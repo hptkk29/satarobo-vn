@@ -1,0 +1,400 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  MANAGER
+  SALES
+  TEACHER
+  MARKETING
+  ACCOUNTANT
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  DEMO_SCHEDULED
+  ENROLLED
+  NURTURING
+  LOST
+}
+
+enum CourseType {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum JobStatus {
+  OPEN
+  CLOSED
+  PAUSED
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  INTERVIEWED
+  ACCEPTED
+  REJECTED
+}
+
+// ─── Auth (NextAuth / Auth.js) ────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Core Business ───────────────────────────────────────────────────────────
+
+model Center {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  leads    Lead[]
+  classes  Class[]
+  students Student[]
+
+  @@index([isActive])
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          Role      @default(SALES)
+  centerId      String?
+  isActive      Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  center        Center?        @relation(fields: [centerId], references: [id])
+  accounts      Account[]
+  assignedLeads Lead[]         @relation("AssignedLeads")
+  notes         Note[]
+  teacherClass  Class[]        @relation("TeacherClasses")
+  blogPosts     BlogPost[]
+  jobPostings   JobPosting[]
+
+  @@index([email])
+  @@index([centerId])
+  @@index([role])
+  @@index([deletedAt])
+}
+
+model Course {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  type        CourseType @default(OFFLINE)
+  description String?    @db.Text
+  price       Int?
+  duration    Int?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  leads       Lead[]
+  classes     Class[]
+  enrollments Enrollment[]
+
+  @@index([slug])
+  @@index([type])
+}
+
+model Lead {
+  id           String     @id @default(cuid())
+  parentName   String
+  phone        String
+  email        String?
+  childName    String?
+  childAge     Int?
+  centerId     String?
+  courseId     String?
+  assignedToId String?
+  status       LeadStatus @default(NEW)
+  source       String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmContent   String?
+  utmTerm      String?
+  note         String?    @db.Text
+  deletedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  center     Center? @relation(fields: [centerId], references: [id])
+  course     Course? @relation(fields: [courseId], references: [id])
+  assignedTo User?   @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  notes      Note[]
+
+  @@index([phone])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([centerId])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  leadId    String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([leadId])
+}
+
+model Student {
+  id          String    @id @default(cuid())
+  name        String
+  dateOfBirth DateTime?
+  phone       String?
+  email       String?
+  parentName  String?
+  parentPhone String?
+  centerId    String?
+  avatarUrl   String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  center      Center?      @relation(fields: [centerId], references: [id])
+  enrollments Enrollment[]
+  attendances Attendance[]
+
+  @@index([phone])
+  @@index([centerId])
+  @@index([deletedAt])
+}
+
+model Class {
+  id          String    @id @default(cuid())
+  name        String
+  courseId    String
+  centerId    String?
+  teacherId   String?
+  schedule    String?
+  startDate   DateTime?
+  endDate     DateTime?
+  maxStudents Int       @default(20)
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  course      Course       @relation(fields: [courseId], references: [id])
+  center      Center?      @relation(fields: [centerId], references: [id])
+  teacher     User?        @relation("TeacherClasses", fields: [teacherId], references: [id])
+  enrollments Enrollment[]
+  sessions    ClassSession[]
+
+  @@index([courseId])
+  @@index([centerId])
+  @@index([teacherId])
+  @@index([deletedAt])
+}
+
+model Enrollment {
+  id        String           @id @default(cuid())
+  studentId String
+  classId   String
+  courseId  String
+  status    EnrollmentStatus @default(ACTIVE)
+  tuition   Int?
+  paidAt    DateTime?
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id])
+  course  Course  @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, classId])
+  @@index([studentId])
+  @@index([classId])
+  @@index([status])
+}
+
+model ClassSession {
+  id        String   @id @default(cuid())
+  classId   String
+  date      DateTime
+  topic     String?
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  class       Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  attendances Attendance[]
+
+  @@index([classId])
+  @@index([date])
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  sessionId String
+  studentId String
+  status    AttendanceStatus @default(PRESENT)
+  note      String?
+  createdAt DateTime         @default(now())
+
+  session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+}
+
+// ─── Content & Marketing ─────────────────────────────────────────────────────
+
+model PageContent {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String
+  content   Json
+  isPublished Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+}
+
+model BlogPost {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  excerpt     String?
+  content     String    @db.Text
+  coverImage  String?
+  authorId    String?
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  author User? @relation(fields: [authorId], references: [id])
+
+  @@index([slug])
+  @@index([isPublished])
+  @@index([publishedAt])
+}
+
+model JobPosting {
+  id           String    @id @default(cuid())
+  title        String
+  slug         String    @unique
+  department   String?
+  location     String?
+  type         String?
+  description  String    @db.Text
+  requirements String?   @db.Text
+  salary       String?
+  status       JobStatus @default(OPEN)
+  authorId     String?
+  closesAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  author       User?              @relation(fields: [authorId], references: [id])
+  applications JobApplication[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+model JobApplication {
+  id          String            @id @default(cuid())
+  jobId       String
+  name        String
+  email       String
+  phone       String
+  cvUrl       String?
+  coverLetter String?           @db.Text
+  status      ApplicationStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  job JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([status])
+  @@index([email])
+}
+
+model MarketingConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
