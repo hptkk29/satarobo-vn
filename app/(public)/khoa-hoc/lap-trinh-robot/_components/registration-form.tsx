@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Loader2,
+  Mail,
   MapPin,
   MessageCircle,
   Phone,
@@ -19,6 +20,10 @@ import { locations } from '../_data/locations'
 const PHONE_VN = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/
 
 const formSchema = z.object({
+  childName: z.string().max(100).optional(),
+  childAge: z.number().int().min(3, 'Tuá»•i tá»‘i thiá»ƒu 3').max(18, 'Tuá»•i tá»‘i Ä‘a 18').optional(),
+  email: z.string().email('Email khÃ´ng há»£p lá»‡').optional().or(z.literal('')),
+  consentMarketing: z.boolean().refine(Boolean, 'Vui lÃ²ng xÃ¡c nháº­n Ä‘á»“ng Ã½ nháº­n thÃ´ng tin'),
   parentName: z.string().min(2, 'Vui lòng nhập họ tên (tối thiểu 2 ký tự)'),
   phone: z.string().regex(PHONE_VN, 'Số điện thoại chưa đúng định dạng'),
   courseValue: z.string().optional(),
@@ -131,7 +136,7 @@ export function RegistrationForm() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { courseValue: '', locationId: '', website: '' },
+    defaultValues: { courseValue: '', locationId: '', email: '', consentMarketing: true, website: '' },
   })
 
   const courseValue = watch('courseValue')
@@ -153,17 +158,22 @@ export function RegistrationForm() {
     try {
       const timeOnPage = Math.floor((Date.now() - pageLoadTime.current) / 1000)
       const eventId = `ltr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const locationName = locations.find(l => String(l.id) === values.locationId)?.name
+      const selectedLocation = locations.find(l => String(l.id) === values.locationId)
+      const locationName = selectedLocation?.name
       const noteText = locationName ? `Cơ sở mong muốn: ${locationName}` : undefined
 
       const body = {
         parentName: values.parentName,
+        childName: values.childName,
+        childAge: values.childAge,
         phone: values.phone,
+        email: values.email,
+        centerId: selectedLocation?.centerId,
         source: values.courseValue || CONSULT_OPTION.value,
         website: values.website ?? '',
         timeOnPage,
         eventId,
-        consentMarketing: true,
+        consentMarketing: values.consentMarketing,
         note: noteText,
         landingPage: window.location.href,
         referrer: document.referrer || undefined,
@@ -322,6 +332,57 @@ export function RegistrationForm() {
                 {errors.parentName && <ErrorText>{errors.parentName.message}</ErrorText>}
               </div>
 
+              <div className="mb-4 grid gap-4 sm:grid-cols-[1fr_8rem]">
+                <div>
+                  <label
+                    htmlFor="childName"
+                    className="mb-1.5 block text-sm font-bold text-text-dark"
+                  >
+                    Tên con
+                  </label>
+                  <div className="relative">
+                    <User
+                      className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+                      aria-hidden="true"
+                    />
+                    <input
+                      id="childName"
+                      type="text"
+                      autoComplete="off"
+                      placeholder="Tên bé"
+                      {...register('childName')}
+                      className="w-full rounded-xl border border-gray-200 py-3 pl-9 pr-4 text-sm text-text-dark transition focus:border-primary-orange focus:outline-none focus:ring-2 focus:ring-primary-orange/20"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="childAge"
+                    className="mb-1.5 block text-sm font-bold text-text-dark"
+                  >
+                    Tuổi
+                  </label>
+                  <input
+                    id="childAge"
+                    type="number"
+                    min={3}
+                    max={18}
+                    inputMode="numeric"
+                    placeholder="9"
+                    {...register('childAge', {
+                      setValueAs: value => value === '' ? undefined : Number(value),
+                    })}
+                    className={`w-full rounded-xl border py-3 px-4 text-sm text-text-dark transition focus:outline-none focus:ring-2 ${
+                      errors.childAge
+                        ? 'border-urgent focus:border-urgent focus:ring-urgent/20'
+                        : 'border-gray-200 focus:border-primary-orange focus:ring-primary-orange/20'
+                    }`}
+                  />
+                  {errors.childAge && <ErrorText>{errors.childAge.message}</ErrorText>}
+                </div>
+              </div>
+
               {/* Phone */}
               <div className="mb-4">
                 <label
@@ -349,6 +410,34 @@ export function RegistrationForm() {
                   />
                 </div>
                 {errors.phone && <ErrorText>{errors.phone.message}</ErrorText>}
+              </div>
+
+              <div className="mb-4">
+                <label
+                  htmlFor="email"
+                  className="mb-1.5 block text-sm font-bold text-text-dark"
+                >
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail
+                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="phuc@satarobo.vn"
+                    {...register('email')}
+                    className={`w-full rounded-xl border py-3 pl-9 pr-4 text-sm text-text-dark transition focus:outline-none focus:ring-2 ${
+                      errors.email
+                        ? 'border-urgent focus:border-urgent focus:ring-urgent/20'
+                        : 'border-gray-200 focus:border-primary-orange focus:ring-primary-orange/20'
+                    }`}
+                  />
+                </div>
+                {errors.email && <ErrorText>{errors.email.message}</ErrorText>}
               </div>
 
               {/* Location */}
@@ -382,6 +471,22 @@ export function RegistrationForm() {
                   />
                 </div>
               </div>
+
+              <label className="mb-4 flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-text-dark">
+                <input
+                  type="checkbox"
+                  {...register('consentMarketing')}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-orange focus:ring-primary-orange"
+                />
+                <span>
+                  Đồng ý nhận thông tin tư vấn, lịch học và ưu đãi từ Sata Robo.
+                  {errors.consentMarketing && (
+                    <span className="mt-1 block text-xs font-semibold text-urgent">
+                      {errors.consentMarketing.message}
+                    </span>
+                  )}
+                </span>
+              </label>
 
               {/* Server error */}
               {serverError && (

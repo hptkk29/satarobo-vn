@@ -1,0 +1,13 @@
+﻿{
+  "parentName": "Hồ Đắc Phúc Test",
+  "childName": "Test UI",
+  "childAge": 9,
+  "phone": "0901234567",
+  "email": "phuc@satarobo.vn",
+  "centerId": "center-hoa-cuong",
+  "source": "lap-trinh-robot",
+  "eventId": "test-full-form-44556677",
+  "landingPage": "http://localhost:3000/khoa-hoc/lap-trinh-robot",
+  "consentMarketing": true,
+  "timeOnPage": 30
+}

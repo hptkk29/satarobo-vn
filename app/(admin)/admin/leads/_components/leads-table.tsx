@@ -1,9 +1,9 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransition, useRef } from 'react'
-import { Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { updateLeadStatus } from '../actions'
+import { useTransition, useRef, useState } from 'react'
+import { Search, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
+import { updateLeadNote, updateLeadStatus } from '../actions'
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Lead mới',
@@ -27,11 +27,21 @@ export type LeadRow = {
   id: string
   parentName: string
   phone: string
+  email: string | null
   childName: string | null
   childAge: number | null
   status: string
   source: string | null
   note: string | null
+  utmSource: string | null
+  utmMedium: string | null
+  utmCampaign: string | null
+  eventId: string | null
+  landingPage: string | null
+  referrer: string | null
+  ipAddress: string | null
+  userAgent: string | null
+  consentMarketing: boolean
   createdAt: string
   center: { name: string } | null
   assignedTo: { name: string | null } | null
@@ -76,6 +86,7 @@ function StatusCell({
       <select
         defaultValue={lead.status}
         disabled={pending}
+        onClick={e => e.stopPropagation()}
         onChange={e => {
           startTransition(async () => {
             await updateLeadStatus(lead.id, e.target.value)
@@ -89,6 +100,133 @@ function StatusCell({
           </option>
         ))}
       </select>
+    </div>
+  )
+}
+
+function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
+      <dd className="mt-1 break-words text-sm text-gray-800">{value || '—'}</dd>
+    </div>
+  )
+}
+
+function LeadDrawer({
+  lead,
+  canUpdate,
+  onClose,
+}: {
+  lead: LeadRow | null
+  canUpdate: boolean
+  onClose: () => void
+}) {
+  const [note, setNote] = useState(lead?.note ?? '')
+  const [status, setStatus] = useState(lead?.status ?? 'NEW')
+  const [pending, startTransition] = useTransition()
+
+  if (!lead) return null
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <button
+        type="button"
+        aria-label="Đóng chi tiết lead"
+        className="absolute inset-0 bg-black/30"
+        onClick={onClose}
+      />
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-gray-100 p-5">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">{lead.parentName}</h2>
+            <p className="mt-1 text-sm text-gray-500">{lead.phone}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            aria-label="Đóng"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-6 overflow-y-auto p-5">
+          <section>
+            <h3 className="mb-3 text-sm font-bold text-gray-900">Thông tin lead</h3>
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <DetailItem label="Tên phụ huynh" value={lead.parentName} />
+              <DetailItem label="Số điện thoại" value={lead.phone} />
+              <DetailItem label="Email" value={lead.email} />
+              <DetailItem label="Tên con" value={lead.childName} />
+              <DetailItem label="Tuổi" value={lead.childAge} />
+              <DetailItem label="Cơ sở" value={lead.center?.name} />
+              <DetailItem label="Khóa quan tâm" value={shortSource(lead.source)} />
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Trạng thái</dt>
+                <dd className="mt-1">
+                  <select
+                    value={status}
+                    onChange={e => setStatus(e.target.value)}
+                    disabled={!canUpdate || pending}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20 disabled:bg-gray-50"
+                  >
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-bold text-gray-900">Tracking</h3>
+            <dl className="grid grid-cols-1 gap-4">
+              <DetailItem label="UTM" value={[lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(' / ')} />
+              <DetailItem label="Event ID" value={lead.eventId} />
+              <DetailItem label="Landing page" value={lead.landingPage} />
+              <DetailItem label="Referrer" value={lead.referrer} />
+              <DetailItem label="IP address" value={lead.ipAddress} />
+              <DetailItem label="User agent" value={lead.userAgent} />
+              <DetailItem label="Consent marketing" value={lead.consentMarketing ? 'Có' : 'Không'} />
+            </dl>
+          </section>
+
+          <section>
+            <label htmlFor="lead-note" className="mb-2 block text-sm font-bold text-gray-900">
+              Note
+            </label>
+            <textarea
+              id="lead-note"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              disabled={!canUpdate || pending}
+              rows={5}
+              className="w-full rounded-lg border border-gray-200 p-3 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20 disabled:bg-gray-50"
+              placeholder="Thêm ghi chú chăm sóc lead..."
+            />
+            {canUpdate && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  startTransition(async () => {
+                    if (status !== lead.status) await updateLeadStatus(lead.id, status)
+                    await updateLeadNote(lead.id, note)
+                  })
+                }}
+                className="mt-3 rounded-lg bg-primary-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              >
+                {pending ? 'Đang lưu...' : 'Save'}
+              </button>
+            )}
+          </section>
+        </div>
+      </aside>
     </div>
   )
 }
@@ -113,6 +251,7 @@ export function LeadsTable({
   const router = useRouter()
   const searchParams = useSearchParams()
   const searchRef = useRef<HTMLInputElement>(null)
+  const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null)
   const totalPages = Math.ceil(total / pageSize)
 
   const navigate = (updates: Record<string, string | undefined>) => {
@@ -206,7 +345,11 @@ export function LeadsTable({
                 </tr>
               ) : (
                 leads.map(lead => (
-                  <tr key={lead.id} className="hover:bg-gray-50/60">
+                  <tr
+                    key={lead.id}
+                    onClick={() => setSelectedLead(lead)}
+                    className="cursor-pointer hover:bg-gray-50/60"
+                  >
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{lead.parentName}</div>
                       {lead.childName && (
@@ -269,6 +412,13 @@ export function LeadsTable({
           </div>
         </div>
       )}
+
+      <LeadDrawer
+        key={selectedLead?.id ?? 'empty'}
+        lead={selectedLead}
+        canUpdate={canUpdate}
+        onClose={() => setSelectedLead(null)}
+      />
     </div>
   )
 }

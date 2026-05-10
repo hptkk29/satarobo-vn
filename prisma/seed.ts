@@ -49,6 +49,34 @@ async function main() {
         phone: "0818823720",
       },
     }),
+    db.center.upsert({
+      where: { id: "center-thanh-khe" },
+      update: {
+        name: "Sata Robo — Thanh Khê",
+        address: "269 Điện Biên Phủ, Thanh Khê, Đà Nẵng",
+        phone: "0818823720",
+      },
+      create: {
+        id: "center-thanh-khe",
+        name: "Sata Robo — Thanh Khê",
+        address: "269 Điện Biên Phủ, Thanh Khê, Đà Nẵng",
+        phone: "0818823720",
+      },
+    }),
+    db.center.upsert({
+      where: { id: "center-hoa-khe" },
+      update: {
+        name: "Sata Robo — Hoà Khê",
+        address: "232 Nguyễn Phước Lan, Hoà Khê, Đà Nẵng",
+        phone: "0818823720",
+      },
+      create: {
+        id: "center-hoa-khe",
+        name: "Sata Robo — Hoà Khê",
+        address: "232 Nguyễn Phước Lan, Hoà Khê, Đà Nẵng",
+        phone: "0818823720",
+      },
+    }),
   ]);
   console.log(`✅ ${centers.length} trung tâm đã tạo`);
 

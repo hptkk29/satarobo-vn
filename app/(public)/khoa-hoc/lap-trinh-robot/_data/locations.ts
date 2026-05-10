@@ -1,6 +1,7 @@
 export const locations = [
   {
     id: 1,
+    centerId: 'center-hai-chau',
     name: 'Cơ sở 1 - Hải Châu',
     address: '60 Lê Lợi, Hải Châu, Đà Nẵng',
     hotline: '0818.823.720',
@@ -12,6 +13,7 @@ export const locations = [
   },
   {
     id: 2,
+    centerId: 'center-hoa-cuong',
     name: 'Cơ sở 2 - Hòa Cường',
     address: '258 Lê Thanh Nghị, Hòa Cường, Hải Châu',
     hotline: '0818.823.720',
@@ -23,6 +25,7 @@ export const locations = [
   },
   {
     id: 3,
+    centerId: 'center-thanh-khe',
     name: 'Cơ sở 3 - Thanh Khê',
     address: '269 Điện Biên Phủ, Thanh Khê, Đà Nẵng',
     hotline: '0818.823.720',
@@ -34,6 +37,7 @@ export const locations = [
   },
   {
     id: 4,
+    centerId: 'center-hoa-khe',
     name: 'Cơ sở 4 - Hòa Khê',
     address: '232 Nguyễn Phước Lan, Hòa Khê, Đà Nẵng',
     hotline: '0818.823.720',

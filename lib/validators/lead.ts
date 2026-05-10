@@ -8,7 +8,7 @@ export const leadCreateSchema = z.object({
   childAge: z.number().int().min(3).max(18).optional(),
   phone: z.string().regex(PHONE_VN, 'SĐT không hợp lệ'),
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
-  centerId: z.string().cuid().optional(),
+  centerId: z.string().min(1).optional(),
   courseId: z.string().cuid().optional(),
   source: z.string().min(1),
   utmSource: z.string().max(100).optional(),

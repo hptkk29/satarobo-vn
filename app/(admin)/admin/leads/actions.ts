@@ -34,3 +34,20 @@ export async function updateLeadStatus(
   revalidatePath('/admin/leads')
   return { ok: true }
 }
+
+export async function updateLeadNote(
+  leadId: string,
+  note: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'ChÆ°a Ä‘Äƒng nháº­p' }
+  if (!hasPermission(session.user, 'update', 'lead')) return { ok: false, error: 'KhÃ´ng cÃ³ quyá»n' }
+
+  await db.lead.update({
+    where: { id: leadId },
+    data: { note: note.trim() || null },
+  })
+
+  revalidatePath('/admin/leads')
+  return { ok: true }
+}
