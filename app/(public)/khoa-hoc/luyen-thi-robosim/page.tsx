@@ -3,10 +3,11 @@ import { TopCountdownBar } from './_components/top-countdown-bar'
 import { Hero } from './_components/hero'
 import { ContestInfo } from './_components/contest-info'
 import { Pain } from './_components/pain'
+import { HowToBuy } from './_components/how-to-buy'
+import { Results } from './_components/results'
 import { Solution } from './_components/solution'
 import { Courses } from './_components/courses'
 import { Roadmap } from './_components/roadmap'
-import { Results } from './_components/results'
 import { Testimonials } from './_components/testimonials'
 import { FinalCTA } from './_components/final-cta'
 import { FAQ } from './_components/faq'
@@ -108,10 +109,11 @@ export default function LuyenThiRoboSimPage() {
         <Hero />
         <ContestInfo />
         <Pain />
+        <HowToBuy />
+        <Results />
         <Solution />
         <Courses />
         <Roadmap />
-        <Results />
         <Testimonials />
         <FinalCTA />
         <FAQ />

@@ -48,8 +48,9 @@ export function TopCountdownBar() {
     <div
       role="banner"
       aria-label="Thông báo ưu đãi và ngày thi"
-      className={`fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ${
-        isHidden ? '-translate-y-full' : 'translate-y-0'
+      aria-hidden={isHidden}
+      className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
+        isHidden ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'
       }`}
       style={{ background: 'linear-gradient(90deg, #1a0845 0%, #2d1060 50%, #1a0845 100%)' }}
     >

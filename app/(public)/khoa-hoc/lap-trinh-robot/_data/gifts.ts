@@ -23,10 +23,9 @@ export const gifts = [
   {
     id: 4,
     icon: '🎯',
-    title: '1 buổi học MIỄN PHÍ tại trung tâm',
+    title: 'Voucher sắm học cụ',
     value: '1.000.000đ',
-    description:
-      '90 phút — con tự tay lập trình robot đầu tiên, bố mẹ ngồi quan sát trực tiếp.',
+    description: 'Voucher mua học cụ STEM trị giá 1 triệu đồng.',
   },
 ]
 

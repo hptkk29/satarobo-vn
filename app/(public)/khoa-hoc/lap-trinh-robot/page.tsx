@@ -5,6 +5,7 @@ import { ContestInfo } from './_components/contest-info'
 import { Roadmap5Years } from './_components/roadmap-5-years'
 import { SpecialOfferCountdown } from './_components/special-offer-countdown'
 import { TeachingMethod } from './_components/teaching-method'
+import { Locations } from './_components/locations'
 import { Commitment } from './_components/commitment'
 import { Gifts } from './_components/gifts'
 import { InternalAwards } from './_components/internal-awards'
@@ -12,7 +13,6 @@ import { Testimonials } from './_components/testimonials'
 import { FAQ } from './_components/faq'
 import { RegistrationForm } from './_components/registration-form'
 import { FinalCTA } from './_components/final-cta'
-import { Locations } from './_components/locations'
 import { FloatingCTA } from './_components/floating-cta'
 import { AgeCoursePopup } from './_components/age-course-popup'
 
@@ -149,14 +149,14 @@ export default function LapTrinhRobotPage() {
         <Roadmap5Years />
         <SpecialOfferCountdown />
         <TeachingMethod />
+        <Locations />
         <Commitment />
         <Gifts />
         <InternalAwards />
         <Testimonials />
-        <FAQ />
         <RegistrationForm />
+        <FAQ />
         <FinalCTA />
-        <Locations />
       </main>
       <FloatingCTA />
       <AgeCoursePopup />

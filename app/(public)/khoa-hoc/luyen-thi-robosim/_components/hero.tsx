@@ -12,7 +12,6 @@ export function Hero() {
       className="overflow-hidden w-full"
       style={{
         background: 'linear-gradient(160deg, #fff9f5 0%, #ffffff 50%, #f5f3ff 100%)',
-        paddingTop: 'calc(47px + 68px + 16px)',
       }}
     >
       {/* 2-col grid */}
