@@ -4,20 +4,25 @@ import Link from "next/link";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { usePathname } from "next/navigation";
 
 const NAV_LINKS = [
   { label: "Trang chủ", href: "/" },
   { label: "Về chúng tôi", href: "/ve-chung-toi" },
   { label: "Khoá học", href: "/khoa-hoc" },
   { label: "Học cụ", href: "/hoc-cu" },
-  { label: "Tin tức", href: "/blog" },
+  { label: "Tin tức", href: "/tin-tuc" },
   { label: "Tuyển dụng", href: "/tuyen-dung" },
   { label: "Liên hệ", href: "/lien-he" },
 ];
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
     <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
@@ -34,7 +39,11 @@ export function Header() {
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-gray-600 transition-colors hover:text-[#F97316]"
+              className={`text-sm font-medium transition-colors ${
+                isActive(link.href)
+                  ? "text-[#F97316]"
+                  : "text-gray-600 hover:text-[#F97316]"
+              }`}
             >
               {link.label}
             </Link>
@@ -55,6 +64,7 @@ export function Header() {
             <span className="sr-only">Mở menu</span>
           </SheetTrigger>
           <SheetContent side="right" className="w-72">
+            <SheetTitle className="sr-only">Menu điều hướng</SheetTitle>
             <div className="flex items-center justify-between mb-6">
               <span className="text-lg font-bold">
                 <span className="text-[#F97316]">Sata</span>
@@ -69,7 +79,11 @@ export function Header() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-base font-medium text-gray-700 hover:text-[#F97316]"
+                  className={`text-base font-medium ${
+                    isActive(link.href)
+                      ? "text-[#F97316]"
+                      : "text-gray-700 hover:text-[#F97316]"
+                  }`}
                   onClick={() => setOpen(false)}
                 >
                   {link.label}
