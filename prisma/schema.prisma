@@ -174,10 +174,20 @@ model Lead {
   utmSource    String?
   utmMedium    String?
   utmCampaign  String?
-  utmContent   String?
-  utmTerm      String?
-  note         String?    @db.Text
-  deletedAt    DateTime?
+  utmContent       String?
+  utmTerm          String?
+  fbclid           String?
+  gclid            String?
+  fbp              String?
+  fbc              String?
+  eventId          String?   @unique
+  landingPage      String?
+  referrer         String?
+  ipAddress        String?
+  userAgent        String?   @db.Text
+  consentMarketing Boolean   @default(false)
+  note             String?   @db.Text
+  deletedAt        DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -192,6 +202,7 @@ model Lead {
   @@index([centerId])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([eventId])
 }
 
 model Note {

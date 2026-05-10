@@ -1,0 +1,76 @@
+export const promotions = {
+  primary: [
+    {
+      id: 'early-bird',
+      title: 'Ưu đãi khai giảng',
+      highlight: 'Giảm 15%',
+      description:
+        'Dành cho phụ huynh đăng ký sớm trong tháng khai trương. Áp dụng cho các khóa Sata1-Sata7, giúp gia đình giữ mức học phí tốt trước khi giá trở về niêm yết.',
+      details: ['Thời hạn: 01/05 - 31/05/2026', 'Áp dụng cho Sata1-Sata7', 'Không áp dụng cho Sata8'],
+      cta: 'Đăng ký giữ ưu đãi',
+      target: 'registration-form',
+      icon: 'Sparkles',
+      featured: true,
+    },
+    {
+      id: 'combo',
+      title: 'Combo luyện thi',
+      highlight: '3.808.000đ',
+      description:
+        'Học trọn Robosim Master + Đấu trường Robot, từ mô phỏng RoboSim đến robot Beta thật, phù hợp khi bố mẹ muốn con đi đủ lộ trình luyện thi.',
+      details: ['32 buổi - 90 phút/buổi', 'Tổng 48 giờ luyện thi', 'Tiết kiệm 1.632.000đ'],
+      cta: 'Chọn gói Combo',
+      target: 'roadmap',
+      icon: 'Trophy',
+      featured: false,
+    },
+    {
+      id: 'installment',
+      title: 'Trả góp 0%',
+      highlight: 'Sata3-Sata7',
+      description:
+        'Áp dụng cho nhóm khóa chuyên sâu 48 buổi từ Sata3 đến Sata7. Phụ huynh có thể chia nhỏ học phí theo tháng để dễ đầu tư dài hạn cho con.',
+      details: [
+        'Áp dụng: Sata3 đến Sata7',
+        'Ví dụ Sata3: 748.000đ/tháng',
+        'Chỉ cần CCCD theo chính sách trả góp',
+      ],
+      cta: 'Tư vấn trả góp',
+      target: 'registration-form',
+      icon: 'CreditCard',
+      featured: false,
+    },
+  ],
+  secondary: [
+    {
+      id: 'referral',
+      title: 'Referral',
+      highlight: 'Giới thiệu bạn bè',
+      description:
+        'Người giới thiệu nhận 300.000đ tiền mặt. Người được giới thiệu giảm thêm 300.000đ học phí.',
+      condition: 'Bạn được giới thiệu đóng tiền lần đầu. Không giới hạn số lượng bạn giới thiệu.',
+      note: 'Không cộng dồn với gói đội thi 2 học viên nếu chính sách yêu cầu.',
+      icon: 'Gift',
+    },
+    {
+      id: 'siblings',
+      title: 'Gói Anh/Chị/Em',
+      highlight: 'Con thứ 2 giảm thêm 15%',
+      description:
+        'Gia đình có 2 con đăng ký, con thứ 2 được giảm thêm 15%. Gia đình có 3 con trở lên, con thứ 3 trở đi giảm 15% và được tặng thêm khóa RoboSim Online.',
+      condition: 'Phù hợp cho gia đình muốn cho các con học cùng hệ sinh thái Robotics.',
+      note: 'Gia đình 3 con có thể tiết kiệm từ 4.000.000đ trở lên tùy khóa học.',
+      icon: 'Users',
+    },
+    {
+      id: 'team',
+      title: 'Gói đội thi 2 HV',
+      highlight: 'Cả 2 giảm thêm 10%',
+      description:
+        '2 học viên cùng đăng ký để lập 1 đội thi theo đúng quy chế 2 thí sinh/đội sẽ được giảm thêm 10% trên mức giá đang áp dụng.',
+      condition: 'Áp dụng khi 2 học viên đăng ký cùng thời điểm.',
+      note: 'Không áp dụng cộng dồn với Referral.',
+      icon: 'Trophy',
+    },
+  ],
+}

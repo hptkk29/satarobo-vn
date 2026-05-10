@@ -1,0 +1,48 @@
+export const locations = [
+  {
+    id: 1,
+    name: 'Cơ sở 1 - Hải Châu',
+    address: '60 Lê Lợi, Hải Châu, Đà Nẵng',
+    hotline: '0818.823.720',
+    workingHours: 'T2 - T7: 8:00 - 20:00',
+    mapLat: 16.067,
+    mapLng: 108.218,
+    isHQ: false,
+    note: 'Gần trung tâm thành phố, thuận tiện đi lại',
+  },
+  {
+    id: 2,
+    name: 'Cơ sở 2 - Hòa Cường',
+    address: '258 Lê Thanh Nghị, Hòa Cường, Hải Châu',
+    hotline: '0818.823.720',
+    workingHours: 'T2 - T7: 8:00 - 20:00',
+    mapLat: 16.035,
+    mapLng: 108.222,
+    isHQ: true,
+    note: 'Phòng Lab lớn, đầy đủ trang thiết bị',
+  },
+  {
+    id: 3,
+    name: 'Cơ sở 3 - Thanh Khê',
+    address: '269 Điện Biên Phủ, Thanh Khê, Đà Nẵng',
+    hotline: '0818.823.720',
+    workingHours: 'T2 - T7: 8:00 - 20:00',
+    mapLat: 16.062,
+    mapLng: 108.21,
+    isHQ: false,
+    note: 'Thuận tiện cho khu vực Thanh Khê',
+  },
+  {
+    id: 4,
+    name: 'Cơ sở 4 - Hòa Khê',
+    address: '232 Nguyễn Phước Lan, Hòa Khê, Đà Nẵng',
+    hotline: '0818.823.720',
+    workingHours: 'T2 - T7: 8:00 - 20:00',
+    mapLat: 15.998,
+    mapLng: 108.196,
+    isHQ: false,
+    note: 'Phục vụ phụ huynh khu vực phía Tây Nam',
+  },
+]
+
+export type Location = (typeof locations)[number]

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
+import { MetaPixel } from "@/components/public/meta-pixel";
+import { GA4 } from "@/components/public/ga4";
 
 const beVietnamPro = Be_Vietnam_Pro({
   variable: "--font-sans",
@@ -28,7 +30,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={`${beVietnamPro.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        {children}
+        <MetaPixel />
+        <GA4 />
+      </body>
     </html>
   );
 }
