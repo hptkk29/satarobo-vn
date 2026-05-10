@@ -6,13 +6,14 @@ Website chính thức của **Công ty Cổ phần Công nghệ Giáo dục Sata
 
 | Lớp | Công nghệ |
 |-----|-----------|
-| Framework | Next.js 15 App Router |
+| Framework | Next.js 16 App Router |
 | Language | TypeScript (strict) |
 | UI | shadcn/ui + Tailwind CSS v4 |
 | Database | PostgreSQL (Supabase) |
 | ORM | Prisma v5 |
 | Auth | Auth.js v5 (NextAuth) |
 | Email | Resend |
+| Tracking | Meta Pixel + CAPI, GA4 + Measurement Protocol |
 | Deploy | Vercel |
 
 > Xem chi tiết: [CLAUDE.md](./CLAUDE.md)
@@ -71,7 +72,7 @@ pnpm dev
 |---|---|
 | URL | http://localhost:3000/login |
 | Email | phuc@satarobo.vn |
-| Password | ChangeMe@2026! |
+| Password | [Đã đổi sau khi setup] |
 
 > ⚠️ **Đổi mật khẩu ngay sau khi đăng nhập lần đầu!**
 
