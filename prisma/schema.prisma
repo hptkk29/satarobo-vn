@@ -348,6 +348,13 @@ model BlogPost {
   authorId    String?
   isPublished Boolean   @default(false)
   publishedAt DateTime?
+  category    String?
+  tags        String[]
+  readingTime Int?
+  seoTitle    String?
+  seoDesc     String?
+  ogImage     String?
+  viewCount   Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -356,6 +363,7 @@ model BlogPost {
   @@index([slug])
   @@index([isPublished])
   @@index([publishedAt])
+  @@index([category])
 }
 
 model JobPosting {

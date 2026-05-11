@@ -6,13 +6,15 @@ const ADMIN_ROLES = ["SUPER_ADMIN", "MANAGER", "SALES", "TEACHER", "MARKETING", 
 
 export default auth((req: NextAuthRequest) => {
   const { pathname } = req.nextUrl;
+  const session = req.auth;
 
+  // /admin → /admin/dashboard shortcut
   if (pathname === "/admin") {
     return NextResponse.redirect(new URL("/admin/dashboard", req.url));
   }
 
+  // Protect /admin/* — redirect unauthenticated or unauthorised users
   if (pathname.startsWith("/admin")) {
-    const session = req.auth;
     if (!session?.user) {
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("callbackUrl", pathname);
@@ -25,9 +27,14 @@ export default auth((req: NextAuthRequest) => {
     }
   }
 
+  // Redirect already-logged-in users away from /login
+  if (pathname === "/login" && session?.user) {
+    return NextResponse.redirect(new URL("/admin/dashboard", req.url));
+  }
+
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/login"],
 };

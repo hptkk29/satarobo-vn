@@ -3,6 +3,7 @@ import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { MetaPixel } from "@/components/public/meta-pixel";
 import { GA4 } from "@/components/public/ga4";
+import { Toaster } from "@/components/ui/sonner";
 
 const beVietnamPro = Be_Vietnam_Pro({
   variable: "--font-sans",
@@ -38,6 +39,7 @@ export default function RootLayout({
         {children}
         <MetaPixel />
         <GA4 />
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   );

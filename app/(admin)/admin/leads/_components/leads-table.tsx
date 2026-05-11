@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useRef, useState } from 'react'
-import { Search, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Loader2, X, Download } from 'lucide-react'
 import { updateLeadNote, updateLeadStatus } from '../actions'
 
 const STATUS_LABELS: Record<string, string> = {
@@ -305,6 +305,17 @@ export function LeadsTable({
             </option>
           ))}
         </select>
+
+        {/* Export CSV */}
+        <a
+          href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
+          download
+          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+          title="Xuất CSV"
+        >
+          <Download className="h-4 w-4" />
+          <span className="hidden sm:inline">Xuất CSV</span>
+        </a>
       </div>
 
       {/* Table */}

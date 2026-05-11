@@ -20,11 +20,11 @@ export async function updateLeadStatus(
   rawStatus: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
-  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!hasPermission(session.user, 'update', 'lead')) return { ok: false, error: 'Không có quyền' }
+  if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
+  if (!hasPermission(session.user, 'update', 'lead')) return { ok: false, error: 'Khong co quyen' }
 
   const parsed = statusSchema.safeParse(rawStatus)
-  if (!parsed.success) return { ok: false, error: 'Trạng thái không hợp lệ' }
+  if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
 
   await db.lead.update({
     where: { id: leadId },
@@ -40,8 +40,8 @@ export async function updateLeadNote(
   note: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
-  if (!session?.user) return { ok: false, error: 'ChÆ°a Ä‘Äƒng nháº­p' }
-  if (!hasPermission(session.user, 'update', 'lead')) return { ok: false, error: 'KhÃ´ng cÃ³ quyá»n' }
+  if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
+  if (!hasPermission(session.user, 'update', 'lead')) return { ok: false, error: 'Khong co quyen' }
 
   await db.lead.update({
     where: { id: leadId },
