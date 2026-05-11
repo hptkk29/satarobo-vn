@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { db } from '@/lib/db'
+import { organizationJsonLd, websiteJsonLd } from '@/lib/seo/jsonld'
 import { Hero } from './_components/hero'
 import { Products } from './_components/products'
 import { WhySata } from './_components/why-sata'
@@ -43,27 +44,8 @@ export const metadata: Metadata = {
   },
 }
 
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'Organization',
-  name: 'Sata Robo',
-  alternateName: 'Công ty Cổ phần Công nghệ Giáo dục Sata Robo',
-  url: BASE_URL,
-  logo: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
-  contactPoint: {
-    '@type': 'ContactPoint',
-    telephone: '+84818823720',
-    contactType: 'customer service',
-    availableLanguage: 'Vietnamese',
-  },
-  address: {
-    '@type': 'PostalAddress',
-    streetAddress: '258 Lê Thanh Nghị',
-    addressLocality: 'Đà Nẵng',
-    addressCountry: 'VN',
-  },
-  sameAs: ['https://facebook.com/satarobo'],
-}
+const orgJsonLd = organizationJsonLd()
+const siteJsonLd = websiteJsonLd()
 
 export default async function HomePage() {
   const posts = await db.blogPost
@@ -87,7 +69,11 @@ export default async function HomePage() {
       {/* Static JSON-LD — no user input, dangerouslySetInnerHTML is safe here */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
       />
       <Hero />
       <Products />

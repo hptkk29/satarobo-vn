@@ -263,6 +263,29 @@ export function jobPostingJsonLd(job: JobForJsonLd) {
   }
 }
 
+export function websiteJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Sata Robo',
+    url: BASE_URL,
+    description: 'Hệ sinh thái Robotics & STEM giáo dục hàng đầu Đà Nẵng',
+    publisher: {
+      '@type': 'Organization',
+      name: 'Sata Robo',
+      url: BASE_URL,
+    },
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${BASE_URL}/tin-tuc?q={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  }
+}
+
 export function breadcrumbJsonLd(items: Array<{ name: string; url: string }>) {
   return {
     '@context': 'https://schema.org',
