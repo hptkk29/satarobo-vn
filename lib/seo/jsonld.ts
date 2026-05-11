@@ -1,3 +1,6 @@
+import { marked } from 'marked'
+import { HR_CONTACT } from '@/lib/data/job-options'
+
 const BASE_URL = 'https://satarobo.vn'
 
 export function organizationJsonLd() {
@@ -164,6 +167,11 @@ const EMPLOYMENT_TYPE_MAP: Record<string, string> = {
   contract: 'CONTRACTOR',
 }
 
+function markdownToHtml(md: string): string {
+  if (!md) return ''
+  return String(marked.parse(md, { gfm: true, breaks: false })).trim()
+}
+
 export interface JobForJsonLd {
   slug: string
   title: string
@@ -180,23 +188,34 @@ export interface JobForJsonLd {
 }
 
 export function jobPostingJsonLd(job: JobForJsonLd) {
+  const fullDescriptionHtml = [
+    markdownToHtml(job.description),
+    job.requirements ? markdownToHtml(job.requirements) : '',
+    job.benefits ? markdownToHtml(job.benefits) : '',
+  ].filter(Boolean).join('\n')
+
+  // Always provide validThrough: default to 90 days from datePosted if closesAt is null
+  const validThrough = job.closesAt
+    ? job.closesAt.toISOString()
+    : new Date(job.createdAt.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString()
+
+  const isRemote = job.location === 'online-hybrid' || job.location === 'remote'
+
   return {
     '@context': 'https://schema.org',
     '@type': 'JobPosting',
     title: job.title,
-    description: [job.description, job.requirements, job.benefits]
-      .filter(Boolean)
-      .join('\n\n'),
+    description: fullDescriptionHtml,
     identifier: {
       '@type': 'PropertyValue',
       name: 'Sata Robo',
       value: job.slug,
     },
     datePosted: job.createdAt.toISOString().split('T')[0],
-    ...(job.closesAt && { validThrough: job.closesAt.toISOString() }),
+    validThrough,
     employmentType: EMPLOYMENT_TYPE_MAP[job.type ?? ''] ?? 'OTHER',
     hiringOrganization: {
-      '@type': 'EducationalOrganization',
+      '@type': 'Organization',
       name: 'Công ty Cổ phần Công nghệ Giáo dục Sata Robo',
       sameAs: BASE_URL,
       logo: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
@@ -206,16 +225,17 @@ export function jobPostingJsonLd(job: JobForJsonLd) {
       address: {
         '@type': 'PostalAddress',
         streetAddress: '258 Lê Thanh Nghị',
-        addressLocality: 'Đà Nẵng',
+        addressLocality: 'Hoà Cường',
         addressRegion: 'Đà Nẵng',
+        postalCode: '550000',
         addressCountry: 'VN',
       },
     },
-    ...(job.location !== 'danang' && {
+    ...(isRemote && {
       jobLocationType: 'TELECOMMUTE',
       applicantLocationRequirements: {
         '@type': 'Country',
-        name: 'Việt Nam',
+        name: 'Vietnam',
       },
     }),
     ...(job.salaryMin && job.salaryMax
@@ -234,11 +254,11 @@ export function jobPostingJsonLd(job: JobForJsonLd) {
       : {}),
     totalJobOpenings: job.openings,
     directApply: false,
-    applicationContact: {
+    applicantContact: {
       '@type': 'ContactPoint',
-      email: 'mytrangduong1986@gmail.com',
-      telephone: '+840905250544',
       contactType: 'recruiter',
+      email: HR_CONTACT.email,
+      telephone: '+84' + HR_CONTACT.phoneRaw.substring(1),
     },
   }
 }
