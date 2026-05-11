@@ -11,6 +11,7 @@ import {
   FileText,
   BarChart3,
   Settings,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { label: "Học viên", href: "/admin/students", icon: GraduationCap },
   { label: "Lớp học", href: "/admin/classes", icon: BookOpen },
   { label: "Giáo viên", href: "/admin/teachers", icon: UserCog },
+  { label: "Tuyển dụng", href: "/admin/jobs", icon: Briefcase },
   { label: "Nội dung", href: "/admin/content", icon: FileText },
   { label: "Marketing", href: "/admin/marketing", icon: BarChart3 },
   { label: "Cài đặt", href: "/admin/settings", icon: Settings },

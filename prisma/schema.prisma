@@ -49,8 +49,10 @@ enum AttendanceStatus {
 }
 
 enum JobStatus {
+  DRAFT
   OPEN
   CLOSED
+  ON_HOLD
   PAUSED
 }
 
@@ -375,7 +377,12 @@ model JobPosting {
   type         String?
   description  String    @db.Text
   requirements String?   @db.Text
+  benefits     String?   @db.Text
   salary       String?
+  salaryMin    Int?
+  salaryMax    Int?
+  salaryNote   String?
+  openings     Int       @default(1)
   status       JobStatus @default(OPEN)
   authorId     String?
   closesAt     DateTime?
@@ -387,6 +394,7 @@ model JobPosting {
 
   @@index([slug])
   @@index([status])
+  @@index([department])
 }
 
 model JobApplication {

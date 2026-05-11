@@ -460,6 +460,101 @@ Trung tâm có niềm tin vào chương trình của mình sẽ không ngại:
   ])
   console.log(`✅ ${blogPosts.length} bài viết blog đã tạo`)
 
+  // ─── Job Postings ─────────────────────────────────────────────────────────────
+  const jobsData = [
+    {
+      slug: 'sale-tu-van-tuyen-sinh',
+      title: 'Sale Tư vấn Tuyển sinh',
+      department: 'marketing-sale',
+      location: 'danang',
+      type: 'fulltime',
+      description: `## Mô tả công việc\n\nSata Robo đang tìm 2 chuyên viên Sale Tư vấn Tuyển sinh năng động cho 4 trung tâm tại Đà Nẵng.\n\n**Trách nhiệm chính:**\n\n- Tư vấn các khoá học Robotics, lập trình, luyện thi cho phụ huynh và học sinh\n- Tiếp nhận lead từ marketing, gọi điện và hẹn lịch demo trực tiếp tại trung tâm\n- Theo dõi pipeline trong CRM, cập nhật trạng thái từng lead\n- Đạt KPI doanh số cá nhân hàng tháng\n- Phối hợp với đội Marketing để tối ưu chất lượng lead\n\n**Khu vực phụ trách:** Đà Nẵng (4 cơ sở)`,
+      requirements: `## Yêu cầu\n\n**Kinh nghiệm:**\n- Tối thiểu 1 năm kinh nghiệm Sale/Telesales (ưu tiên ngành giáo dục)\n- Hoặc Fresher có khả năng học hỏi tốt, đam mê lĩnh vực giáo dục\n\n**Kỹ năng:**\n- Giao tiếp tốt với phụ huynh, có khả năng lắng nghe và thuyết phục\n- Kiên trì, chịu áp lực KPI cao\n- Sử dụng thành thạo Zalo, Facebook, email\n\n**Cá tính:**\n- Yêu trẻ em, kiên nhẫn với phụ huynh\n- Tinh thần đồng đội, sẵn sàng học hỏi`,
+      benefits: `## Quyền lợi\n\n**Thu nhập:**\n- Lương cơ bản: 7–10 triệu/tháng\n- Hoa hồng theo doanh số (không giới hạn)\n- Tổng thu nhập trung bình: 12–20 triệu/tháng\n\n**Phúc lợi:**\n- BHXH, BHYT, BHTN đầy đủ\n- Thưởng các ngày lễ và lương tháng 13\n- Phụ cấp xăng xe, ăn trưa\n- Đào tạo nội bộ chuyên sâu\n\n**Môi trường:**\n- Team trẻ, năng động, lộ trình thăng tiến rõ ràng\n- Giờ làm: T2–T6 (8h30–17h30) + T7 sáng`,
+      salaryMin: 7_000_000,
+      salaryMax: 20_000_000,
+      salaryNote: null as string | null,
+      status: 'OPEN' as const,
+      openings: 2,
+      closesAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    },
+    {
+      slug: 'giang-vien-robotics',
+      title: 'Giảng viên Robotics & Lập trình',
+      department: 'dao-tao',
+      location: 'danang',
+      type: 'fulltime',
+      description: `## Mô tả công việc\n\nBạn sẽ trực tiếp giảng dạy các khoá **Lập trình Robot** và **Luyện thi RoboSim** cho học sinh lớp 1–8 tại các cơ sở Sata Robo.\n\n**Trách nhiệm:**\n\n- Lên giáo án và giảng dạy theo chương trình chuẩn WRO\n- Theo dõi và đánh giá tiến độ từng học viên\n- Tham gia nghiên cứu phát triển giáo trình mới\n- Hướng dẫn và huấn luyện đội tuyển thi đấu\n- Báo cáo định kỳ với Trưởng bộ môn`,
+      requirements: `## Yêu cầu\n\n- Tốt nghiệp ĐH ngành Kỹ thuật, CNTT, Cơ điện tử hoặc liên quan\n- Đam mê giáo dục và làm việc với trẻ em\n- Có kiến thức lập trình (Scratch, Python, C++ là lợi thế)\n- Ưu tiên: đã từng thi đấu Robotics hoặc có chứng chỉ liên quan\n- Kiên nhẫn, có kỹ năng truyền đạt tốt`,
+      benefits: `## Quyền lợi\n\n- Lương: 8–15 triệu/tháng tuỳ năng lực\n- Được đào tạo chuyên sâu 40 giờ trước khi đứng lớp\n- Cơ hội phát triển thành GV Lead hoặc Trưởng bộ môn\n- BHXH đầy đủ, phụ cấp ăn trưa\n- Môi trường học thuật, được tiếp cận thiết bị robot hiện đại`,
+      salaryMin: 8_000_000,
+      salaryMax: 15_000_000,
+      salaryNote: null as string | null,
+      status: 'OPEN' as const,
+      openings: 3,
+      closesAt: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000),
+    },
+    {
+      slug: 'marketing-specialist',
+      title: 'Marketing Specialist',
+      department: 'marketing',
+      location: 'danang',
+      type: 'fulltime',
+      description: `## Mô tả công việc\n\nBạn sẽ phụ trách toàn bộ hoạt động marketing digital cho Sata Robo — từ content creation đến performance ads.\n\n**Trách nhiệm:**\n\n- Lên kế hoạch và triển khai chiến lược content: blog, Facebook, TikTok, YouTube\n- Chạy và tối ưu quảng cáo Facebook Ads, Google Ads\n- Phân tích dữ liệu (GA4, Meta Pixel, CRM) và báo cáo hàng tuần\n- Phối hợp với team Sales để tối ưu conversion rate\n- Quản lý KOL/KOC và các chiến dịch collaboration`,
+      requirements: `## Yêu cầu\n\n- Tốt nghiệp ĐH ngành Marketing, Truyền thông, QTKD hoặc liên quan\n- Tối thiểu 2 năm kinh nghiệm Digital Marketing\n- Thành thạo Facebook Ads Manager, Google Ads\n- Biết viết content chuẩn SEO, thiết kế cơ bản (Canva/Figma)\n- Có dữ liệu thành tích chiến dịch cụ thể (ROAS, CPL, CTR...)`,
+      benefits: `## Quyền lợi\n\n- Lương: 10–18 triệu/tháng + thưởng KPI\n- Budget quảng cáo riêng để thử nghiệm và học hỏi\n- Được đầu tư công cụ: Canva Pro, scheduling tool, analytics\n- Môi trường sáng tạo, tự chủ cao\n- BHXH đầy đủ, thưởng tháng 13`,
+      salaryMin: 10_000_000,
+      salaryMax: 18_000_000,
+      salaryNote: null as string | null,
+      status: 'OPEN' as const,
+      openings: 1,
+      closesAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    },
+    {
+      slug: 'frontend-developer-nextjs',
+      title: 'Frontend Developer (React / Next.js)',
+      department: 'it',
+      location: 'online-hybrid',
+      type: 'fulltime',
+      description: `## Mô tả công việc\n\nBạn sẽ phát triển và duy trì **satarobo.vn** và các sản phẩm web nội bộ của Sata Robo — bao gồm website marketing, admin CRM và LMS học viên.\n\n**Trách nhiệm:**\n\n- Phát triển tính năng mới cho website theo yêu cầu của Product Owner\n- Tối ưu performance (Core Web Vitals, Lighthouse score ≥ 90)\n- Code review và maintain code quality\n- Phối hợp với team Marketing để implement tracking (GA4, Meta Pixel)\n- Báo cáo tiến độ và đề xuất cải tiến kỹ thuật`,
+      requirements: `## Yêu cầu\n\n**Bắt buộc:**\n- Tối thiểu 2 năm kinh nghiệm React.js\n- Thành thạo Next.js App Router (RSC, Server Actions)\n- TypeScript strict mode\n- Tailwind CSS, responsive design\n- Hiểu biết về Web Performance và SEO kỹ thuật\n\n**Lợi thế:**\n- Có kinh nghiệm Prisma / PostgreSQL\n- Đã từng build CMS hoặc admin panel\n- Hiểu về tracking (GA4, Meta Pixel, CAPI)`,
+      benefits: `## Quyền lợi\n\n- Lương: 15–30 triệu/tháng tuỳ năng lực\n- Làm việc Hybrid: 3 ngày remote, 2 ngày tại Đà Nẵng (hoặc Full Remote với senior)\n- Được chọn công cụ và setup môi trường làm việc\n- Review lương 2 lần/năm\n- Budget học tập 5 triệu/năm (sách, khoá học, conference)\n- BHXH đầy đủ`,
+      salaryMin: 15_000_000,
+      salaryMax: 30_000_000,
+      salaryNote: null as string | null,
+      status: 'OPEN' as const,
+      openings: 1,
+      closesAt: null,
+    },
+    {
+      slug: 'thuc-tap-sinh-marketing',
+      title: 'Thực tập sinh Marketing',
+      department: 'marketing',
+      location: 'danang',
+      type: 'intern',
+      description: `## Mô tả công việc\n\nBạn sẽ được trải nghiệm thực tế tại bộ phận Marketing — không phải pha cà phê và photo tài liệu, mà là **làm việc thật**.\n\n**Bạn sẽ làm:**\n\n- Sản xuất nội dung: viết bài blog, caption mạng xã hội, kịch bản TikTok\n- Thiết kế poster, banner sự kiện bằng Canva\n- Hỗ trợ chạy và theo dõi chiến dịch quảng cáo\n- Phân tích số liệu từ Facebook Insights, Google Analytics\n- Tham gia sự kiện và hoạt động của trung tâm`,
+      requirements: `## Yêu cầu\n\n- Sinh viên năm 3–4 ngành Marketing, Truyền thông, QTKD hoặc liên quan\n- Có thể đi làm tối thiểu 4 buổi/tuần\n- Biết Canva (Figma là lợi thế)\n- Có tài khoản Facebook/TikTok/Instagram hoạt động\n- Nhiệt tình, ham học hỏi, có khiếu sáng tạo nội dung`,
+      benefits: `## Quyền lợi\n\n- Phụ cấp: 3–5 triệu/tháng tuỳ mức độ đóng góp\n- Được mentor 1:1 với Marketing Manager\n- Thực hành thật với budget quảng cáo thật\n- Cơ hội chuyển thành nhân viên chính thức sau thực tập\n- Chứng nhận thực tập có giá trị, được ký và đóng dấu công ty`,
+      salaryMin: 3_000_000,
+      salaryMax: 5_000_000,
+      salaryNote: null as string | null,
+      status: 'OPEN' as const,
+      openings: 2,
+      closesAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+    },
+  ]
+
+  let jobCount = 0
+  for (const job of jobsData) {
+    await db.jobPosting.upsert({
+      where: { slug: job.slug },
+      update: { ...job, authorId: admin.id },
+      create: { ...job, authorId: admin.id },
+    })
+    jobCount++
+  }
+  console.log(`✅ ${jobCount} tin tuyển dụng đã tạo`)
+
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));
   console.log("📧 Email:    phuc@satarobo.vn");

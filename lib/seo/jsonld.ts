@@ -157,6 +157,92 @@ export function blogPostingJsonLd(post: BlogPostingInput) {
   }
 }
 
+const EMPLOYMENT_TYPE_MAP: Record<string, string> = {
+  fulltime: 'FULL_TIME',
+  parttime: 'PART_TIME',
+  intern: 'INTERN',
+  contract: 'CONTRACTOR',
+}
+
+export interface JobForJsonLd {
+  slug: string
+  title: string
+  description: string
+  requirements: string | null
+  benefits: string | null
+  location: string | null
+  type: string | null
+  salaryMin: number | null
+  salaryMax: number | null
+  openings: number
+  createdAt: Date
+  closesAt: Date | null
+}
+
+export function jobPostingJsonLd(job: JobForJsonLd) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'JobPosting',
+    title: job.title,
+    description: [job.description, job.requirements, job.benefits]
+      .filter(Boolean)
+      .join('\n\n'),
+    identifier: {
+      '@type': 'PropertyValue',
+      name: 'Sata Robo',
+      value: job.slug,
+    },
+    datePosted: job.createdAt.toISOString().split('T')[0],
+    ...(job.closesAt && { validThrough: job.closesAt.toISOString() }),
+    employmentType: EMPLOYMENT_TYPE_MAP[job.type ?? ''] ?? 'OTHER',
+    hiringOrganization: {
+      '@type': 'EducationalOrganization',
+      name: 'Công ty Cổ phần Công nghệ Giáo dục Sata Robo',
+      sameAs: BASE_URL,
+      logo: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
+    },
+    jobLocation: {
+      '@type': 'Place',
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: '258 Lê Thanh Nghị',
+        addressLocality: 'Đà Nẵng',
+        addressRegion: 'Đà Nẵng',
+        addressCountry: 'VN',
+      },
+    },
+    ...(job.location !== 'danang' && {
+      jobLocationType: 'TELECOMMUTE',
+      applicantLocationRequirements: {
+        '@type': 'Country',
+        name: 'Việt Nam',
+      },
+    }),
+    ...(job.salaryMin && job.salaryMax
+      ? {
+          baseSalary: {
+            '@type': 'MonetaryAmount',
+            currency: 'VND',
+            value: {
+              '@type': 'QuantitativeValue',
+              minValue: job.salaryMin,
+              maxValue: job.salaryMax,
+              unitText: 'MONTH',
+            },
+          },
+        }
+      : {}),
+    totalJobOpenings: job.openings,
+    directApply: false,
+    applicationContact: {
+      '@type': 'ContactPoint',
+      email: 'mytrangduong1986@gmail.com',
+      telephone: '+840905250544',
+      contactType: 'recruiter',
+    },
+  }
+}
+
 export function breadcrumbJsonLd(items: Array<{ name: string; url: string }>) {
   return {
     '@context': 'https://schema.org',
