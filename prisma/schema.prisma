@@ -13,6 +13,7 @@ datasource db {
 enum Role {
   SUPER_ADMIN
   MANAGER
+  HR
   SALES
   TEACHER
   MARKETING
@@ -105,10 +106,11 @@ model Center {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users    User[]
-  leads    Lead[]
-  classes  Class[]
-  students Student[]
+  users     User[]
+  leads     Lead[]
+  classes   Class[]
+  students  Student[]
+  employees Employee[]
 
   @@index([isActive])
 }
@@ -127,6 +129,10 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Link 1-1 với Employee (1 user account ↔ 1 employee record)
+  employeeId    String?   @unique
+  employee      Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+
   center        Center?        @relation(fields: [centerId], references: [id])
   accounts      Account[]
   assignedLeads Lead[]         @relation("AssignedLeads")
@@ -134,6 +140,10 @@ model User {
   teacherClass  Class[]        @relation("TeacherClasses")
   blogPosts     BlogPost[]
   jobPostings   JobPosting[]
+
+  honorsCreated      Honor[]            @relation("HonorCreatedBy")
+  pageContentUpdated SitePageContent[]  @relation("PageContentUpdatedBy")
+  employeesCreated   Employee[]         @relation("EmployeeCreatedBy")
 
   @@index([email])
   @@index([centerId])
@@ -424,4 +434,167 @@ model MarketingConfig {
   updatedAt DateTime @updatedAt
 
   @@index([key])
+}
+
+// ============================================
+// HALL OF FAME — VINH DANH NHÂN SỰ
+// ============================================
+
+enum HonorCategory {
+  SPARK
+  GROWTH
+  IMPACT
+  GRAND_CHAMPION
+}
+
+model Honor {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+
+  // Link sang Employee (source of truth cho thông tin nhân sự)
+  // Tạm thời nullable để migration backfill xong mới enforce NOT NULL ở Phase 4.7.1
+  employeeId     String?
+  employee       Employee?     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // Snapshot lúc trao giải (override Employee data hiện tại nếu cần)
+  jobTitleAtTime String?
+  yearsAtTime    Int?
+
+  // DEPRECATED: Giữ tạm để code cũ rollback an toàn, sẽ drop ở Phase 4.7.1
+  // Code mới đọc qua honor.employee.fullName / jobTitle / avatarUrl
+  fullName       String?
+  jobTitle       String?
+  avatarUrl      String?
+  yearsAtCompany Int?
+
+  category       HonorCategory
+  awardName      String
+  awardedAt      DateTime
+  awardQuarter   String?
+
+  story          String        @db.Text
+  shortBio       String?       @db.VarChar(280)
+  pullQuote      String?       @db.VarChar(500)
+  achievements   String?       @db.Text
+
+  isFeatured     Boolean       @default(false)
+  isPublished    Boolean       @default(true)
+  displayOrder   Int           @default(0)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdById    String?
+  createdBy      User?         @relation("HonorCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([isFeatured])
+  @@index([isPublished, displayOrder])
+  @@index([employeeId])
+}
+
+model TimelineItem {
+  id              String   @id @default(cuid())
+  occurredAt      DateTime
+  title           String
+  description     String   @db.Text
+  coverImageUrl   String?
+  relatedHonorIds String?
+  isPublished     Boolean  @default(true)
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isPublished, occurredAt])
+}
+
+model SitePageContent {
+  id           String   @id @default(cuid())
+  pageKey      String
+  contentKey   String
+  contentValue String   @db.Text
+  updatedAt    DateTime @updatedAt
+  updatedById  String?
+  updatedBy    User?    @relation("PageContentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([pageKey, contentKey])
+  @@index([pageKey])
+}
+
+// ============================================
+// EMPLOYEE MODULE
+// ============================================
+
+enum Department {
+  BAN_GIAM_DOC
+  DAO_TAO
+  MARKETING
+  KINH_DOANH
+  IT
+  HANH_CHANH_NHAN_SU
+  KE_TOAN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ContractType {
+  FULLTIME
+  PARTTIME
+  INTERN
+  FREELANCE
+}
+
+model Employee {
+  id           String        @id @default(cuid())
+
+  // Tier 1: cơ bản
+  employeeCode String        @unique
+  fullName     String
+  jobTitle     String
+  department   Department
+  avatarUrl    String?
+  email        String?       @unique
+  joinedAt     DateTime?
+  bio          String?       @db.Text
+  isActive     Boolean       @default(true)
+  isPublic     Boolean       @default(false)
+  displayOrder Int           @default(0)
+
+  // Tier 2: HR cơ bản
+  phone        String?
+  dateOfBirth  DateTime?
+  gender       Gender?
+  contractType ContractType?
+  salaryRank   Int?
+  salaryLevel  Int?
+
+  // Cơ sở làm việc
+  centerId     String?
+  center       Center?       @relation(fields: [centerId], references: [id], onDelete: SetNull)
+
+  // Self-relation: quản lý trực tiếp
+  managerId    String?
+  manager      Employee?     @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates Employee[]    @relation("EmployeeManager")
+
+  // CEO flag (chỉ 1 employee được isCEO=true tại 1 thời điểm)
+  isCEO        Boolean       @default(false)
+
+  // Meta
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  createdById  String?
+  createdBy    User?         @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  // Relations
+  honors       Honor[]
+  userAccount  User?         @relation("UserEmployee")
+
+  @@index([department])
+  @@index([isActive])
+  @@index([isPublic])
+  @@index([isCEO])
 }
