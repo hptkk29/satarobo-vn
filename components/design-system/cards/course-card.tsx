@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Clock, Users } from "lucide-react";
 import { BorderBeam } from "@/components/magic/border-beam";
+import { HoverLiftCard } from "@/components/design-system/effects/hover-lift-card";
 import { tokens } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,8 @@ interface CourseCardProps {
   duration?: string;
   studentCount?: number;
   className?: string;
+  /** Wrap với HoverLiftCard. Default true (Phase 4.UI.1.1). */
+  liftOnHover?: boolean;
 }
 
 // Course card với BorderBeam hover. Light background.
@@ -30,8 +33,9 @@ export function CourseCard({
   duration,
   studentCount,
   className,
+  liftOnHover = true,
 }: CourseCardProps) {
-  return (
+  const card = (
     <Link
       href={href}
       className={cn(
@@ -111,4 +115,9 @@ export function CourseCard({
       </div>
     </Link>
   );
+
+  if (liftOnHover) {
+    return <HoverLiftCard glowColor="orange">{card}</HoverLiftCard>;
+  }
+  return card;
 }

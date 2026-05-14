@@ -95,6 +95,7 @@ export default tseslint.config(
       'components/design-system/ctas/**/*.{ts,tsx}',
       'components/design-system/decorations/**/*.{ts,tsx}',
       'components/design-system/illustrations/**/*.{ts,tsx}',
+      'components/design-system/effects/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': ['error', clientBlockedImports],

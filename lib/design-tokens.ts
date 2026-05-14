@@ -131,6 +131,41 @@ export const tokens = {
     accent: "border border-orange-200",
     interactive: "border border-neutral-200 hover:border-orange-300 transition-colors",
   },
+
+  // Phase 4.UI.1.1 — Vibrant gradient backgrounds (strategic placement)
+  vibrantBg: {
+    // Hero CHÍNH — wow effect (1 lần per page max)
+    sunrise: "bg-gradient-to-br from-orange-50/60 via-white to-purple-50/40",
+    twilight: "bg-gradient-to-br from-purple-50/40 via-white to-orange-50/60",
+    // Section-specific
+    softWarm: "bg-gradient-to-b from-white via-orange-50/40 to-white", // Sản phẩm (cam dominant)
+    softCool: "bg-gradient-to-b from-white via-purple-50/30 to-white", // Testimonials/About (tím dominant)
+    softWarmInverse: "bg-gradient-to-b from-orange-50/40 via-white to-white",
+    softCoolInverse: "bg-gradient-to-b from-purple-50/30 via-white to-white",
+    // Aurora — special moments
+    aurora: "bg-gradient-to-br from-orange-50/30 via-white to-purple-50/30",
+    // Final CTA
+    ctaFinal: "bg-gradient-to-r from-orange-50/60 via-white to-purple-50/60",
+  },
+
+  // Phase 4.UI.1.1 — Effect utility classes (hover, glow)
+  effects: {
+    // Glow orb backgrounds (for absolute decoration)
+    glowOrb: {
+      orange: "bg-orange-300/40 blur-3xl",
+      purple: "bg-purple-300/40 blur-3xl",
+      mixed: "bg-gradient-to-br from-orange-300/30 to-purple-300/30 blur-3xl",
+    },
+    // Sparkle colors (hex for SVG/canvas)
+    sparkle: {
+      orange: "#F97316",
+      purple: "#7C3AED",
+    },
+    // Hover state classes
+    hoverLift: "hover:-translate-y-1 hover:shadow-lg transition-all duration-300",
+    hoverBorder: "hover:border-orange-300 transition-colors duration-200",
+    hoverGlow: "hover:shadow-[0_0_30px_rgba(249,115,22,0.15)] transition-shadow duration-300",
+  },
 } as const;
 
 // Convenience re-exports
@@ -143,3 +178,5 @@ export const shadows = tokens.shadows;
 export const radius = tokens.radius;
 export const duration = tokens.duration;
 export const borders = tokens.borders;
+export const vibrantBg = tokens.vibrantBg;
+export const effects = tokens.effects;

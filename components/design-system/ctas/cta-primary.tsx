@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode, ButtonHTMLAttributes } from "react";
 import { ShimmerButton } from "@/components/magic/shimmer-button";
+import { MagneticCTA } from "@/components/design-system/effects/magnetic-cta";
 import { cn } from "@/lib/utils";
 
 type Size = "sm" | "md" | "lg";
@@ -11,6 +12,8 @@ interface CommonProps {
   children: ReactNode;
   size?: Size;
   className?: string;
+  /** Wrap with MagneticCTA cursor-following effect. Default false. Phase 4.UI.1.1. */
+  magnetic?: boolean;
 }
 
 type ButtonProps = CommonProps &
@@ -31,7 +34,7 @@ const SIZE_CLASS: Record<Size, string> = {
 
 // Primary CTA — Cam shimmer button. Use cho important actions.
 export function CTAPrimary(props: Props) {
-  const { children, size = "md", className } = props;
+  const { children, size = "md", className, magnetic = false } = props;
 
   const button = (
     <ShimmerButton
@@ -43,19 +46,24 @@ export function CTAPrimary(props: Props) {
       )}
       shimmerColor="rgba(255,255,255,0.7)"
       background="#F97316"
-      // If onClick exists, pass it through
       onClick={"onClick" in props && !("href" in props) ? props.onClick : undefined}
     >
       {children}
     </ShimmerButton>
   );
 
+  let wrapped: ReactNode = button;
+
   if ("href" in props && props.href) {
-    return (
+    wrapped = (
       <Link href={props.href} target={props.target} className="inline-block">
         {button}
       </Link>
     );
   }
-  return button;
+
+  if (magnetic) {
+    return <MagneticCTA>{wrapped}</MagneticCTA>;
+  }
+  return wrapped;
 }
