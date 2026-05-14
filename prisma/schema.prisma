@@ -160,6 +160,16 @@ model Course {
   price       Int?
   duration    Int?
   isActive    Boolean    @default(true)
+
+  // Marketing fields (Phase 4.UI.FINAL)
+  code             String? // "SP1", "SP2"... cho product cards
+  shortDescription String? @db.VarChar(280)
+  priceDisplay     String? // "2,400,000đ" hoặc "Liên hệ"
+  durationDisplay  String? // "6 tháng" hoặc "Tuỳ chỉnh"
+  studentCount     Int     @default(0)
+  displayOrder     Int     @default(0)
+  isPublished      Boolean @default(true)
+
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -169,6 +179,8 @@ model Course {
 
   @@index([slug])
   @@index([type])
+  @@index([code])
+  @@index([isPublished, displayOrder])
 }
 
 model Lead {

@@ -82,10 +82,12 @@ async function main() {
   console.log(`✅ ${centers.length} trung tâm đã tạo`);
 
   // ─── Courses ─────────────────────────────────────────────────────────────────
+  // Legacy 2 courses (giữ để tránh break /khoa-hoc/lap-trinh-robot, luyen-thi-robosim)
+  // + 4 new SP cards cho marketing site (Phase 4.UI.FINAL).
   const courses = await Promise.all([
     db.course.upsert({
       where: { slug: "lap-trinh-robot" },
-      update: {},
+      update: { isPublished: false, displayOrder: 99 },
       create: {
         slug: "lap-trinh-robot",
         name: "Khoá Lập trình Robot Offline",
@@ -93,22 +95,111 @@ async function main() {
         description:
           "Khoá học lập trình robot thực tế cho học sinh lớp 1-8. Học viên được thực hành trực tiếp với robot, phát triển tư duy logic và kỹ năng STEM.",
         isActive: true,
+        isPublished: false, // legacy — không hiện trong product grid mới
+        displayOrder: 99,
       },
     }),
     db.course.upsert({
       where: { slug: "luyen-thi-robosim" },
-      update: {},
+      update: { isPublished: false, displayOrder: 99 },
       create: {
         slug: "luyen-thi-robosim",
         name: "Khoá Luyện thi RoboSim Online",
         type: "ONLINE",
         description:
-          "Khoá luyện thi RoboSim trực tuyến, giúp học sinh chinh phục các kỳ thi Robotics cấp thành phố và quốc gia.",
+          "Khoá luyện thi RoboSim trực tuyến.",
         isActive: true,
+        isPublished: false,
+        displayOrder: 99,
+      },
+    }),
+    // ─── 4 SP marketing courses ───────────────────────────────────────────────
+    db.course.upsert({
+      where: { slug: "sp1" },
+      update: {},
+      create: {
+        slug: "sp1",
+        code: "SP1",
+        name: "Robosim Master",
+        type: "ONLINE",
+        description:
+          "Khoá video online học robotics trên trình duyệt. Platform mô phỏng cuộc thi RoboSim đầu tiên tại Việt Nam — 4,000+ học viên đã luyện thi.",
+        shortDescription:
+          "Khoá video online học robotics trên trình duyệt. Platform mô phỏng cuộc thi đầu tiên tại Việt Nam.",
+        price: 2400000,
+        priceDisplay: "2,400,000đ",
+        duration: 180,
+        durationDisplay: "6 tháng",
+        studentCount: 2400,
+        displayOrder: 1,
+        isActive: true,
+        isPublished: true,
+      },
+    }),
+    db.course.upsert({
+      where: { slug: "sp2" },
+      update: {},
+      create: {
+        slug: "sp2",
+        code: "SP2",
+        name: "Offline Class",
+        type: "OFFLINE",
+        description:
+          "Lớp học robotics offline tại 4 cơ sở Đà Nẵng. Robot thật, giảng viên 1:1, sĩ số ≤ 8 học viên/lớp.",
+        shortDescription:
+          "Lớp học robotics tại 4 cơ sở Đà Nẵng. Robot thật, lớp nhỏ, giáo viên 1:1.",
+        price: 6500000,
+        priceDisplay: "6,500,000đ",
+        duration: 90,
+        durationDisplay: "3 tháng",
+        studentCount: 800,
+        displayOrder: 2,
+        isActive: true,
+        isPublished: true,
+      },
+    }),
+    db.course.upsert({
+      where: { slug: "sp3" },
+      update: {},
+      create: {
+        slug: "sp3",
+        code: "SP3",
+        name: "Sata Inno School",
+        type: "OFFLINE",
+        description:
+          "Giải pháp Lab STEM & Robotics tổng thể cho trường K-12: trang bị phòng lab, chương trình tích hợp, đào tạo giáo viên, KPI dashboard.",
+        shortDescription:
+          "Giải pháp Lab STEM cho trường K-12: phòng lab, chương trình, đào tạo giáo viên.",
+        priceDisplay: "Liên hệ",
+        durationDisplay: "Tuỳ chỉnh",
+        studentCount: 0,
+        displayOrder: 3,
+        isActive: true,
+        isPublished: true,
+      },
+    }),
+    db.course.upsert({
+      where: { slug: "sp4" },
+      update: {},
+      create: {
+        slug: "sp4",
+        code: "SP4",
+        name: "SATAGO Trải nghiệm",
+        type: "HYBRID",
+        description:
+          "Tour ngoại khoá Robotics + STEM 1-3 ngày cho học sinh: tham quan, thực hành, lắp ráp robot. Có thể kết hợp với SP3.",
+        shortDescription:
+          "Tour ngoại khoá robotics + STEM 1-3 ngày kết hợp khám phá và thực hành.",
+        priceDisplay: "Liên hệ",
+        durationDisplay: "1-3 ngày",
+        studentCount: 0,
+        displayOrder: 4,
+        isActive: true,
+        isPublished: true,
       },
     }),
   ]);
-  console.log(`✅ ${courses.length} khoá học đã tạo`);
+  console.log(`✅ ${courses.length} khoá học đã tạo (2 legacy + 4 SP marketing)`);
 
   // ─── SUPER_ADMIN ──────────────────────────────────────────────────────────────
   const hashedPassword = await bcrypt.hash("ChangeMe@2026!", 12);
