@@ -70,6 +70,7 @@ export default tseslint.config(
     files: [
       'app/(admin)/**/*.{ts,tsx}',
       'components/admin/**/*.{ts,tsx}',
+      'components/design-system/admin/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': ['error', adminBlockedImports],
@@ -88,6 +89,12 @@ export default tseslint.config(
       'components/seo/**/*.{ts,tsx}',
       'components/magic/**/*.{ts,tsx}',
       'components/motion/**/*.{ts,tsx}',
+      'components/design-system/heroes/**/*.{ts,tsx}',
+      'components/design-system/sections/**/*.{ts,tsx}',
+      'components/design-system/cards/**/*.{ts,tsx}',
+      'components/design-system/ctas/**/*.{ts,tsx}',
+      'components/design-system/decorations/**/*.{ts,tsx}',
+      'components/design-system/illustrations/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': ['error', clientBlockedImports],
