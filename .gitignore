@@ -33,9 +33,11 @@ yarn-error.log*
 # env files — .env.example được commit, còn lại không
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env*.local
+.env.development
+.env.production
+.env.staging
+.env.test
 
 # vercel
 .vercel
@@ -45,3 +47,24 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+
+# Backup files (NEVER commit)
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# Sensitive files (extra safety)
+*.key
+*credentials*
+*-secret*
+secret-*
+*.sql.bak
+*.dump
+
+# Claude Code per-user settings (project-wide config trong rules/skills/commands IS committed)
+.claude/settings.local.json
+.claude/cache/
+.claude/.logs/
