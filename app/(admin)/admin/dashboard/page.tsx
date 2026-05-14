@@ -1,145 +1,277 @@
-import { auth } from '@/lib/auth'
-import { redirect } from 'next/navigation'
-import { db } from '@/lib/db'
-import { Users, UserPlus, BookOpen, FileText } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { db } from "@/lib/db";
+import { Users, UserPlus, BookOpen, FileText, TrendingUp } from "lucide-react";
+import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin";
+import { StatusBadge } from "@/components/design-system/admin/status-badge";
+import { DataTableShell } from "@/components/design-system/admin/data-table-shell";
+import { LineChart } from "@/components/charts/line-chart";
+import { BarChart } from "@/components/charts/bar-chart";
 
-const ROLE_LABELS: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  MANAGER: 'Quản lý',
-  SALES: 'Sales',
-  TEACHER: 'Giáo viên',
-  MARKETING: 'Marketing',
-  ACCOUNTANT: 'Kế toán',
-}
+const STATUS_VARIANT: Record<
+  string,
+  "success" | "warning" | "error" | "info" | "neutral"
+> = {
+  NEW: "info",
+  CONTACTED: "warning",
+  DEMO_SCHEDULED: "info",
+  ENROLLED: "success",
+  NURTURING: "warning",
+  LOST: "error",
+};
 
 const STATUS_LABELS: Record<string, string> = {
-  NEW: 'Lead mới',
-  CONTACTED: 'Đã liên hệ',
-  DEMO_SCHEDULED: 'Đã hẹn demo',
-  ENROLLED: 'Đã đăng ký',
-  NURTURING: 'Đang nuôi',
-  LOST: 'Đã mất',
-}
+  NEW: "Mới",
+  CONTACTED: "Đã liên hệ",
+  DEMO_SCHEDULED: "Đã hẹn demo",
+  ENROLLED: "Đã đăng ký",
+  NURTURING: "Đang nuôi",
+  LOST: "Đã mất",
+};
 
-const STATUS_COLORS: Record<string, string> = {
-  NEW: 'bg-blue-100 text-blue-700',
-  CONTACTED: 'bg-yellow-100 text-yellow-700',
-  DEMO_SCHEDULED: 'bg-purple-100 text-purple-700',
-  ENROLLED: 'bg-green-100 text-green-700',
-  NURTURING: 'bg-orange-100 text-orange-700',
-  LOST: 'bg-gray-100 text-gray-500',
+function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
+  const buckets: Record<string, number> = {};
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+    buckets[key] = 0;
+  }
+  leads.forEach((l) => {
+    const key = new Date(l.createdAt).toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+    if (key in buckets) buckets[key]++;
+  });
+  return Object.entries(buckets).map(([date, count]) => ({ date, leads: count }));
 }
-
 
 export default async function DashboardPage() {
-  const session = await auth()
-  if (!session?.user) redirect('/login')
+  const session = await auth();
+  if (!session?.user) redirect("/login");
 
-  const roleLabel = ROLE_LABELS[session.user.role] ?? session.user.role
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-
-  const [totalLeads, todayLeads, leadsByStatus, totalPosts, recentLeads] = await Promise.all([
-    db.lead.count({ where: { deletedAt: null } }).catch(() => 0),
-    db.lead.count({ where: { deletedAt: null, createdAt: { gte: todayStart } } }).catch(() => 0),
-    db.lead.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { _all: true } }).catch(() => []),
-    db.blogPost.count({ where: { isPublished: true } }).catch(() => 0),
+  const [
+    totalLeads,
+    newLeadsThisMonth,
+    newLeadsLastMonth,
+    enrolledLeads,
+    totalStudents,
+    totalPosts,
+    recentLeads,
+    leadsLast14Days,
+    leadsByStatus,
+  ] = await Promise.all([
+    db.lead.count(),
+    db.lead.count({ where: { createdAt: { gte: monthStart } } }),
+    db.lead.count({ where: { createdAt: { gte: lastMonth, lt: monthStart } } }),
+    db.lead.count({ where: { status: "ENROLLED" } }),
+    db.student.count({ where: { deletedAt: null } }),
+    db.blogPost.count({ where: { isPublished: true } }),
     db.lead.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { id: true, parentName: true, phone: true, status: true, createdAt: true, center: { select: { name: true } } },
-    }).catch(() => []),
-  ])
+      take: 8,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        parentName: true,
+        phone: true,
+        status: true,
+        createdAt: true,
+      },
+    }),
+    db.lead.findMany({
+      where: { createdAt: { gte: fourteenDaysAgo } },
+      select: { createdAt: true },
+    }),
+    db.lead.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    }),
+  ]);
 
-  const stats = [
-    { title: 'Tổng lead', value: totalLeads.toLocaleString('vi-VN'), icon: Users, color: 'text-blue-600 bg-blue-50' },
-    { title: 'Lead mới hôm nay', value: `+${todayLeads}`, icon: UserPlus, color: 'text-orange-600 bg-orange-50' },
-    { title: 'Bài viết đã đăng', value: totalPosts.toLocaleString('vi-VN'), icon: FileText, color: 'text-purple-600 bg-purple-50' },
-    { title: 'Lead đã đăng ký', value: (leadsByStatus.find(s => s.status === 'ENROLLED')?._count._all ?? 0).toLocaleString('vi-VN'), icon: BookOpen, color: 'text-green-600 bg-green-50' },
-  ]
+  const monthDelta =
+    newLeadsLastMonth > 0
+      ? ((newLeadsThisMonth - newLeadsLastMonth) / newLeadsLastMonth) * 100
+      : 0;
+  const conversionRate =
+    totalLeads > 0 ? ((enrolledLeads / totalLeads) * 100).toFixed(1) : "0";
+
+  const dailyLeadsChart = lastNDaysData(leadsLast14Days);
+  const statusBars = leadsByStatus
+    .map((s) => ({
+      status: STATUS_LABELS[s.status] ?? s.status,
+      count: s._count.id,
+    }))
+    .sort((a, b) => b.count - a.count);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Chào {session.user.name ?? 'Admin'} 👋
+        <h1 className="text-2xl font-bold text-neutral-900">
+          Xin chào, {session.user.name?.split(" ").slice(-1)[0] ?? "Admin"}
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Vai trò: <span className="font-medium text-[#7C3AED]">{roleLabel}</span>
+        <p className="text-sm text-neutral-500 mt-1">
+          Tổng quan hệ thống ·{" "}
+          {now.toLocaleDateString("vi-VN", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          })}
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon
-          return (
-            <Card key={stat.title} className="border-0 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">{stat.title}</CardTitle>
-                <div className={`rounded-lg p-2 ${stat.color}`}>
-                  <Icon className="h-4 w-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-              </CardContent>
-            </Card>
-          )
-        })}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCardAdmin
+          label="Tổng leads"
+          value={totalLeads}
+          icon={<Users className="w-4 h-4" />}
+          iconColor="orange"
+        />
+        <StatCardAdmin
+          label="Leads tháng này"
+          value={newLeadsThisMonth}
+          trend={
+            monthDelta !== 0
+              ? {
+                  direction: monthDelta > 0 ? "up" : "down",
+                  value: `${monthDelta > 0 ? "+" : ""}${monthDelta.toFixed(0)}% so với tháng trước`,
+                }
+              : undefined
+          }
+          icon={<UserPlus className="w-4 h-4" />}
+          iconColor="purple"
+        />
+        <StatCardAdmin
+          label="Học viên đăng ký"
+          value={totalStudents}
+          icon={<BookOpen className="w-4 h-4" />}
+          iconColor="orange"
+        />
+        <StatCardAdmin
+          label="Conversion rate"
+          value={`${conversionRate}%`}
+          icon={<TrendingUp className="w-4 h-4" />}
+          iconColor="purple"
+        />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Lead by status */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base font-bold">Lead theo trạng thái</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {leadsByStatus.length === 0 ? (
-              <p className="text-sm text-gray-400">Chưa có dữ liệu</p>
-            ) : (
-              leadsByStatus.map((row) => (
-                <div key={row.status} className="flex items-center justify-between">
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[row.status] ?? 'bg-gray-100 text-gray-500'}`}>
-                    {STATUS_LABELS[row.status] ?? row.status}
-                  </span>
-                  <span className="text-sm font-bold text-gray-700">{row._count._all}</span>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white border border-neutral-200 rounded-xl p-6">
+          <h2 className="font-semibold text-neutral-900 mb-1">Leads 14 ngày qua</h2>
+          <p className="text-xs text-neutral-500 mb-4">Số lead mới mỗi ngày</p>
+          {dailyLeadsChart.length > 0 ? (
+            <LineChart
+              data={dailyLeadsChart}
+              xKey="date"
+              lines={[{ key: "leads", name: "Leads", color: "#F97316" }]}
+              showLegend={false}
+              height={260}
+            />
+          ) : (
+            <div className="h-[260px] flex items-center justify-center text-sm text-neutral-400">
+              Chưa có dữ liệu
+            </div>
+          )}
+        </div>
 
-        {/* Recent leads */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base font-bold">Lead mới nhất</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recentLeads.length === 0 ? (
-              <p className="text-sm text-gray-400">Chưa có lead nào</p>
-            ) : (
-              <ul className="divide-y divide-gray-50">
-                {recentLeads.map((lead) => (
-                  <li key={lead.id} className="flex items-center justify-between py-2.5">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{lead.parentName}</p>
-                      <p className="text-xs text-gray-400">{lead.center?.name ?? '—'}</p>
-                    </div>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLORS[lead.status] ?? 'bg-gray-100 text-gray-500'}`}>
+        <div className="bg-white border border-neutral-200 rounded-xl p-6">
+          <h2 className="font-semibold text-neutral-900 mb-1">
+            Phân bố theo trạng thái
+          </h2>
+          <p className="text-xs text-neutral-500 mb-4">Tất cả leads</p>
+          {statusBars.length > 0 ? (
+            <BarChart
+              data={statusBars}
+              xKey="status"
+              bars={[{ key: "count", name: "Số lượng", color: "#F97316" }]}
+              height={260}
+            />
+          ) : (
+            <div className="h-[260px] flex items-center justify-center text-sm text-neutral-400">
+              Chưa có dữ liệu
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-neutral-900">Leads mới nhất</h2>
+          <Link
+            href="/admin/leads"
+            className="text-sm font-semibold text-orange-600 hover:underline"
+          >
+            Xem tất cả →
+          </Link>
+        </div>
+        <DataTableShell>
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
+              <tr>
+                <th className="px-4 py-3">Phụ huynh</th>
+                <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Thời gian</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {recentLeads.map((lead) => (
+                <tr key={lead.id} className="hover:bg-neutral-50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-neutral-900">
+                    {lead.parentName}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-neutral-700">
+                    {lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>
                       {STATUS_LABELS[lead.status] ?? lead.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+                    </StatusBadge>
+                  </td>
+                  <td className="px-4 py-3 text-right text-xs text-neutral-500">
+                    {new Date(lead.createdAt).toLocaleString("vi-VN", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </td>
+                </tr>
+              ))}
+              {recentLeads.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-neutral-500">
+                    Chưa có lead nào
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </DataTableShell>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
+          <FileText className="w-5 h-5 text-orange-500 shrink-0" />
+          <div>
+            <p className="text-neutral-600">Bài blog đang publish</p>
+            <p className="font-semibold text-neutral-900">{totalPosts} bài</p>
+          </div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
+          <Users className="w-5 h-5 text-purple-700 shrink-0" />
+          <div>
+            <p className="text-neutral-600">Leads ENROLLED tất cả</p>
+            <p className="font-semibold text-neutral-900">{enrolledLeads} người</p>
+          </div>
+        </div>
       </div>
     </div>
-  )
+  );
 }
