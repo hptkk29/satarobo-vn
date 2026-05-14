@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { seedHonors } from "./seed-honors";
 
 const db = new PrismaClient();
 
@@ -554,6 +555,9 @@ Trung tâm có niềm tin vào chương trình của mình sẽ không ngại:
     jobCount++
   }
   console.log(`✅ ${jobCount} tin tuyển dụng đã tạo`)
+
+  // ─── Hall of Fame ─────────────────────────────────────────────────────────────
+  await seedHonors(db);
 
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "MANAGER", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT"];
+const ADMIN_ROLES = ["SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT"];
 
 export default auth((req: NextAuthRequest) => {
   const { pathname } = req.nextUrl;

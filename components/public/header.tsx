@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { label: "Khoá học", href: "/khoa-hoc" },
   { label: "Học cụ", href: "/hoc-cu" },
   { label: "Tin tức", href: "/tin-tuc" },
+  { label: "Vinh danh", href: "/vinh-danh" },
   { label: "Tuyển dụng", href: "/tuyen-dung" },
   { label: "Liên hệ", href: "/lien-he" },
 ];

@@ -12,6 +12,8 @@ import {
   BarChart3,
   Settings,
   Briefcase,
+  Trophy,
+  IdCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +23,9 @@ const NAV_ITEMS = [
   { label: "Học viên", href: "/admin/students", icon: GraduationCap },
   { label: "Lớp học", href: "/admin/classes", icon: BookOpen },
   { label: "Giáo viên", href: "/admin/teachers", icon: UserCog },
+  { label: "Nhân sự", href: "/admin/nhan-su", icon: IdCard },
   { label: "Tuyển dụng", href: "/admin/jobs", icon: Briefcase },
+  { label: "Vinh danh", href: "/admin/honors", icon: Trophy },
   { label: "Nội dung", href: "/admin/content", icon: FileText },
   { label: "Marketing", href: "/admin/marketing", icon: BarChart3 },
   { label: "Cài đặt", href: "/admin/settings", icon: Settings },
