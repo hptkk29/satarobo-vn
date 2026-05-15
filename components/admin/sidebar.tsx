@@ -15,6 +15,10 @@ import {
   Trophy,
   IdCard,
   Image as ImageIcon,
+  Newspaper,
+  UserPlus,
+  Package,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,14 +40,23 @@ const NAV_GROUPS = [
     items: [
       { label: "Giáo viên", href: "/admin/teachers", icon: UserCog },
       { label: "Nhân sự", href: "/admin/nhan-su", icon: IdCard },
-      { label: "Tuyển dụng", href: "/admin/jobs", icon: Briefcase },
+      { label: "Tuyển dụng website", href: "/admin/recruitment", icon: UserPlus },
+      { label: "Tuyển dụng (cũ)", href: "/admin/jobs", icon: Briefcase },
       { label: "Vinh danh", href: "/admin/honors", icon: Trophy },
+    ],
+  },
+  {
+    label: "Sản phẩm",
+    items: [
+      { label: "Khoá học (Packages)", href: "/admin/course-packages", icon: Boxes },
+      { label: "Học cụ (Kits)", href: "/admin/kits", icon: Package },
     ],
   },
   {
     label: "Marketing",
     items: [
-      { label: "Nội dung blog", href: "/admin/content", icon: FileText },
+      { label: "Tin tức website", href: "/admin/news", icon: Newspaper },
+      { label: "Bài viết (cũ)", href: "/admin/content", icon: FileText },
       { label: "Hình ảnh trang", href: "/admin/site-content", icon: ImageIcon },
       { label: "Tracking", href: "/admin/marketing", icon: BarChart3 },
     ],
