@@ -41,10 +41,10 @@ export function formatSalaryRange(
 }
 
 export const HR_CONTACT = {
-  email: 'mytrangduong1986@gmail.com',
-  phone: '0905.250.544',
-  phoneRaw: '0905250544',
-  zaloUrl: 'https://zalo.me/0905250544',
+  email: 'satarobo@gmail.com',
+  phone: '0818.823.720',
+  phoneRaw: '0818823720',
+  zaloUrl: 'https://zalo.me/0818823720',
   name: 'Ms. Trang',
   address: '211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng',
 } as const
