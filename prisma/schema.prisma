@@ -451,6 +451,109 @@ model MarketingConfig {
 }
 
 // ============================================
+// COURSE PACKAGES (Phase 4.UI.RESET.2 PART D3)
+// Sata1-Sata8 + Combo packages — children of Course "laptrinhrobot"
+// ============================================
+model CoursePackage {
+  id               String  @id @default(cuid())
+  slug             String  @unique
+  code             String
+  name             String
+  shortName        String?
+  subtitle         String?
+  shortDescription String? @db.Text
+  description      String? @db.Text
+
+  ageGroup String?
+  level    String?
+
+  lessons        Int?
+  duration       String?
+  priceOriginal  Int?
+  priceEarlyBird Int?
+  priceMember    Int?
+
+  features   Json?
+  highlights Json?
+  curriculum Json?
+
+  badge        String?
+  color        String?
+  displayOrder Int     @default(0)
+  isPublished  Boolean @default(false)
+  isFeatured   Boolean @default(false)
+
+  thumbnail String?
+
+  seoTitle       String?
+  seoDescription String? @db.Text
+
+  parentCourseSlug String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([parentCourseSlug, isPublished, displayOrder])
+}
+
+// ============================================
+// NEWS (Phase 4.UI.RESET.2 PART D4)
+// Marketing articles — separate from BlogPost
+// ============================================
+model News {
+  id             String    @id @default(cuid())
+  slug           String    @unique
+  title          String
+  excerpt        String    @db.Text
+  content        String    @db.Text
+  coverImage     String?
+  category       String?
+  tags           String[]
+  isPublished    Boolean   @default(false)
+  isFeatured     Boolean   @default(false)
+  publishedAt    DateTime?
+  displayOrder   Int       @default(0)
+  seoTitle       String?
+  seoDescription String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([isPublished, publishedAt])
+}
+
+// ============================================
+// RECRUITMENT (Phase 4.UI.RESET.2 PART D5)
+// Career postings — separate from JobPosting
+// ============================================
+model Recruitment {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  title            String
+  department       String
+  location         String
+  workingHours     String?
+  salaryRange      String?
+  jobType          String
+  experienceLevel  String?
+  summary          String   @db.Text
+  responsibilities Json
+  requirements     Json
+  benefits         Json
+  contactEmail     String
+  contactPhone     String
+  isPublished      Boolean  @default(true)
+  isFeatured       Boolean  @default(false)
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isPublished, displayOrder])
+}
+
+// ============================================
 // HALL OF FAME — VINH DANH NHÂN SỰ
 // ============================================
 

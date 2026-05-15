@@ -87,8 +87,44 @@ export async function submitLeadToSheet(formData: LeadData): Promise<{ success: 
   }
 }
 
+async function submitLeadToApi(formData: LeadData): Promise<void> {
+  // Phase 4.UI.RESET.2 PART D1 — write to internal Lead table alongside Google Sheet.
+  // Errors swallowed: do NOT break form submit when Lead fails.
+  try {
+    const eventId = `ltr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const note = [
+      formData.course ? `Khoá: ${formData.course}` : null,
+      formData.center ? `Cơ sở: ${formData.center}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    await fetch("/api/leads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        parentName: formData.name || "",
+        phone: formData.phone || "",
+        email: formData.email || "",
+        source: "laptrinhrobot-landing",
+        eventId,
+        landingPage:
+          typeof window !== "undefined" ? window.location.href : undefined,
+        referrer:
+          typeof document !== "undefined" ? document.referrer || undefined : undefined,
+        note: note || undefined,
+        consentMarketing: true,
+      }),
+    });
+  } catch (err) {
+    console.warn("[Lead API] submit failed (non-blocking):", err);
+  }
+}
+
 export async function handleLeadSubmission(formData: LeadData) {
   const sheetResult = await submitLeadToSheet(formData);
+  // Fire-and-forget Lead API write (non-blocking, errors logged only).
+  void submitLeadToApi(formData);
   trackFacebookLead({ course: formData.course, center: formData.center });
   trackGA4Lead({ course: formData.course, center: formData.center });
   return sheetResult;

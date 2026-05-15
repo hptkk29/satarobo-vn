@@ -1,78 +1,57 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import Image from "next/image";
+import { ChevronRight, Calendar, Tag as TagIcon } from "lucide-react";
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
-import { POSTS_PER_PAGE } from "@/lib/blog-utils";
-import { BlogCard } from "@/components/blog/blog-card";
 import { HeroMinimal } from "@/components/design-system/heroes/hero-minimal";
 import { SectionBase } from "@/components/design-system/sections/section-base";
-import { Pagination } from "./_components/pagination";
 import { tokens } from "@/lib/design-tokens";
 
 const BASE_URL = "https://satarobo.vn";
 
 export const metadata: Metadata = {
-  title: "Tin tức & Kiến thức Robotics — Sata Robo",
+  title: "Tin tức & Sự kiện — Sata Robo",
   description:
-    "Cập nhật tin tức mới nhất, bài viết kiến thức Robotics & STEM từ Sata Robo — hữu ích cho phụ huynh, giáo viên, nhà trường.",
+    "Cập nhật tin tức mới nhất từ Sata Robo — sự kiện, khoá học, ưu đãi và thông tin Cuộc thi Sáng tạo Robotics 2026.",
   alternates: { canonical: `${BASE_URL}/tin-tuc` },
   openGraph: {
-    title: "Tin tức & Kiến thức Robotics — Sata Robo",
-    description: "Cập nhật tin tức và bài viết kiến thức Robotics & STEM.",
+    title: "Tin tức & Sự kiện — Sata Robo",
+    description: "Cập nhật tin tức từ Sata Robo Đà Nẵng.",
     url: `${BASE_URL}/tin-tuc`,
     siteName: "Sata Robo",
   },
 };
 
-interface BlogListPageProps {
-  searchParams: Promise<{ category?: string; q?: string; page?: string }>;
+export const revalidate = 60;
+
+function formatDate(d: Date | null): string {
+  if (!d) return "";
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
 }
 
-export default async function BlogListPage({ searchParams }: BlogListPageProps) {
-  const { category, q, page: pageStr } = await searchParams;
-  const currentPage = Math.max(1, parseInt(pageStr ?? "1", 10));
-  const skip = (currentPage - 1) * POSTS_PER_PAGE;
-
-  const where = {
-    isPublished: true,
-    ...(category ? { category } : {}),
-    ...(q
-      ? {
-          OR: [
-            { title: { contains: q, mode: "insensitive" as const } },
-            { excerpt: { contains: q, mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-  };
-
-  const [posts, total] = await Promise.all([
-    db.blogPost
-      .findMany({
-        where,
-        orderBy: { publishedAt: "desc" },
-        take: POSTS_PER_PAGE,
-        skip,
-        select: {
-          slug: true,
-          title: true,
-          excerpt: true,
-          coverImage: true,
-          publishedAt: true,
-          category: true,
-          readingTime: true,
-          author: { select: { name: true } },
-        },
-      })
-      .catch(() => []),
-    db.blogPost.count({ where }).catch(() => 0),
-  ]);
-
-  const totalPages = Math.ceil(total / POSTS_PER_PAGE);
-  const featuredPost = currentPage === 1 && !q ? posts[0] : null;
-  const gridPosts = featuredPost ? posts.slice(1) : posts;
-  const baseHref = `/tin-tuc${category ? `?category=${category}` : ""}${q ? `${category ? "&" : "?"}q=${encodeURIComponent(q)}` : ""}`;
+export default async function NewsListPage() {
+  const news = await db.news
+    .findMany({
+      where: { isPublished: true },
+      orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }, { displayOrder: "asc" }],
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        excerpt: true,
+        coverImage: true,
+        category: true,
+        tags: true,
+        publishedAt: true,
+        isFeatured: true,
+      },
+    })
+    .catch(() => []);
 
   return (
     <>
@@ -91,7 +70,9 @@ export default async function BlogListPage({ searchParams }: BlogListPageProps) 
       <div className="bg-white border-b border-neutral-200 py-3">
         <div className={tokens.spacing.container}>
           <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-neutral-500">
-            <Link href="/" className="hover:text-orange-600 transition-colors">Trang chủ</Link>
+            <Link href="/" className="hover:text-orange-600 transition-colors">
+              Trang chủ
+            </Link>
             <ChevronRight className="h-3.5 w-3.5" />
             <span className="text-neutral-800 font-medium">Tin tức</span>
           </nav>
@@ -100,42 +81,72 @@ export default async function BlogListPage({ searchParams }: BlogListPageProps) 
 
       <HeroMinimal
         eyebrow="TIN TỨC"
-        title={q ? `Kết quả tìm: "${q}"` : "Cập nhật từ Sata Robo"}
-        subtitle="Sự kiện, hoạt động, kiến thức Robotics & STEM cho phụ huynh và nhà trường"
+        title="Cập nhật từ Sata Robo"
+        subtitle="Sự kiện, khoá học mới, ưu đãi và thông tin Cuộc thi Robotics 2026"
       />
 
       <SectionBase theme="white">
-        {posts.length === 0 ? (
+        {news.length === 0 ? (
           <div className="text-center py-20 text-neutral-500">
             <p className="text-lg font-semibold">Chưa có bài viết nào</p>
-            <p className="text-sm mt-2">
-              {q ? `Không tìm thấy kết quả cho "${q}"` : "Hãy quay lại sau!"}
-            </p>
+            <p className="text-sm mt-2">Hãy quay lại sau!</p>
           </div>
         ) : (
-          <>
-            {featuredPost && (
-              <div className="mb-10">
-                <BlogCard post={featuredPost} featured />
-              </div>
-            )}
-
-            {gridPosts.length > 0 && (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {gridPosts.map((post) => (
-                  <BlogCard key={post.slug} post={post} />
-                ))}
-              </div>
-            )}
-
-            <div className="mt-10">
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                baseHref={baseHref}
-              />
-            </div>
-          </>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
+            {news.map((post) => (
+              <Link
+                key={post.id}
+                href={`/tin-tuc/${post.slug}`}
+                className="group block bg-white rounded-2xl border border-neutral-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all"
+              >
+                <div className="aspect-video relative overflow-hidden bg-gradient-to-br from-orange-50 to-purple-50">
+                  {post.coverImage ? (
+                    <Image
+                      src={post.coverImage}
+                      alt={post.title}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-orange-300 text-6xl">
+                      📰
+                    </div>
+                  )}
+                  {post.isFeatured && (
+                    <div className="absolute top-3 left-3 px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
+                      ★ Nổi bật
+                    </div>
+                  )}
+                </div>
+                <div className="p-5">
+                  {post.category && (
+                    <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
+                      {post.category}
+                    </div>
+                  )}
+                  <h3 className="text-lg font-bold text-neutral-900 mb-2 line-clamp-2 group-hover:text-orange-600 transition-colors">
+                    {post.title}
+                  </h3>
+                  <p className="text-sm text-neutral-600 line-clamp-3 mb-4">{post.excerpt}</p>
+                  <div className="flex items-center gap-3 text-xs text-neutral-500">
+                    {post.publishedAt && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {formatDate(post.publishedAt)}
+                      </span>
+                    )}
+                    {post.tags.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        <TagIcon className="h-3.5 w-3.5" />
+                        {post.tags[0]}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
       </SectionBase>
     </>

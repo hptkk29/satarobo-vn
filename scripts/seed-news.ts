@@ -1,25 +1,34 @@
+/**
+ * Seed 4 News records (Phase 4.UI.RESET.2 PART D4).
+ * Uses new News model (separate from BlogPost).
+ *
+ * Run: pnpm dotenv -e .env.local -- pnpm tsx scripts/seed-news.ts
+ */
 import { db } from "@/lib/db";
 
-interface BlogSeed {
+interface NewsSeed {
   slug: string;
   title: string;
   excerpt: string;
   content: string;
-  seoTitle: string;
-  seoDesc: string;
-  publishedAt: Date;
   category: string;
   tags: string[];
-  readingTime: number;
+  publishedAt: Date;
+  isFeatured: boolean;
+  displayOrder: number;
+  seoTitle: string;
+  seoDescription: string;
 }
 
-const NEWS: BlogSeed[] = [
+const NEWS: NewsSeed[] = [
   {
     slug: "sata-robo-khai-truong-6-co-so-da-nang",
     title: "Sata Robo Chính Thức Khai Trương 6 Cơ Sở Tại Đà Nẵng",
     excerpt:
-      "Sata Robo chính thức khai trương tại Đà Nẵng, mang đến 8 chương trình Robotics độc đáo với Robosim — phần mềm thi bắt buộc duy nhất của Cuộc thi Sáng tạo Robotics Toàn Quốc 2026. Lớp học nhỏ, giáo viên tận tâm, cam kết hoàn tiền 100%.",
-    content: `Đà Nẵng vừa có thêm địa chỉ đào tạo Robotics đáng tin cậy dành cho học sinh lớp 1-8: **Sata Robo** — Trung tâm Công nghệ Giáo dục đặt tại:
+      "Sata Robo chính thức khai trương tại Đà Nẵng, mang đến 8 chương trình Robotics độc đáo với Robosim — phần mềm thi bắt buộc duy nhất của Cuộc thi Sáng tạo Robotics Toàn Quốc 2026.",
+    content: `# Sata Robo Chính Thức Khai Trương 6 Cơ Sở Tại Đà Nẵng
+
+Đà Nẵng vừa có thêm địa chỉ đào tạo Robotics đáng tin cậy dành cho học sinh lớp 1-8: **Sata Robo** — Trung tâm Công nghệ Giáo dục đặt tại:
 
 - 258 Lê Thanh Nghị (Trụ sở chính)
 - 60 Lê Lợi
@@ -50,20 +59,21 @@ Trong khi các đội thi vẫn đang loay hoay đăng ký, học viên Sata Rob
 
 ## 8 chương trình học đa dạng
 
-Từ **Sata1 — Robosim Master** (luyện thi vòng loại) đến **Sata7 — Chắp Cánh Tương Lai** (AI và robot tự hành), Sata Robo thiết kế lộ trình riêng biệt cho từng độ tuổi, đảm bảo con được học đúng — học đủ — học vui.
+Từ **Sata1 — Robosim Master** (luyện thi vòng loại) đến **Sata7 — Chắp Cánh Tương Lai** (AI và robot tự hành), Sata Robo thiết kế lộ trình riêng biệt cho từng độ tuổi.
 
 ## Ưu đãi khai trương
 
 Trong tháng 5/2026, Sata Robo triển khai **Early Bird khai trương** với ưu đãi lên đến 30% cho học viên mới với các chương trình cam kết đầu ra chất lượng đào tạo.
 
 > 📞 Đăng ký học MIỄN PHÍ ngay hôm nay: **0818.823.720**`,
-    seoTitle: "Sata Robo Khai Trương | Trung Tâm Robotics Hàng Đầu Đà Nẵng",
-    seoDesc:
-      "Sata Robo khai trương tại Đà Nẵng. 8 chương trình Robotics, lớp ≤12 HV, Robosim độc quyền, cam kết hoàn tiền 100%. Học miễn phí 5 buổi.",
-    publishedAt: new Date("2026-05-15"),
     category: "Tin công ty",
     tags: ["Khai trương", "Robotics", "Đà Nẵng"],
-    readingTime: 4,
+    publishedAt: new Date("2026-05-15"),
+    isFeatured: true,
+    displayOrder: 1,
+    seoTitle: "Sata Robo Khai Trương | Trung Tâm Robotics Hàng Đầu Đà Nẵng",
+    seoDescription:
+      "Sata Robo khai trương tại Đà Nẵng. 8 chương trình Robotics, lớp ≤12 HV, Robosim độc quyền, cam kết hoàn tiền 100%. Học miễn phí 5 buổi.",
   },
   {
     slug: "sata8-ve-vang-chung-ket-cam-ket-hoan-100",
@@ -71,7 +81,9 @@ Trong tháng 5/2026, Sata Robo triển khai **Early Bird khai trương** với �
       "Sata8 — Vé Vàng Chung Kết: Cam Kết Hoàn 100% Học Phí Nếu Con Không Vượt Vòng Loại",
     excerpt:
       "Sata Robo ra mắt gói đặc biệt Sata8 — 5 buổi chuyên binh cam kết đưa con vào chung kết Khu vực Miền Trung. Không đạt — hoàn 100% học phí 2.500.000đ.",
-    content: `Lần đầu tiên tại Đà Nẵng, một trung tâm Robotics dám cam kết tuyệt đối hoàn trả 100% chi phí đào tạo vào kết quả của học viên.
+    content: `# Sata8 — Vé Vàng Chung Kết: Không Đạt, Hoàn 100%
+
+Lần đầu tiên tại Đà Nẵng, một trung tâm Robotics dám cam kết tuyệt đối hoàn trả 100% chi phí đào tạo vào kết quả của học viên.
 
 ## Sata8 là gì?
 
@@ -97,20 +109,24 @@ Nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng vẫn
 **Số lượng:** Tối đa 12 học viên/lớp — đăng ký sớm để giữ suất
 
 > 📞 Tư vấn ngay: **0818.823.720** | 📍 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng`,
-    seoTitle: "Sata8 Vé Vàng Chung Kết | Cam Kết Hoàn 100% Học Phí | Sata Robo",
-    seoDesc:
-      "Sata8 — 5 buổi chuyên binh cam kết đưa con vượt vòng loại Robotics 2026. Không đạt — hoàn 100% học phí 2.5M. Đà Nẵng. SL có hạn!",
-    publishedAt: new Date("2026-05-12"),
     category: "Khoá học mới",
     tags: ["Sata8", "Vé Vàng", "Cam kết", "Cuộc thi 2026"],
-    readingTime: 3,
+    publishedAt: new Date("2026-05-12"),
+    isFeatured: true,
+    displayOrder: 2,
+    seoTitle: "Sata8 Vé Vàng Chung Kết | Cam Kết Hoàn 100% Học Phí | Sata Robo",
+    seoDescription:
+      "Sata8 — 5 buổi chuyên binh cam kết đưa con vượt vòng loại Robotics 2026. Không đạt — hoàn 100% học phí 2.5M. Đà Nẵng. SL có hạn!",
   },
   {
     slug: "cuoc-thi-sang-tao-robotics-2026-phu-huynh-can-biet",
-    title: "Cuộc Thi Sáng Tạo Robotics Toàn Quốc 2026: Những Điều Phụ Huynh Cần Biết",
+    title:
+      "Cuộc Thi Sáng Tạo Robotics Toàn Quốc 2026: Những Điều Phụ Huynh Cần Biết",
     excerpt:
       "Cuộc thi Sáng tạo Robotics Toàn Quốc 2026 sắp diễn ra — Robosim là công cụ thi bắt buộc. Chỉ có Sata Robo đào tạo phần mềm này tại Đà Nẵng.",
-    content: `Cuộc thi Sáng tạo Robotics Toàn Quốc 2026 là sân chơi lớn nhất dành cho học sinh yêu thích công nghệ và robot. Đây là cơ hội để con thể hiện tư duy lập trình, bản lĩnh thi đấu và khả năng làm việc nhóm trên đấu trường toàn quốc.
+    content: `# Cuộc Thi Sáng Tạo Robotics 2026 — Cơ Hội Vàng Cho Con Bạn
+
+Cuộc thi Sáng tạo Robotics Toàn Quốc 2026 là sân chơi lớn nhất dành cho học sinh yêu thích công nghệ và robot.
 
 ## Lịch thi
 
@@ -123,7 +139,7 @@ Nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng vẫn
 
 Năm 2026, **Robosim** là phần mềm mô phỏng robot **bắt buộc** trong cuộc thi. Thí sinh phải thành thạo Robosim để tham dự vòng loại.
 
-**Tin quan trọng:** Chỉ có **Sata Robo** tại Đà Nẵng đào tạo chính thức phần mềm Robosim. Đây là lợi thế độc quyền mà học viên Sata Robo được hưởng.
+**Tin quan trọng:** Chỉ có **Sata Robo** tại Đà Nẵng đào tạo chính thức phần mềm Robosim.
 
 ## Con cần chuẩn bị gì?
 
@@ -131,24 +147,27 @@ Năm 2026, **Robosim** là phần mềm mô phỏng robot **bắt buộc** trong
 - ✅ Thực chiến robot thật → Học **Sata2 — Đấu Trường Robot** (16 buổi)
 - ✅ Chắc chắn vượt vòng loại → Đăng ký **Sata8 — Vé Vàng Chung Kết** (cam kết hoàn 100%)
 
-> ⚠️ **Early Bird khai trương chỉ đến 31/05/2026** — Ưu đãi lên đến 30%. Sau ngày này giá trở về niêm yết.
+> ⚠️ **Early Bird khai trương chỉ đến 31/05/2026** — Ưu đãi lên đến 30%.
 
 > 📞 Tư vấn miễn phí: **0818.823.720**`,
-    seoTitle: "Cuộc Thi Robotics 2026 Đà Nẵng | Robosim | Đăng Ký Luyện Thi",
-    seoDesc:
-      "Cuộc thi Sáng tạo Robotics 2026 — Robosim là công cụ thi bắt buộc. Chỉ Sata Robo đào tạo Robosim tại Đà Nẵng. Đăng ký ngay, ưu đãi đến 31/05!",
-    publishedAt: new Date("2026-05-10"),
     category: "Sự kiện",
     tags: ["Cuộc thi 2026", "Robosim", "Robotics"],
-    readingTime: 3,
+    publishedAt: new Date("2026-05-10"),
+    isFeatured: true,
+    displayOrder: 3,
+    seoTitle: "Cuộc Thi Robotics 2026 Đà Nẵng | Robosim | Đăng Ký Luyện Thi",
+    seoDescription:
+      "Cuộc thi Sáng tạo Robotics 2026 — Robosim là công cụ thi bắt buộc. Chỉ Sata Robo đào tạo Robosim tại Đà Nẵng. Đăng ký ngay, ưu đãi đến 31/05!",
   },
   {
     slug: "early-bird-sata-robo-uu-dai-30-toi-31-05",
     title:
       "Early Bird Khai Trương Sata Robo: Ưu Đãi Lên Đến 30% — Chỉ Đến 31/05/2026",
     excerpt:
-      "Sata Robo mở cửa với ưu đãi khai trương chưa từng có: HV Satamath giảm 25%, HV ngoài giảm 15%, Combo Sata1+Sata2 giảm 30%. Ưu đãi DUY NHẤT, không lặp lại sau 31/05.",
-    content: `Từ 01/05 đến hết 31/05/2026, Sata Robo triển khai chương trình **Early Bird Khai Trương** — ưu đãi lớn nhất và DUY NHẤT, không lặp lại sau khi kết thúc.
+      "Sata Robo mở cửa với ưu đãi khai trương chưa từng có: HV Satamath giảm 25%, HV ngoài giảm 15%, Combo Sata1+Sata2 giảm 30%.",
+    content: `# Early Bird Khai Trương — Ưu Đãi Chỉ Có 1 Lần!
+
+Từ 01/05 đến hết 31/05/2026, Sata Robo triển khai **Early Bird Khai Trương** — ưu đãi lớn nhất và DUY NHẤT, không lặp lại sau khi kết thúc.
 
 ## Bảng ưu đãi
 
@@ -169,62 +188,38 @@ Năm 2026, **Robosim** là phần mềm mô phỏng robot **bắt buộc** trong
 
 > ⚠️ **Đây là ưu đãi mở cửa DUY NHẤT** — Sau 31/05/2026, tất cả các khoá trở về giá niêm yết.
 
-> 🎯 **Đăng ký học thử MIỄN PHÍ** khoá học lập trình Robotics cơ bản cho cuộc thi 2026
-
 > 📞 **0818.823.720** | 📍 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng`,
-    seoTitle:
-      "Early Bird Sata Robo — Ưu Đãi 30% Khoá Robotics | Chỉ Đến 31/05/2026",
-    seoDesc:
-      "Early Bird khai trương Sata Robo: giảm đến 30% khoá Robotics Đà Nẵng. Ưu đãi DUY NHẤT đến 31/05! Cam kết hoàn 100% phí đào tạo bằng văn bản.",
-    publishedAt: new Date("2026-05-01"),
     category: "Ưu đãi",
     tags: ["Early Bird", "Ưu đãi", "Khai trương"],
-    readingTime: 3,
+    publishedAt: new Date("2026-05-01"),
+    isFeatured: true,
+    displayOrder: 4,
+    seoTitle:
+      "Early Bird Sata Robo — Ưu Đãi 30% Khoá Robotics | Chỉ Đến 31/05/2026",
+    seoDescription:
+      "Early Bird khai trương Sata Robo: giảm đến 30% khoá Robotics Đà Nẵng. Ưu đãi DUY NHẤT đến 31/05! Cam kết hoàn 100% phí đào tạo bằng văn bản.",
   },
 ];
 
 async function main() {
-  console.log("🚀 Seeding 4 BlogPost records (Phase 4.UI.RESET.2)...\n");
+  console.log("🚀 Seeding 4 News records (Phase 4.UI.RESET.2 PART D4)...\n");
 
-  for (const post of NEWS) {
-    const result = await db.blogPost.upsert({
-      where: { slug: post.slug },
-      update: {
-        title: post.title,
-        excerpt: post.excerpt,
-        content: post.content,
-        seoTitle: post.seoTitle,
-        seoDesc: post.seoDesc,
-        publishedAt: post.publishedAt,
-        category: post.category,
-        tags: post.tags,
-        readingTime: post.readingTime,
-        isPublished: true,
-      },
-      create: {
-        slug: post.slug,
-        title: post.title,
-        excerpt: post.excerpt,
-        content: post.content,
-        seoTitle: post.seoTitle,
-        seoDesc: post.seoDesc,
-        publishedAt: post.publishedAt,
-        category: post.category,
-        tags: post.tags,
-        readingTime: post.readingTime,
-        isPublished: true,
-      },
+  for (const item of NEWS) {
+    const result = await db.news.upsert({
+      where: { slug: item.slug },
+      update: { ...item, isPublished: true },
+      create: { ...item, isPublished: true },
     });
     console.log(`✅ ${result.slug} — ${result.title}`);
   }
 
-  const total = await db.blogPost.count({ where: { isPublished: true } });
-  console.log(`\n📊 Total published BlogPost: ${total}`);
+  const total = await db.news.count({ where: { isPublished: true } });
+  console.log(`\n📊 Total published News: ${total}`);
 }
 
 main()
   .catch((err) => {
-    console.error("❌ Seed failed:", err);
+    console.error("❌", err);
     process.exit(1);
   })
   .finally(() => process.exit(0));

@@ -25,17 +25,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/chinh-sach-hoan-tra`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
   ]
 
-  const [posts, jobs, honors] = await Promise.all([
-    db.blogPost
+  const [news, recruitments, honors] = await Promise.all([
+    db.news
       .findMany({
         where: { isPublished: true },
         select: { slug: true, updatedAt: true },
         orderBy: { publishedAt: 'desc' },
       })
       .catch(() => []),
-    db.jobPosting
+    db.recruitment
       .findMany({
-        where: { status: 'OPEN' },
+        where: { isPublished: true },
         select: { slug: true, updatedAt: true },
       })
       .catch(() => []),
@@ -47,16 +47,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .catch(() => []),
   ])
 
-  const blogRoutes: MetadataRoute.Sitemap = posts.map((post) => ({
-    url: `${BASE_URL}/tin-tuc/${post.slug}`,
-    lastModified: post.updatedAt,
+  const newsRoutes: MetadataRoute.Sitemap = news.map((n) => ({
+    url: `${BASE_URL}/tin-tuc/${n.slug}`,
+    lastModified: n.updatedAt,
     changeFrequency: 'weekly',
     priority: 0.7,
   }))
 
-  const jobRoutes: MetadataRoute.Sitemap = jobs.map((job) => ({
-    url: `${BASE_URL}/tuyen-dung/${job.slug}`,
-    lastModified: job.updatedAt,
+  const jobRoutes: MetadataRoute.Sitemap = recruitments.map((r) => ({
+    url: `${BASE_URL}/tuyen-dung/${r.slug}`,
+    lastModified: r.updatedAt,
     changeFrequency: 'weekly',
     priority: 0.6,
   }))
@@ -68,5 +68,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }))
 
-  return [...staticRoutes, ...blogRoutes, ...jobRoutes, ...honorRoutes]
+  return [...staticRoutes, ...newsRoutes, ...jobRoutes, ...honorRoutes]
 }

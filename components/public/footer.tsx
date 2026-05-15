@@ -96,7 +96,7 @@ export function Footer() {
             <ul className="space-y-2 text-sm">
               <li>
                 <Link href="/khoa-hoc/laptrinhrobot" className="hover:text-[#F97316] transition-colors">
-                  Lập trình Robot K-9
+                  Lập trình Robot
                 </Link>
               </li>
               <li>
@@ -139,11 +139,6 @@ export function Footer() {
               <li>
                 <Link href="/lien-he" className="hover:text-[#F97316] transition-colors">
                   Liên hệ
-                </Link>
-              </li>
-              <li>
-                <Link href="/admin" className="hover:text-[#F97316] transition-colors">
-                  Đăng nhập Admin
                 </Link>
               </li>
             </ul>

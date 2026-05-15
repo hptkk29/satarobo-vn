@@ -1,25 +1,36 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronRight, Briefcase, Heart, TrendingUp, Users } from "lucide-react";
+import {
+  ChevronRight,
+  Briefcase,
+  Heart,
+  TrendingUp,
+  Users,
+  MapPin,
+  Clock,
+  DollarSign,
+  ArrowRight,
+} from "lucide-react";
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
-import { JobCard as DSJobCard } from "@/components/design-system/cards/job-card";
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
-import { HR_CONTACT } from "@/lib/data/job-options";
+import { SATA_ROBO_CONTACT } from "@/lib/locations";
 
 export const revalidate = 60;
 
 const BASE_URL = "https://satarobo.vn";
+const HR_EMAIL = SATA_ROBO_CONTACT.emails.recruitment;
+const HR_PHONE = SATA_ROBO_CONTACT.hotline;
 
 export const metadata: Metadata = {
   title: "Tuyển dụng — Cơ hội nghề nghiệp tại Sata Robo",
   description:
-    "Sata Robo tuyển dụng giáo viên Robotics, Sales, Marketing tại Đà Nẵng. Môi trường năng động, đam mê giáo dục công nghệ.",
+    "Sata Robo tuyển dụng giáo viên Robotics, Tư vấn tuyển sinh, Kế toán, Marketing, Telesales tại Đà Nẵng. Lương cạnh tranh, đào tạo bài bản.",
   alternates: { canonical: `${BASE_URL}/tuyen-dung` },
   openGraph: {
     title: "Tuyển dụng — Sata Robo",
@@ -30,40 +41,29 @@ export const metadata: Metadata = {
   },
 };
 
-interface SearchParams {
-  searchParams: Promise<{ department?: string; location?: string; type?: string }>;
-}
-
 const PERKS = [
   { icon: Heart, title: "Văn hoá tích cực", desc: "Team trẻ, năng động, học hỏi liên tục" },
-  { icon: TrendingUp, title: "Lương cạnh tranh", desc: "Lương + thưởng KPI + cổ phần ESOP" },
+  { icon: TrendingUp, title: "Lương cạnh tranh", desc: "Lương + thưởng KPI + thưởng tháng 13" },
   { icon: Users, title: "Đào tạo bài bản", desc: "Mentor 1-1 + budget học liệu" },
-  { icon: Briefcase, title: "Lộ trình thăng tiến", desc: "Performance review hàng quý, rõ ràng" },
+  { icon: Briefcase, title: "Lộ trình thăng tiến", desc: "Performance review rõ ràng" },
 ];
 
-export default async function TuyenDungPage({ searchParams }: SearchParams) {
-  const sp = await searchParams;
-
-  const jobs = await db.jobPosting
+export default async function TuyenDungPage() {
+  const jobs = await db.recruitment
     .findMany({
-      where: {
-        status: "OPEN",
-        ...(sp.department ? { department: sp.department } : {}),
-        ...(sp.location ? { location: sp.location } : {}),
-        ...(sp.type ? { type: sp.type } : {}),
-      },
-      orderBy: { createdAt: "desc" },
+      where: { isPublished: true },
+      orderBy: [{ isFeatured: "desc" }, { displayOrder: "asc" }],
       select: {
         id: true,
         slug: true,
         title: true,
         department: true,
         location: true,
-        type: true,
-        salaryMin: true,
-        salaryMax: true,
-        salaryNote: true,
-        openings: true,
+        jobType: true,
+        salaryRange: true,
+        experienceLevel: true,
+        summary: true,
+        isFeatured: true,
       },
     })
     .catch(() => []);
@@ -72,16 +72,6 @@ export default async function TuyenDungPage({ searchParams }: SearchParams) {
     { name: "Trang chủ", url: "/" },
     { name: "Tuyển dụng", url: "/tuyen-dung" },
   ]);
-
-  function formatSalary(j: (typeof jobs)[number]): string | undefined {
-    if (j.salaryNote) return j.salaryNote;
-    if (j.salaryMin && j.salaryMax) {
-      const min = (j.salaryMin / 1_000_000).toFixed(0);
-      const max = (j.salaryMax / 1_000_000).toFixed(0);
-      return `${min}-${max} triệu`;
-    }
-    return undefined;
-  }
 
   return (
     <>
@@ -93,26 +83,25 @@ export default async function TuyenDungPage({ searchParams }: SearchParams) {
       <div className="bg-white border-b border-neutral-200 py-3">
         <div className={tokens.spacing.container}>
           <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-neutral-500">
-            <Link href="/" className="hover:text-orange-600 transition-colors">Trang chủ</Link>
+            <Link href="/" className="hover:text-orange-600 transition-colors">
+              Trang chủ
+            </Link>
             <ChevronRight className="h-3.5 w-3.5" />
             <span className="text-neutral-800 font-medium">Tuyển dụng</span>
           </nav>
         </div>
       </div>
 
-      {/* ─── Hero SOFT-WARM (careers = action = cam) ─── */}
       <section className={`relative overflow-hidden ${tokens.vibrantBg.softWarm} py-16 md:py-24`}>
         <GlowOrb color="orange" position="top-right" size="lg" />
         <div className="container max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center relative z-10">
           <div>
             <p className={`${tokens.typography.eyebrow} mb-3`}>TUYỂN DỤNG</p>
-            <h1 className={`${tokens.typography.display.h2} mb-4`}>
-              Gia nhập Sata Robo
-            </h1>
+            <h1 className={`${tokens.typography.display.h2} mb-4`}>Gia nhập Sata Robo</h1>
             <p className={`${tokens.typography.body.lg} text-neutral-600 mb-6`}>
               Cùng xây dựng tương lai giáo dục Robotics tại Việt Nam — nơi đam mê công nghệ và giáo dục gặp nhau
             </p>
-            <CTAPrimary href={`mailto:${HR_CONTACT.email}`} magnetic>
+            <CTAPrimary href={`mailto:${HR_EMAIL}`} magnetic>
               Liên hệ tuyển dụng
             </CTAPrimary>
           </div>
@@ -129,38 +118,60 @@ export default async function TuyenDungPage({ searchParams }: SearchParams) {
         </div>
       </section>
 
-      {/* ─── Jobs grid WHITE ─── */}
-      <SectionBase
-        theme="white"
-        eyebrow={`VỊ TRÍ MỞ (${jobs.length})`}
-        title="Cơ hội nghề nghiệp"
-      >
+      <SectionBase theme="white" eyebrow={`VỊ TRÍ MỞ (${jobs.length})`} title="Cơ hội nghề nghiệp">
         {jobs.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-neutral-500 mb-4">
               Hiện không có vị trí phù hợp. Gửi CV để được lưu hồ sơ cho cơ hội tương lai.
             </p>
-            <CTAPrimary href={`mailto:${HR_CONTACT.email}`}>Gửi CV chủ động</CTAPrimary>
+            <CTAPrimary href={`mailto:${HR_EMAIL}`}>Gửi CV chủ động</CTAPrimary>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {jobs.map((j) => (
-              <DSJobCard
+              <Link
                 key={j.id}
-                title={j.title}
-                department={j.department || ""}
-                location={j.location || ""}
-                type={j.type || ""}
-                salaryRange={formatSalary(j)}
-                openings={j.openings}
                 href={`/tuyen-dung/${j.slug}`}
-              />
+                className="group block bg-white rounded-2xl border border-neutral-200 p-6 hover:border-orange-300 hover:shadow-xl hover:-translate-y-1 transition-all"
+              >
+                {j.isFeatured && (
+                  <div className="inline-block mb-3 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">
+                    ★ Nổi bật
+                  </div>
+                )}
+                <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
+                  {j.department}
+                </div>
+                <h3 className="text-lg font-bold text-neutral-900 mb-2 group-hover:text-orange-600 transition-colors line-clamp-2">
+                  {j.title}
+                </h3>
+                <p className="text-sm text-neutral-600 mb-4 line-clamp-2">{j.summary}</p>
+                <div className="space-y-1.5 text-xs text-neutral-600 mb-4">
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                    <span className="line-clamp-1">{j.location}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-purple-500" />
+                    <span>{j.jobType}</span>
+                  </div>
+                  {j.salaryRange && (
+                    <div className="flex items-center gap-1.5">
+                      <DollarSign className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                      <span className="line-clamp-1">{j.salaryRange}</span>
+                    </div>
+                  )}
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 group-hover:gap-2.5 transition-all">
+                  Xem chi tiết
+                  <ArrowRight className="h-4 w-4" />
+                </span>
+              </Link>
             ))}
           </div>
         )}
       </SectionBase>
 
-      {/* ─── Why Sata Robo SOFT-COOL ─── */}
       <SectionBase
         theme="soft-cool"
         eyebrow="💜 LÝ DO CHỌN SATA ROBO"
@@ -180,25 +191,18 @@ export default async function TuyenDungPage({ searchParams }: SearchParams) {
         </div>
       </SectionBase>
 
-      {/* ─── HR contact WHITE ─── */}
       <SectionBase theme="white" eyebrow="LIÊN HỆ" title="HR Sata Robo" variant="narrow">
         <div className="text-center max-w-xl mx-auto">
-          <p className="text-neutral-700 mb-2">
-            <strong>{HR_CONTACT.name}</strong> — HR Manager
-          </p>
           <p className="text-neutral-600 mb-1">
             📧{" "}
-            <a
-              href={`mailto:${HR_CONTACT.email}`}
-              className="text-orange-600 hover:underline"
-            >
-              {HR_CONTACT.email}
+            <a href={`mailto:${HR_EMAIL}`} className="text-orange-600 hover:underline">
+              {HR_EMAIL}
             </a>
           </p>
           <p className="text-neutral-600">
             📞{" "}
-            <a href={`tel:${HR_CONTACT.phone}`} className="text-orange-600 hover:underline">
-              {HR_CONTACT.phone}
+            <a href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`} className="text-orange-600 hover:underline">
+              {HR_PHONE}
             </a>
           </p>
         </div>
