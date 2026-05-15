@@ -56,7 +56,6 @@ export default function HowToBuy() {
             aria-label="Phát video hướng dẫn"
             type="button"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`https://img.youtube.com/vi/${VIDEO_ID}/maxresdefault.jpg`}
               alt="Hướng dẫn đăng ký tài khoản SataWorld và mua khóa học"

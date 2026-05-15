@@ -1,3 +1,4 @@
+@reference "../../../app/globals.css";
 ﻿
 /* Phase 4.UI.FIX.3 — was @theme in source, demoted to :root so it doesn't
  * clobber satarobo-vn's global theme tokens. Tailwind utilities won't pick
