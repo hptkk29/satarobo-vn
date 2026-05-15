@@ -1,58 +1,58 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronRight, Phone, Mail, MapPin, Clock } from "lucide-react";
-import { db } from "@/lib/db";
+import { ChevronRight, Phone, Mail, MapPin, Clock, Star } from "lucide-react";
 import {
   contactPageJsonLd,
   localBusinessJsonLd,
   breadcrumbJsonLd,
 } from "@/lib/seo/jsonld";
 import { ContactForm } from "./_components/contact-form";
-import { CentersGrid } from "./_components/centers-grid";
 import { SocialLinks } from "./_components/social-links";
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
+import { SATA_ROBO_LOCATIONS, SATA_ROBO_CONTACT } from "@/lib/locations";
 
 const BASE_URL = "https://satarobo.vn";
 
 export const metadata: Metadata = {
   title: "Liên hệ — Sata Robo Đà Nẵng",
-  description:
-    "Liên hệ Sata Robo — Hotline 0818.823.720, email satarobo@gmail.com. 4 cơ sở tại Đà Nẵng.",
+  description: `Liên hệ Sata Robo — Hotline ${SATA_ROBO_CONTACT.hotline}, email ${SATA_ROBO_CONTACT.emails.primary}. 2 cơ sở tại Đà Nẵng.`,
   alternates: { canonical: `${BASE_URL}/lien-he` },
   openGraph: {
     title: "Liên hệ — Sata Robo",
-    description: "Hotline 0818.823.720 — phản hồi 30 phút giờ hành chính.",
+    description: `Hotline ${SATA_ROBO_CONTACT.hotline} — phản hồi 30 phút giờ hành chính.`,
     url: `${BASE_URL}/lien-he`,
     siteName: "Sata Robo",
     images: [{ url: pageImages.contact.src, width: 1600, height: 900 }],
   },
 };
 
+const hqLocation = SATA_ROBO_LOCATIONS.find((l) => l.isHQ) ?? SATA_ROBO_LOCATIONS[0];
+
 const QUICK_INFO = [
-  { icon: Phone, label: "Hotline", value: "0818 823 720", href: "tel:0818823720" },
-  { icon: Mail, label: "Email", value: "satarobo@gmail.com", href: "mailto:satarobo@gmail.com" },
+  { icon: Phone, label: "Hotline", value: SATA_ROBO_CONTACT.hotline, href: `tel:${SATA_ROBO_CONTACT.hotlineRaw}` },
+  { icon: Mail, label: "Email", value: SATA_ROBO_CONTACT.emails.primary, href: `mailto:${SATA_ROBO_CONTACT.emails.primary}` },
   {
     icon: MapPin,
     label: "Trụ sở",
-    value: "258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng",
-    href: "https://maps.google.com/?q=258+Le+Thanh+Nghi+Da+Nang",
+    value: hqLocation.address,
+    href: `https://maps.google.com/?q=${encodeURIComponent(hqLocation.address)}`,
   },
-  { icon: Clock, label: "Giờ làm việc", value: "T2-T7: 8:00-17:30" },
+  { icon: Clock, label: "Giờ làm việc", value: hqLocation.workingHours },
 ];
 
 export default async function ContactPage() {
-  const centers = await db.center
-    .findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true, address: true, phone: true, email: true },
-    })
-    .catch(() => []);
+  const centers = SATA_ROBO_LOCATIONS.map((loc) => ({
+    id: loc.id,
+    name: loc.name,
+    address: loc.address,
+    phone: loc.hotline,
+    email: SATA_ROBO_CONTACT.emails.primary,
+  }));
 
   return (
     <>
@@ -103,9 +103,9 @@ export default async function ContactPage() {
               Chúng tôi sẵn sàng tư vấn 1-1 miễn phí về lộ trình học Robotics phù hợp với con bạn — phản hồi trong 30 phút giờ hành chính
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <CTAPrimary href="tel:0818823720" magnetic>
+              <CTAPrimary href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`} magnetic>
                 <Phone className="w-4 h-4" />
-                <span>Gọi ngay 0818 823 720</span>
+                <span>Gọi ngay {SATA_ROBO_CONTACT.hotline}</span>
               </CTAPrimary>
             </div>
           </div>
@@ -161,16 +161,67 @@ export default async function ContactPage() {
       </SectionBase>
 
       {/* ─── Centers grid SOFT-COOL ─── */}
-      {centers.length > 0 && (
-        <SectionBase
-          theme="soft-cool"
-          eyebrow="💜 4 CƠ SỞ"
-          title="Tìm cơ sở gần nhà"
-          glowOrb={{ color: "purple", position: "bottom-right" }}
-        >
-          <CentersGrid centers={centers} />
-        </SectionBase>
-      )}
+      <SectionBase
+        theme="soft-cool"
+        eyebrow="💜 2 CƠ SỞ"
+        title="Tìm cơ sở gần nhà"
+        glowOrb={{ color: "purple", position: "bottom-right" }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          {SATA_ROBO_LOCATIONS.map((loc) => (
+            <div
+              key={loc.id}
+              className={`relative bg-white rounded-2xl border-2 ${
+                loc.isHQ ? "border-orange-300" : "border-purple-300"
+              } p-6 shadow-lg hover:shadow-xl transition-shadow`}
+            >
+              {loc.isHQ && (
+                <div className="absolute -top-3 -right-3 inline-flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  <Star className="w-3 h-3 fill-current" />
+                  Trụ sở chính
+                </div>
+              )}
+              <div className="flex items-start gap-3 mb-4">
+                <div
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    loc.isHQ ? "bg-orange-100 text-orange-600" : "bg-purple-100 text-purple-600"
+                  }`}
+                >
+                  <MapPin className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-xl text-neutral-900">{loc.name}</h3>
+                  <p className="text-neutral-700 mt-1">{loc.address}</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm pt-4 border-t border-neutral-100">
+                <a
+                  href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
+                  className="flex items-center gap-2 text-neutral-700 hover:text-orange-600"
+                >
+                  <Phone className="w-4 h-4" />
+                  {loc.hotline}
+                </a>
+                <div className="flex items-center gap-2 text-neutral-600">
+                  <Clock className="w-4 h-4" />
+                  {loc.workingHours}
+                </div>
+                {loc.note && (
+                  <p className="text-xs text-neutral-500 italic mt-2">{loc.note}</p>
+                )}
+                <a
+                  href={`https://maps.google.com/?q=${encodeURIComponent(loc.address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-purple-700 hover:text-purple-800 mt-2"
+                >
+                  Chỉ đường →
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      </SectionBase>
 
       {/* ─── Social WHITE ─── */}
       <SectionBase theme="white" eyebrow="KẾT NỐI" title="Theo dõi Sata Robo" variant="narrow">

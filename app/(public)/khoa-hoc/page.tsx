@@ -231,8 +231,8 @@ export default async function CoursesPage() {
             <CTAPrimary href="/lien-he" size="lg" magnetic>
               Đăng ký tư vấn miễn phí
             </CTAPrimary>
-            <CTASecondary href="tel:0818823720" size="lg">
-              Gọi 0818 823 720
+            <CTASecondary href="tel:0905250544" size="lg">
+              Gọi 0905 250 544
             </CTASecondary>
           </div>
         </div>

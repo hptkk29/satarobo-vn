@@ -278,7 +278,7 @@ Kết quả sau 3 tháng:
       occurredAt: new Date("2020-06-15"),
       title: "Thành lập Sata Robo",
       description:
-        "Hồ Đắc Phúc và 2 đồng sự khởi nghiệp Công ty Cổ phần Công nghệ Giáo dục Sata Robo tại 258 Lê Thanh Nghị, Đà Nẵng. Sứ mệnh: đưa Robotics & STEM giáo dục đến gần hơn với trẻ em Việt Nam.",
+        "Hồ Đắc Phúc và 2 đồng sự khởi nghiệp Công ty Cổ phần Công nghệ Giáo dục Sata Robo tại Đà Nẵng. Sứ mệnh: đưa Robotics & STEM giáo dục đến gần hơn với trẻ em Việt Nam.",
       displayOrder: 1,
     },
     {
@@ -306,7 +306,7 @@ Kết quả sau 3 tháng:
       occurredAt: new Date("2025-08-15"),
       title: "Mở rộng 4 cơ sở tại Đà Nẵng",
       description:
-        "Sata Robo hoàn tất mạng lưới 4 cơ sở (Hoà Cường, Hải Châu, Sơn Trà, Ngũ Hành Sơn), phục vụ phụ huynh và học viên trên toàn thành phố Đà Nẵng.",
+        "Sata Robo khai trương trụ sở chính tại 211 Nguyễn Hữu Thọ và mở thêm cơ sở thứ 2 tại 114 Hoàng Diệu — phục vụ phụ huynh và học viên khu vực Hải Châu, Đà Nẵng.",
       displayOrder: 5,
     },
     {

@@ -1,32 +1,39 @@
 import { marked } from 'marked'
 import { HR_CONTACT } from '@/lib/data/job-options'
+import { SATA_ROBO_CONTACT, SATA_ROBO_LOCATIONS } from '@/lib/locations'
 
 const BASE_URL = 'https://satarobo.vn'
 
 export function organizationJsonLd() {
   return {
     '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: 'Sata Robo',
-    alternateName: 'Công ty Cổ phần Công nghệ Giáo dục Sata Robo',
+    '@type': 'EducationalOrganization',
+    name: SATA_ROBO_CONTACT.shortName,
+    alternateName: SATA_ROBO_CONTACT.companyName,
     url: BASE_URL,
     logo: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
+    description: 'Học viện Robotics & STEM hàng đầu Đà Nẵng',
     contactPoint: {
       '@type': 'ContactPoint',
-      telephone: '+84818823720',
+      telephone: SATA_ROBO_CONTACT.hotlineE164,
       contactType: 'customer service',
+      email: SATA_ROBO_CONTACT.emails.primary,
+      areaServed: 'VN',
       availableLanguage: 'Vietnamese',
     },
-    address: {
+    address: SATA_ROBO_LOCATIONS.map((loc) => ({
       '@type': 'PostalAddress',
-      streetAddress: '258 Lê Thanh Nghị',
-      addressLocality: 'Đà Nẵng',
+      streetAddress: loc.address.replace(', Đà Nẵng', ''),
+      addressLocality: 'Hải Châu',
+      addressRegion: 'Đà Nẵng',
       addressCountry: 'VN',
-    },
+      name: loc.isHQ ? `${loc.name} - Trụ sở chính` : loc.name,
+    })),
     sameAs: [
-      'https://www.facebook.com/satarobo',
-      'https://www.tiktok.com/@satarobo',
-      'https://www.youtube.com/@satarobo',
+      SATA_ROBO_CONTACT.facebook,
+      SATA_ROBO_CONTACT.tiktok,
+      SATA_ROBO_CONTACT.youtube,
+      SATA_ROBO_CONTACT.zalo,
     ],
   }
 }
@@ -224,10 +231,9 @@ export function jobPostingJsonLd(job: JobForJsonLd) {
       '@type': 'Place',
       address: {
         '@type': 'PostalAddress',
-        streetAddress: '258 Lê Thanh Nghị',
-        addressLocality: 'Hoà Cường',
+        streetAddress: '211 Nguyễn Hữu Thọ',
+        addressLocality: 'Hải Châu',
         addressRegion: 'Đà Nẵng',
-        postalCode: '550000',
         addressCountry: 'VN',
       },
     },
