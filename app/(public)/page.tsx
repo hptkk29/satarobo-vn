@@ -289,7 +289,7 @@ export default async function HomePage() {
             <CTAPrimary href="/lien-he" size="lg" magnetic>
               Đăng ký tư vấn miễn phí
             </CTAPrimary>
-            <CTASecondary href="tel:0905250544" size="lg">
+            <CTASecondary href="tel:0818823720" size="lg">
               Gọi điện ngay
             </CTASecondary>
           </div>

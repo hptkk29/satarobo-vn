@@ -84,7 +84,7 @@ Theo Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân, Anh/Ch
 Để thực hiện các quyền trên, Anh/Chị liên hệ:
 
 - **Email:** dpo@satarobo.vn (tạm thời: phuc@satarobo.vn)
-- **Điện thoại:** 0905.250.544
+- **Điện thoại:** 0818.823.720
 
 Chúng tôi sẽ phản hồi trong vòng **72 giờ làm việc**.
 
@@ -113,7 +113,7 @@ Mọi câu hỏi, yêu cầu liên quan đến Chính sách Bảo mật, vui lò
 **CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO**
 
 - 📍 Trụ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng
-- 📞 Hotline: 0905.250.544
+- 📞 Hotline: 0818.823.720
 - 📧 Email: dpo@satarobo.vn
 
 ---

@@ -26,7 +26,7 @@ export function maskEmail(email: string): string {
   return local.slice(0, 2) + "*".repeat(local.length - 2) + "@" + domain;
 }
 
-/** Format phone for display: "0905250544" → "0905 250 544" */
+/** Format phone for display: "0818823720" → "0818 823 720" */
 export function formatPhoneVn(phone: string): string {
   const clean = phone.replace(/\D/g, "");
   if (clean.length === 10) {
