@@ -19,6 +19,10 @@ import {
   UserPlus,
   Package,
   Boxes,
+  MapPin,
+  ClipboardList,
+  CalendarDays,
+  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +37,19 @@ const NAV_GROUPS = [
       { label: "Leads", href: "/admin/leads", icon: Users },
       { label: "Học viên", href: "/admin/students", icon: GraduationCap },
       { label: "Lớp học", href: "/admin/classes", icon: BookOpen },
+      { label: "Đăng ký học", href: "/admin/enrollments", icon: ClipboardList },
     ],
+  },
+  {
+    label: "Vận hành lớp",
+    items: [
+      { label: "Buổi học", href: "/admin/sessions", icon: CalendarDays },
+      { label: "Điểm danh", href: "/admin/attendance", icon: ClipboardCheck },
+    ],
+  },
+  {
+    label: "Hệ thống cơ sở",
+    items: [{ label: "Cơ sở", href: "/admin/centers", icon: MapPin }],
   },
   {
     label: "Nội bộ",
