@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronRight, Calendar, Tag as TagIcon } from "lucide-react";
+import { ChevronRight, Calendar, Tag as TagIcon, Newspaper, Star } from "lucide-react";
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
 import { HeroMinimal } from "@/components/design-system/heroes/hero-minimal";
@@ -109,13 +109,14 @@ export default async function NewsListPage() {
                       sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
                     />
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-orange-300 text-6xl">
-                      📰
+                    <div className="absolute inset-0 flex items-center justify-center text-orange-300">
+                      <Newspaper className="h-16 w-16" aria-hidden="true" />
                     </div>
                   )}
                   {post.isFeatured && (
-                    <div className="absolute top-3 left-3 px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
-                      ★ Nổi bật
+                    <div className="absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded-full shadow-md">
+                      <Star className="h-3 w-3 fill-current" />
+                      Nổi bật
                     </div>
                   )}
                 </div>

@@ -11,6 +11,8 @@ import {
   Clock,
   DollarSign,
   ArrowRight,
+  Mail,
+  Phone,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
@@ -192,19 +194,21 @@ export default async function TuyenDungPage() {
       </SectionBase>
 
       <SectionBase theme="white" eyebrow="LIÊN HỆ" title="HR Sata Robo" variant="narrow">
-        <div className="text-center max-w-xl mx-auto">
-          <p className="text-neutral-600 mb-1">
-            📧{" "}
-            <a href={`mailto:${HR_EMAIL}`} className="text-orange-600 hover:underline">
-              {HR_EMAIL}
-            </a>
-          </p>
-          <p className="text-neutral-600">
-            📞{" "}
-            <a href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`} className="text-orange-600 hover:underline">
-              {HR_PHONE}
-            </a>
-          </p>
+        <div className="flex flex-col items-center gap-3 max-w-xl mx-auto">
+          <a
+            href={`mailto:${HR_EMAIL}`}
+            className="inline-flex items-center gap-2 text-neutral-700 hover:text-orange-600 transition-colors"
+          >
+            <Mail className="h-4 w-4 text-orange-500" />
+            {HR_EMAIL}
+          </a>
+          <a
+            href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
+            className="inline-flex items-center gap-2 text-neutral-700 hover:text-orange-600 transition-colors"
+          >
+            <Phone className="h-4 w-4 text-orange-500" />
+            {HR_PHONE}
+          </a>
         </div>
       </SectionBase>
     </>

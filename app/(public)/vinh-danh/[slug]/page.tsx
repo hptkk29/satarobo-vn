@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trophy } from "lucide-react";
 import { db } from "@/lib/db";
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
 import { ShareButtons } from "@/components/blog/share-buttons";
@@ -287,7 +287,10 @@ export default async function VinhDanhSlugPage({ params }: Props) {
 
         {honor.achievements && (
           <div className="bg-gray-50 rounded-xl p-6 mb-12">
-            <h2 className="text-xl font-bold mb-4">🏆 Thành tựu nổi bật</h2>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-orange-500" />
+              Thành tựu nổi bật
+            </h2>
             <div className="prose prose-sm max-w-none">
               <MarkdownRenderer content={honor.achievements} />
             </div>

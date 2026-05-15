@@ -14,6 +14,7 @@ import {
   Mail,
   MapPin,
   Receipt,
+  ArrowRight,
 } from "lucide-react";
 import { aboutPageJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld";
 import { HeroParticles } from "@/components/design-system/heroes/hero-particles";
@@ -172,9 +173,7 @@ export default function VeChungToiPage() {
           </p>
           <div className="text-center pt-6">
             <div className="inline-flex items-center gap-3 bg-gradient-to-r from-orange-50 to-purple-50 border border-orange-200 rounded-full px-6 py-3 shadow-sm">
-              <span className="text-2xl" aria-hidden="true">
-                👉
-              </span>
+              <ArrowRight className="h-5 w-5 text-orange-500" aria-hidden="true" />
               <p className="text-neutral-800 font-semibold">
                 Hãy đồng hành cùng chúng tôi để phát triển tư duy cho thế hệ trẻ
                 Việt Nam!

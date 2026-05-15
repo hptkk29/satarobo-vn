@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Calendar, Tag, ArrowLeft } from "lucide-react";
+import { Calendar, Tag, ArrowLeft, Newspaper } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
@@ -195,8 +195,8 @@ export default async function NewsDetailPage({ params }: Params) {
                       />
                     </div>
                   ) : (
-                    <div className="aspect-video bg-gradient-to-br from-orange-50 to-purple-50 flex items-center justify-center text-orange-300 text-4xl">
-                      📰
+                    <div className="aspect-video bg-gradient-to-br from-orange-50 to-purple-50 flex items-center justify-center text-orange-300">
+                      <Newspaper className="h-12 w-12" aria-hidden="true" />
                     </div>
                   )}
                   <div className="p-3">

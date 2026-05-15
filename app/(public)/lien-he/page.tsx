@@ -170,7 +170,7 @@ export default async function ContactPage() {
       {/* ─── Centers grid SOFT-COOL ─── */}
       <SectionBase
         theme="soft-cool"
-        eyebrow={`💜 ${operational.length} CƠ SỞ ĐANG HOẠT ĐỘNG`}
+        eyebrow={`${operational.length} CƠ SỞ ĐANG HOẠT ĐỘNG`}
         title="Tìm cơ sở gần nhà"
         glowOrb={{ color: "purple", position: "bottom-right" }}
       >
