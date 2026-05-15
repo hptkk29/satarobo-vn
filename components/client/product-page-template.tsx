@@ -242,8 +242,8 @@ export function ProductPageTemplate({
             <CTAPrimary href={`/lien-he?subject=${slug}`} size="lg" magnetic>
               {ctaPrimaryLabel}
             </CTAPrimary>
-            <CTASecondary href="tel:0905250544" size="lg">
-              Gọi 0905 250 544
+            <CTASecondary href="tel:0818823720" size="lg">
+              Gọi 0818 823 720
             </CTASecondary>
           </div>
         </div>

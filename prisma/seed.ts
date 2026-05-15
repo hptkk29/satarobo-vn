@@ -14,15 +14,15 @@ async function main() {
       id: "center-nguyen-huu-tho",
       name: "Cơ sở 1 - Hải Châu (Trụ sở chính)",
       address: "211 Nguyễn Hữu Thọ, Đà Nẵng",
-      phone: "0905250544",
-      email: "SataROBO@gmail.com",
+      phone: "0818823720",
+      email: "satarobo@gmail.com",
     },
     {
       id: "center-hoang-dieu",
       name: "Cơ sở 2 - Hải Châu",
       address: "114 Hoàng Diệu, Đà Nẵng",
-      phone: "0905250544",
-      email: "SataROBO@gmail.com",
+      phone: "0818823720",
+      email: "satarobo@gmail.com",
     },
   ];
 
