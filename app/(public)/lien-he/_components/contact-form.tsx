@@ -37,8 +37,8 @@ const SUBJECTS = [
 type SubjectValue = (typeof SUBJECTS)[number]['value']
 
 const SUBJECT_PARAM_MAP: Record<string, SubjectValue> = {
-  'sata-inno-school': 'hop-tac-b2b',
-  satago: 'hop-tac-b2b',
+  laptrinhrobot: 'tu-van-khoa-hoc',
+  luyenthirobosim: 'tu-van-khoa-hoc',
   'tu-van-khoa-hoc': 'tu-van-khoa-hoc',
   'hop-tac-b2b': 'hop-tac-b2b',
 }

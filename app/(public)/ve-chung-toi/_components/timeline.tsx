@@ -28,18 +28,16 @@ const MILESTONES: Milestone[] = [
   },
   {
     year: '2025',
-    title: 'Ra mắt SP1 RoboSim Master & SP3 Sata Inno School',
+    title: 'Ra mắt khoá Luyện thi RoboSim online',
     description:
-      // ANH CẦN CUNG CẤP — mô tả cụ thể việc ra mắt 2 sản phẩm mới
-      '[ANH CẦN CUNG CẤP — Mô tả chi tiết việc ra mắt khoá học RoboSim Master Online và chương trình B2B Sata Inno School, kết quả ban đầu]',
+      '[ANH CẦN CUNG CẤP — Mô tả chi tiết việc ra mắt khoá Luyện thi RoboSim trên platform mô phỏng đầu tiên tại Việt Nam, kết quả ban đầu]',
     badge: 'Số hoá',
   },
   {
     year: '2026',
-    title: 'Triển khai SP4 SATAGO & Thi TW Đoàn lần 6',
+    title: 'Tập trung 2 khoá học chủ lực & Thi TW Đoàn lần 6',
     description:
-      // ANH CẦN CUNG CẤP
-      '[ANH CẦN CUNG CẤP — Kế hoạch triển khai SATAGO du lịch giáo dục và hành trình học viên Sata Robo tham dự cuộc thi Robotics toàn quốc lần 6]',
+      '[ANH CẦN CUNG CẤP — Hành trình học viên Sata Robo tham dự cuộc thi Robotics toàn quốc lần 6 và mở rộng 2 khoá học chủ lực Lập trình Robot + Luyện thi RoboSim]',
     badge: 'Hiện tại',
   },
 ]

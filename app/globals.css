@@ -15,7 +15,7 @@
   --color-brand-purple: #7C3AED;
   --color-brand-purple-dark: #6B21A8;
   --font-heading: var(--font-sans);
-  /* SP2 (Lap Trinh Robot) design tokens */
+  /* Lập trình Robot design tokens */
   --color-primary-orange: #F97316;
   --color-primary-orange-dark: #EA580C;
   --color-primary-purple: #7C3AED;
@@ -194,7 +194,7 @@
   }
 }
 
-/* ── SP2 Keyframes ─────────────────────────────────────────── */
+/* ── Lập trình Robot Keyframes ─────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -226,7 +226,7 @@
   100% { transform: scale(1)    rotate(-6deg); }
 }
 
-/* ── SP2 Component Classes ─────────────────────────────────── */
+/* ── Lập trình Robot Component Classes ─────────────────────── */
 @layer components {
   .container-site {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
@@ -269,7 +269,7 @@
   }
 }
 
-/* ── SP2 Utility Classes ───────────────────────────────────── */
+/* ── Lập trình Robot Utility Classes ───────────────────────── */
 @layer utilities {
   .text-gradient-orange-purple {
     background: linear-gradient(90deg, #F97316 0%, #7C3AED 100%);

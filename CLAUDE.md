@@ -96,9 +96,9 @@ prisma/
 ## Business context
 
 - Công ty Cổ phần Công nghệ Giáo dục Sata Robo (Đà Nẵng), CEO Hồ Đắc Phúc.
-- 4 dòng SP: SP1 (RoboSim Online), SP2 (Robotics Offline), SP3 (Sata Inno School B2B), SP4 (SATAGO du lịch giáo dục).
-- B2C: phụ huynh con lớp 1-8 · B2B: hiệu trưởng/phòng giáo dục.
-- 2 domain cũ redirect qua middleware (`proxy.ts`): `laptrinhrobot.vn` → `/khoa-hoc/lap-trinh-robot`; `luyenthirobosim.vn` → `/khoa-hoc/luyen-thi-robosim`.
+- 2 khoá học chủ lực: **Lập trình Robot** (offline K-9, slug `laptrinhrobot`) và **Luyện thi RoboSim** (online + coaching, slug `luyenthirobosim`).
+- B2C: phụ huynh con lớp 1-8.
+- 2 domain cũ redirect qua middleware (`proxy.ts`): `laptrinhrobot.vn` → `/khoa-hoc/laptrinhrobot`; `luyenthirobosim.vn` → `/khoa-hoc/luyenthirobosim`.
 
 ## Detailed rules (load on-demand)
 

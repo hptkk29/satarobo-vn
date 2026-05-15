@@ -49,43 +49,31 @@ export function DesignSystemV2Demo() {
       {/* ═══════════════════════════════════════════════════════ */}
       <SectionBase
         theme="soft-warm"
-        eyebrow="🧡 SẢN PHẨM (CAM ACCENT)"
-        title="4 sản phẩm chủ lực"
+        eyebrow="🧡 KHOÁ HỌC (CAM ACCENT)"
+        title="2 khoá học chủ lực"
         subtitle="Background soft-warm cam nhẹ + glow orb cam + cards hover lift + BorderBeam"
         glowOrb={{ color: "orange", position: "bottom-right" }}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           <CourseCard
-            badge="SP1"
-            title="Robosim Master"
-            description="Khoá video online học robotics trên trình duyệt"
+            size="large"
+            badge="LTR"
+            title="Lập trình Robot K-9"
+            description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 4 cơ sở Đà Nẵng"
             href="#"
-            price="2,400,000đ"
+            price="Liên hệ tư vấn"
             duration="6 tháng"
-            studentCount={2400}
+            studentCount={1200}
           />
           <CourseCard
-            badge="SP2"
-            title="Offline Class"
-            description="Lớp tại 4 cơ sở Đà Nẵng"
+            size="large"
+            badge="LTRS"
+            title="Luyện thi RoboSim"
+            description="Khoá luyện thi online + coaching 1-1 — pass vòng loại Sáng tạo Robotics R1/R2"
             href="#"
-            price="6,500,000đ"
-            duration="3 tháng"
+            price="Liên hệ tư vấn"
+            duration="3-6 tháng"
             studentCount={800}
-          />
-          <CourseCard
-            badge="SP3"
-            title="Sata Inno School"
-            description="Lab STEM cho trường K-12"
-            href="#"
-            duration="Tuỳ chỉnh"
-          />
-          <CourseCard
-            badge="SP4"
-            title="SATAGO Trải nghiệm"
-            description="Tour ngoại khoá robotics + STEM"
-            href="#"
-            duration="1-3 ngày"
           />
         </div>
       </SectionBase>
@@ -97,8 +85,8 @@ export function DesignSystemV2Demo() {
         eyebrow="THÀNH TỰU"
         title="Sata Robo qua 6 năm"
         stats={[
-          { value: 4000, suffix: "+", label: "Học viên" },
-          { value: 8, label: "Trường đối tác" },
+          { value: 2000, suffix: "+", label: "Học viên" },
+          { value: 4, label: "Cơ sở Đà Nẵng" },
           { value: 24, label: "Giải RoboSim 2026" },
           { value: 6, suffix: "+", label: "Năm xây dựng" },
         ]}
@@ -110,7 +98,7 @@ export function DesignSystemV2Demo() {
       <SectionBase
         theme="soft-cool"
         eyebrow="💜 PHỤ HUYNH NÓI GÌ (TÍM ACCENT)"
-        title="Tin cậy từ 4,000+ gia đình"
+        title="Tin cậy từ 2,000+ gia đình"
         subtitle="Background soft-cool tím nhẹ + glow orb tím — Trust signal"
         glowOrb={{ color: "purple", position: "top-left" }}
       >
@@ -156,8 +144,8 @@ export function DesignSystemV2Demo() {
             category="Phụ huynh"
           />
           <BlogCard
-            title="Sata Inno School — Giải pháp STEM cho trường K-12"
-            excerpt="Mô hình đối tác giáo dục giữa Sata Robo và 8 trường tại Đà Nẵng."
+            title="Luyện thi RoboSim — Lộ trình pass vòng loại cho con"
+            excerpt="Bí quyết chuẩn bị bài bản cho cuộc thi Sáng tạo Robotics 2026, bảng R1 và R2."
             href="#"
             publishedAt={new Date("2026-04-20")}
             readingTimeMin={7}

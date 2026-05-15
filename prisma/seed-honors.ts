@@ -153,7 +153,7 @@ export async function seedHonors(db: PrismaClient) {
 
 Sau 2 năm, chiến lược content "Mẹ Dặn Con Mỗi Ngày" của Mai đã giúp:
 - Fanpage chính Sata Robo: 200 → 12,000+ followers
-- 38 kênh vệ tinh SP1/SP2 với tổng 50,000+ reach mỗi tuần
+- 38 kênh vệ tinh phụ huynh + học viên với tổng 50,000+ reach mỗi tuần
 - Top 3 nhận diện thương hiệu Robotics giáo dục tại Đà Nẵng (khảo sát PA 2025)
 - Đưa CPL (chi phí mỗi lead) từ 250k giảm xuống còn 85k
 
@@ -161,7 +161,7 @@ Marketing tại Sata Robo dưới thời Mai không chỉ là "chạy ads" — �
       pullQuote:
         "Một mẹ nói với tôi: 'Con tôi đăng ký Sata Robo vì xem video bé Bin đam mê quá.' Đó là khoảnh khắc tôi biết mình đã làm đúng.",
       achievements: `- Tăng followers fanpage chính từ 200 lên 12,000+
-- Xây dựng 38 kênh vệ tinh SP1/SP2 với 50K+ reach/tuần
+- Xây dựng 38 kênh vệ tinh phụ huynh + học viên với 50K+ reach/tuần
 - Giảm CPL từ 250k xuống 85k
 - Top 3 nhận diện thương hiệu Robotics tại Đà Nẵng`,
       isFeatured: false,
@@ -304,9 +304,9 @@ Kết quả sau 3 tháng:
     },
     {
       occurredAt: new Date("2025-08-15"),
-      title: "Đối tác chiến lược với 8 trường K-12",
+      title: "Mở rộng 4 cơ sở tại Đà Nẵng",
       description:
-        "Sata Robo trở thành đơn vị cung cấp giải pháp Robotics chính thức cho 8 trường K-12 tại Đà Nẵng — thông qua chương trình 'Sata Inno School'. Đánh dấu bước chuyển sang B2B/B2G education.",
+        "Sata Robo hoàn tất mạng lưới 4 cơ sở (Hoà Cường, Hải Châu, Sơn Trà, Ngũ Hành Sơn), phục vụ phụ huynh và học viên trên toàn thành phố Đà Nẵng.",
       displayOrder: 5,
     },
     {
