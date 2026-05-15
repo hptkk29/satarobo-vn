@@ -1,16 +1,35 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowRight,
   Phone,
   Trophy,
-  Sparkles,
+  Award,
+  Medal,
   Users,
   Target,
-  Award,
   GraduationCap,
+  CheckCircle2,
+  Wallet,
+  Plane,
+  Mic,
+  ShieldCheck,
+  MapPin,
+  Flag,
+  Sparkles as SparklesIcon,
+  CalendarClock,
+  type LucideIcon,
 } from "lucide-react";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { AnimatedGradientText } from "@/components/magic/animated-gradient-text";
+import { NumberTicker } from "@/components/magic/number-ticker";
+import { BorderBeam } from "@/components/magic/border-beam";
+import { ShimmerButton } from "@/components/magic/shimmer-button";
+import { Particles } from "@/components/magic/particles";
+import { FadeIn } from "@/components/motion/fade-in";
+import { RevealOnScroll } from "@/components/motion/reveal-on-scroll";
 
 // ============== Types ==============
 export interface MainCourseCard {
@@ -41,62 +60,82 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
 // ============== 1. HERO ==============
 function HeroSection() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-16 md:py-24">
-      <div className="container mx-auto px-4 max-w-7xl">
-        <div className="text-center max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-purple-200 rounded-full px-4 py-1.5 mb-6 shadow-sm">
-            <Sparkles className="w-4 h-4 text-purple-600" />
-            <span className="text-xs font-bold uppercase tracking-wider text-purple-700">
-              Học Viện Robotics &amp; AI Đà Nẵng
-            </span>
+    <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-20 md:py-28">
+      {/* Background particles */}
+      <Particles
+        className="absolute inset-0"
+        quantity={40}
+        ease={80}
+        color="#7C3AED"
+        refresh={false}
+      />
+
+      <div className="container mx-auto px-4 max-w-7xl relative z-10">
+        <FadeIn>
+          <div className="text-center max-w-4xl mx-auto">
+            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-purple-200 rounded-full px-4 py-1.5 mb-6 shadow-sm">
+              <SparklesIcon className="w-4 h-4 text-purple-600" />
+              <span className="text-xs font-bold uppercase tracking-wider text-purple-700">
+                Học Viện Robotics &amp; AI Đà Nẵng
+              </span>
+            </div>
+
+            <h1 className="text-4xl md:text-6xl font-black text-neutral-900 mb-4 leading-tight">
+              <AnimatedGradientText
+                colorFrom="#F97316"
+                colorTo="#7C3AED"
+                className="text-4xl md:text-6xl font-black"
+              >
+                Khơi Nguồn Sáng Tạo
+              </AnimatedGradientText>
+              <br />
+              <span>– Chắp Cánh Tương Lai</span>
+            </h1>
+
+            <p className="text-xl md:text-2xl text-neutral-700 mb-2 font-medium">
+              Trung tâm đào tạo lập trình Robotics &amp; AI
+            </p>
+            <p className="text-lg text-neutral-600 italic">
+              — nơi con học robot, nơi con trưởng thành.
+            </p>
+
+            <p className="text-base text-neutral-600 my-8 leading-relaxed max-w-3xl mx-auto">
+              Sata Robo mang đến chương trình học Robotics sinh động, gắn liền thực tiễn và các
+              cuộc thi từ cấp thành phố đến quốc tế.{" "}
+              <strong>Lớp nhỏ ≤12 học viên</strong>, giáo viên tận tâm nhiều kinh nghiệm.{" "}
+              <strong>Cam kết hoàn tiền 100% bằng văn bản</strong> nếu thí sinh không qua vòng
+              loại và tham gia chung kết khu vực Miền Trung tại Nghệ An tháng 9/2026 — không câu
+              hỏi.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+              <Link href="/lien-he?free-trial=true">
+                <ShimmerButton
+                  background="linear-gradient(110deg, #F97316 0%, #FB923C 50%, #F97316 100%)"
+                  borderRadius="14px"
+                  className="px-6 py-4 font-bold text-white shadow-xl shadow-orange-500/30"
+                >
+                  <Target className="w-5 h-5 mr-2" />
+                  <span>Đăng Ký Học MIỄN PHÍ</span>
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </ShimmerButton>
+              </Link>
+              <Link
+                href="/khoa-hoc"
+                className="inline-flex items-center justify-center gap-2 bg-white hover:bg-purple-50 text-purple-700 border-2 border-purple-300 font-bold px-6 py-4 rounded-xl transition-all duration-200 hover:-translate-y-0.5 shadow-sm hover:shadow-md focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
+              >
+                Xem Các Khoá Học
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+            </div>
+
+            <div className="flex flex-wrap gap-2 justify-center text-xs">
+              <TrustBadge>Học MIỄN PHÍ 5 buổi luyện thi cơ bản</TrustBadge>
+              <TrustBadge>Hoàn tiền 100% có cam kết văn bản</TrustBadge>
+              <TrustBadge>Robosim — Phần mềm thi bắt buộc 2026</TrustBadge>
+            </div>
           </div>
-
-          <h1 className="text-4xl md:text-6xl font-black text-neutral-900 mb-4 leading-tight">
-            <span className="bg-gradient-to-r from-orange-500 to-purple-600 bg-clip-text text-transparent">
-              Khơi Nguồn Sáng Tạo
-            </span>
-            <br />
-            <span>– Chắp Cánh Tương Lai</span>
-          </h1>
-
-          <p className="text-xl md:text-2xl text-neutral-700 mb-2 font-medium">
-            Trung tâm đào tạo lập trình Robotics &amp; AI
-          </p>
-          <p className="text-lg text-neutral-600 italic">
-            — nơi con học robot, nơi con trưởng thành.
-          </p>
-
-          <p className="text-base text-neutral-600 my-8 leading-relaxed max-w-3xl mx-auto">
-            Sata Robo mang đến chương trình học Robotics sinh động, gắn liền thực tiễn và các
-            cuộc thi từ cấp thành phố đến quốc tế.{" "}
-            <strong>Lớp nhỏ ≤12 học viên</strong>, giáo viên tận tâm nhiều kinh nghiệm.{" "}
-            <strong>Cam kết hoàn tiền 100% bằng văn bản</strong> nếu thí sinh không qua vòng
-            loại và tham gia chung kết khu vực Miền Trung tại Nghệ An tháng 9/2026 — không câu
-            hỏi.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-            <Link
-              href="/lien-he?free-trial=true"
-              className="inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 py-4 rounded-xl shadow-xl hover:shadow-2xl transition-all"
-            >
-              <span>🎯 Đăng Ký Học MIỄN PHÍ</span>
-              <ArrowRight className="w-5 h-5" />
-            </Link>
-            <Link
-              href="/khoa-hoc"
-              className="inline-flex items-center justify-center gap-2 bg-white hover:bg-purple-50 text-purple-700 border-2 border-purple-300 font-bold px-6 py-4 rounded-xl"
-            >
-              Xem Các Khoá Học
-            </Link>
-          </div>
-
-          <div className="flex flex-wrap gap-2 justify-center text-xs">
-            <TrustBadge>✅ Học MIỄN PHÍ 5 buổi luyện thi cơ bản</TrustBadge>
-            <TrustBadge>✅ Hoàn tiền 100% có cam kết văn bản</TrustBadge>
-            <TrustBadge>✅ Robosim — Phần mềm thi bắt buộc 2026</TrustBadge>
-          </div>
-        </div>
+        </FadeIn>
       </div>
     </section>
   );
@@ -104,7 +143,8 @@ function HeroSection() {
 
 function TrustBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center bg-white border border-green-200 text-green-700 font-semibold px-3 py-1.5 rounded-full shadow-sm">
+    <span className="inline-flex items-center gap-1.5 bg-white border border-green-200 text-green-700 font-semibold px-3 py-1.5 rounded-full shadow-sm">
+      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
       {children}
     </span>
   );
@@ -112,31 +152,56 @@ function TrustBadge({ children }: { children: React.ReactNode }) {
 
 // ============== 2. STATS BAR ==============
 function StatsBar() {
-  const stats = [
-    { value: "500+", label: "Học Viên đã theo học", Icon: Users },
-    { value: "Lớp 1 → 8", label: "Cho các Kỹ Sư Nhí", Icon: GraduationCap },
-    { value: "≤12 HV", label: "/lớp - GV tận tâm", Icon: Target },
-    { value: "100%", label: "Cam kết hoàn tiền văn bản", Icon: Award },
-  ];
-
   return (
     <section className="bg-gradient-to-r from-purple-600 to-orange-500 py-12">
       <div className="container mx-auto px-4 max-w-6xl">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {stats.map((s) => (
-            <div key={s.label} className="text-center text-white">
-              <s.Icon className="w-8 h-8 mx-auto mb-2 opacity-90" />
-              <div className="text-3xl md:text-4xl font-black mb-1">{s.value}</div>
-              <div className="text-xs md:text-sm opacity-90 font-medium">{s.label}</div>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-white">
+          <StatBlock Icon={Users}>
+            <span className="text-3xl md:text-4xl font-black">
+              <NumberTicker value={500} className="text-white" />
+              <span>+</span>
+            </span>
+            <span className="text-xs md:text-sm opacity-90 font-medium">Học Viên đã theo học</span>
+          </StatBlock>
+          <StatBlock Icon={GraduationCap}>
+            <span className="text-3xl md:text-4xl font-black">Lớp 1 → 8</span>
+            <span className="text-xs md:text-sm opacity-90 font-medium">
+              Cho các Kỹ Sư Nhí
+            </span>
+          </StatBlock>
+          <StatBlock Icon={Target}>
+            <span className="text-3xl md:text-4xl font-black">
+              ≤
+              <NumberTicker value={12} className="text-white" />
+              <span> HV</span>
+            </span>
+            <span className="text-xs md:text-sm opacity-90 font-medium">/lớp - GV tận tâm</span>
+          </StatBlock>
+          <StatBlock Icon={Award}>
+            <span className="text-3xl md:text-4xl font-black">
+              <NumberTicker value={100} className="text-white" />
+              <span>%</span>
+            </span>
+            <span className="text-xs md:text-sm opacity-90 font-medium">
+              Cam kết hoàn tiền văn bản
+            </span>
+          </StatBlock>
         </div>
       </div>
     </section>
   );
 }
 
-// ============== 3. ƯU THẾ + THÀNH TỰU ==============
+function StatBlock({ Icon, children }: { Icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <div className="text-center text-white">
+      <Icon className="w-8 h-8 mx-auto mb-2 opacity-90" />
+      <div className="flex flex-col items-center">{children}</div>
+    </div>
+  );
+}
+
+// ============== 3. ƯU THẾ + THÀNH TỰU (Bento 5) ==============
 function UuTheSection() {
   const achievements = [
     "Phối hợp tổ chức thành công Cuộc thi Sáng tạo Robotics 2026 cùng Thành Đoàn TP Đà Nẵng và TW Đoàn TNCS Hồ Chí Minh",
@@ -147,29 +212,36 @@ function UuTheSection() {
   ];
 
   return (
-    <section className="bg-white py-16">
-      <div className="container mx-auto px-4 max-w-5xl">
-        <div className="text-center mb-12">
-          <div className="text-xs font-bold uppercase tracking-wider text-orange-600 mb-2">
-            🏆 ƯU THẾ + THÀNH TỰU
-          </div>
-          <h2 className="text-3xl md:text-4xl font-black text-neutral-900">
-            Sata Robo Đang Là Đơn Vị Tiên Phong
-          </h2>
-          <p className="text-neutral-600 mt-3">Robotics giáo dục tại Đà Nẵng</p>
-        </div>
+    <section className="bg-white py-16 md:py-24">
+      <div className="container mx-auto px-4 max-w-6xl">
+        <SectionEyebrow icon={Trophy} label="ƯU THẾ + THÀNH TỰU" tone="orange" />
+        <SectionHeading>Sata Robo đang là đơn vị tiên phong</SectionHeading>
+        <SectionLead>Robotics giáo dục tại Đà Nẵng</SectionLead>
 
-        <div className="space-y-3">
-          {achievements.map((text, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-4 bg-gradient-to-r from-purple-50 to-orange-50 rounded-xl p-5 border border-purple-100"
-            >
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-purple-600 text-white font-black flex items-center justify-center">
-                {i + 1}
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4 md:auto-rows-fr">
+          {/* Card 1 — featured, spans 2 rows on desktop */}
+          <RevealOnScroll direction="up" distance={20}>
+            <article className="relative h-full bg-gradient-to-br from-orange-50 via-white to-purple-50 rounded-2xl border-2 border-orange-200 p-6 md:p-8 md:row-span-2 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-shadow overflow-hidden">
+              <BorderBeam size={70} duration={9} colorFrom="#F97316" colorTo="#7C3AED" />
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-orange-500 text-white font-black mb-4 shadow-md shadow-orange-500/30">
+                1
               </div>
-              <p className="text-neutral-800 leading-relaxed">{text}</p>
-            </div>
+              <p className="text-neutral-800 text-base md:text-lg leading-relaxed font-medium">
+                {achievements[0]}
+              </p>
+            </article>
+          </RevealOnScroll>
+
+          {/* Cards 2-5 */}
+          {achievements.slice(1).map((text, i) => (
+            <RevealOnScroll key={i} direction="up" distance={20} delay={(i + 1) * 0.05}>
+              <article className="h-full bg-white rounded-2xl border border-neutral-200 p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300">
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-purple-600 text-white text-sm font-black mb-3">
+                  {i + 2}
+                </div>
+                <p className="text-neutral-700 leading-relaxed text-sm">{text}</p>
+              </article>
+            </RevealOnScroll>
           ))}
         </div>
       </div>
@@ -178,157 +250,146 @@ function UuTheSection() {
 }
 
 // ============== 4. 6 ƯU ĐIỂM ==============
-type AdvColor = "orange" | "purple" | "green" | "blue" | "amber" | "indigo";
-
 interface Advantage {
-  number: string;
-  icon: string;
+  Icon: LucideIcon;
   title: string;
   desc: string;
-  color: AdvColor;
+  tone: "orange" | "purple" | "green" | "blue" | "amber" | "indigo";
 }
+
+const ADVANTAGE_TONE: Record<Advantage["tone"], { bg: string; border: string; icon: string }> = {
+  orange: { bg: "from-orange-50 to-amber-50", border: "border-orange-200", icon: "bg-orange-500" },
+  purple: { bg: "from-purple-50 to-violet-50", border: "border-purple-200", icon: "bg-purple-600" },
+  green: { bg: "from-green-50 to-emerald-50", border: "border-green-200", icon: "bg-green-500" },
+  blue: { bg: "from-blue-50 to-sky-50", border: "border-blue-200", icon: "bg-blue-500" },
+  amber: { bg: "from-amber-50 to-yellow-50", border: "border-amber-200", icon: "bg-amber-500" },
+  indigo: { bg: "from-indigo-50 to-blue-50", border: "border-indigo-200", icon: "bg-indigo-500" },
+};
 
 function SixAdvantagesSection() {
   const advantages: Advantage[] = [
     {
-      number: "①",
-      icon: "🎯",
+      Icon: Target,
       title: "Robosim Độc Quyền",
       desc: "Phần mềm bắt buộc trong Cuộc thi Sáng tạo Robotics 2026 của Thành Đoàn Đà Nẵng. Chỉ Sata Robo đào tạo phần mềm này.",
-      color: "orange",
+      tone: "orange",
     },
     {
-      number: "②",
-      icon: "👥",
+      Icon: Users,
       title: "Lớp Nhỏ ≤12 HV",
       desc: "Giáo viên biết tên và điểm mạnh từng con. Không em nào bị bỏ lại phía sau.",
-      color: "purple",
+      tone: "purple",
     },
     {
-      number: "③",
-      icon: "💰",
+      Icon: Wallet,
       title: "Cam Kết Hoàn Tiền 100%",
       desc: "Nếu con học tại trung tâm và không vượt vòng loại để tham gia chung kết khu vực tại Nghệ An vào tháng 9/2026.",
-      color: "green",
+      tone: "green",
     },
     {
-      number: "④",
-      icon: "✈️",
+      Icon: Plane,
       title: "Giải Thưởng Du Lịch 3-7 Triệu",
       desc: "Học viên đạt giải cuộc thi cấp TP được thưởng chuyến du lịch kết hợp lễ khai trương T8/2026.",
-      color: "blue",
+      tone: "blue",
     },
     {
-      number: "⑤",
-      icon: "🎤",
+      Icon: Mic,
       title: "Thuyết Trình Trước Phụ Huynh",
       desc: "Cuối mỗi 12 buổi học, con thuyết trình dự án, ghi hình kỷ niệm. Phụ huynh thấy kết quả thực tế.",
-      color: "amber",
+      tone: "amber",
     },
     {
-      number: "⑥",
-      icon: "🏆",
+      Icon: Trophy,
       title: "Hỗ Trợ 3 Triệu Lệ Phí Thi Quốc Gia",
       desc: "Học viên hoàn thành khoá học và tham dự cuộc thi Quốc gia theo đoàn Sata Robo được hỗ trợ 3.000.000đ/năm.",
-      color: "indigo",
+      tone: "indigo",
     },
   ];
 
   return (
-    <section className="bg-neutral-50 py-16">
+    <section className="bg-neutral-50 py-16 md:py-24">
       <div className="container mx-auto px-4 max-w-7xl">
-        <div className="text-center mb-12">
-          <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
-            ⭐ ƯU ĐIỂM
-          </div>
-          <h2 className="text-3xl md:text-4xl font-black text-neutral-900">
-            Tại Sao Phụ Huynh Chọn Sata Robo?
-          </h2>
-          <p className="text-neutral-600 mt-3">6 điểm khác biệt làm nên uy tín</p>
-        </div>
+        <SectionEyebrow icon={SparklesIcon} label="ƯU ĐIỂM" tone="purple" />
+        <SectionHeading>Tại sao phụ huynh chọn Sata Robo?</SectionHeading>
+        <SectionLead>6 điểm khác biệt làm nên uy tín</SectionLead>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {advantages.map((a) => (
-            <AdvantageCard key={a.title} adv={a} />
-          ))}
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {advantages.map((adv, i) => {
+            const tone = ADVANTAGE_TONE[adv.tone];
+            const { Icon } = adv;
+            return (
+              <RevealOnScroll key={adv.title} direction="up" distance={20} delay={i * 0.05}>
+                <article
+                  className={`group h-full bg-gradient-to-br ${tone.bg} rounded-2xl border-2 ${tone.border} p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className={`w-12 h-12 rounded-xl ${tone.icon} text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform`}
+                    >
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <span className="text-3xl font-black text-neutral-300">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-neutral-900 mb-2">{adv.title}</h3>
+                  <p className="text-sm text-neutral-700 leading-relaxed">{adv.desc}</p>
+                </article>
+              </RevealOnScroll>
+            );
+          })}
         </div>
       </div>
     </section>
   );
 }
 
-const ADVANTAGE_COLOR_MAP: Record<AdvColor, string> = {
-  orange: "from-orange-50 to-amber-50 border-orange-200",
-  purple: "from-purple-50 to-violet-50 border-purple-200",
-  green: "from-green-50 to-emerald-50 border-green-200",
-  blue: "from-blue-50 to-sky-50 border-blue-200",
-  amber: "from-amber-50 to-yellow-50 border-amber-200",
-  indigo: "from-indigo-50 to-blue-50 border-indigo-200",
-};
-
-function AdvantageCard({ adv }: { adv: Advantage }) {
-  return (
-    <div
-      className={`bg-gradient-to-br ${ADVANTAGE_COLOR_MAP[adv.color]} rounded-2xl border-2 p-6 hover:shadow-lg transition-shadow`}
-    >
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-3xl">{adv.icon}</span>
-        <span className="text-3xl font-black text-purple-600">{adv.number}</span>
-      </div>
-      <h3 className="text-xl font-bold text-neutral-900 mb-2">{adv.title}</h3>
-      <p className="text-sm text-neutral-700 leading-relaxed">{adv.desc}</p>
-    </div>
-  );
-}
-
-// ============== 5. CATALOG (2 MAIN COURSES) ==============
+// ============== 5. CATALOG (2 main courses) ==============
 function CatalogSection({ courses }: { courses: MainCourseCard[] }) {
   return (
-    <section className="bg-white py-16">
+    <section className="bg-white py-16 md:py-24">
       <div className="container mx-auto px-4 max-w-7xl">
-        <div className="text-center mb-12">
-          <div className="text-xs font-bold uppercase tracking-wider text-orange-600 mb-2">
-            🎓 KHOÁ HỌC
-          </div>
-          <h2 className="text-3xl md:text-4xl font-black text-neutral-900">
-            Chương Trình Học Robotics
-          </h2>
-          <p className="text-neutral-600 mt-3 max-w-2xl mx-auto">
-            Từ luyện thi chuyên sâu đến lộ trình Robotics dài hạn cho lớp 1-8
-          </p>
-        </div>
+        <SectionEyebrow icon={GraduationCap} label="KHOÁ HỌC" tone="orange" />
+        <SectionHeading>Chương trình học Robotics</SectionHeading>
+        <SectionLead>
+          Từ luyện thi chuyên sâu đến lộ trình Robotics dài hạn cho lớp 1-8
+        </SectionLead>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-          {courses.map((course) => (
-            <Link
-              key={course.id}
-              href={`/khoa-hoc/${course.slug}`}
-              className="group block bg-gradient-to-br from-orange-50 to-purple-50 rounded-2xl border-2 border-purple-200 overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all"
-            >
-              {course.thumbnail && (
-                <div className="aspect-video relative overflow-hidden bg-neutral-100">
-                  <Image
-                    src={course.thumbnail}
-                    alt={course.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                  />
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          {courses.map((course, i) => (
+            <RevealOnScroll key={course.id} direction="up" distance={24} delay={i * 0.08}>
+              <Link
+                href={`/khoa-hoc/${course.slug}`}
+                className="group relative block bg-white rounded-2xl border border-neutral-200 overflow-hidden hover:shadow-[0_12px_40px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none"
+              >
+                {/* Hover border beam */}
+                <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl overflow-hidden">
+                  <BorderBeam size={90} duration={8} colorFrom="#F97316" colorTo="#7C3AED" />
+                </span>
+
+                {course.thumbnail && (
+                  <div className="aspect-video relative overflow-hidden bg-gradient-to-br from-orange-50 to-purple-50">
+                    <Image
+                      src={course.thumbnail}
+                      alt={course.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                    />
+                  </div>
+                )}
+                <div className="p-6">
+                  <h3 className="text-2xl font-bold text-neutral-900 mb-2 group-hover:text-orange-600 transition-colors">
+                    {course.name}
+                  </h3>
+                  <p className="text-neutral-700 mb-4 line-clamp-3">{course.shortDescription}</p>
+                  <span className="inline-flex items-center gap-2 text-orange-600 font-bold group-hover:gap-3 transition-all">
+                    Xem chi tiết
+                    <ArrowRight className="w-5 h-5" />
+                  </span>
                 </div>
-              )}
-              <div className="p-6">
-                <h3 className="text-2xl font-bold text-neutral-900 mb-2 group-hover:text-orange-600 transition-colors">
-                  {course.name}
-                </h3>
-                <p className="text-neutral-700 mb-4 line-clamp-3">
-                  {course.shortDescription}
-                </p>
-                <div className="inline-flex items-center gap-2 text-orange-600 font-bold group-hover:gap-3 transition-all">
-                  Xem chi tiết
-                  <ArrowRight className="w-5 h-5" />
-                </div>
-              </div>
-            </Link>
+              </Link>
+            </RevealOnScroll>
           ))}
         </div>
       </div>
@@ -340,69 +401,60 @@ function CatalogSection({ courses }: { courses: MainCourseCard[] }) {
 function SevenCommitmentsSection() {
   const commitments = [
     {
-      number: "①",
       title: "Hoàn tiền 100% sau 2 buổi đầu",
       desc: "Nếu con không thích, hoàn toàn bộ, không câu hỏi.",
     },
     {
-      number: "②",
       title: "Lớp nhỏ ≤12 HV",
       desc: "GV tận tâm, học kèm để các con tiến bộ mỗi ngày.",
     },
     {
-      number: "③",
       title: "Robosim độc quyền",
       desc: "Phần mềm bắt buộc Cuộc thi 2026, chỉ Sata Robo đào tạo.",
     },
     {
-      number: "④",
       title: "Giải thưởng du lịch 3-7 triệu",
       desc: "Dành cho HV đạt giải cuộc thi cấp TP Đà Nẵng.",
     },
     {
-      number: "⑤",
       title: "Thuyết trình cuối mỗi học phần",
       desc: "Phụ huynh được xem kết quả thực tế, ghi hình kỷ niệm.",
     },
     {
-      number: "⑥",
       title: "Hỗ trợ 3 triệu lệ phí thi Quốc gia",
       desc: "Cho HV tham dự cuộc thi Quốc gia theo đoàn Sata Robo.",
     },
     {
-      number: "⑦",
       title: "Test năng lực & Học thử MIỄN PHÍ",
       desc: "45 phút test + 90 phút học thử, hoàn toàn 0 đồng.",
     },
   ];
 
   return (
-    <section className="bg-gradient-to-br from-purple-50 to-orange-50 py-16">
+    <section className="bg-gradient-to-br from-purple-50 to-orange-50 py-16 md:py-24">
       <div className="container mx-auto px-4 max-w-6xl">
-        <div className="text-center mb-12">
-          <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
-            🤝 CAM KẾT
-          </div>
-          <h2 className="text-3xl md:text-4xl font-black text-neutral-900">
-            Sata Robo Cam Kết Với Bạn
-          </h2>
-          <p className="text-neutral-600 mt-3">7 cam kết bằng văn bản với phụ huynh</p>
-        </div>
+        <SectionEyebrow icon={ShieldCheck} label="CAM KẾT" tone="purple" />
+        <SectionHeading>Sata Robo cam kết với bạn</SectionHeading>
+        <SectionLead>7 cam kết bằng văn bản với phụ huynh</SectionLead>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {commitments.map((c) => (
-            <div
-              key={c.number}
-              className="bg-white rounded-xl border-2 border-purple-200 p-5 flex items-start gap-4 hover:shadow-lg transition-shadow"
-            >
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-purple-600 text-white font-black text-xl flex items-center justify-center">
-                {c.number}
-              </div>
-              <div>
-                <h3 className="font-bold text-neutral-900 mb-1">{c.title}</h3>
-                <p className="text-sm text-neutral-600">{c.desc}</p>
-              </div>
-            </div>
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {commitments.map((c, i) => (
+            <RevealOnScroll key={c.title} direction="up" distance={16} delay={i * 0.04}>
+              <article className="flex items-start gap-4 bg-white rounded-xl border-2 border-purple-100 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300">
+                <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-xs font-bold text-purple-500">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <h3 className="font-bold text-neutral-900">{c.title}</h3>
+                  </div>
+                  <p className="text-sm text-neutral-600">{c.desc}</p>
+                </div>
+              </article>
+            </RevealOnScroll>
           ))}
         </div>
       </div>
@@ -412,93 +464,142 @@ function SevenCommitmentsSection() {
 
 // ============== 7. TRAVEL PRIZE BANNER ==============
 function TravelPrizeBanner() {
+  const prizes = [
+    {
+      Icon: Trophy,
+      rank: "Giải Nhất",
+      amount: 7,
+      desc: "Chuyến du lịch kỷ niệm (HV + phụ huynh)",
+      ring: "ring-yellow-300/60",
+      iconBg: "bg-yellow-400 text-yellow-900",
+    },
+    {
+      Icon: Medal,
+      rank: "Giải Nhì",
+      amount: 5,
+      desc: "Chuyến du lịch trị giá",
+      ring: "ring-slate-200/60",
+      iconBg: "bg-slate-200 text-slate-700",
+    },
+    {
+      Icon: Award,
+      rank: "Giải Ba",
+      amount: 3,
+      desc: "Chuyến du lịch trị giá",
+      ring: "ring-orange-300/60",
+      iconBg: "bg-amber-700 text-amber-100",
+    },
+  ];
+
   return (
-    <section className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 py-16">
-      <div className="container mx-auto px-4 max-w-6xl text-center text-white">
-        <Trophy className="w-16 h-16 mx-auto mb-4 drop-shadow-lg" />
-        <div className="text-xs font-bold uppercase tracking-wider mb-2 opacity-90">
-          🏆 GIẢI THƯỞNG ĐẶC BIỆT
-        </div>
-        <h2 className="text-3xl md:text-4xl font-black mb-3">
-          Lễ Khai Trương 2 Chi Nhánh Mới — Tháng 8/2026
-        </h2>
-        <p className="text-lg mb-8 opacity-90">
-          Trao tại lễ khai trương 114 Hoàng Diệu + 211 Nguyễn Hữu Thọ
-        </p>
+    <section className="relative overflow-hidden bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 py-16 md:py-24">
+      <Particles
+        className="absolute inset-0"
+        quantity={30}
+        ease={60}
+        color="#FEF3C7"
+        refresh={false}
+      />
+      <div className="container mx-auto px-4 max-w-6xl text-center text-white relative z-10">
+        <FadeIn>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/15 backdrop-blur ring-2 ring-white/30 mb-4 mx-auto">
+            <Trophy className="w-10 h-10 drop-shadow-lg" />
+          </div>
+          <div className="text-xs font-bold uppercase tracking-wider mb-2 opacity-90">
+            Giải Thưởng Đặc Biệt
+          </div>
+          <h2 className="text-3xl md:text-4xl font-black mb-3">
+            Lễ Khai Trương 2 Chi Nhánh Mới — Tháng 8/2026
+          </h2>
+          <p className="text-lg mb-10 opacity-90">
+            Trao tại lễ khai trương 114 Hoàng Diệu + 211 Nguyễn Hữu Thọ
+          </p>
+        </FadeIn>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8">
-          <PrizeCard
-            rank="🥇 Giải Nhất"
-            amount="7.000.000đ"
-            desc="Chuyến du lịch kỷ niệm (HV + phụ huynh)"
-          />
-          <PrizeCard rank="🥈 Giải Nhì" amount="5.000.000đ" desc="Chuyến du lịch trị giá" />
-          <PrizeCard rank="🥉 Giải Ba" amount="3.000.000đ" desc="Chuyến du lịch trị giá" />
+          {prizes.map((p, i) => (
+            <RevealOnScroll key={p.rank} direction="up" distance={20} delay={i * 0.08}>
+              <article
+                className={`relative bg-white/15 backdrop-blur rounded-2xl ring-2 ${p.ring} p-6 hover:bg-white/20 transition-colors`}
+              >
+                <div
+                  className={`w-12 h-12 rounded-xl ${p.iconBg} mx-auto mb-3 flex items-center justify-center shadow-md`}
+                >
+                  <p.Icon className="w-7 h-7" />
+                </div>
+                <div className="text-sm font-semibold mb-2 opacity-90">{p.rank}</div>
+                <div className="text-3xl md:text-4xl font-black mb-2">
+                  <NumberTicker value={p.amount} className="text-white" />
+                  <span>.000.000đ</span>
+                </div>
+                <div className="text-sm opacity-90">{p.desc}</div>
+              </article>
+            </RevealOnScroll>
+          ))}
         </div>
 
         <p className="text-sm opacity-90 max-w-2xl mx-auto bg-black/20 backdrop-blur rounded-xl p-4">
-          <strong>Điều kiện:</strong> Đang học tại Sata Robo + Đạt giải ≥ Giải Ba cấp TP Đà Nẵng.
-          Căn cứ kết quả vòng loại Robosim kết thúc 26/07/2026.
+          <strong>Điều kiện:</strong> Đang học tại Sata Robo + Đạt giải ≥ Giải Ba cấp TP Đà
+          Nẵng. Căn cứ kết quả vòng loại Robosim kết thúc 26/07/2026.
         </p>
       </div>
     </section>
-  );
-}
-
-function PrizeCard({ rank, amount, desc }: { rank: string; amount: string; desc: string }) {
-  return (
-    <div className="bg-white/15 backdrop-blur rounded-2xl border-2 border-white/30 p-6">
-      <div className="text-2xl font-bold mb-2">{rank}</div>
-      <div className="text-3xl font-black mb-2">{amount}</div>
-      <div className="text-sm opacity-90">{desc}</div>
-    </div>
   );
 }
 
 // ============== 8. COMPETITION COUNTDOWN ==============
 function CompetitionCountdown() {
   return (
-    <section className="bg-neutral-900 py-16 text-white">
+    <section className="bg-neutral-900 py-16 md:py-24 text-white">
       <div className="container mx-auto px-4 max-w-6xl">
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 bg-orange-500/20 backdrop-blur border border-orange-400/50 rounded-full px-4 py-1.5 mb-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-orange-300">
-              ⏰ CUỘC THI QUỐC GIA
-            </span>
+        <FadeIn>
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-orange-500/20 backdrop-blur border border-orange-400/50 rounded-full px-4 py-1.5 mb-4">
+              <CalendarClock className="w-3.5 h-3.5 text-orange-300" />
+              <span className="text-xs font-bold uppercase tracking-wider text-orange-300">
+                Cuộc thi quốc gia
+              </span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-black mb-3">
+              Cuộc Thi Sáng Tạo Robotics Toàn Quốc 2026
+            </h2>
+            <p className="text-neutral-400">
+              Robosim là{" "}
+              <strong className="text-orange-400">công cụ thi bắt buộc</strong> — chỉ Sata Robo
+              đào tạo
+            </p>
           </div>
-          <h2 className="text-3xl md:text-4xl font-black mb-3">
-            Cuộc Thi Sáng Tạo Robotics Toàn Quốc 2026
-          </h2>
-          <p className="text-neutral-400">
-            Robosim là{" "}
-            <strong className="text-orange-400">công cụ thi bắt buộc</strong> — chỉ Sata Robo
-            đào tạo
-          </p>
-        </div>
+        </FadeIn>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          <CompetitionStage
-            stage="Vòng Loại"
-            location="TP Đà Nẵng"
-            date="26/07/2026"
-            note="Dự kiến kết thúc"
-            color="orange"
-          />
-          <CompetitionStage
-            stage="Chung Kết"
-            location="Khu vực Miền Trung"
-            date="13/09/2026"
-            note="Tại Nghệ An"
-            color="red"
-          />
+          <RevealOnScroll direction="up" distance={20}>
+            <CompetitionStage
+              Icon={Flag}
+              stage="Vòng Loại"
+              location="TP Đà Nẵng"
+              date="26/07/2026"
+              note="Dự kiến kết thúc"
+              tone="orange"
+            />
+          </RevealOnScroll>
+          <RevealOnScroll direction="up" distance={20} delay={0.1}>
+            <CompetitionStage
+              Icon={Trophy}
+              stage="Chung Kết"
+              location="Khu vực Miền Trung"
+              date="13/09/2026"
+              note="Tại Nghệ An"
+              tone="red"
+            />
+          </RevealOnScroll>
         </div>
 
         <div className="text-center mt-12">
           <Link
             href="/khoa-hoc/laptrinhrobot#sata1"
-            className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-3 rounded-xl shadow-xl"
+            className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-3 rounded-xl shadow-xl shadow-orange-500/40 hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:outline-none"
           >
-            👉 Đăng ký Sata1 - Luyện thi Robosim ngay
+            Đăng ký Sata1 - Luyện thi Robosim ngay
             <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
@@ -507,67 +608,138 @@ function CompetitionCountdown() {
   );
 }
 
-const STAGE_COLOR_MAP: Record<"orange" | "red", string> = {
-  orange: "border-orange-400/50 from-orange-500/10 to-amber-500/10",
-  red: "border-red-400/50 from-red-500/10 to-orange-500/10",
+const STAGE_TONE: Record<"orange" | "red", { ring: string; bg: string; icon: string }> = {
+  orange: {
+    ring: "ring-orange-400/40",
+    bg: "from-orange-500/10 to-amber-500/10",
+    icon: "bg-orange-500/20 text-orange-300",
+  },
+  red: {
+    ring: "ring-red-400/40",
+    bg: "from-red-500/10 to-orange-500/10",
+    icon: "bg-red-500/20 text-red-300",
+  },
 };
 
 function CompetitionStage({
+  Icon,
   stage,
   location,
   date,
   note,
-  color,
+  tone,
 }: {
+  Icon: LucideIcon;
   stage: string;
   location: string;
   date: string;
   note: string;
-  color: "orange" | "red";
+  tone: "orange" | "red";
 }) {
+  const t = STAGE_TONE[tone];
   return (
-    <div
-      className={`bg-gradient-to-br ${STAGE_COLOR_MAP[color]} backdrop-blur rounded-2xl border-2 p-6`}
+    <article
+      className={`bg-gradient-to-br ${t.bg} backdrop-blur rounded-2xl ring-2 ${t.ring} p-6`}
     >
-      <div className="text-xs uppercase tracking-wider text-neutral-400 mb-2">{stage}</div>
-      <div className="text-2xl font-bold mb-1">{location}</div>
-      <div className="text-3xl font-black text-orange-400 mb-2">{date}</div>
+      <div className="flex items-center gap-3 mb-3">
+        <div className={`w-10 h-10 rounded-xl ${t.icon} flex items-center justify-center`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="text-xs uppercase tracking-wider text-neutral-400">{stage}</div>
+      </div>
+      <div className="flex items-center gap-2 mb-1">
+        <MapPin className="w-4 h-4 text-neutral-400" />
+        <span className="text-xl md:text-2xl font-bold">{location}</span>
+      </div>
+      <div className="text-3xl md:text-4xl font-black text-orange-400 mb-2">{date}</div>
       <div className="text-sm text-neutral-300">{note}</div>
-    </div>
+    </article>
   );
 }
 
 // ============== 9. FINAL CTA ==============
 function FinalCTA() {
   return (
-    <section className="bg-gradient-to-r from-orange-500 to-purple-600 py-16">
-      <div className="container mx-auto px-4 max-w-4xl text-center text-white">
-        <h2 className="text-3xl md:text-5xl font-black mb-3">
-          Con Bạn Xứng Đáng Được Trải Nghiệm Tốt Nhất
-        </h2>
-        <p className="text-lg md:text-xl mb-8 opacity-90">
-          Học thử <strong>MIỄN PHÍ</strong> — không điều kiện.
-          <br />
-          Cam kết hoàn tiền 100% nếu không hài lòng.
-        </p>
+    <section className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-purple-600 py-16 md:py-24">
+      <Particles
+        className="absolute inset-0"
+        quantity={35}
+        ease={70}
+        color="#ffffff"
+        refresh={false}
+      />
+      <div className="container mx-auto px-4 max-w-4xl text-center text-white relative z-10">
+        <FadeIn>
+          <h2 className="text-3xl md:text-5xl font-black mb-3">
+            Con bạn xứng đáng được trải nghiệm tốt nhất
+          </h2>
+          <p className="text-lg md:text-xl mb-10 opacity-90">
+            Học thử <strong>MIỄN PHÍ</strong> — không điều kiện.
+            <br />
+            Cam kết hoàn tiền 100% nếu không hài lòng.
+          </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link
-            href="/lien-he?free-trial=true"
-            className="inline-flex items-center justify-center gap-2 bg-white text-orange-600 font-bold px-8 py-4 rounded-xl hover:bg-orange-50 shadow-xl text-lg"
-          >
-            🎯 Đăng Ký Học Thử Ngay
-            <ArrowRight className="w-5 h-5" />
-          </Link>
-          <a
-            href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-            className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur text-white border-2 border-white/50 font-bold px-8 py-4 rounded-xl hover:bg-white/20 text-lg"
-          >
-            <Phone className="w-6 h-6" />
-            {SATA_ROBO_CONTACT.hotline}
-          </a>
-        </div>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/lien-he?free-trial=true">
+              <ShimmerButton
+                background="rgba(255,255,255,1)"
+                borderRadius="14px"
+                className="px-8 py-4 font-bold text-orange-600 text-lg shadow-2xl"
+              >
+                <Target className="w-5 h-5 mr-2" />
+                <span>Đăng ký học thử ngay</span>
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </ShimmerButton>
+            </Link>
+            <a
+              href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
+              className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur text-white border-2 border-white/50 font-bold px-8 py-4 rounded-xl hover:bg-white/20 text-lg transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+            >
+              <Phone className="w-6 h-6" />
+              {SATA_ROBO_CONTACT.hotline}
+            </a>
+          </div>
+        </FadeIn>
       </div>
     </section>
+  );
+}
+
+// ============== Section primitives ==============
+const EYEBROW_TONE: Record<"orange" | "purple", string> = {
+  orange: "text-orange-600",
+  purple: "text-purple-600",
+};
+
+function SectionEyebrow({
+  icon: Icon,
+  label,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  tone: "orange" | "purple";
+}) {
+  return (
+    <div className={`flex items-center justify-center gap-2 mb-3 ${EYEBROW_TONE[tone]}`}>
+      <Icon className="w-4 h-4" />
+      <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
+    </div>
+  );
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-center text-3xl md:text-4xl font-black text-neutral-900 leading-tight">
+      {children}
+    </h2>
+  );
+}
+
+function SectionLead({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-center text-neutral-600 mt-3 max-w-2xl mx-auto leading-relaxed">
+      {children}
+    </p>
   );
 }
