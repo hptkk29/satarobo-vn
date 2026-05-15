@@ -1,7 +1,6 @@
 "use client";
 
-// Phase 4.UI.FIX.3 PART E — UPDATED mobile address "258 Lê Thanh Nghị" → "211 Nguyễn Hữu Thọ"
-// and "4 Trung Tâm Đà Nẵng" → "2 Cơ Sở Đà Nẵng"
+// Phase 4.UI.RESET.1 — emails switched to thongtin@/tuyendung@satarobo.vn; HQ = 258 Lê Thanh Nghị.
 
 import Image from "next/image";
 import { Clock, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
@@ -77,11 +76,11 @@ export default function Footer() {
                 </li>
                 <li className="flex items-center gap-1.5">
                   <Mail className="w-3 h-3 text-primary-orange flex-shrink-0" />
-                  <a href="mailto:satarobo@gmail.com" className="hover:text-primary-orange transition text-[10px]">satarobo@gmail.com</a>
+                  <a href="mailto:thongtin@satarobo.vn" className="hover:text-primary-orange transition text-[10px]">thongtin@satarobo.vn</a>
                 </li>
                 <li className="flex items-start gap-1.5">
                   <MapPin className="w-3 h-3 text-primary-orange flex-shrink-0 mt-0.5" />
-                  <span className="text-[10px] leading-tight">211 Nguyễn Hữu Thọ, Đà Nẵng</span>
+                  <span className="text-[10px] leading-tight">258 Lê Thanh Nghị, Đà Nẵng</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <Clock className="w-3 h-3 text-primary-orange flex-shrink-0" />
@@ -144,7 +143,7 @@ export default function Footer() {
               <li><a href="/khoa-hoc/luyenthirobosim" className="hover:text-primary-orange transition">Khoá Luyện Thi RoboSim →</a></li>
               <li><a href="#awards" className="hover:text-primary-orange transition">Sata Robo Championship</a></li>
               <li><a href="#gifts" className="hover:text-primary-orange transition">Học Bổng & Quà Tặng</a></li>
-              <li><a href="#locations" className="hover:text-primary-orange transition">2 Cơ Sở Đà Nẵng</a></li>
+              <li><a href="#locations" className="hover:text-primary-orange transition">4 Cơ Sở Đà Nẵng</a></li>
             </ul>
           </div>
 
@@ -157,7 +156,11 @@ export default function Footer() {
               </li>
               <li className="flex items-start gap-2">
                 <Mail className="w-4 h-4 text-primary-orange flex-shrink-0 mt-0.5" />
-                <a href="mailto:satarobo@gmail.com" className="hover:text-primary-orange transition">satarobo@gmail.com</a>
+                <a href="mailto:thongtin@satarobo.vn" className="hover:text-primary-orange transition">thongtin@satarobo.vn</a>
+              </li>
+              <li className="flex items-start gap-2">
+                <Mail className="w-4 h-4 text-primary-purple flex-shrink-0 mt-0.5" />
+                <a href="mailto:tuyendung@satarobo.vn" className="hover:text-primary-purple transition">tuyendung@satarobo.vn</a>
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-primary-orange flex-shrink-0 mt-0.5" />

@@ -1,12 +1,14 @@
 "use client";
 
-// Phase 4.UI.FIX.3 PART E — UPDATED title "4 ĐỊA CHỈ" → "2 ĐỊA CHỈ", grid lg:grid-cols-4 → sm:grid-cols-2
-// Source bug: loc.isHO (typo) — corrected to loc.isHQ to match data shape.
+// Phase 4.UI.RESET.1 — 4 cơ sở operational (grid sm:grid-cols-2 lg:grid-cols-4) + 2 cơ sở upcoming.
 
 import { locations } from "./_data/locations";
 import { ArrowRight, MapPin, MessageCircle, Star } from "lucide-react";
 
 export default function Locations() {
+  const operational = locations.filter((l) => !l.isUpcoming);
+  const upcoming = locations.filter((l) => l.isUpcoming);
+
   return (
     <section id="locations" className="section-padding bg-white">
       <div className="container-site">
@@ -16,7 +18,9 @@ export default function Locations() {
             ĐỊA ĐIỂM HỌC
           </div>
           <h2 className="heading-2 mb-4">
-            <span className="text-gradient-orange-purple">2 ĐỊA CHỈ HỌC TẠI ĐÀ NẴNG</span>
+            <span className="text-gradient-orange-purple">
+              {operational.length} ĐỊA CHỈ HỌC TẠI ĐÀ NẴNG
+            </span>
             <br />
             <span className="text-text-dark text-2xl sm:text-3xl">— CHỌN GẦN NHÀ NHẤT</span>
           </h2>
@@ -26,8 +30,8 @@ export default function Locations() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10 max-w-3xl mx-auto">
-          {locations.map((loc) => (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 max-w-5xl mx-auto">
+          {operational.map((loc) => (
             <div
               key={loc.id}
               className={`card-base p-3 sm:p-4 border-2 transition flex flex-col ${
@@ -79,6 +83,37 @@ export default function Locations() {
             </div>
           ))}
         </div>
+
+        {upcoming.length > 0 && (
+          <div className="max-w-5xl mx-auto mb-10">
+            <p className="text-center text-xs sm:text-sm text-text-muted mb-3 uppercase tracking-wider font-bold">
+              Cơ sở sắp khai trương
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {upcoming.map((loc) => (
+                <div
+                  key={loc.id}
+                  className="card-base p-3 sm:p-4 border-2 border-dashed border-amber-300 bg-amber-50/40 flex flex-col"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-amber-100 text-amber-600">
+                      <MapPin className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <span className="inline-flex items-center px-1.5 py-0.5 bg-amber-500 text-white text-[9px] sm:text-xs font-bold rounded-full">
+                      Sắp mở
+                    </span>
+                  </div>
+                  <h3 className="font-extrabold text-[11px] sm:text-base text-text-dark leading-snug mb-1">
+                    {loc.address}
+                  </h3>
+                  <p className="text-[10px] sm:text-sm text-amber-700 font-bold">
+                    {loc.workingHours}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="max-w-3xl mx-auto bg-soft-purple rounded-2xl p-5 text-center border-2 border-primary-purple/20">
           <p className="text-sm sm:text-base text-text-dark mb-3">

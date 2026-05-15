@@ -14,13 +14,18 @@ import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
-import { SATA_ROBO_LOCATIONS, SATA_ROBO_CONTACT } from "@/lib/locations";
+import {
+  SATA_ROBO_LOCATIONS,
+  SATA_ROBO_CONTACT,
+  operationalLocations,
+  upcomingLocations,
+} from "@/lib/locations";
 
 const BASE_URL = "https://satarobo.vn";
 
 export const metadata: Metadata = {
   title: "Liên hệ — Sata Robo Đà Nẵng",
-  description: `Liên hệ Sata Robo — Hotline ${SATA_ROBO_CONTACT.hotline}, email ${SATA_ROBO_CONTACT.emails.primary}. 2 cơ sở tại Đà Nẵng.`,
+  description: `Liên hệ Sata Robo — Hotline ${SATA_ROBO_CONTACT.hotline}, email ${SATA_ROBO_CONTACT.emails.general}. 4 cơ sở tại Đà Nẵng.`,
   alternates: { canonical: `${BASE_URL}/lien-he` },
   openGraph: {
     title: "Liên hệ — Sata Robo",
@@ -35,7 +40,7 @@ const hqLocation = SATA_ROBO_LOCATIONS.find((l) => l.isHQ) ?? SATA_ROBO_LOCATION
 
 const QUICK_INFO = [
   { icon: Phone, label: "Hotline", value: SATA_ROBO_CONTACT.hotline, href: `tel:${SATA_ROBO_CONTACT.hotlineRaw}` },
-  { icon: Mail, label: "Email", value: SATA_ROBO_CONTACT.emails.primary, href: `mailto:${SATA_ROBO_CONTACT.emails.primary}` },
+  { icon: Mail, label: "Email", value: SATA_ROBO_CONTACT.emails.general, href: `mailto:${SATA_ROBO_CONTACT.emails.general}` },
   {
     icon: MapPin,
     label: "Trụ sở",
@@ -46,12 +51,14 @@ const QUICK_INFO = [
 ];
 
 export default async function ContactPage() {
-  const centers = SATA_ROBO_LOCATIONS.map((loc) => ({
+  const operational = operationalLocations();
+  const upcoming = upcomingLocations();
+  const centers = operational.map((loc) => ({
     id: loc.id,
     name: loc.name,
     address: loc.address,
     phone: loc.hotline,
-    email: SATA_ROBO_CONTACT.emails.primary,
+    email: SATA_ROBO_CONTACT.emails.general,
   }));
 
   return (
@@ -163,12 +170,12 @@ export default async function ContactPage() {
       {/* ─── Centers grid SOFT-COOL ─── */}
       <SectionBase
         theme="soft-cool"
-        eyebrow="💜 2 CƠ SỞ"
+        eyebrow={`💜 ${operational.length} CƠ SỞ ĐANG HOẠT ĐỘNG`}
         title="Tìm cơ sở gần nhà"
         glowOrb={{ color: "purple", position: "bottom-right" }}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-          {SATA_ROBO_LOCATIONS.map((loc) => (
+          {operational.map((loc) => (
             <div
               key={loc.id}
               className={`relative bg-white rounded-2xl border-2 ${
@@ -192,6 +199,7 @@ export default async function ContactPage() {
                 <div>
                   <h3 className="font-bold text-xl text-neutral-900">{loc.name}</h3>
                   <p className="text-neutral-700 mt-1">{loc.address}</p>
+                  <p className="text-xs text-neutral-500 mt-0.5">{loc.district}</p>
                 </div>
               </div>
               <div className="space-y-2 text-sm pt-4 border-t border-neutral-100">
@@ -221,6 +229,44 @@ export default async function ContactPage() {
             </div>
           ))}
         </div>
+
+        {upcoming.length > 0 && (
+          <div className="mt-12 max-w-5xl mx-auto">
+            <div className="text-center mb-6">
+              <span className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold uppercase tracking-wider">
+                Sắp khai trương
+              </span>
+              <p className="mt-2 text-sm text-neutral-600">
+                Mạng lưới đang mở rộng — phục vụ phụ huynh khu vực mới
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {upcoming.map((loc) => (
+                <div
+                  key={loc.id}
+                  className="relative bg-white/70 rounded-2xl border-2 border-dashed border-amber-300 p-6"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-amber-100 text-amber-600">
+                      <MapPin className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-xl text-neutral-900">{loc.name}</h3>
+                      <p className="text-neutral-700 mt-1">{loc.address}</p>
+                      <p className="text-xs text-neutral-500 mt-0.5">{loc.district}</p>
+                      <p className="mt-3 text-sm font-semibold text-amber-700">
+                        {loc.workingHours}
+                      </p>
+                      {loc.note && (
+                        <p className="text-xs text-neutral-500 italic mt-1">{loc.note}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </SectionBase>
 
       {/* ─── Social WHITE ─── */}

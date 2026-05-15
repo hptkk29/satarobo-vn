@@ -1,6 +1,6 @@
 "use client";
 
-// Phase 4.UI.FIX.3 PART E — UPDATED "258 Lê Thanh Nghị, Phường Hoà Cường" → "211 Nguyễn Hữu Thọ, Hải Châu"
+// Phase 4.UI.RESET.1 — HQ = 258 Lê Thanh Nghị, Hòa Cường; email = thongtin@satarobo.vn.
 
 import { Rocket, Phone, Mail, MapPin, Clock, MessageCircle } from "lucide-react";
 
@@ -81,13 +81,13 @@ export default function FinalCTA() {
               </div>
             </a>
 
-            <a href="mailto:satarobo@gmail.com" className="flex items-start gap-3 p-4 rounded-xl bg-white/10 hover:bg-white/15 transition group">
+            <a href="mailto:thongtin@satarobo.vn" className="flex items-start gap-3 p-4 rounded-xl bg-white/10 hover:bg-white/15 transition group">
               <div className="w-10 h-10 rounded-lg bg-primary-purple text-white flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition">
                 <Mail className="w-5 h-5" />
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-bold text-white/60 uppercase">Email</div>
-                <div className="text-sm font-bold text-white whitespace-nowrap">satarobo@gmail.com</div>
+                <div className="text-sm font-bold text-white whitespace-nowrap">thongtin@satarobo.vn</div>
               </div>
             </a>
 
@@ -98,7 +98,7 @@ export default function FinalCTA() {
               <div className="min-w-0">
                 <div className="text-xs font-bold text-white/60 uppercase">Trụ sở</div>
                 <div className="text-xs sm:text-sm font-bold text-white leading-snug break-words">
-                  211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng
+                  258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng
                 </div>
               </div>
             </div>

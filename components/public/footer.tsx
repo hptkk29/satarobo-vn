@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { MapPin, Phone, Mail } from "lucide-react";
-import { SATA_ROBO_LOCATIONS, SATA_ROBO_CONTACT } from "@/lib/locations";
+import {
+  SATA_ROBO_LOCATIONS,
+  SATA_ROBO_CONTACT,
+  operationalLocations,
+  upcomingLocations,
+} from "@/lib/locations";
+
+const HQ_FOOTER = SATA_ROBO_LOCATIONS.find((l) => l.isHQ) ?? SATA_ROBO_LOCATIONS[0];
 
 const SOCIAL_LINKS = [
   {
@@ -62,7 +69,9 @@ export function Footer() {
             <p className="text-xs text-gray-500 mb-5">
               {SATA_ROBO_CONTACT.companyName}
               <br />
-              {SATA_ROBO_LOCATIONS[0].address}
+              MST: {SATA_ROBO_CONTACT.taxCode}
+              <br />
+              {HQ_FOOTER.address}
             </p>
             {/* Social icons */}
             <div className="flex gap-2">
@@ -176,7 +185,7 @@ export function Footer() {
           <div>
             <h4 className="mb-4 font-semibold text-white">Hệ thống cơ sở</h4>
             <ul className="space-y-3 text-sm">
-              {SATA_ROBO_LOCATIONS.map((loc) => (
+              {operationalLocations().map((loc) => (
                 <li key={loc.id} className="flex gap-2">
                   <MapPin
                     className={`mt-0.5 h-4 w-4 shrink-0 ${
@@ -187,6 +196,21 @@ export function Footer() {
                     <span className="font-medium text-white">
                       {loc.name}
                       {loc.isHQ && " (Trụ sở chính)"}
+                    </span>
+                    <br />
+                    {loc.address}
+                  </span>
+                </li>
+              ))}
+              {upcomingLocations().map((loc) => (
+                <li key={loc.id} className="flex gap-2 opacity-70">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                  <span>
+                    <span className="font-medium text-amber-300">
+                      {loc.name}
+                      <span className="ml-1 text-[10px] uppercase tracking-wider text-amber-200/80">
+                        · Sắp khai trương
+                      </span>
                     </span>
                     <br />
                     {loc.address}
@@ -208,10 +232,19 @@ export function Footer() {
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4 shrink-0 text-[#F97316]" />
                 <a
-                  href={`mailto:${SATA_ROBO_CONTACT.emails.primary}`}
+                  href={`mailto:${SATA_ROBO_CONTACT.emails.general}`}
                   className="hover:text-[#F97316] transition-colors"
                 >
-                  {SATA_ROBO_CONTACT.emails.primary}
+                  {SATA_ROBO_CONTACT.emails.general}
+                </a>
+              </li>
+              <li className="flex items-center gap-2">
+                <Mail className="h-4 w-4 shrink-0 text-[#F97316]" />
+                <a
+                  href={`mailto:${SATA_ROBO_CONTACT.emails.recruitment}`}
+                  className="hover:text-[#F97316] transition-colors"
+                >
+                  {SATA_ROBO_CONTACT.emails.recruitment}
                 </a>
               </li>
             </ul>

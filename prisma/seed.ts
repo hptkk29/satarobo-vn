@@ -8,21 +8,56 @@ async function main() {
   console.log("🌱 Bắt đầu seed data...");
 
   // ─── Centers ─────────────────────────────────────────────────────────────────
-  // 2 cơ sở mới (Phase 4.UI.FIX.2). Loại bỏ cơ sở cũ.
+  // Phase 4.UI.RESET.1: 4 cơ sở operational + 2 cơ sở upcoming (isActive=false).
+  // IDs match lib/locations.ts.
   const centersData = [
     {
-      id: "center-nguyen-huu-tho",
-      name: "Cơ sở 1 - Hải Châu (Trụ sở chính)",
-      address: "211 Nguyễn Hữu Thọ, Đà Nẵng",
+      id: "tru-so-le-thanh-nghi",
+      name: "Trụ sở chính - Hòa Cường",
+      address: "258 Lê Thanh Nghị, Đà Nẵng",
       phone: "0818823720",
-      email: "satarobo@gmail.com",
+      email: "thongtin@satarobo.vn",
+      isActive: true,
     },
     {
-      id: "center-hoang-dieu",
-      name: "Cơ sở 2 - Hải Châu",
+      id: "co-so-le-loi",
+      name: "Cơ sở Hải Châu",
+      address: "60 Lê Lợi, Đà Nẵng",
+      phone: "0818823720",
+      email: "thongtin@satarobo.vn",
+      isActive: true,
+    },
+    {
+      id: "co-so-dien-bien-phu",
+      name: "Cơ sở Thanh Khê",
+      address: "269 Điện Biên Phủ, Đà Nẵng",
+      phone: "0818823720",
+      email: "thongtin@satarobo.vn",
+      isActive: true,
+    },
+    {
+      id: "co-so-nguyen-phuoc-lan",
+      name: "Cơ sở Cẩm Lệ",
+      address: "232 Nguyễn Phước Lan, Đà Nẵng",
+      phone: "0818823720",
+      email: "thongtin@satarobo.vn",
+      isActive: true,
+    },
+    {
+      id: "co-so-hoang-dieu",
+      name: "Cơ sở Hoàng Diệu (sắp khai trương)",
       address: "114 Hoàng Diệu, Đà Nẵng",
       phone: "0818823720",
-      email: "satarobo@gmail.com",
+      email: "thongtin@satarobo.vn",
+      isActive: false,
+    },
+    {
+      id: "co-so-nguyen-huu-tho",
+      name: "Cơ sở Nguyễn Hữu Thọ (khai trương 08/2026)",
+      address: "211 Nguyễn Hữu Thọ, Đà Nẵng",
+      phone: "0818823720",
+      email: "thongtin@satarobo.vn",
+      isActive: false,
     },
   ];
 
@@ -37,7 +72,7 @@ async function main() {
 
   // Re-point FK của User/Lead/Class/Student về HQ mới trước khi xoá cơ sở cũ
   // (relation onDelete mặc định Restrict, nên cần tay làm thế).
-  const newHqId = centersData[0].id;
+  const newHqId = centersData[0].id; // tru-so-le-thanh-nghi
   await db.user.updateMany({
     where: { centerId: { notIn: validCenterIds, not: null } },
     data: { centerId: newHqId },

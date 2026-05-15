@@ -306,7 +306,7 @@ Kết quả sau 3 tháng:
       occurredAt: new Date("2025-08-15"),
       title: "Mở rộng 4 cơ sở tại Đà Nẵng",
       description:
-        "Sata Robo khai trương trụ sở chính tại 211 Nguyễn Hữu Thọ và mở thêm cơ sở thứ 2 tại 114 Hoàng Diệu — phục vụ phụ huynh và học viên khu vực Hải Châu, Đà Nẵng.",
+        "Sata Robo khai trương trụ sở chính tại 258 Lê Thanh Nghị và mở thêm 3 cơ sở tại 60 Lê Lợi, 269 Điện Biên Phủ, 232 Nguyễn Phước Lan — phủ khắp Hải Châu, Thanh Khê và Cẩm Lệ, Đà Nẵng.",
       displayOrder: 5,
     },
     {

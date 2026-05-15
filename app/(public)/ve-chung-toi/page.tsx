@@ -1,6 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRight, Lightbulb, Users, Shield, Target, Compass, Rocket, Sparkles as SparklesIcon } from "lucide-react";
+import {
+  ChevronRight,
+  Lightbulb,
+  Users,
+  Shield,
+  Target,
+  Compass,
+  Rocket,
+  Sparkles as SparklesIcon,
+  Building2,
+  Phone,
+  Mail,
+  MapPin,
+  Receipt,
+} from "lucide-react";
 import { aboutPageJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld";
 import { HeroParticles } from "@/components/design-system/heroes/hero-particles";
 import { SectionBase } from "@/components/design-system/sections/section-base";
@@ -9,6 +23,11 @@ import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { CTASecondary } from "@/components/design-system/ctas/cta-secondary";
 import { tokens } from "@/lib/design-tokens";
+import {
+  SATA_ROBO_CONTACT,
+  operationalLocations,
+  upcomingLocations,
+} from "@/lib/locations";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -298,6 +317,114 @@ export default function VeChungToiPage() {
               </div>
             );
           })}
+        </div>
+      </SectionBase>
+
+      {/* SECTION 4.5 - THÔNG TIN CÔNG TY */}
+      <SectionBase
+        theme="soft-cool"
+        eyebrow="🏢 THÔNG TIN CÔNG TY"
+        title="Hệ thống cơ sở Sata Robo tại Đà Nẵng"
+        subtitle={`${operationalLocations().length} cơ sở đang hoạt động · ${upcomingLocations().length} cơ sở sắp khai trương`}
+      >
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-1 bg-white rounded-2xl border-2 border-purple-200 shadow-sm p-6 space-y-4">
+            <div className="flex items-center gap-2 text-purple-700">
+              <Building2 className="w-5 h-5" />
+              <h3 className="font-bold">Pháp nhân</h3>
+            </div>
+            <p className="font-semibold text-neutral-900 leading-snug">
+              {SATA_ROBO_CONTACT.companyName}
+            </p>
+            <div className="text-sm space-y-2 text-neutral-700">
+              <p className="flex items-start gap-2">
+                <Receipt className="w-4 h-4 mt-0.5 shrink-0 text-purple-500" />
+                <span>
+                  <span className="text-neutral-500">Mã số thuế:</span>{" "}
+                  <span className="font-mono font-semibold">
+                    {SATA_ROBO_CONTACT.taxCode}
+                  </span>
+                </span>
+              </p>
+              <p className="flex items-start gap-2">
+                <Phone className="w-4 h-4 mt-0.5 shrink-0 text-orange-500" />
+                <a
+                  href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
+                  className="hover:text-orange-600"
+                >
+                  {SATA_ROBO_CONTACT.hotline}
+                </a>
+              </p>
+              <p className="flex items-start gap-2">
+                <Mail className="w-4 h-4 mt-0.5 shrink-0 text-orange-500" />
+                <a
+                  href={`mailto:${SATA_ROBO_CONTACT.emails.general}`}
+                  className="hover:text-orange-600 break-all"
+                >
+                  {SATA_ROBO_CONTACT.emails.general}
+                </a>
+              </p>
+              <p className="flex items-start gap-2">
+                <Mail className="w-4 h-4 mt-0.5 shrink-0 text-purple-500" />
+                <a
+                  href={`mailto:${SATA_ROBO_CONTACT.emails.recruitment}`}
+                  className="hover:text-purple-700 break-all"
+                >
+                  {SATA_ROBO_CONTACT.emails.recruitment}
+                </a>
+              </p>
+            </div>
+          </div>
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {operationalLocations().map((loc) => (
+              <div
+                key={loc.id}
+                className={`bg-white rounded-xl border ${
+                  loc.isHQ ? "border-orange-300" : "border-neutral-200"
+                } p-4`}
+              >
+                <div className="flex items-start gap-2">
+                  <MapPin
+                    className={`w-4 h-4 mt-0.5 shrink-0 ${
+                      loc.isHQ ? "text-orange-500" : "text-purple-500"
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-neutral-900">
+                      {loc.name}
+                      {loc.isHQ && (
+                        <span className="ml-1.5 inline-block text-[10px] font-bold uppercase tracking-wider text-orange-600 align-middle">
+                          HQ
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-sm text-neutral-700">{loc.address}</p>
+                    <p className="text-xs text-neutral-500">{loc.district}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {upcomingLocations().map((loc) => (
+              <div
+                key={loc.id}
+                className="bg-amber-50/60 rounded-xl border border-dashed border-amber-300 p-4"
+              >
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-neutral-900">
+                      {loc.name}
+                      <span className="ml-1.5 inline-block text-[10px] font-bold uppercase tracking-wider text-amber-700 align-middle">
+                        Sắp khai trương
+                      </span>
+                    </p>
+                    <p className="text-sm text-neutral-700">{loc.address}</p>
+                    <p className="text-xs text-neutral-500">{loc.district}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </SectionBase>
 

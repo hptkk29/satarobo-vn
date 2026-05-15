@@ -64,12 +64,16 @@ export const faqs: FAQ[] = [
     id: 4,
     question: "Trung tâm có gần nhà mình không?",
     answer: [
-      "Sata Robo có 2 cơ sở tại Đà Nẵng để phụ huynh chọn nơi thuận tiện nhất.",
+      "Sata Robo có 4 cơ sở đang hoạt động và 2 cơ sở sắp khai trương tại Đà Nẵng — phụ huynh chọn nơi thuận tiện nhất.",
       {
         type: "list",
         items: [
-          "Cơ sở 1 - Hải Châu (Trụ sở chính): 211 Nguyễn Hữu Thọ, Đà Nẵng.",
-          "Cơ sở 2 - Hải Châu: 114 Hoàng Diệu, Đà Nẵng.",
+          "Trụ sở chính - Hòa Cường: 258 Lê Thanh Nghị, Đà Nẵng.",
+          "Cơ sở Hải Châu: 60 Lê Lợi, Đà Nẵng.",
+          "Cơ sở Thanh Khê: 269 Điện Biên Phủ, Đà Nẵng.",
+          "Cơ sở Cẩm Lệ: 232 Nguyễn Phước Lan, Đà Nẵng.",
+          "Cơ sở 114 Hoàng Diệu - sắp khai trương.",
+          "Cơ sở 211 Nguyễn Hữu Thọ - khai trương 08/2026.",
         ],
       },
       "Nếu chưa chắc cơ sở nào phù hợp, phụ huynh có thể để lại địa chỉ khu vực trong form, tư vấn viên sẽ gợi ý cơ sở gần và thuận tiện nhất.",

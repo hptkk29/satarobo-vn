@@ -73,18 +73,18 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="mailto:satarobo@gmail.com" aria-label="Gửi email cho Sata Robo">
-                  <span className="fi">✉️</span> satarobo@gmail.com
+                <a href="mailto:thongtin@satarobo.vn" aria-label="Gửi email cho Sata Robo">
+                  <span className="fi">✉️</span> thongtin@satarobo.vn
                 </a>
               </li>
               <li className="footer-hide-mobile">
                 <a
-                  href="https://maps.google.com/?q=211+Nguy%E1%BB%85n+H%E1%BB%AFu+Th%E1%BB%8D,+%C4%90%C3%A0+N%E1%BA%B5ng"
+                  href="https://maps.google.com/?q=258+L%C3%AA+Thanh+Ngh%E1%BB%8B,+%C4%90%C3%A0+N%E1%BA%B5ng"
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Xem địa chỉ trung tâm trên Google Maps"
                 >
-                  <span className="fi">📍</span> 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng
+                  <span className="fi">📍</span> 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng
                 </a>
               </li>
               <li>
