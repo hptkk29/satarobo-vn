@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { r2Client, R2_BUCKET, R2_PUBLIC_URL } from "@/lib/storage/r2-client";
+import {
+  getR2Client,
+  getR2Bucket,
+  getR2PublicUrl,
+} from "@/lib/storage/r2-client";
 
 // DELETE /api/admin/upload-delete
 // Xoá file khỏi R2. Chỉ cho phép xoá file dưới prefix "uploads/" để tránh
@@ -26,17 +30,19 @@ export async function DELETE(req: NextRequest) {
 
   const { url, key: rawKey } = (body ?? {}) as { url?: string; key?: string };
 
+  const publicUrl = getR2PublicUrl();
+
   let key: string;
   if (rawKey) {
     key = rawKey.startsWith("/") ? rawKey.slice(1) : rawKey;
   } else if (url) {
-    if (!url.startsWith(R2_PUBLIC_URL)) {
+    if (!url.startsWith(publicUrl)) {
       return NextResponse.json(
         { error: "URL không thuộc R2 bucket của Sata Robo" },
         { status: 400 },
       );
     }
-    key = url.slice(R2_PUBLIC_URL.length + 1);
+    key = url.slice(publicUrl.length + 1);
   } else {
     return NextResponse.json(
       { error: "Phải có url hoặc key" },
@@ -52,9 +58,9 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    await r2Client.send(
+    await getR2Client().send(
       new DeleteObjectCommand({
-        Bucket: R2_BUCKET,
+        Bucket: getR2Bucket(),
         Key: key,
       }),
     );

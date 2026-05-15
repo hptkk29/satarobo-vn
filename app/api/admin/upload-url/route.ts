@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuid } from "uuid";
-import { r2Client, R2_BUCKET, getPublicUrl } from "@/lib/storage/r2-client";
+import { getR2Client, getR2Bucket, getPublicUrl } from "@/lib/storage/r2-client";
 import {
   UPLOAD_CONFIG,
   UploadCategory,
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const command = new PutObjectCommand({
-      Bucket: R2_BUCKET,
+      Bucket: getR2Bucket(),
       Key: key,
       ContentType: mimeType,
       ContentLength: sizeBytes,
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const uploadUrl = await getSignedUrl(r2Client, command, {
+    const uploadUrl = await getSignedUrl(getR2Client(), command, {
       expiresIn: 300,
     });
 
