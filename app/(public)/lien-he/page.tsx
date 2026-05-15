@@ -158,7 +158,7 @@ export default async function ContactPage() {
       {/* ─── Form section SOFT-WARM ─── */}
       <SectionBase
         theme="soft-warm"
-        eyebrow="🧡 ĐĂNG KÝ TƯ VẤN"
+        eyebrow="ĐĂNG KÝ TƯ VẤN"
         title="Gửi thông tin — chúng tôi liên hệ ngay"
         subtitle="Phản hồi trong 30 phút giờ hành chính · 24h ngoài giờ"
         variant="narrow"

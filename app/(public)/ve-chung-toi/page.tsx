@@ -139,7 +139,7 @@ export default function VeChungToiPage() {
       {/* SECTION 1 - CÂU CHUYỆN */}
       <SectionBase
         theme="white"
-        eyebrow="💜 CÂU CHUYỆN CỦA CHÚNG TÔI"
+        eyebrow="CÂU CHUYỆN CỦA CHÚNG TÔI"
         title="Hành trình khơi mầm sáng tạo cho thế hệ trẻ Việt Nam"
       >
         <div className="max-w-3xl mx-auto space-y-6">
@@ -187,7 +187,7 @@ export default function VeChungToiPage() {
       {/* SECTION 2 - TẦM NHÌN */}
       <SectionBase
         theme="soft-cool"
-        eyebrow="🎯 TẦM NHÌN"
+        eyebrow="TẦM NHÌN"
         title="Tầm nhìn của chúng tôi"
         glowOrb={{ color: "purple", position: "top-right" }}
       >
@@ -234,7 +234,7 @@ export default function VeChungToiPage() {
       {/* SECTION 3 - SỨ MỆNH */}
       <SectionBase
         theme="soft-warm"
-        eyebrow="🚀 SỨ MỆNH"
+        eyebrow="SỨ MỆNH"
         title="Sứ mệnh của Sata Robo"
         glowOrb={{ color: "orange", position: "bottom-left" }}
       >
@@ -285,7 +285,7 @@ export default function VeChungToiPage() {
       {/* SECTION 4 - 4 GIÁ TRỊ CỐT LÕI */}
       <SectionBase
         theme="white"
-        eyebrow="💎 GIÁ TRỊ CỐT LÕI"
+        eyebrow="GIÁ TRỊ CỐT LÕI"
         title="4 giá trị định hình Sata Robo"
         subtitle="Mỗi quyết định, mỗi hành động của chúng tôi đều xuất phát từ 4 giá trị cốt lõi này"
       >
@@ -323,7 +323,7 @@ export default function VeChungToiPage() {
       {/* SECTION 4.5 - THÔNG TIN CÔNG TY */}
       <SectionBase
         theme="soft-cool"
-        eyebrow="🏢 THÔNG TIN CÔNG TY"
+        eyebrow="THÔNG TIN CÔNG TY"
         title="Hệ thống cơ sở Sata Robo tại Đà Nẵng"
         subtitle={`${operationalLocations().length} cơ sở đang hoạt động · ${upcomingLocations().length} cơ sở sắp khai trương`}
       >

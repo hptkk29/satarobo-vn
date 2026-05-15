@@ -174,7 +174,7 @@ export default async function TuyenDungPage() {
 
       <SectionBase
         theme="soft-cool"
-        eyebrow="💜 LÝ DO CHỌN SATA ROBO"
+        eyebrow="LÝ DO CHỌN SATA ROBO"
         title="Vì sao gia nhập đội ngũ?"
         glowOrb={{ color: "purple", position: "bottom-left" }}
       >

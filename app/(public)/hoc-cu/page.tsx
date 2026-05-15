@@ -89,7 +89,7 @@ export default async function HocCuPage() {
       {/* HERO SOFT-WARM */}
       <HeroParticles
         theme="soft-warm"
-        eyebrow="🛠️ HỌC CỤ"
+        eyebrow="HỌC CỤ"
         title="Học cụ Robotics ZMROBO chính hãng"
         subtitle="3 cấp độ học cụ phù hợp với mọi lứa tuổi — Từ nhập môn (6+) đến nâng cao AI"
         effects={{ particles: true, sparkles: true, glowOrbs: true, gridLines: false }}
