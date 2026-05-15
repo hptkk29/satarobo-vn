@@ -30,6 +30,7 @@ import { ShimmerButton } from "@/components/magic/shimmer-button";
 import { Particles } from "@/components/magic/particles";
 import { FadeIn } from "@/components/motion/fade-in";
 import { RevealOnScroll } from "@/components/motion/reveal-on-scroll";
+import { Sparkles } from "@/components/design-system/effects/sparkles";
 
 // ============== Types ==============
 export interface MainCourseCard {
@@ -60,61 +61,83 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
 // ============== 1. HERO ==============
 function HeroSection() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-24 md:py-32 lg:py-36">
-      {/* Layered background — orange glow top-left + purple glow bottom-right */}
+    <section className="relative overflow-hidden bg-gradient-to-br from-orange-100 via-amber-50/40 to-purple-100 py-24 md:py-32 lg:py-36">
+      {/* Mesh gradient base — 4 large saturated blobs for depth */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-0 left-0 h-[600px] w-[600px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-orange-300/40 blur-3xl"
+        className="pointer-events-none absolute top-0 left-0 h-[750px] w-[750px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-orange-400/60 blur-3xl"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-purple-300/40 blur-3xl"
+        className="pointer-events-none absolute bottom-0 right-0 h-[750px] w-[750px] translate-x-1/3 translate-y-1/3 rounded-full bg-purple-500/50 blur-3xl"
       />
-      {/* Subtle dot grid */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(124,58,237,0.08)_1px,transparent_1px)] [background-size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_75%)]"
+        className="pointer-events-none absolute top-1/4 right-0 h-[400px] w-[400px] translate-x-1/4 rounded-full bg-rose-400/35 blur-3xl"
       />
-      {/* Particles overlay */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-1/4 left-0 h-[400px] w-[400px] -translate-x-1/4 rounded-full bg-amber-400/40 blur-3xl"
+      />
+      {/* Conic accent — adds spectrum colorfulness */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 [background:conic-gradient(from_180deg_at_50%_50%,rgba(249,115,22,0.10)_0deg,rgba(124,58,237,0.10)_120deg,rgba(244,114,182,0.08)_240deg,rgba(249,115,22,0.10)_360deg)] opacity-70"
+      />
+      {/* Dot grid with center mask */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(124,58,237,0.15)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_70%)]"
+      />
+      {/* Particles + sparkles for dynamic motion */}
       <Particles
         className="absolute inset-0"
-        quantity={55}
-        ease={80}
+        quantity={90}
+        ease={70}
         color="#7C3AED"
         refresh={false}
       />
+      <Sparkles density="high" colors={["orange", "purple"]} />
 
       <div className="container mx-auto px-4 max-w-6xl relative z-10">
         <FadeIn>
           <div className="text-center max-w-4xl mx-auto">
-            {/* Live status pill — pulsing orange dot */}
-            <div className="inline-flex items-center gap-2.5 bg-white shadow-lg shadow-orange-500/10 border border-orange-200 rounded-full px-4 py-2 mb-6">
+            {/* Live status pill — gradient bg, larger pulse dot */}
+            <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white shadow-2xl shadow-orange-500/40 rounded-full px-5 py-2.5 mb-6 ring-1 ring-white/30">
               <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-90" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
               </span>
-              <span className="text-xs sm:text-sm font-bold text-neutral-800">
+              <span className="text-xs sm:text-sm font-bold tracking-wide">
                 Đang tuyển sinh — Cuộc thi Robotics 2026 · Vòng loại 26/07
               </span>
             </div>
 
-            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-purple-200 rounded-full px-4 py-1.5 mb-6 shadow-sm">
+            <div className="inline-flex items-center gap-2 bg-white/90 backdrop-blur border border-purple-300 rounded-full px-4 py-1.5 mb-6 shadow-md shadow-purple-500/10">
               <SparklesIcon className="w-4 h-4 text-purple-600" />
               <span className="text-xs font-bold uppercase tracking-wider text-purple-700">
                 Học Viện Robotics &amp; AI Đà Nẵng
               </span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-neutral-900 mb-6 leading-[1.05] tracking-tight">
-              <AnimatedGradientText
-                colorFrom="#F97316"
-                colorTo="#7C3AED"
-                className="font-black"
-              >
-                Khơi Nguồn Sáng Tạo
-              </AnimatedGradientText>
+            {/* H1 with glowing accent behind gradient line */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-neutral-900 mb-6 leading-[1.05] tracking-tight drop-shadow-sm">
+              <span className="relative inline-block">
+                {/* Soft glow behind gradient text */}
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-0 -bottom-1 h-1/2 bg-gradient-to-r from-orange-400/30 via-pink-400/30 to-purple-500/30 blur-2xl"
+                />
+                <AnimatedGradientText
+                  colorFrom="#F97316"
+                  colorTo="#7C3AED"
+                  className="relative font-black"
+                >
+                  Khơi Nguồn Sáng Tạo
+                </AnimatedGradientText>
+              </span>
               <br />
-              <span>– Chắp Cánh Tương Lai</span>
+              <span className="text-neutral-900">– Chắp Cánh Tương Lai</span>
             </h1>
 
             <p className="text-xl md:text-2xl text-neutral-700 mb-2 font-medium">
