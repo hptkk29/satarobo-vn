@@ -31,6 +31,8 @@ import { Particles } from "@/components/magic/particles";
 import { FadeIn } from "@/components/motion/fade-in";
 import { RevealOnScroll } from "@/components/motion/reveal-on-scroll";
 import { Sparkles } from "@/components/design-system/effects/sparkles";
+import { EarlyBirdCountdown } from "@/components/home/early-bird-countdown";
+import { FAQSection } from "@/components/home/faq-section";
 
 // ============== Types ==============
 export interface MainCourseCard {
@@ -49,10 +51,12 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
       <StatsBar />
       <UuTheSection />
       <SixAdvantagesSection />
+      <EarlyBirdCountdown />
       <CatalogSection courses={courses} />
       <SevenCommitmentsSection />
       <TravelPrizeBanner />
       <CompetitionCountdown />
+      <FAQSection />
       <FinalCTA />
     </>
   );
