@@ -82,6 +82,12 @@ export function EmployeeForm({
     salaryLevel: initial?.salaryLevel ?? "",
     centerId: initial?.centerId ?? "",
     managerId: initial?.managerId ?? "",
+    // Phase 4.7 extension
+    endDate: dateInputValue(initial?.endDate),
+    bhxhBase: initial?.bhxhBase ?? "",
+    address: initial?.address ?? "",
+    emergencyContact: initial?.emergencyContact ?? "",
+    notes: initial?.notes ?? "",
     isCEO: initial?.isCEO ?? false,
   });
 
@@ -103,6 +109,12 @@ export function EmployeeForm({
       salaryLevel: data.salaryLevel ? Number(data.salaryLevel) : null,
       centerId: data.centerId || null,
       managerId: data.managerId || null,
+      // Phase 4.7 extension
+      endDate: data.endDate || null,
+      bhxhBase: data.bhxhBase ? Number(data.bhxhBase) : null,
+      address: data.address || null,
+      emergencyContact: data.emergencyContact || null,
+      notes: data.notes || null,
       displayOrder: Number(data.displayOrder),
     };
 
@@ -370,6 +382,58 @@ export function EmployeeForm({
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold">
+                  Ngày kết thúc HĐ
+                </label>
+                <input
+                  type="date"
+                  value={data.endDate}
+                  onChange={(e) => setData({ ...data, endDate: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Cho hợp đồng có thời hạn. Để trống nếu vô thời hạn.
+                </p>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-semibold">Địa chỉ</label>
+                <input
+                  value={data.address}
+                  onChange={(e) => setData({ ...data, address: e.target.value })}
+                  placeholder="Số nhà, đường, phường, quận, thành phố"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-semibold">
+                  Liên hệ khẩn cấp
+                </label>
+                <input
+                  value={data.emergencyContact}
+                  onChange={(e) =>
+                    setData({ ...data, emergencyContact: e.target.value })
+                  }
+                  placeholder="Tên - Quan hệ - SĐT"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-semibold">
+                  Ghi chú nội bộ
+                </label>
+                <textarea
+                  rows={3}
+                  value={data.notes}
+                  onChange={(e) => setData({ ...data, notes: e.target.value })}
+                  placeholder="Ghi chú HR nội bộ — không hiển thị public."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                />
+              </div>
             </>
           )}
         </div>
@@ -379,7 +443,7 @@ export function EmployeeForm({
             <p className="mb-3 text-sm font-semibold text-amber-900">
               💰 Lương (chỉ HR / Accountant / SUPER_ADMIN thấy)
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <label className="mb-1 block text-xs font-semibold">
                   Bậc (SR.QD.200)
@@ -410,9 +474,23 @@ export function EmployeeForm({
                   className="w-full rounded border border-amber-300 px-2 py-1.5 text-sm"
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">
+                  Lương đóng BHXH (VNĐ)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={100000}
+                  value={data.bhxhBase}
+                  onChange={(e) => setData({ ...data, bhxhBase: e.target.value })}
+                  placeholder="5000000"
+                  className="w-full rounded border border-amber-300 px-2 py-1.5 text-sm"
+                />
+              </div>
             </div>
             <p className="mt-2 text-xs text-amber-700">
-              Tính lương cơ bản L1/L2 sẽ làm ở Phase 4.8 (Payroll). Hiện chỉ lưu Bậc/Mức.
+              Tính lương cơ bản L1/L2 sẽ làm ở Phase 4.8 (Payroll). Hiện chỉ lưu Bậc/Mức + lương BHXH.
             </p>
           </div>
         )}
