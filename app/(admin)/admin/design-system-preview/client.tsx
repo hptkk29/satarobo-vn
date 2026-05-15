@@ -52,9 +52,9 @@ export function DesignSystemDemo() {
 
       {/* === HERO SPLIT === */}
       <HeroSplit
-        eyebrow="SP1 — ROBOSIM MASTER"
-        title="Học Robotics trên trình duyệt"
-        subtitle="Platform mô phỏng cuộc thi đầu tiên tại Việt Nam — 4,000+ học viên đã luyện thi"
+        eyebrow="LUYỆN THI ROBOSIM"
+        title="Pass vòng loại Sáng tạo Robotics"
+        subtitle="Platform mô phỏng cuộc thi đầu tiên tại Việt Nam — coaching 1-1 với mentor"
         illustration={<HeroKidRobot />}
       >
         <CTAPrimary href="#">Học thử miễn phí</CTAPrimary>
@@ -62,9 +62,9 @@ export function DesignSystemDemo() {
       </HeroSplit>
 
       <HeroSplit
-        eyebrow="SP2 — OFFLINE CLASS"
-        title="Lớp học robotics tại 4 cơ sở Đà Nẵng"
-        subtitle="Học thực tế với robot vật lý, giáo viên 1:1, sĩ số ≤ 8 học viên"
+        eyebrow="LẬP TRÌNH ROBOT"
+        title="Khoá Robotics K-9 tại 4 cơ sở Đà Nẵng"
+        subtitle="Học thực tế với robot vật lý, giáo viên 1:8, sĩ số nhỏ"
         illustration={<HeroClassroom />}
         illustrationPosition="left"
       >
@@ -83,47 +83,35 @@ export function DesignSystemDemo() {
         eyebrow="THÀNH TỰU"
         title="Sata Robo trong 6 năm"
         stats={[
-          { value: 4000, suffix: "+", label: "Học viên" },
-          { value: 8, label: "Trường đối tác" },
+          { value: 2000, suffix: "+", label: "Học viên" },
+          { value: 4, label: "Cơ sở Đà Nẵng" },
           { value: 24, label: "Giải RoboSim 2026" },
           { value: 6, suffix: "+", label: "Năm xây dựng" },
         ]}
       />
 
       {/* === SECTION CIRCUIT — COURSE CARDS === */}
-      <SectionCircuit eyebrow="KHOÁ HỌC" title="4 sản phẩm chủ lực" subtitle="Mỗi sản phẩm thiết kế cho từng nhóm học viên cụ thể">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <SectionCircuit eyebrow="KHOÁ HỌC" title="2 khoá học chủ lực" subtitle="Mỗi khoá thiết kế cho từng nhóm học viên cụ thể">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           <CourseCard
-            badge="SP1"
-            title="Robosim Master"
-            description="Khoá video online học robotics trên trình duyệt"
+            size="large"
+            badge="LTR"
+            title="Lập trình Robot K-9"
+            description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 4 cơ sở Đà Nẵng"
             href="#"
-            price="2,400,000đ"
+            price="Liên hệ tư vấn"
             duration="6 tháng"
-            studentCount={2400}
+            studentCount={1200}
           />
           <CourseCard
-            badge="SP2"
-            title="Offline Class"
-            description="Lớp học robotics tại 4 cơ sở Đà Nẵng"
+            size="large"
+            badge="LTRS"
+            title="Luyện thi RoboSim"
+            description="Khoá luyện thi online + coaching 1-1 — pass vòng loại Sáng tạo Robotics R1/R2"
             href="#"
-            price="6,500,000đ"
-            duration="3 tháng"
+            price="Liên hệ tư vấn"
+            duration="3-6 tháng"
             studentCount={800}
-          />
-          <CourseCard
-            badge="SP3"
-            title="Sata Inno School"
-            description="Giải pháp Lab STEM cho trường K-12"
-            href="#"
-            duration="Tuỳ chỉnh"
-          />
-          <CourseCard
-            badge="SP4"
-            title="SATAGO Trải nghiệm"
-            description="Tour ngoại khoá robotics + STEM"
-            href="#"
-            duration="1-3 ngày"
           />
         </div>
       </SectionCircuit>
@@ -210,23 +198,23 @@ export function DesignSystemDemo() {
 
       {/* === HEROES WITH OTHER ILLUSTRATIONS === */}
       <HeroSplit
-        eyebrow="SP3 — SATA INNO SCHOOL"
-        title="Đối tác Lab STEM cho trường K-12"
-        subtitle="Trang bị phòng lab, giáo trình, giáo viên huấn luyện đi kèm"
+        eyebrow="ĐỘI NGŨ SATA ROBO"
+        title="Đội ngũ giáo viên & mentor 6 năm kinh nghiệm"
+        subtitle="Giảng viên Robotics + STEM được đào tạo bài bản theo chuẩn WRO"
         illustration={<HeroTeamWork />}
       >
-        <CTAPrimary href="#">Đặt lịch khảo sát</CTAPrimary>
-        <CTAGhost href="#">Xem catalogue</CTAGhost>
+        <CTAPrimary href="#">Gặp đội ngũ</CTAPrimary>
+        <CTAGhost href="#">Xem tuyển dụng</CTAGhost>
       </HeroSplit>
 
       <HeroSplit
-        eyebrow="SP4 — SATAGO"
-        title="Trải nghiệm robotics ngoài lớp học"
-        subtitle="Tour STEM 1-3 ngày kết hợp khám phá + thực hành lắp ráp"
+        eyebrow="HỌC CỤ"
+        title="Bộ kit Robotics chuẩn quốc tế"
+        subtitle="Robot LEGO Education + sensor + controller — tất cả Sata Robo cung cấp"
         illustration={<HeroStemTools />}
         illustrationPosition="left"
       >
-        <CTAPrimary href="#">Xem lịch tour</CTAPrimary>
+        <CTAPrimary href="#">Xem học cụ</CTAPrimary>
       </HeroSplit>
 
       {/* === DECORATIONS DEMO === */}

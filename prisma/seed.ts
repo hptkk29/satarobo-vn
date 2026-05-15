@@ -81,125 +81,75 @@ async function main() {
   ]);
   console.log(`✅ ${centers.length} trung tâm đã tạo`);
 
-  // ─── Courses ─────────────────────────────────────────────────────────────────
-  // Legacy 2 courses (giữ để tránh break /khoa-hoc/lap-trinh-robot, luyen-thi-robosim)
-  // + 4 new SP cards cho marketing site (Phase 4.UI.FINAL).
-  const courses = await Promise.all([
-    db.course.upsert({
-      where: { slug: "lap-trinh-robot" },
-      update: { isPublished: false, displayOrder: 99 },
-      create: {
-        slug: "lap-trinh-robot",
-        name: "Khoá Lập trình Robot Offline",
-        type: "OFFLINE",
-        description:
-          "Khoá học lập trình robot thực tế cho học sinh lớp 1-8. Học viên được thực hành trực tiếp với robot, phát triển tư duy logic và kỹ năng STEM.",
-        isActive: true,
-        isPublished: false, // legacy — không hiện trong product grid mới
-        displayOrder: 99,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "luyen-thi-robosim" },
-      update: { isPublished: false, displayOrder: 99 },
-      create: {
-        slug: "luyen-thi-robosim",
-        name: "Khoá Luyện thi RoboSim Online",
-        type: "ONLINE",
-        description:
-          "Khoá luyện thi RoboSim trực tuyến.",
-        isActive: true,
-        isPublished: false,
-        displayOrder: 99,
-      },
-    }),
-    // ─── 4 SP marketing courses ───────────────────────────────────────────────
-    db.course.upsert({
-      where: { slug: "sp1" },
-      update: {},
-      create: {
-        slug: "sp1",
-        code: "SP1",
-        name: "Robosim Master",
-        type: "ONLINE",
-        description:
-          "Khoá video online học robotics trên trình duyệt. Platform mô phỏng cuộc thi RoboSim đầu tiên tại Việt Nam — 4,000+ học viên đã luyện thi.",
-        shortDescription:
-          "Khoá video online học robotics trên trình duyệt. Platform mô phỏng cuộc thi đầu tiên tại Việt Nam.",
-        price: 2400000,
-        priceDisplay: "2,400,000đ",
-        duration: 180,
-        durationDisplay: "6 tháng",
-        studentCount: 2400,
-        displayOrder: 1,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "sp2" },
-      update: {},
-      create: {
-        slug: "sp2",
-        code: "SP2",
-        name: "Offline Class",
-        type: "OFFLINE",
-        description:
-          "Lớp học robotics offline tại 4 cơ sở Đà Nẵng. Robot thật, giảng viên 1:1, sĩ số ≤ 8 học viên/lớp.",
-        shortDescription:
-          "Lớp học robotics tại 4 cơ sở Đà Nẵng. Robot thật, lớp nhỏ, giáo viên 1:1.",
-        price: 6500000,
-        priceDisplay: "6,500,000đ",
-        duration: 90,
-        durationDisplay: "3 tháng",
-        studentCount: 800,
-        displayOrder: 2,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "sp3" },
-      update: {},
-      create: {
-        slug: "sp3",
-        code: "SP3",
-        name: "Sata Inno School",
-        type: "OFFLINE",
-        description:
-          "Giải pháp Lab STEM & Robotics tổng thể cho trường K-12: trang bị phòng lab, chương trình tích hợp, đào tạo giáo viên, KPI dashboard.",
-        shortDescription:
-          "Giải pháp Lab STEM cho trường K-12: phòng lab, chương trình, đào tạo giáo viên.",
-        priceDisplay: "Liên hệ",
-        durationDisplay: "Tuỳ chỉnh",
-        studentCount: 0,
-        displayOrder: 3,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "sp4" },
-      update: {},
-      create: {
-        slug: "sp4",
-        code: "SP4",
-        name: "SATAGO Trải nghiệm",
-        type: "HYBRID",
-        description:
-          "Tour ngoại khoá Robotics + STEM 1-3 ngày cho học sinh: tham quan, thực hành, lắp ráp robot. Có thể kết hợp với SP3.",
-        shortDescription:
-          "Tour ngoại khoá robotics + STEM 1-3 ngày kết hợp khám phá và thực hành.",
-        priceDisplay: "Liên hệ",
-        durationDisplay: "1-3 ngày",
-        studentCount: 0,
-        displayOrder: 4,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-  ]);
-  console.log(`✅ ${courses.length} khoá học đã tạo (2 legacy + 4 SP marketing)`);
+  // ─── Courses (Phase 4.UI.FIX.1) ──────────────────────────────────────────
+  // Focus 2 khoá học chính. Loại bỏ 4 SP marketing + 2 legacy hyphenated slugs.
+  const coursesData = [
+    {
+      slug: "laptrinhrobot",
+      code: "LTR",
+      name: "Lập trình Robot",
+      type: "OFFLINE" as const,
+      shortDescription:
+        "Khoá học toàn diện về lập trình & điều khiển robot cho học sinh K-9. Tư duy logic, lập trình thực hành, dự án sáng tạo.",
+      description: `Khoá học Lập trình Robot là chương trình giáo dục STEM toàn diện dành cho học sinh từ K-9, giúp các em làm quen với:
+
+- Tư duy logic và lập trình cơ bản
+- Cấu trúc và nguyên lý hoạt động của robot
+- Lập trình robot thực hành với kit chuyên dụng
+- Phát triển tư duy giải quyết vấn đề
+
+Chương trình được thiết kế bài bản từ cơ bản đến nâng cao, học viên sẽ tự tay xây dựng và lập trình các robot từ đơn giản đến phức tạp.`,
+      priceDisplay: "Liên hệ tư vấn",
+      duration: 180,
+      durationDisplay: "6 tháng",
+      studentCount: 1200,
+      displayOrder: 1,
+      isActive: true,
+      isPublished: true,
+    },
+    {
+      slug: "luyenthirobosim",
+      code: "LTRS",
+      name: "Luyện thi Robosim",
+      type: "HYBRID" as const,
+      shortDescription:
+        "Chuẩn bị thi đấu Robotics chuyên nghiệp (RoboSim, WRO) cho học sinh có nền tảng. Mentor 1-1, mô phỏng chuyên sâu.",
+      description: `Luyện thi Robosim là chương trình chuyên sâu dành cho học viên muốn tham gia các cuộc thi Robotics cấp quốc gia và quốc tế (RoboSim, WRO, ...).
+
+Học viên sẽ được:
+- Luyện tập trên nền tảng mô phỏng Robosim chuyên nghiệp
+- Học chiến thuật giải quyết các challenge cuộc thi
+- Phát triển kỹ năng làm việc nhóm trong team thi
+- Hướng dẫn 1-1 bởi mentor có kinh nghiệm thi đấu
+
+Chương trình phù hợp cho học sinh đã có nền tảng lập trình robot cơ bản.`,
+      priceDisplay: "Liên hệ tư vấn",
+      duration: 120,
+      durationDisplay: "3-6 tháng",
+      studentCount: 800,
+      displayOrder: 2,
+      isActive: true,
+      isPublished: true,
+    },
+  ];
+
+  for (const data of coursesData) {
+    await db.course.upsert({
+      where: { slug: data.slug },
+      update: data,
+      create: data,
+    });
+  }
+
+  // Xoá courses không nằm trong list mới (sp1-4 + lap-trinh-robot/luyen-thi-robosim legacy).
+  // deleteMany an toàn vì lúc seed chưa có Lead/Class/Enrollment ref tới chúng.
+  const validSlugs = coursesData.map((c) => c.slug);
+  const deleted = await db.course.deleteMany({
+    where: { slug: { notIn: validSlugs } },
+  });
+  console.log(
+    `✅ ${coursesData.length} khoá học chính · removed ${deleted.count} legacy/SP courses`,
+  );
 
   // ─── SUPER_ADMIN ──────────────────────────────────────────────────────────────
   const hashedPassword = await bcrypt.hash("ChangeMe@2026!", 12);
@@ -218,6 +168,13 @@ async function main() {
   console.log(`✅ Admin tạo xong: ${admin.email}`);
 
   // ─── Blog Posts ───────────────────────────────────────────────────────────────
+  // Xoá blog posts legacy đã đổi slug khi chuyển từ 4 SPs về 2 khoá học chính.
+  await db.blogPost.deleteMany({
+    where: {
+      slug: { in: ['sata-inno-school-giai-phap-stem-truong-hoc', 'satago-du-lich-giao-duc-stem'] },
+    },
+  });
+
   const blogPosts = await Promise.all([
     db.blogPost.upsert({
       where: { slug: 'tai-sao-tre-can-hoc-lap-trinh-robot' },
@@ -342,132 +299,112 @@ Tháng 9:   Luyện thi sprint, mô phỏng điều kiện thi thật
       },
     }),
     db.blogPost.upsert({
-      where: { slug: 'sata-inno-school-giai-phap-stem-truong-hoc' },
+      where: { slug: 'lop-1-8-co-nen-hoc-lap-trinh-robot' },
       update: {},
       create: {
-        slug: 'sata-inno-school-giai-phap-stem-truong-hoc',
-        title: 'Sata Inno School — Giải pháp STEM toàn diện cho nhà trường',
-        excerpt: 'Sata Inno School là chương trình B2B của Sata Robo, mang phòng lab Robotics và chương trình học chuẩn quốc tế vào thẳng trường học.',
-        content: `## Bài toán mà nhà trường đang đối mặt
+        slug: 'lop-1-8-co-nen-hoc-lap-trinh-robot',
+        title: 'Trẻ lớp 1-8 có nên học Lập trình Robot? — Góc nhìn từ Sata Robo',
+        excerpt: 'Phân tích khoa học về độ tuổi vàng học Robotics, lợi ích tư duy thuật toán và cách phụ huynh có thể bắt đầu cùng con.',
+        content: `## Tại sao lớp 1-8 là độ tuổi vàng?
 
-Nhiều trường học tại Đà Nẵng và toàn quốc đang đứng trước áp lực phải triển khai **giáo dục STEM theo Chương trình GDPT 2018**, nhưng gặp phải 3 vướng mắc lớn:
+Theo nghiên cứu của **Carnegie Mellon University** và **MIT Media Lab**, trẻ em từ 6-14 tuổi đang ở giai đoạn:
+- Phát triển mạnh tư duy logic (executive function)
+- Não bộ linh hoạt nhất với khái niệm trừu tượng
+- Hình thành thái độ với khoa học và công nghệ
 
-1. **Thiếu cơ sở vật chất** — không có phòng lab, thiết bị robot đắt tiền
-2. **Thiếu giáo viên** — giáo viên hiện tại chưa được đào tạo về Robotics
-3. **Thiếu chương trình** — không biết dạy gì, theo chuẩn nào
+Đây chính là lý do **chương trình Lập trình Robot của Sata Robo** thiết kế riêng cho học sinh K-9.
 
-**Sata Inno School** ra đời để giải quyết cả 3 vướng mắc đó.
+## 4 lợi ích thực tế khi con học Robotics sớm
 
-## Sata Inno School là gì?
+### 🧠 1. Tư duy thuật toán
+Khi viết chương trình điều khiển robot, con phải chia bài toán thành các bước nhỏ — kỹ năng này áp dụng được cho Toán, Lý, Tin và cả viết văn.
 
-Đây là **gói giải pháp tổng thể**, bao gồm:
+### 🔧 2. Kỹ năng giải quyết vấn đề
+Robot không hoạt động đúng? Con phải tự debug. Sata Robo dạy phương pháp tư duy "thử — sai — sửa" theo khoa học, không phải "cứ thử đại".
 
-### 🏫 Phòng Lab Robotics Turnkey
-- Thiết kế và lắp đặt phòng học chuyên dụng
-- Trang bị đầy đủ robot học tập, máy tính, bảng tương tác
-- Bảo trì thiết bị trong suốt thời gian hợp đồng
+### 👥 3. Làm việc nhóm
+Dự án cuối khoá luôn theo nhóm 2-4 học sinh. Con học chia việc, lắng nghe, phản biện — kỹ năng cần thiết suốt đời.
 
-### 📚 Chương trình học theo chuẩn WRO
-- Giáo trình biên soạn theo chuẩn **World Robot Olympiad**
-- Phân cấp rõ ràng theo lớp, theo năng lực
-- Tài liệu học tập và bài tập thực hành đi kèm
+### 🎯 4. Sự tự tin
+Khi robot do chính tay con lập trình chạy đúng, đó là niềm tự hào không gì sánh được. Phụ huynh Sata Robo phản hồi: con trở nên chủ động và dám thử cái mới hơn.
 
-### 👩‍🏫 Đào tạo giáo viên
-- Workshop đào tạo GV 40 giờ trước khi khai giảng
-- Hỗ trợ trực tuyến trong suốt năm học
-- Cập nhật chương trình hàng năm
+## Lộ trình Lập trình Robot tại Sata Robo
 
-### 🏆 Hỗ trợ thi đấu
-- Đăng ký và chuẩn bị cho học sinh thi RoboSim, WRO cấp trường/tỉnh/quốc gia
-- Đội ngũ huấn luyện viên kèm cặp đội tuyển
+| Cấp độ | Đối tượng | Nội dung chính |
+|--------|-----------|----------------|
+| **Beginner** | Lớp 1-3 | Lắp robot, di chuyển cơ bản, cảm biến đơn giản |
+| **Intermediate** | Lớp 4-6 | Lập trình block-based, giải mê cung, dự án nhóm |
+| **Advanced** | Lớp 7-8 | Python cơ bản, cảm biến nâng cao, chuẩn bị thi RoboSim |
 
-## Các trường đã triển khai
+## Cách bắt đầu
 
-> "Sau 1 năm với Sata Inno School, trường chúng tôi đã có 2 học sinh vào top 10 RoboSim cấp thành phố. Phụ huynh phản hồi rất tích cực, tỉ lệ tái đăng ký lên tới 94%." — Hiệu trưởng Trường Tiểu học Lê Văn Tám, Đà Nẵng
+1. **Đặt lịch học thử miễn phí 1-2 buổi** tại 1 trong 4 cơ sở Sata Robo
+2. Tham khảo phản hồi của 1,200+ phụ huynh đã đồng hành
+3. Bắt đầu lộ trình phù hợp với con
 
-## Mô hình hợp tác linh hoạt
-
-| Gói | Phù hợp | Chi tiết |
-|-----|---------|---------|
-| **Starter** | Trường mới bắt đầu | 1 phòng lab, 2 lớp/tuần, 1 GV đào tạo |
-| **Standard** | Trường muốn mở rộng | 2 phòng lab, 5 lớp/tuần, 2 GV đào tạo |
-| **Premium** | Trường muốn có đội tuyển mạnh | Full lab, không giới hạn lớp, team huấn luyện |
-
-**Liên hệ ngay để nhận báo giá và lịch khảo sát trường miễn phí:** [0818 823 720](tel:0818823720)`,
+**[Đăng ký học thử miễn phí →](/lien-he?subject=laptrinhrobot)**`,
         isPublished: true,
         publishedAt: new Date('2026-05-01'),
-        category: 'doanh-nghiep',
-        tags: ['b2b', 'trường học', 'stem', 'phòng lab', 'sata inno school'],
+        category: 'phu-huynh',
+        tags: ['lập trình robot', 'k-9', 'tư duy', 'sata robo', 'phụ huynh'],
         readingTime: 5,
-        seoTitle: 'Sata Inno School — Giải pháp STEM Robot cho trường học tại Đà Nẵng',
-        seoDesc: 'Chương trình B2B của Sata Robo: phòng lab Robotics turnkey, chương trình học chuẩn WRO, đào tạo giáo viên và hỗ trợ thi đấu cho các trường.',
+        seoTitle: 'Trẻ lớp 1-8 có nên học Lập trình Robot? | Sata Robo',
+        seoDesc: 'Phân tích khoa học độ tuổi vàng học Robotics K-9. Lộ trình Lập trình Robot tại Sata Robo cho học sinh lớp 1-8, 4 cơ sở Đà Nẵng.',
         authorId: admin.id,
       },
     }),
     db.blogPost.upsert({
-      where: { slug: 'satago-du-lich-giao-duc-stem' },
+      where: { slug: 'luyen-thi-robosim-lo-trinh-pass-vong-loai' },
       update: {},
       create: {
-        slug: 'satago-du-lich-giao-duc-stem',
-        title: 'SATAGO — Khi du lịch kết hợp giáo dục STEM tạo ra trải nghiệm đáng nhớ',
-        excerpt: 'SATAGO là chương trình du lịch giáo dục STEM độc đáo của Sata Robo — nơi học sinh vừa được khám phá, vừa học lập trình và chế tạo robot trong môi trường thực tế.',
-        content: `## "Học mà chơi, chơi mà học" — không phải khẩu hiệu suông
+        slug: 'luyen-thi-robosim-lo-trinh-pass-vong-loai',
+        title: 'Luyện thi RoboSim — Lộ trình pass vòng loại Sáng tạo Robotics 2026',
+        excerpt: 'Tổng hợp bí quyết luyện thi RoboSim cho bảng R1 (Tiểu học) và R2 (THCS) — từ nền tảng đến giải đề năm trước.',
+        content: `## Cuộc thi Sáng tạo Robotics RoboSim là gì?
 
-Hè 2025, hơn 200 học sinh tham gia chương trình **SATAGO** tại Đà Nẵng và Hội An đã mang về nhà không chỉ ảnh chụp và kỷ niệm, mà còn cả **robot tự tay lắp ráp và lập trình**.
+**RoboSim** là cuộc thi Robotics chính thức tại Việt Nam, sử dụng platform mô phỏng thay vì robot vật lý. Học sinh thi 2 bảng:
+- **R1**: Tiểu học (lớp 1-5)
+- **R2**: THCS (lớp 6-9)
 
-## SATAGO là gì?
+Mỗi năm, hàng nghìn học sinh tham gia vòng sơ loại online — chỉ top ~15% được vào vòng tỉnh, top ~3% vào vòng quốc gia.
 
-**SATAGO** (Sata Robo Adventure Go) là chương trình **du lịch giáo dục STEM** kết hợp:
-- Trải nghiệm thực địa tại các điểm du lịch, cơ sở sản xuất, bảo tàng khoa học
-- Workshop lắp ráp và lập trình robot
-- Thử thách nhóm giải quyết vấn đề thực tế
-- Kết nối với thiên nhiên và văn hoá địa phương
+## 3 sai lầm thường gặp khi luyện thi
 
-## Một ngày với SATAGO trông như thế nào?
+### ❌ 1. Học lập trình chung chung, không bám đề
+Nhiều bạn học Python/Scratch tốt nhưng không biết cách giải đề RoboSim cụ thể. **Phải luyện đúng đề.**
 
-### 7:00 — Khởi hành từ trung tâm
+### ❌ 2. Bỏ qua vòng giải đề năm trước
+Đề thi RoboSim có pattern. Học sinh giải kỹ 3-4 đề cũ thường có lợi thế lớn trong vòng sơ loại.
 
-Xe đưa đón học sinh từ trung tâm Sata Robo. Trên xe, các bạn nhỏ được nghe briefing nhiệm vụ ngày hôm đó.
+### ❌ 3. Không có coaching cá nhân
+Học video một mình dễ bị "stuck" 2-3 tuần ở một bug. Mentor 1-1 giải đáp trong 24h thường tiết kiệm hàng tháng tự mò.
 
-### 8:30 — Thực địa buổi sáng
+## Lộ trình luyện thi 3-6 tháng tại Sata Robo
 
-Ví dụ chuyến "Khám phá nhà máy": học sinh tham quan dây chuyền sản xuất thực tế, quan sát robot công nghiệp, đặt câu hỏi với kỹ sư.
+| Giai đoạn | Thời gian | Nội dung |
+|-----------|-----------|----------|
+| **Nền tảng** | Tuần 1-4 | Biến, vòng lặp, điều kiện. Thực hành RoboSim Lite. |
+| **Cảm biến** | Tuần 5-8 | Ánh sáng, khoảng cách, màu — bài toán thực tế. |
+| **Giải đề năm trước** | Tuần 9-12 | Phân tích đề 2024, 2025. Giải mẫu + tự thi thử. |
+| **Sprint luyện thi** | Tuần 13-16 | Mô phỏng điều kiện thi thật, giải đề trong giới hạn thời gian. |
+| **Coaching 1-1** | Xuyên suốt | Buổi cá nhân với mentor, giải đáp khó khăn riêng. |
 
-### 10:00 — Workshop "Giải quyết vấn đề"
+## Kết quả Sata Robo 2026
 
-Dựa trên những gì quan sát được, học sinh chia nhóm thiết kế giải pháp mini bằng robot kit. **Không có đáp án đúng duy nhất** — sáng tạo được khuyến khích.
+- **87%** học viên pass vòng sơ loại
+- **24 giải thưởng** RoboSim 2026 (5 vàng, 8 bạc, 11 đồng)
+- **800+ học viên** đã tham gia khoá luyện thi từ 2023
 
-### 12:00 — Ăn trưa + thư giãn
+> "Con nhà tôi không thông minh xuất sắc, nhưng với khoá Luyện thi RoboSim ở Sata Robo, con pass được vòng tỉnh năm đầu tiên." — Chị Hà, phụ huynh lớp 7
 
-Bữa trưa tại nhà hàng địa phương, thời gian tự do khám phá.
-
-### 14:00 — Thử thách nhóm
-
-Mỗi nhóm trình bày robot của mình, thực hiện thử thách thực tế. Giải thưởng cho nhóm sáng tạo nhất, nhóm hợp tác tốt nhất.
-
-### 17:00 — Về đến trung tâm
-
-Học sinh mang về robot đã lắp ráp và tâm thế đầy tự hào.
-
-## Lịch SATAGO Hè 2026
-
-| Chương trình | Thời gian | Địa điểm | Số chỗ |
-|-------------|-----------|----------|--------|
-| Khám phá nhà máy | 15/6 | KCN Hoà Khánh | 30 học sinh |
-| Bảo tàng Khoa học | 22/6 | TP Đà Nẵng | 30 học sinh |
-| Làng nghề truyền thống | 6/7 | Hội An | 25 học sinh |
-| Trại hè Robot 3 ngày | 21-23/7 | Bà Nà Hills | 40 học sinh |
-
-> ⚠️ Các chương trình thường đầy chỗ trước 2-3 tuần. **Đăng ký sớm để giữ chỗ cho con!**
-
-**[Xem lịch đầy đủ và đăng ký →](/khoa-hoc)**`,
+**[Học thử miễn phí 1 module →](/lien-he?subject=luyenthirobosim)**`,
         isPublished: true,
         publishedAt: new Date('2026-05-05'),
         category: 'tin-tuc',
-        tags: ['satago', 'du lịch giáo dục', 'stem', 'hè', 'trải nghiệm'],
-        readingTime: 4,
-        seoTitle: 'SATAGO — Du lịch giáo dục STEM hè 2026 tại Đà Nẵng — Sata Robo',
-        seoDesc: 'Chương trình du lịch giáo dục STEM SATAGO: học sinh vừa khám phá thực địa vừa lắp ráp và lập trình robot. Đăng ký hè 2026.',
+        tags: ['luyện thi', 'robosim', 'r1', 'r2', 'sáng tạo robotics'],
+        readingTime: 5,
+        seoTitle: 'Luyện thi RoboSim 2026 — Lộ trình pass vòng loại | Sata Robo',
+        seoDesc: 'Bí quyết luyện thi RoboSim bảng R1 & R2: nền tảng, cảm biến, giải đề năm trước, coaching 1-1. 87% học viên Sata Robo pass vòng sơ loại.',
         authorId: admin.id,
       },
     }),

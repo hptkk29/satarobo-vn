@@ -18,13 +18,13 @@ import { tokens } from "@/lib/design-tokens";
 const BASE_URL = "https://satarobo.vn";
 
 export const metadata: Metadata = {
-  title: "Sata Robo — Hệ sinh thái Robotics & STEM giáo dục hàng đầu Đà Nẵng",
+  title: "Sata Robo — Trung tâm Robotics & STEM hàng đầu Đà Nẵng",
   description:
-    "Sata Robo — Trung tâm Robotics & STEM hàng đầu Đà Nẵng. RoboSim Online, Lập trình Robot Offline, Sata Inno School B2B và SATAGO du lịch giáo dục. 4,000+ học viên.",
+    "Sata Robo — Trung tâm Robotics & STEM hàng đầu Đà Nẵng. Khoá Lập trình Robot K-9 và Luyện thi RoboSim cho học sinh lớp 1-8. 2,000+ học viên, 4 cơ sở.",
   openGraph: {
-    title: "Sata Robo — Hệ sinh thái Robotics & STEM giáo dục",
+    title: "Sata Robo — Trung tâm Robotics & STEM hàng đầu Đà Nẵng",
     description:
-      "Trung tâm Robotics & STEM hàng đầu Đà Nẵng cho học sinh lớp 1-8. 4 cơ sở, 4,000+ học viên, cam kết kết quả.",
+      "Trung tâm Robotics & STEM hàng đầu Đà Nẵng cho học sinh lớp 1-8. 4 cơ sở, 2,000+ học viên, cam kết kết quả.",
     url: BASE_URL,
     siteName: "Sata Robo",
     images: [
@@ -62,7 +62,7 @@ const FEATURES = [
   {
     icon: Heart,
     title: "Cộng đồng cha mẹ",
-    desc: "4,000+ gia đình tin tưởng đồng hành cùng con",
+    desc: "2,000+ gia đình tin tưởng đồng hành cùng con",
   },
 ];
 
@@ -97,7 +97,7 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      "SATAGO tour 3 ngày cho con khám phá Đà Nẵng + làm robot mini. Vợ chồng tôi cũng học theo!",
+      "Con luyện thi RoboSim với mentor 1-1 — pass vòng loại ngay năm đầu tiên. Mentor Sata Robo rất tận tâm.",
     authorName: "Anh Hoàng Long",
     authorRole: "Phụ huynh lớp 8",
     rating: 5,
@@ -120,7 +120,7 @@ export default async function HomePage() {
       .findMany({
         where: { isPublished: true },
         orderBy: { displayOrder: "asc" },
-        take: 4,
+        take: 2,
       })
       .catch(() => []),
     db.blogPost
@@ -159,11 +159,11 @@ export default async function HomePage() {
         theme="sunrise"
         eyebrow="ROBOTICS & STEM K-12"
         title="Nuôi dưỡng thế hệ kỹ sư tương lai"
-        subtitle="Hơn 4,000 học viên tin tưởng Sata Robo qua 6 năm xây dựng nền tảng giáo dục công nghệ tại Việt Nam"
+        subtitle="Hơn 2,000 học viên tin tưởng Sata Robo qua 6 năm xây dựng nền tảng giáo dục công nghệ tại Đà Nẵng"
         trustIndicators={[
-          { text: "8 trường K-12 đối tác" },
+          { text: "4 cơ sở Đà Nẵng" },
           { text: "24 giải RoboSim 2026" },
-          { text: "4,000+ học viên" },
+          { text: "2,000+ học viên" },
         ]}
         effects={{ particles: true, sparkles: true, glowOrbs: true, gridLines: true }}
       >
@@ -175,22 +175,23 @@ export default async function HomePage() {
         </CTASecondary>
       </HeroParticles>
 
-      {/* ─── Section 2: Products SOFT-WARM ────────────────────────────── */}
+      {/* ─── Section 2: Products SOFT-WARM (2 large cards) ───────────── */}
       <SectionBase
         theme="soft-warm"
-        eyebrow="🧡 SẢN PHẨM"
-        title="4 sản phẩm chủ lực Sata Robo"
-        subtitle="Lộ trình từ video online đến giải pháp B2B trường học và tour trải nghiệm"
+        eyebrow="🧡 KHOÁ HỌC"
+        title="2 khoá học chủ lực Sata Robo"
+        subtitle="Lập trình Robot offline cho mọi học sinh K-9 — Luyện thi RoboSim online cho học sinh muốn thi đấu"
         glowOrb={{ color: "orange", position: "bottom-right" }}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           {courses.length > 0 ? (
             courses.map((c) => (
               <CourseCard
                 key={c.id}
+                size="large"
                 badge={c.code ?? undefined}
                 title={c.name}
-                description={c.shortDescription ?? c.description?.slice(0, 100) ?? ""}
+                description={c.shortDescription ?? c.description?.slice(0, 200) ?? ""}
                 href={`/khoa-hoc/${c.slug}`}
                 price={c.priceDisplay ?? undefined}
                 duration={c.durationDisplay ?? undefined}
@@ -225,8 +226,8 @@ export default async function HomePage() {
         eyebrow="THÀNH TỰU"
         title="Sata Robo qua 6 năm"
         stats={[
-          { value: 4000, suffix: "+", label: "Học viên" },
-          { value: 8, label: "Trường đối tác" },
+          { value: 2000, suffix: "+", label: "Học viên" },
+          { value: 4, label: "Cơ sở Đà Nẵng" },
           { value: 24, label: "Giải RoboSim 2026" },
           { value: 6, suffix: "+", label: "Năm xây dựng" },
         ]}
@@ -236,7 +237,7 @@ export default async function HomePage() {
       <SectionBase
         theme="soft-cool"
         eyebrow="💜 PHỤ HUYNH NÓI GÌ"
-        title="Tin cậy từ 4,000+ gia đình"
+        title="Tin cậy từ 2,000+ gia đình"
         glowOrb={{ color: "purple", position: "top-left" }}
       >
         <Marquee pauseOnHover style={{ ["--duration" as string]: "40s" }}>

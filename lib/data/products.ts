@@ -44,7 +44,7 @@ export const PRODUCTS: Product[] = [
     price: 2_500_000,
     image: '/images/products/robot-trung-cap-b2.jpg', // ANH CẦN CUNG CẤP ẢNH THẬT
     description:
-      'Bộ Robot Trung cấp B2 dành cho học sinh 8-10 tuổi đã có nền tảng cơ bản. Hỗ trợ lập trình Scratch và block-based, phù hợp cho chương trình Sata Robo SP2 cấp độ 2-3.',
+      'Bộ Robot Trung cấp B2 dành cho học sinh 8-10 tuổi đã có nền tảng cơ bản. Hỗ trợ lập trình Scratch và block-based, phù hợp cho chương trình Lập trình Robot Sata Robo cấp độ 2-3.',
     specs: [
       '120 chi tiết lắp ráp đa dạng',
       'Vi điều khiển tích hợp sẵn',
@@ -63,7 +63,7 @@ export const PRODUCTS: Product[] = [
     price: 4_500_000,
     image: '/images/products/robot-nang-cao-c3.jpg', // ANH CẦN CUNG CẤP ẢNH THẬT
     description:
-      'Bộ Robot Nâng cao C3 dành cho học sinh THCS, hỗ trợ lập trình Python, C++ và ROS cơ bản. Đây là bộ học cụ chuẩn cho học viên SP2 cấp độ 4-5 và chuẩn bị thi đấu cấp tỉnh/quốc gia.',
+      'Bộ Robot Nâng cao C3 dành cho học sinh THCS, hỗ trợ lập trình Python, C++ và ROS cơ bản. Đây là bộ học cụ chuẩn cho học viên Lập trình Robot cấp độ 4-5 và chuẩn bị thi đấu cấp tỉnh/quốc gia.',
     specs: [
       '200+ chi tiết lắp ráp chuyên nghiệp',
       'Vi điều khiển ARM Cortex-M4',
@@ -160,11 +160,11 @@ export const PRODUCTS: Product[] = [
     price: 180_000,
     image: '/images/products/sach-huong-dan-lap-trinh.jpg', // ANH CẦN CUNG CẤP ẢNH THẬT
     description:
-      'Sách hướng dẫn lập trình Robot song ngữ Việt-Anh, 180 trang, phù hợp học sinh từ 8 tuổi. Bám sát chương trình SP2 của Sata Robo với bài tập thực hành từng bước.',
+      'Sách hướng dẫn lập trình Robot song ngữ Việt-Anh, 180 trang, phù hợp học sinh từ 8 tuổi. Bám sát chương trình Lập trình Robot của Sata Robo với bài tập thực hành từng bước.',
     specs: [
       '180 trang, khổ A4, in màu',
       'Song ngữ Việt - Anh',
-      'Bám sát chương trình SP2 Sata Robo',
+      'Bám sát chương trình Lập trình Robot Sata Robo',
       '30 bài tập thực hành có đáp án',
       'QR code link video hướng dẫn kèm theo',
     ],

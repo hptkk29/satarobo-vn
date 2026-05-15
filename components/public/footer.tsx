@@ -87,28 +87,23 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Sản phẩm */}
+          {/* Khoá học */}
           <div>
-            <h4 className="mb-4 font-semibold text-white">Sản phẩm</h4>
+            <h4 className="mb-4 font-semibold text-white">Khoá học</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/khoa-hoc/luyen-thi-robosim" className="hover:text-[#F97316] transition-colors">
-                  Luyện thi RoboSim Online
+                <Link href="/khoa-hoc/laptrinhrobot" className="hover:text-[#F97316] transition-colors">
+                  Lập trình Robot K-9
                 </Link>
               </li>
               <li>
-                <Link href="/khoa-hoc/lap-trinh-robot" className="hover:text-[#F97316] transition-colors">
-                  Lập trình Robot Offline
+                <Link href="/khoa-hoc/luyenthirobosim" className="hover:text-[#F97316] transition-colors">
+                  Luyện thi RoboSim
                 </Link>
               </li>
               <li>
-                <Link href="/lien-he" className="hover:text-[#F97316] transition-colors">
-                  Sata Inno School (B2B)
-                </Link>
-              </li>
-              <li>
-                <Link href="/lien-he" className="hover:text-[#F97316] transition-colors">
-                  SATAGO Du lịch giáo dục
+                <Link href="/khoa-hoc" className="hover:text-[#F97316] transition-colors">
+                  Tất cả khoá học
                 </Link>
               </li>
               <li>

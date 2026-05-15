@@ -6,8 +6,8 @@
 
 Chính sách này áp dụng cho tất cả các dịch vụ của Sata Robo:
 
-- **SP2 — Robotics Offline:** Các khoá học Robotics, STEM tại trung tâm Đà Nẵng
-- **SP1 — RoboSim Online:** Khoá học luyện thi RoboSim qua nền tảng trực tuyến
+- **Lập trình Robot:** Khoá học Robotics offline cho học sinh K-9 tại 4 cơ sở Đà Nẵng
+- **Luyện thi RoboSim:** Khoá luyện thi online + coaching 1-1 trên platform mô phỏng
 - **Học cụ / Kit:** Bộ kit robot, linh kiện, thiết bị học tập
 
 ## 2. Chính sách hoàn trả khoá học

@@ -37,8 +37,9 @@ export function BrandStory() {
               </p>
               <p>
                 {/* ANH CẦN CUNG CẤP NỘI DUNG THẬT — định hướng tương lai */}
-                [Đoạn 4 — ANH CẦN CUNG CẤP: Hành trình số hoá sản phẩm (RoboSim Master), mở rộng
-                B2B với Sata Inno School và du lịch giáo dục SATAGO]
+                [Đoạn 4 — ANH CẦN CUNG CẤP: Tập trung phát triển 2 khoá học chủ lực — Lập trình
+                Robot offline cho học sinh K-9 và Luyện thi RoboSim online cho học viên muốn
+                thi đấu]
               </p>
             </div>
 

@@ -18,10 +18,10 @@ const BASE_URL = "https://satarobo.vn";
 export const metadata: Metadata = {
   title: "Khoá học Robotics & STEM — Sata Robo Đà Nẵng",
   description:
-    "4 hình thức học Robotics & STEM tại Sata Robo — từ video online đến lab tại trường, từ B2B đến tour ngoại khoá.",
+    "2 khoá học chủ lực tại Sata Robo: Lập trình Robot (K-9) và Luyện thi RoboSim — robot vật lý, giáo viên 1:8, 4 cơ sở Đà Nẵng.",
   openGraph: {
     title: "Khoá học Robotics & STEM — Sata Robo",
-    description: "4 hình thức học phù hợp mọi nhu cầu — học sinh K-12 + B2B.",
+    description: "2 khoá học chủ lực: Lập trình Robot (K-9) và Luyện thi RoboSim.",
     url: `${BASE_URL}/khoa-hoc`,
     siteName: "Sata Robo",
   },
@@ -31,12 +31,41 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 const COMPARISON = [
-  { label: "Hình thức", sp1: "Online video", sp2: "Offline lớp", sp3: "B2B trường học", sp4: "Tour 1-3 ngày" },
-  { label: "Đối tượng", sp1: "Lớp 3-8", sp2: "Lớp 1-8", sp3: "Trường K-12", sp4: "Lớp 4-12" },
-  { label: "Thời lượng", sp1: "6 tháng", sp2: "3 tháng", sp3: "Tuỳ chỉnh", sp4: "1-3 ngày" },
-  { label: "Sĩ số", sp1: "Không giới hạn", sp2: "≤ 8 / lớp", sp3: "Theo trường", sp4: "20-40 / tour" },
-  { label: "Giá", sp1: "2,400,000đ", sp2: "6,500,000đ", sp3: "Liên hệ", sp4: "Liên hệ" },
-  { label: "Phù hợp với", sp1: "Học tự lập, tiết kiệm", sp2: "Học bài bản 1:1", sp3: "Hiệu trưởng/Ban GD", sp4: "Hoạt động ngoại khoá" },
+  {
+    label: "Hình thức",
+    laptrinhrobot: "Offline tại lớp",
+    luyenthirobosim: "Online + coaching 1-1",
+  },
+  {
+    label: "Đối tượng",
+    laptrinhrobot: "Học sinh lớp 1-8 (mới bắt đầu)",
+    luyenthirobosim: "Học sinh đã biết cơ bản, muốn thi đấu",
+  },
+  {
+    label: "Thời lượng",
+    laptrinhrobot: "6 tháng (12 module)",
+    luyenthirobosim: "3-6 tháng (18 buổi video + coaching)",
+  },
+  {
+    label: "Sĩ số",
+    laptrinhrobot: "≤ 8 học viên / lớp",
+    luyenthirobosim: "Không giới hạn (online)",
+  },
+  {
+    label: "Thiết bị",
+    laptrinhrobot: "Robot LEGO Education vật lý",
+    luyenthirobosim: "Platform RoboSim trên trình duyệt",
+  },
+  {
+    label: "Mục tiêu",
+    laptrinhrobot: "Nền tảng Robotics + tư duy lập trình",
+    luyenthirobosim: "Pass vòng loại Sáng tạo Robotics (RoboSim)",
+  },
+  {
+    label: "Giá",
+    laptrinhrobot: "Liên hệ tư vấn",
+    luyenthirobosim: "Liên hệ tư vấn",
+  },
 ];
 
 export default async function CoursesPage() {
@@ -83,8 +112,8 @@ export default async function CoursesPage() {
       <HeroParticles
         theme="sunrise"
         eyebrow="KHOÁ HỌC"
-        title="4 con đường Robotics phù hợp mọi nhu cầu"
-        subtitle="Từ học online đến tour trải nghiệm — Sata Robo có giải pháp cho mọi gia đình"
+        title="2 con đường Robotics phù hợp với con bạn"
+        subtitle="Bắt đầu nền tảng với Lập trình Robot — nâng cao luyện thi đấu với RoboSim"
         trustIndicators={[
           { text: "Lộ trình rõ ràng" },
           { text: "Hoàn 100% nếu không hài lòng" },
@@ -95,21 +124,22 @@ export default async function CoursesPage() {
         <CTAPrimary href="/lien-he" magnetic>Đăng ký tư vấn miễn phí</CTAPrimary>
       </HeroParticles>
 
-      {/* ─── Products grid SOFT-WARM ─── */}
+      {/* ─── Products grid SOFT-WARM (2 large cards) ─── */}
       <SectionBase
         theme="soft-warm"
-        eyebrow="🧡 4 SẢN PHẨM CHỦ LỰC"
-        title="Chọn sản phẩm phù hợp với con bạn"
-        subtitle="Mỗi sản phẩm thiết kế cho nhu cầu cụ thể — bấm vào card để xem chi tiết"
+        eyebrow="🧡 2 KHOÁ HỌC CHỦ LỰC"
+        title="Chọn khoá phù hợp với con bạn"
+        subtitle="Bấm vào card để xem chi tiết lộ trình, học phí và cách đăng ký"
         glowOrb={{ color: "orange", position: "bottom-right" }}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           {courses.map((c) => (
             <CourseCard
               key={c.id}
+              size="large"
               badge={c.code ?? undefined}
               title={c.name}
-              description={c.shortDescription ?? c.description?.slice(0, 100) ?? ""}
+              description={c.shortDescription ?? c.description?.slice(0, 200) ?? ""}
               href={`/khoa-hoc/${c.slug}`}
               price={c.priceDisplay ?? undefined}
               duration={c.durationDisplay ?? undefined}
@@ -123,28 +153,24 @@ export default async function CoursesPage() {
       <SectionBase
         theme="white"
         eyebrow="SO SÁNH"
-        title="So sánh 4 sản phẩm"
-        subtitle="Bảng tổng hợp để chọn nhanh"
+        title="Lập trình Robot vs Luyện thi RoboSim"
+        subtitle="Bảng tổng hợp để chọn nhanh khoá phù hợp"
       >
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white max-w-4xl mx-auto">
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-left">
               <tr>
-                <th className="px-4 py-3 font-semibold text-neutral-700">Tiêu chí</th>
-                <th className="px-4 py-3 font-semibold text-orange-600">SP1 RoboSim</th>
-                <th className="px-4 py-3 font-semibold text-orange-600">SP2 Offline</th>
-                <th className="px-4 py-3 font-semibold text-orange-600">SP3 Inno School</th>
-                <th className="px-4 py-3 font-semibold text-orange-600">SP4 SATAGO</th>
+                <th className="px-4 py-4 font-semibold text-neutral-700">Tiêu chí</th>
+                <th className="px-4 py-4 font-semibold text-orange-600">Lập trình Robot</th>
+                <th className="px-4 py-4 font-semibold text-purple-700">Luyện thi RoboSim</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {COMPARISON.map((row) => (
                 <tr key={row.label} className="hover:bg-neutral-50">
                   <td className="px-4 py-3 font-medium text-neutral-700">{row.label}</td>
-                  <td className="px-4 py-3 text-neutral-600">{row.sp1}</td>
-                  <td className="px-4 py-3 text-neutral-600">{row.sp2}</td>
-                  <td className="px-4 py-3 text-neutral-600">{row.sp3}</td>
-                  <td className="px-4 py-3 text-neutral-600">{row.sp4}</td>
+                  <td className="px-4 py-3 text-neutral-600">{row.laptrinhrobot}</td>
+                  <td className="px-4 py-3 text-neutral-600">{row.luyenthirobosim}</td>
                 </tr>
               ))}
             </tbody>
@@ -157,10 +183,10 @@ export default async function CoursesPage() {
         eyebrow="CON SỐ"
         title="Sata Robo qua 6 năm"
         stats={[
-          { value: 4000, suffix: "+", label: "Học viên" },
+          { value: 2000, suffix: "+", label: "Học viên" },
           { value: 4, label: "Cơ sở Đà Nẵng" },
-          { value: 8, label: "Trường K-12 đối tác" },
           { value: 24, label: "Giải RoboSim 2026" },
+          { value: 4.9, label: "Đánh giá phụ huynh" },
         ]}
       />
 
@@ -176,8 +202,8 @@ export default async function CoursesPage() {
             "Hoàn 100% học phí buổi 1-2 nếu con không phù hợp",
             "Giáo viên 1:8 — đảm bảo từng học viên được chú ý",
             "Lab Robotics đầy đủ — robot LEGO, sensor, controller",
-            "Cộng đồng phụ huynh 4,000+ chia sẻ kinh nghiệm",
-            "Đối tác 8 trường K-12 — giáo trình đã kiểm chứng",
+            "Cộng đồng phụ huynh 2,000+ chia sẻ kinh nghiệm",
+            "4 cơ sở Đà Nẵng — thuận tiện đưa đón con đi học",
           ].map((point) => (
             <div key={point} className="flex items-start gap-3 p-4 rounded-xl border border-neutral-200">
               <div className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
@@ -196,7 +222,7 @@ export default async function CoursesPage() {
         <GlowOrb color="purple" position="top-right" size="xl" />
         <div className="container max-w-4xl mx-auto px-4 text-center relative z-10">
           <h2 className={`${tokens.typography.display.h2} mb-4`}>
-            Chưa biết chọn sản phẩm nào?
+            Chưa biết chọn khoá nào?
           </h2>
           <p className={`${tokens.typography.body.lg} text-neutral-600 mb-8 max-w-2xl mx-auto`}>
             Đăng ký tư vấn 1-1 miễn phí — chuyên gia Sata Robo sẽ giúp anh chị tìm lộ trình phù hợp nhất cho con

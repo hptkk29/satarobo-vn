@@ -44,10 +44,8 @@ export async function saveSiteContentAction(
   const pathMap: Record<string, string> = {
     home: "/",
     "khoa-hoc": "/khoa-hoc",
-    "khoa-hoc/sp1": "/khoa-hoc/sp1",
-    "khoa-hoc/sp2": "/khoa-hoc/sp2",
-    "khoa-hoc/sp3": "/khoa-hoc/sp3",
-    "khoa-hoc/sp4": "/khoa-hoc/sp4",
+    "khoa-hoc/laptrinhrobot": "/khoa-hoc/laptrinhrobot",
+    "khoa-hoc/luyenthirobosim": "/khoa-hoc/luyenthirobosim",
     "ve-chung-toi": "/ve-chung-toi",
     "tuyen-dung": "/tuyen-dung",
     "lien-he": "/lien-he",

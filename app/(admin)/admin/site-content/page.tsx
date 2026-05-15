@@ -11,10 +11,8 @@ export const metadata = { title: "Hình ảnh & nội dung trang | Admin" };
 const PAGES = [
   { pageKey: "home", label: "Trang chủ" },
   { pageKey: "khoa-hoc", label: "Khoá học (overview)" },
-  { pageKey: "khoa-hoc/sp1", label: "SP1 — Robosim Master" },
-  { pageKey: "khoa-hoc/sp2", label: "SP2 — Offline Class" },
-  { pageKey: "khoa-hoc/sp3", label: "SP3 — Sata Inno School" },
-  { pageKey: "khoa-hoc/sp4", label: "SP4 — SATAGO" },
+  { pageKey: "khoa-hoc/laptrinhrobot", label: "Lập trình Robot K-9" },
+  { pageKey: "khoa-hoc/luyenthirobosim", label: "Luyện thi RoboSim" },
   { pageKey: "ve-chung-toi", label: "Về chúng tôi" },
   { pageKey: "tuyen-dung", label: "Tuyển dụng" },
   { pageKey: "lien-he", label: "Liên hệ" },
