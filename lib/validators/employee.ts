@@ -8,6 +8,10 @@ export const DepartmentEnum = z.enum([
   "IT",
   "HANH_CHANH_NHAN_SU",
   "KE_TOAN",
+  // Phase 4.7 extension
+  "TUYEN_SINH",
+  "GIAO_VU",
+  "GIANG_DAY",
 ]);
 
 export const GenderEnum = z.enum(["MALE", "FEMALE", "OTHER"]);
@@ -17,6 +21,10 @@ export const ContractTypeEnum = z.enum([
   "PARTTIME",
   "INTERN",
   "FREELANCE",
+  // Phase 4.7 extension — Vietnam labor law
+  "THU_VIEC",
+  "CHINH_THUC_XAC_DINH",
+  "CHINH_THUC_KHONG_XAC_DINH",
 ]);
 
 // Helper: convert empty string → null, preserve type
@@ -74,6 +82,16 @@ export const employeeCreateSchema = z.object({
 
   centerId: nullableStr,
   managerId: nullableStr,
+
+  // Phase 4.7 extension — additional Tier 2 fields
+  endDate: nullableDate,
+  bhxhBase: z
+    .union([z.coerce.number().nonnegative(), z.literal(""), z.null()])
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? null : (v as number))),
+  address: nullableStr,
+  emergencyContact: nullableStr,
+  notes: nullableStr,
 
   isCEO: z.coerce.boolean().default(false),
 });

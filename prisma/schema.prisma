@@ -544,6 +544,10 @@ enum Department {
   IT
   HANH_CHANH_NHAN_SU
   KE_TOAN
+  // Phase 4.7 extension
+  TUYEN_SINH
+  GIAO_VU
+  GIANG_DAY
 }
 
 enum Gender {
@@ -557,6 +561,10 @@ enum ContractType {
   PARTTIME
   INTERN
   FREELANCE
+  // Phase 4.7 extension — Vietnam labor law contract types
+  THU_VIEC
+  CHINH_THUC_XAC_DINH
+  CHINH_THUC_KHONG_XAC_DINH
 }
 
 model Employee {
@@ -582,6 +590,13 @@ model Employee {
   contractType ContractType?
   salaryRank   Int?
   salaryLevel  Int?
+
+  // Phase 4.7 — additional Tier 2 HR fields
+  endDate          DateTime?    // Ngày kết thúc HĐ (cho hợp đồng có thời hạn)
+  bhxhBase         Float?       // Mức lương đóng BHXH
+  address          String?
+  emergencyContact String?      // Tên - Quan hệ - SĐT
+  notes            String?      @db.Text
 
   // Cơ sở làm việc
   centerId     String?

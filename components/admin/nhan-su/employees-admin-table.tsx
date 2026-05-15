@@ -30,6 +30,9 @@ const DEPARTMENT_LABELS: Record<Department, string> = {
   IT: "IT",
   HANH_CHANH_NHAN_SU: "Hành chính - Nhân sự",
   KE_TOAN: "Kế toán",
+  TUYEN_SINH: "Tuyển sinh",
+  GIAO_VU: "Giáo vụ",
+  GIANG_DAY: "Giảng dạy",
 };
 
 export function EmployeesAdminTable({ employees, canDelete }: Props) {
