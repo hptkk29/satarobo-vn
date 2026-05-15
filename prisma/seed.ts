@@ -135,6 +135,209 @@ Chương trình phù hợp cho học sinh đã có nền tảng lập trình rob
     `✅ ${coursesData.length} khoá học chính · removed ${deleted.count} legacy/SP courses`,
   );
 
+  // ─── ZMRobo Kits (Phase 4.UI.FIX.2) ─────────────────────────────────────
+  // 3 bộ học cụ ZMROBO: Alpha (nhập môn) / Beta (thi đấu) / Intelligence Storm (AI nâng cao)
+  const zmRoboKits = [
+    {
+      slug: "alpha",
+      brand: "ZMROBO",
+      series: "α-Series",
+      code: null,
+      title: "Alpha Set",
+      subtitle: "Bộ NHẬP MÔN cho trẻ từ 6 tuổi",
+      shortDescription:
+        "Lập trình robot KHÔNG cần máy tính qua thẻ lệnh OID — 320-378 chi tiết, 7 cảm biến, Smart Hub. Phương pháp PBL.",
+      description: `Alpha Set (α-Series) là bộ học cụ NHẬP MÔN dành cho trẻ em từ 6 tuổi trở lên, được thiết kế bởi ZMROBO — thương hiệu hàng đầu thế giới về Robotics giáo dục.
+
+ĐẶC ĐIỂM NỔI BẬT:
+- 320-378 chi tiết lắp ráp chính xác cao, an toàn tuyệt đối
+- Lập trình KHÔNG cần máy tính qua thẻ lệnh OID (Optical Identification)
+- 7 cảm biến đa dạng giúp robot tương tác với môi trường
+- Smart Hub trung tâm điều khiển thông minh
+- Áp dụng phương pháp PBL (Project-Based Learning)
+
+PHÙ HỢP CHO:
+- Trẻ em từ 6 tuổi mới bắt đầu làm quen với Robotics
+- Phụ huynh muốn con tiếp xúc công nghệ sớm
+- Trung tâm STEM, trường tiểu học (K1-K3)
+
+THƯƠNG HIỆU:
+ZMROBO (JoinMax Digital Technology Co., Ltd) - thành lập 2002, chuyên STEAM education với 300+ patents.`,
+      priceDisplay: "Liên hệ tư vấn",
+      isAvailable: true,
+      specs: {
+        pieces: "320-378 PCS",
+        age: "6+ tuổi",
+        level: "Nhập môn",
+        controller: "Smart Hub 330",
+        sensors: [
+          "Cảm biến chạm",
+          "Cảm biến góc nghiêng",
+          "Cảm biến IR",
+          "Cảm biến khoảng cách",
+          "Cảm biến light",
+          "Cảm biến màu sắc",
+          "Cảm biến thẻ lệnh OID",
+        ],
+        programmingMethod: "OID Coding Cards (không cần máy tính)",
+        teachingMethod: "PBL - Project-Based Learning",
+      },
+      features: [
+        { icon: "Cpu", title: "Smart Hub thông minh", desc: "Bộ điều khiển trung tâm tích hợp cho robot" },
+        { icon: "CreditCard", title: "Lập trình qua thẻ lệnh", desc: "Không cần máy tính - chỉ scan thẻ OID" },
+        { icon: "Activity", title: "7 cảm biến đa dạng", desc: "Tương tác với môi trường: chạm, ánh sáng, màu, khoảng cách..." },
+        { icon: "Puzzle", title: "320-378 chi tiết", desc: "Lắp ráp nhiều mô hình robot khác nhau" },
+      ],
+      highlights: [
+        "Không cần máy tính — phù hợp trẻ mầm non, tiểu học",
+        "7 cảm biến — robot có thể 'cảm nhận' môi trường",
+        "Phương pháp PBL — học qua dự án sáng tạo",
+        "An toàn tuyệt đối — chứng nhận quốc tế",
+      ],
+      mainImage: "",
+      galleryImages: [],
+      sourceUrl: "https://zmrobo.net/products/80",
+      displayOrder: 1,
+      isPublished: true,
+    },
+    {
+      slug: "beta",
+      brand: "ZMROBO",
+      series: "β-Series",
+      code: null,
+      title: "Beta Set Core",
+      subtitle: "Bộ THI ĐẤU chuyên nghiệp",
+      shortDescription:
+        "β-Series Core Set 133 PCS — Bộ kit thi đấu Robotics dành cho học viên đã có nền tảng từ Alpha Set. Race-style robot.",
+      description: `Beta Set (β-Series Core Set) là bộ học cụ THI ĐẤU dành cho học viên đã hoàn thành Alpha Set hoặc đã có nền tảng Robotics cơ bản.
+
+ĐẶC ĐIỂM NỔI BẬT:
+- 133 chi tiết tinh gọn, tối ưu cho thi đấu
+- Thiết kế Race-style robot - tốc độ và độ chính xác cao
+- Phù hợp với các cuộc thi Robotics quốc gia và quốc tế
+- Lắp ráp nhanh - thi đấu hiệu quả
+
+PHÙ HỢP CHO:
+- Học viên có nền tảng Robotics, hướng tới thi đấu
+- Đội tuyển Robotics trường học, trung tâm
+- Phụ huynh muốn con tham gia các cuộc thi RBT, RoboSim, WRO
+
+CƠ HỘI THI ĐẤU:
+- RBT2026 (RoboSim)
+- WRO (World Robot Olympiad)
+- Các cuộc thi nội bộ Sata Robo`,
+      priceDisplay: "Liên hệ tư vấn",
+      isAvailable: true,
+      specs: {
+        pieces: "133 PCS",
+        age: "6+ tuổi",
+        level: "Thi đấu",
+        formFactor: "Race-style Robot",
+        compatibility: "Tương thích Alpha Set",
+        labelText: "β-Series Core Set",
+      },
+      features: [
+        { icon: "Trophy", title: "Thiết kế thi đấu", desc: "Race-style robot, tốc độ và độ chính xác cao" },
+        { icon: "Zap", title: "Lắp ráp nhanh", desc: "133 chi tiết tinh gọn, dễ thao tác" },
+        { icon: "Target", title: "Cuộc thi quốc tế", desc: "Phù hợp WRO, RoboSim, RBT2026" },
+        { icon: "Link2", title: "Tương thích Alpha", desc: "Sử dụng cùng hệ sinh thái ZMROBO" },
+      ],
+      highlights: [
+        "Thiết kế tối ưu cho thi đấu",
+        "Tham gia các cuộc thi quốc gia + quốc tế",
+        "Lắp ráp nhanh, thao tác dễ",
+        "Tương thích với Alpha Set",
+      ],
+      mainImage: "",
+      galleryImages: [],
+      sourceUrl: "https://zmrobo.net/products/89",
+      displayOrder: 2,
+      isPublished: true,
+    },
+    {
+      slug: "intelligence-storm",
+      brand: "ZMROBO",
+      series: "Intelligence Storm",
+      code: "JMC-NY-2108E",
+      title: "Intelligence Storm",
+      subtitle: "Bộ NÂNG CAO AI + Python + C",
+      shortDescription:
+        "JMC-NY-2108E 619 PCS — E6-RCU Smart Controller, 96 bài học/6 stages, lập trình Graphical + Python + C, AI image recognition.",
+      description: `Intelligence Storm (mã JMC-NY-2108E) là bộ học cụ NÂNG CAO cao cấp nhất của ZMROBO, dành cho học sinh trung học và những ai muốn tiến sâu vào AI, Robotics và lập trình chuyên nghiệp.
+
+ĐẶC ĐIỂM NỔI BẬT:
+- 619 chi tiết lắp ráp robot nhiều hình dạng phức tạp
+- E6-RCU Smart Controller (8 sensor ports + 4 motor ports)
+- 96 bài học chia thành 6 stages + 32 extensions
+- 3 ngôn ngữ lập trình: Graphical (kéo thả), Python, C
+- AI: Image recognition, Gesture detection
+- Custom Android OS với ZMROBO AI library
+
+CHƯƠNG TRÌNH 6 STAGES:
+Stage 1: Structural knowledge
+Stage 2: Force transfer
+Stage 3: Master controller
+Stage 4: Sensors
+Stage 5: Software programming
+Stage 6: AI applications
+
+PHÙ HỢP CHO:
+- Học sinh THCS, THPT (lớp 6-12)
+- Học viên đã hoàn thành Alpha + Beta Set
+- Người yêu thích AI, lập trình Python, C
+- Trường THCS/THPT, trung tâm STEM cao cấp`,
+      priceDisplay: "Liên hệ tư vấn",
+      isAvailable: true,
+      specs: {
+        pieces: "619 PCS",
+        age: "6+ tuổi (lý tưởng 10+)",
+        level: "Nâng cao",
+        productCode: "JMC-NY-2108E",
+        controller: "E6-RCU Smart Controller (8 sensor + 4 motor ports)",
+        processor: "8-core processor",
+        operatingSystem: "Custom Android",
+        sensors: ["Ultrasonic", "PhotorElectric", "Light"],
+        motors: ["Large Motor", "Medium Motor"],
+        programming: ["Graphical Programming", "Python", "C"],
+        aiFeatures: ["Image Recognition", "Gesture Detection", "ZMROBO AI Library"],
+        curriculum: "96 lessons / 6 stages + 32 extensions",
+      },
+      features: [
+        { icon: "Brain", title: "AI Image Recognition", desc: "Robot nhận diện hình ảnh, vật thể, khuôn mặt" },
+        { icon: "Code", title: "Python + C Programming", desc: "Lập trình chuyên nghiệp với 3 ngôn ngữ" },
+        { icon: "Cpu", title: "E6-RCU Controller", desc: "8-core processor, 8 sensor ports, 4 motor ports" },
+        { icon: "BookOpen", title: "96 bài học có sẵn", desc: "6 stages + 32 extensions chuẩn quốc tế" },
+      ],
+      highlights: [
+        "619 chi tiết - robot hình dạng phức tạp",
+        "E6-RCU Controller next-gen - 8 cổng cảm biến",
+        "3 ngôn ngữ: Graphical + Python + C",
+        "AI: Image recognition + Gesture detection",
+        "96 bài học có sẵn - 6 stages chuẩn quốc tế",
+      ],
+      mainImage: "",
+      galleryImages: [],
+      sourceUrl: "https://zmrobo.net/products/67",
+      displayOrder: 3,
+      isPublished: true,
+    },
+  ];
+
+  for (const kit of zmRoboKits) {
+    await db.zMRoboKit.upsert({
+      where: { slug: kit.slug },
+      update: kit,
+      create: kit,
+    });
+  }
+  const validKitSlugs = zmRoboKits.map((k) => k.slug);
+  const removedKits = await db.zMRoboKit.deleteMany({
+    where: { slug: { notIn: validKitSlugs } },
+  });
+  console.log(
+    `✅ ${zmRoboKits.length} ZMRobo kits đã tạo · removed ${removedKits.count} kit cũ`,
+  );
+
   // ─── SUPER_ADMIN ──────────────────────────────────────────────────────────────
   const hashedPassword = await bcrypt.hash("ChangeMe@2026!", 12);
   const admin = await db.user.upsert({
