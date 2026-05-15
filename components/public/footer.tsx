@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { MapPin, Phone, Mail } from "lucide-react";
 import {
   SATA_ROBO_LOCATIONS,
@@ -59,10 +60,19 @@ export function Footer() {
         <div className="grid grid-cols-2 gap-x-8 gap-y-10 lg:grid-cols-5">
           {/* Brand */}
           <div className="col-span-2 lg:col-span-1">
-            <div className="mb-3 text-2xl font-bold">
-              <span className="text-[#F97316]">Sata</span>
-              <span className="text-[#7C3AED]">Robo</span>
-            </div>
+            <Link
+              href="/"
+              aria-label="Sata Robo — Trang chủ"
+              className="inline-flex items-center bg-white rounded-xl px-3 py-2 mb-4 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <Image
+                src="/brand/logo-satarobo.jpg"
+                alt="Sata Robo"
+                width={160}
+                height={48}
+                className="h-10 w-auto object-contain"
+              />
+            </Link>
             <p className="text-sm text-gray-400 mb-4">
               Hệ sinh thái Robotics & STEM giáo dục hàng đầu tại Đà Nẵng
             </p>

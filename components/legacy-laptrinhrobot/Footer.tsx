@@ -33,7 +33,7 @@ export default function Footer() {
           <div className="flex items-center justify-between mb-5 pb-5 border-b border-white/10">
             <div>
               <Image
-                src="/laptrinhrobot/LogoSataROBO.png"
+                src="/brand/logo-satarobo.jpg"
                 alt="Sata Robo"
                 className="h-10 w-auto object-contain bg-white rounded-lg p-1.5"
                 width={140}
@@ -96,7 +96,7 @@ export default function Footer() {
           <div className="lg:col-span-1">
             <div className="flex items-center mb-4">
               <Image
-                src="/laptrinhrobot/LogoSataROBO.png"
+                src="/brand/logo-satarobo.jpg"
                 alt="Sata Robo"
                 className="h-14 w-auto object-contain bg-white rounded-xl p-2"
                 width={180}

@@ -25,10 +25,11 @@ export default function Header() {
       <div className="container lp-header__inner">
         <a href="/" className="lp-header__logo" aria-label="Sata Robo — Trang chủ">
           <Image
-            src="/luyenthirobosim/LogoSataROBO.png"
+            src="/brand/logo-satarobo.jpg"
             alt="Logo Sata Robo"
-            width={52}
-            height={52}
+            width={80}
+            height={48}
+            className="h-12 w-auto object-contain"
           />
         </a>
 

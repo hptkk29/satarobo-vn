@@ -11,7 +11,7 @@ export function organizationJsonLd() {
     name: SATA_ROBO_CONTACT.shortName,
     alternateName: SATA_ROBO_CONTACT.companyName,
     url: BASE_URL,
-    logo: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
+    logo: `${BASE_URL}/brand/logo-satarobo.jpg`,
     description: 'Học viện Robotics & STEM hàng đầu Đà Nẵng',
     taxID: SATA_ROBO_CONTACT.taxCode,
     contactPoint: [
@@ -99,7 +99,7 @@ export function localBusinessJsonLd(center: CenterInput) {
     email: center.email ?? undefined,
     url: BASE_URL,
     openingHours: 'Mo-Su 08:00-21:00',
-    image: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
+    image: `${BASE_URL}/brand/logo-satarobo.jpg`,
   }
 }
 
@@ -168,7 +168,7 @@ export function blogPostingJsonLd(post: BlogPostingInput) {
       name: 'Sata Robo',
       logo: {
         '@type': 'ImageObject',
-        url: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
+        url: `${BASE_URL}/brand/logo-satarobo.jpg`,
       },
     },
     description: post.excerpt ?? undefined,
@@ -236,7 +236,7 @@ export function jobPostingJsonLd(job: JobForJsonLd) {
       '@type': 'Organization',
       name: 'Công ty Cổ phần Công nghệ Giáo dục Sata Robo',
       sameAs: BASE_URL,
-      logo: `${BASE_URL}/images/courses/lap-trinh-robot/LogoSataROBO.png`,
+      logo: `${BASE_URL}/brand/logo-satarobo.jpg`,
     },
     jobLocation: {
       '@type': 'Place',

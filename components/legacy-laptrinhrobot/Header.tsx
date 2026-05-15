@@ -20,10 +20,10 @@ export default function Header() {
         <div className="flex items-center justify-between h-16 sm:h-18">
           <a href="/" className="flex items-center no-tap-highlight" aria-label="Sata Robo">
             <Image
-              src="/laptrinhrobot/LogoSataROBO.png"
+              src="/brand/logo-satarobo.jpg"
               alt="Sata Robo"
               className="h-11 sm:h-14 w-auto object-contain"
-              width={140}
+              width={180}
               height={56}
             />
           </a>

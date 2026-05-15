@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Menu, X, Phone, ArrowRight } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -45,15 +46,17 @@ export function Header() {
         {/* Logo */}
         <Link
           href="/"
-          className="flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none rounded-md"
+          aria-label="Sata Robo — Trang chủ"
+          className="flex items-center focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none rounded-md"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-purple-600 text-white font-black text-sm shadow-md shadow-orange-500/30">
-            SR
-          </span>
-          <span className="hidden sm:inline text-xl font-black tracking-tight">
-            <span className="text-[#F97316]">Sata</span>
-            <span className="text-[#7C3AED]">Robo</span>
-          </span>
+          <Image
+            src="/brand/logo-satarobo.jpg"
+            alt="Sata Robo"
+            width={160}
+            height={48}
+            priority
+            className="h-9 w-auto object-contain"
+          />
         </Link>
 
         {/* Desktop nav */}
@@ -110,15 +113,16 @@ export function Header() {
               <Link
                 href="/"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2"
+                aria-label="Sata Robo — Trang chủ"
+                className="flex items-center"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-purple-600 text-white font-black text-sm">
-                  SR
-                </span>
-                <span className="text-xl font-black">
-                  <span className="text-[#F97316]">Sata</span>
-                  <span className="text-[#7C3AED]">Robo</span>
-                </span>
+                <Image
+                  src="/brand/logo-satarobo.jpg"
+                  alt="Sata Robo"
+                  width={160}
+                  height={48}
+                  className="h-9 w-auto object-contain"
+                />
               </Link>
               <button
                 onClick={() => setOpen(false)}

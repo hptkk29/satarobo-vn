@@ -11,7 +11,7 @@ export default function Footer() {
         <div className="footer-grid">
           <div className="footer-brand">
             <Image
-              src="/luyenthirobosim/LogoSataROBO.png"
+              src="/brand/logo-satarobo.jpg"
               alt="Logo Sata Robo"
               className="footer-brand-logo"
               loading="lazy"
