@@ -68,3 +68,8 @@ secret-*
 .claude/settings.local.json
 .claude/cache/
 .claude/.logs/
+
+# Phase 4.UI.FIX.3 — Legacy source reference (do NOT commit)
+/_legacy-sources/
+/_temp-uploads/
+
