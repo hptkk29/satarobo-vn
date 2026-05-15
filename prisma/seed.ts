@@ -81,125 +81,75 @@ async function main() {
   ]);
   console.log(`✅ ${centers.length} trung tâm đã tạo`);
 
-  // ─── Courses ─────────────────────────────────────────────────────────────────
-  // Legacy 2 courses (giữ để tránh break /khoa-hoc/lap-trinh-robot, luyen-thi-robosim)
-  // + 4 new SP cards cho marketing site (Phase 4.UI.FINAL).
-  const courses = await Promise.all([
-    db.course.upsert({
-      where: { slug: "lap-trinh-robot" },
-      update: { isPublished: false, displayOrder: 99 },
-      create: {
-        slug: "lap-trinh-robot",
-        name: "Khoá Lập trình Robot Offline",
-        type: "OFFLINE",
-        description:
-          "Khoá học lập trình robot thực tế cho học sinh lớp 1-8. Học viên được thực hành trực tiếp với robot, phát triển tư duy logic và kỹ năng STEM.",
-        isActive: true,
-        isPublished: false, // legacy — không hiện trong product grid mới
-        displayOrder: 99,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "luyen-thi-robosim" },
-      update: { isPublished: false, displayOrder: 99 },
-      create: {
-        slug: "luyen-thi-robosim",
-        name: "Khoá Luyện thi RoboSim Online",
-        type: "ONLINE",
-        description:
-          "Khoá luyện thi RoboSim trực tuyến.",
-        isActive: true,
-        isPublished: false,
-        displayOrder: 99,
-      },
-    }),
-    // ─── 4 SP marketing courses ───────────────────────────────────────────────
-    db.course.upsert({
-      where: { slug: "sp1" },
-      update: {},
-      create: {
-        slug: "sp1",
-        code: "SP1",
-        name: "Robosim Master",
-        type: "ONLINE",
-        description:
-          "Khoá video online học robotics trên trình duyệt. Platform mô phỏng cuộc thi RoboSim đầu tiên tại Việt Nam — 4,000+ học viên đã luyện thi.",
-        shortDescription:
-          "Khoá video online học robotics trên trình duyệt. Platform mô phỏng cuộc thi đầu tiên tại Việt Nam.",
-        price: 2400000,
-        priceDisplay: "2,400,000đ",
-        duration: 180,
-        durationDisplay: "6 tháng",
-        studentCount: 2400,
-        displayOrder: 1,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "sp2" },
-      update: {},
-      create: {
-        slug: "sp2",
-        code: "SP2",
-        name: "Offline Class",
-        type: "OFFLINE",
-        description:
-          "Lớp học robotics offline tại 4 cơ sở Đà Nẵng. Robot thật, giảng viên 1:1, sĩ số ≤ 8 học viên/lớp.",
-        shortDescription:
-          "Lớp học robotics tại 4 cơ sở Đà Nẵng. Robot thật, lớp nhỏ, giáo viên 1:1.",
-        price: 6500000,
-        priceDisplay: "6,500,000đ",
-        duration: 90,
-        durationDisplay: "3 tháng",
-        studentCount: 800,
-        displayOrder: 2,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "sp3" },
-      update: {},
-      create: {
-        slug: "sp3",
-        code: "SP3",
-        name: "Sata Inno School",
-        type: "OFFLINE",
-        description:
-          "Giải pháp Lab STEM & Robotics tổng thể cho trường K-12: trang bị phòng lab, chương trình tích hợp, đào tạo giáo viên, KPI dashboard.",
-        shortDescription:
-          "Giải pháp Lab STEM cho trường K-12: phòng lab, chương trình, đào tạo giáo viên.",
-        priceDisplay: "Liên hệ",
-        durationDisplay: "Tuỳ chỉnh",
-        studentCount: 0,
-        displayOrder: 3,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-    db.course.upsert({
-      where: { slug: "sp4" },
-      update: {},
-      create: {
-        slug: "sp4",
-        code: "SP4",
-        name: "SATAGO Trải nghiệm",
-        type: "HYBRID",
-        description:
-          "Tour ngoại khoá Robotics + STEM 1-3 ngày cho học sinh: tham quan, thực hành, lắp ráp robot. Có thể kết hợp với SP3.",
-        shortDescription:
-          "Tour ngoại khoá robotics + STEM 1-3 ngày kết hợp khám phá và thực hành.",
-        priceDisplay: "Liên hệ",
-        durationDisplay: "1-3 ngày",
-        studentCount: 0,
-        displayOrder: 4,
-        isActive: true,
-        isPublished: true,
-      },
-    }),
-  ]);
-  console.log(`✅ ${courses.length} khoá học đã tạo (2 legacy + 4 SP marketing)`);
+  // ─── Courses (Phase 4.UI.FIX.1) ──────────────────────────────────────────
+  // Focus 2 khoá học chính. Loại bỏ 4 SP marketing + 2 legacy hyphenated slugs.
+  const coursesData = [
+    {
+      slug: "laptrinhrobot",
+      code: "LTR",
+      name: "Lập trình Robot",
+      type: "OFFLINE" as const,
+      shortDescription:
+        "Khoá học toàn diện về lập trình & điều khiển robot cho học sinh K-9. Tư duy logic, lập trình thực hành, dự án sáng tạo.",
+      description: `Khoá học Lập trình Robot là chương trình giáo dục STEM toàn diện dành cho học sinh từ K-9, giúp các em làm quen với:
+
+- Tư duy logic và lập trình cơ bản
+- Cấu trúc và nguyên lý hoạt động của robot
+- Lập trình robot thực hành với kit chuyên dụng
+- Phát triển tư duy giải quyết vấn đề
+
+Chương trình được thiết kế bài bản từ cơ bản đến nâng cao, học viên sẽ tự tay xây dựng và lập trình các robot từ đơn giản đến phức tạp.`,
+      priceDisplay: "Liên hệ tư vấn",
+      duration: 180,
+      durationDisplay: "6 tháng",
+      studentCount: 1200,
+      displayOrder: 1,
+      isActive: true,
+      isPublished: true,
+    },
+    {
+      slug: "luyenthirobosim",
+      code: "LTRS",
+      name: "Luyện thi Robosim",
+      type: "HYBRID" as const,
+      shortDescription:
+        "Chuẩn bị thi đấu Robotics chuyên nghiệp (RoboSim, WRO) cho học sinh có nền tảng. Mentor 1-1, mô phỏng chuyên sâu.",
+      description: `Luyện thi Robosim là chương trình chuyên sâu dành cho học viên muốn tham gia các cuộc thi Robotics cấp quốc gia và quốc tế (RoboSim, WRO, ...).
+
+Học viên sẽ được:
+- Luyện tập trên nền tảng mô phỏng Robosim chuyên nghiệp
+- Học chiến thuật giải quyết các challenge cuộc thi
+- Phát triển kỹ năng làm việc nhóm trong team thi
+- Hướng dẫn 1-1 bởi mentor có kinh nghiệm thi đấu
+
+Chương trình phù hợp cho học sinh đã có nền tảng lập trình robot cơ bản.`,
+      priceDisplay: "Liên hệ tư vấn",
+      duration: 120,
+      durationDisplay: "3-6 tháng",
+      studentCount: 800,
+      displayOrder: 2,
+      isActive: true,
+      isPublished: true,
+    },
+  ];
+
+  for (const data of coursesData) {
+    await db.course.upsert({
+      where: { slug: data.slug },
+      update: data,
+      create: data,
+    });
+  }
+
+  // Xoá courses không nằm trong list mới (sp1-4 + lap-trinh-robot/luyen-thi-robosim legacy).
+  // deleteMany an toàn vì lúc seed chưa có Lead/Class/Enrollment ref tới chúng.
+  const validSlugs = coursesData.map((c) => c.slug);
+  const deleted = await db.course.deleteMany({
+    where: { slug: { notIn: validSlugs } },
+  });
+  console.log(
+    `✅ ${coursesData.length} khoá học chính · removed ${deleted.count} legacy/SP courses`,
+  );
 
   // ─── SUPER_ADMIN ──────────────────────────────────────────────────────────────
   const hashedPassword = await bcrypt.hash("ChangeMe@2026!", 12);
