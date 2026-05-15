@@ -42,7 +42,7 @@ const SOCIALS = [
   {
     label: 'Zalo OA',
     Icon: MessageCircle,
-    href: 'https://zalo.me/0818823720',
+    href: 'https://zalo.me/0905250544',
     color: '#0068FF',
     bg: '#EBF4FF',
   },

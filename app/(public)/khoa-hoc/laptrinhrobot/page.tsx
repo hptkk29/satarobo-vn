@@ -54,8 +54,8 @@ export default async function LapTrinhRobotPage() {
         },
         {
           icon: MapPin,
-          title: "4 cơ sở Đà Nẵng",
-          desc: "Hoà Cường, Hải Châu, Sơn Trà, Ngũ Hành Sơn — chọn cơ sở gần nhà nhất",
+          title: "2 cơ sở Hải Châu, Đà Nẵng",
+          desc: "211 Nguyễn Hữu Thọ + 114 Hoàng Diệu (Hải Châu) — chọn cơ sở gần nhà nhất",
         },
       ]}
       curriculum={[

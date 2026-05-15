@@ -8,78 +8,62 @@ async function main() {
   console.log("🌱 Bắt đầu seed data...");
 
   // ─── Centers ─────────────────────────────────────────────────────────────────
-  const centers = await Promise.all([
-    db.center.upsert({
-      where: { id: "center-hoa-cuong" },
-      update: {},
-      create: {
-        id: "center-hoa-cuong",
-        name: "Sata Robo — Hoà Cường",
-        address: "258 Lê Thanh Nghị, Hoà Cường Nam, Hải Châu, Đà Nẵng",
-        phone: "0818823720",
-        email: "satarobo@gmail.com",
-      },
-    }),
-    db.center.upsert({
-      where: { id: "center-hai-chau" },
-      update: {},
-      create: {
-        id: "center-hai-chau",
-        name: "Sata Robo — Hải Châu",
-        address: "Quận Hải Châu, Đà Nẵng (sắp khai trương)",
-        phone: "0818823720",
-      },
-    }),
-    db.center.upsert({
-      where: { id: "center-son-tra" },
-      update: {},
-      create: {
-        id: "center-son-tra",
-        name: "Sata Robo — Sơn Trà",
-        address: "Quận Sơn Trà, Đà Nẵng (sắp khai trương)",
-        phone: "0818823720",
-      },
-    }),
-    db.center.upsert({
-      where: { id: "center-ngu-hanh-son" },
-      update: {},
-      create: {
-        id: "center-ngu-hanh-son",
-        name: "Sata Robo — Ngũ Hành Sơn",
-        address: "Quận Ngũ Hành Sơn, Đà Nẵng (sắp khai trương)",
-        phone: "0818823720",
-      },
-    }),
-    db.center.upsert({
-      where: { id: "center-thanh-khe" },
-      update: {
-        name: "Sata Robo — Thanh Khê",
-        address: "269 Điện Biên Phủ, Thanh Khê, Đà Nẵng",
-        phone: "0818823720",
-      },
-      create: {
-        id: "center-thanh-khe",
-        name: "Sata Robo — Thanh Khê",
-        address: "269 Điện Biên Phủ, Thanh Khê, Đà Nẵng",
-        phone: "0818823720",
-      },
-    }),
-    db.center.upsert({
-      where: { id: "center-hoa-khe" },
-      update: {
-        name: "Sata Robo — Hoà Khê",
-        address: "232 Nguyễn Phước Lan, Hoà Khê, Đà Nẵng",
-        phone: "0818823720",
-      },
-      create: {
-        id: "center-hoa-khe",
-        name: "Sata Robo — Hoà Khê",
-        address: "232 Nguyễn Phước Lan, Hoà Khê, Đà Nẵng",
-        phone: "0818823720",
-      },
-    }),
-  ]);
-  console.log(`✅ ${centers.length} trung tâm đã tạo`);
+  // 2 cơ sở mới (Phase 4.UI.FIX.2). Loại bỏ cơ sở cũ.
+  const centersData = [
+    {
+      id: "center-nguyen-huu-tho",
+      name: "Cơ sở 1 - Hải Châu (Trụ sở chính)",
+      address: "211 Nguyễn Hữu Thọ, Đà Nẵng",
+      phone: "0905250544",
+      email: "SataROBO@gmail.com",
+    },
+    {
+      id: "center-hoang-dieu",
+      name: "Cơ sở 2 - Hải Châu",
+      address: "114 Hoàng Diệu, Đà Nẵng",
+      phone: "0905250544",
+      email: "SataROBO@gmail.com",
+    },
+  ];
+
+  for (const data of centersData) {
+    await db.center.upsert({
+      where: { id: data.id },
+      update: data,
+      create: data,
+    });
+  }
+  const validCenterIds = centersData.map((c) => c.id);
+
+  // Re-point FK của User/Lead/Class/Student về HQ mới trước khi xoá cơ sở cũ
+  // (relation onDelete mặc định Restrict, nên cần tay làm thế).
+  const newHqId = centersData[0].id;
+  await db.user.updateMany({
+    where: { centerId: { notIn: validCenterIds, not: null } },
+    data: { centerId: newHqId },
+  });
+  await db.lead.updateMany({
+    where: { centerId: { notIn: validCenterIds, not: null } },
+    data: { centerId: newHqId },
+  });
+  await db.class.updateMany({
+    where: { centerId: { notIn: validCenterIds, not: null } },
+    data: { centerId: newHqId },
+  });
+  await db.student.updateMany({
+    where: { centerId: { notIn: validCenterIds, not: null } },
+    data: { centerId: newHqId },
+  });
+  // Employee.center has onDelete: SetNull — đặt về HQ luôn cho gọn
+  await db.employee.updateMany({
+    where: { centerId: { notIn: validCenterIds, not: null } },
+    data: { centerId: newHqId },
+  });
+
+  const removedCenters = await db.center.deleteMany({
+    where: { id: { notIn: validCenterIds } },
+  });
+  console.log(`✅ ${centersData.length} cơ sở đã tạo · removed ${removedCenters.count} cơ sở cũ`);
 
   // ─── Courses (Phase 4.UI.FIX.1) ──────────────────────────────────────────
   // Focus 2 khoá học chính. Loại bỏ 4 SP marketing + 2 legacy hyphenated slugs.
@@ -161,7 +145,7 @@ Chương trình phù hợp cho học sinh đã có nền tảng lập trình rob
       name: "Hồ Đắc Phúc",
       password: hashedPassword,
       role: "SUPER_ADMIN",
-      centerId: "center-hoa-cuong",
+      centerId: "center-nguyen-huu-tho",
       isActive: true,
     },
   });

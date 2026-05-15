@@ -101,4 +101,4 @@ Sata Robo có quyền thay đổi Điều khoản này bất kỳ lúc nào. Phi
 Mọi câu hỏi về Điều khoản:
 
 - 📧 Email: phuc@satarobo.vn
-- 📞 Hotline: 0818.823.720
+- 📞 Hotline: 0905.250.544

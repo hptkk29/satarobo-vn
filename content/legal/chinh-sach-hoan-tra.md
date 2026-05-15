@@ -58,8 +58,8 @@ Trường hợp phụ huynh chủ động rút học:
 ## 5. Liên hệ yêu cầu hoàn trả
 
 - 📧 Email: cskh@satarobo.vn
-- 📞 Hotline: 0818.823.720 (Thứ 2 – Thứ 7, 8:00 – 20:00)
-- 🏢 Trực tiếp tại cơ sở: 258 Lê Thanh Nghị, Hoà Cường, Đà Nẵng
+- 📞 Hotline: 0905.250.544 (Thứ 2 – Thứ 7, 8:00 – 20:00)
+- 🏢 Trực tiếp tại cơ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng (Trụ sở chính)
 
 ## 6. Ghi chú
 

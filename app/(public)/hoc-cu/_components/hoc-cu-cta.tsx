@@ -18,7 +18,7 @@ export function HocCuCta() {
             </p>
           </div>
           <a
-            href="tel:0818823720"
+            href="tel:0905250544"
             className="inline-flex items-center gap-3 px-7 py-4 rounded-2xl text-white font-extrabold text-lg whitespace-nowrap transition hover:opacity-90 hover:-translate-y-0.5 flex-shrink-0"
             style={{
               background: 'linear-gradient(135deg, #F97316, #FBBF24)',
@@ -26,7 +26,7 @@ export function HocCuCta() {
             }}
           >
             <Phone className="w-5 h-5" />
-            0818.823.720
+            0905.250.544
           </a>
         </div>
       </div>

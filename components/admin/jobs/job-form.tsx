@@ -95,13 +95,13 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
         <div className="space-y-4">
           <div>
             <label className={labelClass}>Tiêu đề *</label>
-            <input className={fieldClass} {...form.register('title')} placeholder="Ví dụ: Giáo viên Robotics cơ sở Hoà Cường" />
+            <input className={fieldClass} {...form.register('title')} placeholder="Ví dụ: Giáo viên Robotics cơ sở Nguyễn Hữu Thọ" />
             {errors.title && <p className={errorClass}>{errors.title.message}</p>}
           </div>
 
           <div>
             <label className={labelClass}>Slug (URL) *</label>
-            <input className={fieldClass} {...form.register('slug')} placeholder="giao-vien-robotics-hoa-cuong" />
+            <input className={fieldClass} {...form.register('slug')} placeholder="giao-vien-robotics-hai-chau" />
             {errors.slug && <p className={errorClass}>{errors.slug.message}</p>}
             <p className="mt-1 text-xs text-gray-400">URL: /tuyen-dung/{form.watch('slug') || '...'}</p>
           </div>

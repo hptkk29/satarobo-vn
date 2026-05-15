@@ -77,7 +77,7 @@ export default function HocCuPage() {
               8 bộ học cụ thiết kế riêng cho từng độ tuổi — đồng bộ với chương trình Sata Robo. Hỗ trợ phụ huynh trang bị cho con học tại nhà.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <CTAPrimary href="https://zalo.me/0818823720" target="_blank">
+              <CTAPrimary href="https://zalo.me/0905250544" target="_blank">
                 <MessageCircle className="w-4 h-4" />
                 <span>Tư vấn qua Zalo</span>
               </CTAPrimary>
@@ -117,7 +117,7 @@ export default function HocCuPage() {
             Chat Zalo trực tiếp với chuyên gia — tư vấn 1-1 miễn phí về sản phẩm phù hợp lứa tuổi của con
           </p>
           <CTAPrimary
-            href="https://zalo.me/0818823720"
+            href="https://zalo.me/0905250544"
             target="_blank"
             size="lg"
             magnetic

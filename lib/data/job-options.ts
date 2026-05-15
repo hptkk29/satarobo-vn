@@ -46,5 +46,5 @@ export const HR_CONTACT = {
   phoneRaw: '0905250544',
   zaloUrl: 'https://zalo.me/0905250544',
   name: 'Ms. Trang',
-  address: '258 Lê Thanh Nghị, Hoà Cường, Đà Nẵng',
+  address: '211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng',
 } as const

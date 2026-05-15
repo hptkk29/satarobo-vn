@@ -1,17 +1,11 @@
 import Link from "next/link";
 import { MapPin, Phone, Mail } from "lucide-react";
-
-const CENTERS = [
-  { name: "Hoà Cường", address: "258 Lê Thanh Nghị, Hoà Cường, Đà Nẵng" },
-  { name: "Cơ sở 2", address: "Đà Nẵng (sắp thông báo)" },
-  { name: "Cơ sở 3", address: "Đà Nẵng (sắp thông báo)" },
-  { name: "Cơ sở 4", address: "Đà Nẵng (sắp thông báo)" },
-];
+import { SATA_ROBO_LOCATIONS, SATA_ROBO_CONTACT } from "@/lib/locations";
 
 const SOCIAL_LINKS = [
   {
     label: "Facebook",
-    href: "https://facebook.com/satarobo",
+    href: SATA_ROBO_CONTACT.facebook,
     bg: "bg-[#1877F2]",
     icon: (
       <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white" aria-hidden="true">
@@ -31,7 +25,7 @@ const SOCIAL_LINKS = [
   },
   {
     label: "YouTube",
-    href: "https://youtube.com/@satarobo",
+    href: SATA_ROBO_CONTACT.youtube,
     bg: "bg-[#FF0000]",
     icon: (
       <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white" aria-hidden="true">
@@ -41,7 +35,7 @@ const SOCIAL_LINKS = [
   },
   {
     label: "Zalo",
-    href: "https://zalo.me/0818823720",
+    href: SATA_ROBO_CONTACT.zalo,
     bg: "bg-[#0068FF]",
     icon: (
       <span className="text-white text-xs font-black leading-none" aria-hidden="true">
@@ -66,9 +60,9 @@ export function Footer() {
               Hệ sinh thái Robotics & STEM giáo dục hàng đầu tại Đà Nẵng
             </p>
             <p className="text-xs text-gray-500 mb-5">
-              Công ty Cổ phần Công nghệ Giáo dục Sata Robo
+              {SATA_ROBO_CONTACT.companyName}
               <br />
-              258 Lê Thanh Nghị, Hoà Cường, Đà Nẵng
+              {SATA_ROBO_LOCATIONS[0].address}
             </p>
             {/* Social icons */}
             <div className="flex gap-2">
@@ -152,7 +146,7 @@ export function Footer() {
             <ul className="space-y-2 text-sm">
               <li>
                 <a
-                  href="https://zalo.me/0818823720"
+                  href={SATA_ROBO_CONTACT.zalo}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-[#F97316] transition-colors"
@@ -182,13 +176,20 @@ export function Footer() {
           <div>
             <h4 className="mb-4 font-semibold text-white">Hệ thống cơ sở</h4>
             <ul className="space-y-3 text-sm">
-              {CENTERS.map((c) => (
-                <li key={c.name} className="flex gap-2">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#F97316]" />
+              {SATA_ROBO_LOCATIONS.map((loc) => (
+                <li key={loc.id} className="flex gap-2">
+                  <MapPin
+                    className={`mt-0.5 h-4 w-4 shrink-0 ${
+                      loc.isHQ ? "text-[#F97316]" : "text-[#7C3AED]"
+                    }`}
+                  />
                   <span>
-                    <span className="font-medium text-white">{c.name}:</span>
+                    <span className="font-medium text-white">
+                      {loc.name}
+                      {loc.isHQ && " (Trụ sở chính)"}
+                    </span>
                     <br />
-                    {c.address}
+                    {loc.address}
                   </span>
                 </li>
               ))}
@@ -197,14 +198,20 @@ export function Footer() {
             <ul className="mt-5 space-y-2 text-sm">
               <li className="flex items-center gap-2">
                 <Phone className="h-4 w-4 shrink-0 text-[#F97316]" />
-                <a href="tel:0818823720" className="hover:text-[#F97316] transition-colors">
-                  0818.823.720
+                <a
+                  href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
+                  className="hover:text-[#F97316] transition-colors"
+                >
+                  {SATA_ROBO_CONTACT.hotline}
                 </a>
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4 shrink-0 text-[#F97316]" />
-                <a href="mailto:satarobo@gmail.com" className="hover:text-[#F97316] transition-colors">
-                  satarobo@gmail.com
+                <a
+                  href={`mailto:${SATA_ROBO_CONTACT.emails.primary}`}
+                  className="hover:text-[#F97316] transition-colors"
+                >
+                  {SATA_ROBO_CONTACT.emails.primary}
                 </a>
               </li>
             </ul>
