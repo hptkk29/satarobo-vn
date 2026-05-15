@@ -141,6 +141,7 @@ export default async function CoursesPage() {
               title={c.name}
               description={c.shortDescription ?? c.description?.slice(0, 200) ?? ""}
               href={`/khoa-hoc/${c.slug}`}
+              imageUrl={c.thumbnail ?? undefined}
               price={c.priceDisplay ?? undefined}
               duration={c.durationDisplay ?? undefined}
               studentCount={c.studentCount > 0 ? c.studentCount : undefined}
