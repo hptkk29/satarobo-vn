@@ -9,21 +9,13 @@ export const pageImages = {
     src: "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=1600&q=80",
     alt: "Học sinh trẻ với laptop, học lập trình",
   },
-  sp1: {
-    src: "https://images.unsplash.com/photo-1573164574572-cb89e39749b4?w=1600&q=80",
-    alt: "Code trên màn hình — Robosim simulation",
-  },
-  sp2: {
+  laptrinhrobot: {
     src: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1600&q=80",
-    alt: "Lớp học robotics offline với học sinh",
+    alt: "Học sinh học lập trình robot tại lớp Sata Robo",
   },
-  sp3: {
-    src: "https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1600&q=80",
-    alt: "Modern school STEM lab",
-  },
-  sp4: {
-    src: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=1600&q=80",
-    alt: "Học sinh tham gia tour ngoại khoá",
+  luyenthirobosim: {
+    src: "https://images.unsplash.com/photo-1573164574572-cb89e39749b4?w=1600&q=80",
+    alt: "Luyện thi RoboSim — simulation trên trình duyệt",
   },
   aboutHero: {
     src: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1600&q=80",

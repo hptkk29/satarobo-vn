@@ -20,6 +20,8 @@ interface CourseCardProps {
   className?: string;
   /** Wrap với HoverLiftCard. Default true (Phase 4.UI.1.1). */
   liftOnHover?: boolean;
+  /** "large" mở rộng padding + typography cho 2-card layout. */
+  size?: "default" | "large";
 }
 
 // Course card với BorderBeam hover. Light background.
@@ -34,7 +36,9 @@ export function CourseCard({
   studentCount,
   className,
   liftOnHover = true,
+  size = "default",
 }: CourseCardProps) {
+  const isLarge = size === "large";
   const card = (
     <Link
       href={href}
@@ -77,39 +81,64 @@ export function CourseCard({
         )}
       </div>
 
-      <div className="p-6">
+      <div className={isLarge ? "p-8 md:p-10" : "p-6"}>
         <h3
           className={cn(
-            tokens.typography.heading.h4,
-            "mb-2 group-hover:text-orange-600 transition-colors line-clamp-1",
+            isLarge ? tokens.typography.heading.h3 : tokens.typography.heading.h4,
+            "mb-3 group-hover:text-orange-600 transition-colors",
+            isLarge ? "line-clamp-2" : "line-clamp-1",
           )}
         >
           {title}
         </h3>
-        <p className="text-sm text-neutral-600 leading-relaxed mb-4 line-clamp-2">
+        <p
+          className={cn(
+            "text-neutral-600 leading-relaxed mb-5",
+            isLarge ? "text-base line-clamp-3" : "text-sm line-clamp-2",
+          )}
+        >
           {description}
         </p>
 
-        <div className="flex items-center gap-4 text-xs text-neutral-500 mb-4">
+        <div
+          className={cn(
+            "flex items-center gap-4 text-neutral-500 mb-5",
+            isLarge ? "text-sm" : "text-xs",
+          )}
+        >
           {duration && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
+            <span className="flex items-center gap-1.5">
+              <Clock className={isLarge ? "w-4 h-4" : "w-3.5 h-3.5"} />
               {duration}
             </span>
           )}
           {studentCount && (
-            <span className="flex items-center gap-1">
-              <Users className="w-3.5 h-3.5" />
+            <span className="flex items-center gap-1.5">
+              <Users className={isLarge ? "w-4 h-4" : "w-3.5 h-3.5"} />
               {studentCount.toLocaleString()} học viên
             </span>
           )}
         </div>
 
         <div className="flex items-center justify-between">
-          {price && <span className="text-lg font-bold text-orange-600">{price}</span>}
-          <span className="ml-auto flex items-center gap-1 text-sm font-semibold text-purple-700 group-hover:gap-2 transition-all">
+          {price && (
+            <span
+              className={cn(
+                "font-bold text-orange-600",
+                isLarge ? "text-xl" : "text-lg",
+              )}
+            >
+              {price}
+            </span>
+          )}
+          <span
+            className={cn(
+              "ml-auto flex items-center gap-1 font-semibold text-purple-700 group-hover:gap-2 transition-all",
+              isLarge ? "text-base" : "text-sm",
+            )}
+          >
             Xem chi tiết
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className={isLarge ? "w-5 h-5" : "w-4 h-4"} />
           </span>
         </div>
       </div>
