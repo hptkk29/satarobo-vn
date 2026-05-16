@@ -363,26 +363,39 @@ model PageContent {
   @@index([slug])
 }
 
+enum ExperienceLevel {
+  ENTRY  // Mới ra trường, không yêu cầu kinh nghiệm
+  JUNIOR // 1-2 năm
+  MID    // 3-5 năm
+  SENIOR // 5+ năm
+  EXPERT // Chuyên gia 10+ năm
+}
+
 model JobPosting {
-  id           String    @id @default(cuid())
-  title        String
-  slug         String    @unique
-  department   String?
-  location     String?
-  type         String?
-  description  String    @db.Text
-  requirements String?   @db.Text
-  benefits     String?   @db.Text
-  salary       String?
-  salaryMin    Int?
-  salaryMax    Int?
-  salaryNote   String?
-  openings     Int       @default(1)
-  status       JobStatus @default(OPEN)
-  authorId     String?
-  closesAt     DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id               String           @id @default(cuid())
+  title            String
+  slug             String           @unique
+  department       String?
+  location         String?
+  type             String?
+  description      String           @db.Text
+  workingHours     String?
+  experienceLevel  ExperienceLevel?
+  responsibilities String[]         @default([])
+  requirements     String[]         @default([])
+  benefits         String[]         @default([])
+  salary           String?
+  salaryMin        Int?
+  salaryMax        Int?
+  salaryNote       String?
+  openings         Int              @default(1)
+  status           JobStatus        @default(OPEN)
+  authorId         String?
+  contactEmail     String?
+  contactPhone     String?
+  closesAt         DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   author       User?              @relation(fields: [authorId], references: [id])
   applications JobApplication[]
