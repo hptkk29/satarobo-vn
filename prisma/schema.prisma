@@ -903,6 +903,7 @@ model Employee {
   honors        Honor[]
   userAccount   User?         @relation("UserEmployee")
   roleAuditLogs RoleAuditLog[]
+  authoredQuestions Question[] @relation("QuestionAuthor")
 
   @@index([department])
   @@index([isActive])
@@ -1013,6 +1014,72 @@ model Lesson {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  questions    Question[]
+
   @@unique([curriculumId, order])
   @@index([curriculumId])
+}
+
+// ─── Phase E2 ─────────────────────────────────────────────────────────────
+// Question bank with 5 types. Choice (cascade) only used by MULTIPLE_CHOICE
+// + TRUE_FALSE; correctAnswer used by SHORT_ANSWER / CODE / ESSAY.
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  ESSAY
+  CODE
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+model Question {
+  id            String              @id @default(cuid())
+
+  questionCode  String?             @unique
+  type          QuestionType
+  text          String              @db.Text
+  explanation   String?             @db.Text
+
+  difficulty    QuestionDifficulty  @default(MEDIUM)
+  tags          String[]            @default([])
+
+  lessonId      String?
+  lesson        Lesson?             @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  // For SHORT_ANSWER / CODE / ESSAY
+  correctAnswer String?             @db.Text
+
+  // For MULTIPLE_CHOICE / TRUE_FALSE
+  choices       Choice[]
+
+  authorId      String?
+  author        Employee?           @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  isPublic      Boolean             @default(true)
+  notes         String?             @db.Text
+
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([lessonId])
+  @@index([type, difficulty])
+  @@index([authorId])
+}
+
+model Choice {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  order      Int
+  text       String   @db.Text
+  isCorrect  Boolean  @default(false)
+
+  @@unique([questionId, order])
 }
