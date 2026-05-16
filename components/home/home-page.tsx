@@ -35,6 +35,9 @@ import { Sparkles } from "@/components/design-system/effects/sparkles";
 import { EarlyBirdCountdown } from "@/components/home/early-bird-countdown";
 import { FAQSection } from "@/components/home/faq-section";
 import { HeroMain } from "@/components/sections/hero-main";
+import { TrustBadges } from "@/components/sections/trust-badges";
+import { UspGrid } from "@/components/sections/usp-grid";
+import { CourseTeaser } from "@/components/sections/course-teaser";
 
 // ============== Types ==============
 export interface MainCourseCard {
@@ -54,6 +57,12 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
          one-click rollback while F-UI-2.5/3/4 ship; remove once the new
          hero is validated in production. */}
       <HeroMain />
+      {/* F-UI-2.5: social proof + USP + course teaser ngay sau Hero để
+         build credibility sớm. Legacy sections (StatsBar, UuTheSection, …)
+         vẫn giữ — sẽ refactor / dedupe ở F-UI-3/4. */}
+      <TrustBadges />
+      <UspGrid />
+      <CourseTeaser />
       <StatsBar />
       <UuTheSection />
       <SixAdvantagesSection />
