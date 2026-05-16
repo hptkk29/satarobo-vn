@@ -533,19 +533,26 @@ model EnrollmentAuditLog {
 }
 
 model ClassSession {
-  id        String   @id @default(cuid())
-  classId   String
-  date      DateTime
-  topic     String?
-  notes     String?  @db.Text
+  id          String   @id @default(cuid())
+  classId     String
+  date        DateTime
+  topic       String?
+  notes       String?  @db.Text
+
+  // Phase E6 — link session to curriculum lesson for progress tracking
+  lessonId    String?
+  lessonNotes String?  @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   class       Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  lesson      Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   attendances Attendance[]
 
   @@index([classId])
   @@index([date])
+  @@index([lessonId])
 }
 
 model Attendance {
@@ -1023,10 +1030,11 @@ model Lesson {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  questions    Question[]
-  exams        Exam[]
-  documents    Document[]
-  assignments  Assignment[]
+  questions     Question[]
+  exams         Exam[]
+  documents     Document[]
+  assignments   Assignment[]
+  classSessions ClassSession[]
 
   @@unique([curriculumId, order])
   @@index([curriculumId])

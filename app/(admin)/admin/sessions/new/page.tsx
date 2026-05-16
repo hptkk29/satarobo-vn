@@ -9,17 +9,31 @@ interface Props {
 
 export default async function NewSessionPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const classes = await db.class.findMany({
-    where: { deletedAt: null, isActive: true },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      course: { select: { name: true } },
-      center: { select: { name: true } },
-    },
-    take: 200,
-  });
+  const [classes, lessons] = await Promise.all([
+    db.class.findMany({
+      where: { deletedAt: null, isActive: true },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        courseId: true,
+        course: { select: { name: true } },
+        center: { select: { name: true } },
+      },
+      take: 200,
+    }),
+    db.lesson.findMany({
+      where: { curriculum: { isActive: true } },
+      orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
+      select: {
+        id: true,
+        order: true,
+        title: true,
+        curriculum: { select: { name: true, courseId: true } },
+      },
+      take: 1000,
+    }),
+  ]);
 
   return (
     <div>
@@ -29,8 +43,16 @@ export default async function NewSessionPage({ searchParams }: Props) {
         classes={classes.map((c) => ({
           id: c.id,
           name: c.name,
+          courseId: c.courseId,
           courseName: c.course.name,
           centerName: c.center?.name ?? null,
+        }))}
+        lessons={lessons.map((l) => ({
+          id: l.id,
+          order: l.order,
+          title: l.title,
+          curriculumName: l.curriculum.name,
+          courseId: l.curriculum.courseId,
         }))}
       />
     </div>

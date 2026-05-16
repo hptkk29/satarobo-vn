@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
@@ -94,9 +95,17 @@ export default async function EditClassPage({ params }: Props) {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">
-        Sửa lớp: <span className="font-bold text-orange-600">{cls.name}</span>
-      </h1>
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="text-3xl font-black text-neutral-900">
+          Sửa lớp: <span className="font-bold text-orange-600">{cls.name}</span>
+        </h1>
+        <Link
+          href={`/admin/classes/${cls.id}/progress`}
+          className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+        >
+          📊 Tiến độ lớp
+        </Link>
+      </div>
       <ClassForm
         cls={formValue}
         courses={courses}

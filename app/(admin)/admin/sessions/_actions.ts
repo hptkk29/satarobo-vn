@@ -14,6 +14,8 @@ const sessionSchema = z.object({
   date: z.date({ message: "Ngày học không hợp lệ" }),
   topic: z.string().trim().optional(),
   notes: z.string().trim().optional(),
+  lessonId: z.string().trim().optional(),
+  lessonNotes: z.string().trim().optional(),
 });
 
 function emptyToUndefined(value: FormDataEntryValue | null): string | undefined {
@@ -50,6 +52,8 @@ function readForm(formData: FormData) {
     date: dateValue ?? new Date(NaN), // forces zod fail if missing
     topic: emptyToUndefined(formData.get("topic")),
     notes: emptyToUndefined(formData.get("notes")),
+    lessonId: emptyToUndefined(formData.get("lessonId")),
+    lessonNotes: emptyToUndefined(formData.get("lessonNotes")),
   };
 }
 
@@ -67,6 +71,8 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
     date: s.date,
     topic: emptyToNull(s.topic),
     notes: emptyToNull(s.notes),
+    lessonNotes: emptyToNull(s.lessonNotes),
+    ...(s.lessonId ? { lesson: { connect: { id: s.lessonId } } } : {}),
   };
 
   try {
@@ -94,6 +100,10 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
     date: s.date,
     topic: emptyToNull(s.topic),
     notes: emptyToNull(s.notes),
+    lessonNotes: emptyToNull(s.lessonNotes),
+    lesson: s.lessonId
+      ? { connect: { id: s.lessonId } }
+      : { disconnect: true },
   };
 
   try {

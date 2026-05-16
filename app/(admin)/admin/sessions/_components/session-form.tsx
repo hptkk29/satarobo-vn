@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { createSession, updateSession } from "../_actions";
@@ -11,18 +11,30 @@ export type SessionFormValue = {
   date: Date;
   topic: string | null;
   notes: string | null;
+  lessonId: string | null;
+  lessonNotes: string | null;
 };
 
 export interface ClassOption {
   id: string;
   name: string;
+  courseId: string;
   courseName: string;
   centerName: string | null;
+}
+
+export interface LessonOption {
+  id: string;
+  order: number;
+  title: string;
+  curriculumName: string;
+  courseId: string;
 }
 
 interface Props {
   session?: SessionFormValue;
   classes: ClassOption[];
+  lessons?: LessonOption[];
   defaultClassId?: string;
 }
 
@@ -44,10 +56,43 @@ function toDateTimeLocal(d: Date | null): string {
   );
 }
 
-export function SessionForm({ session, classes, defaultClassId }: Props) {
+export function SessionForm({
+  session,
+  classes,
+  lessons = [],
+  defaultClassId,
+}: Props) {
   const router = useRouter();
   const isEdit = Boolean(session);
   const [error, setError] = useState<string | null>(null);
+  const [classId, setClassId] = useState<string>(
+    session?.classId ?? defaultClassId ?? "",
+  );
+  const [lessonId, setLessonId] = useState<string>(session?.lessonId ?? "");
+
+  const selectedCourseId = useMemo(() => {
+    const cls = classes.find((c) => c.id === classId);
+    return cls?.courseId ?? null;
+  }, [classes, classId]);
+
+  const availableLessons = useMemo(() => {
+    if (!selectedCourseId) return [];
+    return lessons.filter((l) => l.courseId === selectedCourseId);
+  }, [lessons, selectedCourseId]);
+
+  function onClassChange(value: string) {
+    setClassId(value);
+    // If the selected lesson is no longer valid for the new class, clear it.
+    const cls = classes.find((c) => c.id === value);
+    if (!cls) {
+      setLessonId("");
+      return;
+    }
+    const stillValid = lessons.some(
+      (l) => l.id === lessonId && l.courseId === cls.courseId,
+    );
+    if (!stillValid) setLessonId("");
+  }
 
   async function action(formData: FormData) {
     setError(null);
@@ -72,7 +117,8 @@ export function SessionForm({ session, classes, defaultClassId }: Props) {
           </span>
           <select
             name="classId"
-            defaultValue={session?.classId ?? defaultClassId ?? ""}
+            value={classId}
+            onChange={(e) => onClassChange(e.target.value)}
             required
             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
           >
@@ -111,6 +157,47 @@ export function SessionForm({ session, classes, defaultClassId }: Props) {
             defaultValue={session?.topic ?? ""}
             placeholder="Vd: Buổi 5 — Điều khiển động cơ servo"
             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            Bài học trong giáo trình
+          </span>
+          <select
+            name="lessonId"
+            value={lessonId}
+            onChange={(e) => setLessonId(e.target.value)}
+            disabled={!classId}
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 disabled:bg-neutral-50"
+          >
+            <option value="">
+              {classId
+                ? "— Không gắn (buổi ôn tập, thi, sự kiện) —"
+                : "— Chọn lớp trước —"}
+            </option>
+            {availableLessons.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.curriculumName} — Bài {l.order}: {l.title}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-neutral-500">
+            Gắn bài học từ giáo trình active của khoá. Buổi không gắn vẫn được
+            tính vào điểm danh, nhưng không cộng vào "lesson coverage".
+          </p>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            Ghi chú riêng buổi này (vs template bài học)
+          </span>
+          <textarea
+            name="lessonNotes"
+            rows={2}
+            defaultValue={session?.lessonNotes ?? ""}
+            placeholder="VD: HS làm chậm phần motor — tuần sau ôn lại"
+            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
           />
         </label>
 

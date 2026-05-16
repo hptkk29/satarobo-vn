@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function EditSessionPage({ params }: Props) {
   const { id } = await params;
 
-  const [session, classes] = await Promise.all([
+  const [session, classes, lessons] = await Promise.all([
     db.classSession.findUnique({
       where: { id },
       include: { class: { select: { name: true } } },
@@ -22,10 +22,22 @@ export default async function EditSessionPage({ params }: Props) {
       select: {
         id: true,
         name: true,
+        courseId: true,
         course: { select: { name: true } },
         center: { select: { name: true } },
       },
       take: 200,
+    }),
+    db.lesson.findMany({
+      where: { curriculum: { isActive: true } },
+      orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
+      select: {
+        id: true,
+        order: true,
+        title: true,
+        curriculum: { select: { name: true, courseId: true } },
+      },
+      take: 1000,
     }),
   ]);
 
@@ -43,12 +55,22 @@ export default async function EditSessionPage({ params }: Props) {
           date: session.date,
           topic: session.topic,
           notes: session.notes,
+          lessonId: session.lessonId,
+          lessonNotes: session.lessonNotes,
         }}
         classes={classes.map((c) => ({
           id: c.id,
           name: c.name,
+          courseId: c.courseId,
           courseName: c.course.name,
           centerName: c.center?.name ?? null,
+        }))}
+        lessons={lessons.map((l) => ({
+          id: l.id,
+          order: l.order,
+          title: l.title,
+          curriculumName: l.curriculum.name,
+          courseId: l.curriculum.courseId,
         }))}
       />
     </div>
