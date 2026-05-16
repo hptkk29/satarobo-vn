@@ -150,6 +150,8 @@ model Room {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  classes      Class[]
+
   @@unique([centerId, code])
   @@index([centerId, status])
 }
@@ -199,7 +201,8 @@ model User {
   accounts      Account[]
   assignedLeads Lead[]         @relation("AssignedLeads")
   notes         Note[]
-  teacherClass  Class[]        @relation("TeacherClasses")
+  teacherClass    Class[]      @relation("TeacherClasses")
+  assistantClass  Class[]      @relation("AssistantClasses")
   jobPostings   JobPosting[]
 
   honorsCreated      Honor[]            @relation("HonorCreatedBy")
@@ -387,17 +390,47 @@ model Student {
   @@index([parentPhone])
 }
 
+enum ClassStatus {
+  PLANNED
+  RECRUITING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 model Class {
   id          String    @id @default(cuid())
+
+  // Identity
+  classCode   String?   @unique
   name        String
+  description String?   @db.Text
+
+  // Relations (existing target preserved: teacher → User)
   courseId    String
   centerId    String?
   teacherId   String?
-  schedule    String?
-  startDate   DateTime?
-  endDate     DateTime?
+  assistantId String?
+  roomId      String?
+
+  // Schedule
+  schedule     String?   // legacy free-text (e.g. "T2 T4 17:30")
+  startDate    DateTime?
+  endDate      DateTime?
+  scheduleDays Int[]     @default([])   // 0=CN, 1=T2, ..., 6=T7
+  startTime    String?                   // "HH:mm"
+  endTime      String?                   // "HH:mm"
+
+  // Capacity
   maxStudents Int       @default(20)
+  minStudents Int       @default(5)
+
+  // Status (new) + legacy isActive flag (kept for back-compat)
+  status      ClassStatus @default(PLANNED)
   isActive    Boolean   @default(true)
+
+  // Other
+  notes       String?   @db.Text
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -405,6 +438,8 @@ model Class {
   course      Course       @relation(fields: [courseId], references: [id])
   center      Center?      @relation(fields: [centerId], references: [id])
   teacher     User?        @relation("TeacherClasses", fields: [teacherId], references: [id])
+  assistant   User?        @relation("AssistantClasses", fields: [assistantId], references: [id])
+  room        Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
   enrollments Enrollment[]
   sessions    ClassSession[]
 
@@ -412,6 +447,9 @@ model Class {
   @@index([centerId])
   @@index([teacherId])
   @@index([deletedAt])
+  @@index([status, centerId])
+  @@index([courseId, status])
+  @@index([roomId])
 }
 
 model Enrollment {
