@@ -388,8 +388,9 @@ model Student {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  enrollments Enrollment[]
-  attendances Attendance[]
+  enrollments  Enrollment[]
+  attendances  Attendance[]
+  examAttempts ExamAttempt[]
 
   @@index([phone])
   @@index([centerId])
@@ -451,6 +452,7 @@ model Class {
   room        Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
   enrollments Enrollment[]
   sessions    ClassSession[]
+  exams       Exam[]
 
   @@index([courseId])
   @@index([centerId])
@@ -903,7 +905,9 @@ model Employee {
   honors        Honor[]
   userAccount   User?         @relation("UserEmployee")
   roleAuditLogs RoleAuditLog[]
-  authoredQuestions Question[] @relation("QuestionAuthor")
+  authoredQuestions Question[]    @relation("QuestionAuthor")
+  createdExams      Exam[]        @relation("ExamCreator")
+  gradedAttempts    ExamAttempt[] @relation("AttemptGrader")
 
   @@index([department])
   @@index([isActive])
@@ -1015,6 +1019,7 @@ model Lesson {
   updatedAt    DateTime   @updatedAt
 
   questions    Question[]
+  exams        Exam[]
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
@@ -1058,6 +1063,8 @@ model Question {
   // For MULTIPLE_CHOICE / TRUE_FALSE
   choices       Choice[]
 
+  examQuestions ExamQuestion[]
+
   authorId      String?
   author        Employee?           @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
@@ -1082,4 +1089,118 @@ model Choice {
   isCorrect  Boolean  @default(false)
 
   @@unique([questionId, order])
+}
+
+// ─── Phase E3 — Exam workflow ────────────────────────────────────────────
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+  REVIEWED
+}
+
+model Exam {
+  id              String       @id @default(cuid())
+
+  examCode        String?      @unique
+  title           String
+  description     String?      @db.Text
+
+  classId         String?
+  class           Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
+  lessonId        String?
+  lesson          Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  durationMinutes Int          @default(60)
+  totalPoints     Float        @default(10)
+  passingScore    Float        @default(5)
+  shuffleQuestions Boolean     @default(false)
+  shuffleChoices   Boolean     @default(false)
+
+  openAt          DateTime?
+  closeAt         DateTime?
+
+  status          ExamStatus   @default(DRAFT)
+
+  createdById     String?
+  createdBy       Employee?    @relation("ExamCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  examQuestions   ExamQuestion[]
+  attempts        ExamAttempt[]
+
+  @@index([status, classId])
+  @@index([lessonId])
+  @@index([createdById])
+}
+
+model ExamQuestion {
+  id          String   @id @default(cuid())
+  examId      String
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    Question @relation(fields: [questionId], references: [id])
+
+  order       Int
+  points      Float    @default(1)
+
+  answers     ExamAnswer[]
+
+  @@unique([examId, order])
+  @@unique([examId, questionId])
+  @@index([examId])
+}
+
+model ExamAttempt {
+  id           String        @id @default(cuid())
+  examId       String
+  exam         Exam          @relation(fields: [examId], references: [id])
+  studentId    String
+  student      Student       @relation(fields: [studentId], references: [id])
+
+  startedAt    DateTime      @default(now())
+  submittedAt  DateTime?
+  gradedAt     DateTime?
+
+  status       AttemptStatus @default(IN_PROGRESS)
+  totalScore   Float?
+  passed       Boolean?
+
+  gradedById   String?
+  gradedBy     Employee?     @relation("AttemptGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+  feedback     String?       @db.Text
+
+  answers      ExamAnswer[]
+
+  @@unique([examId, studentId])
+  @@index([status, examId])
+  @@index([studentId])
+}
+
+model ExamAnswer {
+  id              String       @id @default(cuid())
+  attemptId       String
+  attempt         ExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  examQuestionId  String
+  examQuestion    ExamQuestion @relation(fields: [examQuestionId], references: [id])
+
+  selectedChoiceIds String[]   @default([])
+  textAnswer        String?    @db.Text
+
+  isCorrect       Boolean?
+  score           Float?
+  graderNote      String?      @db.Text
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([attemptId, examQuestionId])
 }

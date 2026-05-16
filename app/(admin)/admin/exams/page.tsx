@@ -1,0 +1,252 @@
+import Link from "next/link";
+import { FileText, Plus } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { ExamStatus, type Prisma } from "@prisma/client";
+
+export const dynamic = "force-dynamic";
+
+const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+
+const STATUS_INFO: Record<ExamStatus, { label: string; color: string }> = {
+  DRAFT: { label: "Đang soạn", color: "bg-gray-100 text-gray-700" },
+  PUBLISHED: { label: "Đã publish", color: "bg-green-100 text-green-700" },
+  CLOSED: { label: "Đóng", color: "bg-amber-100 text-amber-700" },
+  ARCHIVED: { label: "Lưu trữ", color: "bg-neutral-100 text-neutral-500" },
+};
+
+const VALID_STATUSES = Object.values(ExamStatus);
+
+interface SearchParams {
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    classId?: string;
+  }>;
+}
+
+export default async function ExamsPage({ searchParams }: SearchParams) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!ALLOWED_ROLES.includes(session.user.role)) {
+    redirect("/admin/dashboard?error=unauthorized");
+  }
+
+  const sp = await searchParams;
+  const q = sp.q?.trim() || undefined;
+  const statusFilter =
+    sp.status && VALID_STATUSES.includes(sp.status as ExamStatus)
+      ? (sp.status as ExamStatus)
+      : undefined;
+  const classFilter = sp.classId?.trim() || undefined;
+
+  const where: Prisma.ExamWhereInput = {
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(classFilter ? { classId: classFilter } : {}),
+    ...(q
+      ? {
+          OR: [
+            { title: { contains: q, mode: "insensitive" as const } },
+            { examCode: { contains: q, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+
+  const [exams, classes] = await Promise.all([
+    db.exam.findMany({
+      where,
+      include: {
+        class: { select: { name: true, classCode: true } },
+        lesson: {
+          select: { order: true, title: true, curriculum: { select: { name: true } } },
+        },
+        _count: { select: { examQuestions: true, attempts: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+    }),
+    db.class.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, classCode: true },
+      take: 200,
+    }),
+  ]);
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+            <FileText className="h-6 w-6 text-[#7C3AED]" />
+            Đề thi
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {exams.length > 0 ? `${exams.length} đề thi` : "Chưa có đề thi nào"}
+          </p>
+        </div>
+        <Link
+          href="/admin/exams/new"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" />
+          Tạo đề mới
+        </Link>
+      </div>
+
+      <form
+        method="GET"
+        className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <input
+          name="q"
+          defaultValue={q}
+          placeholder="Tìm tiêu đề / mã đề..."
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+        />
+        <select
+          name="status"
+          defaultValue={statusFilter ?? ""}
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+        >
+          <option value="">Mọi trạng thái</option>
+          {Object.entries(STATUS_INFO).map(([v, { label }]) => (
+            <option key={v} value={v}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          name="classId"
+          defaultValue={classFilter ?? ""}
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+        >
+          <option value="">Mọi lớp</option>
+          {classes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.classCode ? `${c.classCode} · ` : ""}
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
+        >
+          Áp dụng bộ lọc
+        </button>
+      </form>
+
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-100">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Tiêu đề
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Lớp / Bài
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Trạng thái
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Câu
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Lượt
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Thời lượng
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Hành động
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {exams.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-12 text-center text-sm text-gray-400"
+                  >
+                    Chưa có đề thi nào khớp bộ lọc.{" "}
+                    <Link href="/admin/exams/new" className="text-[#7C3AED] hover:underline">
+                      Tạo mới →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                exams.map((e) => {
+                  const statusInfo = STATUS_INFO[e.status];
+                  return (
+                    <tr key={e.id} className="hover:bg-gray-50/60">
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-gray-900">{e.title}</div>
+                        {e.examCode && (
+                          <div className="text-xs text-gray-400 tabular-nums">
+                            {e.examCode}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-gray-600">
+                        {e.class && (
+                          <div className="font-medium">{e.class.name}</div>
+                        )}
+                        {e.lesson && (
+                          <div className="text-gray-400">
+                            {e.lesson.curriculum.name} — Bài {e.lesson.order}:{" "}
+                            {e.lesson.title}
+                          </div>
+                        )}
+                        {!e.class && !e.lesson && (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                        >
+                          {statusInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center text-sm tabular-nums text-gray-700">
+                        {e._count.examQuestions}
+                      </td>
+                      <td className="px-3 py-3 text-center text-sm tabular-nums text-gray-700">
+                        {e._count.attempts}
+                      </td>
+                      <td className="px-3 py-3 text-sm tabular-nums text-gray-500">
+                        {e.durationMinutes}′
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="inline-flex gap-1">
+                          <Link
+                            href={`/admin/exams/${e.id}/builder`}
+                            className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            Builder
+                          </Link>
+                          <Link
+                            href={`/admin/exams/${e.id}/attempts`}
+                            className="rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+                          >
+                            Bài làm
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
