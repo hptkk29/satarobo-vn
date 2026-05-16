@@ -388,9 +388,10 @@ model Student {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  enrollments  Enrollment[]
-  attendances  Attendance[]
-  examAttempts ExamAttempt[]
+  enrollments           Enrollment[]
+  attendances           Attendance[]
+  examAttempts          ExamAttempt[]
+  assignmentSubmissions AssignmentSubmission[]
 
   @@index([phone])
   @@index([centerId])
@@ -453,6 +454,7 @@ model Class {
   enrollments Enrollment[]
   sessions    ClassSession[]
   exams       Exam[]
+  assignments Assignment[]
 
   @@index([courseId])
   @@index([centerId])
@@ -909,6 +911,8 @@ model Employee {
   createdExams       Exam[]        @relation("ExamCreator")
   gradedAttempts     ExamAttempt[] @relation("AttemptGrader")
   uploadedDocuments  Document[]    @relation("DocumentUploader")
+  createdAssignments Assignment[]              @relation("AssignmentCreator")
+  gradedSubmissions  AssignmentSubmission[]    @relation("SubmissionGrader")
 
   @@index([department])
   @@index([isActive])
@@ -1022,6 +1026,7 @@ model Lesson {
   questions    Question[]
   exams        Exam[]
   documents    Document[]
+  assignments  Assignment[]
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
@@ -1245,8 +1250,103 @@ model Document {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
+  assignmentDocs AssignmentDocument[]
+
   @@index([lessonId])
   @@index([type])
   @@index([isPublic])
   @@index([uploadedById])
+}
+
+// ─── Phase E5 — Assignment + Submission workflow ─────────────────────────
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  LATE
+  GRADED
+}
+
+model Assignment {
+  id           String           @id @default(cuid())
+
+  title        String
+  description  String           @db.Text
+  instructions String?          @db.Text
+
+  classId      String
+  class        Class            @relation(fields: [classId], references: [id])
+  lessonId     String?
+  lesson       Lesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  totalPoints  Float            @default(10)
+
+  assignedAt   DateTime         @default(now())
+  dueAt        DateTime?
+
+  allowText    Boolean          @default(true)
+  allowFile    Boolean          @default(true)
+
+  status       AssignmentStatus @default(DRAFT)
+
+  createdById  String?
+  createdBy    Employee?        @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  submissions  AssignmentSubmission[]
+  documents    AssignmentDocument[]
+
+  @@index([status, classId])
+  @@index([dueAt])
+  @@index([createdById])
+}
+
+model AssignmentDocument {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  documentId   String
+  document     Document   @relation(fields: [documentId], references: [id])
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([assignmentId, documentId])
+  @@index([documentId])
+}
+
+model AssignmentSubmission {
+  id           String           @id @default(cuid())
+  assignmentId String
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
+  studentId    String
+  student      Student          @relation(fields: [studentId], references: [id])
+
+  textAnswer   String?          @db.Text
+  fileUrl      String?
+  fileName     String?
+  fileSize     Int?
+  mimeType     String?
+
+  submittedAt  DateTime?
+  status       SubmissionStatus @default(NOT_SUBMITTED)
+
+  score        Float?
+  feedback     String?          @db.Text
+  gradedAt     DateTime?
+  gradedById   String?
+  gradedBy     Employee?        @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([assignmentId, studentId])
+  @@index([status, assignmentId])
+  @@index([studentId])
 }
