@@ -1,11 +1,11 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { EmployeesAdminTable } from "@/components/admin/nhan-su/employees-admin-table";
-import type { Department } from "@prisma/client";
+import type { Department, EmploymentStatus, Prisma } from "@prisma/client";
 
 export const metadata = { title: "Quản lý nhân sự | Admin" };
 
@@ -17,10 +17,27 @@ const DEPARTMENTS: Department[] = [
   "IT",
   "HANH_CHANH_NHAN_SU",
   "KE_TOAN",
+  "TUYEN_SINH",
+  "GIAO_VU",
+  "GIANG_DAY",
 ];
 
+const STATUSES: EmploymentStatus[] = ["ACTIVE", "ON_LEAVE", "RESIGNED", "TERMINATED"];
+
+const STATUS_LABEL: Record<EmploymentStatus, string> = {
+  ACTIVE: "Đang làm",
+  ON_LEAVE: "Tạm nghỉ",
+  RESIGNED: "Đã nghỉ",
+  TERMINATED: "Cho nghỉ",
+};
+
 interface PageProps {
-  searchParams: Promise<{ department?: string; active?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    department?: string;
+    centerId?: string;
+    status?: string;
+  }>;
 }
 
 export default async function EmployeesAdminPage({ searchParams }: PageProps) {
@@ -32,17 +49,38 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
   }
 
   const params = await searchParams;
-  const where: { department?: Department; isActive?: boolean } = {};
-  if (params.department && DEPARTMENTS.includes(params.department as Department)) {
-    where.department = params.department as Department;
-  }
-  if (params.active === "true") where.isActive = true;
-  if (params.active === "false") where.isActive = false;
+  const q = params.q?.trim() ?? "";
+  const departmentParam =
+    params.department && DEPARTMENTS.includes(params.department as Department)
+      ? (params.department as Department)
+      : undefined;
+  const centerIdParam = params.centerId?.trim() ?? "";
+  const rawStatus = params.status;
+  const statusParam: EmploymentStatus | undefined =
+    rawStatus === "ALL"
+      ? undefined
+      : rawStatus && STATUSES.includes(rawStatus as EmploymentStatus)
+        ? (rawStatus as EmploymentStatus)
+        : "ACTIVE"; // default: only Active
 
-  const [employees, departmentCounts] = await Promise.all([
+  const where: Prisma.EmployeeWhereInput = {};
+  if (departmentParam) where.department = departmentParam;
+  if (centerIdParam) where.centerId = centerIdParam;
+  if (statusParam) where.status = statusParam;
+  if (q) {
+    where.OR = [
+      { fullName: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q } },
+      { email: { contains: q, mode: "insensitive" } },
+      { employeeCode: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  const [employees, departmentCounts, centers] = await Promise.all([
     db.employee.findMany({
       where,
       orderBy: [{ displayOrder: "asc" }, { fullName: "asc" }],
+      take: 200,
       include: {
         center: { select: { name: true } },
         manager: { select: { fullName: true } },
@@ -52,7 +90,12 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
     db.employee.groupBy({
       by: ["department"],
       _count: { id: true },
+      where: { status: "ACTIVE" },
+    }),
+    db.center.findMany({
       where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
     }),
   ]);
 
@@ -65,9 +108,11 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Quản lý nhân sự</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Tổng {employees.length} nhân sự
-            {params.department && ` · ${params.department.replace(/_/g, " ")}`}
-            {params.active === "false" && " · đã nghỉ"}
+            {employees.length} nhân sự
+            {departmentParam && ` · ${departmentParam.replace(/_/g, " ")}`}
+            {statusParam && ` · ${STATUS_LABEL[statusParam]}`}
+            {q && ` · "${q}"`}
+            {employees.length >= 200 && " (giới hạn 200, dùng filter để thu hẹp)"}
           </p>
         </div>
         {canCreate && (
@@ -81,12 +126,73 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         )}
       </div>
 
-      {/* Department filter chips */}
+      {/* Filter bar */}
+      <form
+        method="GET"
+        className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto]"
+      >
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            name="q"
+            defaultValue={q}
+            placeholder="Tìm theo tên, SĐT, email, mã NV..."
+            className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          />
+        </div>
+        <select
+          name="department"
+          defaultValue={departmentParam ?? ""}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+        >
+          <option value="">Tất cả phòng ban</option>
+          {DEPARTMENTS.map((d) => (
+            <option key={d} value={d}>
+              {d.replace(/_/g, " ")}
+            </option>
+          ))}
+        </select>
+        <select
+          name="centerId"
+          defaultValue={centerIdParam}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+        >
+          <option value="">Tất cả cơ sở</option>
+          {centers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select
+          name="status"
+          defaultValue={rawStatus ?? "ACTIVE"}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+        >
+          <option value="ALL">Mọi trạng thái</option>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABEL[s]}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+        >
+          Lọc
+        </button>
+      </form>
+
+      {/* Department chips (quick filter, kept for backward UX) */}
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href="/admin/nhan-su"
           className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            !params.department ? "bg-[#7C3AED] text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            !departmentParam
+              ? "bg-[#7C3AED] text-white"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
           Tất cả
@@ -96,7 +202,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
             key={d.department}
             href={`/admin/nhan-su?department=${d.department}`}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              params.department === d.department
+              departmentParam === d.department
                 ? "bg-[#7C3AED] text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}

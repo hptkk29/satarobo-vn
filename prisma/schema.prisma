@@ -687,6 +687,13 @@ enum ContractType {
   CHINH_THUC_KHONG_XAC_DINH
 }
 
+enum EmploymentStatus {
+  ACTIVE      // Đang làm
+  ON_LEAVE    // Tạm nghỉ (sản, ốm dài)
+  RESIGNED    // Đã nghỉ tự nguyện
+  TERMINATED  // Bị cho nghỉ
+}
+
 model Employee {
   id           String        @id @default(cuid())
 
@@ -718,6 +725,12 @@ model Employee {
   emergencyContact String?      // Tên - Quan hệ - SĐT
   notes            String?      @db.Text
 
+  // Phase C1 — extended HR fields
+  nationalId       String?      // CCCD / CMND
+  status           EmploymentStatus @default(ACTIVE)
+  subjects         String[]     @default([])  // Môn dạy (mainly for GIANG_DAY / DAO_TAO)
+  certifications   String[]     @default([])  // Chứng chỉ chuyên môn
+
   // Cơ sở làm việc
   centerId     String?
   center       Center?       @relation(fields: [centerId], references: [id], onDelete: SetNull)
@@ -744,6 +757,7 @@ model Employee {
   @@index([isActive])
   @@index([isPublic])
   @@index([isCEO])
+  @@index([status])
 }
 
 // ─── Phase 4.UI.FIX.2 ─────────────────────────────────────────────────────

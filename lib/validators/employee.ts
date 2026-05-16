@@ -27,6 +27,13 @@ export const ContractTypeEnum = z.enum([
   "CHINH_THUC_KHONG_XAC_DINH",
 ]);
 
+export const EmploymentStatusEnum = z.enum([
+  "ACTIVE",
+  "ON_LEAVE",
+  "RESIGNED",
+  "TERMINATED",
+]);
+
 // Helper: convert empty string → null, preserve type
 const nullableStr = z
   .string()
@@ -92,6 +99,12 @@ export const employeeCreateSchema = z.object({
   address: nullableStr,
   emergencyContact: nullableStr,
   notes: nullableStr,
+
+  // Phase C1 — extended HR fields
+  nationalId: nullableStr,
+  status: EmploymentStatusEnum.default("ACTIVE"),
+  subjects: z.array(z.string().trim().min(1)).default([]),
+  certifications: z.array(z.string().trim().min(1)).default([]),
 
   isCEO: z.coerce.boolean().default(false),
 });
