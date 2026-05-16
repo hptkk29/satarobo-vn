@@ -51,24 +51,43 @@ const PERKS = [
 ];
 
 export default async function TuyenDungPage() {
-  const jobs = await db.recruitment
+  const jobs = await db.jobPosting
     .findMany({
-      where: { isPublished: true },
-      orderBy: [{ isFeatured: "desc" }, { displayOrder: "asc" }],
+      where: { status: "OPEN" },
+      orderBy: [{ updatedAt: "desc" }],
       select: {
         id: true,
         slug: true,
         title: true,
         department: true,
         location: true,
-        jobType: true,
-        salaryRange: true,
-        experienceLevel: true,
-        summary: true,
-        isFeatured: true,
+        type: true,
+        salary: true,
+        salaryMin: true,
+        salaryMax: true,
+        salaryNote: true,
+        description: true,
       },
     })
     .catch(() => []);
+
+  const formatSalary = (j: {
+    salary: string | null;
+    salaryMin: number | null;
+    salaryMax: number | null;
+    salaryNote: string | null;
+  }): string | null => {
+    if (j.salary) return j.salary;
+    if (j.salaryMin && j.salaryMax) {
+      return `${j.salaryMin.toLocaleString("vi-VN")} – ${j.salaryMax.toLocaleString("vi-VN")} VND`;
+    }
+    return j.salaryNote ?? null;
+  };
+
+  const summarize = (text: string, max = 160): string => {
+    const stripped = text.replace(/\s+/g, " ").trim();
+    return stripped.length > max ? `${stripped.slice(0, max - 1)}…` : stripped;
+  };
 
   const breadcrumb = breadcrumbJsonLd([
     { name: "Trang chủ", url: "/" },
@@ -130,46 +149,52 @@ export default async function TuyenDungPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {jobs.map((j) => (
-              <Link
-                key={j.id}
-                href={`/tuyen-dung/${j.slug}`}
-                className="group block bg-white rounded-2xl border border-neutral-200 p-6 hover:border-orange-300 hover:shadow-xl hover:-translate-y-1 transition-all"
-              >
-                {j.isFeatured && (
-                  <div className="inline-block mb-3 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">
-                    ★ Nổi bật
-                  </div>
-                )}
-                <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
-                  {j.department}
-                </div>
-                <h3 className="text-lg font-bold text-neutral-900 mb-2 group-hover:text-orange-600 transition-colors line-clamp-2">
-                  {j.title}
-                </h3>
-                <p className="text-sm text-neutral-600 mb-4 line-clamp-2">{j.summary}</p>
-                <div className="space-y-1.5 text-xs text-neutral-600 mb-4">
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                    <span className="line-clamp-1">{j.location}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 shrink-0 text-purple-500" />
-                    <span>{j.jobType}</span>
-                  </div>
-                  {j.salaryRange && (
-                    <div className="flex items-center gap-1.5">
-                      <DollarSign className="h-3.5 w-3.5 shrink-0 text-green-600" />
-                      <span className="line-clamp-1">{j.salaryRange}</span>
+            {jobs.map((j) => {
+              const salaryLabel = formatSalary(j);
+              return (
+                <Link
+                  key={j.id}
+                  href={`/tuyen-dung/${j.slug}`}
+                  className="group block bg-white rounded-2xl border border-neutral-200 p-6 hover:border-orange-300 hover:shadow-xl hover:-translate-y-1 transition-all"
+                >
+                  {j.department && (
+                    <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
+                      {j.department}
                     </div>
                   )}
-                </div>
-                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 group-hover:gap-2.5 transition-all">
-                  Xem chi tiết
-                  <ArrowRight className="h-4 w-4" />
-                </span>
-              </Link>
-            ))}
+                  <h3 className="text-lg font-bold text-neutral-900 mb-2 group-hover:text-orange-600 transition-colors line-clamp-2">
+                    {j.title}
+                  </h3>
+                  <p className="text-sm text-neutral-600 mb-4 line-clamp-2">
+                    {summarize(j.description)}
+                  </p>
+                  <div className="space-y-1.5 text-xs text-neutral-600 mb-4">
+                    {j.location && (
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                        <span className="line-clamp-1">{j.location}</span>
+                      </div>
+                    )}
+                    {j.type && (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 shrink-0 text-purple-500" />
+                        <span>{j.type}</span>
+                      </div>
+                    )}
+                    {salaryLabel && (
+                      <div className="flex items-center gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                        <span className="line-clamp-1">{salaryLabel}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 group-hover:gap-2.5 transition-all">
+                    Xem chi tiết
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         )}
       </SectionBase>

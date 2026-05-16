@@ -5,24 +5,46 @@ import {
   ChevronRight,
   ArrowLeft,
   MapPin,
-  Clock,
   Briefcase,
   DollarSign,
   Phone,
   Mail,
+  Users,
+  CalendarClock,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { SATA_ROBO_CONTACT } from "@/lib/locations";
 
 export const revalidate = 60;
 
 const BASE_URL = "https://satarobo.vn";
+const HR_EMAIL = SATA_ROBO_CONTACT.emails.recruitment;
+const HR_PHONE = SATA_ROBO_CONTACT.hotline;
 
 export async function generateStaticParams() {
-  const jobs = await db.recruitment
-    .findMany({ where: { isPublished: true }, select: { slug: true } })
+  const jobs = await db.jobPosting
+    .findMany({ where: { status: "OPEN" }, select: { slug: true } })
     .catch(() => []);
   return jobs.map((j) => ({ slug: j.slug }));
+}
+
+function summarize(text: string, max = 160): string {
+  const stripped = text.replace(/\s+/g, " ").trim();
+  return stripped.length > max ? `${stripped.slice(0, max - 1)}…` : stripped;
+}
+
+function formatSalary(j: {
+  salary: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryNote: string | null;
+}): string | null {
+  if (j.salary) return j.salary;
+  if (j.salaryMin && j.salaryMax) {
+    return `${j.salaryMin.toLocaleString("vi-VN")} – ${j.salaryMax.toLocaleString("vi-VN")} VND`;
+  }
+  return j.salaryNote ?? null;
 }
 
 export async function generateMetadata({
@@ -31,25 +53,21 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const job = await db.recruitment.findUnique({ where: { slug } }).catch(() => null);
-  if (!job || !job.isPublished) return {};
+  const job = await db.jobPosting.findUnique({ where: { slug } }).catch(() => null);
+  if (!job || job.status !== "OPEN") return {};
 
+  const description = summarize(job.description, 160);
   return {
     title: `${job.title} | Tuyển dụng Sata Robo`,
-    description: job.summary.slice(0, 160),
+    description,
     alternates: { canonical: `${BASE_URL}/tuyen-dung/${slug}` },
     openGraph: {
       title: `${job.title} — Tuyển dụng Sata Robo`,
-      description: job.summary.slice(0, 160),
+      description,
       type: "article",
       url: `${BASE_URL}/tuyen-dung/${slug}`,
     },
   };
-}
-
-function asStringArray(v: unknown): string[] {
-  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
-  return [];
 }
 
 export default async function JobDetailPage({
@@ -59,12 +77,10 @@ export default async function JobDetailPage({
 }) {
   const { slug } = await params;
 
-  const job = await db.recruitment.findUnique({ where: { slug } }).catch(() => null);
-  if (!job || !job.isPublished) notFound();
+  const job = await db.jobPosting.findUnique({ where: { slug } }).catch(() => null);
+  if (!job || job.status !== "OPEN") notFound();
 
-  const responsibilities = asStringArray(job.responsibilities);
-  const requirements = asStringArray(job.requirements);
-  const benefits = asStringArray(job.benefits);
+  const salaryLabel = formatSalary(job);
 
   return (
     <>
@@ -109,37 +125,40 @@ export default async function JobDetailPage({
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <header className="bg-white rounded-2xl border border-neutral-200 p-6">
-              <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
-                {job.department}
-              </div>
+              {job.department && (
+                <div className="text-xs font-bold uppercase tracking-wider text-purple-600 mb-2">
+                  {job.department}
+                </div>
+              )}
               <h1 className="text-2xl md:text-3xl font-black text-neutral-900 mb-3">
                 {job.title}
               </h1>
-              <p className="text-neutral-700 leading-relaxed">{job.summary}</p>
 
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <MetaRow icon={MapPin} label="Địa điểm" value={job.location} />
-                <MetaRow icon={Briefcase} label="Hình thức" value={job.jobType} />
-                {job.workingHours && (
-                  <MetaRow icon={Clock} label="Giờ làm việc" value={job.workingHours} />
+                {job.location && <MetaRow icon={MapPin} label="Địa điểm" value={job.location} />}
+                {job.type && <MetaRow icon={Briefcase} label="Hình thức" value={job.type} />}
+                {salaryLabel && (
+                  <MetaRow icon={DollarSign} label="Mức lương" value={salaryLabel} />
                 )}
-                {job.salaryRange && (
-                  <MetaRow icon={DollarSign} label="Mức lương" value={job.salaryRange} />
+                {job.openings > 1 && (
+                  <MetaRow icon={Users} label="Số lượng" value={`${job.openings} người`} />
                 )}
-                {job.experienceLevel && (
-                  <MetaRow icon={Briefcase} label="Kinh nghiệm" value={job.experienceLevel} />
+                {job.closesAt && (
+                  <MetaRow
+                    icon={CalendarClock}
+                    label="Hạn nộp"
+                    value={new Date(job.closesAt).toLocaleDateString("vi-VN")}
+                  />
                 )}
               </div>
             </header>
 
-            {responsibilities.length > 0 && (
-              <JobSection title="Trách nhiệm chính" items={responsibilities} color="orange" />
+            <JobSection title="Mô tả công việc" body={job.description} color="orange" />
+            {job.requirements && (
+              <JobSection title="Yêu cầu công việc" body={job.requirements} color="purple" />
             )}
-            {requirements.length > 0 && (
-              <JobSection title="Yêu cầu công việc" items={requirements} color="purple" />
-            )}
-            {benefits.length > 0 && (
-              <JobSection title="Quyền lợi" items={benefits} color="green" />
+            {job.benefits && (
+              <JobSection title="Quyền lợi" body={job.benefits} color="green" />
             )}
           </div>
 
@@ -150,7 +169,7 @@ export default async function JobDetailPage({
                 Gửi CV qua email hoặc liên hệ trực tiếp HR Sata Robo
               </p>
               <a
-                href={`mailto:${job.contactEmail}?subject=${encodeURIComponent(
+                href={`mailto:${HR_EMAIL}?subject=${encodeURIComponent(
                   `Ứng tuyển: ${job.title}`,
                 )}`}
                 className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-3 rounded-xl transition-colors mb-3"
@@ -158,7 +177,7 @@ export default async function JobDetailPage({
                 Gửi CV qua Email
               </a>
               <a
-                href={`tel:${job.contactPhone.replace(/\D/g, "")}`}
+                href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
                 className="block w-full text-center bg-white border-2 border-purple-300 text-purple-700 hover:bg-purple-50 font-bold px-4 py-3 rounded-xl transition-colors"
               >
                 Gọi HR Sata Robo
@@ -167,17 +186,17 @@ export default async function JobDetailPage({
               <div className="mt-6 pt-6 border-t border-orange-200 space-y-2 text-sm">
                 <p className="flex items-center gap-2 text-neutral-700">
                   <Mail className="w-4 h-4 text-orange-500 shrink-0" />
-                  <a href={`mailto:${job.contactEmail}`} className="hover:text-orange-600 break-all">
-                    {job.contactEmail}
+                  <a href={`mailto:${HR_EMAIL}`} className="hover:text-orange-600 break-all">
+                    {HR_EMAIL}
                   </a>
                 </p>
                 <p className="flex items-center gap-2 text-neutral-700">
                   <Phone className="w-4 h-4 text-orange-500 shrink-0" />
                   <a
-                    href={`tel:${job.contactPhone.replace(/\D/g, "")}`}
+                    href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
                     className="hover:text-orange-600"
                   >
-                    {job.contactPhone}
+                    {HR_PHONE}
                   </a>
                 </p>
               </div>
@@ -217,24 +236,17 @@ const SECTION_COLOR: Record<"orange" | "purple" | "green", string> = {
 
 function JobSection({
   title,
-  items,
+  body,
   color,
 }: {
   title: string;
-  items: string[];
+  body: string;
   color: "orange" | "purple" | "green";
 }) {
   return (
     <section className={`rounded-2xl border-2 ${SECTION_COLOR[color]} p-6`}>
       <h2 className="text-xl font-bold text-neutral-900 mb-4">{title}</h2>
-      <ul className="space-y-2">
-        {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-neutral-700">
-            <span className="mt-2 h-1.5 w-1.5 rounded-full bg-orange-500 shrink-0" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="prose prose-sm max-w-none text-neutral-700 whitespace-pre-line">{body}</div>
     </section>
   );
 }

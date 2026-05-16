@@ -73,7 +73,7 @@ export default async function DashboardPage() {
     db.lead.count({ where: { createdAt: { gte: lastMonth, lt: monthStart } } }),
     db.lead.count({ where: { status: "ENROLLED" } }),
     db.student.count({ where: { deletedAt: null } }),
-    db.blogPost.count({ where: { isPublished: true } }),
+    db.news.count({ where: { isPublished: true } }),
     db.lead.findMany({
       take: 8,
       orderBy: { createdAt: "desc" },
@@ -260,7 +260,7 @@ export default async function DashboardPage() {
         <div className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
           <FileText className="w-5 h-5 text-orange-500 shrink-0" />
           <div>
-            <p className="text-neutral-600">Bài blog đang publish</p>
+            <p className="text-neutral-600">Tin tức đang publish</p>
             <p className="font-semibold text-neutral-900">{totalPosts} bài</p>
           </div>
         </div>

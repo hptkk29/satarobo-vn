@@ -138,7 +138,6 @@ model User {
   assignedLeads Lead[]         @relation("AssignedLeads")
   notes         Note[]
   teacherClass  Class[]        @relation("TeacherClasses")
-  blogPosts     BlogPost[]
   jobPostings   JobPosting[]
 
   honorsCreated      Honor[]            @relation("HonorCreatedBy")
@@ -364,34 +363,6 @@ model PageContent {
   @@index([slug])
 }
 
-model BlogPost {
-  id          String    @id @default(cuid())
-  title       String
-  slug        String    @unique
-  excerpt     String?
-  content     String    @db.Text
-  coverImage  String?
-  authorId    String?
-  isPublished Boolean   @default(false)
-  publishedAt DateTime?
-  category    String?
-  tags        String[]
-  readingTime Int?
-  seoTitle    String?
-  seoDesc     String?
-  ogImage     String?
-  viewCount   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  author User? @relation(fields: [authorId], references: [id])
-
-  @@index([slug])
-  @@index([isPublished])
-  @@index([publishedAt])
-  @@index([category])
-}
-
 model JobPosting {
   id           String    @id @default(cuid())
   title        String
@@ -499,7 +470,7 @@ model CoursePackage {
 
 // ============================================
 // NEWS (Phase 4.UI.RESET.2 PART D4)
-// Marketing articles — separate from BlogPost
+// Marketing articles (replaced legacy BlogPost in Phase A4)
 // ============================================
 model News {
   id             String    @id @default(cuid())
@@ -521,36 +492,6 @@ model News {
 
   @@index([slug])
   @@index([isPublished, publishedAt])
-}
-
-// ============================================
-// RECRUITMENT (Phase 4.UI.RESET.2 PART D5)
-// Career postings — separate from JobPosting
-// ============================================
-model Recruitment {
-  id               String   @id @default(cuid())
-  slug             String   @unique
-  title            String
-  department       String
-  location         String
-  workingHours     String?
-  salaryRange      String?
-  jobType          String
-  experienceLevel  String?
-  summary          String   @db.Text
-  responsibilities Json
-  requirements     Json
-  benefits         Json
-  contactEmail     String
-  contactPhone     String
-  isPublished      Boolean  @default(true)
-  isFeatured       Boolean  @default(false)
-  displayOrder     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([slug])
-  @@index([isPublished, displayOrder])
 }
 
 // ============================================

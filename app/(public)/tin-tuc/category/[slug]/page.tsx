@@ -53,8 +53,8 @@ export default async function CategoryPage({ params, searchParams }: Params) {
 
   const where = { isPublished: true, category: slug }
 
-  const [posts, total] = await Promise.all([
-    db.blogPost
+  const [rawPosts, total] = await Promise.all([
+    db.news
       .findMany({
         where,
         orderBy: { publishedAt: 'desc' },
@@ -67,13 +67,17 @@ export default async function CategoryPage({ params, searchParams }: Params) {
           coverImage: true,
           publishedAt: true,
           category: true,
-          readingTime: true,
-          author: { select: { name: true } },
         },
       })
       .catch(() => []),
-    db.blogPost.count({ where }).catch(() => 0),
+    db.news.count({ where }).catch(() => 0),
   ])
+
+  const posts = rawPosts.map((p) => ({
+    ...p,
+    readingTime: null,
+    author: null,
+  }))
 
   const totalPages = Math.ceil(total / POSTS_PER_PAGE)
   const featuredPost = currentPage === 1 ? posts[0] : null

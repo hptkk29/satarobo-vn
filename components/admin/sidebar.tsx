@@ -8,7 +8,6 @@ import {
   GraduationCap,
   BookOpen,
   UserCog,
-  FileText,
   BarChart3,
   Settings,
   Briefcase,
@@ -16,7 +15,6 @@ import {
   IdCard,
   Image as ImageIcon,
   Newspaper,
-  UserPlus,
   Package,
   Boxes,
   MapPin,
@@ -56,8 +54,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Giáo viên", href: "/admin/teachers", icon: UserCog },
       { label: "Nhân sự", href: "/admin/nhan-su", icon: IdCard },
-      { label: "Tuyển dụng website", href: "/admin/recruitment", icon: UserPlus },
-      { label: "Tuyển dụng (cũ)", href: "/admin/jobs", icon: Briefcase },
+      { label: "Tuyển dụng", href: "/admin/jobs", icon: Briefcase },
       { label: "Vinh danh", href: "/admin/honors", icon: Trophy },
     ],
   },
@@ -71,8 +68,7 @@ const NAV_GROUPS = [
   {
     label: "Marketing",
     items: [
-      { label: "Tin tức website", href: "/admin/news", icon: Newspaper },
-      { label: "Bài viết (cũ)", href: "/admin/content", icon: FileText },
+      { label: "Tin tức", href: "/admin/news", icon: Newspaper },
       { label: "Hình ảnh trang", href: "/admin/site-content", icon: ImageIcon },
       { label: "Tracking", href: "/admin/marketing", icon: BarChart3 },
     ],

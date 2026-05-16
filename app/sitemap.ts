@@ -25,7 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/chinh-sach-hoan-tra`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
   ]
 
-  const [news, recruitments, honors] = await Promise.all([
+  const [news, jobs, honors] = await Promise.all([
     db.news
       .findMany({
         where: { isPublished: true },
@@ -33,9 +33,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         orderBy: { publishedAt: 'desc' },
       })
       .catch(() => []),
-    db.recruitment
+    db.jobPosting
       .findMany({
-        where: { isPublished: true },
+        where: { status: 'OPEN' },
         select: { slug: true, updatedAt: true },
       })
       .catch(() => []),
@@ -54,9 +54,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }))
 
-  const jobRoutes: MetadataRoute.Sitemap = recruitments.map((r) => ({
-    url: `${BASE_URL}/tuyen-dung/${r.slug}`,
-    lastModified: r.updatedAt,
+  const jobRoutes: MetadataRoute.Sitemap = jobs.map((j) => ({
+    url: `${BASE_URL}/tuyen-dung/${j.slug}`,
+    lastModified: j.updatedAt,
     changeFrequency: 'weekly',
     priority: 0.6,
   }))

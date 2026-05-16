@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { createKit, updateKit } from "../_actions";
-import { StringArrayEditor } from "../../recruitment/_components/string-array-editor";
+import { StringArrayEditor } from "./string-array-editor";
 import { SpecsEditor } from "./specs-editor";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 

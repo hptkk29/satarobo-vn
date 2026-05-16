@@ -11,16 +11,16 @@ interface Params {
 export async function GET(_req: Request, { params }: Params) {
   const { slug } = await params
 
-  const post = await db.blogPost
+  const post = await db.news
     .findUnique({
       where: { slug },
-      select: { title: true, excerpt: true, author: { select: { name: true } } },
+      select: { title: true, excerpt: true },
     })
     .catch(() => null)
 
   const title = post?.title ?? 'Tin tức & Blog'
   const excerpt = post?.excerpt ?? 'Sata Robo — Hệ sinh thái Robotics & STEM giáo dục hàng đầu Đà Nẵng'
-  const author = post?.author?.name ?? 'Sata Robo'
+  const author = 'Sata Robo'
 
   return new ImageResponse(
     (

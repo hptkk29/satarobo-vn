@@ -44,8 +44,8 @@ export default async function TagPage({ params, searchParams }: Params) {
 
   const where = { isPublished: true, tags: { has: tag } }
 
-  const [posts, total] = await Promise.all([
-    db.blogPost
+  const [rawPosts, total] = await Promise.all([
+    db.news
       .findMany({
         where,
         orderBy: { publishedAt: 'desc' },
@@ -58,13 +58,17 @@ export default async function TagPage({ params, searchParams }: Params) {
           coverImage: true,
           publishedAt: true,
           category: true,
-          readingTime: true,
-          author: { select: { name: true } },
         },
       })
       .catch(() => []),
-    db.blogPost.count({ where }).catch(() => 0),
+    db.news.count({ where }).catch(() => 0),
   ])
+
+  const posts = rawPosts.map((p) => ({
+    ...p,
+    readingTime: null,
+    author: null,
+  }))
 
   if (posts.length === 0 && currentPage === 1) notFound()
 
