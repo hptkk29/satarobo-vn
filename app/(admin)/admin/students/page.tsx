@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { FileSpreadsheet, Plus } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
@@ -129,12 +130,22 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
           </p>
         </div>
         {canCreate && (
-          <Link
-            href="/admin/students/new"
-            className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-          >
-            + Thêm học viên
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/admin/students/new"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" />
+              Thêm học viên
+            </Link>
+            <Link
+              href="/admin/students/import"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Import Excel
+            </Link>
+          </div>
         )}
       </div>
 
