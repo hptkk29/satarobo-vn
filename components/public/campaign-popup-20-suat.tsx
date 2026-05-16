@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { X, Calendar, Clock, MapPin, Phone } from "lucide-react";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
 
-// sessionStorage key — checked by FreeTrialPopup to coordinate timing
-// (kept in sync via CAMPAIGN_DISMISSED_KEY there).
+// sessionStorage key — prevents re-showing within the same browsing session
+// once the visitor dismisses the popup.
 const STORAGE_KEY = "satarobo-campaign-20-suat-dismissed";
 
 // Window in which this popup is allowed to show.
