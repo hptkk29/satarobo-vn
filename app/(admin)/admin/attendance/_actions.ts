@@ -48,9 +48,11 @@ export async function markAttendance(
 
   const data = parsed.data;
 
-  // Upsert each — composite unique key sessionId_studentId
+  // Upsert each — composite unique key sessionId_studentId.
+  // Wrap in $transaction so a mid-batch failure rolls back the entire save
+  // (atomicity matters when teacher hits Save with concurrent edits open).
   try {
-    await Promise.all(
+    await db.$transaction(
       data.records.map((r) =>
         db.attendance.upsert({
           where: {
