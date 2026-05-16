@@ -1,0 +1,37 @@
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { ItemForm } from "../_components/item-form";
+
+export const dynamic = "force-dynamic";
+
+const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"];
+
+export default async function NewInventoryItemPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!ALLOWED_ROLES.includes(session.user.role)) {
+    redirect("/admin/dashboard?error=unauthorized");
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Link
+          href="/admin/inventory/items"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+        >
+          <ChevronLeft className="h-4 w-4" /> Quay lại kho
+        </Link>
+        <h1 className="text-2xl font-bold text-neutral-900">Thêm mặt hàng mới</h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          Sau khi tạo, hệ thống sẽ tự khởi tạo tồn = 0 cho mọi cơ sở đang hoạt
+          động.
+        </p>
+      </div>
+
+      <ItemForm />
+    </div>
+  );
+}

@@ -133,6 +133,7 @@ model Center {
   employees Employee[]
   rooms     Room[]
   holidays  Holiday[]
+  stockBalances StockBalance[]
 
   @@index([isActive])
   @@index([displayOrder])
@@ -1380,4 +1381,67 @@ model ProgressReportLog {
   @@index([studentId, generatedAt])
   @@index([classId])
   @@index([generatedAt])
+}
+
+// ─── Phase F — Inventory ─────────────────────────────────────────────────
+enum InventoryCategory {
+  MAINBOARD
+  SENSOR
+  MOTOR
+  BATTERY
+  MECHANICAL
+  WIRE
+  TOOL
+  CONSUMABLE
+  ROBOSIM
+  OTHER
+}
+
+model InventoryItem {
+  id                  String            @id @default(cuid())
+
+  itemCode            String            @unique
+  name                String
+  description         String?           @db.Text
+
+  category            InventoryCategory @default(OTHER)
+  unit                String            @default("Cái")
+
+  pricePerUnit        Float?
+  supplier            String?
+
+  defaultMinThreshold Int               @default(5)
+
+  imageUrl            String?
+  tags                String[]          @default([])
+
+  isActive            Boolean           @default(true)
+  notes               String?           @db.Text
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  balances            StockBalance[]
+
+  @@index([category, isActive])
+}
+
+model StockBalance {
+  id           String        @id @default(cuid())
+  itemId       String
+  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  centerId     String
+  center       Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  quantity     Int           @default(0)
+  reserved     Int           @default(0)
+  minThreshold Int?
+
+  lastReceiptAt DateTime?
+  lastIssueAt   DateTime?
+
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([itemId, centerId])
+  @@index([centerId, quantity])
 }
