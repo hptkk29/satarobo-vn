@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { HelpCircle, Plus } from "lucide-react";
+import { FileSpreadsheet, HelpCircle, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -112,13 +112,22 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
               : "Chưa có câu hỏi nào"}
           </p>
         </div>
-        <Link
-          href="/admin/questions/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" />
-          Thêm câu hỏi
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/admin/questions/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            Thêm câu hỏi
+          </Link>
+          <Link
+            href="/admin/questions/import"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Import Excel
+          </Link>
+        </div>
       </div>
 
       <form
