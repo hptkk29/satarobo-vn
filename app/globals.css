@@ -14,6 +14,12 @@
   --color-brand-orange: #F97316;
   --color-brand-purple: #7C3AED;
   --color-brand-purple-dark: #6B21A8;
+  /* F-UI-1 — extended palette for Aceternity-style backgrounds */
+  --color-sata-orange: #F97316;
+  --color-sata-orange-light: #FB923C;
+  --color-sata-yellow: #EAB308;
+  --color-sata-purple: #A855F7;
+  --color-sata-purple-deep: #7C3AED;
   --font-heading: var(--font-sans);
   /* Lập trình Robot design tokens */
   --color-primary-orange: #F97316;
@@ -317,6 +323,30 @@
 
   .bg-soft-cream { background-color: #FFF7ED; }
   .bg-soft-purple { background-color: #F3E8FF; }
+
+  /* F-UI-1 — Sata Robo gradient palette
+     warm = orange → yellow, tech = orange → purple, cool = purple deep → purple */
+  .bg-gradient-sata-warm {
+    background: linear-gradient(135deg, #F97316 0%, #EAB308 100%);
+  }
+  .bg-gradient-sata-tech {
+    background: linear-gradient(135deg, #F97316 0%, #A855F7 100%);
+  }
+  .bg-gradient-sata-cool {
+    background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+  }
+  .text-gradient-warm {
+    background: linear-gradient(135deg, #F97316 0%, #EAB308 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .text-gradient-tech {
+    background: linear-gradient(135deg, #F97316 0%, #A855F7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
 }
 
 /* ── Hero responsive helper (legacy laptrinhrobot) ─────────── */
