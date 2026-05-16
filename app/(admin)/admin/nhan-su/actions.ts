@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
@@ -175,5 +176,97 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
     data: { isPublic: !emp.isPublic },
   });
   revalidateAll();
+  return { ok: true };
+}
+
+// ─── Role change (audit-logged) ─────────────────────────────────────────
+// "Role" here = the auth Role on the Employee's linked User account.
+// Employees without a linked User account cannot have their role changed
+// from this UI (there's nothing to update). SUPER_ADMIN only.
+
+const VALID_ROLES = [
+  "SUPER_ADMIN",
+  "MANAGER",
+  "HR",
+  "SALES",
+  "TEACHER",
+  "MARKETING",
+  "ACCOUNTANT",
+] as const;
+type ValidRole = (typeof VALID_ROLES)[number];
+
+const changeRoleSchema = z.object({
+  employeeId: z.string().min(1),
+  newRole: z.enum(VALID_ROLES),
+  reason: z.string().trim().min(5, "Lý do phải có ít nhất 5 ký tự").max(500),
+});
+
+export async function changeEmployeeRoleAction(input: {
+  employeeId: string;
+  newRole: ValidRole;
+  reason: string;
+}): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (session.user.role !== "SUPER_ADMIN") {
+    return { ok: false, error: "Chỉ SUPER_ADMIN mới được thay đổi vai trò" };
+  }
+
+  const parsed = changeRoleSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
+  }
+
+  const employee = await db.employee.findUnique({
+    where: { id: parsed.data.employeeId },
+    select: {
+      id: true,
+      fullName: true,
+      userAccount: { select: { id: true, role: true } },
+    },
+  });
+  if (!employee) return { ok: false, error: "Không tìm thấy nhân viên" };
+  if (!employee.userAccount) {
+    return {
+      ok: false,
+      error:
+        "Nhân viên chưa có User account — không có vai trò để đổi. Tạo User cho NV này trước.",
+    };
+  }
+
+  const fromRole = employee.userAccount.role;
+  if (fromRole === parsed.data.newRole) {
+    return { ok: false, error: "Vai trò không thay đổi" };
+  }
+
+  try {
+    await db.$transaction([
+      db.user.update({
+        where: { id: employee.userAccount.id },
+        data: { role: parsed.data.newRole },
+      }),
+      db.roleAuditLog.create({
+        data: {
+          employeeId: employee.id,
+          fromRole,
+          toRole: parsed.data.newRole,
+          changedByUserId: session.user.id ?? null,
+          changedByName: session.user.name ?? session.user.email ?? "Unknown",
+          reason: parsed.data.reason,
+        },
+      }),
+    ]);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi DB: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  revalidateAll();
+  revalidatePath(`/admin/nhan-su/${employee.id}/edit`);
   return { ok: true };
 }

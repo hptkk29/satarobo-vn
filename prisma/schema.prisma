@@ -750,14 +750,37 @@ model Employee {
   createdBy    User?         @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   // Relations
-  honors       Honor[]
-  userAccount  User?         @relation("UserEmployee")
+  honors        Honor[]
+  userAccount   User?         @relation("UserEmployee")
+  roleAuditLogs RoleAuditLog[]
 
   @@index([department])
   @@index([isActive])
   @@index([isPublic])
   @@index([isCEO])
   @@index([status])
+}
+
+// Audit trail for User.role changes scoped to one Employee (the linked
+// userAccount's role). Stored as String (not Role enum) so the log
+// stays readable if the enum ever shifts. Cascade on Employee delete.
+model RoleAuditLog {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  fromRole        String
+  toRole          String
+
+  changedByUserId String?  // nullable — defensive if the auditor User row gets removed
+  changedByName   String   // snapshot so the trail is human-readable even after deletion
+
+  reason          String?  @db.Text
+
+  createdAt       DateTime @default(now())
+
+  @@index([employeeId, createdAt])
+  @@index([createdAt])
 }
 
 // ─── Phase 4.UI.FIX.2 ─────────────────────────────────────────────────────
