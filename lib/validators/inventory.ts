@@ -62,6 +62,62 @@ const nullableUrl = z
     }
   });
 
+// ─── Phase F2 — movement schemas ─────────────────────────────────────────
+
+export const StockMovementTypeEnum = z.enum([
+  "RECEIPT",
+  "ISSUE",
+  "TRANSFER_OUT",
+  "TRANSFER_IN",
+]);
+
+const positiveInt = z.coerce.number().int().min(1, "Số lượng phải >= 1");
+
+const nullableFloatNonNeg = z
+  .union([z.coerce.number(), z.null(), z.literal("")])
+  .optional()
+  .transform((v) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = v as number;
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  });
+
+export const receiptSchema = z.object({
+  itemId: z.string().trim().min(1, "Thiếu mặt hàng"),
+  centerId: z.string().trim().min(1, "Thiếu cơ sở"),
+  quantity: positiveInt,
+  unitPrice: nullableFloatNonNeg,
+  referenceNote: nullableStr,
+  notes: nullableStr,
+});
+
+export const issueSchema = z.object({
+  itemId: z.string().trim().min(1, "Thiếu mặt hàng"),
+  centerId: z.string().trim().min(1, "Thiếu cơ sở"),
+  quantity: positiveInt,
+  referenceType: nullableStr,
+  referenceId: nullableStr,
+  referenceNote: nullableStr,
+  notes: nullableStr,
+});
+
+export const transferSchema = z
+  .object({
+    itemId: z.string().trim().min(1, "Thiếu mặt hàng"),
+    fromCenterId: z.string().trim().min(1, "Thiếu cơ sở nguồn"),
+    toCenterId: z.string().trim().min(1, "Thiếu cơ sở đích"),
+    quantity: positiveInt,
+    notes: nullableStr,
+  })
+  .refine((d) => d.fromCenterId !== d.toCenterId, {
+    message: "Cơ sở đích trùng cơ sở nguồn",
+    path: ["toCenterId"],
+  });
+
+export type ReceiptInput = z.infer<typeof receiptSchema>;
+export type IssueInput = z.infer<typeof issueSchema>;
+export type TransferInput = z.infer<typeof transferSchema>;
+
 export const inventoryItemSchema = z.object({
   itemCode: z
     .string()

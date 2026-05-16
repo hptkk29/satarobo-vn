@@ -133,7 +133,8 @@ model Center {
   employees Employee[]
   rooms     Room[]
   holidays  Holiday[]
-  stockBalances StockBalance[]
+  stockBalances  StockBalance[]
+  stockMovements StockMovement[]
 
   @@index([isActive])
   @@index([displayOrder])
@@ -924,6 +925,7 @@ model Employee {
   createdAssignments Assignment[]              @relation("AssignmentCreator")
   gradedSubmissions  AssignmentSubmission[]    @relation("SubmissionGrader")
   generatedReports   ProgressReportLog[]       @relation("ReportGenerator")
+  performedMovements StockMovement[]           @relation("MovementPerformer")
 
   @@index([department])
   @@index([isActive])
@@ -1422,6 +1424,7 @@ model InventoryItem {
   updatedAt           DateTime          @updatedAt
 
   balances            StockBalance[]
+  movements           StockMovement[]
 
   @@index([category, isActive])
 }
@@ -1444,4 +1447,48 @@ model StockBalance {
 
   @@unique([itemId, centerId])
   @@index([centerId, quantity])
+}
+
+// ─── Phase F2 — Stock movement workflow ──────────────────────────────────
+enum StockMovementType {
+  RECEIPT       // Nhập kho từ supplier
+  ISSUE         // Xuất kho cho lớp / sự kiện / hỏng
+  TRANSFER_OUT  // Chuyển đi cơ sở khác
+  TRANSFER_IN   // Nhận từ cơ sở khác
+}
+
+model StockMovement {
+  id             String            @id @default(cuid())
+
+  itemId         String
+  item           InventoryItem     @relation(fields: [itemId], references: [id])
+  centerId       String
+  center         Center            @relation(fields: [centerId], references: [id])
+
+  type           StockMovementType
+  quantity       Int
+
+  // TRANSFER pair link (OUT ↔ IN)
+  transferPairId String?
+  transferPair   StockMovement?    @relation("TransferPair", fields: [transferPairId], references: [id])
+  transferOf     StockMovement[]   @relation("TransferPair")
+
+  // Free-form reference linking
+  referenceType  String?
+  referenceId    String?
+  referenceNote  String?
+
+  // Pricing snapshot (RECEIPT only)
+  unitPrice      Float?
+  totalCost      Float?
+
+  performedById  String?
+  performedBy    Employee?         @relation("MovementPerformer", fields: [performedById], references: [id], onDelete: SetNull)
+  performedAt    DateTime          @default(now())
+  notes          String?           @db.Text
+
+  @@index([itemId, centerId, performedAt])
+  @@index([centerId, performedAt])
+  @@index([type, performedAt])
+  @@index([transferPairId])
 }

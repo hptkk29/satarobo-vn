@@ -26,12 +26,17 @@ export default async function EditInventoryItemPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [item, balances] = await Promise.all([
+  const [item, balances, allCenters] = await Promise.all([
     db.inventoryItem.findUnique({ where: { id } }),
     db.stockBalance.findMany({
       where: { itemId: id },
       include: { center: { select: { name: true, displayOrder: true } } },
       orderBy: { center: { displayOrder: "asc" } },
+    }),
+    db.center.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { displayOrder: "asc" },
     }),
   ]);
 
@@ -78,7 +83,11 @@ export default async function EditInventoryItemPage({ params }: Props) {
         <p className="mt-1 text-sm text-neutral-500 tabular-nums">{item.itemCode}</p>
       </div>
 
-      <ItemForm item={formValue} balances={balanceRows} />
+      <ItemForm
+        item={formValue}
+        balances={balanceRows}
+        allCenters={allCenters}
+      />
     </div>
   );
 }

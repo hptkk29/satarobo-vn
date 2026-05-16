@@ -10,6 +10,7 @@ import {
   updateItem,
   updateMinThreshold,
 } from "../_actions";
+import { MovementActions } from "./movement-actions";
 
 type Category =
   | "MAINBOARD"
@@ -73,12 +74,19 @@ export interface BalanceRow {
   minThreshold: number | null;
 }
 
+export interface CenterOption {
+  id: string;
+  name: string;
+}
+
 export function ItemForm({
   item,
   balances,
+  allCenters = [],
 }: {
   item?: ItemFormValue;
   balances?: BalanceRow[];
+  allCenters?: CenterOption[];
 }) {
   const router = useRouter();
   const isEdit = Boolean(item);
@@ -351,6 +359,9 @@ export function ItemForm({
                   <th className="px-3 py-2 text-right font-semibold text-neutral-600">
                     Ngưỡng (override)
                   </th>
+                  <th className="px-3 py-2 text-right font-semibold text-neutral-600">
+                    Thao tác
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-50">
@@ -359,7 +370,9 @@ export function ItemForm({
                     key={b.id}
                     row={b}
                     itemId={item!.id}
+                    itemUnit={unit}
                     fallbackThreshold={defaultMinThreshold}
+                    allCenters={allCenters}
                   />
                 ))}
               </tbody>
@@ -402,11 +415,15 @@ export function ItemForm({
 function BalanceRowEditor({
   row,
   itemId,
+  itemUnit,
   fallbackThreshold,
+  allCenters,
 }: {
   row: BalanceRow;
   itemId: string;
+  itemUnit: string;
   fallbackThreshold: number;
+  allCenters: CenterOption[];
 }) {
   const router = useRouter();
   const [value, setValue] = useState<string>(
@@ -466,6 +483,16 @@ function BalanceRowEditor({
           className="w-24 rounded-md border border-neutral-200 px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
         />
         {error && <div className="mt-0.5 text-xs text-red-600">{error}</div>}
+      </td>
+      <td className="px-3 py-2 text-right whitespace-nowrap">
+        <MovementActions
+          itemId={itemId}
+          itemUnit={itemUnit}
+          centerId={row.centerId}
+          centerName={row.centerName}
+          currentQty={row.quantity}
+          allCenters={allCenters}
+        />
       </td>
     </tr>
   );

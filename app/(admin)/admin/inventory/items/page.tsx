@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, FileSpreadsheet, Plus } from "lucide-react";
+import { Boxes, FileSpreadsheet, History, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -117,6 +117,13 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
+          </Link>
+          <Link
+            href="/admin/inventory/movements"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            <History className="h-4 w-4" />
+            Lịch sử
           </Link>
         </div>
       </div>
