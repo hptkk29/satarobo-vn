@@ -11,8 +11,6 @@ import {
   Users,
   Target,
   GraduationCap,
-  CheckCircle2,
-  ShieldCheck,
   MapPin,
   Flag,
   CalendarClock,
@@ -48,7 +46,6 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
   return (
     <>
       <HeroMain />
-      <TrustBadges />
       <UspGrid />
       <CatalogSection courses={courses} />
       <Testimonials />
@@ -56,7 +53,7 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
       <StatsBar />
       <UuTheSection />
       <EarlyBirdCountdown />
-      <SixCommitmentsSection />
+      <TrustBadges />
       <TravelPrizeBanner />
       <CompetitionCountdown />
       <FAQSection />
@@ -162,18 +159,28 @@ function UuTheSection() {
               </p>
             </article>
           </RevealOnScroll>
-
-          {/* Cards 2-5 */}
-          {achievements.slice(1).map((text, i) => (
-            <RevealOnScroll key={i} direction="up" distance={20} delay={(i + 1) * 0.05}>
-              <article className="h-full bg-white rounded-2xl border border-neutral-200 p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300">
-                <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-purple-600 text-white text-sm font-black mb-3">
-                  {i + 2}
-                </div>
-                <p className="text-neutral-700 leading-relaxed text-sm">{text}</p>
-              </article>
-            </RevealOnScroll>
-          ))}
+          {/* Card 2 */}
+          <RevealOnScroll direction="up" distance={20} delay={0.1}>
+            <article className="h-full bg-white rounded-2xl border border-neutral-200 p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-shadow">
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-orange-500 text-white font-black mb-4 shadow-md shadow-orange-500/30">
+                2
+              </div>
+              <p className="text-neutral-800 text-base md:text-lg leading-relaxed font-medium">
+                {achievements[1]}
+              </p>
+            </article>
+          </RevealOnScroll>
+          {/* Card 3 */}
+          <RevealOnScroll direction="up" distance={20} delay={0.2}>
+            <article className="h-full bg-white rounded-2xl border border-neutral-200 p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-shadow">
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-orange-500 text-white font-black mb-4 shadow-md shadow-orange-5<PASSWORD>">
+                3
+              </div>
+              <p className="text-neutral-8<PASSWORD> text-base md:text-lg leading-relaxed font-medium">
+                {achievements[2]}
+              </p>
+            </article>
+          </RevealOnScroll>
         </div>
       </div>
     </section>
@@ -225,93 +232,6 @@ function CatalogSection({ courses }: { courses: MainCourseCard[] }) {
                   </span>
                 </div>
               </Link>
-            </RevealOnScroll>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ============== 6. CAM KẾT (6 items) ==============
-function SixCommitmentsSection() {
-  const commitments = [
-    {
-      title: "Hoàn tiền 100% nếu không hài lòng",
-      desc: "Buổi học đầu tiên 90 phút, nếu con không thích sẽ hoàn tiền 100% học phí đã đóng, không câu hỏi. Hoàn lại sau 3 ngày làm việc.",
-    },
-    {
-      title: "Lớp nhỏ ≤12 Học viên",
-      desc: "GV tận tâm, học kèm để các con tiến bộ mỗi ngày.",
-    },
-    {
-      title: "Giải thưởng du lịch 3-7 triệu",
-      desc: "Dành cho HV đạt giải cuộc thi cấp TP Đà Nẵng.",
-    },
-    {
-      title: "Thuyết trình cuối mỗi học phần",
-      desc: "Phụ huynh được xem kết quả thực tế, ghi hình kỷ niệm.",
-    },
-    {
-      title: "Hỗ trợ 3 triệu lệ phí thi Quốc gia",
-      desc: "Cho HV tham dự cuộc thi Quốc gia theo đoàn Sata Robo.",
-    },
-    {
-      title: "Cam kết văn bản cho gói Sata8",
-      desc: "Quyền lợi hoàn tiền của phụ huynh được ghi rõ bằng văn bản trước khi đăng ký gói Sata8.",
-    },
-  ];
-
-  return (
-    <section className="bg-gradient-to-br from-purple-50 to-orange-50 py-16 md:py-24">
-      <div className="container mx-auto px-4 max-w-6xl">
-        <SectionEyebrow icon={ShieldCheck} label="CAM KẾT" tone="purple" />
-        <SectionHeading>Sata Robo cam kết với bạn</SectionHeading>
-        <SectionLead>6 cam kết bằng văn bản với phụ huynh</SectionLead>
-
-        {/* Mobile + tablet: auto-rotating carousel */}
-        <div className="mt-10 md:hidden">
-          <AutoCarousel slideClassName="flex-[0_0_88%]" dotActiveClassName="bg-purple-600">
-            {commitments.map((c, i) => (
-              <article
-                key={c.title}
-                className="flex items-start gap-4 bg-white rounded-xl border-2 border-purple-100 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.04)] h-full"
-              >
-                <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xs font-bold text-purple-500">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <h3 className="font-bold text-neutral-900">{c.title}</h3>
-                  </div>
-                  <p className="text-sm text-neutral-600">{c.desc}</p>
-                </div>
-              </article>
-            ))}
-          </AutoCarousel>
-        </div>
-
-        {/* Desktop: 2-col grid */}
-        <div className="mt-10 hidden md:grid md:grid-cols-2 gap-4">
-          {commitments.map((c, i) => (
-            <RevealOnScroll key={c.title} direction="up" distance={16} delay={i * 0.04}>
-              <article className="flex items-start gap-4 bg-white rounded-xl border-2 border-purple-100 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300">
-                <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xs font-bold text-purple-500">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <h3 className="font-bold text-neutral-900">{c.title}</h3>
-                  </div>
-                  <p className="text-sm text-neutral-600">{c.desc}</p>
-                </div>
-              </article>
             </RevealOnScroll>
           ))}
         </div>
@@ -454,10 +374,10 @@ function CompetitionCountdown() {
 
         <div className="text-center mt-12">
           <Link
-            href="/khoa-hoc/laptrinhrobot#sata1"
+            href="https://drive.google.com/file/d/1fE3ALCboUanJlLxFb6Uq7iiJqYu7y4mC/view"
             className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-3 rounded-xl shadow-xl shadow-orange-500/40 hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:outline-none"
           >
-            Đăng ký Sata1 - Luyện thi Robosim ngay
+            Xem ngay thể lệ cuộc thi
             <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
