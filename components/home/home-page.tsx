@@ -235,20 +235,20 @@ function StatsBar() {
       <div className="container mx-auto px-4 max-w-6xl">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-white">
           <StatBlock Icon={Users}>
-            <span className="text-3xl md:text-4xl font-black">
+            <span className="text-2xl sm:text-3xl md:text-4xl font-black">
               <NumberTicker value={500} className="text-white" />
               <span>+</span>
             </span>
             <span className="text-xs md:text-sm opacity-90 font-medium">Học Viên đã theo học</span>
           </StatBlock>
           <StatBlock Icon={GraduationCap}>
-            <span className="text-3xl md:text-4xl font-black">Lớp 1 → 8</span>
+            <span className="text-xl sm:text-3xl md:text-4xl font-black">Lớp 1 → 8</span>
             <span className="text-xs md:text-sm opacity-90 font-medium">
               Cho các Kỹ Sư Nhí
             </span>
           </StatBlock>
           <StatBlock Icon={Target}>
-            <span className="text-3xl md:text-4xl font-black">
+            <span className="text-2xl sm:text-3xl md:text-4xl font-black">
               ≤
               <NumberTicker value={12} className="text-white" />
               <span> HV</span>
@@ -256,7 +256,7 @@ function StatsBar() {
             <span className="text-xs md:text-sm opacity-90 font-medium">/lớp - GV tận tâm</span>
           </StatBlock>
           <StatBlock Icon={Award}>
-            <span className="text-3xl md:text-4xl font-black">
+            <span className="text-2xl sm:text-3xl md:text-4xl font-black">
               <NumberTicker value={100} className="text-white" />
               <span>%</span>
             </span>
