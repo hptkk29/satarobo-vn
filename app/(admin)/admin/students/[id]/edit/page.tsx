@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { hasPermission } from "@/lib/permissions";
 import { getStudentProgress } from "@/lib/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
+import { GeneratePdfButton } from "./_pdf-button";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -158,13 +159,19 @@ export default async function EditStudentPage({ params }: Props) {
                       {enrollment.class.center?.name &&
                         ` · ${enrollment.class.center.name}`}
                     </p>
+                    <Link
+                      href={`/admin/classes/${enrollment.class.id}/progress`}
+                      className="mt-0.5 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
+                    >
+                      Xem lớp →
+                    </Link>
                   </div>
-                  <Link
-                    href={`/admin/classes/${enrollment.class.id}/progress`}
-                    className="flex-shrink-0 text-xs font-semibold text-[#7C3AED] hover:underline"
-                  >
-                    Xem lớp →
-                  </Link>
+                  <GeneratePdfButton
+                    studentId={id}
+                    classId={enrollment.class.id}
+                    studentName={student.name}
+                    className={enrollment.class.name}
+                  />
                 </div>
                 <div className="grid grid-cols-4 gap-2 text-center text-sm">
                   <MiniStat

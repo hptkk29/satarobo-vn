@@ -392,6 +392,7 @@ model Student {
   attendances           Attendance[]
   examAttempts          ExamAttempt[]
   assignmentSubmissions AssignmentSubmission[]
+  progressReports       ProgressReportLog[]
 
   @@index([phone])
   @@index([centerId])
@@ -451,10 +452,11 @@ model Class {
   teacher     User?        @relation("TeacherClasses", fields: [teacherId], references: [id])
   assistant   User?        @relation("AssistantClasses", fields: [assistantId], references: [id])
   room        Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  enrollments Enrollment[]
-  sessions    ClassSession[]
-  exams       Exam[]
-  assignments Assignment[]
+  enrollments     Enrollment[]
+  sessions        ClassSession[]
+  exams           Exam[]
+  assignments     Assignment[]
+  progressReports ProgressReportLog[]
 
   @@index([courseId])
   @@index([centerId])
@@ -920,6 +922,7 @@ model Employee {
   uploadedDocuments  Document[]    @relation("DocumentUploader")
   createdAssignments Assignment[]              @relation("AssignmentCreator")
   gradedSubmissions  AssignmentSubmission[]    @relation("SubmissionGrader")
+  generatedReports   ProgressReportLog[]       @relation("ReportGenerator")
 
   @@index([department])
   @@index([isActive])
@@ -1357,4 +1360,24 @@ model AssignmentSubmission {
   @@unique([assignmentId, studentId])
   @@index([status, assignmentId])
   @@index([studentId])
+}
+
+// ─── Phase E7 — Audit log for generated PDF reports ──────────────────────
+model ProgressReportLog {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId       String?
+  class         Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  generatedById String?
+  generatedBy   Employee? @relation("ReportGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
+  generatedAt   DateTime  @default(now())
+  sentToEmail   String?
+  sentAt        DateTime?
+  reportTitle   String
+  metadata      Json?
+
+  @@index([studentId, generatedAt])
+  @@index([classId])
+  @@index([generatedAt])
 }
