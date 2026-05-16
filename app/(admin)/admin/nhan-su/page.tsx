@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, FileSpreadsheet } from "lucide-react";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { EmployeesAdminTable } from "@/components/admin/nhan-su/employees-admin-table";
@@ -116,13 +116,22 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
           </p>
         </div>
         {canCreate && (
-          <Link
-            href="/admin/nhan-su/new"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
-            Thêm nhân sự
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/nhan-su/import"
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Import Excel
+            </Link>
+            <Link
+              href="/admin/nhan-su/new"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" />
+              Thêm nhân sự
+            </Link>
+          </div>
         )}
       </div>
 
