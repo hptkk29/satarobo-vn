@@ -80,7 +80,7 @@ export function HeroMain() {
               className="w-full px-6 py-3 text-sm font-semibold sm:w-auto sm:px-8 sm:py-4 sm:text-base"
             >
               <span className="flex items-center gap-2 text-white">
-                Đăng ký học thử MIỄN PHÍ
+                Liên hệ Đăng ký học
                 <ArrowRight className="h-4 w-4" />
               </span>
             </ShimmerButton>
@@ -122,7 +122,7 @@ export function HeroMain() {
           </div>
           <span className="hidden text-zinc-700 sm:inline">·</span>
           <div>
-            <strong className="text-white">6 cơ sở</strong> Đà Nẵng
+            <strong className="text-white">7 cơ sở</strong> Đà Nẵng
           </div>
         </motion.div>
       </div>

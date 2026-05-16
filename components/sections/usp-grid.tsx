@@ -8,44 +8,44 @@ import { HoverEffect } from "@/components/aceternity/card-hover-effect";
 const USP_ITEMS = [
   {
     icon: "🤖",
-    title: "Học qua Robosim",
+    title: "Hoàn tiền 100% nếu không hài lòng",
     description:
-      "Sa bàn ảo điều khiển robot không cần bộ kit. Tiết kiệm 50 triệu so với bộ kit truyền thống.",
+      "Buổi học đầu tiên 90 phút, nếu con không thích sẽ hoàn tiền 100% học phí đã đóng, không câu hỏi. Hoàn lại sau 3 ngày làm việc.",
     link: "/khoa-hoc/luyenthirobosim",
   },
   {
     icon: "👨‍🏫",
-    title: "GV chuyên môn cao",
+    title: "Lớp nhỏ ≤12 Học viên",
     description:
-      "100% giáo viên đại học CNTT, kinh nghiệm dạy 3+ năm. Tỉ lệ 1:8 - 1:12.",
+      "GV tận tâm, học kèm để các con tiến bộ mỗi ngày.",
     link: "/ve-chung-toi",
   },
   {
     icon: "🏆",
-    title: "Đấu trường Robot",
+    title: "Giải thưởng du lịch 3-7 triệu",
     description:
-      "Tham gia cuộc thi cấp trường, cấp tỉnh, quốc gia. WRO, NQ57 TW Đoàn lần 6.",
+      "Dành cho HV đạt giải cuộc thi cấp TP Đà Nẵng.",
     link: "/dau-truong-robot",
   },
   {
     icon: "📚",
-    title: "Lộ trình rõ ràng",
+    title: "Thuyết trình cuối mỗi học phần",
     description:
-      "K1 → K2 → K3 → Senior. Mỗi cấp 24 buổi, kiểm tra cuối kỳ, cấp chứng chỉ.",
+      "Phụ huynh được xem kết quả thực tế, ghi hình kỷ niệm.",
     link: "/lo-trinh",
   },
   {
     icon: "🏫",
-    title: "7 cơ sở Đà Nẵng",
+    title: "Hỗ trợ 3 triệu lệ phí thi Quốc gia",
     description:
-      "Mạng lưới cơ sở khắp Đà Nẵng. Học online toàn quốc qua Zoom + Robosim cho HS xa.",
+      "Cho HV tham dự cuộc thi Quốc gia theo đoàn Sata Robo.",
     link: "/cac-co-so",
   },
   {
     icon: "💰",
-    title: "Giá hợp lý",
+    title: "Cam kết văn bản cho gói Sata8",
     description:
-      "Chỉ từ 30k/buổi online. Trả góp 0%. Hoàn 100% nếu không hài lòng sau 3 buổi.",
+      "Quyền lợi hoàn tiền của phụ huynh được ghi rõ bằng văn bản trước khi đăng ký gói Sata8.",
     link: "/khoa-hoc",
   },
 ];

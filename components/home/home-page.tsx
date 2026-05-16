@@ -12,18 +12,13 @@ import {
   Target,
   GraduationCap,
   CheckCircle2,
-  Wallet,
-  Plane,
-  Mic,
   ShieldCheck,
   MapPin,
   Flag,
-  Sparkles as SparklesIcon,
   CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
-import { AnimatedGradientText } from "@/components/magic/animated-gradient-text";
 import { NumberTicker } from "@/components/magic/number-ticker";
 import { BorderBeam } from "@/components/magic/border-beam";
 import { ShimmerButton } from "@/components/magic/shimmer-button";
@@ -31,15 +26,12 @@ import { Particles } from "@/components/magic/particles";
 import { FadeIn } from "@/components/motion/fade-in";
 import { RevealOnScroll } from "@/components/motion/reveal-on-scroll";
 import { AutoCarousel } from "@/components/public/auto-carousel";
-import { Sparkles } from "@/components/design-system/effects/sparkles";
 import { EarlyBirdCountdown } from "@/components/home/early-bird-countdown";
 import { FAQSection } from "@/components/home/faq-section";
 import { HeroMain } from "@/components/sections/hero-main";
 import { TrustBadges } from "@/components/sections/trust-badges";
 import { UspGrid } from "@/components/sections/usp-grid";
-import { CourseTeaser } from "@/components/sections/course-teaser";
 import { Testimonials } from "@/components/sections/testimonials";
-import { FAQ } from "@/components/sections/faq";
 import { SecondaryCta } from "@/components/sections/secondary-cta";
 
 // ============== Types ==============
@@ -55,203 +47,21 @@ export interface MainCourseCard {
 export function HomePage({ courses }: { courses: MainCourseCard[] }) {
   return (
     <>
-      {/* F-UI-2: new dark Aceternity-style hero. Old <HeroSection />
-         (light blobs + AnimatedGradientText) is kept defined below for
-         one-click rollback while F-UI-2.5/3/4 ship; remove once the new
-         hero is validated in production. */}
       <HeroMain />
-      {/* F-UI-2.5: social proof + USP + course teaser ngay sau Hero để
-         build credibility sớm. Legacy sections (StatsBar, UuTheSection, …)
-         vẫn giữ — sẽ refactor / dedupe ở F-UI-3/4. */}
       <TrustBadges />
       <UspGrid />
-      <CourseTeaser />
-      {/* F-UI-3: testimonials → FAQ → secondary CTA. Legacy FAQSection
-         + FinalCTA bên dưới sẽ dedupe / remove ở F-UI-4 (cùng phase với
-         footer + mobile nav drawer). */}
+      <CatalogSection courses={courses} />
       <Testimonials />
-      <FAQ />
       <SecondaryCta />
       <StatsBar />
       <UuTheSection />
-      <SixAdvantagesSection />
       <EarlyBirdCountdown />
-      <CatalogSection courses={courses} />
       <SixCommitmentsSection />
       <TravelPrizeBanner />
       <CompetitionCountdown />
       <FAQSection />
       <FinalCTA />
     </>
-  );
-}
-
-// ============== 1. HERO (LEGACY — replaced by <HeroMain /> in F-UI-2)
-// Prefixed with `_` so ESLint allows the function to stay defined for one-
-// click rollback. Delete once the new hero is validated.
-// ====================================
-function _HeroSection() {
-  return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-orange-100 via-amber-50/40 to-purple-100 py-24 md:py-32 lg:py-36">
-      {/* Mesh gradient base — 4 large saturated blobs for depth */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute top-0 left-0 h-[750px] w-[750px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-orange-400/60 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute bottom-0 right-0 h-[750px] w-[750px] translate-x-1/3 translate-y-1/3 rounded-full bg-purple-500/50 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/4 right-0 h-[400px] w-[400px] translate-x-1/4 rounded-full bg-rose-400/35 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute bottom-1/4 left-0 h-[400px] w-[400px] -translate-x-1/4 rounded-full bg-amber-400/40 blur-3xl"
-      />
-      {/* Conic accent — adds spectrum colorfulness */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 [background:conic-gradient(from_180deg_at_50%_50%,rgba(249,115,22,0.10)_0deg,rgba(124,58,237,0.10)_120deg,rgba(244,114,182,0.08)_240deg,rgba(249,115,22,0.10)_360deg)] opacity-70"
-      />
-      {/* Dot grid with center mask */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(124,58,237,0.15)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_70%)]"
-      />
-      {/* Particles + sparkles for dynamic motion */}
-      <Particles
-        className="absolute inset-0"
-        quantity={90}
-        ease={70}
-        color="#7C3AED"
-        refresh={false}
-      />
-      <Sparkles density="high" colors={["orange", "purple"]} />
-
-      <div className="container mx-auto px-4 max-w-6xl relative z-10">
-        <FadeIn>
-          <div className="text-center max-w-4xl mx-auto">
-            {/* Live status pill — gradient bg, larger pulse dot */}
-            <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white shadow-2xl shadow-orange-500/40 rounded-full px-5 py-2.5 mb-6 ring-1 ring-white/30">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-90" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
-              </span>
-              <span className="text-xs sm:text-sm font-bold tracking-wide">
-                Đang tuyển sinh — Cuộc thi Robotics 2026 · Vòng loại 26/07
-              </span>
-            </div>
-
-            <div className="inline-flex items-center gap-2 bg-white/90 backdrop-blur border border-purple-300 rounded-full px-4 py-1.5 mb-6 shadow-md shadow-purple-500/10">
-              <SparklesIcon className="w-4 h-4 text-purple-600" />
-              <span className="text-xs font-bold uppercase tracking-wider text-purple-700">
-                Học Viện Robotics &amp; AI Đà Nẵng
-              </span>
-            </div>
-
-            {/* H1 with glowing accent behind gradient line */}
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-neutral-900 mb-6 leading-[1.05] tracking-tight drop-shadow-sm">
-              <span className="relative inline-block">
-                {/* Soft glow behind gradient text */}
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-x-0 -bottom-1 h-1/2 bg-gradient-to-r from-orange-400/30 via-pink-400/30 to-purple-500/30 blur-2xl"
-                />
-                <AnimatedGradientText
-                  colorFrom="#F97316"
-                  colorTo="#7C3AED"
-                  className="relative font-black"
-                >
-                  Khơi Nguồn Sáng Tạo
-                </AnimatedGradientText>
-              </span>
-              <br />
-              <span className="text-neutral-900">– Chắp Cánh Tương Lai</span>
-            </h1>
-
-            <p className="text-xl md:text-2xl text-neutral-700 mb-2 font-medium">
-              Trung tâm đào tạo lập trình Robotics &amp; AI
-            </p>
-            <p className="text-lg md:text-xl text-neutral-600 italic">
-              — nơi con học robot, nơi con trưởng thành.
-            </p>
-
-            <p className="text-base md:text-lg text-neutral-600 my-8 leading-relaxed max-w-3xl mx-auto">
-              Sata Robo mang đến chương trình học Robotics sinh động, gắn liền thực tiễn và các
-              cuộc thi từ cấp thành phố đến quốc tế.{" "}
-              <strong>Lớp nhỏ ≤12 học viên</strong>, giáo viên tận tâm nhiều kinh nghiệm.{" "}
-              <strong>Cam kết hoàn tiền 100% bằng văn bản</strong> nếu thí sinh không qua vòng
-              loại và tham gia chung kết khu vực Miền Trung tại Nghệ An tháng 9/2026 — không câu
-              hỏi.
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
-              <Link href="/lien-he?free-trial=true">
-                <ShimmerButton
-                  background="linear-gradient(110deg, #F97316 0%, #FB923C 50%, #F97316 100%)"
-                  borderRadius="14px"
-                  className="px-8 py-5 font-bold text-white shadow-2xl shadow-orange-500/40 text-base"
-                >
-                  <Target className="w-5 h-5 mr-2" />
-                  <span>Đăng Ký Học MIỄN PHÍ</span>
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </ShimmerButton>
-              </Link>
-              <Link
-                href="/khoa-hoc"
-                className="inline-flex items-center justify-center gap-2 bg-white hover:bg-purple-50 text-purple-700 border-2 border-purple-300 font-bold px-8 py-5 rounded-2xl text-base transition-all duration-200 hover:-translate-y-0.5 shadow-md hover:shadow-lg focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
-              >
-                Xem Các Khoá Học
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-            </div>
-
-            {/* Upgraded trust strip — icon cards instead of chips */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
-              <TrustItem
-                Icon={CheckCircle2}
-                title="Học MIỄN PHÍ"
-                subtitle="5 buổi luyện thi cơ bản"
-              />
-              <TrustItem
-                Icon={ShieldCheck}
-                title="Hoàn tiền 100%"
-                subtitle="Cam kết bằng văn bản"
-              />
-              <TrustItem
-                Icon={Target}
-                title="Robosim độc quyền"
-                subtitle="Phần mềm thi bắt buộc 2026"
-              />
-            </div>
-          </div>
-        </FadeIn>
-      </div>
-    </section>
-  );
-}
-
-function TrustItem({
-  Icon,
-  title,
-  subtitle,
-}: {
-  Icon: LucideIcon;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 bg-white/80 backdrop-blur border border-green-200 rounded-xl px-4 py-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
-      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 text-green-600 flex items-center justify-center shadow-sm">
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="text-left min-w-0">
-        <div className="text-sm font-bold text-neutral-900 truncate">{title}</div>
-        <div className="text-xs text-neutral-500 truncate">{subtitle}</div>
-      </div>
-    </div>
   );
 }
 
@@ -306,14 +116,12 @@ function StatBlock({ Icon, children }: { Icon: LucideIcon; children: React.React
   );
 }
 
-// ============== 3. ƯU THẾ + THÀNH TỰU (Bento 5) ==============
+// ============== 3. ƯU THẾ + THÀNH TỰU (Bento 3) ==============
 function UuTheSection() {
   const achievements = [
-    "Phối hợp tổ chức thành công Cuộc thi Sáng tạo Robotics 2026 cùng Thành Đoàn TP Đà Nẵng và TW Đoàn TNCS Hồ Chí Minh",
+    "Phối hợp tổ chức thành công Cuộc thi Sáng tạo Robotics 2025 cùng Thành Đoàn TP Đà Nẵng và TW Đoàn TNCS Hồ Chí Minh",
     "Tiếp tục tham gia BTC và hỗ trợ các đội thi Robotics 2026 tại TP Đà Nẵng",
-    "Mở rộng 4 trung tâm bao phủ quanh TP Đà Nẵng",
     "Đã giải xong đề thi 2026 và hoàn thiện tài liệu đào tạo luyện thi chuyên sâu với cam kết đầu ra bằng văn bản",
-    "Đang hoàn thiện 2 trung tâm mới, dự kiến khai trương tháng 8/2026",
   ];
 
   return (
@@ -366,129 +174,6 @@ function UuTheSection() {
               </article>
             </RevealOnScroll>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ============== 4. 6 ƯU ĐIỂM ==============
-interface Advantage {
-  Icon: LucideIcon;
-  title: string;
-  desc: string;
-  tone: "orange" | "purple" | "green" | "blue" | "amber" | "indigo";
-}
-
-const ADVANTAGE_TONE: Record<Advantage["tone"], { bg: string; border: string; icon: string }> = {
-  orange: { bg: "from-orange-50 to-amber-50", border: "border-orange-200", icon: "bg-orange-500" },
-  purple: { bg: "from-purple-50 to-violet-50", border: "border-purple-200", icon: "bg-purple-600" },
-  green: { bg: "from-green-50 to-emerald-50", border: "border-green-200", icon: "bg-green-500" },
-  blue: { bg: "from-blue-50 to-sky-50", border: "border-blue-200", icon: "bg-blue-500" },
-  amber: { bg: "from-amber-50 to-yellow-50", border: "border-amber-200", icon: "bg-amber-500" },
-  indigo: { bg: "from-indigo-50 to-blue-50", border: "border-indigo-200", icon: "bg-indigo-500" },
-};
-
-function SixAdvantagesSection() {
-  const advantages: Advantage[] = [
-    {
-      Icon: Target,
-      title: "Robosim Độc Quyền",
-      desc: "Phần mềm bắt buộc trong Cuộc thi Sáng tạo Robotics 2026 của Thành Đoàn Đà Nẵng. Chỉ Sata Robo đào tạo phần mềm này.",
-      tone: "orange",
-    },
-    {
-      Icon: Users,
-      title: "Lớp Nhỏ ≤12 HV",
-      desc: "Giáo viên biết tên và điểm mạnh từng con. Không em nào bị bỏ lại phía sau.",
-      tone: "purple",
-    },
-    {
-      Icon: Wallet,
-      title: "Cam Kết Hoàn Tiền 100%",
-      desc: "Nếu con học tại trung tâm và không vượt vòng loại để tham gia chung kết khu vực tại Nghệ An vào tháng 9/2026.",
-      tone: "green",
-    },
-    {
-      Icon: Plane,
-      title: "Giải Thưởng Du Lịch 3-7 Triệu",
-      desc: "Học viên đạt giải cuộc thi cấp TP được thưởng chuyến du lịch kết hợp lễ khai trương T8/2026.",
-      tone: "blue",
-    },
-    {
-      Icon: Mic,
-      title: "Thuyết Trình Trước Phụ Huynh",
-      desc: "Cuối mỗi 12 buổi học, con thuyết trình dự án, ghi hình kỷ niệm. Phụ huynh thấy kết quả thực tế.",
-      tone: "amber",
-    },
-    {
-      Icon: Trophy,
-      title: "Hỗ Trợ 3 Triệu Lệ Phí Thi Quốc Gia",
-      desc: "Học viên hoàn thành khoá học và tham dự cuộc thi Quốc gia theo đoàn Sata Robo được hỗ trợ 3.000.000đ/năm.",
-      tone: "indigo",
-    },
-  ];
-
-  return (
-    <section className="bg-neutral-50 py-16 md:py-24">
-      <div className="container mx-auto px-4 max-w-7xl">
-        <SectionEyebrow icon={SparklesIcon} label="ƯU ĐIỂM" tone="purple" />
-        <SectionHeading>Tại sao phụ huynh chọn Sata Robo?</SectionHeading>
-        <SectionLead>6 điểm khác biệt làm nên uy tín</SectionLead>
-
-        {/* Mobile + tablet: auto-rotating carousel */}
-        <div className="mt-10 lg:hidden">
-          <AutoCarousel slideClassName="flex-[0_0_88%] sm:flex-[0_0_45%]" dotActiveClassName="bg-purple-600">
-            {advantages.map((adv, i) => {
-              const tone = ADVANTAGE_TONE[adv.tone];
-              const { Icon } = adv;
-              return (
-                <article
-                  key={adv.title}
-                  className={`h-full bg-gradient-to-br ${tone.bg} rounded-2xl border-2 ${tone.border} p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)]`}
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-12 h-12 rounded-xl ${tone.icon} text-white flex items-center justify-center shadow-md`}>
-                      <Icon className="w-6 h-6" />
-                    </div>
-                    <span className="text-3xl font-black text-neutral-300">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-bold text-neutral-900 mb-2">{adv.title}</h3>
-                  <p className="text-sm text-neutral-700 leading-relaxed">{adv.desc}</p>
-                </article>
-              );
-            })}
-          </AutoCarousel>
-        </div>
-
-        {/* Desktop: 3-col grid */}
-        <div className="mt-10 hidden lg:grid lg:grid-cols-3 gap-6">
-          {advantages.map((adv, i) => {
-            const tone = ADVANTAGE_TONE[adv.tone];
-            const { Icon } = adv;
-            return (
-              <RevealOnScroll key={adv.title} direction="up" distance={20} delay={i * 0.05}>
-                <article
-                  className={`group h-full bg-gradient-to-br ${tone.bg} rounded-2xl border-2 ${tone.border} p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300`}
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    <div
-                      className={`w-12 h-12 rounded-xl ${tone.icon} text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform`}
-                    >
-                      <Icon className="w-6 h-6" />
-                    </div>
-                    <span className="text-3xl font-black text-neutral-300">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-bold text-neutral-900 mb-2">{adv.title}</h3>
-                  <p className="text-sm text-neutral-700 leading-relaxed">{adv.desc}</p>
-                </article>
-              </RevealOnScroll>
-            );
-          })}
         </div>
       </div>
     </section>

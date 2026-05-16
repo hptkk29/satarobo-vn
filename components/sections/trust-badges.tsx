@@ -27,7 +27,7 @@ export function TrustBadges() {
       <div className="mx-auto max-w-6xl">
         <FadeIn>
           <p className="mb-8 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 sm:text-sm">
-            Tin tưởng bởi 10,000+ phụ huynh & học sinh
+            Tin tưởng bởi 5,000+ phụ huynh & học sinh
           </p>
         </FadeIn>
 
