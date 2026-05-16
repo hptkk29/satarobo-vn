@@ -370,6 +370,10 @@
     animation: none;
     opacity: 1;
   }
+  .animate-marquee,
+  .animate-marquee-vertical {
+    animation: none;
+  }
 }
 
 /* ── Hero responsive helper (legacy laptrinhrobot) ─────────── */

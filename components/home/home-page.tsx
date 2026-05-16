@@ -38,6 +38,9 @@ import { HeroMain } from "@/components/sections/hero-main";
 import { TrustBadges } from "@/components/sections/trust-badges";
 import { UspGrid } from "@/components/sections/usp-grid";
 import { CourseTeaser } from "@/components/sections/course-teaser";
+import { Testimonials } from "@/components/sections/testimonials";
+import { FAQ } from "@/components/sections/faq";
+import { SecondaryCta } from "@/components/sections/secondary-cta";
 
 // ============== Types ==============
 export interface MainCourseCard {
@@ -63,6 +66,12 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
       <TrustBadges />
       <UspGrid />
       <CourseTeaser />
+      {/* F-UI-3: testimonials → FAQ → secondary CTA. Legacy FAQSection
+         + FinalCTA bên dưới sẽ dedupe / remove ở F-UI-4 (cùng phase với
+         footer + mobile nav drawer). */}
+      <Testimonials />
+      <FAQ />
+      <SecondaryCta />
       <StatsBar />
       <UuTheSection />
       <SixAdvantagesSection />
