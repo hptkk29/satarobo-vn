@@ -111,15 +111,13 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
             <Plus className="h-4 w-4" />
             Thêm hàng
           </Link>
-          <button
-            type="button"
-            disabled
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed"
-            title="Coming in F1.5"
+          <Link
+            href="/admin/inventory/items/import"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Import Excel (F1.5)
-          </button>
+            Import Excel
+          </Link>
         </div>
       </div>
 
