@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { createNews, updateNews } from "../_actions";
 import { MarkdownEditor } from "./markdown-editor";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 
 export type NewsFormValue = {
   id: string;
@@ -31,6 +32,7 @@ export function NewsForm({ news }: NewsFormProps) {
   const isEdit = Boolean(news);
 
   const [content, setContent] = useState<string>(news?.content ?? "");
+  const [coverImage, setCoverImage] = useState<string | null>(news?.coverImage ?? null);
   const [error, setError] = useState<string | null>(null);
 
   async function action(formData: FormData) {
@@ -93,12 +95,17 @@ export function NewsForm({ news }: NewsFormProps) {
           />
         </Grid>
         <Grid cols={2}>
-          <Field
-            label="Cover Image URL"
-            name="coverImage"
-            defaultValue={news?.coverImage ?? undefined}
-            placeholder="https://cdn.satarobo.vn/..."
-          />
+          <div>
+            <ImageUploader
+              label="Cover Image"
+              value={coverImage}
+              onChange={setCoverImage}
+              prefix="uploads/news"
+              aspect="video"
+              helperText="Ảnh đại diện hiển thị ở /tin-tuc và OG image"
+            />
+            <input type="hidden" name="coverImage" value={coverImage ?? ""} />
+          </div>
           <Field
             label="Display Order"
             name="displayOrder"

@@ -180,7 +180,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
           <ul className="list-disc list-inside text-blue-800 space-y-1">
             <li>Để trống ô và bấm Lưu → reset về giá trị mặc định.</li>
             <li>Public page tự revalidate sau khi lưu.</li>
-            <li>Ảnh upload qua R2 (max 5MB, JPG/PNG/WebP/GIF/SVG).</li>
+            <li>Ảnh upload qua R2 (max 10MB, JPG/PNG/WebP/GIF/SVG).</li>
           </ul>
         </div>
       </div>

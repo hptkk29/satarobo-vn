@@ -10,6 +10,7 @@ import {
   type JsonArrayItem,
   type JsonObjectItem,
 } from "./json-array-editor";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 
 type PackageFormValue = {
   id: string;
@@ -113,6 +114,7 @@ export function PackageForm({ pkg }: PackageFormProps) {
   const [curriculum, setCurriculum] = useState<JsonArrayItem[]>(
     normalizeJsonArray(pkg?.curriculum ?? []),
   );
+  const [thumbnail, setThumbnail] = useState<string | null>(pkg?.thumbnail ?? null);
 
   const action = async (formData: FormData) => {
     setError(null);
@@ -263,12 +265,14 @@ export function PackageForm({ pkg }: PackageFormProps) {
       </Section>
 
       <Section title="Image">
-        <Field
-          label="Thumbnail URL"
-          name="thumbnail"
-          defaultValue={pkg?.thumbnail}
-          placeholder="https://cdn.satarobo.vn/..."
+        <ImageUploader
+          label="Thumbnail"
+          value={thumbnail}
+          onChange={setThumbnail}
+          prefix="uploads/courses"
+          aspect="video"
         />
+        <input type="hidden" name="thumbnail" value={thumbnail ?? ""} />
       </Section>
 
       <Section title="SEO">

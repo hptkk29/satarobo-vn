@@ -6,6 +6,7 @@ import { useFormStatus } from "react-dom";
 import { createKit, updateKit } from "../_actions";
 import { StringArrayEditor } from "../../recruitment/_components/string-array-editor";
 import { SpecsEditor } from "./specs-editor";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 
 export type KitFormValue = {
   id: string;
@@ -36,6 +37,7 @@ export function KitForm({ kit }: { kit?: KitFormValue }) {
   const [specs, setSpecs] = useState<Record<string, string>>(kit?.specs ?? {});
   const [features, setFeatures] = useState<string[]>(kit?.features ?? []);
   const [highlights, setHighlights] = useState<string[]>(kit?.highlights ?? []);
+  const [mainImage, setMainImage] = useState<string | null>(kit?.mainImage || null);
   const [galleryImages, setGalleryImages] = useState<string[]>(kit?.galleryImages ?? []);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,20 +146,28 @@ export function KitForm({ kit }: { kit?: KitFormValue }) {
       </Section>
 
       <Section title="Hình ảnh">
-        <Field
-          label="Ảnh chính (mainImage URL)"
-          name="mainImage"
-          defaultValue={kit?.mainImage ?? ""}
-          placeholder="https://cdn.satarobo.vn/hoc-cu/alpha/main.png"
-        />
+        <div>
+          <ImageUploader
+            label="Ảnh chính (mainImage)"
+            value={mainImage}
+            onChange={setMainImage}
+            prefix="uploads/kits"
+            aspect="square"
+            required
+          />
+          <input type="hidden" name="mainImage" value={mainImage ?? ""} />
+        </div>
         <div>
           <label className="mb-1 block text-sm font-semibold text-neutral-700">
             Gallery (URLs ảnh phụ)
           </label>
+          <p className="mb-2 text-xs text-neutral-500">
+            Tạm thời nhập URL — gallery uploader sẽ thêm ở Phase B.
+          </p>
           <StringArrayEditor
             value={galleryImages}
             onChange={setGalleryImages}
-            placeholder="https://cdn.satarobo.vn/hoc-cu/alpha/sub1.png"
+            placeholder="URL ảnh phụ — gallery uploader sẽ thêm ở Phase B"
           />
         </div>
       </Section>
