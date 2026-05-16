@@ -189,40 +189,29 @@ export function Footer() {
           {/* Hệ thống cơ sở */}
           <div>
             <h4 className="mb-4 font-semibold text-white">Hệ thống cơ sở</h4>
-            <ul className="space-y-3 text-sm">
-              {operationalLocations().map((loc) => (
-                <li key={loc.id} className="flex gap-2">
-                  <MapPin
-                    className={`mt-0.5 h-4 w-4 shrink-0 ${
-                      loc.isHQ ? "text-[#F97316]" : "text-[#7C3AED]"
-                    }`}
-                  />
-                  <span>
-                    <span className="font-medium text-white">
-                      {loc.name}
-                      {loc.isHQ && " (Trụ sở chính)"}
-                    </span>
-                    <br />
-                    {loc.address}
-                  </span>
-                </li>
-              ))}
-              {upcomingLocations().map((loc) => (
-                <li key={loc.id} className="flex gap-2 opacity-70">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                  <span>
-                    <span className="font-medium text-amber-300">
-                      {loc.name}
-                      <span className="ml-1 text-[10px] uppercase tracking-wider text-amber-200/80">
-                        · Sắp khai trương
-                      </span>
-                    </span>
-                    <br />
-                    {loc.address}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-3 text-sm">
+              <div className="flex gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#F97316]" />
+                <div>
+                  <p className="font-medium text-white">
+                    {HQ_FOOTER.name}{" "}
+                    <span className="text-xs text-gray-400">(Trụ sở chính)</span>
+                  </p>
+                  <p className="text-xs text-gray-400">{HQ_FOOTER.address}</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                {operationalLocations().length} cơ sở đang hoạt động ·{" "}
+                {upcomingLocations().length} sắp khai trương
+              </p>
+              <Link
+                href="/lien-he"
+                className="inline-flex items-center gap-1 text-sm font-medium text-[#F97316] hover:text-orange-400 transition-colors"
+              >
+                Xem tất cả cơ sở
+                <span aria-hidden="true">→</span>
+              </Link>
+            </div>
             {/* Contact */}
             <ul className="mt-5 space-y-2 text-sm">
               <li className="flex items-center gap-2">
