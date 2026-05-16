@@ -54,7 +54,7 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
       <SixAdvantagesSection />
       <EarlyBirdCountdown />
       <CatalogSection courses={courses} />
-      <SevenCommitmentsSection />
+      <SixCommitmentsSection />
       <TravelPrizeBanner />
       <CompetitionCountdown />
       <FAQSection />
@@ -522,20 +522,16 @@ function CatalogSection({ courses }: { courses: MainCourseCard[] }) {
   );
 }
 
-// ============== 6. 7 CAM KẾT ==============
-function SevenCommitmentsSection() {
+// ============== 6. CAM KẾT (6 items) ==============
+function SixCommitmentsSection() {
   const commitments = [
     {
-      title: "Hoàn tiền 100% sau 2 buổi đầu",
-      desc: "Nếu con không thích, hoàn toàn bộ, không câu hỏi.",
+      title: "Hoàn tiền 100% nếu không hài lòng",
+      desc: "Buổi học đầu tiên 90 phút, nếu con không thích sẽ hoàn tiền 100% học phí đã đóng, không câu hỏi. Hoàn lại sau 3 ngày làm việc.",
     },
     {
-      title: "Lớp nhỏ ≤12 HV",
+      title: "Lớp nhỏ ≤12 Học viên",
       desc: "GV tận tâm, học kèm để các con tiến bộ mỗi ngày.",
-    },
-    {
-      title: "Robosim độc quyền",
-      desc: "Phần mềm bắt buộc Cuộc thi 2026, chỉ Sata Robo đào tạo.",
     },
     {
       title: "Giải thưởng du lịch 3-7 triệu",
@@ -550,8 +546,8 @@ function SevenCommitmentsSection() {
       desc: "Cho HV tham dự cuộc thi Quốc gia theo đoàn Sata Robo.",
     },
     {
-      title: "Test năng lực & Học thử MIỄN PHÍ",
-      desc: "45 phút test + 90 phút học thử, hoàn toàn 0 đồng.",
+      title: "Cam kết văn bản cho gói Sata8",
+      desc: "Quyền lợi hoàn tiền của phụ huynh được ghi rõ bằng văn bản trước khi đăng ký gói Sata8.",
     },
   ];
 
@@ -560,7 +556,7 @@ function SevenCommitmentsSection() {
       <div className="container mx-auto px-4 max-w-6xl">
         <SectionEyebrow icon={ShieldCheck} label="CAM KẾT" tone="purple" />
         <SectionHeading>Sata Robo cam kết với bạn</SectionHeading>
-        <SectionLead>7 cam kết bằng văn bản với phụ huynh</SectionLead>
+        <SectionLead>6 cam kết bằng văn bản với phụ huynh</SectionLead>
 
         {/* Mobile + tablet: auto-rotating carousel */}
         <div className="mt-10 md:hidden">
