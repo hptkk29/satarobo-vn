@@ -97,14 +97,25 @@ model VerificationToken {
 // ─── Core Business ───────────────────────────────────────────────────────────
 
 model Center {
-  id        String   @id @default(cuid())
-  name      String
-  address   String
-  phone     String?
-  email     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  address      String
+  ward         String?
+  district     String?
+  city         String   @default("")
+  phone        String?
+  email        String?
+  googleMapUrl String?  @db.Text
+  workingHours String?
+  managerName  String?
+  logoUrl      String?
+  bannerUrl    String?
+  description  String?  @db.Text
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   users     User[]
   leads     Lead[]
@@ -113,6 +124,7 @@ model Center {
   employees Employee[]
 
   @@index([isActive])
+  @@index([displayOrder])
 }
 
 model User {
