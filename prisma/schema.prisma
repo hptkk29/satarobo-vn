@@ -133,8 +133,9 @@ model Center {
   employees Employee[]
   rooms     Room[]
   holidays  Holiday[]
-  stockBalances  StockBalance[]
-  stockMovements StockMovement[]
+  stockBalances    StockBalance[]
+  stockMovements   StockMovement[]
+  inventoryAudits  InventoryAudit[]
 
   @@index([isActive])
   @@index([displayOrder])
@@ -926,6 +927,7 @@ model Employee {
   gradedSubmissions  AssignmentSubmission[]    @relation("SubmissionGrader")
   generatedReports   ProgressReportLog[]       @relation("ReportGenerator")
   performedMovements StockMovement[]           @relation("MovementPerformer")
+  performedAudits    InventoryAudit[]          @relation("AuditPerformer")
 
   @@index([department])
   @@index([isActive])
@@ -1425,6 +1427,7 @@ model InventoryItem {
 
   balances            StockBalance[]
   movements           StockMovement[]
+  auditItems          InventoryAuditItem[] @relation("AuditedItem")
 
   @@index([category, isActive])
 }
@@ -1489,8 +1492,69 @@ model StockMovement {
   performedAt    DateTime          @default(now())
   notes          String?           @db.Text
 
+  auditItem      InventoryAuditItem? @relation("AuditMovement")
+
   @@index([itemId, centerId, performedAt])
   @@index([centerId, performedAt])
   @@index([type, performedAt])
   @@index([transferPairId])
+}
+
+// ─── Phase F4 — Inventory audit (kiểm kê) ────────────────────────────────
+enum InventoryAuditStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
+model InventoryAudit {
+  id             String               @id @default(cuid())
+  auditCode      String?              @unique
+  centerId       String
+  center         Center               @relation(fields: [centerId], references: [id])
+
+  status         InventoryAuditStatus @default(DRAFT)
+
+  // Snapshot stats (filled on submit)
+  totalItems     Int                  @default(0)
+  totalAdjusted  Int                  @default(0)
+  totalIncreases Int                  @default(0)
+  totalDecreases Int                  @default(0)
+
+  performedById  String?
+  performedBy    Employee?            @relation("AuditPerformer", fields: [performedById], references: [id], onDelete: SetNull)
+  performedAt    DateTime?
+
+  notes          String?              @db.Text
+
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  items          InventoryAuditItem[]
+
+  @@index([centerId, performedAt])
+  @@index([status])
+}
+
+model InventoryAuditItem {
+  id          String         @id @default(cuid())
+  auditId     String
+  audit       InventoryAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  itemId      String
+  item        InventoryItem  @relation("AuditedItem", fields: [itemId], references: [id])
+
+  previousQty Int
+  actualQty   Int
+  delta       Int
+
+  reason      String?        @db.Text
+
+  // Link to the ADJUSTMENT movement generated on submit (null in DRAFT).
+  movementId  String?        @unique
+  movement    StockMovement? @relation("AuditMovement", fields: [movementId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime       @default(now())
+
+  @@unique([auditId, itemId])
+  @@index([itemId])
 }

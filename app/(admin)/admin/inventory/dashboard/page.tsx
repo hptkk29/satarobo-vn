@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
+  ClipboardCheck,
   DollarSign,
   History,
   LayoutDashboard,
@@ -64,6 +65,13 @@ export default async function InventoryDashboardPage() {
           >
             <History className="mr-1 inline h-3.5 w-3.5" />
             Lịch sử
+          </Link>
+          <Link
+            href="/admin/inventory/audit"
+            className="rounded-md border border-gray-200 bg-white px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            <ClipboardCheck className="mr-1 inline h-3.5 w-3.5" />
+            Kiểm kê
           </Link>
         </div>
       </div>

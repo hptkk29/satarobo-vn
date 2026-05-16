@@ -150,3 +150,33 @@ export const inventoryItemSchema = z.object({
 });
 
 export type InventoryItemInput = z.infer<typeof inventoryItemSchema>;
+
+// ─── Phase F4 — audit (kiểm kê bulk) ─────────────────────────────────────
+
+export const InventoryAuditStatusEnum = z.enum([
+  "DRAFT",
+  "COMPLETED",
+  "CANCELLED",
+]);
+
+export const startAuditSchema = z.object({
+  centerId: z.string().trim().min(1, "Chọn cơ sở"),
+  auditCode: nullableStr,
+  notes: nullableStr,
+});
+
+export const auditLineSchema = z.object({
+  itemId: z.string().trim().min(1),
+  previousQty: z.coerce.number().int().min(0),
+  actualQty: z.coerce.number().int().min(0),
+  reason: nullableStr,
+});
+
+export const saveAuditDraftSchema = z.object({
+  auditId: z.string().trim().min(1),
+  lines: z.array(auditLineSchema),
+});
+
+export type StartAuditInput = z.infer<typeof startAuditSchema>;
+export type AuditLineInput = z.infer<typeof auditLineSchema>;
+export type SaveAuditDraftInput = z.infer<typeof saveAuditDraftSchema>;

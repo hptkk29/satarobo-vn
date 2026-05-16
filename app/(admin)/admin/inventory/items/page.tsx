@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { Boxes, FileSpreadsheet, History, LayoutDashboard, Plus } from "lucide-react";
+import {
+  Boxes,
+  ClipboardCheck,
+  FileSpreadsheet,
+  History,
+  LayoutDashboard,
+  Plus,
+} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -124,6 +131,13 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
           >
             <History className="h-4 w-4" />
             Lịch sử
+          </Link>
+          <Link
+            href="/admin/inventory/audit"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            Kiểm kê
           </Link>
           <Link
             href="/admin/inventory/dashboard"
