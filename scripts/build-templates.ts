@@ -119,6 +119,45 @@ const TEMPLATES: Template[] = [
       },
     ],
   },
+  {
+    filename: "mau-lich-nghi.xlsx",
+    sheetName: "Lịch nghỉ",
+    headers: ["name", "date", "endDate", "centerSlug", "type", "note"],
+    sampleRows: [
+      {
+        name: "Tết Dương lịch 2026",
+        date: "2026-01-01",
+        endDate: "",
+        centerSlug: "",
+        type: "HOLIDAY",
+        note: "Nghỉ Tết Dương lịch",
+      },
+      {
+        name: "Tết Nguyên Đán Bính Ngọ",
+        date: "2026-02-17",
+        endDate: "2026-02-23",
+        centerSlug: "",
+        type: "HOLIDAY",
+        note: "Nghỉ Tết Nguyên Đán",
+      },
+      {
+        name: "Bảo trì hệ thống điện",
+        date: "2026-03-15",
+        endDate: "",
+        centerSlug: "danang",
+        type: "MAINTENANCE",
+        note: "Chỉ chi nhánh Đà Nẵng",
+      },
+      {
+        name: "Lễ Quốc khánh",
+        date: "2026-09-02",
+        endDate: "2026-09-03",
+        centerSlug: "",
+        type: "HOLIDAY",
+        note: "",
+      },
+    ],
+  },
 ];
 
 const outDir = path.join(process.cwd(), "public", "templates");

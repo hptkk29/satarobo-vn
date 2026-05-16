@@ -19,6 +19,7 @@ import {
   Boxes,
   MapPin,
   DoorOpen,
+  CalendarOff,
   ClipboardList,
   CalendarDays,
   ClipboardCheck,
@@ -51,6 +52,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Cơ sở", href: "/admin/centers", icon: MapPin },
       { label: "Phòng học", href: "/admin/rooms", icon: DoorOpen },
+      { label: "Lịch nghỉ", href: "/admin/holidays", icon: CalendarOff },
     ],
   },
   {

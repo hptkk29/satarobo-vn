@@ -123,6 +123,7 @@ model Center {
   students  Student[]
   employees Employee[]
   rooms     Room[]
+  holidays  Holiday[]
 
   @@index([isActive])
   @@index([displayOrder])
@@ -150,6 +151,29 @@ model Room {
 
   @@unique([centerId, code])
   @@index([centerId, status])
+}
+
+enum HolidayType {
+  HOLIDAY
+  MAINTENANCE
+  EVENT
+  OTHER
+}
+
+model Holiday {
+  id        String      @id @default(cuid())
+  name      String
+  date      DateTime    @db.Date
+  endDate   DateTime?   @db.Date
+  centerId  String?
+  center    Center?     @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  type      HolidayType @default(HOLIDAY)
+  note      String?     @db.Text
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([date])
+  @@index([centerId, date])
 }
 
 model User {
