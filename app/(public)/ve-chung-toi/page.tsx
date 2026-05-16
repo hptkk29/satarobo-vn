@@ -29,6 +29,7 @@ import {
   operationalLocations,
   upcomingLocations,
 } from "@/lib/locations";
+import { AutoCarousel } from "@/components/public/auto-carousel";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -288,7 +289,35 @@ export default function VeChungToiPage() {
         title="4 giá trị định hình Sata Robo"
         subtitle="Mỗi quyết định, mỗi hành động của chúng tôi đều xuất phát từ 4 giá trị cốt lõi này"
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+        {/* Mobile + tablet: auto-rotating carousel */}
+        <div className="lg:hidden max-w-6xl mx-auto">
+          <AutoCarousel slideClassName="flex-[0_0_88%] sm:flex-[0_0_45%]">
+            {coreValues.map((value, index) => {
+              const Icon = value.icon;
+              return (
+                <div
+                  key={value.title}
+                  className={`relative h-full bg-gradient-to-br ${value.gradient} rounded-2xl border-2 ${value.borderColor} p-6`}
+                >
+                  <div className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full border-2 border-neutral-200 flex items-center justify-center text-xs font-black text-neutral-700 shadow-sm">
+                    {String(index + 1).padStart(2, "0")}
+                  </div>
+                  <div className={`w-14 h-14 rounded-2xl ${value.iconBg} flex items-center justify-center mb-4`}>
+                    <Icon className={`w-7 h-7 ${value.iconColor}`} />
+                  </div>
+                  <h3 className="text-xl font-bold text-neutral-900 mb-1">{value.title}</h3>
+                  <div className={`text-xs uppercase tracking-wider font-semibold ${value.iconColor} mb-3`}>
+                    {value.titleEn}
+                  </div>
+                  <p className="text-sm text-neutral-700 leading-relaxed">{value.description}</p>
+                </div>
+              );
+            })}
+          </AutoCarousel>
+        </div>
+
+        {/* Desktop: 4-col grid */}
+        <div className="hidden lg:grid lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
           {coreValues.map((value, index) => {
             const Icon = value.icon;
             return (

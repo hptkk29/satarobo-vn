@@ -30,6 +30,7 @@ import { ShimmerButton } from "@/components/magic/shimmer-button";
 import { Particles } from "@/components/magic/particles";
 import { FadeIn } from "@/components/motion/fade-in";
 import { RevealOnScroll } from "@/components/motion/reveal-on-scroll";
+import { AutoCarousel } from "@/components/public/auto-carousel";
 import { Sparkles } from "@/components/design-system/effects/sparkles";
 import { EarlyBirdCountdown } from "@/components/home/early-bird-countdown";
 import { FAQSection } from "@/components/home/faq-section";
@@ -296,7 +297,25 @@ function UuTheSection() {
         <SectionHeading>Sata Robo đang là đơn vị tiên phong</SectionHeading>
         <SectionLead>Robotics giáo dục tại Đà Nẵng</SectionLead>
 
-        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4 md:auto-rows-fr">
+        {/* Mobile + tablet: auto-rotating carousel */}
+        <div className="mt-10 md:hidden">
+          <AutoCarousel slideClassName="flex-[0_0_92%] sm:flex-[0_0_60%]">
+            {achievements.map((text, i) => (
+              <article
+                key={i}
+                className="h-full bg-white rounded-2xl border border-neutral-200 p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)]"
+              >
+                <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-purple-600 text-white text-sm font-black mb-3">
+                  {i + 1}
+                </div>
+                <p className="text-neutral-700 leading-relaxed text-sm">{text}</p>
+              </article>
+            ))}
+          </AutoCarousel>
+        </div>
+
+        {/* Desktop: original grid with row-span featured card preserved */}
+        <div className="mt-10 hidden md:grid md:grid-cols-3 gap-4 md:auto-rows-fr">
           {/* Card 1 — featured, spans 2 rows on desktop */}
           <RevealOnScroll direction="up" distance={20}>
             <article className="relative h-full bg-gradient-to-br from-orange-50 via-white to-purple-50 rounded-2xl border-2 border-orange-200 p-6 md:p-8 md:row-span-2 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-shadow overflow-hidden">
@@ -391,7 +410,35 @@ function SixAdvantagesSection() {
         <SectionHeading>Tại sao phụ huynh chọn Sata Robo?</SectionHeading>
         <SectionLead>6 điểm khác biệt làm nên uy tín</SectionLead>
 
-        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Mobile + tablet: auto-rotating carousel */}
+        <div className="mt-10 lg:hidden">
+          <AutoCarousel slideClassName="flex-[0_0_88%] sm:flex-[0_0_45%]" dotActiveClassName="bg-purple-600">
+            {advantages.map((adv, i) => {
+              const tone = ADVANTAGE_TONE[adv.tone];
+              const { Icon } = adv;
+              return (
+                <article
+                  key={adv.title}
+                  className={`h-full bg-gradient-to-br ${tone.bg} rounded-2xl border-2 ${tone.border} p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)]`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-12 h-12 rounded-xl ${tone.icon} text-white flex items-center justify-center shadow-md`}>
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <span className="text-3xl font-black text-neutral-300">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-neutral-900 mb-2">{adv.title}</h3>
+                  <p className="text-sm text-neutral-700 leading-relaxed">{adv.desc}</p>
+                </article>
+              );
+            })}
+          </AutoCarousel>
+        </div>
+
+        {/* Desktop: 3-col grid */}
+        <div className="mt-10 hidden lg:grid lg:grid-cols-3 gap-6">
           {advantages.map((adv, i) => {
             const tone = ADVANTAGE_TONE[adv.tone];
             const { Icon } = adv;
@@ -515,7 +562,33 @@ function SevenCommitmentsSection() {
         <SectionHeading>Sata Robo cam kết với bạn</SectionHeading>
         <SectionLead>7 cam kết bằng văn bản với phụ huynh</SectionLead>
 
-        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Mobile + tablet: auto-rotating carousel */}
+        <div className="mt-10 md:hidden">
+          <AutoCarousel slideClassName="flex-[0_0_88%]" dotActiveClassName="bg-purple-600">
+            {commitments.map((c, i) => (
+              <article
+                key={c.title}
+                className="flex items-start gap-4 bg-white rounded-xl border-2 border-purple-100 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.04)] h-full"
+              >
+                <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-xs font-bold text-purple-500">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <h3 className="font-bold text-neutral-900">{c.title}</h3>
+                  </div>
+                  <p className="text-sm text-neutral-600">{c.desc}</p>
+                </div>
+              </article>
+            ))}
+          </AutoCarousel>
+        </div>
+
+        {/* Desktop: 2-col grid */}
+        <div className="mt-10 hidden md:grid md:grid-cols-2 gap-4">
           {commitments.map((c, i) => (
             <RevealOnScroll key={c.title} direction="up" distance={16} delay={i * 0.04}>
               <article className="flex items-start gap-4 bg-white rounded-xl border-2 border-purple-100 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300">

@@ -22,6 +22,7 @@ import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { getPageImage, pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { AutoCarousel } from "@/components/public/auto-carousel";
 
 export const revalidate = 60;
 
@@ -207,7 +208,29 @@ export default async function TuyenDungPage() {
         title="Vì sao gia nhập đội ngũ?"
         glowOrb={{ color: "purple", position: "bottom-left" }}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Mobile + tablet: auto-rotating carousel */}
+        <div className="lg:hidden">
+          <AutoCarousel
+            slideClassName="flex-[0_0_88%] sm:flex-[0_0_45%]"
+            dotActiveClassName="bg-purple-600"
+          >
+            {PERKS.map((p) => (
+              <div
+                key={p.title}
+                className="h-full bg-white p-6 rounded-2xl border border-neutral-200"
+              >
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-purple-100 text-purple-700 mb-4">
+                  <p.icon className="w-6 h-6" />
+                </div>
+                <h3 className={`${tokens.typography.heading.h5} mb-2`}>{p.title}</h3>
+                <p className="text-sm text-neutral-600 leading-relaxed">{p.desc}</p>
+              </div>
+            ))}
+          </AutoCarousel>
+        </div>
+
+        {/* Desktop: 4-col grid */}
+        <div className="hidden lg:grid lg:grid-cols-4 gap-6">
           {PERKS.map((p) => (
             <div key={p.title} className="bg-white p-6 rounded-2xl border border-neutral-200">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-purple-100 text-purple-700 mb-4">
