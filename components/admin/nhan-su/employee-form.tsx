@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Employee, Department, Gender, ContractType } from "@prisma/client";
-import { FileUploader, type UploadResult } from "@/components/admin/file-uploader";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 import { Switch } from "@/components/ui/switch";
 import { getEmployeeFieldVisibility } from "@/lib/auth/permissions";
 import {
@@ -214,32 +214,13 @@ export function EmployeeForm({
         </div>
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-semibold">Avatar</label>
-          {data.avatarUrl ? (
-            <div className="mb-2 flex items-center gap-3 rounded-lg border border-gray-200 p-3">
-              <img
-                src={data.avatarUrl}
-                alt="Avatar"
-                className="h-16 w-16 rounded-full object-cover"
-              />
-              <div className="flex-1 truncate text-xs text-gray-600">
-                {data.avatarUrl}
-              </div>
-              <button
-                type="button"
-                onClick={() => setData({ ...data, avatarUrl: "" })}
-                className="text-xs text-red-600 hover:underline"
-              >
-                Xoá ảnh
-              </button>
-            </div>
-          ) : (
-            <FileUploader
-              acceptedCategories={["image"]}
-              onUploaded={(r: UploadResult) => setData({ ...data, avatarUrl: r.url })}
-              onError={(err) => toast.error(err)}
-            />
-          )}
+          <ImageUploader
+            label="Avatar"
+            value={data.avatarUrl}
+            onChange={(url) => setData({ ...data, avatarUrl: url ?? "" })}
+            prefix="uploads/employees"
+            aspect="square"
+          />
         </div>
 
         <div className="mt-4">

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileUploader, type UploadResult } from "@/components/admin/file-uploader";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 import { updatePageContentAction } from "@/app/(admin)/admin/honors/actions";
 
 export type SettingField = {
@@ -102,32 +102,12 @@ function FieldEditor({
       )}
 
       {field.type === "avatar" && (
-        <div className="space-y-3">
-          {draft && (
-            <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
-              <img
-                src={draft}
-                alt="Avatar"
-                className="h-16 w-16 rounded-full object-cover"
-              />
-              <div className="flex-1 truncate text-xs text-gray-600">{draft}</div>
-              <button
-                type="button"
-                onClick={() => setDraft("")}
-                className="text-xs text-red-600 hover:underline"
-              >
-                Xoá
-              </button>
-            </div>
-          )}
-          {!draft && (
-            <FileUploader
-              acceptedCategories={["image"]}
-              onUploaded={(r: UploadResult) => setDraft(r.url)}
-              onError={(e) => toast.error(e)}
-            />
-          )}
-        </div>
+        <ImageUploader
+          value={draft}
+          onChange={(url) => setDraft(url ?? "")}
+          prefix="uploads/honors"
+          aspect="square"
+        />
       )}
 
       <div className="mt-3 flex items-center justify-end gap-2">

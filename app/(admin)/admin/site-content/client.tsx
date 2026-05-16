@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileUploader, type UploadResult } from "@/components/admin/file-uploader";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 import { saveSiteContentAction } from "./actions";
 
 type FieldType = "text" | "textarea" | "avatar";
@@ -55,10 +55,6 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
         toast.error(res.error || "Lỗi");
       }
     });
-  };
-
-  const clear = (contentKey: string) => {
-    update(contentKey, "");
   };
 
   return (
@@ -132,33 +128,12 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
               )}
 
               {field.type === "avatar" && (
-                <div className="space-y-3">
-                  {value ? (
-                    <div className="flex items-center gap-3 rounded-lg border border-neutral-200 p-3 bg-neutral-50">
-                      <img
-                        src={value}
-                        alt="Preview"
-                        className="h-16 w-24 rounded object-cover"
-                      />
-                      <div className="flex-1 truncate text-xs text-neutral-600">
-                        {value}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => clear(field.key)}
-                        className="text-xs text-red-600 hover:underline"
-                      >
-                        Xoá
-                      </button>
-                    </div>
-                  ) : (
-                    <FileUploader
-                      acceptedCategories={["image"]}
-                      onUploaded={(r: UploadResult) => update(field.key, r.url)}
-                      onError={(e) => toast.error(e)}
-                    />
-                  )}
-                </div>
+                <ImageUploader
+                  value={value}
+                  onChange={(url) => update(field.key, url ?? "")}
+                  prefix="uploads/images"
+                  aspect="video"
+                />
               )}
 
               <div className="flex justify-end mt-3">
