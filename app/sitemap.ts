@@ -14,18 +14,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/tuyen-dung`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 },
     { url: `${BASE_URL}/lien-he`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE_URL}/tin-tuc`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.8 },
-    { url: `${BASE_URL}/vinh-danh`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
-    { url: `${BASE_URL}/vinh-danh/tat-ca`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.7 },
-    { url: `${BASE_URL}/vinh-danh/spark`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 },
-    { url: `${BASE_URL}/vinh-danh/growth`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 },
-    { url: `${BASE_URL}/vinh-danh/impact`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 },
-    { url: `${BASE_URL}/vinh-danh/grand-champion`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 },
+    // /vinh-danh entries removed — section is hidden via layout.tsx 404.
+    // Re-add when /vinh-danh is re-enabled.
     { url: `${BASE_URL}/chinh-sach-bao-mat`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
     { url: `${BASE_URL}/dieu-khoan-su-dung`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
     { url: `${BASE_URL}/chinh-sach-hoan-tra`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
   ]
 
-  const [news, jobs, honors] = await Promise.all([
+  const [news, jobs] = await Promise.all([
     db.news
       .findMany({
         where: { isPublished: true },
@@ -39,12 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         select: { slug: true, updatedAt: true },
       })
       .catch(() => []),
-    db.honor
-      .findMany({
-        where: { isPublished: true },
-        select: { slug: true, updatedAt: true },
-      })
-      .catch(() => []),
+    // db.honor disabled — /vinh-danh section is 404 via layout.
   ])
 
   const newsRoutes: MetadataRoute.Sitemap = news.map((n) => ({
@@ -61,12 +52,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }))
 
-  const honorRoutes: MetadataRoute.Sitemap = honors.map((h) => ({
-    url: `${BASE_URL}/vinh-danh/${h.slug}`,
-    lastModified: h.updatedAt,
-    changeFrequency: 'weekly',
-    priority: 0.7,
-  }))
-
-  return [...staticRoutes, ...newsRoutes, ...jobRoutes, ...honorRoutes]
+  return [...staticRoutes, ...newsRoutes, ...jobRoutes]
 }
