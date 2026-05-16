@@ -250,6 +250,7 @@ model Course {
   leads       Lead[]
   classes     Class[]
   enrollments Enrollment[]
+  curriculums Curriculum[]
 
   @@index([slug])
   @@index([type])
@@ -967,4 +968,51 @@ model ZMRoboKit {
 
   @@index([slug])
   @@index([isPublished, displayOrder])
+}
+
+// ─── Phase E1 ─────────────────────────────────────────────────────────────
+// Curriculum (Giáo trình) chứa Lesson (Bài học). Tách rời khỏi Course để
+// course (protected) giữ metadata, còn syllabus có thể update qua versions.
+model Curriculum {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id])
+
+  version     Int      @default(1)
+  name        String
+  description String?  @db.Text
+
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lessons     Lesson[]
+
+  @@unique([courseId, version])
+  @@index([courseId, isActive])
+}
+
+model Lesson {
+  id           String     @id @default(cuid())
+  curriculumId String
+  curriculum   Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+
+  order        Int
+
+  title        String
+  description  String?    @db.Text
+  content      String?    @db.Text
+
+  duration     Int        @default(90)
+  objectives   String[]   @default([])
+  materials    String[]   @default([])
+
+  notes        String?    @db.Text
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([curriculumId, order])
+  @@index([curriculumId])
 }
