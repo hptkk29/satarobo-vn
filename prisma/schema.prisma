@@ -905,9 +905,10 @@ model Employee {
   honors        Honor[]
   userAccount   User?         @relation("UserEmployee")
   roleAuditLogs RoleAuditLog[]
-  authoredQuestions Question[]    @relation("QuestionAuthor")
-  createdExams      Exam[]        @relation("ExamCreator")
-  gradedAttempts    ExamAttempt[] @relation("AttemptGrader")
+  authoredQuestions  Question[]    @relation("QuestionAuthor")
+  createdExams       Exam[]        @relation("ExamCreator")
+  gradedAttempts     ExamAttempt[] @relation("AttemptGrader")
+  uploadedDocuments  Document[]    @relation("DocumentUploader")
 
   @@index([department])
   @@index([isActive])
@@ -1020,6 +1021,7 @@ model Lesson {
 
   questions    Question[]
   exams        Exam[]
+  documents    Document[]
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
@@ -1203,4 +1205,48 @@ model ExamAnswer {
   updatedAt       DateTime     @updatedAt
 
   @@unique([attemptId, examQuestionId])
+}
+
+// ─── Phase E4 — Document management ──────────────────────────────────────
+enum DocumentType {
+  PDF
+  IMAGE
+  VIDEO
+  SLIDE
+  WORKSHEET
+  AUDIO
+  OTHER
+}
+
+model Document {
+  id           String       @id @default(cuid())
+
+  documentCode String?      @unique
+  title        String
+  description  String?      @db.Text
+
+  type         DocumentType
+  fileUrl      String
+  fileName     String
+  fileSize     Int
+  mimeType     String?
+
+  lessonId     String?
+  lesson       Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  isPublic     Boolean      @default(false)
+
+  tags         String[]     @default([])
+  notes        String?      @db.Text
+
+  uploadedById String?
+  uploadedBy   Employee?    @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([lessonId])
+  @@index([type])
+  @@index([isPublic])
+  @@index([uploadedById])
 }

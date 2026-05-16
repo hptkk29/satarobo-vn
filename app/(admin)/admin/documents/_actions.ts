@@ -1,0 +1,159 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import {
+  detectDocumentType,
+  documentSchema,
+  type DocumentInput,
+} from "@/lib/validators/document";
+
+type Result<T = undefined> =
+  | { ok: true; data?: T }
+  | { ok: false; error: string };
+
+const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"] as const;
+
+async function requireRole(): Promise<
+  | { ok: true; userId: string }
+  | { ok: false; error: string }
+> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!ALLOWED_ROLES.includes(session.user.role as (typeof ALLOWED_ROLES)[number])) {
+    return { ok: false, error: "Không có quyền quản lý tài liệu" };
+  }
+  return { ok: true, userId: session.user.id ?? "" };
+}
+
+async function resolveEmployeeId(userId: string): Promise<string | null> {
+  if (!userId) return null;
+  try {
+    const u = await db.user.findUnique({
+      where: { id: userId },
+      select: { employeeId: true },
+    });
+    return u?.employeeId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function createDocument(
+  input: DocumentInput,
+): Promise<Result<{ documentId: string }>> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const parsed = documentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  if (data.documentCode) {
+    const dup = await db.document.findUnique({
+      where: { documentCode: data.documentCode },
+      select: { id: true },
+    });
+    if (dup) return { ok: false, error: `Mã tài liệu "${data.documentCode}" đã tồn tại` };
+  }
+
+  const uploadedById = await resolveEmployeeId(gate.userId);
+
+  try {
+    const doc = await db.document.create({
+      data: {
+        ...data,
+        type: detectDocumentType(data.mimeType),
+        uploadedById,
+      },
+      select: { id: true },
+    });
+    revalidatePath("/admin/documents");
+    return { ok: true, data: { documentId: doc.id } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+}
+
+export async function createDocumentAndRedirect(input: DocumentInput) {
+  const res = await createDocument(input);
+  if (!res.ok) return res;
+  redirect(`/admin/documents/${res.data!.documentId}/edit`);
+}
+
+export async function updateDocument(
+  id: string,
+  input: DocumentInput,
+): Promise<Result> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const parsed = documentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const current = await db.document.findUnique({
+    where: { id },
+    select: { documentCode: true },
+  });
+  if (!current) return { ok: false, error: "Tài liệu không tồn tại" };
+
+  if (data.documentCode && data.documentCode !== current.documentCode) {
+    const dup = await db.document.findUnique({
+      where: { documentCode: data.documentCode },
+      select: { id: true },
+    });
+    if (dup && dup.id !== id) {
+      return { ok: false, error: `Mã tài liệu "${data.documentCode}" đã tồn tại` };
+    }
+  }
+
+  try {
+    await db.document.update({
+      where: { id },
+      data: { ...data, type: detectDocumentType(data.mimeType) },
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  revalidatePath("/admin/documents");
+  revalidatePath(`/admin/documents/${id}/edit`);
+  return { ok: true };
+}
+
+// NOTE: Chỉ xoá DB record; file trên R2 vẫn còn (cleanup job riêng sẽ
+// quét orphan files theo lịch — tránh xoá nhầm khi user revert).
+export async function deleteDocument(id: string): Promise<Result> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  try {
+    await db.document.delete({ where: { id } });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+  revalidatePath("/admin/documents");
+  return { ok: true };
+}
+
+export async function deleteDocumentAndRedirect(id: string): Promise<Result> {
+  const res = await deleteDocument(id);
+  if (!res.ok) return res;
+  redirect("/admin/documents");
+}

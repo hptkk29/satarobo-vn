@@ -7,6 +7,7 @@ import {
   FileText,
   Image as ImageIcon,
   Video,
+  Music,
   Archive,
   Loader2,
 } from "lucide-react";
@@ -51,6 +52,7 @@ const CATEGORY_ICONS = {
   image: ImageIcon,
   document: FileText,
   video: Video,
+  audio: Music,
   archive: Archive,
 };
 

@@ -1,4 +1,4 @@
-export type UploadCategory = "image" | "document" | "video" | "archive";
+export type UploadCategory = "image" | "document" | "video" | "audio" | "archive";
 
 export interface CategoryConfig {
   folder: string;
@@ -60,6 +60,22 @@ export const UPLOAD_CONFIG: Record<UploadCategory, CategoryConfig> = {
     ],
     allowedExtensions: [".mp4", ".webm", ".mov", ".avi"],
     description: "Video (MP4/WEBM/MOV/AVI, tối đa 500MB)",
+  },
+  audio: {
+    folder: "uploads/audio",
+    maxSize: 50 * 1024 * 1024,
+    allowedMimes: [
+      "audio/mpeg",
+      "audio/mp3",
+      "audio/wav",
+      "audio/x-wav",
+      "audio/ogg",
+      "audio/webm",
+      "audio/m4a",
+      "audio/x-m4a",
+    ],
+    allowedExtensions: [".mp3", ".wav", ".ogg", ".m4a", ".webm"],
+    description: "Audio (MP3/WAV/OGG/M4A, tối đa 50MB)",
   },
   archive: {
     folder: "uploads/archives",
