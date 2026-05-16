@@ -60,6 +60,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Size check returns 413 (Payload Too Large) — RFC-correct, separates size
+  // from MIME/extension issues that stay 400.
+  const maxSize = UPLOAD_CONFIG[category].maxSize;
+  if (sizeBytes > maxSize) {
+    const maxMB = Math.round(maxSize / 1024 / 1024);
+    return NextResponse.json(
+      { error: `File quá lớn. Tối đa ${maxMB}MB.` },
+      { status: 413 },
+    );
+  }
+
   const validationError = validateFile(category, filename, mimeType, sizeBytes);
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });

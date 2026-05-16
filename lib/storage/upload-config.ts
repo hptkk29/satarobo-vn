@@ -11,7 +11,7 @@ export interface CategoryConfig {
 export const UPLOAD_CONFIG: Record<UploadCategory, CategoryConfig> = {
   image: {
     folder: "uploads/images",
-    maxSize: 5 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024,
     allowedMimes: [
       "image/jpeg",
       "image/png",
@@ -20,7 +20,7 @@ export const UPLOAD_CONFIG: Record<UploadCategory, CategoryConfig> = {
       "image/svg+xml",
     ],
     allowedExtensions: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"],
-    description: "Ảnh (JPG/PNG/WEBP/GIF/SVG, tối đa 5MB)",
+    description: "Ảnh (JPG/PNG/WEBP/GIF/SVG, tối đa 10MB)",
   },
   document: {
     folder: "uploads/documents",

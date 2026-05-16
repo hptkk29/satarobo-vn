@@ -10,6 +10,13 @@ import { cn } from "@/lib/utils";
 const MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+// UPLOAD_CONFIG uses generic categories (image | document | video | archive).
+// ImageUploader is always "image"; prefix is kept on the prop for forward
+// compatibility if categories become per-resource later.
+function mapPrefixToCategory(_prefix: string): "image" {
+  return "image";
+}
+
 export interface ImageUploaderProps {
   value?: string | null;
   onChange: (url: string | null) => void;
@@ -67,17 +74,15 @@ export function ImageUploader({
       }
 
       try {
+        const category = mapPrefixToCategory(prefix);
         const presignRes = await fetch("/api/admin/upload-url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            category,
             filename: file.name,
-            contentType: file.type,
-            contentLength: file.size,
-            prefix,
             mimeType: file.type,
             sizeBytes: file.size,
-            category: "image",
           }),
         });
 
