@@ -257,8 +257,8 @@ export default async function HocCuPage() {
         title="Bảng so sánh chi tiết 3 bộ học cụ"
         subtitle="Chọn bộ phù hợp với độ tuổi và mục tiêu của con"
       >
-        <div className="max-w-5xl mx-auto overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
+        <div className="max-w-5xl mx-auto -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm border-collapse">
             <thead>
               <tr className="bg-neutral-50">
                 <th className="px-4 py-3 text-left font-semibold text-neutral-700 border-b-2 border-neutral-200">
