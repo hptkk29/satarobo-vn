@@ -3,14 +3,21 @@
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ArrowRightLeft, Minus, Plus, X } from "lucide-react";
 import {
+  ArrowRightLeft,
+  ClipboardCheck,
+  Minus,
+  Plus,
+  X,
+} from "lucide-react";
+import {
+  recordAdjustment,
   recordIssue,
   recordReceipt,
   recordTransfer,
 } from "../../movements/_actions";
 
-type ModalType = "receipt" | "issue" | "transfer" | null;
+type ModalType = "receipt" | "issue" | "transfer" | "adjustment" | null;
 
 interface CenterOption {
   id: string;
@@ -68,6 +75,15 @@ export function MovementActions({
           <ArrowRightLeft className="h-3 w-3" />
           Chuyển
         </button>
+        <button
+          type="button"
+          onClick={() => setOpen("adjustment")}
+          className="inline-flex items-center gap-1 rounded-md border border-purple-300 bg-white px-2 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+          title="Kiểm kê"
+        >
+          <ClipboardCheck className="h-3 w-3" />
+          Kiểm kê
+        </button>
       </div>
 
       {open &&
@@ -114,8 +130,12 @@ function MovementModal({
   const [toCenterId, setToCenterId] = useState<string>("");
   const [referenceNote, setReferenceNote] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [newQuantity, setNewQuantity] = useState<number>(currentQty);
+  const [reason, setReason] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const adjustmentDelta = newQuantity - currentQty;
 
   const close = () => {
     if (pending) return;
@@ -124,25 +144,41 @@ function MovementModal({
 
   function handleSubmit() {
     setError(null);
-    if (!Number.isFinite(quantity) || quantity < 1) {
-      setError("Số lượng phải >= 1");
-      return;
-    }
-    if (
-      (type === "issue" || type === "transfer") &&
-      quantity > currentQty
-    ) {
-      setError(`Không đủ tồn (${currentQty}). Cần ${quantity}.`);
-      return;
-    }
-    if (type === "transfer") {
-      if (!toCenterId) {
-        setError("Chọn cơ sở đích");
+
+    if (type === "adjustment") {
+      if (!Number.isFinite(newQuantity) || newQuantity < 0) {
+        setError("Số lượng mới phải >= 0");
         return;
       }
-      if (toCenterId === centerId) {
-        setError("Cơ sở đích trùng cơ sở nguồn");
+      if (adjustmentDelta === 0) {
+        setError("Số lượng không thay đổi");
         return;
+      }
+      if (reason.trim().length < 5) {
+        setError("Lý do tối thiểu 5 ký tự");
+        return;
+      }
+    } else {
+      if (!Number.isFinite(quantity) || quantity < 1) {
+        setError("Số lượng phải >= 1");
+        return;
+      }
+      if (
+        (type === "issue" || type === "transfer") &&
+        quantity > currentQty
+      ) {
+        setError(`Không đủ tồn (${currentQty}). Cần ${quantity}.`);
+        return;
+      }
+      if (type === "transfer") {
+        if (!toCenterId) {
+          setError("Chọn cơ sở đích");
+          return;
+        }
+        if (toCenterId === centerId) {
+          setError("Cơ sở đích trùng cơ sở nguồn");
+          return;
+        }
       }
     }
 
@@ -169,13 +205,20 @@ function MovementModal({
             referenceNote: referenceNote.trim() || null,
             notes: notes.trim() || null,
           });
-        } else {
+        } else if (type === "transfer") {
           res = await recordTransfer({
             itemId,
             fromCenterId: centerId,
             toCenterId,
             quantity,
             notes: notes.trim() || null,
+          });
+        } else {
+          res = await recordAdjustment({
+            itemId,
+            centerId,
+            newQuantity,
+            reason: reason.trim(),
           });
         }
 
@@ -195,12 +238,14 @@ function MovementModal({
     receipt: `Nhập kho — ${centerName}`,
     issue: `Xuất kho — ${centerName}`,
     transfer: `Chuyển kho từ ${centerName}`,
+    adjustment: `Kiểm kê — ${centerName}`,
   };
 
   const COLOR: Record<typeof type, string> = {
     receipt: "bg-green-500 hover:bg-green-600",
     issue: "bg-red-500 hover:bg-red-600",
     transfer: "bg-blue-500 hover:bg-blue-600",
+    adjustment: "bg-purple-500 hover:bg-purple-600",
   };
 
   return (
@@ -235,26 +280,80 @@ function MovementModal({
         )}
 
         <div className="mt-4 space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
-              Số lượng <span className="text-red-500">*</span>
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={
-                type === "receipt"
-                  ? undefined
-                  : Math.max(1, currentQty)
-              }
-              value={quantity}
-              onChange={(e) =>
-                setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
-              }
-              disabled={pending}
-              className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
-            />
-          </label>
+          {type !== "adjustment" && (
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+                Số lượng <span className="text-red-500">*</span>
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={
+                  type === "receipt"
+                    ? undefined
+                    : Math.max(1, currentQty)
+                }
+                value={quantity}
+                onChange={(e) =>
+                  setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
+                }
+                disabled={pending}
+                className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+              />
+            </label>
+          )}
+
+          {type === "adjustment" && (
+            <>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-neutral-700">
+                  Số lượng thực tế <span className="text-red-500">*</span>
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  value={newQuantity}
+                  onChange={(e) =>
+                    setNewQuantity(
+                      Math.max(0, parseInt(e.target.value, 10) || 0),
+                    )
+                  }
+                  disabled={pending}
+                  className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                />
+                {adjustmentDelta !== 0 && (
+                  <span
+                    className={
+                      "mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold " +
+                      (adjustmentDelta > 0
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700")
+                    }
+                  >
+                    {adjustmentDelta > 0 ? "Thừa" : "Thiếu"}:{" "}
+                    {Math.abs(adjustmentDelta)} {itemUnit}
+                  </span>
+                )}
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-neutral-700">
+                  Lý do <span className="text-red-500">*</span>{" "}
+                  <span className="font-normal text-neutral-500">
+                    (≥ 5 ký tự)
+                  </span>
+                </span>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={3}
+                  disabled={pending}
+                  placeholder="VD: Phát hiện 2 cái bị hỏng khi kiểm tra cuối tháng, đã loại ra"
+                  className="w-full resize-y rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                />
+              </label>
+            </>
+          )}
 
           {type === "receipt" && (
             <label className="block">
@@ -300,7 +399,7 @@ function MovementModal({
             </label>
           )}
 
-          {type !== "transfer" && (
+          {(type === "receipt" || type === "issue") && (
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-neutral-700">
                 {type === "receipt" ? "Tham chiếu / NCC" : "Lý do xuất / tham chiếu"}
@@ -320,19 +419,21 @@ function MovementModal({
             </label>
           )}
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
-              Ghi chú
-            </span>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              disabled={pending}
-              placeholder="Ghi chú thêm cho phiếu..."
-              className="w-full resize-y rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
-            />
-          </label>
+          {type !== "adjustment" && (
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+                Ghi chú
+              </span>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                disabled={pending}
+                placeholder="Ghi chú thêm cho phiếu..."
+                className="w-full resize-y rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+              />
+            </label>
+          )}
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
@@ -347,7 +448,12 @@ function MovementModal({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={pending || quantity < 1}
+            disabled={
+              pending ||
+              (type === "adjustment"
+                ? adjustmentDelta === 0 || reason.trim().length < 5
+                : quantity < 1)
+            }
             className={
               "rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-50 " +
               COLOR[type]

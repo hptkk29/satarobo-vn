@@ -1451,10 +1451,12 @@ model StockBalance {
 
 // ─── Phase F2 — Stock movement workflow ──────────────────────────────────
 enum StockMovementType {
-  RECEIPT       // Nhập kho từ supplier
-  ISSUE         // Xuất kho cho lớp / sự kiện / hỏng
-  TRANSFER_OUT  // Chuyển đi cơ sở khác
-  TRANSFER_IN   // Nhận từ cơ sở khác
+  RECEIPT             // Nhập kho từ supplier
+  ISSUE               // Xuất kho cho lớp / sự kiện / hỏng
+  TRANSFER_OUT        // Chuyển đi cơ sở khác
+  TRANSFER_IN         // Nhận từ cơ sở khác
+  ADJUSTMENT_INCREASE // Kiểm kê thừa
+  ADJUSTMENT_DECREASE // Kiểm kê thiếu
 }
 
 model StockMovement {

@@ -7,9 +7,11 @@ import {
   receiptSchema,
   issueSchema,
   transferSchema,
+  adjustmentSchema,
   type ReceiptInput,
   type IssueInput,
   type TransferInput,
+  type AdjustmentInput,
 } from "@/lib/validators/inventory";
 
 type Result<T = undefined> =
@@ -304,3 +306,72 @@ export async function recordTransfer(input: TransferInput): Promise<Result> {
   revalidateAfterMovement(data.itemId);
   return { ok: true };
 }
+
+
+// ──────────────────────────────────────────────────────────────────────────
+// ADJUSTMENT — kiểm kê (audit reconciliation)
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function recordAdjustment(input: AdjustmentInput): Promise<Result> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const parsed = adjustmentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const balance = await db.stockBalance.findUnique({
+    where: {
+      itemId_centerId: { itemId: data.itemId, centerId: data.centerId },
+    },
+    select: { quantity: true },
+  });
+  if (!balance) {
+    return { ok: false, error: "Chưa có bản ghi tồn kho cho cặp item × cơ sở" };
+  }
+
+  const delta = data.newQuantity - balance.quantity;
+  if (delta === 0) {
+    return { ok: false, error: "Số lượng không thay đổi" };
+  }
+
+  const type =
+    delta > 0 ? "ADJUSTMENT_INCREASE" as const : "ADJUSTMENT_DECREASE" as const;
+  const absDelta = Math.abs(delta);
+  const performedById = await resolveEmployeeId(gate.userId);
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.stockMovement.create({
+        data: {
+          itemId: data.itemId,
+          centerId: data.centerId,
+          type,
+          quantity: absDelta,
+          referenceType: "Audit",
+          referenceNote: `Trước: ${balance.quantity} → Sau: ${data.newQuantity}`,
+          notes: data.reason,
+          performedById,
+        },
+      });
+      await tx.stockBalance.update({
+        where: {
+          itemId_centerId: { itemId: data.itemId, centerId: data.centerId },
+        },
+        data: { quantity: data.newQuantity },
+      });
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  revalidateAfterMovement(data.itemId);
+  revalidatePath("/admin/inventory/dashboard");
+  return { ok: true };
+}
+

@@ -114,9 +114,21 @@ export const transferSchema = z
     path: ["toCenterId"],
   });
 
+export const adjustmentSchema = z.object({
+  itemId: z.string().trim().min(1, "Thiếu mặt hàng"),
+  centerId: z.string().trim().min(1, "Thiếu cơ sở"),
+  newQuantity: z.coerce.number().int().min(0, "Số lượng mới phải >= 0"),
+  reason: z
+    .string()
+    .trim()
+    .min(5, "Lý do tối thiểu 5 ký tự")
+    .max(500, "Lý do tối đa 500 ký tự"),
+});
+
 export type ReceiptInput = z.infer<typeof receiptSchema>;
 export type IssueInput = z.infer<typeof issueSchema>;
 export type TransferInput = z.infer<typeof transferSchema>;
+export type AdjustmentInput = z.infer<typeof adjustmentSchema>;
 
 export const inventoryItemSchema = z.object({
   itemCode: z

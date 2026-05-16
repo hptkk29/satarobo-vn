@@ -25,6 +25,16 @@ const TYPE_INFO: Record<
     color: "bg-blue-100 text-blue-700",
     sign: "+",
   },
+  ADJUSTMENT_INCREASE: {
+    label: "Kiểm kê thừa",
+    color: "bg-purple-100 text-purple-700",
+    sign: "+",
+  },
+  ADJUSTMENT_DECREASE: {
+    label: "Kiểm kê thiếu",
+    color: "bg-purple-100 text-purple-700",
+    sign: "-",
+  },
 };
 
 const VALID_TYPES = Object.values(StockMovementType);
