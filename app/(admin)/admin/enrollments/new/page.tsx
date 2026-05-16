@@ -1,24 +1,52 @@
 import { db } from "@/lib/db";
-import { EnrollmentForm } from "../_components/enrollment-form";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { EnrollForm } from "../_components/enroll-form";
 
 export const dynamic = "force-dynamic";
 
+const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "HR", "SALES"];
+const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"];
+
 export default async function NewEnrollmentPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!ALLOWED_ROLES.includes(session.user.role)) {
+    redirect("/admin/dashboard?error=unauthorized");
+  }
+
   const [students, classes] = await Promise.all([
     db.student.findMany({
-      where: { deletedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, phone: true },
-      take: 500,
-    }),
-    db.class.findMany({
-      where: { deletedAt: null, isActive: true },
-      orderBy: { name: "asc" },
+      where: { deletedAt: null, status: "ACTIVE" },
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         name: true,
-        course: { select: { name: true } },
+        parentPhone: true,
+        studentCode: true,
+      },
+      take: 500,
+    }),
+    db.class.findMany({
+      where: {
+        deletedAt: null,
+        status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },
+      },
+      orderBy: [{ status: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        classCode: true,
+        status: true,
+        maxStudents: true,
         center: { select: { name: true } },
+        _count: {
+          select: {
+            enrollments: {
+              where: { status: { in: CAPACITY_COUNT_STATUSES as never[] } },
+            },
+          },
+        },
       },
       take: 200,
     }),
@@ -26,13 +54,18 @@ export default async function NewEnrollmentPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">Tạo đăng ký mới</h1>
-      <EnrollmentForm
+      <h1 className="mb-6 text-3xl font-black text-neutral-900">
+        Đăng ký lớp cho học viên
+      </h1>
+      <EnrollForm
         students={students}
         classes={classes.map((c) => ({
           id: c.id,
+          classCode: c.classCode,
           name: c.name,
-          courseName: c.course.name,
+          status: c.status,
+          maxStudents: c.maxStudents,
+          enrolledCount: c._count.enrollments,
           centerName: c.center?.name ?? null,
         }))}
       />

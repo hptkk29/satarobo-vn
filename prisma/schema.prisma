@@ -36,10 +36,18 @@ enum CourseType {
 }
 
 enum EnrollmentStatus {
+  // Legacy (kept for back-compat with existing rows)
   ACTIVE
+  CANCELLED
+
+  // D5 workflow
+  PENDING
+  CONFIRMED
+  STUDYING
   PAUSED
   COMPLETED
-  CANCELLED
+  WITHDREW
+  TRANSFERRED
 }
 
 enum AttendanceStatus {
@@ -458,10 +466,30 @@ model Enrollment {
   classId   String
   courseId  String
   status    EnrollmentStatus @default(ACTIVE)
+
+  // Financial (legacy)
   tuition   Int?
   paidAt    DateTime?
+
+  // Legacy dates (kept for back-compat)
   startDate DateTime?
   endDate   DateTime?
+
+  // D5 workflow timestamps
+  enrolledAt   DateTime  @default(now())
+  confirmedAt  DateTime?
+  startedAt    DateTime?
+  endedAt      DateTime?
+
+  // Transfer
+  transferredToId String?
+  transferredTo   Enrollment?  @relation("EnrollmentTransfer", fields: [transferredToId], references: [id])
+  transferredFrom Enrollment[] @relation("EnrollmentTransfer")
+  transferReason  String?      @db.Text
+
+  // Other
+  notes     String?  @db.Text
+
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
@@ -469,10 +497,34 @@ model Enrollment {
   class   Class   @relation(fields: [classId], references: [id])
   course  Course  @relation(fields: [courseId], references: [id])
 
+  auditLogs EnrollmentAuditLog[]
+
   @@unique([studentId, classId])
   @@index([studentId])
   @@index([classId])
   @@index([status])
+  @@index([classId, status])
+  @@index([studentId, status])
+  @@index([status, enrolledAt])
+}
+
+model EnrollmentAuditLog {
+  id              String      @id @default(cuid())
+  enrollmentId    String
+  enrollment      Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  fromStatus      String
+  toStatus        String
+
+  changedByUserId String?
+  changedByName   String
+
+  reason          String?     @db.Text
+  extraData       Json?
+
+  createdAt       DateTime    @default(now())
+
+  @@index([enrollmentId, createdAt])
 }
 
 model ClassSession {
