@@ -83,6 +83,42 @@ const TEMPLATES: Template[] = [
       },
     ],
   },
+  {
+    filename: "mau-phong-hoc.xlsx",
+    sheetName: "Phòng học",
+    headers: [
+      "name",
+      "code",
+      "centerSlug",
+      "capacity",
+      "equipment",
+      "status",
+      "notes",
+      "displayOrder",
+    ],
+    sampleRows: [
+      {
+        name: "Phòng A1",
+        code: "DN-A1",
+        centerSlug: "danang",
+        capacity: 15,
+        equipment: "Robot SR1, Laptop, Máy chiếu",
+        status: "ACTIVE",
+        notes: "",
+        displayOrder: 1,
+      },
+      {
+        name: "Phòng A2",
+        code: "DN-A2",
+        centerSlug: "danang",
+        capacity: 20,
+        equipment: "Robot SR2, Bảng tương tác",
+        status: "ACTIVE",
+        notes: "",
+        displayOrder: 2,
+      },
+    ],
+  },
 ];
 
 const outDir = path.join(process.cwd(), "public", "templates");

@@ -18,6 +18,7 @@ import {
   Package,
   Boxes,
   MapPin,
+  DoorOpen,
   ClipboardList,
   CalendarDays,
   ClipboardCheck,
@@ -47,7 +48,10 @@ const NAV_GROUPS = [
   },
   {
     label: "Hệ thống cơ sở",
-    items: [{ label: "Cơ sở", href: "/admin/centers", icon: MapPin }],
+    items: [
+      { label: "Cơ sở", href: "/admin/centers", icon: MapPin },
+      { label: "Phòng học", href: "/admin/rooms", icon: DoorOpen },
+    ],
   },
   {
     label: "Nội bộ",

@@ -122,9 +122,34 @@ model Center {
   classes   Class[]
   students  Student[]
   employees Employee[]
+  rooms     Room[]
 
   @@index([isActive])
   @@index([displayOrder])
+}
+
+enum RoomStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
+}
+
+model Room {
+  id           String     @id @default(cuid())
+  name         String
+  code         String
+  centerId     String
+  center       Center     @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  capacity     Int        @default(15)
+  equipment    String[]   @default([])
+  status       RoomStatus @default(ACTIVE)
+  notes        String?    @db.Text
+  displayOrder Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([centerId, code])
+  @@index([centerId, status])
 }
 
 model User {
