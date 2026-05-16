@@ -13,7 +13,7 @@ export function FloatingCta() {
   if (pathname && HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end gap-3 pointer-events-none">
+    <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 hidden lg:flex flex-col items-end gap-3 pointer-events-none">
       {/* Zalo chat — with subtle ping ring */}
       <a
         href={SATA_ROBO_CONTACT.zalo}
