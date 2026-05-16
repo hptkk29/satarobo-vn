@@ -78,6 +78,17 @@ export const SATA_ROBO_LOCATIONS: SataRoboLocation[] = [
     openingDate: "2026-08",
     note: "Khai trương tháng 8/2026",
   },
+  {
+    id: "co-so-xo-viet-nghe-tinh",
+    name: "Cơ sở Xô Viết Nghệ Tĩnh",
+    address: "89 Xô Viết Nghệ Tĩnh, Đà Nẵng",
+    district: "Hải Châu",
+    hotline: "0818.823.720",
+    workingHours: "Sắp khai trương",
+    status: "upcoming",
+    isHQ: false,
+    note: "Cơ sở sắp khai trương",
+  },
 ];
 
 export const SATA_ROBO_CONTACT = {
