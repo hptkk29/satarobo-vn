@@ -11,6 +11,8 @@ import {
   Mail,
   Users,
   CalendarClock,
+  Clock,
+  GraduationCap,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
@@ -19,8 +21,16 @@ import { SATA_ROBO_CONTACT } from "@/lib/locations";
 export const revalidate = 60;
 
 const BASE_URL = "https://satarobo.vn";
-const HR_EMAIL = SATA_ROBO_CONTACT.emails.recruitment;
-const HR_PHONE = SATA_ROBO_CONTACT.hotline;
+const DEFAULT_HR_EMAIL = SATA_ROBO_CONTACT.emails.recruitment;
+const DEFAULT_HR_PHONE = SATA_ROBO_CONTACT.hotline;
+
+const EXPERIENCE_LABELS: Record<string, string> = {
+  ENTRY: "Mới ra trường",
+  JUNIOR: "1-2 năm kinh nghiệm",
+  MID: "3-5 năm kinh nghiệm",
+  SENIOR: "5+ năm kinh nghiệm",
+  EXPERT: "Chuyên gia 10+ năm",
+};
 
 export async function generateStaticParams() {
   const jobs = await db.jobPosting
@@ -81,6 +91,9 @@ export default async function JobDetailPage({
   if (!job || job.status !== "OPEN") notFound();
 
   const salaryLabel = formatSalary(job);
+  const hrEmail = job.contactEmail ?? DEFAULT_HR_EMAIL;
+  const hrPhone = job.contactPhone ?? DEFAULT_HR_PHONE;
+  const hrPhoneTel = (job.contactPhone ?? SATA_ROBO_CONTACT.hotlineRaw).replace(/\D/g, "");
 
   return (
     <>
@@ -137,6 +150,16 @@ export default async function JobDetailPage({
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 {job.location && <MetaRow icon={MapPin} label="Địa điểm" value={job.location} />}
                 {job.type && <MetaRow icon={Briefcase} label="Hình thức" value={job.type} />}
+                {job.workingHours && (
+                  <MetaRow icon={Clock} label="Giờ làm việc" value={job.workingHours} />
+                )}
+                {job.experienceLevel && (
+                  <MetaRow
+                    icon={GraduationCap}
+                    label="Kinh nghiệm"
+                    value={EXPERIENCE_LABELS[job.experienceLevel] ?? job.experienceLevel}
+                  />
+                )}
                 {salaryLabel && (
                   <MetaRow icon={DollarSign} label="Mức lương" value={salaryLabel} />
                 )}
@@ -154,11 +177,14 @@ export default async function JobDetailPage({
             </header>
 
             <JobSection title="Mô tả công việc" body={job.description} color="orange" />
-            {job.requirements && (
-              <JobSection title="Yêu cầu công việc" body={job.requirements} color="purple" />
+            {job.responsibilities.length > 0 && (
+              <JobBulletSection title="Trách nhiệm công việc" items={job.responsibilities} color="orange" />
             )}
-            {job.benefits && (
-              <JobSection title="Quyền lợi" body={job.benefits} color="green" />
+            {job.requirements.length > 0 && (
+              <JobBulletSection title="Yêu cầu ứng viên" items={job.requirements} color="purple" />
+            )}
+            {job.benefits.length > 0 && (
+              <JobBulletSection title="Quyền lợi" items={job.benefits} color="green" />
             )}
           </div>
 
@@ -169,7 +195,7 @@ export default async function JobDetailPage({
                 Gửi CV qua email hoặc liên hệ trực tiếp HR Sata Robo
               </p>
               <a
-                href={`mailto:${HR_EMAIL}?subject=${encodeURIComponent(
+                href={`mailto:${hrEmail}?subject=${encodeURIComponent(
                   `Ứng tuyển: ${job.title}`,
                 )}`}
                 className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-3 rounded-xl transition-colors mb-3"
@@ -177,7 +203,7 @@ export default async function JobDetailPage({
                 Gửi CV qua Email
               </a>
               <a
-                href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
+                href={`tel:${hrPhoneTel}`}
                 className="block w-full text-center bg-white border-2 border-purple-300 text-purple-700 hover:bg-purple-50 font-bold px-4 py-3 rounded-xl transition-colors"
               >
                 Gọi HR Sata Robo
@@ -186,17 +212,14 @@ export default async function JobDetailPage({
               <div className="mt-6 pt-6 border-t border-orange-200 space-y-2 text-sm">
                 <p className="flex items-center gap-2 text-neutral-700">
                   <Mail className="w-4 h-4 text-orange-500 shrink-0" />
-                  <a href={`mailto:${HR_EMAIL}`} className="hover:text-orange-600 break-all">
-                    {HR_EMAIL}
+                  <a href={`mailto:${hrEmail}`} className="hover:text-orange-600 break-all">
+                    {hrEmail}
                   </a>
                 </p>
                 <p className="flex items-center gap-2 text-neutral-700">
                   <Phone className="w-4 h-4 text-orange-500 shrink-0" />
-                  <a
-                    href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-                    className="hover:text-orange-600"
-                  >
-                    {HR_PHONE}
+                  <a href={`tel:${hrPhoneTel}`} className="hover:text-orange-600">
+                    {hrPhone}
                   </a>
                 </p>
               </div>
@@ -247,6 +270,36 @@ function JobSection({
     <section className={`rounded-2xl border-2 ${SECTION_COLOR[color]} p-6`}>
       <h2 className="text-xl font-bold text-neutral-900 mb-4">{title}</h2>
       <div className="prose prose-sm max-w-none text-neutral-700 whitespace-pre-line">{body}</div>
+    </section>
+  );
+}
+
+const BULLET_COLOR: Record<"orange" | "purple" | "green", string> = {
+  orange: "bg-orange-500",
+  purple: "bg-purple-500",
+  green: "bg-green-600",
+};
+
+function JobBulletSection({
+  title,
+  items,
+  color,
+}: {
+  title: string;
+  items: string[];
+  color: "orange" | "purple" | "green";
+}) {
+  return (
+    <section className={`rounded-2xl border-2 ${SECTION_COLOR[color]} p-6`}>
+      <h2 className="text-xl font-bold text-neutral-900 mb-4">{title}</h2>
+      <ul className="space-y-2 text-neutral-700">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className={`mt-2 h-1.5 w-1.5 rounded-full ${BULLET_COLOR[color]} shrink-0`} />
+            <span className="whitespace-pre-line">{item}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

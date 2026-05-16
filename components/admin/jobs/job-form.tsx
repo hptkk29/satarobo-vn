@@ -1,12 +1,22 @@
 'use client'
 
 import { useEffect, useTransition } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { jobCreateSchema, type JobCreateInput } from '@/lib/validators/job'
 import { DEPARTMENTS, LOCATIONS, JOB_TYPES, JOB_STATUS } from '@/lib/data/job-options'
+import { StringArrayEditor } from '@/app/(admin)/admin/kits/_components/string-array-editor'
 import { Loader2 } from 'lucide-react'
+
+const EXPERIENCE_OPTIONS: { value: JobCreateInput['experienceLevel']; label: string }[] = [
+  { value: null, label: '— Không yêu cầu —' },
+  { value: 'ENTRY', label: 'Mới ra trường' },
+  { value: 'JUNIOR', label: '1-2 năm' },
+  { value: 'MID', label: '3-5 năm' },
+  { value: 'SENIOR', label: '5+ năm' },
+  { value: 'EXPERT', label: 'Chuyên gia 10+ năm' },
+]
 
 function slugify(str: string): string {
   return str
@@ -45,14 +55,19 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
       location: initialData?.location ?? 'danang',
       type: initialData?.type ?? 'fulltime',
       description: initialData?.description ?? '',
-      requirements: initialData?.requirements ?? '',
-      benefits: initialData?.benefits ?? '',
+      workingHours: initialData?.workingHours ?? null,
+      experienceLevel: initialData?.experienceLevel ?? null,
+      responsibilities: initialData?.responsibilities ?? [],
+      requirements: initialData?.requirements ?? [],
+      benefits: initialData?.benefits ?? [],
       salaryMin: initialData?.salaryMin ?? undefined,
       salaryMax: initialData?.salaryMax ?? undefined,
       salaryNote: initialData?.salaryNote ?? 'Thoả thuận theo năng lực',
       status: (initialData?.status as JobCreateInput['status']) ?? 'DRAFT',
       openings: initialData?.openings ?? 1,
       closesAt: undefined,
+      contactEmail: initialData?.contactEmail ?? null,
+      contactPhone: initialData?.contactPhone ?? null,
     },
   })
 
@@ -136,46 +151,100 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
               </select>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelClass}>Giờ làm việc</label>
+              <input
+                className={fieldClass}
+                {...form.register('workingHours')}
+                placeholder="VD: Thứ 2-6, 8h-17h"
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Yêu cầu kinh nghiệm</label>
+              <Controller
+                control={form.control}
+                name="experienceLevel"
+                render={({ field }) => (
+                  <select
+                    className={fieldClass}
+                    value={field.value ?? ''}
+                    onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
+                  >
+                    {EXPERIENCE_OPTIONS.map((opt) => (
+                      <option key={opt.value ?? '__none__'} value={opt.value ?? ''}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Section 2: Nội dung Markdown */}
+      {/* Section 2: Mô tả + Bullets */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-5 font-bold text-gray-900">Nội dung (Markdown)</h2>
-        <div className="space-y-4">
+        <h2 className="mb-5 font-bold text-gray-900">Nội dung tin tuyển</h2>
+        <div className="space-y-5">
           <div>
-            <label className={labelClass}>Mô tả công việc *</label>
+            <label className={labelClass}>Mô tả tổng quan *</label>
             <textarea
               className={fieldClass}
-              rows={10}
-              placeholder="## Mô tả&#10;&#10;- Trách nhiệm 1&#10;- Trách nhiệm 2"
+              rows={6}
+              placeholder="Giới thiệu chung về vị trí, đội nhóm, văn hoá..."
               {...form.register('description')}
             />
             {errors.description && <p className={errorClass}>{errors.description.message}</p>}
+            <p className="mt-1 text-xs text-gray-400">Tối thiểu 50 ký tự. Hỗ trợ xuống dòng.</p>
           </div>
 
           <div>
-            <label className={labelClass}>Yêu cầu *</label>
-            <textarea
-              className={fieldClass}
-              rows={8}
-              placeholder="## Yêu cầu&#10;&#10;- Tốt nghiệp..."
-              {...form.register('requirements')}
+            <label className={labelClass}>Trách nhiệm công việc</label>
+            <Controller
+              control={form.control}
+              name="responsibilities"
+              render={({ field }) => (
+                <StringArrayEditor
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  placeholder="VD: Lên giáo án và giảng dạy theo chương trình WRO"
+                />
+              )}
             />
-            {errors.requirements && <p className={errorClass}>{errors.requirements.message}</p>}
           </div>
 
           <div>
-            <label className={labelClass}>Quyền lợi *</label>
-            <textarea
-              className={fieldClass}
-              rows={8}
-              placeholder="## Quyền lợi&#10;&#10;- Lương..."
-              {...form.register('benefits')}
+            <label className={labelClass}>Yêu cầu ứng viên</label>
+            <Controller
+              control={form.control}
+              name="requirements"
+              render={({ field }) => (
+                <StringArrayEditor
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  placeholder="VD: Tốt nghiệp ĐH ngành Kỹ thuật / CNTT / Cơ điện tử"
+                />
+              )}
             />
-            {errors.benefits && <p className={errorClass}>{errors.benefits.message}</p>}
           </div>
-          <p className="text-xs text-gray-400">Hỗ trợ Markdown: **bold**, *italic*, ## heading, - bullet list</p>
+
+          <div>
+            <label className={labelClass}>Quyền lợi</label>
+            <Controller
+              control={form.control}
+              name="benefits"
+              render={({ field }) => (
+                <StringArrayEditor
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  placeholder="VD: Lương 8–15 triệu/tháng tuỳ năng lực"
+                />
+              )}
+            />
+          </div>
         </div>
       </section>
 
@@ -236,7 +305,36 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
         </div>
       </section>
 
-      {/* Section 4: Trạng thái */}
+      {/* Section 4: Liên hệ */}
+      <section className="rounded-xl border border-gray-200 bg-white p-6">
+        <h2 className="mb-5 font-bold text-gray-900">Thông tin liên hệ</h2>
+        <p className="mb-3 text-xs text-gray-500">
+          Để trống = public page dùng email & SĐT mặc định của Sata Robo.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Email liên hệ</label>
+            <input
+              className={fieldClass}
+              type="email"
+              placeholder="hr@satarobo.vn"
+              {...form.register('contactEmail')}
+            />
+            {errors.contactEmail && <p className={errorClass}>{errors.contactEmail.message}</p>}
+          </div>
+          <div>
+            <label className={labelClass}>SĐT liên hệ</label>
+            <input
+              className={fieldClass}
+              type="tel"
+              placeholder="0901234567"
+              {...form.register('contactPhone')}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Section 5: Trạng thái */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-5 font-bold text-gray-900">Trạng thái</h2>
         <div>

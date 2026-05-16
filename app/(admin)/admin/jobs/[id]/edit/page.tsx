@@ -49,14 +49,19 @@ export default async function EditJobPage({
           location: job.location ?? 'danang',
           type: job.type ?? 'fulltime',
           description: job.description,
-          requirements: job.requirements ?? '',
-          benefits: job.benefits ?? '',
+          workingHours: job.workingHours,
+          experienceLevel: job.experienceLevel,
+          responsibilities: job.responsibilities,
+          requirements: job.requirements,
+          benefits: job.benefits,
           salaryMin: job.salaryMin,
           salaryMax: job.salaryMax,
           salaryNote: job.salaryNote,
           status: job.status as never,
           openings: job.openings,
           closesAt: job.closesAt,
+          contactEmail: job.contactEmail,
+          contactPhone: job.contactPhone,
         }}
       />
     </div>
