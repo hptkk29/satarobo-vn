@@ -1,8 +1,12 @@
-// Sata Robo Image Placeholders — Phase 4.UI.FINAL
+// Sata Robo Image Placeholders.
 //
-// 10 Unsplash photos curated cho client pages. Khi anh upload ảnh thật qua
-// admin /admin/site-content → SitePageContent.contentValue (key="hero-image-url")
-// sẽ override; fallback về đây nếu chưa có ảnh upload.
+// Hardcoded Unsplash fallbacks for every public page hero image. The actual
+// override pipeline lives in `getPageImage(pageKey, fallback)` below — it
+// reads SitePageContent (pageKey, "hero-image-url") and returns the DB value
+// if present, else the fallback. Public pages should call that helper rather
+// than reading `pageImages.<key>` directly.
+
+import { db } from "@/lib/db";
 
 export const pageImages = {
   homeSecondary: {
@@ -40,3 +44,30 @@ export const pageImages = {
 } as const;
 
 export type PageImageKey = keyof typeof pageImages;
+
+interface PageImage {
+  src: string;
+  alt: string;
+}
+
+// Read the admin-overridden hero image for a given public page, falling back
+// to the bundled Unsplash placeholder when no override exists. Keep this
+// server-only — it queries Prisma.
+export async function getPageImage(
+  pageKey: string,
+  fallback: PageImage,
+): Promise<PageImage> {
+  try {
+    const row = await db.sitePageContent.findUnique({
+      where: { pageKey_contentKey: { pageKey, contentKey: "hero-image-url" } },
+      select: { contentValue: true },
+    });
+    const override = row?.contentValue?.trim();
+    if (override) {
+      return { src: override, alt: fallback.alt };
+    }
+  } catch {
+    // DB unreachable → silently fall back. Hero images are not load-bearing.
+  }
+  return fallback;
+}

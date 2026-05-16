@@ -19,7 +19,7 @@ import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
-import { pageImages } from "@/lib/page-images";
+import { getPageImage, pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
 
@@ -51,6 +51,8 @@ const PERKS = [
 ];
 
 export default async function TuyenDungPage() {
+  const heroImage = await getPageImage("tuyen-dung", pageImages.careers);
+
   const jobs = await db.jobPosting
     .findMany({
       where: { status: "OPEN" },
@@ -128,8 +130,8 @@ export default async function TuyenDungPage() {
           </div>
           <div className="relative aspect-video rounded-2xl overflow-hidden shadow-xl">
             <Image
-              src={pageImages.careers.src}
-              alt={pageImages.careers.alt}
+              src={heroImage.src}
+              alt={heroImage.alt}
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, 50vw"

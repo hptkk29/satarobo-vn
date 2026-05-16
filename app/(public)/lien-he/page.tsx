@@ -12,7 +12,7 @@ import { SocialLinks } from "./_components/social-links";
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
-import { pageImages } from "@/lib/page-images";
+import { getPageImage, pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
 import {
   SATA_ROBO_LOCATIONS,
@@ -22,6 +22,8 @@ import {
 } from "@/lib/locations";
 
 const BASE_URL = "https://satarobo.vn";
+
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Liên hệ — Sata Robo Đà Nẵng",
@@ -51,6 +53,7 @@ const QUICK_INFO = [
 ];
 
 export default async function ContactPage() {
+  const heroImage = await getPageImage("lien-he", pageImages.contact);
   const operational = operationalLocations();
   const upcoming = upcomingLocations();
   const centers = operational.map((loc) => ({
@@ -118,8 +121,8 @@ export default async function ContactPage() {
           </div>
           <div className="relative aspect-video rounded-2xl overflow-hidden shadow-xl">
             <Image
-              src={pageImages.contact.src}
-              alt={pageImages.contact.alt}
+              src={heroImage.src}
+              alt={heroImage.alt}
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, 50vw"
