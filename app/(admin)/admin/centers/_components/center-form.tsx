@@ -3,21 +3,35 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 import { createCenter, updateCenter } from "../_actions";
 
 export type CenterFormValue = {
   id: string;
   name: string;
+  slug: string;
   address: string;
+  ward: string | null;
+  district: string | null;
+  city: string;
   phone: string | null;
   email: string | null;
+  googleMapUrl: string | null;
+  workingHours: string | null;
+  managerName: string | null;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  description: string | null;
   isActive: boolean;
+  displayOrder: number;
 };
 
 export function CenterForm({ center }: { center?: CenterFormValue }) {
   const router = useRouter();
   const isEdit = Boolean(center);
   const [error, setError] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(center?.logoUrl ?? null);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(center?.bannerUrl ?? null);
 
   async function action(formData: FormData) {
     setError(null);
@@ -28,7 +42,7 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
   }
 
   return (
-    <form action={action} className="max-w-3xl space-y-6">
+    <form action={action} className="max-w-4xl space-y-6">
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -36,14 +50,44 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
       )}
 
       <Section title="Thông tin cơ sở">
-        <Field label="Tên cơ sở" name="name" defaultValue={center?.name} required />
+        <Grid cols={2}>
+          <Field label="Tên cơ sở" name="name" defaultValue={center?.name} required />
+          <Field
+            label="Slug (URL)"
+            name="slug"
+            defaultValue={center?.slug}
+            placeholder="danang, ho-chi-minh, ha-noi"
+            required
+          />
+        </Grid>
         <Field
           label="Địa chỉ"
           name="address"
           defaultValue={center?.address}
-          placeholder="258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng"
+          placeholder="258 Lê Thanh Nghị"
           required
         />
+        <Grid cols={3}>
+          <Field
+            label="Phường"
+            name="ward"
+            defaultValue={center?.ward ?? undefined}
+            placeholder="Hòa Cường"
+          />
+          <Field
+            label="Quận / Huyện"
+            name="district"
+            defaultValue={center?.district ?? undefined}
+            placeholder="Hải Châu"
+          />
+          <Field
+            label="Tỉnh / TP"
+            name="city"
+            defaultValue={center?.city}
+            placeholder="Đà Nẵng"
+            required
+          />
+        </Grid>
         <Grid cols={2}>
           <Field
             label="Số điện thoại"
@@ -56,18 +100,81 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
             name="email"
             type="email"
             defaultValue={center?.email ?? undefined}
-            placeholder="thongtin@satarobo.vn"
+            placeholder="danang@satarobo.vn"
           />
+        </Grid>
+        <Field
+          label="Google Maps URL"
+          name="googleMapUrl"
+          defaultValue={center?.googleMapUrl ?? undefined}
+          placeholder="https://maps.app.goo.gl/..."
+        />
+        <Grid cols={2}>
+          <Field
+            label="Giờ làm việc"
+            name="workingHours"
+            defaultValue={center?.workingHours ?? undefined}
+            placeholder="T2-T6: 17h-21h, T7-CN: 8h-17h"
+          />
+          <Field
+            label="Quản lý cơ sở"
+            name="managerName"
+            defaultValue={center?.managerName ?? undefined}
+            placeholder="Nguyễn Văn A"
+          />
+        </Grid>
+        <Field
+          label="Mô tả ngắn"
+          name="description"
+          type="textarea"
+          rows={3}
+          defaultValue={center?.description ?? undefined}
+          placeholder="Mô tả ngắn về chi nhánh, điểm nổi bật..."
+        />
+      </Section>
+
+      <Section title="Hình ảnh">
+        <Grid cols={2}>
+          <div>
+            <ImageUploader
+              label="Logo chi nhánh"
+              value={logoUrl}
+              onChange={setLogoUrl}
+              prefix="uploads/centers"
+              aspect="square"
+              helperText="Logo riêng (để trống = dùng logo Sata Robo chung)"
+            />
+            <input type="hidden" name="logoUrl" value={logoUrl ?? ""} />
+          </div>
+          <div>
+            <ImageUploader
+              label="Ảnh banner"
+              value={bannerUrl}
+              onChange={setBannerUrl}
+              prefix="uploads/centers"
+              aspect="video"
+              helperText="Cover ảnh hiển thị ở trang chi tiết public"
+            />
+            <input type="hidden" name="bannerUrl" value={bannerUrl ?? ""} />
+          </div>
         </Grid>
       </Section>
 
-      <Section title="Trạng thái">
-        <CheckboxField
-          label="Đang hoạt động"
-          name="isActive"
-          defaultChecked={center?.isActive ?? true}
-        />
-        <p className="mt-1 text-xs text-neutral-500">
+      <Section title="Hiển thị">
+        <Grid cols={2}>
+          <CheckboxField
+            label="Đang hoạt động"
+            name="isActive"
+            defaultChecked={center?.isActive ?? true}
+          />
+          <Field
+            label="Display Order"
+            name="displayOrder"
+            type="number"
+            defaultValue={center?.displayOrder ?? 0}
+          />
+        </Grid>
+        <p className="text-xs text-neutral-500">
           Cơ sở chưa hoạt động sẽ không hiển thị trên trang công khai và Footer.
         </p>
       </Section>

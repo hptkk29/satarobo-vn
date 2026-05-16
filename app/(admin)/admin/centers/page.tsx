@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, MapPin } from "lucide-react";
+import { Plus, MapPin, FileSpreadsheet } from "lucide-react";
 import { db } from "@/lib/db";
 import { CenterListRow } from "./_components/center-list-row";
 
@@ -7,14 +7,17 @@ export const dynamic = "force-dynamic";
 
 export default async function CentersAdminPage() {
   const centers = await db.center.findMany({
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    orderBy: [{ isActive: "desc" }, { displayOrder: "asc" }, { name: "asc" }],
     select: {
       id: true,
       name: true,
+      slug: true,
       address: true,
+      city: true,
       phone: true,
       email: true,
       isActive: true,
+      displayOrder: true,
       _count: {
         select: {
           classes: true,
@@ -39,13 +42,22 @@ export default async function CentersAdminPage() {
             Quản lý cơ sở Sata Robo · {activeCount}/{centers.length} đang hoạt động
           </p>
         </div>
-        <Link
-          href="/admin/centers/new"
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
-        >
-          <Plus className="h-5 w-5" />
-          Thêm cơ sở
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/admin/centers/import"
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Import Excel
+          </Link>
+          <Link
+            href="/admin/centers/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+          >
+            <Plus className="h-5 w-5" />
+            Thêm cơ sở
+          </Link>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">

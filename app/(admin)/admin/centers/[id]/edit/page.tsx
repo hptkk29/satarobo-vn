@@ -20,10 +20,21 @@ export default async function EditCenterPage({ params }: Props) {
         center={{
           id: center.id,
           name: center.name,
+          slug: center.slug,
           address: center.address,
+          ward: center.ward,
+          district: center.district,
+          city: center.city,
           phone: center.phone,
           email: center.email,
+          googleMapUrl: center.googleMapUrl,
+          workingHours: center.workingHours,
+          managerName: center.managerName,
+          logoUrl: center.logoUrl,
+          bannerUrl: center.bannerUrl,
+          description: center.description,
           isActive: center.isActive,
+          displayOrder: center.displayOrder,
         }}
       />
     </div>
