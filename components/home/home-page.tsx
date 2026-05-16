@@ -34,6 +34,7 @@ import { AutoCarousel } from "@/components/public/auto-carousel";
 import { Sparkles } from "@/components/design-system/effects/sparkles";
 import { EarlyBirdCountdown } from "@/components/home/early-bird-countdown";
 import { FAQSection } from "@/components/home/faq-section";
+import { HeroMain } from "@/components/sections/hero-main";
 
 // ============== Types ==============
 export interface MainCourseCard {
@@ -48,7 +49,11 @@ export interface MainCourseCard {
 export function HomePage({ courses }: { courses: MainCourseCard[] }) {
   return (
     <>
-      <HeroSection />
+      {/* F-UI-2: new dark Aceternity-style hero. Old <HeroSection />
+         (light blobs + AnimatedGradientText) is kept defined below for
+         one-click rollback while F-UI-2.5/3/4 ship; remove once the new
+         hero is validated in production. */}
+      <HeroMain />
       <StatsBar />
       <UuTheSection />
       <SixAdvantagesSection />
@@ -63,8 +68,11 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
   );
 }
 
-// ============== 1. HERO ==============
-function HeroSection() {
+// ============== 1. HERO (LEGACY — replaced by <HeroMain /> in F-UI-2)
+// Prefixed with `_` so ESLint allows the function to stay defined for one-
+// click rollback. Delete once the new hero is validated.
+// ====================================
+function _HeroSection() {
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-orange-100 via-amber-50/40 to-purple-100 py-24 md:py-32 lg:py-36">
       {/* Mesh gradient base — 4 large saturated blobs for depth */}
