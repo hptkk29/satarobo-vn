@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Phone, Mail, MapPin, ChevronDown } from "lucide-react";
+import { Phone, Mail, MapPin, Plus } from "lucide-react";
 import {
   SATA_ROBO_CONTACT,
   SATA_ROBO_LOCATIONS,
@@ -161,18 +161,13 @@ export function SiteFooter() {
             </div>
           </div>
 
-          {/* Link sections — desktop: open + summary cursor-default;
-              mobile: accordion. `open` attribute = default expanded. */}
-          {SECTIONS.map((section) => (
-            <details
-              key={section.title}
-              open
-              className="group border-b border-gray-800 pb-3 md:border-0 md:pb-0"
-            >
-              <summary className="mb-4 flex list-none cursor-pointer items-center justify-between md:cursor-default md:pointer-events-none">
-                <h3 className="font-semibold text-white">{section.title}</h3>
-                <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180 md:hidden" />
-              </summary>
+          {/* Link sections — 2 render trees để giữ state đúng theo viewport:
+              - Mobile (< md): <details> default closed, user tap để mở.
+              - Desktop (≥ md): plain block luôn hiển thị.
+              Tách 2 cây tránh tình trạng "đóng trên mobile xong resize
+              desktop vẫn đóng" của approach 1-tree-with-CSS. */}
+          {SECTIONS.map((section) => {
+            const renderLinks = (
               <ul className="space-y-2">
                 {section.links.map((link) => (
                   <li key={link.href}>
@@ -196,8 +191,30 @@ export function SiteFooter() {
                   </li>
                 ))}
               </ul>
-            </details>
-          ))}
+            );
+            return (
+              <div key={section.title}>
+                {/* Mobile accordion — default đóng (không có `open` attr) */}
+                <details className="group border-b border-gray-800 pb-3 md:hidden">
+                  <summary className="flex list-none cursor-pointer items-center justify-between py-2">
+                    <h3 className="font-semibold text-white">
+                      {section.title}
+                    </h3>
+                    <Plus className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-45" />
+                  </summary>
+                  <div className="pt-3">{renderLinks}</div>
+                </details>
+
+                {/* Desktop block — luôn hiển thị, không có toggle */}
+                <div className="hidden md:block">
+                  <h3 className="mb-4 font-semibold text-white">
+                    {section.title}
+                  </h3>
+                  {renderLinks}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Social + Trust */}

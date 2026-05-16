@@ -46,6 +46,7 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
   return (
     <>
       <HeroMain />
+      <TrustBadges />
       <UspGrid />
       <CatalogSection courses={courses} />
       <Testimonials />
@@ -53,9 +54,8 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
       <StatsBar />
       <UuTheSection />
       <EarlyBirdCountdown />
-      <TrustBadges />
-      <TravelPrizeBanner />
       <CompetitionCountdown />
+      <TravelPrizeBanner />
       <FAQSection />
       <FinalCTA />
     </>
@@ -128,9 +128,14 @@ function UuTheSection() {
         <SectionHeading>Sata Robo đang là đơn vị tiên phong</SectionHeading>
         <SectionLead>Robotics giáo dục tại Đà Nẵng</SectionLead>
 
-        {/* Mobile + tablet: auto-rotating carousel */}
+        {/* Mobile: 1 card / view, centered, no loop seam, no peek of next */}
         <div className="mt-10 md:hidden">
-          <AutoCarousel slideClassName="flex-[0_0_92%] sm:flex-[0_0_60%]">
+          <AutoCarousel
+            loop={false}
+            align="center"
+            slideClassName="flex-[0_0_100%]"
+            showArrows={false}
+          >
             {achievements.map((text, i) => (
               <article
                 key={i}
@@ -287,18 +292,26 @@ function TravelPrizeBanner() {
             Giải Thưởng Đặc Biệt
           </div>
           <h2 className="text-3xl md:text-4xl font-black mb-3">
-            Lễ Khai Trương 2 Chi Nhánh Mới — Tháng 8/2026
+            Lễ Khai Trương 2 Chi Nhánh Mới — Tháng 5/2026
           </h2>
           <p className="text-lg mb-10 opacity-90">
             Trao tại lễ khai trương 114 Hoàng Diệu + 211 Nguyễn Hữu Thọ
           </p>
         </FadeIn>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8">
+        {/* Desktop: 3-col grid, items-stretch + h-full → 3 thẻ giải bằng
+            chiều cao chính xác kể cả khi desc dài-ngắn khác nhau. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8 md:items-stretch">
           {prizes.map((p, i) => (
-            <RevealOnScroll key={p.rank} direction="up" distance={20} delay={i * 0.08}>
+            <RevealOnScroll
+              key={p.rank}
+              direction="up"
+              distance={20}
+              delay={i * 0.08}
+              className="h-full"
+            >
               <article
-                className={`relative bg-white/15 backdrop-blur rounded-2xl ring-2 ${p.ring} p-6 hover:bg-white/20 transition-colors`}
+                className={`relative flex h-full flex-col bg-white/15 backdrop-blur rounded-2xl ring-2 ${p.ring} p-6 hover:bg-white/20 transition-colors`}
               >
                 <div
                   className={`w-12 h-12 rounded-xl ${p.iconBg} mx-auto mb-3 flex items-center justify-center shadow-md`}
@@ -310,7 +323,7 @@ function TravelPrizeBanner() {
                   <NumberTicker value={p.amount} className="text-white" />
                   <span>.000.000đ</span>
                 </div>
-                <div className="text-sm opacity-90">{p.desc}</div>
+                <div className="text-sm opacity-90 mt-auto">{p.desc}</div>
               </article>
             </RevealOnScroll>
           ))}

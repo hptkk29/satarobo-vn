@@ -22,7 +22,7 @@ interface FAQItem {
 const FAQS: FAQItem[] = [
   {
     q: "Khoá học Sata Robo phù hợp với con từ độ tuổi nào?",
-    a: "Sata Robo có lộ trình đầy đủ cho học sinh từ lớp 1 đến lớp 8 (6-14 tuổi). Mỗi khoá học được thiết kế phù hợp với năng lực tư duy và độ tinh xảo của từng độ tuổi — từ Sata3 (Ươm Mầm Tài Năng, lớp 1-2) đến Sata7 (Chắp Cánh Tương Lai, AI cho lớp 6-12).",
+    a: "Sata Robo có lộ trình đầy đủ cho học sinh từ lớp 1 đến lớp 8 (6-14 tuổi). Mỗi khoá học được thiết kế phù hợp với năng lực tư duy và độ tinh xảo của từng độ tuổi — từ Sata3 (Ươm Mầm Tài Năng, lớp 1-2) đến Sata7 (Chắp Cánh Tương Lai, AI cho lớp 6-8).",
   },
   {
     q: "Học phí các khoá học bao nhiêu?",

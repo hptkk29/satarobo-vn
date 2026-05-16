@@ -23,6 +23,12 @@ export interface AutoCarouselProps {
   dotActiveClassName?: string;
   /** Optional wrapper className */
   className?: string;
+  /** Loop slides (last → first). Default true. Disable to remove seam
+   *  between last and first slide (user requested for 1-per-view mobile). */
+  loop?: boolean;
+  /** Slide alignment within viewport. Default "start". Use "center" when
+   *  showing 1 full-width slide per view to keep it visually centered. */
+  align?: "start" | "center" | "end";
 }
 
 export function AutoCarousel({
@@ -33,6 +39,8 @@ export function AutoCarousel({
   showDots = true,
   dotActiveClassName = "bg-orange-500",
   className,
+  loop = true,
+  align = "start",
 }: AutoCarouselProps) {
   const plugins =
     autoplayInterval > 0
@@ -46,7 +54,7 @@ export function AutoCarousel({
       : [];
 
   const [emblaRef, emblaApi] = useEmblaCarousel(
-    { loop: true, align: "start", containScroll: "trimSnaps" },
+    { loop, align, containScroll: "trimSnaps" },
     plugins,
   );
 

@@ -45,11 +45,16 @@ export function SecondaryCta() {
         </FadeIn>
 
         <FadeIn delay={0.2}>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-            <Link href="/dang-ky-hoc-thu" className="w-full sm:w-auto">
+          {/* Mobile: stack vertical, mỗi nút full width + h-14 → bằng nhau
+              chính xác. Desktop: sm:flex-row + sm:w-auto + sm:h-auto. */}
+          <div className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <Link
+              href="/dang-ky-hoc-thu"
+              className="block h-14 w-full sm:h-auto sm:w-auto"
+            >
               <ShimmerButton
                 background="linear-gradient(135deg, #F97316 0%, #EAB308 100%)"
-                className="w-full px-8 py-4 text-base font-semibold sm:w-auto"
+                className="h-14 w-full px-8 text-base font-semibold sm:h-auto sm:w-auto sm:py-3.5"
               >
                 <span className="flex items-center gap-2 text-white">
                   <Calendar className="h-5 w-5" />
@@ -61,7 +66,7 @@ export function SecondaryCta() {
 
             <a
               href="tel:0818823720"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 py-3.5 text-base font-medium text-white backdrop-blur transition-colors hover:bg-white/10 sm:w-auto"
+              className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 text-base font-medium text-white backdrop-blur transition-colors hover:bg-white/10 sm:h-auto sm:w-auto sm:py-3.5"
             >
               <Phone className="h-5 w-5" />
               Gọi 0818.823.720

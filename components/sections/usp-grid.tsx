@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { FadeIn } from "@/components/motion/fade-in";
 import { HoverEffect } from "@/components/aceternity/card-hover-effect";
+import { AutoCarousel } from "@/components/public/auto-carousel";
 
-// F-UI-2.5 — 6 lý do chọn Sata Robo. Mỗi card render qua HoverEffect
-// (shared-layout gradient halo trượt giữa các cell khi hover).
+// F-UI-2.5 — 6 lý do chọn Sata Robo. Desktop dùng HoverEffect grid
+// (shared-layout halo). Mobile (<md) dùng AutoCarousel 1 card / view
+// để user vuốt từng card, không loop để cuối-đầu không nối liền.
 const USP_ITEMS = [
   {
     icon: "🤖",
@@ -50,6 +53,32 @@ const USP_ITEMS = [
   },
 ];
 
+function MobileUspCard({
+  icon,
+  title,
+  description,
+  link,
+}: (typeof USP_ITEMS)[number]) {
+  const content = (
+    <>
+      <div className="mb-3 text-3xl">{icon}</div>
+      <h4 className="text-lg font-bold tracking-wide text-zinc-900">{title}</h4>
+      <p className="mt-3 text-sm leading-relaxed tracking-wide text-zinc-600">
+        {description}
+      </p>
+    </>
+  );
+  const className =
+    "block h-full rounded-2xl border border-gray-200 bg-white p-5 shadow-sm";
+  return link ? (
+    <Link href={link} className={className}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
 export function UspGrid() {
   return (
     <section className="bg-white px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -72,8 +101,28 @@ export function UspGrid() {
           </div>
         </FadeIn>
 
+        {/* Desktop ≥ md: hover-halo grid */}
         <FadeIn delay={0.2}>
-          <HoverEffect items={USP_ITEMS} />
+          <div className="hidden md:block">
+            <HoverEffect items={USP_ITEMS} />
+          </div>
+        </FadeIn>
+
+        {/* Mobile < md: swipeable carousel, no loop, 1 card / view */}
+        <FadeIn delay={0.2}>
+          <div className="md:hidden">
+            <AutoCarousel
+              loop={false}
+              align="center"
+              slideClassName="flex-[0_0_100%]"
+              autoplayInterval={6000}
+              showArrows={false}
+            >
+              {USP_ITEMS.map((item) => (
+                <MobileUspCard key={item.title} {...item} />
+              ))}
+            </AutoCarousel>
+          </div>
         </FadeIn>
       </div>
     </section>
