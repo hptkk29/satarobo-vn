@@ -121,6 +121,7 @@ model Center {
   leads     Lead[]
   classes   Class[]
   students  Student[]
+  studentsPreferred Student[] @relation("StudentPreferredCenter")
   employees Employee[]
   rooms     Room[]
   holidays  Holiday[]
@@ -305,27 +306,85 @@ model Note {
   @@index([leadId])
 }
 
+enum StudentStatus {
+  ACTIVE     // Đang học
+  PAUSED     // Bảo lưu (tạm nghỉ)
+  GRADUATED  // Hoàn thành khoá học
+  INACTIVE   // Nghỉ học hẳn
+}
+
+enum BloodType {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  O_POS
+  O_NEG
+  AB_POS
+  AB_NEG
+  UNKNOWN
+}
+
 model Student {
-  id          String    @id @default(cuid())
-  name        String
-  dateOfBirth DateTime?
-  phone       String?
-  email       String?
-  parentName  String?
-  parentPhone String?
-  centerId    String?
-  avatarUrl   String?
+  id           String    @id @default(cuid())
+  name         String
+  studentCode  String?   @unique
+  dateOfBirth  DateTime?
+  gender       Gender?
+  phone        String?
+  email        String?
+  avatarUrl    String?
+
+  // Education
+  currentGrade Int?
+  school       String?
+
+  // Parent / Guardian
+  // parentName + parentPhone stay nullable in the DB for the existing rows
+  // (some seeded students lack them). Zod requires them at write time.
+  parentName      String?
+  parentPhone     String?
+  parentEmail     String?
+  parentRelation  String?
+  parent2Name     String?
+  parent2Phone    String?
+  parent2Relation String?
+
+  // Address
+  address  String?
+  ward     String?
+  district String?
+  city     String?
+
+  // Health
+  bloodType   BloodType?
+  allergies   String[]   @default([])
+  healthNotes String?    @db.Text
+
+  // Sata Robo specific
+  enrollmentDate    DateTime?     @db.Date
+  preferredCenterId String?
+  preferredCenter   Center?       @relation("StudentPreferredCenter", fields: [preferredCenterId], references: [id])
+  notes             String?       @db.Text
+  status            StudentStatus @default(ACTIVE)
+
+  // Legacy "current center" — pre-D1 association, kept for compat.
+  centerId String?
+  center   Center?  @relation(fields: [centerId], references: [id])
+
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  center      Center?      @relation(fields: [centerId], references: [id])
   enrollments Enrollment[]
   attendances Attendance[]
 
   @@index([phone])
   @@index([centerId])
   @@index([deletedAt])
+  @@index([status])
+  @@index([preferredCenterId])
+  @@index([parentPhone])
 }
 
 model Class {
