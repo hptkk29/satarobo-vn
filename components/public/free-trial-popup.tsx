@@ -13,6 +13,15 @@ import { SATA_ROBO_CONTACT } from "@/lib/locations";
 const STORAGE_KEY = "satarobo-free-trial-submitted";
 const INTERVAL_MS = 60_000; // 60 seconds
 
+// Coordination with CampaignPopup20Suat (FIX-4): while the campaign window
+// is active and the campaign popup has not been dismissed, defer this
+// popup so the visitor isn't stacked with two modals. Keep CAMPAIGN_END
+// in sync with the constant in campaign-popup-20-suat.tsx.
+const CAMPAIGN_DISMISSED_KEY = "satarobo-campaign-20-suat-dismissed";
+const CAMPAIGN_START = new Date("2026-05-15T00:00:00+07:00");
+const CAMPAIGN_END = new Date("2026-05-31T23:59:59+07:00");
+const CAMPAIGN_GRACE_MS = 30_000; // wait 30s after campaign dismiss before first interval fire
+
 // Hide on routes where popup would be redundant or noisy.
 const HIDDEN_PREFIXES = [
   "/lien-he",
@@ -29,6 +38,20 @@ function hasSubmittedThisSession(): boolean {
   } catch {
     return false;
   }
+}
+
+function campaignDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(CAMPAIGN_DISMISSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function isCampaignActive(): boolean {
+  const now = new Date();
+  return now >= CAMPAIGN_START && now <= CAMPAIGN_END;
 }
 
 function markSubmitted() {
@@ -48,18 +71,41 @@ export function FreeTrialPopup() {
     if (HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))) return;
     if (hasSubmittedThisSession()) return;
 
-    // First fire at INTERVAL_MS, then every INTERVAL_MS while the visitor is
-    // still on a non-hidden route. Re-checks the submitted flag each tick so
-    // a CTA click in another tab still stops the loop here too.
-    const id = window.setInterval(() => {
-      if (hasSubmittedThisSession()) {
-        window.clearInterval(id);
-        return;
-      }
-      setOpen(true);
-    }, INTERVAL_MS);
+    let intervalId: number | undefined;
+    let pollId: number | undefined;
+    let graceTimerId: number | undefined;
 
-    return () => window.clearInterval(id);
+    const startInterval = () => {
+      // First fire at INTERVAL_MS, then every INTERVAL_MS. Each tick re-checks
+      // the submitted flag so a CTA click in another tab also stops the loop here.
+      intervalId = window.setInterval(() => {
+        if (hasSubmittedThisSession()) {
+          if (intervalId !== undefined) window.clearInterval(intervalId);
+          return;
+        }
+        setOpen(true);
+      }, INTERVAL_MS);
+    };
+
+    if (isCampaignActive() && !campaignDismissed()) {
+      // Campaign window — wait for the campaign popup to be dismissed before
+      // starting our interval. Poll every 5s.
+      pollId = window.setInterval(() => {
+        if (campaignDismissed()) {
+          if (pollId !== undefined) window.clearInterval(pollId);
+          // Give a 30s grace period after dismiss before the first show.
+          graceTimerId = window.setTimeout(startInterval, CAMPAIGN_GRACE_MS);
+        }
+      }, 5_000);
+    } else {
+      startInterval();
+    }
+
+    return () => {
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+      if (pollId !== undefined) window.clearInterval(pollId);
+      if (graceTimerId !== undefined) window.clearTimeout(graceTimerId);
+    };
   }, [pathname]);
 
   const handleClose = useCallback(() => {
