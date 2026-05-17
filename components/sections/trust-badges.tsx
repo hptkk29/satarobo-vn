@@ -2,16 +2,14 @@
 
 import { FadeIn } from "@/components/motion/fade-in";
 
-// F-UI-2.5 — Social proof row ngay sau Hero. Achievements (DB snapshot,
-// TODO: query thực tế sau) + partner names (text fallback, swap <Image>
-// khi có logo SVG/PNG transparent).
+// F-UI-2.5 — Social proof row ngay sau Hero. Achievements snapshot;
+// TODO: pull từ DB khi có dashboard count students/centers thực tế.
 const ACHIEVEMENTS = [
   { value: "5,000+", label: "Học viên đã đào tạo" },
   { value: "7", label: "Cơ sở Đà Nẵng + Online" },
   { value: "98%", label: "PH tiếp tục khoá tiếp theo" },
   { value: "150+", label: "Giải thưởng cuộc thi" },
 ];
-
 
 export function TrustBadges() {
   return (
