@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   images: {
@@ -74,4 +75,21 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const sentryWebpackPluginOptions = {
+  // Suppress source map upload logs in CI
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  // Auth token chỉ cần khi upload source maps
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Hides source maps from public bundle
+  hideSourceMaps: true,
+  // Auto-instrument browser/server requests
+  autoInstrumentServerFunctions: true,
+  // Tunnel /monitoring to bypass ad-blockers
+  tunnelRoute: "/monitoring",
+  // Don't upload source maps in dev — chỉ prod
+  disableLogger: process.env.NODE_ENV !== "production",
+};
+
+export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);
