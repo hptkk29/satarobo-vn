@@ -51,3 +51,25 @@ export async function updateLeadNote(
   revalidatePath('/admin/leads')
   return { ok: true }
 }
+
+export async function deleteLead(
+  leadId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
+  if (!hasPermission(session.user, 'delete', 'lead')) {
+    return { ok: false, error: 'Khong co quyen xoa lead' }
+  }
+
+  try {
+    await db.lead.update({
+      where: { id: leadId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    })
+  } catch {
+    return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
+  }
+
+  revalidatePath('/admin/leads')
+  return { ok: true }
+}

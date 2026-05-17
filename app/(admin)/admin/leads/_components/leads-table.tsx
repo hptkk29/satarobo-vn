@@ -1,9 +1,9 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransition, useRef, useState } from 'react'
-import { Search, ChevronLeft, ChevronRight, Loader2, X, Download } from 'lucide-react'
-import { updateLeadNote, updateLeadStatus } from '../actions'
+import { useTransition, useRef, useState, useEffect } from 'react'
+import { Search, ChevronLeft, ChevronRight, Loader2, X, Download, Trash2 } from 'lucide-react'
+import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Lead mới',
@@ -101,6 +101,55 @@ function StatusCell({
         ))}
       </select>
     </div>
+  )
+}
+
+function DeleteCell({ lead, onDeleted }: { lead: LeadRow; onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  // Reset confirm state sau 4 giây nếu user không click tiếp
+  useEffect(() => {
+    if (!confirming) return
+    const t = setTimeout(() => setConfirming(false), 4000)
+    return () => clearTimeout(t)
+  }, [confirming])
+
+  function handleClick() {
+    if (!confirming) {
+      setConfirming(true)
+      return
+    }
+    startTransition(async () => {
+      const res = await deleteLead(lead.id)
+      if (res.ok) {
+        onDeleted()
+      } else {
+        alert(res.error ?? 'Lỗi xoá lead')
+        setConfirming(false)
+      }
+    })
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={pending}
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+        confirming
+          ? 'bg-red-600 text-white hover:bg-red-700'
+          : 'text-red-600 hover:bg-red-50'
+      }`}
+      aria-label={confirming ? `Xác nhận xoá ${lead.parentName}` : `Xoá ${lead.parentName}`}
+    >
+      {pending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Trash2 className="h-3.5 w-3.5" />
+      )}
+      {confirming ? 'Xác nhận?' : 'Xoá'}
+    </button>
   )
 }
 
@@ -237,6 +286,7 @@ export function LeadsTable({
   page,
   pageSize,
   canUpdate,
+  canDelete,
   currentStatus,
   currentQ,
 }: {
@@ -245,6 +295,7 @@ export function LeadsTable({
   page: number
   pageSize: number
   canUpdate: boolean
+  canDelete: boolean
   currentStatus?: string
   currentQ?: string
 }) {
@@ -342,13 +393,18 @@ export function LeadsTable({
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Ngày đăng ký
                 </th>
+                {canDelete && (
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Hành động
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {leads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={canDelete ? 7 : 6}
                     className="px-4 py-12 text-center text-sm text-gray-400"
                   >
                     Chưa có lead nào
@@ -387,6 +443,17 @@ export function LeadsTable({
                     <td className="px-4 py-3 text-sm text-gray-500 tabular-nums">
                       {formatDate(lead.createdAt)}
                     </td>
+                    {canDelete && (
+                      <td
+                        className="px-4 py-3 text-right"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <DeleteCell
+                          lead={lead}
+                          onDeleted={() => router.refresh()}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

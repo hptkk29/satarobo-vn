@@ -71,6 +71,7 @@ export default async function LeadsPage({
 
   const isMarketing = session.user.role === 'MARKETING'
   const canUpdate = hasPermission(session.user, 'update', 'lead')
+  const canDelete = hasPermission(session.user, 'delete', 'lead')
 
   // Serialize dates + mask phone for MARKETING role
   const leads: LeadRow[] = rawLeads.map(lead => ({
@@ -112,6 +113,7 @@ export default async function LeadsPage({
         page={page}
         pageSize={PAGE_SIZE}
         canUpdate={canUpdate}
+        canDelete={canDelete}
         currentStatus={statusFilter}
         currentQ={q}
       />
