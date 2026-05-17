@@ -76,20 +76,28 @@ const nextConfig: NextConfig = {
 };
 
 const sentryWebpackPluginOptions = {
-  // Suppress source map upload logs in CI
-  silent: true,
+  // TEMPORARILY false to debug — change back to true after verifying
+  silent: false,
+
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
-  // Auth token chỉ cần khi upload source maps
   authToken: process.env.SENTRY_AUTH_TOKEN,
-  // Hides source maps from public bundle
-  hideSourceMaps: true,
-  // Auto-instrument browser/server requests
-  autoInstrumentServerFunctions: true,
-  // Tunnel /monitoring to bypass ad-blockers
+
+  // Tunnel route to bypass ad-blockers (Sentry events go through /monitoring)
   tunnelRoute: "/monitoring",
-  // Don't upload source maps in dev — chỉ prod
-  disableLogger: process.env.NODE_ENV !== "production",
+
+  // Hide source maps from public bundle output
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
+
+  // Disable Sentry logger to reduce bundle size in production
+  disableLogger: true,
+
+  // Automatically tree-shake Sentry logger statements
+  reactComponentAnnotation: {
+    enabled: true,
+  },
 };
 
 export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);
