@@ -3,10 +3,10 @@ import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { leadCreateSchema } from '@/lib/validators/lead'
 import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
+import { rateLimit } from '@/lib/rate-limit'
 
-// In-memory rate limit. Replace with Upstash or Redis when scaling beyond one instance.
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT_MAX = 3
+// Rate limit — uses Upstash Redis when env vars set, in-memory fallback otherwise.
+const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 60_000
 
 export async function POST(req: NextRequest) {
@@ -42,18 +42,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, leadId: 'ab-' + Date.now() })
     }
 
-    const now = Date.now()
-    const limit = rateLimitMap.get(ip)
-    if (limit && limit.resetAt > now) {
-      if (limit.count >= RATE_LIMIT_MAX) {
-        return NextResponse.json(
-          { ok: false, error: 'Quá nhiều request, vui lòng thử lại sau 1 phút' },
-          { status: 429 },
-        )
-      }
-      limit.count++
-    } else {
-      rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    const limit = await rateLimit({
+      key: `leads:${ip}`,
+      max: RATE_LIMIT_MAX,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    })
+
+    if (!limit.success) {
+      return NextResponse.json(
+        { ok: false, error: 'Quá nhiều request, vui lòng thử lại sau 1 phút' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((limit.resetAt - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(limit.remaining),
+            'X-RateLimit-Reset': String(limit.resetAt),
+          },
+        },
+      )
     }
 
     let courseId = data.courseId
