@@ -81,17 +81,24 @@ test.describe("Cookie consent", () => {
 
 test.describe("API health", () => {
   test("/api/leads POST rate limit", async ({ request }) => {
-    // Spam 7 requests — chỉ 5 succeed (RATE_LIMIT_MAX = 5)
+    // Payload phải pass leadCreateSchema để vượt qua validation gate
+    // (parentName ≥2, phone match VN regex, source ≥1, eventId ≥8,
+    // timeOnPage ≥3). Spam 7 requests — RATE_LIMIT_MAX = 5/phút →
+    // ít nhất 1 request trả 429.
+    //
+    // Lưu ý: ~5 request đầu sẽ tạo lead thật trong DB với source
+    // "e2e-smoke-rate-limit" — query DELETE nếu cần dọn dẹp.
+    const payload = {
+      parentName: "E2E Test",
+      phone: "0912345678",
+      source: "e2e-smoke-rate-limit",
+      eventId: "e2e-smoke-event-id",
+      consentMarketing: false,
+      timeOnPage: 10,
+    };
     const responses = await Promise.all(
       Array.from({ length: 7 }).map(() =>
-        request.post("/api/leads", {
-          data: {
-            parentName: "Test",
-            phone: "0900000000",
-            consentMarketing: false,
-            timeOnPage: 10,
-          },
-        }),
+        request.post("/api/leads", { data: payload }),
       ),
     );
     const statuses = responses.map((r) => r.status());
