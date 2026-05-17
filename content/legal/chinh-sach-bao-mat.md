@@ -112,7 +112,7 @@ Mọi câu hỏi, yêu cầu liên quan đến Chính sách Bảo mật, vui lò
 
 **CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO**
 
-- 📍 Trụ sở: 258 Lê Thanh Nghị, Hòa Cường, Hải Châu, Đà Nẵng
+- 📍 Trụ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng
 - 📞 Hotline: 0818.823.720
 - 📧 Email: dpo@satarobo.vn
 - 📧 Email công ty: thongtin@satarobo.vn

@@ -102,5 +102,5 @@ Mọi câu hỏi về Điều khoản:
 
 - 📧 Email: thongtin@satarobo.vn
 - 📞 Hotline: 0818.823.720
-- 🏢 Trụ sở: 258 Lê Thanh Nghị, Hòa Cường, Hải Châu, Đà Nẵng
+- 🏢 Trụ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng
 - 🆔 Mã số thuế: 0402301783

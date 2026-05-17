@@ -59,7 +59,7 @@ export function DesignSystemV2Demo() {
             size="large"
             badge="LTR"
             title="Lập trình Robot K-9"
-            description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 4 cơ sở Đà Nẵng"
+            description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 2 cơ sở Đà Nẵng"
             href="#"
             price="Liên hệ tư vấn"
             duration="6 tháng"

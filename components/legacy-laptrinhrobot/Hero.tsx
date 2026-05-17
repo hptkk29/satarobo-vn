@@ -13,10 +13,8 @@ interface Center {
 }
 
 const centers: Center[] = [
-  { icon: Building2, name: "Trụ sở chính - Hòa Cường", address: "258 Lê Thanh Nghị, Đà Nẵng" },
-  { icon: MapPin, name: "Cơ sở Hải Châu", address: "60 Lê Lợi, Đà Nẵng" },
-  { icon: MapPin, name: "Cơ sở Thanh Khê", address: "269 Điện Biên Phủ, Đà Nẵng" },
-  { icon: MapPin, name: "Cơ sở Cẩm Lệ", address: "232 Nguyễn Phước Lan, Đà Nẵng" },
+  { icon: Building2, name: "Trụ sở chính - Nguyễn Hữu Thọ", address: "211 Nguyễn Hữu Thọ, Đà Nẵng" },
+  { icon: MapPin, name: "Cơ sở Hoàng Diệu", address: "114 Hoàng Diệu, Đà Nẵng" },
 ];
 
 function Highlight({ children, tone = "orange" }: { children: React.ReactNode; tone?: "orange" | "purple" }) {

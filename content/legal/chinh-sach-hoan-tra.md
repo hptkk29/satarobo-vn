@@ -6,7 +6,7 @@
 
 Chính sách này áp dụng cho tất cả các dịch vụ của Sata Robo:
 
-- **Lập trình Robot:** Khoá học Robotics offline cho học sinh K-9 tại 4 cơ sở Đà Nẵng
+- **Lập trình Robot:** Khoá học Robotics offline cho học sinh K-9 tại 2 cơ sở Đà Nẵng
 - **Luyện thi RoboSim:** Khoá luyện thi online + coaching 1-1 trên platform mô phỏng
 - **Học cụ / Kit:** Bộ kit robot, linh kiện, thiết bị học tập
 
@@ -59,7 +59,7 @@ Trường hợp phụ huynh chủ động rút học:
 
 - 📧 Email: cskh@satarobo.vn
 - 📞 Hotline: 0818.823.720 (Thứ 2 – Thứ 7, 8:00 – 20:00)
-- 🏢 Trực tiếp tại cơ sở: 258 Lê Thanh Nghị, Hòa Cường, Hải Châu, Đà Nẵng (Trụ sở chính)
+- 🏢 Trực tiếp tại cơ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng (Trụ sở chính)
 
 ## 6. Ghi chú
 

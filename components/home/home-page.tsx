@@ -299,19 +299,11 @@ function TravelPrizeBanner() {
           </p>
         </FadeIn>
 
-        {/* Desktop: 3-col grid, items-stretch + h-full → 3 thẻ giải bằng
-            chiều cao chính xác kể cả khi desc dài-ngắn khác nhau. */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8 md:items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8">
           {prizes.map((p, i) => (
-            <RevealOnScroll
-              key={p.rank}
-              direction="up"
-              distance={20}
-              delay={i * 0.08}
-              className="h-full"
-            >
+            <RevealOnScroll key={p.rank} direction="up" distance={20} delay={i * 0.08}>
               <article
-                className={`relative flex h-full flex-col bg-white/15 backdrop-blur rounded-2xl ring-2 ${p.ring} p-6 hover:bg-white/20 transition-colors`}
+                className={`relative bg-white/15 backdrop-blur rounded-2xl ring-2 ${p.ring} p-6 hover:bg-white/20 transition-colors`}
               >
                 <div
                   className={`w-12 h-12 rounded-xl ${p.iconBg} mx-auto mb-3 flex items-center justify-center shadow-md`}
@@ -323,7 +315,7 @@ function TravelPrizeBanner() {
                   <NumberTicker value={p.amount} className="text-white" />
                   <span>.000.000đ</span>
                 </div>
-                <div className="text-sm opacity-90 mt-auto">{p.desc}</div>
+                <div className="text-sm opacity-90">{p.desc}</div>
               </article>
             </RevealOnScroll>
           ))}
@@ -387,7 +379,7 @@ function CompetitionCountdown() {
 
         <div className="text-center mt-12">
           <Link
-            href="https://drive.google.com/file/d/1fE3ALCboUanJlLxFb6Uq7iiJqYu7y4mC/view"
+            href="https://drive.google.com/drive/folders/12DTFji_NWDg_i3d1SGgjKKp8vxjF1seL?usp=sharing"
             className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-3 rounded-xl shadow-xl shadow-orange-500/40 hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:outline-none"
           >
             Xem ngay thể lệ cuộc thi

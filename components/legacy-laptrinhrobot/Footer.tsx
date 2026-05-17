@@ -80,7 +80,7 @@ export default function Footer() {
                 </li>
                 <li className="flex items-start gap-1.5">
                   <MapPin className="w-3 h-3 text-primary-orange flex-shrink-0 mt-0.5" />
-                  <span className="text-[10px] leading-tight">258 Lê Thanh Nghị, Đà Nẵng</span>
+                  <span className="text-[10px] leading-tight">211 Nguyễn Hữu Thọ, Đà Nẵng</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <Clock className="w-3 h-3 text-primary-orange flex-shrink-0" />

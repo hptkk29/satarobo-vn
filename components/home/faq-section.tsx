@@ -34,7 +34,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Sata Robo có bao nhiêu cơ sở tại Đà Nẵng?",
-    a: "Hiện 4 cơ sở đang hoạt động: 258 Lê Thanh Nghị (Trụ sở chính - Hòa Cường), 60 Lê Lợi (Hải Châu), 269 Điện Biên Phủ (Thanh Khê), 232 Nguyễn Phước Lan (Cẩm Lệ). 2 cơ sở mới sắp khai trương tháng 8/2026: 114 Hoàng Diệu và 211 Nguyễn Hữu Thọ.",
+    a: "Hiện có 2 cơ sở tại Đà Nẵng: 211 Nguyễn Hữu Thọ (Trụ sở chính) và 114 Hoàng Diệu (Hải Châu). Phụ huynh chọn cơ sở thuận tiện nhất; ngoài giờ học offline, học sinh có thể học online qua Robosim toàn quốc.",
   },
   {
     q: "Con học xong có thi đấu được không?",

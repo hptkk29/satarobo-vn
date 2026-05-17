@@ -39,7 +39,7 @@ export default function TestUiPage() {
                 Khoá học Lập trình Robot
               </p>
               <p className="mt-2 text-sm text-neutral-600">
-                6 cơ sở Đà Nẵng · 60 buổi · Cam kết hoàn 100% nếu HS không hài
+                2 cơ sở Đà Nẵng · 60 buổi · Cam kết hoàn 100% nếu HS không hài
                 lòng.
               </p>
               <p className="mt-3 text-xl font-bold text-gradient-warm">
@@ -95,7 +95,7 @@ export default function TestUiPage() {
                   🏫
                 </span>
                 <div>
-                  <p className="text-2xl font-bold text-neutral-900">6</p>
+                  <p className="text-2xl font-bold text-neutral-900">2</p>
                   <p className="text-sm text-neutral-500">Cơ sở Đà Nẵng</p>
                 </div>
               </div>

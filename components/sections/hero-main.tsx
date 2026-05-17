@@ -12,7 +12,7 @@ import { NumberTicker } from "@/components/magic/number-ticker";
 // badge → eyebrow → H1 → subtitle → CTAs → stats strip → social-proof.
 const HERO_STATS = [
   { value: 500, suffix: "+", label: "Học viên" },
-  { value: 7, suffix: " cơ sở", label: "Đà Nẵng + Online" },
+  { value: 2, suffix: " cơ sở", label: "Đà Nẵng + Online" },
   { value: 100, suffix: "%", label: "Cam kết hoàn tiền" },
 ];
 
@@ -81,7 +81,7 @@ export function HeroMain() {
         {/* Subtitle */}
         <div className="mx-auto mt-5 max-w-2xl">
           <TextGenerateEffect
-            words="7 cơ sở Đà Nẵng + Robosim độc quyền cho Cuộc thi 2026. Lớp ≤12 HV, cam kết hoàn 100%."
+            words="2 cơ sở Đà Nẵng + Robosim độc quyền cho Cuộc thi 2026. Lớp ≤12 HV, cam kết hoàn 100%."
             className="text-base font-normal leading-relaxed text-neutral-700 sm:text-lg"
           />
         </div>

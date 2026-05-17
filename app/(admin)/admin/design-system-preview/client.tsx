@@ -63,7 +63,7 @@ export function DesignSystemDemo() {
 
       <HeroSplit
         eyebrow="LẬP TRÌNH ROBOT"
-        title="Khoá Robotics K-9 tại 4 cơ sở Đà Nẵng"
+        title="Khoá Robotics K-9 tại 2 cơ sở Đà Nẵng"
         subtitle="Học thực tế với robot vật lý, giáo viên 1:8, sĩ số nhỏ"
         illustration={<HeroClassroom />}
         illustrationPosition="left"
@@ -84,7 +84,7 @@ export function DesignSystemDemo() {
         title="Sata Robo trong 6 năm"
         stats={[
           { value: 2000, suffix: "+", label: "Học viên" },
-          { value: 4, label: "Cơ sở Đà Nẵng" },
+          { value: 2, label: "Cơ sở Đà Nẵng" },
           { value: 24, label: "Giải RoboSim 2026" },
           { value: 6, suffix: "+", label: "Năm xây dựng" },
         ]}
@@ -97,7 +97,7 @@ export function DesignSystemDemo() {
             size="large"
             badge="LTR"
             title="Lập trình Robot K-9"
-            description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 4 cơ sở Đà Nẵng"
+            description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 2 cơ sở Đà Nẵng"
             href="#"
             price="Liên hệ tư vấn"
             duration="6 tháng"

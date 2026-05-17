@@ -8,11 +8,11 @@ const BASE_URL = "https://satarobo.vn";
 export const metadata: Metadata = {
   title: "Sata Robo — Học Viện Robotics & AI Đà Nẵng",
   description:
-    "Sata Robo - 6 cơ sở Robotics tại Đà Nẵng. Robosim độc quyền - phần mềm bắt buộc Cuộc thi 2026. Lớp ≤12 HV. Cam kết hoàn 100%. EB đến 30%.",
+    "Sata Robo - 2 cơ sở Robotics tại Đà Nẵng. Robosim độc quyền - phần mềm bắt buộc Cuộc thi 2026. Lớp ≤12 HV. Cam kết hoàn 100%. EB đến 30%.",
   openGraph: {
     title: "Sata Robo — Học Viện Robotics & AI Đà Nẵng",
     description:
-      "Robosim độc quyền · Cam kết hoàn 100% · 6 cơ sở Đà Nẵng",
+      "Robosim độc quyền · Cam kết hoàn 100% · 2 cơ sở Đà Nẵng",
     url: BASE_URL,
     siteName: "Sata Robo",
     images: [

@@ -71,7 +71,7 @@ export function contactPageJsonLd() {
     '@type': 'ContactPage',
     name: 'Liên hệ — Sata Robo',
     url: `${BASE_URL}/lien-he`,
-    description: 'Liên hệ với Sata Robo — Hotline, email và 4 cơ sở tại Đà Nẵng.',
+    description: 'Liên hệ với Sata Robo — Hotline, email và 2 cơ sở tại Đà Nẵng.',
   }
 }
 
@@ -242,8 +242,8 @@ export function jobPostingJsonLd(job: JobForJsonLd) {
       '@type': 'Place',
       address: {
         '@type': 'PostalAddress',
-        streetAddress: '258 Lê Thanh Nghị',
-        addressLocality: 'Hòa Cường, Hải Châu',
+        streetAddress: '211 Nguyễn Hữu Thọ',
+        addressLocality: 'Hải Châu',
         addressRegion: 'Đà Nẵng',
         addressCountry: 'VN',
       },

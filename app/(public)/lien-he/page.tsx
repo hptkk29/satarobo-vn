@@ -27,7 +27,7 @@ export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Liên hệ — Sata Robo Đà Nẵng",
-  description: `Liên hệ Sata Robo — Hotline ${SATA_ROBO_CONTACT.hotline}, email ${SATA_ROBO_CONTACT.emails.general}. 4 cơ sở tại Đà Nẵng.`,
+  description: `Liên hệ Sata Robo — Hotline ${SATA_ROBO_CONTACT.hotline}, email ${SATA_ROBO_CONTACT.emails.general}. 2 cơ sở tại Đà Nẵng.`,
   alternates: { canonical: `${BASE_URL}/lien-he` },
   openGraph: {
     title: "Liên hệ — Sata Robo",

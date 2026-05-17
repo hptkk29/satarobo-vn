@@ -28,7 +28,7 @@ const BASE_URL = "https://satarobo.vn";
 export const metadata: Metadata = {
   title: "Khoá học Robotics & STEM — Sata Robo Đà Nẵng",
   description:
-    "2 khoá học chủ lực tại Sata Robo: Lập trình Robot (K-9) và Luyện thi RoboSim — robot vật lý, lớp ≤12 HV, cam kết hoàn 100%, 6 cơ sở Đà Nẵng.",
+    "2 khoá học chủ lực tại Sata Robo: Lập trình Robot (K-9) và Luyện thi RoboSim — robot vật lý, lớp ≤12 HV, cam kết hoàn 100%, 2 cơ sở Đà Nẵng.",
   openGraph: {
     title: "Khoá học Robotics & STEM — Sata Robo",
     description: "Lập trình Robot (K-9) và Luyện thi RoboSim.",
@@ -84,7 +84,7 @@ const COMMITMENTS = [
   "Giáo viên 1:8 — đảm bảo từng học viên được chú ý",
   "Lab Robotics đầy đủ — robot LEGO, sensor, controller",
   "Cộng đồng phụ huynh 2,000+ chia sẻ kinh nghiệm",
-  "4 cơ sở Đà Nẵng — thuận tiện đưa đón con đi học",
+  "2 cơ sở Đà Nẵng — thuận tiện đưa đón con đi học",
 ];
 
 export default async function CoursesPage() {
@@ -166,7 +166,7 @@ export default async function CoursesPage() {
                 Bắt đầu nền tảng với Lập trình Robot — nâng cao luyện thi đấu với RoboSim
               </p>
               <div className="flex flex-wrap gap-2 justify-center text-xs mb-8">
-                {["Lộ trình rõ ràng", "Hoàn 100% nếu không hài lòng", "4 cơ sở Đà Nẵng"].map(
+                {["Lộ trình rõ ràng", "Hoàn 100% nếu không hài lòng", "2 cơ sở Đà Nẵng"].map(
                   (text) => (
                     <span
                       key={text}
@@ -232,9 +232,12 @@ export default async function CoursesPage() {
                   </div>
 
                   <div className="p-6 md:p-8">
-                    <h3 className="text-2xl font-bold text-neutral-900 mb-3 group-hover:text-orange-600 transition-colors">
+                    <h3 className="text-2xl font-bold text-neutral-900 mb-1 group-hover:text-orange-600 transition-colors">
                       {c.name}
                     </h3>
+                    <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-gradient-warm">
+                      Học &amp; Thi Robotics 2026
+                    </p>
                     <p className="text-neutral-600 mb-5 line-clamp-3 leading-relaxed">
                       {c.shortDescription ?? c.description?.slice(0, 200) ?? ""}
                     </p>

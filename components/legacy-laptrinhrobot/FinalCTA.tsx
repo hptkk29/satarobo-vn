@@ -98,7 +98,7 @@ export default function FinalCTA() {
               <div className="min-w-0">
                 <div className="text-xs font-bold text-white/60 uppercase">Trụ sở</div>
                 <div className="text-xs sm:text-sm font-bold text-white leading-snug break-words">
-                  258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng
+                  211 Nguyễn Hữu Thọ, Đà Nẵng
                 </div>
               </div>
             </div>

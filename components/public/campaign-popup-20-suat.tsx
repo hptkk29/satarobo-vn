@@ -26,7 +26,7 @@ interface CenterInfo {
 const CENTERS: CenterInfo[] = [
   {
     cs: "CS1",
-    address: "211 Nguyễn Hữu Thọ — Hoà Cường",
+    address: "211 Nguyễn Hữu Thọ — Trụ sở chính",
     openingDate: "23/05/2026",
     openingDay: "Thứ 7",
     time: "Ca 15h45",
@@ -39,14 +39,6 @@ const CENTERS: CenterInfo[] = [
     openingDay: "Thứ 2",
     time: "Ca 17h30",
     schedule: "T2 & T5",
-  },
-  {
-    cs: "CS3",
-    address: "89 Xô Viết Nghệ Tĩnh",
-    openingDate: "24/05/2026",
-    openingDay: "Chủ nhật",
-    time: "Ca 8h00",
-    schedule: "CN & T3",
   },
 ];
 
@@ -139,7 +131,7 @@ export function CampaignPopup20Suat() {
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
-              Lịch khai giảng 3 cơ sở mới
+              Lịch khai giảng 2 cơ sở
             </h3>
             <div className="space-y-2">
               {CENTERS.map((c) => (

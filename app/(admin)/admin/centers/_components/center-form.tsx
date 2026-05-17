@@ -64,7 +64,7 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
           label="Địa chỉ"
           name="address"
           defaultValue={center?.address}
-          placeholder="258 Lê Thanh Nghị"
+          placeholder="211 Nguyễn Hữu Thọ"
           required
         />
         <Grid cols={3}>

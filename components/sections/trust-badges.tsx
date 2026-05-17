@@ -6,7 +6,7 @@ import { FadeIn } from "@/components/motion/fade-in";
 // TODO: pull từ DB khi có dashboard count students/centers thực tế.
 const ACHIEVEMENTS = [
   { value: "5,000+", label: "Học viên đã đào tạo" },
-  { value: "7", label: "Cơ sở Đà Nẵng + Online" },
+  { value: "2", label: "Cơ sở Đà Nẵng + Online" },
   { value: "98%", label: "PH tiếp tục khoá tiếp theo" },
   { value: "150+", label: "Giải thưởng cuộc thi" },
 ];
