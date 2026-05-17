@@ -1,5 +1,6 @@
 // Sentry client-side init.
-// Auto-loaded by Next.js when present at project root.
+// Next.js 16 + Turbopack auto-loads this file (renamed from
+// sentry.client.config.ts per Sentry v10+ contract).
 // Docs: https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
@@ -49,3 +50,6 @@ if (dsn) {
     },
   });
 }
+
+// Required for App Router navigation tracing
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
