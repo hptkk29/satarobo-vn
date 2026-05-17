@@ -43,8 +43,13 @@ let upstashClient: {
 function getUpstash(): typeof upstashClient {
   if (upstashClient !== null) return upstashClient;
 
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // Vercel Marketplace Upstash integration sets KV_* names by default.
+  // Standalone Upstash uses UPSTASH_* names. Support both — prefer UPSTASH_*
+  // when explicitly set (e.g. local .env.local overrides), fall back to KV_*.
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
 
   if (!url || !token) return null;
 
