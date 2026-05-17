@@ -95,7 +95,7 @@ function rateLimitMemory(args: RateLimitArgs): RateLimitResult {
 }
 
 // =============================================================================
-// Upstash implementation (using INCR + EXPIRE atomic-ish ops)
+// Upstash implementation (atomic pipeline INCR + EXPIRE NX)
 // =============================================================================
 
 async function rateLimitUpstash(args: RateLimitArgs): Promise<RateLimitResult> {
@@ -106,18 +106,27 @@ async function rateLimitUpstash(args: RateLimitArgs): Promise<RateLimitResult> {
   const now = Date.now();
 
   try {
-    // Use pipeline to be atomic-ish: INCR + EXPIRE
-    // (Pipeline isn't truly atomic but the race window is tiny; for ironclad
-    // atomicity use Lua scripting via /eval, but INCR returns the new value
-    // and we only set EXPIRE if it's the first hit.)
-    const incrRes = await client.fetch(`/incr/${encodeURIComponent(args.key)}`);
-    if (!incrRes.ok) throw new Error(`Upstash INCR failed: ${incrRes.status}`);
-    const incrData = (await incrRes.json()) as { result: number };
-    const count = incrData.result;
+    // Pipeline: INCR + EXPIRE NX in 1 HTTP roundtrip.
+    // EXPIRE with NX flag only sets TTL if the key has no TTL yet,
+    // preventing concurrent instances from resetting the window mid-flight.
+    const pipelineRes = await client.fetch("/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([
+        ["INCR", args.key],
+        ["EXPIRE", args.key, windowSec, "NX"],
+      ]),
+    });
 
-    // First hit → set TTL
-    if (count === 1) {
-      await client.fetch(`/expire/${encodeURIComponent(args.key)}/${windowSec}`);
+    if (!pipelineRes.ok) {
+      throw new Error(`Upstash pipeline failed: ${pipelineRes.status}`);
+    }
+
+    const data = (await pipelineRes.json()) as Array<{ result: number | string }>;
+    const count = Number(data[0]?.result ?? 0);
+
+    if (!Number.isFinite(count) || count <= 0) {
+      throw new Error(`Upstash returned unexpected count: ${JSON.stringify(data)}`);
     }
 
     const resetAt = now + windowSec * 1000;
@@ -132,8 +141,6 @@ async function rateLimitUpstash(args: RateLimitArgs): Promise<RateLimitResult> {
       resetAt,
     };
   } catch (err) {
-    // Fail-open: if Upstash is down, fall back to memory limiter (defensive).
-    // Log and continue — better to allow legitimate traffic than block everyone.
     console.error("[rate-limit] Upstash error, falling back to memory:", err);
     return rateLimitMemory(args);
   }
