@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel in-progress runs when new commits land on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Skip Prisma binary download — we don't need it in CI checks below
+  # (only typecheck/lint/build need the client which uses bundled engine)
+  PRISMA_SKIP_POSTINSTALL_GENERATE: "false"
+
+jobs:
+  quality:
+    name: Quality (typecheck + lint + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+        env:
+          # Build needs valid envs even if not used. Use placeholders for CI.
+          DATABASE_URL: "postgresql://placeholder:placeholder@placeholder:5432/placeholder"
+          DIRECT_URL: "postgresql://placeholder:placeholder@placeholder:5432/placeholder"
+          NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+          NEXTAUTH_URL: "http://localhost:3000"
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+  unit-tests:
+    name: Unit tests (Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run Vitest
+        run: pnpm test:unit -- --run --reporter=verbose
+
+  e2e:
+    name: E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+    # Only run on PR + main (skip develop to save CI minutes)
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build app
+        run: pnpm build
+        env:
+          DATABASE_URL: "postgresql://placeholder:placeholder@placeholder:5432/placeholder"
+          DIRECT_URL: "postgresql://placeholder:placeholder@placeholder:5432/placeholder"
+          NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+          NEXTAUTH_URL: "http://localhost:3000"
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+      - name: Run Playwright smoke tests
+        run: pnpm test:e2e
+        env:
+          BASE_URL: "http://localhost:3000"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
