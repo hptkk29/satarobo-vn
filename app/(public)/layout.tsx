@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/sections/site-footer";
 import { FloatingCta } from "@/components/public/floating-cta";
 import { StickyMobileCta } from "@/components/sections/sticky-mobile-cta";
 import { CampaignPopup20Suat } from "@/components/public/campaign-popup-20-suat";
+import { CookieConsent } from "@/components/public/cookie-consent";
 
 // F-UI-4 wiring:
 // - <SiteFooter /> thay <Footer /> cũ (giữ file cũ ở components/public/
@@ -19,6 +20,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       <FloatingCta />
       <StickyMobileCta />
       <CampaignPopup20Suat />
+      <CookieConsent />
     </>
   );
 }

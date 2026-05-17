@@ -255,6 +255,12 @@ export function SiteFooter() {
               Điều khoản
             </Link>
             <Link
+              href="/quyen-rieng-tu"
+              className="transition-colors hover:text-orange-400"
+            >
+              Quyền riêng tư
+            </Link>
+            <Link
               href="/chinh-sach-bao-mat"
               className="transition-colors hover:text-orange-400"
             >

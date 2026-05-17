@@ -1,6 +1,8 @@
 'use client'
 
 import Script from 'next/script'
+import { useEffect, useState } from 'react'
+import { hasConsent } from '@/lib/cookie-consent'
 
 declare global {
   interface Window {
@@ -11,8 +13,27 @@ declare global {
 
 const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID
 
+/**
+ * Meta Pixel — only loads after user grants 'marketing' consent.
+ * Server-side conversion API (Meta CAPI) still fires regardless via /api/leads
+ * because that's necessary for our business purpose (lead tracking we own),
+ * but the browser pixel is opt-in.
+ */
 export function MetaPixel() {
+  const [granted, setGranted] = useState(false)
+
+  useEffect(() => {
+    setGranted(hasConsent('marketing'))
+
+    const handler = () => {
+      setGranted(hasConsent('marketing'))
+    }
+    window.addEventListener('consent-change', handler)
+    return () => window.removeEventListener('consent-change', handler)
+  }, [])
+
   if (!PIXEL_ID) return null
+  if (!granted) return null
 
   return (
     // Static pixel init — content is build-time constant, not user input
