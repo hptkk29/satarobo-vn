@@ -28,10 +28,10 @@ const BASE_URL = "https://satarobo.vn";
 export const metadata: Metadata = {
   title: "Khoá học Robotics & STEM — Sata Robo Đà Nẵng",
   description:
-    "2 khoá học chủ lực tại Sata Robo: Lập trình Robot (K-9) và Luyện thi RoboSim — robot vật lý, lớp ≤12 HV, cam kết hoàn 100%, 2 cơ sở Đà Nẵng.",
+    "2 khoá học chủ lực tại Sata Robo: Lập trình Robot (Sata1-8) và Luyện thi RoboSim — robot vật lý, lớp ≤12 HV, cam kết hoàn 100%, 2 cơ sở Đà Nẵng.",
   openGraph: {
     title: "Khoá học Robotics & STEM — Sata Robo",
-    description: "Lập trình Robot (K-9) và Luyện thi RoboSim.",
+    description: "Lập trình Robot (Sata1-8) và Luyện thi RoboSim.",
     url: `${BASE_URL}/khoa-hoc`,
     siteName: "Sata Robo",
   },
@@ -43,28 +43,28 @@ export const revalidate = 60;
 const COMPARISON = [
   {
     label: "Hình thức",
-    laptrinhrobot: "Offline tại lớp",
-    luyenthirobosim: "Online + coaching 1-1",
+    laptrinhrobot: "Offline tại trung tâm",
+    luyenthirobosim: "Học Online qua nền tảng SataWorld",
   },
   {
     label: "Đối tượng",
-    laptrinhrobot: "Học sinh lớp 1-8 (mới bắt đầu)",
-    luyenthirobosim: "Học sinh đã biết cơ bản, muốn thi đấu",
+    laptrinhrobot: "Học sinh lớp 1-8",
+    luyenthirobosim: "Học sinh đã biết cơ bản, muốn học luyện thi để thi đấu",
   },
   {
     label: "Thời lượng",
-    laptrinhrobot: "6 tháng (12 module)",
-    luyenthirobosim: "3-6 tháng (18 buổi video + coaching)",
+    laptrinhrobot: "12 tháng (48 buổi)",
+    luyenthirobosim: "1 tháng (18 buổi video + coaching)",
   },
   {
     label: "Sĩ số",
-    laptrinhrobot: "≤ 8 học viên / lớp",
+    laptrinhrobot: "≤ 12 học viên / lớp",
     luyenthirobosim: "Không giới hạn (online)",
   },
   {
     label: "Thiết bị",
-    laptrinhrobot: "Robot LEGO Education vật lý",
-    luyenthirobosim: "Platform RoboSim trên trình duyệt",
+    laptrinhrobot: "Các Robot Education vật lý",
+    luyenthirobosim: "Ứng dụng RoboSim trên máy tính Windows",
   },
   {
     label: "Mục tiêu",
@@ -73,16 +73,16 @@ const COMPARISON = [
   },
   {
     label: "Giá",
-    laptrinhrobot: "Liên hệ tư vấn",
-    luyenthirobosim: "Liên hệ tư vấn",
+    laptrinhrobot: "Chỉ từ 2.040.000đ",
+    luyenthirobosim: "Chỉ từ 490.000đ",
   },
 ];
 
 const COMMITMENTS = [
-  "Giáo trình WRO chuẩn quốc tế — 6 năm tinh chỉnh",
+  "Giáo trình WRO chuẩn quốc tế — 3 năm tinh chỉnh",
   "Hoàn 100% học phí buổi 1-2 nếu con không phù hợp",
   "Giáo viên 1:8 — đảm bảo từng học viên được chú ý",
-  "Lab Robotics đầy đủ — robot LEGO, sensor, controller",
+  "Lab Robotics đầy đủ — robot Education vật lý, sensor, controller",
   "Cộng đồng phụ huynh 2,000+ chia sẻ kinh nghiệm",
   "2 cơ sở Đà Nẵng — thuận tiện đưa đón con đi học",
 ];
@@ -156,14 +156,14 @@ export default async function CoursesPage() {
               <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-purple-200 rounded-full px-4 py-1.5 mb-6 shadow-sm">
                 <Sparkles className="w-4 h-4 text-purple-600" />
                 <span className="text-xs font-bold uppercase tracking-wider text-purple-700">
-                  Khoá học
+                  Học + Thực Hành + Thi Đấu + Thành tích
                 </span>
               </div>
               <h1 className="text-4xl md:text-5xl font-black text-neutral-900 mb-4 leading-tight">
-                2 con đường Robotics phù hợp với con bạn
+                Học để phát triển tư duy là đương nhiên, nhưng sẽ phải gắn liền với thi đấu. Lấy kết quả thi đấu là thước đo đánh giá hiệu quả. Đó là triết lý giáo dục của Sata Robo.
               </h1>
               <p className="text-lg text-neutral-600 mb-8 max-w-2xl mx-auto">
-                Bắt đầu nền tảng với Lập trình Robot — nâng cao luyện thi đấu với RoboSim
+                Tại Sata Robo, chúng tôi đào tạo và có cam kết đầu ra. Học viên được học để hiểu, thực hành để thành thạo, và thi đấu để khẳng định năng lực. Thành tích thi đấu là thước đo khách quan nhất cho hiệu quả đào tạo của chúng tôi.
               </p>
               <div className="flex flex-wrap gap-2 justify-center text-xs mb-8">
                 {["Lộ trình rõ ràng", "Hoàn 100% nếu không hài lòng", "2 cơ sở Đà Nẵng"].map(

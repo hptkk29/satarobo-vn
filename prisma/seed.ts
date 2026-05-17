@@ -8,44 +8,14 @@ async function main() {
   console.log("🌱 Bắt đầu seed data...");
 
   // ─── Centers ─────────────────────────────────────────────────────────────────
-  // Phase 4.UI.RESET.1: 4 cơ sở operational + 2 cơ sở upcoming (isActive=false).
-  // IDs match lib/locations.ts.
+  // 2 cơ sở operational match lib/locations.ts (211 NHT = HQ + 114 HD).
+  // centersData[0] = HQ → dùng làm fallback cho FK orphan của các row khác.
   const centersData = [
     {
-      id: "tru-so-le-thanh-nghi",
-      slug: "tru-so-le-thanh-nghi",
-      name: "Trụ sở chính - Hòa Cường",
-      address: "258 Lê Thanh Nghị",
-      city: "Đà Nẵng",
-      phone: "0818823720",
-      email: "thongtin@satarobo.vn",
-      isActive: true,
-    },
-    {
-      id: "co-so-le-loi",
-      slug: "co-so-le-loi",
-      name: "Cơ sở Hải Châu",
-      address: "60 Lê Lợi",
-      city: "Đà Nẵng",
-      phone: "0818823720",
-      email: "thongtin@satarobo.vn",
-      isActive: true,
-    },
-    {
-      id: "co-so-dien-bien-phu",
-      slug: "co-so-dien-bien-phu",
-      name: "Cơ sở Thanh Khê",
-      address: "269 Điện Biên Phủ",
-      city: "Đà Nẵng",
-      phone: "0818823720",
-      email: "thongtin@satarobo.vn",
-      isActive: true,
-    },
-    {
-      id: "co-so-nguyen-phuoc-lan",
-      slug: "co-so-nguyen-phuoc-lan",
-      name: "Cơ sở Cẩm Lệ",
-      address: "232 Nguyễn Phước Lan",
+      id: "co-so-nguyen-huu-tho",
+      slug: "co-so-nguyen-huu-tho",
+      name: "Trụ sở chính - Nguyễn Hữu Thọ",
+      address: "211 Nguyễn Hữu Thọ",
       city: "Đà Nẵng",
       phone: "0818823720",
       email: "thongtin@satarobo.vn",
@@ -54,22 +24,12 @@ async function main() {
     {
       id: "co-so-hoang-dieu",
       slug: "co-so-hoang-dieu",
-      name: "Cơ sở Hoàng Diệu (sắp khai trương)",
+      name: "Cơ sở Hoàng Diệu",
       address: "114 Hoàng Diệu",
       city: "Đà Nẵng",
       phone: "0818823720",
       email: "thongtin@satarobo.vn",
-      isActive: false,
-    },
-    {
-      id: "co-so-nguyen-huu-tho",
-      slug: "co-so-nguyen-huu-tho",
-      name: "Cơ sở Nguyễn Hữu Thọ (khai trương 08/2026)",
-      address: "211 Nguyễn Hữu Thọ",
-      city: "Đà Nẵng",
-      phone: "0818823720",
-      email: "thongtin@satarobo.vn",
-      isActive: false,
+      isActive: true,
     },
   ];
 
@@ -84,7 +44,7 @@ async function main() {
 
   // Re-point FK của User/Lead/Class/Student về HQ mới trước khi xoá cơ sở cũ
   // (relation onDelete mặc định Restrict, nên cần tay làm thế).
-  const newHqId = centersData[0].id; // tru-so-le-thanh-nghi
+  const newHqId = centersData[0].id; // co-so-nguyen-huu-tho
   await db.user.updateMany({
     where: { centerId: { notIn: validCenterIds, not: null } },
     data: { centerId: newHqId },
@@ -121,8 +81,8 @@ async function main() {
       name: "Lập trình Robot",
       type: "OFFLINE" as const,
       shortDescription:
-        "Khoá học toàn diện về lập trình & điều khiển robot cho học sinh K-9. Tư duy logic, lập trình thực hành, dự án sáng tạo.",
-      description: `Khoá học Lập trình Robot là chương trình giáo dục STEM toàn diện dành cho học sinh từ K-9, giúp các em làm quen với:
+        "Hệ thống các khoá học offline tại trung tâm bao gồm khoá luyện thi(dành cho học sinh từ lớp 3-8 đã có nền tảng với mong muốn luyện thi cấp tốc để thi đấu) và khoá học chuyên sâu (dành cho học sinh từ lớp 1-8 chưa có nền tảng với mong muốn học lập trình robot để phát triển tư duy lâu dài). ",
+      description: `Khoá học Lập trình Robot là chương trình giáo dục STEM toàn diện dành cho học sinh từ lớp 1-8, giúp các em làm quen với:
 
 - Tư duy logic và lập trình cơ bản
 - Cấu trúc và nguyên lý hoạt động của robot
@@ -132,7 +92,7 @@ async function main() {
 Chương trình được thiết kế bài bản từ cơ bản đến nâng cao, học viên sẽ tự tay xây dựng và lập trình các robot từ đơn giản đến phức tạp.`,
       priceDisplay: "Liên hệ tư vấn",
       duration: 180,
-      durationDisplay: "6 tháng",
+      durationDisplay: "12 tháng (48 buổi)",
       studentCount: 1200,
       displayOrder: 1,
       isActive: true,
@@ -144,8 +104,8 @@ Chương trình được thiết kế bài bản từ cơ bản đến nâng cao
       name: "Luyện thi Robosim",
       type: "HYBRID" as const,
       shortDescription:
-        "Chuẩn bị thi đấu Robotics chuyên nghiệp (RoboSim, WRO) cho học sinh có nền tảng. Mentor 1-1, mô phỏng chuyên sâu.",
-      description: `Luyện thi Robosim là chương trình chuyên sâu dành cho học viên muốn tham gia các cuộc thi Robotics cấp quốc gia và quốc tế (RoboSim, WRO, ...).
+        "Khoá tự học Online qua nền tảng SataWorld - Chuẩn bị thi đấu Robotics chuyên nghiệp (RoboSim) cho học sinh có nền tảng. Có hướng dẫn giải đề chi tiết dành cho đề thi vòng loại Robotics Quốc gia 2026.",
+      description: `Luyện thi Robosim là chương trình dành cho học viên muốn vượt qua vòng loại Robotics Quốc gia 2026 để đến với vòng Khu vực được diễn ra vào tháng 9/2026.
 
 Học viên sẽ được:
 - Luyện tập trên nền tảng mô phỏng Robosim chuyên nghiệp
@@ -156,7 +116,7 @@ Học viên sẽ được:
 Chương trình phù hợp cho học sinh đã có nền tảng lập trình robot cơ bản.`,
       priceDisplay: "Liên hệ tư vấn",
       duration: 120,
-      durationDisplay: "3-6 tháng",
+      durationDisplay: "1-2 tháng",
       studentCount: 800,
       displayOrder: 2,
       isActive: true,

@@ -6,7 +6,7 @@
 
 Chính sách này áp dụng cho tất cả các dịch vụ của Sata Robo:
 
-- **Lập trình Robot:** Khoá học Robotics offline cho học sinh K-9 tại 2 cơ sở Đà Nẵng
+- **Lập trình Robot:** Khoá học Robotics offline cho học sinh lớp 1-8 tại 2 cơ sở Đà Nẵng
 - **Luyện thi RoboSim:** Khoá luyện thi online + coaching 1-1 trên platform mô phỏng
 - **Học cụ / Kit:** Bộ kit robot, linh kiện, thiết bị học tập
 

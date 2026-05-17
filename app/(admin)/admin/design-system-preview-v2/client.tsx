@@ -58,7 +58,7 @@ export function DesignSystemV2Demo() {
           <CourseCard
             size="large"
             badge="LTR"
-            title="Lập trình Robot K-9"
+            title="Lập trình Robot (Sata1-8)"
             description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 2 cơ sở Đà Nẵng"
             href="#"
             price="Liên hệ tư vấn"

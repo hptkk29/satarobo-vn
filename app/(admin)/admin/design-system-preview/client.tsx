@@ -63,7 +63,7 @@ export function DesignSystemDemo() {
 
       <HeroSplit
         eyebrow="LẬP TRÌNH ROBOT"
-        title="Khoá Robotics K-9 tại 2 cơ sở Đà Nẵng"
+        title="Khoá Robotics Sata1-8 tại 2 cơ sở Đà Nẵng"
         subtitle="Học thực tế với robot vật lý, giáo viên 1:8, sĩ số nhỏ"
         illustration={<HeroClassroom />}
         illustrationPosition="left"
@@ -96,7 +96,7 @@ export function DesignSystemDemo() {
           <CourseCard
             size="large"
             badge="LTR"
-            title="Lập trình Robot K-9"
+            title="Lập trình Robot (Sata1-8)"
             description="Khoá Robotics offline cho học sinh lớp 1-8 — robot vật lý, lớp 1:8, 2 cơ sở Đà Nẵng"
             href="#"
             price="Liên hệ tư vấn"
@@ -210,7 +210,7 @@ export function DesignSystemDemo() {
       <HeroSplit
         eyebrow="HỌC CỤ"
         title="Bộ kit Robotics chuẩn quốc tế"
-        subtitle="Robot LEGO Education + sensor + controller — tất cả Sata Robo cung cấp"
+        subtitle="Robot Education vật lý + sensor + controller — tất cả Sata Robo cung cấp"
         illustration={<HeroStemTools />}
         illustrationPosition="left"
       >

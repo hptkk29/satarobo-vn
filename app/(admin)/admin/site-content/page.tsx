@@ -11,7 +11,7 @@ export const metadata = { title: "Hình ảnh & nội dung trang | Admin" };
 const PAGES = [
   { pageKey: "home", label: "Trang chủ" },
   { pageKey: "khoa-hoc", label: "Khoá học (overview)" },
-  { pageKey: "khoa-hoc/laptrinhrobot", label: "Lập trình Robot K-9" },
+  { pageKey: "khoa-hoc/laptrinhrobot", label: "Lập trình Robot (Sata1-8)" },
   { pageKey: "khoa-hoc/luyenthirobosim", label: "Luyện thi RoboSim" },
   { pageKey: "ve-chung-toi", label: "Về chúng tôi" },
   { pageKey: "tuyen-dung", label: "Tuyển dụng" },
