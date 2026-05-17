@@ -5,10 +5,10 @@ import { FadeIn } from "@/components/motion/fade-in";
 // F-UI-2.5 — Social proof row ngay sau Hero. Achievements snapshot;
 // TODO: pull từ DB khi có dashboard count students/centers thực tế.
 const ACHIEVEMENTS = [
-  { value: "5,000+", label: "Học viên đã đào tạo" },
+  { value: "1,000+", label: "Học viên đã đào tạo" },
   { value: "2", label: "Cơ sở Đà Nẵng + Online" },
   { value: "98%", label: "PH tiếp tục khoá tiếp theo" },
-  { value: "150+", label: "Giải thưởng cuộc thi" },
+  { value: "50+", label: "Giải thưởng cuộc thi" },
 ];
 
 export function TrustBadges() {
@@ -17,7 +17,7 @@ export function TrustBadges() {
       <div className="mx-auto max-w-6xl">
         <FadeIn>
           <p className="mb-8 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 sm:text-sm">
-            Tin tưởng bởi 5,000+ phụ huynh & học sinh
+            Tin tưởng bởi 2,000+ phụ huynh & học sinh
           </p>
         </FadeIn>
 

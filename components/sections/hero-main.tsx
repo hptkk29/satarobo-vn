@@ -11,7 +11,7 @@ import { NumberTicker } from "@/components/magic/number-ticker";
 // pastel halos (cam + tím) + grid mảnh xám nhạt. Nội dung giữ nguyên:
 // badge → eyebrow → H1 → subtitle → CTAs → stats strip → social-proof.
 const HERO_STATS = [
-  { value: 500, suffix: "+", label: "Học viên" },
+  { value: 1000, suffix: "+", label: "Học viên" },
   { value: 2, suffix: " cơ sở", label: "Đà Nẵng + Online" },
   { value: 100, suffix: "%", label: "Cam kết hoàn tiền" },
 ];

@@ -84,7 +84,7 @@ export default function TestUiPage() {
                   🎓
                 </span>
                 <div>
-                  <p className="text-2xl font-bold text-neutral-900">10,000+</p>
+                  <p className="text-2xl font-bold text-neutral-900">1,000+</p>
                   <p className="text-sm text-neutral-500">Học viên</p>
                 </div>
               </div>

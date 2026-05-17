@@ -112,7 +112,7 @@ export function Testimonials() {
               </span>
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-5xl">
-              <span className="text-gradient-warm">10,000+ phụ huynh</span> tin
+              <span className="text-gradient-warm">2,000+ phụ huynh</span> tin
               tưởng
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base text-gray-600 sm:text-lg">

@@ -199,12 +199,18 @@ export default async function CoursesPage() {
             Bấm vào card để xem chi tiết lộ trình, học phí và cách đăng ký
           </SectionLead>
 
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto md:items-stretch">
             {courses.map((c, i) => (
-              <RevealOnScroll key={c.id} direction="up" distance={24} delay={i * 0.08}>
+              <RevealOnScroll
+                key={c.id}
+                direction="up"
+                distance={24}
+                delay={i * 0.08}
+                className="h-full"
+              >
                 <Link
                   href={`/khoa-hoc/${c.slug}`}
-                  className="group relative block bg-white rounded-2xl border border-neutral-200 overflow-hidden hover:shadow-[0_12px_40px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none"
+                  className="group relative flex h-full flex-col bg-white rounded-2xl border border-neutral-200 overflow-hidden hover:shadow-[0_12px_40px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none"
                 >
                   <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl overflow-hidden">
                     <BorderBeam size={90} duration={8} colorFrom="#F97316" colorTo="#7C3AED" />
@@ -231,41 +237,44 @@ export default async function CoursesPage() {
                     )}
                   </div>
 
-                  <div className="p-6 md:p-8">
+                  <div className="flex flex-1 flex-col p-6 md:p-8">
                     <h3 className="text-2xl font-bold text-neutral-900 mb-1 group-hover:text-orange-600 transition-colors">
                       {c.name}
                     </h3>
                     <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-gradient-warm">
                       Học &amp; Thi Robotics 2026
                     </p>
-                    <p className="text-neutral-600 mb-5 line-clamp-3 leading-relaxed">
-                      {c.shortDescription ?? c.description?.slice(0, 200) ?? ""}
+                    {/* Show shortDescription đầy đủ — không line-clamp; dài bao nhiêu cũng hiện. */}
+                    <p className="text-neutral-600 mb-5 leading-relaxed">
+                      {c.shortDescription ?? c.description ?? ""}
                     </p>
 
-                    <div className="flex items-center gap-4 text-sm text-neutral-500 mb-5">
-                      {c.durationDisplay && (
-                        <span className="flex items-center gap-1.5">
-                          <Sparkles className="w-4 h-4" />
-                          {c.durationDisplay}
-                        </span>
-                      )}
-                      {c.studentCount > 0 && (
-                        <span className="flex items-center gap-1.5">
-                          {c.studentCount.toLocaleString()} học viên
-                        </span>
-                      )}
-                    </div>
+                    <div className="mt-auto flex flex-col gap-4">
+                      <div className="flex items-center gap-4 text-sm text-neutral-500">
+                        {c.durationDisplay && (
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4" />
+                            {c.durationDisplay}
+                          </span>
+                        )}
+                        {c.studentCount > 0 && (
+                          <span className="flex items-center gap-1.5">
+                            {c.studentCount.toLocaleString()} học viên
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="flex items-center justify-between">
-                      {c.priceDisplay && (
-                        <span className="text-xl font-bold text-orange-600">
-                          {c.priceDisplay}
+                      <div className="flex items-center justify-between">
+                        {c.priceDisplay && (
+                          <span className="text-xl font-bold text-orange-600">
+                            {c.priceDisplay}
+                          </span>
+                        )}
+                        <span className="ml-auto inline-flex items-center gap-1.5 text-sm font-bold text-purple-700 group-hover:gap-2.5 transition-all">
+                          Xem chi tiết
+                          <ArrowRight className="w-4 h-4" />
                         </span>
-                      )}
-                      <span className="ml-auto inline-flex items-center gap-1.5 text-sm font-bold text-purple-700 group-hover:gap-2.5 transition-all">
-                        Xem chi tiết
-                        <ArrowRight className="w-4 h-4" />
-                      </span>
+                      </div>
                     </div>
                   </div>
                 </Link>

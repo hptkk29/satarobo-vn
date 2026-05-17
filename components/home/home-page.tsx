@@ -70,7 +70,7 @@ function StatsBar() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-white">
           <StatBlock Icon={Users}>
             <span className="text-2xl sm:text-3xl md:text-4xl font-black">
-              <NumberTicker value={500} className="text-white" />
+              <NumberTicker value={1000} className="text-white" />
               <span>+</span>
             </span>
             <span className="text-xs md:text-sm opacity-90 font-medium">Học Viên đã theo học</span>
