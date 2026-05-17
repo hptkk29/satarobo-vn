@@ -3,7 +3,7 @@ import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { leadCreateSchema } from '@/lib/validators/lead'
 import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
-import { rateLimit } from '@/lib/rate-limit'
+import { rateLimit, getRateLimitBackend } from '@/lib/rate-limit'
 
 // Rate limit — uses Upstash Redis when env vars set, in-memory fallback otherwise.
 const RATE_LIMIT_MAX = 5
@@ -20,6 +20,13 @@ export async function POST(req: NextRequest) {
     // Read body before rate limiting so validation probes and bot traps do not
     // consume the real lead submission quota.
     const body = await req.json()
+
+    console.log('[POST /api/leads]', {
+      ip,
+      backend: getRateLimitBackend(),
+      timeOnPage: body?.timeOnPage,
+      hasEventId: !!body?.eventId,
+    })
 
     if (typeof body?.website === 'string' && body.website.length > 0) {
       console.warn('[POST /api/leads] honeypot triggered, ip:', ip)
@@ -46,6 +53,12 @@ export async function POST(req: NextRequest) {
       key: `leads:${ip}`,
       max: RATE_LIMIT_MAX,
       windowMs: RATE_LIMIT_WINDOW_MS,
+    })
+
+    console.log('[POST /api/leads] rate limit result', {
+      ip,
+      success: limit.success,
+      remaining: limit.remaining,
     })
 
     if (!limit.success) {
