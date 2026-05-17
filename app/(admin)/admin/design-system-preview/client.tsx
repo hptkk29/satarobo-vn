@@ -57,7 +57,7 @@ export function DesignSystemDemo() {
         subtitle="Platform mô phỏng cuộc thi đầu tiên tại Việt Nam — coaching 1-1 với mentor"
         illustration={<HeroKidRobot />}
       >
-        <CTAPrimary href="#">Học thử miễn phí</CTAPrimary>
+        <CTAPrimary href="#">Học trải nghiệm miễn phí</CTAPrimary>
         <CTAGhost href="#">Tìm hiểu thêm</CTAGhost>
       </HeroSplit>
 

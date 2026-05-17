@@ -290,7 +290,12 @@ export default function VeChungToiPage() {
       >
         {/* Mobile + tablet: auto-rotating carousel */}
         <div className="lg:hidden max-w-6xl mx-auto">
-          <AutoCarousel slideClassName="flex-[0_0_88%] sm:flex-[0_0_45%]">
+          <AutoCarousel
+            loop={false}
+            align="center"
+            slideClassName="flex-[0_0_100%]"
+            showArrows={false}
+          >
             {coreValues.map((value, index) => {
               const Icon = value.icon;
               return (

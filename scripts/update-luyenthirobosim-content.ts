@@ -50,7 +50,7 @@ Có cam kết bằng văn bản. Nếu học viên hoàn thành đầy đủ cam
 - Sau ngày này: giá trở về niêm yết
 
 ═══════════════════════════════════════
-📞 ĐĂNG KÝ HỌC THỬ MIỄN PHÍ
+📞 ĐĂNG KÝ HỌC TRẢI NGHIỆM MIỄN PHÍ
 
 Hotline: 0818.823.720
 Email: thongtin@satarobo.vn

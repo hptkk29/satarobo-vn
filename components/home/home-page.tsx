@@ -299,11 +299,20 @@ function TravelPrizeBanner() {
           </p>
         </FadeIn>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8">
+        {/* Desktop: 3 thẻ bằng chiều cao chính xác (items-stretch + h-full +
+            flex flex-col). Desc đẩy xuống đáy qua mt-auto → 3 cột align ngang nhau
+            kể cả khi desc dài-ngắn khác nhau (Giải Nhất 2 dòng vs Giải Nhì/Ba 1 dòng). */}
+        <div className="mx-auto mb-8 grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-3 md:items-stretch">
           {prizes.map((p, i) => (
-            <RevealOnScroll key={p.rank} direction="up" distance={20} delay={i * 0.08}>
+            <RevealOnScroll
+              key={p.rank}
+              direction="up"
+              distance={20}
+              delay={i * 0.08}
+              className="h-full"
+            >
               <article
-                className={`relative bg-white/15 backdrop-blur rounded-2xl ring-2 ${p.ring} p-6 hover:bg-white/20 transition-colors`}
+                className={`relative flex h-full flex-col bg-white/15 backdrop-blur rounded-2xl ring-2 ${p.ring} p-6 hover:bg-white/20 transition-colors`}
               >
                 <div
                   className={`w-12 h-12 rounded-xl ${p.iconBg} mx-auto mb-3 flex items-center justify-center shadow-md`}
@@ -315,7 +324,7 @@ function TravelPrizeBanner() {
                   <NumberTicker value={p.amount} className="text-white" />
                   <span>.000.000đ</span>
                 </div>
-                <div className="text-sm opacity-90">{p.desc}</div>
+                <div className="mt-auto text-sm opacity-90">{p.desc}</div>
               </article>
             </RevealOnScroll>
           ))}
@@ -457,26 +466,31 @@ function FinalCTA() {
             Con bạn xứng đáng được trải nghiệm tốt nhất
           </h2>
           <p className="text-lg md:text-xl mb-10 opacity-90">
-            Học thử <strong>MIỄN PHÍ</strong> — không điều kiện.
+            Học trải nghiệm <strong>MIỄN PHÍ</strong> — không điều kiện.
             <br />
             Cam kết hoàn tiền 100% nếu không hài lòng.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/lien-he?free-trial=true">
+          {/* Mobile: stack vertical, 2 nút h-14 + w-full → bằng nhau chính xác.
+              Desktop: flex-row + width auto theo nội dung. */}
+          <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-center">
+            <Link
+              href="/lien-he?free-trial=true"
+              className="block h-14 w-full sm:h-auto sm:w-auto"
+            >
               <ShimmerButton
                 background="rgba(255,255,255,1)"
                 borderRadius="14px"
-                className="px-8 py-4 font-bold text-orange-600 text-lg shadow-2xl"
+                className="h-14 w-full px-8 font-bold text-orange-600 text-lg shadow-2xl sm:h-auto sm:w-auto sm:py-4"
               >
                 <Target className="w-5 h-5 mr-2" />
-                <span>Đăng ký học thử ngay</span>
+                <span>Đăng ký học trải nghiệm ngay</span>
                 <ArrowRight className="w-5 h-5 ml-2" />
               </ShimmerButton>
             </Link>
             <a
               href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-              className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur text-white border-2 border-white/50 font-bold px-8 py-4 rounded-xl hover:bg-white/20 text-lg transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+              className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border-2 border-white/50 bg-white/10 px-8 text-lg font-bold text-white backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:h-auto sm:w-auto sm:py-4"
             >
               <Phone className="w-6 h-6" />
               {SATA_ROBO_CONTACT.hotline}

@@ -211,7 +211,10 @@ export default async function TuyenDungPage() {
         {/* Mobile + tablet: auto-rotating carousel */}
         <div className="lg:hidden">
           <AutoCarousel
-            slideClassName="flex-[0_0_88%] sm:flex-[0_0_45%]"
+            loop={false}
+            align="center"
+            slideClassName="flex-[0_0_100%]"
+            showArrows={false}
             dotActiveClassName="bg-purple-600"
           >
             {PERKS.map((p) => (

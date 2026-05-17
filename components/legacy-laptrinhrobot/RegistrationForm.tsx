@@ -173,7 +173,7 @@ export default function RegistrationForm() {
             <p className="mb-6 text-base leading-relaxed text-text-muted sm:text-lg">
               Học viện <strong>Sata Robo</strong> đã nhận được thông tin của bố mẹ.
               <br />
-              Tư vấn viên sẽ gọi trong vòng <strong className="text-primary-orange">24h</strong> để xếp lịch học thử miễn phí.
+              Tư vấn viên sẽ gọi trong vòng <strong className="text-primary-orange">24h</strong> để xếp lịch học trải nghiệm miễn phí.
             </p>
 
             {shouldRedirectToZalo ? (
@@ -217,14 +217,14 @@ export default function RegistrationForm() {
         <div className="mb-8 text-center sm:mb-12">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/20 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white backdrop-blur-sm sm:text-sm">
             <ClipboardList className="h-4 w-4" />
-            ĐĂNG KÝ BUỔI HỌC THỬ MIỄN PHÍ
+            ĐĂNG KÝ BUỔI HỌC TRẢI NGHIỆM MIỄN PHÍ
           </div>
           <h2 className="mb-4 text-3xl font-black leading-tight text-white sm:text-5xl">
             Bắt Đầu <span className="text-soft-yellow">Hành Trình</span><br />
             Của Con Ngay Hôm Nay
           </h2>
           <p className="mx-auto max-w-2xl text-base text-white/90 sm:text-lg">
-            Bố mẹ vui lòng điền thông tin dưới đây - Sata Robo gọi tư vấn trong <strong>24h</strong> để xếp lịch học thử miễn phí cho con.
+            Bố mẹ vui lòng điền thông tin dưới đây - Sata Robo gọi tư vấn trong <strong>24h</strong> để xếp lịch học trải nghiệm miễn phí cho con.
           </p>
         </div>
 

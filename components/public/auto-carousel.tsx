@@ -3,7 +3,7 @@
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoveHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface AutoCarouselProps {
@@ -29,6 +29,10 @@ export interface AutoCarouselProps {
   /** Slide alignment within viewport. Default "start". Use "center" when
    *  showing 1 full-width slide per view to keep it visually centered. */
   align?: "start" | "center" | "end";
+  /** Slider awareness label dưới dots — giúp phụ huynh biết section có
+   *  thể vuốt. Pass `null` để tắt; pass string để override text.
+   *  Default = "Vuốt để xem thêm" với progress "1 / N". */
+  hint?: string | null;
 }
 
 export function AutoCarousel({
@@ -41,6 +45,7 @@ export function AutoCarousel({
   className,
   loop = true,
   align = "start",
+  hint = "Vuốt để xem thêm",
 }: AutoCarouselProps) {
   const plugins =
     autoplayInterval > 0
@@ -93,7 +98,7 @@ export function AutoCarousel({
       </div>
 
       {showDots && scrollSnaps.length > 1 && (
-        <div className="flex justify-center gap-2 mt-6">
+        <div className="mt-6 flex justify-center gap-2">
           {scrollSnaps.map((_, i) => (
             <button
               key={i}
@@ -108,6 +113,24 @@ export function AutoCarousel({
               aria-label={`Slide ${i + 1}`}
             />
           ))}
+        </div>
+      )}
+
+      {/* Slider awareness — chỉ render khi có nhiều hơn 1 slide. Hiển thị
+          progress "X / N" + nhãn vuốt + chevron animate-pulse. Giúp phụ
+          huynh lướt qua nhận ra section có nhiều card cần xem hết. */}
+      {hint && scrollSnaps.length > 1 && (
+        <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-neutral-500 md:hidden">
+          <ChevronLeft className="h-3.5 w-3.5 animate-pulse" />
+          <span className="font-medium">
+            <span className="tabular-nums">
+              {selectedIndex + 1} / {scrollSnaps.length}
+            </span>
+            <span className="mx-1.5 text-neutral-300">·</span>
+            <MoveHorizontal className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
+            {hint}
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 animate-pulse" />
         </div>
       )}
 

@@ -38,7 +38,7 @@ export function SecondaryCta() {
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-zinc-300 sm:text-lg">
             Đăng ký{" "}
-            <strong className="text-white">học thử miễn phí 1 buổi</strong>{" "}
+            <strong className="text-white">học trải nghiệm miễn phí 1 buổi</strong>{" "}
             — không cần thẻ tín dụng, không ràng buộc. Cùng con khám phá thế
             giới Robot ngay!
           </p>
@@ -58,7 +58,7 @@ export function SecondaryCta() {
               >
                 <span className="flex items-center gap-2 text-white">
                   <Calendar className="h-5 w-5" />
-                  Đăng ký học thử miễn phí
+                  Đăng ký học trải nghiệm miễn phí
                   <ArrowRight className="h-4 w-4" />
                 </span>
               </ShimmerButton>

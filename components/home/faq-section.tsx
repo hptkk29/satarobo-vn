@@ -41,8 +41,8 @@ const FAQS: FAQItem[] = [
     a: "Có. Sata Robo là đơn vị duy nhất tại Đà Nẵng đào tạo Robosim — phần mềm bắt buộc trong Cuộc thi Sáng tạo Robotics Toàn Quốc 2026. Vòng loại cấp TP Đà Nẵng dự kiến kết thúc 26/07/2026. Chung kết khu vực Miền Trung 13/09/2026 tại Nghệ An. Học viên thi đạt giải còn được thưởng chuyến du lịch 3-7 triệu kết hợp lễ khai trương 2 chi nhánh mới.",
   },
   {
-    q: "Có học thử miễn phí trước khi đăng ký không?",
-    a: "Có. Sata Robo tặng 5 buổi luyện thi cơ bản miễn phí + 1 buổi test năng lực 45 phút + 1 buổi học thử 90 phút — hoàn toàn 0 đồng, không điều kiện. Đăng ký qua form trên website hoặc gọi hotline 0818.823.720.",
+    q: "Có học trải nghiệm miễn phí trước khi đăng ký không?",
+    a: "Có. Sata Robo tặng 5 buổi luyện thi cơ bản miễn phí + 1 buổi test năng lực 45 phút + 1 buổi học trải nghiệm 90 phút — hoàn toàn 0 đồng, không điều kiện. Đăng ký qua form trên website hoặc gọi hotline 0818.823.720.",
   },
 ];
 
