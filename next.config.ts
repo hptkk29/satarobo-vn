@@ -76,8 +76,8 @@ const nextConfig: NextConfig = {
 };
 
 const sentryWebpackPluginOptions = {
-  // TEMPORARILY false to debug — change back to true after verifying
-  silent: false,
+  // Suppress Sentry plugin output in build log (errors still surface).
+  silent: true,
 
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
