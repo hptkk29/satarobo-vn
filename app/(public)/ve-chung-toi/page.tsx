@@ -27,7 +27,6 @@ import { tokens } from "@/lib/design-tokens";
 import {
   SATA_ROBO_CONTACT,
   operationalLocations,
-  upcomingLocations,
 } from "@/lib/locations";
 import { AutoCarousel } from "@/components/public/auto-carousel";
 
@@ -353,103 +352,111 @@ export default function VeChungToiPage() {
         theme="soft-cool"
         eyebrow="THÔNG TIN CÔNG TY"
         title="Hệ thống cơ sở Sata Robo tại Đà Nẵng"
-        subtitle={`${operationalLocations().length} cơ sở đang hoạt động · ${upcomingLocations().length} cơ sở sắp khai trương`}
+        subtitle={`${operationalLocations().length} cơ sở đang hoạt động tại Đà Nẵng`}
       >
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-1 bg-white rounded-2xl border-2 border-purple-200 shadow-sm p-6 space-y-4">
-            <div className="flex items-center gap-2 text-purple-700">
-              <Building2 className="w-5 h-5" />
-              <h3 className="font-bold">Pháp nhân</h3>
-            </div>
-            <p className="font-semibold text-neutral-900 leading-snug">
-              {SATA_ROBO_CONTACT.companyName}
-            </p>
-            <div className="text-sm space-y-2 text-neutral-700">
-              <p className="flex items-start gap-2">
-                <Receipt className="w-4 h-4 mt-0.5 shrink-0 text-purple-500" />
-                <span>
-                  <span className="text-neutral-500">Mã số thuế:</span>{" "}
-                  <span className="font-mono font-semibold">
-                    {SATA_ROBO_CONTACT.taxCode}
+        <div className="mx-auto max-w-5xl space-y-6">
+          {/* Hàng 1 — Pháp nhân (full-width). Layout 2 cột nội bộ:
+              trái = công ty + MST, phải = 3 liên hệ. */}
+          <div className="relative overflow-hidden rounded-2xl border-2 border-purple-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-purple-100/60 blur-3xl" />
+            <div className="relative grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-10">
+              {/* Cột trái — Pháp nhân */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-purple-700">
+                  <Building2 className="h-5 w-5" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider">
+                    Pháp nhân
+                  </h3>
+                </div>
+                <p className="text-lg font-bold leading-snug text-neutral-900">
+                  {SATA_ROBO_CONTACT.companyName}
+                </p>
+                <p className="flex items-start gap-2 text-sm text-neutral-700">
+                  <Receipt className="mt-0.5 h-4 w-4 shrink-0 text-purple-500" />
+                  <span>
+                    <span className="text-neutral-500">Mã số thuế:</span>{" "}
+                    <span className="font-mono font-semibold">
+                      {SATA_ROBO_CONTACT.taxCode}
+                    </span>
                   </span>
-                </span>
-              </p>
-              <p className="flex items-start gap-2">
-                <Phone className="w-4 h-4 mt-0.5 shrink-0 text-orange-500" />
+                </p>
+              </div>
+
+              {/* Cột phải — Liên hệ */}
+              <div className="flex flex-col gap-2.5 text-sm md:border-l md:border-neutral-200 md:pl-10">
                 <a
                   href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-                  className="hover:text-orange-600"
+                  className="group flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-orange-50"
                 >
-                  {SATA_ROBO_CONTACT.hotline}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 group-hover:bg-orange-200">
+                    <Phone className="h-4 w-4" />
+                  </span>
+                  <span className="font-semibold text-neutral-800 group-hover:text-orange-700">
+                    {SATA_ROBO_CONTACT.hotline}
+                  </span>
                 </a>
-              </p>
-              <p className="flex items-start gap-2">
-                <Mail className="w-4 h-4 mt-0.5 shrink-0 text-orange-500" />
                 <a
                   href={`mailto:${SATA_ROBO_CONTACT.emails.general}`}
-                  className="hover:text-orange-600 break-all"
+                  className="group flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-orange-50"
                 >
-                  {SATA_ROBO_CONTACT.emails.general}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 group-hover:bg-orange-200">
+                    <Mail className="h-4 w-4" />
+                  </span>
+                  <span className="break-all text-neutral-800 group-hover:text-orange-700">
+                    {SATA_ROBO_CONTACT.emails.general}
+                  </span>
                 </a>
-              </p>
-              <p className="flex items-start gap-2">
-                <Mail className="w-4 h-4 mt-0.5 shrink-0 text-purple-500" />
                 <a
                   href={`mailto:${SATA_ROBO_CONTACT.emails.recruitment}`}
-                  className="hover:text-purple-700 break-all"
+                  className="group flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-purple-50"
                 >
-                  {SATA_ROBO_CONTACT.emails.recruitment}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-600 group-hover:bg-purple-200">
+                    <Mail className="h-4 w-4" />
+                  </span>
+                  <span className="break-all text-neutral-800 group-hover:text-purple-700">
+                    {SATA_ROBO_CONTACT.emails.recruitment}
+                  </span>
                 </a>
-              </p>
+              </div>
             </div>
           </div>
-          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+          {/* Hàng 2 — 2 cơ sở 1 hàng, cùng kích thước */}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:items-stretch">
             {operationalLocations().map((loc) => (
               <div
                 key={loc.id}
-                className={`bg-white rounded-xl border ${
-                  loc.isHQ ? "border-orange-300" : "border-neutral-200"
-                } p-4`}
+                className={`group relative flex h-full flex-col rounded-2xl border-2 bg-white p-6 shadow-sm transition-all hover:shadow-md ${
+                  loc.isHQ
+                    ? "border-orange-200 hover:border-orange-300"
+                    : "border-purple-200 hover:border-purple-300"
+                }`}
               >
-                <div className="flex items-start gap-2">
-                  <MapPin
-                    className={`w-4 h-4 mt-0.5 shrink-0 ${
-                      loc.isHQ ? "text-orange-500" : "text-purple-500"
+                <div className="mb-3 flex items-center justify-between">
+                  <span
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                      loc.isHQ
+                        ? "bg-orange-100 text-orange-600"
+                        : "bg-purple-100 text-purple-600"
                     }`}
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-neutral-900">
-                      {loc.name}
-                      {loc.isHQ && (
-                        <span className="ml-1.5 inline-block text-[10px] font-bold uppercase tracking-wider text-orange-600 align-middle">
-                          HQ
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-sm text-neutral-700">{loc.address}</p>
-                    <p className="text-xs text-neutral-500">{loc.district}</p>
-                  </div>
+                  >
+                    <MapPin className="h-5 w-5" />
+                  </span>
+                  {loc.isHQ && (
+                    <span className="rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+                      HQ · Trụ sở chính
+                    </span>
+                  )}
                 </div>
-              </div>
-            ))}
-            {upcomingLocations().map((loc) => (
-              <div
-                key={loc.id}
-                className="bg-amber-50/60 rounded-xl border border-dashed border-amber-300 p-4"
-              >
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-neutral-900">
-                      {loc.name}
-                      <span className="ml-1.5 inline-block text-[10px] font-bold uppercase tracking-wider text-amber-700 align-middle">
-                        Sắp khai trương
-                      </span>
-                    </p>
-                    <p className="text-sm text-neutral-700">{loc.address}</p>
-                    <p className="text-xs text-neutral-500">{loc.district}</p>
-                  </div>
-                </div>
+                <h4 className="text-base font-bold text-neutral-900">
+                  {loc.name}
+                </h4>
+                <p className="mt-2 text-sm leading-relaxed text-neutral-700">
+                  {loc.address}
+                </p>
+                <p className="mt-auto pt-3 text-xs text-neutral-500">
+                  {loc.district} · {loc.workingHours}
+                </p>
               </div>
             ))}
           </div>

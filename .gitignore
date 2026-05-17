@@ -74,3 +74,7 @@ secret-*
 /_temp-uploads/
 
 _qa-reports/
+
+# Playwright (test results local, do NOT commit — CI uploads as artifact)
+/playwright-report/
+/test-results/
