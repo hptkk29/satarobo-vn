@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function NewClassPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user.role, "classes:create")) {
+  if (!can(session.user, "classes:create")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
 

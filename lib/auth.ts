@@ -5,17 +5,23 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { loginSchema } from "@/lib/validators/auth";
 
+type SessionGrant = { action: string; grant: "ALLOW" | "DENY" };
+
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
       role: string;
       centerId: string | null;
+      grants: SessionGrant[];
+      tokenVersion: number;
     } & DefaultSession["user"];
   }
   interface User {
     role?: string;
     centerId?: string | null;
+    grants?: SessionGrant[];
+    tokenVersion?: number;
   }
 }
 
@@ -52,28 +58,55 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const valid = await bcrypt.compare(parsed.data.password, user.password);
         if (!valid) return null;
 
+        // Phase 5.3.0: update lastLoginAt + load per-user grants + fresh
+        // tokenVersion in parallel để giảm login latency.
+        const [, grants, fresh] = await Promise.all([
+          db.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+          }),
+          db.userPermissionGrant.findMany({
+            where: { userId: user.id },
+            select: { action: true, grant: true },
+          }),
+          db.user.findUnique({
+            where: { id: user.id },
+            select: { tokenVersion: true },
+          }),
+        ]);
+
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role,
           centerId: user.centerId,
+          grants,
+          tokenVersion: fresh?.tokenVersion ?? 0,
         };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
+      // Khi user mới login (authorize trả user), copy fields vào token.
       if (user) {
+        token.id = user.id;
         token.role = user.role ?? "SALES";
         token.centerId = user.centerId ?? null;
+        token.grants = user.grants ?? [];
+        token.tokenVersion = user.tokenVersion ?? 0;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user.id = token.sub as string;
-      session.user.role = (token.role as string) ?? "SALES";
-      session.user.centerId = (token.centerId as string | null) ?? null;
+      if (session.user) {
+        session.user.id = (token.id as string) ?? (token.sub as string);
+        session.user.role = (token.role as string) ?? "SALES";
+        session.user.centerId = (token.centerId as string | null) ?? null;
+        session.user.grants = (token.grants as SessionGrant[]) ?? [];
+        session.user.tokenVersion = (token.tokenVersion as number) ?? 0;
+      }
       return session;
     },
   },

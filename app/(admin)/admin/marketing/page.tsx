@@ -29,7 +29,7 @@ function pct(part: number, total: number) {
 export default async function MarketingPage() {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user.role, 'leads:view-all')) redirect('/admin/dashboard')
+  if (!can(session.user, 'leads:view-all')) redirect('/admin/dashboard')
 
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)

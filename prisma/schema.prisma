@@ -10,6 +10,11 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
+enum GrantType {
+  ALLOW
+  DENY
+}
+
 enum Role {
   SUPER_ADMIN
   MANAGER
@@ -204,6 +209,10 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // ─── Per-user permission system (Phase 5.3.0) ───
+  tokenVersion  Int       @default(0)
+  lastLoginAt   DateTime?
+
   // Link 1-1 với Employee (1 user account ↔ 1 employee record)
   employeeId    String?   @unique
   employee      Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
@@ -220,10 +229,31 @@ model User {
   pageContentUpdated SitePageContent[]  @relation("PageContentUpdatedBy")
   employeesCreated   Employee[]         @relation("EmployeeCreatedBy")
 
+  permissionGrants   UserPermissionGrant[] @relation("UserPermissionGrants")
+  permissionsGranted UserPermissionGrant[] @relation("UserPermissionGrantor")
+
   @@index([email])
   @@index([centerId])
   @@index([role])
   @@index([deletedAt])
+}
+
+model UserPermissionGrant {
+  id        String    @id @default(cuid())
+  userId    String
+  action    String    // e.g. "leads:edit", phải match Action union trong lib/auth/permissions.ts
+  grant     GrantType
+  reason    String?   @db.Text
+  grantedBy String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user    User @relation("UserPermissionGrants", fields: [userId], references: [id], onDelete: Cascade)
+  grantor User @relation("UserPermissionGrantor", fields: [grantedBy], references: [id])
+
+  @@unique([userId, action])
+  @@index([userId])
+  @@index([grantedBy])
 }
 
 model Course {

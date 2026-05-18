@@ -10,7 +10,7 @@ export const metadata = { title: "Thêm vinh danh | Hall of Fame" };
 export default async function NewHonorPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user.role, "honors:create")) redirect("/admin/dashboard");
+  if (!can(session.user, "honors:create")) redirect("/admin/dashboard");
 
   const employees = await db.employee.findMany({
     where: { isActive: true },

@@ -64,10 +64,10 @@ interface SearchParams {
 export default async function ClassesPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user.role, 'classes:view-all')) redirect('/admin/dashboard')
+  if (!can(session.user, 'classes:view-all')) redirect('/admin/dashboard')
 
-  const canCreate = can(session.user.role, 'classes:create')
-  const canUpdate = can(session.user.role, 'classes:edit')
+  const canCreate = can(session.user, 'classes:create')
+  const canUpdate = can(session.user, 'classes:edit')
 
   const params = await searchParams
   const q = params.q?.trim() || undefined

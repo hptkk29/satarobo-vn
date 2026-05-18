@@ -31,7 +31,7 @@ export default async function LeadsPage({
 }) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user.role, 'leads:view-all')) redirect('/admin/dashboard')
+  if (!can(session.user, 'leads:view-all')) redirect('/admin/dashboard')
 
   const params = await searchParams
   const page = Math.max(1, Number(params.page ?? 1))
@@ -70,8 +70,8 @@ export default async function LeadsPage({
   ])
 
   const isMarketing = session.user.role === 'MARKETING'
-  const canUpdate = can(session.user.role, 'leads:edit')
-  const canDelete = can(session.user.role, 'leads:delete')
+  const canUpdate = can(session.user, 'leads:edit')
+  const canDelete = can(session.user, 'leads:delete')
 
   // Serialize dates + mask phone for MARKETING role
   const leads: LeadRow[] = rawLeads.map(lead => ({

@@ -21,7 +21,7 @@ export async function updateLeadStatus(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!can(session.user.role, 'leads:edit')) return { ok: false, error: 'Khong co quyen' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Khong co quyen' }
 
   const parsed = statusSchema.safeParse(rawStatus)
   if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
@@ -41,7 +41,7 @@ export async function updateLeadNote(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!can(session.user.role, 'leads:edit')) return { ok: false, error: 'Khong co quyen' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Khong co quyen' }
 
   await db.lead.update({
     where: { id: leadId },
@@ -57,7 +57,7 @@ export async function deleteLead(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!can(session.user.role, 'leads:delete')) {
+  if (!can(session.user, 'leads:delete')) {
     return { ok: false, error: 'Khong co quyen xoa lead' }
   }
 

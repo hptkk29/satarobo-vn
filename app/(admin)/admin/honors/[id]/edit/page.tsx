@@ -13,7 +13,7 @@ interface Props {
 export default async function EditHonorPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user.role, "honors:edit")) redirect("/admin/dashboard");
+  if (!can(session.user, "honors:edit")) redirect("/admin/dashboard");
 
   const { id } = await params;
   const [honor, employees] = await Promise.all([

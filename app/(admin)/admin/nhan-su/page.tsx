@@ -44,7 +44,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  if (!can(session.user.role, "employees:view-all")) {
+  if (!can(session.user, "employees:view-all")) {
     redirect("/admin/dashboard");
   }
 
@@ -99,8 +99,8 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
     }),
   ]);
 
-  const canCreate = can(session.user.role, "employees:create");
-  const canDelete = can(session.user.role, "employees:delete");
+  const canCreate = can(session.user, "employees:create");
+  const canDelete = can(session.user, "employees:delete");
 
   return (
     <div>

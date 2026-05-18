@@ -23,7 +23,7 @@ async function requireStudentWrite(action: "create" | "update" | "delete") {
     delete: "students:delete",
   };
 
-  if (!can(session.user.role, actionMap[action])) {
+  if (!can(session.user, actionMap[action])) {
     redirect("/admin/dashboard?error=unauthorized");
   }
   return session.user;

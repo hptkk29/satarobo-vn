@@ -15,7 +15,7 @@ interface Props {
 export default async function ClassProgressPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user.role, "classes:view-all")) {
+  if (!can(session.user, "classes:view-all")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
 

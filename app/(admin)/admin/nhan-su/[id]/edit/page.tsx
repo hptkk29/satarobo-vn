@@ -22,7 +22,7 @@ interface Props {
 export default async function EditEmployeePage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user.role, "employees:edit")) redirect("/admin/dashboard");
+  if (!can(session.user, "employees:edit")) redirect("/admin/dashboard");
 
   const { id } = await params;
   const employee = await db.employee.findUnique({

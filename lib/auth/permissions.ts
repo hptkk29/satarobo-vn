@@ -339,12 +339,53 @@ const PERMISSIONS: Record<Action, Role[]> = {
 // CORE FUNCTIONS
 // =============================================================================
 
+// Per-user override grant — Phase 5.3.0
+export type UserGrant = {
+  action: string;
+  grant: "ALLOW" | "DENY";
+};
+
+export type CanUser = {
+  role: Role | string | null | undefined;
+  grants?: UserGrant[];
+};
+
+/**
+ * Check if a user (or role string) can perform action.
+ *
+ * Resolution order (DENY beats ALLOW beats role):
+ *   1. If user.grants has DENY for action → false
+ *   2. If user.grants has ALLOW for action → true
+ *   3. Fall back to PERMISSIONS matrix (role-based)
+ *
+ * Backward compat: pass role string (or null) → behaves like before.
+ */
 export function can(
-  role: Role | string | undefined | null,
+  userOrRole: CanUser | Role | string | null | undefined,
   action: Action,
 ): boolean {
-  if (!role) return false;
-  return PERMISSIONS[action]?.includes(role as Role) ?? false;
+  // Path 1: legacy signature — role string / null / undefined
+  if (
+    userOrRole === null ||
+    userOrRole === undefined ||
+    typeof userOrRole === "string"
+  ) {
+    const role = userOrRole;
+    if (!role) return false;
+    return PERMISSIONS[action]?.includes(role as Role) ?? false;
+  }
+
+  // Path 2: user object with grants
+  const user = userOrRole;
+
+  // 2a. Per-user grants — DENY > ALLOW > role fallback
+  const grant = user.grants?.find((g) => g.action === action);
+  if (grant?.grant === "DENY") return false;
+  if (grant?.grant === "ALLOW") return true;
+
+  // 2b. Role matrix fallback
+  if (!user.role) return false;
+  return PERMISSIONS[action]?.includes(user.role as Role) ?? false;
 }
 
 export function assertCan(

@@ -20,7 +20,7 @@ async function requireClassWrite(action: "create" | "update" | "delete") {
     delete: "classes:delete",
   };
 
-  if (!can(session.user.role, actionMap[action])) {
+  if (!can(session.user, actionMap[action])) {
     redirect("/admin/dashboard?error=unauthorized");
   }
   return session.user;

@@ -33,10 +33,10 @@ const VALID_STATUSES = Object.values(StudentStatus)
 export default async function StudentsPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user.role, 'students:view-all')) redirect('/admin/dashboard')
+  if (!can(session.user, 'students:view-all')) redirect('/admin/dashboard')
 
-  const canCreate = can(session.user.role, 'students:create')
-  const canUpdate = can(session.user.role, 'students:edit')
+  const canCreate = can(session.user, 'students:create')
+  const canUpdate = can(session.user, 'students:edit')
 
   const params = await searchParams
   const q = params.q?.trim() || undefined

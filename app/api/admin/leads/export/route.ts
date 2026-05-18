@@ -25,7 +25,7 @@ function maskPhone(phone: string): string {
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!can(session.user.role, 'leads:view-all')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!can(session.user, 'leads:view-all')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = req.nextUrl
   const statusParam = searchParams.get('status') as LeadStatus | null

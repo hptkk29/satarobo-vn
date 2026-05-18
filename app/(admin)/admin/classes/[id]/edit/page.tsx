@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function EditClassPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user.role, "classes:edit")) {
+  if (!can(session.user, "classes:edit")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
 
