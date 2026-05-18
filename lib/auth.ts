@@ -28,6 +28,11 @@ declare module "next-auth" {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
+  // Trust the actual request Host header thay vì canonicalize sang
+  // NEXTAUTH_URL/VERCEL_URL. Cần thiết khi production dùng custom domain
+  // (satarobo.vn) trên Vercel — không thì redirect leak sang
+  // satarobo-vn.vercel.app.
+  trustHost: true,
   pages: {
     signIn: "/login",
   },
