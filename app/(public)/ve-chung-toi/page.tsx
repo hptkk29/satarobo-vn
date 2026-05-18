@@ -35,7 +35,7 @@ const BASE_URL = "https://satarobo.vn";
 export const metadata: Metadata = {
   title: "Câu chuyện thương hiệu Sata Robo | Tầm nhìn, Sứ mệnh, Giá trị cốt lõi",
   description:
-    "Sata Robo — Khơi nguồn sáng tạo, chắp cánh tương lai. Học viện Robotics & STEM giáo dục hàng đầu Đà Nẵng.",
+    "Trung tâm đào tạo STEM – Lập trình Robotics & AI – Sata Robo. Khơi nguồn sáng tạo, chắp cánh tương lai.",
   alternates: { canonical: `${BASE_URL}/ve-chung-toi` },
   openGraph: {
     title: "Câu chuyện thương hiệu Sata Robo",

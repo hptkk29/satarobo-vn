@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description:
     "Sata Robo - 2 cơ sở Robotics tại Đà Nẵng. Robosim độc quyền - phần mềm bắt buộc Cuộc thi 2026. Lớp ≤12 HV. Cam kết hoàn 100%. EB đến 30%.",
   openGraph: {
-    title: "Sata Robo — Học Viện Robotics & AI Đà Nẵng",
+    title: "Sata Robo – Trung tâm đào tạo STEM – Lập trình Robotics & AI",
     description:
       "Robosim độc quyền · Cam kết hoàn 100% · 2 cơ sở Đà Nẵng",
     url: BASE_URL,
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
         url: `${BASE_URL}/images/og/homepage.jpg`,
         width: 1200,
         height: 630,
-        alt: "Sata Robo — Học Viện Robotics & AI Đà Nẵng",
+        alt: "Sata Robo – Trung tâm đào tạo STEM – Lập trình Robotics & AI",
       },
     ],
     locale: "vi_VN",

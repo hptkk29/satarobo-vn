@@ -135,7 +135,7 @@ export function SiteFooter() {
               />
             </Link>
             <p className="mb-4 text-sm leading-relaxed text-gray-400">
-              Hệ sinh thái Robotics & STEM giáo dục hàng đầu tại Đà Nẵng.
+              Trung tâm đào tạo STEM – Lập trình Robotics & AI – Sata Robo.
               {ops > 0 ? ` ${ops} cơ sở đang hoạt động` : ""}
               {upcoming > 0 ? ` · ${upcoming} sắp khai trương` : ""}.
             </p>

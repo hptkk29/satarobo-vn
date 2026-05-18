@@ -12,7 +12,7 @@ export function organizationJsonLd() {
     alternateName: SATA_ROBO_CONTACT.companyName,
     url: BASE_URL,
     logo: `${BASE_URL}/brand/logo-satarobo.jpg`,
-    description: 'Học viện Robotics & STEM hàng đầu Đà Nẵng',
+    description: 'Trung tâm đào tạo STEM – Lập trình Robotics & AI – Sata Robo',
     taxID: SATA_ROBO_CONTACT.taxCode,
     contactPoint: [
       {
@@ -286,7 +286,7 @@ export function websiteJsonLd() {
     '@type': 'WebSite',
     name: 'Sata Robo',
     url: BASE_URL,
-    description: 'Hệ sinh thái Robotics & STEM giáo dục hàng đầu Đà Nẵng',
+    description: 'Trung tâm đào tạo STEM – Lập trình Robotics & AI – Sata Robo',
     publisher: {
       '@type': 'Organization',
       name: 'Sata Robo',

@@ -15,7 +15,7 @@ const beVietnamPro = Be_Vietnam_Pro({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://satarobo.vn"),
   title: {
-    default: "Sata Robo — Hệ sinh thái Robotics & STEM giáo dục",
+    default: "Sata Robo – Trung tâm đào tạo STEM – Lập trình Robotics & AI",
     template: "%s | Sata Robo",
   },
   description:

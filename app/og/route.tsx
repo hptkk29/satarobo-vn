@@ -6,7 +6,7 @@ export const runtime = 'edge'
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const title = searchParams.get('title') ?? 'Sata Robo'
-  const subtitle = searchParams.get('subtitle') ?? 'Hệ sinh thái Robotics & STEM giáo dục hàng đầu Đà Nẵng'
+  const subtitle = searchParams.get('subtitle') ?? 'Trung tâm đào tạo STEM – Lập trình Robotics & AI – Sata Robo'
 
   return new ImageResponse(
     (

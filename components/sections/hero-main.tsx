@@ -67,7 +67,7 @@ export function HeroMain() {
         >
           <Sparkles className="h-3.5 w-3.5 text-purple-600" />
           <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-700 sm:text-xs">
-            Học Viện Robotics &amp; AI Đà Nẵng
+            Trung tâm đào tạo STEM – Lập trình Robotics &amp; AI – Sata Robo
           </span>
         </motion.div>
 
