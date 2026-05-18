@@ -27,8 +27,8 @@ const CENTERS: CenterInfo[] = [
   {
     cs: "CS1",
     address: "211 Nguyễn Hữu Thọ — Trụ sở chính",
-    openingDate: "23/05/2026",
-    openingDay: "Thứ 7",
+    openingDate: "25/05/2026",
+    openingDay: "Thứ 2",
     time: "Ca 15h45",
     schedule: "T7 & T4",
   },

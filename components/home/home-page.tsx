@@ -295,7 +295,7 @@ function TravelPrizeBanner() {
             Lễ Khai Trương 2 Chi Nhánh Mới — Tháng 5/2026
           </h2>
           <p className="text-lg mb-10 opacity-90">
-            Trao tại lễ khai trương 114 Hoàng Diệu + 211 Nguyễn Hữu Thọ
+            Giải thưởng sẽ được trao vào tháng 8
           </p>
         </FadeIn>
 

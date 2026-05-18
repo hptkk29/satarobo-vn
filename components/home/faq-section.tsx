@@ -1,24 +1,17 @@
 "use client";
 
-import { HelpCircle } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { RevealOnScroll } from "@/components/motion/reveal-on-scroll";
-import {
-  SectionEyebrow,
-  SectionHeading,
-  SectionLead,
-} from "@/components/design-system/sections/section-primitives";
+import { useState } from "react";
+import { HelpCircle, Plus, Minus, MessageCircle } from "lucide-react";
+import { SATA_ROBO_CONTACT } from "@/lib/locations";
 
 interface FAQItem {
   q: string;
   a: string;
 }
 
+// ─── NỘI DUNG FAQ — sửa nội dung tại đây ─────────────────────────────
+// Mỗi item: { q: "Câu hỏi?", a: "Câu trả lời..." }
+// Thêm/xoá item tuỳ ý — order quyết định thứ tự hiển thị.
 const FAQS: FAQItem[] = [
   {
     q: "Khoá học Sata Robo phù hợp với con từ độ tuổi nào?",
@@ -38,40 +31,118 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Con học xong có thi đấu được không?",
-    a: "Có. Sata Robo là đơn vị duy nhất tại Đà Nẵng đào tạo Robosim — phần mềm bắt buộc trong Cuộc thi Sáng tạo Robotics Toàn Quốc 2026. Vòng loại cấp TP Đà Nẵng dự kiến kết thúc 26/07/2026. Chung kết khu vực Miền Trung 13/09/2026 tại Nghệ An. Học viên thi đạt giải còn được thưởng chuyến du lịch 3-7 triệu kết hợp lễ khai trương 2 chi nhánh mới.",
+    a: "Có, duy nhất học chi tiết chương trình đào tạo robosim có kết hơp hệ thống bài test theo gamificaton và Ai đánh giá kết quả học tập và trao chứng nhận tự động từ Sata Robo. Chương trình biên tập theo sát thể lệ cuộc thi sáng tạo Robotics 2026 do TW đoàn phát động",
   },
   {
     q: "Có học trải nghiệm miễn phí trước khi đăng ký không?",
-    a: "Có. Sata Robo tặng 5 buổi luyện thi cơ bản miễn phí + 1 buổi test năng lực 45 phút + 1 buổi học trải nghiệm 90 phút — hoàn toàn 0 đồng, không điều kiện. Đăng ký qua form trên website hoặc gọi hotline 0818.823.720.",
+    a: "Có. Sata Robo tặng 5 buổi luyện thi cơ bản robosim miễn phí trước thời điểm tháng 5/2026. Hướng đến cuộc thi sáng tạo robotics 2026. Sau thời điểm này là 1 buổi test năng lực 45 phút + 1 buổi học trải nghiệm 90 phút — hoàn toàn 0 đồng, không điều kiện.",
   },
 ];
 
 export function FAQSection() {
-  return (
-    <section className="bg-neutral-50 py-16 md:py-24">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <SectionEyebrow icon={HelpCircle} label="CÂU HỎI THƯỜNG GẶP" tone="purple" />
-        <SectionHeading>Phụ huynh thường hỏi</SectionHeading>
-        <SectionLead>
-          6 câu hỏi phổ biến nhất từ phụ huynh khi tìm hiểu về Sata Robo
-        </SectionLead>
+  // First FAQ open by default (đồng nhất với design laptrinhrobot)
+  const [openIdx, setOpenIdx] = useState<number | null>(0);
 
-        <div className="mt-10">
-          <RevealOnScroll direction="up" distance={20}>
-            <Accordion className="rounded-2xl border border-neutral-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] overflow-hidden divide-y divide-neutral-100">
-{/* @base-ui/react accordion defaults to single-open; no `type`/`collapsible` props needed */}
-              {FAQS.map((faq, i) => (
-                <AccordionItem key={i} className="border-0 px-5 sm:px-6">
-                  <AccordionTrigger className="text-left text-base sm:text-lg font-bold text-neutral-900 hover:text-orange-600 py-5 hover:no-underline">
-                    {faq.q}
-                  </AccordionTrigger>
-                  <AccordionContent className="text-neutral-700 leading-relaxed pb-5">
-                    {faq.a}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          </RevealOnScroll>
+  const toggle = (i: number) => setOpenIdx(openIdx === i ? null : i);
+
+  return (
+    <section
+      id="faq"
+      className="bg-gradient-to-b from-orange-50 via-amber-50/40 to-white py-16 md:py-24"
+    >
+      <div className="container mx-auto max-w-3xl px-4">
+        {/* Header */}
+        <div className="mb-10 text-center sm:mb-14">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-orange-100 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-orange-700">
+            <HelpCircle className="h-4 w-4" />
+            CÂU HỎI THƯỜNG GẶP
+          </div>
+          <h2 className="mb-4 text-3xl font-black text-neutral-900 md:text-4xl">
+            Bố mẹ thường hỏi mình{" "}
+            <span className="bg-gradient-to-r from-orange-500 to-purple-600 bg-clip-text text-transparent">
+              những câu này
+            </span>
+          </h2>
+          <p className="mx-auto max-w-2xl text-base text-neutral-600 sm:text-lg">
+            Những câu hỏi phụ huynh thường hỏi nhất trước khi quyết định cho
+            con học.
+          </p>
+        </div>
+
+        {/* Accordion */}
+        <div className="space-y-3">
+          {FAQS.map((faq, i) => {
+            const isOpen = openIdx === i;
+            return (
+              <div
+                key={faq.q}
+                className={`overflow-hidden rounded-2xl border bg-white transition-all ${
+                  isOpen
+                    ? "border-orange-300 shadow-lg ring-2 ring-orange-500/30"
+                    : "border-neutral-200 shadow-sm"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggle(i)}
+                  aria-expanded={isOpen}
+                  className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-orange-50/50 sm:p-5"
+                >
+                  <span className="flex flex-1 items-start gap-2 text-sm font-bold text-neutral-900 sm:text-base">
+                    <span className="flex-shrink-0 text-orange-500">?</span>
+                    <span>{faq.q}</span>
+                  </span>
+                  <span
+                    className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition sm:h-8 sm:w-8 ${
+                      isOpen
+                        ? "rotate-180 bg-orange-500 text-white"
+                        : "bg-amber-100 text-orange-600"
+                    }`}
+                  >
+                    {isOpen ? (
+                      <Minus className="h-4 w-4" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                  </span>
+                </button>
+
+                <div
+                  className={`grid transition-all duration-300 ease-in-out ${
+                    isOpen
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
+                      <div className="rounded-2xl border border-orange-500/15 bg-orange-50/55 px-4 py-4 text-sm leading-7 text-neutral-700 sm:px-5 sm:text-base sm:leading-8">
+                        {faq.a}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom Zalo CTA card */}
+        <div className="mx-auto mt-10 max-w-2xl rounded-2xl border-2 border-purple-200 bg-white p-6 text-center shadow-md sm:p-7">
+          <p className="mb-4 text-sm text-neutral-700 sm:text-base">
+            Còn câu hỏi khác? <strong>Inbox Zalo</strong> — Sata Robo sẽ phản
+            hồi trong{" "}
+            <strong className="text-orange-600">ít phút</strong>.
+          </p>
+          <a
+            href={SATA_ROBO_CONTACT.zalo}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:bg-purple-700 sm:text-base"
+          >
+            <MessageCircle className="h-5 w-5" />
+            Chat Zalo Ngay →
+          </a>
         </div>
       </div>
     </section>
