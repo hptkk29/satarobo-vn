@@ -25,7 +25,7 @@ export function SecondaryCta() {
               <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-500" />
             </span>
             <span className="text-xs font-medium text-orange-200 sm:text-sm">
-              🔥 Chỉ còn 20 suất Tháng 5/2026
+              🔥 Chỉ còn 24 suất Tháng 5/2026
             </span>
           </div>
 

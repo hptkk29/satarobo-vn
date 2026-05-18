@@ -54,7 +54,7 @@ export function HeroMain() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-600" />
           </span>
           <span className="text-xs font-semibold text-orange-800 sm:text-sm">
-            🎉 20 suất Robotics MIỄN PHÍ — Tháng 5/2026
+            🎉 24 suất Robotics MIỄN PHÍ — Tháng 5/2026
           </span>
         </motion.div>
 

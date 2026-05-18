@@ -117,7 +117,7 @@ export function CampaignPopup20Suat() {
             Tặng 24 suất khoá học Robotics MIỄN PHÍ
           </h2>
           <p className="mt-2 text-xs sm:text-sm md:text-base opacity-95">
-            Chỉ 24 suất / cơ sở. Đăng ký đóng tự động khi đủ chỉ tiêu.
+            Chỉ 12 suất / cơ sở. Đăng ký đóng tự động khi đủ chỉ tiêu.
           </p>
         </div>
 

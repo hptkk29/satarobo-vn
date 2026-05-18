@@ -337,7 +337,7 @@ const TEMPLATES: Template[] = [
         minStudents: 5,
         maxStudents: 20,
         status: "RECRUITING",
-        description: "Lớp khai trương — chương trình 20 suất miễn phí",
+        description: "Lớp khai trương — chương trình 24 suất miễn phí",
         notes: "Campaign launch 2026-05-23 tại 211 Nguyễn Hữu Thọ",
       },
       {
@@ -434,7 +434,7 @@ const TEMPLATES: Template[] = [
         bloodType: "A_POS",
         allergies: "Tôm, sữa",
         healthNotes: "Bị hen suyễn nhẹ, cần lưu ý khi vận động",
-        notes: "Đăng ký qua campaign 20 suất miễn phí 23/05",
+        notes: "Đăng ký qua campaign 24 suất miễn phí 23/05",
       },
       {
         studentCode: "SR-HV-002",

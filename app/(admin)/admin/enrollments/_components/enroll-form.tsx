@@ -169,7 +169,7 @@ export function EnrollForm({
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="VD: Đăng ký qua campaign 20 suất miễn phí…"
+            placeholder="VD: Đăng ký qua campaign 24 suất miễn phí…"
             rows={3}
             disabled={pending}
             className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
