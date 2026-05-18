@@ -355,7 +355,7 @@ PHÙ HỢP CHO:
       name: "Hồ Đắc Phúc",
       password: hashedPassword,
       role: "SUPER_ADMIN",
-      centerId: "center-nguyen-huu-tho",
+      centerId: "co-so-nguyen-huu-tho",
       isActive: true,
     },
   });
