@@ -22,17 +22,25 @@ const NAV_LINKS = [
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
+    setMounted(true);
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  // Server-side + first client render đều return false để SSR markup khớp
+  // hydration → tránh React mismatch (homepage static với revalidate=60,
+  // pathname mismatch lúc hydrate đổi class + thêm span underline cho
+  // active link). Sau khi mounted, isActive trả về kết quả thật.
+  const isActive = (href: string) => {
+    if (!mounted) return false;
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  };
 
   return (
     <header
