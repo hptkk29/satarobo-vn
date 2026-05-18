@@ -47,7 +47,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${beVietnamPro.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans">
+      <body
+        className="min-h-full flex flex-col font-sans"
+        suppressHydrationWarning
+      >
         {children}
         <MetaPixel />
         <GA4 />
