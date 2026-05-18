@@ -5,8 +5,8 @@ import Link from "next/link";
 import { ArrowRight, Flame, CalendarClock } from "lucide-react";
 import { FadeIn } from "@/components/motion/fade-in";
 
-// Early Bird deadline: 31/05/2026 23:59:59 Vietnam time (UTC+7) = 16:59:59 UTC
-const DEADLINE_MS = Date.UTC(2026, 4, 31, 16, 59, 59);
+// Early Bird deadline: 25/05/2026 23:59:59 Vietnam time (UTC+7) = 16:59:59 UTC
+const DEADLINE_MS = Date.UTC(2026, 4, 25, 16, 59, 59);
 
 interface TimeLeft {
   days: number;
@@ -64,7 +64,7 @@ export function EarlyBirdCountdown() {
                 Early Bird Khai Trương — Ưu Đãi Đến 30%
               </h2>
               <p className="text-sm md:text-base opacity-95 max-w-xl">
-                Còn lại đến hết <strong>23:59 ngày 31/05/2026</strong>. Sau ngày này,
+                Còn lại đến hết <strong>23:59 ngày 25/05/2026</strong>. Sau ngày này,
                 tất cả các khoá trở về giá niêm yết.
               </p>
             </div>
@@ -87,7 +87,7 @@ export function EarlyBirdCountdown() {
             </Link>
             <div className="inline-flex items-center gap-2 text-xs sm:text-sm text-white/90">
               <CalendarClock className="w-4 h-4" />
-              <span>Đến hết 23:59 ngày 31/05/2026</span>
+              <span>Đến hết 23:59 ngày 25/05/2026</span>
             </div>
           </div>
         </FadeIn>
