@@ -1,14 +1,14 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { isSuperAdmin } from '@/lib/permissions'
+import { isSuperAdmin } from '@/lib/auth/permissions'
 import { ChangePasswordForm } from './_components/change-password-form'
 
 export default async function SettingsPage() {
   const session = await auth()
   if (!session?.user) redirect('/login')
 
-  const superAdmin = isSuperAdmin(session.user)
+  const superAdmin = isSuperAdmin(session.user.role)
 
   const centers = superAdmin
     ? await db.center.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, address: true, phone: true, email: true, isActive: true } }).catch(() => [])

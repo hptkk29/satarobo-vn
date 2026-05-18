@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { hasPermission } from '@/lib/permissions'
+import { can } from '@/lib/auth/permissions'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
 import type { LeadStatus } from '@prisma/client'
@@ -31,7 +31,7 @@ export default async function LeadsPage({
 }) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!hasPermission(session.user, 'read', 'lead')) redirect('/admin/dashboard')
+  if (!can(session.user.role, 'leads:view-all')) redirect('/admin/dashboard')
 
   const params = await searchParams
   const page = Math.max(1, Number(params.page ?? 1))
@@ -70,8 +70,8 @@ export default async function LeadsPage({
   ])
 
   const isMarketing = session.user.role === 'MARKETING'
-  const canUpdate = hasPermission(session.user, 'update', 'lead')
-  const canDelete = hasPermission(session.user, 'delete', 'lead')
+  const canUpdate = can(session.user.role, 'leads:edit')
+  const canDelete = can(session.user.role, 'leads:delete')
 
   // Serialize dates + mask phone for MARKETING role
   const leads: LeadRow[] = rawLeads.map(lead => ({

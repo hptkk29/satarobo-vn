@@ -3,7 +3,7 @@ import { FileSpreadsheet, Plus } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { hasPermission } from '@/lib/permissions'
+import { can } from '@/lib/auth/permissions'
 import { ClassStatus, type Prisma } from '@prisma/client'
 
 const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
@@ -64,10 +64,10 @@ interface SearchParams {
 export default async function ClassesPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!hasPermission(session.user, 'read', 'class')) redirect('/admin/dashboard')
+  if (!can(session.user.role, 'classes:view-all')) redirect('/admin/dashboard')
 
-  const canCreate = hasPermission(session.user, 'create', 'class')
-  const canUpdate = hasPermission(session.user, 'update', 'class')
+  const canCreate = can(session.user.role, 'classes:create')
+  const canUpdate = can(session.user.role, 'classes:edit')
 
   const params = await searchParams
   const q = params.q?.trim() || undefined

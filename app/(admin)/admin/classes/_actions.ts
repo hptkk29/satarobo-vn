@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
-import { hasPermission } from "@/lib/permissions";
+import { can, type Action } from "@/lib/auth/permissions";
 import { classCreateSchema } from "@/lib/validators/class";
 
 type ActionResult = { error?: string };
@@ -13,7 +13,14 @@ type ActionResult = { error?: string };
 async function requireClassWrite(action: "create" | "update" | "delete") {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!hasPermission(session.user, action, "class")) {
+
+  const actionMap: Record<typeof action, Action> = {
+    create: "classes:create",
+    update: "classes:edit",
+    delete: "classes:delete",
+  };
+
+  if (!can(session.user.role, actionMap[action])) {
     redirect("/admin/dashboard?error=unauthorized");
   }
   return session.user;

@@ -3,7 +3,7 @@ import { LineChart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/auth/permissions";
 import { getStudentProgress } from "@/lib/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
 import { GeneratePdfButton } from "./_pdf-button";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function EditStudentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!hasPermission(session.user, "update", "student")) {
+  if (!can(session.user.role, "students:edit")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
 

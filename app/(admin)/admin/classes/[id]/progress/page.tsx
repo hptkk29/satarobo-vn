@@ -3,7 +3,7 @@ import { ChevronLeft, LineChart } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/auth/permissions";
 import { getClassProgress } from "@/lib/progress";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ interface Props {
 export default async function ClassProgressPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!hasPermission(session.user, "read", "class")) {
+  if (!can(session.user.role, "classes:view-all")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
 

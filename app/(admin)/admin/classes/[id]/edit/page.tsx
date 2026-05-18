@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/auth/permissions";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
 
 interface Props {
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function EditClassPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!hasPermission(session.user, "update", "class")) {
+  if (!can(session.user.role, "classes:edit")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
 

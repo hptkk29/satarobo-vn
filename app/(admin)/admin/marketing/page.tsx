@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { hasPermission } from '@/lib/permissions'
+import { can } from '@/lib/auth/permissions'
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Lead mới',
@@ -29,7 +29,7 @@ function pct(part: number, total: number) {
 export default async function MarketingPage() {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!hasPermission(session.user, 'read', 'marketing')) redirect('/admin/dashboard')
+  if (!can(session.user.role, 'leads:view-all')) redirect('/admin/dashboard')
 
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)

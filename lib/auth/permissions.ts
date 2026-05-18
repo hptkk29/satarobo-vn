@@ -19,8 +19,8 @@ import type { Role } from "@prisma/client";
 // ALL 7 ROLES:
 // SUPER_ADMIN, MANAGER, HR, SALES, TEACHER, MARKETING, ACCOUNTANT
 //
-// Legacy lib/permissions.ts (6 roles, missing HR) is DEPRECATED.
-// Migration shim at lib/permissions.ts re-exports hasPermission() → can().
+// Legacy lib/permissions.ts (6 roles, missing HR) đã xoá ở Sprint 5.2.
+// 15 callsite cũ migrated sang can(role, "resource:action") trực tiếp.
 //
 // =============================================================================
 

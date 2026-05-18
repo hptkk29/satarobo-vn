@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/auth/permissions";
 import { StudentForm } from "../_components/student-form";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function NewStudentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!hasPermission(session.user, "create", "student")) {
+  if (!can(session.user.role, "students:create")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
 

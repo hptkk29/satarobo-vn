@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { hasPermission } from '@/lib/permissions'
+import { can } from '@/lib/auth/permissions'
 import { Role } from '@prisma/client'
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -37,7 +37,7 @@ interface SearchParams {
 export default async function TeachersPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!hasPermission(session.user, 'read', 'teacher')) redirect('/admin/dashboard')
+  if (!can(session.user.role, 'employees:view-all')) redirect('/admin/dashboard')
 
   const params = await searchParams
   const q = params.q?.trim()
