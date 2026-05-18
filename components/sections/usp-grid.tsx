@@ -28,21 +28,21 @@ const USP_ITEMS = [
     title: "Giải thưởng du lịch 3-7 triệu",
     description:
       "Dành cho HV đạt giải cuộc thi cấp TP Đà Nẵng.",
-    link: "/dau-truong-robot",
+    link: "/khoa-hoc",
   },
   {
     icon: "📚",
     title: "Thuyết trình cuối mỗi học phần",
     description:
       "Phụ huynh được xem kết quả thực tế, ghi hình kỷ niệm.",
-    link: "/lo-trinh",
+    link: "/khoa-hoc",
   },
   {
     icon: "🏫",
     title: "Hỗ trợ 3 triệu lệ phí thi Quốc gia",
     description:
       "Cho HV tham dự cuộc thi Quốc gia theo đoàn Sata Robo.",
-    link: "/cac-co-so",
+    link: "/ve-chung-toi",
   },
   {
     icon: "💰",

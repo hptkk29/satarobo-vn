@@ -49,7 +49,7 @@ export function SecondaryCta() {
               chính xác. Desktop: sm:flex-row + sm:w-auto + sm:h-auto. */}
           <div className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
             <Link
-              href="/dang-ky-hoc-thu"
+              href="/lien-he?free-trial=true"
               className="block h-14 w-full sm:h-auto sm:w-auto"
             >
               <ShimmerButton
