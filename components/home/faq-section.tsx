@@ -1,43 +1,144 @@
 "use client";
 
 import { useState } from "react";
-import { HelpCircle, Plus, Minus, MessageCircle } from "lucide-react";
+import { HelpCircle, Plus, Minus, MessageCircle, CheckCircle2 } from "lucide-react";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
+
+// FAQ answer = mảng các block. Mỗi block là:
+// - string → 1 đoạn paragraph
+// - { type: "list", items: string[] } → bullet list (mỗi item 1 checkmark)
+type FAQAnswerItem = string | { type: "list"; items: string[] };
 
 interface FAQItem {
   q: string;
-  a: string;
+  a: FAQAnswerItem[];
 }
 
 // ─── NỘI DUNG FAQ — sửa nội dung tại đây ─────────────────────────────
-// Mỗi item: { q: "Câu hỏi?", a: "Câu trả lời..." }
-// Thêm/xoá item tuỳ ý — order quyết định thứ tự hiển thị.
+// Mỗi item: { q: "Câu hỏi?", a: [ "đoạn 1", "đoạn 2", { type: "list", items: [...] }, "đoạn cuối" ] }
+// String = paragraph riêng. Object list = bullet list với CheckCircle2 icon.
+// Order trong mảng quyết định thứ tự hiển thị trên UI.
 const FAQS: FAQItem[] = [
   {
     q: "Khoá học Sata Robo phù hợp với con từ độ tuổi nào?",
-    a: "Sata Robo có lộ trình đầy đủ cho học sinh từ lớp 1 đến lớp 8 (6-14 tuổi). Mỗi khoá học được thiết kế phù hợp với năng lực tư duy và độ tinh xảo của từng độ tuổi — từ Sata3 (Ươm Mầm Tài Năng, lớp 1-2) đến Sata7 (Chắp Cánh Tương Lai, AI cho lớp 6-8).",
+    a: [
+      "Sata Robo có lộ trình đầy đủ cho học sinh từ lớp 1 đến lớp 8 (6-14 tuổi).",
+      "Mỗi khoá học được thiết kế phù hợp với năng lực tư duy và độ tinh xảo của từng độ tuổi.",
+      {
+        type: "list",
+        items: [
+          "Sata3 — Ươm Mầm Tài Năng: dành cho lớp 1-2.",
+          "Sata4–Sata7 — Chắp Cánh Tương Lai: AI cho lớp 3-8.",
+          "Sata1–Sata2: luyện thi Robotics 2026 ngắn hạn.",
+        ],
+      },
+    ],
   },
   {
     q: "Học phí các khoá học bao nhiêu?",
-    a: "Học phí từ 2.400.000đ (khoá luyện thi Sata1 — Robosim Master) đến 18.000.000đ (khoá cao cấp 48 buổi Sata7 — AI + Robot tự hành). Trong tháng 5/2026 có ưu đãi Early Bird khai trương giảm đến 30%. Combo Sata1 + Sata2 chỉ 3.808.000đ (tiết kiệm 1.6 triệu). Trả góp 0% qua VPBank / Sacombank / Home Credit cho khoá 48 buổi.",
+    a: [
+      "Học phí từ 2.400.000đ đến 18.000.000đ tuỳ khoá.",
+      {
+        type: "list",
+        items: [
+          "Sata1 — Robosim Master: 2.400.000đ (khoá luyện thi).",
+          "Sata7 — AI + Robot tự hành: 18.000.000đ (48 buổi cao cấp).",
+          "Combo Sata1 + Sata2: 3.808.000đ (tiết kiệm 1.6 triệu).",
+        ],
+      },
+      "Trong tháng 5/2026 có ưu đãi Early Bird khai trương giảm đến 30%. Trả góp 0% qua VPBank / Sacombank / Home Credit cho khoá 48 buổi.",
+    ],
   },
   {
     q: "Sata Robo có cam kết hoàn tiền không?",
-    a: "Có 2 cam kết bằng văn bản: (1) Hoàn 100% trong 2 buổi đầu nếu con không thích — không câu hỏi. (2) Với khoá Sata8 — Vé Vàng Chung Kết, cam kết hoàn 100% học phí trong 7 ngày làm việc nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng không vượt vòng loại để thi chung kết Khu vực Miền Trung tại Nghệ An tháng 9/2026.",
+    a: [
+      "Có 2 cam kết bằng văn bản:",
+      {
+        type: "list",
+        items: [
+          "Hoàn 100% trong 2 buổi đầu nếu con không thích — không câu hỏi.",
+          "Với khoá Sata8 — Vé Vàng Chung Kết: hoàn 100% học phí trong 7 ngày làm việc nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng không vượt vòng loại để thi chung kết Khu vực Miền Trung tại Nghệ An tháng 9/2026.",
+        ],
+      },
+    ],
   },
   {
     q: "Sata Robo có bao nhiêu cơ sở tại Đà Nẵng?",
-    a: "Hiện có 2 cơ sở tại Đà Nẵng: 211 Nguyễn Hữu Thọ (Trụ sở chính) và 114 Hoàng Diệu (Hải Châu). Phụ huynh chọn cơ sở thuận tiện nhất; ngoài giờ học offline, học sinh có thể học online qua Robosim toàn quốc.",
+    a: [
+      "Hiện có 2 cơ sở tại Đà Nẵng — phụ huynh chọn cơ sở thuận tiện nhất.",
+      {
+        type: "list",
+        items: [
+          "Trụ sở chính: 211 Nguyễn Hữu Thọ.",
+          "Cơ sở Hoàng Diệu: 114 Hoàng Diệu (Hải Châu).",
+        ],
+      },
+      "Ngoài giờ học offline, học sinh có thể học online qua Robosim toàn quốc.",
+    ],
   },
   {
     q: "Con học xong có thi đấu được không?",
-    a: "Có, duy nhất học chi tiết chương trình đào tạo robosim có kết hơp hệ thống bài test theo gamificaton và Ai đánh giá kết quả học tập và trao chứng nhận tự động từ Sata Robo. Chương trình biên tập theo sát thể lệ cuộc thi sáng tạo Robotics 2026 do TW đoàn phát động",
+    a: [
+      "Có. Sata Robo là đơn vị duy nhất tại Đà Nẵng đào tạo Robosim — phần mềm bắt buộc trong Cuộc thi Sáng tạo Robotics 2026 do TW Đoàn phát động.",
+      "Chương trình kết hợp các điểm nổi bật:",
+      {
+        type: "list",
+        items: [
+          "Hệ thống bài test theo gamification.",
+          "AI đánh giá kết quả học tập tự động.",
+          "Trao chứng nhận tự động từ Sata Robo.",
+        ],
+      },
+      "Chương trình được biên tập theo sát thể lệ Cuộc thi Sáng tạo Robotics 2026.",
+    ],
   },
   {
     q: "Có học trải nghiệm miễn phí trước khi đăng ký không?",
-    a: "Có. Sata Robo tặng 5 buổi luyện thi cơ bản robosim miễn phí trước thời điểm tháng 5/2026. Hướng đến cuộc thi sáng tạo robotics 2026. Sau thời điểm này là 1 buổi test năng lực 45 phút + 1 buổi học trải nghiệm 90 phút — hoàn toàn 0 đồng, không điều kiện.",
+    a: [
+      "Có. Sata Robo tặng 5 buổi luyện thi cơ bản Robosim miễn phí trước thời điểm tháng 5/2026 — hướng đến Cuộc thi Sáng tạo Robotics 2026.",
+      "Sau thời điểm này, phụ huynh nhận:",
+      {
+        type: "list",
+        items: [
+          "1 buổi test năng lực 45 phút.",
+          "1 buổi học trải nghiệm 90 phút.",
+        ],
+      },
+      "Hoàn toàn 0 đồng, không điều kiện.",
+    ],
   },
 ];
+
+// Render block: string → <p>, list object → <ul> với checkmark
+function AnswerBlock({ answer }: { answer: FAQAnswerItem[] }) {
+  return (
+    <div className="space-y-3 text-sm leading-7 text-neutral-700 sm:text-base sm:leading-8">
+      {answer.map((block, index) => {
+        if (typeof block === "string") {
+          return (
+            <p key={`p-${index}`} className="mb-2 last:mb-0">
+              {block}
+            </p>
+          );
+        }
+        // block narrowed to { type: "list"; items: string[] }
+        return (
+          <ul
+            key={`list-${index}`}
+            className="space-y-2 rounded-xl bg-white/70 p-3 sm:p-4"
+          >
+            {block.items.map((item) => (
+              <li key={item} className="grid grid-cols-[1.1rem_1fr] gap-2.5">
+                <CheckCircle2 className="mt-1.5 h-3.5 w-3.5 text-green-600" />
+                <span className="min-w-0">{item}</span>
+              </li>
+            ))}
+          </ul>
+        );
+      })}
+    </div>
+  );
+}
 
 export function FAQSection() {
   // First FAQ open by default (đồng nhất với design laptrinhrobot)
@@ -116,8 +217,8 @@ export function FAQSection() {
                 >
                   <div className="overflow-hidden">
                     <div className="px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
-                      <div className="rounded-2xl border border-orange-500/15 bg-orange-50/55 px-4 py-4 text-sm leading-7 text-neutral-700 sm:px-5 sm:text-base sm:leading-8">
-                        {faq.a}
+                      <div className="rounded-2xl border border-orange-500/15 bg-orange-50/55 px-4 py-4 sm:px-5">
+                        <AnswerBlock answer={faq.a} />
                       </div>
                     </div>
                   </div>
