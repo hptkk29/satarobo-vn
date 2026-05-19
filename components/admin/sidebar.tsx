@@ -23,6 +23,7 @@ import {
   ClipboardList,
   CalendarDays,
   ClipboardCheck,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Giáo viên", href: "/admin/teachers", icon: UserCog },
       { label: "Nhân sự", href: "/admin/nhan-su", icon: IdCard },
+      { label: "Tài khoản", href: "/admin/users", icon: KeyRound },
       { label: "Tuyển dụng", href: "/admin/jobs", icon: Briefcase },
       { label: "Vinh danh", href: "/admin/honors", icon: Trophy },
     ],
