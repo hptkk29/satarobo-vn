@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, KeyRound } from "lucide-react";
+import { Plus, KeyRound, Shield } from "lucide-react";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { RoleBadge } from "./_components/role-badge";
@@ -37,6 +37,7 @@ export default async function UsersAdminPage() {
     include: {
       employee: { select: { id: true, fullName: true, employeeCode: true } },
       center: { select: { name: true } },
+      _count: { select: { permissionGrants: true } },
     },
   });
 
@@ -138,7 +139,19 @@ export default async function UsersAdminPage() {
                         {u.name ?? "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <RoleBadge role={u.role} />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <RoleBadge role={u.role} />
+                          {u._count.permissionGrants > 0 && (
+                            <Link
+                              href={`/admin/users/${u.id}/permissions`}
+                              title="Xem chi tiết overrides"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700 hover:bg-orange-200"
+                            >
+                              <Shield className="h-2.5 w-2.5" />
+                              {u._count.permissionGrants} override
+                            </Link>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {u.employee ? (

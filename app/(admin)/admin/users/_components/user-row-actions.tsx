@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, KeyRound, Loader2 } from "lucide-react";
+import { Pencil, KeyRound, Loader2, Shield } from "lucide-react";
 import { toggleUserActiveAction } from "../_actions";
 
 export function UserStatusToggle({
@@ -65,6 +65,13 @@ export function UserRowActions({ userId }: { userId: string }) {
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
       >
         <Pencil className="h-4 w-4" />
+      </Link>
+      <Link
+        href={`/admin/users/${userId}/permissions`}
+        title="Phân quyền nâng cao"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-purple-100 hover:text-purple-700"
+      >
+        <Shield className="h-4 w-4" />
       </Link>
       <Link
         href={`/admin/users/${userId}/reset-password`}

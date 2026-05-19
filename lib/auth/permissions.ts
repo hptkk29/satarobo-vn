@@ -172,7 +172,7 @@ export type Action =
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
 // =============================================================================
 
-const PERMISSIONS: Record<Action, Role[]> = {
+export const PERMISSIONS: Record<Action, Role[]> = {
   // --- Employees ---
   "employees:view-all": ["SUPER_ADMIN", "MANAGER", "HR"],
   "employees:view-public": [
@@ -378,15 +378,28 @@ export function can(
   // Path 2: user object with grants
   const user = userOrRole;
 
-  // 2a. Per-user grants — DENY > ALLOW > role fallback
+  // 2a. SUPER_ADMIN bypass — không thể bị DENY override (safety against
+  // self-lockout). Vẫn check matrix nhưng matrix gần như luôn cấp quyền
+  // cho SUPER_ADMIN.
+  if (user.role === "SUPER_ADMIN") {
+    return PERMISSIONS[action]?.includes("SUPER_ADMIN") ?? false;
+  }
+
+  // 2b. Per-user grants — DENY > ALLOW > role fallback
   const grant = user.grants?.find((g) => g.action === action);
   if (grant?.grant === "DENY") return false;
   if (grant?.grant === "ALLOW") return true;
 
-  // 2b. Role matrix fallback
+  // 2c. Role matrix fallback
   if (!user.role) return false;
   return PERMISSIONS[action]?.includes(user.role as Role) ?? false;
 }
+
+// =============================================================================
+// FULL ACTION LIST — single source of truth, sync với PERMISSIONS matrix
+// =============================================================================
+
+export const ALL_ACTIONS = Object.keys(PERMISSIONS) as Action[];
 
 export function assertCan(
   role: Role | string | undefined | null,

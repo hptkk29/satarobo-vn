@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, KeyRound, Power } from "lucide-react";
+import { ChevronLeft, KeyRound, Power, Shield, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { UserForm } from "../../_components/user-form";
@@ -38,6 +38,7 @@ export default async function EditUserPage({ params }: Props) {
     include: {
       employee: { select: { id: true, fullName: true, employeeCode: true } },
       center: { select: { id: true, name: true } },
+      _count: { select: { permissionGrants: true } },
     },
   });
   if (!user) notFound();
@@ -152,6 +153,39 @@ export default async function EditUserPage({ params }: Props) {
             </dd>
           </div>
         </dl>
+      </div>
+
+      {/* Phân quyền nâng cao — Phase 5.3.2 */}
+      <div className="mt-6 rounded-xl border border-purple-200 bg-purple-50/30 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-purple-700">
+              <Shield className="h-4 w-4" />
+              Phân quyền nâng cao
+            </h2>
+            <p className="mt-2 text-sm text-gray-700">
+              Cấp (ALLOW) hoặc thu hồi (DENY) một quyền cụ thể bất kể role.
+              {user._count.permissionGrants > 0 ? (
+                <>
+                  {" "}User này đang có{" "}
+                  <strong className="text-purple-700">
+                    {user._count.permissionGrants} override
+                  </strong>
+                  .
+                </>
+              ) : (
+                <> User này chưa có override nào — đang dùng quyền mặc định theo role.</>
+              )}
+            </p>
+          </div>
+          <Link
+            href={`/admin/users/${user.id}/permissions`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+          >
+            Quản lý
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
 
       {/* Nguy hiểm: reset password + toggle disable */}
