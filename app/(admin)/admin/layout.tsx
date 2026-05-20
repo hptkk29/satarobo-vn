@@ -21,12 +21,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     select: { isActive: true, tokenVersion: true, deletedAt: true },
   });
 
-  if (
-    !dbUser ||
-    !dbUser.isActive ||
-    dbUser.deletedAt ||
-    dbUser.tokenVersion !== session.user.tokenVersion
-  ) {
+  if (!dbUser || dbUser.deletedAt) {
+    redirect("/login?reason=session-invalidated");
+  }
+  if (!dbUser.isActive) {
+    redirect("/login?reason=session-disabled");
+  }
+  if (dbUser.tokenVersion !== session.user.tokenVersion) {
     redirect("/login?reason=session-invalidated");
   }
 

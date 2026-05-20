@@ -10,6 +10,7 @@ import {
   ROLE_LABEL,
   type Role,
 } from "@/components/admin/nhan-su/change-role-dialog";
+import { UserAccountSection } from "./_components/user-account-section";
 
 export const metadata = { title: "Sửa nhân sự | Admin" };
 
@@ -27,9 +28,23 @@ export default async function EditEmployeePage({ params }: Props) {
   const { id } = await params;
   const employee = await db.employee.findUnique({
     where: { id },
-    include: { userAccount: { select: { id: true, role: true, email: true } } },
+    include: {
+      userAccount: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          isActive: true,
+          lastLoginAt: true,
+          createdAt: true,
+          _count: { select: { permissionGrants: true } },
+        },
+      },
+    },
   });
   if (!employee) notFound();
+
+  const canManageUsers = can(session.user, "users:manage");
 
   const [centers, managers] = await Promise.all([
     db.center.findMany({
@@ -98,6 +113,14 @@ export default async function EditEmployeePage({ params }: Props) {
         managers={managers}
         userRole={session.user.role}
       />
+
+      {canManageUsers && (
+        <UserAccountSection
+          employeeId={employee.id}
+          employeeName={employee.fullName}
+          existingUser={employee.userAccount}
+        />
+      )}
 
       {canViewAudit && auditLogs.length > 0 && (
         <section className="mt-8 border-t pt-6">

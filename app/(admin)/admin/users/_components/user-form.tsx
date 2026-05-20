@@ -13,18 +13,21 @@ import { createUserAction, updateUserAction } from "../_actions";
 type CenterOption = { id: string; name: string };
 type EmployeeOption = { id: string; fullName: string; employeeCode: string | null };
 
+type UserFormInitialData = {
+  // id only present in edit mode
+  id?: string;
+  name?: string | null;
+  email?: string;
+  role?: Role;
+  centerId?: string | null;
+  employeeId?: string | null;
+};
+
 interface UserFormProps {
   mode: "create" | "edit";
-  initialData?: {
-    id: string;
-    name: string | null;
-    email: string;
-    role: Role;
-    centerId: string | null;
-    employeeId: string | null;
-  };
+  initialData?: UserFormInitialData;
   centers: CenterOption[];
-  employees: EmployeeOption[]; // unlinked employees + current employee (if edit)
+  employees: EmployeeOption[]; // unlinked employees + current employee (if edit) + prefill employee (if create-from-employee)
 }
 
 const selectClass =
@@ -49,7 +52,7 @@ export function UserForm({
       const res =
         mode === "create"
           ? await createUserAction(fd)
-          : await updateUserAction(initialData!.id, fd);
+          : await updateUserAction(initialData!.id!, fd);
 
       if (!res.ok) {
         setError(res.error ?? "Lỗi thao tác");

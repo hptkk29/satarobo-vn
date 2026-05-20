@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, KeyRound, Shield } from "lucide-react";
+import { Plus, KeyRound, Shield, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { RoleBadge } from "./_components/role-badge";
@@ -13,8 +13,11 @@ import {
 export const metadata = { title: "Tài khoản đăng nhập | Admin" };
 export const dynamic = "force-dynamic";
 
-function formatLogin(date: Date | null): string {
-  if (!date) return "Chưa đăng nhập";
+function daysSince(date: Date): number {
+  return Math.floor((Date.now() - date.getTime()) / 86400000);
+}
+
+function formatLoginShort(date: Date): string {
   return new Intl.DateTimeFormat("vi-VN", {
     day: "2-digit",
     month: "2-digit",
@@ -22,6 +25,25 @@ function formatLogin(date: Date | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatRelative(date: Date | null): {
+  text: string;
+  idleDays: number | null;
+} {
+  if (!date) return { text: "Chưa từng", idleDays: null };
+  const days = daysSince(date);
+  if (days < 1) {
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return { text: `Hôm nay ${hh}:${mm}`, idleDays: days };
+  }
+  if (days === 1) {
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return { text: `Hôm qua ${hh}:${mm}`, idleDays: days };
+  }
+  return { text: formatLoginShort(date), idleDays: days };
 }
 
 export default async function UsersAdminPage() {
@@ -181,8 +203,32 @@ export default async function UsersAdminPage() {
                           disabledReason={toggleReason}
                         />
                       </td>
-                      <td className="px-4 py-3 text-xs tabular-nums text-gray-500">
-                        {formatLogin(u.lastLoginAt)}
+                      <td className="px-4 py-3 text-xs tabular-nums">
+                        {(() => {
+                          const { text, idleDays } = formatRelative(
+                            u.lastLoginAt,
+                          );
+                          if (idleDays === null) {
+                            return (
+                              <span className="inline-flex items-center gap-1 italic text-yellow-700">
+                                <AlertCircle className="h-3 w-3" />
+                                {text}
+                              </span>
+                            );
+                          }
+                          if (idleDays > 30) {
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-gray-700">{text}</span>
+                                <span className="inline-flex w-fit items-center gap-1 rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-800">
+                                  <AlertCircle className="h-2.5 w-2.5" />
+                                  Idle {idleDays}d
+                                </span>
+                              </div>
+                            );
+                          }
+                          return <span className="text-gray-600">{text}</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <UserRowActions userId={u.id} />
