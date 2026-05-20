@@ -130,17 +130,17 @@ model Center {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users     User[]
-  leads     Lead[]
-  classes   Class[]
-  students  Student[]
-  studentsPreferred Student[] @relation("StudentPreferredCenter")
-  employees Employee[]
-  rooms     Room[]
-  holidays  Holiday[]
-  stockBalances    StockBalance[]
-  stockMovements   StockMovement[]
-  inventoryAudits  InventoryAudit[]
+  users             User[]
+  leads             Lead[]
+  classes           Class[]
+  students          Student[]
+  studentsPreferred Student[]        @relation("StudentPreferredCenter")
+  employees         Employee[]
+  rooms             Room[]
+  holidays          Holiday[]
+  stockBalances     StockBalance[]
+  stockMovements    StockMovement[]
+  inventoryAudits   InventoryAudit[]
 
   @@index([isActive])
   @@index([displayOrder])
@@ -166,7 +166,7 @@ model Room {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  classes      Class[]
+  classes Class[]
 
   @@unique([centerId, code])
   @@index([centerId, status])
@@ -210,27 +210,31 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // ─── Per-user permission system (Phase 5.3.0) ───
-  tokenVersion  Int       @default(0)
-  lastLoginAt   DateTime?
+  tokenVersion Int       @default(0)
+  lastLoginAt  DateTime?
 
   // Link 1-1 với Employee (1 user account ↔ 1 employee record)
-  employeeId    String?   @unique
-  employee      Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeId String?   @unique
+  employee   Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
 
-  center        Center?        @relation(fields: [centerId], references: [id])
-  accounts      Account[]
-  assignedLeads Lead[]         @relation("AssignedLeads")
-  notes         Note[]
-  teacherClass    Class[]      @relation("TeacherClasses")
-  assistantClass  Class[]      @relation("AssistantClasses")
-  jobPostings   JobPosting[]
+  center         Center?      @relation(fields: [centerId], references: [id])
+  accounts       Account[]
+  assignedLeads  Lead[]       @relation("AssignedLeads")
+  notes          Note[]
+  teacherClass   Class[]      @relation("TeacherClasses")
+  assistantClass Class[]      @relation("AssistantClasses")
+  jobPostings    JobPosting[]
 
-  honorsCreated      Honor[]            @relation("HonorCreatedBy")
-  pageContentUpdated SitePageContent[]  @relation("PageContentUpdatedBy")
-  employeesCreated   Employee[]         @relation("EmployeeCreatedBy")
+  honorsCreated      Honor[]           @relation("HonorCreatedBy")
+  pageContentUpdated SitePageContent[] @relation("PageContentUpdatedBy")
+  employeesCreated   Employee[]        @relation("EmployeeCreatedBy")
 
   permissionGrants   UserPermissionGrant[] @relation("UserPermissionGrants")
   permissionsGranted UserPermissionGrant[] @relation("UserPermissionGrantor")
+
+  // Phase 5.4.0 — Audit log relations
+  auditLogs      UserAuditLog[]            @relation("UserAuditLogs")
+  grantAuditLogs PermissionGrantAuditLog[] @relation("UserGrantAudits")
 
   @@index([email])
   @@index([centerId])
@@ -241,7 +245,7 @@ model User {
 model UserPermissionGrant {
   id        String    @id @default(cuid())
   userId    String
-  action    String    // e.g. "leads:edit", phải match Action union trong lib/auth/permissions.ts
+  action    String // e.g. "leads:edit", phải match Action union trong lib/auth/permissions.ts
   grant     GrantType
   reason    String?   @db.Text
   grantedBy String
@@ -275,10 +279,10 @@ model Course {
   displayOrder     Int     @default(0)
   isPublished      Boolean @default(true)
 
-  thumbnail   String?
+  thumbnail String?
 
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   leads       Lead[]
   classes     Class[]
@@ -292,41 +296,44 @@ model Course {
 }
 
 model Lead {
-  id           String     @id @default(cuid())
-  parentName   String
-  phone        String
-  email        String?
-  childName    String?
-  childAge     Int?
-  centerId     String?
-  courseId     String?
-  assignedToId String?
-  status       LeadStatus @default(NEW)
-  source       String?
-  utmSource    String?
-  utmMedium    String?
-  utmCampaign  String?
+  id               String     @id @default(cuid())
+  parentName       String
+  phone            String
+  email            String?
+  childName        String?
+  childAge         Int?
+  centerId         String?
+  courseId         String?
+  assignedToId     String?
+  status           LeadStatus @default(NEW)
+  source           String?
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
   utmContent       String?
   utmTerm          String?
   fbclid           String?
   gclid            String?
   fbp              String?
   fbc              String?
-  eventId          String?   @unique
+  eventId          String?    @unique
   landingPage      String?
   referrer         String?
   ipAddress        String?
-  userAgent        String?   @db.Text
-  consentMarketing Boolean   @default(false)
-  note             String?   @db.Text
+  userAgent        String?    @db.Text
+  consentMarketing Boolean    @default(false)
+  note             String?    @db.Text
   deletedAt        DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   center     Center? @relation(fields: [centerId], references: [id])
   course     Course? @relation(fields: [courseId], references: [id])
   assignedTo User?   @relation("AssignedLeads", fields: [assignedToId], references: [id])
   notes      Note[]
+
+  // Phase 5.4.0 — Audit log
+  auditLogs LeadAuditLog[] @relation("LeadAuditLogs")
 
   @@index([phone])
   @@index([status])
@@ -352,10 +359,10 @@ model Note {
 }
 
 enum StudentStatus {
-  ACTIVE     // Đang học
-  PAUSED     // Bảo lưu (tạm nghỉ)
-  GRADUATED  // Hoàn thành khoá học
-  INACTIVE   // Nghỉ học hẳn
+  ACTIVE // Đang học
+  PAUSED // Bảo lưu (tạm nghỉ)
+  GRADUATED // Hoàn thành khoá học
+  INACTIVE // Nghỉ học hẳn
 }
 
 enum BloodType {
@@ -371,14 +378,14 @@ enum BloodType {
 }
 
 model Student {
-  id           String    @id @default(cuid())
-  name         String
-  studentCode  String?   @unique
-  dateOfBirth  DateTime?
-  gender       Gender?
-  phone        String?
-  email        String?
-  avatarUrl    String?
+  id          String    @id @default(cuid())
+  name        String
+  studentCode String?   @unique
+  dateOfBirth DateTime?
+  gender      Gender?
+  phone       String?
+  email       String?
+  avatarUrl   String?
 
   // Education
   currentGrade Int?
@@ -415,17 +422,20 @@ model Student {
 
   // Legacy "current center" — pre-D1 association, kept for compat.
   centerId String?
-  center   Center?  @relation(fields: [centerId], references: [id])
+  center   Center? @relation(fields: [centerId], references: [id])
 
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   enrollments           Enrollment[]
   attendances           Attendance[]
   examAttempts          ExamAttempt[]
   assignmentSubmissions AssignmentSubmission[]
   progressReports       ProgressReportLog[]
+
+  // Phase 5.4.0 — Audit log
+  auditLogs StudentAuditLog[] @relation("StudentAuditLogs")
 
   @@index([phone])
   @@index([centerId])
@@ -444,12 +454,12 @@ enum ClassStatus {
 }
 
 model Class {
-  id          String    @id @default(cuid())
+  id String @id @default(cuid())
 
   // Identity
-  classCode   String?   @unique
+  classCode   String? @unique
   name        String
-  description String?   @db.Text
+  description String? @db.Text
 
   // Relations (existing target preserved: teacher → User)
   courseId    String
@@ -459,37 +469,40 @@ model Class {
   roomId      String?
 
   // Schedule
-  schedule     String?   // legacy free-text (e.g. "T2 T4 17:30")
+  schedule     String? // legacy free-text (e.g. "T2 T4 17:30")
   startDate    DateTime?
   endDate      DateTime?
-  scheduleDays Int[]     @default([])   // 0=CN, 1=T2, ..., 6=T7
-  startTime    String?                   // "HH:mm"
-  endTime      String?                   // "HH:mm"
+  scheduleDays Int[]     @default([]) // 0=CN, 1=T2, ..., 6=T7
+  startTime    String? // "HH:mm"
+  endTime      String? // "HH:mm"
 
   // Capacity
-  maxStudents Int       @default(20)
-  minStudents Int       @default(5)
+  maxStudents Int @default(20)
+  minStudents Int @default(5)
 
   // Status (new) + legacy isActive flag (kept for back-compat)
-  status      ClassStatus @default(PLANNED)
-  isActive    Boolean   @default(true)
+  status   ClassStatus @default(PLANNED)
+  isActive Boolean     @default(true)
 
   // Other
-  notes       String?   @db.Text
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  notes     String?   @db.Text
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  course      Course       @relation(fields: [courseId], references: [id])
-  center      Center?      @relation(fields: [centerId], references: [id])
-  teacher     User?        @relation("TeacherClasses", fields: [teacherId], references: [id])
-  assistant   User?        @relation("AssistantClasses", fields: [assistantId], references: [id])
-  room        Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  course          Course              @relation(fields: [courseId], references: [id])
+  center          Center?             @relation(fields: [centerId], references: [id])
+  teacher         User?               @relation("TeacherClasses", fields: [teacherId], references: [id])
+  assistant       User?               @relation("AssistantClasses", fields: [assistantId], references: [id])
+  room            Room?               @relation(fields: [roomId], references: [id], onDelete: SetNull)
   enrollments     Enrollment[]
   sessions        ClassSession[]
   exams           Exam[]
   assignments     Assignment[]
   progressReports ProgressReportLog[]
+
+  // Phase 5.4.0 — Audit log
+  auditLogs ClassAuditLog[] @relation("ClassAuditLogs")
 
   @@index([courseId])
   @@index([centerId])
@@ -508,18 +521,18 @@ model Enrollment {
   status    EnrollmentStatus @default(ACTIVE)
 
   // Financial (legacy)
-  tuition   Int?
-  paidAt    DateTime?
+  tuition Int?
+  paidAt  DateTime?
 
   // Legacy dates (kept for back-compat)
   startDate DateTime?
   endDate   DateTime?
 
   // D5 workflow timestamps
-  enrolledAt   DateTime  @default(now())
-  confirmedAt  DateTime?
-  startedAt    DateTime?
-  endedAt      DateTime?
+  enrolledAt  DateTime  @default(now())
+  confirmedAt DateTime?
+  startedAt   DateTime?
+  endedAt     DateTime?
 
   // Transfer
   transferredToId String?
@@ -528,10 +541,10 @@ model Enrollment {
   transferReason  String?      @db.Text
 
   // Other
-  notes     String?  @db.Text
+  notes String? @db.Text
 
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   class   Class   @relation(fields: [classId], references: [id])
@@ -549,34 +562,34 @@ model Enrollment {
 }
 
 model EnrollmentAuditLog {
-  id              String      @id @default(cuid())
-  enrollmentId    String
-  enrollment      Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
-  fromStatus      String
-  toStatus        String
+  fromStatus String
+  toStatus   String
 
   changedByUserId String?
   changedByName   String
 
-  reason          String?     @db.Text
-  extraData       Json?
+  reason    String? @db.Text
+  extraData Json?
 
-  createdAt       DateTime    @default(now())
+  createdAt DateTime @default(now())
 
   @@index([enrollmentId, createdAt])
 }
 
 model ClassSession {
-  id          String   @id @default(cuid())
-  classId     String
-  date        DateTime
-  topic       String?
-  notes       String?  @db.Text
+  id      String   @id @default(cuid())
+  classId String
+  date    DateTime
+  topic   String?
+  notes   String?  @db.Text
 
   // Phase E6 — link session to curriculum lesson for progress tracking
   lessonId    String?
-  lessonNotes String?  @db.Text
+  lessonNotes String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -609,21 +622,21 @@ model Attendance {
 // ─── Content & Marketing ─────────────────────────────────────────────────────
 
 model PageContent {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  title     String
-  content   Json
-  isPublished Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  content     Json
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([slug])
 }
 
 enum ExperienceLevel {
-  ENTRY  // Mới ra trường, không yêu cầu kinh nghiệm
+  ENTRY // Mới ra trường, không yêu cầu kinh nghiệm
   JUNIOR // 1-2 năm
-  MID    // 3-5 năm
+  MID // 3-5 năm
   SENIOR // 5+ năm
   EXPERT // Chuyên gia 10+ năm
 }
@@ -654,7 +667,7 @@ model JobPosting {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  author       User?              @relation(fields: [authorId], references: [id])
+  author       User?            @relation(fields: [authorId], references: [id])
   applications JobApplication[]
 
   @@index([slug])
@@ -776,13 +789,13 @@ enum HonorCategory {
 }
 
 model Honor {
-  id             String        @id @default(cuid())
-  slug           String        @unique
+  id   String @id @default(cuid())
+  slug String @unique
 
   // Link sang Employee (source of truth cho thông tin nhân sự)
   // Tạm thời nullable để migration backfill xong mới enforce NOT NULL ở Phase 4.7.1
-  employeeId     String?
-  employee       Employee?     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   // Snapshot lúc trao giải (override Employee data hiện tại nếu cần)
   jobTitleAtTime String?
@@ -795,24 +808,24 @@ model Honor {
   avatarUrl      String?
   yearsAtCompany Int?
 
-  category       HonorCategory
-  awardName      String
-  awardedAt      DateTime
-  awardQuarter   String?
+  category     HonorCategory
+  awardName    String
+  awardedAt    DateTime
+  awardQuarter String?
 
-  story          String        @db.Text
-  shortBio       String?       @db.VarChar(280)
-  pullQuote      String?       @db.VarChar(500)
-  achievements   String?       @db.Text
+  story        String  @db.Text
+  shortBio     String? @db.VarChar(280)
+  pullQuote    String? @db.VarChar(500)
+  achievements String? @db.Text
 
-  isFeatured     Boolean       @default(false)
-  isPublished    Boolean       @default(true)
-  displayOrder   Int           @default(0)
+  isFeatured   Boolean @default(false)
+  isPublished  Boolean @default(true)
+  displayOrder Int     @default(0)
 
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  createdById    String?
-  createdBy      User?         @relation("HonorCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("HonorCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([category])
   @@index([isFeatured])
@@ -884,27 +897,27 @@ enum ContractType {
 }
 
 enum EmploymentStatus {
-  ACTIVE      // Đang làm
-  ON_LEAVE    // Tạm nghỉ (sản, ốm dài)
-  RESIGNED    // Đã nghỉ tự nguyện
-  TERMINATED  // Bị cho nghỉ
+  ACTIVE // Đang làm
+  ON_LEAVE // Tạm nghỉ (sản, ốm dài)
+  RESIGNED // Đã nghỉ tự nguyện
+  TERMINATED // Bị cho nghỉ
 }
 
 model Employee {
-  id           String        @id @default(cuid())
+  id String @id @default(cuid())
 
   // Tier 1: cơ bản
-  employeeCode String        @unique
+  employeeCode String     @unique
   fullName     String
   jobTitle     String
   department   Department
   avatarUrl    String?
-  email        String?       @unique
+  email        String?    @unique
   joinedAt     DateTime?
-  bio          String?       @db.Text
-  isActive     Boolean       @default(true)
-  isPublic     Boolean       @default(false)
-  displayOrder Int           @default(0)
+  bio          String?    @db.Text
+  isActive     Boolean    @default(true)
+  isPublic     Boolean    @default(false)
+  displayOrder Int        @default(0)
 
   // Tier 2: HR cơ bản
   phone        String?
@@ -915,49 +928,49 @@ model Employee {
   salaryLevel  Int?
 
   // Phase 4.7 — additional Tier 2 HR fields
-  endDate          DateTime?    // Ngày kết thúc HĐ (cho hợp đồng có thời hạn)
-  bhxhBase         Float?       // Mức lương đóng BHXH
+  endDate          DateTime? // Ngày kết thúc HĐ (cho hợp đồng có thời hạn)
+  bhxhBase         Float? // Mức lương đóng BHXH
   address          String?
-  emergencyContact String?      // Tên - Quan hệ - SĐT
-  notes            String?      @db.Text
+  emergencyContact String? // Tên - Quan hệ - SĐT
+  notes            String?   @db.Text
 
   // Phase C1 — extended HR fields
-  nationalId       String?      // CCCD / CMND
-  status           EmploymentStatus @default(ACTIVE)
-  subjects         String[]     @default([])  // Môn dạy (mainly for GIANG_DAY / DAO_TAO)
-  certifications   String[]     @default([])  // Chứng chỉ chuyên môn
+  nationalId     String? // CCCD / CMND
+  status         EmploymentStatus @default(ACTIVE)
+  subjects       String[]         @default([]) // Môn dạy (mainly for GIANG_DAY / DAO_TAO)
+  certifications String[]         @default([]) // Chứng chỉ chuyên môn
 
   // Cơ sở làm việc
-  centerId     String?
-  center       Center?       @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  centerId String?
+  center   Center? @relation(fields: [centerId], references: [id], onDelete: SetNull)
 
   // Self-relation: quản lý trực tiếp
   managerId    String?
-  manager      Employee?     @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
-  subordinates Employee[]    @relation("EmployeeManager")
+  manager      Employee?  @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates Employee[] @relation("EmployeeManager")
 
   // CEO flag (chỉ 1 employee được isCEO=true tại 1 thời điểm)
-  isCEO        Boolean       @default(false)
+  isCEO Boolean @default(false)
 
   // Meta
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  createdById  String?
-  createdBy    User?         @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   // Relations
-  honors        Honor[]
-  userAccount   User?         @relation("UserEmployee")
-  roleAuditLogs RoleAuditLog[]
-  authoredQuestions  Question[]    @relation("QuestionAuthor")
-  createdExams       Exam[]        @relation("ExamCreator")
-  gradedAttempts     ExamAttempt[] @relation("AttemptGrader")
-  uploadedDocuments  Document[]    @relation("DocumentUploader")
-  createdAssignments Assignment[]              @relation("AssignmentCreator")
-  gradedSubmissions  AssignmentSubmission[]    @relation("SubmissionGrader")
-  generatedReports   ProgressReportLog[]       @relation("ReportGenerator")
-  performedMovements StockMovement[]           @relation("MovementPerformer")
-  performedAudits    InventoryAudit[]          @relation("AuditPerformer")
+  honors             Honor[]
+  userAccount        User?                  @relation("UserEmployee")
+  roleAuditLogs      RoleAuditLog[]
+  authoredQuestions  Question[]             @relation("QuestionAuthor")
+  createdExams       Exam[]                 @relation("ExamCreator")
+  gradedAttempts     ExamAttempt[]          @relation("AttemptGrader")
+  uploadedDocuments  Document[]             @relation("DocumentUploader")
+  createdAssignments Assignment[]           @relation("AssignmentCreator")
+  gradedSubmissions  AssignmentSubmission[] @relation("SubmissionGrader")
+  generatedReports   ProgressReportLog[]    @relation("ReportGenerator")
+  performedMovements StockMovement[]        @relation("MovementPerformer")
+  performedAudits    InventoryAudit[]       @relation("AuditPerformer")
 
   @@index([department])
   @@index([isActive])
@@ -970,19 +983,19 @@ model Employee {
 // userAccount's role). Stored as String (not Role enum) so the log
 // stays readable if the enum ever shifts. Cascade on Employee delete.
 model RoleAuditLog {
-  id              String   @id @default(cuid())
-  employeeId      String
-  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  fromRole        String
-  toRole          String
+  fromRole String
+  toRole   String
 
-  changedByUserId String?  // nullable — defensive if the auditor User row gets removed
-  changedByName   String   // snapshot so the trail is human-readable even after deletion
+  changedByUserId String? // nullable — defensive if the auditor User row gets removed
+  changedByName   String // snapshot so the trail is human-readable even after deletion
 
-  reason          String?  @db.Text
+  reason String? @db.Text
 
-  createdAt       DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([employeeId, createdAt])
   @@index([createdAt])
@@ -992,34 +1005,34 @@ model RoleAuditLog {
 // Học cụ Robotics ZMROBO — 3 bộ kit (Alpha / Beta / Intelligence Storm).
 // Specs/features/highlights là JSON để giữ schema linh hoạt.
 model ZMRoboKit {
-  id               String   @id @default(cuid())
-  slug             String   @unique
+  id   String @id @default(cuid())
+  slug String @unique
 
-  brand            String   @default("ZMROBO")
+  brand            String  @default("ZMROBO")
   series           String
   code             String?
   title            String
   subtitle         String
-  shortDescription String   @db.Text
-  description      String   @db.Text
+  shortDescription String  @db.Text
+  description      String  @db.Text
 
-  priceDisplay     String   @default("Liên hệ tư vấn")
-  isAvailable      Boolean  @default(true)
+  priceDisplay String  @default("Liên hệ tư vấn")
+  isAvailable  Boolean @default(true)
 
-  specs            Json
-  features         Json
-  highlights       Json
+  specs      Json
+  features   Json
+  highlights Json
 
-  mainImage        String   @default("")
-  galleryImages    String[]
+  mainImage     String   @default("")
+  galleryImages String[]
 
-  sourceUrl        String?
+  sourceUrl String?
 
-  displayOrder     Int      @default(0)
-  isPublished      Boolean  @default(true)
+  displayOrder Int     @default(0)
+  isPublished  Boolean @default(true)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([slug])
   @@index([isPublished, displayOrder])
@@ -1029,20 +1042,20 @@ model ZMRoboKit {
 // Curriculum (Giáo trình) chứa Lesson (Bài học). Tách rời khỏi Course để
 // course (protected) giữ metadata, còn syllabus có thể update qua versions.
 model Curriculum {
-  id          String   @id @default(cuid())
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id])
+  id       String @id @default(cuid())
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id])
 
-  version     Int      @default(1)
+  version     Int     @default(1)
   name        String
-  description String?  @db.Text
+  description String? @db.Text
 
-  isActive    Boolean  @default(true)
+  isActive Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  lessons     Lesson[]
+  lessons Lesson[]
 
   @@unique([courseId, version])
   @@index([courseId, isActive])
@@ -1053,20 +1066,20 @@ model Lesson {
   curriculumId String
   curriculum   Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
 
-  order        Int
+  order Int
 
-  title        String
-  description  String?    @db.Text
-  content      String?    @db.Text
+  title       String
+  description String? @db.Text
+  content     String? @db.Text
 
-  duration     Int        @default(90)
-  objectives   String[]   @default([])
-  materials    String[]   @default([])
+  duration   Int      @default(90)
+  objectives String[] @default([])
+  materials  String[] @default([])
 
-  notes        String?    @db.Text
+  notes String? @db.Text
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   questions     Question[]
   exams         Exam[]
@@ -1097,35 +1110,35 @@ enum QuestionDifficulty {
 }
 
 model Question {
-  id            String              @id @default(cuid())
+  id String @id @default(cuid())
 
-  questionCode  String?             @unique
-  type          QuestionType
-  text          String              @db.Text
-  explanation   String?             @db.Text
+  questionCode String?      @unique
+  type         QuestionType
+  text         String       @db.Text
+  explanation  String?      @db.Text
 
-  difficulty    QuestionDifficulty  @default(MEDIUM)
-  tags          String[]            @default([])
+  difficulty QuestionDifficulty @default(MEDIUM)
+  tags       String[]           @default([])
 
-  lessonId      String?
-  lesson        Lesson?             @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  lessonId String?
+  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
   // For SHORT_ANSWER / CODE / ESSAY
-  correctAnswer String?             @db.Text
+  correctAnswer String? @db.Text
 
   // For MULTIPLE_CHOICE / TRUE_FALSE
-  choices       Choice[]
+  choices Choice[]
 
   examQuestions ExamQuestion[]
 
-  authorId      String?
-  author        Employee?           @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorId String?
+  author   Employee? @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
-  isPublic      Boolean             @default(true)
-  notes         String?             @db.Text
+  isPublic Boolean @default(true)
+  notes    String? @db.Text
 
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([lessonId])
   @@index([type, difficulty])
@@ -1137,9 +1150,9 @@ model Choice {
   questionId String
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
-  order      Int
-  text       String   @db.Text
-  isCorrect  Boolean  @default(false)
+  order     Int
+  text      String  @db.Text
+  isCorrect Boolean @default(false)
 
   @@unique([questionId, order])
 }
@@ -1160,35 +1173,35 @@ enum AttemptStatus {
 }
 
 model Exam {
-  id              String       @id @default(cuid())
+  id String @id @default(cuid())
 
-  examCode        String?      @unique
-  title           String
-  description     String?      @db.Text
+  examCode    String? @unique
+  title       String
+  description String? @db.Text
 
-  classId         String?
-  class           Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
-  lessonId        String?
-  lesson          Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  classId  String?
+  class    Class?  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  lessonId String?
+  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
-  durationMinutes Int          @default(60)
-  totalPoints     Float        @default(10)
-  passingScore    Float        @default(5)
-  shuffleQuestions Boolean     @default(false)
-  shuffleChoices   Boolean     @default(false)
+  durationMinutes  Int     @default(60)
+  totalPoints      Float   @default(10)
+  passingScore     Float   @default(5)
+  shuffleQuestions Boolean @default(false)
+  shuffleChoices   Boolean @default(false)
 
-  openAt          DateTime?
-  closeAt         DateTime?
+  openAt  DateTime?
+  closeAt DateTime?
 
-  status          ExamStatus   @default(DRAFT)
+  status ExamStatus @default(DRAFT)
 
-  createdById     String?
-  createdBy       Employee?    @relation("ExamCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdById String?
+  createdBy   Employee? @relation("ExamCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  examQuestions   ExamQuestion[]
-  attempts        ExamAttempt[]
+  examQuestions ExamQuestion[]
+  attempts      ExamAttempt[]
 
   @@index([status, classId])
   @@index([lessonId])
@@ -1196,16 +1209,16 @@ model Exam {
 }
 
 model ExamQuestion {
-  id          String   @id @default(cuid())
-  examId      String
-  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  questionId  String
-  question    Question @relation(fields: [questionId], references: [id])
+  id         String   @id @default(cuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
 
-  order       Int
-  points      Float    @default(1)
+  order  Int
+  points Float @default(1)
 
-  answers     ExamAnswer[]
+  answers ExamAnswer[]
 
   @@unique([examId, order])
   @@unique([examId, questionId])
@@ -1213,25 +1226,25 @@ model ExamQuestion {
 }
 
 model ExamAttempt {
-  id           String        @id @default(cuid())
-  examId       String
-  exam         Exam          @relation(fields: [examId], references: [id])
-  studentId    String
-  student      Student       @relation(fields: [studentId], references: [id])
+  id        String  @id @default(cuid())
+  examId    String
+  exam      Exam    @relation(fields: [examId], references: [id])
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
 
-  startedAt    DateTime      @default(now())
-  submittedAt  DateTime?
-  gradedAt     DateTime?
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  gradedAt    DateTime?
 
-  status       AttemptStatus @default(IN_PROGRESS)
-  totalScore   Float?
-  passed       Boolean?
+  status     AttemptStatus @default(IN_PROGRESS)
+  totalScore Float?
+  passed     Boolean?
 
-  gradedById   String?
-  gradedBy     Employee?     @relation("AttemptGrader", fields: [gradedById], references: [id], onDelete: SetNull)
-  feedback     String?       @db.Text
+  gradedById String?
+  gradedBy   Employee? @relation("AttemptGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+  feedback   String?   @db.Text
 
-  answers      ExamAnswer[]
+  answers ExamAnswer[]
 
   @@unique([examId, studentId])
   @@index([status, examId])
@@ -1239,21 +1252,21 @@ model ExamAttempt {
 }
 
 model ExamAnswer {
-  id              String       @id @default(cuid())
-  attemptId       String
-  attempt         ExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  examQuestionId  String
-  examQuestion    ExamQuestion @relation(fields: [examQuestionId], references: [id])
+  id             String       @id @default(cuid())
+  attemptId      String
+  attempt        ExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  examQuestionId String
+  examQuestion   ExamQuestion @relation(fields: [examQuestionId], references: [id])
 
-  selectedChoiceIds String[]   @default([])
-  textAnswer        String?    @db.Text
+  selectedChoiceIds String[] @default([])
+  textAnswer        String?  @db.Text
 
-  isCorrect       Boolean?
-  score           Float?
-  graderNote      String?      @db.Text
+  isCorrect  Boolean?
+  score      Float?
+  graderNote String?  @db.Text
 
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([attemptId, examQuestionId])
 }
@@ -1270,31 +1283,31 @@ enum DocumentType {
 }
 
 model Document {
-  id           String       @id @default(cuid())
+  id String @id @default(cuid())
 
-  documentCode String?      @unique
+  documentCode String? @unique
   title        String
-  description  String?      @db.Text
+  description  String? @db.Text
 
-  type         DocumentType
-  fileUrl      String
-  fileName     String
-  fileSize     Int
-  mimeType     String?
+  type     DocumentType
+  fileUrl  String
+  fileName String
+  fileSize Int
+  mimeType String?
 
-  lessonId     String?
-  lesson       Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  lessonId String?
+  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
-  isPublic     Boolean      @default(false)
+  isPublic Boolean @default(false)
 
-  tags         String[]     @default([])
-  notes        String?      @db.Text
+  tags  String[] @default([])
+  notes String?  @db.Text
 
   uploadedById String?
-  uploadedBy   Employee?    @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedBy   Employee? @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   assignmentDocs AssignmentDocument[]
 
@@ -1320,34 +1333,34 @@ enum SubmissionStatus {
 }
 
 model Assignment {
-  id           String           @id @default(cuid())
+  id String @id @default(cuid())
 
   title        String
-  description  String           @db.Text
-  instructions String?          @db.Text
+  description  String  @db.Text
+  instructions String? @db.Text
 
-  classId      String
-  class        Class            @relation(fields: [classId], references: [id])
-  lessonId     String?
-  lesson       Lesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  classId  String
+  class    Class   @relation(fields: [classId], references: [id])
+  lessonId String?
+  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
-  totalPoints  Float            @default(10)
+  totalPoints Float @default(10)
 
-  assignedAt   DateTime         @default(now())
-  dueAt        DateTime?
+  assignedAt DateTime  @default(now())
+  dueAt      DateTime?
 
-  allowText    Boolean          @default(true)
-  allowFile    Boolean          @default(true)
+  allowText Boolean @default(true)
+  allowFile Boolean @default(true)
 
-  status       AssignmentStatus @default(DRAFT)
+  status AssignmentStatus @default(DRAFT)
 
-  createdById  String?
-  createdBy    Employee?        @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  createdById String?
+  createdBy   Employee? @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  submissions  AssignmentSubmission[]
-  documents    AssignmentDocument[]
+  submissions AssignmentSubmission[]
+  documents   AssignmentDocument[]
 
   @@index([status, classId])
   @@index([dueAt])
@@ -1361,36 +1374,36 @@ model AssignmentDocument {
   documentId   String
   document     Document   @relation(fields: [documentId], references: [id])
 
-  createdAt    DateTime   @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([assignmentId, documentId])
   @@index([documentId])
 }
 
 model AssignmentSubmission {
-  id           String           @id @default(cuid())
+  id           String     @id @default(cuid())
   assignmentId String
-  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
   studentId    String
-  student      Student          @relation(fields: [studentId], references: [id])
+  student      Student    @relation(fields: [studentId], references: [id])
 
-  textAnswer   String?          @db.Text
-  fileUrl      String?
-  fileName     String?
-  fileSize     Int?
-  mimeType     String?
+  textAnswer String? @db.Text
+  fileUrl    String?
+  fileName   String?
+  fileSize   Int?
+  mimeType   String?
 
-  submittedAt  DateTime?
-  status       SubmissionStatus @default(NOT_SUBMITTED)
+  submittedAt DateTime?
+  status      SubmissionStatus @default(NOT_SUBMITTED)
 
-  score        Float?
-  feedback     String?          @db.Text
-  gradedAt     DateTime?
-  gradedById   String?
-  gradedBy     Employee?        @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+  score      Float?
+  feedback   String?   @db.Text
+  gradedAt   DateTime?
+  gradedById String?
+  gradedBy   Employee? @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
 
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([assignmentId, studentId])
   @@index([status, assignmentId])
@@ -1432,51 +1445,51 @@ enum InventoryCategory {
 }
 
 model InventoryItem {
-  id                  String            @id @default(cuid())
+  id String @id @default(cuid())
 
-  itemCode            String            @unique
-  name                String
-  description         String?           @db.Text
+  itemCode    String  @unique
+  name        String
+  description String? @db.Text
 
-  category            InventoryCategory @default(OTHER)
-  unit                String            @default("Cái")
+  category InventoryCategory @default(OTHER)
+  unit     String            @default("Cái")
 
-  pricePerUnit        Float?
-  supplier            String?
+  pricePerUnit Float?
+  supplier     String?
 
-  defaultMinThreshold Int               @default(5)
+  defaultMinThreshold Int @default(5)
 
-  imageUrl            String?
-  tags                String[]          @default([])
+  imageUrl String?
+  tags     String[] @default([])
 
-  isActive            Boolean           @default(true)
-  notes               String?           @db.Text
+  isActive Boolean @default(true)
+  notes    String? @db.Text
 
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  balances            StockBalance[]
-  movements           StockMovement[]
-  auditItems          InventoryAuditItem[] @relation("AuditedItem")
+  balances   StockBalance[]
+  movements  StockMovement[]
+  auditItems InventoryAuditItem[] @relation("AuditedItem")
 
   @@index([category, isActive])
 }
 
 model StockBalance {
-  id           String        @id @default(cuid())
-  itemId       String
-  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  centerId     String
-  center       Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  id       String        @id @default(cuid())
+  itemId   String
+  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  centerId String
+  center   Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
-  quantity     Int           @default(0)
-  reserved     Int           @default(0)
+  quantity     Int  @default(0)
+  reserved     Int  @default(0)
   minThreshold Int?
 
   lastReceiptAt DateTime?
   lastIssueAt   DateTime?
 
-  updatedAt    DateTime      @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@unique([itemId, centerId])
   @@index([centerId, quantity])
@@ -1484,45 +1497,45 @@ model StockBalance {
 
 // ─── Phase F2 — Stock movement workflow ──────────────────────────────────
 enum StockMovementType {
-  RECEIPT             // Nhập kho từ supplier
-  ISSUE               // Xuất kho cho lớp / sự kiện / hỏng
-  TRANSFER_OUT        // Chuyển đi cơ sở khác
-  TRANSFER_IN         // Nhận từ cơ sở khác
+  RECEIPT // Nhập kho từ supplier
+  ISSUE // Xuất kho cho lớp / sự kiện / hỏng
+  TRANSFER_OUT // Chuyển đi cơ sở khác
+  TRANSFER_IN // Nhận từ cơ sở khác
   ADJUSTMENT_INCREASE // Kiểm kê thừa
   ADJUSTMENT_DECREASE // Kiểm kê thiếu
 }
 
 model StockMovement {
-  id             String            @id @default(cuid())
+  id String @id @default(cuid())
 
-  itemId         String
-  item           InventoryItem     @relation(fields: [itemId], references: [id])
-  centerId       String
-  center         Center            @relation(fields: [centerId], references: [id])
+  itemId   String
+  item     InventoryItem @relation(fields: [itemId], references: [id])
+  centerId String
+  center   Center        @relation(fields: [centerId], references: [id])
 
-  type           StockMovementType
-  quantity       Int
+  type     StockMovementType
+  quantity Int
 
   // TRANSFER pair link (OUT ↔ IN)
   transferPairId String?
-  transferPair   StockMovement?    @relation("TransferPair", fields: [transferPairId], references: [id])
-  transferOf     StockMovement[]   @relation("TransferPair")
+  transferPair   StockMovement?  @relation("TransferPair", fields: [transferPairId], references: [id])
+  transferOf     StockMovement[] @relation("TransferPair")
 
   // Free-form reference linking
-  referenceType  String?
-  referenceId    String?
-  referenceNote  String?
+  referenceType String?
+  referenceId   String?
+  referenceNote String?
 
   // Pricing snapshot (RECEIPT only)
-  unitPrice      Float?
-  totalCost      Float?
+  unitPrice Float?
+  totalCost Float?
 
-  performedById  String?
-  performedBy    Employee?         @relation("MovementPerformer", fields: [performedById], references: [id], onDelete: SetNull)
-  performedAt    DateTime          @default(now())
-  notes          String?           @db.Text
+  performedById String?
+  performedBy   Employee? @relation("MovementPerformer", fields: [performedById], references: [id], onDelete: SetNull)
+  performedAt   DateTime  @default(now())
+  notes         String?   @db.Text
 
-  auditItem      InventoryAuditItem? @relation("AuditMovement")
+  auditItem InventoryAuditItem? @relation("AuditMovement")
 
   @@index([itemId, centerId, performedAt])
   @@index([centerId, performedAt])
@@ -1538,53 +1551,186 @@ enum InventoryAuditStatus {
 }
 
 model InventoryAudit {
-  id             String               @id @default(cuid())
-  auditCode      String?              @unique
-  centerId       String
-  center         Center               @relation(fields: [centerId], references: [id])
+  id        String  @id @default(cuid())
+  auditCode String? @unique
+  centerId  String
+  center    Center  @relation(fields: [centerId], references: [id])
 
-  status         InventoryAuditStatus @default(DRAFT)
+  status InventoryAuditStatus @default(DRAFT)
 
   // Snapshot stats (filled on submit)
-  totalItems     Int                  @default(0)
-  totalAdjusted  Int                  @default(0)
-  totalIncreases Int                  @default(0)
-  totalDecreases Int                  @default(0)
+  totalItems     Int @default(0)
+  totalAdjusted  Int @default(0)
+  totalIncreases Int @default(0)
+  totalDecreases Int @default(0)
 
-  performedById  String?
-  performedBy    Employee?            @relation("AuditPerformer", fields: [performedById], references: [id], onDelete: SetNull)
-  performedAt    DateTime?
+  performedById String?
+  performedBy   Employee? @relation("AuditPerformer", fields: [performedById], references: [id], onDelete: SetNull)
+  performedAt   DateTime?
 
-  notes          String?              @db.Text
+  notes String? @db.Text
 
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  items          InventoryAuditItem[]
+  items InventoryAuditItem[]
 
   @@index([centerId, performedAt])
   @@index([status])
 }
 
 model InventoryAuditItem {
-  id          String         @id @default(cuid())
-  auditId     String
-  audit       InventoryAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  itemId      String
-  item        InventoryItem  @relation("AuditedItem", fields: [itemId], references: [id])
+  id      String         @id @default(cuid())
+  auditId String
+  audit   InventoryAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  itemId  String
+  item    InventoryItem  @relation("AuditedItem", fields: [itemId], references: [id])
 
   previousQty Int
   actualQty   Int
   delta       Int
 
-  reason      String?        @db.Text
+  reason String? @db.Text
 
   // Link to the ADJUSTMENT movement generated on submit (null in DRAFT).
-  movementId  String?        @unique
-  movement    StockMovement? @relation("AuditMovement", fields: [movementId], references: [id], onDelete: SetNull)
+  movementId String?        @unique
+  movement   StockMovement? @relation("AuditMovement", fields: [movementId], references: [id], onDelete: SetNull)
 
-  createdAt   DateTime       @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([auditId, itemId])
   @@index([itemId])
+}
+
+// =============================================================================
+// Phase 5.4.0 — Audit log foundation (5 domain-specific models)
+// =============================================================================
+// Follow pattern from RoleAuditLog + EnrollmentAuditLog: FK Cascade to target
+// entity, nullable changedByUserId (defensive — no FK), changedByName snapshot
+// for human-readable history forever, reason Text + metadata Json for extensibility.
+// String action field (not enum) for consistency with existing pattern.
+// =============================================================================
+
+model UserAuditLog {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  action String // "CREATE" | "UPDATE" | "DISABLE" | "ENABLE" | "PASSWORD_RESET" | "ROLE_CHANGE"
+
+  changedByUserId String?
+  changedByName   String
+
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[] @default([])
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
+}
+
+model PermissionGrantAuditLog {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation("UserGrantAudits", fields: [userId], references: [id], onDelete: Cascade)
+
+  // grant snapshot — no FK because grant can be removed (REMOVE action)
+  grantId   String?
+  actionKey String // e.g. "users:manage"
+
+  action String // "ADD" | "UPDATE" | "REMOVE"
+
+  changedByUserId String?
+  changedByName   String
+
+  oldGrant String? // "ALLOW" | "DENY" | null (on ADD)
+  newGrant String? // "ALLOW" | "DENY" | null (on REMOVE)
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
+}
+
+model LeadAuditLog {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation("LeadAuditLogs", fields: [leadId], references: [id], onDelete: Cascade)
+
+  action String // "CREATE" | "UPDATE" | "DELETE" | "ASSIGN" | "STATUS_CHANGE"
+
+  changedByUserId String?
+  changedByName   String
+
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[] @default([])
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
+}
+
+model ClassAuditLog {
+  id      String @id @default(cuid())
+  classId String
+  class   Class  @relation("ClassAuditLogs", fields: [classId], references: [id], onDelete: Cascade)
+
+  action String // "CREATE" | "UPDATE" | "DELETE"
+
+  changedByUserId String?
+  changedByName   String
+
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[] @default([])
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([classId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
+}
+
+model StudentAuditLog {
+  id        String  @id @default(cuid())
+  studentId String
+  student   Student @relation("StudentAuditLogs", fields: [studentId], references: [id], onDelete: Cascade)
+
+  action String // "CREATE" | "UPDATE" | "DELETE"
+
+  changedByUserId String?
+  changedByName   String
+
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[] @default([])
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
 }
