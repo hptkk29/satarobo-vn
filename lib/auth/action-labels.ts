@@ -35,6 +35,9 @@ const RESOURCE_LABELS: Record<string, string> = {
   "audit-logs": "Audit logs",
   settings: "Cài đặt",
   roles: "Vai trò",
+  // Phase 5.6 — Financial
+  payments: "Phương thức thanh toán",
+  orders: "Đơn hàng",
 };
 
 const VERB_LABELS: Record<string, string> = {

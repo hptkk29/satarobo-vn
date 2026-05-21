@@ -78,6 +78,41 @@ enum ApplicationStatus {
   REJECTED
 }
 
+// ─── Phase 5.6 — Payment + Order enums ────────────────────────────────────
+
+enum PaymentMethodType {
+  CASH
+  BANK_TRANSFER
+  VNPAY
+  TINGEE
+  COD
+  WALLET // reserved for future wallet system (Sprint defer)
+}
+
+enum OrderType {
+  COURSE // offline class enrollment
+  PACKAGE // CoursePackage purchase
+  EXAM // exam registration
+  PRODUCT // physical product (kit/sensor) — Sprint 5.10
+  COMBO // bundle, defer
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  CONFIRMED // payment confirmed, awaiting fulfillment
+  COMPLETED // fulfilled (e.g., student attended class, kit delivered)
+  CANCELLED // pre-COMPLETED cancellation
+  REFUNDED // post-COMPLETED refund
+}
+
+enum OrderItemType {
+  COURSE_ENROLLMENT // link tới Enrollment (offline class)
+  COURSE_PACKAGE // link tới CoursePackage
+  EXAM_REGISTRATION // link tới ExamAttempt
+  PRODUCT // link tới Product (Sprint 5.10, nullable for now)
+}
+
 // ─── Auth (NextAuth / Auth.js) ────────────────────────────────────────────────
 
 model Account {
@@ -141,6 +176,9 @@ model Center {
   stockBalances     StockBalance[]
   stockMovements    StockMovement[]
   inventoryAudits   InventoryAudit[]
+
+  // Phase 5.6 — Order
+  orders Order[]
 
   @@index([isActive])
   @@index([displayOrder])
@@ -335,6 +373,9 @@ model Lead {
   // Phase 5.4.0 — Audit log
   auditLogs LeadAuditLog[] @relation("LeadAuditLogs")
 
+  // Phase 5.6 — Order
+  orders Order[] @relation("LeadOrders")
+
   @@index([phone])
   @@index([status])
   @@index([assignedToId])
@@ -436,6 +477,9 @@ model Student {
 
   // Phase 5.4.0 — Audit log
   auditLogs StudentAuditLog[] @relation("StudentAuditLogs")
+
+  // Phase 5.6 — Order
+  orders Order[] @relation("StudentOrders")
 
   @@index([phone])
   @@index([centerId])
@@ -551,6 +595,9 @@ model Enrollment {
   course  Course  @relation(fields: [courseId], references: [id])
 
   auditLogs EnrollmentAuditLog[]
+
+  // Phase 5.6 — Order item link
+  orderItems OrderItem[] @relation("EnrollmentOrderItems")
 
   @@unique([studentId, classId])
   @@index([studentId])
@@ -746,6 +793,9 @@ model CoursePackage {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Phase 5.6 — Order item link
+  orderItems OrderItem[]
 
   @@index([slug])
   @@index([parentCourseSlug, isPublished, displayOrder])
@@ -1246,6 +1296,9 @@ model ExamAttempt {
 
   answers ExamAnswer[]
 
+  // Phase 5.6 — Order item link
+  orderItems OrderItem[] @relation("ExamOrderItems")
+
   @@unique([examId, studentId])
   @@index([status, examId])
   @@index([studentId])
@@ -1731,6 +1784,175 @@ model StudentAuditLog {
   createdAt DateTime @default(now())
 
   @@index([studentId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
+}
+
+// =============================================================================
+// Phase 5.6.0 — Payment + Order foundation
+// =============================================================================
+// Order is polymorphic via OrderItem.type (COURSE/PACKAGE/EXAM/PRODUCT).
+// Customer info snapshotted on Order (immutable per order — no Parent model yet).
+// VND-only Int storage. No Decimal, no multi-currency.
+// Status workflow enforced at app layer via lib/orders/status.ts.
+// =============================================================================
+
+model PaymentMethod {
+  id          String            @id @default(cuid())
+  code        String            @unique // "CASH", "BANK_TRANSFER", "VNPAY", "TINGEE"
+  name        String
+  type        PaymentMethodType
+  image       String?
+  description String?           @db.Text
+
+  // Allowed-for flags (match SataWorld pattern)
+  canBuyCourse  Boolean @default(true)
+  canBuyPackage Boolean @default(true)
+  canBuyExam    Boolean @default(true)
+  canBuyProduct Boolean @default(false) // Sprint 5.10
+  canDeposit    Boolean @default(false) // wallet topup — reserved
+
+  // Bank account info (BANK_TRANSFER only)
+  bankName          String?
+  bankBranch        String?
+  bankAccountNumber String?
+  bankAccountName   String?
+
+  // Gateway config (VNPAY/TINGEE only) — defer Sprint 5.6.5
+  gatewayConfig Json?
+
+  displayOrder Int     @default(0)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([code])
+  @@index([isActive, displayOrder])
+}
+
+model Order {
+  id     String      @id @default(cuid())
+  code   String      @unique // "ORD-260521-000001"
+  type   OrderType
+  status OrderStatus @default(DRAFT)
+
+  // Customer snapshot (immutable per order)
+  customerName    String
+  customerPhone   String
+  customerEmail   String?
+  customerAddress String? @db.Text
+  customerWard    String?
+  customerCity    String?
+
+  // Optional links
+  studentId String?
+  student   Student? @relation("StudentOrders", fields: [studentId], references: [id])
+
+  leadId String?
+  lead   Lead?   @relation("LeadOrders", fields: [leadId], references: [id])
+
+  centerId String?
+  center   Center? @relation(fields: [centerId], references: [id])
+
+  paymentMethodId String?
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  // Amounts (VND, Int)
+  subtotal       Int @default(0)
+  discountAmount Int @default(0)
+  shippingFee    Int @default(0)
+  totalAmount    Int @default(0)
+
+  // Voucher (Sprint 5.7 — nullable, no FK yet)
+  voucherCode String?
+
+  // Payment proof / external refs
+  bankReference String?
+  gatewayTxnId  String?
+  paidAt        DateTime?
+
+  // Confirmation by staff
+  confirmedByUserId String?
+  confirmedAt       DateTime?
+
+  customerNote String? @db.Text
+  internalNote String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items   OrderItem[]
+  history OrderStatusHistory[]
+
+  @@index([code])
+  @@index([status])
+  @@index([type, status])
+  @@index([studentId])
+  @@index([leadId])
+  @@index([centerId, createdAt])
+  @@index([createdAt])
+  @@index([customerPhone])
+}
+
+model OrderItem {
+  id      String        @id @default(cuid())
+  orderId String
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type    OrderItemType
+
+  // Polymorphic refs (only one non-null per row, by type)
+  enrollmentId String?
+  enrollment   Enrollment? @relation("EnrollmentOrderItems", fields: [enrollmentId], references: [id])
+
+  packageId String?
+  package   CoursePackage? @relation(fields: [packageId], references: [id])
+
+  examAttemptId String?
+  examAttempt   ExamAttempt? @relation("ExamOrderItems", fields: [examAttemptId], references: [id])
+
+  productId String? // Sprint 5.10 — no FK yet
+
+  // Item display snapshot (immutable)
+  itemName        String
+  itemDescription String? @db.Text
+
+  // Pricing (VND, Int)
+  quantity   Int @default(1)
+  unitPrice  Int
+  totalPrice Int
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([type])
+  @@index([enrollmentId])
+  @@index([packageId])
+  @@index([examAttemptId])
+}
+
+model OrderStatusHistory {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  fromStatus OrderStatus
+  toStatus   OrderStatus
+
+  changedByUserId String? // no FK, defensive (consistent with audit log pattern)
+  changedByName   String
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
   @@index([createdAt])
   @@index([changedByUserId])
 }
