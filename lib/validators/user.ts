@@ -9,8 +9,8 @@ export const userCreateSchema = z.object({
     .min(8, "Mật khẩu tối thiểu 8 ký tự")
     .max(72, "Mật khẩu tối đa 72 ký tự"),
   role: z.nativeEnum(Role),
-  centerId: z.string().cuid().nullable().optional(),
-  employeeId: z.string().cuid().nullable().optional(),
+  centerId: z.string().min(1).nullable().optional(),
+  employeeId: z.string().min(1).nullable().optional(),
 });
 
 export const userUpdateSchema = userCreateSchema.omit({ password: true });

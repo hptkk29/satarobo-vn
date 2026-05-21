@@ -46,5 +46,5 @@ export const jobCreateSchema = z.object({
 export type JobCreateInput = z.infer<typeof jobCreateSchema>
 
 export const jobUpdateSchema = jobCreateSchema.partial().extend({
-  id: z.string().cuid(),
+  id: z.string().min(1),
 })

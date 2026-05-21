@@ -9,7 +9,7 @@ export const leadCreateSchema = z.object({
   phone: z.string().regex(PHONE_VN, 'SĐT không hợp lệ'),
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
   centerId: z.string().min(1).optional(),
-  courseId: z.string().cuid().optional(),
+  courseId: z.string().min(1).optional(),
   source: z.string().min(1),
   utmSource: z.string().max(100).optional(),
   utmMedium: z.string().max(100).optional(),
@@ -35,7 +35,7 @@ export const leadUpdateSchema = leadCreateSchema.partial().extend({
   status: z
     .enum(['NEW', 'CONTACTED', 'DEMO_SCHEDULED', 'ENROLLED', 'NURTURING', 'LOST'])
     .optional(),
-  assignedToId: z.string().cuid().optional(),
+  assignedToId: z.string().min(1).optional(),
 })
 
 export type LeadCreateInput = z.infer<typeof leadCreateSchema>
