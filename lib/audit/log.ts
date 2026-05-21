@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Session } from "next-auth";
 import { db } from "@/lib/db";
 import { getRequestMetadata } from "@/lib/audit/headers";
 
@@ -191,4 +192,22 @@ export function detectChangedFields<T extends Record<string, unknown>>(
     }
     return oldVal !== newVal;
   });
+}
+
+// ─── UTILITY: extract actor info from session ───────────────────────
+/**
+ * Extract actor info from NextAuth session. Returns "System" when no
+ * session (background jobs / system actions).
+ */
+export function getAuditActor(session: Session | null | undefined): {
+  actorId: string | null;
+  actorName: string;
+} {
+  if (!session?.user) {
+    return { actorId: null, actorName: "System" };
+  }
+  return {
+    actorId: session.user.id,
+    actorName: session.user.name ?? session.user.email ?? "Unknown",
+  };
 }

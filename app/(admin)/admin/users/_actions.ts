@@ -11,6 +11,11 @@ import {
   userUpdateSchema,
   passwordResetSchema,
 } from "@/lib/validators/user";
+import {
+  logUserAudit,
+  detectChangedFields,
+  getAuditActor,
+} from "@/lib/audit/log";
 
 async function requireUsersManage() {
   const session = await auth();
@@ -18,12 +23,12 @@ async function requireUsersManage() {
   if (!can(session.user, "users:manage")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
-  return session.user;
+  return session;
 }
 
 // ─── CREATE ──────────────────────────────────────────────────────────
 export async function createUserAction(formData: FormData) {
-  await requireUsersManage();
+  const session = await requireUsersManage();
 
   const parsed = userCreateSchema.safeParse({
     name: formData.get("name"),
@@ -62,19 +67,46 @@ export async function createUserAction(formData: FormData) {
   }
 
   const hashed = await bcrypt.hash(parsed.data.password, 10);
+  const { actorId, actorName } = getAuditActor(session);
 
-  const user = await db.user.create({
-    data: {
-      name: parsed.data.name,
-      email: parsed.data.email,
-      password: hashed,
-      role: parsed.data.role,
-      centerId: parsed.data.centerId ?? null,
-      employeeId: parsed.data.employeeId ?? null,
-      isActive: true,
-      tokenVersion: 0,
-    },
-    select: { id: true },
+  const user = await db.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        password: hashed,
+        role: parsed.data.role,
+        centerId: parsed.data.centerId ?? null,
+        employeeId: parsed.data.employeeId ?? null,
+        isActive: true,
+        tokenVersion: 0,
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        centerId: true,
+        employeeId: true,
+        isActive: true,
+      },
+    });
+
+    await logUserAudit({
+      userId: created.id,
+      action: "CREATE",
+      actorId,
+      actorName,
+      newValues: {
+        email: created.email,
+        role: created.role,
+        centerId: created.centerId,
+        employeeId: created.employeeId,
+        isActive: created.isActive,
+      },
+      tx,
+    });
+
+    return created;
   });
 
   revalidatePath("/admin/users");
@@ -83,7 +115,8 @@ export async function createUserAction(formData: FormData) {
 
 // ─── UPDATE ──────────────────────────────────────────────────────────
 export async function updateUserAction(id: string, formData: FormData) {
-  const me = await requireUsersManage();
+  const session = await requireUsersManage();
+  const me = session.user;
 
   const parsed = userUpdateSchema.safeParse({
     name: formData.get("name"),
@@ -102,7 +135,14 @@ export async function updateUserAction(id: string, formData: FormData) {
 
   const current = await db.user.findUnique({
     where: { id },
-    select: { id: true, email: true, role: true, employeeId: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      centerId: true,
+      employeeId: true,
+    },
   });
   if (!current) return { ok: false, error: "Không tìm thấy user" };
 
@@ -153,17 +193,54 @@ export async function updateUserAction(id: string, formData: FormData) {
 
   // Increment tokenVersion nếu role thay đổi → force re-login
   const roleChanged = parsed.data.role !== current.role;
+  const { actorId, actorName } = getAuditActor(session);
 
-  await db.user.update({
-    where: { id },
-    data: {
-      name: parsed.data.name,
-      email: parsed.data.email,
-      role: parsed.data.role,
-      centerId: parsed.data.centerId ?? null,
-      employeeId: parsed.data.employeeId ?? null,
-      ...(roleChanged && { tokenVersion: { increment: 1 } }),
-    },
+  await db.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id },
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        role: parsed.data.role,
+        centerId: parsed.data.centerId ?? null,
+        employeeId: parsed.data.employeeId ?? null,
+        ...(roleChanged && { tokenVersion: { increment: 1 } }),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        centerId: true,
+        employeeId: true,
+      },
+    });
+
+    const oldValues = {
+      name: current.name,
+      email: current.email,
+      role: current.role,
+      centerId: current.centerId,
+      employeeId: current.employeeId,
+    };
+    const newValues = {
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+      centerId: updated.centerId,
+      employeeId: updated.employeeId,
+    };
+
+    await logUserAudit({
+      userId: id,
+      action: roleChanged ? "ROLE_CHANGE" : "UPDATE",
+      actorId,
+      actorName,
+      oldValues,
+      newValues,
+      changedFields: detectChangedFields(oldValues, newValues),
+      tx,
+    });
   });
 
   revalidatePath("/admin/users");
@@ -173,7 +250,8 @@ export async function updateUserAction(id: string, formData: FormData) {
 
 // ─── TOGGLE ACTIVE ───────────────────────────────────────────────────
 export async function toggleUserActiveAction(id: string) {
-  const me = await requireUsersManage();
+  const session = await requireUsersManage();
+  const me = session.user;
 
   if (id === me.id) {
     return { ok: false, error: "Không thể tự disable chính mình" };
@@ -200,12 +278,28 @@ export async function toggleUserActiveAction(id: string) {
     }
   }
 
-  await db.user.update({
-    where: { id },
-    data: {
-      isActive: !user.isActive,
-      tokenVersion: { increment: 1 }, // force logout
-    },
+  const willBeActive = !user.isActive;
+  const { actorId, actorName } = getAuditActor(session);
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id },
+      data: {
+        isActive: willBeActive,
+        tokenVersion: { increment: 1 }, // force logout
+      },
+    });
+
+    await logUserAudit({
+      userId: id,
+      action: willBeActive ? "ENABLE" : "DISABLE",
+      actorId,
+      actorName,
+      oldValues: { isActive: user.isActive },
+      newValues: { isActive: willBeActive },
+      changedFields: ["isActive"],
+      tx,
+    });
   });
 
   revalidatePath("/admin/users");
@@ -214,7 +308,7 @@ export async function toggleUserActiveAction(id: string) {
 
 // ─── RESET PASSWORD ──────────────────────────────────────────────────
 export async function resetUserPasswordAction(id: string, formData: FormData) {
-  await requireUsersManage();
+  const session = await requireUsersManage();
 
   const parsed = passwordResetSchema.safeParse({
     newPassword: formData.get("newPassword"),
@@ -232,13 +326,25 @@ export async function resetUserPasswordAction(id: string, formData: FormData) {
   if (!user) return { ok: false, error: "Không tìm thấy user" };
 
   const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
+  const { actorId, actorName } = getAuditActor(session);
 
-  await db.user.update({
-    where: { id },
-    data: {
-      password: hashed,
-      tokenVersion: { increment: 1 }, // force logout
-    },
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id },
+      data: {
+        password: hashed,
+        tokenVersion: { increment: 1 }, // force logout
+      },
+    });
+
+    await logUserAudit({
+      userId: id,
+      action: "PASSWORD_RESET",
+      actorId,
+      actorName,
+      // KHÔNG log oldValues/newValues — không leak hash
+      tx,
+    });
   });
 
   revalidatePath("/admin/users");

@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { can } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 
 const statusSchema = z.enum([
   'NEW',
@@ -26,9 +27,30 @@ export async function updateLeadStatus(
   const parsed = statusSchema.safeParse(rawStatus)
   if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
 
-  await db.lead.update({
+  const before = await db.lead.findUnique({
     where: { id: leadId },
-    data: { status: parsed.data },
+    select: { status: true },
+  })
+  if (!before) return { ok: false, error: 'Lead khong ton tai' }
+
+  const { actorId, actorName } = getAuditActor(session)
+
+  await db.$transaction(async (tx) => {
+    await tx.lead.update({
+      where: { id: leadId },
+      data: { status: parsed.data },
+    })
+
+    await logLeadAudit({
+      leadId,
+      action: 'STATUS_CHANGE',
+      actorId,
+      actorName,
+      oldValues: { status: before.status },
+      newValues: { status: parsed.data },
+      changedFields: ['status'],
+      tx,
+    })
   })
 
   revalidatePath('/admin/leads')
@@ -43,9 +65,31 @@ export async function updateLeadNote(
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
   if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Khong co quyen' }
 
-  await db.lead.update({
+  const before = await db.lead.findUnique({
     where: { id: leadId },
-    data: { note: note.trim() || null },
+    select: { note: true },
+  })
+  if (!before) return { ok: false, error: 'Lead khong ton tai' }
+
+  const newNote = note.trim() || null
+  const { actorId, actorName } = getAuditActor(session)
+
+  await db.$transaction(async (tx) => {
+    await tx.lead.update({
+      where: { id: leadId },
+      data: { note: newNote },
+    })
+
+    await logLeadAudit({
+      leadId,
+      action: 'UPDATE',
+      actorId,
+      actorName,
+      oldValues: { note: before.note },
+      newValues: { note: newNote },
+      changedFields: before.note !== newNote ? ['note'] : [],
+      tx,
+    })
   })
 
   revalidatePath('/admin/leads')
@@ -61,10 +105,29 @@ export async function deleteLead(
     return { ok: false, error: 'Khong co quyen xoa lead' }
   }
 
+  const before = await db.lead.findUnique({
+    where: { id: leadId, deletedAt: null },
+    select: { parentName: true, phone: true, status: true },
+  })
+  if (!before) return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
+
+  const { actorId, actorName } = getAuditActor(session)
+
   try {
-    await db.lead.update({
-      where: { id: leadId, deletedAt: null },
-      data: { deletedAt: new Date() },
+    await db.$transaction(async (tx) => {
+      await tx.lead.update({
+        where: { id: leadId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      })
+
+      await logLeadAudit({
+        leadId,
+        action: 'DELETE',
+        actorId,
+        actorName,
+        oldValues: before,
+        tx,
+      })
     })
   } catch {
     return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }

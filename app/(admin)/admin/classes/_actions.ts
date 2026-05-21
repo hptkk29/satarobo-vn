@@ -7,6 +7,11 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { can, type Action } from "@/lib/auth/permissions";
 import { classCreateSchema } from "@/lib/validators/class";
+import {
+  logClassAudit,
+  detectChangedFields,
+  getAuditActor,
+} from "@/lib/audit/log";
 
 type ActionResult = { error?: string };
 
@@ -23,7 +28,7 @@ async function requireClassWrite(action: "create" | "update" | "delete") {
   if (!can(session.user, actionMap[action])) {
     redirect("/admin/dashboard?error=unauthorized");
   }
-  return session.user;
+  return session;
 }
 
 function toCreateData(
@@ -111,8 +116,22 @@ function readForm(formData: FormData) {
   };
 }
 
+const CLASS_SNAPSHOT_SELECT = {
+  name: true,
+  classCode: true,
+  courseId: true,
+  centerId: true,
+  roomId: true,
+  teacherId: true,
+  assistantId: true,
+  status: true,
+  startDate: true,
+  endDate: true,
+  maxStudents: true,
+} as const;
+
 export async function createClass(formData: FormData): Promise<ActionResult> {
-  await requireClassWrite("create");
+  const session = await requireClassWrite("create");
 
   const raw = readForm(formData);
   const parsed = classCreateSchema.safeParse(raw);
@@ -120,8 +139,27 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    await db.class.create({ data: toCreateData(parsed.data) });
+    await db.$transaction(async (tx) => {
+      const created = await tx.class.create({
+        data: toCreateData(parsed.data),
+        select: { id: true, ...CLASS_SNAPSHOT_SELECT },
+      });
+
+      const { id: _id, ...newValues } = created;
+      void _id;
+
+      await logClassAudit({
+        classId: created.id,
+        action: "CREATE",
+        actorId,
+        actorName,
+        newValues,
+        tx,
+      });
+    });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã lớp đã tồn tại" };
@@ -137,7 +175,7 @@ export async function updateClass(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireClassWrite("update");
+  const session = await requireClassWrite("update");
 
   const raw = readForm(formData);
   const parsed = classCreateSchema.safeParse(raw);
@@ -145,10 +183,32 @@ export async function updateClass(
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  const before = await db.class.findUnique({
+    where: { id },
+    select: CLASS_SNAPSHOT_SELECT,
+  });
+  if (!before) return { error: "Không tìm thấy lớp" };
+
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    await db.class.update({
-      where: { id },
-      data: toUpdateData(parsed.data),
+    await db.$transaction(async (tx) => {
+      const updated = await tx.class.update({
+        where: { id },
+        data: toUpdateData(parsed.data),
+        select: CLASS_SNAPSHOT_SELECT,
+      });
+
+      await logClassAudit({
+        classId: id,
+        action: "UPDATE",
+        actorId,
+        actorName,
+        oldValues: before,
+        newValues: updated,
+        changedFields: detectChangedFields(before, updated),
+        tx,
+      });
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
@@ -163,11 +223,31 @@ export async function updateClass(
 }
 
 export async function deleteClass(id: string): Promise<ActionResult> {
-  await requireClassWrite("delete");
+  const session = await requireClassWrite("delete");
+
+  const before = await db.class.findUnique({
+    where: { id },
+    select: CLASS_SNAPSHOT_SELECT,
+  });
+  if (!before) return { error: "Không thể xoá lớp này" };
+
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    await db.class.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    await db.$transaction(async (tx) => {
+      await tx.class.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+
+      await logClassAudit({
+        classId: id,
+        action: "DELETE",
+        actorId,
+        actorName,
+        oldValues: before,
+        tx,
+      });
     });
   } catch {
     return { error: "Không thể xoá lớp này" };

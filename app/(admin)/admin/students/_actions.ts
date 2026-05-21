@@ -10,6 +10,11 @@ import {
   studentCreateSchema,
   studentUpdateSchema,
 } from "@/lib/validators/student";
+import {
+  logStudentAudit,
+  detectChangedFields,
+  getAuditActor,
+} from "@/lib/audit/log";
 
 type ActionResult = { error?: string };
 
@@ -26,8 +31,19 @@ async function requireStudentWrite(action: "create" | "update" | "delete") {
   if (!can(session.user, actionMap[action])) {
     redirect("/admin/dashboard?error=unauthorized");
   }
-  return session.user;
+  return session;
 }
+
+const STUDENT_SNAPSHOT_SELECT = {
+  name: true,
+  studentCode: true,
+  dateOfBirth: true,
+  gender: true,
+  parentName: true,
+  parentPhone: true,
+  centerId: true,
+  status: true,
+} as const;
 
 function toData(parsed: ReturnType<typeof studentCreateSchema.parse>): Prisma.StudentCreateInput {
   const {
@@ -69,7 +85,7 @@ function toUpdateData(
 }
 
 export async function createStudent(formData: FormData): Promise<ActionResult> {
-  await requireStudentWrite("create");
+  const session = await requireStudentWrite("create");
 
   const raw = readForm(formData);
   const parsed = studentCreateSchema.safeParse(raw);
@@ -77,8 +93,27 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    await db.student.create({ data: toData(parsed.data) });
+    await db.$transaction(async (tx) => {
+      const created = await tx.student.create({
+        data: toData(parsed.data),
+        select: { id: true, ...STUDENT_SNAPSHOT_SELECT },
+      });
+
+      const { id: _id, ...newValues } = created;
+      void _id;
+
+      await logStudentAudit({
+        studentId: created.id,
+        action: "CREATE",
+        actorId,
+        actorName,
+        newValues,
+        tx,
+      });
+    });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã học viên đã tồn tại" };
@@ -91,7 +126,7 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateStudent(id: string, formData: FormData): Promise<ActionResult> {
-  await requireStudentWrite("update");
+  const session = await requireStudentWrite("update");
 
   const raw = readForm(formData);
   const parsed = studentUpdateSchema.safeParse(raw);
@@ -99,8 +134,33 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  const before = await db.student.findUnique({
+    where: { id },
+    select: STUDENT_SNAPSHOT_SELECT,
+  });
+  if (!before) return { error: "Không tìm thấy học viên" };
+
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    await db.student.update({ where: { id }, data: toUpdateData(parsed.data) });
+    await db.$transaction(async (tx) => {
+      const updated = await tx.student.update({
+        where: { id },
+        data: toUpdateData(parsed.data),
+        select: STUDENT_SNAPSHOT_SELECT,
+      });
+
+      await logStudentAudit({
+        studentId: id,
+        action: "UPDATE",
+        actorId,
+        actorName,
+        oldValues: before,
+        newValues: updated,
+        changedFields: detectChangedFields(before, updated),
+        tx,
+      });
+    });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã học viên đã tồn tại" };
@@ -114,12 +174,32 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
 }
 
 export async function deleteStudent(id: string): Promise<ActionResult> {
-  await requireStudentWrite("delete");
+  const session = await requireStudentWrite("delete");
+
+  const before = await db.student.findUnique({
+    where: { id },
+    select: STUDENT_SNAPSHOT_SELECT,
+  });
+  if (!before) return { error: "Không thể xoá học viên này" };
+
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    // Soft delete — Student has deletedAt
-    await db.student.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    await db.$transaction(async (tx) => {
+      // Soft delete — Student has deletedAt
+      await tx.student.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+
+      await logStudentAudit({
+        studentId: id,
+        action: "DELETE",
+        actorId,
+        actorName,
+        oldValues: before,
+        tx,
+      });
     });
   } catch {
     return { error: "Không thể xoá học viên này" };

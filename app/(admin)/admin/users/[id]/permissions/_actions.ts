@@ -9,6 +9,7 @@ import {
   grantCreateSchema,
   grantUpdateSchema,
 } from "@/lib/validators/permission-grant";
+import { logGrantAudit, getAuditActor } from "@/lib/audit/log";
 
 async function requireUsersManage() {
   const session = await auth();
@@ -16,12 +17,13 @@ async function requireUsersManage() {
   if (!can(session.user, "users:manage")) {
     redirect("/admin/dashboard?error=unauthorized");
   }
-  return session.user;
+  return session;
 }
 
 // ─── ADD GRANT ──────────────────────────────────────────────────────
 export async function addGrantAction(userId: string, formData: FormData) {
-  const me = await requireUsersManage();
+  const session = await requireUsersManage();
+  const me = session.user;
 
   const parsed = grantCreateSchema.safeParse({
     action: formData.get("action"),
@@ -62,8 +64,10 @@ export async function addGrantAction(userId: string, formData: FormData) {
     };
   }
 
-  await db.$transaction([
-    db.userPermissionGrant.create({
+  const { actorId, actorName } = getAuditActor(session);
+
+  await db.$transaction(async (tx) => {
+    const newGrant = await tx.userPermissionGrant.create({
       data: {
         userId,
         action: parsed.data.action,
@@ -71,12 +75,25 @@ export async function addGrantAction(userId: string, formData: FormData) {
         reason: parsed.data.reason ?? null,
         grantedBy: me.id,
       },
-    }),
-    db.user.update({
+    });
+
+    await tx.user.update({
       where: { id: userId },
       data: { tokenVersion: { increment: 1 } }, // force re-login
-    }),
-  ]);
+    });
+
+    await logGrantAudit({
+      userId,
+      grantId: newGrant.id,
+      actionKey: parsed.data.action,
+      action: "ADD",
+      actorId,
+      actorName,
+      newGrant: parsed.data.grant,
+      reason: parsed.data.reason ?? undefined,
+      tx,
+    });
+  });
 
   revalidatePath(`/admin/users/${userId}/permissions`);
   revalidatePath(`/admin/users/${userId}/edit`);
@@ -86,7 +103,7 @@ export async function addGrantAction(userId: string, formData: FormData) {
 
 // ─── UPDATE GRANT ───────────────────────────────────────────────────
 export async function updateGrantAction(grantId: string, formData: FormData) {
-  await requireUsersManage();
+  const session = await requireUsersManage();
 
   const parsed = grantUpdateSchema.safeParse({
     grant: formData.get("grant"),
@@ -100,48 +117,80 @@ export async function updateGrantAction(grantId: string, formData: FormData) {
     };
   }
 
-  const grant = await db.userPermissionGrant.findUnique({
+  const currentGrant = await db.userPermissionGrant.findUnique({
     where: { id: grantId },
-    select: { userId: true },
+    select: { userId: true, action: true, grant: true },
   });
-  if (!grant) return { ok: false as const, error: "Không tìm thấy grant" };
+  if (!currentGrant)
+    return { ok: false as const, error: "Không tìm thấy grant" };
 
-  await db.$transaction([
-    db.userPermissionGrant.update({
+  const { actorId, actorName } = getAuditActor(session);
+
+  await db.$transaction(async (tx) => {
+    await tx.userPermissionGrant.update({
       where: { id: grantId },
       data: { grant: parsed.data.grant, reason: parsed.data.reason ?? null },
-    }),
-    db.user.update({
-      where: { id: grant.userId },
-      data: { tokenVersion: { increment: 1 } },
-    }),
-  ]);
+    });
 
-  revalidatePath(`/admin/users/${grant.userId}/permissions`);
-  revalidatePath(`/admin/users/${grant.userId}/edit`);
+    await tx.user.update({
+      where: { id: currentGrant.userId },
+      data: { tokenVersion: { increment: 1 } },
+    });
+
+    await logGrantAudit({
+      userId: currentGrant.userId,
+      grantId,
+      actionKey: currentGrant.action,
+      action: "UPDATE",
+      actorId,
+      actorName,
+      oldGrant: currentGrant.grant,
+      newGrant: parsed.data.grant,
+      reason: parsed.data.reason ?? undefined,
+      tx,
+    });
+  });
+
+  revalidatePath(`/admin/users/${currentGrant.userId}/permissions`);
+  revalidatePath(`/admin/users/${currentGrant.userId}/edit`);
   return { ok: true as const };
 }
 
 // ─── REMOVE GRANT ───────────────────────────────────────────────────
 export async function removeGrantAction(grantId: string) {
-  await requireUsersManage();
+  const session = await requireUsersManage();
 
-  const grant = await db.userPermissionGrant.findUnique({
+  const currentGrant = await db.userPermissionGrant.findUnique({
     where: { id: grantId },
-    select: { userId: true },
+    select: { userId: true, action: true, grant: true },
   });
-  if (!grant) return { ok: false as const, error: "Không tìm thấy grant" };
+  if (!currentGrant)
+    return { ok: false as const, error: "Không tìm thấy grant" };
 
-  await db.$transaction([
-    db.userPermissionGrant.delete({ where: { id: grantId } }),
-    db.user.update({
-      where: { id: grant.userId },
+  const { actorId, actorName } = getAuditActor(session);
+
+  await db.$transaction(async (tx) => {
+    await tx.userPermissionGrant.delete({ where: { id: grantId } });
+
+    await tx.user.update({
+      where: { id: currentGrant.userId },
       data: { tokenVersion: { increment: 1 } },
-    }),
-  ]);
+    });
 
-  revalidatePath(`/admin/users/${grant.userId}/permissions`);
-  revalidatePath(`/admin/users/${grant.userId}/edit`);
+    await logGrantAudit({
+      userId: currentGrant.userId,
+      grantId: null,
+      actionKey: currentGrant.action,
+      action: "REMOVE",
+      actorId,
+      actorName,
+      oldGrant: currentGrant.grant,
+      tx,
+    });
+  });
+
+  revalidatePath(`/admin/users/${currentGrant.userId}/permissions`);
+  revalidatePath(`/admin/users/${currentGrant.userId}/edit`);
   revalidatePath(`/admin/users`);
   return { ok: true as const };
 }
