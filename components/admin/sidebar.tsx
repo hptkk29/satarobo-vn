@@ -24,6 +24,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   KeyRound,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +84,10 @@ const NAV_GROUPS = [
   },
   {
     label: "Hệ thống",
-    items: [{ label: "Cài đặt", href: "/admin/settings", icon: Settings }],
+    items: [
+      { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText },
+      { label: "Cài đặt", href: "/admin/settings", icon: Settings },
+    ],
   },
 ];
 
