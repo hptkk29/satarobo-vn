@@ -25,6 +25,7 @@ import {
   ClipboardCheck,
   KeyRound,
   ScrollText,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +81,12 @@ const NAV_GROUPS = [
       { label: "Tin tức", href: "/admin/news", icon: Newspaper },
       { label: "Hình ảnh trang", href: "/admin/site-content", icon: ImageIcon },
       { label: "Tracking", href: "/admin/marketing", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Tài chính",
+    items: [
+      { label: "Phương thức TT", href: "/admin/payment-methods", icon: CreditCard },
     ],
   },
   {

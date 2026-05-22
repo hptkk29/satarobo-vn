@@ -1829,6 +1829,9 @@ model PaymentMethod {
 
   orders Order[]
 
+  // Phase 5.6.1 — Audit log
+  auditLogs PaymentMethodAuditLog[]
+
   @@index([code])
   @@index([isActive, displayOrder])
 }
@@ -1953,6 +1956,31 @@ model OrderStatusHistory {
   createdAt DateTime @default(now())
 
   @@index([orderId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
+}
+
+// Phase 5.6.1 — PaymentMethod audit log
+model PaymentMethodAuditLog {
+  id              String        @id @default(cuid())
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  action String // "CREATE" | "UPDATE" | "ENABLE" | "DISABLE"
+
+  changedByUserId String? // no FK, defensive
+  changedByName   String
+
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[] @default([])
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentMethodId, createdAt])
   @@index([createdAt])
   @@index([changedByUserId])
 }
