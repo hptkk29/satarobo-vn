@@ -61,6 +61,13 @@ export default function AgeCoursePopup() {
       goal,
     });
     setIsOpen(false);
+    // Scroll xuống section Lộ trình để PH thấy khoá học vừa chọn — delay nhẹ
+    // cho Roadmap5Years kịp re-render với tab/year đúng.
+    setTimeout(() => {
+      document
+        .getElementById("roadmap")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   };
 
   useEffect(() => {
