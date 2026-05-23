@@ -26,6 +26,7 @@ import {
   KeyRound,
   ScrollText,
   CreditCard,
+  ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -86,6 +87,7 @@ const NAV_GROUPS = [
   {
     label: "Tài chính",
     items: [
+      { label: "Đơn hàng", href: "/admin/orders", icon: ShoppingBag },
       { label: "Phương thức TT", href: "/admin/payment-methods", icon: CreditCard },
     ],
   },
