@@ -52,6 +52,7 @@ const ADMIN_ROUTE_SEGMENTS = new Set<string>([
   "students",
   "teachers",
   "users",
+  "vouchers",
 ]);
 
 /** First path segment, e.g. "/leads/123" → "leads". */

@@ -113,6 +113,21 @@ enum OrderItemType {
   PRODUCT // link tới Product (Sprint 5.10, nullable for now)
 }
 
+// ─── Phase 5.7 — Voucher enums ────────────────────────────────────────────
+
+enum VoucherType {
+  COURSE // áp dụng cho đơn type=COURSE
+  PACKAGE // áp dụng cho đơn type=PACKAGE
+  KIT_ROBOT // áp dụng cho product category=KIT (Sprint 5.10 ready)
+  SENSOR // áp dụng cho product category=SENSOR (Sprint 5.10 ready)
+  ALL // áp dụng cho bất kỳ loại đơn
+}
+
+enum VoucherDiscountKind {
+  PERCENT // % giảm + max cap VND
+  FIXED // tiền cố định VND
+}
+
 // ─── Auth (NextAuth / Auth.js) ────────────────────────────────────────────────
 
 model Account {
@@ -1890,6 +1905,9 @@ model Order {
   items   OrderItem[]
   history OrderStatusHistory[]
 
+  // Sprint 5.7 — Voucher
+  voucherRedemption VoucherRedemption? @relation("OrderVoucherRedemption")
+
   @@index([code])
   @@index([status])
   @@index([type, status])
@@ -1981,6 +1999,90 @@ model PaymentMethodAuditLog {
   createdAt DateTime @default(now())
 
   @@index([paymentMethodId, createdAt])
+  @@index([createdAt])
+  @@index([changedByUserId])
+}
+
+// ─── Phase 5.7 — Voucher foundation ───────────────────────────────────────
+// 5 types (COURSE/PACKAGE/KIT_ROBOT/SENSOR/ALL) × 2 discount kinds
+// (PERCENT + max cap, FIXED). KIT_ROBOT/SENSOR can't apply until Sprint 5.10
+// adds Product model — created here to lock the schema shape early.
+
+model Voucher {
+  id           String              @id @default(cuid())
+  code         String              @unique // "OPENING2026", "SATA8_LAUNCH"
+  name         String // "Giảm 20% khai trương 2026"
+  description  String?             @db.Text
+  type         VoucherType
+  discountKind VoucherDiscountKind
+
+  // Discount values — one of two non-null depending on discountKind
+  discountPercent Int? // 1-100 (when PERCENT)
+  discountAmount  Int? // VND (when FIXED)
+  maxDiscount     Int? // cap VND (only when PERCENT)
+  minOrderValue   Int  @default(0)
+
+  // Usage limits
+  quantity          Int? // null = unlimited
+  usedCount         Int  @default(0)
+  usageLimitPerUser Int  @default(1)
+
+  // Validity
+  validFrom  DateTime
+  validUntil DateTime
+  isActive   Boolean  @default(true)
+
+  // Audit
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdByUserId String?
+
+  redemptions VoucherRedemption[]
+  auditLogs   VoucherAuditLog[]
+
+  @@index([code])
+  @@index([type, isActive, validFrom, validUntil])
+  @@index([createdAt])
+}
+
+model VoucherRedemption {
+  id        String  @id @default(cuid())
+  voucherId String
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+
+  orderId String @unique // 1 order = 1 voucher max
+  order   Order  @relation("OrderVoucherRedemption", fields: [orderId], references: [id], onDelete: Cascade)
+
+  customerPhone String // snapshot for per-user limit check
+  customerId    String? // future: User account link (no FK, defensive)
+
+  discountApplied Int // VND actual discount snapshot
+
+  redeemedAt DateTime @default(now())
+
+  @@index([voucherId, redeemedAt])
+  @@index([customerPhone, voucherId])
+}
+
+model VoucherAuditLog {
+  id        String  @id @default(cuid())
+  voucherId String
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  action          String // CREATE | UPDATE | ENABLE | DISABLE
+  changedByUserId String? // no FK, defensive
+  changedByName   String
+
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[] @default([])
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([voucherId, createdAt])
   @@index([createdAt])
   @@index([changedByUserId])
 }

@@ -171,7 +171,11 @@ export type Action =
   // --- Phase 5.6 — Financial (Payment + Order) ---
   | "payments:manage"
   | "orders:view"
-  | "orders:manage";
+  | "orders:manage"
+
+  // --- Phase 5.7 — Vouchers ---
+  | "vouchers:view"
+  | "vouchers:manage";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -343,6 +347,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "payments:manage": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "MANAGER", "SALES", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
+
+  // --- Phase 5.7 — Vouchers ---
+  "vouchers:view": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING", "ACCOUNTANT"],
+  "vouchers:manage": ["SUPER_ADMIN", "MANAGER", "MARKETING", "ACCOUNTANT"],
 };
 
 // =============================================================================
