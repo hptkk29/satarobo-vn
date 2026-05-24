@@ -14,6 +14,7 @@ import { generateOrderCode } from "@/lib/orders/code";
 import { canTransition } from "@/lib/orders/status";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
+import { validateAndComputeDiscount } from "@/lib/vouchers/compute";
 
 const PAGE_SIZE = 20;
 
@@ -139,6 +140,39 @@ export async function createOrderManualAction(input: unknown) {
     (s, it) => s + it.unitPrice * it.quantity,
     0,
   );
+
+  // Voucher: validate + compute discount BEFORE total calculation.
+  // Server is source of truth — discountAmount sent from UI is overridden
+  // when a valid voucher code is provided.
+  let voucherInfo: {
+    voucherId: string;
+    voucherCode: string;
+    discountAmount: number;
+  } | null = null;
+
+  if (data.voucherCode?.trim()) {
+    const voucherResult = await validateAndComputeDiscount({
+      code: data.voucherCode,
+      orderType: data.type,
+      subtotal,
+      customerPhone: data.customerPhone,
+    });
+
+    if (!voucherResult.ok) {
+      return {
+        ok: false as const,
+        error: `Voucher: ${voucherResult.message}`,
+      };
+    }
+
+    voucherInfo = {
+      voucherId: voucherResult.voucherId,
+      voucherCode: voucherResult.voucherCode,
+      discountAmount: voucherResult.discountAmount,
+    };
+    data.discountAmount = voucherResult.discountAmount;
+  }
+
   const totalAmount = subtotal - data.discountAmount + data.shippingFee;
   if (totalAmount < 0) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
@@ -205,7 +239,7 @@ export async function createOrderManualAction(input: unknown) {
         discountAmount: data.discountAmount,
         shippingFee: data.shippingFee,
         totalAmount,
-        voucherCode: data.voucherCode?.trim() || null,
+        voucherCode: voucherInfo?.voucherCode ?? data.voucherCode?.trim() ?? null,
         customerNote: data.customerNote?.trim() || null,
         internalNote: data.internalNote?.trim() || null,
         items: {
@@ -225,11 +259,73 @@ export async function createOrderManualAction(input: unknown) {
       select: { id: true, code: true },
     });
 
+    // Voucher redemption + atomic increment (Sprint 5.7.1).
+    if (voucherInfo) {
+      await tx.voucherRedemption.create({
+        data: {
+          voucherId: voucherInfo.voucherId,
+          orderId: order.id,
+          customerPhone: data.customerPhone.trim(),
+          customerId: null, // manual orders không có User account
+          discountApplied: voucherInfo.discountAmount,
+        },
+      });
+
+      // Atomic increment + race-condition guard. Nếu 2 đơn cùng vớt
+      // voucher cuối cùng, tx sẽ rollback nhánh thứ 2.
+      const updated = await tx.voucher.update({
+        where: { id: voucherInfo.voucherId },
+        data: { usedCount: { increment: 1 } },
+        select: { usedCount: true, quantity: true },
+      });
+
+      if (updated.quantity != null && updated.usedCount > updated.quantity) {
+        throw new Error("VOUCHER_QUANTITY_EXCEEDED_RACE");
+      }
+    }
+
     return order;
   });
 
   revalidatePath("/orders");
+  if (voucherInfo) {
+    revalidatePath("/vouchers");
+    revalidatePath(`/vouchers/${voucherInfo.voucherId}`);
+  }
   return { ok: true as const, id: created.id, code: created.code };
+}
+
+// ─── PREVIEW VOUCHER (no DB write) ──────────────────────────────────
+export async function previewVoucherAction(input: {
+  code: string;
+  orderType: OrderType;
+  subtotal: number;
+  customerPhone: string;
+}) {
+  await requireOrdersManage();
+
+  if (!input.code?.trim()) {
+    return { ok: false as const, error: "Vui lòng nhập mã voucher" };
+  }
+  if (!input.customerPhone?.trim()) {
+    return { ok: false as const, error: "Vui lòng nhập SĐT khách trước" };
+  }
+  if (input.subtotal <= 0) {
+    return { ok: false as const, error: "Vui lòng chọn sản phẩm trước" };
+  }
+
+  const result = await validateAndComputeDiscount(input);
+  if (!result.ok) {
+    return { ok: false as const, error: result.message };
+  }
+
+  return {
+    ok: true as const,
+    voucherId: result.voucherId,
+    voucherCode: result.voucherCode,
+    voucherName: result.voucherName,
+    discountAmount: result.discountAmount,
+  };
 }
 
 // ─── CHANGE STATUS ──────────────────────────────────────────────────

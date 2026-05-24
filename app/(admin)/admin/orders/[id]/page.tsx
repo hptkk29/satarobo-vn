@@ -42,6 +42,13 @@ export default async function OrderDetailPage({ params }: Props) {
       lead: { select: { id: true, parentName: true } },
       center: { select: { id: true, name: true } },
       history: { orderBy: { createdAt: "desc" } },
+      voucherRedemption: {
+        include: {
+          voucher: {
+            select: { id: true, code: true, name: true, type: true },
+          },
+        },
+      },
     },
   });
   if (!order) notFound();

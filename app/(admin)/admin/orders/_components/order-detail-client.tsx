@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Prisma, OrderStatus } from "@prisma/client";
@@ -35,6 +36,11 @@ type OrderWithIncludes = Prisma.OrderGetPayload<{
     lead: { select: { id: true; parentName: true } };
     center: { select: { id: true; name: true } };
     history: true;
+    voucherRedemption: {
+      include: {
+        voucher: { select: { id: true; code: true; name: true; type: true } };
+      };
+    };
   };
 }>;
 
@@ -204,7 +210,20 @@ export function OrderDetailClient({
               <tr>
                 <td colSpan={3} className="p-2 text-right text-gray-600">
                   Giảm giá
-                  {order.voucherCode ? ` (${order.voucherCode})` : ""}:
+                  {order.voucherRedemption ? (
+                    <>
+                      {" — "}
+                      <Link
+                        href={`/vouchers/${order.voucherRedemption.voucher.id}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {order.voucherRedemption.voucher.code}
+                      </Link>
+                    </>
+                  ) : order.voucherCode ? (
+                    <> — {order.voucherCode} (manual)</>
+                  ) : null}
+                  :
                 </td>
                 <td className="p-2 text-right text-red-600 tabular-nums">
                   -{order.discountAmount.toLocaleString("vi-VN")}

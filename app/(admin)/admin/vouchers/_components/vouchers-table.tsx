@@ -140,8 +140,13 @@ export function VouchersTable({
                     {discountDisplay(v)}
                   </TableCell>
                   <TableCell className="text-right text-sm tabular-nums">
-                    {v.usedCount}
-                    {v.quantity != null ? ` / ${v.quantity}` : " / ∞"}
+                    <Link
+                      href={`/vouchers/${v.id}`}
+                      className="text-blue-600 hover:underline"
+                    >
+                      {v.usedCount}
+                      {v.quantity != null ? ` / ${v.quantity}` : " / ∞"}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-xs">
                     <ValidityBadge v={v} />

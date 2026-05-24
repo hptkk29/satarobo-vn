@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createOrderManualAction } from "../_actions";
+import { createOrderManualAction, previewVoucherAction } from "../_actions";
 
 type Course = {
   id: string;
@@ -82,6 +82,13 @@ export function OrderCreateForm({
   const [discountAmount, setDiscountAmount] = useState(0);
   const [shippingFee, setShippingFee] = useState(0);
   const [voucherCode, setVoucherCode] = useState("");
+  const [voucherStatus, setVoucherStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "valid"; voucherName: string; discount: number }
+    | { kind: "invalid"; error: string }
+  >({ kind: "idle" });
+  const [previewPending, startPreviewTransition] = useTransition();
 
   // Notes
   const [customerNote, setCustomerNote] = useState("");
@@ -116,6 +123,47 @@ export function OrderCreateForm({
 
   const subtotal = unitPrice * quantity;
   const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
+
+  function handlePreviewVoucher() {
+    if (!voucherCode.trim()) {
+      setVoucherStatus({ kind: "idle" });
+      return;
+    }
+    if (!customer.phone.trim()) {
+      setVoucherStatus({
+        kind: "invalid",
+        error: "Vui lòng nhập SĐT khách trước",
+      });
+      return;
+    }
+    if (subtotal <= 0) {
+      setVoucherStatus({
+        kind: "invalid",
+        error: "Vui lòng chọn sản phẩm trước",
+      });
+      return;
+    }
+
+    setVoucherStatus({ kind: "loading" });
+    startPreviewTransition(async () => {
+      const result = await previewVoucherAction({
+        code: voucherCode,
+        orderType,
+        subtotal,
+        customerPhone: customer.phone,
+      });
+      if (result.ok) {
+        setVoucherStatus({
+          kind: "valid",
+          voucherName: result.voucherName,
+          discount: result.discountAmount,
+        });
+        setDiscountAmount(result.discountAmount);
+      } else {
+        setVoucherStatus({ kind: "invalid", error: result.error });
+      }
+    });
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -383,32 +431,67 @@ export function OrderCreateForm({
         <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
           Định giá
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Mã voucher</Label>
-            <Input
-              value={voucherCode}
-              onChange={(e) => setVoucherCode(e.target.value)}
-              placeholder="Tuỳ chọn (Sprint 5.7)"
-            />
+            <div className="flex gap-2">
+              <Input
+                value={voucherCode}
+                onChange={(e) => {
+                  setVoucherCode(e.target.value.toUpperCase());
+                  setVoucherStatus({ kind: "idle" });
+                }}
+                placeholder="VD: OPENING2026"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handlePreviewVoucher}
+                disabled={previewPending}
+              >
+                {previewPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Check"
+                )}
+              </Button>
+            </div>
+            {voucherStatus.kind === "valid" && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-sm text-green-800">
+                ✅ <strong>{voucherStatus.voucherName}</strong> — giảm{" "}
+                <strong>
+                  {voucherStatus.discount.toLocaleString("vi-VN")} đ
+                </strong>
+              </div>
+            )}
+            {voucherStatus.kind === "invalid" && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+                ❌ {voucherStatus.error}
+              </div>
+            )}
           </div>
-          <div className="space-y-1.5">
-            <Label>Giảm giá (VND)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={discountAmount}
-              onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Phí vận chuyển (VND)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={shippingFee}
-              onChange={(e) => setShippingFee(Number(e.target.value) || 0)}
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label>Giảm giá (VND)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={discountAmount}
+                onChange={(e) =>
+                  setDiscountAmount(Number(e.target.value) || 0)
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phí vận chuyển (VND)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={shippingFee}
+                onChange={(e) => setShippingFee(Number(e.target.value) || 0)}
+              />
+            </div>
           </div>
         </div>
         <div className="text-right">
