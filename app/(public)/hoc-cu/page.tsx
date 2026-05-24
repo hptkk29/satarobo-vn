@@ -121,7 +121,7 @@ export default async function HocCuPage() {
       </SectionBase>
 
       {/* 3 KITS DETAIL */}
-      <section id="kits" className="bg-gradient-to-b from-white to-orange-50/30 py-20">
+      <section id="kits" className="bg-gradient-to-b from-white to-orange-50/30 py-16">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 mb-3 bg-orange-100 border border-orange-200 rounded-full px-4 py-1.5">
@@ -319,7 +319,7 @@ export default async function HocCuPage() {
       </SectionBase>
 
       {/* FINAL CTA */}
-      <section className="bg-gradient-to-r from-orange-500 via-orange-600 to-purple-600 py-16 md:py-20">
+      <section className="bg-gradient-to-r from-orange-500 via-orange-600 to-purple-600 py-16">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-4xl font-black text-white mb-4">
             Chưa biết chọn bộ nào phù hợp với con?

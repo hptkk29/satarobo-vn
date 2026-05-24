@@ -239,7 +239,7 @@
   }
 
   .section-padding {
-    @apply py-12 sm:py-16 lg:py-20;
+    @apply py-16;
   }
 
   .heading-2 {

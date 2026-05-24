@@ -1,21 +1,12 @@
 /**
- * Rolling deadline cho ưu đãi 490k.
- * Mốc trong tháng: 5, 10, 15, 20, 25.
- * Sau ngày 25 → deadline = ngày 2 tháng sau.
+ * Rolling deadline đồng bộ với lễ khai trương — countdown đến hết Thứ 7
+ * (mốc Sun 00:00). 00:00 Chủ nhật → tự nhảy sang Thứ 7 tuần kế tiếp.
+ * Logic chung: lib/opening-date.ts.
  */
-export function getNextDeadline(): Date {
-  const now = new Date();
-  const day = now.getDate();
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  const milestones = [5, 10, 15, 20, 25];
+import { getOpeningCountdownTarget } from "@/lib/opening-date";
 
-  for (const m of milestones) {
-    if (day <= m) {
-      return new Date(year, month, m + 1, 0, 0, 0);
-    }
-  }
-  return new Date(year, month + 1, 2, 0, 0, 0);
+export function getNextDeadline(): Date {
+  return getOpeningCountdownTarget(new Date());
 }
 
 /**

@@ -86,8 +86,8 @@ export const tokens = {
 
   // Spacing
   spacing: {
-    section: "py-16 md:py-24 lg:py-32",
-    sectionSm: "py-12 md:py-16",
+    section: "py-16",
+    sectionSm: "py-16",
     container: "container mx-auto px-4 md:px-6 lg:px-8",
     containerNarrow: "container mx-auto px-4 max-w-4xl",
     card: "p-6 md:p-8",

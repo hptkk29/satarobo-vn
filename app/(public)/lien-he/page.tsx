@@ -101,7 +101,7 @@ export default async function ContactPage() {
       </div>
 
       {/* ─── Hero SOFT-WARM ─── */}
-      <section className={`relative overflow-hidden ${tokens.vibrantBg.softWarm} py-16 md:py-20`}>
+      <section className={`relative overflow-hidden ${tokens.vibrantBg.softWarm} py-16`}>
         <GlowOrb color="orange" position="bottom-right" size="lg" />
         <div className="container max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center relative z-10">
           <div>

@@ -226,7 +226,7 @@ export function ProductPageTemplate({
 
       {/* ─── Final CTA TWILIGHT ─── */}
       <section
-        className={`relative overflow-hidden ${tokens.vibrantBg.ctaFinal} py-20 md:py-28`}
+        className={`relative overflow-hidden ${tokens.vibrantBg.ctaFinal} py-16`}
       >
         <Sparkles density="high" colors={["orange", "purple"]} />
         <GlowOrb color="orange" position="bottom-left" size="xl" />

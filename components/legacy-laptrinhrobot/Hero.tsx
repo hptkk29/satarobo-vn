@@ -33,7 +33,7 @@ export default function Hero() {
   };
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-8 sm:py-10 lg:py-12">
+    <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-16">
       <div className="container-site">
         <div className="grid max-w-full gap-7 lg:grid-cols-[1fr_0.92fr] lg:items-center xl:gap-10">
           <div className="min-w-0 text-center lg:text-left">

@@ -149,7 +149,7 @@ export function FAQSection() {
   return (
     <section
       id="faq"
-      className="bg-gradient-to-b from-orange-50 via-amber-50/40 to-white py-16 md:py-24"
+      className="bg-gradient-to-b from-orange-50 via-amber-50/40 to-white py-16"
     >
       <div className="container mx-auto max-w-3xl px-4">
         {/* Header */}

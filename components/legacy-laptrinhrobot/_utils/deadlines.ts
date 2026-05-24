@@ -1,4 +1,12 @@
-// Rolling deadline: ngày 5, 10, 15, 20, 25 mỗi tháng. Sau ngày 25 → cuối tháng.
+// Rolling deadline đồng bộ với lễ khai trương:
+// - Countdown chạy đến hết ngày Thứ 7 (mốc Sun 00:00).
+// - 00:00 Chủ nhật → tự rollover sang Thứ 7 tuần kế tiếp.
+// Logic chung: lib/opening-date.ts.
+
+import {
+  getNextOpeningDate,
+  getOpeningCountdownTarget,
+} from "@/lib/opening-date";
 
 export interface TimeRemaining {
   days: number;
@@ -9,26 +17,33 @@ export interface TimeRemaining {
   expired: boolean;
 }
 
+/**
+ * Trả về Date = cuối ngày Thứ 7 đang tới (Sun 00:00). Hết countdown này
+ * thì helper tự nhảy sang Thứ 7 tuần sau.
+ */
 export function getNextDeadline(): Date {
-  const now = new Date();
-  const day = now.getDate();
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  const milestones = [5, 10, 15, 20, 25];
-
-  for (const milestone of milestones) {
-    if (day <= milestone) {
-      return new Date(year, month, milestone, 23, 59, 59);
-    }
-  }
-  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-  return new Date(year, month, lastDayOfMonth, 23, 59, 59);
+  return getOpeningCountdownTarget(new Date());
 }
 
+/**
+ * Format ngày khai trương để hiển thị (DD/MM/YYYY của Thứ 7 đang tới —
+ * KHÔNG phải mốc Sun 00:00).
+ */
 export function formatDeadline(deadline: Date): string {
-  const dd = String(deadline.getDate()).padStart(2, "0");
-  const mm = String(deadline.getMonth() + 1).padStart(2, "0");
-  const yyyy = deadline.getFullYear();
+  // Nếu deadline là Sun 00:00 thì lùi 1 ngày để hiển thị "Thứ 7".
+  // Khi `deadline` là Date bất kỳ (đề phòng caller truyền vào kiểu khác),
+  // fall back về chính deadline.
+  const openingSat =
+    deadline.getDay() === 0
+      ? (() => {
+          const d = new Date(deadline);
+          d.setDate(d.getDate() - 1);
+          return d;
+        })()
+      : getNextOpeningDate(deadline);
+  const dd = String(openingSat.getDate()).padStart(2, "0");
+  const mm = String(openingSat.getMonth() + 1).padStart(2, "0");
+  const yyyy = openingSat.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
 }
 

@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Flame, CalendarClock } from "lucide-react";
 import { FadeIn } from "@/components/motion/fade-in";
-
-// Early Bird deadline: 25/05/2026 23:59:59 Vietnam time (UTC+7) = 16:59:59 UTC
-const DEADLINE_MS = Date.UTC(2026, 4, 25, 16, 59, 59);
+import {
+  getNextOpeningDate,
+  getOpeningCountdownTarget,
+  formatVietnameseDateLong,
+} from "@/lib/opening-date";
 
 interface TimeLeft {
   days: number;
@@ -14,12 +16,25 @@ interface TimeLeft {
   minutes: number;
   seconds: number;
   expired: boolean;
+  openingDate: Date;
 }
 
 function getTimeLeft(): TimeLeft {
-  const diff = DEADLINE_MS - Date.now();
+  const now = new Date();
+  const target = getOpeningCountdownTarget(now);
+  const openingDate = getNextOpeningDate(now);
+  const diff = target.getTime() - now.getTime();
   if (diff <= 0) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
+    // Edge case: ngay khi pass mốc Sun 00:00 — helper sẽ tự roll sang
+    // Sat tuần kế tiếp ở tick interval kế tiếp.
+    return {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      expired: true,
+      openingDate,
+    };
   }
   return {
     days: Math.floor(diff / (1000 * 60 * 60 * 24)),
@@ -27,6 +42,7 @@ function getTimeLeft(): TimeLeft {
     minutes: Math.floor((diff / (1000 * 60)) % 60),
     seconds: Math.floor((diff / 1000) % 60),
     expired: false,
+    openingDate,
   };
 }
 
@@ -41,11 +57,13 @@ export function EarlyBirdCountdown() {
     return () => window.clearInterval(id);
   }, []);
 
-  // Don't render anything until client-mounted (avoid SSR mismatch); hide when expired.
-  if (!time || time.expired) return null;
+  // Don't render anything until client-mounted (avoid SSR mismatch).
+  if (!time) return null;
+
+  const openingDateLabel = formatVietnameseDateLong(time.openingDate);
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 py-12 md:py-16">
+    <section className="relative overflow-hidden bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 py-16">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.18)_1px,transparent_1px)] [background-size:24px_24px] opacity-50"
@@ -64,7 +82,8 @@ export function EarlyBirdCountdown() {
                 Early Bird Khai Trương — Ưu Đãi Đến 30%
               </h2>
               <p className="text-sm md:text-base opacity-95 max-w-xl">
-                Còn lại đến hết <strong>23:59 ngày 25/05/2026</strong>. Sau ngày này,
+                Đếm ngược đến lễ khai trương{" "}
+                <strong>Thứ 7, {openingDateLabel}</strong>. Sau ngày này,
                 tất cả các khoá trở về giá niêm yết.
               </p>
             </div>
@@ -87,7 +106,7 @@ export function EarlyBirdCountdown() {
             </Link>
             <div className="inline-flex items-center gap-2 text-xs sm:text-sm text-white/90">
               <CalendarClock className="w-4 h-4" />
-              <span>Đến hết 23:59 ngày 25/05/2026</span>
+              <span>Khai trương Thứ 7, {openingDateLabel}</span>
             </div>
           </div>
         </FadeIn>

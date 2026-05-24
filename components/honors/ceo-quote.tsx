@@ -12,7 +12,7 @@ export function HonorCEOQuote({ quote, name, title, avatarUrl }: HonorCEOQuotePr
   if (!quote) return null;
 
   return (
-    <section className="container max-w-4xl mx-auto px-4 py-16 md:py-20">
+    <section className="container max-w-4xl mx-auto px-4 py-16">
       <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12 border-l-4 border-orange-500">
         <Quote className="w-12 h-12 text-orange-200 mb-4" aria-hidden="true" />
         <p className="text-xl md:text-2xl text-gray-800 leading-relaxed font-light italic mb-8">

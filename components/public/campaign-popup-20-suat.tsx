@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, Calendar, Clock, MapPin, Phone, Star } from "lucide-react";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import {
+  getNextOpeningDate,
+  getNextMondayOpeningDate,
+  formatVietnameseDate,
+} from "@/lib/opening-date";
 
 // sessionStorage key — prevents re-showing within the same browsing session
 // once the visitor dismisses the popup.
@@ -10,7 +15,7 @@ const STORAGE_KEY = "satarobo-campaign-20-suat-dismissed";
 
 // Window in which this popup is allowed to show.
 const CAMPAIGN_START = new Date("2026-05-15T00:00:00+07:00");
-const CAMPAIGN_END = new Date("2026-05-31T23:59:59+07:00");
+const CAMPAIGN_END = new Date("2026-12-31T23:59:59+07:00");
 
 const INITIAL_DELAY_MS = 15_000; // first show 15s after page load
 
@@ -22,19 +27,25 @@ interface BatchInfo {
 }
 
 // 2 ĐỢT KHAI GIẢNG — mỗi đợt áp dụng cho CẢ 2 cơ sở (211 NHT + 114 HD).
-const BATCHES: BatchInfo[] = [
-  {
-    priority: true,
-    openingDate: "23/5/2026",
-    openingDay: "Thứ 7",
-    schedule: "T4/T7 hằng tuần — 15h45-17h15",
-  },
-  {
-    openingDate: "25/5/2026",
-    openingDay: "Thứ 2",
-    schedule: "T2/T5 hằng tuần — 17h30-19h00",
-  },
-];
+// Ngày tự rolling theo logic ở lib/opening-date.ts: 00:00 Chủ nhật → sang
+// Thứ 7 tuần kế tiếp.
+function computeBatches(now: Date): BatchInfo[] {
+  const sat = getNextOpeningDate(now);
+  const mon = getNextMondayOpeningDate(now);
+  return [
+    {
+      priority: true,
+      openingDate: formatVietnameseDate(sat),
+      openingDay: "Thứ 7",
+      schedule: "T4/T7 hằng tuần — 15h45-17h15",
+    },
+    {
+      openingDate: formatVietnameseDate(mon),
+      openingDay: "Thứ 2",
+      schedule: "T2/T5 hằng tuần — 17h30-19h00",
+    },
+  ];
+}
 
 const ZALO_LINK = `https://zalo.me/${SATA_ROBO_CONTACT.hotlineRaw}`;
 
@@ -57,15 +68,23 @@ function markDismissed() {
 
 export function CampaignPopup20Suat() {
   const [isOpen, setIsOpen] = useState(false);
+  const [mountedAt, setMountedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     const now = new Date();
     if (now < CAMPAIGN_START || now > CAMPAIGN_END) return;
     if (hasBeenDismissed()) return;
 
+    setMountedAt(now);
     const id = window.setTimeout(() => setIsOpen(true), INITIAL_DELAY_MS);
     return () => window.clearTimeout(id);
   }, []);
+
+  // Batches computed client-side để dates rolling đúng theo "hôm nay".
+  const batches = useMemo(
+    () => computeBatches(mountedAt ?? new Date()),
+    [mountedAt],
+  );
 
   const handleDismiss = () => {
     markDismissed();
@@ -141,7 +160,7 @@ export function CampaignPopup20Suat() {
               2 đợt khai giảng
             </h3>
             <div className="space-y-2">
-              {BATCHES.map((b, i) => (
+              {batches.map((b, i) => (
                 <div
                   key={b.openingDate}
                   className={`rounded-lg p-3 transition-colors ${

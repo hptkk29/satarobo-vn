@@ -142,7 +142,7 @@ export default async function CoursesPage() {
       </div>
 
       {/* HERO */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-20 md:py-28">
+      <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-16">
         <Particles
           className="absolute inset-0"
           quantity={40}
@@ -191,7 +191,7 @@ export default async function CoursesPage() {
       </section>
 
       {/* PRODUCTS */}
-      <section className="bg-white py-16 md:py-24">
+      <section className="bg-white py-16">
         <div className="container mx-auto px-4 max-w-7xl">
           <SectionEyebrow icon={GraduationCap} label="2 khoá học chủ lực" tone="orange" />
           <SectionHeading>Chọn khoá phù hợp với con bạn</SectionHeading>
@@ -285,7 +285,7 @@ export default async function CoursesPage() {
       </section>
 
       {/* COMPARISON */}
-      <section className="bg-neutral-50 py-16 md:py-24">
+      <section className="bg-neutral-50 py-16">
         <div className="container mx-auto px-4 max-w-5xl">
           <SectionEyebrow icon={Sparkles} label="So sánh" tone="purple" />
           <SectionHeading>Lập trình Robot vs Luyện thi RoboSim</SectionHeading>
@@ -323,7 +323,7 @@ export default async function CoursesPage() {
       </section>
 
       {/* COMMITMENTS */}
-      <section className="bg-white py-16 md:py-24">
+      <section className="bg-white py-16">
         <div className="container mx-auto px-4 max-w-6xl">
           <SectionEyebrow icon={ShieldCheck} label="Cam kết" tone="orange" />
           <SectionHeading>Tại sao chọn Sata Robo</SectionHeading>
@@ -344,7 +344,7 @@ export default async function CoursesPage() {
       </section>
 
       {/* FINAL CTA */}
-      <section className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-purple-600 py-16 md:py-24">
+      <section className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-purple-600 py-16">
         <Particles
           className="absolute inset-0"
           quantity={30}

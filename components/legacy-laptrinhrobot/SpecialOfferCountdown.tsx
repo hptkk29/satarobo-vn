@@ -174,7 +174,7 @@ export default function SpecialOfferCountdown() {
     promo._type === "primary" ? renderPrimaryCard(promo) : renderSecondaryCard(promo);
 
   return (
-    <section id="special-offer" className="relative overflow-hidden bg-gradient-to-br from-soft-cream via-white to-soft-purple/50 py-12 sm:py-16 lg:py-20">
+    <section id="special-offer" className="relative overflow-hidden bg-gradient-to-br from-soft-cream via-white to-soft-purple/50 py-16">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary-orange/30 to-transparent" />
 
       <div className="container-site relative">

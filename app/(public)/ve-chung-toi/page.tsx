@@ -469,7 +469,7 @@ export default function VeChungToiPage() {
       </SectionBase>
 
       {/* SECTION 5 - SLOGAN BANNER */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-20 md:py-28">
+      <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-purple-50 py-16">
         <Sparkles density="high" colors={["orange", "purple"]} />
         <GlowOrb color="orange" position="top-left" size="xl" />
         <GlowOrb color="purple" position="bottom-right" size="xl" />

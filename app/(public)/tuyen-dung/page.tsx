@@ -116,7 +116,7 @@ export default async function TuyenDungPage() {
         </div>
       </div>
 
-      <section className={`relative overflow-hidden ${tokens.vibrantBg.softWarm} py-16 md:py-24`}>
+      <section className={`relative overflow-hidden ${tokens.vibrantBg.softWarm} py-16`}>
         <GlowOrb color="orange" position="top-right" size="lg" />
         <div className="container max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center relative z-10">
           <div>

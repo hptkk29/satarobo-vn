@@ -102,7 +102,7 @@ export function Testimonials() {
   const secondRow = TESTIMONIALS.slice(4);
 
   return (
-    <section className="overflow-hidden bg-gradient-to-b from-gray-50 to-white py-16 sm:py-20">
+    <section className="overflow-hidden bg-gradient-to-b from-gray-50 to-white py-16">
       <div className="mx-auto mb-8 max-w-6xl px-4 sm:mb-12 sm:px-6 lg:px-8">
         <FadeIn>
           <div className="text-center">

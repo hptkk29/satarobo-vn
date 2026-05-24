@@ -9,7 +9,7 @@ import { ShimmerButton } from "@/components/magic/shimmer-button";
 // gradient với grid mask + 2 glow halos để focus vào CTA chính.
 export function SecondaryCta() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-zinc-950 via-purple-950 to-zinc-950 px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
+    <section className="relative overflow-hidden bg-gradient-to-br from-zinc-950 via-purple-950 to-zinc-950 px-4 py-16 sm:px-6 lg:px-8">
       {/* Grid background với radial mask */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#262626_1px,transparent_1px),linear-gradient(to_bottom,#262626_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-30 [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]" />
 

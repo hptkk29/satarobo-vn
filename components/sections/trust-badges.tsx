@@ -13,7 +13,7 @@ const ACHIEVEMENTS = [
 
 export function TrustBadges() {
   return (
-    <section className="border-y border-gray-100 bg-white px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+    <section className="border-y border-gray-100 bg-white px-4 py-16 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <FadeIn>
           <p className="mb-8 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 sm:text-sm">

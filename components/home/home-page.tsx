@@ -65,7 +65,7 @@ export function HomePage({ courses }: { courses: MainCourseCard[] }) {
 // ============== 2. STATS BAR ==============
 function StatsBar() {
   return (
-    <section className="bg-gradient-to-r from-purple-600 to-orange-500 py-12">
+    <section className="bg-gradient-to-r from-purple-600 to-orange-500 py-16">
       <div className="container mx-auto px-4 max-w-6xl">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-white">
           <StatBlock Icon={Users}>
@@ -122,7 +122,7 @@ function UuTheSection() {
   ];
 
   return (
-    <section className="bg-white py-16 md:py-24">
+    <section className="bg-white py-16">
       <div className="container mx-auto px-4 max-w-6xl">
         <SectionEyebrow icon={Trophy} label="ƯU THẾ + THÀNH TỰU" tone="orange" />
         <SectionHeading>Sata Robo đang là đơn vị tiên phong</SectionHeading>
@@ -195,7 +195,7 @@ function UuTheSection() {
 // ============== 5. CATALOG (2 main courses) ==============
 function CatalogSection({ courses }: { courses: MainCourseCard[] }) {
   return (
-    <section className="bg-white py-16 md:py-24">
+    <section className="bg-white py-16">
       <div className="container mx-auto px-4 max-w-7xl">
         <SectionEyebrow icon={GraduationCap} label="KHOÁ HỌC" tone="orange" />
         <SectionHeading>Chương trình học Robotics</SectionHeading>
@@ -275,7 +275,7 @@ function TravelPrizeBanner() {
   ];
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 py-16 md:py-24">
+    <section className="relative overflow-hidden bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 py-16">
       <Particles
         className="absolute inset-0"
         quantity={30}
@@ -342,7 +342,7 @@ function TravelPrizeBanner() {
 // ============== 8. COMPETITION COUNTDOWN ==============
 function CompetitionCountdown() {
   return (
-    <section className="bg-neutral-900 py-16 md:py-24 text-white">
+    <section className="bg-neutral-900 py-16 text-white">
       <div className="container mx-auto px-4 max-w-6xl">
         <FadeIn>
           <div className="text-center mb-12">
@@ -452,7 +452,7 @@ function CompetitionStage({
 // ============== 9. FINAL CTA ==============
 function FinalCTA() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-purple-600 py-16 md:py-24">
+    <section className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-purple-600 py-16">
       <Particles
         className="absolute inset-0"
         quantity={35}

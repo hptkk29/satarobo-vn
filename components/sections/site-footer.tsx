@@ -117,7 +117,7 @@ export function SiteFooter() {
 
   return (
     <footer className="bg-zinc-950 text-gray-300">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4 lg:gap-12">
           {/* Brand column */}
           <div>

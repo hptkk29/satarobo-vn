@@ -110,9 +110,9 @@ body {
            font-bold text-xs sm:text-sm rounded-full border border-urgent/30;
   }
 
-  /* Section padding */
+  /* Section padding — synced 64px uniform across breakpoints */
   .section-padding {
-    @apply py-12 sm:py-16 lg:py-20;
+    @apply py-16;
   }
 }
 
