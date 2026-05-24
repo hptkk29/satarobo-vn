@@ -21,7 +21,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const sp = await searchParams;
@@ -68,7 +68,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
           </p>
         </div>
         <Link
-          href="/admin/curriculums/new"
+          href="/curriculums/new"
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
@@ -119,7 +119,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Chưa có khoá học nào. Tạo khoá học trước tại{" "}
           <Link
-            href="/admin/courses"
+            href="/courses"
             className="font-semibold underline hover:text-amber-900"
           >
             /admin/courses
@@ -161,7 +161,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
                     >
                       Chưa có giáo trình nào khớp bộ lọc.{" "}
                       <Link
-                        href="/admin/curriculums/new"
+                        href="/curriculums/new"
                         className="text-[#7C3AED] hover:underline"
                       >
                         Tạo mới →
@@ -192,7 +192,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link
-                          href={`/admin/curriculums/${c.id}/edit`}
+                          href={`/curriculums/${c.id}/edit`}
                           className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                         >
                           Mở

@@ -68,7 +68,7 @@ export async function createAssignment(
       data: { ...data, createdById },
       select: { id: true },
     });
-    revalidatePath("/admin/assignments");
+    revalidatePath("/assignments");
     return { ok: true, data: { assignmentId: a.id } };
   } catch (err) {
     return {
@@ -81,7 +81,7 @@ export async function createAssignment(
 export async function createAssignmentAndRedirect(input: AssignmentInput) {
   const res = await createAssignment(input);
   if (!res.ok) return res;
-  redirect(`/admin/assignments/${res.data!.assignmentId}/edit`);
+  redirect(`/assignments/${res.data!.assignmentId}/edit`);
 }
 
 export async function updateAssignment(
@@ -104,8 +104,8 @@ export async function updateAssignment(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/assignments");
-  revalidatePath(`/admin/assignments/${id}/edit`);
+  revalidatePath("/assignments");
+  revalidatePath(`/assignments/${id}/edit`);
   return { ok: true };
 }
 
@@ -139,14 +139,14 @@ export async function deleteAssignment(id: string): Promise<Result> {
       error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/assignments");
+  revalidatePath("/assignments");
   return { ok: true };
 }
 
 export async function deleteAssignmentAndRedirect(id: string): Promise<Result> {
   const res = await deleteAssignment(id);
   if (!res.ok) return res;
-  redirect("/admin/assignments");
+  redirect("/assignments");
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ export async function attachDocument(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/assignments/${assignmentId}/edit`);
+  revalidatePath(`/assignments/${assignmentId}/edit`);
   return { ok: true };
 }
 
@@ -206,7 +206,7 @@ export async function detachDocument(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/assignments/${ad.assignmentId}/edit`);
+  revalidatePath(`/assignments/${ad.assignmentId}/edit`);
   return { ok: true };
 }
 
@@ -268,8 +268,8 @@ export async function publishAssignment(
       error: `Publish thất bại: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/assignments");
-  revalidatePath(`/admin/assignments/${assignmentId}/edit`);
+  revalidatePath("/assignments");
+  revalidatePath(`/assignments/${assignmentId}/edit`);
   return { ok: true, data: { created: enrollments.length } };
 }
 
@@ -303,8 +303,8 @@ export async function changeAssignmentStatus(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/assignments");
-  revalidatePath(`/admin/assignments/${parsed.data.assignmentId}/edit`);
+  revalidatePath("/assignments");
+  revalidatePath(`/assignments/${parsed.data.assignmentId}/edit`);
   return { ok: true };
 }
 
@@ -368,7 +368,7 @@ export async function recordSubmission(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/assignments/${submission.assignmentId}/edit`);
+  revalidatePath(`/assignments/${submission.assignmentId}/edit`);
   return { ok: true };
 }
 
@@ -428,6 +428,6 @@ export async function gradeSubmission(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/assignments/${submission.assignmentId}/edit`);
+  revalidatePath(`/assignments/${submission.assignmentId}/edit`);
   return { ok: true };
 }

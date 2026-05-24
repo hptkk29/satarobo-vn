@@ -22,7 +22,7 @@ import { loginSchema, type LoginInput } from "@/lib/validators/auth";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/admin/dashboard";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const reason = searchParams.get("reason");
   const [loading, setLoading] = useState(false);
 

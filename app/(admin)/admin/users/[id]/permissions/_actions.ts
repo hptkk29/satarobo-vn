@@ -15,7 +15,7 @@ async function requireUsersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "users:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -95,9 +95,9 @@ export async function addGrantAction(userId: string, formData: FormData) {
     });
   });
 
-  revalidatePath(`/admin/users/${userId}/permissions`);
-  revalidatePath(`/admin/users/${userId}/edit`);
-  revalidatePath(`/admin/users`);
+  revalidatePath(`/users/${userId}/permissions`);
+  revalidatePath(`/users/${userId}/edit`);
+  revalidatePath(`/users`);
   return { ok: true as const };
 }
 
@@ -151,8 +151,8 @@ export async function updateGrantAction(grantId: string, formData: FormData) {
     });
   });
 
-  revalidatePath(`/admin/users/${currentGrant.userId}/permissions`);
-  revalidatePath(`/admin/users/${currentGrant.userId}/edit`);
+  revalidatePath(`/users/${currentGrant.userId}/permissions`);
+  revalidatePath(`/users/${currentGrant.userId}/edit`);
   return { ok: true as const };
 }
 
@@ -189,8 +189,8 @@ export async function removeGrantAction(grantId: string) {
     });
   });
 
-  revalidatePath(`/admin/users/${currentGrant.userId}/permissions`);
-  revalidatePath(`/admin/users/${currentGrant.userId}/edit`);
-  revalidatePath(`/admin/users`);
+  revalidatePath(`/users/${currentGrant.userId}/permissions`);
+  revalidatePath(`/users/${currentGrant.userId}/edit`);
+  revalidatePath(`/users`);
   return { ok: true as const };
 }

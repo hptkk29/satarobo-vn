@@ -76,14 +76,14 @@ export function SessionListRow({ session }: { session: Row }) {
       <td className="p-4 text-right">
         <div className="inline-flex items-center gap-1">
           <Link
-            href={`/admin/attendance?sessionId=${session.id}`}
+            href={`/attendance?sessionId=${session.id}`}
             className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
             title="Điểm danh"
           >
             <ClipboardCheck className="h-4 w-4" />
           </Link>
           <Link
-            href={`/admin/sessions/${session.id}/edit`}
+            href={`/sessions/${session.id}/edit`}
             className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
             title="Sửa"
           >

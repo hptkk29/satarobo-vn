@@ -21,7 +21,7 @@ async function requireOrdersView() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "orders:view")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -30,7 +30,7 @@ async function requireOrdersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "orders:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -228,7 +228,7 @@ export async function createOrderManualAction(input: unknown) {
     return order;
   });
 
-  revalidatePath("/admin/orders");
+  revalidatePath("/orders");
   return { ok: true as const, id: created.id, code: created.code };
 }
 
@@ -295,8 +295,8 @@ export async function changeOrderStatusAction(
     });
   });
 
-  revalidatePath("/admin/orders");
-  revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${orderId}`);
   return { ok: true as const };
 }
 
@@ -322,7 +322,7 @@ export async function updateOrderNoteAction(
     data: { internalNote: internalNote.trim() || null },
   });
 
-  revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath(`/orders/${orderId}`);
   return { ok: true as const };
 }
 

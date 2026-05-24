@@ -315,13 +315,13 @@ export function LeadsTable({
       }
     })
     params.delete('page')
-    router.push(`/admin/leads?${params.toString()}`)
+    router.push(`/leads?${params.toString()}`)
   }
 
   const goPage = (p: number) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', String(p))
-    router.push(`/admin/leads?${params.toString()}`)
+    router.push(`/leads?${params.toString()}`)
   }
 
   const handleSearch = (e: React.FormEvent) => {

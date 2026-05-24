@@ -16,7 +16,7 @@ export default async function ClassProgressPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "classes:view-all")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -62,7 +62,7 @@ export default async function ClassProgressPage({ params }: Props) {
     <div className="space-y-6">
       <div>
         <Link
-          href={`/admin/classes/${cls.id}/edit`}
+          href={`/classes/${cls.id}/edit`}
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại lớp
@@ -207,7 +207,7 @@ export default async function ClassProgressPage({ params }: Props) {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link
-                          href={`/admin/students/${student.id}/edit`}
+                          href={`/students/${student.id}/edit`}
                           className="text-xs font-semibold text-[#7C3AED] hover:underline"
                         >
                           Chi tiết →

@@ -115,7 +115,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
 
       if (res.ok) {
         toast.success(mode === "create" ? "Đã tạo vinh danh" : "Đã cập nhật");
-        router.push("/admin/honors");
+        router.push("/honors");
         router.refresh();
       } else {
         toast.error(res.error || "Có lỗi xảy ra");
@@ -150,7 +150,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
           <p className="mt-1 text-xs text-gray-500">
             Chưa có nhân sự?{" "}
             <a
-              href="/admin/nhan-su/new"
+              href="/nhan-su/new"
               target="_blank"
               rel="noreferrer"
               className="text-orange-600 hover:underline"
@@ -417,7 +417,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => router.push("/admin/honors")}
+          onClick={() => router.push("/honors")}
           disabled={isPending}
           className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
         >

@@ -43,7 +43,7 @@ export default async function KitsAdminPage() {
           </p>
         </div>
         <Link
-          href="/admin/kits/new"
+          href="/kits/new"
           className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
         >
           <Plus className="h-5 w-5" />
@@ -68,7 +68,7 @@ export default async function KitsAdminPage() {
               <tr>
                 <td colSpan={6} className="p-12 text-center text-neutral-500">
                   Chưa có kit nào.{" "}
-                  <Link href="/admin/kits/new" className="text-orange-600 hover:underline">
+                  <Link href="/kits/new" className="text-orange-600 hover:underline">
                     Thêm kit đầu tiên →
                   </Link>
                 </td>

@@ -31,7 +31,7 @@ export default async function LeadsPage({
 }) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user, 'leads:view-all')) redirect('/admin/dashboard')
+  if (!can(session.user, 'leads:view-all')) redirect('/dashboard')
 
   const params = await searchParams
   const page = Math.max(1, Number(params.page ?? 1))

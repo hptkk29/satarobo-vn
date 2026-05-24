@@ -13,7 +13,7 @@ export default async function NewCurriculumPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const courses = await db.course.findMany({
@@ -26,7 +26,7 @@ export default async function NewCurriculumPage() {
     <div className="space-y-4">
       <div>
         <Link
-          href="/admin/curriculums"
+          href="/curriculums"
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
@@ -38,7 +38,7 @@ export default async function NewCurriculumPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Chưa có khoá học. Tạo khoá học trước tại{" "}
           <Link
-            href="/admin/courses"
+            href="/courses"
             className="font-semibold underline hover:text-amber-900"
           >
             /admin/courses

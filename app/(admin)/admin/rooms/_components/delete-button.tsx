@@ -17,7 +17,7 @@ export function DeleteRoomButton({ id, name }: { id: string; name: string }) {
         alert(res.error);
         return;
       }
-      router.push("/admin/rooms");
+      router.push("/rooms");
       router.refresh();
     });
   }

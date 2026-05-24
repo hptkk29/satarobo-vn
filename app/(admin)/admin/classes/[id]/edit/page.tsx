@@ -15,7 +15,7 @@ export default async function EditClassPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "classes:edit")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -100,7 +100,7 @@ export default async function EditClassPage({ params }: Props) {
           Sửa lớp: <span className="font-bold text-orange-600">{cls.name}</span>
         </h1>
         <Link
-          href={`/admin/classes/${cls.id}/progress`}
+          href={`/classes/${cls.id}/progress`}
           className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
         >
           📊 Tiến độ lớp

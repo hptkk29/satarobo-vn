@@ -13,7 +13,7 @@ export default async function OrdersPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "orders:view")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const canCreate = can(session.user, "orders:manage");
@@ -33,7 +33,7 @@ export default async function OrdersPage() {
           </div>
         </div>
         {canCreate && (
-          <Link href="/admin/orders/new">
+          <Link href="/orders/new">
             <Button>
               <Plus className="h-4 w-4" />
               Tạo đơn thủ công

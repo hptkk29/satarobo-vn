@@ -71,7 +71,7 @@ export async function createItem(
       }
       return item;
     });
-    revalidatePath("/admin/inventory/items");
+    revalidatePath("/inventory/items");
     return { ok: true, data: { itemId: created.id } };
   } catch (err) {
     return {
@@ -84,7 +84,7 @@ export async function createItem(
 export async function createItemAndRedirect(input: InventoryItemInput) {
   const res = await createItem(input);
   if (!res.ok) return res;
-  redirect(`/admin/inventory/items/${res.data!.itemId}/edit`);
+  redirect(`/inventory/items/${res.data!.itemId}/edit`);
 }
 
 export async function updateItem(
@@ -124,8 +124,8 @@ export async function updateItem(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/inventory/items");
-  revalidatePath(`/admin/inventory/items/${id}/edit`);
+  revalidatePath("/inventory/items");
+  revalidatePath(`/inventory/items/${id}/edit`);
   return { ok: true };
 }
 
@@ -156,14 +156,14 @@ export async function deleteItem(id: string): Promise<Result> {
       error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/inventory/items");
+  revalidatePath("/inventory/items");
   return { ok: true };
 }
 
 export async function deleteItemAndRedirect(id: string): Promise<Result> {
   const res = await deleteItem(id);
   if (!res.ok) return res;
-  redirect("/admin/inventory/items");
+  redirect("/inventory/items");
 }
 
 const ThresholdSchema = z.object({
@@ -202,7 +202,7 @@ export async function updateMinThreshold(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/inventory/items/${parsed.data.itemId}/edit`);
+  revalidatePath(`/inventory/items/${parsed.data.itemId}/edit`);
   return { ok: true };
 }
 

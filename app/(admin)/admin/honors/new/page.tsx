@@ -10,7 +10,7 @@ export const metadata = { title: "Thêm vinh danh | Hall of Fame" };
 export default async function NewHonorPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "honors:create")) redirect("/admin/dashboard");
+  if (!can(session.user, "honors:create")) redirect("/dashboard");
 
   const employees = await db.employee.findMany({
     where: { isActive: true },
@@ -33,7 +33,7 @@ export default async function NewHonorPage() {
         <p className="mt-1 text-sm text-gray-500">
           Chọn nhân sự từ danh sách, điền giải thưởng + câu chuyện. Chưa có nhân sự?{" "}
           <Link
-            href="/admin/nhan-su/new"
+            href="/nhan-su/new"
             className="text-orange-600 hover:underline"
           >
             Thêm nhân sự mới

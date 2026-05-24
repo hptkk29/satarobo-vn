@@ -70,7 +70,7 @@ export function EnrollForm({
         setError(res.error);
         return;
       }
-      router.push("/admin/enrollments");
+      router.push("/enrollments");
       router.refresh();
     });
   }
@@ -187,7 +187,7 @@ export function EnrollForm({
         </button>
         <button
           type="button"
-          onClick={() => router.push("/admin/enrollments")}
+          onClick={() => router.push("/enrollments")}
           disabled={pending}
           className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
         >

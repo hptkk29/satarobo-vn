@@ -13,7 +13,7 @@ export default async function AuditLogPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "users:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const actors = await db.user.findMany({

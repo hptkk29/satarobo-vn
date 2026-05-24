@@ -45,7 +45,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
   if (!session?.user) redirect("/login");
 
   if (!can(session.user, "employees:view-all")) {
-    redirect("/admin/dashboard");
+    redirect("/dashboard");
   }
 
   const params = await searchParams;
@@ -118,14 +118,14 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         {canCreate && (
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href="/admin/nhan-su/import"
+              href="/nhan-su/import"
               className="inline-flex items-center gap-2 rounded-lg border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
             >
               <FileSpreadsheet className="h-4 w-4" />
               Import Excel
             </Link>
             <Link
-              href="/admin/nhan-su/new"
+              href="/nhan-su/new"
               className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
@@ -197,7 +197,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
       {/* Department chips (quick filter, kept for backward UX) */}
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
-          href="/admin/nhan-su"
+          href="/nhan-su"
           className={`rounded-full px-3 py-1 text-xs font-semibold ${
             !departmentParam
               ? "bg-[#7C3AED] text-white"
@@ -209,7 +209,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         {departmentCounts.map((d) => (
           <Link
             key={d.department}
-            href={`/admin/nhan-su?department=${d.department}`}
+            href={`/nhan-su?department=${d.department}`}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
               departmentParam === d.department
                 ? "bg-[#7C3AED] text-white"

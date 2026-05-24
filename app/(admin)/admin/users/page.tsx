@@ -50,7 +50,7 @@ export default async function UsersAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "users:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const users = await db.user.findMany({
@@ -80,7 +80,7 @@ export default async function UsersAdminPage() {
           </p>
         </div>
         <Link
-          href="/admin/users/new"
+          href="/users/new"
           className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600"
         >
           <Plus className="h-4 w-4" />
@@ -146,7 +146,7 @@ export default async function UsersAdminPage() {
                     <tr key={u.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3">
                         <Link
-                          href={`/admin/users/${u.id}/edit`}
+                          href={`/users/${u.id}/edit`}
                           className="font-medium text-gray-900 hover:text-orange-600"
                         >
                           {u.email}
@@ -165,7 +165,7 @@ export default async function UsersAdminPage() {
                           <RoleBadge role={u.role} />
                           {u._count.permissionGrants > 0 && (
                             <Link
-                              href={`/admin/users/${u.id}/permissions`}
+                              href={`/users/${u.id}/permissions`}
                               title="Xem chi tiết overrides"
                               className="inline-flex items-center gap-0.5 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700 hover:bg-orange-200"
                             >
@@ -178,7 +178,7 @@ export default async function UsersAdminPage() {
                       <td className="px-4 py-3 text-sm">
                         {u.employee ? (
                           <Link
-                            href={`/admin/nhan-su/${u.employee.id}`}
+                            href={`/nhan-su/${u.employee.id}`}
                             className="text-orange-600 hover:underline"
                           >
                             {u.employee.fullName}

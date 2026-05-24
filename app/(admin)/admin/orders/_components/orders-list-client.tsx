@@ -246,7 +246,7 @@ export function OrdersListClient() {
                     {formatDateTime(o.createdAt)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link href={`/admin/orders/${o.id}`}>
+                    <Link href={`/orders/${o.id}`}>
                       <Button variant="outline" size="sm">
                         <Eye className="h-3.5 w-3.5" />
                         Xem

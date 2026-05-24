@@ -75,7 +75,7 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
 
       if (result.ok) {
         toast.success(isEdit ? "Đã cập nhật" : "Đã tạo phương thức");
-        router.push("/admin/payment-methods");
+        router.push("/payment-methods");
         router.refresh();
       } else {
         if ("issues" in result && result.issues) {

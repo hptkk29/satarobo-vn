@@ -46,9 +46,9 @@ async function resolveEmployeeId(userId: string): Promise<string | null> {
 }
 
 function revalidateAfterMovement(itemId: string) {
-  revalidatePath("/admin/inventory/items");
-  revalidatePath("/admin/inventory/movements");
-  revalidatePath(`/admin/inventory/items/${itemId}/edit`);
+  revalidatePath("/inventory/items");
+  revalidatePath("/inventory/movements");
+  revalidatePath(`/inventory/items/${itemId}/edit`);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -371,7 +371,7 @@ export async function recordAdjustment(input: AdjustmentInput): Promise<Result> 
   }
 
   revalidateAfterMovement(data.itemId);
-  revalidatePath("/admin/inventory/dashboard");
+  revalidatePath("/inventory/dashboard");
   return { ok: true };
 }
 

@@ -68,7 +68,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const sp = await searchParams;
@@ -140,7 +140,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
     <div>
       <div className="mb-6">
         <Link
-          href="/admin/inventory/items"
+          href="/inventory/items"
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại kho

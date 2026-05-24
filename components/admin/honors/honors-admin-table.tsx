@@ -57,7 +57,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
         <p>Chưa có nhân sự nào được vinh danh.</p>
-        <Link href="/admin/honors/new" className="mt-2 inline-block text-orange-600 hover:underline">
+        <Link href="/honors/new" className="mt-2 inline-block text-orange-600 hover:underline">
           Thêm nhân sự đầu tiên →
         </Link>
       </div>
@@ -139,7 +139,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                       <Eye className="h-4 w-4" />
                     </Link>
                     <Link
-                      href={`/admin/honors/${honor.id}/edit`}
+                      href={`/honors/${honor.id}/edit`}
                       className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
                       title="Sửa"
                     >

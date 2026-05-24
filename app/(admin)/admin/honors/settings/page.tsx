@@ -48,7 +48,7 @@ export default async function HonorsSettingsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!["SUPER_ADMIN", "MANAGER"].includes(session.user.role)) {
-    redirect("/admin/dashboard");
+    redirect("/dashboard");
   }
 
   const settings = await db.sitePageContent.findMany({

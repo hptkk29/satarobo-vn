@@ -14,7 +14,7 @@ export default async function PaymentMethodsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "payments:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const methods = await db.paymentMethod.findMany({
@@ -38,7 +38,7 @@ export default async function PaymentMethodsPage() {
             </p>
           </div>
         </div>
-        <Link href="/admin/payment-methods/new">
+        <Link href="/payment-methods/new">
           <Button>
             <Plus className="h-4 w-4" />
             Thêm phương thức

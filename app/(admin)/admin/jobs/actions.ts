@@ -26,7 +26,7 @@ export async function createJobAction(input: unknown) {
     },
   })
 
-  revalidatePath('/admin/jobs')
+  revalidatePath('/jobs')
   revalidatePath('/tuyen-dung')
 
   return { ok: true, id: job.id }
@@ -48,7 +48,7 @@ export async function updateJobAction(id: string, input: unknown) {
     },
   })
 
-  revalidatePath('/admin/jobs')
+  revalidatePath('/jobs')
   revalidatePath('/tuyen-dung')
   revalidatePath(`/tuyen-dung/${job.slug}`)
 
@@ -62,7 +62,7 @@ export async function deleteJobAction(id: string) {
 
   const job = await db.jobPosting.delete({ where: { id } })
 
-  revalidatePath('/admin/jobs')
+  revalidatePath('/jobs')
   revalidatePath('/tuyen-dung')
   revalidatePath(`/tuyen-dung/${job.slug}`)
 
@@ -104,7 +104,7 @@ export async function duplicateJobAction(id: string) {
     },
   })
 
-  revalidatePath('/admin/jobs')
+  revalidatePath('/jobs')
   return { ok: true, id: newJob.id }
 }
 
@@ -118,7 +118,7 @@ export async function changeJobStatusAction(id: string, status: string) {
     data: { status: status as never },
   })
 
-  revalidatePath('/admin/jobs')
+  revalidatePath('/jobs')
   revalidatePath('/tuyen-dung')
   revalidatePath(`/tuyen-dung/${job.slug}`)
 

@@ -12,7 +12,7 @@ export default async function R2TestPage() {
 
   const allowedRoles = ["SUPER_ADMIN", "MANAGER", "MARKETING"];
   if (!allowedRoles.includes(session.user.role)) {
-    redirect("/admin/dashboard");
+    redirect("/dashboard");
   }
 
   return (

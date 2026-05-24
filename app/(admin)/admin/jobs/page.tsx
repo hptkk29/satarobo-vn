@@ -70,7 +70,7 @@ export default async function AdminJobsPage({ searchParams }: SearchParams) {
         </div>
         {canEdit && (
           <Link
-            href="/admin/jobs/new"
+            href="/jobs/new"
             className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
@@ -84,7 +84,7 @@ export default async function AdminJobsPage({ searchParams }: SearchParams) {
         {STATUS_TABS.map((tab) => (
           <Link
             key={tab.value}
-            href={tab.value === 'all' ? '/admin/jobs' : `/admin/jobs?status=${tab.value}`}
+            href={tab.value === 'all' ? '/jobs' : `/jobs?status=${tab.value}`}
             className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
               activeTab === tab.value
                 ? 'bg-[#7C3AED] text-white'

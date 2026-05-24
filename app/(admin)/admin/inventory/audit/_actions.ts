@@ -78,7 +78,7 @@ export async function startAudit(
       },
       select: { id: true },
     });
-    revalidatePath("/admin/inventory/audit");
+    revalidatePath("/inventory/audit");
     return { ok: true, data: { auditId: audit.id } };
   } catch (err) {
     return {
@@ -91,7 +91,7 @@ export async function startAudit(
 export async function startAuditAndRedirect(input: StartAuditInput) {
   const res = await startAudit(input);
   if (!res.ok) return res;
-  redirect(`/admin/inventory/audit/${res.data!.auditId}/edit`);
+  redirect(`/inventory/audit/${res.data!.auditId}/edit`);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ export async function saveAuditDraft(
     };
   }
 
-  revalidatePath(`/admin/inventory/audit/${auditId}/edit`);
+  revalidatePath(`/inventory/audit/${auditId}/edit`);
   return { ok: true };
 }
 
@@ -256,19 +256,19 @@ export async function submitAudit(auditId: string): Promise<Result> {
     };
   }
 
-  revalidatePath("/admin/inventory/audit");
-  revalidatePath(`/admin/inventory/audit/${auditId}`);
-  revalidatePath(`/admin/inventory/audit/${auditId}/edit`);
-  revalidatePath("/admin/inventory/dashboard");
-  revalidatePath("/admin/inventory/movements");
-  revalidatePath("/admin/inventory/items");
+  revalidatePath("/inventory/audit");
+  revalidatePath(`/inventory/audit/${auditId}`);
+  revalidatePath(`/inventory/audit/${auditId}/edit`);
+  revalidatePath("/inventory/dashboard");
+  revalidatePath("/inventory/movements");
+  revalidatePath("/inventory/items");
   return { ok: true };
 }
 
 export async function submitAuditAndRedirect(auditId: string) {
   const res = await submitAudit(auditId);
   if (!res.ok) return res;
-  redirect(`/admin/inventory/audit/${auditId}`);
+  redirect(`/inventory/audit/${auditId}`);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -299,13 +299,13 @@ export async function cancelAudit(auditId: string): Promise<Result> {
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/inventory/audit");
-  revalidatePath(`/admin/inventory/audit/${auditId}/edit`);
+  revalidatePath("/inventory/audit");
+  revalidatePath(`/inventory/audit/${auditId}/edit`);
   return { ok: true };
 }
 
 export async function cancelAuditAndRedirect(auditId: string): Promise<Result> {
   const res = await cancelAudit(auditId);
   if (!res.ok) return res;
-  redirect("/admin/inventory/audit");
+  redirect("/inventory/audit");
 }

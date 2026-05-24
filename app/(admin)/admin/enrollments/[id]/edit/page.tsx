@@ -54,7 +54,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -165,7 +165,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
     <div className="space-y-6">
       <div>
         <Link
-          href="/admin/enrollments"
+          href="/enrollments"
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
@@ -218,7 +218,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
                 </div>
               )}
               <Link
-                href={`/admin/students/${enrollment.student.id}/edit`}
+                href={`/students/${enrollment.student.id}/edit`}
                 className="mt-2 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
               >
                 Mở hồ sơ học viên →
@@ -264,7 +264,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
             <dd className="text-neutral-900">{fmtDate(enrollment.class.startDate)}</dd>
           </dl>
           <Link
-            href={`/admin/classes/${enrollment.class.id}/edit`}
+            href={`/classes/${enrollment.class.id}/edit`}
             className="mt-3 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
           >
             Mở chi tiết lớp →
@@ -305,7 +305,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
             </div>
             {enrollment.transferredToId && (
               <Link
-                href={`/admin/enrollments/${enrollment.transferredToId}/edit`}
+                href={`/enrollments/${enrollment.transferredToId}/edit`}
                 className="mt-1 inline-block text-xs font-semibold text-purple-800 hover:underline"
               >
                 Mở enrollment mới →
@@ -391,7 +391,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
                           <>
                             → Enrollment đích:{" "}
                             <Link
-                              href={`/admin/enrollments/${extra.transferredToId}/edit`}
+                              href={`/enrollments/${extra.transferredToId}/edit`}
                               className="font-mono text-[#7C3AED] hover:underline"
                             >
                               {String(extra.transferredToId).slice(0, 12)}…
@@ -402,7 +402,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
                           <>
                             ← Enrollment gốc:{" "}
                             <Link
-                              href={`/admin/enrollments/${extra.transferredFromId}/edit`}
+                              href={`/enrollments/${extra.transferredFromId}/edit`}
                               className="font-mono text-[#7C3AED] hover:underline"
                             >
                               {String(extra.transferredFromId).slice(0, 12)}…

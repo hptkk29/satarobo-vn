@@ -67,7 +67,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const sp = await searchParams;
@@ -130,7 +130,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
           </p>
         </div>
         <Link
-          href="/admin/documents/new"
+          href="/documents/new"
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
@@ -229,7 +229,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
                   >
                     Chưa có tài liệu nào khớp bộ lọc.{" "}
                     <Link
-                      href="/admin/documents/new"
+                      href="/documents/new"
                       className="text-[#7C3AED] hover:underline"
                     >
                       Tải lên →
@@ -326,7 +326,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
                             Mở
                           </a>
                           <Link
-                            href={`/admin/documents/${d.id}/edit`}
+                            href={`/documents/${d.id}/edit`}
                             className="rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
                           >
                             Sửa

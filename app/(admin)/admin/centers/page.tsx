@@ -44,14 +44,14 @@ export default async function CentersAdminPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/admin/centers/import"
+            href="/centers/import"
             className="inline-flex items-center gap-2 rounded-xl border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
           </Link>
           <Link
-            href="/admin/centers/new"
+            href="/centers/new"
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
           >
             <Plus className="h-5 w-5" />
@@ -76,7 +76,7 @@ export default async function CentersAdminPage() {
               <tr>
                 <td colSpan={5} className="p-12 text-center text-neutral-500">
                   Chưa có cơ sở nào.{" "}
-                  <Link href="/admin/centers/new" className="text-orange-600 hover:underline">
+                  <Link href="/centers/new" className="text-orange-600 hover:underline">
                     Thêm cơ sở đầu tiên →
                   </Link>
                 </td>

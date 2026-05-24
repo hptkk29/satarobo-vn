@@ -299,7 +299,7 @@ export function PackageForm({ pkg }: PackageFormProps) {
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
-          onClick={() => router.push("/admin/course-packages")}
+          onClick={() => router.push("/course-packages")}
           className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
         >
           Huy

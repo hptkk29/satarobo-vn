@@ -79,8 +79,8 @@ export async function markAttendance(
     return { error: "Lỗi cơ sở dữ liệu — không lưu được điểm danh" };
   }
 
-  revalidatePath("/admin/attendance");
-  revalidatePath(`/admin/attendance?sessionId=${data.sessionId}`);
+  revalidatePath("/attendance");
+  revalidatePath(`/attendance?sessionId=${data.sessionId}`);
   return { saved: data.records.length };
 }
 
@@ -95,6 +95,6 @@ export async function deleteAttendance(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá bản ghi" };
   }
-  revalidatePath("/admin/attendance");
+  revalidatePath("/attendance");
   return {};
 }

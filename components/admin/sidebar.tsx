@@ -33,69 +33,69 @@ import { cn } from "@/lib/utils";
 const NAV_GROUPS = [
   {
     label: "Tổng quan",
-    items: [{ label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard }],
+    items: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
   },
   {
     label: "Khách hàng",
     items: [
-      { label: "Leads", href: "/admin/leads", icon: Users },
-      { label: "Học viên", href: "/admin/students", icon: GraduationCap },
-      { label: "Lớp học", href: "/admin/classes", icon: BookOpen },
-      { label: "Đăng ký học", href: "/admin/enrollments", icon: ClipboardList },
+      { label: "Leads", href: "/leads", icon: Users },
+      { label: "Học viên", href: "/students", icon: GraduationCap },
+      { label: "Lớp học", href: "/classes", icon: BookOpen },
+      { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList },
     ],
   },
   {
     label: "Vận hành lớp",
     items: [
-      { label: "Buổi học", href: "/admin/sessions", icon: CalendarDays },
-      { label: "Điểm danh", href: "/admin/attendance", icon: ClipboardCheck },
+      { label: "Buổi học", href: "/sessions", icon: CalendarDays },
+      { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck },
     ],
   },
   {
     label: "Hệ thống cơ sở",
     items: [
-      { label: "Cơ sở", href: "/admin/centers", icon: MapPin },
-      { label: "Phòng học", href: "/admin/rooms", icon: DoorOpen },
-      { label: "Lịch nghỉ", href: "/admin/holidays", icon: CalendarOff },
+      { label: "Cơ sở", href: "/centers", icon: MapPin },
+      { label: "Phòng học", href: "/rooms", icon: DoorOpen },
+      { label: "Lịch nghỉ", href: "/holidays", icon: CalendarOff },
     ],
   },
   {
     label: "Nội bộ",
     items: [
-      { label: "Giáo viên", href: "/admin/teachers", icon: UserCog },
-      { label: "Nhân sự", href: "/admin/nhan-su", icon: IdCard },
-      { label: "Tài khoản", href: "/admin/users", icon: KeyRound },
-      { label: "Tuyển dụng", href: "/admin/jobs", icon: Briefcase },
-      { label: "Vinh danh", href: "/admin/honors", icon: Trophy },
+      { label: "Giáo viên", href: "/teachers", icon: UserCog },
+      { label: "Nhân sự", href: "/nhan-su", icon: IdCard },
+      { label: "Tài khoản", href: "/users", icon: KeyRound },
+      { label: "Tuyển dụng", href: "/jobs", icon: Briefcase },
+      { label: "Vinh danh", href: "/honors", icon: Trophy },
     ],
   },
   {
     label: "Sản phẩm",
     items: [
-      { label: "Khoá học (Packages)", href: "/admin/course-packages", icon: Boxes },
-      { label: "Học cụ (Kits)", href: "/admin/kits", icon: Package },
+      { label: "Khoá học (Packages)", href: "/course-packages", icon: Boxes },
+      { label: "Học cụ (Kits)", href: "/kits", icon: Package },
     ],
   },
   {
     label: "Marketing",
     items: [
-      { label: "Tin tức", href: "/admin/news", icon: Newspaper },
-      { label: "Hình ảnh trang", href: "/admin/site-content", icon: ImageIcon },
-      { label: "Tracking", href: "/admin/marketing", icon: BarChart3 },
+      { label: "Tin tức", href: "/news", icon: Newspaper },
+      { label: "Hình ảnh trang", href: "/site-content", icon: ImageIcon },
+      { label: "Tracking", href: "/marketing", icon: BarChart3 },
     ],
   },
   {
     label: "Tài chính",
     items: [
-      { label: "Đơn hàng", href: "/admin/orders", icon: ShoppingBag },
-      { label: "Phương thức TT", href: "/admin/payment-methods", icon: CreditCard },
+      { label: "Đơn hàng", href: "/orders", icon: ShoppingBag },
+      { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard },
     ],
   },
   {
     label: "Hệ thống",
     items: [
-      { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText },
-      { label: "Cài đặt", href: "/admin/settings", icon: Settings },
+      { label: "Audit Log", href: "/audit-log", icon: ScrollText },
+      { label: "Cài đặt", href: "/settings", icon: Settings },
     ],
   },
 ];
@@ -107,7 +107,7 @@ export function Sidebar() {
     <aside className="flex h-full w-64 flex-col border-r border-neutral-200 bg-white">
       <div className="flex h-16 items-center border-b border-neutral-200 px-6">
         <Link
-          href="/admin/dashboard"
+          href="/dashboard"
           className="group text-xl font-bold transition-opacity hover:opacity-90"
         >
           <span className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-transparent">

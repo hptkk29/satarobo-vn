@@ -73,7 +73,7 @@ export function EmployeesAdminTable({ employees, canDelete }: Props) {
       <div className="rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
         <p>Chưa có nhân sự nào khớp bộ lọc.</p>
         <Link
-          href="/admin/nhan-su/new"
+          href="/nhan-su/new"
           className="mt-2 inline-block text-orange-600 hover:underline"
         >
           Thêm nhân sự đầu tiên →
@@ -161,7 +161,7 @@ export function EmployeesAdminTable({ employees, canDelete }: Props) {
               <td className="px-4 py-3 text-right">
                 <div className="inline-flex items-center gap-1">
                   <Link
-                    href={`/admin/nhan-su/${emp.id}/edit`}
+                    href={`/nhan-su/${emp.id}/edit`}
                     className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
                     title="Sửa"
                   >

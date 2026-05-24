@@ -40,7 +40,7 @@ async function requireTeacherOrAdmin() {
   if (!session?.user) redirect("/login");
   const role = session.user.role;
   if (role !== "SUPER_ADMIN" && role !== "MANAGER" && role !== "TEACHER") {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session.user;
 }
@@ -81,9 +81,9 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
     return { error: "Không tạo được buổi học. Lớp có tồn tại không?" };
   }
 
-  revalidatePath("/admin/sessions");
-  revalidatePath("/admin/attendance");
-  redirect("/admin/sessions");
+  revalidatePath("/sessions");
+  revalidatePath("/attendance");
+  redirect("/sessions");
 }
 
 export async function updateSession(id: string, formData: FormData): Promise<ActionResult> {
@@ -112,10 +112,10 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
     return { error: "Không cập nhật được buổi học" };
   }
 
-  revalidatePath("/admin/sessions");
-  revalidatePath(`/admin/sessions/${id}/edit`);
-  revalidatePath("/admin/attendance");
-  redirect("/admin/sessions");
+  revalidatePath("/sessions");
+  revalidatePath(`/sessions/${id}/edit`);
+  revalidatePath("/attendance");
+  redirect("/sessions");
 }
 
 export async function deleteSession(id: string): Promise<ActionResult> {
@@ -126,7 +126,7 @@ export async function deleteSession(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá buổi học" };
   }
-  revalidatePath("/admin/sessions");
-  revalidatePath("/admin/attendance");
+  revalidatePath("/sessions");
+  revalidatePath("/attendance");
   return {};
 }

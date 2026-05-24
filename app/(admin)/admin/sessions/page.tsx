@@ -57,7 +57,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
           </p>
         </div>
         <Link
-          href="/admin/sessions/new"
+          href="/sessions/new"
           className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
         >
           <Plus className="h-5 w-5" />
@@ -117,7 +117,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
               <tr>
                 <td colSpan={4} className="p-12 text-center text-neutral-500">
                   Chưa có buổi học nào khớp bộ lọc.{" "}
-                  <Link href="/admin/sessions/new" className="text-orange-600 hover:underline">
+                  <Link href="/sessions/new" className="text-orange-600 hover:underline">
                     Tạo buổi học mới →
                   </Link>
                 </td>

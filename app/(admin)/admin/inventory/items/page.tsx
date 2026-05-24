@@ -43,7 +43,7 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const sp = await searchParams;
@@ -112,35 +112,35 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
         </div>
         <div className="flex gap-2">
           <Link
-            href="/admin/inventory/items/new"
+            href="/inventory/items/new"
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Thêm hàng
           </Link>
           <Link
-            href="/admin/inventory/items/import"
+            href="/inventory/items/import"
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
           </Link>
           <Link
-            href="/admin/inventory/movements"
+            href="/inventory/movements"
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             <History className="h-4 w-4" />
             Lịch sử
           </Link>
           <Link
-            href="/admin/inventory/audit"
+            href="/inventory/audit"
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             <ClipboardCheck className="h-4 w-4" />
             Kiểm kê
           </Link>
           <Link
-            href="/admin/inventory/dashboard"
+            href="/inventory/dashboard"
             className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-white px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"
           >
             <LayoutDashboard className="h-4 w-4" />
@@ -228,7 +228,7 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
                   >
                     Chưa có mặt hàng nào khớp bộ lọc.{" "}
                     <Link
-                      href="/admin/inventory/items/new"
+                      href="/inventory/items/new"
                       className="text-[#7C3AED] hover:underline"
                     >
                       Thêm hàng →
@@ -286,7 +286,7 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
                       </td>
                       <td className="px-3 py-3 text-right">
                         <Link
-                          href={`/admin/inventory/items/${item.id}/edit`}
+                          href={`/inventory/items/${item.id}/edit`}
                           className="inline-flex items-center gap-1 rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
                         >
                           Sửa

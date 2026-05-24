@@ -128,7 +128,7 @@ export function KitListRow({ kit }: { kit: Row }) {
             </Link>
           )}
           <Link
-            href={`/admin/kits/${kit.id}/edit`}
+            href={`/kits/${kit.id}/edit`}
             className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
             title="Sửa"
           >

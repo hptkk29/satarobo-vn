@@ -9,7 +9,7 @@ export default async function TimelineAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!["SUPER_ADMIN", "MANAGER"].includes(session.user.role)) {
-    redirect("/admin/dashboard");
+    redirect("/dashboard");
   }
 
   const items = await db.timelineItem.findMany({

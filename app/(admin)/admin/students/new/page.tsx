@@ -10,7 +10,7 @@ export default async function NewStudentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "students:create")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const centers = await db.center.findMany({

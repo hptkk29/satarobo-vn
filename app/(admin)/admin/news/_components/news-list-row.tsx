@@ -84,7 +84,7 @@ export function NewsListRow({ news }: { news: Row }) {
             </Link>
           )}
           <Link
-            href={`/admin/news/${news.id}/edit`}
+            href={`/news/${news.id}/edit`}
             className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
             title="Sửa"
           >

@@ -103,7 +103,7 @@ export async function createQuestion(
       return created;
     });
 
-    revalidatePath("/admin/questions");
+    revalidatePath("/questions");
     return { ok: true, data: { questionId: q.id } };
   } catch (err) {
     return {
@@ -116,7 +116,7 @@ export async function createQuestion(
 export async function createQuestionAndRedirect(input: QuestionInput) {
   const res = await createQuestion(input);
   if (!res.ok) return res;
-  redirect(`/admin/questions/${res.data!.questionId}/edit`);
+  redirect(`/questions/${res.data!.questionId}/edit`);
 }
 
 export async function updateQuestion(
@@ -188,8 +188,8 @@ export async function updateQuestion(
     };
   }
 
-  revalidatePath("/admin/questions");
-  revalidatePath(`/admin/questions/${id}/edit`);
+  revalidatePath("/questions");
+  revalidatePath(`/questions/${id}/edit`);
   return { ok: true };
 }
 
@@ -205,12 +205,12 @@ export async function deleteQuestion(id: string): Promise<Result> {
       error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/questions");
+  revalidatePath("/questions");
   return { ok: true };
 }
 
 export async function deleteQuestionAndRedirect(id: string): Promise<Result> {
   const res = await deleteQuestion(id);
   if (!res.ok) return res;
-  redirect("/admin/questions");
+  redirect("/questions");
 }

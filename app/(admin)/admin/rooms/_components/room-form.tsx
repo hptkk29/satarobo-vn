@@ -129,7 +129,7 @@ export function RoomForm({
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
-          onClick={() => router.push("/admin/rooms")}
+          onClick={() => router.push("/rooms")}
           className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
         >
           Huỷ

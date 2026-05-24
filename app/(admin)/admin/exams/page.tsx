@@ -30,7 +30,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const sp = await searchParams;
@@ -88,7 +88,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
           </p>
         </div>
         <Link
-          href="/admin/exams/new"
+          href="/exams/new"
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
@@ -175,7 +175,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
                     className="px-4 py-12 text-center text-sm text-gray-400"
                   >
                     Chưa có đề thi nào khớp bộ lọc.{" "}
-                    <Link href="/admin/exams/new" className="text-[#7C3AED] hover:underline">
+                    <Link href="/exams/new" className="text-[#7C3AED] hover:underline">
                       Tạo mới →
                     </Link>
                   </td>
@@ -226,13 +226,13 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
                       <td className="px-3 py-3 text-right">
                         <div className="inline-flex gap-1">
                           <Link
-                            href={`/admin/exams/${e.id}/builder`}
+                            href={`/exams/${e.id}/builder`}
                             className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                           >
                             Builder
                           </Link>
                           <Link
-                            href={`/admin/exams/${e.id}/attempts`}
+                            href={`/exams/${e.id}/attempts`}
                             className="rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
                           >
                             Bài làm

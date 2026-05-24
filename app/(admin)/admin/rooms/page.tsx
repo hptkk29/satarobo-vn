@@ -79,14 +79,14 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/admin/rooms/import"
+            href="/rooms/import"
             className="inline-flex items-center gap-2 rounded-xl border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
           </Link>
           <Link
-            href="/admin/rooms/new"
+            href="/rooms/new"
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
           >
             <Plus className="h-5 w-5" />
@@ -173,7 +173,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
                   ) : (
                     <>
                       Chưa có phòng nào.{" "}
-                      <Link href="/admin/rooms/new" className="text-orange-600 hover:underline">
+                      <Link href="/rooms/new" className="text-orange-600 hover:underline">
                         Thêm phòng đầu tiên →
                       </Link>
                     </>
@@ -204,7 +204,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
                   <td className="p-4 text-center text-sm">{r.displayOrder}</td>
                   <td className="p-4 text-right">
                     <Link
-                      href={`/admin/rooms/${r.id}/edit`}
+                      href={`/rooms/${r.id}/edit`}
                       className="inline-flex items-center gap-1 rounded p-1.5 text-purple-600 hover:bg-purple-50"
                       title="Sửa"
                     >

@@ -52,7 +52,7 @@ function JobActions({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
       {canEdit && (
         <>
           <Link
-            href={`/admin/jobs/${job.id}/edit`}
+            href={`/jobs/${job.id}/edit`}
             className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
             title="Sửa"
           >
@@ -66,7 +66,7 @@ function JobActions({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
             onClick={() =>
               startTransition(async () => {
                 const r = await duplicateJobAction(job.id)
-                if (r.ok && r.id) window.location.href = `/admin/jobs/${r.id}/edit`
+                if (r.ok && r.id) window.location.href = `/jobs/${r.id}/edit`
               })
             }
             className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40"

@@ -82,7 +82,7 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
       <td className="px-4 py-3 text-right">
         <div className="inline-flex items-center gap-1.5">
           <Link
-            href={`/admin/course-packages/${pkg.id}/edit`}
+            href={`/course-packages/${pkg.id}/edit`}
             className="rounded-lg p-2 text-[#7C3AED] hover:bg-purple-50"
             aria-label={`Sua ${pkg.code}`}
           >

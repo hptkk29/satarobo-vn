@@ -20,7 +20,7 @@ async function requirePaymentsManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "payments:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -121,7 +121,7 @@ export async function createPaymentMethodAction(formData: FormData) {
     return pm;
   });
 
-  revalidatePath("/admin/payment-methods");
+  revalidatePath("/payment-methods");
   return { ok: true as const, id: created.id };
 }
 
@@ -223,8 +223,8 @@ export async function updatePaymentMethodAction(
     });
   });
 
-  revalidatePath("/admin/payment-methods");
-  revalidatePath(`/admin/payment-methods/${id}/edit`);
+  revalidatePath("/payment-methods");
+  revalidatePath(`/payment-methods/${id}/edit`);
   return { ok: true as const };
 }
 
@@ -259,6 +259,6 @@ export async function togglePaymentMethodActiveAction(id: string) {
     });
   });
 
-  revalidatePath("/admin/payment-methods");
+  revalidatePath("/payment-methods");
   return { ok: true as const, isActive: willBeActive };
 }

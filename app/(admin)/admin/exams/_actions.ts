@@ -77,7 +77,7 @@ export async function createExam(
       data: { ...data, createdById },
       select: { id: true },
     });
-    revalidatePath("/admin/exams");
+    revalidatePath("/exams");
     return { ok: true, data: { examId: e.id } };
   } catch (err) {
     return {
@@ -90,7 +90,7 @@ export async function createExam(
 export async function createExamAndRedirect(input: ExamInput) {
   const res = await createExam(input);
   if (!res.ok) return res;
-  redirect(`/admin/exams/${res.data!.examId}/builder`);
+  redirect(`/exams/${res.data!.examId}/builder`);
 }
 
 export async function updateExam(
@@ -131,8 +131,8 @@ export async function updateExam(
     };
   }
 
-  revalidatePath("/admin/exams");
-  revalidatePath(`/admin/exams/${id}/builder`);
+  revalidatePath("/exams");
+  revalidatePath(`/exams/${id}/builder`);
   return { ok: true };
 }
 
@@ -156,14 +156,14 @@ export async function deleteExam(id: string): Promise<Result> {
       error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/exams");
+  revalidatePath("/exams");
   return { ok: true };
 }
 
 export async function deleteExamAndRedirect(id: string): Promise<Result> {
   const res = await deleteExam(id);
   if (!res.ok) return res;
-  redirect("/admin/exams");
+  redirect("/exams");
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ export async function addQuestionToExam(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/exams/${examId}/builder`);
+  revalidatePath(`/exams/${examId}/builder`);
   return { ok: true };
 }
 
@@ -251,7 +251,7 @@ export async function removeQuestionFromExam(
     };
   }
 
-  revalidatePath(`/admin/exams/${eq.examId}/builder`);
+  revalidatePath(`/exams/${eq.examId}/builder`);
   return { ok: true };
 }
 
@@ -271,7 +271,7 @@ export async function updateExamQuestionPoints(
       data: { points },
       select: { examId: true },
     });
-    revalidatePath(`/admin/exams/${eq.examId}/builder`);
+    revalidatePath(`/exams/${eq.examId}/builder`);
   } catch (err) {
     return {
       ok: false,
@@ -325,7 +325,7 @@ export async function reorderExamQuestions({
       error: `Reorder thất bại: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/exams/${examId}/builder`);
+  revalidatePath(`/exams/${examId}/builder`);
   return { ok: true };
 }
 
@@ -403,7 +403,7 @@ export async function autoGenerateExamQuestions(
     };
   }
 
-  revalidatePath(`/admin/exams/${examId}/builder`);
+  revalidatePath(`/exams/${examId}/builder`);
   return { ok: true, data: { added: picked.length } };
 }
 
@@ -489,8 +489,8 @@ export async function gradeAttempt(attemptId: string): Promise<Result> {
     };
   }
 
-  revalidatePath("/admin/exams");
-  revalidatePath(`/admin/exams/${attempt.exam.id}/attempts`);
+  revalidatePath("/exams");
+  revalidatePath(`/exams/${attempt.exam.id}/attempts`);
   return { ok: true };
 }
 
@@ -579,7 +579,7 @@ export async function changeExamStatus(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/exams");
-  revalidatePath(`/admin/exams/${parsed.data.examId}/builder`);
+  revalidatePath("/exams");
+  revalidatePath(`/exams/${parsed.data.examId}/builder`);
   return { ok: true };
 }

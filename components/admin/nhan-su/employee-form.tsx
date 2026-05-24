@@ -154,7 +154,7 @@ export function EmployeeForm({
 
       if (res.ok) {
         toast.success(mode === "create" ? "Đã tạo nhân sự" : "Đã cập nhật");
-        router.push("/admin/nhan-su");
+        router.push("/nhan-su");
         router.refresh();
       } else {
         toast.error(res.error);
@@ -596,7 +596,7 @@ export function EmployeeForm({
         </button>
         <button
           type="button"
-          onClick={() => router.push("/admin/nhan-su")}
+          onClick={() => router.push("/nhan-su")}
           disabled={isPending}
           className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
         >

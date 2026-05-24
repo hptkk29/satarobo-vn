@@ -171,7 +171,7 @@ export function OrderCreateForm({
       const result = await createOrderManualAction(input);
       if (result.ok) {
         toast.success(`Đã tạo đơn ${result.code}`);
-        router.push(`/admin/orders/${result.id}`);
+        router.push(`/orders/${result.id}`);
         router.refresh();
       } else {
         toast.error(result.error);

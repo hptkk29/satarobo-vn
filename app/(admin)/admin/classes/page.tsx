@@ -64,7 +64,7 @@ interface SearchParams {
 export default async function ClassesPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user, 'classes:view-all')) redirect('/admin/dashboard')
+  if (!can(session.user, 'classes:view-all')) redirect('/dashboard')
 
   const canCreate = can(session.user, 'classes:create')
   const canUpdate = can(session.user, 'classes:edit')
@@ -164,14 +164,14 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
         {canCreate && (
           <div className="flex gap-2">
             <Link
-              href="/admin/classes/new"
+              href="/classes/new"
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
               Thêm lớp
             </Link>
             <Link
-              href="/admin/classes/import"
+              href="/classes/import"
               className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
             >
               <FileSpreadsheet className="h-4 w-4" />
@@ -346,7 +346,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                       {canUpdate && (
                         <td className="px-4 py-3 text-right">
                           <Link
-                            href={`/admin/classes/${cls.id}/edit`}
+                            href={`/classes/${cls.id}/edit`}
                             className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                           >
                             Sửa

@@ -31,7 +31,7 @@ export default function ImportRoomsPage() {
     <div className="p-6 max-w-5xl mx-auto space-y-4">
       <div>
         <Link
-          href="/admin/rooms"
+          href="/rooms"
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách

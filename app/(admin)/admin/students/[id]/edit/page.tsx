@@ -18,7 +18,7 @@ export default async function EditStudentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "students:edit")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -160,7 +160,7 @@ export default async function EditStudentPage({ params }: Props) {
                         ` · ${enrollment.class.center.name}`}
                     </p>
                     <Link
-                      href={`/admin/classes/${enrollment.class.id}/progress`}
+                      href={`/classes/${enrollment.class.id}/progress`}
                       className="mt-0.5 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
                     >
                       Xem lớp →

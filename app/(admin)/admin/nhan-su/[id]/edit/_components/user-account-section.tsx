@@ -80,7 +80,7 @@ export function UserAccountSection({
               <Button
                 type="button"
                 onClick={() =>
-                  router.push(`/admin/users/new?employeeId=${employeeId}`)
+                  router.push(`/users/new?employeeId=${employeeId}`)
                 }
               >
                 <UserPlus className="h-4 w-4" />
@@ -196,7 +196,7 @@ export function UserAccountSection({
               </dt>
               <dd className="mt-1">
                 <Link
-                  href={`/admin/users/${existingUser.id}/permissions`}
+                  href={`/users/${existingUser.id}/permissions`}
                   className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700 hover:bg-orange-200"
                 >
                   <Shield className="h-3 w-3" />
@@ -222,21 +222,21 @@ export function UserAccountSection({
       {/* Actions */}
       <div className="mt-5 flex flex-wrap gap-2">
         <Link
-          href={`/admin/users/${existingUser.id}/edit`}
+          href={`/users/${existingUser.id}/edit`}
           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
         >
           <Pencil className="h-4 w-4" />
           Sửa tài khoản
         </Link>
         <Link
-          href={`/admin/users/${existingUser.id}/reset-password`}
+          href={`/users/${existingUser.id}/reset-password`}
           className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50"
         >
           <KeyRound className="h-4 w-4" />
           Đổi mật khẩu
         </Link>
         <Link
-          href={`/admin/users/${existingUser.id}/permissions`}
+          href={`/users/${existingUser.id}/permissions`}
           className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
         >
           <Shield className="h-4 w-4" />

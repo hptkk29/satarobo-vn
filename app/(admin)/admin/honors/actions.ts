@@ -12,7 +12,7 @@ import {
 const CAN_EDIT = ["SUPER_ADMIN", "MANAGER"];
 
 function revalidatePublic(slug?: string) {
-  revalidatePath("/admin/honors");
+  revalidatePath("/honors");
   revalidatePath("/vinh-danh");
   revalidatePath("/vinh-danh/tat-ca");
   revalidatePath("/vinh-danh/spark");
@@ -186,7 +186,7 @@ export async function createTimelineAction(input: unknown) {
     },
   });
 
-  revalidatePath("/admin/honors/timeline");
+  revalidatePath("/honors/timeline");
   revalidatePath("/vinh-danh");
   return { ok: true, id: item.id };
 }
@@ -212,7 +212,7 @@ export async function updateTimelineAction(id: string, input: unknown) {
     },
   });
 
-  revalidatePath("/admin/honors/timeline");
+  revalidatePath("/honors/timeline");
   revalidatePath("/vinh-danh");
   return { ok: true };
 }
@@ -224,7 +224,7 @@ export async function deleteTimelineAction(id: string) {
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
 
   await db.timelineItem.delete({ where: { id } });
-  revalidatePath("/admin/honors/timeline");
+  revalidatePath("/honors/timeline");
   revalidatePath("/vinh-danh");
   return { ok: true };
 }
@@ -262,7 +262,7 @@ export async function updatePageContentAction(input: unknown) {
     },
   });
 
-  revalidatePath("/admin/honors/settings");
+  revalidatePath("/honors/settings");
   if (parsed.data.pageKey === "honors") revalidatePath("/vinh-danh");
   return { ok: true };
 }

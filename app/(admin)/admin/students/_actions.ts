@@ -29,7 +29,7 @@ async function requireStudentWrite(action: "create" | "update" | "delete") {
   };
 
   if (!can(session.user, actionMap[action])) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -121,8 +121,8 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được học viên" };
   }
 
-  revalidatePath("/admin/students");
-  redirect("/admin/students");
+  revalidatePath("/students");
+  redirect("/students");
 }
 
 export async function updateStudent(id: string, formData: FormData): Promise<ActionResult> {
@@ -168,9 +168,9 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
     return { error: "Học viên không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/students");
-  revalidatePath(`/admin/students/${id}/edit`);
-  redirect("/admin/students");
+  revalidatePath("/students");
+  revalidatePath(`/students/${id}/edit`);
+  redirect("/students");
 }
 
 export async function deleteStudent(id: string): Promise<ActionResult> {
@@ -204,7 +204,7 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá học viên này" };
   }
-  revalidatePath("/admin/students");
+  revalidatePath("/students");
   return {};
 }
 

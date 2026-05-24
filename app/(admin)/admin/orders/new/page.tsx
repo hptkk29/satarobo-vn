@@ -13,7 +13,7 @@ export default async function NewOrderPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "orders:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const data = await loadCreateOrderFormData();
@@ -21,7 +21,7 @@ export default async function NewOrderPage() {
   return (
     <div className="max-w-4xl">
       <Link
-        href="/admin/orders"
+        href="/orders"
         className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
       >
         <ChevronLeft className="h-4 w-4" />

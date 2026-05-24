@@ -62,14 +62,14 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/admin/holidays/import"
+            href="/holidays/import"
             className="inline-flex items-center gap-2 rounded-xl border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
           </Link>
           <Link
-            href="/admin/holidays/new"
+            href="/holidays/new"
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
           >
             <Plus className="h-5 w-5" />
@@ -159,7 +159,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                   ) : (
                     <>
                       Chưa có ngày nghỉ nào trong năm {year}.{" "}
-                      <Link href="/admin/holidays/new" className="text-orange-600 hover:underline">
+                      <Link href="/holidays/new" className="text-orange-600 hover:underline">
                         Thêm ngày nghỉ đầu tiên →
                       </Link>
                     </>
@@ -188,7 +188,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                   </td>
                   <td className="p-4 text-right">
                     <Link
-                      href={`/admin/holidays/${h.id}/edit`}
+                      href={`/holidays/${h.id}/edit`}
                       className="inline-flex items-center gap-1 rounded p-1.5 text-purple-600 hover:bg-purple-50"
                       title="Sửa"
                     >

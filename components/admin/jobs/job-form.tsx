@@ -85,9 +85,9 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
       const result = await action(data)
       if (result.ok) {
         if (mode === 'create' && result.id) {
-          router.push(`/admin/jobs/${result.id}/edit`)
+          router.push(`/jobs/${result.id}/edit`)
         } else {
-          router.push('/admin/jobs')
+          router.push('/jobs')
         }
       } else {
         alert(result.error ?? 'Co loi xay ra')

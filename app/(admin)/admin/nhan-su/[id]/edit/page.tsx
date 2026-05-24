@@ -23,7 +23,7 @@ interface Props {
 export default async function EditEmployeePage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "employees:edit")) redirect("/admin/dashboard");
+  if (!can(session.user, "employees:edit")) redirect("/dashboard");
 
   const { id } = await params;
   const employee = await db.employee.findUnique({
@@ -96,7 +96,7 @@ export default async function EditEmployeePage({ params }: Props) {
           )}
           {showScheduleLink && (
             <Link
-              href={`/admin/nhan-su/${id}/schedule`}
+              href={`/nhan-su/${id}/schedule`}
               className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-200 bg-white px-4 py-2 text-sm font-bold text-orange-600 hover:bg-orange-50"
             >
               <CalendarDays className="h-4 w-4" />

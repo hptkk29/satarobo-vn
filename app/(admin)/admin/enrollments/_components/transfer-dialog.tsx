@@ -82,7 +82,7 @@ export function TransferDialog({
       }
       setIsOpen(false);
       if (res.data?.newEnrollmentId) {
-        router.push(`/admin/enrollments/${res.data.newEnrollmentId}/edit`);
+        router.push(`/enrollments/${res.data.newEnrollmentId}/edit`);
       }
       router.refresh();
     });

@@ -82,7 +82,7 @@ export function AuditLogClient({ actors }: { actors: Actor[] }) {
     setActiveTab(newTab);
     const params = new URLSearchParams(searchParams);
     params.set("tab", newTab);
-    router.replace(`/admin/audit-log?${params.toString()}`);
+    router.replace(`/audit-log?${params.toString()}`);
   }
 
   return (

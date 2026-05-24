@@ -53,7 +53,7 @@ export async function saveSiteContentAction(
   };
   const publicPath = pathMap[pageKey];
   if (publicPath) revalidatePath(publicPath);
-  revalidatePath("/admin/site-content");
+  revalidatePath("/site-content");
 
   return { ok: true };
 }

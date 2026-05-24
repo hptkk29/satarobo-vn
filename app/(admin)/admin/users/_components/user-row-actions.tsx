@@ -60,21 +60,21 @@ export function UserRowActions({ userId }: { userId: string }) {
   return (
     <div className="flex items-center justify-end gap-1">
       <Link
-        href={`/admin/users/${userId}/edit`}
+        href={`/users/${userId}/edit`}
         title="Sửa"
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
       >
         <Pencil className="h-4 w-4" />
       </Link>
       <Link
-        href={`/admin/users/${userId}/permissions`}
+        href={`/users/${userId}/permissions`}
         title="Phân quyền nâng cao"
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-purple-100 hover:text-purple-700"
       >
         <Shield className="h-4 w-4" />
       </Link>
       <Link
-        href={`/admin/users/${userId}/reset-password`}
+        href={`/users/${userId}/reset-password`}
         title="Đổi mật khẩu"
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-orange-100 hover:text-orange-700"
       >

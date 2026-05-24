@@ -39,7 +39,7 @@ export default async function ExamAttemptsPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -71,7 +71,7 @@ export default async function ExamAttemptsPage({ params }: Props) {
     <div className="space-y-6">
       <div>
         <Link
-          href="/admin/exams"
+          href="/exams"
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
@@ -82,7 +82,7 @@ export default async function ExamAttemptsPage({ params }: Props) {
             Bài làm: <span className="text-orange-600">{exam.title}</span>
           </h1>
           <Link
-            href={`/admin/exams/${id}/builder`}
+            href={`/exams/${id}/builder`}
             className="text-sm font-semibold text-[#7C3AED] hover:underline"
           >
             ← Builder

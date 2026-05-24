@@ -23,7 +23,7 @@ export function DeleteHolidayButton({
         alert(res.error);
         return;
       }
-      router.push("/admin/holidays");
+      router.push("/holidays");
       router.refresh();
     });
   }

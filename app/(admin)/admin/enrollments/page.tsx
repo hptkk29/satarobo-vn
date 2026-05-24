@@ -130,7 +130,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
           </p>
         </div>
         <Link
-          href="/admin/enrollments/new"
+          href="/enrollments/new"
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
@@ -223,7 +223,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">
                     Chưa có đăng ký nào khớp bộ lọc.{" "}
-                    <Link href="/admin/enrollments/new" className="text-[#7C3AED] hover:underline">
+                    <Link href="/enrollments/new" className="text-[#7C3AED] hover:underline">
                       Tạo đăng ký mới →
                     </Link>
                   </td>
@@ -278,7 +278,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link
-                          href={`/admin/enrollments/${e.id}/edit`}
+                          href={`/enrollments/${e.id}/edit`}
                           className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                         >
                           <Pencil className="h-3.5 w-3.5" />

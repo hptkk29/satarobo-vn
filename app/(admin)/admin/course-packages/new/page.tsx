@@ -12,14 +12,14 @@ export default async function NewPackagePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canManageCoursePackages(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   return (
     <div>
       <div className="mb-6">
         <Link
-          href="/admin/course-packages"
+          href="/course-packages"
           className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900"
         >
           <ChevronLeft className="h-4 w-4" />

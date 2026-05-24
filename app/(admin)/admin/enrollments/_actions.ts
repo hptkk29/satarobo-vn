@@ -73,7 +73,7 @@ async function requireSalesOrAdmin() {
   if (!session?.user) redirect("/login");
   const role = session.user.role;
   if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -134,8 +134,8 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
     return { error: "Lỗi cơ sở dữ liệu — không tạo được đăng ký" };
   }
 
-  revalidatePath("/admin/enrollments");
-  redirect("/admin/enrollments");
+  revalidatePath("/enrollments");
+  redirect("/enrollments");
 }
 
 export async function updateEnrollment(
@@ -190,9 +190,9 @@ export async function updateEnrollment(
     return { error: "Lỗi cơ sở dữ liệu — không cập nhật được" };
   }
 
-  revalidatePath("/admin/enrollments");
-  revalidatePath(`/admin/enrollments/${id}/edit`);
-  redirect("/admin/enrollments");
+  revalidatePath("/enrollments");
+  revalidatePath(`/enrollments/${id}/edit`);
+  redirect("/enrollments");
 }
 
 export async function deleteEnrollment(id: string): Promise<ActionResult> {
@@ -202,7 +202,7 @@ export async function deleteEnrollment(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá đăng ký này" };
   }
-  revalidatePath("/admin/enrollments");
+  revalidatePath("/enrollments");
   return {};
 }
 
@@ -291,8 +291,8 @@ export async function enrollStudent(
       },
       select: { id: true },
     });
-    revalidatePath("/admin/enrollments");
-    revalidatePath(`/admin/classes/${classId}/edit`);
+    revalidatePath("/enrollments");
+    revalidatePath(`/classes/${classId}/edit`);
     return { ok: true, data: { enrollmentId: enrollment.id } };
   } catch (err) {
     return {
@@ -400,9 +400,9 @@ export async function changeEnrollmentStatus(
     };
   }
 
-  revalidatePath("/admin/enrollments");
-  revalidatePath(`/admin/enrollments/${data.enrollmentId}/edit`);
-  revalidatePath(`/admin/classes/${enrollment.classId}/edit`);
+  revalidatePath("/enrollments");
+  revalidatePath(`/enrollments/${data.enrollmentId}/edit`);
+  revalidatePath(`/classes/${enrollment.classId}/edit`);
   return { ok: true };
 }
 
@@ -550,10 +550,10 @@ export async function transferEnrollment(
       return newEnrollment.id;
     });
 
-    revalidatePath("/admin/enrollments");
-    revalidatePath(`/admin/classes/${oldEnrollment.classId}/edit`);
-    revalidatePath(`/admin/classes/${data.targetClassId}/edit`);
-    revalidatePath(`/admin/enrollments/${oldEnrollment.id}/edit`);
+    revalidatePath("/enrollments");
+    revalidatePath(`/classes/${oldEnrollment.classId}/edit`);
+    revalidatePath(`/classes/${data.targetClassId}/edit`);
+    revalidatePath(`/enrollments/${oldEnrollment.id}/edit`);
     return { ok: true, data: { newEnrollmentId: newId } };
   } catch (err) {
     return {

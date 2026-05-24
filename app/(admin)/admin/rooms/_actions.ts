@@ -57,7 +57,7 @@ async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session.user;
 }
@@ -121,8 +121,8 @@ export async function createRoom(formData: FormData): Promise<ActionResult> {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được phòng" };
   }
 
-  revalidatePath("/admin/rooms");
-  redirect("/admin/rooms");
+  revalidatePath("/rooms");
+  redirect("/rooms");
 }
 
 export async function updateRoom(id: string, formData: FormData): Promise<ActionResult> {
@@ -142,9 +142,9 @@ export async function updateRoom(id: string, formData: FormData): Promise<Action
     return { error: "Phòng không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/rooms");
-  revalidatePath(`/admin/rooms/${id}/edit`);
-  redirect("/admin/rooms");
+  revalidatePath("/rooms");
+  revalidatePath(`/rooms/${id}/edit`);
+  redirect("/rooms");
 }
 
 export async function deleteRoom(id: string): Promise<ActionResult> {
@@ -154,6 +154,6 @@ export async function deleteRoom(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá phòng này" };
   }
-  revalidatePath("/admin/rooms");
+  revalidatePath("/rooms");
   return {};
 }

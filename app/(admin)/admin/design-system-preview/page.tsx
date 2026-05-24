@@ -7,7 +7,7 @@ export const metadata = { title: "Design System Preview | Admin" };
 export default async function DesignSystemPreviewPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "SUPER_ADMIN") redirect("/admin/dashboard");
+  if (session.user.role !== "SUPER_ADMIN") redirect("/dashboard");
 
   return <DesignSystemDemo />;
 }

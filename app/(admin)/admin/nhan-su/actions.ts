@@ -15,7 +15,7 @@ type ActionResult<T = unknown> =
   | { ok: false; error: string };
 
 function revalidateAll() {
-  revalidatePath("/admin/nhan-su");
+  revalidatePath("/nhan-su");
   revalidatePath("/vinh-danh");
   revalidatePath("/vinh-danh/tat-ca");
   revalidatePath("/vinh-danh/spark");
@@ -267,6 +267,6 @@ export async function changeEmployeeRoleAction(input: {
   }
 
   revalidateAll();
-  revalidatePath(`/admin/nhan-su/${employee.id}/edit`);
+  revalidatePath(`/nhan-su/${employee.id}/edit`);
   return { ok: true };
 }

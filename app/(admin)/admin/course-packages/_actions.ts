@@ -87,7 +87,7 @@ async function requireAdmin() {
   if (!session?.user) redirect("/login");
 
   if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   return session.user;
@@ -173,8 +173,8 @@ export async function createPackage(formData: FormData): Promise<ActionResult> {
     return { error: "Slug hoac code da ton tai, hoac co loi co so du lieu" };
   }
 
-  revalidatePath("/admin/course-packages");
-  redirect("/admin/course-packages");
+  revalidatePath("/course-packages");
+  redirect("/course-packages");
 }
 
 export async function updatePackage(id: string, formData: FormData): Promise<ActionResult> {
@@ -220,9 +220,9 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
     return { error: "Package khong ton tai, slug bi trung, hoac co loi co so du lieu" };
   }
 
-  revalidatePath("/admin/course-packages");
-  revalidatePath(`/admin/course-packages/${id}/edit`);
-  redirect("/admin/course-packages");
+  revalidatePath("/course-packages");
+  revalidatePath(`/course-packages/${id}/edit`);
+  redirect("/course-packages");
 }
 
 export async function deletePackage(id: string): Promise<ActionResult> {
@@ -234,6 +234,6 @@ export async function deletePackage(id: string): Promise<ActionResult> {
     return { error: "Khong the xoa package nay" };
   }
 
-  revalidatePath("/admin/course-packages");
+  revalidatePath("/course-packages");
   return {};
 }

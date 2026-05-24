@@ -64,7 +64,7 @@ export function UserForm({
         mode === "create" ? "Tạo tài khoản thành công" : "Đã lưu thay đổi",
       );
       if (mode === "create") {
-        router.push("/admin/users");
+        router.push("/users");
       } else {
         router.refresh();
       }
@@ -188,7 +188,7 @@ export function UserForm({
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push("/admin/users")}
+          onClick={() => router.push("/users")}
           disabled={pending}
         >
           Huỷ

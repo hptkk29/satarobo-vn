@@ -79,7 +79,7 @@ export function Topbar({ userName, userRole }: TopbarProps) {
             <ChevronDown className="h-4 w-4 text-neutral-400" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => router.push("/admin/settings/profile")}>
+            <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
               <User className="mr-2 h-4 w-4" /> Hồ sơ cá nhân
             </DropdownMenuItem>
             <DropdownMenuSeparator />

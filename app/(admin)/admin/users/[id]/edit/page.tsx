@@ -29,7 +29,7 @@ export default async function EditUserPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "users:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -78,7 +78,7 @@ export default async function EditUserPage({ params }: Props) {
   return (
     <div className="max-w-3xl">
       <Link
-        href="/admin/users"
+        href="/users"
         className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -179,7 +179,7 @@ export default async function EditUserPage({ params }: Props) {
             </p>
           </div>
           <Link
-            href={`/admin/users/${user.id}/permissions`}
+            href={`/users/${user.id}/permissions`}
             className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"
           >
             Quản lý
@@ -195,7 +195,7 @@ export default async function EditUserPage({ params }: Props) {
         </h2>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Link
-            href={`/admin/users/${user.id}/reset-password`}
+            href={`/users/${user.id}/reset-password`}
             className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-orange-300 bg-white px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
           >
             <KeyRound className="h-4 w-4" />

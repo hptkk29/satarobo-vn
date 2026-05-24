@@ -7,7 +7,7 @@ export const metadata = { title: "Test Recharts | Admin" };
 export default async function ChartsTestPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "SUPER_ADMIN") redirect("/admin/dashboard");
+  if (session.user.role !== "SUPER_ADMIN") redirect("/dashboard");
 
   return (
     <div className="container max-w-6xl py-8">

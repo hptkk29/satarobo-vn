@@ -21,7 +21,7 @@ async function requireUsersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "users:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -109,7 +109,7 @@ export async function createUserAction(formData: FormData) {
     return created;
   });
 
-  revalidatePath("/admin/users");
+  revalidatePath("/users");
   return { ok: true as const, id: user.id };
 }
 
@@ -243,8 +243,8 @@ export async function updateUserAction(id: string, formData: FormData) {
     });
   });
 
-  revalidatePath("/admin/users");
-  revalidatePath(`/admin/users/${id}/edit`);
+  revalidatePath("/users");
+  revalidatePath(`/users/${id}/edit`);
   return { ok: true as const };
 }
 
@@ -302,7 +302,7 @@ export async function toggleUserActiveAction(id: string) {
     });
   });
 
-  revalidatePath("/admin/users");
+  revalidatePath("/users");
   return { ok: true as const };
 }
 
@@ -347,6 +347,6 @@ export async function resetUserPasswordAction(id: string, formData: FormData) {
     });
   });
 
-  revalidatePath("/admin/users");
+  revalidatePath("/users");
   return { ok: true as const };
 }

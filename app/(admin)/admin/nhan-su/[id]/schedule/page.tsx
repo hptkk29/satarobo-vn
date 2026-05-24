@@ -62,7 +62,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
     return (
       <div className="p-6 max-w-3xl">
         <Link
-          href={`/admin/nhan-su/${id}/edit`}
+          href={`/nhan-su/${id}/edit`}
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ArrowLeft className="h-4 w-4" /> Quay lại
@@ -117,7 +117,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
     centerName: s.class?.center?.name ?? null,
     topic: s.topic,
     attendanceCount: s._count.attendances,
-    href: `/admin/sessions/${s.id}/edit`,
+    href: `/sessions/${s.id}/edit`,
   }));
 
   return (
@@ -125,7 +125,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link
-            href={`/admin/nhan-su/${id}/edit`}
+            href={`/nhan-su/${id}/edit`}
             className="mb-2 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
           >
             <ArrowLeft className="h-4 w-4" /> Quay lại
@@ -156,7 +156,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
       {/* Week navigation */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-neutral-50 rounded-xl px-4 py-3">
         <Link
-          href={`/admin/nhan-su/${id}/schedule?week=${format(prevWeek, "yyyy-MM-dd")}`}
+          href={`/nhan-su/${id}/schedule?week=${format(prevWeek, "yyyy-MM-dd")}`}
           className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold hover:bg-neutral-50"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -169,7 +169,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
             {format(weekEnd, "dd/MM/yyyy", { locale: vi })}
           </div>
           <Link
-            href={`/admin/nhan-su/${id}/schedule`}
+            href={`/nhan-su/${id}/schedule`}
             className="text-xs text-orange-600 hover:underline"
           >
             Về tuần hiện tại
@@ -177,7 +177,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
         </div>
 
         <Link
-          href={`/admin/nhan-su/${id}/schedule?week=${format(nextWeek, "yyyy-MM-dd")}`}
+          href={`/nhan-su/${id}/schedule?week=${format(nextWeek, "yyyy-MM-dd")}`}
           className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold hover:bg-neutral-50"
         >
           Tuần sau

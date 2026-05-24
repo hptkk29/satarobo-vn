@@ -17,7 +17,7 @@ export default async function NewUserPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "users:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { employeeId: prefillEmployeeId } = await searchParams;
@@ -45,7 +45,7 @@ export default async function NewUserPage({ searchParams }: Props) {
     });
 
     if (emp?.userAccount) {
-      redirect(`/admin/users/${emp.userAccount.id}/edit`);
+      redirect(`/users/${emp.userAccount.id}/edit`);
     }
 
     if (emp) {
@@ -73,7 +73,7 @@ export default async function NewUserPage({ searchParams }: Props) {
   return (
     <div className="max-w-3xl">
       <Link
-        href="/admin/users"
+        href="/users"
         className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
       >
         <ChevronLeft className="h-4 w-4" />

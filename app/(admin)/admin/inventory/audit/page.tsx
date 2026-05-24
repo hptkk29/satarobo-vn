@@ -42,7 +42,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const sp = await searchParams;
@@ -79,7 +79,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
     <div className="space-y-6">
       <div>
         <Link
-          href="/admin/inventory/items"
+          href="/inventory/items"
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại kho
@@ -97,7 +97,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
             </p>
           </div>
           <Link
-            href="/admin/inventory/audit/new"
+            href="/inventory/audit/new"
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
@@ -185,7 +185,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
                   >
                     Chưa có phiếu kiểm kê nào khớp bộ lọc.{" "}
                     <Link
-                      href="/admin/inventory/audit/new"
+                      href="/inventory/audit/new"
                       className="text-[#7C3AED] hover:underline"
                     >
                       Tạo mới →
@@ -240,14 +240,14 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
                       <td className="px-3 py-3 text-right">
                         {isDraft ? (
                           <Link
-                            href={`/admin/inventory/audit/${a.id}/edit`}
+                            href={`/inventory/audit/${a.id}/edit`}
                             className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
                           >
                             Tiếp tục →
                           </Link>
                         ) : (
                           <Link
-                            href={`/admin/inventory/audit/${a.id}`}
+                            href={`/inventory/audit/${a.id}`}
                             className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                           >
                             Xem

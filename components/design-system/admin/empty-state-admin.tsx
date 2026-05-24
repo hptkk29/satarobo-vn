@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 interface Props {
   title: string;
   description?: string;
-  /** Optional action button (e.g. <Link href="/admin/.../new">Thêm mới</Link>) */
+  /** Optional action button (e.g. <Link href="/.../new">Thêm mới</Link>) */
   action?: ReactNode;
   /** Hide illustration if you want compact empty state */
   hideIllustration?: boolean;

@@ -204,7 +204,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-neutral-900">Leads mới nhất</h2>
           <Link
-            href="/admin/leads"
+            href="/leads"
             className="text-sm font-semibold text-orange-600 hover:underline"
           >
             Xem tất cả →

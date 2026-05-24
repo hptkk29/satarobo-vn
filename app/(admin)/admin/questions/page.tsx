@@ -41,7 +41,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const sp = await searchParams;
@@ -114,14 +114,14 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         </div>
         <div className="flex gap-2">
           <Link
-            href="/admin/questions/new"
+            href="/questions/new"
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Thêm câu hỏi
           </Link>
           <Link
-            href="/admin/questions/import"
+            href="/questions/import"
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
@@ -227,7 +227,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                   >
                     Chưa có câu hỏi nào khớp bộ lọc.{" "}
                     <Link
-                      href="/admin/questions/new"
+                      href="/questions/new"
                       className="text-[#7C3AED] hover:underline"
                     >
                       Tạo mới →
@@ -300,7 +300,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                       </td>
                       <td className="px-3 py-3 text-right">
                         <Link
-                          href={`/admin/questions/${q.id}/edit`}
+                          href={`/questions/${q.id}/edit`}
                           className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                         >
                           Sửa

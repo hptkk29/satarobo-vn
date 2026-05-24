@@ -53,7 +53,7 @@ export async function updateLeadStatus(
     })
   })
 
-  revalidatePath('/admin/leads')
+  revalidatePath('/leads')
   return { ok: true }
 }
 
@@ -92,7 +92,7 @@ export async function updateLeadNote(
     })
   })
 
-  revalidatePath('/admin/leads')
+  revalidatePath('/leads')
   return { ok: true }
 }
 
@@ -133,6 +133,6 @@ export async function deleteLead(
     return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
   }
 
-  revalidatePath('/admin/leads')
+  revalidatePath('/leads')
   return { ok: true }
 }

@@ -149,7 +149,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
       <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-12 text-center text-neutral-500">
         Lớp này chưa có học viên nào đăng ký ở trạng thái <strong>Đang học (ACTIVE)</strong>.
         <br />
-        <a href="/admin/enrollments" className="text-orange-600 hover:underline">
+        <a href="/enrollments" className="text-orange-600 hover:underline">
           → Tạo đăng ký
         </a>
       </div>

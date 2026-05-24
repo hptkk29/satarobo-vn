@@ -13,7 +13,7 @@ export default async function CoursePackagesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canManageCoursePackages(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const packages = await db.coursePackage.findMany({
@@ -41,7 +41,7 @@ export default async function CoursePackagesPage() {
           </p>
         </div>
         <Link
-          href="/admin/course-packages/new"
+          href="/course-packages/new"
           className="inline-flex items-center gap-2 rounded-lg bg-[#F7941D] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e58510]"
         >
           <Plus className="h-4 w-4" />

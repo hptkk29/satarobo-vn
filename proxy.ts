@@ -14,8 +14,54 @@ function detectHost(host: string): HostKind {
   return "unknown"; // localhost, preview deployments
 }
 
-function isAdminPath(p: string): boolean {
-  return p.startsWith("/admin") || p === "/login";
+// Top-level route segments under app/(admin)/admin/* — admin host serves
+// these at the root path (no /admin prefix). Keep in sync with the folder
+// list. Adding a new admin route? Add its top segment here.
+const ADMIN_ROUTE_SEGMENTS = new Set<string>([
+  "assignments",
+  "attendance",
+  "audit-log",
+  "centers",
+  "charts-test",
+  "classes",
+  "course-packages",
+  "curriculums",
+  "dashboard",
+  "design-system-preview",
+  "design-system-preview-v2",
+  "documents",
+  "enrollments",
+  "exams",
+  "holidays",
+  "honors",
+  "inventory",
+  "jobs",
+  "kits",
+  "leads",
+  "marketing",
+  "news",
+  "nhan-su",
+  "orders",
+  "payment-methods",
+  "questions",
+  "r2-test",
+  "rooms",
+  "sessions",
+  "settings",
+  "site-content",
+  "students",
+  "teachers",
+  "users",
+]);
+
+/** First path segment, e.g. "/leads/123" → "leads". */
+function firstSegment(p: string): string {
+  const parts = p.split("/").filter(Boolean);
+  return parts[0] ?? "";
+}
+
+function isAdminRoute(p: string): boolean {
+  return ADMIN_ROUTE_SEGMENTS.has(firstSegment(p));
 }
 
 function isInfraPath(p: string): boolean {
@@ -29,9 +75,7 @@ function isInfraPath(p: string): boolean {
   );
 }
 
-/**
- * Redirect to same path on different host (preserves query string).
- */
+/** Redirect to same path on different host (preserves query string). */
 function redirectToHost(
   req: NextAuthRequest,
   targetHost: string,
@@ -67,10 +111,14 @@ function redirectTo(
   return NextResponse.redirect(url);
 }
 
-/**
- * Add noindex headers for admin subdomain responses (SEO defense — admin
- * pages should never appear in search results).
- */
+/** Internal rewrite — URL bar stays, server-side resolves new path. */
+function rewriteTo(req: NextAuthRequest, pathname: string): NextResponse {
+  const url = req.nextUrl.clone();
+  url.pathname = pathname;
+  return NextResponse.rewrite(url);
+}
+
+/** Add noindex headers for admin subdomain responses (SEO defense). */
 function withAdminHeaders(response: NextResponse): NextResponse {
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   return response;
@@ -86,62 +134,88 @@ export default auth((req: NextAuthRequest) => {
   // BRANCH 1: *.vercel.app → canonical host (production only)
   // ═══════════════════════════════════════════════════════════════════
   if (kind === "vercel" && process.env.NODE_ENV === "production") {
-    const targetHost = isAdminPath(pathname) ? ADMIN_HOST : PUBLIC_HOST;
-    return redirectToHost(req, targetHost, pathname, 308);
+    // Strip /admin prefix when bouncing to admin host (clean URLs there).
+    const isAdminPrefixed = pathname.startsWith("/admin/") || pathname === "/admin";
+    if (isAdminPrefixed) {
+      const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
+      return redirectToHost(req, ADMIN_HOST, cleanPath, 308);
+    }
+    if (pathname === "/login" || isAdminRoute(pathname)) {
+      return redirectToHost(req, ADMIN_HOST, pathname, 308);
+    }
+    return redirectToHost(req, PUBLIC_HOST, pathname, 308);
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 2: satarobo.vn (public) — admin paths → redirect subdomain
+  // BRANCH 2: satarobo.vn (public)
+  // - Old /admin/X URLs → 308 to admin host without /admin prefix
+  // - Bare admin route names → 308 to admin host
+  // - /login → 308 to admin host
+  // - Everything else → public passthrough
   // ═══════════════════════════════════════════════════════════════════
   if (kind === "public") {
-    if (isAdminPath(pathname)) {
+    if (pathname.startsWith("/admin/") || pathname === "/admin") {
+      const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
+      return redirectToHost(req, ADMIN_HOST, cleanPath, 308);
+    }
+    if (pathname === "/login" || isAdminRoute(pathname)) {
       return redirectToHost(req, ADMIN_HOST, pathname, 308);
     }
     return NextResponse.next();
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 3: admin.satarobo.vn — strict admin/auth/infra only
+  // BRANCH 3: admin.satarobo.vn — clean URLs, internal rewrite
   // ═══════════════════════════════════════════════════════════════════
   if (kind === "admin") {
     if (isInfraPath(pathname)) {
       return NextResponse.next();
     }
 
-    // Root or /admin → /admin/dashboard
-    if (pathname === "/" || pathname === "/admin" || pathname === "/admin/") {
-      return withAdminHeaders(redirectTo(req, "/admin/dashboard"));
+    // Legacy /admin/X URLs (old bookmarks, external links) → 308 strip prefix
+    if (pathname.startsWith("/admin/") || pathname === "/admin") {
+      const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
+      return withAdminHeaders(redirectTo(req, cleanPath));
+    }
+
+    // Root → dashboard
+    if (pathname === "/") {
+      if (!session?.user) {
+        return withAdminHeaders(redirectTo(req, "/login"));
+      }
+      return withAdminHeaders(redirectTo(req, "/dashboard"));
     }
 
     // /login on admin host
     if (pathname === "/login") {
       if (session?.user) {
-        return withAdminHeaders(redirectTo(req, "/admin/dashboard"));
+        return withAdminHeaders(redirectTo(req, "/dashboard"));
       }
       return withAdminHeaders(NextResponse.next());
     }
 
-    // /admin/* → check authenticated (no role gate, page handles permission)
-    if (pathname.startsWith("/admin")) {
+    // Known admin route → rewrite internally to /admin/X so Next.js resolves
+    // file at app/(admin)/admin/X. URL bar stays as /X.
+    if (isAdminRoute(pathname)) {
       if (!session?.user) {
         return withAdminHeaders(
           redirectTo(req, "/login", { callbackUrl: pathname }),
         );
       }
-      // PASS — page-level can() handles authorization
-      return withAdminHeaders(NextResponse.next());
+      return withAdminHeaders(rewriteTo(req, "/admin" + pathname));
     }
 
-    // Non-admin paths on admin subdomain → bounce to public host.
+    // Non-admin path on admin host → bounce to public host
     // VD: admin.satarobo.vn/khoa-hoc → satarobo.vn/khoa-hoc
     return redirectToHost(req, PUBLIC_HOST, pathname, 308);
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 4: unknown host (localhost, preview *.vercel.app dev)
-  // Apply combined logic — no subdomain split.
+  // BRANCH 4: unknown host (localhost, preview deployments)
+  // No subdomain split — use the same /admin/X paths Next.js file system
+  // serves. Apply auth gate + legacy /admin/X cleanup mirror.
   // ═══════════════════════════════════════════════════════════════════
-  if (pathname.startsWith("/admin")) {
+  if (pathname.startsWith("/admin/") || pathname === "/admin") {
     if (!session?.user) {
       return redirectTo(req, "/login", { callbackUrl: pathname });
     }
@@ -151,8 +225,16 @@ export default auth((req: NextAuthRequest) => {
     return NextResponse.next();
   }
 
+  // Clean URL on localhost too — rewrite /X → /admin/X for known admin routes
+  if (isAdminRoute(pathname)) {
+    if (!session?.user) {
+      return redirectTo(req, "/login", { callbackUrl: pathname });
+    }
+    return rewriteTo(req, "/admin" + pathname);
+  }
+
   if (pathname === "/login" && session?.user) {
-    return redirectTo(req, "/admin/dashboard");
+    return redirectTo(req, "/dashboard");
   }
 
   return NextResponse.next();

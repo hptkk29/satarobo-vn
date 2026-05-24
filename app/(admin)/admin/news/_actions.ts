@@ -71,7 +71,7 @@ async function requireAdmin() {
     role !== "MANAGER" &&
     role !== "MARKETING"
   ) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session.user;
 }
@@ -124,9 +124,9 @@ export async function createNews(formData: FormData): Promise<ActionResult> {
     return { error: "Slug đã tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/news");
+  revalidatePath("/news");
   revalidatePath("/tin-tuc");
-  redirect("/admin/news");
+  redirect("/news");
 }
 
 export async function updateNews(id: string, formData: FormData): Promise<ActionResult> {
@@ -174,11 +174,11 @@ export async function updateNews(id: string, formData: FormData): Promise<Action
     return { error: "Bài viết không tồn tại, slug trùng, hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/news");
-  revalidatePath(`/admin/news/${id}/edit`);
+  revalidatePath("/news");
+  revalidatePath(`/news/${id}/edit`);
   revalidatePath("/tin-tuc");
   revalidatePath(`/tin-tuc/${n.slug || ""}`);
-  redirect("/admin/news");
+  redirect("/news");
 }
 
 export async function deleteNews(id: string): Promise<ActionResult> {
@@ -188,7 +188,7 @@ export async function deleteNews(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá bài viết này" };
   }
-  revalidatePath("/admin/news");
+  revalidatePath("/news");
   revalidatePath("/tin-tuc");
   return {};
 }
@@ -213,7 +213,7 @@ export async function toggleNewsPublished(id: string, newValue: boolean): Promis
   } catch {
     return { error: "Không thể cập nhật trạng thái" };
   }
-  revalidatePath("/admin/news");
+  revalidatePath("/news");
   revalidatePath("/tin-tuc");
   return {};
 }

@@ -179,7 +179,7 @@ export function CurriculumForm({
         </button>
         <button
           type="button"
-          onClick={() => router.push("/admin/curriculums")}
+          onClick={() => router.push("/curriculums")}
           disabled={pending}
           className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-2.5 font-bold text-neutral-700 hover:bg-neutral-50"
         >

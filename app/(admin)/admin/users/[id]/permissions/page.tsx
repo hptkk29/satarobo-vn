@@ -20,7 +20,7 @@ export default async function UserPermissionsPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "users:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -48,7 +48,7 @@ export default async function UserPermissionsPage({ params }: Props) {
   return (
     <div className="max-w-5xl">
       <Link
-        href={`/admin/users/${user.id}/edit`}
+        href={`/users/${user.id}/edit`}
         className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -78,7 +78,7 @@ export default async function UserPermissionsPage({ params }: Props) {
               <RoleBadge role={user.role} />
               {user.employee && (
                 <Link
-                  href={`/admin/nhan-su/${user.employee.id}`}
+                  href={`/nhan-su/${user.employee.id}`}
                   className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700 hover:bg-gray-200"
                 >
                   <BadgeCheck className="h-3 w-3" />

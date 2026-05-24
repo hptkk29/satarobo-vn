@@ -12,7 +12,7 @@ export default async function NewEnrollmentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const [students, classes] = await Promise.all([

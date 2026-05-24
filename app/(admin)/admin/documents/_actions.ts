@@ -72,7 +72,7 @@ export async function createDocument(
       },
       select: { id: true },
     });
-    revalidatePath("/admin/documents");
+    revalidatePath("/documents");
     return { ok: true, data: { documentId: doc.id } };
   } catch (err) {
     return {
@@ -85,7 +85,7 @@ export async function createDocument(
 export async function createDocumentAndRedirect(input: DocumentInput) {
   const res = await createDocument(input);
   if (!res.ok) return res;
-  redirect(`/admin/documents/${res.data!.documentId}/edit`);
+  redirect(`/documents/${res.data!.documentId}/edit`);
 }
 
 export async function updateDocument(
@@ -129,8 +129,8 @@ export async function updateDocument(
     };
   }
 
-  revalidatePath("/admin/documents");
-  revalidatePath(`/admin/documents/${id}/edit`);
+  revalidatePath("/documents");
+  revalidatePath(`/documents/${id}/edit`);
   return { ok: true };
 }
 
@@ -148,12 +148,12 @@ export async function deleteDocument(id: string): Promise<Result> {
       error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/documents");
+  revalidatePath("/documents");
   return { ok: true };
 }
 
 export async function deleteDocumentAndRedirect(id: string): Promise<Result> {
   const res = await deleteDocument(id);
   if (!res.ok) return res;
-  redirect("/admin/documents");
+  redirect("/documents");
 }

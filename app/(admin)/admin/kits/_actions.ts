@@ -100,7 +100,7 @@ async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session.user;
 }
@@ -164,9 +164,9 @@ export async function createKit(formData: FormData): Promise<ActionResult> {
     return { error: "Slug đã tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/kits");
+  revalidatePath("/kits");
   revalidatePath("/hoc-cu");
-  redirect("/admin/kits");
+  redirect("/kits");
 }
 
 export async function updateKit(id: string, formData: FormData): Promise<ActionResult> {
@@ -205,10 +205,10 @@ export async function updateKit(id: string, formData: FormData): Promise<ActionR
     return { error: "Kit không tồn tại, slug trùng, hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/kits");
-  revalidatePath(`/admin/kits/${id}/edit`);
+  revalidatePath("/kits");
+  revalidatePath(`/kits/${id}/edit`);
   revalidatePath("/hoc-cu");
-  redirect("/admin/kits");
+  redirect("/kits");
 }
 
 export async function deleteKit(id: string): Promise<ActionResult> {
@@ -218,7 +218,7 @@ export async function deleteKit(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá kit này" };
   }
-  revalidatePath("/admin/kits");
+  revalidatePath("/kits");
   revalidatePath("/hoc-cu");
   return {};
 }
@@ -233,7 +233,7 @@ export async function toggleKitPublished(id: string, newValue: boolean): Promise
   } catch {
     return { error: "Không thể cập nhật trạng thái" };
   }
-  revalidatePath("/admin/kits");
+  revalidatePath("/kits");
   revalidatePath("/hoc-cu");
   return {};
 }
@@ -248,7 +248,7 @@ export async function toggleKitAvailable(id: string, newValue: boolean): Promise
   } catch {
     return { error: "Không thể cập nhật trạng thái" };
   }
-  revalidatePath("/admin/kits");
+  revalidatePath("/kits");
   revalidatePath("/hoc-cu");
   return {};
 }

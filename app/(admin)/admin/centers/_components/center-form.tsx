@@ -183,7 +183,7 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
-          onClick={() => router.push("/admin/centers")}
+          onClick={() => router.push("/centers")}
           className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
         >
           Huỷ

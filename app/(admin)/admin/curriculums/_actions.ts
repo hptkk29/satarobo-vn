@@ -58,7 +58,7 @@ export async function createCurriculum(
 
   try {
     const c = await db.curriculum.create({ data, select: { id: true } });
-    revalidatePath("/admin/curriculums");
+    revalidatePath("/curriculums");
     return { ok: true, data: { curriculumId: c.id } };
   } catch (err) {
     return {
@@ -71,7 +71,7 @@ export async function createCurriculum(
 export async function createCurriculumAndRedirect(input: CurriculumInput) {
   const res = await createCurriculum(input);
   if (!res.ok) return res;
-  redirect(`/admin/curriculums/${res.data!.curriculumId}/edit`);
+  redirect(`/curriculums/${res.data!.curriculumId}/edit`);
 }
 
 export async function updateCurriculum(
@@ -117,8 +117,8 @@ export async function updateCurriculum(
     };
   }
 
-  revalidatePath("/admin/curriculums");
-  revalidatePath(`/admin/curriculums/${id}/edit`);
+  revalidatePath("/curriculums");
+  revalidatePath(`/curriculums/${id}/edit`);
   return { ok: true };
 }
 
@@ -142,14 +142,14 @@ export async function deleteCurriculum(id: string): Promise<Result> {
       error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath("/admin/curriculums");
+  revalidatePath("/curriculums");
   return { ok: true };
 }
 
 export async function deleteCurriculumAndRedirect(id: string): Promise<Result> {
   const res = await deleteCurriculum(id);
   if (!res.ok) return res;
-  redirect("/admin/curriculums");
+  redirect("/curriculums");
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -189,7 +189,7 @@ export async function createLesson(input: LessonInput): Promise<Result> {
     };
   }
 
-  revalidatePath(`/admin/curriculums/${data.curriculumId}/edit`);
+  revalidatePath(`/curriculums/${data.curriculumId}/edit`);
   return { ok: true };
 }
 
@@ -236,7 +236,7 @@ export async function updateLesson(
     };
   }
 
-  revalidatePath(`/admin/curriculums/${data.curriculumId}/edit`);
+  revalidatePath(`/curriculums/${data.curriculumId}/edit`);
   return { ok: true };
 }
 
@@ -258,7 +258,7 @@ export async function deleteLesson(id: string): Promise<Result> {
       error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
-  revalidatePath(`/admin/curriculums/${lesson.curriculumId}/edit`);
+  revalidatePath(`/curriculums/${lesson.curriculumId}/edit`);
   return { ok: true };
 }
 
@@ -309,6 +309,6 @@ export async function reorderLessons({
     };
   }
 
-  revalidatePath(`/admin/curriculums/${curriculumId}/edit`);
+  revalidatePath(`/curriculums/${curriculumId}/edit`);
   return { ok: true };
 }

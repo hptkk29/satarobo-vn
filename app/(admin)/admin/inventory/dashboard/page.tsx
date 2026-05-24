@@ -35,7 +35,7 @@ export default async function InventoryDashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!ALLOWED_ROLES.includes(session.user.role)) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const stats = await getInventoryStats();
@@ -54,20 +54,20 @@ export default async function InventoryDashboardPage() {
         </div>
         <div className="flex gap-2 text-sm">
           <Link
-            href="/admin/inventory/items"
+            href="/inventory/items"
             className="rounded-md border border-gray-200 bg-white px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50"
           >
             Mặt hàng →
           </Link>
           <Link
-            href="/admin/inventory/movements"
+            href="/inventory/movements"
             className="rounded-md border border-gray-200 bg-white px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50"
           >
             <History className="mr-1 inline h-3.5 w-3.5" />
             Lịch sử
           </Link>
           <Link
-            href="/admin/inventory/audit"
+            href="/inventory/audit"
             className="rounded-md border border-gray-200 bg-white px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50"
           >
             <ClipboardCheck className="mr-1 inline h-3.5 w-3.5" />
@@ -163,7 +163,7 @@ export default async function InventoryDashboardPage() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       <Link
-                        href={`/admin/inventory/items/${a.itemId}/edit`}
+                        href={`/inventory/items/${a.itemId}/edit`}
                         className="text-xs font-semibold text-[#7C3AED] hover:underline"
                       >
                         Mở →

@@ -17,7 +17,7 @@ export default async function EditPaymentMethodPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "payments:manage")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
@@ -27,7 +27,7 @@ export default async function EditPaymentMethodPage({ params }: Props) {
   return (
     <div>
       <Link
-        href="/admin/payment-methods"
+        href="/payment-methods"
         className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
       >
         <ChevronLeft className="h-4 w-4" />

@@ -11,7 +11,7 @@ export default async function HonorsAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!["SUPER_ADMIN", "MANAGER"].includes(session.user.role)) {
-    redirect("/admin/dashboard");
+    redirect("/dashboard");
   }
 
   const honors = await db.honor.findMany({
@@ -30,19 +30,19 @@ export default async function HonorsAdminPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/admin/honors/timeline"
+            href="/honors/timeline"
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             Timeline
           </Link>
           <Link
-            href="/admin/honors/settings"
+            href="/honors/settings"
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             Cài đặt trang
           </Link>
           <Link
-            href="/admin/honors/new"
+            href="/honors/new"
             className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
           >
             <Plus className="h-4 w-4" />

@@ -29,7 +29,7 @@ export default async function SiteContentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "honors:settings")) {
-    redirect("/admin/dashboard");
+    redirect("/dashboard");
   }
 
   // Load tất cả site content cho 10 pages

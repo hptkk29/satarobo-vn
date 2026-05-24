@@ -169,7 +169,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
             <p className="mt-2 text-sm text-amber-600">
               <AlertCircle className="mr-1 inline h-4 w-4" />
               Chưa có buổi học nào.{" "}
-              <Link href="/admin/sessions/new" className="text-orange-600 hover:underline">
+              <Link href="/sessions/new" className="text-orange-600 hover:underline">
                 Tạo buổi học →
               </Link>
             </p>

@@ -37,7 +37,7 @@ interface SearchParams {
 export default async function TeachersPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user, 'employees:view-all')) redirect('/admin/dashboard')
+  if (!can(session.user, 'employees:view-all')) redirect('/dashboard')
 
   const params = await searchParams
   const q = params.q?.trim()

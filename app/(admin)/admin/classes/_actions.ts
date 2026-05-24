@@ -26,7 +26,7 @@ async function requireClassWrite(action: "create" | "update" | "delete") {
   };
 
   if (!can(session.user, actionMap[action])) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
@@ -167,8 +167,8 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được lớp" };
   }
 
-  revalidatePath("/admin/classes");
-  redirect("/admin/classes");
+  revalidatePath("/classes");
+  redirect("/classes");
 }
 
 export async function updateClass(
@@ -217,9 +217,9 @@ export async function updateClass(
     return { error: "Lớp không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/classes");
-  revalidatePath(`/admin/classes/${id}/edit`);
-  redirect("/admin/classes");
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${id}/edit`);
+  redirect("/classes");
 }
 
 export async function deleteClass(id: string): Promise<ActionResult> {
@@ -252,6 +252,6 @@ export async function deleteClass(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá lớp này" };
   }
-  revalidatePath("/admin/classes");
+  revalidatePath("/classes");
   return {};
 }

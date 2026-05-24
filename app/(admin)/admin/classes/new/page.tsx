@@ -10,7 +10,7 @@ export default async function NewClassPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "classes:create")) {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
 
   const [courses, centers, rooms, teachers] = await Promise.all([

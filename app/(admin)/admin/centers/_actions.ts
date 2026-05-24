@@ -54,7 +54,7 @@ async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session.user;
 }
@@ -118,9 +118,9 @@ export async function createCenter(formData: FormData): Promise<ActionResult> {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được cơ sở" };
   }
 
-  revalidatePath("/admin/centers");
+  revalidatePath("/centers");
   revalidatePath("/lien-he");
-  redirect("/admin/centers");
+  redirect("/centers");
 }
 
 export async function updateCenter(id: string, formData: FormData): Promise<ActionResult> {
@@ -140,10 +140,10 @@ export async function updateCenter(id: string, formData: FormData): Promise<Acti
     return { error: "Cơ sở không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/centers");
-  revalidatePath(`/admin/centers/${id}/edit`);
+  revalidatePath("/centers");
+  revalidatePath(`/centers/${id}/edit`);
   revalidatePath("/lien-he");
-  redirect("/admin/centers");
+  redirect("/centers");
 }
 
 export async function deleteCenter(id: string): Promise<ActionResult> {
@@ -185,7 +185,7 @@ export async function deleteCenter(id: string): Promise<ActionResult> {
     return { error: "Không thể xoá cơ sở này" };
   }
 
-  revalidatePath("/admin/centers");
+  revalidatePath("/centers");
   revalidatePath("/lien-he");
   return {};
 }
@@ -197,7 +197,7 @@ export async function toggleCenterActive(id: string, newValue: boolean): Promise
   } catch {
     return { error: "Không thể cập nhật trạng thái" };
   }
-  revalidatePath("/admin/centers");
+  revalidatePath("/centers");
   revalidatePath("/lien-he");
   return {};
 }

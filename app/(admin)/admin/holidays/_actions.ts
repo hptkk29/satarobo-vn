@@ -74,7 +74,7 @@ async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
-    redirect("/admin/dashboard?error=unauthorized");
+    redirect("/dashboard?error=unauthorized");
   }
   return session.user;
 }
@@ -132,8 +132,8 @@ export async function createHoliday(formData: FormData): Promise<ActionResult> {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được ngày nghỉ" };
   }
 
-  revalidatePath("/admin/holidays");
-  redirect("/admin/holidays");
+  revalidatePath("/holidays");
+  redirect("/holidays");
 }
 
 export async function updateHoliday(
@@ -153,9 +153,9 @@ export async function updateHoliday(
     return { error: "Ngày nghỉ không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
-  revalidatePath("/admin/holidays");
-  revalidatePath(`/admin/holidays/${id}/edit`);
-  redirect("/admin/holidays");
+  revalidatePath("/holidays");
+  revalidatePath(`/holidays/${id}/edit`);
+  redirect("/holidays");
 }
 
 export async function deleteHoliday(id: string): Promise<ActionResult> {
@@ -165,6 +165,6 @@ export async function deleteHoliday(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không thể xoá ngày nghỉ này" };
   }
-  revalidatePath("/admin/holidays");
+  revalidatePath("/holidays");
   return {};
 }

@@ -33,7 +33,7 @@ export function ResetPasswordForm({
         return;
       }
       toast.success(`Đã đổi mật khẩu cho ${userEmail}`);
-      router.push("/admin/users");
+      router.push("/users");
     });
   }
 

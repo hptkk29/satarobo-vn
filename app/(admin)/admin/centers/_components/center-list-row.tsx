@@ -109,7 +109,7 @@ export function CenterListRow({ center }: { center: Row }) {
       <td className="p-4 text-right">
         <div className="inline-flex items-center gap-1">
           <Link
-            href={`/admin/centers/${center.id}/edit`}
+            href={`/centers/${center.id}/edit`}
             className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
             title="Sửa"
           >

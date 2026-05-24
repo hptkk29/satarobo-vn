@@ -122,7 +122,7 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Link href={`/admin/payment-methods/${pm.id}/edit`}>
+                        <Link href={`/payment-methods/${pm.id}/edit`}>
                           <Button variant="outline" size="sm">
                             <Pencil className="h-3.5 w-3.5" />
                             Sửa

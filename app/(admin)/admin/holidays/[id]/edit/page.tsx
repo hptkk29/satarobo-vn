@@ -29,7 +29,7 @@ export default async function EditHolidayPage({ params }: Props) {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <Link
-            href="/admin/holidays"
+            href="/holidays"
             className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
           >
             <ChevronLeft className="h-4 w-4" /> Quay lại danh sách

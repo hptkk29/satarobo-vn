@@ -16,7 +16,7 @@ export default async function NewRoomPage() {
     return (
       <div className="max-w-3xl">
         <Link
-          href="/admin/rooms"
+          href="/rooms"
           className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
@@ -28,7 +28,7 @@ export default async function NewRoomPage() {
             Tạo ít nhất 1 cơ sở (Active) trước khi thêm phòng.
           </p>
           <Link
-            href="/admin/centers/new"
+            href="/centers/new"
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
           >
             Thêm cơ sở →
@@ -41,7 +41,7 @@ export default async function NewRoomPage() {
   return (
     <div>
       <Link
-        href="/admin/rooms"
+        href="/rooms"
         className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
