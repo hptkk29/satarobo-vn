@@ -2,14 +2,54 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
 
-const HR_ALLOWED_ROUTES = ["/admin/nhan-su", "/admin/dashboard"];
-const ADMIN_ONLY_PREFIX = "/admin";
+const PUBLIC_HOST = "satarobo.vn";
+const ADMIN_HOST = "admin.satarobo.vn";
+
+type HostKind = "public" | "admin" | "vercel" | "unknown";
+
+function detectHost(host: string): HostKind {
+  if (host === PUBLIC_HOST || host === `www.${PUBLIC_HOST}`) return "public";
+  if (host === ADMIN_HOST) return "admin";
+  if (host.endsWith(".vercel.app")) return "vercel";
+  return "unknown"; // localhost, preview deployments
+}
+
+function isAdminPath(p: string): boolean {
+  return p.startsWith("/admin") || p === "/login";
+}
+
+function isInfraPath(p: string): boolean {
+  return (
+    p.startsWith("/_next/") ||
+    p.startsWith("/api/") ||
+    p === "/favicon.ico" ||
+    p === "/robots.txt" ||
+    p === "/sitemap.xml" ||
+    p === "/manifest.json"
+  );
+}
 
 /**
- * Build redirect URL từ req.nextUrl.clone() thay vì `new URL(path, req.url)`.
- * `req.url` có thể bị NextAuth canonicalize sang NEXTAUTH_URL/VERCEL_URL
- * → leak `*.vercel.app` host khi production dùng custom domain. nextUrl
- * giữ đúng host từ request thực tế (satarobo.vn).
+ * Redirect to same path on different host (preserves query string).
+ */
+function redirectToHost(
+  req: NextAuthRequest,
+  targetHost: string,
+  targetPath: string,
+  status: 307 | 308 = 308,
+): NextResponse {
+  const url = req.nextUrl.clone();
+  url.host = targetHost;
+  url.protocol = "https:";
+  url.port = "";
+  url.pathname = targetPath;
+  return NextResponse.redirect(url, status);
+}
+
+/**
+ * Redirect within same host (preserves host). Build URL từ
+ * `req.nextUrl.clone()` thay vì `new URL(path, req.url)` để KHÔNG bị
+ * NextAuth canonicalize sang NEXTAUTH_URL/VERCEL_URL.
  */
 function redirectTo(
   req: NextAuthRequest,
@@ -27,42 +67,90 @@ function redirectTo(
   return NextResponse.redirect(url);
 }
 
+/**
+ * Add noindex headers for admin subdomain responses (SEO defense — admin
+ * pages should never appear in search results).
+ */
+function withAdminHeaders(response: NextResponse): NextResponse {
+  response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  return response;
+}
+
 export default auth((req: NextAuthRequest) => {
   const { pathname } = req.nextUrl;
+  const host = (req.headers.get("host") ?? "").toLowerCase();
   const session = req.auth;
+  const kind = detectHost(host);
 
-  // Protect /admin/* — redirect unauthenticated or unauthorised users
-  if (pathname.startsWith(ADMIN_ONLY_PREFIX)) {
+  // ═══════════════════════════════════════════════════════════════════
+  // BRANCH 1: *.vercel.app → canonical host (production only)
+  // ═══════════════════════════════════════════════════════════════════
+  if (kind === "vercel" && process.env.NODE_ENV === "production") {
+    const targetHost = isAdminPath(pathname) ? ADMIN_HOST : PUBLIC_HOST;
+    return redirectToHost(req, targetHost, pathname, 308);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // BRANCH 2: satarobo.vn (public) — admin paths → redirect subdomain
+  // ═══════════════════════════════════════════════════════════════════
+  if (kind === "public") {
+    if (isAdminPath(pathname)) {
+      return redirectToHost(req, ADMIN_HOST, pathname, 308);
+    }
+    return NextResponse.next();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // BRANCH 3: admin.satarobo.vn — strict admin/auth/infra only
+  // ═══════════════════════════════════════════════════════════════════
+  if (kind === "admin") {
+    if (isInfraPath(pathname)) {
+      return NextResponse.next();
+    }
+
+    // Root or /admin → /admin/dashboard
+    if (pathname === "/" || pathname === "/admin" || pathname === "/admin/") {
+      return withAdminHeaders(redirectTo(req, "/admin/dashboard"));
+    }
+
+    // /login on admin host
+    if (pathname === "/login") {
+      if (session?.user) {
+        return withAdminHeaders(redirectTo(req, "/admin/dashboard"));
+      }
+      return withAdminHeaders(NextResponse.next());
+    }
+
+    // /admin/* → check authenticated (no role gate, page handles permission)
+    if (pathname.startsWith("/admin")) {
+      if (!session?.user) {
+        return withAdminHeaders(
+          redirectTo(req, "/login", { callbackUrl: pathname }),
+        );
+      }
+      // PASS — page-level can() handles authorization
+      return withAdminHeaders(NextResponse.next());
+    }
+
+    // Non-admin paths on admin subdomain → bounce to public host.
+    // VD: admin.satarobo.vn/khoa-hoc → satarobo.vn/khoa-hoc
+    return redirectToHost(req, PUBLIC_HOST, pathname, 308);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // BRANCH 4: unknown host (localhost, preview *.vercel.app dev)
+  // Apply combined logic — no subdomain split.
+  // ═══════════════════════════════════════════════════════════════════
+  if (pathname.startsWith("/admin")) {
     if (!session?.user) {
       return redirectTo(req, "/login", { callbackUrl: pathname });
     }
-
-    const role = session.user.role || "SALES";
-
-    if (role === "SUPER_ADMIN" || role === "MANAGER") {
-      if (pathname === "/admin") {
-        return redirectTo(req, "/admin/dashboard");
-      }
-      return NextResponse.next();
+    if (pathname === "/admin" || pathname === "/admin/") {
+      return redirectTo(req, "/admin/dashboard");
     }
-
-    if (role === "HR") {
-      const isAllowed =
-        pathname === "/admin" ||
-        HR_ALLOWED_ROUTES.some((route) => pathname.startsWith(route));
-      if (!isAllowed) {
-        return redirectTo(req, "/admin/dashboard", { error: "unauthorized" });
-      }
-      if (pathname === "/admin") {
-        return redirectTo(req, "/admin/dashboard");
-      }
-      return NextResponse.next();
-    }
-
-    return redirectTo(req, "/", { error: "admin-only" });
+    return NextResponse.next();
   }
 
-  // Redirect already-logged-in users away from /login
   if (pathname === "/login" && session?.user) {
     return redirectTo(req, "/admin/dashboard");
   }
@@ -70,6 +158,10 @@ export default auth((req: NextAuthRequest) => {
   return NextResponse.next();
 });
 
+// Broad matcher — middleware runs on all page/API requests.
+// Static assets excluded for performance.
 export const config = {
-  matcher: ["/admin/:path*", "/login"],
+  matcher: [
+    "/((?!_next/static|_next/image|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|js|css|woff|woff2|ttf|map)$).*)",
+  ],
 };
