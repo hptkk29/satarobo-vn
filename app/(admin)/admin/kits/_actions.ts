@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -99,7 +100,7 @@ function slugify(text: string): string {
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
+  if (!can(session.user, "kits:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;

@@ -89,42 +89,62 @@ export async function submitLeadToSheet(formData: LeadData): Promise<{ success: 
 
 async function submitLeadToApi(formData: LeadData): Promise<void> {
   // Phase 4.UI.RESET.2 PART D1 — write to internal Lead table alongside Google Sheet.
-  // Errors swallowed: do NOT break form submit when Lead fails.
-  try {
-    const eventId = `ltr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const note = [
-      formData.course ? `Khoá: ${formData.course}` : null,
-      formData.center ? `Cơ sở: ${formData.center}` : null,
-    ]
-      .filter(Boolean)
-      .join(" | ");
+  // Errors do NOT break form submit, but we now CHECK response.ok and log
+  // payload + status so silent 400/429 failures surface in browser console.
+  const eventId = `ltr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const note = [
+    formData.course ? `Khoá: ${formData.course}` : null,
+    formData.center ? `Cơ sở: ${formData.center}` : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 
-    await fetch("/api/leads", {
+  const payload = {
+    parentName: formData.name || "",
+    phone: formData.phone || "",
+    email: formData.email || "",
+    source: "laptrinhrobot-landing",
+    eventId,
+    landingPage:
+      typeof window !== "undefined" ? window.location.href : undefined,
+    referrer:
+      typeof document !== "undefined" ? document.referrer || undefined : undefined,
+    note: note || undefined,
+    consentMarketing: true,
+  };
+
+  try {
+    const res = await fetch("/api/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        parentName: formData.name || "",
-        phone: formData.phone || "",
-        email: formData.email || "",
-        source: "laptrinhrobot-landing",
-        eventId,
-        landingPage:
-          typeof window !== "undefined" ? window.location.href : undefined,
-        referrer:
-          typeof document !== "undefined" ? document.referrer || undefined : undefined,
-        note: note || undefined,
-        consentMarketing: true,
-      }),
+      body: JSON.stringify(payload),
     });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(
+        `[Lead API] HTTP ${res.status} ${res.statusText} — lead NOT saved to admin`,
+        { payload, response: body.slice(0, 500) },
+      );
+      return;
+    }
+
+    const data = (await res.json().catch(() => null)) as
+      | { ok?: boolean; leadId?: string }
+      | null;
+    if (!data?.ok) {
+      console.warn("[Lead API] response.ok=false", data);
+    }
   } catch (err) {
-    console.warn("[Lead API] submit failed (non-blocking):", err);
+    console.error("[Lead API] network/exception (lead NOT saved):", err);
   }
 }
 
 export async function handleLeadSubmission(formData: LeadData) {
   const sheetResult = await submitLeadToSheet(formData);
-  // Fire-and-forget Lead API write (non-blocking, errors logged only).
-  void submitLeadToApi(formData);
+  // Await Lead API so any 400/429/500 failures surface in console immediately
+  // (still non-blocking via the surrounding try/catch — submit success not gated).
+  await submitLeadToApi(formData);
   trackFacebookLead({ course: formData.course, center: formData.center });
   trackGA4Lead({ course: formData.course, center: formData.center });
   return sheetResult;

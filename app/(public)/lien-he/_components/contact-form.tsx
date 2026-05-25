@@ -29,6 +29,7 @@ const PHONE_VN = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/
 
 const SUBJECTS = [
   { value: 'tu-van-khoa-hoc', label: 'Tư vấn khoá học' },
+  { value: 'tu-van-hoc-cu', label: 'Tư vấn / đặt mua học cụ' },
   { value: 'hop-tac-b2b', label: 'Hợp tác B2B' },
   { value: 'khieu-nai', label: 'Khiếu nại' },
   { value: 'khac', label: 'Khác' },
@@ -40,10 +41,18 @@ const SUBJECT_PARAM_MAP: Record<string, SubjectValue> = {
   laptrinhrobot: 'tu-van-khoa-hoc',
   luyenthirobosim: 'tu-van-khoa-hoc',
   'tu-van-khoa-hoc': 'tu-van-khoa-hoc',
+  'tu-van-hoc-cu': 'tu-van-hoc-cu',
+  'hoc-cu': 'tu-van-hoc-cu',
   'hop-tac-b2b': 'hop-tac-b2b',
 }
 
-const SUBJECT_VALUES = ['tu-van-khoa-hoc', 'hop-tac-b2b', 'khieu-nai', 'khac'] as const
+const SUBJECT_VALUES = [
+  'tu-van-khoa-hoc',
+  'tu-van-hoc-cu',
+  'hop-tac-b2b',
+  'khieu-nai',
+  'khac',
+] as const
 
 const contactSchema = z.object({
   parentName: z.string().min(2, 'Họ tên tối thiểu 2 ký tự').max(100),

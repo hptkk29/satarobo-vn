@@ -258,7 +258,13 @@ export default async function HocCuPage() {
         subtitle="Chọn bộ phù hợp với độ tuổi và mục tiêu của con"
       >
         <div className="max-w-5xl mx-auto -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm border-collapse">
+          <table className="w-full min-w-[640px] text-sm border-collapse table-fixed">
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-[26%]" />
+              <col className="w-[26%]" />
+              <col className="w-[26%]" />
+            </colgroup>
             <thead>
               <tr className="bg-neutral-50">
                 <th className="px-4 py-3 text-left font-semibold text-neutral-700 border-b-2 border-neutral-200">
@@ -339,10 +345,10 @@ export default async function HocCuPage() {
               Chat Zalo: {SATA_ROBO_CONTACT.hotline}
             </a>
             <Link
-              href="/lien-he"
+              href="/lien-he?subject=tu-van-hoc-cu"
               className="inline-flex items-center gap-2 bg-purple-700 text-white font-bold px-6 py-3 rounded-xl hover:bg-purple-800 transition-colors shadow-lg"
             >
-              Đặt lịch xem học cụ tại trung tâm
+              Tư vấn bộ học cụ hoặc đặt mua học cụ
               <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
