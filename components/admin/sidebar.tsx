@@ -28,6 +28,7 @@ import {
   CreditCard,
   ShoppingBag,
   Ticket,
+  Package2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +76,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Khoá học (Packages)", href: "/course-packages", icon: Boxes },
       { label: "Học cụ (Kits)", href: "/kits", icon: Package },
+      { label: "Sản phẩm bán/thuê", href: "/products", icon: Package2 },
     ],
   },
   {

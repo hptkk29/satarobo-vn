@@ -43,6 +43,7 @@ const ADMIN_ROUTE_SEGMENTS = new Set<string>([
   "nhan-su",
   "orders",
   "payment-methods",
+  "products",
   "questions",
   "r2-test",
   "rooms",

@@ -240,6 +240,39 @@ export async function logVoucherAudit(params: {
   });
 }
 
+// ─── PRODUCT AUDIT ──────────────────────────────────────────────────
+export type ProductAuditAction =
+  | "CREATE"
+  | "UPDATE"
+  | "DELETE"
+  | "STATUS_CHANGE";
+
+export async function logProductAudit(params: {
+  productId: string;
+  action: ProductAuditAction;
+  actorId: string | null;
+  actorName: string;
+  oldValues?: Record<string, unknown>;
+  newValues?: Record<string, unknown>;
+  changedFields?: string[];
+  reason?: string;
+  tx?: TxClient;
+}) {
+  const client: DbClient = params.tx ?? db;
+  await client.productAuditLog.create({
+    data: {
+      productId: params.productId,
+      action: params.action,
+      changedByUserId: params.actorId ?? null,
+      changedByName: params.actorName,
+      oldValues: params.oldValues as Prisma.InputJsonValue | undefined,
+      newValues: params.newValues as Prisma.InputJsonValue | undefined,
+      changedFields: params.changedFields ?? [],
+      reason: params.reason ?? null,
+    },
+  });
+}
+
 // ─── UTILITY: detect changed fields ─────────────────────────────────
 /**
  * Compare old vs new object, return list of changed field names.

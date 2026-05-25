@@ -128,6 +128,35 @@ enum VoucherDiscountKind {
   FIXED // tiền cố định VND
 }
 
+// ─── Phase 5.10 — Product catalog enums ───────────────────────────────────
+
+enum ProductCategory {
+  KIT_ROBOT // Bộ kit robot hoàn chỉnh
+  SENSOR // Cảm biến riêng lẻ
+  MISSION_BLOCK // Khối nhiệm vụ thi đấu
+  ACCESSORY // Phụ kiện
+  BOOK // Sách/tài liệu
+  CONSUMABLE // Vật tư tiêu hao
+  OTHER
+}
+
+enum ProductStatus {
+  DRAFT // Soạn nháp, chưa bán
+  ACTIVE // Đang bán
+  PAUSED // Tạm ngưng bán
+  DISCONTINUED // Ngừng kinh doanh
+}
+
+enum ProductMovementType {
+  PURCHASE // Nhập hàng (+)
+  SALE // Bán (-)
+  ADJUSTMENT // Điều chỉnh (+/-)
+  DAMAGE // Hỏng (-)
+  RETURN // Trả lại từ KH (+)
+  TRANSFER_IN // Chuyển từ CN khác (+)
+  TRANSFER_OUT // Chuyển sang CN khác (-)
+}
+
 // ─── Auth (NextAuth / Auth.js) ────────────────────────────────────────────────
 
 model Account {
@@ -1105,6 +1134,9 @@ model ZMRoboKit {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Phase 5.10 — Product catalog link
+  products Product[]
 
   @@index([slug])
   @@index([isPublished, displayOrder])
@@ -2129,4 +2161,97 @@ model StudentReserve {
   @@index([studentId, startedAt])
   @@index([startedAt])
   @@index([endedAt])
+}
+
+// ─── Phase 5.10 — Product catalog (sales/rental SKU layer) ────────────────
+// Distinct from ZMRoboKit (marketing catalog). Product = sellable SKU with
+// inventory + pricing + audit trail. Global stockOnHand for v1; per-center
+// stock deferred. Optional zmroboKitId link for kit products that match a
+// public marketing entry.
+
+model Product {
+  id          String  @id @default(cuid())
+  sku         String  @unique
+  name        String
+  description String? @db.Text
+
+  category ProductCategory
+  status   ProductStatus   @default(DRAFT)
+
+  // Pricing (VND, Int)
+  salePrice           Int
+  costPrice           Int? // internal-only
+  rentalPricePerMonth Int?
+
+  // Stock (global v1)
+  stockOnHand  Int @default(0)
+  minThreshold Int @default(0)
+
+  // Display
+  imageUrls String[] @default([])
+
+  // Optional link to public ZMRoboKit marketing entry
+  zmroboKitId String?
+  zmroboKit   ZMRoboKit? @relation(fields: [zmroboKitId], references: [id], onDelete: SetNull)
+
+  attributes Json?
+  notes      String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements ProductMovement[]
+  auditLogs ProductAuditLog[]
+
+  @@index([category, status])
+  @@index([status])
+  @@index([sku])
+}
+
+model ProductMovement {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  type     ProductMovementType
+  quantity Int // signed: + for in, - for out
+
+  reason String? @db.Text
+
+  // Optional link (filled when type = SALE in Phase 5.10.1)
+  orderId String?
+
+  // Stock snapshots (denormalised for audit)
+  stockBeforeMovement Int
+  stockAfterMovement  Int
+
+  createdByUserId String?
+  createdByName   String
+
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@index([type])
+  @@index([orderId])
+}
+
+model ProductAuditLog {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  action String // CREATE | UPDATE | DELETE | STATUS_CHANGE
+
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[] @default([])
+
+  changedByUserId String?
+  changedByName   String
+
+  reason String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
 }

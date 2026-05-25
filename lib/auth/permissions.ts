@@ -175,7 +175,11 @@ export type Action =
 
   // --- Phase 5.7 — Vouchers ---
   | "vouchers:view"
-  | "vouchers:manage";
+  | "vouchers:manage"
+
+  // --- Phase 5.10 — Products (sales/rental catalog) ---
+  | "products:view"
+  | "products:manage";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -351,6 +355,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // --- Phase 5.7 — Vouchers ---
   "vouchers:view": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING", "ACCOUNTANT"],
   "vouchers:manage": ["SUPER_ADMIN", "MANAGER", "MARKETING", "ACCOUNTANT"],
+
+  // --- Phase 5.10 — Products ---
+  "products:view": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING", "ACCOUNTANT"],
+  "products:manage": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
 };
 
 // =============================================================================
