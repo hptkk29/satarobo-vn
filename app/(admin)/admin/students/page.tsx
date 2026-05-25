@@ -1,123 +1,215 @@
-import Link from 'next/link'
-import { FileSpreadsheet, Plus } from 'lucide-react'
-import { auth } from '@/lib/auth'
-import { redirect } from 'next/navigation'
-import { db } from '@/lib/db'
-import { can } from '@/lib/auth/permissions'
-import { StudentStatus } from '@prisma/client'
+import Link from "next/link";
+import { FileSpreadsheet, Plus } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
+import { StudentStatus, type Prisma } from "@prisma/client";
+import {
+  buildLifecycleWhere,
+  postFilterFrequentlyAbsent,
+  LIFECYCLE_VIEW_LABEL,
+  LIFECYCLE_VIEW_DESCRIPTION,
+  LIFECYCLE_VIEWS,
+  type LifecycleView,
+} from "@/lib/students/lifecycle";
+
+export const dynamic = "force-dynamic";
 
 const STATUS_INFO: Record<StudentStatus, { label: string; color: string }> = {
-  ACTIVE: { label: 'Đang học', color: 'bg-green-100 text-green-700' },
-  PAUSED: { label: 'Bảo lưu', color: 'bg-yellow-100 text-yellow-700' },
-  GRADUATED: { label: 'Hoàn thành', color: 'bg-blue-100 text-blue-700' },
-  INACTIVE: { label: 'Nghỉ học', color: 'bg-gray-100 text-gray-500' },
-}
+  ACTIVE: { label: "Đang học", color: "bg-green-100 text-green-700" },
+  PAUSED: { label: "Bảo lưu", color: "bg-yellow-100 text-yellow-700" },
+  GRADUATED: { label: "Hoàn thành", color: "bg-blue-100 text-blue-700" },
+  INACTIVE: { label: "Nghỉ học", color: "bg-gray-100 text-gray-500" },
+};
 
-function formatDate(date: Date) {
-  return new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+function formatDate(date: Date): string {
+  return new Date(date).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 interface SearchParams {
   searchParams: Promise<{
-    q?: string
-    status?: string
-    centerId?: string
-    grade?: string
-    page?: string
-  }>
+    q?: string;
+    status?: string;
+    centerId?: string;
+    grade?: string;
+    page?: string;
+    view?: string;
+  }>;
 }
 
-const PAGE_SIZE = 20
-const VALID_STATUSES = Object.values(StudentStatus)
+const PAGE_SIZE = 20;
+const VALID_STATUSES = Object.values(StudentStatus);
+const FREQUENT_ABSENT_FETCH_LIMIT = 500;
+
+function isValidView(v: string | undefined): v is LifecycleView {
+  return LIFECYCLE_VIEWS.includes(v as LifecycleView);
+}
+
+type StudentRow = {
+  id: string;
+  name: string;
+  studentCode: string | null;
+  avatarUrl: string | null;
+  currentGrade: number | null;
+  status: StudentStatus;
+  parentName: string | null;
+  parentPhone: string | null;
+  createdAt: Date;
+  enrollmentDate: Date | null;
+  preferredCenter: { name: string } | null;
+  center: { name: string } | null;
+  _count: { enrollments: number };
+  reserves: Array<{
+    id: string;
+    startedAt: Date;
+    expectedEndAt: Date | null;
+    reason: string;
+  }>;
+};
+
+const STUDENT_LIST_SELECT = {
+  id: true,
+  name: true,
+  studentCode: true,
+  avatarUrl: true,
+  currentGrade: true,
+  status: true,
+  parentName: true,
+  parentPhone: true,
+  createdAt: true,
+  enrollmentDate: true,
+  preferredCenter: { select: { name: true } },
+  center: { select: { name: true } },
+  _count: { select: { enrollments: true } },
+  reserves: {
+    where: { isActive: true },
+    select: {
+      id: true,
+      startedAt: true,
+      expectedEndAt: true,
+      reason: true,
+    },
+    take: 1,
+    orderBy: { startedAt: "desc" as const },
+  },
+} satisfies Prisma.StudentSelect;
 
 export default async function StudentsPage({ searchParams }: SearchParams) {
-  const session = await auth()
-  if (!session?.user) redirect('/login')
-  if (!can(session.user, 'students:view-all')) redirect('/dashboard')
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!can(session.user, "students:view-all")) redirect("/dashboard");
 
-  const canCreate = can(session.user, 'students:create')
-  const canUpdate = can(session.user, 'students:edit')
+  const canCreate = can(session.user, "students:create");
+  const canUpdate = can(session.user, "students:edit");
 
-  const params = await searchParams
-  const q = params.q?.trim() || undefined
-  const statusParam = params.status
-  // Default: ACTIVE. "all" disables status filter.
-  const statusFilter: StudentStatus | undefined =
-    statusParam === 'all'
-      ? undefined
-      : statusParam && VALID_STATUSES.includes(statusParam as StudentStatus)
-        ? (statusParam as StudentStatus)
-        : 'ACTIVE'
-
-  const centerFilter = params.centerId?.trim() || undefined
-  const gradeRaw = params.grade?.trim()
-  const gradeFilter =
+  const sp = await searchParams;
+  const view: LifecycleView = isValidView(sp.view) ? sp.view : "all";
+  const q = sp.q?.trim() ?? "";
+  const centerId = sp.centerId?.trim() ?? "";
+  const gradeRaw = sp.grade?.trim() ?? "";
+  const grade =
     gradeRaw && /^\d+$/.test(gradeRaw)
       ? Math.max(1, Math.min(12, Number(gradeRaw)))
-      : undefined
+      : undefined;
+  const statusParam =
+    sp.status && VALID_STATUSES.includes(sp.status as StudentStatus)
+      ? (sp.status as StudentStatus)
+      : undefined;
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  const page = Math.max(1, Number(params.page ?? 1))
+  // Build base filters (search, center, grade). Note: centerId param maps
+  // to Student.preferredCenterId — same field that the existing list filtered
+  // on before lifecycle tabs were added.
+  const baseFilters: Prisma.StudentWhereInput = {};
+  if (q) {
+    baseFilters.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { studentCode: { contains: q, mode: "insensitive" } },
+      { parentName: { contains: q, mode: "insensitive" } },
+      { parentPhone: { contains: q } },
+      { phone: { contains: q } },
+    ];
+  }
+  if (centerId) baseFilters.preferredCenterId = centerId;
+  if (grade != null) baseFilters.currentGrade = grade;
+  // Status filter only meaningful on "all" view — other views encode status implicitly.
+  if (view === "all" && statusParam) baseFilters.status = statusParam;
 
-  const where = {
-    deletedAt: null as null,
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: 'insensitive' as const } },
-            { parentName: { contains: q, mode: 'insensitive' as const } },
-            { parentPhone: { contains: q } },
-            { studentCode: { contains: q, mode: 'insensitive' as const } },
-          ],
-        }
-      : {}),
-    ...(statusFilter ? { status: statusFilter } : {}),
-    ...(centerFilter ? { preferredCenterId: centerFilter } : {}),
-    ...(gradeFilter ? { currentGrade: gradeFilter } : {}),
+  const where = buildLifecycleWhere(view, baseFilters);
+
+  // ─── DATA FETCH ───
+  let students: StudentRow[] = [];
+  let totalCount: number;
+
+  if (view === "frequent-absent") {
+    // Post-filter approach: load base candidates, then JS-filter.
+    const baseStudents = await db.student.findMany({
+      where,
+      select: { id: true },
+      take: FREQUENT_ABSENT_FETCH_LIMIT,
+    });
+    const filteredIds = await postFilterFrequentlyAbsent(
+      baseStudents.map((s) => s.id),
+    );
+    const filteredArr = Array.from(filteredIds);
+    totalCount = filteredArr.length;
+    const pageIds = filteredArr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+    if (pageIds.length > 0) {
+      const rows = await db.student.findMany({
+        where: { id: { in: pageIds } },
+        select: STUDENT_LIST_SELECT,
+        orderBy: [{ name: "asc" }],
+      });
+      students = rows as StudentRow[];
+    }
+  } else {
+    const [count, rows] = await Promise.all([
+      db.student.count({ where }),
+      db.student.findMany({
+        where,
+        select: STUDENT_LIST_SELECT,
+        orderBy: [{ createdAt: "desc" }],
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+      }),
+    ]);
+    totalCount = count;
+    students = rows as StudentRow[];
   }
 
-  const [students, total, centers] = await Promise.all([
-    db.student.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      select: {
-        id: true,
-        name: true,
-        studentCode: true,
-        avatarUrl: true,
-        phone: true,
-        currentGrade: true,
-        status: true,
-        parentName: true,
-        parentPhone: true,
-        createdAt: true,
-        preferredCenter: { select: { name: true } },
-        center: { select: { name: true } },
-      },
-    }).catch(() => []),
-    db.student.count({ where }).catch(() => 0),
-    db.center
-      .findMany({
-        where: { isActive: true },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      })
-      .catch(() => [] as Array<{ id: string; name: string }>),
-  ])
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const centers = await db.center.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
 
-  // build query string preserving filters
-  function pageUrl(p: number) {
-    const sp = new URLSearchParams()
-    if (q) sp.set('q', q)
-    if (statusParam && statusParam !== 'ACTIVE') sp.set('status', statusParam)
-    if (centerFilter) sp.set('centerId', centerFilter)
-    if (gradeFilter) sp.set('grade', String(gradeFilter))
-    if (p > 1) sp.set('page', String(p))
-    const s = sp.toString()
-    return s ? `?${s}` : ''
+  // URL helper preserving filters across tab/page transitions
+  function urlFor(
+    params: Partial<{
+      view: LifecycleView;
+      page: number;
+      q: string;
+      centerId: string;
+      grade: string;
+      status: string;
+    }>,
+  ): string {
+    const u = new URLSearchParams();
+    if (params.view && params.view !== "all") u.set("view", params.view);
+    if (params.page && params.page > 1) u.set("page", String(params.page));
+    if (params.q) u.set("q", params.q);
+    if (params.centerId) u.set("centerId", params.centerId);
+    if (params.grade) u.set("grade", params.grade);
+    if (params.status) u.set("status", params.status);
+    return `/students${u.toString() ? "?" + u.toString() : ""}`;
   }
 
   return (
@@ -126,7 +218,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Học viên</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {total > 0 ? `Tổng ${total} học viên` : 'Chưa có học viên nào'}
+            {LIFECYCLE_VIEW_DESCRIPTION[view]}
           </p>
         </div>
         {canCreate && (
@@ -149,28 +241,63 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         )}
       </div>
 
+      {/* Lifecycle tabs */}
+      <div className="mb-4 border-b border-gray-200">
+        <nav className="-mb-px flex gap-1 overflow-x-auto">
+          {LIFECYCLE_VIEWS.map((v) => {
+            const active = v === view;
+            return (
+              <Link
+                key={v}
+                href={urlFor({
+                  view: v,
+                  q,
+                  centerId,
+                  grade: grade != null ? String(grade) : "",
+                })}
+                className={
+                  "whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium " +
+                  (active
+                    ? "border-[#7C3AED] text-[#7C3AED]"
+                    : "border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900")
+                }
+              >
+                {LIFECYCLE_VIEW_LABEL[v]}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+
       {/* Filters */}
-      <form method="GET" className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <form
+        method="GET"
+        className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+      >
+        {view !== "all" && <input type="hidden" name="view" value={view} />}
         <input
           name="q"
           defaultValue={q}
           placeholder="Tên / mã / phụ huynh / SĐT phụ huynh..."
           className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
         />
-        <select
-          name="status"
-          defaultValue={statusParam ?? 'ACTIVE'}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
-        >
-          <option value="ACTIVE">Đang học</option>
-          <option value="PAUSED">Bảo lưu</option>
-          <option value="GRADUATED">Hoàn thành</option>
-          <option value="INACTIVE">Nghỉ học</option>
-          <option value="all">Tất cả trạng thái</option>
-        </select>
+        {view === "all" && (
+          <select
+            name="status"
+            defaultValue={statusParam ?? ""}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          >
+            <option value="">Tất cả trạng thái</option>
+            {VALID_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_INFO[s].label}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           name="centerId"
-          defaultValue={centerFilter ?? ''}
+          defaultValue={centerId}
           className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
         >
           <option value="">Tất cả cơ sở</option>
@@ -182,7 +309,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         </select>
         <select
           name="grade"
-          defaultValue={gradeFilter ? String(gradeFilter) : ''}
+          defaultValue={grade != null ? String(grade) : ""}
           className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
         >
           <option value="">Tất cả lớp</option>
@@ -194,42 +321,75 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
+          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-1"
         >
-          Áp dụng bộ lọc
+          Áp dụng
         </button>
       </form>
+
+      <div className="mb-2 text-sm text-gray-600">
+        {totalCount.toLocaleString("vi-VN")} học viên
+        {view === "frequent-absent" &&
+          totalCount === FREQUENT_ABSENT_FETCH_LIMIT && (
+            <span className="ml-2 text-orange-600">
+              (cap {FREQUENT_ABSENT_FETCH_LIMIT} — refine filter để xem hết)
+            </span>
+          )}
+      </div>
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-100">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Ảnh</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Học viên</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Lớp</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Phụ huynh</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Cơ sở mong muốn</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Trạng thái</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Ngày tạo</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Ảnh
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Học viên
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Lớp
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Phụ huynh
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Cơ sở
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Khoá
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Trạng thái
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Ngày tạo
+                </th>
                 {canUpdate && (
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Hành động</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Hành động
+                  </th>
                 )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {students.length === 0 ? (
                 <tr>
-                  <td colSpan={canUpdate ? 8 : 7} className="px-4 py-12 text-center text-sm text-gray-400">
-                    Chưa có học viên nào
+                  <td
+                    colSpan={canUpdate ? 9 : 8}
+                    className="px-4 py-12 text-center text-sm text-gray-400"
+                  >
+                    Không có học viên trong view này
                   </td>
                 </tr>
               ) : (
                 students.map((s) => {
                   const statusInfo = STATUS_INFO[s.status] ?? {
                     label: s.status,
-                    color: 'bg-gray-100 text-gray-500',
-                  }
+                    color: "bg-gray-100 text-gray-500",
+                  };
+                  const reserve = s.reserves[0];
                   return (
                     <tr key={s.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3">
@@ -246,29 +406,52 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{s.name}</div>
+                        <div className="font-medium text-gray-900">
+                          {s.name}
+                        </div>
                         {s.studentCode && (
-                          <div className="text-xs text-gray-400 tabular-nums">{s.studentCode}</div>
+                          <div className="text-xs tabular-nums text-gray-400">
+                            {s.studentCode}
+                          </div>
+                        )}
+                        {reserve && (
+                          <div
+                            className="mt-0.5 text-xs text-yellow-700"
+                            title={reserve.reason}
+                          >
+                            🟡 Bảo lưu từ {formatDate(reserve.startedAt)}
+                            {reserve.expectedEndAt &&
+                              ` → ${formatDate(reserve.expectedEndAt)}`}
+                          </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">
-                        {s.currentGrade ? `Lớp ${s.currentGrade}` : '—'}
+                      <td className="px-4 py-3 text-sm tabular-nums text-gray-600">
+                        {s.currentGrade ? `Lớp ${s.currentGrade}` : "—"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        <div>{s.parentName ?? '—'}</div>
+                        <div>{s.parentName ?? "—"}</div>
                         {s.parentPhone && (
-                          <div className="text-xs text-gray-400 tabular-nums">{s.parentPhone}</div>
+                          <div className="text-xs tabular-nums text-gray-400">
+                            {s.parentPhone}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
-                        {s.preferredCenter?.name ?? s.center?.name ?? '—'}
+                        {s.preferredCenter?.name ?? s.center?.name ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-600">
+                        {s._count.enrollments}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}>
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                        >
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-gray-500">{formatDate(s.createdAt)}</td>
+                      <td className="px-4 py-3 text-sm tabular-nums text-gray-500">
+                        {formatDate(s.createdAt)}
+                      </td>
                       {canUpdate && (
                         <td className="px-4 py-3 text-right">
                           <Link
@@ -280,7 +463,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                         </td>
                       )}
                     </tr>
-                  )
+                  );
                 })
               )}
             </tbody>
@@ -288,24 +471,46 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         </div>
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-          <span>Trang {page}/{totalPages} · {total} học viên</span>
+          <span>
+            Trang {page}/{totalPages} ·{" "}
+            {totalCount.toLocaleString("vi-VN")} học viên
+          </span>
           <div className="flex gap-2">
             {page > 1 && (
-              <a href={pageUrl(page - 1)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50">
+              <Link
+                href={urlFor({
+                  view,
+                  page: page - 1,
+                  q,
+                  centerId,
+                  grade: grade != null ? String(grade) : "",
+                  status: statusParam,
+                })}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
                 ← Trước
-              </a>
+              </Link>
             )}
             {page < totalPages && (
-              <a href={pageUrl(page + 1)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50">
+              <Link
+                href={urlFor({
+                  view,
+                  page: page + 1,
+                  q,
+                  centerId,
+                  grade: grade != null ? String(grade) : "",
+                  status: statusParam,
+                })}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
                 Sau →
-              </a>
+              </Link>
             )}
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -7,6 +7,8 @@ import { can } from "@/lib/auth/permissions";
 import { getStudentProgress } from "@/lib/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
 import { GeneratePdfButton } from "./_pdf-button";
+import { LifecycleActions } from "../../_components/lifecycle-actions";
+import { ReserveHistorySection } from "../../_components/reserve-history-section";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -118,6 +120,28 @@ export default async function EditStudentPage({ params }: Props) {
     },
   });
 
+  const [activeReserve, lifecycleEnrollments] = await Promise.all([
+    db.studentReserve.findFirst({
+      where: { studentId: id, isActive: true },
+      orderBy: { startedAt: "desc" },
+      select: {
+        id: true,
+        startedAt: true,
+        expectedEndAt: true,
+        reason: true,
+      },
+    }),
+    db.enrollment.findMany({
+      where: { studentId: id },
+      select: {
+        id: true,
+        status: true,
+        class: { select: { name: true } },
+      },
+      orderBy: { enrolledAt: "desc" },
+    }),
+  ]);
+
   const progressByClass = await Promise.all(
     activeEnrollments.map(async (e) => ({
       enrollment: e,
@@ -134,6 +158,16 @@ export default async function EditStudentPage({ params }: Props) {
         </h1>
         <StudentForm student={formValue} centers={centers} />
       </div>
+
+      <LifecycleActions
+        studentId={student.id}
+        studentName={student.name}
+        studentStatus={student.status}
+        activeReserve={activeReserve}
+        enrollments={lifecycleEnrollments}
+      />
+
+      <ReserveHistorySection studentId={student.id} />
 
       {progressByClass.length > 0 && (
         <section>
