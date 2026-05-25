@@ -30,6 +30,8 @@ const STATUS_LABELS: Record<string, string> = {
   LOST: "Đã mất",
 };
 
+const ACTIVE_LEAD: { deletedAt: null } = { deletedAt: null };
+
 function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
   const buckets: Record<string, number> = {};
   for (let i = days - 1; i >= 0; i--) {
@@ -68,13 +70,21 @@ export default async function DashboardPage() {
     leadsLast14Days,
     leadsByStatus,
   ] = await Promise.all([
-    db.lead.count(),
-    db.lead.count({ where: { createdAt: { gte: monthStart } } }),
-    db.lead.count({ where: { createdAt: { gte: lastMonth, lt: monthStart } } }),
-    db.lead.count({ where: { status: "ENROLLED" } }),
+    db.lead.count({ where: ACTIVE_LEAD }),
+    db.lead.count({
+      where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } },
+    }),
+    db.lead.count({
+      where: {
+        ...ACTIVE_LEAD,
+        createdAt: { gte: lastMonth, lt: monthStart },
+      },
+    }),
+    db.lead.count({ where: { ...ACTIVE_LEAD, status: "ENROLLED" } }),
     db.student.count({ where: { deletedAt: null } }),
     db.news.count({ where: { isPublished: true } }),
     db.lead.findMany({
+      where: ACTIVE_LEAD,
       take: 8,
       orderBy: { createdAt: "desc" },
       select: {
@@ -86,11 +96,12 @@ export default async function DashboardPage() {
       },
     }),
     db.lead.findMany({
-      where: { createdAt: { gte: fourteenDaysAgo } },
+      where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } },
       select: { createdAt: true },
     }),
     db.lead.groupBy({
       by: ["status"],
+      where: ACTIVE_LEAD,
       _count: { id: true },
     }),
   ]);

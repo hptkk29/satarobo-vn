@@ -54,6 +54,7 @@ export async function updateLeadStatus(
   })
 
   revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return { ok: true }
 }
 
@@ -93,6 +94,7 @@ export async function updateLeadNote(
   })
 
   revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return { ok: true }
 }
 
@@ -134,5 +136,6 @@ export async function deleteLead(
   }
 
   revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return { ok: true }
 }
