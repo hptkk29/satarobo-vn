@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { db } from '@/lib/db'
+import { VALID_COURSE_SLUGS } from '@/components/legacy-laptrinhrobot/_data/courses-details'
 
 const BASE_URL = 'https://satarobo.vn'
 
@@ -52,5 +53,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }))
 
-  return [...staticRoutes, ...newsRoutes, ...jobRoutes]
+  // Phase A1 — 9 trang chi tiết khóa Sata1-Sata8 + combo (SSG)
+  const courseRoutes: MetadataRoute.Sitemap = VALID_COURSE_SLUGS.map((slug) => ({
+    url: `${BASE_URL}/khoa-hoc/${slug}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly',
+    priority: 0.9,
+  }))
+
+  return [...staticRoutes, ...newsRoutes, ...jobRoutes, ...courseRoutes]
 }
