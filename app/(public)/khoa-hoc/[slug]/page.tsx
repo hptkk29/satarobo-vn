@@ -7,6 +7,7 @@ import {
   VALID_COURSE_SLUGS,
   courseDetails,
 } from "@/components/legacy-laptrinhrobot/_data/courses-details";
+import { ConsultCtaButton } from "@/components/khoa-hoc/consult-cta-button";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -179,27 +180,30 @@ export default async function CoursePage({
               )}
             </div>
 
-            {/* CTAs (Phase A2 sẽ wire) */}
+            {/* CTAs */}
             <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex-1">
+                <ConsultCtaButton
+                  courseSlug={slugLower}
+                  courseName={course.shortName ?? course.name}
+                  courseDisplayName={course.displayName ?? course.name}
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                />
+              </div>
               <button
                 type="button"
                 disabled
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-orange-500/30 transition hover:from-orange-600 hover:to-orange-700 disabled:opacity-70"
-              >
-                Đăng ký tư vấn miễn phí
-              </button>
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-purple-300 bg-white px-6 py-4 text-base font-semibold text-purple-700 transition hover:bg-purple-50 disabled:opacity-50"
+                className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-xl border-2 border-purple-300 bg-white px-6 py-4 text-base font-semibold text-purple-700 transition disabled:opacity-50"
                 title="Tính năng mua trực tiếp sẽ ra mắt sau khi hoàn thiện hệ thống thanh toán"
               >
                 Mua ngay <span className="text-xs">(sắp ra mắt)</span>
               </button>
             </div>
             <p className="mt-2 text-xs text-gray-500">
-              CTA tư vấn sẽ hoạt động sau Phase A2. Hiện tại vui lòng gọi
-              hotline 0818.823.720.
+              Đăng ký tư vấn để Sata Robo gọi lại trong 30 phút. Mua trực tiếp
+              trên web sẽ ra mắt sau khi hoàn thiện hệ thống thanh toán.
             </p>
           </div>
 
@@ -328,13 +332,14 @@ export default async function CoursePage({
             Đăng ký tư vấn miễn phí — Sata Robo sẽ liên hệ trong 30 phút
           </p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <button
-              type="button"
-              disabled
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 text-lg font-bold text-orange-600 shadow-xl transition hover:bg-orange-50 disabled:opacity-70"
-            >
-              Đăng ký tư vấn miễn phí
-            </button>
+            <ConsultCtaButton
+              courseSlug={slugLower}
+              courseName={course.shortName ?? course.name}
+              courseDisplayName={course.displayName ?? course.name}
+              variant="white"
+              size="lg"
+            />
+
             <a
               href="tel:0818823720"
               className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white px-8 py-4 text-lg font-bold text-white transition hover:bg-white/10"

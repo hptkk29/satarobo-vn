@@ -3,6 +3,7 @@
 // Phase 4.UI.FIX.3 PART E — image paths /image/* → /laptrinhrobot/*
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Award,
   BookOpen,
@@ -30,7 +31,6 @@ import { examRoadmap, type ExamRoadmapItem } from "./_data/exam-roadmap";
 import { courseGroups, type Course } from "./_data/courses-pricing";
 import {
   readStoredCourseSelection,
-  selectCourse,
   type CourseSelectionPayload,
 } from "./_utils/courseSelection";
 
@@ -38,6 +38,13 @@ const fmt = (n?: number) => (n ? `${n.toLocaleString("vi-VN")}đ` : "-");
 
 const allCourses: Course[] = courseGroups.flatMap((group) => group.courses);
 const getCourse = (id: string): Course | undefined => allCourses.find((course) => course.id === id);
+
+// Phase A2 — slug mapping for /khoa-hoc/[slug] detail pages.
+// Combo có slug đặc biệt; Sata1-8 dùng lowercase.
+function slugForCourseId(id: string): string {
+  if (id === "Combo") return "combo-sata1-sata2";
+  return id.toLowerCase();
+}
 
 function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState<boolean>(() => {
@@ -118,15 +125,6 @@ const featuredProjectsByCourse: Record<string, [string, string, string][]> = {
 const toProjects = (productCode: string): FeaturedProject[] =>
   (featuredProjectsByCourse[productCode] ?? []).map(([title, image, caption]) => ({ title, image, caption }));
 
-const scrollToForm = () => {
-  document.getElementById("registration-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
-};
-
-function chooseCourse(productCode: string, extra: Record<string, unknown> = {}) {
-  selectCourse(productCode, extra);
-  setTimeout(scrollToForm, 50);
-}
-
 function PriceLine({ label, value, muted = false }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className={`flex items-center justify-between gap-3 text-sm ${muted ? "text-text-muted line-through" : "text-text-dark"}`}>
@@ -175,9 +173,12 @@ function ExamCourseCard({ item, course, isOpen, onToggle }: ExamCourseCardProps)
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <button type="button" onClick={() => chooseCourse(course.id)} className="btn-primary flex-1 px-4 py-3 text-sm">
-          Chọn khóa này
-        </button>
+        <Link
+          href={`/khoa-hoc/${slugForCourseId(course.id)}`}
+          className="btn-primary flex-1 px-4 py-3 text-sm text-center"
+        >
+          Xem chi tiết khóa
+        </Link>
         <button type="button" onClick={onToggle} className="btn-outline flex-1 px-4 py-3 text-sm" aria-expanded={isOpen}>
           {isOpen ? "Thu gọn" : "Xem nội dung chi tiết"}
         </button>
@@ -277,9 +278,12 @@ function FocusCourseBox({ item, course, isOpen, onToggle }: FocusCourseBoxProps)
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <button type="button" onClick={() => chooseCourse(course.id)} className="btn-primary flex-1 px-4 py-3 text-sm">
-          {isCombo ? "Chọn gói Combo" : "Tư vấn Sata8"}
-        </button>
+        <Link
+          href={`/khoa-hoc/${slugForCourseId(course.id)}`}
+          className="btn-primary flex-1 px-4 py-3 text-sm text-center"
+        >
+          {isCombo ? "Xem chi tiết Combo" : "Xem chi tiết Sata8"}
+        </Link>
         <button type="button" onClick={onToggle} className="btn-outline flex-1 px-4 py-3 text-sm" aria-expanded={isOpen}>
           {isCombo ? (isOpen ? "Thu gọn" : "Combo gồm gì?") : isOpen ? "Thu gọn" : "Xem điều kiện"}
         </button>
@@ -786,9 +790,12 @@ export default function Roadmap5Years() {
                     </div>
                   </div>
 
-                  <button type="button" onClick={() => chooseCourse(currentYear.productCode, { yearIndex: yearIdx })} className="btn-primary w-full sm:w-auto">
-                    Chọn khóa này
-                  </button>
+                  <Link
+                    href={`/khoa-hoc/${slugForCourseId(currentYear.productCode)}`}
+                    className="btn-primary w-full text-center sm:w-auto"
+                  >
+                    Xem chi tiết khóa
+                  </Link>
                 </div>
 
                 <aside className="h-fit rounded-3xl border border-primary-purple/20 bg-white/95 p-5 shadow-card lg:col-span-4">
