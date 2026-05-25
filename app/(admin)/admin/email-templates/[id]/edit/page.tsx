@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { TemplateForm } from "../../_components/template-form";
+import { TestSendButton } from "../../_components/test-send-button";
 
 export const metadata = { title: "Sửa email template | Admin" };
 export const dynamic = "force-dynamic";
@@ -21,9 +22,18 @@ export default async function EditTemplatePage({ params }: Props) {
   const template = await db.emailTemplate.findUnique({ where: { id } });
   if (!template) notFound();
 
+  const currentUserEmail = session.user.email ?? null;
+
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Sửa template: {template.name}</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">Sửa template: {template.name}</h1>
+        <TestSendButton
+          templateId={template.id}
+          trigger={template.trigger}
+          currentUserEmail={currentUserEmail}
+        />
+      </div>
       <TemplateForm
         initial={{
           id: template.id,

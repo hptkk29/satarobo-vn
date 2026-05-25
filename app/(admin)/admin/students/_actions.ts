@@ -15,6 +15,7 @@ import {
   detectChangedFields,
   getAuditActor,
 } from "@/lib/audit/log";
+import { sendEmailForTrigger } from "@/lib/email/trigger";
 
 type ActionResult = { error?: string };
 
@@ -405,6 +406,35 @@ export async function reserveStudentAction(input: {
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
+
+  const studentForEmail = await db.student.findUnique({
+    where: { id: input.studentId },
+    select: { name: true, parentName: true, parentEmail: true },
+  });
+  if (studentForEmail) {
+    sendEmailForTrigger({
+      trigger: "RESERVATION_NOTICE",
+      recipient: {
+        email: studentForEmail.parentEmail,
+        name: studentForEmail.parentName,
+      },
+      vars: {
+        student_name: studentForEmail.name,
+        parent_name: studentForEmail.parentName ?? "Quý phụ huynh",
+        started_at: new Date(),
+        expected_end_at: input.expectedEndAt
+          ? new Date(input.expectedEndAt)
+          : null,
+        reason: input.reason.trim(),
+      },
+      context: { type: "Student", id: input.studentId },
+      triggerType: "SYSTEM",
+      actor: { userId: actorId, name: actorName },
+    }).catch((err) => {
+      console.error("[email] RESERVATION_NOTICE trigger error:", err);
+    });
+  }
+
   return { ok: true as const };
 }
 
@@ -595,6 +625,32 @@ export async function withdrawStudentAction(input: {
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
+
+  const studentForEmail = await db.student.findUnique({
+    where: { id: input.studentId },
+    select: { name: true, parentName: true, parentEmail: true },
+  });
+  if (studentForEmail) {
+    sendEmailForTrigger({
+      trigger: "WITHDRAWAL_NOTICE",
+      recipient: {
+        email: studentForEmail.parentEmail,
+        name: studentForEmail.parentName,
+      },
+      vars: {
+        student_name: studentForEmail.name,
+        parent_name: studentForEmail.parentName ?? "Quý phụ huynh",
+        withdrawn_at: new Date(),
+        reason: input.reason.trim(),
+      },
+      context: { type: "Student", id: input.studentId },
+      triggerType: "SYSTEM",
+      actor: { userId: actorId, name: actorName },
+    }).catch((err) => {
+      console.error("[email] WITHDRAWAL_NOTICE trigger error:", err);
+    });
+  }
+
   return { ok: true as const };
 }
 

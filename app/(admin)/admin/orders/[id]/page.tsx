@@ -6,6 +6,7 @@ import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
+import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL } from "@/lib/orders/status";
 import type { OrderStatus } from "@prisma/client";
 
@@ -60,6 +61,17 @@ export default async function OrderDetailPage({ params }: Props) {
 
   const canManage = can(session.user, "orders:manage");
 
+  const emailTemplates = canManage
+    ? await db.emailTemplate.findMany({
+        where: {
+          isActive: true,
+          trigger: { in: ["ORDER_CONFIRMATION", "PAYMENT_RECEIPT", "MANUAL"] },
+        },
+        select: { id: true, name: true, trigger: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
   return (
     <div className="max-w-5xl">
       <Link
@@ -92,10 +104,18 @@ export default async function OrderDetailPage({ params }: Props) {
             }).format(order.createdAt)}
           </p>
         </div>
-        <div className="text-right">
+        <div className="text-right space-y-2">
           <div className="text-3xl font-bold text-gray-900 tabular-nums">
             {order.totalAmount.toLocaleString("vi-VN")} đ
           </div>
+          {canManage && (
+            <SendEmailModal
+              orderId={order.id}
+              defaultEmail={order.customerEmail}
+              defaultName={order.customerName}
+              templates={emailTemplates}
+            />
+          )}
         </div>
       </div>
 

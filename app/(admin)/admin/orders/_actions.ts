@@ -15,6 +15,9 @@ import { canTransition } from "@/lib/orders/status";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { validateAndComputeDiscount } from "@/lib/vouchers/compute";
+import { sendEmailForTrigger } from "@/lib/email/trigger";
+import { renderTemplate } from "@/lib/email/render";
+import { sendEmail } from "@/lib/email/send";
 
 const PAGE_SIZE = 20;
 
@@ -188,6 +191,7 @@ export async function createOrderManualAction(input: unknown) {
     where: { id: data.paymentMethodId },
     select: {
       id: true,
+      name: true,
       isActive: true,
       canBuyCourse: true,
       canBuyPackage: true,
@@ -385,7 +389,48 @@ export async function createOrderManualAction(input: unknown) {
     revalidatePath("/vouchers");
     revalidatePath(`/vouchers/${voucherInfo.voucherId}`);
   }
+
+  sendEmailForTrigger({
+    trigger: "ORDER_CONFIRMATION",
+    recipient: {
+      email: data.customerEmail,
+      name: data.customerName,
+    },
+    vars: {
+      customer_name: data.customerName,
+      order_code: created.code,
+      total_amount: totalAmount,
+      payment_method: pm.name ?? "—",
+      order_date: new Date(),
+      items_list: renderItemsListHtml(data.items),
+    },
+    context: { type: "Order", id: created.id },
+    triggerType: "SYSTEM",
+    actor: { userId: actorId, name: actorName },
+  }).catch((err) => {
+    console.error("[email] ORDER_CONFIRMATION trigger error:", err);
+  });
+
   return { ok: true as const, id: created.id, code: created.code };
+}
+
+function renderItemsListHtml(
+  items: Array<{ itemName: string; quantity: number; unitPrice: number }>,
+): string {
+  const rows = items
+    .map((it) => {
+      const lineTotal = it.unitPrice * it.quantity;
+      return `<li>${escapeHtml(it.itemName)} × ${it.quantity} = ${lineTotal.toLocaleString("vi-VN")} đ</li>`;
+    })
+    .join("");
+  return `<ul>${rows}</ul>`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 // ─── PREVIEW VOUCHER (no DB write) ──────────────────────────────────
@@ -490,6 +535,36 @@ export async function changeOrderStatusAction(
 
   revalidatePath("/orders");
   revalidatePath(`/orders/${orderId}`);
+
+  // Fire PAYMENT_RECEIPT when order transitions to CONFIRMED (paidAt set).
+  if (parsed.data.toStatus === "CONFIRMED") {
+    const orderForEmail = await db.order.findUnique({
+      where: { id: orderId },
+      include: { paymentMethod: { select: { name: true } } },
+    });
+    if (orderForEmail) {
+      sendEmailForTrigger({
+        trigger: "PAYMENT_RECEIPT",
+        recipient: {
+          email: orderForEmail.customerEmail,
+          name: orderForEmail.customerName,
+        },
+        vars: {
+          customer_name: orderForEmail.customerName,
+          order_code: orderForEmail.code,
+          total_amount: orderForEmail.totalAmount,
+          payment_method: orderForEmail.paymentMethod?.name ?? "—",
+          paid_at: orderForEmail.paidAt ?? new Date(),
+        },
+        context: { type: "Order", id: orderForEmail.id },
+        triggerType: "SYSTEM",
+        actor: { userId: actorId, name: actorName },
+      }).catch((err) => {
+        console.error("[email] PAYMENT_RECEIPT trigger error:", err);
+      });
+    }
+  }
+
   return { ok: true as const };
 }
 
@@ -576,6 +651,85 @@ export async function loadCreateOrderFormData() {
     ]);
 
   return { paymentMethods, courses, packages, products, centers };
+}
+
+// ─── MANUAL SEND EMAIL từ template (Phase 5.13.1) ───────────────────
+export async function sendManualOrderEmailAction(input: {
+  orderId: string;
+  templateId: string;
+  toEmail: string;
+  toName?: string | null;
+}) {
+  const session = await requireOrdersManage();
+
+  if (!input.toEmail?.trim()) {
+    return { ok: false as const, error: "Vui lòng nhập email người nhận" };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.toEmail)) {
+    return { ok: false as const, error: "Email không hợp lệ" };
+  }
+
+  const [template, order] = await Promise.all([
+    db.emailTemplate.findUnique({ where: { id: input.templateId } }),
+    db.order.findUnique({
+      where: { id: input.orderId },
+      include: {
+        items: true,
+        paymentMethod: { select: { name: true } },
+      },
+    }),
+  ]);
+  if (!template)
+    return { ok: false as const, error: "Template không tồn tại" };
+  if (!template.isActive)
+    return { ok: false as const, error: "Template đã bị tắt" };
+  if (!order) return { ok: false as const, error: "Đơn hàng không tồn tại" };
+
+  const itemsListInner = order.items
+    .map(
+      (it) =>
+        `<li>${it.itemName} × ${it.quantity} = ${(it.unitPrice * it.quantity).toLocaleString("vi-VN")} đ</li>`,
+    )
+    .join("");
+
+  const vars = {
+    customer_name: order.customerName,
+    order_code: order.code,
+    total_amount: order.totalAmount,
+    payment_method: order.paymentMethod?.name ?? "—",
+    order_date: order.createdAt,
+    paid_at: order.paidAt ?? "",
+    items_list: itemsListInner ? `<ul>${itemsListInner}</ul>` : "",
+  };
+
+  const subject = renderTemplate(template.subject, vars);
+  const bodyText = renderTemplate(template.bodyText, vars);
+  const bodyHtml = renderTemplate(template.bodyHtml, vars);
+
+  const { actorId, actorName } = getAuditActor(session);
+
+  const result = await sendEmail({
+    to: input.toEmail.trim(),
+    toName: input.toName ?? undefined,
+    subject,
+    bodyText,
+    bodyHtml,
+    fromName: template.fromName ?? undefined,
+    replyTo: template.replyTo ?? undefined,
+    templateId: template.id,
+    contextType: "Order",
+    contextId: order.id,
+    triggeredByUserId: actorId,
+    triggeredByName: actorName,
+    triggerType: "MANUAL",
+  });
+
+  if (!result.ok) {
+    return { ok: false as const, error: result.error };
+  }
+
+  revalidatePath(`/orders/${input.orderId}`);
+  return { ok: true as const, logId: result.logId };
 }
 
 // ─── Row type for client ─────────────────────────────────────────────

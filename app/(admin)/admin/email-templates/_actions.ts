@@ -9,7 +9,10 @@ import {
   emailTemplateSchema,
   TRIGGER_VARIABLES,
 } from "@/lib/validators/email-template";
-import { extractVariables } from "@/lib/email/render";
+import { extractVariables, renderTemplate } from "@/lib/email/render";
+import { sendEmail } from "@/lib/email/send";
+import { SAMPLE_VARS } from "@/lib/email/sample-vars";
+import { getAuditActor } from "@/lib/audit/log";
 
 async function requireEmailsManage() {
   const session = await auth();
@@ -164,4 +167,53 @@ export async function deleteTemplateAction(id: string) {
   await db.emailTemplate.delete({ where: { id } });
   revalidatePath("/email-templates");
   return { ok: true as const };
+}
+
+// ─── TEST SEND (Phase 5.13.1) ───────────────────────────────────────
+export async function sendTestEmailAction(input: {
+  templateId: string;
+  toEmail: string;
+  varOverrides?: Record<string, string>;
+}) {
+  const session = await requireEmailsManage();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.toEmail)) {
+    return { ok: false as const, error: "Email không hợp lệ" };
+  }
+
+  const template = await db.emailTemplate.findUnique({
+    where: { id: input.templateId },
+  });
+  if (!template)
+    return { ok: false as const, error: "Template không tồn tại" };
+
+  const vars: Record<string, string> = {
+    ...SAMPLE_VARS[template.trigger],
+    ...(input.varOverrides ?? {}),
+  };
+
+  const subject = "[TEST] " + renderTemplate(template.subject, vars);
+  const bodyText = "[TEST EMAIL]\n\n" + renderTemplate(template.bodyText, vars);
+  const bodyHtml =
+    '<div style="background:#fef3c7;padding:8px;text-align:center;color:#92400e;font-weight:bold;">[TEST EMAIL]</div>' +
+    renderTemplate(template.bodyHtml, vars);
+
+  const { actorId, actorName } = getAuditActor(session);
+
+  const result = await sendEmail({
+    to: input.toEmail.trim(),
+    subject,
+    bodyText,
+    bodyHtml,
+    templateId: template.id,
+    contextType: "TestSend",
+    contextId: template.id,
+    triggeredByUserId: actorId,
+    triggeredByName: actorName,
+    triggerType: "MANUAL",
+  });
+
+  return result.ok
+    ? { ok: true as const, logId: result.logId }
+    : { ok: false as const, error: result.error };
 }
