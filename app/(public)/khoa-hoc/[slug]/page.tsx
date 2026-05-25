@@ -8,6 +8,8 @@ import {
   courseDetails,
 } from "@/components/legacy-laptrinhrobot/_data/courses-details";
 import { ConsultCtaButton } from "@/components/khoa-hoc/consult-cta-button";
+import { ExamDetailSections } from "@/components/khoa-hoc/exam-detail-sections";
+import { LongtermDetailSections } from "@/components/khoa-hoc/longterm-detail-sections";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -68,7 +70,7 @@ export default async function CoursePage({
   const bundle = getCourseBundle(slugLower);
   if (!bundle) notFound();
 
-  const { course, detail } = bundle;
+  const { course, detail, type, exam, longterm } = bundle;
 
   // Pricing display logic
   const isFixedPrice = !!course.fixedPrice;
@@ -305,22 +307,13 @@ export default async function CoursePage({
         </section>
       )}
 
-      {/* DEVICE INFO */}
-      <section className="bg-gray-50 py-12">
-        <div className="container mx-auto max-w-4xl px-4">
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h3 className="mb-3 text-lg font-bold text-gray-900">
-              Thiết bị sử dụng
-            </h3>
-            <p className="text-gray-700">{course.device}</p>
-            {course.format && (
-              <p className="mt-2 text-sm text-gray-600">
-                <strong>Hình thức:</strong> {course.format}
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
+      {/* DETAIL SECTIONS theo course type */}
+      {type === "exam" && exam && (
+        <ExamDetailSections exam={exam} slug={slugLower} />
+      )}
+      {type === "longterm" && longterm && (
+        <LongtermDetailSections longterm={longterm} />
+      )}
 
       {/* CTA BOTTOM */}
       <section className="bg-gradient-to-r from-orange-500 to-purple-600 py-16">

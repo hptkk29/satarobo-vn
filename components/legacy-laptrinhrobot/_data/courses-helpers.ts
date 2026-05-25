@@ -1,31 +1,83 @@
 import { courseGroups, type Course } from "./courses-pricing";
 import { courseDetails, type CourseDetail } from "./courses-details";
+import { examRoadmap, type ExamRoadmapItem } from "./exam-roadmap";
+import { roadmap5Years, type RoadmapCourse } from "./roadmap-5-years";
 
 const allCourses: Course[] = courseGroups.flatMap((g) => g.courses);
 
-/**
- * Get course by slug (case-insensitive, matches Course.id lowercase
- * or combo slug "combo-sata1-sata2").
- */
-export function getCourseBySlug(slug: string): Course | null {
+// Map slug -> Course.id
+const SLUG_TO_COURSE_ID: Record<string, string> = {
+  sata1: "Sata1",
+  sata2: "Sata2",
+  sata3: "Sata3",
+  sata4: "Sata4",
+  sata5: "Sata5",
+  sata6: "Sata6",
+  sata7: "Sata7",
+  sata8: "Sata8",
+  "combo-sata1-sata2": "Combo",
+};
+
+// Exam courses (luyện thi): hiển thị lessons + goal + methods
+const EXAM_SLUGS = new Set(["sata1", "sata2", "combo-sata1-sata2", "sata8"]);
+
+// Longterm courses (chuyên sâu 5 năm): hiển thị 4 modules
+const LONGTERM_SLUGS = new Set([
+  "sata3",
+  "sata4",
+  "sata5",
+  "sata6",
+  "sata7",
+]);
+
+export type CourseType = "exam" | "longterm";
+
+export function getCourseType(slug: string): CourseType | null {
   const s = slug.toLowerCase();
-  // Combo special case
-  if (s === "combo-sata1-sata2") {
-    return allCourses.find((c) => c.id === "Combo") ?? null;
-  }
-  // Sata1-Sata8: case-insensitive match
-  return allCourses.find((c) => c.id.toLowerCase() === s) ?? null;
+  if (EXAM_SLUGS.has(s)) return "exam";
+  if (LONGTERM_SLUGS.has(s)) return "longterm";
+  return null;
+}
+
+export function getCourseBySlug(slug: string): Course | null {
+  const courseId = SLUG_TO_COURSE_ID[slug.toLowerCase()];
+  if (!courseId) return null;
+  return allCourses.find((c) => c.id === courseId) ?? null;
+}
+
+export function getExamRoadmapBySlug(slug: string): ExamRoadmapItem | null {
+  const courseId = SLUG_TO_COURSE_ID[slug.toLowerCase()];
+  if (!courseId) return null;
+  return examRoadmap.find((e) => e.id === courseId) ?? null;
+}
+
+export function getRoadmapCourseBySlug(slug: string): RoadmapCourse | null {
+  const courseId = SLUG_TO_COURSE_ID[slug.toLowerCase()];
+  if (!courseId) return null;
+  return roadmap5Years.find((r) => r.productCode === courseId) ?? null;
 }
 
 /**
- * Get both pricing + detail data for a slug.
+ * Aggregate all data for a course slug.
  */
 export function getCourseBundle(slug: string): {
   course: Course;
   detail: CourseDetail;
+  type: CourseType;
+  exam: ExamRoadmapItem | null;
+  longterm: RoadmapCourse | null;
 } | null {
-  const course = getCourseBySlug(slug);
-  const detail = courseDetails[slug.toLowerCase()];
-  if (!course || !detail) return null;
-  return { course, detail };
+  const slugLower = slug.toLowerCase();
+  const course = getCourseBySlug(slugLower);
+  const detail = courseDetails[slugLower];
+  const type = getCourseType(slugLower);
+  if (!course || !detail || !type) return null;
+
+  return {
+    course,
+    detail,
+    type,
+    exam: type === "exam" ? getExamRoadmapBySlug(slugLower) : null,
+    longterm: type === "longterm" ? getRoadmapCourseBySlug(slugLower) : null,
+  };
 }
