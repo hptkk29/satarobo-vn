@@ -29,6 +29,8 @@ import {
   ShoppingBag,
   Ticket,
   Package2,
+  Mail,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +100,8 @@ const NAV_GROUPS = [
   {
     label: "Hệ thống",
     items: [
+      { label: "Email Templates", href: "/email-templates", icon: Mail },
+      { label: "Email Logs", href: "/email-logs", icon: Send },
       { label: "Audit Log", href: "/audit-log", icon: ScrollText },
       { label: "Cài đặt", href: "/settings", icon: Settings },
     ],

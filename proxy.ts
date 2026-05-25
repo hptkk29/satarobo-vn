@@ -30,6 +30,8 @@ const ADMIN_ROUTE_SEGMENTS = new Set<string>([
   "design-system-preview",
   "design-system-preview-v2",
   "documents",
+  "email-logs",
+  "email-templates",
   "enrollments",
   "exams",
   "holidays",

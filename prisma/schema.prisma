@@ -2261,3 +2261,85 @@ model ProductAuditLog {
 
   @@index([productId, createdAt])
 }
+
+// ─── Email System (Phase 5.13.0) ─────────────────────────────────────────────
+
+enum EmailTemplateTrigger {
+  ORDER_CONFIRMATION
+  PAYMENT_RECEIPT
+  RESERVATION_NOTICE
+  WITHDRAWAL_NOTICE
+  RENEWAL_REMINDER
+  CLASS_REMINDER
+  MANUAL
+}
+
+enum EmailLogStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+}
+
+model EmailTemplate {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String? @db.Text
+
+  trigger  EmailTemplateTrigger
+  isActive Boolean              @default(true)
+
+  subject  String
+  bodyText String @db.Text
+  bodyHtml String @db.Text
+
+  availableVariables String[] @default([])
+
+  fromName String?
+  replyTo  String?
+
+  sentCount  Int       @default(0)
+  lastSentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs EmailLog[]
+
+  @@index([trigger, isActive])
+  @@index([code])
+}
+
+model EmailLog {
+  id String @id @default(cuid())
+
+  templateId String?
+  template   EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  toEmail  String
+  toName   String?
+  subject  String
+  bodyText String  @db.Text
+  bodyHtml String  @db.Text
+
+  status        EmailLogStatus @default(PENDING)
+  resendId      String?
+  failureReason String?        @db.Text
+
+  contextType String?
+  contextId   String?
+
+  triggeredByUserId String?
+  triggeredByName   String?
+  triggerType       String
+
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([templateId, createdAt])
+  @@index([toEmail, createdAt])
+  @@index([contextType, contextId])
+  @@index([status, createdAt])
+  @@index([createdAt])
+}

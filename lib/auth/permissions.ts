@@ -179,7 +179,11 @@ export type Action =
 
   // --- Phase 5.10 — Products (sales/rental catalog) ---
   | "products:view"
-  | "products:manage";
+  | "products:manage"
+
+  // --- Phase 5.13 — Email System ---
+  | "emails:view"
+  | "emails:manage";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -359,6 +363,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // --- Phase 5.10 — Products ---
   "products:view": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING", "ACCOUNTANT"],
   "products:manage": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
+
+  // --- Phase 5.13 — Email System ---
+  "emails:view": ["SUPER_ADMIN", "MANAGER", "MARKETING", "ACCOUNTANT"],
+  "emails:manage": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
 };
 
 // =============================================================================
