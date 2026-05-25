@@ -269,3 +269,377 @@ function readForm(formData: FormData) {
     centerId: emptyToUndefined(formData.get("centerId")),
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 5.9 — Lifecycle actions: reserve / resume / withdraw / reactivate
+// All actions are atomic via db.$transaction. Student status changes go
+// through logStudentAudit (Sprint 5.4); enrollment status changes go
+// through the existing EnrollmentAuditLog table.
+// Permission gate: students:edit (state mutations are an edit operation).
+// ═══════════════════════════════════════════════════════════════════
+
+async function requireStudentLifecycle() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!can(session.user, "students:edit")) {
+    redirect("/dashboard?error=unauthorized");
+  }
+  return session;
+}
+
+// ─── RESERVE STUDENT ────────────────────────────────────────────────
+export async function reserveStudentAction(input: {
+  studentId: string;
+  enrollmentId?: string | null;
+  reason: string;
+  expectedEndAt?: string | null;
+}) {
+  const session = await requireStudentLifecycle();
+
+  if (!input.reason?.trim()) {
+    return { ok: false as const, error: "Vui lòng nhập lý do bảo lưu" };
+  }
+  if (input.reason.length > 1000) {
+    return { ok: false as const, error: "Lý do quá dài (max 1000 ký tự)" };
+  }
+
+  const student = await db.student.findFirst({
+    where: { id: input.studentId, deletedAt: null },
+    select: { id: true, status: true, name: true },
+  });
+  if (!student) {
+    return { ok: false as const, error: "Không tìm thấy học viên" };
+  }
+
+  const existing = await db.studentReserve.findFirst({
+    where: { studentId: input.studentId, isActive: true },
+    select: { id: true, startedAt: true },
+  });
+  if (existing) {
+    return {
+      ok: false as const,
+      error: `Học viên đã đang bảo lưu (từ ${existing.startedAt.toLocaleDateString("vi-VN")})`,
+    };
+  }
+
+  if (input.enrollmentId) {
+    const enr = await db.enrollment.findFirst({
+      where: { id: input.enrollmentId, studentId: input.studentId },
+      select: { id: true, status: true },
+    });
+    if (!enr) {
+      return {
+        ok: false as const,
+        error: "Đăng ký không tồn tại hoặc không thuộc học viên này",
+      };
+    }
+    if (enr.status !== "STUDYING") {
+      return {
+        ok: false as const,
+        error: "Chỉ có thể bảo lưu lớp đang STUDYING",
+      };
+    }
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+
+  await db.$transaction(async (tx) => {
+    await tx.studentReserve.create({
+      data: {
+        studentId: input.studentId,
+        enrollmentId: input.enrollmentId ?? null,
+        reason: input.reason.trim(),
+        expectedEndAt: input.expectedEndAt
+          ? new Date(input.expectedEndAt)
+          : null,
+        createdByUserId: actorId,
+        createdByName: actorName,
+        isActive: true,
+      },
+    });
+
+    if (student.status === "ACTIVE") {
+      await tx.student.update({
+        where: { id: input.studentId },
+        data: { status: "PAUSED" },
+      });
+
+      await logStudentAudit({
+        studentId: input.studentId,
+        action: "UPDATE",
+        actorId,
+        actorName,
+        oldValues: { status: student.status },
+        newValues: { status: "PAUSED" },
+        changedFields: ["status"],
+        reason: `Bảo lưu: ${input.reason.trim()}`,
+        tx,
+      });
+    }
+
+    const enrollmentsToPause = input.enrollmentId
+      ? [{ id: input.enrollmentId, status: "STUDYING" as const }]
+      : await tx.enrollment.findMany({
+          where: { studentId: input.studentId, status: "STUDYING" },
+          select: { id: true, status: true },
+        });
+
+    for (const enr of enrollmentsToPause) {
+      await tx.enrollment.update({
+        where: { id: enr.id },
+        data: { status: "PAUSED" },
+      });
+
+      await tx.enrollmentAuditLog.create({
+        data: {
+          enrollmentId: enr.id,
+          fromStatus: enr.status,
+          toStatus: "PAUSED",
+          changedByUserId: actorId,
+          changedByName: actorName,
+          reason: input.reason.trim(),
+        },
+      });
+    }
+  });
+
+  revalidatePath("/students");
+  revalidatePath(`/students/${input.studentId}/edit`);
+  return { ok: true as const };
+}
+
+// ─── RESUME RESERVE ─────────────────────────────────────────────────
+export async function resumeStudentReserveAction(input: {
+  reserveId: string;
+  endReason?: string | null;
+}) {
+  const session = await requireStudentLifecycle();
+
+  const reserve = await db.studentReserve.findUnique({
+    where: { id: input.reserveId },
+    select: {
+      id: true,
+      studentId: true,
+      enrollmentId: true,
+      isActive: true,
+      student: { select: { status: true } },
+    },
+  });
+  if (!reserve) {
+    return { ok: false as const, error: "Không tìm thấy đợt bảo lưu" };
+  }
+  if (!reserve.isActive) {
+    return { ok: false as const, error: "Đợt bảo lưu đã kết thúc" };
+  }
+
+  if (input.endReason && input.endReason.length > 1000) {
+    return { ok: false as const, error: "Ghi chú quá dài" };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  const now = new Date();
+
+  await db.$transaction(async (tx) => {
+    await tx.studentReserve.update({
+      where: { id: input.reserveId },
+      data: {
+        isActive: false,
+        endedAt: now,
+        endReason: input.endReason?.trim() || null,
+        endedByUserId: actorId,
+        endedByName: actorName,
+      },
+    });
+
+    const otherActive = await tx.studentReserve.findFirst({
+      where: {
+        studentId: reserve.studentId,
+        isActive: true,
+        NOT: { id: input.reserveId },
+      },
+      select: { id: true },
+    });
+
+    if (!otherActive && reserve.student.status === "PAUSED") {
+      await tx.student.update({
+        where: { id: reserve.studentId },
+        data: { status: "ACTIVE" },
+      });
+
+      await logStudentAudit({
+        studentId: reserve.studentId,
+        action: "UPDATE",
+        actorId,
+        actorName,
+        oldValues: { status: "PAUSED" },
+        newValues: { status: "ACTIVE" },
+        changedFields: ["status"],
+        reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
+        tx,
+      });
+    }
+
+    const enrollmentsToResume = reserve.enrollmentId
+      ? [{ id: reserve.enrollmentId }]
+      : await tx.enrollment.findMany({
+          where: { studentId: reserve.studentId, status: "PAUSED" },
+          select: { id: true },
+        });
+
+    for (const enr of enrollmentsToResume) {
+      await tx.enrollment.update({
+        where: { id: enr.id },
+        data: { status: "STUDYING" },
+      });
+
+      await tx.enrollmentAuditLog.create({
+        data: {
+          enrollmentId: enr.id,
+          fromStatus: "PAUSED",
+          toStatus: "STUDYING",
+          changedByUserId: actorId,
+          changedByName: actorName,
+          reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
+        },
+      });
+    }
+  });
+
+  revalidatePath("/students");
+  revalidatePath(`/students/${reserve.studentId}/edit`);
+  return { ok: true as const };
+}
+
+// ─── WITHDRAW STUDENT (nghỉ học hẳn) ─────────────────────────────────
+export async function withdrawStudentAction(input: {
+  studentId: string;
+  reason: string;
+}) {
+  const session = await requireStudentLifecycle();
+
+  if (!input.reason?.trim()) {
+    return { ok: false as const, error: "Vui lòng nhập lý do nghỉ học" };
+  }
+  if (input.reason.length > 1000) {
+    return { ok: false as const, error: "Lý do quá dài" };
+  }
+
+  const student = await db.student.findFirst({
+    where: { id: input.studentId, deletedAt: null },
+    select: { id: true, status: true },
+  });
+  if (!student) {
+    return { ok: false as const, error: "Không tìm thấy học viên" };
+  }
+  if (student.status === "INACTIVE") {
+    return { ok: false as const, error: "Học viên đã nghỉ học rồi" };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+
+  await db.$transaction(async (tx) => {
+    await tx.studentReserve.updateMany({
+      where: { studentId: input.studentId, isActive: true },
+      data: {
+        isActive: false,
+        endedAt: new Date(),
+        endReason: "Học viên nghỉ học",
+        endedByUserId: actorId,
+        endedByName: actorName,
+      },
+    });
+
+    await tx.student.update({
+      where: { id: input.studentId },
+      data: { status: "INACTIVE" },
+    });
+
+    await logStudentAudit({
+      studentId: input.studentId,
+      action: "UPDATE",
+      actorId,
+      actorName,
+      oldValues: { status: student.status },
+      newValues: { status: "INACTIVE" },
+      changedFields: ["status"],
+      reason: `Nghỉ học: ${input.reason.trim()}`,
+      tx,
+    });
+
+    const activeEnrollments = await tx.enrollment.findMany({
+      where: {
+        studentId: input.studentId,
+        status: { in: ["PENDING", "CONFIRMED", "STUDYING", "PAUSED"] },
+      },
+      select: { id: true, status: true },
+    });
+
+    for (const enr of activeEnrollments) {
+      await tx.enrollment.update({
+        where: { id: enr.id },
+        data: { status: "WITHDREW" },
+      });
+
+      await tx.enrollmentAuditLog.create({
+        data: {
+          enrollmentId: enr.id,
+          fromStatus: enr.status,
+          toStatus: "WITHDREW",
+          changedByUserId: actorId,
+          changedByName: actorName,
+          reason: `Học viên nghỉ học: ${input.reason.trim()}`,
+        },
+      });
+    }
+  });
+
+  revalidatePath("/students");
+  revalidatePath(`/students/${input.studentId}/edit`);
+  return { ok: true as const };
+}
+
+// ─── REACTIVATE STUDENT (INACTIVE/PAUSED → ACTIVE) ───────────────────
+// Note: KHÔNG auto-create enrollment. Admin phải tạo Enrollment mới
+// qua flow Enrollment riêng.
+export async function reactivateStudentAction(input: {
+  studentId: string;
+  note?: string | null;
+}) {
+  const session = await requireStudentLifecycle();
+
+  const student = await db.student.findFirst({
+    where: { id: input.studentId, deletedAt: null },
+    select: { id: true, status: true },
+  });
+  if (!student) {
+    return { ok: false as const, error: "Không tìm thấy học viên" };
+  }
+  if (student.status === "ACTIVE") {
+    return { ok: false as const, error: "Học viên đã đang ACTIVE" };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+
+  await db.$transaction(async (tx) => {
+    await tx.student.update({
+      where: { id: input.studentId },
+      data: { status: "ACTIVE" },
+    });
+
+    await logStudentAudit({
+      studentId: input.studentId,
+      action: "UPDATE",
+      actorId,
+      actorName,
+      oldValues: { status: student.status },
+      newValues: { status: "ACTIVE" },
+      changedFields: ["status"],
+      reason: `Kích hoạt lại${input.note ? `: ${input.note.trim()}` : ""}`,
+      tx,
+    });
+  });
+
+  revalidatePath("/students");
+  revalidatePath(`/students/${input.studentId}/edit`);
+  return { ok: true as const };
+}

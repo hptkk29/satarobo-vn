@@ -496,6 +496,9 @@ model Student {
   // Phase 5.6 — Order
   orders Order[] @relation("StudentOrders")
 
+  // Phase 5.9 — Reserve history
+  reserves StudentReserve[] @relation("StudentReserves")
+
   @@index([phone])
   @@index([centerId])
   @@index([deletedAt])
@@ -613,6 +616,10 @@ model Enrollment {
 
   // Phase 5.6 — Order item link
   orderItems OrderItem[] @relation("EnrollmentOrderItems")
+
+  // Phase 5.9 — Reserve link (enrollment-specific reserves only; whole-student
+  // reserves leave enrollmentId NULL)
+  reserves StudentReserve[] @relation("EnrollmentReserves")
 
   @@unique([studentId, classId])
   @@index([studentId])
@@ -2085,4 +2092,41 @@ model VoucherAuditLog {
   @@index([voucherId, createdAt])
   @@index([createdAt])
   @@index([changedByUserId])
+}
+
+// ─── Phase 5.9 — Student lifecycle: reserve history ───────────────────────
+// Multiple reserve periods per student. enrollmentId NULL = áp dụng cho mọi
+// active enrollment của học viên (whole-student reserve). Actor info được
+// snapshot (không FK) để giữ audit trail dù user gốc bị xoá.
+
+model StudentReserve {
+  id        String  @id @default(cuid())
+  studentId String
+  student   Student @relation("StudentReserves", fields: [studentId], references: [id], onDelete: Cascade)
+
+  enrollmentId String?
+  enrollment   Enrollment? @relation("EnrollmentReserves", fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  reason        String    @db.Text
+  startedAt     DateTime  @default(now())
+  expectedEndAt DateTime?
+  endedAt       DateTime?
+  endReason     String?   @db.Text
+
+  // Actor snapshots — no FK (defensive)
+  createdByUserId String?
+  createdByName   String
+  endedByUserId   String?
+  endedByName     String?
+
+  // Denormalised flag (= endedAt is null) for fast queries.
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, isActive])
+  @@index([studentId, startedAt])
+  @@index([startedAt])
+  @@index([endedAt])
 }
