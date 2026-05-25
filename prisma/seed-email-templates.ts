@@ -150,18 +150,143 @@ Sata Robo`,
       "reason",
     ],
   },
+
+  // ─── WITHDRAWAL_NOTICE_VI ────────────────────────────────────────
+  {
+    code: "WITHDRAWAL_NOTICE_VI",
+    name: "Xác nhận thôi học (Tiếng Việt)",
+    description: "Gửi cho phụ huynh khi học sinh được rút khỏi danh sách",
+    trigger: EmailTemplateTrigger.WITHDRAWAL_NOTICE,
+    isActive: true,
+    subject: "Xác nhận thôi học - {{student_name}} | Sata Robo",
+    bodyText: `Xin chào {{parent_name}},
+
+Sata Robo xác nhận học viên {{student_name}} đã chính thức ngừng học tại trung tâm.
+
+Thông tin:
+- Ngày ghi nhận: {{withdrawn_at:date}}
+- Lý do: {{reason}}
+
+Sata Robo cảm ơn anh/chị và {{student_name}} đã đồng hành cùng chúng tôi.
+Mọi câu hỏi về học phí, hoàn trả hoặc thủ tục, vui lòng liên hệ 0818823720.
+
+Hẹn gặp lại trong tương lai!
+
+Trân trọng,
+Sata Robo`,
+    bodyHtml: `<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #7e22ce, #475569); color: white; border-radius: 8px 8px 0 0;">
+  <h1 style="margin: 0;">Sata Robo</h1>
+  <p style="margin: 8px 0 0;">Xác nhận thôi học</p>
+</div>
+<div style="background: white; padding: 24px; border: 1px solid #eee; border-radius: 0 0 8px 8px;">
+  <p>Xin chào <strong>{{parent_name}}</strong>,</p>
+  <p>Sata Robo xác nhận học viên <strong>{{student_name}}</strong> đã chính thức ngừng học tại trung tâm.</p>
+
+  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <tr><td style="padding: 8px; background: #f9fafb;"><strong>Ngày ghi nhận:</strong></td><td style="padding: 8px;">{{withdrawn_at:date}}</td></tr>
+    <tr><td style="padding: 8px; background: #f9fafb;"><strong>Lý do:</strong></td><td style="padding: 8px;">{{reason}}</td></tr>
+  </table>
+
+  <p>Sata Robo cảm ơn anh/chị đã đồng hành cùng chúng tôi. Hẹn gặp lại trong tương lai!</p>
+
+  <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+  <p style="text-align: center; color: #666; font-size: 13px;">
+    Mọi câu hỏi liên hệ <strong>0818823720</strong> hoặc <strong>satarobo@gmail.com</strong>
+  </p>
+</div>
+</body></html>`,
+    availableVariables: ["parent_name", "student_name", "withdrawn_at", "reason"],
+  },
+
+  // ─── CONSULT_LEAD_NOTIFICATION_INTERNAL ──────────────────────────
+  // Note: dùng trigger MANUAL vì không tạo enum mới (tránh migration).
+  // consult-notification.ts tìm theo CODE thay vì trigger.
+  {
+    code: "CONSULT_LEAD_NOTIFICATION_INTERNAL",
+    name: "Thông báo Lead mới (Nội bộ)",
+    description:
+      "Gửi tới email nội bộ khi có lead đăng ký tư vấn từ trang /khoa-hoc/[slug]",
+    trigger: EmailTemplateTrigger.MANUAL,
+    isActive: true,
+    subject:
+      "Lead tư vấn mới: {{parent_name}} quan tâm {{course_name}}",
+    bodyText: `Lead mới từ trang chi tiết khoá học:
+
+Phụ huynh:    {{parent_name}}
+SĐT:          {{phone}}
+Email:        {{email}}
+Tên con:      {{child_name}}
+Thời gian PH muốn được liên hệ: {{preferred_time}}
+
+Khoá quan tâm: {{course_name}} ({{course_slug}})
+Trang nguồn:   https://satarobo.vn{{landing_page}}
+Thời gian:     {{created_at:datetime}}
+
+Lead ID: {{lead_id}}
+Mở trong admin: https://satarobo.vn/admin/leads/{{lead_id}}`,
+    bodyHtml: `<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<div style="background: #fef3c7; padding: 12px; border-left: 4px solid #f59e0b; margin-bottom: 16px;">
+  <strong>LEAD MỚI - CẦN GỌI TRONG 30 PHÚT</strong>
+</div>
+<table style="width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 8px; background: #f9fafb; width: 40%;"><strong>Phụ huynh:</strong></td><td style="padding: 8px;">{{parent_name}}</td></tr>
+  <tr><td style="padding: 8px; background: #f9fafb;"><strong>SĐT:</strong></td><td style="padding: 8px;"><a href="tel:{{phone}}" style="font-size: 16px; color: #f97316; font-weight: bold;">{{phone}}</a></td></tr>
+  <tr><td style="padding: 8px; background: #f9fafb;"><strong>Email:</strong></td><td style="padding: 8px;">{{email}}</td></tr>
+  <tr><td style="padding: 8px; background: #f9fafb;"><strong>Tên con:</strong></td><td style="padding: 8px;">{{child_name}}</td></tr>
+  <tr><td style="padding: 8px; background: #f9fafb;"><strong>Thời gian muốn liên hệ:</strong></td><td style="padding: 8px;">{{preferred_time}}</td></tr>
+  <tr><td style="padding: 8px; background: #f9fafb;"><strong>Khoá quan tâm:</strong></td><td style="padding: 8px;"><strong style="color: #7e22ce;">{{course_name}}</strong> ({{course_slug}})</td></tr>
+  <tr><td style="padding: 8px; background: #f9fafb;"><strong>Trang nguồn:</strong></td><td style="padding: 8px;"><a href="https://satarobo.vn{{landing_page}}">{{landing_page}}</a></td></tr>
+  <tr><td style="padding: 8px; background: #f9fafb;"><strong>Thời gian:</strong></td><td style="padding: 8px;">{{created_at:datetime}}</td></tr>
+</table>
+<div style="margin-top: 20px; text-align: center;">
+  <a href="https://satarobo.vn/admin/leads/{{lead_id}}" style="display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Mở trong Admin →</a>
+</div>
+</body></html>`,
+    availableVariables: [
+      "lead_id",
+      "parent_name",
+      "phone",
+      "email",
+      "child_name",
+      "preferred_time",
+      "course_name",
+      "course_slug",
+      "landing_page",
+      "created_at",
+    ],
+  },
 ];
 
 export async function seedEmailTemplates(prisma: PrismaClient) {
+  let created = 0;
+  let updated = 0;
   for (const tpl of TEMPLATES) {
+    const existing = await prisma.emailTemplate.findUnique({
+      where: { code: tpl.code },
+      select: { id: true },
+    });
     await prisma.emailTemplate.upsert({
       where: { code: tpl.code },
       create: tpl,
-      update: {}, // không overwrite nếu admin đã sửa
+      // Update content but preserve sentCount + lastSentAt stats.
+      update: {
+        name: tpl.name,
+        description: tpl.description,
+        trigger: tpl.trigger,
+        isActive: tpl.isActive,
+        subject: tpl.subject,
+        bodyText: tpl.bodyText,
+        bodyHtml: tpl.bodyHtml,
+        availableVariables: tpl.availableVariables,
+      },
     });
-    console.log(`[seed] Email template: ${tpl.code} ensured`);
+    if (existing) updated++;
+    else created++;
   }
-  console.log(`Seeded ${TEMPLATES.length} email templates`);
+  console.log(`Email templates: ${created} mới · ${updated} cập nhật`);
 }
 
 if (require.main === module) {

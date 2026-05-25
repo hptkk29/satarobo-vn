@@ -98,6 +98,39 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // ─── Consult lead notification (Phase 5.13.1.FINAL) ──────────────
+    // Chỉ gửi cho lead từ ConsultModal — detect qua source là course slug.
+    const CONSULT_SLUGS = new Set([
+      'sata1', 'sata2', 'sata3', 'sata4', 'sata5',
+      'sata6', 'sata7', 'sata8', 'combo-sata1-sata2',
+    ])
+    if (data.source && CONSULT_SLUGS.has(data.source.toLowerCase())) {
+      const noteText = data.note ?? ''
+      const courseNameMatch = noteText.match(/Khóa quan tâm:\s*(.+?)(?:\n|$)/)
+      const courseName = courseNameMatch?.[1]?.trim() ?? data.source
+      const preferredTimeMatch = noteText.match(/Thời gian muốn liên hệ:\s*(.+?)(?:\n|$)/)
+      const preferredTime = preferredTimeMatch?.[1]?.trim()
+
+      const { sendConsultLeadNotification } = await import(
+        '@/lib/email/consult-notification'
+      )
+
+      sendConsultLeadNotification({
+        leadId: lead.id,
+        parentName: lead.parentName,
+        phone: lead.phone,
+        email: lead.email,
+        childName: lead.childName,
+        courseSlug: data.source,
+        courseName,
+        preferredTime,
+        landingPage: lead.landingPage,
+        createdAt: lead.createdAt,
+      }).catch((err) =>
+        console.error('[/api/leads] consult notification error:', err),
+      )
+    }
+
     Promise.all([
       sendMetaCapi({
         eventName: 'Lead',

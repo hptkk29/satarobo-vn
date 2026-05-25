@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedHonors } from "./seed-honors";
+import { seedEmailTemplates } from "./seed-email-templates";
 
 const db = new PrismaClient();
 
@@ -369,6 +370,9 @@ PHÙ HỢP CHO:
   // bullet-array shape.
   // ─── Hall of Fame ─────────────────────────────────────────────────────────────
   await seedHonors(db);
+
+  // ─── Email templates (Phase 5.13.1.FINAL) ───────────────────────────────────
+  await seedEmailTemplates(db);
 
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));
