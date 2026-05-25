@@ -9,7 +9,8 @@ export type VoucherValidationError =
   | "QUANTITY_EXHAUSTED"
   | "MIN_ORDER_NOT_MET"
   | "TYPE_MISMATCH"
-  | "TYPE_NOT_SUPPORTED_YET"
+  | "PRODUCT_REQUIRED"
+  | "PRODUCT_CATEGORY_MISMATCH"
   | "USER_LIMIT_REACHED";
 
 const ERROR_LABEL: Record<VoucherValidationError, string> = {
@@ -20,7 +21,8 @@ const ERROR_LABEL: Record<VoucherValidationError, string> = {
   QUANTITY_EXHAUSTED: "Voucher đã hết lượt sử dụng",
   MIN_ORDER_NOT_MET: "Đơn hàng chưa đạt giá trị tối thiểu",
   TYPE_MISMATCH: "Voucher không áp dụng cho loại đơn này",
-  TYPE_NOT_SUPPORTED_YET: "Loại voucher chưa hỗ trợ (đợi Sprint 5.10)",
+  PRODUCT_REQUIRED: "Voucher này cần chọn sản phẩm cụ thể",
+  PRODUCT_CATEGORY_MISMATCH: "Voucher không áp dụng cho loại sản phẩm này",
   USER_LIMIT_REACHED: "SĐT này đã dùng voucher quá số lần cho phép",
 };
 
@@ -50,6 +52,8 @@ export async function validateAndComputeDiscount(params: {
   orderType: OrderType;
   subtotal: number;
   customerPhone: string;
+  /** Required when voucher.type === KIT_ROBOT or SENSOR. */
+  productId?: string | null;
 }): Promise<VoucherValidationResult> {
   const code = params.code.toUpperCase().trim();
 
@@ -78,17 +82,45 @@ export async function validateAndComputeDiscount(params: {
     return { ok: false, error: "NOT_FOUND", message: ERROR_LABEL.NOT_FOUND };
   }
 
-  // KIT_ROBOT + SENSOR not supported until Sprint 5.10 (Product model).
+  // Type compatibility check.
+  // Phase 5.10.1: KIT_ROBOT and SENSOR vouchers now active — require the
+  // order to be PRODUCT type AND the specific product to match category.
   if (voucher.type === "KIT_ROBOT" || voucher.type === "SENSOR") {
-    return {
-      ok: false,
-      error: "TYPE_NOT_SUPPORTED_YET",
-      message: ERROR_LABEL.TYPE_NOT_SUPPORTED_YET,
-    };
-  }
-
-  // Type compatibility check
-  if (voucher.type !== "ALL") {
+    if (params.orderType !== "PRODUCT") {
+      return {
+        ok: false,
+        error: "TYPE_MISMATCH",
+        message: ERROR_LABEL.TYPE_MISMATCH,
+      };
+    }
+    if (!params.productId) {
+      return {
+        ok: false,
+        error: "PRODUCT_REQUIRED",
+        message: ERROR_LABEL.PRODUCT_REQUIRED,
+      };
+    }
+    const product = await db.product.findUnique({
+      where: { id: params.productId },
+      select: { id: true, category: true },
+    });
+    if (!product) {
+      return {
+        ok: false,
+        error: "PRODUCT_REQUIRED",
+        message: "Sản phẩm không tồn tại",
+      };
+    }
+    const expectedCategory =
+      voucher.type === "KIT_ROBOT" ? "KIT_ROBOT" : "SENSOR";
+    if (product.category !== expectedCategory) {
+      return {
+        ok: false,
+        error: "PRODUCT_CATEGORY_MISMATCH",
+        message: ERROR_LABEL.PRODUCT_CATEGORY_MISMATCH,
+      };
+    }
+  } else if (voucher.type !== "ALL") {
     const matches =
       (voucher.type === "COURSE" && params.orderType === "COURSE") ||
       (voucher.type === "PACKAGE" && params.orderType === "PACKAGE");

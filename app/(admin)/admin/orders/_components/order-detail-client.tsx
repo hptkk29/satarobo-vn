@@ -30,7 +30,11 @@ import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
 
 type OrderWithIncludes = Prisma.OrderGetPayload<{
   include: {
-    items: true;
+    items: {
+      include: {
+        product: { select: { id: true; sku: true } };
+      };
+    };
     paymentMethod: true;
     student: { select: { id: true; name: true } };
     lead: { select: { id: true; parentName: true } };
@@ -181,6 +185,14 @@ export function OrderDetailClient({
               <tr key={it.id} className="border-b border-gray-100">
                 <td className="p-2">
                   <div className="font-medium text-gray-900">{it.itemName}</div>
+                  {it.product && (
+                    <Link
+                      href={`/products/${it.product.id}`}
+                      className="font-mono text-xs text-blue-600 hover:underline"
+                    >
+                      → {it.product.sku}
+                    </Link>
+                  )}
                   {it.itemDescription && (
                     <div className="text-xs text-gray-500">
                       {it.itemDescription}

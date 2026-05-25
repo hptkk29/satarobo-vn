@@ -151,11 +151,17 @@ export async function createOrderManualAction(input: unknown) {
   } | null = null;
 
   if (data.voucherCode?.trim()) {
+    // For PRODUCT orders, pass productId so KIT_ROBOT/SENSOR vouchers can
+    // verify category match.
+    const productIdForVoucher =
+      data.type === "PRODUCT" ? (data.items[0]?.productId ?? null) : null;
+
     const voucherResult = await validateAndComputeDiscount({
       code: data.voucherCode,
       orderType: data.type,
       subtotal,
       customerPhone: data.customerPhone,
+      productId: productIdForVoucher,
     });
 
     if (!voucherResult.ok) {
@@ -214,10 +220,61 @@ export async function createOrderManualAction(input: unknown) {
     };
   }
 
+  // Phase 5.10.1 — PRODUCT order validation (single-item v1).
+  // Verify product exists, is ACTIVE, has enough stock. The actual stock
+  // decrement happens inside the tx below to keep create + decrement atomic.
+  let productSnapshot: {
+    productId: string;
+    name: string;
+    salePrice: number;
+    currentStock: number;
+    quantityRequested: number;
+  } | null = null;
+
+  if (data.type === "PRODUCT") {
+    const item = data.items[0];
+    if (!item || !item.productId) {
+      return {
+        ok: false as const,
+        error: "Đơn PRODUCT phải chọn sản phẩm",
+      };
+    }
+    const product = await db.product.findUnique({
+      where: { id: item.productId },
+      select: {
+        id: true,
+        name: true,
+        salePrice: true,
+        stockOnHand: true,
+        status: true,
+      },
+    });
+    if (!product) {
+      return { ok: false as const, error: "Sản phẩm không tồn tại" };
+    }
+    if (product.status !== "ACTIVE") {
+      return {
+        ok: false as const,
+        error: `Sản phẩm "${product.name}" không đang bán (status=${product.status})`,
+      };
+    }
+    if (product.stockOnHand < item.quantity) {
+      return {
+        ok: false as const,
+        error: `Tồn kho không đủ. Hiện có ${product.stockOnHand}, yêu cầu ${item.quantity}`,
+      };
+    }
+    productSnapshot = {
+      productId: product.id,
+      name: product.name,
+      salePrice: product.salePrice,
+      currentStock: product.stockOnHand,
+      quantityRequested: item.quantity,
+    };
+  }
+
   const code = await generateOrderCode();
-  // Actor info not yet used (no OrderAuditLog model — OrderStatusHistory only).
-  // Keep `session` lookup to preserve auth check ordering.
-  void session;
+  const { actorId, actorName } = getAuditActor(session);
 
   const created = await db.$transaction(async (tx) => {
     const order = await tx.order.create({
@@ -252,12 +309,44 @@ export async function createOrderManualAction(input: unknown) {
             totalPrice: it.unitPrice * it.quantity,
             packageId: it.packageId || null,
             examAttemptId: it.examAttemptId || null,
+            productId: it.productId || null,
             metadata: (it.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
           })),
         },
       },
       select: { id: true, code: true },
     });
+
+    // Phase 5.10.1 — Stock decrement + SALE movement for PRODUCT orders.
+    // Inside same tx so order + stock move atomically. Defensive guard:
+    // if a concurrent order race makes stock < 0, throw to rollback.
+    if (productSnapshot) {
+      const updated = await tx.product.update({
+        where: { id: productSnapshot.productId },
+        data: {
+          stockOnHand: { decrement: productSnapshot.quantityRequested },
+        },
+        select: { stockOnHand: true },
+      });
+
+      if (updated.stockOnHand < 0) {
+        throw new Error("PRODUCT_STOCK_INSUFFICIENT_RACE");
+      }
+
+      await tx.productMovement.create({
+        data: {
+          productId: productSnapshot.productId,
+          type: "SALE",
+          quantity: -productSnapshot.quantityRequested,
+          reason: `Bán theo đơn ${order.code}`,
+          orderId: order.id,
+          stockBeforeMovement: productSnapshot.currentStock,
+          stockAfterMovement: updated.stockOnHand,
+          createdByUserId: actorId,
+          createdByName: actorName,
+        },
+      });
+    }
 
     // Voucher redemption + atomic increment (Sprint 5.7.1).
     if (voucherInfo) {
@@ -288,6 +377,10 @@ export async function createOrderManualAction(input: unknown) {
   });
 
   revalidatePath("/orders");
+  if (productSnapshot) {
+    revalidatePath("/products");
+    revalidatePath(`/products/${productSnapshot.productId}`);
+  }
   if (voucherInfo) {
     revalidatePath("/vouchers");
     revalidatePath(`/vouchers/${voucherInfo.voucherId}`);
@@ -301,6 +394,7 @@ export async function previewVoucherAction(input: {
   orderType: OrderType;
   subtotal: number;
   customerPhone: string;
+  productId?: string | null;
 }) {
   await requireOrdersManage();
 
@@ -314,7 +408,10 @@ export async function previewVoucherAction(input: {
     return { ok: false as const, error: "Vui lòng chọn sản phẩm trước" };
   }
 
-  const result = await validateAndComputeDiscount(input);
+  const result = await validateAndComputeDiscount({
+    ...input,
+    productId: input.productId ?? null,
+  });
   if (!result.ok) {
     return { ok: false as const, error: result.message };
   }
@@ -426,45 +523,59 @@ export async function updateOrderNoteAction(
 export async function loadCreateOrderFormData() {
   await requireOrdersManage();
 
-  const [paymentMethods, courses, packages, centers] = await Promise.all([
-    db.paymentMethod.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: "asc" },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        type: true,
-        canBuyCourse: true,
-        canBuyPackage: true,
-        canBuyExam: true,
-        canBuyProduct: true,
-      },
-    }),
-    db.course.findMany({
-      where: { isActive: true, isPublished: true },
-      orderBy: { displayOrder: "asc" },
-      select: { id: true, code: true, name: true, price: true, type: true },
-    }),
-    db.coursePackage.findMany({
-      where: { isPublished: true },
-      orderBy: { displayOrder: "asc" },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        priceMember: true,
-        priceEarlyBird: true,
-      },
-    }),
-    db.center.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const [paymentMethods, courses, packages, products, centers] =
+    await Promise.all([
+      db.paymentMethod.findMany({
+        where: { isActive: true },
+        orderBy: { displayOrder: "asc" },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          type: true,
+          canBuyCourse: true,
+          canBuyPackage: true,
+          canBuyExam: true,
+          canBuyProduct: true,
+        },
+      }),
+      db.course.findMany({
+        where: { isActive: true, isPublished: true },
+        orderBy: { displayOrder: "asc" },
+        select: { id: true, code: true, name: true, price: true, type: true },
+      }),
+      db.coursePackage.findMany({
+        where: { isPublished: true },
+        orderBy: { displayOrder: "asc" },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          priceMember: true,
+          priceEarlyBird: true,
+        },
+      }),
+      db.product.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        take: 200,
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          salePrice: true,
+          stockOnHand: true,
+          category: true,
+        },
+      }),
+      db.center.findMany({
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+    ]);
 
-  return { paymentMethods, courses, packages, centers };
+  return { paymentMethods, courses, packages, products, centers };
 }
 
 // ─── Row type for client ─────────────────────────────────────────────

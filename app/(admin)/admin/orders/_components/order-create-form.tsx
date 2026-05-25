@@ -31,6 +31,14 @@ type Pkg = {
   priceMember: number | null;
   priceEarlyBird: number | null;
 };
+type ProductOption = {
+  id: string;
+  sku: string;
+  name: string;
+  salePrice: number;
+  stockOnHand: number;
+  category: string;
+};
 type PM = {
   id: string;
   code: string;
@@ -48,11 +56,13 @@ export function OrderCreateForm({
   paymentMethods,
   courses,
   packages,
+  products,
   centers,
 }: {
   paymentMethods: PM[];
   courses: Course[];
   packages: Pkg[];
+  products: ProductOption[];
   centers: Center[];
 }) {
   const router = useRouter();
@@ -118,6 +128,12 @@ export function OrderCreateForm({
         setItemName(p.name);
         setUnitPrice(p.priceMember ?? p.priceEarlyBird ?? 0);
       }
+    } else if (orderType === "PRODUCT") {
+      const pd = products.find((x) => x.id === refId);
+      if (pd) {
+        setItemName(`${pd.name} (${pd.sku})`);
+        setUnitPrice(pd.salePrice);
+      }
     }
   }
 
@@ -151,6 +167,7 @@ export function OrderCreateForm({
         orderType,
         subtotal,
         customerPhone: customer.phone,
+        productId: orderType === "PRODUCT" ? itemRefId : null,
       });
       if (result.ok) {
         setVoucherStatus({
@@ -176,13 +193,17 @@ export function OrderCreateForm({
       toast.error("Vui lòng chọn phương thức thanh toán");
       return;
     }
-    if (orderType !== "COURSE" && orderType !== "PACKAGE") {
-      toast.error("v1 chỉ hỗ trợ COURSE và PACKAGE");
+    if (!["COURSE", "PACKAGE", "PRODUCT"].includes(orderType)) {
+      toast.error(`v1 chỉ hỗ trợ COURSE, PACKAGE, PRODUCT (không hỗ trợ ${orderType})`);
       return;
     }
 
-    const itemType: OrderItemType =
-      orderType === "COURSE" ? "COURSE_ENROLLMENT" : "COURSE_PACKAGE";
+    const itemTypeMap: Record<string, OrderItemType> = {
+      COURSE: "COURSE_ENROLLMENT",
+      PACKAGE: "COURSE_PACKAGE",
+      PRODUCT: "PRODUCT",
+    };
+    const itemType: OrderItemType = itemTypeMap[orderType];
 
     const item = {
       type: itemType,
@@ -191,6 +212,7 @@ export function OrderCreateForm({
       unitPrice,
       packageId: orderType === "PACKAGE" ? itemRefId : null,
       examAttemptId: null,
+      productId: orderType === "PRODUCT" ? itemRefId : null,
       metadata: orderType === "COURSE" ? { courseId: itemRefId } : null,
     };
 
@@ -253,6 +275,7 @@ export function OrderCreateForm({
               <SelectContent>
                 <SelectItem value="COURSE">Khoá học</SelectItem>
                 <SelectItem value="PACKAGE">Gói combo</SelectItem>
+                <SelectItem value="PRODUCT">Sản phẩm</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -383,26 +406,74 @@ export function OrderCreateForm({
           Sản phẩm
         </h2>
         <div className="space-y-1.5">
-          <Label>{orderType === "COURSE" ? "Khoá học *" : "Gói combo *"}</Label>
-          <Select value={itemRefId} onValueChange={(v) => handleItemSelect(v ?? "")}>
+          <Label>
+            {orderType === "COURSE"
+              ? "Khoá học *"
+              : orderType === "PACKAGE"
+                ? "Gói combo *"
+                : "Sản phẩm *"}
+          </Label>
+          <Select
+            value={itemRefId}
+            onValueChange={(v) => handleItemSelect(v ?? "")}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Chọn..." />
             </SelectTrigger>
             <SelectContent>
-              {orderType === "COURSE"
-                ? courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                      {c.code ? ` (${c.code})` : ""}
-                    </SelectItem>
-                  ))
-                : packages.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} ({p.code})
-                    </SelectItem>
-                  ))}
+              {orderType === "COURSE" &&
+                courses.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                    {c.code ? ` (${c.code})` : ""}
+                  </SelectItem>
+                ))}
+              {orderType === "PACKAGE" &&
+                packages.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} ({p.code})
+                  </SelectItem>
+                ))}
+              {orderType === "PRODUCT" && products.length === 0 && (
+                <div className="p-2 text-xs text-gray-500">
+                  Không có sản phẩm ACTIVE. Tạo sản phẩm tại /products/new
+                </div>
+              )}
+              {orderType === "PRODUCT" &&
+                products.map((pd) => (
+                  <SelectItem
+                    key={pd.id}
+                    value={pd.id}
+                    disabled={pd.stockOnHand <= 0}
+                  >
+                    {pd.sku} · {pd.name} ·{" "}
+                    {pd.salePrice.toLocaleString("vi-VN")}đ · còn{" "}
+                    {pd.stockOnHand}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
+          {orderType === "PRODUCT" &&
+            itemRefId &&
+            (() => {
+              const selected = products.find((p) => p.id === itemRefId);
+              if (!selected) return null;
+              const insufficient = selected.stockOnHand < quantity;
+              return (
+                <div
+                  className={
+                    "mt-2 rounded-lg p-2 text-sm " +
+                    (insufficient
+                      ? "border border-red-200 bg-red-50 text-red-700"
+                      : "border border-blue-200 bg-blue-50 text-blue-700")
+                  }
+                >
+                  {insufficient ? "⚠️" : "ℹ️"} Tồn kho hiện tại:{" "}
+                  {selected.stockOnHand}
+                  {insufficient && ` — không đủ cho yêu cầu ${quantity}`}
+                </div>
+              );
+            })()}
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-1">

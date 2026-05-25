@@ -1973,7 +1973,9 @@ model OrderItem {
   examAttemptId String?
   examAttempt   ExamAttempt? @relation("ExamOrderItems", fields: [examAttemptId], references: [id])
 
-  productId String? // Sprint 5.10 — no FK yet
+  // Phase 5.10.1 — FK to Product (SetNull on product delete)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   // Item display snapshot (immutable)
   itemName        String
@@ -1994,6 +1996,7 @@ model OrderItem {
   @@index([enrollmentId])
   @@index([packageId])
   @@index([examAttemptId])
+  @@index([productId])
 }
 
 model OrderStatusHistory {
@@ -2202,6 +2205,9 @@ model Product {
 
   movements ProductMovement[]
   auditLogs ProductAuditLog[]
+
+  // Phase 5.10.1 — order item references
+  orderItems OrderItem[]
 
   @@index([category, status])
   @@index([status])

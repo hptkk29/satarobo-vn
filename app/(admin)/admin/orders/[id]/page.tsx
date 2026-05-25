@@ -36,7 +36,12 @@ export default async function OrderDetailPage({ params }: Props) {
   const order = await db.order.findUnique({
     where: { id },
     include: {
-      items: { orderBy: { createdAt: "asc" } },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          product: { select: { id: true, sku: true } },
+        },
+      },
       paymentMethod: true,
       student: { select: { id: true, name: true } },
       lead: { select: { id: true, parentName: true } },

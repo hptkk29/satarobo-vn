@@ -12,6 +12,7 @@ const orderItemSchema = z.object({
   // Polymorphic refs (one will be set depending on type)
   packageId: z.string().min(1).optional().nullable(),
   examAttemptId: z.string().min(1).optional().nullable(),
+  productId: z.string().min(1).optional().nullable(),
   // Metadata cho COURSE_ENROLLMENT (chứa courseId vì Enrollment chưa tồn tại)
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
 });

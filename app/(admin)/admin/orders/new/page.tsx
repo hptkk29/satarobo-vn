@@ -40,6 +40,7 @@ export default async function NewOrderPage() {
         paymentMethods={data.paymentMethods}
         courses={data.courses}
         packages={data.packages}
+        products={data.products}
         centers={data.centers}
       />
     </div>
