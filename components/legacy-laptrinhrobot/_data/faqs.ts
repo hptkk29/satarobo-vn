@@ -33,9 +33,9 @@ export const faqs: FAQ[] = [
       {
         type: "list",
         items: [
-          "Sata1 Robosim Master: giá ưu đãi 2.040.000đ.",
-          "Sata2 Đấu trường Robot: giá ưu đãi 2.584.000đ.",
-          "Combo Sata1 + Sata2: 3.808.000đ.",
+          "Sata1 Robosim Master: giá ưu đãi 1.485.000đ.",
+          "Sata2 Đấu trường Robot: giá ưu đãi 2.736.000đ.",
+          "Combo Sata1 + Sata2: 3.986.000đ (tiết kiệm 704.000đ).",
           "Sata8 Vé Vàng Chung Kết: 2.500.000đ cố định, không áp dụng giảm giá.",
           "Sata3-Sata7: giá ưu đãi theo từng khóa và có trả góp 0%.",
         ],

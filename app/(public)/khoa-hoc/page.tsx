@@ -73,7 +73,7 @@ const COMPARISON = [
   },
   {
     label: "Giá",
-    laptrinhrobot: "Chỉ từ 2.040.000đ",
+    laptrinhrobot: "Chỉ từ 1.485.000đ",
     luyenthirobosim: "Chỉ từ 490.000đ",
   },
 ];

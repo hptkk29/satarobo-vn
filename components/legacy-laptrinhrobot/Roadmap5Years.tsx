@@ -34,12 +34,44 @@ const ID_TO_SLUG: Record<string, string> = {
 };
 
 // Icons + accent cho longterm courses
-const LONGTERM_META: Record<string, { Icon: LucideIcon; color: string }> = {
-  Sata3: { Icon: Sprout, color: "from-emerald-500 to-emerald-600" },
-  Sata4: { Icon: Rocket, color: "from-indigo-500 to-indigo-600" },
-  Sata5: { Icon: Zap, color: "from-amber-500 to-amber-600" },
-  Sata6: { Icon: Trophy, color: "from-orange-500 to-orange-600" },
-  Sata7: { Icon: Bot, color: "from-violet-500 to-violet-600" },
+type LongtermMeta = {
+  Icon: LucideIcon;
+  gradient: string; // gradient from-to classes for header strip + icon bg
+  accent: string; // border + ring color
+  year: number;
+};
+
+const LONGTERM_META: Record<string, LongtermMeta> = {
+  Sata3: {
+    Icon: Sprout,
+    gradient: "from-emerald-400 to-teal-500",
+    accent: "ring-emerald-200/60 hover:ring-emerald-300",
+    year: 1,
+  },
+  Sata4: {
+    Icon: Rocket,
+    gradient: "from-indigo-500 to-blue-500",
+    accent: "ring-indigo-200/60 hover:ring-indigo-300",
+    year: 2,
+  },
+  Sata5: {
+    Icon: Zap,
+    gradient: "from-amber-400 to-orange-500",
+    accent: "ring-amber-200/60 hover:ring-amber-300",
+    year: 3,
+  },
+  Sata6: {
+    Icon: Trophy,
+    gradient: "from-orange-500 to-rose-500",
+    accent: "ring-orange-200/60 hover:ring-orange-300",
+    year: 4,
+  },
+  Sata7: {
+    Icon: Bot,
+    gradient: "from-violet-500 to-fuchsia-500",
+    accent: "ring-violet-200/60 hover:ring-violet-300",
+    year: 5,
+  },
 };
 
 // ─── EXAM CARD (Sata1, Sata2, Combo, Sata8) ─────────────────────────
@@ -169,7 +201,7 @@ function LongtermCard({ courseId }: { courseId: string }) {
 
   const slug = ID_TO_SLUG[courseId];
   const meta = LONGTERM_META[courseId] ?? LONGTERM_META.Sata3;
-  const { Icon, color } = meta;
+  const { Icon, gradient, accent, year } = meta;
 
   const finalPrice = course.earlyBirdPrice ?? course.listPrice;
   const discountPct = course.earlyBirdPrice
@@ -179,60 +211,97 @@ function LongtermCard({ courseId }: { courseId: string }) {
     : 0;
 
   return (
-    <article className="flex h-full flex-col rounded-3xl border-2 border-gray-200 bg-white p-6 shadow-lg transition hover:scale-[1.02] hover:shadow-xl">
-      <div className="mb-3 flex items-start gap-3">
-        <span
-          className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${color} text-white shadow-md`}
-        >
-          <Icon className="h-6 w-6" />
-        </span>
-        <div className="flex-1">
+    <article
+      className={`group flex h-full flex-col overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-gray-200 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:ring-2 ${accent}`}
+    >
+      {/* Gradient header strip với Year + Grade */}
+      <div
+        className={`relative bg-gradient-to-r ${gradient} px-5 py-3 text-white`}
+      >
+        <div className="flex items-center justify-between">
+          <span className="rounded-full bg-white/25 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider backdrop-blur-sm">
+            Năm {year}
+          </span>
+          <span className="text-[11px] font-semibold text-white/95">
+            {course.grade}
+          </span>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 flex-col p-5">
+        {/* Icon + Title */}
+        <div className="mb-4 flex flex-col items-center text-center">
+          <span
+            className={`mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-white shadow-lg transition-transform group-hover:scale-110`}
+          >
+            <Icon className="h-7 w-7" strokeWidth={2.2} />
+          </span>
           {course.badge && (
-            <span className="mb-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">
+            <span className="mb-2 inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700 ring-1 ring-amber-200">
               {course.badge}
             </span>
           )}
-          <h3 className="text-xl font-black leading-tight text-gray-900">
+          <h3 className="text-lg font-black leading-tight text-gray-900 line-clamp-2 min-h-[3rem]">
             {course.displayName ?? course.name}
           </h3>
-          <p className="mt-1 text-xs font-semibold text-gray-600">
-            {course.grade} · 48 buổi · 4 học phần
-          </p>
         </div>
-      </div>
 
-      <p className="mb-4 flex-1 text-sm text-gray-700">{course.note}</p>
+        {/* Description */}
+        <p className="mb-4 flex-1 text-center text-sm leading-relaxed text-gray-600 line-clamp-3">
+          {course.note}
+        </p>
 
-      <div className="mb-4 rounded-xl bg-gray-50 p-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400 line-through">
-            {fmt(course.listPrice)}
-          </span>
-          {discountPct > 0 && (
-            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
-              −{discountPct}%
+        {/* Sessions info */}
+        <div className="mb-4 flex items-center justify-center gap-3 rounded-xl bg-gray-50 py-2 text-[11px] font-semibold text-gray-600">
+          <span>{course.sessions} buổi</span>
+          <span className="text-gray-300">·</span>
+          <span>4 học phần</span>
+          <span className="text-gray-300">·</span>
+          <span>{course.totalDuration}</span>
+        </div>
+
+        {/* Price block */}
+        <div className="mb-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/70 to-amber-50/40 p-4">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs text-gray-400 line-through">
+              {fmt(course.listPrice)}
             </span>
+            {discountPct > 0 && (
+              <span className="rounded-md bg-red-500 px-2 py-0.5 text-[10px] font-black text-white">
+                −{discountPct}%
+              </span>
+            )}
+          </div>
+          <div className="text-2xl font-extrabold tracking-tight text-orange-600">
+            {fmt(finalPrice)}
+          </div>
+          {course.installmentOutside && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-600">
+              <span className="text-green-600">●</span>
+              <span>
+                Trả góp{" "}
+                <strong className="text-gray-800">
+                  {fmt(course.installmentOutside)}/tháng
+                </strong>{" "}
+                × 12 tháng
+              </span>
+            </div>
           )}
         </div>
-        <div className="text-2xl font-extrabold text-orange-600">
-          {fmt(finalPrice)}
-        </div>
-        {course.installmentOutside && (
-          <div className="text-xs text-gray-600">
-            hoặc{" "}
-            <strong>
-              {fmt(course.installmentOutside)}/tháng × 12 tháng
-            </strong>
-          </div>
-        )}
-      </div>
 
-      <Link
-        href={`/khoa-hoc/${slug}`}
-        className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:from-orange-600 hover:to-orange-700"
-      >
-        Xem chi tiết khoá học <ChevronRight size={16} />
-      </Link>
+        {/* CTA */}
+        <Link
+          href={`/khoa-hoc/${slug}`}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:from-orange-600 hover:to-orange-700 hover:shadow-lg"
+        >
+          Xem chi tiết khoá học
+          <ChevronRight
+            size={16}
+            className="transition-transform group-hover:translate-x-0.5"
+          />
+        </Link>
+      </div>
     </article>
   );
 }
@@ -265,16 +334,47 @@ export default function Roadmap5Years() {
 
         {/* GROUP 2: Khoá chuyên sâu 5 năm */}
         <div>
-          <div className="mb-8 text-center">
-            <span className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-4 py-2 text-xs font-black uppercase tracking-widest text-purple-700">
+          <div className="mb-10 text-center">
+            <span className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-purple-100 to-violet-100 px-4 py-2 text-xs font-black uppercase tracking-widest text-purple-700 ring-1 ring-purple-200">
               LỘ TRÌNH 5 NĂM ROBOTICS
             </span>
             <h2 className="mt-4 text-3xl font-extrabold text-gray-900 sm:text-4xl">
-              Đào tạo Robotics bài bản từ Lớp 1 đến Lớp 8
+              Đào tạo Robotics bài bản từ{" "}
+              <span className="bg-gradient-to-r from-orange-500 to-purple-600 bg-clip-text text-transparent">
+                Lớp 1 đến Lớp 8
+              </span>
             </h2>
-            <p className="mt-2 text-gray-600">
-              5 khoá học × 48 buổi/năm · 4 học phần/năm · 240 buổi tổng cho hành trình 5 năm
+            <p className="mx-auto mt-3 max-w-2xl text-gray-600">
+              5 khoá học × 48 buổi/năm · 4 học phần/năm ·{" "}
+              <strong className="text-gray-900">240 buổi</strong> tổng cho hành trình 5 năm
             </p>
+
+            {/* 5-year journey indicator */}
+            <div className="mx-auto mt-6 hidden max-w-3xl items-center gap-1 sm:flex">
+              {[
+                { y: 1, g: "Lớp 1-2", c: "from-emerald-400 to-teal-500" },
+                { y: 2, g: "Lớp 3-4", c: "from-indigo-500 to-blue-500" },
+                { y: 3, g: "Lớp 5", c: "from-amber-400 to-orange-500" },
+                { y: 4, g: "Lớp 6-7", c: "from-orange-500 to-rose-500" },
+                { y: 5, g: "Lớp 8", c: "from-violet-500 to-fuchsia-500" },
+              ].map((step, i, arr) => (
+                <div key={step.y} className="flex flex-1 items-center">
+                  <div className="flex flex-1 flex-col items-center">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br ${step.c} text-xs font-black text-white shadow-md`}
+                    >
+                      {step.y}
+                    </div>
+                    <span className="mt-1 text-[11px] font-semibold text-gray-600">
+                      {step.g}
+                    </span>
+                  </div>
+                  {i < arr.length - 1 && (
+                    <div className="mx-1 h-0.5 flex-1 -translate-y-3 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200" />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <LongtermCard courseId="Sata3" />
