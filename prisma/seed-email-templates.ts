@@ -258,6 +258,131 @@ Mở trong admin: https://satarobo.vn/admin/leads/{{lead_id}}`,
       "created_at",
     ],
   },
+
+  // ─── CLASS_REMINDER_VI ───────────────────────────────────────────
+  {
+    code: "CLASS_REMINDER_VI",
+    name: "Nhắc lịch học (24h trước)",
+    description: "Gửi cho phụ huynh 24h trước mỗi buổi học",
+    trigger: EmailTemplateTrigger.CLASS_REMINDER,
+    isActive: true,
+    subject: "Nhắc lịch học: {{class_name}} ngày mai - {{student_name}}",
+    bodyText: `Xin chào {{parent_name}},
+
+Sata Robo nhắc nhở lịch học của {{student_name}} ngày mai:
+
+Buổi học: {{class_name}}
+Thời gian: {{session_date:datetime}}
+Địa điểm: {{center_name}}
+Chủ đề: {{session_topic}}
+
+Vui lòng cho con đi học đúng giờ. Nếu có thay đổi đột xuất, vui lòng liên hệ ngay
+0818.823.720 để Sata Robo sắp xếp.
+
+Trân trọng,
+Sata Robo`,
+    bodyHtml: `<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; border-radius: 8px 8px 0 0;">
+  <h1 style="margin: 0; font-size: 22px;">Nhắc lịch học</h1>
+  <p style="margin: 8px 0 0;">Sata Robo</p>
+</div>
+<div style="background: white; padding: 24px; border: 1px solid #eee; border-radius: 0 0 8px 8px;">
+  <p>Xin chào <strong>{{parent_name}}</strong>,</p>
+  <p>Sata Robo nhắc nhở lịch học của <strong>{{student_name}}</strong> ngày mai:</p>
+
+  <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 16px; margin: 20px 0; border-radius: 4px;">
+    <div style="margin-bottom: 8px;"><strong>Buổi học:</strong> {{class_name}}</div>
+    <div style="margin-bottom: 8px;"><strong>Thời gian:</strong> <span style="color: #ea580c; font-weight: bold;">{{session_date:datetime}}</span></div>
+    <div style="margin-bottom: 8px;"><strong>Địa điểm:</strong> {{center_name}}</div>
+    <div><strong>Chủ đề:</strong> {{session_topic}}</div>
+  </div>
+
+  <p>Vui lòng cho con đi học đúng giờ. Nếu có thay đổi đột xuất, liên hệ ngay:</p>
+  <p style="text-align: center; margin: 20px 0;">
+    <a href="tel:0818823720" style="display: inline-block; padding: 12px 24px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">0818.823.720</a>
+  </p>
+
+  <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+  <p style="text-align: center; color: #666; font-size: 13px;">
+    Mọi câu hỏi liên hệ <strong>0818.823.720</strong> hoặc <strong>satarobo@gmail.com</strong>
+  </p>
+</div>
+</body></html>`,
+    availableVariables: [
+      "parent_name",
+      "student_name",
+      "class_name",
+      "session_date",
+      "center_name",
+      "session_topic",
+    ],
+  },
+
+  // ─── RENEWAL_REMINDER_VI ─────────────────────────────────────────
+  {
+    code: "RENEWAL_REMINDER_VI",
+    name: "Nhắc gia hạn khóa học (14 ngày trước)",
+    description: "Gửi cho phụ huynh 14 ngày trước khi enrollment kết thúc",
+    trigger: EmailTemplateTrigger.RENEWAL_REMINDER,
+    isActive: true,
+    subject:
+      "{{student_name}} sắp hoàn thành khóa {{course_name}} - Sata Robo",
+    bodyText: `Xin chào {{parent_name}},
+
+Sata Robo xin thông báo: {{student_name}} sắp hoàn thành khóa học hiện tại.
+
+Thông tin:
+- Khóa học: {{course_name}}
+- Ngày kết thúc: {{end_date:date}} ({{days_remaining}} ngày nữa)
+
+Để con tiếp tục lộ trình Robotics liền mạch, Sata Robo trân trọng mời anh/chị
+đăng ký khóa tiếp theo trước ngày {{end_date:date}}.
+
+Liên hệ ngay 0818.823.720 để được tư vấn lộ trình phù hợp với độ tuổi và mục
+tiêu của con.
+
+Trân trọng,
+Sata Robo`,
+    bodyHtml: `<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #f97316, #7e22ce); color: white; border-radius: 8px 8px 0 0;">
+  <h1 style="margin: 0;">Sắp kết thúc khóa học</h1>
+  <p style="margin: 8px 0 0;">Sata Robo</p>
+</div>
+<div style="background: white; padding: 24px; border: 1px solid #eee; border-radius: 0 0 8px 8px;">
+  <p>Xin chào <strong>{{parent_name}}</strong>,</p>
+  <p><strong>{{student_name}}</strong> sắp hoàn thành khóa học hiện tại tại Sata Robo!</p>
+
+  <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 4px;">
+    <div style="margin-bottom: 8px;"><strong>Khóa học:</strong> {{course_name}}</div>
+    <div><strong>Ngày kết thúc:</strong> <span style="color: #c2410c; font-weight: bold;">{{end_date:date}}</span> (còn {{days_remaining}} ngày)</div>
+  </div>
+
+  <p>Để con tiếp tục lộ trình Robotics <strong>liền mạch</strong>, không bị gián đoạn tư duy đã xây dựng, anh/chị nên đăng ký khóa tiếp theo trong 14 ngày tới.</p>
+
+  <p style="text-align: center; margin: 24px 0;">
+    <a href="tel:0818823720" style="display: inline-block; padding: 14px 28px; background: #f97316; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Liên hệ tư vấn ngay</a>
+  </p>
+
+  <p style="text-align: center; color: #666; font-size: 14px;">
+    Hoặc xem các khóa tiếp theo tại: <a href="https://satarobo.vn/khoa-hoc/laptrinhrobot" style="color: #f97316;">satarobo.vn/khoa-hoc</a>
+  </p>
+
+  <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+  <p style="text-align: center; color: #666; font-size: 13px;">
+    Sata Robo · 0818.823.720 · satarobo@gmail.com
+  </p>
+</div>
+</body></html>`,
+    availableVariables: [
+      "parent_name",
+      "student_name",
+      "course_name",
+      "end_date",
+      "days_remaining",
+    ],
+  },
 ];
 
 export async function seedEmailTemplates(prisma: PrismaClient) {

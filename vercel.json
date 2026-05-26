@@ -1,3 +1,13 @@
 {
-  "regions": ["hnd1"]
+  "regions": ["hnd1"],
+  "crons": [
+    {
+      "path": "/api/cron/class-reminder",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/renewal-reminder",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
