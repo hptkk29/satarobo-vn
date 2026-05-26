@@ -14,11 +14,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Tìm ClassSession có date trong khoảng 23h - 25h từ giờ hiện tại
-  // (window 2h để safe — cron chạy hourly, nếu lag 1 chu kỳ vẫn bắt được)
+  // Daily cron chạy 8h sáng VN (UTC 01:00) — quét sessions từ 12h-48h tới
+  // Bắt được mọi session ngày hôm sau bất kể giờ học sáng/chiều/tối
   const now = new Date();
-  const windowStart = new Date(now.getTime() + 23 * 3600 * 1000);
-  const windowEnd = new Date(now.getTime() + 25 * 3600 * 1000);
+  const windowStart = new Date(now.getTime() + 12 * 3600 * 1000);
+  const windowEnd = new Date(now.getTime() + 48 * 3600 * 1000);
 
   const sessions = await db.classSession.findMany({
     where: {
