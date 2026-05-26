@@ -11,6 +11,7 @@ import {
   type JsonObjectItem,
 } from "./json-array-editor";
 import { ImageUploader } from "@/components/admin/ImageUploader";
+import { FaqEditor, type FaqItem } from "./faq-editor";
 
 type PackageFormValue = {
   id: string;
@@ -40,7 +41,37 @@ type PackageFormValue = {
   seoTitle: string | null;
   seoDescription: string | null;
   parentCourseSlug: string | null;
+  // Phase TD-1 — Detail content
+  audienceTag: string | null;
+  audienceDescription: string | null;
+  mission: string | null;
+  outcomesJson: Prisma.JsonValue;
+  methodsJson: Prisma.JsonValue;
+  conditionsJson: Prisma.JsonValue;
+  noteForParents: string | null;
+  faqsJson: Prisma.JsonValue;
 };
+
+function normalizeStringArray(value: Prisma.JsonValue): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === "string");
+}
+
+function normalizeFaqArray(value: Prisma.JsonValue): FaqItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (v): v is { question: string; answer: string } =>
+        typeof v === "object" &&
+        v !== null &&
+        !Array.isArray(v) &&
+        "question" in v &&
+        "answer" in v &&
+        typeof (v as Record<string, unknown>).question === "string" &&
+        typeof (v as Record<string, unknown>).answer === "string",
+    )
+    .map((v) => ({ question: v.question, answer: v.answer }));
+}
 
 interface PackageFormProps {
   pkg?: PackageFormValue;
@@ -115,12 +146,34 @@ export function PackageForm({ pkg }: PackageFormProps) {
     normalizeJsonArray(pkg?.curriculum ?? []),
   );
   const [thumbnail, setThumbnail] = useState<string | null>(pkg?.thumbnail ?? null);
+  // Phase TD-1 — Detail content state
+  const [outcomes, setOutcomes] = useState<JsonArrayItem[]>(
+    normalizeStringArray(pkg?.outcomesJson ?? []),
+  );
+  const [methods, setMethods] = useState<JsonArrayItem[]>(
+    normalizeStringArray(pkg?.methodsJson ?? []),
+  );
+  const [conditions, setConditions] = useState<JsonArrayItem[]>(
+    normalizeStringArray(pkg?.conditionsJson ?? []),
+  );
+  const [faqs, setFaqs] = useState<FaqItem[]>(
+    normalizeFaqArray(pkg?.faqsJson ?? []),
+  );
 
   const action = async (formData: FormData) => {
     setError(null);
     formData.set("features", JSON.stringify(features));
     formData.set("highlights", JSON.stringify(highlights));
     formData.set("curriculum", JSON.stringify(curriculum));
+    formData.set("outcomesJson", JSON.stringify(outcomes));
+    formData.set("methodsJson", JSON.stringify(methods));
+    formData.set("conditionsJson", JSON.stringify(conditions));
+    formData.set(
+      "faqsJson",
+      JSON.stringify(
+        faqs.filter((f) => f.question.trim() && f.answer.trim()),
+      ),
+    );
 
     const result = pkg
       ? await updatePackage(pkg.id, formData)
@@ -293,6 +346,91 @@ export function PackageForm({ pkg }: PackageFormProps) {
           defaultValue={pkg?.parentCourseSlug}
           options={PARENT_COURSE_OPTIONS}
         />
+      </Section>
+
+      {/* Phase TD-1 — Detail content cho /khoa-hoc/[slug] */}
+      <Section title="Nội dung trang chi tiết khóa học">
+        <Field
+          label="Đối tượng (badge ngắn — VD: Học sinh Lớp 1-8)"
+          name="audienceTag"
+          defaultValue={pkg?.audienceTag}
+          placeholder="VD: Học sinh Lớp 1-8"
+        />
+        <Field
+          label="Mô tả đối tượng (1-2 câu)"
+          name="audienceDescription"
+          type="textarea"
+          rows={2}
+          defaultValue={pkg?.audienceDescription}
+          placeholder="VD: Dành cho học sinh chuẩn bị thi vòng loại Robotics 2026..."
+        />
+        <Field
+          label="Sứ mệnh khóa học (2-4 đoạn)"
+          name="mission"
+          type="textarea"
+          rows={6}
+          defaultValue={pkg?.mission}
+          placeholder="Mô tả mục đích, đối tượng, giá trị mang lại..."
+        />
+
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+            Kết quả đạt được sau khi hoàn thành
+          </label>
+          <JsonArrayEditor
+            value={outcomes}
+            onChange={setOutcomes}
+            template=""
+            type="string"
+            placeholder="Chưa có outcome nào"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+            Phương pháp đào tạo (tuỳ chọn — cho khóa luyện thi)
+          </label>
+          <JsonArrayEditor
+            value={methods}
+            onChange={setMethods}
+            template=""
+            type="string"
+            placeholder="Chưa có phương pháp nào"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+            Điều kiện đặc biệt (tuỳ chọn — VD Sata8 cam kết hoàn tiền)
+          </label>
+          <JsonArrayEditor
+            value={conditions}
+            onChange={setConditions}
+            template=""
+            type="string"
+            placeholder="Chưa có điều kiện nào"
+          />
+        </div>
+
+        <Field
+          label="Lưu ý cho phụ huynh (yellow alert)"
+          name="noteForParents"
+          type="textarea"
+          rows={3}
+          defaultValue={pkg?.noteForParents}
+          placeholder="VD: Khóa này nên kết hợp với Sata2..."
+        />
+
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+            FAQ riêng cho khóa này
+          </label>
+          <FaqEditor value={faqs} onChange={setFaqs} />
+          <p className="mt-1 text-xs text-gray-500">
+            Mỗi FAQ là 1 cặp question/answer. Sẽ render trong section "Câu hỏi
+            thường gặp" trên trang chi tiết.
+          </p>
+        </div>
       </Section>
 
       <div className="flex gap-3 border-t border-gray-200 pt-6">

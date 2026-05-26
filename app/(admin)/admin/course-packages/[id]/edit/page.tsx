@@ -51,6 +51,15 @@ export default async function EditPackagePage({ params }: EditPackagePageProps) 
       seoTitle: true,
       seoDescription: true,
       parentCourseSlug: true,
+      // Phase TD-1 — Detail content
+      audienceTag: true,
+      audienceDescription: true,
+      mission: true,
+      outcomesJson: true,
+      methodsJson: true,
+      conditionsJson: true,
+      noteForParents: true,
+      faqsJson: true,
     },
   });
 

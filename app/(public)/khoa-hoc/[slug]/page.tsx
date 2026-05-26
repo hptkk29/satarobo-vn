@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Check, GraduationCap, Clock, Tag } from "lucide-react";
-import { getCourseBundle } from "@/components/legacy-laptrinhrobot/_data/courses-helpers";
+import {
+  getCourseBundle,
+  getCoursePackageFromDb,
+} from "@/components/legacy-laptrinhrobot/_data/courses-helpers";
 import {
   VALID_COURSE_SLUGS,
   courseDetails,
@@ -12,6 +15,10 @@ import { ExamDetailSections } from "@/components/khoa-hoc/exam-detail-sections";
 import { LongtermDetailSections } from "@/components/khoa-hoc/longterm-detail-sections";
 
 const BASE_URL = "https://satarobo.vn";
+
+// Phase TD-1 — revalidate mỗi 60s để admin edits hiển thị trong vòng 1 phút
+// (kể cả khi build prerender fallback hardcoded vì DB unreachable)
+export const revalidate = 60;
 
 // Reserved slugs that have their own static routes (must NOT be handled here)
 const RESERVED_SLUGS = new Set(["laptrinhrobot", "luyenthirobosim"]);
@@ -70,7 +77,35 @@ export default async function CoursePage({
   const bundle = getCourseBundle(slugLower);
   if (!bundle) notFound();
 
-  const { course, detail, type, exam, longterm } = bundle;
+  const { course, detail: hardcodedDetail, type, exam, longterm } = bundle;
+
+  // Phase TD-1 — ưu tiên DB content nếu có, fallback hardcode
+  const dbPkg = await getCoursePackageFromDb(slugLower);
+
+  const dbOutcomes = Array.isArray(dbPkg?.outcomesJson)
+    ? (dbPkg.outcomesJson.filter((v) => typeof v === "string") as string[])
+    : null;
+  const dbHighlights = Array.isArray(dbPkg?.highlights)
+    ? (dbPkg.highlights.filter((v) => typeof v === "string") as string[])
+    : null;
+
+  const detail = {
+    ...hardcodedDetail,
+    audienceTag: dbPkg?.audienceTag ?? hardcodedDetail.audienceTag,
+    audienceDescription:
+      dbPkg?.audienceDescription ?? hardcodedDetail.audienceDescription,
+    mission: dbPkg?.mission ?? hardcodedDetail.mission,
+    outcomes:
+      dbOutcomes && dbOutcomes.length > 0
+        ? dbOutcomes
+        : hardcodedDetail.outcomes,
+    highlights:
+      dbHighlights && dbHighlights.length > 0
+        ? dbHighlights
+        : hardcodedDetail.highlights,
+    noteForParents:
+      dbPkg?.noteForParents ?? hardcodedDetail.noteForParents,
+  };
 
   // Pricing display logic
   const isFixedPrice = !!course.fixedPrice;

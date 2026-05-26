@@ -842,6 +842,18 @@ model CoursePackage {
 
   parentCourseSlug String?
 
+  // Phase TD-1 — Detail content cho /khoa-hoc/[slug]
+  audienceTag         String?
+  audienceDescription String? @db.Text
+  mission             String? @db.Text
+  outcomesJson        Json?
+  methodsJson         Json?
+  conditionsJson      Json?
+  noteForParents      String? @db.Text
+  faqsJson            Json?
+  heroImageUrl         String?
+  galleryImageUrlsJson Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

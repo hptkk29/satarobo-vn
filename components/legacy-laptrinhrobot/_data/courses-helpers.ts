@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { db } from "@/lib/db";
 import { courseGroups, type Course } from "./courses-pricing";
 import { courseDetails, type CourseDetail } from "./courses-details";
 import { examRoadmap, type ExamRoadmapItem } from "./exam-roadmap";
@@ -56,6 +58,42 @@ export function getRoadmapCourseBySlug(slug: string): RoadmapCourse | null {
   if (!courseId) return null;
   return roadmap5Years.find((r) => r.productCode === courseId) ?? null;
 }
+
+/**
+ * Phase TD-1 — Load CoursePackage detail content từ DB.
+ * Returns null nếu slug không có trong DB.
+ *
+ * Cached: dùng React `cache()` để dedupe trong cùng request.
+ */
+export const getCoursePackageFromDb = cache(async (slug: string) => {
+  // Graceful fallback: nếu DB unreachable (VD: build worker thiếu DATABASE_URL),
+  // return null để page render từ hardcoded courses-details.ts.
+  try {
+    return await db.coursePackage.findUnique({
+      where: { slug: slug.toLowerCase() },
+      select: {
+        slug: true,
+        audienceTag: true,
+        audienceDescription: true,
+        mission: true,
+        outcomesJson: true,
+        methodsJson: true,
+        conditionsJson: true,
+        noteForParents: true,
+        faqsJson: true,
+        highlights: true,
+        heroImageUrl: true,
+        galleryImageUrlsJson: true,
+      },
+    });
+  } catch (err) {
+    console.warn(
+      `[courses-helpers] DB lookup failed for slug=${slug} — fallback to hardcoded:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+});
 
 /**
  * Aggregate all data for a course slug.

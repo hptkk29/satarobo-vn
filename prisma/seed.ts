@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedHonors } from "./seed-honors";
 import { seedEmailTemplates } from "./seed-email-templates";
+import { seedCoursePackageContent } from "./seed-coursepackage-content";
 
 const db = new PrismaClient();
 
@@ -373,6 +374,9 @@ PHÙ HỢP CHO:
 
   // ─── Email templates (Phase 5.13.1.FINAL) ───────────────────────────────────
   await seedEmailTemplates(db);
+
+  // ─── CoursePackage detail content (Phase TD-1) ──────────────────────────────
+  await seedCoursePackageContent(db);
 
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));

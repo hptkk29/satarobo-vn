@@ -44,6 +44,15 @@ const packageSchema = z.object({
   seoTitle: z.string().trim().optional(),
   seoDescription: z.string().trim().optional(),
   parentCourseSlug: z.string().trim().optional(),
+  // Phase TD-1 — Detail content
+  audienceTag: z.string().trim().max(100).optional(),
+  audienceDescription: z.string().trim().max(500).optional(),
+  mission: z.string().trim().max(5000).optional(),
+  outcomesJson: jsonArraySchema,
+  methodsJson: jsonArraySchema,
+  conditionsJson: jsonArraySchema,
+  noteForParents: z.string().trim().max(2000).optional(),
+  faqsJson: jsonArraySchema,
 });
 
 function emptyToUndefined(value: FormDataEntryValue | null): string | undefined {
@@ -124,6 +133,15 @@ function readPackageForm(formData: FormData, includeCode: boolean) {
     seoTitle: emptyToUndefined(formData.get("seoTitle")),
     seoDescription: emptyToUndefined(formData.get("seoDescription")),
     parentCourseSlug: emptyToUndefined(formData.get("parentCourseSlug")),
+    // Phase TD-1
+    audienceTag: emptyToUndefined(formData.get("audienceTag")),
+    audienceDescription: emptyToUndefined(formData.get("audienceDescription")),
+    mission: emptyToUndefined(formData.get("mission")),
+    outcomesJson: parseJsonArray(formData.get("outcomesJson")),
+    methodsJson: parseJsonArray(formData.get("methodsJson")),
+    conditionsJson: parseJsonArray(formData.get("conditionsJson")),
+    noteForParents: emptyToUndefined(formData.get("noteForParents")),
+    faqsJson: parseJsonArray(formData.get("faqsJson")),
   };
 }
 
@@ -165,6 +183,15 @@ export async function createPackage(formData: FormData): Promise<ActionResult> {
     seoTitle: emptyToNull(pkg.seoTitle),
     seoDescription: emptyToNull(pkg.seoDescription),
     parentCourseSlug: emptyToNull(pkg.parentCourseSlug),
+    // Phase TD-1
+    audienceTag: emptyToNull(pkg.audienceTag),
+    audienceDescription: emptyToNull(pkg.audienceDescription),
+    mission: emptyToNull(pkg.mission),
+    outcomesJson: pkg.outcomesJson as Prisma.InputJsonValue,
+    methodsJson: pkg.methodsJson as Prisma.InputJsonValue,
+    conditionsJson: pkg.conditionsJson as Prisma.InputJsonValue,
+    noteForParents: emptyToNull(pkg.noteForParents),
+    faqsJson: pkg.faqsJson as Prisma.InputJsonValue,
   };
 
   try {
@@ -212,6 +239,15 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
     seoTitle: emptyToNull(pkg.seoTitle),
     seoDescription: emptyToNull(pkg.seoDescription),
     parentCourseSlug: emptyToNull(pkg.parentCourseSlug),
+    // Phase TD-1
+    audienceTag: emptyToNull(pkg.audienceTag),
+    audienceDescription: emptyToNull(pkg.audienceDescription),
+    mission: emptyToNull(pkg.mission),
+    outcomesJson: pkg.outcomesJson as Prisma.InputJsonValue,
+    methodsJson: pkg.methodsJson as Prisma.InputJsonValue,
+    conditionsJson: pkg.conditionsJson as Prisma.InputJsonValue,
+    noteForParents: emptyToNull(pkg.noteForParents),
+    faqsJson: pkg.faqsJson as Prisma.InputJsonValue,
   };
 
   try {
