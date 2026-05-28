@@ -31,6 +31,7 @@ import {
   Package2,
   Mail,
   Send,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ const NAV_GROUPS = [
     label: "Khách hàng",
     items: [
       { label: "Leads", href: "/leads", icon: Users },
+      { label: "Học thử", href: "/trials", icon: FlaskConical },
       { label: "Học viên", href: "/students", icon: GraduationCap },
       { label: "Lớp học", href: "/classes", icon: BookOpen },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes },

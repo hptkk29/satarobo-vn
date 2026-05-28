@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
+import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { ReassignButton } from "./_components/reassign-button";
@@ -33,6 +34,13 @@ export default async function LeadDetailPage({ params }: Props) {
       assignedTo: { select: { id: true, name: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 100 },
       tasks: { orderBy: [{ status: "asc" }, { dueAt: "asc" }] },
+      trialClasses: {
+        orderBy: { scheduledAt: "desc" },
+        include: {
+          teacher: { select: { name: true } },
+          feedback: { select: { id: true } },
+        },
+      },
     },
   });
   if (!lead) notFound();
@@ -91,6 +99,52 @@ export default async function LeadDetailPage({ params }: Props) {
         />
         <Info label="Ghi chú" value={lead.note} />
       </dl>
+
+      {/* Học thử (Phase T1.4) */}
+      {lead.trialClasses.length > 0 && (
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">Buổi học thử</h2>
+            <Link href="/trials" className="text-xs font-medium text-orange-600 hover:underline">
+              Quản lý ở mục Học thử →
+            </Link>
+          </div>
+          <ul className="space-y-2">
+            {lead.trialClasses.map((t) => (
+              <li
+                key={t.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TRIAL_STATUS_BADGE[t.status]}`}
+                  >
+                    {TRIAL_STATUS_LABEL[t.status]}
+                  </span>
+                  <span className="text-gray-700">
+                    {t.scheduledAt.toLocaleString("vi-VN", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  {t.teacher?.name && (
+                    <span className="text-gray-500">· GV: {t.teacher.name}</span>
+                  )}
+                </div>
+                {t.feedback ? (
+                  <span className="text-xs font-medium text-indigo-600">
+                    Đã có nhận xét
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">Chưa nhận xét</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <LeadActivityPanel
         leadId={lead.id}

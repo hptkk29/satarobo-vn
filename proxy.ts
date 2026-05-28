@@ -55,6 +55,7 @@ const ADMIN_ROUTE_SEGMENTS = new Set<string>([
   "site-content",
   "students",
   "teachers",
+  "trials",
   "users",
   "vouchers",
 ]);

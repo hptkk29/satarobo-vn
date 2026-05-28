@@ -223,6 +223,7 @@ model Center {
   leads             Lead[]
   classes           Class[]
   classGroups       ClassGroup[]
+  trialClasses      TrialClass[]
   students          Student[]
   studentsPreferred Student[]        @relation("StudentPreferredCenter")
   employees         Employee[]
@@ -259,7 +260,8 @@ model Room {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  classes Class[]
+  classes      Class[]
+  trialClasses TrialClass[]
 
   @@unique([centerId, code])
   @@index([centerId, status])
@@ -316,6 +318,7 @@ model User {
   notes          Note[]
   teacherClass   Class[]      @relation("TeacherClasses")
   assistantClass Class[]      @relation("AssistantClasses")
+  trialClasses   TrialClass[] @relation("TrialTeacher")
   jobPostings    JobPosting[]
 
   honorsCreated      Honor[]           @relation("HonorCreatedBy")
@@ -377,10 +380,11 @@ model Course {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  leads       Lead[]
-  classes     Class[]
-  enrollments Enrollment[]
-  curriculums Curriculum[]
+  leads              Lead[]
+  classes            Class[]
+  enrollments        Enrollment[]
+  curriculums        Curriculum[]
+  trialRecommended   TrialFeedback[] @relation("TrialRecommendedCourse")
 
   @@index([slug])
   @@index([type])
@@ -431,6 +435,9 @@ model Lead {
 
   // Phase T1.3 — chống trùng
   duplicates LeadDuplicate[] @relation("LeadDuplicates")
+
+  // Phase T1.4 — học thử
+  trialClasses TrialClass[]
 
   // Phase 5.4.0 — Audit log
   auditLogs LeadAuditLog[] @relation("LeadAuditLogs")
@@ -638,6 +645,7 @@ model Class {
   exams           Exam[]
   assignments     Assignment[]
   progressReports ProgressReportLog[]
+  trialClasses    TrialClass[]
 
   // Phase 5.4.0 — Audit log
   auditLogs ClassAuditLog[] @relation("ClassAuditLogs")
@@ -2473,4 +2481,84 @@ model Counter {
   key       String   @unique
   lastValue Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+// ─── Trial Class + Webhook (Phase T1.4) ──────────────────────────────────────
+
+enum TrialClassStatus {
+  SCHEDULED
+  CONFIRMED
+  ATTENDED
+  MISSED
+  POSTPONED
+  ENROLLED
+  REJECTED
+}
+
+enum ChildGrasp {
+  EXCELLENT
+  GOOD
+  AVERAGE
+  POOR
+}
+
+model TrialClass {
+  id          String           @id @default(cuid())
+  leadId      String
+  lead        Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  centerId    String?
+  center      Center?          @relation(fields: [centerId], references: [id])
+  classId     String?
+  class       Class?           @relation(fields: [classId], references: [id], onDelete: SetNull)
+  roomId      String?
+  room        Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  teacherId   String?
+  teacher     User?            @relation("TrialTeacher", fields: [teacherId], references: [id])
+  scheduledAt DateTime
+  status      TrialClassStatus @default(SCHEDULED)
+  attendedAt  DateTime?
+  notes       String?          @db.Text
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  feedback TrialFeedback?
+
+  @@index([leadId])
+  @@index([centerId, scheduledAt])
+  @@index([status, scheduledAt])
+}
+
+model TrialFeedback {
+  id                  String      @id @default(cuid())
+  trialClassId        String      @unique
+  trialClass          TrialClass  @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  childEnjoyed        Boolean?
+  childGrasp          ChildGrasp?
+  teacherSuggestion   String?     @db.Text
+  parentFeedback      String?     @db.Text
+  recommendedCourseId String?
+  recommendedCourse   Course?     @relation("TrialRecommendedCourse", fields: [recommendedCourseId], references: [id], onDelete: SetNull)
+  createdAt           DateTime    @default(now())
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  DUPLICATE
+}
+
+model WebhookDelivery {
+  id           String        @id @default(cuid())
+  source       String // "facebook" | "zalo" | "google-form"
+  externalId   String?
+  payload      Json
+  status       WebhookStatus @default(RECEIVED)
+  receivedAt   DateTime      @default(now())
+  processedAt  DateTime?
+  errorMessage String?       @db.Text
+  retryCount   Int           @default(0)
+
+  @@index([source, externalId])
+  @@index([status, receivedAt])
 }

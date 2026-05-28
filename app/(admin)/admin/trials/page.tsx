@@ -1,0 +1,118 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
+import { db } from "@/lib/db";
+import type { Prisma, TrialClassStatus } from "@prisma/client";
+import { TrialsList } from "./_components/trials-list";
+import { TRIAL_STATUS_LABEL, ALL_TRIAL_STATUSES } from "@/lib/trials/status";
+
+export const metadata = { title: "Học thử | Admin" };
+export const dynamic = "force-dynamic";
+
+interface Props {
+  searchParams: Promise<{ status?: string }>;
+}
+
+export default async function TrialsPage({ searchParams }: Props) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!can(session.user, "trials:view")) redirect("/dashboard");
+
+  const { status } = await searchParams;
+  const isTeacher = session.user.role === "TEACHER";
+  const canManage = can(session.user, "trials:manage");
+
+  const where: Prisma.TrialClassWhereInput = {};
+  if (status && (ALL_TRIAL_STATUSES as readonly string[]).includes(status)) {
+    where.status = status as TrialClassStatus;
+  }
+  // Teacher chỉ thấy buổi được phân công cho mình.
+  if (isTeacher) where.teacherId = session.user.id;
+
+  const [trials, teachers, rooms, classes, courses] = await Promise.all([
+    db.trialClass.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
+      take: 200,
+      include: {
+        lead: { select: { id: true, parentName: true, phone: true, childName: true } },
+        center: { select: { name: true } },
+        teacher: { select: { id: true, name: true } },
+        feedback: true,
+      },
+    }),
+    db.user.findMany({
+      where: { role: "TEACHER", isActive: true, deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    db.room.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, name: true, code: true },
+      orderBy: { displayOrder: "asc" },
+    }),
+    db.class.findMany({
+      where: { deletedAt: null, isActive: true },
+      select: { id: true, name: true, classCode: true },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    db.course.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
+  const items = trials.map((t) => ({
+    id: t.id,
+    leadId: t.lead.id,
+    parentName: t.lead.parentName,
+    phone: t.lead.phone,
+    childName: t.lead.childName,
+    centerName: t.center?.name ?? null,
+    teacherId: t.teacherId,
+    teacherName: t.teacher?.name ?? null,
+    roomId: t.roomId,
+    classId: t.classId,
+    scheduledAt: t.scheduledAt.toISOString(),
+    status: t.status,
+    notes: t.notes,
+    feedback: t.feedback
+      ? {
+          childEnjoyed: t.feedback.childEnjoyed,
+          childGrasp: t.feedback.childGrasp,
+          teacherSuggestion: t.feedback.teacherSuggestion,
+          parentFeedback: t.feedback.parentFeedback,
+          recommendedCourseId: t.feedback.recommendedCourseId,
+        }
+      : null,
+  }));
+
+  return (
+    <div className="max-w-6xl p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Học thử</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Lịch học thử tự sinh khi lead chuyển sang &quot;Đã hẹn học thử&quot;. Giáo
+          viên nhập nhận xét sau buổi.
+        </p>
+      </div>
+
+      <TrialsList
+        items={items}
+        teachers={teachers.map((u) => ({ id: u.id, name: u.name ?? "(chưa đặt tên)" }))}
+        rooms={rooms.map((r) => ({ id: r.id, label: `${r.name} (${r.code})` }))}
+        classes={classes.map((c) => ({
+          id: c.id,
+          label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+        }))}
+        courses={courses}
+        canManage={canManage}
+        canFeedback={can(session.user, "trials:feedback")}
+        statusFilter={status ?? ""}
+        statusLabels={TRIAL_STATUS_LABEL}
+      />
+    </div>
+  );
+}

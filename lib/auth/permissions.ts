@@ -62,6 +62,11 @@ export type Action =
   | "leads:delete"
   | "leads:export"
 
+  // --- Trial classes (Phase T1.4) ---
+  | "trials:view"
+  | "trials:manage"
+  | "trials:feedback"
+
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
   | "blog:create"
@@ -236,6 +241,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+
+  // --- Trial classes (Phase T1.4) ---
+  "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
+  "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
 
   // --- Blog / News ---
   "blog:view": [

@@ -37,7 +37,7 @@ export async function updateLeadStatus(
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
-    select: { status: true },
+    select: { status: true, centerId: true },
   })
   if (!before) return { ok: false, error: 'Lead khong ton tai' }
 
@@ -71,10 +71,39 @@ export async function updateLeadStatus(
         metadata: { from: before.status, to: parsed.data },
       },
     })
+
+    // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
+    if (
+      parsed.data === 'TRIAL_SCHEDULED' &&
+      before.status !== 'TRIAL_SCHEDULED'
+    ) {
+      const openTrial = await tx.trialClass.findFirst({
+        where: { leadId, status: { in: ['SCHEDULED', 'CONFIRMED', 'POSTPONED'] } },
+        select: { id: true },
+      })
+      if (!openTrial) {
+        // Placeholder: ngày mai cùng giờ — GV/admin chỉnh lại lịch thật sau.
+        const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        await tx.trialClass.create({
+          data: { leadId, centerId: before.centerId, scheduledAt },
+        })
+        await tx.leadActivity.create({
+          data: {
+            leadId,
+            actorId,
+            actorName,
+            type: 'NOTE',
+            content:
+              '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
+          },
+        })
+      }
+    }
   })
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/trials')
   revalidatePath('/dashboard')
   return { ok: true }
 }
