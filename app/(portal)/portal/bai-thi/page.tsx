@@ -1,5 +1,6 @@
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentExams } from "@/lib/portal/learning";
+import { StartExamButton } from "./_components/start-exam-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Bài thi | Sata Robo" };
@@ -39,12 +40,12 @@ export default async function BaiThiPage() {
                 </div>
                 {done ? (
                   <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                    {e.totalScore !== null ? `Điểm: ${e.totalScore}` : "Đã làm"}
+                    {e.totalScore !== null ? `Điểm: ${e.totalScore}` : "Chờ chấm"}
                   </span>
+                ) : e.attemptStatus === "IN_PROGRESS" ? (
+                  <StartExamButton examId={e.id} resume />
                 ) : e.isOpen ? (
-                  <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700">
-                    Đang mở
-                  </span>
+                  <StartExamButton examId={e.id} resume={false} />
                 ) : (
                   <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-500">
                     Chưa mở
@@ -55,10 +56,6 @@ export default async function BaiThiPage() {
           })}
         </ul>
       )}
-
-      <p className="rounded-lg bg-neutral-100 px-3 py-2 text-xs text-neutral-500">
-        Làm bài thi trực tuyến sẽ được mở trong bản cập nhật tới.
-      </p>
     </div>
   );
 }

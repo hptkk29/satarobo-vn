@@ -226,3 +226,44 @@ export async function getStudentExams(studentId: string): Promise<ExamRow[]> {
     };
   });
 }
+
+export type ExamResultRow = {
+  attemptId: string;
+  examTitle: string;
+  status: string;
+  totalScore: number | null;
+  totalPoints: number;
+  passed: boolean | null;
+  graded: boolean;
+  feedback: string | null;
+};
+
+/** Kết quả bài thi đã nộp (điểm + nhận xét hiện khi đã chấm xong). */
+export async function getStudentExamResults(
+  studentId: string,
+): Promise<ExamResultRow[]> {
+  const attempts = await db.examAttempt.findMany({
+    where: { studentId, status: { in: ["SUBMITTED", "GRADED", "REVIEWED"] } },
+    select: {
+      id: true,
+      status: true,
+      totalScore: true,
+      passed: true,
+      gradedAt: true,
+      feedback: true,
+      exam: { select: { title: true, totalPoints: true } },
+    },
+    orderBy: { submittedAt: "desc" },
+  });
+
+  return attempts.map((a) => ({
+    attemptId: a.id,
+    examTitle: a.exam.title,
+    status: a.status,
+    totalScore: a.totalScore,
+    totalPoints: a.exam.totalPoints,
+    passed: a.passed,
+    graded: a.gradedAt !== null,
+    feedback: a.feedback,
+  }));
+}
