@@ -11,10 +11,12 @@ import {
   Award,
   CreditCard,
   User,
+  Bell,
 } from "lucide-react";
 
 const ITEMS = [
   { label: "Trang chủ", href: "/portal", icon: Home },
+  { label: "Thông báo", href: "/portal/thong-bao", icon: Bell },
   { label: "Lịch học", href: "/portal/lich-hoc", icon: CalendarDays },
   { label: "Bài giảng", href: "/portal/bai-giang", icon: BookOpen },
   { label: "Bài tập", href: "/portal/bai-tap", icon: ClipboardList },

@@ -1,0 +1,201 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  createNotification,
+  toggleNotificationPublish,
+  deleteNotification,
+} from "../actions";
+
+type Opt = { id: string; label: string };
+type Item = {
+  id: string;
+  title: string;
+  body: string;
+  audience: string;
+  scopeLabel: string;
+  isPublished: boolean;
+  createdAt: string;
+  createdByName: string | null;
+};
+
+const inputCls =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none";
+
+export function NotificationsClient({
+  items,
+  centers,
+  classes,
+}: {
+  items: Item[];
+  centers: Opt[];
+  classes: Opt[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [audience, setAudience] = useState("ALL_PARENTS");
+  const [centerId, setCenterId] = useState("");
+  const [classId, setClassId] = useState("");
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+
+  function submit() {
+    startTransition(async () => {
+      const res = await createNotification({
+        title,
+        body,
+        audience,
+        centerId: centerId || null,
+        classId: classId || null,
+        publish: true,
+      });
+      if (res.ok) {
+        toast.success("Đã đăng thông báo");
+        setTitle("");
+        setBody("");
+        setAudience("ALL_PARENTS");
+        setCenterId("");
+        setClassId("");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <section className="rounded-xl border border-gray-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-700">
+          Soạn thông báo
+        </h2>
+        <div className="space-y-3">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Tiêu đề"
+            className={inputCls}
+          />
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={5}
+            placeholder="Nội dung thông báo…"
+            className={inputCls}
+          />
+          <select
+            value={audience}
+            onChange={(e) => setAudience(e.target.value)}
+            className={inputCls}
+          >
+            <option value="ALL_PARENTS">Tất cả phụ huynh</option>
+            <option value="CENTER">Theo cơ sở</option>
+            <option value="CLASS">Theo lớp</option>
+          </select>
+          {audience === "CENTER" && (
+            <select
+              value={centerId}
+              onChange={(e) => setCenterId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">— Chọn cơ sở —</option>
+              {centers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {audience === "CLASS" && (
+            <select
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">— Chọn lớp —</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={pending}
+            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+          >
+            Đăng thông báo
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-gray-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-700">
+          Đã đăng ({items.length})
+        </h2>
+        {items.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-400">Chưa có thông báo.</p>
+        ) : (
+          <ul className="space-y-2">
+            {items.map((n) => (
+              <li key={n.id} className="rounded-lg border border-gray-100 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-gray-900">{n.title}</p>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      n.isPublished
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-neutral-100 text-neutral-500"
+                    }`}
+                  >
+                    {n.isPublished ? "Hiển thị" : "Ẩn"}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-gray-500">{n.body}</p>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  {n.scopeLabel} ·{" "}
+                  {new Date(n.createdAt).toLocaleDateString("vi-VN")}
+                  {n.createdByName ? ` · ${n.createdByName}` : ""}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await toggleNotificationPublish(n.id);
+                        router.refresh();
+                      })
+                    }
+                    className="text-xs font-medium text-orange-600 hover:underline"
+                  >
+                    {n.isPublished ? "Ẩn" : "Hiển thị"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirmDel === n.id) {
+                        startTransition(async () => {
+                          await deleteNotification(n.id);
+                          setConfirmDel(null);
+                          router.refresh();
+                        });
+                      } else {
+                        setConfirmDel(n.id);
+                      }
+                    }}
+                    className="text-xs font-medium text-red-600 hover:underline"
+                  >
+                    {confirmDel === n.id ? "Xác nhận xoá?" : "Xoá"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

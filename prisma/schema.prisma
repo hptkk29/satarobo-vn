@@ -2569,3 +2569,32 @@ model WebhookDelivery {
   @@index([source, externalId])
   @@index([status, receivedAt])
 }
+
+// ─── Notification (Phase NHÓM 3) ─────────────────────────────────────────────
+// Thông báo cho phụ huynh. Target theo audience. centerId/classId là cột phẳng
+// (không FK) để giữ migration nhỏ — portal match theo studentId/classId của con.
+enum NotificationAudience {
+  ALL_PARENTS
+  CENTER
+  CLASS
+}
+
+model Notification {
+  id          String               @id @default(cuid())
+  title       String
+  body        String               @db.Text
+  audience    NotificationAudience @default(ALL_PARENTS)
+  centerId    String?
+  classId     String?
+  isPublished Boolean              @default(true)
+  publishedAt DateTime?            @default(now())
+  createdById String?
+  createdByName String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([audience, isPublished])
+  @@index([centerId])
+  @@index([classId])
+  @@index([createdAt])
+}

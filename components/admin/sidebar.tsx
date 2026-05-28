@@ -32,6 +32,7 @@ import {
   Mail,
   Send,
   FlaskConical,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -91,6 +92,7 @@ const NAV_GROUPS = [
     label: "Marketing",
     items: [
       { label: "Tin tức", href: "/news", icon: Newspaper },
+      { label: "Thông báo PH", href: "/notifications", icon: Bell },
       { label: "Hình ảnh trang", href: "/site-content", icon: ImageIcon },
       { label: "Tracking", href: "/marketing", icon: BarChart3 },
     ],

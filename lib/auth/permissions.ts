@@ -67,6 +67,9 @@ export type Action =
   | "trials:manage"
   | "trials:feedback"
 
+  // --- Notifications (Phase NHÓM 3) ---
+  | "notifications:manage"
+
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
   | "blog:create"
@@ -246,6 +249,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+
+  // --- Notifications (Phase NHÓM 3) ---
+  "notifications:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Blog / News ---
   "blog:view": [
