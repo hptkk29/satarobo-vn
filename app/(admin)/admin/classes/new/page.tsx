@@ -13,7 +13,7 @@ export default async function NewClassPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const [courses, centers, rooms, teachers] = await Promise.all([
+  const [courses, centers, classGroups, rooms, teachers] = await Promise.all([
     db.course.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
@@ -23,6 +23,11 @@ export default async function NewClassPage() {
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true },
+    }),
+    db.classGroup.findMany({
+      where: { deletedAt: null, status: "ACTIVE" },
+      orderBy: { displayCode: "asc" },
+      select: { id: true, displayCode: true, name: true, centerId: true },
     }),
     db.room.findMany({
       where: { status: "ACTIVE" },
@@ -46,6 +51,7 @@ export default async function NewClassPage() {
       <ClassForm
         courses={courses}
         centers={centers}
+        classGroups={classGroups}
         rooms={rooms}
         teachers={teachers.map((t) => ({
           id: t.id,

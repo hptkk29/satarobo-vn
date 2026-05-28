@@ -191,6 +191,7 @@ model VerificationToken {
 
 model Center {
   id           String   @id @default(cuid())
+  code         String?  @unique // Phase T0.2 — mã cơ sở "CS1", "CS2" cho codegen
   name         String
   slug         String   @unique
   address      String
@@ -213,6 +214,7 @@ model Center {
   users             User[]
   leads             Lead[]
   classes           Class[]
+  classGroups       ClassGroup[]
   students          Student[]
   studentsPreferred Student[]        @relation("StudentPreferredCenter")
   employees         Employee[]
@@ -545,6 +547,33 @@ enum ClassStatus {
   CANCELLED
 }
 
+// Phase T0.2 — Lớp cố định (nhóm học sinh đi cùng nhau qua nhiều khoá/năm)
+enum ClassGroupStatus {
+  ACTIVE
+  GRADUATED
+  DISBANDED
+}
+
+model ClassGroup {
+  id          String           @id @default(cuid())
+  code        String           @unique // CS<n>.LOP.<YY>.<seq> (auto codegen)
+  displayCode String // mã ngắn admin tự đặt, hiển thị cho người dùng (vd "A1", "B2")
+  name        String?
+  centerId    String
+  status      ClassGroupStatus @default(ACTIVE)
+  notes       String?          @db.Text
+  deletedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  center  Center  @relation(fields: [centerId], references: [id])
+  classes Class[]
+
+  @@index([centerId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
 model Class {
   id String @id @default(cuid())
 
@@ -554,11 +583,12 @@ model Class {
   description String? @db.Text
 
   // Relations (existing target preserved: teacher → User)
-  courseId    String
-  centerId    String?
-  teacherId   String?
-  assistantId String?
-  roomId      String?
+  courseId      String
+  centerId      String?
+  classGroupId  String? // Phase T0.2 — lớp cố định (nhóm đi cùng nhau qua các khoá)
+  teacherId     String?
+  assistantId   String?
+  roomId        String?
 
   // Schedule
   schedule     String? // legacy free-text (e.g. "T2 T4 17:30")
@@ -584,6 +614,7 @@ model Class {
 
   course          Course              @relation(fields: [courseId], references: [id])
   center          Center?             @relation(fields: [centerId], references: [id])
+  classGroup      ClassGroup?         @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
   teacher         User?               @relation("TeacherClasses", fields: [teacherId], references: [id])
   assistant       User?               @relation("AssistantClasses", fields: [assistantId], references: [id])
   room            Room?               @relation(fields: [roomId], references: [id], onDelete: SetNull)
@@ -598,6 +629,7 @@ model Class {
 
   @@index([courseId])
   @@index([centerId])
+  @@index([classGroupId])
   @@index([teacherId])
   @@index([deletedAt])
   @@index([status, centerId])
@@ -2355,4 +2387,14 @@ model EmailLog {
   @@index([contextType, contextId])
   @@index([status, createdAt])
   @@index([createdAt])
+}
+
+// ─── Counter (Phase T0.2) ────────────────────────────────────────────────────
+// Atomic sequence generator cho mã định danh CS<n>.<LOAI>.<YY>.<seq>.
+// key dạng "<LOAI>:<centerCode>:<yy>" (vd "HV:CS1:26") — seq reset theo năm.
+model Counter {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
 }

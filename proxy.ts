@@ -23,6 +23,7 @@ const ADMIN_ROUTE_SEGMENTS = new Set<string>([
   "audit-log",
   "centers",
   "charts-test",
+  "class-groups",
   "classes",
   "course-packages",
   "curriculums",

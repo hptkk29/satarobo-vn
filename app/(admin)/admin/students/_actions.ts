@@ -16,6 +16,7 @@ import {
   getAuditActor,
 } from "@/lib/audit/log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
+import { genStudentCode } from "@/lib/codegen";
 
 type ActionResult = { error?: string };
 
@@ -95,11 +96,23 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
   }
 
   const { actorId, actorName } = getAuditActor(session);
+  const data = parsed.data;
 
   try {
     await db.$transaction(async (tx) => {
+      // Phase T0.2 — tự sinh studentCode nếu admin để trống (giữ mã cũ nếu có).
+      if (!data.studentCode && data.centerId) {
+        const center = await tx.center.findUnique({
+          where: { id: data.centerId },
+          select: { code: true },
+        });
+        if (center?.code) {
+          data.studentCode = await genStudentCode(center.code, tx);
+        }
+      }
+
       const created = await tx.student.create({
-        data: toData(parsed.data),
+        data: toData(data),
         select: { id: true, ...STUDENT_SNAPSHOT_SELECT },
       });
 

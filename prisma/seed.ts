@@ -15,6 +15,7 @@ async function main() {
   const centersData = [
     {
       id: "co-so-nguyen-huu-tho",
+      code: "CS1",
       slug: "co-so-nguyen-huu-tho",
       name: "Trụ sở chính - Nguyễn Hữu Thọ",
       address: "211 Nguyễn Hữu Thọ",
@@ -25,6 +26,7 @@ async function main() {
     },
     {
       id: "co-so-hoang-dieu",
+      code: "CS2",
       slug: "co-so-hoang-dieu",
       name: "Cơ sở Hoàng Diệu",
       address: "114 Hoàng Diệu",

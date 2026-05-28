@@ -12,6 +12,7 @@ export type ClassFormValue = {
   description: string | null;
   courseId: string;
   centerId: string | null;
+  classGroupId: string | null;
   roomId: string | null;
   teacherId: string | null;
   assistantId: string | null;
@@ -33,6 +34,12 @@ interface CourseOption {
 interface CenterOption {
   id: string;
   name: string;
+}
+interface ClassGroupOption {
+  id: string;
+  displayCode: string;
+  name: string | null;
+  centerId: string;
 }
 interface RoomOption {
   id: string;
@@ -73,12 +80,14 @@ export function ClassForm({
   cls,
   courses,
   centers,
+  classGroups,
   rooms,
   teachers,
 }: {
   cls?: ClassFormValue;
   courses: CourseOption[];
   centers: CenterOption[];
+  classGroups: ClassGroupOption[];
   rooms: RoomOption[];
   teachers: TeacherOption[];
 }) {
@@ -192,6 +201,20 @@ export function ClassForm({
             options={[...STATUS_OPTIONS]}
           />
         </Grid>
+
+        <SelectField
+          label="Nhóm lớp cố định (tuỳ chọn)"
+          name="classGroupId"
+          defaultValue={cls?.classGroupId ?? ""}
+          options={[
+            { value: "", label: "— Không gán nhóm —" },
+            ...classGroups.map((g) => ({
+              value: g.id,
+              label: `${g.displayCode}${g.name ? ` · ${g.name}` : ""}`,
+            })),
+          ]}
+          helper="Nếu chọn, lớp sẽ kế thừa cơ sở của nhóm. Dùng cho lộ trình tăng khoá Sata3 → 4 → 5…"
+        />
 
         <Field
           label="Mô tả ngắn"

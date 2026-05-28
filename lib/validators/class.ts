@@ -47,6 +47,7 @@ export const classCreateSchema = z
 
     courseId: z.string().trim().min(1, "Chọn khoá học"),
     centerId: z.string().trim().min(1, "Chọn cơ sở"),
+    classGroupId: nullableStr,
     roomId: nullableStr,
     teacherId: nullableStr,
     assistantId: nullableStr,

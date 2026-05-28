@@ -12,6 +12,7 @@ import {
   detectChangedFields,
   getAuditActor,
 } from "@/lib/audit/log";
+import { genClassCode } from "@/lib/codegen";
 
 type ActionResult = { error?: string };
 
@@ -33,20 +34,26 @@ async function requireClassWrite(action: "create" | "update" | "delete") {
 
 function toCreateData(
   parsed: ReturnType<typeof classCreateSchema.parse>,
+  classCode: string | null,
 ): Prisma.ClassCreateInput {
   const {
     courseId,
     centerId,
+    classGroupId,
     roomId,
     teacherId,
     assistantId,
+    classCode: _ignoredCode,
     ...rest
   } = parsed;
+  void _ignoredCode;
 
   return {
     ...rest,
+    classCode,
     course: { connect: { id: courseId } },
     center: { connect: { id: centerId } },
+    ...(classGroupId ? { classGroup: { connect: { id: classGroupId } } } : {}),
     ...(roomId ? { room: { connect: { id: roomId } } } : {}),
     ...(teacherId ? { teacher: { connect: { id: teacherId } } } : {}),
     ...(assistantId ? { assistant: { connect: { id: assistantId } } } : {}),
@@ -59,6 +66,7 @@ function toUpdateData(
   const {
     courseId,
     centerId,
+    classGroupId,
     roomId,
     teacherId,
     assistantId,
@@ -69,6 +77,9 @@ function toUpdateData(
     ...rest,
     course: { connect: { id: courseId } },
     center: { connect: { id: centerId } },
+    classGroup: classGroupId
+      ? { connect: { id: classGroupId } }
+      : { disconnect: true },
     room: roomId ? { connect: { id: roomId } } : { disconnect: true },
     teacher: teacherId ? { connect: { id: teacherId } } : { disconnect: true },
     assistant: assistantId
@@ -97,6 +108,7 @@ function readForm(formData: FormData) {
 
     courseId: s("courseId") ?? "",
     centerId: s("centerId") ?? "",
+    classGroupId: s("classGroupId"),
     roomId: s("roomId"),
     teacherId: s("teacherId"),
     assistantId: s("assistantId"),
@@ -140,11 +152,40 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   }
 
   const { actorId, actorName } = getAuditActor(session);
+  const data = parsed.data;
+
+  // Phase T0.2 — nếu gán nhóm lớp, kế thừa centerId của nhóm.
+  if (data.classGroupId) {
+    const group = await db.classGroup.findUnique({
+      where: { id: data.classGroupId },
+      select: { centerId: true },
+    });
+    if (group) data.centerId = group.centerId;
+  }
 
   try {
     await db.$transaction(async (tx) => {
+      // Phase T0.2 — tự sinh classCode nếu admin để trống (giữ mã cũ nếu có).
+      let classCode = data.classCode;
+      if (!classCode) {
+        const [center, course] = await Promise.all([
+          tx.center.findUnique({
+            where: { id: data.centerId },
+            select: { code: true },
+          }),
+          tx.course.findUnique({
+            where: { id: data.courseId },
+            select: { code: true, slug: true },
+          }),
+        ]);
+        if (center?.code) {
+          const courseCode = course?.code || course?.slug || "KH";
+          classCode = await genClassCode(center.code, courseCode, tx);
+        }
+      }
+
       const created = await tx.class.create({
-        data: toCreateData(parsed.data),
+        data: toCreateData(data, classCode),
         select: { id: true, ...CLASS_SNAPSHOT_SELECT },
       });
 

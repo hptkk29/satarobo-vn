@@ -20,7 +20,8 @@ export default async function EditClassPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [cls, courses, centers, rooms, teachers] = await Promise.all([
+  const [cls, courses, centers, classGroups, rooms, teachers] =
+    await Promise.all([
     db.class.findFirst({
       where: { id, deletedAt: null },
       select: {
@@ -30,6 +31,7 @@ export default async function EditClassPage({ params }: Props) {
         description: true,
         courseId: true,
         centerId: true,
+        classGroupId: true,
         roomId: true,
         teacherId: true,
         assistantId: true,
@@ -53,6 +55,11 @@ export default async function EditClassPage({ params }: Props) {
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true },
+    }),
+    db.classGroup.findMany({
+      where: { deletedAt: null, status: "ACTIVE" },
+      orderBy: { displayCode: "asc" },
+      select: { id: true, displayCode: true, name: true, centerId: true },
     }),
     db.room.findMany({
       where: { status: "ACTIVE" },
@@ -79,6 +86,7 @@ export default async function EditClassPage({ params }: Props) {
     description: cls.description,
     courseId: cls.courseId,
     centerId: cls.centerId,
+    classGroupId: cls.classGroupId,
     roomId: cls.roomId,
     teacherId: cls.teacherId,
     assistantId: cls.assistantId,
@@ -110,6 +118,7 @@ export default async function EditClassPage({ params }: Props) {
         cls={formValue}
         courses={courses}
         centers={centers}
+        classGroups={classGroups}
         rooms={rooms}
         teachers={teachers.map((t) => ({
           id: t.id,

@@ -92,6 +92,12 @@ export type Action =
   | "classes:edit"
   | "classes:delete"
 
+  // --- Class groups (Phase T0.2) ---
+  | "class_group:view-all"
+  | "class_group:create"
+  | "class_group:edit"
+  | "class_group:delete"
+
   // --- Enrollments (NEW) ---
   | "enrollments:view-all"
   | "enrollments:view-own"
@@ -264,6 +270,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "classes:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "classes:delete": ["SUPER_ADMIN"],
+
+  // --- Class groups (Phase T0.2) ---
+  "class_group:view-all": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "class_group:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "class_group:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "class_group:delete": ["SUPER_ADMIN"],
 
   // --- Enrollments ---
   "enrollments:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],

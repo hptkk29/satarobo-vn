@@ -45,6 +45,7 @@ const NAV_GROUPS = [
       { label: "Leads", href: "/leads", icon: Users },
       { label: "Học viên", href: "/students", icon: GraduationCap },
       { label: "Lớp học", href: "/classes", icon: BookOpen },
+      { label: "Nhóm lớp", href: "/class-groups", icon: Boxes },
       { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList },
     ],
   },
