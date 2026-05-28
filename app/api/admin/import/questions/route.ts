@@ -8,7 +8,7 @@ import {
   QuestionDifficultyEnum,
 } from "@/lib/validators/question";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 function parseBoolean(v: unknown): boolean {
   if (typeof v === "boolean") return v;

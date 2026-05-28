@@ -6,7 +6,7 @@ import { Plus } from "lucide-react";
 import { PackageListRow } from "./_components/package-list-row";
 
 function canManageCoursePackages(role: string | undefined) {
-  return role === "SUPER_ADMIN" || role === "MANAGER";
+  return role === "SUPER_ADMIN" || role === "CENTER_MANAGER";
 }
 
 export default async function CoursePackagesPage() {

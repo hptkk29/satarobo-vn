@@ -68,7 +68,7 @@ export default function ImportClassesPage() {
         <p className="text-sm text-neutral-500 mt-1">
           <code>classCode</code> = khoá upsert. <strong>5 references</strong> phải tồn
           tại trước: courseSlug, centerSlug, roomCode (theo center), teacherCode +
-          assistantCode (Employee role TEACHER/MANAGER + có User account).
+          assistantCode (Employee role TEACHER/CENTER_MANAGER + có User account).
         </p>
       </div>
 
@@ -190,7 +190,7 @@ export default function ImportClassesPage() {
           </li>
           <li>
             <code>teacherCode</code> / <code>assistantCode</code>: phải là Employee
-            có <strong>role TEACHER hoặc MANAGER</strong> + <strong>status ACTIVE</strong>
+            có <strong>role TEACHER hoặc CENTER_MANAGER</strong> + <strong>status ACTIVE</strong>
             + có User account active. Sai → row bỏ qua.
           </li>
           <li>GV phụ không được trùng GV chính → row bỏ qua.</li>

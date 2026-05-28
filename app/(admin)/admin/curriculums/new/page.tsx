@@ -7,7 +7,7 @@ import { CurriculumForm } from "../_components/curriculum-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 export default async function NewCurriculumPage() {
   const session = await auth();

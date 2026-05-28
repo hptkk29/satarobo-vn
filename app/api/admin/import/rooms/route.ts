@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"];
 
 const intish = z
   .union([z.number(), z.string()])

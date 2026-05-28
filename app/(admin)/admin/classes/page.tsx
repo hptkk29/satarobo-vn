@@ -144,7 +144,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
         where: {
           deletedAt: null,
           isActive: true,
-          role: { in: ['TEACHER', 'MANAGER'] },
+          role: { in: ['TEACHER', 'CENTER_MANAGER'] },
         },
         orderBy: { name: 'asc' },
         select: { id: true, name: true },

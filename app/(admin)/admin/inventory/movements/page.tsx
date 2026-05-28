@@ -7,7 +7,7 @@ import { StockMovementType, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 const TYPE_INFO: Record<
   StockMovementType,

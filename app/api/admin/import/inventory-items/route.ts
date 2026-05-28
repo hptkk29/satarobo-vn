@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { InventoryCategoryEnum } from "@/lib/validators/inventory";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 function parseBoolean(v: unknown): boolean {
   if (typeof v === "boolean") return v;

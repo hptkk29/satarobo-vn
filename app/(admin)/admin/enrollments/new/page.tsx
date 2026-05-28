@@ -5,7 +5,7 @@ import { EnrollForm } from "../_components/enroll-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "HR", "SALES"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"];
 const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"];
 
 export default async function NewEnrollmentPage() {

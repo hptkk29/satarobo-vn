@@ -6,7 +6,7 @@ import { ItemForm } from "../_components/item-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 export default async function NewInventoryItemPage() {
   const session = await auth();

@@ -19,12 +19,13 @@ interface TopbarProps {
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
-  MANAGER: "Quản lý",
+  CENTER_MANAGER: "Quản lý cơ sở",
   HR: "Nhân sự (HR)",
-  SALES: "Sales",
+  SALES_CSM: "Tư vấn & Chăm sóc",
   TEACHER: "Giáo viên",
   MARKETING: "Marketing",
   ACCOUNTANT: "Kế toán",
+  PARENT: "Phụ huynh",
 };
 
 export function Topbar({ userName, userRole }: TopbarProps) {

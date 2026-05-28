@@ -10,7 +10,7 @@ export const metadata = { title: "Quản lý Hall of Fame | Admin" };
 export default async function HonorsAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!["SUPER_ADMIN", "MANAGER"].includes(session.user.role)) {
+  if (!["SUPER_ADMIN", "CENTER_MANAGER"].includes(session.user.role)) {
     redirect("/dashboard");
   }
 

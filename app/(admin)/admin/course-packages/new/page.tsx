@@ -5,7 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { PackageForm } from "../_components/package-form";
 
 function canManageCoursePackages(role: string | undefined) {
-  return role === "SUPER_ADMIN" || role === "MANAGER";
+  return role === "SUPER_ADMIN" || role === "CENTER_MANAGER";
 }
 
 export default async function NewPackagePage() {

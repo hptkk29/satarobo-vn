@@ -33,7 +33,7 @@ export default async function NewClassPage() {
       where: {
         deletedAt: null,
         isActive: true,
-        role: { in: ["TEACHER", "MANAGER"] },
+        role: { in: ["TEACHER", "CENTER_MANAGER"] },
       },
       orderBy: { name: "asc" },
       select: { id: true, name: true, role: true },

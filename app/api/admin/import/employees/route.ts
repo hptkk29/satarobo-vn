@@ -10,7 +10,7 @@ import {
   EmploymentStatusEnum,
 } from "@/lib/validators/employee";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "HR"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR"];
 
 // Excel date parser — reused pattern from B3 holidays / B2 rooms.
 function parseExcelDate(v: unknown): Date | null {

@@ -14,7 +14,7 @@ import { InventoryCategory, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 const CATEGORY_INFO: Record<InventoryCategory, { label: string; color: string }> = {
   MAINBOARD: { label: "Bo mạch", color: "bg-blue-100 text-blue-700" },

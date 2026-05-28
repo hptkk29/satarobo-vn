@@ -47,7 +47,7 @@ const FIELDS = [
 export default async function HonorsSettingsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!["SUPER_ADMIN", "MANAGER"].includes(session.user.role)) {
+  if (!["SUPER_ADMIN", "CENTER_MANAGER"].includes(session.user.role)) {
     redirect("/dashboard");
   }
 

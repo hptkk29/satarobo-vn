@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   // TEACHER added in Phase E4 so teachers can upload teaching materials
   // (documents/videos/audio for their lessons).
-  const allowedRoles = ["SUPER_ADMIN", "MANAGER", "MARKETING", "TEACHER"];
+  const allowedRoles = ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "TEACHER"];
   if (!allowedRoles.includes(session.user.role)) {
     return NextResponse.json(
       { error: "Forbidden: insufficient permissions" },

@@ -10,7 +10,7 @@ interface EditPackagePageProps {
 }
 
 function canManageCoursePackages(role: string | undefined) {
-  return role === "SUPER_ADMIN" || role === "MANAGER";
+  return role === "SUPER_ADMIN" || role === "CENTER_MANAGER";
 }
 
 export default async function EditPackagePage({ params }: EditPackagePageProps) {

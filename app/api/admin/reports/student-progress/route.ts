@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 // PDF generation needs Node APIs (fs for font loading); pin runtime.
 export const runtime = "nodejs";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER", "HR", "SALES"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "HR", "SALES_CSM"];
 
 const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 

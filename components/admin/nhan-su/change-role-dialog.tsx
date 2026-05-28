@@ -7,18 +7,18 @@ import { changeEmployeeRoleAction } from "@/app/(admin)/admin/nhan-su/actions";
 
 type Role =
   | "SUPER_ADMIN"
-  | "MANAGER"
+  | "CENTER_MANAGER"
   | "HR"
-  | "SALES"
+  | "SALES_CSM"
   | "TEACHER"
   | "MARKETING"
   | "ACCOUNTANT";
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
-  { value: "MANAGER", label: "Quản lý" },
+  { value: "CENTER_MANAGER", label: "Quản lý" },
   { value: "HR", label: "Nhân sự" },
-  { value: "SALES", label: "Tư vấn tuyển sinh" },
+  { value: "SALES_CSM", label: "Tư vấn tuyển sinh" },
   { value: "TEACHER", label: "Giáo viên" },
   { value: "MARKETING", label: "Marketing" },
   { value: "ACCOUNTANT", label: "Kế toán" },

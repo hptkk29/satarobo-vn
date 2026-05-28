@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ClassStatusEnum } from "@/lib/validators/class";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"];
 
 // Excel date parser — reused from D2 / B3.
 function parseExcelDate(v: unknown): Date | null {
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
             userAccount: {
               isActive: true,
               deletedAt: null,
-              role: { in: ["TEACHER", "MANAGER"] },
+              role: { in: ["TEACHER", "CENTER_MANAGER"] },
             },
           },
           select: {
@@ -325,7 +325,7 @@ export async function POST(req: NextRequest) {
       if (!tid) {
         errors.push({
           row: rowNo,
-          error: `Không tìm thấy GV "${d.teacherCode}" (cần Employee role TEACHER/MANAGER + có User account)`,
+          error: `Không tìm thấy GV "${d.teacherCode}" (cần Employee role TEACHER/CENTER_MANAGER + có User account)`,
         });
         continue;
       }

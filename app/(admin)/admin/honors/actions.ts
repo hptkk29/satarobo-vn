@@ -9,7 +9,7 @@ import {
   sitePageContentUpdateSchema,
 } from "@/lib/validators/honor";
 
-const CAN_EDIT = ["SUPER_ADMIN", "MANAGER"];
+const CAN_EDIT = ["SUPER_ADMIN", "CENTER_MANAGER"];
 
 function revalidatePublic(slug?: string) {
   revalidatePath("/honors");

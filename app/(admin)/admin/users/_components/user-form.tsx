@@ -130,7 +130,7 @@ export function UserForm({
             id="role"
             name="role"
             required
-            defaultValue={initialData?.role ?? "SALES"}
+            defaultValue={initialData?.role ?? "SALES_CSM"}
             className={selectClass}
           >
             {ROLE_OPTIONS.map((r) => (

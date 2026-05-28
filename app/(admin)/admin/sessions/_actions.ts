@@ -39,7 +39,7 @@ async function requireTeacherOrAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const role = session.user.role;
-  if (role !== "SUPER_ADMIN" && role !== "MANAGER" && role !== "TEACHER") {
+  if (role !== "SUPER_ADMIN" && role !== "CENTER_MANAGER" && role !== "TEACHER") {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;

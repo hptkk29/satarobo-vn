@@ -24,7 +24,7 @@ export default async function AdminJobsPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
 
-  const canEdit = ['SUPER_ADMIN', 'MANAGER'].includes(session.user.role)
+  const canEdit = ['SUPER_ADMIN', 'CENTER_MANAGER'].includes(session.user.role)
 
   const sp = await searchParams
   const statusParam = sp.status as JobStatus | undefined

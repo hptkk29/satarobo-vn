@@ -25,7 +25,7 @@ async function requireTeacherOrAdmin() {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
   const role = session.user.role;
-  if (role !== "SUPER_ADMIN" && role !== "MANAGER" && role !== "TEACHER") {
+  if (role !== "SUPER_ADMIN" && role !== "CENTER_MANAGER" && role !== "TEACHER") {
     throw new Error("Forbidden");
   }
   return session.user;

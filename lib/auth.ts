@@ -7,6 +7,13 @@ import { loginSchema } from "@/lib/validators/auth";
 
 type SessionGrant = { action: string; grant: "ALLOW" | "DENY" };
 
+// Phase T0.1 — map role cũ (JWT phát hành trước khi rename) sang tên mới.
+function migrateLegacyRole(role: string): string {
+  if (role === "MANAGER") return "CENTER_MANAGER";
+  if (role === "SALES") return "SALES_CSM";
+  return role;
+}
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -97,7 +104,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Khi user mới login (authorize trả user), copy fields vào token.
       if (user) {
         token.id = user.id;
-        token.role = user.role ?? "SALES";
+        token.role = user.role ?? "SALES_CSM";
         token.centerId = user.centerId ?? null;
         token.grants = user.grants ?? [];
         token.tokenVersion = user.tokenVersion ?? 0;
@@ -107,7 +114,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = (token.id as string) ?? (token.sub as string);
-        session.user.role = (token.role as string) ?? "SALES";
+        // Phase T0.1 — compat shim: JWT cũ (trước rename) còn role MANAGER/SALES.
+        // Map sang tên mới để staff đang đăng nhập không mất quyền cho tới khi
+        // token hết hạn / re-login. Có thể bỏ shim sau 1-2 tuần.
+        session.user.role = migrateLegacyRole(
+          (token.role as string) ?? "SALES_CSM",
+        );
         session.user.centerId = (token.centerId as string | null) ?? null;
         session.user.grants = (token.grants as SessionGrant[]) ?? [];
         session.user.tokenVersion = (token.tokenVersion as number) ?? 0;

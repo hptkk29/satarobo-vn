@@ -7,7 +7,7 @@ import { AssignmentStatus, SubmissionStatus, type Prisma } from "@prisma/client"
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const STATUS_INFO: Record<AssignmentStatus, { label: string; color: string }> = {
   DRAFT: { label: "Đang soạn", color: "bg-gray-100 text-gray-700" },

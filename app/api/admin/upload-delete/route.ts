@@ -9,14 +9,14 @@ import {
 
 // DELETE /api/admin/upload-delete
 // Xoá file khỏi R2. Chỉ cho phép xoá file dưới prefix "uploads/" để tránh
-// xoá nhầm asset hệ thống. Chỉ SUPER_ADMIN và MANAGER được phép.
+// xoá nhầm asset hệ thống. Chỉ SUPER_ADMIN và CENTER_MANAGER được phép.
 export async function DELETE(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowedRoles = ["SUPER_ADMIN", "MANAGER"];
+  const allowedRoles = ["SUPER_ADMIN", "CENTER_MANAGER"];
   if (!allowedRoles.includes(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

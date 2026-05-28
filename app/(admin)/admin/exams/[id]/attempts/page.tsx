@@ -8,7 +8,7 @@ import { GradeButton } from "../../_components/grade-button";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const ATTEMPT_STATUS_INFO: Record<
   AttemptStatus,

@@ -13,7 +13,7 @@ export default async function EditJobPage({
 }) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!['SUPER_ADMIN', 'MANAGER'].includes(session.user.role)) redirect('/jobs')
+  if (!['SUPER_ADMIN', 'CENTER_MANAGER'].includes(session.user.role)) redirect('/jobs')
 
   const { id } = await params
   const job = await db.jobPosting.findUnique({ where: { id } })

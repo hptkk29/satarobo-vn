@@ -10,7 +10,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 interface Props {
   params: Promise<{ id: string }>;

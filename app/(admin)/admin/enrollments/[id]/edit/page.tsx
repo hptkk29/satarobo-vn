@@ -8,8 +8,8 @@ import { TransferDialog } from "../../_components/transfer-dialog";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "HR", "SALES"];
-const AUDIT_VIEWER_ROLES = new Set(["SUPER_ADMIN", "MANAGER"]);
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"];
+const AUDIT_VIEWER_ROLES = new Set(["SUPER_ADMIN", "CENTER_MANAGER"]);
 const TERMINAL_STATUSES = new Set([
   "COMPLETED",
   "WITHDREW",

@@ -99,9 +99,9 @@ export async function updateEmployeeAction(
     };
   }
 
-  // MANAGER role không được edit salary fields
+  // CENTER_MANAGER role không được edit salary fields
   const data = { ...parsed.data };
-  if (session.user.role === "MANAGER") {
+  if (session.user.role === "CENTER_MANAGER") {
     delete data.salaryRank;
     delete data.salaryLevel;
   }
@@ -186,9 +186,9 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
 
 const VALID_ROLES = [
   "SUPER_ADMIN",
-  "MANAGER",
+  "CENTER_MANAGER",
   "HR",
-  "SALES",
+  "SALES_CSM",
   "TEACHER",
   "MARKETING",
   "ACCOUNTANT",

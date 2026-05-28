@@ -17,12 +17,13 @@ enum GrantType {
 
 enum Role {
   SUPER_ADMIN
-  MANAGER
+  CENTER_MANAGER // Phase T0.1 — đổi tên từ MANAGER (quản lý cơ sở)
   HR
-  SALES
+  SALES_CSM // Phase T0.1 — đổi tên từ SALES (tư vấn & chăm sóc học viên)
   TEACHER
   MARKETING
   ACCOUNTANT
+  PARENT // Phase T0.1 — phụ huynh (portal hocvien.satarobo.vn), KHÔNG vào /admin
 }
 
 enum LeadStatus {
@@ -284,7 +285,7 @@ model User {
   emailVerified DateTime?
   password      String?
   image         String?
-  role          Role      @default(SALES)
+  role          Role      @default(SALES_CSM)
   centerId      String?
   isActive      Boolean   @default(true)
   deletedAt     DateTime?

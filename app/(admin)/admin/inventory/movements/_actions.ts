@@ -18,7 +18,7 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"] as const;
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"] as const;
 
 async function requireRole(): Promise<
   | { ok: true; userId: string }

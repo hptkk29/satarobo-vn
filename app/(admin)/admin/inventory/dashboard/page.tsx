@@ -14,7 +14,7 @@ import { getInventoryStats } from "@/lib/inventory-stats";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 function formatVnd(value: number): string {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(

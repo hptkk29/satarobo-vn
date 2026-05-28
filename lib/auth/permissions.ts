@@ -16,8 +16,14 @@ import type { Role } from "@prisma/client";
 // - Enforce in Server Action: `assertCan(role, action)` throws on deny.
 // - Field-level for Employee: `getEmployeeFieldVisibility(role)` returns object.
 //
-// ALL 7 ROLES:
-// SUPER_ADMIN, MANAGER, HR, SALES, TEACHER, MARKETING, ACCOUNTANT
+// ALL 8 ROLES (Phase T0.1 — rename MANAGER->CENTER_MANAGER, SALES->SALES_CSM,
+// thêm PARENT):
+// SUPER_ADMIN, CENTER_MANAGER, HR, SALES_CSM, TEACHER, MARKETING, ACCOUNTANT, PARENT
+//
+// PARENT = phụ huynh (portal hocvien.satarobo.vn). KHÔNG có quyền admin nào —
+// không xuất hiện trong bất kỳ array PERMISSIONS nào → can(PARENT, adminAction)
+// luôn false. Quyền portal (xem data con) check riêng qua activeSite, không qua
+// matrix này.
 //
 // Legacy lib/permissions.ts (6 roles, missing HR) đã xoá ở Sprint 5.2.
 // 15 callsite cũ migrated sang can(role, "resource:action") trực tiếp.
@@ -191,182 +197,182 @@ export type Action =
 
 export const PERMISSIONS: Record<Action, Role[]> = {
   // --- Employees ---
-  "employees:view-all": ["SUPER_ADMIN", "MANAGER", "HR"],
+  "employees:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
   "employees:view-public": [
-    "SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
   "employees:create": ["SUPER_ADMIN", "HR"],
-  "employees:edit": ["SUPER_ADMIN", "HR", "MANAGER"],
+  "employees:edit": ["SUPER_ADMIN", "HR", "CENTER_MANAGER"],
   "employees:delete": ["SUPER_ADMIN"],
   "employees:view-salary": ["SUPER_ADMIN", "HR", "ACCOUNTANT"],
   "employees:view-personal": ["SUPER_ADMIN", "HR"],
 
   // --- Honors ---
   "honors:view": [
-    "SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
-  "honors:create": ["SUPER_ADMIN", "MANAGER", "HR", "MARKETING"],
-  "honors:edit": ["SUPER_ADMIN", "MANAGER", "HR", "MARKETING"],
+  "honors:create": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "MARKETING"],
+  "honors:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "MARKETING"],
   "honors:delete": ["SUPER_ADMIN"],
-  "honors:settings": ["SUPER_ADMIN", "MANAGER"],
+  "honors:settings": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Jobs ---
-  "jobs:view": ["SUPER_ADMIN", "MANAGER", "HR", "SALES", "MARKETING"],
-  "jobs:create": ["SUPER_ADMIN", "MANAGER", "HR"],
-  "jobs:edit": ["SUPER_ADMIN", "MANAGER", "HR"],
+  "jobs:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "MARKETING"],
+  "jobs:create": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
+  "jobs:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
   "jobs:delete": ["SUPER_ADMIN", "HR"],
 
   // --- Leads ---
-  "leads:view-all": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
-  "leads:view-own": ["SALES"],
-  "leads:create": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING"],
-  "leads:edit": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING"],
-  "leads:assign": ["SUPER_ADMIN", "MANAGER"],
-  "leads:delete": ["SUPER_ADMIN", "MANAGER"],
-  "leads:export": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "leads:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  "leads:view-own": ["SALES_CSM"],
+  "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Blog / News ---
   "blog:view": [
-    "SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
-  "blog:create": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
-  "blog:edit": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "blog:create": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  "blog:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   "blog:delete": ["SUPER_ADMIN"],
   "news:view": [
-    "SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
-  "news:create": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
-  "news:edit": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
-  "news:delete": ["SUPER_ADMIN", "MANAGER"],
-  "news:publish": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "news:create": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  "news:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  "news:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "news:publish": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Payroll ---
   "payroll:view": ["SUPER_ADMIN", "ACCOUNTANT", "HR"],
   "payroll:edit": ["SUPER_ADMIN", "ACCOUNTANT"],
 
   // --- Students ---
-  "students:view-all": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING", "ACCOUNTANT", "HR"],
+  "students:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT", "HR"],
   "students:view-own-class": ["TEACHER"],
-  "students:create": ["SUPER_ADMIN", "MANAGER", "SALES"],
-  "students:edit": ["SUPER_ADMIN", "MANAGER", "SALES", "ACCOUNTANT"],
-  "students:delete": ["SUPER_ADMIN", "MANAGER"],
-  "students:import": ["SUPER_ADMIN", "MANAGER"],
+  "students:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "students:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
+  "students:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "students:import": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Classes ---
-  "classes:view-all": ["SUPER_ADMIN", "MANAGER", "SALES", "ACCOUNTANT", "HR", "MARKETING"],
+  "classes:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING"],
   "classes:view-own": ["TEACHER"],
-  "classes:create": ["SUPER_ADMIN", "MANAGER"],
-  "classes:edit": ["SUPER_ADMIN", "MANAGER"],
+  "classes:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "classes:delete": ["SUPER_ADMIN"],
 
   // --- Enrollments ---
-  "enrollments:view-all": ["SUPER_ADMIN", "MANAGER", "SALES", "ACCOUNTANT"],
+  "enrollments:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "enrollments:view-own": ["TEACHER"],
-  "enrollments:create": ["SUPER_ADMIN", "MANAGER", "SALES"],
-  "enrollments:edit": ["SUPER_ADMIN", "MANAGER", "SALES"],
-  "enrollments:transfer": ["SUPER_ADMIN", "MANAGER"],
-  "enrollments:cancel": ["SUPER_ADMIN", "MANAGER"],
+  "enrollments:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "enrollments:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "enrollments:transfer": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "enrollments:cancel": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Sessions + Attendance ---
-  "sessions:view": ["SUPER_ADMIN", "MANAGER", "TEACHER", "SALES"],
-  "sessions:create": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "sessions:edit": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "attendance:view": ["SUPER_ADMIN", "MANAGER", "TEACHER", "SALES"],
-  "attendance:mark": ["TEACHER", "SUPER_ADMIN", "MANAGER"],
-  "attendance:edit": ["SUPER_ADMIN", "MANAGER"],
+  "sessions:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "SALES_CSM"],
+  "sessions:create": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "sessions:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "SALES_CSM"],
+  "attendance:mark": ["TEACHER", "SUPER_ADMIN", "CENTER_MANAGER"],
+  "attendance:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Courses + Packages ---
   "courses:view": [
-    "SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
-  "courses:create": ["SUPER_ADMIN", "MANAGER"],
-  "courses:edit": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "courses:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "courses:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   "courses:delete": ["SUPER_ADMIN"],
   "course-packages:view": [
-    "SUPER_ADMIN", "MANAGER", "SALES", "MARKETING",
+    "SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING",
   ],
-  "course-packages:edit": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "course-packages:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Curriculum + Lessons ---
-  "curriculum:view": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "curriculum:create": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "curriculum:edit": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "curriculum:delete": ["SUPER_ADMIN", "MANAGER"],
+  "curriculum:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "curriculum:create": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "curriculum:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "curriculum:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Questions / Exams / Assignments ---
-  "questions:view": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "questions:author": ["TEACHER", "SUPER_ADMIN", "MANAGER"],
-  "questions:edit": ["SUPER_ADMIN", "MANAGER", "TEACHER"], // teacher edit own questions enforced separately
-  "questions:delete": ["SUPER_ADMIN", "MANAGER"],
-  "exams:view": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "exams:create": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "exams:edit": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "exams:grade": ["TEACHER", "SUPER_ADMIN", "MANAGER"],
-  "exams:delete": ["SUPER_ADMIN", "MANAGER"],
-  "assignments:view": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "assignments:create": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "assignments:edit": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "assignments:grade": ["TEACHER", "SUPER_ADMIN", "MANAGER"],
-  "assignments:delete": ["SUPER_ADMIN", "MANAGER"],
+  "questions:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "questions:author": ["TEACHER", "SUPER_ADMIN", "CENTER_MANAGER"],
+  "questions:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"], // teacher edit own questions enforced separately
+  "questions:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "exams:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "exams:create": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "exams:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "exams:grade": ["TEACHER", "SUPER_ADMIN", "CENTER_MANAGER"],
+  "exams:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "assignments:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "assignments:create": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "assignments:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "assignments:grade": ["TEACHER", "SUPER_ADMIN", "CENTER_MANAGER"],
+  "assignments:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Documents ---
-  "documents:view": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "documents:upload": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "documents:delete": ["SUPER_ADMIN", "MANAGER"],
+  "documents:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "documents:upload": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "documents:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Centers / Rooms / Holidays ---
   "centers:view": [
-    "SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
   "centers:edit": ["SUPER_ADMIN"],
-  "rooms:view": ["SUPER_ADMIN", "MANAGER", "TEACHER", "SALES"],
-  "rooms:edit": ["SUPER_ADMIN", "MANAGER"],
+  "rooms:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "SALES_CSM"],
+  "rooms:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "holidays:view": [
-    "SUPER_ADMIN", "MANAGER", "HR", "SALES", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
-  "holidays:edit": ["SUPER_ADMIN", "MANAGER"],
+  "holidays:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Inventory ---
-  "inventory:view": ["SUPER_ADMIN", "MANAGER", "TEACHER", "ACCOUNTANT"],
-  "inventory:edit": ["SUPER_ADMIN", "MANAGER"],
-  "inventory:movement": ["SUPER_ADMIN", "MANAGER", "TEACHER"],
-  "inventory:audit": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
+  "inventory:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "ACCOUNTANT"],
+  "inventory:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "inventory:movement": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "inventory:audit": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
 
   // --- ZMRoboKit ---
   "kits:view": [
-    "SUPER_ADMIN", "MANAGER", "SALES", "MARKETING",
+    "SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING",
   ],
-  "kits:edit": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "kits:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Site content / CMS ---
-  "site-content:view": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
-  "site-content:edit": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "site-content:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  "site-content:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Audit logs ---
-  "audit-logs:view": ["SUPER_ADMIN", "MANAGER"],
+  "audit-logs:view": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Settings / system ---
-  "settings:view": ["SUPER_ADMIN", "MANAGER"],
+  "settings:view": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "settings:edit": ["SUPER_ADMIN"],
   "users:manage": ["SUPER_ADMIN"], // create/disable User accounts
   "roles:assign": ["SUPER_ADMIN"],
 
   // --- Phase 5.6 — Financial ---
-  "payments:manage": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
-  "orders:view": ["SUPER_ADMIN", "MANAGER", "SALES", "ACCOUNTANT"],
-  "orders:manage": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
+  "payments:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
+  "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
 
   // --- Phase 5.7 — Vouchers ---
-  "vouchers:view": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING", "ACCOUNTANT"],
-  "vouchers:manage": ["SUPER_ADMIN", "MANAGER", "MARKETING", "ACCOUNTANT"],
+  "vouchers:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT"],
+  "vouchers:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "ACCOUNTANT"],
 
   // --- Phase 5.10 — Products ---
-  "products:view": ["SUPER_ADMIN", "MANAGER", "SALES", "MARKETING", "ACCOUNTANT"],
-  "products:manage": ["SUPER_ADMIN", "MANAGER", "ACCOUNTANT"],
+  "products:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT"],
+  "products:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
 
   // --- Phase 5.13 — Email System ---
-  "emails:view": ["SUPER_ADMIN", "MANAGER", "MARKETING", "ACCOUNTANT"],
-  "emails:manage": ["SUPER_ADMIN", "MANAGER", "MARKETING"],
+  "emails:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "ACCOUNTANT"],
+  "emails:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 };
 
 // =============================================================================
@@ -463,7 +469,7 @@ export function getEmployeeFieldVisibility(
   }
   return {
     basic: true,
-    contact: (["SUPER_ADMIN", "MANAGER", "HR"] as Role[]).includes(role as Role),
+    contact: (["SUPER_ADMIN", "CENTER_MANAGER", "HR"] as Role[]).includes(role as Role),
     salary: (["SUPER_ADMIN", "HR", "ACCOUNTANT"] as Role[]).includes(
       role as Role,
     ),

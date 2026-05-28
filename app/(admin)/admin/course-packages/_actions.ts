@@ -95,7 +95,7 @@ async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "MANAGER") {
+  if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "CENTER_MANAGER") {
     redirect("/dashboard?error=unauthorized");
   }
 

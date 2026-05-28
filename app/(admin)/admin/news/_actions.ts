@@ -68,7 +68,7 @@ async function requireAdmin() {
   const role = session.user.role;
   if (
     role !== "SUPER_ADMIN" &&
-    role !== "MANAGER" &&
+    role !== "CENTER_MANAGER" &&
     role !== "MARKETING"
   ) {
     redirect("/dashboard?error=unauthorized");

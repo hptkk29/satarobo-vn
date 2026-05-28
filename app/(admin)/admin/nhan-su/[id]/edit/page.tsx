@@ -60,7 +60,7 @@ export default async function EditEmployeePage({ params }: Props) {
   ]);
 
   const isSuperAdmin = session.user.role === "SUPER_ADMIN";
-  const canViewAudit = ["SUPER_ADMIN", "MANAGER"].includes(session.user.role);
+  const canViewAudit = ["SUPER_ADMIN", "CENTER_MANAGER"].includes(session.user.role);
   const showScheduleLink = TEACHING_DEPARTMENTS.has(employee.department);
 
   const auditLogs = canViewAudit

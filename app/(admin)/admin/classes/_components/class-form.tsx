@@ -233,7 +233,7 @@ export function ClassForm({
               { value: "", label: "— Chưa phân —" },
               ...teachers.map((t) => ({
                 value: t.id,
-                label: `${t.name}${t.role === "MANAGER" ? " (QL)" : ""}`,
+                label: `${t.name}${t.role === "CENTER_MANAGER" ? " (QL)" : ""}`,
               })),
             ]}
           />

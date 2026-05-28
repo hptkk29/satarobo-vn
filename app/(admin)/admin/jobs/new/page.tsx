@@ -8,7 +8,7 @@ import { createJobAction } from '@/app/(admin)/admin/jobs/actions'
 export default async function NewJobPage() {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!['SUPER_ADMIN', 'MANAGER'].includes(session.user.role)) redirect('/jobs')
+  if (!['SUPER_ADMIN', 'CENTER_MANAGER'].includes(session.user.role)) redirect('/jobs')
 
   return (
     <div>

@@ -10,7 +10,7 @@ export default async function R2TestPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const allowedRoles = ["SUPER_ADMIN", "MANAGER", "MARKETING"];
+  const allowedRoles = ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"];
   if (!allowedRoles.includes(session.user.role)) {
     redirect("/dashboard");
   }

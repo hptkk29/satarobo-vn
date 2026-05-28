@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"];
 
 // Parse a date from Excel: Date object, ISO string YYYY-MM-DD, DD/MM/YYYY,
 // or Excel serial number (days since 1899-12-30).

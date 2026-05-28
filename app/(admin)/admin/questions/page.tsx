@@ -7,7 +7,7 @@ import { QuestionType, QuestionDifficulty, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const TYPE_INFO: Record<QuestionType, { label: string; color: string }> = {
   MULTIPLE_CHOICE: { label: "Trắc nghiệm", color: "bg-blue-100 text-blue-700" },

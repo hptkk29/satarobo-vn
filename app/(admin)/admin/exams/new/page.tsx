@@ -7,7 +7,7 @@ import { ExamForm } from "../_components/exam-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 export default async function NewExamPage() {
   const session = await auth();

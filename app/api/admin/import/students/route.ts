@@ -9,7 +9,7 @@ import {
   GenderEnum,
 } from "@/lib/validators/student";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "HR", "SALES"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"];
 
 // Excel date parser — reused pattern from B3 / C2.
 function parseExcelDate(v: unknown): Date | null {

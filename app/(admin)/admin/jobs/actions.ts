@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { jobCreateSchema } from '@/lib/validators/job'
 
-const CAN_EDIT = ['SUPER_ADMIN', 'MANAGER']
+const CAN_EDIT = ['SUPER_ADMIN', 'CENTER_MANAGER']
 
 export async function createJobAction(input: unknown) {
   const session = await auth()

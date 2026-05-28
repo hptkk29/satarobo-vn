@@ -16,7 +16,7 @@ import { DocumentType, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "MANAGER", "TEACHER"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const TYPE_INFO: Record<DocumentType, { label: string; color: string }> = {
   PDF: { label: "PDF", color: "bg-red-100 text-red-700" },
