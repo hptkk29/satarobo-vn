@@ -23,8 +23,8 @@ export const courseDetails: Record<string, CourseDetail> = {
     metaTitle:
       "Sata1 — Robosim Master | Khóa luyện thi vòng loại Robotics 2026 | Sata Robo",
     metaDescription:
-      "Khóa Robosim Master 11 buổi tính phí (5 buổi đầu miễn phí) cho lớp 1-8. Làm chủ phần mềm Robosim bắt buộc trong cuộc thi Sáng tạo Robotics 2026. Ưu đãi còn 1.485.000đ.",
-    audienceTag: "Học sinh Lớp 1-8",
+      "Khóa Robosim Master 11 buổi tính phí (5 buổi đầu miễn phí) cho lớp 3-8. Làm chủ phần mềm Robosim bắt buộc trong cuộc thi Sáng tạo Robotics 2026. Ưu đãi còn 1.485.000đ.",
+    audienceTag: "Học sinh Lớp 3-8",
     audienceDescription:
       "Dành cho học sinh chuẩn bị tham gia vòng loại Sáng tạo Robotics 2026 — cần làm quen phần mềm Robosim, đọc sa bàn và tối ưu chiến thuật.",
     mission:
@@ -77,12 +77,12 @@ export const courseDetails: Record<string, CourseDetail> = {
     metaTitle:
       "Combo Sata1+Sata2 — Full Lộ Trình Luyện Thi Robotics 2026 | Sata Robo",
     metaDescription:
-      "Trọn bộ 32 buổi: Robosim Master + Đấu trường Robot. Lộ trình bài bản từ vòng loại đến chung kết. Tiết kiệm 15% còn 3.986.000đ (124.500đ/buổi).",
-    audienceTag: "Học sinh Lớp 1-8",
+      "Trọn bộ 27 buổi tính phí (11 Sata1 + 16 Sata2): Robosim Master + Đấu trường Robot. Lộ trình bài bản từ vòng loại đến chung kết. Tiết kiệm 15% còn 3.986.000đ (147.000đ/buổi).",
+    audienceTag: "Học sinh Lớp 3-8",
     audienceDescription:
       "Combo đề xuất cho phụ huynh muốn con có lộ trình LUYỆN THI HOÀN CHỈNH — từ phần mềm Robosim đến vận hành robot Beta thật.",
     mission:
-      "Combo Sata1+Sata2 là lộ trình tiết kiệm và bài bản nhất cho học viên có mục tiêu thi đấu nghiêm túc. 32 buổi liên thông từ kỹ năng Robosim cơ bản đến vận hành robot Beta cấp khu vực. Tiết kiệm 704.000đ so với mua riêng từng khóa.",
+      "Combo Sata1+Sata2 là lộ trình tiết kiệm và bài bản nhất cho học viên có mục tiêu thi đấu nghiêm túc. 27 buổi tính phí liên thông (11 buổi Robosim + 16 buổi robot Beta) từ kỹ năng cơ bản đến vận hành robot Beta cấp khu vực. Tiết kiệm 704.000đ so với mua riêng từng khóa.",
     outcomes: [
       "Hoàn thiện cả 2 kỹ năng: Robosim mô phỏng + Robot Beta thực chiến",
       "Sẵn sàng cho vòng loại Đà Nẵng và chung kết Khu vực Miền Trung",
@@ -90,10 +90,10 @@ export const courseDetails: Record<string, CourseDetail> = {
       "Tiết kiệm 704.000đ so với học riêng",
     ],
     highlights: [
-      "Tổng 32 buổi × 90 phút = 48 giờ luyện thi",
-      "Giá ưu đãi: 124.500đ/buổi (rẻ hơn học riêng)",
+      "Tổng 27 buổi tính phí × 90 phút = 40,5 giờ luyện thi",
+      "Giá ưu đãi: 147.000đ/buổi (rẻ hơn học riêng)",
       "Combo đề xuất — đa số phụ huynh chọn lộ trình này",
-      "Cùng lớp, cùng giáo viên xuyên suốt 32 buổi",
+      "Cùng lớp, cùng giáo viên xuyên suốt 27 buổi tính phí",
     ],
     noteForParents:
       "Đây là gói TỐT NHẤT cho học sinh nghiêm túc luyện thi 2026. Nếu muốn cam kết vượt vòng loại 100%, bổ sung thêm Sata8 (Vé Vàng) để được hoàn tiền nếu không đậu.",

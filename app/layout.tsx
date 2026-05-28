@@ -4,6 +4,7 @@ import "./globals.css";
 import { MetaPixel } from "@/components/public/meta-pixel";
 import { GA4 } from "@/components/public/ga4";
 import { Toaster } from "@/components/ui/sonner";
+import { BfcacheReloadFix } from "@/components/public/bfcache-reload-fix";
 
 const beVietnamPro = Be_Vietnam_Pro({
   variable: "--font-sans",
@@ -55,6 +56,7 @@ export default function RootLayout({
         <MetaPixel />
         <GA4 />
         <Toaster position="top-right" richColors />
+        <BfcacheReloadFix />
       </body>
     </html>
   );

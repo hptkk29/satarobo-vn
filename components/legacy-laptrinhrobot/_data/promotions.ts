@@ -45,7 +45,7 @@ export const promotions: Promotions = {
       highlight: "3.986.000đ",
       description:
         "Học trọn Robosim Master + Đấu trường Robot, từ mô phỏng RoboSim đến robot Beta thật, phù hợp khi bố mẹ muốn con đi đủ lộ trình luyện thi.",
-      details: ["32 buổi - 90 phút/buổi", "Tổng 48 giờ luyện thi", "Tiết kiệm 704.000đ"],
+      details: ["27 buổi tính phí - 90 phút/buổi", "Tổng 40,5 giờ luyện thi", "Tiết kiệm 704.000đ"],
       cta: "Chọn gói Combo",
       target: "roadmap",
       icon: "Trophy",
