@@ -73,6 +73,9 @@ export type Action =
   // --- Parent requests (Phase NHÓM 3) ---
   | "parent-requests:manage"
 
+  // --- Parent feedback (Phase NHÓM 3) ---
+  | "parent-feedback:view"
+
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
   | "blog:create"
@@ -258,6 +261,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Parent requests (Phase NHÓM 3) ---
   "parent-requests:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+
+  // --- Parent feedback (Phase NHÓM 3) ---
+  "parent-feedback:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Blog / News ---
   "blog:view": [

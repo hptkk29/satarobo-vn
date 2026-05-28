@@ -2640,3 +2640,19 @@ model ParentRequest {
   @@index([status, createdAt])
   @@index([parentUserId])
 }
+
+// ─── ParentFeedback (Phase NHÓM 3) ───────────────────────────────────────────
+// Phụ huynh đánh giá (sao + nội dung). studentId là cột phẳng (không FK).
+model ParentFeedback {
+  id           String   @id @default(cuid())
+  parentUserId String?
+  parentName   String?
+  studentId    String?
+  studentName  String?
+  rating       Int // 1-5
+  content      String   @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([studentId])
+}

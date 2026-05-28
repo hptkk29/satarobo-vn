@@ -34,6 +34,7 @@ import {
   FlaskConical,
   Bell,
   MessageSquarePlus,
+  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -95,6 +96,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Tin tức", href: "/news", icon: Newspaper },
       { label: "Thông báo PH", href: "/notifications", icon: Bell },
+      { label: "Đánh giá PH", href: "/parent-feedback", icon: Star },
       { label: "Hình ảnh trang", href: "/site-content", icon: ImageIcon },
       { label: "Tracking", href: "/marketing", icon: BarChart3 },
     ],

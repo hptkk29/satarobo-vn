@@ -13,6 +13,7 @@ import {
   User,
   Bell,
   MessageSquarePlus,
+  Star,
 } from "lucide-react";
 
 const ITEMS = [
@@ -25,6 +26,7 @@ const ITEMS = [
   { label: "Kết quả", href: "/portal/ket-qua", icon: Award },
   { label: "Yêu cầu", href: "/portal/yeu-cau", icon: MessageSquarePlus },
   { label: "Học phí", href: "/portal/hoc-phi", icon: CreditCard },
+  { label: "Đánh giá", href: "/portal/danh-gia", icon: Star },
   { label: "Hồ sơ", href: "/portal/ho-so", icon: User },
 ];
 
