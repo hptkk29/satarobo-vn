@@ -4,9 +4,24 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
-import { getClassProgress } from "@/lib/progress";
+import { getClassProgress, getClassGradebook } from "@/lib/progress";
+import { GenerateReportsButton } from "./_components/generate-reports-button";
 
 export const dynamic = "force-dynamic";
+
+const EXAM_STATUS_VI: Record<string, string> = {
+  IN_PROGRESS: "Đang làm",
+  SUBMITTED: "Đã nộp",
+  GRADED: "Đã chấm",
+  REVIEWED: "Đã duyệt",
+  "—": "Chưa làm",
+};
+const SUB_STATUS_VI: Record<string, string> = {
+  NOT_SUBMITTED: "Chưa nộp",
+  SUBMITTED: "Đã nộp",
+  LATE: "Nộp trễ",
+  GRADED: "Đã chấm",
+};
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -15,9 +30,6 @@ interface Props {
 export default async function ClassProgressPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "classes:view-all")) {
-    redirect("/dashboard?error=unauthorized");
-  }
 
   const { id } = await params;
   const now = new Date();
@@ -32,9 +44,22 @@ export default async function ClassProgressPage({ params }: Props) {
   });
   if (!cls) notFound();
 
-  const [progresses, heldSessionsCount] = await Promise.all([
+  // Gate: view-all (quản lý) hoặc giáo viên phụ trách lớp (view-own).
+  const canViewAll = can(session.user, "classes:view-all");
+  const isOwnTeacher =
+    can(session.user, "classes:view-own") && cls.teacherId === session.user.id;
+  if (!canViewAll && !isOwnTeacher) {
+    redirect("/dashboard?error=unauthorized");
+  }
+  const canGenerateReports =
+    session.user.role === "SUPER_ADMIN" ||
+    session.user.role === "CENTER_MANAGER" ||
+    (session.user.role === "TEACHER" && cls.teacherId === session.user.id);
+
+  const [progresses, heldSessionsCount, gradebook] = await Promise.all([
     getClassProgress(id),
     db.classSession.count({ where: { classId: id, date: { lte: now } } }),
+    getClassGradebook(id),
   ]);
 
   const avgAttendance =
@@ -60,21 +85,26 @@ export default async function ClassProgressPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href={`/classes/${cls.id}/edit`}
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
-        >
-          <ChevronLeft className="h-4 w-4" /> Quay lại lớp
-        </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
-          <LineChart className="h-6 w-6 text-[#7C3AED]" />
-          Tiến độ lớp: <span className="text-orange-600">{cls.name}</span>
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          {cls.course.name} · {cls.center?.name ?? "—"}
-          {cls.teacher?.name && ` · GV: ${cls.teacher.name}`}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link
+            href={`/classes/${cls.id}/edit`}
+            className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          >
+            <ChevronLeft className="h-4 w-4" /> Quay lại lớp
+          </Link>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
+            <LineChart className="h-6 w-6 text-[#7C3AED]" />
+            Tiến độ lớp: <span className="text-orange-600">{cls.name}</span>
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            {cls.course.name} · {cls.center?.name ?? "—"}
+            {cls.teacher?.name && ` · GV: ${cls.teacher.name}`}
+          </p>
+        </div>
+        {canGenerateReports && progresses.length > 0 && (
+          <GenerateReportsButton classId={cls.id} />
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -219,6 +249,153 @@ export default async function ClassProgressPage({ params }: Props) {
               )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      {/* Lộ trình giáo trình (Phase T2.1) */}
+      <section className="rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <header className="flex items-center justify-between border-b border-neutral-100 p-4">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+            Lộ trình giáo trình
+          </h2>
+          <span className="text-xs font-medium text-neutral-500">
+            {gradebook.coveredLessons}/{gradebook.totalLessons} bài ·{" "}
+            {gradebook.lessonCoverageRate}%
+          </span>
+        </header>
+        <div className="p-4">
+          {gradebook.lessons.length === 0 ? (
+            <p className="py-6 text-center text-sm text-neutral-400">
+              Khoá học chưa có giáo trình (curriculum) đang hoạt động.
+            </p>
+          ) : (
+            <ol className="space-y-1.5">
+              {gradebook.lessons.map((l) => (
+                <li
+                  key={l.id}
+                  className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm"
+                >
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      l.taught
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-neutral-100 text-neutral-400"
+                    }`}
+                  >
+                    {l.order}
+                  </span>
+                  <span
+                    className={
+                      l.taught ? "text-neutral-800" : "text-neutral-400"
+                    }
+                  >
+                    {l.title}
+                  </span>
+                  {l.taught && l.sessionDate && (
+                    <span className="ml-auto text-xs text-neutral-400 tabular-nums">
+                      Đã dạy {new Date(l.sessionDate).toLocaleDateString("vi-VN")}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </section>
+
+      {/* Bảng điểm lớp (Phase T2.1) */}
+      <section className="rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <header className="border-b border-neutral-100 p-4">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+            Bảng điểm lớp
+          </h2>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            Ma trận học viên × đề thi/bài tập đã giao. Ô hiện điểm thô hoặc trạng thái.
+          </p>
+        </header>
+        <div className="overflow-x-auto">
+          {gradebook.columns.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-neutral-400">
+              Lớp chưa có đề thi hoặc bài tập nào được giao (PUBLISHED).
+            </p>
+          ) : (
+            <table className="min-w-full divide-y divide-neutral-100 text-sm">
+              <thead className="bg-neutral-50">
+                <tr>
+                  <th className="sticky left-0 z-10 bg-neutral-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                    Học viên
+                  </th>
+                  {gradebook.columns.map((c) => (
+                    <th
+                      key={c.id}
+                      className="px-3 py-3 text-center text-xs font-semibold text-neutral-500"
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                            c.kind === "exam"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-orange-100 text-orange-700"
+                          }`}
+                        >
+                          {c.kind === "exam" ? "Đề" : "BT"}
+                        </span>
+                        <span className="max-w-[120px] truncate font-medium normal-case text-neutral-700">
+                          {c.title}
+                        </span>
+                        <span className="text-[10px] font-normal text-neutral-400">
+                          /{c.totalPoints}
+                        </span>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-50">
+                {gradebook.rows.map((r) => (
+                  <tr key={r.studentId} className="hover:bg-neutral-50/60">
+                    <td className="sticky left-0 z-10 bg-white px-4 py-2 font-medium text-neutral-900">
+                      {r.name}
+                      {r.studentCode && (
+                        <span className="ml-1 text-[10px] text-neutral-400 tabular-nums">
+                          {r.studentCode}
+                        </span>
+                      )}
+                    </td>
+                    {gradebook.columns.map((c) => {
+                      const cell = r.cells[c.id];
+                      const label =
+                        c.kind === "exam"
+                          ? EXAM_STATUS_VI[cell.status] ?? cell.status
+                          : SUB_STATUS_VI[cell.status] ?? cell.status;
+                      return (
+                        <td
+                          key={c.id}
+                          className="px-3 py-2 text-center tabular-nums"
+                        >
+                          {cell.score !== null ? (
+                            <span
+                              className={`font-semibold ${
+                                cell.passed === false
+                                  ? "text-red-600"
+                                  : "text-neutral-800"
+                              }`}
+                            >
+                              {cell.score}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-neutral-400">
+                              {label}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
     </div>

@@ -383,6 +383,73 @@ Sata Robo`,
       "days_remaining",
     ],
   },
+
+  // ─── PROGRESS_REPORT_VI (Phase T2.1) ─────────────────────────────
+  // Dùng trigger MANUAL + tìm theo CODE (tránh tạo enum mới / migration),
+  // giống pattern CONSULT_LEAD_NOTIFICATION_INTERNAL.
+  {
+    code: "PROGRESS_REPORT_VI",
+    name: "Báo cáo tiến độ học tập (Phụ huynh)",
+    description: "Gửi cho phụ huynh khi giáo viên tạo báo cáo tiến độ lớp",
+    trigger: EmailTemplateTrigger.MANUAL,
+    isActive: true,
+    subject: "Báo cáo tiến độ học tập của {{student_name}} - Sata Robo",
+    bodyText: `Xin chào {{parent_name}},
+
+Sata Robo gửi anh/chị báo cáo tiến độ học tập của {{student_name}} tại lớp {{class_name}}:
+
+- Điểm danh: {{attendance_rate}}% ({{attended_sessions}}/{{total_sessions}} buổi)
+- Bài học đã hoàn thành: {{covered_lessons}}/{{total_lessons}}
+- Bài tập đã nộp: {{submitted_assignments}}/{{total_assignments}}
+- Điểm trung bình: {{average_score}}
+- Đề thi đạt: {{passed_exams}}/{{exam_attempts}}
+
+Báo cáo lập ngày {{report_date:date}}.
+
+Mọi thắc mắc về tiến độ của con, anh/chị vui lòng liên hệ 0818823720.
+
+Trân trọng,
+Sata Robo`,
+    bodyHtml: `<!DOCTYPE html>
+<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #f97316, #7e22ce); color: white; border-radius: 8px 8px 0 0;">
+  <h1 style="margin: 0;">Báo cáo tiến độ học tập</h1>
+  <p style="margin: 8px 0 0;">Sata Robo</p>
+</div>
+<div style="background: white; padding: 24px; border: 1px solid #eee; border-radius: 0 0 8px 8px;">
+  <p>Xin chào <strong>{{parent_name}}</strong>,</p>
+  <p>Sata Robo gửi anh/chị báo cáo tiến độ học tập của <strong>{{student_name}}</strong> tại lớp <strong>{{class_name}}</strong>:</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <tr><td style="padding: 8px; background: #f9fafb;"><strong>Điểm danh:</strong></td><td style="padding: 8px;">{{attendance_rate}}% ({{attended_sessions}}/{{total_sessions}} buổi)</td></tr>
+    <tr><td style="padding: 8px; background: #f9fafb;"><strong>Bài học hoàn thành:</strong></td><td style="padding: 8px;">{{covered_lessons}}/{{total_lessons}}</td></tr>
+    <tr><td style="padding: 8px; background: #f9fafb;"><strong>Bài tập đã nộp:</strong></td><td style="padding: 8px;">{{submitted_assignments}}/{{total_assignments}}</td></tr>
+    <tr><td style="padding: 8px; background: #f9fafb;"><strong>Điểm trung bình:</strong></td><td style="padding: 8px; font-size: 18px; color: #f97316;"><strong>{{average_score}}</strong></td></tr>
+    <tr><td style="padding: 8px; background: #f9fafb;"><strong>Đề thi đạt:</strong></td><td style="padding: 8px;">{{passed_exams}}/{{exam_attempts}}</td></tr>
+  </table>
+  <p style="color: #666; font-size: 13px;">Báo cáo lập ngày {{report_date:date}}.</p>
+  <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+  <p style="text-align: center; color: #666; font-size: 13px;">
+    Mọi thắc mắc liên hệ <strong>0818823720</strong> hoặc <strong>satarobo@gmail.com</strong>
+  </p>
+</div>
+</body></html>`,
+    availableVariables: [
+      "parent_name",
+      "student_name",
+      "class_name",
+      "attendance_rate",
+      "attended_sessions",
+      "total_sessions",
+      "covered_lessons",
+      "total_lessons",
+      "submitted_assignments",
+      "total_assignments",
+      "average_score",
+      "passed_exams",
+      "exam_attempts",
+      "report_date",
+    ],
+  },
 ];
 
 export async function seedEmailTemplates(prisma: PrismaClient) {
