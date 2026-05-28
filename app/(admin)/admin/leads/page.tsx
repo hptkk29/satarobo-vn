@@ -111,11 +111,18 @@ export default async function LeadsPage({
     : [[], []]
 
   if (view === 'kanban') {
+    const nowTs = new Date()
     const rawLeads = await db.lead.findMany({
       where,
       include: {
         course: { select: { name: true } },
         assignedTo: { select: { name: true } },
+        // T1.2 — phát hiện quá hạn: có task OPEN dueAt < now.
+        tasks: {
+          where: { status: 'OPEN', dueAt: { lt: nowTs } },
+          select: { id: true },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: KANBAN_LIMIT,
@@ -132,7 +139,7 @@ export default async function LeadsPage({
       courseName: l.course?.name ?? null,
       assignedToName: l.assignedTo?.name ?? null,
       createdAt: l.createdAt.toISOString(),
-      overdue: false, // T1.2 — sẽ nối LeadTask
+      overdue: l.tasks.length > 0,
     }))
 
     return (

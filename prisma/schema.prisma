@@ -425,6 +425,10 @@ model Lead {
   assignedTo User?   @relation("AssignedLeads", fields: [assignedToId], references: [id])
   notes      Note[]
 
+  // Phase T1.2 — Activity timeline + follow-up tasks
+  activities LeadActivity[]
+  tasks      LeadTask[]
+
   // Phase 5.4.0 — Audit log
   auditLogs LeadAuditLog[] @relation("LeadAuditLogs")
 
@@ -1845,6 +1849,54 @@ model LeadAuditLog {
   @@index([leadId, createdAt])
   @@index([createdAt])
   @@index([changedByUserId])
+}
+
+// ─── Lead Activity + Task (Phase T1.2) ───────────────────────────────────────
+
+enum LeadActivityType {
+  CALL
+  MESSAGE
+  NOTE
+  STATUS_CHANGE
+  EMAIL
+}
+
+enum LeadTaskStatus {
+  OPEN
+  DONE
+  SKIPPED
+}
+
+model LeadActivity {
+  id        String           @id @default(cuid())
+  leadId    String
+  lead      Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actorName String
+  type      LeadActivityType
+  content   String           @db.Text
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model LeadTask {
+  id             String         @id @default(cuid())
+  leadId         String
+  lead           Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedToId   String?
+  assignedToName String?
+  title          String
+  description    String?        @db.Text
+  dueAt          DateTime
+  completedAt    DateTime?
+  status         LeadTaskStatus @default(OPEN)
+  createdAt      DateTime       @default(now())
+
+  @@index([leadId])
+  @@index([assignedToId, status, dueAt])
+  @@index([status, dueAt])
 }
 
 model ClassAuditLog {

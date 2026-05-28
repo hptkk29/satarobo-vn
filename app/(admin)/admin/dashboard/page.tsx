@@ -72,6 +72,14 @@ export default async function DashboardPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const endOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+  );
 
   const [
     totalLeads,
@@ -83,6 +91,7 @@ export default async function DashboardPage() {
     recentLeads,
     leadsLast14Days,
     leadsByStatus,
+    myTasksToday,
   ] = await Promise.all([
     db.lead.count({ where: ACTIVE_LEAD }),
     db.lead.count({
@@ -118,6 +127,19 @@ export default async function DashboardPage() {
       where: ACTIVE_LEAD,
       _count: { id: true },
     }),
+    // Phase T1.2 — "Việc hôm nay": task OPEN của mình, hạn <= hết hôm nay.
+    db.leadTask.findMany({
+      where: {
+        assignedToId: session.user.id,
+        status: "OPEN",
+        dueAt: { lte: endOfToday },
+      },
+      include: {
+        lead: { select: { id: true, parentName: true, phone: true } },
+      },
+      orderBy: { dueAt: "asc" },
+      take: 20,
+    }),
   ]);
 
   const monthDelta =
@@ -150,6 +172,46 @@ export default async function DashboardPage() {
           })}
         </p>
       </div>
+
+      {myTasksToday.length > 0 && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-orange-800">
+              Việc hôm nay ({myTasksToday.length})
+            </h2>
+            <Link href="/leads?view=kanban" className="text-xs text-orange-700 hover:underline">
+              Xem pipeline →
+            </Link>
+          </div>
+          <ul className="space-y-2">
+            {myTasksToday.map((t) => {
+              const overdue = t.dueAt.getTime() < now.getTime();
+              return (
+                <li key={t.id}>
+                  <Link
+                    href={`/leads/${t.lead.id}`}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm hover:bg-orange-100/40"
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      <strong className="text-gray-900">{t.title}</strong>
+                      <span className="text-gray-500"> · {t.lead.parentName}</span>
+                    </span>
+                    <span
+                      className={`flex-shrink-0 text-xs ${overdue ? "font-bold text-red-600" : "text-gray-500"}`}
+                    >
+                      {t.dueAt.toLocaleTimeString("vi-VN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {overdue ? " · Quá hạn" : ""}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCardAdmin

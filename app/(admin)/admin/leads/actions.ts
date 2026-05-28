@@ -58,9 +58,126 @@ export async function updateLeadStatus(
       changedFields: ['status'],
       tx,
     })
+
+    // Phase T1.2 — tự sinh activity timeline cho mỗi lần đổi status.
+    await tx.leadActivity.create({
+      data: {
+        leadId,
+        actorId,
+        actorName,
+        type: 'STATUS_CHANGE',
+        content: `Chuyển trạng thái: ${before.status} → ${parsed.data}`,
+        metadata: { from: before.status, to: parsed.data },
+      },
+    })
   })
 
   revalidatePath('/leads')
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+// ─── Phase T1.2 — Activity + Task ────────────────────────────────────────────
+
+const activityTypeSchema = z.enum(['CALL', 'MESSAGE', 'NOTE', 'EMAIL'])
+
+export async function addLeadActivity(input: {
+  leadId: string
+  type: string
+  content: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const parsedType = activityTypeSchema.safeParse(input.type)
+  if (!parsedType.success) return { ok: false, error: 'Loại hoạt động không hợp lệ' }
+  const content = input.content?.trim()
+  if (!content) return { ok: false, error: 'Vui lòng nhập nội dung' }
+
+  const lead = await db.lead.findUnique({
+    where: { id: input.leadId },
+    select: { id: true },
+  })
+  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+
+  const { actorId, actorName } = getAuditActor(session)
+  await db.leadActivity.create({
+    data: {
+      leadId: input.leadId,
+      actorId,
+      actorName,
+      type: parsedType.data,
+      content,
+    },
+  })
+
+  revalidatePath(`/leads/${input.leadId}`)
+  return { ok: true }
+}
+
+export async function addLeadTask(input: {
+  leadId: string
+  title: string
+  description?: string
+  dueAt: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const title = input.title?.trim()
+  if (!title) return { ok: false, error: 'Vui lòng nhập tiêu đề việc' }
+  const due = new Date(input.dueAt)
+  if (Number.isNaN(due.getTime())) return { ok: false, error: 'Hạn không hợp lệ' }
+
+  const lead = await db.lead.findUnique({
+    where: { id: input.leadId },
+    select: { id: true, assignedToId: true },
+  })
+  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+
+  const { actorId, actorName } = getAuditActor(session)
+  await db.leadTask.create({
+    data: {
+      leadId: input.leadId,
+      // Giao cho sale phụ trách lead nếu có, mặc định người tạo.
+      assignedToId: lead.assignedToId ?? actorId,
+      assignedToName: actorName,
+      title,
+      description: input.description?.trim() || null,
+      dueAt: due,
+    },
+  })
+
+  revalidatePath(`/leads/${input.leadId}`)
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+export async function completeLeadTask(
+  taskId: string,
+  done = true,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const task = await db.leadTask.findUnique({
+    where: { id: taskId },
+    select: { leadId: true },
+  })
+  if (!task) return { ok: false, error: 'Việc không tồn tại' }
+
+  await db.leadTask.update({
+    where: { id: taskId },
+    data: done
+      ? { status: 'DONE', completedAt: new Date() }
+      : { status: 'OPEN', completedAt: null },
+  })
+
+  revalidatePath(`/leads/${task.leadId}`)
   revalidatePath('/dashboard')
   return { ok: true }
 }
