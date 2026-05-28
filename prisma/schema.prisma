@@ -559,6 +559,9 @@ model Student {
   // Phase 5.9 — Reserve history
   reserves StudentReserve[] @relation("StudentReserves")
 
+  // Phase NHÓM 3 — yêu cầu phụ huynh
+  parentRequests ParentRequest[] @relation("StudentParentRequests")
+
   @@index([phone])
   @@index([centerId])
   @@index([deletedAt])
@@ -2597,4 +2600,43 @@ model Notification {
   @@index([centerId])
   @@index([classId])
   @@index([createdAt])
+}
+
+// ─── ParentRequest (Phase NHÓM 3) ────────────────────────────────────────────
+// Yêu cầu của phụ huynh: báo vắng / học bù / chuyển lớp / chuyển cơ sở / bảo lưu.
+enum ParentRequestType {
+  ABSENCE
+  MAKEUP
+  TRANSFER_CLASS
+  TRANSFER_CENTER
+  RESERVE
+  OTHER
+}
+
+enum ParentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model ParentRequest {
+  id            String              @id @default(cuid())
+  studentId     String
+  student       Student             @relation("StudentParentRequests", fields: [studentId], references: [id], onDelete: Cascade)
+  parentUserId  String?
+  type          ParentRequestType
+  content       String              @db.Text
+  preferredDate DateTime?
+  status        ParentRequestStatus @default(PENDING)
+  response      String?             @db.Text
+  handledById   String?
+  handledByName String?
+  handledAt     DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([studentId])
+  @@index([status, createdAt])
+  @@index([parentUserId])
 }

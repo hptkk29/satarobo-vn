@@ -33,6 +33,7 @@ import {
   Send,
   FlaskConical,
   Bell,
+  MessageSquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Leads", href: "/leads", icon: Users },
       { label: "Học thử", href: "/trials", icon: FlaskConical },
+      { label: "Yêu cầu PH", href: "/parent-requests", icon: MessageSquarePlus },
       { label: "Học viên", href: "/students", icon: GraduationCap },
       { label: "Lớp học", href: "/classes", icon: BookOpen },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes },

@@ -12,6 +12,7 @@ import {
   CreditCard,
   User,
   Bell,
+  MessageSquarePlus,
 } from "lucide-react";
 
 const ITEMS = [
@@ -22,6 +23,7 @@ const ITEMS = [
   { label: "Bài tập", href: "/portal/bai-tap", icon: ClipboardList },
   { label: "Bài thi", href: "/portal/bai-thi", icon: FileText },
   { label: "Kết quả", href: "/portal/ket-qua", icon: Award },
+  { label: "Yêu cầu", href: "/portal/yeu-cau", icon: MessageSquarePlus },
   { label: "Học phí", href: "/portal/hoc-phi", icon: CreditCard },
   { label: "Hồ sơ", href: "/portal/ho-so", icon: User },
 ];
