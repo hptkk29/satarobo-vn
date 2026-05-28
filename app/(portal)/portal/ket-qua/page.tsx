@@ -1,16 +1,30 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { getStudentClasses, getStudentExamResults } from "@/lib/portal/learning";
+import {
+  getStudentClasses,
+  getStudentExamResults,
+  getStudentAssignmentResults,
+  getLatestProgressReport,
+} from "@/lib/portal/learning";
 import { getStudentProgress } from "@/lib/progress";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Kết quả | Sata Robo" };
 
+const ASSIGN_STATUS: Record<string, { label: string; cls: string }> = {
+  SUBMITTED: { label: "Đã nộp", cls: "bg-blue-100 text-blue-700" },
+  LATE: { label: "Nộp trễ", cls: "bg-amber-100 text-amber-700" },
+  GRADED: { label: "Đã chấm", cls: "bg-emerald-100 text-emerald-700" },
+};
+
 export default async function KetQuaPage() {
   const { studentId } = await requireActiveStudent();
-  const [classes, examResults] = await Promise.all([
-    getStudentClasses(studentId),
-    getStudentExamResults(studentId),
-  ]);
+  const [classes, examResults, assignmentResults, latestReport] =
+    await Promise.all([
+      getStudentClasses(studentId),
+      getStudentExamResults(studentId),
+      getStudentAssignmentResults(studentId),
+      getLatestProgressReport(studentId),
+    ]);
   const results = await Promise.all(
     classes.map(async (c) => ({
       cls: c,
@@ -21,6 +35,17 @@ export default async function KetQuaPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-neutral-900">Kết quả học tập</h1>
+
+      {latestReport && (
+        <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-800">
+          <p className="font-semibold">{latestReport.reportTitle}</p>
+          <p className="text-xs text-purple-600">
+            {latestReport.className ? `${latestReport.className} · ` : ""}
+            Lập ngày{" "}
+            {new Date(latestReport.generatedAt).toLocaleDateString("vi-VN")}
+          </p>
+        </div>
+      )}
 
       {results.length === 0 ? (
         <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
@@ -104,6 +129,46 @@ export default async function KetQuaPage() {
                 )}
               </li>
             ))}
+          </ul>
+        </section>
+      )}
+
+      {assignmentResults.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
+            Kết quả bài tập
+          </h2>
+          <ul className="space-y-2">
+            {assignmentResults.map((r) => {
+              const st = ASSIGN_STATUS[r.status] ?? ASSIGN_STATUS.SUBMITTED;
+              return (
+                <li
+                  key={r.id}
+                  className="rounded-xl border border-neutral-200 bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-neutral-900">{r.title}</p>
+                    <div className="flex items-center gap-2">
+                      {r.status === "GRADED" && r.score !== null && (
+                        <span className="text-sm font-bold text-neutral-800">
+                          {r.score}/{r.totalPoints}
+                        </span>
+                      )}
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+                      >
+                        {st.label}
+                      </span>
+                    </div>
+                  </div>
+                  {r.status === "GRADED" && r.feedback && (
+                    <p className="mt-2 rounded-lg bg-neutral-50 p-2 text-sm text-neutral-600">
+                      Nhận xét: {r.feedback}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

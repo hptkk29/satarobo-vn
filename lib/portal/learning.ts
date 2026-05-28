@@ -85,7 +85,9 @@ export type LessonRow = {
   id: string;
   title: string;
   description: string | null;
+  content: string | null;
   objectives: string[];
+  materials: string[];
   taughtAt: string | null;
   documents: { id: string; title: string; type: string; fileUrl: string }[];
 };
@@ -113,7 +115,9 @@ export async function getStudentLessons(studentId: string): Promise<LessonRow[]>
       id: true,
       title: true,
       description: true,
+      content: true,
       objectives: true,
+      materials: true,
       order: true,
       documents: {
         select: { id: true, title: true, type: true, fileUrl: true },
@@ -127,7 +131,9 @@ export async function getStudentLessons(studentId: string): Promise<LessonRow[]>
     id: l.id,
     title: l.title,
     description: l.description,
+    content: l.content,
     objectives: l.objectives,
+    materials: l.materials,
     taughtAt: lessonDate.get(l.id)?.toISOString() ?? null,
     documents: l.documents,
   }));
@@ -266,4 +272,142 @@ export async function getStudentExamResults(
     graded: a.gradedAt !== null,
     feedback: a.feedback,
   }));
+}
+
+export type AssignmentResultRow = {
+  id: string;
+  title: string;
+  status: string;
+  score: number | null;
+  totalPoints: number;
+  feedback: string | null;
+};
+
+/** Kết quả bài tập đã nộp/đã chấm (cho /ket-qua). */
+export async function getStudentAssignmentResults(
+  studentId: string,
+): Promise<AssignmentResultRow[]> {
+  const classIds = await classIdsFor(studentId);
+  if (classIds.length === 0) return [];
+
+  const subs = await db.assignmentSubmission.findMany({
+    where: {
+      studentId,
+      status: { in: ["SUBMITTED", "LATE", "GRADED"] },
+      assignment: { classId: { in: classIds } },
+    },
+    select: {
+      status: true,
+      score: true,
+      feedback: true,
+      assignment: { select: { id: true, title: true, totalPoints: true } },
+    },
+    orderBy: { submittedAt: "desc" },
+  });
+
+  return subs.map((s) => ({
+    id: s.assignment.id,
+    title: s.assignment.title,
+    status: s.status,
+    score: s.score,
+    totalPoints: s.assignment.totalPoints,
+    feedback: s.feedback,
+  }));
+}
+
+export type AssignmentDetail = {
+  id: string;
+  title: string;
+  description: string;
+  instructions: string | null;
+  dueAt: string | null;
+  totalPoints: number;
+  allowText: boolean;
+  allowFile: boolean;
+  documents: { id: string; title: string; fileUrl: string }[];
+  submission: {
+    status: string;
+    textAnswer: string | null;
+    fileUrl: string | null;
+    fileName: string | null;
+    score: number | null;
+    feedback: string | null;
+  } | null;
+};
+
+/** Chi tiết 1 bài tập + bài nộp của con — null nếu không thuộc lớp của con. */
+export async function getAssignmentDetail(
+  studentId: string,
+  assignmentId: string,
+): Promise<AssignmentDetail | null> {
+  const classIds = await classIdsFor(studentId);
+  const a = await db.assignment.findFirst({
+    where: { id: assignmentId, classId: { in: classIds } },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      instructions: true,
+      dueAt: true,
+      totalPoints: true,
+      allowText: true,
+      allowFile: true,
+      documents: {
+        select: { document: { select: { id: true, title: true, fileUrl: true } } },
+      },
+      submissions: {
+        where: { studentId },
+        select: {
+          status: true,
+          textAnswer: true,
+          fileUrl: true,
+          fileName: true,
+          score: true,
+          feedback: true,
+        },
+        take: 1,
+      },
+    },
+  });
+  if (!a) return null;
+
+  return {
+    id: a.id,
+    title: a.title,
+    description: a.description,
+    instructions: a.instructions,
+    dueAt: a.dueAt?.toISOString() ?? null,
+    totalPoints: a.totalPoints,
+    allowText: a.allowText,
+    allowFile: a.allowFile,
+    documents: a.documents.map((d) => d.document),
+    submission: a.submissions[0] ?? null,
+  };
+}
+
+export type LatestReport = {
+  reportTitle: string;
+  generatedAt: string;
+  className: string | null;
+};
+
+/** ProgressReportLog gần nhất của con (cho /ket-qua). */
+export async function getLatestProgressReport(
+  studentId: string,
+): Promise<LatestReport | null> {
+  const r = await db.progressReportLog.findFirst({
+    where: { studentId },
+    orderBy: { generatedAt: "desc" },
+    select: {
+      reportTitle: true,
+      generatedAt: true,
+      class: { select: { name: true } },
+    },
+  });
+  if (!r) return null;
+  return {
+    reportTitle: r.reportTitle,
+    generatedAt: r.generatedAt.toISOString(),
+    className: r.class?.name ?? null,
+  };
 }

@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentAssignments } from "@/lib/portal/learning";
 
@@ -28,39 +30,38 @@ export default async function BaiTapPage() {
           {assignments.map((a) => {
             const st = STATUS[a.status] ?? STATUS.NOT_SUBMITTED;
             return (
-              <li
-                key={a.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-4"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-neutral-900">{a.title}</p>
-                  <p className="text-xs text-neutral-500">
-                    {a.className}
-                    {a.dueAt &&
-                      ` · Hạn ${new Date(a.dueAt).toLocaleDateString("vi-VN")}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {a.status === "GRADED" && a.score !== null && (
-                    <span className="text-sm font-bold text-neutral-800">
-                      {a.score}/{a.totalPoints}
+              <li key={a.id}>
+                <Link
+                  href={`/portal/bai-tap/${a.id}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-4 transition-shadow hover:shadow-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-neutral-900">{a.title}</p>
+                    <p className="text-xs text-neutral-500">
+                      {a.className}
+                      {a.dueAt &&
+                        ` · Hạn ${new Date(a.dueAt).toLocaleDateString("vi-VN")}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {a.status === "GRADED" && a.score !== null && (
+                      <span className="text-sm font-bold text-neutral-800">
+                        {a.score}/{a.totalPoints}
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+                    >
+                      {st.label}
                     </span>
-                  )}
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
-                  >
-                    {st.label}
-                  </span>
-                </div>
+                    <ChevronRight className="h-4 w-4 text-neutral-300" />
+                  </div>
+                </Link>
               </li>
             );
           })}
         </ul>
       )}
-
-      <p className="rounded-lg bg-neutral-100 px-3 py-2 text-xs text-neutral-500">
-        Nộp bài trực tuyến sẽ được mở trong bản cập nhật tới.
-      </p>
     </div>
   );
 }

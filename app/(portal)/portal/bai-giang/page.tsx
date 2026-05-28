@@ -39,11 +39,31 @@ export default async function BaiGiangPage() {
                 <p className="mt-1 text-sm text-neutral-600">{l.description}</p>
               )}
               {l.objectives.length > 0 && (
-                <ul className="mt-2 list-inside list-disc text-sm text-neutral-600">
-                  {l.objectives.map((o, i) => (
-                    <li key={i}>{o}</li>
-                  ))}
-                </ul>
+                <div className="mt-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                    Mục tiêu
+                  </p>
+                  <ul className="mt-1 list-inside list-disc text-sm text-neutral-600">
+                    {l.objectives.map((o, i) => (
+                      <li key={i}>{o}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {l.content && (
+                <p className="mt-2 whitespace-pre-wrap border-t border-neutral-100 pt-2 text-sm text-neutral-600">
+                  {l.content}
+                </p>
+              )}
+              {l.materials.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                    Dụng cụ / vật liệu
+                  </p>
+                  <p className="mt-0.5 text-sm text-neutral-600">
+                    {l.materials.join(" · ")}
+                  </p>
+                </div>
               )}
               {l.documents.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
