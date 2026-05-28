@@ -9,6 +9,7 @@ import { StudentForm, type StudentFormValue } from "../../_components/student-fo
 import { GeneratePdfButton } from "./_pdf-button";
 import { LifecycleActions } from "../../_components/lifecycle-actions";
 import { ReserveHistorySection } from "../../_components/reserve-history-section";
+import { ParentAccountSection } from "../../_components/parent-account-section";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -58,6 +59,8 @@ export default async function EditStudentPage({ params }: Props) {
         notes: true,
         status: true,
         centerId: true,
+        parentUserId: true,
+        parentUser: { select: { email: true, name: true } },
       },
     }),
     db.center.findMany({
@@ -165,6 +168,14 @@ export default async function EditStudentPage({ params }: Props) {
         studentStatus={student.status}
         activeReserve={activeReserve}
         enrollments={lifecycleEnrollments}
+      />
+
+      <ParentAccountSection
+        studentId={student.id}
+        linked={!!student.parentUserId}
+        parentEmail={student.parentUser?.email ?? null}
+        parentName={student.parentUser?.name ?? student.parentName}
+        defaultEmail={student.parentEmail}
       />
 
       <ReserveHistorySection studentId={student.id} />

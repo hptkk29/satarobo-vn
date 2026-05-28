@@ -1,5 +1,7 @@
 "use server";
 
+import bcrypt from "bcryptjs";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
@@ -665,6 +667,100 @@ export async function withdrawStudentAction(input: {
   }
 
   return { ok: true as const };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase T2.2 — Cấp tài khoản phụ huynh (PARENT) cho học viên (portal site con).
+// Tạo/dùng lại User role PARENT + link student.parentUserId. Tự link các anh
+// chị em cùng parentPhone (chưa có parent) để 1 phụ huynh quản nhiều con.
+// ═══════════════════════════════════════════════════════════════════
+
+const parentAccountSchema = z.object({
+  studentId: z.string().min(1),
+  email: z.string().email("Email không hợp lệ"),
+  password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
+  name: z.string().trim().max(120).optional(),
+});
+
+export async function createParentAccount(input: {
+  studentId: string;
+  email: string;
+  password: string;
+  name?: string;
+}): Promise<{ ok: boolean; linkedCount?: number; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "students:edit")) {
+    return { ok: false, error: "Không có quyền cấp tài khoản phụ huynh" };
+  }
+
+  const parsed = parentAccountSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { studentId, password } = parsed.data;
+  const email = parsed.data.email.trim().toLowerCase();
+
+  const student = await db.student.findFirst({
+    where: { id: studentId, deletedAt: null },
+    select: { id: true, parentUserId: true, parentName: true, parentPhone: true },
+  });
+  if (!student) return { ok: false, error: "Không tìm thấy học viên" };
+  if (student.parentUserId) {
+    return { ok: false, error: "Học viên đã có tài khoản phụ huynh" };
+  }
+
+  // Email đã dùng?
+  const existingUser = await db.user.findUnique({
+    where: { email },
+    select: { id: true, role: true },
+  });
+  if (existingUser && existingUser.role !== "PARENT") {
+    return { ok: false, error: "Email đã dùng cho tài khoản nhân viên khác" };
+  }
+
+  const parentName = parsed.data.name?.trim() || student.parentName || "Phụ huynh";
+
+  try {
+    const linkedCount = await db.$transaction(async (tx) => {
+      let parentUserId = existingUser?.id;
+      if (!parentUserId) {
+        const hashed = await bcrypt.hash(password, 10);
+        const created = await tx.user.create({
+          data: {
+            name: parentName,
+            email,
+            password: hashed,
+            role: "PARENT",
+            isActive: true,
+            tokenVersion: 0,
+          },
+          select: { id: true },
+        });
+        parentUserId = created.id;
+      }
+
+      // Link student hiện tại + anh chị em cùng SĐT phụ huynh (chưa có parent).
+      const siblingFilter: Prisma.StudentWhereInput = student.parentPhone
+        ? {
+            deletedAt: null,
+            parentUserId: null,
+            OR: [{ id: studentId }, { parentPhone: student.parentPhone }],
+          }
+        : { id: studentId };
+
+      const res = await tx.student.updateMany({
+        where: siblingFilter,
+        data: { parentUserId },
+      });
+      return res.count;
+    });
+
+    revalidatePath(`/students/${studentId}/edit`);
+    return { ok: true, linkedCount };
+  } catch {
+    return { ok: false, error: "Lỗi tạo tài khoản phụ huynh" };
+  }
 }
 
 // ─── REACTIVATE STUDENT (INACTIVE/PAUSED → ACTIVE) ───────────────────

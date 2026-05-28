@@ -4,12 +4,14 @@ import type { NextAuthRequest } from "next-auth";
 
 const PUBLIC_HOST = "satarobo.vn";
 const ADMIN_HOST = "admin.satarobo.vn";
+const PORTAL_HOST = "hocvien.satarobo.vn"; // Phase T2.2 — portal phụ huynh/site con
 
-type HostKind = "public" | "admin" | "vercel" | "unknown";
+type HostKind = "public" | "admin" | "portal" | "vercel" | "unknown";
 
 function detectHost(host: string): HostKind {
   if (host === PUBLIC_HOST || host === `www.${PUBLIC_HOST}`) return "public";
   if (host === ADMIN_HOST) return "admin";
+  if (host === PORTAL_HOST) return "portal";
   if (host.endsWith(".vercel.app")) return "vercel";
   return "unknown"; // localhost, preview deployments
 }
@@ -154,6 +156,39 @@ export default auth((req: NextAuthRequest) => {
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // BRANCH 1.5: hocvien.satarobo.vn — portal phụ huynh (Phase T2.2)
+  // Chỉ role PARENT. Clean URL (/lich-hoc...) rewrite nội bộ → /portal/*.
+  // ═══════════════════════════════════════════════════════════════════
+  if (kind === "portal") {
+    if (isInfraPath(pathname)) return NextResponse.next();
+
+    // Trang đăng nhập dùng chung (app/(auth)/login).
+    if (pathname === "/login") {
+      if (session?.user?.role === "PARENT") return redirectTo(req, "/");
+      return NextResponse.next();
+    }
+
+    if (!session?.user) {
+      return redirectTo(req, "/login", { callbackUrl: pathname });
+    }
+    // Staff (không phải phụ huynh) lạc vào portal → đẩy về admin host.
+    if (session.user.role !== "PARENT") {
+      return redirectToHost(req, ADMIN_HOST, "/dashboard", 307);
+    }
+
+    // PARENT: chuẩn hoá landing admin-ish (vd callbackUrl mặc định /dashboard)
+    // về portal home, rồi rewrite clean URL → /portal/*.
+    if (pathname === "/dashboard" || isAdminRoute(pathname)) {
+      return redirectTo(req, "/");
+    }
+    if (pathname === "/") return rewriteTo(req, "/portal");
+    if (pathname === "/portal" || pathname.startsWith("/portal/")) {
+      return NextResponse.next();
+    }
+    return rewriteTo(req, "/portal" + pathname);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // BRANCH 2: satarobo.vn (public)
   // - Old /admin/X URLs → 308 to admin host without /admin prefix
   // - Bare admin route names → 308 to admin host
@@ -161,6 +196,10 @@ export default auth((req: NextAuthRequest) => {
   // - Everything else → public passthrough
   // ═══════════════════════════════════════════════════════════════════
   if (kind === "public") {
+    // Portal-only segment lọt sang public host → đẩy về portal host.
+    if (pathname === "/portal" || pathname.startsWith("/portal/")) {
+      return redirectToHost(req, PORTAL_HOST, "/", 308);
+    }
     if (pathname.startsWith("/admin/") || pathname === "/admin") {
       const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
       return redirectToHost(req, ADMIN_HOST, cleanPath, 308);
@@ -177,6 +216,11 @@ export default auth((req: NextAuthRequest) => {
   if (kind === "admin") {
     if (isInfraPath(pathname)) {
       return NextResponse.next();
+    }
+
+    // Portal-only segment lọt sang admin host → đẩy về portal host.
+    if (pathname === "/portal" || pathname.startsWith("/portal/")) {
+      return redirectToHost(req, PORTAL_HOST, "/", 308);
     }
 
     // Legacy /admin/X URLs (old bookmarks, external links) → 308 strip prefix

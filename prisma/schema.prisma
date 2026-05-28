@@ -314,6 +314,7 @@ model User {
 
   center         Center?      @relation(fields: [centerId], references: [id])
   accounts       Account[]
+  children       Student[]    @relation("ParentChildren")
   assignedLeads  Lead[]       @relation("AssignedLeads")
   notes          Note[]
   teacherClass   Class[]      @relation("TeacherClasses")
@@ -534,6 +535,11 @@ model Student {
   centerId String?
   center   Center? @relation(fields: [centerId], references: [id])
 
+  // Phase T2.2 — liên kết tài khoản phụ huynh (portal "site con").
+  // 1 PARENT User ↔ nhiều Student (các con). Học sinh KHÔNG có account riêng.
+  parentUserId String?
+  parentUser   User?   @relation("ParentChildren", fields: [parentUserId], references: [id], onDelete: SetNull)
+
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -559,6 +565,7 @@ model Student {
   @@index([status])
   @@index([preferredCenterId])
   @@index([parentPhone])
+  @@index([parentUserId])
 }
 
 enum ClassStatus {
