@@ -4,8 +4,9 @@ import { can } from '@/lib/auth/permissions'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { LeadStatus } from '@prisma/client'
+import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 
-const VALID_STATUSES: LeadStatus[] = ['NEW', 'CONTACTED', 'DEMO_SCHEDULED', 'ENROLLED', 'NURTURING', 'LOST']
+const VALID_STATUSES: LeadStatus[] = ALL_LEAD_STATUSES
 
 function escapeCsv(value: string | null | undefined): string {
   if (value == null) return ''

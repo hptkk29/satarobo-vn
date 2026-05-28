@@ -9,11 +9,18 @@ import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 
 const statusSchema = z.enum([
   'NEW',
+  'ASSIGNED',
   'CONTACTED',
-  'DEMO_SCHEDULED',
+  'NO_ANSWER',
+  'CONSULTING',
+  'TRIAL_SCHEDULED',
+  'TRIAL_ATTENDED',
+  'AWAITING_DECISION',
   'ENROLLED',
   'NURTURING',
   'LOST',
+  'DUPLICATE',
+  'DEMO_SCHEDULED',
 ])
 
 export async function updateLeadStatus(

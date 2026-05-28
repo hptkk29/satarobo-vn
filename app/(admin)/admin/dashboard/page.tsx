@@ -14,20 +14,34 @@ const STATUS_VARIANT: Record<
   "success" | "warning" | "error" | "info" | "neutral"
 > = {
   NEW: "info",
+  ASSIGNED: "info",
   CONTACTED: "warning",
+  NO_ANSWER: "warning",
+  CONSULTING: "info",
+  TRIAL_SCHEDULED: "info",
+  TRIAL_ATTENDED: "info",
+  AWAITING_DECISION: "warning",
   DEMO_SCHEDULED: "info",
   ENROLLED: "success",
   NURTURING: "warning",
   LOST: "error",
+  DUPLICATE: "neutral",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: "Mới",
+  ASSIGNED: "Đã phân công",
   CONTACTED: "Đã liên hệ",
+  NO_ANSWER: "Không nghe máy",
+  CONSULTING: "Đang tư vấn",
+  TRIAL_SCHEDULED: "Đã hẹn học thử",
+  TRIAL_ATTENDED: "Đã học thử",
+  AWAITING_DECISION: "Chờ quyết định",
   DEMO_SCHEDULED: "Đã hẹn demo",
   ENROLLED: "Đã đăng ký",
   NURTURING: "Đang nuôi",
   LOST: "Đã mất",
+  DUPLICATE: "Trùng lặp",
 };
 
 const ACTIVE_LEAD: { deletedAt: null } = { deletedAt: null };

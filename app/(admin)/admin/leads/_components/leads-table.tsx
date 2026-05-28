@@ -4,24 +4,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useRef, useState, useEffect } from 'react'
 import { Search, ChevronLeft, ChevronRight, Loader2, X, Download, Trash2 } from 'lucide-react'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
-
-const STATUS_LABELS: Record<string, string> = {
-  NEW: 'Lead mới',
-  CONTACTED: 'Đã liên hệ',
-  DEMO_SCHEDULED: 'Đã hẹn demo',
-  ENROLLED: 'Đã đăng ký',
-  NURTURING: 'Đang nuôi',
-  LOST: 'Đã mất',
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  NEW: 'bg-blue-100 text-blue-700',
-  CONTACTED: 'bg-yellow-100 text-yellow-700',
-  DEMO_SCHEDULED: 'bg-purple-100 text-purple-700',
-  ENROLLED: 'bg-green-100 text-green-700',
-  NURTURING: 'bg-orange-100 text-orange-700',
-  LOST: 'bg-gray-100 text-gray-500',
-}
+import {
+  LEAD_STATUS_LABEL as STATUS_LABELS,
+  LEAD_STATUS_BADGE as STATUS_COLORS,
+  KANBAN_COLUMNS,
+} from '@/lib/leads/status'
 
 export type LeadRow = {
   id: string
@@ -73,9 +60,9 @@ function StatusCell({
   if (!canUpdate) {
     return (
       <span
-        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[lead.status] ?? 'bg-gray-100 text-gray-500'}`}
+        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS] ?? 'bg-gray-100 text-gray-500'}`}
       >
-        {STATUS_LABELS[lead.status] ?? lead.status}
+        {STATUS_LABELS[lead.status as keyof typeof STATUS_LABELS] ?? lead.status}
       </span>
     )
   }
@@ -92,13 +79,13 @@ function StatusCell({
             await updateLeadStatus(lead.id, e.target.value)
           })
         }}
-        className={`rounded-full border-0 py-0.5 pl-2.5 pr-6 text-xs font-semibold focus:ring-2 focus:ring-primary/20 ${STATUS_COLORS[lead.status] ?? 'bg-gray-100 text-gray-500'}`}
+        className={`rounded-full border-0 py-0.5 pl-2.5 pr-6 text-xs font-semibold focus:ring-2 focus:ring-primary/20 ${STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS] ?? 'bg-gray-100 text-gray-500'}`}
       >
-        {Object.entries(STATUS_LABELS).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
+        {KANBAN_COLUMNS.map((value) => (
+                      <option key={value} value={value}>
+                        {STATUS_LABELS[value]}
+                      </option>
+                    ))}
       </select>
     </div>
   )
@@ -221,9 +208,9 @@ function LeadDrawer({
                     disabled={!canUpdate || pending}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20 disabled:bg-gray-50"
                   >
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                    {KANBAN_COLUMNS.map((value) => (
                       <option key={value} value={value}>
-                        {label}
+                        {STATUS_LABELS[value]}
                       </option>
                     ))}
                   </select>
@@ -350,11 +337,11 @@ export function LeadsTable({
           className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20"
         >
           <option value="">Tất cả trạng thái</option>
-          {Object.entries(STATUS_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
+          {KANBAN_COLUMNS.map((value) => (
+                      <option key={value} value={value}>
+                        {STATUS_LABELS[value]}
+                      </option>
+                    ))}
         </select>
 
         {/* Export CSV */}

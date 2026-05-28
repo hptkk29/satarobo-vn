@@ -27,12 +27,20 @@ enum Role {
 }
 
 enum LeadStatus {
+  // Phase T1.1 — pipeline mở rộng (giữ giá trị cũ để back-compat)
   NEW
+  ASSIGNED
   CONTACTED
-  DEMO_SCHEDULED
+  NO_ANSWER
+  CONSULTING
+  TRIAL_SCHEDULED
+  TRIAL_ATTENDED
+  AWAITING_DECISION
   ENROLLED
   NURTURING
   LOST
+  DUPLICATE
+  DEMO_SCHEDULED // deprecated — data đã map sang TRIAL_SCHEDULED, giữ cho back-compat
 }
 
 enum CourseType {

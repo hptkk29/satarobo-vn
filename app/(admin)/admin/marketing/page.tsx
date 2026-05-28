@@ -5,20 +5,34 @@ import { can } from '@/lib/auth/permissions'
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Lead mới',
+  ASSIGNED: 'Đã phân công',
   CONTACTED: 'Đã liên hệ',
+  NO_ANSWER: 'Không nghe máy',
+  CONSULTING: 'Đang tư vấn',
+  TRIAL_SCHEDULED: 'Đã hẹn học thử',
+  TRIAL_ATTENDED: 'Đã học thử',
+  AWAITING_DECISION: 'Chờ quyết định',
   DEMO_SCHEDULED: 'Đã hẹn demo',
   ENROLLED: 'Đã đăng ký',
   NURTURING: 'Đang nuôi',
   LOST: 'Đã mất',
+  DUPLICATE: 'Trùng lặp',
 }
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: 'bg-blue-500',
+  ASSIGNED: 'bg-cyan-500',
   CONTACTED: 'bg-yellow-500',
+  NO_ANSWER: 'bg-amber-500',
+  CONSULTING: 'bg-indigo-500',
+  TRIAL_SCHEDULED: 'bg-violet-500',
+  TRIAL_ATTENDED: 'bg-purple-500',
+  AWAITING_DECISION: 'bg-orange-500',
   DEMO_SCHEDULED: 'bg-purple-500',
   ENROLLED: 'bg-green-500',
   NURTURING: 'bg-orange-500',
   LOST: 'bg-gray-400',
+  DUPLICATE: 'bg-gray-300',
 }
 
 function pct(part: number, total: number) {

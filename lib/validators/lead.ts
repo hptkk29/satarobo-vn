@@ -33,7 +33,21 @@ export const leadCreateSchema = z.object({
 
 export const leadUpdateSchema = leadCreateSchema.partial().extend({
   status: z
-    .enum(['NEW', 'CONTACTED', 'DEMO_SCHEDULED', 'ENROLLED', 'NURTURING', 'LOST'])
+    .enum([
+      'NEW',
+      'ASSIGNED',
+      'CONTACTED',
+      'NO_ANSWER',
+      'CONSULTING',
+      'TRIAL_SCHEDULED',
+      'TRIAL_ATTENDED',
+      'AWAITING_DECISION',
+      'ENROLLED',
+      'NURTURING',
+      'LOST',
+      'DUPLICATE',
+      'DEMO_SCHEDULED',
+    ])
     .optional(),
   assignedToId: z.string().min(1).optional(),
 })
