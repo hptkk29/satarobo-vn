@@ -9,6 +9,7 @@ import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { ReassignButton } from "./_components/reassign-button";
+import { CloseDealButton } from "./_components/close-deal-button";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -51,7 +52,25 @@ export default async function LeadDetailPage({ params }: Props) {
   }
 
   const canAssign = can(session.user, "leads:assign");
+  const canCloseDeal =
+    can(session.user, "students:create") && can(session.user, "enrollments:create");
   const status = lead.status as LeadStatus;
+  const dealClosable =
+    canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
+
+  // Lớp đang mở để chọn khi chốt deal (ưu tiên cùng cơ sở với lead).
+  const classOptions = dealClosable
+    ? await db.class.findMany({
+        where: {
+          deletedAt: null,
+          status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },
+          ...(lead.centerId ? { centerId: lead.centerId } : {}),
+        },
+        select: { id: true, name: true, classCode: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      })
+    : [];
 
   return (
     <div className="max-w-6xl p-6">
@@ -82,7 +101,9 @@ export default async function LeadDetailPage({ params }: Props) {
             {lead.email && <span> · {lead.email}</span>}
           </div>
         </div>
-        {canAssign && <ReassignButton leadId={lead.id} />}
+        <div className="flex items-center gap-2">
+          {canAssign && <ReassignButton leadId={lead.id} />}
+        </div>
       </div>
 
       {/* Info grid */}
@@ -99,6 +120,20 @@ export default async function LeadDetailPage({ params }: Props) {
         />
         <Info label="Ghi chú" value={lead.note} />
       </dl>
+
+      {/* Chốt deal (Phase T1.5) */}
+      {dealClosable && (
+        <div className="mb-6">
+          <CloseDealButton
+            leadId={lead.id}
+            defaultStudentName={lead.childName ?? `Con của ${lead.parentName}`}
+            classes={classOptions.map((c) => ({
+              id: c.id,
+              label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+            }))}
+          />
+        </div>
+      )}
 
       {/* Học thử (Phase T1.4) */}
       {lead.trialClasses.length > 0 && (

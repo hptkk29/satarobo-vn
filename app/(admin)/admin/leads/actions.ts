@@ -5,8 +5,9 @@ import { db } from '@/lib/db'
 import { can } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
+import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
+import { genStudentCode } from '@/lib/codegen'
 
 const statusSchema = z.enum([
   'NEW',
@@ -326,4 +327,198 @@ export async function reassignLeadsFromAction(
   revalidatePath('/leads')
   revalidatePath('/dashboard')
   return { ok: true, reassigned: res.reassigned }
+}
+
+// ─── Phase T1.5 — Close deal (lead → Student + Enrollment + ENROLLED) ─────────
+
+const CAPACITY_STATUSES = ['PENDING', 'CONFIRMED', 'STUDYING', 'ACTIVE'] as const
+
+const closeDealSchema = z.object({
+  classId: z.string().trim().min(1, 'Vui lòng chọn lớp'),
+  studentName: z.string().trim().max(120).optional(),
+  tuition: z.number().int().nonnegative().nullable().optional(),
+  paid: z.boolean().optional(),
+})
+
+export async function closeLeadAsEnrolled(
+  leadId: string,
+  input: unknown,
+): Promise<{ ok: boolean; studentId?: string; enrollmentId?: string; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  // Chốt deal = tạo học viên + đăng ký → cần cả 2 quyền (loại MARKETING ra).
+  if (!can(session.user, 'students:create') || !can(session.user, 'enrollments:create')) {
+    return { ok: false, error: 'Không có quyền chốt deal (tạo học viên + đăng ký)' }
+  }
+
+  const parsed = closeDealSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  }
+  const { classId, tuition, paid } = parsed.data
+
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, deletedAt: null },
+    select: {
+      id: true,
+      status: true,
+      parentName: true,
+      childName: true,
+      phone: true,
+      email: true,
+      centerId: true,
+    },
+  })
+  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+  if (lead.status === 'ENROLLED') {
+    return { ok: false, error: 'Lead này đã được chốt (ENROLLED)' }
+  }
+
+  // Lớp đích: kiểm tra tồn tại + còn chỗ.
+  const cls = await db.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: {
+      id: true,
+      courseId: true,
+      centerId: true,
+      maxStudents: true,
+      status: true,
+      _count: {
+        select: { enrollments: { where: { status: { in: [...CAPACITY_STATUSES] } } } },
+      },
+    },
+  })
+  if (!cls) return { ok: false, error: 'Lớp không tồn tại' }
+  if (cls.status === 'CANCELLED' || cls.status === 'COMPLETED') {
+    return { ok: false, error: `Lớp đang ${cls.status}, không thể đăng ký` }
+  }
+  if (cls._count.enrollments >= cls.maxStudents) {
+    return { ok: false, error: `Lớp đã đủ học viên (${cls.maxStudents} chỗ)` }
+  }
+
+  const studentName =
+    parsed.data.studentName?.trim() ||
+    lead.childName?.trim() ||
+    `Con của ${lead.parentName}`
+  const { actorId, actorName } = getAuditActor(session)
+  const centerId = lead.centerId ?? cls.centerId ?? null
+
+  try {
+    const result = await db.$transaction(async (tx) => {
+      // studentCode tự sinh nếu cơ sở có mã.
+      let studentCode: string | undefined
+      if (centerId) {
+        const center = await tx.center.findUnique({
+          where: { id: centerId },
+          select: { code: true },
+        })
+        if (center?.code) studentCode = await genStudentCode(center.code, tx)
+      }
+
+      const student = await tx.student.create({
+        data: {
+          name: studentName,
+          studentCode,
+          parentName: lead.parentName,
+          parentPhone: lead.phone,
+          parentEmail: lead.email ?? undefined,
+          centerId: centerId ?? undefined,
+          preferredCenterId: centerId ?? undefined,
+          enrollmentDate: new Date(),
+          status: 'ACTIVE',
+          notes: `Tạo từ Lead ${lead.id} (chốt deal)`,
+        },
+        select: { id: true, name: true, studentCode: true, parentName: true, parentPhone: true, centerId: true, status: true },
+      })
+
+      await logStudentAudit({
+        studentId: student.id,
+        action: 'CREATE',
+        actorId,
+        actorName,
+        newValues: {
+          name: student.name,
+          studentCode: student.studentCode,
+          parentName: student.parentName,
+          parentPhone: student.parentPhone,
+          centerId: student.centerId,
+          status: student.status,
+        },
+        tx,
+      })
+
+      const enrollment = await tx.enrollment.create({
+        data: {
+          student: { connect: { id: student.id } },
+          class: { connect: { id: cls.id } },
+          course: { connect: { id: cls.courseId } },
+          status: 'CONFIRMED',
+          confirmedAt: new Date(),
+          tuition: tuition ?? null,
+          paidAt: paid ? new Date() : null,
+          notes: `Chốt từ Lead ${lead.id}`,
+        },
+        select: { id: true },
+      })
+
+      await tx.enrollmentAuditLog.create({
+        data: {
+          enrollmentId: enrollment.id,
+          fromStatus: '—',
+          toStatus: 'CONFIRMED',
+          changedByUserId: actorId,
+          changedByName: actorName,
+          reason: `Chốt deal từ Lead ${lead.id}`,
+        },
+      })
+
+      // Lead → ENROLLED + audit + activity.
+      await tx.lead.update({ where: { id: leadId }, data: { status: 'ENROLLED' } })
+      await logLeadAudit({
+        leadId,
+        action: 'STATUS_CHANGE',
+        actorId,
+        actorName,
+        oldValues: { status: lead.status },
+        newValues: { status: 'ENROLLED' },
+        changedFields: ['status'],
+        tx,
+      })
+      await tx.leadActivity.create({
+        data: {
+          leadId,
+          actorId,
+          actorName,
+          type: 'STATUS_CHANGE',
+          content: `Chốt deal → tạo học viên "${studentName}"${
+            student.studentCode ? ` (${student.studentCode})` : ''
+          } + đăng ký lớp.`,
+          metadata: { studentId: student.id, enrollmentId: enrollment.id, classId: cls.id },
+        },
+      })
+
+      // Buổi học thử đang mở → đánh dấu ENROLLED.
+      await tx.trialClass.updateMany({
+        where: {
+          leadId,
+          status: { in: ['SCHEDULED', 'CONFIRMED', 'ATTENDED', 'POSTPONED'] },
+        },
+        data: { status: 'ENROLLED' },
+      })
+
+      return { studentId: student.id, enrollmentId: enrollment.id }
+    })
+
+    revalidatePath('/leads')
+    revalidatePath(`/leads/${leadId}`)
+    revalidatePath('/students')
+    revalidatePath('/enrollments')
+    revalidatePath('/trials')
+    revalidatePath('/dashboard')
+    revalidatePath('/crm')
+    return { ok: true, ...result }
+  } catch (err) {
+    console.error('[closeLeadAsEnrolled] error:', err)
+    return { ok: false, error: 'Lỗi tạo học viên/đăng ký' }
+  }
 }

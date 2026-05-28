@@ -26,6 +26,7 @@ const ADMIN_ROUTE_SEGMENTS = new Set<string>([
   "class-groups",
   "classes",
   "course-packages",
+  "crm",
   "curriculums",
   "dashboard",
   "design-system-preview",

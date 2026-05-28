@@ -38,7 +38,10 @@ import { cn } from "@/lib/utils";
 const NAV_GROUPS = [
   {
     label: "Tổng quan",
-    items: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
+    items: [
+      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { label: "CRM", href: "/crm", icon: BarChart3 },
+    ],
   },
   {
     label: "Khách hàng",
