@@ -24,6 +24,7 @@ const ADMIN_ROUTE_SEGMENTS = new Set<string>([
   "attendance",
   "audit-log",
   "centers",
+  "cham-cong",
   "charts-test",
   "class-groups",
   "classes",

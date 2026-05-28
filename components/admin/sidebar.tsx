@@ -35,6 +35,7 @@ import {
   Bell,
   MessageSquarePlus,
   Star,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -79,6 +80,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Giáo viên", href: "/teachers", icon: UserCog },
       { label: "Nhân sự", href: "/nhan-su", icon: IdCard },
+      { label: "Chấm công", href: "/cham-cong", icon: Clock },
       { label: "Tài khoản", href: "/users", icon: KeyRound },
       { label: "Tuyển dụng", href: "/jobs", icon: Briefcase },
       { label: "Vinh danh", href: "/honors", icon: Trophy },

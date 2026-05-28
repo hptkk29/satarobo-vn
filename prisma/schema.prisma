@@ -211,6 +211,11 @@ model Center {
   googleMapUrl String?  @db.Text
   workingHours String?
   managerName  String?
+
+  // Phase NHÓM 4 — geofence chấm công QR.
+  latitude            Float?
+  longitude           Float?
+  allowedRadiusMeters Int?   @default(150)
   logoUrl      String?
   bannerUrl    String?
   description  String?  @db.Text
@@ -2694,4 +2699,31 @@ model MediaStudentTag {
 
   @@unique([mediaId, studentId])
   @@index([studentId])
+}
+
+// ─── Employee QR attendance (Phase NHÓM 4) ───────────────────────────────────
+// Chấm công bằng QR xoay (HMAC time-window, không cần lưu QR). EmployeeCheckin
+// ghi check-in/out + GPS + geofence theo Center. userId là cột phẳng (no FK).
+enum CheckinType {
+  CHECK_IN
+  CHECK_OUT
+}
+
+model EmployeeCheckin {
+  id             String      @id @default(cuid())
+  userId         String
+  userName       String?
+  centerId       String?
+  type           CheckinType
+  checkedAt      DateTime    @default(now())
+  latitude       Float?
+  longitude      Float?
+  distanceMeters Int?
+  withinGeofence Boolean     @default(true)
+  qrToken        String?
+  createdAt      DateTime    @default(now())
+
+  @@unique([userId, type, qrToken])
+  @@index([userId, checkedAt])
+  @@index([centerId, checkedAt])
 }

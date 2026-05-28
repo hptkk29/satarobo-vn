@@ -81,6 +81,10 @@ export type Action =
   | "media:upload"
   | "media:approve"
 
+  // --- HR attendance / chấm công QR (Phase NHÓM 4) ---
+  | "hr_attendance:checkin"
+  | "hr_attendance:view"
+
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
   | "blog:create"
@@ -274,6 +278,13 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "media:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "media:upload": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "media:approve": ["SUPER_ADMIN", "CENTER_MANAGER"],
+
+  // --- HR attendance / chấm công QR (Phase NHÓM 4) ---
+  // checkin = mọi nhân viên (không gồm PARENT). view = quản lý cơ sở + HR.
+  "hr_attendance:checkin": [
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
+  ],
+  "hr_attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
 
   // --- Blog / News ---
   "blog:view": [
