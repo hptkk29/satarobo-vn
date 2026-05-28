@@ -44,13 +44,13 @@ export const examRoadmap: ExamRoadmapItem[] = [
     displayName: "Robosim Master",
     groupName: "Khóa luyện thi",
     educationLevel: "Tiểu học, Trung học cơ sở",
-    grade: "Lớp 3-8",
-    sessions: 16,
-    totalDuration: "24 giờ",
+    grade: "Lớp 1-8",
+    sessions: 11,
+    totalDuration: "16,5 giờ",
     device: "RoboSim phần mềm",
     format: "Trực tiếp, kết hợp E-learning",
     description:
-      "Dành cho học sinh cần luyện thi vòng loại, làm quen phần mềm RoboSim, đọc sa bàn và tối ưu chiến thuật bài thi.",
+      "Dành cho học sinh cần luyện thi vòng loại, làm quen phần mềm RoboSim, đọc sa bàn và tối ưu chiến thuật bài thi. 5 buổi đầu là buổi học thử miễn phí, không tính học phí.",
     goal:
       "Bồi dưỡng nền tảng lập trình và lắp ráp Robotics, phát triển tư duy thuật toán, năng lực giải quyết vấn đề và sáng tạo.",
     outcomes: [
@@ -60,7 +60,9 @@ export const examRoadmap: ExamRoadmapItem[] = [
       "Trình bày được quy trình lắp ráp, lập trình và vận hành robot.",
     ],
     methods: ["Blended Learning", "Flipped Classroom", "Luyện tập theo nhiệm vụ bài thi", "Tự học có hướng dẫn và kiểm soát"],
-    lessons: contestLessons,
+    // 5 buổi đầu (intro/discovery) đã miễn phí cho học sinh, không tính trong lộ trình tính phí.
+    // Hiển thị 11 buổi tính phí từ lesson số 6 trong contestLessons trở đi.
+    lessons: contestLessons.slice(5),
     ...examDuration,
   },
   {
