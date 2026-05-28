@@ -76,6 +76,11 @@ export type Action =
   // --- Parent feedback (Phase NHÓM 3) ---
   | "parent-feedback:view"
 
+  // --- Media / ảnh lớp (Phase NHÓM 3) ---
+  | "media:view"
+  | "media:upload"
+  | "media:approve"
+
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
   | "blog:create"
@@ -264,6 +269,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Parent feedback (Phase NHÓM 3) ---
   "parent-feedback:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+
+  // --- Media / ảnh lớp (Phase NHÓM 3) ---
+  "media:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "media:upload": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "media:approve": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Blog / News ---
   "blog:view": [

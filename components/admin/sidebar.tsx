@@ -63,6 +63,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Buổi học", href: "/sessions", icon: CalendarDays },
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck },
+      { label: "Ảnh lớp học", href: "/media", icon: ImageIcon },
     ],
   },
   {

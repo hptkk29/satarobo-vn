@@ -2656,3 +2656,42 @@ model ParentFeedback {
   @@index([createdAt])
   @@index([studentId])
 }
+
+// ─── Media (Phase NHÓM 3) ────────────────────────────────────────────────────
+// Ảnh lớp học: GV upload (PENDING) → CENTER_MANAGER duyệt → phụ huynh xem ảnh
+// APPROVED có tag con mình. classId/studentId là cột phẳng (không FK).
+enum MediaStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ClassSessionMedia {
+  id             String            @id @default(cuid())
+  classId        String
+  fileUrl        String
+  fileName       String?
+  caption        String?           @db.Text
+  status         MediaStatus       @default(PENDING)
+  uploadedById   String?
+  uploadedByName String?
+  approvedById   String?
+  approvedByName String?
+  approvedAt     DateTime?
+  createdAt      DateTime          @default(now())
+
+  tags MediaStudentTag[]
+
+  @@index([classId, status])
+  @@index([status, createdAt])
+}
+
+model MediaStudentTag {
+  id        String            @id @default(cuid())
+  mediaId   String
+  media     ClassSessionMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  studentId String
+
+  @@unique([mediaId, studentId])
+  @@index([studentId])
+}
