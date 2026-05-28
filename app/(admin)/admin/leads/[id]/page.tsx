@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
+import { ReassignButton } from "./_components/reassign-button";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export default async function LeadDetailPage({ params }: Props) {
     redirect("/leads?view=kanban");
   }
 
+  const canAssign = can(session.user, "leads:assign");
   const status = lead.status as LeadStatus;
 
   return (
@@ -72,6 +74,7 @@ export default async function LeadDetailPage({ params }: Props) {
             {lead.email && <span> · {lead.email}</span>}
           </div>
         </div>
+        {canAssign && <ReassignButton leadId={lead.id} />}
       </div>
 
       {/* Info grid */}

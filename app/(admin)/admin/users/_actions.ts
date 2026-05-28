@@ -11,6 +11,7 @@ import {
   userUpdateSchema,
   passwordResetSchema,
 } from "@/lib/validators/user";
+import { reassignOpenLeads } from "@/lib/lead/assign";
 import {
   logUserAudit,
   detectChangedFields,
@@ -262,6 +263,7 @@ export async function toggleUserActiveAction(id: string) {
     select: { isActive: true, role: true },
   });
   if (!user) return { ok: false, error: "Không tìm thấy user" };
+  const wasSalesCsm = user.role === "SALES_CSM";
 
   // Last SUPER_ADMIN check (chỉ áp dụng khi đang active + đi disable)
   if (user.role === "SUPER_ADMIN" && user.isActive) {
@@ -301,6 +303,15 @@ export async function toggleUserActiveAction(id: string) {
       tx,
     });
   });
+
+  // Phase T1.3 — sale SALES_CSM bị disable → chia lại lead OPEN cho người còn lại.
+  // Gọi SAU tx (isActive đã false) nên getSalesLoad không tính người này.
+  if (!willBeActive && wasSalesCsm) {
+    await reassignOpenLeads(id, { actorId, actorName }).catch((err) =>
+      console.error("[toggleUserActive] reassign leads error:", err),
+    );
+    revalidatePath("/leads");
+  }
 
   revalidatePath("/users");
   return { ok: true as const };

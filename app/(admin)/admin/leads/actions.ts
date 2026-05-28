@@ -6,6 +6,7 @@ import { can } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
+import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 
 const statusSchema = z.enum([
   'NEW',
@@ -262,4 +263,38 @@ export async function deleteLead(
   revalidatePath('/leads')
   revalidatePath('/dashboard')
   return { ok: true }
+}
+
+// ─── Phase T1.3 — Auto-assign actions ────────────────────────────────────────
+
+export async function autoAssignLeadAction(
+  leadId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+
+  const { actorId, actorName } = getAuditActor(session)
+  const res = await autoAssignLead(leadId, { actorId, actorName })
+  if (!res.ok) return { ok: false, error: res.error }
+
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${leadId}`)
+  return { ok: true }
+}
+
+export async function reassignLeadsFromAction(
+  userId: string,
+): Promise<{ ok: boolean; reassigned?: number; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+
+  const { actorId, actorName } = getAuditActor(session)
+  const res = await reassignOpenLeads(userId, { actorId, actorName })
+  if (!res.ok) return { ok: false, error: res.error }
+
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
+  return { ok: true, reassigned: res.reassigned }
 }

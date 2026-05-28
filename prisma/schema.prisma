@@ -429,6 +429,9 @@ model Lead {
   activities LeadActivity[]
   tasks      LeadTask[]
 
+  // Phase T1.3 — chống trùng
+  duplicates LeadDuplicate[] @relation("LeadDuplicates")
+
   // Phase 5.4.0 — Audit log
   auditLogs LeadAuditLog[] @relation("LeadAuditLogs")
 
@@ -1897,6 +1900,19 @@ model LeadTask {
   @@index([leadId])
   @@index([assignedToId, status, dueAt])
   @@index([status, dueAt])
+}
+
+// Phase T1.3 — log lần submit trùng SĐT (đã chặn tạo lead mới)
+model LeadDuplicate {
+  id             String   @id @default(cuid())
+  primaryLeadId  String
+  primaryLead    Lead     @relation("LeadDuplicates", fields: [primaryLeadId], references: [id], onDelete: Cascade)
+  duplicatePhone String
+  source         String?
+  matchedAt      DateTime @default(now())
+
+  @@index([primaryLeadId])
+  @@index([duplicatePhone])
 }
 
 model ClassAuditLog {

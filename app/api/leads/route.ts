@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { leadCreateSchema } from '@/lib/validators/lead'
 import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
 import { rateLimit } from '@/lib/rate-limit'
+import { findRecentDuplicate, logDuplicateAttempt } from '@/lib/lead/dedup'
+import { autoAssignLead } from '@/lib/lead/assign'
 
 // Rate limit — uses Upstash Redis when env vars set, in-memory fallback otherwise.
 const RATE_LIMIT_MAX = 5
@@ -60,6 +62,14 @@ export async function POST(req: NextRequest) {
           },
         },
       )
+    }
+
+    // ─── Chống trùng SĐT trong 90 ngày (Phase T1.3) ─────────────────
+    // Nếu trùng → KHÔNG tạo lead mới, log vào lead gốc + trả về lead cũ.
+    const duplicate = await findRecentDuplicate(data.phone)
+    if (duplicate) {
+      await logDuplicateAttempt(duplicate.id, data.phone, data.source ?? null)
+      return NextResponse.json({ ok: true, leadId: duplicate.id, duplicate: true })
     }
 
     let courseId = data.courseId
@@ -130,6 +140,14 @@ export async function POST(req: NextRequest) {
         console.error('[/api/leads] consult notification error:', err),
       )
     }
+
+    // ─── Auto-assign round-robin (Phase T1.3) ───────────────────────
+    // Lead web chưa có assignedToId → gán cho SALES_CSM ít tải nhất.
+    // Await để đảm bảo gán (serverless có thể kill fire-and-forget).
+    await autoAssignLead(lead.id, {
+      actorId: null,
+      actorName: 'Hệ thống (web)',
+    }).catch((err) => console.error('[/api/leads] auto-assign error:', err))
 
     Promise.all([
       sendMetaCapi({
