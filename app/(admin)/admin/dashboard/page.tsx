@@ -122,6 +122,26 @@ export default async function DashboardPage() {
       })
     : [];
 
+  // Đợt 3C #4 — cảnh báo vận hành (center-scoped cho CM).
+  const cmCenter =
+    session.user.role === "CENTER_MANAGER" ? session.user.centerId : null;
+  const weekAhead = new Date(now.getTime() + 7 * 86400000);
+  const [parentReqPending, mediaPending, leaveReqs] = isSessionManager
+    ? await Promise.all([
+        db.parentRequest.count({
+          where: { status: "PENDING", ...(cmCenter ? { student: { centerId: cmCenter } } : {}) },
+        }),
+        db.classSessionMedia.count({ where: { status: "PENDING" } }),
+        db.shiftRegistration.count({
+          where: {
+            status: "LEAVE_REQUESTED",
+            date: { gte: monthStart, lt: weekAhead },
+            ...(cmCenter ? { centerId: cmCenter } : {}),
+          },
+        }),
+      ])
+    : [0, 0, 0];
+
   const [
     totalLeads,
     newLeadsThisMonth,
@@ -222,6 +242,26 @@ export default async function DashboardPage() {
           </ul>
           {incompleteSessions.length > 8 && (
             <p className="mt-1 text-xs text-rose-500">…và {incompleteSessions.length - 8} buổi khác.</p>
+          )}
+        </div>
+      )}
+
+      {isSessionManager && (parentReqPending > 0 || mediaPending > 0 || leaveReqs > 0) && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {parentReqPending > 0 && (
+            <Link href="/parent-requests" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400">
+              <span className="text-lg font-bold">{parentReqPending}</span> yêu cầu phụ huynh chờ duyệt
+            </Link>
+          )}
+          {mediaPending > 0 && (
+            <Link href="/media" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400">
+              <span className="text-lg font-bold">{mediaPending}</span> ảnh lớp chờ duyệt
+            </Link>
+          )}
+          {leaveReqs > 0 && (
+            <Link href="/cham-cong/lich-ca-nhan-vien" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 hover:border-rose-400">
+              <span className="text-lg font-bold">{leaveReqs}</span> lượt xin nghỉ khẩn cần sắp người
+            </Link>
           )}
         </div>
       )}
