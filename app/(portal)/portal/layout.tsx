@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { hasStaffRole } from "@/lib/auth/permissions";
 import { getPortalContext } from "@/lib/portal/session";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
@@ -19,9 +20,9 @@ export default async function PortalLayout({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // Defense-in-depth: chỉ PARENT vào portal. Staff lạc vào → /dashboard
-  // (middleware portal host sẽ redirectHost sang admin.satarobo.vn).
-  if (session.user.role !== "PARENT") redirect("/dashboard");
+  // Defense-in-depth: portal chỉ cho PARENT. Có BẤT KỲ vai trò nhân viên nào
+  // (đa vai trò 3B) → đẩy về admin dashboard.
+  if (hasStaffRole(session.user)) redirect("/dashboard");
 
   const ctx = await getPortalContext();
   // ctx luôn khác null vì role PARENT, nhưng guard cho chắc.

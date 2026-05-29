@@ -18,7 +18,7 @@ export async function saveSiteContentAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user.role, "honors:settings");
+    assertCan(session.user, "honors:settings");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }

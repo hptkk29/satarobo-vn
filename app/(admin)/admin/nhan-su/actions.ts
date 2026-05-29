@@ -4,7 +4,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { assertCan } from "@/lib/auth/permissions";
+import { assertCan, hasRole } from "@/lib/auth/permissions";
 import {
   employeeCreateSchema,
   employeeUpdateSchema,
@@ -31,7 +31,7 @@ export async function createEmployeeAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user.role, "employees:create");
+    assertCan(session.user, "employees:create");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -86,7 +86,7 @@ export async function updateEmployeeAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user.role, "employees:edit");
+    assertCan(session.user, "employees:edit");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -101,7 +101,7 @@ export async function updateEmployeeAction(
 
   // CENTER_MANAGER role không được edit salary fields
   const data = { ...parsed.data };
-  if (session.user.role === "CENTER_MANAGER") {
+  if (hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")) {
     delete data.salaryRank;
     delete data.salaryLevel;
   }
@@ -122,7 +122,7 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user.role, "employees:delete");
+    assertCan(session.user, "employees:delete");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -145,7 +145,7 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user.role, "employees:edit");
+    assertCan(session.user, "employees:edit");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -164,7 +164,7 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user.role, "employees:edit");
+    assertCan(session.user, "employees:edit");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -208,7 +208,7 @@ export async function changeEmployeeRoleAction(input: {
 }): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (session.user.role !== "SUPER_ADMIN") {
+  if (!hasRole(session.user, "SUPER_ADMIN")) {
     return { ok: false, error: "Chỉ SUPER_ADMIN mới được thay đổi vai trò" };
   }
 

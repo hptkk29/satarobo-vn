@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import {
@@ -112,7 +113,7 @@ export async function updateHonorAction(id: string, input: unknown) {
 export async function deleteHonorAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
-  if (session.user.role !== "SUPER_ADMIN")
+  if (!hasRole(session.user, "SUPER_ADMIN"))
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
 
   const honor = await db.honor.delete({ where: { id } });
@@ -220,7 +221,7 @@ export async function updateTimelineAction(id: string, input: unknown) {
 export async function deleteTimelineAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
-  if (session.user.role !== "SUPER_ADMIN")
+  if (!hasRole(session.user, "SUPER_ADMIN"))
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
 
   await db.timelineItem.delete({ where: { id } });

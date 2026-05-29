@@ -12,7 +12,7 @@ async function requireManager(): Promise<Result & { ok: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user.role, "courses:create");
+    assertCan(session.user, "courses:create");
   } catch {
     return { ok: false, error: "Không có quyền cấu hình khoá học" };
   }

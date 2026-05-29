@@ -1,6 +1,7 @@
 'use server'
 
 import { auth } from '@/lib/auth'
+import { hasRole } from '@/lib/auth/permissions'
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { jobCreateSchema } from '@/lib/validators/job'
@@ -58,7 +59,7 @@ export async function updateJobAction(id: string, input: unknown) {
 export async function deleteJobAction(id: string) {
   const session = await auth()
   if (!session?.user) return { ok: false }
-  if (session.user.role !== 'SUPER_ADMIN') return { ok: false, error: 'Chi SUPER_ADMIN duoc xoa JD' }
+  if (!hasRole(session.user, 'SUPER_ADMIN')) return { ok: false, error: 'Chi SUPER_ADMIN duoc xoa JD' }
 
   const job = await db.jobPosting.delete({ where: { id } })
 

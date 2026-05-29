@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { hasStaffRole } from "@/lib/auth/permissions";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { Toaster } from "@/components/ui/sonner";
@@ -12,11 +13,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/login");
   }
 
-  // Defense-in-depth (tầng layout, không tin mỗi middleware): PARENT KHÔNG
-  // được vào admin. Middleware đã chặn ở host admin; check lại phòng khi
-  // bypass (vd localhost, lỗi config host). → đẩy về portal (/portal trên
-  // admin host được middleware redirectHost sang hocvien.satarobo.vn).
-  if (session.user.role === "PARENT") {
+  // Defense-in-depth (tầng layout): chỉ chặn user KHÔNG có vai trò nhân viên
+  // nào (PARENT-only). Đa vai trò (3B): có ≥1 staff role → được vào admin.
+  if (!hasStaffRole(session.user)) {
     redirect("/portal");
   }
 

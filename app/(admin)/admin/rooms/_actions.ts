@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { hasAnyRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -56,7 +57,7 @@ function parseEquipment(value: FormDataEntryValue | null): string[] {
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "SUPER_ADMIN" && session.user.role !== "CENTER_MANAGER") {
+  if (!hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER"])) {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;
