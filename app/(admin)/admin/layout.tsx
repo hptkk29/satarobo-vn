@@ -42,7 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="admin-scope flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex md:shrink-0">
-        <Sidebar user={{ role: session.user.role, grants: session.user.grants }} />
+        <Sidebar user={{ role: session.user.role, roles: session.user.roles, grants: session.user.grants }} />
       </div>
 
       {/* Main */}

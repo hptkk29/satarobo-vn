@@ -143,6 +143,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 type SidebarUser = {
   role: string | null;
+  roles?: string[]; // Đợt 3B — menu = UNION quyền các vai trò
   grants?: { action: string; grant: "ALLOW" | "DENY" }[];
 };
 

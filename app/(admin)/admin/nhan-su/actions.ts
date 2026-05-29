@@ -195,15 +195,24 @@ const VALID_ROLES = [
 ] as const;
 type ValidRole = (typeof VALID_ROLES)[number];
 
-const changeRoleSchema = z.object({
-  employeeId: z.string().min(1),
-  newRole: z.enum(VALID_ROLES),
-  reason: z.string().trim().min(5, "Lý do phải có ít nhất 5 ký tự").max(500),
-});
+// Đợt 3B — gán NHIỀU vai trò + 1 vai trò chính (primary). PARENT loại khỏi
+// VALID_ROLES (chỉ staff) nên không thể trộn PARENT với staff ở đây.
+const changeRoleSchema = z
+  .object({
+    employeeId: z.string().min(1),
+    roles: z.array(z.enum(VALID_ROLES)).min(1, "Chọn ít nhất 1 vai trò"),
+    primaryRole: z.enum(VALID_ROLES),
+    reason: z.string().trim().min(5, "Lý do phải có ít nhất 5 ký tự").max(500),
+  })
+  .refine((d) => d.roles.includes(d.primaryRole), {
+    message: "Vai trò chính phải nằm trong danh sách vai trò đã chọn",
+    path: ["primaryRole"],
+  });
 
 export async function changeEmployeeRoleAction(input: {
   employeeId: string;
-  newRole: ValidRole;
+  roles: ValidRole[];
+  primaryRole: ValidRole;
   reason: string;
 }): Promise<ActionResult> {
   const session = await auth();
@@ -219,13 +228,15 @@ export async function changeEmployeeRoleAction(input: {
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
     };
   }
+  const roles = [...new Set(parsed.data.roles)] as ValidRole[];
+  const primaryRole = parsed.data.primaryRole;
 
   const employee = await db.employee.findUnique({
     where: { id: parsed.data.employeeId },
     select: {
       id: true,
       fullName: true,
-      userAccount: { select: { id: true, role: true } },
+      userAccount: { select: { id: true, role: true, roles: true } },
     },
   });
   if (!employee) return { ok: false, error: "Không tìm thấy nhân viên" };
@@ -237,8 +248,7 @@ export async function changeEmployeeRoleAction(input: {
     };
   }
 
-  // Chống tự khoá: không được đổi vai trò CHÍNH tài khoản mình (vd tự hạ xuống
-  // TEACHER → mất quyền admin ngay request kế tiếp).
+  // Chống tự khoá: không được đổi vai trò CHÍNH tài khoản mình.
   if (employee.userAccount.id === session.user.id) {
     return {
       ok: false,
@@ -247,7 +257,10 @@ export async function changeEmployeeRoleAction(input: {
   }
 
   const fromRole = employee.userAccount.role;
-  if (fromRole === parsed.data.newRole) {
+  const sameRoles =
+    fromRole === primaryRole &&
+    [...employee.userAccount.roles].sort().join(",") === [...roles].sort().join(",");
+  if (sameRoles) {
     return { ok: false, error: "Vai trò không thay đổi" };
   }
 
@@ -255,19 +268,18 @@ export async function changeEmployeeRoleAction(input: {
     await db.$transaction([
       db.user.update({
         where: { id: employee.userAccount.id },
-        // Bump tokenVersion → JWT cũ (mang role cũ) bị vô hiệu ngay request kế
-        // tiếp (admin layout check tokenVersion mismatch → buộc re-login), nên
-        // vai trò mới có hiệu lực NGAY, không phải chờ token hết hạn ~30 ngày.
-        data: { role: parsed.data.newRole, tokenVersion: { increment: 1 } },
+        // Bump tokenVersion → token cũ vô hiệu ngay request kế (buộc re-login để
+        // mang roles mới). role = vai trò chính; roles = union.
+        data: { role: primaryRole, roles, tokenVersion: { increment: 1 } },
       }),
       db.roleAuditLog.create({
         data: {
           employeeId: employee.id,
           fromRole,
-          toRole: parsed.data.newRole,
+          toRole: primaryRole,
           changedByUserId: session.user.id ?? null,
           changedByName: session.user.name ?? session.user.email ?? "Unknown",
-          reason: parsed.data.reason,
+          reason: `${parsed.data.reason} · vai trò: [${roles.join(", ")}] (chính: ${primaryRole})`,
         },
       }),
     ]);

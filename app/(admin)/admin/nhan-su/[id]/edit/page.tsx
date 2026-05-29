@@ -34,6 +34,7 @@ export default async function EditEmployeePage({ params }: Props) {
           id: true,
           email: true,
           role: true,
+          roles: true,
           isActive: true,
           lastLoginAt: true,
           createdAt: true,
@@ -92,6 +93,7 @@ export default async function EditEmployeePage({ params }: Props) {
               employeeId={employee.id}
               employeeName={employee.fullName}
               currentRole={employee.userAccount.role as Role}
+              currentRoles={employee.userAccount.roles as Role[]}
             />
           )}
           {showScheduleLink && (

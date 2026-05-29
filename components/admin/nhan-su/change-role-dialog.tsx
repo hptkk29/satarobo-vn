@@ -32,12 +32,15 @@ interface Props {
   employeeId: string;
   employeeName: string;
   currentRole: Role;
+  currentRoles?: Role[]; // Đợt 3B — tất cả vai trò hiện giữ
 }
 
-export function ChangeRoleDialog({ employeeId, employeeName, currentRole }: Props) {
+export function ChangeRoleDialog({ employeeId, employeeName, currentRole, currentRoles }: Props) {
   const router = useRouter();
+  const initialRoles = currentRoles && currentRoles.length > 0 ? currentRoles : [currentRole];
   const [isOpen, setIsOpen] = useState(false);
-  const [newRole, setNewRole] = useState<Role>(currentRole);
+  const [selected, setSelected] = useState<Role[]>(initialRoles);
+  const [primary, setPrimary] = useState<Role>(currentRole);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -47,14 +50,27 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole }: Prop
     setIsOpen(false);
     setError(null);
     setReason("");
-    setNewRole(currentRole);
+    setSelected(initialRoles);
+    setPrimary(currentRole);
+  };
+
+  const toggle = (r: Role) => {
+    setSelected((cur) => {
+      const next = cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r];
+      // Nếu bỏ vai trò chính, chọn lại primary = phần tử đầu còn lại.
+      if (!next.includes(primary) && next.length > 0) setPrimary(next[0]);
+      return next;
+    });
   };
 
   const handleSubmit = () => {
     setError(null);
-
-    if (newRole === currentRole) {
-      setError("Vai trò không thay đổi");
+    if (selected.length === 0) {
+      setError("Chọn ít nhất 1 vai trò");
+      return;
+    }
+    if (!selected.includes(primary)) {
+      setError("Vai trò chính phải nằm trong các vai trò đã chọn");
       return;
     }
     if (reason.trim().length < 5) {
@@ -65,7 +81,8 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole }: Prop
     startTransition(async () => {
       const res = await changeEmployeeRoleAction({
         employeeId,
-        newRole,
+        roles: selected,
+        primaryRole: primary,
         reason: reason.trim(),
       });
       if (!res.ok) {
@@ -133,29 +150,44 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole }: Prop
             <div className="mt-4 space-y-3">
               <div>
                 <label className="mb-1 block text-sm font-semibold">
-                  Vai trò hiện tại
+                  Vai trò (chọn nhiều) *
                 </label>
-                <div className="rounded-lg bg-neutral-100 px-3 py-2 text-sm font-medium">
-                  {ROLE_LABEL[currentRole] ?? currentRole}
+                <div className="space-y-1.5">
+                  {ROLE_OPTIONS.map((opt) => {
+                    const on = selected.includes(opt.value);
+                    return (
+                      <div key={opt.value} className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 px-3 py-1.5">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => toggle(opt.value)}
+                            disabled={pending}
+                            className="h-4 w-4 rounded border-neutral-300"
+                          />
+                          {opt.label}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => on && setPrimary(opt.value)}
+                          disabled={!on || pending}
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            primary === opt.value
+                              ? "bg-amber-500 text-white"
+                              : on
+                                ? "bg-neutral-100 text-neutral-600 hover:bg-amber-100"
+                                : "bg-neutral-50 text-neutral-300"
+                          }`}
+                        >
+                          {primary === opt.value ? "Vai trò chính" : "Đặt chính"}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-semibold">
-                  Vai trò mới *
-                </label>
-                <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as Role)}
-                  disabled={pending}
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
-                >
-                  {ROLE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                <p className="mt-1 text-xs text-neutral-400">
+                  Quyền = hợp của tất cả vai trò. Vai trò chính dùng cho dashboard mặc định.
+                </p>
               </div>
 
               <div>
@@ -189,7 +221,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole }: Prop
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={pending || newRole === currentRole}
+                disabled={pending || selected.length === 0}
                 className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50"
               >
                 {pending ? "Đang lưu..." : "Xác nhận thay đổi"}
