@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 // LMS-4 — gom thông tin GV cần TRƯỚC buổi học.
 
@@ -9,8 +10,6 @@ export type PreSessionInfo = {
   studentsToNote: { id: string; name: string; reasons: string[] }[];
   ungraded: { studentName: string; assignmentTitle: string }[];
 };
-
-const ACTIVE_ENROLL = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 export async function getPreSessionInfo(sessionId: string): Promise<PreSessionInfo | null> {
   const sess = await db.classSession.findUnique({
@@ -57,7 +56,7 @@ export async function getPreSessionInfo(sessionId: string): Promise<PreSessionIn
 
   const [enrollments, absenceGroups, lowFeedback, ungradedRows] = await Promise.all([
     db.enrollment.findMany({
-      where: { classId, status: { in: [...ACTIVE_ENROLL] } },
+      where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
       select: { student: { select: { id: true, name: true } } },
       orderBy: { student: { name: "asc" } },
     }),

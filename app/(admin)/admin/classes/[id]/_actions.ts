@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudentProgress } from "@/lib/progress";
 import { sendProgressReportEmail } from "@/lib/email/progress-report";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 // =============================================================================
 // CLASS LMS ACTIONS — Phase T2.1
@@ -12,7 +13,6 @@ import { sendProgressReportEmail } from "@/lib/email/progress-report";
 // =============================================================================
 
 const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"] as const;
-const ACTIVE_ENROLLMENT_STATUSES = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 export async function generateClassProgressReports(
   classId: string,
@@ -36,7 +36,7 @@ export async function generateClassProgressReports(
   }
 
   const enrollments = await db.enrollment.findMany({
-    where: { classId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+    where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
     select: {
       student: {
         select: {

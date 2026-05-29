@@ -9,16 +9,13 @@ import {
   assignmentSchema,
   type AssignmentInput,
 } from "@/lib/validators/assignment";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
 const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"] as const;
-
-// Active-enrollment statuses that should receive a submission row on publish.
-// Includes legacy ACTIVE to cover pre-D5 enrollments.
-const ACTIVE_ENROLLMENT_STATUSES = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 async function requireRole(): Promise<
   | { ok: true; userId: string }
@@ -235,7 +232,7 @@ export async function publishAssignment(
   const enrollments = await db.enrollment.findMany({
     where: {
       classId: assignment.classId,
-      status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+      status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
     },
     select: { studentId: true },
   });

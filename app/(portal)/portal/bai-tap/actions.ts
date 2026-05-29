@@ -3,13 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireActiveStudent } from "@/lib/portal/session";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 // =============================================================================
 // PORTAL ASSIGNMENT SUBMIT — Phase T2.4
 // Học sinh (qua tài khoản phụ huynh) nộp bài tập. Verify activeSite.studentId.
 // =============================================================================
-
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 export async function submitAssignment(input: {
   assignmentId: string;
@@ -41,7 +40,7 @@ export async function submitAssignment(input: {
     where: {
       studentId,
       classId: assignment.classId,
-      status: { in: [...ACTIVE_ENROLLMENT] },
+      status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
     },
     select: { id: true },
   });

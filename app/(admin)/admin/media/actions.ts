@@ -6,13 +6,12 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 // =============================================================================
 // ADMIN MEDIA — Phase NHÓM 3
 // GV upload ảnh lớp (PENDING) + tag học sinh → CENTER_MANAGER duyệt.
 // =============================================================================
-
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 /** Học sinh đang học của 1 lớp — cho form tag. */
 export async function getClassStudentsForTag(
@@ -21,7 +20,7 @@ export async function getClassStudentsForTag(
   const session = await auth();
   if (!session?.user || !can(session.user, "media:upload")) return [];
   const enr = await db.enrollment.findMany({
-    where: { classId, status: { in: [...ACTIVE_ENROLLMENT] } },
+    where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
     select: { student: { select: { id: true, name: true } } },
     orderBy: { createdAt: "asc" },
   });

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
 import { can } from '@/lib/auth/permissions'
 import { ClassStatus, type Prisma } from '@prisma/client'
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 
 const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
   PLANNED: { label: 'Đang lên KH', color: 'bg-gray-100 text-gray-700' },
@@ -121,7 +122,11 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
           center: { select: { name: true } },
           room: { select: { code: true } },
           teacher: { select: { name: true } },
-          _count: { select: { enrollments: true } },
+          _count: {
+            select: {
+              enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+            },
+          },
         },
       })
       .catch(() => []),

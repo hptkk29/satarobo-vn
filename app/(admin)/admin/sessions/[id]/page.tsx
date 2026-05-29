@@ -7,12 +7,12 @@ import { SessionFeedbackEditor } from "./_components/session-feedback-editor";
 import { SessionChecklist } from "./_components/session-checklist";
 import { canManageSessionClass } from "./_actions";
 import { getPreSessionInfo } from "@/lib/lms/pre-session";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { BookOpen, Users, AlertTriangle, FileWarning } from "lucide-react";
 
 export const metadata = { title: "Chi tiết buổi học | Admin" };
 export const dynamic = "force-dynamic";
 
-const ACTIVE_ENROLL = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"] as const;
 const PRESENT_STATUSES = new Set(["PRESENT", "LATE"]);
 
 interface Props {
@@ -71,7 +71,7 @@ export default async function SessionDetailPage({ params }: Props) {
   }
 
   const enrollments = await db.enrollment.findMany({
-    where: { classId: sess.class.id, status: { in: [...ACTIVE_ENROLL] } },
+    where: { classId: sess.class.id, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
     select: { student: { select: { id: true, name: true } } },
     orderBy: { student: { name: "asc" } },
   });

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClipboardCheck, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { AttendanceGrid } from "./_components/attendance-grid";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
             id: true,
             name: true,
             enrollments: {
-              where: { status: { in: ["ACTIVE", "PAUSED"] } },
+              where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
               select: {
                 status: true,
                 student: { select: { id: true, name: true, phone: true } },
