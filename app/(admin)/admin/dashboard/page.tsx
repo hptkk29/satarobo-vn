@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/design-system/admin/status-badge";
 import { DataTableShell } from "@/components/design-system/admin/data-table-shell";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
+import { TeacherDashboard } from "./_components/teacher-dashboard";
 
 const STATUS_VARIANT: Record<
   string,
@@ -67,6 +68,14 @@ function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  // Đợt 3C — dashboard riêng theo vai trò (single-role hiện tại; thanh chuyển
+  // vai trò chờ 3B multi-role). Vai trò chưa có dashboard riêng → dùng trang
+  // tổng quan quản lý/admin bên dưới (default).
+  const role = session.user.role;
+  if (role === "TEACHER") {
+    return <TeacherDashboard userId={session.user.id} name={session.user.name ?? ""} />;
+  }
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
