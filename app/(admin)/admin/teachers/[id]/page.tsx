@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { TeacherProfileForm } from "./_components/profile-form";
+import { ClassAssignmentSection } from "./_components/class-assignment";
 
 export const metadata = { title: "Hồ sơ giáo viên | Admin" };
 export const dynamic = "force-dynamic";
@@ -53,13 +54,51 @@ export default async function TeacherProfilePage({ params }: Props) {
   // Sửa: SUPER_ADMIN, hoặc CM cùng cơ sở.
   const canEdit = me.role === "SUPER_ADMIN" || cmInScope;
 
-  const courses = await db.course.findMany({
-    where: { isActive: true },
-    orderBy: { displayOrder: "asc" },
-    select: { id: true, name: true, code: true },
-  });
-
   const p = teacher.teacherProfile;
+  const teacherCourseIds = p?.teachableCourses.map((t) => t.courseId) ?? [];
+
+  const classSelect = {
+    id: true,
+    name: true,
+    classCode: true,
+    courseId: true,
+    course: { select: { name: true } },
+  } as const;
+
+  const [courses, mainClasses, assistantClasses, assignableRaw] = await Promise.all([
+    db.course.findMany({
+      where: { isActive: true },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true, name: true, code: true },
+    }),
+    db.class.findMany({
+      where: { teacherId: id, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: classSelect,
+    }),
+    db.class.findMany({
+      where: { assistantId: id, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: classSelect,
+    }),
+    db.class.findMany({
+      where: {
+        deletedAt: null,
+        status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },
+        teacherId: { not: id },
+        ...(teacher.centerId ? { centerId: teacher.centerId } : {}),
+      },
+      orderBy: { name: "asc" },
+      take: 200,
+      select: classSelect,
+    }),
+  ]);
+
+  const fmtClass = (c: { id: string; name: string; classCode: string | null; course: { name: string } }) => ({
+    id: c.id,
+    label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+    courseName: c.course.name,
+  });
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -103,8 +142,22 @@ export default async function TeacherProfilePage({ params }: Props) {
           employmentType: p?.employmentType ?? "PARTTIME",
           status: p?.status ?? "ACTIVE",
           bio: p?.bio ?? "",
-          courseIds: p?.teachableCourses.map((t) => t.courseId) ?? [],
+          courseIds: teacherCourseIds,
         }}
+      />
+
+      <ClassAssignmentSection
+        teacherUserId={teacher.id}
+        teacherCourseIds={teacherCourseIds}
+        canEdit={canEdit}
+        mainClasses={mainClasses.map(fmtClass)}
+        assistantClasses={assistantClasses.map(fmtClass)}
+        assignable={assignableRaw.map((c) => ({
+          id: c.id,
+          label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+          courseId: c.courseId,
+          courseName: c.course.name,
+        }))}
       />
     </div>
   );

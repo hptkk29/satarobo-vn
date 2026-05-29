@@ -90,3 +90,87 @@ export async function updateTeacherProfile(input: unknown): Promise<Result> {
   revalidatePath(`/teachers/${userId}`);
   return { ok: true };
 }
+
+// ── PHẦN 2 — phân công lớp ────────────────────────────────────────────────
+
+const assignSchema = z.object({
+  classId: z.string().min(1),
+  teacherUserId: z.string().min(1),
+  as: z.enum(["teacher", "assistant"]),
+});
+
+/** Gán GV làm GV chính / trợ giảng cho 1 lớp. */
+export async function assignClassToTeacher(input: unknown): Promise<Result> {
+  const parsed = assignSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { classId, teacherUserId, as } = parsed.data;
+
+  const gate = await requireTeacherManager(teacherUserId);
+  if (!gate.ok) return gate;
+
+  const cls = await db.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { id: true, centerId: true },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+  if (gate.session.user.role === "CENTER_MANAGER" && cls.centerId !== gate.session.user.centerId) {
+    return { ok: false, error: "Lớp không thuộc cơ sở của bạn" };
+  }
+
+  try {
+    await db.class.update({
+      where: { id: classId },
+      data: as === "teacher" ? { teacherId: teacherUserId } : { assistantId: teacherUserId },
+    });
+  } catch (err) {
+    return { ok: false, error: `Lỗi gán lớp: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+
+  revalidatePath(`/teachers/${teacherUserId}`);
+  revalidatePath("/teachers");
+  revalidatePath(`/classes/${classId}/edit`);
+  return { ok: true };
+}
+
+const unassignSchema = z.object({
+  classId: z.string().min(1),
+  teacherUserId: z.string().min(1),
+  as: z.enum(["teacher", "assistant"]),
+});
+
+/** Gỡ GV khỏi lớp (chính / trợ giảng). */
+export async function unassignClassFromTeacher(input: unknown): Promise<Result> {
+  const parsed = unassignSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { classId, teacherUserId, as } = parsed.data;
+
+  const gate = await requireTeacherManager(teacherUserId);
+  if (!gate.ok) return gate;
+
+  const cls = await db.class.findUnique({
+    where: { id: classId },
+    select: { centerId: true, teacherId: true, assistantId: true },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+  if (gate.session.user.role === "CENTER_MANAGER" && cls.centerId !== gate.session.user.centerId) {
+    return { ok: false, error: "Lớp không thuộc cơ sở của bạn" };
+  }
+
+  try {
+    await db.class.update({
+      where: { id: classId },
+      data: as === "teacher" ? { teacherId: null } : { assistantId: null },
+    });
+  } catch (err) {
+    return { ok: false, error: `Lỗi gỡ lớp: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+
+  revalidatePath(`/teachers/${teacherUserId}`);
+  revalidatePath("/teachers");
+  revalidatePath(`/classes/${classId}/edit`);
+  return { ok: true };
+}
