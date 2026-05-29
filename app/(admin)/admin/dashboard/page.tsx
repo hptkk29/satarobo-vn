@@ -11,6 +11,7 @@ import { BarChart } from "@/components/charts/bar-chart";
 import { TeacherDashboard } from "./_components/teacher-dashboard";
 import { SalesDashboard } from "./_components/sales-dashboard";
 import { AccountantDashboard } from "./_components/accountant-dashboard";
+import { MarketingDashboard, HrDashboard } from "./_components/marketing-hr-dashboards";
 
 const STATUS_VARIANT: Record<
   string,
@@ -83,6 +84,12 @@ export default async function DashboardPage() {
   }
   if (role === "ACCOUNTANT") {
     return <AccountantDashboard name={session.user.name ?? ""} />;
+  }
+  if (role === "MARKETING") {
+    return <MarketingDashboard name={session.user.name ?? ""} />;
+  }
+  if (role === "HR") {
+    return <HrDashboard name={session.user.name ?? ""} />;
   }
 
   const now = new Date();
