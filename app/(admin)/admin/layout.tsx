@@ -12,6 +12,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/login");
   }
 
+  // Defense-in-depth (tầng layout, không tin mỗi middleware): PARENT KHÔNG
+  // được vào admin. Middleware đã chặn ở host admin; check lại phòng khi
+  // bypass (vd localhost, lỗi config host). → đẩy về portal (/portal trên
+  // admin host được middleware redirectHost sang hocvien.satarobo.vn).
+  if (session.user.role === "PARENT") {
+    redirect("/portal");
+  }
+
   // Phase 5.3.0 — Real-time invalidation: check user vẫn active + tokenVersion
   // match. Nếu admin disable user / soft-delete / bump tokenVersion → logout
   // ngay request kế tiếp. 1 DB query / request /admin/* acceptable cho admin

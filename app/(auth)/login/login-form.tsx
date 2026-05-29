@@ -18,11 +18,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { loginSchema, type LoginInput } from "@/lib/validators/auth";
+import { sanitizeCallbackUrl } from "@/lib/auth/route-policy";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  // Chống open-redirect cross-host: chỉ chấp nhận path nội bộ thuần.
+  const callbackUrl = sanitizeCallbackUrl(searchParams.get("callbackUrl") ?? "/dashboard");
   const reason = searchParams.get("reason");
   const [loading, setLoading] = useState(false);
 

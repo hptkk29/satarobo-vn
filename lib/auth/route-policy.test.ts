@@ -1,0 +1,383 @@
+import { describe, it, expect } from "vitest";
+import {
+  decideRoute,
+  sanitizeCallbackUrl,
+  type MaybeRole,
+  type RouteDecision,
+} from "./route-policy";
+
+/**
+ * Bảng tổ hợp host × role × sessionValid cho `decideRoute()`.
+ *
+ * Ma trận nguồn chân lý:
+ *  - 7 staff role (TRỪ PARENT): admin ✅ / portal ❌ (đá về admin).
+ *  - PARENT: portal ✅ / admin ❌ (đá về portal).
+ *  - Chưa login: /login GIỮ host đang đứng (callbackUrl = path).
+ *  - Public: ai cũng vào; /admin|/portal lọt vào → đá đúng host.
+ *
+ * Các case khoá lỗ hổng đã biết (proxy.ts cũ KHÔNG check role ở admin branch):
+ *  - PARENT + admin route → PHẢI redirectHost portal (trước fix: rewrite /admin/* = LỌT).
+ *  - PARENT + admin /login (đã login) → PHẢI redirectHost portal (trước fix: → /dashboard).
+ */
+
+const STAFF_ROLES = [
+  "SUPER_ADMIN",
+  "CENTER_MANAGER",
+  "HR",
+  "SALES_CSM",
+  "TEACHER",
+  "MARKETING",
+  "ACCOUNTANT",
+] as const satisfies readonly Exclude<NonNullable<MaybeRole>, "PARENT">[];
+
+const ALL_ROLES = [...STAFF_ROLES, "PARENT"] as const;
+
+function authed(role: MaybeRole) {
+  return { role, sessionValid: true } as const;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// A. Ma trận host × role
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("A. admin host × role", () => {
+  it("mọi staff role vào admin route → rewrite /admin/*", () => {
+    for (const role of STAFF_ROLES) {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: "/leads", ...authed(role) }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+    }
+  });
+
+  it("PARENT vào admin route → redirectHost portal (lỗ hổng đã bịt)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/dashboard", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+    // nested admin path cũng phải bị chặn
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads/123", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("chưa login vào admin route → /login GIỮ host admin + callbackUrl", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role: null,
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/leads",
+      reason: undefined,
+    });
+  });
+
+  it("staff vào / → /dashboard; PARENT vào / → portal; ẩn danh → /login", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/", ...authed("HR") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/dashboard" });
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/login", reason: undefined });
+  });
+});
+
+describe("A. portal host × role", () => {
+  it("PARENT clean path → rewrite /portal/*", () => {
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/lich-hoc", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/portal/lich-hoc" });
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/portal" });
+  });
+
+  it("mọi staff role lạc vào portal → redirectHost admin", () => {
+    for (const role of STAFF_ROLES) {
+      expect(
+        decideRoute({ hostKind: "portal", pathname: "/lich-hoc", ...authed(role) }),
+      ).toEqual<RouteDecision>({
+        type: "redirectHost",
+        host: "admin",
+        path: "/dashboard",
+        status: 307,
+      });
+    }
+  });
+
+  it("chưa login vào portal → /login GIỮ host portal + callbackUrl", () => {
+    expect(
+      decideRoute({
+        hostKind: "portal",
+        pathname: "/lich-hoc",
+        role: null,
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/lich-hoc",
+      reason: undefined,
+    });
+  });
+
+  it("PARENT vào admin-ish path trên portal (vd /dashboard) → portal home", () => {
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/dashboard", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+});
+
+describe("A. public host × role — ai cũng vào", () => {
+  it("public page → next (mọi role + ẩn danh)", () => {
+    for (const role of [...ALL_ROLES, null] as MaybeRole[]) {
+      expect(
+        decideRoute({
+          hostKind: "public",
+          pathname: "/khoa-hoc",
+          role,
+          sessionValid: role !== null,
+        }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// B. Edge cases
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("B. /login khi đã login", () => {
+  it("PARENT ở portal/login → portal home", () => {
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/login", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+
+  it("staff ở admin/login → /dashboard", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/login", ...authed("SUPER_ADMIN") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/dashboard" });
+  });
+
+  it("PARENT ở admin/login (đã login) → redirectHost portal", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/login", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("staff ở portal/login (đã login) → redirectHost admin", () => {
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/login", ...authed("TEACHER") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("chưa login ở /login (admin & portal) → next (hiện form)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/login", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "next" });
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/login", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+});
+
+describe("B. route lọt sai host", () => {
+  it("/admin/* lọt vào public → redirectHost admin (strip prefix)", () => {
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/admin/leads", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/leads",
+      status: 308,
+    });
+  });
+
+  it("bare admin route name lọt vào public → redirectHost admin", () => {
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/leads", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/leads",
+      status: 308,
+    });
+  });
+
+  it("/portal/* lọt vào public host → redirectHost portal", () => {
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/portal/lich-hoc", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 308,
+    });
+  });
+
+  it("/portal/* lọt vào admin host → redirectHost portal", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/portal/lich-hoc", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 308,
+    });
+  });
+
+  it("legacy /admin/X trên admin host → strip prefix (giữ host)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/admin/leads", ...authed("HR") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/leads" });
+  });
+
+  it("non-admin path trên admin host → bounce public", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/khoa-hoc", ...authed("HR") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "public",
+      path: "/khoa-hoc",
+      status: 308,
+    });
+  });
+});
+
+describe("B. infra paths không bị auth", () => {
+  for (const p of ["/api/leads", "/_next/static/chunk.js", "/favicon.ico"]) {
+    it(`${p} (admin host) → next`, () => {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    });
+    it(`${p} (portal host) → next`, () => {
+      expect(
+        decideRoute({ hostKind: "portal", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    });
+  }
+});
+
+describe("B. sessionValid=false (deactivated) → /login?reason bất kể role", () => {
+  it("admin route, role còn nhưng session invalid → /login + reason + callbackUrl", () => {
+    for (const role of ALL_ROLES) {
+      const d = decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role,
+        sessionValid: false,
+      });
+      expect(d).toEqual<RouteDecision>({
+        type: "redirectPath",
+        path: "/login",
+        callbackUrl: "/leads",
+        reason: "session-invalidated",
+      });
+    }
+  });
+
+  it("portal route, role còn nhưng session invalid → /login + reason", () => {
+    const d = decideRoute({
+      hostKind: "portal",
+      pathname: "/lich-hoc",
+      role: "PARENT",
+      sessionValid: false,
+    });
+    expect(d).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/lich-hoc",
+      reason: "session-invalidated",
+    });
+  });
+});
+
+describe("B. callbackUrl sanitize chống open-redirect", () => {
+  it("path nội bộ thuần → giữ nguyên", () => {
+    expect(sanitizeCallbackUrl("/leads/123")).toBe("/leads/123");
+  });
+  it("//evil.com → /", () => {
+    expect(sanitizeCallbackUrl("//evil.com")).toBe("/");
+  });
+  it("chứa http(s):// → /", () => {
+    expect(sanitizeCallbackUrl("/x?next=https://evil.com")).toBe("/");
+    expect(sanitizeCallbackUrl("/redir?u=http://evil")).toBe("/");
+  });
+  it("backslash trick → /", () => {
+    expect(sanitizeCallbackUrl("/\\evil.com")).toBe("/");
+    expect(sanitizeCallbackUrl("\\\\evil.com")).toBe("/");
+  });
+  it("không bắt đầu bằng / → /", () => {
+    expect(sanitizeCallbackUrl("evil.com")).toBe("/");
+    expect(sanitizeCallbackUrl("")).toBe("/");
+  });
+
+  it("decideRoute không bao giờ trả callbackUrl chứa host khác", () => {
+    const d = decideRoute({
+      hostKind: "admin",
+      pathname: "//evil.com/leads",
+      role: null,
+      sessionValid: false,
+    });
+    // "//evil.com/leads" firstSegment = "evil.com" → không phải admin route →
+    // bounce public; nhưng nếu là admin route, callbackUrl phải đã sanitize.
+    if (d.type === "redirectPath" && d.callbackUrl) {
+      expect(d.callbackUrl.startsWith("//")).toBe(false);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tổng quát: KHÔNG bao giờ rewrite /admin/* cho PARENT, /portal/* cho staff.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("Invariants bảo mật", () => {
+  it("PARENT KHÔNG bao giờ nhận rewrite vào /admin/*", () => {
+    for (const p of ["/leads", "/dashboard", "/users", "/nhan-su", "/settings"]) {
+      const d = decideRoute({ hostKind: "admin", pathname: p, ...authed("PARENT") });
+      expect(d.type === "rewrite" && d.path.startsWith("/admin")).toBe(false);
+    }
+  });
+
+  it("staff KHÔNG bao giờ nhận rewrite vào /portal/*", () => {
+    for (const role of STAFF_ROLES) {
+      for (const p of ["/lich-hoc", "/bai-tap", "/ho-so"]) {
+        const d = decideRoute({ hostKind: "portal", pathname: p, ...authed(role) });
+        expect(d.type === "rewrite" && d.path.startsWith("/portal")).toBe(false);
+      }
+    }
+  });
+});

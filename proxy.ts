@@ -1,12 +1,19 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
+import type { Role } from "@prisma/client";
+import {
+  decideRoute,
+  isAdminRoute,
+  isLegacyAdminPrefixed,
+  sanitizeCallbackUrl,
+  type HostKind,
+  type RouteDecision,
+} from "@/lib/auth/route-policy";
 
 const PUBLIC_HOST = "satarobo.vn";
 const ADMIN_HOST = "admin.satarobo.vn";
 const PORTAL_HOST = "hocvien.satarobo.vn"; // Phase T2.2 — portal phụ huynh/site con
-
-type HostKind = "public" | "admin" | "portal" | "vercel" | "unknown";
 
 function detectHost(host: string): HostKind {
   if (host === PUBLIC_HOST || host === `www.${PUBLIC_HOST}`) return "public";
@@ -16,78 +23,11 @@ function detectHost(host: string): HostKind {
   return "unknown"; // localhost, preview deployments
 }
 
-// Top-level route segments under app/(admin)/admin/* — admin host serves
-// these at the root path (no /admin prefix). Keep in sync with the folder
-// list. Adding a new admin route? Add its top segment here.
-const ADMIN_ROUTE_SEGMENTS = new Set<string>([
-  "assignments",
-  "attendance",
-  "audit-log",
-  "centers",
-  "cham-cong",
-  "charts-test",
-  "class-groups",
-  "classes",
-  "course-packages",
-  "crm",
-  "curriculums",
-  "dashboard",
-  "design-system-preview",
-  "design-system-preview-v2",
-  "documents",
-  "email-logs",
-  "email-templates",
-  "enrollments",
-  "exams",
-  "holidays",
-  "honors",
-  "inventory",
-  "jobs",
-  "kits",
-  "leads",
-  "marketing",
-  "media",
-  "news",
-  "nhan-su",
-  "notifications",
-  "orders",
-  "parent-feedback",
-  "parent-requests",
-  "payment-methods",
-  "products",
-  "questions",
-  "r2-test",
-  "rooms",
-  "sessions",
-  "settings",
-  "site-content",
-  "students",
-  "teachers",
-  "trials",
-  "users",
-  "vouchers",
-]);
-
-/** First path segment, e.g. "/leads/123" → "leads". */
-function firstSegment(p: string): string {
-  const parts = p.split("/").filter(Boolean);
-  return parts[0] ?? "";
-}
-
-function isAdminRoute(p: string): boolean {
-  return ADMIN_ROUTE_SEGMENTS.has(firstSegment(p));
-}
-
-function isInfraPath(p: string): boolean {
-  return (
-    p.startsWith("/_next/") ||
-    p.startsWith("/api/") ||
-    p === "/favicon.ico" ||
-    p === "/robots.txt" ||
-    p === "/sitemap.xml" ||
-    p === "/manifest.json"
-  );
-}
+const HOST_BY_KIND = {
+  admin: ADMIN_HOST,
+  portal: PORTAL_HOST,
+  public: PUBLIC_HOST,
+} as const;
 
 /** Redirect to same path on different host (preserves query string). */
 function redirectToHost(
@@ -138,6 +78,24 @@ function withAdminHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
+/** Thực thi một RouteDecision (do `decideRoute()` trả về) thành NextResponse. */
+function execute(req: NextAuthRequest, decision: RouteDecision): NextResponse {
+  switch (decision.type) {
+    case "next":
+      return NextResponse.next();
+    case "rewrite":
+      return rewriteTo(req, decision.path);
+    case "redirectPath": {
+      const search: Record<string, string> = {};
+      if (decision.callbackUrl) search.callbackUrl = decision.callbackUrl;
+      if (decision.reason) search.reason = decision.reason;
+      return redirectTo(req, decision.path, Object.keys(search).length ? search : undefined);
+    }
+    case "redirectHost":
+      return redirectToHost(req, HOST_BY_KIND[decision.host], decision.path, decision.status);
+  }
+}
+
 export default auth((req: NextAuthRequest) => {
   const { pathname } = req.nextUrl;
   const host = (req.headers.get("host") ?? "").toLowerCase();
@@ -145,12 +103,11 @@ export default auth((req: NextAuthRequest) => {
   const kind = detectHost(host);
 
   // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 1: *.vercel.app → canonical host (production only)
+  // BRANCH 1: *.vercel.app → canonical host (production only).
+  // Pure canonicalization (không liên quan auth) — giữ inline.
   // ═══════════════════════════════════════════════════════════════════
   if (kind === "vercel" && process.env.NODE_ENV === "production") {
-    // Strip /admin prefix when bouncing to admin host (clean URLs there).
-    const isAdminPrefixed = pathname.startsWith("/admin/") || pathname === "/admin";
-    if (isAdminPrefixed) {
+    if (isLegacyAdminPrefixed(pathname)) {
       const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
       return redirectToHost(req, ADMIN_HOST, cleanPath, 308);
     }
@@ -161,119 +118,36 @@ export default auth((req: NextAuthRequest) => {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 1.5: hocvien.satarobo.vn — portal phụ huynh (Phase T2.2)
-  // Chỉ role PARENT. Clean URL (/lich-hoc...) rewrite nội bộ → /portal/*.
+  // BRANCH 2: host thật (public/admin/portal) → decideRoute() thuần tuý.
+  // Toàn bộ logic phân quyền theo host nằm trong lib/auth/route-policy.ts
+  // (test bằng route-policy.test.ts). Middleware không biết tokenVersion/
+  // isActive (cần DB) → sessionValid = có JWT hợp lệ; tầng liveness
+  // (deactivated/tokenVersion) enforce ở layout RSC. defense-in-depth.
   // ═══════════════════════════════════════════════════════════════════
-  if (kind === "portal") {
-    if (isInfraPath(pathname)) return NextResponse.next();
+  if (kind === "public" || kind === "admin" || kind === "portal") {
+    const decision = decideRoute({
+      hostKind: kind,
+      pathname,
+      role: (session?.user?.role as Role | undefined) ?? null,
+      sessionValid: Boolean(session?.user),
+    });
+    const response = execute(req, decision);
+    return kind === "admin" ? withAdminHeaders(response) : response;
+  }
 
-    // Trang đăng nhập dùng chung (app/(auth)/login).
-    if (pathname === "/login") {
-      if (session?.user?.role === "PARENT") return redirectTo(req, "/");
-      return NextResponse.next();
-    }
+  // ═══════════════════════════════════════════════════════════════════
+  // BRANCH 3: unknown host (localhost, preview) — không có subdomain split.
+  // Dùng path /admin/X như file system Next.js phục vụ + clean-URL mirror.
+  // Áp role gate tối thiểu để dev không bypass được (PARENT ↛ /admin/*).
+  // ═══════════════════════════════════════════════════════════════════
+  const role = (session?.user?.role as Role | undefined) ?? null;
 
+  if (isLegacyAdminPrefixed(pathname)) {
     if (!session?.user) {
-      return redirectTo(req, "/login", { callbackUrl: pathname });
+      return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
     }
-    // Staff (không phải phụ huynh) lạc vào portal → đẩy về admin host.
-    if (session.user.role !== "PARENT") {
-      return redirectToHost(req, ADMIN_HOST, "/dashboard", 307);
-    }
-
-    // PARENT: chuẩn hoá landing admin-ish (vd callbackUrl mặc định /dashboard)
-    // về portal home, rồi rewrite clean URL → /portal/*.
-    if (pathname === "/dashboard" || isAdminRoute(pathname)) {
-      return redirectTo(req, "/");
-    }
-    if (pathname === "/") return rewriteTo(req, "/portal");
-    if (pathname === "/portal" || pathname.startsWith("/portal/")) {
-      return NextResponse.next();
-    }
-    return rewriteTo(req, "/portal" + pathname);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 2: satarobo.vn (public)
-  // - Old /admin/X URLs → 308 to admin host without /admin prefix
-  // - Bare admin route names → 308 to admin host
-  // - /login → 308 to admin host
-  // - Everything else → public passthrough
-  // ═══════════════════════════════════════════════════════════════════
-  if (kind === "public") {
-    // Portal-only segment lọt sang public host → đẩy về portal host.
-    if (pathname === "/portal" || pathname.startsWith("/portal/")) {
-      return redirectToHost(req, PORTAL_HOST, "/", 308);
-    }
-    if (pathname.startsWith("/admin/") || pathname === "/admin") {
-      const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
-      return redirectToHost(req, ADMIN_HOST, cleanPath, 308);
-    }
-    if (pathname === "/login" || isAdminRoute(pathname)) {
-      return redirectToHost(req, ADMIN_HOST, pathname, 308);
-    }
-    return NextResponse.next();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 3: admin.satarobo.vn — clean URLs, internal rewrite
-  // ═══════════════════════════════════════════════════════════════════
-  if (kind === "admin") {
-    if (isInfraPath(pathname)) {
-      return NextResponse.next();
-    }
-
-    // Portal-only segment lọt sang admin host → đẩy về portal host.
-    if (pathname === "/portal" || pathname.startsWith("/portal/")) {
-      return redirectToHost(req, PORTAL_HOST, "/", 308);
-    }
-
-    // Legacy /admin/X URLs (old bookmarks, external links) → 308 strip prefix
-    if (pathname.startsWith("/admin/") || pathname === "/admin") {
-      const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
-      return withAdminHeaders(redirectTo(req, cleanPath));
-    }
-
-    // Root → dashboard
-    if (pathname === "/") {
-      if (!session?.user) {
-        return withAdminHeaders(redirectTo(req, "/login"));
-      }
-      return withAdminHeaders(redirectTo(req, "/dashboard"));
-    }
-
-    // /login on admin host
-    if (pathname === "/login") {
-      if (session?.user) {
-        return withAdminHeaders(redirectTo(req, "/dashboard"));
-      }
-      return withAdminHeaders(NextResponse.next());
-    }
-
-    // Known admin route → rewrite internally to /admin/X so Next.js resolves
-    // file at app/(admin)/admin/X. URL bar stays as /X.
-    if (isAdminRoute(pathname)) {
-      if (!session?.user) {
-        return withAdminHeaders(
-          redirectTo(req, "/login", { callbackUrl: pathname }),
-        );
-      }
-      return withAdminHeaders(rewriteTo(req, "/admin" + pathname));
-    }
-
-    // Non-admin path on admin host → bounce to public host
-    // VD: admin.satarobo.vn/khoa-hoc → satarobo.vn/khoa-hoc
-    return redirectToHost(req, PUBLIC_HOST, pathname, 308);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // BRANCH 4: unknown host (localhost, preview deployments)
-  // No subdomain split — use the same /admin/X paths Next.js file system
-  // serves. Apply auth gate + legacy /admin/X cleanup mirror.
-  // ═══════════════════════════════════════════════════════════════════
-  if (pathname.startsWith("/admin/") || pathname === "/admin") {
-    if (!session?.user) {
-      return redirectTo(req, "/login", { callbackUrl: pathname });
+    if (role === "PARENT") {
+      return redirectTo(req, "/portal");
     }
     if (pathname === "/admin" || pathname === "/admin/") {
       return redirectTo(req, "/admin/dashboard");
@@ -281,16 +155,19 @@ export default auth((req: NextAuthRequest) => {
     return NextResponse.next();
   }
 
-  // Clean URL on localhost too — rewrite /X → /admin/X for known admin routes
+  // Clean URL trên localhost: rewrite /X → /admin/X cho known admin routes.
   if (isAdminRoute(pathname)) {
     if (!session?.user) {
-      return redirectTo(req, "/login", { callbackUrl: pathname });
+      return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
+    }
+    if (role === "PARENT") {
+      return redirectTo(req, "/portal");
     }
     return rewriteTo(req, "/admin" + pathname);
   }
 
   if (pathname === "/login" && session?.user) {
-    return redirectTo(req, "/dashboard");
+    return redirectTo(req, role === "PARENT" ? "/portal" : "/dashboard");
   }
 
   return NextResponse.next();

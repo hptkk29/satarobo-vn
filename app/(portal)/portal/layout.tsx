@@ -19,7 +19,9 @@ export default async function PortalLayout({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "PARENT") redirect("/login");
+  // Defense-in-depth: chỉ PARENT vào portal. Staff lạc vào → /dashboard
+  // (middleware portal host sẽ redirectHost sang admin.satarobo.vn).
+  if (session.user.role !== "PARENT") redirect("/dashboard");
 
   const ctx = await getPortalContext();
   // ctx luôn khác null vì role PARENT, nhưng guard cho chắc.
