@@ -10,6 +10,7 @@ import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { TeacherDashboard } from "./_components/teacher-dashboard";
 import { SalesDashboard } from "./_components/sales-dashboard";
+import { AccountantDashboard } from "./_components/accountant-dashboard";
 
 const STATUS_VARIANT: Record<
   string,
@@ -79,6 +80,9 @@ export default async function DashboardPage() {
   }
   if (role === "SALES_CSM") {
     return <SalesDashboard userId={session.user.id} name={session.user.name ?? ""} />;
+  }
+  if (role === "ACCOUNTANT") {
+    return <AccountantDashboard name={session.user.name ?? ""} />;
   }
 
   const now = new Date();
