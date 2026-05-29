@@ -75,37 +75,19 @@ export function ImageUploader({
 
       try {
         const category = mapPrefixToCategory(prefix);
-        const presignRes = await fetch("/api/admin/upload-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            category,
-            filename: file.name,
-            mimeType: file.type,
-            sizeBytes: file.size,
-          }),
-        });
 
-        if (!presignRes.ok) {
-          const err = (await presignRes.json().catch(() => ({}))) as PresignResponse;
-          throw new Error(err.error || "Không lấy được URL upload");
-        }
-
-        const data = (await presignRes.json()) as PresignResponse;
-        const uploadUrl = data.uploadUrl ?? data.url;
-        const publicUrl =
-          data.publicUrl ?? (data.key ? `https://cdn.satarobo.vn/${data.key}` : null);
-
-        if (!uploadUrl || !publicUrl) {
-          throw new Error("Server trả về dữ liệu không hợp lệ");
-        }
-
+        // Upload qua proxy SAME-ORIGIN (/api/admin/upload) → server đẩy lên R2.
+        // Tránh hoàn toàn CORS browser→R2 (hoạt động cả localhost lẫn production).
         setState({ status: "uploading", progress: 0, filename: file.name });
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("category", category);
 
         const xhr = new XMLHttpRequest();
         xhrRef.current = xhr;
 
-        await new Promise<void>((resolve, reject) => {
+        const publicUrl = await new Promise<string>((resolve, reject) => {
           xhr.upload.addEventListener("progress", (e) => {
             if (e.lengthComputable) {
               const progress = Math.round((e.loaded / e.total) * 100);
@@ -113,20 +95,24 @@ export function ImageUploader({
             }
           });
           xhr.addEventListener("load", () => {
-            if (xhr.status >= 200 && xhr.status < 300) resolve();
-            else reject(new Error(`Upload thất bại: HTTP ${xhr.status}`));
+            let body: PresignResponse = {};
+            try {
+              body = JSON.parse(xhr.responseText) as PresignResponse;
+            } catch {
+              /* ignore parse */
+            }
+            if (xhr.status >= 200 && xhr.status < 300 && body.publicUrl) {
+              resolve(body.publicUrl);
+            } else {
+              reject(new Error(body.error || `Upload thất bại: HTTP ${xhr.status}`));
+            }
           });
           xhr.addEventListener("error", () =>
-            reject(
-              new Error(
-                "Không gửi được ảnh lên kho lưu trữ. Kiểm tra kết nối mạng; nếu vẫn lỗi, R2 bucket cần bật CORS cho phép PUT từ tên miền admin.",
-              ),
-            ),
+            reject(new Error("Lỗi kết nối khi gửi ảnh lên máy chủ. Kiểm tra mạng và thử lại.")),
           );
           xhr.addEventListener("abort", () => reject(new Error("Đã huỷ upload")));
-          xhr.open("PUT", uploadUrl);
-          xhr.setRequestHeader("Content-Type", file.type);
-          xhr.send(file);
+          xhr.open("POST", "/api/admin/upload");
+          xhr.send(formData);
         });
 
         onChange(publicUrl);
