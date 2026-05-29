@@ -30,7 +30,13 @@ export type ClassFormValue = {
 interface CourseOption {
   id: string;
   name: string;
+  category: "LUYEN_THI_ROBOSIM" | "LAP_TRINH_ROBOT" | null;
 }
+
+const COURSE_CATEGORY_LABEL: Record<"LUYEN_THI_ROBOSIM" | "LAP_TRINH_ROBOT", string> = {
+  LUYEN_THI_ROBOSIM: "Khoá luyện thi RoboSim",
+  LAP_TRINH_ROBOT: "Khoá lập trình Robot",
+};
 interface CenterOption {
   id: string;
   name: string;
@@ -177,10 +183,15 @@ export function ClassForm({
             name="courseId"
             defaultValue={cls?.courseId ?? ""}
             required
-            options={[
-              { value: "", label: "— Chọn khoá học —" },
-              ...courses.map((c) => ({ value: c.id, label: c.name })),
-            ]}
+            options={[{ value: "", label: "— Chọn khoá cụ thể —" }]}
+            groups={(["LUYEN_THI_ROBOSIM", "LAP_TRINH_ROBOT"] as const)
+              .map((cat) => ({
+                label: COURSE_CATEGORY_LABEL[cat],
+                options: courses
+                  .filter((c) => c.category === cat)
+                  .map((c) => ({ value: c.id, label: c.name })),
+              }))
+              .filter((g) => g.options.length > 0)}
           />
           <SelectField
             label="Cơ sở"
@@ -474,10 +485,13 @@ function Field({
   );
 }
 
+type SelectOption = { value: string; label: string };
 type SelectFieldProps = {
   label: string;
   name: string;
-  options: readonly { value: string; label: string }[];
+  options: readonly SelectOption[];
+  /** Nếu có → render <optgroup> thay cho options phẳng (giữ option đầu của options làm placeholder). */
+  groups?: readonly { label: string; options: readonly SelectOption[] }[];
   defaultValue?: string;
   value?: string;
   onChange?: (v: string) => void;
@@ -489,6 +503,7 @@ function SelectField({
   label,
   name,
   options,
+  groups,
   defaultValue,
   value,
   onChange,
@@ -514,6 +529,15 @@ function SelectField({
           <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>
+        ))}
+        {groups?.map((g) => (
+          <optgroup key={g.label} label={g.label}>
+            {g.options.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
       {helper && <span className="mt-1 block text-xs text-neutral-500">{helper}</span>}

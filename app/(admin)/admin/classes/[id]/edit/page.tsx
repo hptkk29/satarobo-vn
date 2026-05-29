@@ -47,9 +47,9 @@ export default async function EditClassPage({ params }: Props) {
       },
     }),
     db.course.findMany({
-      where: { isActive: true },
+      where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, category: true },
     }),
     db.center.findMany({
       where: { isActive: true },
