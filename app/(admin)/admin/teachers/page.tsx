@@ -4,36 +4,12 @@ import { db } from '@/lib/db'
 import { can } from '@/lib/auth/permissions'
 import { Role } from '@prisma/client'
 
-const ROLE_LABELS: Record<Role, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  CENTER_MANAGER: 'Quản lý',
-  HR: 'Nhân sự (HR)',
-  SALES_CSM: 'Sales',
-  TEACHER: 'Giáo viên',
-  MARKETING: 'Marketing',
-  ACCOUNTANT: 'Kế toán',
-  PARENT: 'Phụ huynh',
-}
-
-const ROLE_COLORS: Record<Role, string> = {
-  SUPER_ADMIN: 'bg-red-100 text-red-700',
-  CENTER_MANAGER: 'bg-purple-100 text-purple-700',
-  HR: 'bg-pink-100 text-pink-700',
-  SALES_CSM: 'bg-blue-100 text-blue-700',
-  TEACHER: 'bg-green-100 text-green-700',
-  MARKETING: 'bg-orange-100 text-orange-700',
-  ACCOUNTANT: 'bg-gray-100 text-gray-600',
-  PARENT: 'bg-teal-100 text-teal-700',
-}
-
-const VALID_ROLES = Object.values(Role)
-
 function formatDate(date: Date) {
   return new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 interface SearchParams {
-  searchParams: Promise<{ q?: string; role?: string }>
+  searchParams: Promise<{ q?: string }>
 }
 
 export default async function TeachersPage({ searchParams }: SearchParams) {
@@ -43,21 +19,19 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
 
   const params = await searchParams
   const q = params.q?.trim()
-  const roleParam = params.role
-  const roleFilter = roleParam && VALID_ROLES.includes(roleParam as Role)
-    ? (roleParam as Role)
-    : undefined
 
+  // FIX 2 — Trang Giáo viên CHỈ liệt kê user role = TEACHER. Xem toàn bộ nhân sự
+  // mọi vai trò là việc của trang Nhân sự (/nhan-su).
   const where = {
     isActive: true,
     deletedAt: null as null,
+    role: 'TEACHER' as Role,
     ...(q ? {
       OR: [
         { name: { contains: q, mode: 'insensitive' as const } },
         { email: { contains: q, mode: 'insensitive' as const } },
       ],
     } : {}),
-    ...(roleFilter ? { role: roleFilter } : {}),
   }
 
   let staff: Array<{
@@ -89,13 +63,14 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
     })
   } catch { /* empty DB returns [] */ }
 
-  const roles = VALID_ROLES.filter((r) => r !== 'SUPER_ADMIN')
-
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Nhân sự</h1>
-        <p className="mt-1 text-sm text-gray-500">{staff.length} thành viên</p>
+        <h1 className="text-2xl font-bold text-gray-900">Giáo viên</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          {staff.length} giáo viên · Quản lý toàn bộ nhân sự ở mục{' '}
+          <a href="/nhan-su" className="font-medium text-[#7C3AED] hover:underline">Nhân sự</a>
+        </p>
       </div>
 
       {/* Filters */}
@@ -106,16 +81,6 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
           placeholder="Tìm theo tên, email..."
           className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm sm:max-w-xs focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
         />
-        <select
-          name="role"
-          defaultValue={roleFilter ?? ''}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
-        >
-          <option value="">Tất cả vai trò</option>
-          {roles.map((r) => (
-            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-          ))}
-        </select>
         <button type="submit" className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
           Tìm
         </button>
@@ -128,7 +93,6 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Tên</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Vai trò</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Cơ sở</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Lớp đang dạy</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Ngày tạo</th>
@@ -137,7 +101,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
             <tbody className="divide-y divide-gray-50">
               {staff.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">Chưa có nhân sự nào</td>
+                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">Chưa có giáo viên nào</td>
                 </tr>
               ) : (
                 staff.map((u) => (
@@ -151,11 +115,6 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{u.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${ROLE_COLORS[u.role]}`}>
-                        {ROLE_LABELS[u.role]}
-                      </span>
-                    </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{u.center?.name ?? '—'}</td>
                     <td className="px-4 py-3">
                       {u.teacherClass.length === 0 ? (
