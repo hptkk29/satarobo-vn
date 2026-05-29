@@ -325,6 +325,7 @@ model User {
   teacherClass   Class[]      @relation("TeacherClasses")
   assistantClass Class[]      @relation("AssistantClasses")
   teacherProfile TeacherProfile? @relation("UserTeacherProfile") // FIX 10
+  shiftRegistrations ShiftRegistration[] // Đợt 3E
   teacherReviews TeacherReview[] @relation("TeacherReviewer")     // FIX 10 — đánh giá nội bộ do user này tạo
   trialClasses   TrialClass[] @relation("TrialTeacher")
   jobPostings    JobPosting[]
@@ -2889,6 +2890,36 @@ model MediaStudentTag {
 enum CheckinType {
   CHECK_IN
   CHECK_OUT
+}
+
+// Đợt 3E — đăng ký ca làm việc (3 ca/ngày).
+enum WorkShift {
+  CA_SANG
+  CA_CHIEU
+  CA_TOI
+}
+
+enum ShiftRegStatus {
+  REGISTERED
+  LEAVE_REQUESTED
+  APPROVED
+}
+
+model ShiftRegistration {
+  id        String         @id @default(cuid())
+  userId    String
+  centerId  String?
+  date      DateTime       @db.Date // 1 record / nhân viên / ngày
+  shifts    WorkShift[]
+  status    ShiftRegStatus @default(REGISTERED)
+  note      String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([centerId, date])
+  @@index([userId, date])
 }
 
 model EmployeeCheckin {
