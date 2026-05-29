@@ -4,12 +4,14 @@ import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import type { WorkShift } from "@prisma/client";
 import {
-  deriveAttendanceStatus,
+  computeShiftAttendance,
   formatVNTime,
-  WORK_SHIFTS,
+  formatRegisteredShifts,
   type AttendanceTag,
 } from "@/lib/work-schedule";
+import { SHIFT_DEFS, SHIFT_ORDER } from "@/lib/shifts";
 
 export const metadata = { title: "Chấm công | Admin" };
 export const dynamic = "force-dynamic";
@@ -37,37 +39,59 @@ export default async function ChamCongPage({ searchParams }: Props) {
   end.setDate(end.getDate() + 1);
   const dateStr = start.toISOString().slice(0, 10);
 
-  const rows = await db.employeeCheckin.findMany({
-    where: { checkedAt: { gte: start, lt: end } },
-    orderBy: { checkedAt: "asc" },
-  });
+  // Phạm vi cơ sở: CENTER_MANAGER chỉ xem cơ sở mình.
+  const centerScope = session.user.role === "CENTER_MANAGER" ? session.user.centerId : null;
 
-  // Gom theo nhân viên.
+  const [rows, regs] = await Promise.all([
+    db.employeeCheckin.findMany({
+      where: { checkedAt: { gte: start, lt: end }, ...(centerScope ? { centerId: centerScope } : {}) },
+      orderBy: { checkedAt: "asc" },
+    }),
+    db.shiftRegistration.findMany({
+      where: { date: { gte: start, lt: end }, ...(centerScope ? { centerId: centerScope } : {}) },
+      select: { userId: true, shifts: true, user: { select: { name: true, centerId: true } } },
+    }),
+  ]);
+
   type Agg = {
+    userId: string;
     userName: string;
     checkIn: Date | null;
     checkOut: Date | null;
     centerId: string | null;
     geofenceFlag: boolean;
+    registeredShifts: WorkShift[];
   };
   const byUser = new Map<string, Agg>();
+  const ensure = (userId: string, name: string, centerId: string | null): Agg => {
+    let a = byUser.get(userId);
+    if (!a) {
+      a = { userId, userName: name, checkIn: null, checkOut: null, centerId, geofenceFlag: false, registeredShifts: [] };
+      byUser.set(userId, a);
+    }
+    return a;
+  };
   for (const r of rows) {
-    const a =
-      byUser.get(r.userId) ??
-      { userName: r.userName ?? "(không tên)", checkIn: null, checkOut: null, centerId: r.centerId, geofenceFlag: false };
+    const a = ensure(r.userId, r.userName ?? "(không tên)", r.centerId);
     if (r.type === "CHECK_IN") a.checkIn = r.checkedAt;
     else a.checkOut = r.checkedAt;
     if (!r.withinGeofence) a.geofenceFlag = true;
-    byUser.set(r.userId, a);
   }
+  // Nhân viên có ĐĂNG KÝ ca ngày đó (kể cả chưa quét → để hiện "Thiếu ca").
+  for (const reg of regs) {
+    const a = ensure(reg.userId, reg.user.name ?? "(không tên)", reg.user.centerId);
+    a.registeredShifts = reg.shifts;
+  }
+
   const list = [...byUser.values()]
     .sort((x, y) => x.userName.localeCompare(y.userName))
     .map((a) => ({
       ...a,
-      status: deriveAttendanceStatus({
+      status: computeShiftAttendance({
         checkIn: a.checkIn,
         checkOut: a.checkOut,
         geofenceFlag: a.geofenceFlag,
+        registeredShifts: a.registeredShifts,
       }),
     }));
 
@@ -82,7 +106,8 @@ export default async function ChamCongPage({ searchParams }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Chấm công nhân viên</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Giờ chuẩn (GMT+7): {WORK_SHIFTS.map((s) => `${s.start}–${s.end}`).join(" · ")} · 8h/ngày.
+            Tính công theo ca đăng ký (GMT+7):{" "}
+            {SHIFT_ORDER.map((s) => `${SHIFT_DEFS[s].label} ${SHIFT_DEFS[s].start}–${SHIFT_DEFS[s].end}`).join(" · ")}.
           </p>
         </div>
         <Link
@@ -120,6 +145,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
               <tr>
                 <th className="px-4 py-3 font-semibold">Nhân viên</th>
                 <th className="px-4 py-3 font-semibold">Cơ sở</th>
+                <th className="px-4 py-3 font-semibold">Ca đăng ký</th>
                 <th className="px-4 py-3 text-center font-semibold">Check-in</th>
                 <th className="px-4 py-3 text-center font-semibold">Check-out</th>
                 <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
@@ -132,6 +158,9 @@ export default async function ChamCongPage({ searchParams }: Props) {
                   <td className="px-4 py-2.5 font-medium text-gray-900">{a.userName}</td>
                   <td className="px-4 py-2.5 text-gray-600">
                     {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-700">
+                    {formatRegisteredShifts(a.registeredShifts)}
                   </td>
                   <td className="px-4 py-2.5 text-center tabular-nums text-gray-700">
                     {formatVNTime(a.checkIn)}

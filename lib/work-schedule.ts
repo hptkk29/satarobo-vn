@@ -1,118 +1,26 @@
 /**
- * Cấu hình giờ làm chuẩn + helper tính công (FIX 6).
+ * Tính công theo CA ĐÃ ĐĂNG KÝ (Đợt 3E — thay mô hình 2-ca cố định của FIX 6).
  *
- * Chỉnh giờ làm / dung sai ở ĐÂY, không sửa rải rác. Dữ liệu chấm công lưu UTC;
- * mọi hiển thị/tính toán quy về Asia/Ho_Chi_Minh (UTC+7, KHÔNG có DST nên dùng
- * offset cố định là chính xác).
+ * Dữ liệu chấm công lưu UTC; mọi tính toán/hiển thị quy về Asia/Ho_Chi_Minh
+ * (UTC+7, không DST). Đủ công = có mặt trọn (các) ca đã đăng ký của ngày đó
+ * (dung sai 5'). Ca chiều (13:30–17:30) và ca tối (17:00–21:00) CHỒNG giờ →
+ * khi đăng ký liền nhau tính theo KHOẢNG LIÊN TỤC (merge), không cộng máy móc.
  */
+import type { WorkShift } from "@prisma/client";
+import { SHIFT_DEFS, SHIFT_TOLERANCE_MIN, SHIFT_ORDER } from "@/lib/shifts";
 
 export const VN_TIME_ZONE = "Asia/Ho_Chi_Minh";
-const VN_OFFSET_MIN = 7 * 60; // UTC+7 cố định
+const VN_OFFSET_MIN = 7 * 60;
 
-/** Ca làm trong ngày (giờ tường VN). Tổng 8h, nghỉ trưa 11:30–13:30. */
-export const WORK_SHIFTS = [
-  { label: "Ca sáng", start: "07:30", end: "11:30" },
-  { label: "Ca chiều", start: "13:30", end: "17:30" },
-] as const;
-
-export const WORK_SCHEDULE = {
-  /** Tổng giờ công chuẩn / ngày. */
-  standardHours: 8,
-  /** Dung sai (phút) cho đi muộn / về sớm / đủ giờ. */
-  toleranceMinutes: 5,
-  /** Mốc tính "đi muộn" (giờ tường VN) = giờ vào ca sáng + dung sai. */
-  lateAfter: "07:35",
-  /** Mốc tính "về sớm" (giờ tường VN) = giờ tan ca chiều − dung sai. */
-  earlyLeaveBefore: "17:25",
-} as const;
-
-/** "HH:MM" → số phút từ 00:00. */
-function hmToMinutes(hm: string): number {
+export function hmToMinutes(hm: string): number {
   const [h, m] = hm.split(":").map(Number);
   return h * 60 + m;
 }
 
-/** Phút-trong-ngày theo giờ tường VN của một mốc thời gian UTC. */
+/** Phút-trong-ngày theo giờ tường VN của một mốc UTC. */
 export function vnMinutesOfDay(date: Date): number {
-  const totalVnMinutes = Math.floor(date.getTime() / 60000) + VN_OFFSET_MIN;
-  return ((totalVnMinutes % 1440) + 1440) % 1440;
-}
-
-const SHIFT_RANGES = WORK_SHIFTS.map((s) => ({
-  start: hmToMinutes(s.start),
-  end: hmToMinutes(s.end),
-}));
-
-/** Giao của [a,b] với [c,d], tính bằng phút (≥0). */
-function overlap(a: number, b: number, c: number, d: number): number {
-  return Math.max(0, Math.min(b, d) - Math.max(a, c));
-}
-
-/**
- * Giờ công THỰC = tổng phần giao của [check-in, check-out] với 2 ca (đã loại
- * nghỉ trưa vì nghỉ trưa nằm ngoài 2 ca). Trả về số giờ (làm tròn 2 chữ số).
- * Giả định check-in/out cùng 1 ngày VN (chấm công trong ngày).
- */
-export function computeWorkedHours(checkIn: Date | null, checkOut: Date | null): number {
-  if (!checkIn || !checkOut) return 0;
-  const ci = vnMinutesOfDay(checkIn);
-  const co = vnMinutesOfDay(checkOut);
-  if (co <= ci) return 0;
-  const worked = SHIFT_RANGES.reduce(
-    (sum, s) => sum + overlap(ci, co, s.start, s.end),
-    0,
-  );
-  return Math.round((worked / 60) * 100) / 100;
-}
-
-export type AttendanceTag = {
-  label: string;
-  tone: "ok" | "warn" | "danger";
-};
-
-/**
- * Suy ra trạng thái chấm công (có thể nhiều tag cùng lúc). Dung sai 5'.
- */
-export function deriveAttendanceStatus(input: {
-  checkIn: Date | null;
-  checkOut: Date | null;
-  geofenceFlag: boolean;
-}): { workedHours: number; tags: AttendanceTag[] } {
-  const { checkIn, checkOut, geofenceFlag } = input;
-  const tags: AttendanceTag[] = [];
-  const workedHours = computeWorkedHours(checkIn, checkOut);
-
-  if (geofenceFlag) tags.push({ label: "Ngoài vùng", tone: "danger" });
-
-  if (!checkIn) {
-    if (tags.length === 0) tags.push({ label: "—", tone: "warn" });
-    return { workedHours, tags };
-  }
-
-  if (checkIn && !checkOut) {
-    tags.push({ label: "Thiếu check-out", tone: "warn" });
-    return { workedHours, tags };
-  }
-
-  const late = vnMinutesOfDay(checkIn) > hmToMinutes(WORK_SCHEDULE.lateAfter);
-  const earlyLeave =
-    checkOut !== null &&
-    vnMinutesOfDay(checkOut) < hmToMinutes(WORK_SCHEDULE.earlyLeaveBefore);
-  const enough =
-    workedHours >= WORK_SCHEDULE.standardHours - WORK_SCHEDULE.toleranceMinutes / 60;
-
-  if (late) tags.push({ label: "Đi muộn", tone: "warn" });
-  if (earlyLeave) tags.push({ label: "Về sớm", tone: "warn" });
-
-  if (!enough) {
-    tags.push({ label: `Thiếu giờ · ${workedHours}h`, tone: "danger" });
-  } else if (!late && !earlyLeave && !geofenceFlag) {
-    tags.push({ label: "Đủ công", tone: "ok" });
-  } else if (tags.filter((t) => t.label !== "Ngoài vùng").length === 0) {
-    tags.push({ label: "Đủ công", tone: "ok" });
-  }
-
-  return { workedHours, tags };
+  const total = Math.floor(date.getTime() / 60000) + VN_OFFSET_MIN;
+  return ((total % 1440) + 1440) % 1440;
 }
 
 /** Format giờ HH:MM theo GMT+7. */
@@ -123,4 +31,111 @@ export function formatVNTime(date: Date | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+type Interval = { start: number; end: number };
+
+/**
+ * Gộp các ca đăng ký thành khoảng liên tục (phút). Ca chồng/nối nhau → merge;
+ * ca cách nhau (vd sáng↔chiều, có nghỉ trưa) → giữ riêng để loại nghỉ trưa.
+ */
+export function mergeShiftIntervals(shifts: WorkShift[]): Interval[] {
+  const ranges = shifts
+    .map((s) => ({ start: hmToMinutes(SHIFT_DEFS[s].start), end: hmToMinutes(SHIFT_DEFS[s].end) }))
+    .sort((a, b) => a.start - b.start);
+  const merged: Interval[] = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end) {
+      last.end = Math.max(last.end, r.end);
+    } else {
+      merged.push({ ...r });
+    }
+  }
+  return merged;
+}
+
+function overlap(a: number, b: number, c: number, d: number): number {
+  return Math.max(0, Math.min(b, d) - Math.max(a, c));
+}
+
+export type AttendanceTag = { label: string; tone: "ok" | "warn" | "danger" };
+
+export type ShiftAttendance = {
+  workedHours: number;
+  expectedHours: number;
+  tags: AttendanceTag[];
+};
+
+/**
+ * Tính công 1 ngày theo ca đăng ký.
+ * - registeredShifts rỗng + có chấm công → "Chưa đăng ký ca" (cảnh báo).
+ * - đăng ký mà không quét → "Thiếu ca".
+ * - Đủ công = giờ công thực ≥ giờ kỳ vọng (tổng khoảng liên tục) − dung sai.
+ */
+export function computeShiftAttendance(input: {
+  checkIn: Date | null;
+  checkOut: Date | null;
+  geofenceFlag: boolean;
+  registeredShifts: WorkShift[];
+}): ShiftAttendance {
+  const { checkIn, checkOut, geofenceFlag, registeredShifts } = input;
+  const tags: AttendanceTag[] = [];
+  const tolH = SHIFT_TOLERANCE_MIN / 60;
+
+  if (geofenceFlag) tags.push({ label: "Ngoài vùng", tone: "danger" });
+
+  const intervals = mergeShiftIntervals(registeredShifts);
+  const expectedMin = intervals.reduce((s, i) => s + (i.end - i.start), 0);
+  const expectedHours = Math.round((expectedMin / 60) * 100) / 100;
+
+  // Không đăng ký ca.
+  if (registeredShifts.length === 0) {
+    if (checkIn) tags.push({ label: "Chưa đăng ký ca", tone: "warn" });
+    else tags.push({ label: "—", tone: "warn" });
+    return { workedHours: 0, expectedHours: 0, tags };
+  }
+
+  // Đăng ký mà không quét vào.
+  if (!checkIn) {
+    tags.push({ label: "Thiếu ca (không quét)", tone: "danger" });
+    return { workedHours: 0, expectedHours, tags };
+  }
+
+  const ci = vnMinutesOfDay(checkIn);
+  if (!checkOut) {
+    tags.push({ label: "Thiếu check-out", tone: "warn" });
+    return { workedHours: 0, expectedHours, tags };
+  }
+  const co = vnMinutesOfDay(checkOut);
+
+  const workedMin = intervals.reduce((s, iv) => s + overlap(ci, co, iv.start, iv.end), 0);
+  const workedHours = Math.round((workedMin / 60) * 100) / 100;
+
+  const firstStart = intervals[0].start;
+  const lastEnd = intervals[intervals.length - 1].end;
+  const late = ci > firstStart + SHIFT_TOLERANCE_MIN;
+  const earlyLeave = co < lastEnd - SHIFT_TOLERANCE_MIN;
+  const enough = workedHours >= expectedHours - tolH;
+
+  if (late) tags.push({ label: "Đi muộn", tone: "warn" });
+  if (earlyLeave) tags.push({ label: "Về sớm", tone: "warn" });
+
+  if (!enough) {
+    tags.push({ label: `Thiếu giờ · ${workedHours}/${expectedHours}h`, tone: "danger" });
+  } else if (!late && !earlyLeave && !geofenceFlag) {
+    tags.push({ label: "Đủ công", tone: "ok" });
+  } else if (tags.filter((t) => t.label !== "Ngoài vùng").length === 0) {
+    tags.push({ label: "Đủ công", tone: "ok" });
+  }
+
+  return { workedHours, expectedHours, tags };
+}
+
+/** Nhãn gọn các ca đăng ký, vd "Sáng + Chiều". */
+export function formatRegisteredShifts(shifts: WorkShift[]): string {
+  if (shifts.length === 0) return "—";
+  return SHIFT_ORDER.filter((s) => shifts.includes(s))
+    .map((s) => SHIFT_DEFS[s].label.replace("Ca ", ""))
+    .join(" + ");
 }

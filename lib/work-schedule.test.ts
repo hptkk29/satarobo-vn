@@ -1,84 +1,97 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeWorkedHours,
-  deriveAttendanceStatus,
+  computeShiftAttendance,
+  mergeShiftIntervals,
   formatVNTime,
   vnMinutesOfDay,
 } from "./work-schedule";
 
-// Helper: tạo Date từ giờ tường VN (UTC+7) → instant UTC tương ứng.
-function vn(dateISO: string, hm: string): Date {
-  return new Date(`${dateISO}T${hm}:00+07:00`);
+// Date từ giờ tường VN (UTC+7).
+function vn(hm: string): Date {
+  return new Date(`2026-05-29T${hm}:00+07:00`);
+}
+function labels(tags: { label: string }[]): string[] {
+  return tags.map((t) => t.label);
 }
 
-describe("vnMinutesOfDay — quy về GMT+7", () => {
+describe("vnMinutesOfDay / formatVNTime — GMT+7", () => {
   it("07:38 VN → 458 phút", () => {
-    expect(vnMinutesOfDay(vn("2026-05-29", "07:38"))).toBe(7 * 60 + 38);
+    expect(vnMinutesOfDay(vn("07:38"))).toBe(7 * 60 + 38);
   });
-});
-
-describe("computeWorkedHours — giao với 2 ca", () => {
-  it("07:38→09:04 chỉ giao ca sáng ≈ 1.43h", () => {
-    const h = computeWorkedHours(vn("2026-05-29", "07:38"), vn("2026-05-29", "09:04"));
-    expect(h).toBeGreaterThan(1.3);
-    expect(h).toBeLessThan(1.6);
-  });
-
-  it("làm full 2 ca 07:30→17:30 = 8h (loại nghỉ trưa)", () => {
-    const h = computeWorkedHours(vn("2026-05-29", "07:30"), vn("2026-05-29", "17:30"));
-    expect(h).toBe(8);
-  });
-
-  it("ở lại xuyên trưa vẫn chỉ tính 2 ca, không tính 11:30–13:30", () => {
-    const h = computeWorkedHours(vn("2026-05-29", "11:00"), vn("2026-05-29", "14:00"));
-    // ca sáng 11:00–11:30 = 0.5h + ca chiều 13:30–14:00 = 0.5h = 1h
-    expect(h).toBe(1);
-  });
-});
-
-describe("deriveAttendanceStatus", () => {
-  it("07:38→09:04 → KHÔNG 'Đủ công', có 'Thiếu giờ'", () => {
-    const { tags } = deriveAttendanceStatus({
-      checkIn: vn("2026-05-29", "07:38"),
-      checkOut: vn("2026-05-29", "09:04"),
-      geofenceFlag: false,
-    });
-    const labels = tags.map((t) => t.label);
-    expect(labels.some((l) => l.startsWith("Thiếu giờ"))).toBe(true);
-    expect(labels).not.toContain("Đủ công");
-    expect(labels).toContain("Đi muộn"); // 07:38 > 07:35
-  });
-
-  it("07:30→17:30 đúng giờ → 'Đủ công'", () => {
-    const { tags } = deriveAttendanceStatus({
-      checkIn: vn("2026-05-29", "07:30"),
-      checkOut: vn("2026-05-29", "17:30"),
-      geofenceFlag: false,
-    });
-    expect(tags.map((t) => t.label)).toContain("Đủ công");
-  });
-
-  it("có vào chưa ra → 'Thiếu check-out'", () => {
-    const { tags } = deriveAttendanceStatus({
-      checkIn: vn("2026-05-29", "07:30"),
-      checkOut: null,
-      geofenceFlag: false,
-    });
-    expect(tags.map((t) => t.label)).toContain("Thiếu check-out");
-  });
-
-  it("geofenceFlag → 'Ngoài vùng'", () => {
-    const { tags } = deriveAttendanceStatus({
-      checkIn: vn("2026-05-29", "07:30"),
-      checkOut: vn("2026-05-29", "17:30"),
-      geofenceFlag: true,
-    });
-    expect(tags.map((t) => t.label)).toContain("Ngoài vùng");
-  });
-});
-
-describe("formatVNTime — GMT+7", () => {
-  it("instant 00:38 UTC → 07:38 VN", () => {
+  it("instant 00:38Z → 07:38 VN", () => {
     expect(formatVNTime(new Date("2026-05-29T00:38:00Z"))).toBe("07:38");
+  });
+});
+
+describe("mergeShiftIntervals — chồng giờ chiều/tối", () => {
+  it("chiều + tối → 1 khoảng liên tục 13:30–21:00 (7.5h)", () => {
+    const m = mergeShiftIntervals(["CA_CHIEU", "CA_TOI"]);
+    expect(m).toHaveLength(1);
+    expect(m[0].end - m[0].start).toBe(7 * 60 + 30); // 450'
+  });
+  it("sáng + chiều → 2 khoảng (giữ nghỉ trưa) tổng 8h", () => {
+    const m = mergeShiftIntervals(["CA_SANG", "CA_CHIEU"]);
+    expect(m).toHaveLength(2);
+    const total = m.reduce((s, i) => s + (i.end - i.start), 0);
+    expect(total).toBe(8 * 60);
+  });
+  it("cả 3 ca → 4h + 7.5h = 11.5h", () => {
+    const m = mergeShiftIntervals(["CA_SANG", "CA_CHIEU", "CA_TOI"]);
+    const total = m.reduce((s, i) => s + (i.end - i.start), 0);
+    expect(total).toBe(11 * 60 + 30);
+  });
+});
+
+describe("computeShiftAttendance", () => {
+  it("1 ca sáng, có mặt trọn → Đủ công, ~4h", () => {
+    const r = computeShiftAttendance({
+      checkIn: vn("07:30"), checkOut: vn("11:30"), geofenceFlag: false,
+      registeredShifts: ["CA_SANG"],
+    });
+    expect(r.expectedHours).toBe(4);
+    expect(r.workedHours).toBe(4);
+    expect(labels(r.tags)).toContain("Đủ công");
+  });
+
+  it("chiều + tối (13:30→21:00, ~7.5h) → Đủ công (không bắt 8h)", () => {
+    const r = computeShiftAttendance({
+      checkIn: vn("13:30"), checkOut: vn("21:00"), geofenceFlag: false,
+      registeredShifts: ["CA_CHIEU", "CA_TOI"],
+    });
+    expect(r.expectedHours).toBe(7.5);
+    expect(labels(r.tags)).toContain("Đủ công");
+  });
+
+  it("đi làm KHÔNG đăng ký ca → cảnh báo 'Chưa đăng ký ca'", () => {
+    const r = computeShiftAttendance({
+      checkIn: vn("07:30"), checkOut: vn("11:30"), geofenceFlag: false,
+      registeredShifts: [],
+    });
+    expect(labels(r.tags)).toContain("Chưa đăng ký ca");
+  });
+
+  it("đăng ký mà không quét → 'Thiếu ca'", () => {
+    const r = computeShiftAttendance({
+      checkIn: null, checkOut: null, geofenceFlag: false,
+      registeredShifts: ["CA_SANG"],
+    });
+    expect(labels(r.tags).some((l) => l.startsWith("Thiếu ca"))).toBe(true);
+  });
+
+  it("vào muộn ca sáng (07:50) → Đi muộn + thiếu giờ", () => {
+    const r = computeShiftAttendance({
+      checkIn: vn("07:50"), checkOut: vn("11:30"), geofenceFlag: false,
+      registeredShifts: ["CA_SANG"],
+    });
+    expect(labels(r.tags)).toContain("Đi muộn");
+    expect(labels(r.tags)).not.toContain("Đủ công");
+  });
+
+  it("geofenceFlag → Ngoài vùng", () => {
+    const r = computeShiftAttendance({
+      checkIn: vn("07:30"), checkOut: vn("11:30"), geofenceFlag: true,
+      registeredShifts: ["CA_SANG"],
+    });
+    expect(labels(r.tags)).toContain("Ngoài vùng");
   });
 });
