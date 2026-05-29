@@ -4,6 +4,12 @@ import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import {
+  deriveAttendanceStatus,
+  formatVNTime,
+  WORK_SHIFTS,
+  type AttendanceTag,
+} from "@/lib/work-schedule";
 
 export const metadata = { title: "Chấm công | Admin" };
 export const dynamic = "force-dynamic";
@@ -12,9 +18,11 @@ interface Props {
   searchParams: Promise<{ date?: string }>;
 }
 
-function fmtTime(d: Date | null): string {
-  return d ? d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—";
-}
+const TAG_TONE: Record<AttendanceTag["tone"], string> = {
+  ok: "bg-emerald-100 text-emerald-700",
+  warn: "bg-amber-100 text-amber-700",
+  danger: "bg-rose-100 text-rose-700",
+};
 
 export default async function ChamCongPage({ searchParams }: Props) {
   const session = await auth();
@@ -52,7 +60,16 @@ export default async function ChamCongPage({ searchParams }: Props) {
     if (!r.withinGeofence) a.geofenceFlag = true;
     byUser.set(r.userId, a);
   }
-  const list = [...byUser.values()].sort((x, y) => x.userName.localeCompare(y.userName));
+  const list = [...byUser.values()]
+    .sort((x, y) => x.userName.localeCompare(y.userName))
+    .map((a) => ({
+      ...a,
+      status: deriveAttendanceStatus({
+        checkIn: a.checkIn,
+        checkOut: a.checkOut,
+        geofenceFlag: a.geofenceFlag,
+      }),
+    }));
 
   const centers = await db.center.findMany({ select: { id: true, name: true } });
   const centerName = new Map(centers.map((c) => [c.id, c.name]));
@@ -65,7 +82,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Chấm công nhân viên</h1>
           <p className="mt-1 text-sm text-gray-500">
-            QR xoay 30s + định vị GPS theo cơ sở. Bắt buộc cả check-in và check-out.
+            Giờ chuẩn (GMT+7): {WORK_SHIFTS.map((s) => `${s.start}–${s.end}`).join(" · ")} · 8h/ngày.
           </p>
         </div>
         <Link
@@ -105,6 +122,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
                 <th className="px-4 py-3 font-semibold">Cơ sở</th>
                 <th className="px-4 py-3 text-center font-semibold">Check-in</th>
                 <th className="px-4 py-3 text-center font-semibold">Check-out</th>
+                <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
                 <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
               </tr>
             </thead>
@@ -116,23 +134,26 @@ export default async function ChamCongPage({ searchParams }: Props) {
                     {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-center tabular-nums text-gray-700">
-                    {fmtTime(a.checkIn)}
+                    {formatVNTime(a.checkIn)}
                   </td>
                   <td className="px-4 py-2.5 text-center tabular-nums text-gray-700">
-                    {fmtTime(a.checkOut)}
+                    {formatVNTime(a.checkOut)}
+                  </td>
+                  <td className="px-4 py-2.5 text-center tabular-nums font-medium text-gray-900">
+                    {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-center">
-                    {a.geofenceFlag ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600">
-                        <MapPinOff className="h-3.5 w-3.5" /> Ngoài vùng
-                      </span>
-                    ) : a.checkIn && !a.checkOut ? (
-                      <span className="text-xs font-medium text-amber-600">Thiếu check-out</span>
-                    ) : a.checkIn && a.checkOut ? (
-                      <span className="text-xs font-medium text-emerald-600">Đủ công</span>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
+                    <div className="flex flex-wrap items-center justify-center gap-1">
+                      {a.status.tags.map((t, j) => (
+                        <span
+                          key={j}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TAG_TONE[t.tone]}`}
+                        >
+                          {t.label === "Ngoài vùng" && <MapPinOff className="h-3 w-3" />}
+                          {t.label}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               ))}
