@@ -324,6 +324,8 @@ model User {
   notes          Note[]
   teacherClass   Class[]      @relation("TeacherClasses")
   assistantClass Class[]      @relation("AssistantClasses")
+  teacherProfile TeacherProfile? @relation("UserTeacherProfile") // FIX 10
+  teacherReviews TeacherReview[] @relation("TeacherReviewer")     // FIX 10 — đánh giá nội bộ do user này tạo
   trialClasses   TrialClass[] @relation("TrialTeacher")
   jobPostings    JobPosting[]
 
@@ -396,6 +398,9 @@ model Course {
   prerequisites     CoursePrerequisite[] @relation("CoursePrereqOwner")
   requiredByCourses CoursePrerequisite[] @relation("CoursePrereqRequired")
 
+  // FIX 10 — khoá GV dạy được.
+  teacherCourses    TeacherCourse[]
+
   @@index([slug])
   @@index([type])
   @@index([code])
@@ -416,6 +421,68 @@ model CoursePrerequisite {
   @@unique([courseId, requiredCourseId])
   @@index([courseId])
   @@index([requiredCourseId])
+}
+
+// FIX 10 — Hồ sơ chuyên môn giáo viên (1-1 với User role TEACHER).
+enum TeacherRank {
+  TRAINEE
+  JUNIOR
+  ADVANCED
+  SENIOR
+  EXPERT
+}
+
+enum EmploymentType {
+  FULLTIME
+  PARTTIME
+}
+
+enum TeacherStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+}
+
+model TeacherProfile {
+  id             String         @id @default(cuid())
+  userId         String         @unique
+  user           User           @relation("UserTeacherProfile", fields: [userId], references: [id], onDelete: Cascade)
+  rank           TeacherRank    @default(TRAINEE)
+  employmentType EmploymentType @default(PARTTIME)
+  status         TeacherStatus  @default(ACTIVE)
+  bio            String?        @db.Text
+
+  teachableCourses TeacherCourse[]
+  reviews          TeacherReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Khoá GV dạy được (n-n TeacherProfile ↔ Course).
+model TeacherCourse {
+  teacherProfileId String
+  courseId         String
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+  course           Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@id([teacherProfileId, courseId])
+  @@index([courseId])
+}
+
+// Đánh giá nội bộ / dự giờ (PHẦN 6).
+model TeacherReview {
+  id               String         @id @default(cuid())
+  teacherProfileId String
+  teacherProfile   TeacherProfile @relation(fields: [teacherProfileId], references: [id], onDelete: Cascade)
+  reviewerId       String?
+  reviewer         User?          @relation("TeacherReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewerName     String
+  score            Int // 1-5
+  note             String?        @db.Text
+  createdAt        DateTime       @default(now())
+
+  @@index([teacherProfileId, createdAt])
 }
 
 model Lead {
