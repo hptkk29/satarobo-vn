@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -36,95 +37,166 @@ import {
   MessageSquarePlus,
   Star,
   Clock,
+  ChevronDown,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { can, type Action } from "@/lib/auth/permissions";
 
-const NAV_GROUPS = [
+type NavItem = {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  /** Hiện mục nếu user có quyền với BẤT KỲ action nào trong đây. Bỏ trống = luôn hiện. */
+  perm?: Action[];
+};
+
+type NavGroup = { label: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
   {
     label: "Tổng quan",
     items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { label: "CRM", href: "/crm", icon: BarChart3 },
+      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }, // luôn hiện
+      { label: "CRM", href: "/crm", icon: BarChart3, perm: ["leads:view-all"] },
     ],
   },
   {
     label: "Khách hàng",
     items: [
-      { label: "Leads", href: "/leads", icon: Users },
-      { label: "Học thử", href: "/trials", icon: FlaskConical },
-      { label: "Yêu cầu PH", href: "/parent-requests", icon: MessageSquarePlus },
-      { label: "Học viên", href: "/students", icon: GraduationCap },
-      { label: "Lớp học", href: "/classes", icon: BookOpen },
-      { label: "Nhóm lớp", href: "/class-groups", icon: Boxes },
-      { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList },
+      { label: "Leads", href: "/leads", icon: Users, perm: ["leads:view-all", "leads:view-own"] },
+      { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
+      { label: "Yêu cầu PH", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
+      { label: "Học viên", href: "/students", icon: GraduationCap, perm: ["students:view-all", "students:view-own-class"] },
+      { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
+      { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
+      { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all", "enrollments:view-own"] },
     ],
   },
   {
     label: "Vận hành lớp",
     items: [
-      { label: "Buổi học", href: "/sessions", icon: CalendarDays },
-      { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck },
-      { label: "Ảnh lớp học", href: "/media", icon: ImageIcon },
+      { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
+      { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view"] },
+      { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: ["media:view"] },
     ],
   },
   {
     label: "Hệ thống cơ sở",
     items: [
-      { label: "Cơ sở", href: "/centers", icon: MapPin },
-      { label: "Phòng học", href: "/rooms", icon: DoorOpen },
-      { label: "Lịch nghỉ", href: "/holidays", icon: CalendarOff },
+      { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
+      { label: "Phòng học", href: "/rooms", icon: DoorOpen, perm: ["rooms:view"] },
+      { label: "Lịch nghỉ", href: "/holidays", icon: CalendarOff, perm: ["holidays:view"] },
     ],
   },
   {
     label: "Nội bộ",
     items: [
-      { label: "Giáo viên", href: "/teachers", icon: UserCog },
-      { label: "Nhân sự", href: "/nhan-su", icon: IdCard },
-      { label: "Chấm công", href: "/cham-cong", icon: Clock },
-      { label: "Tài khoản", href: "/users", icon: KeyRound },
-      { label: "Tuyển dụng", href: "/jobs", icon: Briefcase },
-      { label: "Vinh danh", href: "/honors", icon: Trophy },
+      { label: "Giáo viên", href: "/teachers", icon: UserCog, perm: ["employees:view-all"] },
+      { label: "Nhân sự", href: "/nhan-su", icon: IdCard, perm: ["employees:view-all"] },
+      { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:checkin"] },
+      { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
+      { label: "Tuyển dụng", href: "/jobs", icon: Briefcase, perm: ["jobs:view"] },
+      { label: "Vinh danh", href: "/honors", icon: Trophy, perm: ["honors:view"] },
     ],
   },
   {
     label: "Sản phẩm",
     items: [
-      { label: "Khoá học (Packages)", href: "/course-packages", icon: Boxes },
-      { label: "Học cụ (Kits)", href: "/kits", icon: Package },
-      { label: "Sản phẩm bán/thuê", href: "/products", icon: Package2 },
+      { label: "Khoá học (Packages)", href: "/course-packages", icon: Boxes, perm: ["course-packages:view"] },
+      { label: "Học cụ (Kits)", href: "/kits", icon: Package, perm: ["kits:view"] },
+      { label: "Sản phẩm bán/thuê", href: "/products", icon: Package2, perm: ["products:view"] },
     ],
   },
   {
     label: "Marketing",
     items: [
-      { label: "Tin tức", href: "/news", icon: Newspaper },
-      { label: "Thông báo PH", href: "/notifications", icon: Bell },
-      { label: "Đánh giá PH", href: "/parent-feedback", icon: Star },
-      { label: "Hình ảnh trang", href: "/site-content", icon: ImageIcon },
-      { label: "Tracking", href: "/marketing", icon: BarChart3 },
+      { label: "Tin tức", href: "/news", icon: Newspaper, perm: ["news:view"] },
+      { label: "Thông báo PH", href: "/notifications", icon: Bell, perm: ["notifications:manage"] },
+      { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
+      { label: "Hình ảnh trang", href: "/site-content", icon: ImageIcon, perm: ["site-content:view"] },
+      { label: "Tracking", href: "/marketing", icon: BarChart3, perm: ["site-content:view"] },
     ],
   },
   {
     label: "Tài chính",
     items: [
-      { label: "Đơn hàng", href: "/orders", icon: ShoppingBag },
-      { label: "Mã khuyến mãi", href: "/vouchers", icon: Ticket },
-      { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard },
+      { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
+      { label: "Mã khuyến mãi", href: "/vouchers", icon: Ticket, perm: ["vouchers:view"] },
+      { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
     ],
   },
   {
     label: "Hệ thống",
     items: [
-      { label: "Email Templates", href: "/email-templates", icon: Mail },
-      { label: "Email Logs", href: "/email-logs", icon: Send },
-      { label: "Audit Log", href: "/audit-log", icon: ScrollText },
-      { label: "Cài đặt", href: "/settings", icon: Settings },
+      { label: "Email Templates", href: "/email-templates", icon: Mail, perm: ["emails:view"] },
+      { label: "Email Logs", href: "/email-logs", icon: Send, perm: ["emails:view"] },
+      { label: "Audit Log", href: "/audit-log", icon: ScrollText, perm: ["audit-logs:view"] },
+      { label: "Cài đặt", href: "/settings", icon: Settings, perm: ["settings:view"] },
     ],
   },
 ];
 
-export function Sidebar() {
+type SidebarUser = {
+  role: string | null;
+  grants?: { action: string; grant: "ALLOW" | "DENY" }[];
+};
+
+const STORAGE_KEY = "satarobo:sidebar:collapsed";
+
+export function Sidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
+
+  // Lọc menu theo quyền — chỉ giữ mục user được phép thấy. Mục không có `perm`
+  // (Dashboard) luôn hiện. Nhóm rỗng sau lọc → ẩn cả tiêu đề.
+  const visibleGroups = useMemo(() => {
+    return NAV_GROUPS.map((g) => ({
+      label: g.label,
+      items: g.items.filter(
+        (it) => !it.perm || it.perm.some((p) => can(user, p)),
+      ),
+    })).filter((g) => g.items.length > 0);
+  }, [user]);
+
+  // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
+  const activeGroupLabel = useMemo(() => {
+    for (const g of visibleGroups) {
+      if (g.items.some((it) => pathname.startsWith(it.href))) return g.label;
+    }
+    return visibleGroups[0]?.label ?? null;
+  }, [visibleGroups, pathname]);
+
+  // Collapsed = set tên nhóm đang thu gọn. Mặc định thu gọn mọi nhóm trừ nhóm active.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    const s = new Set<string>();
+    for (const g of NAV_GROUPS) if (g.label !== activeGroupLabel) s.add(g.label);
+    return s;
+  });
+
+  // Sau mount: nạp trạng thái đã lưu (localStorage) — chạy client-only nên không
+  // gây hydration mismatch.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggleGroup(label: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-neutral-200 bg-white">
@@ -144,32 +216,47 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="mb-2">
-            <p className="px-6 mb-1 text-[10px] uppercase tracking-widest font-semibold text-neutral-400">
-              {group.label}
-            </p>
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const active = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
+        {visibleGroups.map((group) => {
+          const isCollapsed = collapsed.has(group.label);
+          return (
+            <div key={group.label} className="mb-1">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.label)}
+                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-neutral-400 hover:text-neutral-600"
+                aria-expanded={!isCollapsed}
+              >
+                <span>{group.label}</span>
+                <ChevronDown
                   className={cn(
-                    "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
-                      : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                    "h-3.5 w-3.5 transition-transform",
+                    isCollapsed && "-rotate-90",
                   )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+                />
+              </button>
+              {!isCollapsed &&
+                group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
+                          : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  );
+                })}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="border-t border-neutral-200 p-4 text-xs text-neutral-400">
