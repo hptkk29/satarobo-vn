@@ -233,22 +233,52 @@ export async function enrollStudent(
   const { studentId, classId } = parsed.data;
   const notes = parsed.data.notes && parsed.data.notes !== "" ? parsed.data.notes : null;
 
-  const cls = await db.class.findFirst({
-    where: { id: classId, deletedAt: null },
-    select: {
-      id: true,
-      courseId: true,
-      maxStudents: true,
-      status: true,
-      _count: {
+  // Pre-create validation queries — bọc try/catch để lỗi DB (vd Prisma Client
+  // stale sau migration, mất kết nối) trả về thông báo thân thiện thay vì văng
+  // 500 không bắt được.
+  let cls: {
+    id: string;
+    courseId: string;
+    maxStudents: number;
+    status: string;
+    _count: { enrollments: number };
+  } | null;
+  let existing: { status: string } | null;
+  let student: { id: string } | null;
+  try {
+    [cls, existing, student] = await Promise.all([
+      db.class.findFirst({
+        where: { id: classId, deletedAt: null },
         select: {
-          enrollments: {
-            where: { status: { in: [...CAPACITY_COUNT_STATUSES] } },
+          id: true,
+          courseId: true,
+          maxStudents: true,
+          status: true,
+          _count: {
+            select: {
+              enrollments: {
+                where: { status: { in: [...CAPACITY_COUNT_STATUSES] } },
+              },
+            },
           },
         },
-      },
-    },
-  });
+      }),
+      db.enrollment.findUnique({
+        where: { studentId_classId: { studentId, classId } },
+        select: { status: true },
+      }),
+      db.student.findFirst({
+        where: { id: studentId, deletedAt: null },
+        select: { id: true },
+      }),
+    ]);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu khi kiểm tra dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
   if (!cls) return { ok: false, error: "Không tìm thấy lớp" };
   if (cls.status === "CANCELLED" || cls.status === "COMPLETED") {
     return {
@@ -262,22 +292,12 @@ export async function enrollStudent(
       error: `Lớp đã đủ HS (${cls.maxStudents} chỗ). Hãy chọn lớp khác.`,
     };
   }
-
-  const existing = await db.enrollment.findUnique({
-    where: { studentId_classId: { studentId, classId } },
-    select: { status: true },
-  });
   if (existing) {
     return {
       ok: false,
       error: `Học viên đã có trong lớp này (trạng thái: ${existing.status})`,
     };
   }
-
-  const student = await db.student.findFirst({
-    where: { id: studentId, deletedAt: null },
-    select: { id: true },
-  });
   if (!student) return { ok: false, error: "Không tìm thấy học viên" };
 
   try {
