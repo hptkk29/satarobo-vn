@@ -13,7 +13,6 @@ type WorkflowResult<T = undefined> =
   | { ok: false; error: string };
 
 const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"] as const;
-export const ENROLLMENT_AUDIT_VIEWER_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"] as const;
 
 // Statuses that count toward a class's capacity.
 const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"] as const;
