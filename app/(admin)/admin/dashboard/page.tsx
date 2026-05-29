@@ -9,6 +9,7 @@ import { DataTableShell } from "@/components/design-system/admin/data-table-shel
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { TeacherDashboard } from "./_components/teacher-dashboard";
+import { SalesDashboard } from "./_components/sales-dashboard";
 
 const STATUS_VARIANT: Record<
   string,
@@ -75,6 +76,9 @@ export default async function DashboardPage() {
   const role = session.user.role;
   if (role === "TEACHER") {
     return <TeacherDashboard userId={session.user.id} name={session.user.name ?? ""} />;
+  }
+  if (role === "SALES_CSM") {
+    return <SalesDashboard userId={session.user.id} name={session.user.name ?? ""} />;
   }
 
   const now = new Date();
