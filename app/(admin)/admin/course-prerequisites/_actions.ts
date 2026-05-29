@@ -4,14 +4,11 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { assertCan } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-/** FIX 7 — thêm 1 khoá tiên quyết: `courseId` yêu cầu `requiredCourseId`. */
-export async function addCoursePrerequisite(
-  courseId: string,
-  requiredCourseId: string,
-): Promise<Result> {
+async function requireManager(): Promise<Result & { ok: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
@@ -19,50 +16,102 @@ export async function addCoursePrerequisite(
   } catch {
     return { ok: false, error: "Không có quyền cấu hình khoá học" };
   }
+  return { ok: true };
+}
 
-  if (!courseId || !requiredCourseId) {
-    return { ok: false, error: "Chọn đủ khoá và khoá tiên quyết" };
-  }
-  if (courseId === requiredCourseId) {
-    return { ok: false, error: "Khoá không thể tiên quyết chính nó" };
-  }
-
-  // Chặn vòng lặp trực tiếp A→B và B→A.
-  const reverse = await db.coursePrerequisite.findUnique({
-    where: {
-      courseId_requiredCourseId: {
-        courseId: requiredCourseId,
-        requiredCourseId: courseId,
-      },
-    },
-    select: { id: true },
+/** Phát hiện vòng lặp: khi gán courseId yêu cầu requiredIds, courseId có bị
+ *  reachable lại từ chính nó qua đồ thị tiên quyết không. */
+async function wouldCreateCycle(courseId: string, requiredIds: string[]): Promise<boolean> {
+  const edges = await db.coursePrerequisite.findMany({
+    select: { courseId: true, requiredCourseId: true },
   });
-  if (reverse) {
-    return { ok: false, error: "Đã có quan hệ ngược — sẽ tạo vòng lặp tiên quyết" };
+  const adj = new Map<string, Set<string>>();
+  for (const e of edges) {
+    if (e.courseId === courseId) continue; // bỏ cạnh cũ của courseId — sẽ thay bằng proposed
+    if (!adj.has(e.courseId)) adj.set(e.courseId, new Set());
+    adj.get(e.courseId)!.add(e.requiredCourseId);
+  }
+  adj.set(courseId, new Set(requiredIds));
+
+  const seen = new Set<string>();
+  const stack = [...requiredIds];
+  while (stack.length) {
+    const n = stack.pop()!;
+    if (n === courseId) return true;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    for (const m of adj.get(n) ?? []) stack.push(m);
+  }
+  return false;
+}
+
+const setSchema = z.object({
+  courseId: z.string().min(1, "Chọn khoá"),
+  requiredCourseIds: z.array(z.string().min(1)).max(20),
+});
+
+/** Đặt TOÀN BỘ danh sách khoá tiên quyết cho 1 khoá (thêm/sửa dùng chung). */
+export async function setCoursePrerequisites(input: unknown): Promise<Result> {
+  const gate = await requireManager();
+  if (!gate.ok) return gate as Result;
+
+  const parsed = setSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { courseId } = parsed.data;
+  const requiredCourseIds = [...new Set(parsed.data.requiredCourseIds)];
+
+  if (requiredCourseIds.includes(courseId)) {
+    return { ok: false, error: "Khoá không thể là tiên quyết của chính nó" };
+  }
+  if (requiredCourseIds.length === 0) {
+    return { ok: false, error: "Chọn ít nhất 1 khoá tiên quyết (hoặc dùng Xoá)" };
+  }
+  if (await wouldCreateCycle(courseId, requiredCourseIds)) {
+    return { ok: false, error: "Cấu hình tạo vòng lặp tiên quyết (A cần B, B cần A…)" };
   }
 
   try {
-    await db.coursePrerequisite.create({ data: { courseId, requiredCourseId } });
-  } catch {
-    return { ok: false, error: "Cặp tiên quyết này đã tồn tại hoặc lỗi DB" };
+    await db.$transaction([
+      db.coursePrerequisite.deleteMany({ where: { courseId } }),
+      db.coursePrerequisite.createMany({
+        data: requiredCourseIds.map((requiredCourseId) => ({ courseId, requiredCourseId })),
+        skipDuplicates: true,
+      }),
+    ]);
+  } catch (err) {
+    return { ok: false, error: `Lỗi lưu: ${err instanceof Error ? err.message : "Unknown"}` };
   }
   revalidatePath("/course-prerequisites");
   return { ok: true };
 }
 
-/** FIX 7 — xoá 1 khoá tiên quyết. */
-export async function removeCoursePrerequisite(id: string): Promise<Result> {
-  const session = await auth();
-  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+/** Xoá TOÀN BỘ tiên quyết của 1 khoá. */
+export async function clearCoursePrerequisites(courseId: string): Promise<Result> {
+  const gate = await requireManager();
+  if (!gate.ok) return gate as Result;
+  if (!courseId) return { ok: false, error: "Thiếu khoá" };
   try {
-    assertCan(session.user.role, "courses:create");
-  } catch {
-    return { ok: false, error: "Không có quyền cấu hình khoá học" };
+    await db.coursePrerequisite.deleteMany({ where: { courseId } });
+  } catch (err) {
+    return { ok: false, error: `Lỗi xoá: ${err instanceof Error ? err.message : "Unknown"}` };
   }
+  revalidatePath("/course-prerequisites");
+  return { ok: true };
+}
+
+/** Xoá 1 cặp tiên quyết cụ thể. */
+export async function removeOnePrerequisite(
+  courseId: string,
+  requiredCourseId: string,
+): Promise<Result> {
+  const gate = await requireManager();
+  if (!gate.ok) return gate as Result;
   try {
-    await db.coursePrerequisite.delete({ where: { id } });
-  } catch {
-    return { ok: false, error: "Không xoá được (có thể đã bị xoá)" };
+    await db.coursePrerequisite.deleteMany({ where: { courseId, requiredCourseId } });
+  } catch (err) {
+    return { ok: false, error: `Lỗi xoá: ${err instanceof Error ? err.message : "Unknown"}` };
   }
   revalidatePath("/course-prerequisites");
   return { ok: true };

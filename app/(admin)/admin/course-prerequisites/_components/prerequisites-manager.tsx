@@ -1,0 +1,256 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
+import {
+  setCoursePrerequisites,
+  clearCoursePrerequisites,
+} from "../_actions";
+
+type CourseOpt = { id: string; label: string };
+type Row = { courseId: string; courseLabel: string; prereqs: CourseOpt[] };
+
+export function PrerequisitesManager({
+  courses,
+  rows,
+}: {
+  courses: CourseOpt[];
+  rows: Row[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState<null | { courseId: string; fixed: boolean }>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  function remove(courseId: string) {
+    startTransition(async () => {
+      const res = await clearCoursePrerequisites(courseId);
+      if (res.ok) {
+        toast.success("Đã xoá điều kiện tiên quyết");
+        setConfirmDelete(null);
+        router.refresh();
+      } else toast.error(res.error);
+    });
+  }
+
+  const configuredIds = new Set(rows.map((r) => r.courseId));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setEditing({ courseId: "", fixed: false })}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" /> Thêm điều kiện tiên quyết
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <table className="min-w-full divide-y divide-gray-100">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Khoá</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Phải hoàn thành trước</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-4 py-12 text-center text-sm text-gray-400">
+                  Chưa có khoá nào cấu hình tiên quyết. Bấm “Thêm điều kiện tiên quyết”.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.courseId} className="hover:bg-gray-50/60">
+                  <td className="px-4 py-3 font-medium text-gray-900">{r.courseLabel}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {r.prereqs.map((p) => (
+                        <span key={p.id} className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-medium text-[#7C3AED]">
+                          {p.label}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditing({ courseId: r.courseId, fixed: true })}
+                        className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+                        title="Sửa"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      {confirmDelete === r.courseId ? (
+                        <button
+                          type="button"
+                          onClick={() => remove(r.courseId)}
+                          disabled={pending}
+                          className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
+                        >
+                          Xác nhận xoá?
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(r.courseId)}
+                          className="rounded p-1.5 text-red-600 hover:bg-red-50"
+                          title="Xoá toàn bộ tiên quyết của khoá này"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <PrereqDialog
+          courses={courses}
+          fixedCourseId={editing.fixed ? editing.courseId : null}
+          initialPrereqs={rows.find((r) => r.courseId === editing.courseId)?.prereqs.map((p) => p.id) ?? []}
+          configuredIds={configuredIds}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PrereqDialog({
+  courses,
+  fixedCourseId,
+  initialPrereqs,
+  configuredIds,
+  onClose,
+  onSaved,
+}: {
+  courses: CourseOpt[];
+  fixedCourseId: string | null;
+  initialPrereqs: string[];
+  configuredIds: Set<string>;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [courseId, setCourseId] = useState(fixedCourseId ?? "");
+  const [picked, setPicked] = useState<string[]>(initialPrereqs);
+
+  function toggle(id: string) {
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
+  function save() {
+    if (!courseId) {
+      toast.error("Chọn khoá");
+      return;
+    }
+    if (picked.length === 0) {
+      toast.error("Chọn ít nhất 1 khoá tiên quyết");
+      return;
+    }
+    startTransition(async () => {
+      const res = await setCoursePrerequisites({ courseId, requiredCourseIds: picked });
+      if (res.ok) {
+        toast.success("Đã lưu điều kiện tiên quyết");
+        onSaved();
+      } else toast.error(res.error);
+    });
+  }
+
+  // Khi thêm mới: gợi ý khoá chưa cấu hình (vẫn cho chọn lại để sửa).
+  const courseChoices = courses;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button type="button" aria-label="Đóng" className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-900">
+            {fixedCourseId ? "Sửa điều kiện tiên quyết" : "Thêm điều kiện tiên quyết"}
+          </h3>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-gray-500">Khoá học</span>
+          <select
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value)}
+            disabled={!!fixedCourseId || pending}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          >
+            <option value="">— Chọn khoá —</option>
+            {courseChoices.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}{!fixedCourseId && configuredIds.has(c.id) ? " (đã có cấu hình)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="mt-4">
+          <span className="mb-2 block text-xs font-medium text-gray-500">
+            Phải hoàn thành trước ({picked.length})
+          </span>
+          <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
+            {courses
+              .filter((c) => c.id !== courseId)
+              .map((c) => {
+                const on = picked.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => toggle(c.id)}
+                    disabled={pending}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                      on ? "border-[#7C3AED] bg-purple-50 text-[#7C3AED]" : "border-gray-200 bg-white text-gray-500 hover:border-[#7C3AED]"
+                    }`}
+                  >
+                    {on ? "✓ " : ""}{c.label}
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={pending}
+            className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {pending ? "Đang lưu…" : "Lưu"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
