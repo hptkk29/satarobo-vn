@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { SessionFeedbackEditor } from "./_components/session-feedback-editor";
 import { SessionChecklist } from "./_components/session-checklist";
 import { canManageSessionClass } from "./_actions";
+import { getPreSessionInfo } from "@/lib/lms/pre-session";
+import { BookOpen, Users, AlertTriangle, FileWarning } from "lucide-react";
 
 export const metadata = { title: "Chi tiết buổi học | Admin" };
 export const dynamic = "force-dynamic";
@@ -97,6 +99,9 @@ export default async function SessionDetailPage({ params }: Props) {
     year: "numeric",
   });
 
+  // LMS-4 — thông tin chuẩn bị (chỉ khi buổi chưa hoàn tất).
+  const pre = sess.status !== "COMPLETED" ? await getPreSessionInfo(sess.id) : null;
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
@@ -123,6 +128,82 @@ export default async function SessionDetailPage({ params }: Props) {
         </dl>
         {sess.notes && <p className="mt-3 text-sm text-gray-600">Ghi chú: {sess.notes}</p>}
       </section>
+
+      {/* LMS-4 — chuẩn bị trước buổi học */}
+      {pre && (
+        <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-indigo-700">
+            Chuẩn bị trước buổi học
+          </h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-indigo-100 bg-white p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-gray-500">
+                <BookOpen className="h-4 w-4" /> BÀI DỰ KIẾN
+              </div>
+              {pre.expectedLesson ? (
+                <>
+                  <p className="text-sm font-semibold text-gray-900">
+                    Bài {pre.expectedLesson.order}: {pre.expectedLesson.title}
+                    {pre.expectedIsSuggested && (
+                      <span className="ml-1 text-xs font-normal text-indigo-500">(gợi ý)</span>
+                    )}
+                  </p>
+                  {pre.expectedLesson.materials.length > 0 && (
+                    <div className="mt-1 text-xs text-gray-600">
+                      Thiết bị: {pre.expectedLesson.materials.join(", ")}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-gray-400">Chưa có giáo trình cho khoá.</p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-indigo-100 bg-white p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-gray-500">
+                <Users className="h-4 w-4" /> HỌC SINH ({pre.students.length})
+              </div>
+              <p className="text-sm text-gray-700">
+                {pre.students.map((s) => s.name).join(", ") || "—"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-amber-100 bg-white p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-amber-600">
+                <AlertTriangle className="h-4 w-4" /> CẦN LƯU Ý
+              </div>
+              {pre.studentsToNote.length === 0 ? (
+                <p className="text-sm text-gray-400">Không có.</p>
+              ) : (
+                <ul className="space-y-0.5 text-sm text-gray-700">
+                  {pre.studentsToNote.map((s) => (
+                    <li key={s.id}>
+                      <span className="font-medium">{s.name}</span> — {s.reasons.join("; ")}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-rose-100 bg-white p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-rose-600">
+                <FileWarning className="h-4 w-4" /> BÀI TẬP CHƯA CHẤM ({pre.ungraded.length})
+              </div>
+              {pre.ungraded.length === 0 ? (
+                <p className="text-sm text-gray-400">Đã chấm hết.</p>
+              ) : (
+                <ul className="space-y-0.5 text-sm text-gray-700">
+                  {pre.ungraded.slice(0, 8).map((u, i) => (
+                    <li key={i}>
+                      {u.studentName} · <span className="text-gray-500">{u.assignmentTitle}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* LMS-3 — checklist sau buổi */}
       <SessionChecklist
