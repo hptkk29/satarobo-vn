@@ -73,16 +73,12 @@ export async function POST(req: NextRequest) {
   const key = `uploads/submissions/${datePrefix}/${safeName}-${uuid().slice(0, 8)}${ext}`;
 
   try {
+    // Chỉ ký Content-Type (xem ghi chú A1 ở admin/upload-url): không ký
+    // Metadata/ContentLength để tránh 403 SignatureDoesNotMatch khi browser PUT.
     const command = new PutObjectCommand({
       Bucket: getR2Bucket(),
       Key: key,
       ContentType: mimeType,
-      ContentLength: sizeBytes,
-      Metadata: {
-        "uploaded-by": session.user.email ?? "parent",
-        "uploaded-at": new Date().toISOString(),
-        "original-filename": encodeURIComponent(filename),
-      },
     });
     const uploadUrl = await getSignedUrl(getR2Client(), command, { expiresIn: 300 });
     return NextResponse.json({

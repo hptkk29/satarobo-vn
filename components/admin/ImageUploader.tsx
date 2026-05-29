@@ -116,7 +116,13 @@ export function ImageUploader({
             if (xhr.status >= 200 && xhr.status < 300) resolve();
             else reject(new Error(`Upload thất bại: HTTP ${xhr.status}`));
           });
-          xhr.addEventListener("error", () => reject(new Error("Lỗi mạng khi upload")));
+          xhr.addEventListener("error", () =>
+            reject(
+              new Error(
+                "Không gửi được ảnh lên kho lưu trữ. Kiểm tra kết nối mạng; nếu vẫn lỗi, R2 bucket cần bật CORS cho phép PUT từ tên miền admin.",
+              ),
+            ),
+          );
           xhr.addEventListener("abort", () => reject(new Error("Đã huỷ upload")));
           xhr.open("PUT", uploadUrl);
           xhr.setRequestHeader("Content-Type", file.type);

@@ -93,16 +93,13 @@ export async function POST(req: NextRequest) {
   const key = `${config.folder}/${datePrefix}/${safeName || "file"}-${uniqueId}${ext}`;
 
   try {
+    // CHỈ ký Content-Type. KHÔNG ký Metadata (x-amz-meta-*) hay ContentLength:
+    // browser PUT chỉ gửi Content-Type nên các header đã-ký-nhưng-không-gửi sẽ
+    // làm R2 trả 403 SignatureDoesNotMatch → xhr báo "Lỗi mạng khi upload" (A1).
     const command = new PutObjectCommand({
       Bucket: getR2Bucket(),
       Key: key,
       ContentType: mimeType,
-      ContentLength: sizeBytes,
-      Metadata: {
-        "uploaded-by": session.user.email ?? "unknown",
-        "uploaded-at": new Date().toISOString(),
-        "original-filename": encodeURIComponent(filename),
-      },
     });
 
     const uploadUrl = await getSignedUrl(getR2Client(), command, {
