@@ -106,15 +106,20 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
 
   const e = parsed.data;
 
-  const classRow = await db.class
-    .findUnique({ where: { id: e.classId }, select: { courseId: true } })
-    .catch(() => null);
+  let classRow: { courseId: string } | null;
+  let existing: { id: string } | null;
+  try {
+    [classRow, existing] = await Promise.all([
+      db.class.findUnique({ where: { id: e.classId }, select: { courseId: true } }),
+      db.enrollment.findFirst({
+        where: { studentId: e.studentId, classId: e.classId },
+        select: { id: true },
+      }),
+    ]);
+  } catch {
+    return { error: "Lỗi cơ sở dữ liệu khi kiểm tra lớp/đăng ký" };
+  }
   if (!classRow) return { error: "Lớp học không tồn tại" };
-
-  const existing = await db.enrollment.findFirst({
-    where: { studentId: e.studentId, classId: e.classId },
-    select: { id: true },
-  });
   if (existing) return { error: "Học viên này đã đăng ký lớp này rồi" };
 
   const data: Prisma.EnrollmentCreateInput = {
