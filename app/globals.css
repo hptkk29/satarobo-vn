@@ -238,6 +238,22 @@
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
 
+  /* Dropdown admin gọn hơn: thay mũi tên OS mặc định bằng chevron đồng nhất.
+     KHÔNG transition/animation (theo yêu cầu). Chỉ áp trong .admin-scope. */
+  .admin-scope select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 1.05rem;
+    padding-right: 2rem;
+  }
+  .admin-scope select::-ms-expand {
+    display: none;
+  }
+
   .section-padding {
     @apply py-16;
   }
