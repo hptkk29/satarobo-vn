@@ -15,6 +15,7 @@ import {
   MessageSquarePlus,
   Star,
   ImageIcon,
+  MessageCircle,
 } from "lucide-react";
 
 const ITEMS = [
@@ -25,6 +26,7 @@ const ITEMS = [
   { label: "Bài tập", href: "/portal/bai-tap", icon: ClipboardList },
   { label: "Bài thi", href: "/portal/bai-thi", icon: FileText },
   { label: "Kết quả", href: "/portal/ket-qua", icon: Award },
+  { label: "Nhận xét", href: "/portal/nhan-xet", icon: MessageCircle },
   { label: "Hình ảnh", href: "/portal/hinh-anh", icon: ImageIcon },
   { label: "Yêu cầu", href: "/portal/yeu-cau", icon: MessageSquarePlus },
   { label: "Học phí", href: "/portal/hoc-phi", icon: CreditCard },

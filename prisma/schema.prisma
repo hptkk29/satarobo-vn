@@ -641,6 +641,7 @@ model Student {
   examAttempts          ExamAttempt[]
   assignmentSubmissions AssignmentSubmission[]
   progressReports       ProgressReportLog[]
+  sessionFeedbacks      StudentSessionFeedback[] // LMS-2
 
   // Phase 5.4.0 — Audit log
   auditLogs StudentAuditLog[] @relation("StudentAuditLogs")
@@ -850,13 +851,31 @@ model ClassSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  class       Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
-  lesson      Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
-  attendances Attendance[]
+  class            Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  lesson           Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  attendances      Attendance[]
+  studentFeedbacks StudentSessionFeedback[] // LMS-2
 
   @@index([classId])
   @@index([date])
   @@index([lessonId])
+}
+
+// LMS-2 — nhận xét RIÊNG từng học sinh mỗi buổi (GV viết, PH xem con mình).
+model StudentSessionFeedback {
+  id             String       @id @default(cuid())
+  classSessionId String
+  studentId      String
+  comment        String       @db.Text
+  rating         Int? // 1-5 tuỳ chọn
+  createdById    String // GV
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  classSession   ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classSessionId, studentId])
+  @@index([studentId])
 }
 
 model Attendance {

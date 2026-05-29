@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTransition } from "react";
-import { Pencil, Trash2, ClipboardCheck } from "lucide-react";
+import { Pencil, Trash2, ClipboardCheck, ListChecks } from "lucide-react";
 import { deleteSession } from "../_actions";
 
 type Row = {
@@ -81,6 +81,13 @@ export function SessionListRow({ session }: { session: Row }) {
             title="Điểm danh"
           >
             <ClipboardCheck className="h-4 w-4" />
+          </Link>
+          <Link
+            href={`/sessions/${session.id}`}
+            className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50"
+            title="Chi tiết / Nhận xét / Checklist"
+          >
+            <ListChecks className="h-4 w-4" />
           </Link>
           <Link
             href={`/sessions/${session.id}/edit`}
