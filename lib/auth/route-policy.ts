@@ -36,8 +36,10 @@ export type RouteDecision =
 export interface RouteInput {
   hostKind: HostKind;
   pathname: string;
-  /** `null` nếu chưa login. */
+  /** Vai trò CHÍNH; `null` nếu chưa login. */
   role: MaybeRole;
+  /** Đợt 3B — tất cả vai trò (union). Trống/bỏ → suy ra từ `role`. */
+  roles?: MaybeRole[];
   /** `false` nếu deactivated / tokenVersion mismatch / không có session. */
   sessionValid: boolean;
 }
@@ -158,15 +160,26 @@ const STAFF_HOME = "/dashboard";
 export function decideRoute(input: RouteInput): RouteDecision {
   const { hostKind, pathname, role, sessionValid } = input;
 
-  // Logged-in = có role HỢP LỆ. tokenVersion mismatch / deactivated → !authed.
-  const authed = role !== null && sessionValid;
-  const isParent = role === "PARENT";
-  const isStaff = authed && !isParent;
+  // Đợt 3B — vai trò hữu hiệu (union). Trống roles → suy từ role chính.
+  const effectiveRoles: MaybeRole[] =
+    input.roles && input.roles.length > 0
+      ? input.roles
+      : role !== null
+        ? [role]
+        : [];
+  const hasAnyRole = effectiveRoles.length > 0;
+
+  // Logged-in = có vai trò HỢP LỆ. tokenVersion mismatch / deactivated → !authed.
+  const authed = hasAnyRole && sessionValid;
+  // isParent = CHỈ gồm PARENT (PARENT không kiêm nhân viên). isStaff = có ≥1 role
+  // nhân viên (≠ PARENT) → ưu tiên host admin nếu lỡ trộn (defensive).
+  const isStaff = authed && effectiveRoles.some((r) => r !== null && r !== "PARENT");
+  const isParent = authed && !isStaff && effectiveRoles.includes("PARENT");
 
   // Chỉ gắn reason khi đã từng có session nhưng bị vô hiệu (deactivated),
-  // KHÔNG gắn cho khách ẩn danh (role === null).
+  // KHÔNG gắn cho khách ẩn danh (chưa login).
   const invalidReason: string | undefined =
-    role !== null && !sessionValid ? "session-invalidated" : undefined;
+    hasAnyRole && !sessionValid ? "session-invalidated" : undefined;
 
   // ── Public host ────────────────────────────────────────────────────────
   // Ai cũng vào (kể cả chưa login). Route admin/portal lọt vào → đá đúng host.

@@ -129,6 +129,7 @@ export default auth((req: NextAuthRequest) => {
       hostKind: kind,
       pathname,
       role: (session?.user?.role as Role | undefined) ?? null,
+      roles: (session?.user?.roles as Role[] | undefined) ?? undefined,
       sessionValid: Boolean(session?.user),
     });
     const response = execute(req, decision);

@@ -364,6 +364,65 @@ describe("B. callbackUrl sanitize chống open-redirect", () => {
 // Tổng quát: KHÔNG bao giờ rewrite /admin/* cho PARENT, /portal/* cho staff.
 // ─────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────
+// Đợt 3B — đa vai trò (roles[])
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("3B. đa vai trò (roles[])", () => {
+  it("[CENTER_MANAGER, TEACHER] vào admin route → rewrite /admin/*", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "TEACHER"],
+        sessionValid: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
+
+  it("[CENTER_MANAGER, TEACHER] vào portal → redirectHost admin (staff cấm portal)", () => {
+    expect(
+      decideRoute({
+        hostKind: "portal",
+        pathname: "/lich-hoc",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "TEACHER"],
+        sessionValid: true,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("[PARENT] (roles) vẫn như cũ — admin → portal, portal → rewrite", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/dashboard", role: "PARENT", roles: ["PARENT"], sessionValid: true }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/lich-hoc", role: "PARENT", roles: ["PARENT"], sessionValid: true }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/portal/lich-hoc" });
+  });
+
+  it("phòng vệ: nếu lỡ trộn [CENTER_MANAGER, PARENT] → coi là STAFF (vào admin, cấm portal)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", role: "CENTER_MANAGER", roles: ["CENTER_MANAGER", "PARENT"], sessionValid: true }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/lich-hoc", role: "CENTER_MANAGER", roles: ["CENTER_MANAGER", "PARENT"], sessionValid: true }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/dashboard", status: 307 });
+  });
+
+  it("roles trống → fallback role chính (back-compat)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", role: "HR", roles: [], sessionValid: true }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
+});
+
 describe("Invariants bảo mật", () => {
   it("PARENT KHÔNG bao giờ nhận rewrite vào /admin/*", () => {
     for (const p of ["/leads", "/dashboard", "/users", "/nhan-su", "/settings"]) {
