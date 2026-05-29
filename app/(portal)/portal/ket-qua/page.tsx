@@ -6,6 +6,9 @@ import {
   getLatestProgressReport,
 } from "@/lib/portal/learning";
 import { getStudentProgress } from "@/lib/progress";
+import { db } from "@/lib/db";
+import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
+import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Kết quả | Sata Robo" };
@@ -32,9 +35,40 @@ export default async function KetQuaPage() {
     })),
   );
 
+  // LMS-5 — năng lực robotics hiện tại (bản mới nhất mỗi kỹ năng).
+  const skillRows = await db.studentSkillAssessment.findMany({
+    where: { studentId },
+    orderBy: { assessedAt: "desc" },
+    select: { skill: true, level: true },
+  });
+  const latestSkills: Partial<Record<RoboticsSkill, SkillLevel>> = {};
+  for (const r of skillRows) if (!latestSkills[r.skill]) latestSkills[r.skill] = r.level;
+  const hasSkills = Object.keys(latestSkills).length > 0;
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-neutral-900">Kết quả học tập</h1>
+
+      {hasSkills && (
+        <section className="rounded-xl border border-neutral-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-700">
+            Năng lực robotics
+          </h2>
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {SKILL_ORDER.filter((s) => latestSkills[s]).map((s) => {
+              const lv = latestSkills[s] as SkillLevel;
+              return (
+                <li key={s} className="flex items-center justify-between gap-2 rounded-lg bg-neutral-50 px-3 py-2">
+                  <span className="text-sm text-neutral-700">{SKILL_LABEL[s]}</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${LEVEL_COLOR[lv]}`}>
+                    {LEVEL_LABEL[lv]}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {latestReport && (
         <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-800">

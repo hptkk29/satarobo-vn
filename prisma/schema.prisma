@@ -642,6 +642,7 @@ model Student {
   assignmentSubmissions AssignmentSubmission[]
   progressReports       ProgressReportLog[]
   sessionFeedbacks      StudentSessionFeedback[] // LMS-2
+  skillAssessments      StudentSkillAssessment[] // LMS-5
 
   // Phase 5.4.0 — Audit log
   auditLogs StudentAuditLog[] @relation("StudentAuditLogs")
@@ -877,6 +878,40 @@ enum SessionStatus {
   SCHEDULED
   IN_PROGRESS
   COMPLETED
+}
+
+// LMS-5 — Hồ sơ năng lực robotics.
+enum SkillLevel {
+  NEED_SUPPORT
+  BASIC
+  GOOD
+  EXCELLENT
+}
+
+enum RoboticsSkill {
+  MECH_ASSEMBLY
+  ALGORITHM
+  PROGRAMMING
+  SENSOR
+  MOTOR_CONTROL
+  PROBLEM_SOLVING
+  TEAMWORK
+  PRESENTATION
+  CREATIVITY
+  COMPETITION_READY
+}
+
+model StudentSkillAssessment {
+  id           String        @id @default(cuid())
+  studentId    String
+  skill        RoboticsSkill
+  level        SkillLevel
+  note         String?
+  assessedById String
+  assessedAt   DateTime      @default(now())
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, skill])
 }
 
 // LMS-2 — nhận xét RIÊNG từng học sinh mỗi buổi (GV viết, PH xem con mình).

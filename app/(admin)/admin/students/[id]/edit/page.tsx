@@ -10,6 +10,8 @@ import { GeneratePdfButton } from "./_pdf-button";
 import { LifecycleActions } from "../../_components/lifecycle-actions";
 import { ReserveHistorySection } from "../../_components/reserve-history-section";
 import { ParentAccountSection } from "../../_components/parent-account-section";
+import { SkillEditor } from "../_components/skill-editor";
+import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -71,6 +73,20 @@ export default async function EditStudentPage({ params }: Props) {
   ]);
 
   if (!student) notFound();
+
+  // LMS-5 — năng lực: lấy bản đánh giá mới nhất mỗi kỹ năng.
+  const skillRows = await db.studentSkillAssessment.findMany({
+    where: { studentId: id },
+    orderBy: { assessedAt: "desc" },
+    select: { skill: true, level: true, note: true, assessedAt: true },
+  });
+  const latestSkills: Partial<Record<RoboticsSkill, { level: SkillLevel; note: string }>> = {};
+  for (const r of skillRows) {
+    if (!latestSkills[r.skill]) latestSkills[r.skill] = { level: r.level, note: r.note ?? "" };
+  }
+  const canAssessSkills =
+    session.user.role === "SUPER_ADMIN" ||
+    (session.user.role === "CENTER_MANAGER" && student.centerId === session.user.centerId);
 
   const formValue: StudentFormValue = {
     id: student.id,
@@ -246,6 +262,20 @@ export default async function EditStudentPage({ params }: Props) {
           </div>
         </section>
       )}
+
+      {/* LMS-5 — hồ sơ năng lực robotics */}
+      <section>
+        <h2 className="mb-3 text-lg font-bold text-neutral-900">
+          Hồ sơ năng lực robotics
+        </h2>
+        <div className="rounded-xl border border-neutral-200 bg-white p-4">
+          <SkillEditor
+            studentId={student.id}
+            canEdit={canAssessSkills}
+            initial={latestSkills}
+          />
+        </div>
+      </section>
     </div>
   );
 }
