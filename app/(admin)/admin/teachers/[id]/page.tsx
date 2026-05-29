@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { TeacherProfileForm } from "./_components/profile-form";
 import { ClassAssignmentSection } from "./_components/class-assignment";
+import { WeeklySchedule } from "./_components/weekly-schedule";
+import type { TeacherClassSlot } from "@/lib/teachers/schedule";
 
 export const metadata = { title: "Hồ sơ giáo viên | Admin" };
 export const dynamic = "force-dynamic";
@@ -63,6 +65,9 @@ export default async function TeacherProfilePage({ params }: Props) {
     classCode: true,
     courseId: true,
     course: { select: { name: true } },
+    scheduleDays: true,
+    startTime: true,
+    endTime: true,
   } as const;
 
   const [courses, mainClasses, assistantClasses, assignableRaw] = await Promise.all([
@@ -99,6 +104,26 @@ export default async function TeacherProfilePage({ params }: Props) {
     label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
     courseName: c.course.name,
   });
+
+  // Lịch tuần = GV chính + trợ giảng (đều chiếm chỗ → tính trùng giờ).
+  const scheduleSlots: TeacherClassSlot[] = [
+    ...mainClasses.map((c) => ({
+      id: c.id,
+      label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+      scheduleDays: c.scheduleDays,
+      startTime: c.startTime,
+      endTime: c.endTime,
+      role: "teacher" as const,
+    })),
+    ...assistantClasses.map((c) => ({
+      id: c.id,
+      label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+      scheduleDays: c.scheduleDays,
+      startTime: c.startTime,
+      endTime: c.endTime,
+      role: "assistant" as const,
+    })),
+  ];
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -159,6 +184,8 @@ export default async function TeacherProfilePage({ params }: Props) {
           courseName: c.course.name,
         }))}
       />
+
+      <WeeklySchedule slots={scheduleSlots} />
     </div>
   );
 }
