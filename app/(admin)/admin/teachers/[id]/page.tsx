@@ -15,12 +15,14 @@ export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ month?: string }>;
 }
 
-export default async function TeacherProfilePage({ params }: Props) {
+export default async function TeacherProfilePage({ params, searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const { id } = await params;
+  const { month: monthParam } = await searchParams;
 
   const teacher = await db.user.findUnique({
     where: { id },
@@ -126,6 +128,33 @@ export default async function TeacherProfilePage({ params }: Props) {
     })),
   ];
 
+  // PHẦN 5 — số buổi đã dạy trong tháng (ClassSession của lớp GV chính, đã diễn ra).
+  const now = new Date();
+  const monthMatch = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : null;
+  const year = monthMatch ? Number(monthMatch.slice(0, 4)) : now.getFullYear();
+  const monthIdx = monthMatch ? Number(monthMatch.slice(5, 7)) - 1 : now.getMonth();
+  const monthStart = new Date(year, monthIdx, 1);
+  const monthEnd = new Date(year, monthIdx + 1, 1);
+  const monthValue = `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+  const mainClassIds = mainClasses.map((c) => c.id);
+  const taughtSessions =
+    mainClassIds.length > 0
+      ? await db.classSession.findMany({
+          where: {
+            classId: { in: mainClassIds },
+            date: { gte: monthStart, lt: monthEnd, lte: now },
+          },
+          orderBy: { date: "desc" },
+          select: {
+            id: true,
+            date: true,
+            topic: true,
+            class: { select: { name: true, classCode: true } },
+          },
+          take: 200,
+        })
+      : [];
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
@@ -217,6 +246,47 @@ export default async function TeacherProfilePage({ params }: Props) {
           </section>
         );
       })()}
+
+      {/* PHẦN 5 — Số buổi đã dạy trong tháng */}
+      <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+            Số buổi đã dạy trong tháng
+          </h2>
+          <form method="GET" className="flex items-center gap-2">
+            <input
+              type="month"
+              name="month"
+              defaultValue={monthValue}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-[#7C3AED] focus:outline-none"
+            />
+            <button type="submit" className="rounded-lg bg-gray-800 px-3 py-1 text-sm font-medium text-white">
+              Xem
+            </button>
+          </form>
+        </div>
+        <p className="mb-3 text-sm text-gray-600">
+          Đã dạy <strong className="text-gray-900">{taughtSessions.length}</strong> buổi trong{" "}
+          {monthValue} (chỉ tính buổi đã diễn ra).
+        </p>
+        {taughtSessions.length === 0 ? (
+          <p className="text-sm text-gray-400">Chưa có buổi nào.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100 text-sm">
+            {taughtSessions.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="tabular-nums text-gray-700">
+                  {new Date(s.date).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" })}
+                </span>
+                <span className="font-medium text-gray-900">
+                  {s.class.classCode ? `${s.class.classCode} · ` : ""}{s.class.name}
+                </span>
+                <span className="flex-1 truncate text-right text-xs text-gray-400">{s.topic ?? ""}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
