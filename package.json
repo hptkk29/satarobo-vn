@@ -15,6 +15,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:courses": "tsx prisma/seed-courses.ts",
     "db:seed:teacher-profiles": "tsx prisma/seed-teacher-profiles.ts",
+    "db:seed:course-categories": "tsx prisma/seed-course-categories.ts",
     "db:reset": "prisma migrate reset",
     "test:unit": "vitest",
     "test:unit:watch": "vitest watch",
