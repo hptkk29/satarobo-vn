@@ -68,6 +68,46 @@ function parseDate(value: FormDataEntryValue | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * FIX 7 — Kiểm tra khoá tiên quyết. Trả lỗi nghiệp vụ thân thiện nếu học viên
+ * chưa hoàn thành (Enrollment status COMPLETED) các khoá yêu cầu trước.
+ * Khoá không có tiên quyết → luôn ok.
+ */
+export async function checkPrerequisites(
+  studentId: string,
+  courseId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const prereqs = await db.coursePrerequisite.findMany({
+      where: { courseId },
+      select: { requiredCourse: { select: { id: true, name: true } } },
+    });
+    if (prereqs.length === 0) return { ok: true };
+
+    const requiredIds = prereqs.map((p) => p.requiredCourse.id);
+    const completed = await db.enrollment.findMany({
+      where: { studentId, courseId: { in: requiredIds }, status: "COMPLETED" },
+      select: { courseId: true },
+    });
+    const done = new Set(completed.map((c) => c.courseId));
+    const missing = prereqs
+      .filter((p) => !done.has(p.requiredCourse.id))
+      .map((p) => p.requiredCourse.name);
+
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        error: `Học viên cần hoàn thành ${missing.join(", ")} trước khi đăng ký khoá này.`,
+      };
+    }
+    return { ok: true };
+  } catch {
+    // Lỗi tra cứu tiên quyết → không chặn cứng (fail-open) nhưng log.
+    console.error("[checkPrerequisites] lookup error for course", courseId);
+    return { ok: true };
+  }
+}
+
 async function requireSalesOrAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -304,6 +344,11 @@ export async function enrollStudent(
     };
   }
   if (!student) return { ok: false, error: "Không tìm thấy học viên" };
+
+  // FIX 7 — kiểm tra khoá tiên quyết: khoá của lớp có yêu cầu khoá trước không,
+  // và học viên đã hoàn thành (Enrollment COMPLETED) chưa.
+  const prereq = await checkPrerequisites(studentId, cls.courseId);
+  if (!prereq.ok) return prereq;
 
   try {
     const enrollment = await db.enrollment.create({

@@ -38,6 +38,7 @@ import {
   Star,
   Clock,
   ChevronDown,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Sản phẩm",
     items: [
       { label: "Khoá học (Packages)", href: "/course-packages", icon: Boxes, perm: ["course-packages:view"] },
+      { label: "Khoá tiên quyết", href: "/course-prerequisites", icon: Workflow, perm: ["courses:create"] },
       { label: "Học cụ (Kits)", href: "/kits", icon: Package, perm: ["kits:view"] },
       { label: "Sản phẩm bán/thuê", href: "/products", icon: Package2, perm: ["products:view"] },
     ],

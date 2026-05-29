@@ -392,10 +392,30 @@ model Course {
   curriculums        Curriculum[]
   trialRecommended   TrialFeedback[] @relation("TrialRecommendedCourse")
 
+  // FIX 7 — khoá tiên quyết (cấu hình qua UI admin).
+  prerequisites     CoursePrerequisite[] @relation("CoursePrereqOwner")
+  requiredByCourses CoursePrerequisite[] @relation("CoursePrereqRequired")
+
   @@index([slug])
   @@index([type])
   @@index([code])
   @@index([isPublished, displayOrder])
+}
+
+// FIX 7 — Khoá tiên quyết: khoá `courseId` yêu cầu hoàn thành `requiredCourseId`
+// trước khi đăng ký. Nhiều-nhiều tự tham chiếu trên Course; admin tự thêm/xoá
+// qua UI (không sửa code). 1 khoá có thể yêu cầu ≥1 khoá trước.
+model CoursePrerequisite {
+  id               String   @id @default(cuid())
+  courseId         String
+  requiredCourseId String
+  course           Course   @relation("CoursePrereqOwner", fields: [courseId], references: [id], onDelete: Cascade)
+  requiredCourse   Course   @relation("CoursePrereqRequired", fields: [requiredCourseId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  @@unique([courseId, requiredCourseId])
+  @@index([courseId])
+  @@index([requiredCourseId])
 }
 
 model Lead {
