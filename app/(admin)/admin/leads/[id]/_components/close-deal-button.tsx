@@ -6,7 +6,7 @@ import { CheckCircle2, X } from "lucide-react";
 import { toast } from "sonner";
 import { closeLeadAsEnrolled } from "../../actions";
 
-type ClassOpt = { id: string; label: string };
+type ClassOpt = { id: string; label: string; price: number | null };
 
 export function CloseDealButton({
   leadId,
@@ -26,7 +26,16 @@ export function CloseDealButton({
   const [classId, setClassId] = useState("");
   const [studentName, setStudentName] = useState(defaultStudentName);
   const [tuition, setTuition] = useState("");
+  const [tuitionEdited, setTuitionEdited] = useState(false);
   const [paid, setPaid] = useState(false);
+
+  // FIX 8 — chọn lớp → tự điền học phí = giá khoá (Course.price), trừ khi đã sửa tay.
+  function handlePickClass(id: string) {
+    setClassId(id);
+    if (tuitionEdited) return;
+    const price = classes.find((c) => c.id === id)?.price;
+    setTuition(price != null ? String(price) : "");
+  }
   const [createParent, setCreateParent] = useState(false);
   const [parentEmail, setParentEmail] = useState(defaultParentEmail ?? "");
   const [parentPassword, setParentPassword] = useState("");
@@ -113,7 +122,7 @@ export function CloseDealButton({
           </span>
           <select
             value={classId}
-            onChange={(e) => setClassId(e.target.value)}
+            onChange={(e) => handlePickClass(e.target.value)}
             className={inputCls}
           >
             <option value="">— Chọn lớp —</option>
@@ -132,8 +141,11 @@ export function CloseDealButton({
             type="number"
             min={0}
             value={tuition}
-            onChange={(e) => setTuition(e.target.value)}
-            placeholder="Tùy chọn"
+            onChange={(e) => {
+              setTuition(e.target.value);
+              setTuitionEdited(true);
+            }}
+            placeholder="Tự điền theo khoá — sửa được"
             className={inputCls}
           />
         </label>

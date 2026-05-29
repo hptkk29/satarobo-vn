@@ -66,7 +66,12 @@ export default async function LeadDetailPage({ params }: Props) {
           status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },
           ...(lead.centerId ? { centerId: lead.centerId } : {}),
         },
-        select: { id: true, name: true, classCode: true },
+        select: {
+          id: true,
+          name: true,
+          classCode: true,
+          course: { select: { price: true } },
+        },
         orderBy: { createdAt: "desc" },
         take: 100,
       })
@@ -131,6 +136,7 @@ export default async function LeadDetailPage({ params }: Props) {
             classes={classOptions.map((c) => ({
               id: c.id,
               label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+              price: c.course?.price ?? null,
             }))}
           />
         </div>

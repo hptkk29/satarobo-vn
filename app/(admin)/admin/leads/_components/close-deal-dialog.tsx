@@ -9,7 +9,7 @@ import { closeLeadAsEnrolled, getLeadCloseDealOptions } from "../actions";
 const inputCls =
   "w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400";
 
-type ClassOpt = { id: string; label: string };
+type ClassOpt = { id: string; label: string; price: number | null };
 
 /**
  * FIX 4 — Dialog chốt deal mở NGAY từ Kanban/table. Tự fetch options (lớp +
@@ -35,7 +35,17 @@ export function CloseDealDialog({
   const [classId, setClassId] = useState("");
   const [studentName, setStudentName] = useState("");
   const [tuition, setTuition] = useState("");
+  const [tuitionEdited, setTuitionEdited] = useState(false);
   const [paid, setPaid] = useState(false);
+
+  // FIX 8 — chọn lớp → tự điền học phí = giá khoá (Course.price), trừ khi sale
+  // đã sửa tay (giữ giá đặc biệt).
+  function handlePickClass(id: string) {
+    setClassId(id);
+    if (tuitionEdited) return;
+    const price = classes.find((c) => c.id === id)?.price;
+    setTuition(price != null ? String(price) : "");
+  }
   const [createParent, setCreateParent] = useState(false);
   const [parentEmail, setParentEmail] = useState("");
   const [parentPassword, setParentPassword] = useState("");
@@ -49,6 +59,7 @@ export function CloseDealDialog({
     // reset form mỗi lần mở
     setClassId("");
     setTuition("");
+    setTuitionEdited(false);
     setPaid(false);
     setCreateParent(false);
     setParentPassword("");
@@ -162,7 +173,7 @@ export function CloseDealDialog({
                 </span>
                 <select
                   value={classId}
-                  onChange={(e) => setClassId(e.target.value)}
+                  onChange={(e) => handlePickClass(e.target.value)}
                   className={inputCls}
                 >
                   <option value="">— Chọn lớp —</option>
@@ -181,8 +192,11 @@ export function CloseDealDialog({
                   type="number"
                   min={0}
                   value={tuition}
-                  onChange={(e) => setTuition(e.target.value)}
-                  placeholder="Tùy chọn"
+                  onChange={(e) => {
+                    setTuition(e.target.value);
+                    setTuitionEdited(true);
+                  }}
+                  placeholder="Tự điền theo khoá — sửa được"
                   className={inputCls}
                 />
               </label>

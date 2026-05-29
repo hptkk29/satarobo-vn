@@ -610,7 +610,7 @@ export async function getLeadCloseDealOptions(leadId: string): Promise<{
   error?: string
   defaultStudentName?: string
   defaultParentEmail?: string | null
-  classes?: { id: string; label: string }[]
+  classes?: { id: string; label: string; price: number | null }[]
 }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
@@ -634,7 +634,7 @@ export async function getLeadCloseDealOptions(leadId: string): Promise<{
       status: { in: ['PLANNED', 'RECRUITING', 'ACTIVE'] },
       ...(lead.centerId ? { centerId: lead.centerId } : {}),
     },
-    select: { id: true, name: true, classCode: true },
+    select: { id: true, name: true, classCode: true, course: { select: { price: true } } },
     orderBy: { createdAt: 'desc' },
     take: 100,
   })
@@ -646,6 +646,7 @@ export async function getLeadCloseDealOptions(leadId: string): Promise<{
     classes: classes.map((c) => ({
       id: c.id,
       label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+      price: c.course?.price ?? null,
     })),
   }
 }
