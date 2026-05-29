@@ -9,6 +9,7 @@ import { ClassAssignmentSection } from "./_components/class-assignment";
 import { WeeklySchedule } from "./_components/weekly-schedule";
 import type { TeacherClassSlot } from "@/lib/teachers/schedule";
 import { computeTeachingLoad, OVERLOAD_HOURS_PER_WEEK } from "@/lib/teachers/load";
+import { TeacherEvaluations } from "./_components/evaluations";
 
 export const metadata = { title: "Hồ sơ giáo viên | Admin" };
 export const dynamic = "force-dynamic";
@@ -155,6 +156,38 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
         })
       : [];
 
+  // PHẦN 6 — đánh giá: ParentFeedback (qua HS enroll lớp GV) + TeacherReview nội bộ.
+  const enrolledStudentIds =
+    mainClassIds.length > 0
+      ? (
+          await db.enrollment.findMany({
+            where: { classId: { in: mainClassIds } },
+            select: { studentId: true },
+            distinct: ["studentId"],
+          })
+        ).map((e) => e.studentId)
+      : [];
+  const [parentFeedback, internalReviews] = await Promise.all([
+    enrolledStudentIds.length > 0
+      ? db.parentFeedback.findMany({
+          where: { studentId: { in: enrolledStudentIds } },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: { rating: true, content: true, studentName: true, createdAt: true },
+        })
+      : Promise.resolve([] as { rating: number; content: string; studentName: string | null; createdAt: Date }[]),
+    db.teacherReview.findMany({
+      where: { teacherProfile: { userId: id } },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: { score: true, note: true, reviewerName: true, createdAt: true },
+    }),
+  ]);
+  const parentAvg =
+    parentFeedback.length > 0
+      ? parentFeedback.reduce((s, f) => s + f.rating, 0) / parentFeedback.length
+      : null;
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
@@ -287,6 +320,25 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
           </ul>
         )}
       </section>
+
+      <TeacherEvaluations
+        userId={teacher.id}
+        canEdit={canEdit}
+        parentAvg={parentAvg}
+        parentCount={parentFeedback.length}
+        parentRecent={parentFeedback.slice(0, 5).map((f) => ({
+          rating: f.rating,
+          content: f.content,
+          studentName: f.studentName,
+          createdAt: f.createdAt.toISOString(),
+        }))}
+        reviews={internalReviews.map((r) => ({
+          score: r.score,
+          note: r.note,
+          reviewerName: r.reviewerName,
+          createdAt: r.createdAt.toISOString(),
+        }))}
+      />
     </div>
   );
 }

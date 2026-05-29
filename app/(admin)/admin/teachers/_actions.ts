@@ -134,6 +134,49 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
   return { ok: true };
 }
 
+// ── PHẦN 6 — đánh giá nội bộ ──────────────────────────────────────────────
+
+const reviewSchema = z.object({
+  userId: z.string().min(1),
+  score: z.coerce.number().int().min(1).max(5),
+  note: z.string().trim().max(2000).optional().or(z.literal("")),
+});
+
+/** Ghi 1 đánh giá nội bộ/dự giờ cho GV. */
+export async function addTeacherReview(input: unknown): Promise<Result> {
+  const parsed = reviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { userId, score, note } = parsed.data;
+
+  const gate = await requireTeacherManager(userId);
+  if (!gate.ok) return gate;
+
+  try {
+    const profile = await db.teacherProfile.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+      select: { id: true },
+    });
+    await db.teacherReview.create({
+      data: {
+        teacherProfileId: profile.id,
+        reviewerId: gate.session.user.id ?? null,
+        reviewerName: gate.session.user.name ?? gate.session.user.email ?? "Quản lý",
+        score,
+        note: note || null,
+      },
+    });
+  } catch (err) {
+    return { ok: false, error: `Lỗi lưu đánh giá: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+
+  revalidatePath(`/teachers/${userId}`);
+  return { ok: true };
+}
+
 const unassignSchema = z.object({
   classId: z.string().min(1),
   teacherUserId: z.string().min(1),
