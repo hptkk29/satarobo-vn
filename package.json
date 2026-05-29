@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:courses": "tsx prisma/seed-courses.ts",
     "db:reset": "prisma migrate reset",
     "test:unit": "vitest",
     "test:unit:watch": "vitest watch",
