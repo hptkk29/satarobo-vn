@@ -76,7 +76,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
 
   const [courses, mainClasses, assistantClasses, assignableRaw] = await Promise.all([
     db.course.findMany({
-      where: { isActive: true },
+      where: { isActive: true, isTeachable: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true },
     }),

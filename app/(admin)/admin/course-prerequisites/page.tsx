@@ -19,7 +19,7 @@ export default async function CoursePrerequisitesPage() {
 
   const [allCourses, withPrereqs] = await Promise.all([
     db.course.findMany({
-      where: { isActive: true },
+      where: { isActive: true, isTeachable: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true },
     }),
