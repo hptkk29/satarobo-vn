@@ -41,6 +41,10 @@ export default async function EditCurriculumPage({ params }: Props) {
             objectives: true,
             materials: true,
             notes: true,
+            teacherGuide: true,
+            expectedOutput: true,
+            homeworkDefault: true,
+            assessmentCriteria: true,
           },
         },
       },
@@ -81,6 +85,7 @@ export default async function EditCurriculumPage({ params }: Props) {
           version: curriculum.version,
           description: curriculum.description,
           isActive: curriculum.isActive,
+          status: curriculum.status,
         }}
       />
 
@@ -97,6 +102,10 @@ export default async function EditCurriculumPage({ params }: Props) {
           objectives: l.objectives,
           materials: l.materials,
           notes: l.notes,
+          teacherGuide: l.teacherGuide,
+          expectedOutput: l.expectedOutput,
+          homeworkDefault: l.homeworkDefault,
+          assessmentCriteria: l.assessmentCriteria,
         }))}
       />
     </div>

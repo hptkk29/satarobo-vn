@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CurriculumStatus } from "@prisma/client";
 
 const nullableStr = z
   .union([z.string(), z.null()])
@@ -20,6 +21,7 @@ export const curriculumSchema = z.object({
   version: z.coerce.number().int().min(1, "Version >= 1").default(1),
   description: nullableStr,
   isActive: z.coerce.boolean().default(true),
+  status: z.nativeEnum(CurriculumStatus).default("ACTIVE"),
 });
 
 export type CurriculumInput = z.infer<typeof curriculumSchema>;
@@ -34,6 +36,11 @@ export const lessonSchema = z.object({
   objectives: stringArrayClean,
   materials: stringArrayClean,
   notes: nullableStr,
+  // LMS-1 — giáo án chi tiết
+  teacherGuide: nullableStr,
+  expectedOutput: nullableStr,
+  homeworkDefault: nullableStr,
+  assessmentCriteria: nullableStr,
 });
 
 export type LessonInput = z.infer<typeof lessonSchema>;

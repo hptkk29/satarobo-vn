@@ -1324,7 +1324,8 @@ model Curriculum {
   name        String
   description String? @db.Text
 
-  isActive Boolean @default(true)
+  isActive Boolean          @default(true)
+  status   CurriculumStatus @default(ACTIVE) // LMS-1
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1333,6 +1334,12 @@ model Curriculum {
 
   @@unique([courseId, version])
   @@index([courseId, isActive])
+}
+
+enum CurriculumStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
 }
 
 model Lesson {
@@ -1348,9 +1355,15 @@ model Lesson {
 
   duration   Int      @default(90)
   objectives String[] @default([])
-  materials  String[] @default([])
+  materials  String[] @default([]) // LMS-1: dùng làm "Thiết bị cần chuẩn bị"
 
   notes String? @db.Text
+
+  // LMS-1 — giáo án chi tiết
+  teacherGuide       String? @db.Text // hướng dẫn giảng dạy
+  expectedOutput     String? @db.Text // kết quả mong đợi
+  homeworkDefault    String? @db.Text // bài tập mặc định
+  assessmentCriteria String? @db.Text // tiêu chí đánh giá
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

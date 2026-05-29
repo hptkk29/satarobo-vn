@@ -17,6 +17,10 @@ export type LessonFormValue = {
   objectives: string[];
   materials: string[];
   notes: string | null;
+  teacherGuide: string | null;
+  expectedOutput: string | null;
+  homeworkDefault: string | null;
+  assessmentCriteria: string | null;
 };
 
 interface Props {
@@ -45,6 +49,10 @@ export function LessonFormDialog({
   const [objectives, setObjectives] = useState<string[]>(lesson?.objectives ?? []);
   const [materials, setMaterials] = useState<string[]>(lesson?.materials ?? []);
   const [notes, setNotes] = useState(lesson?.notes ?? "");
+  const [teacherGuide, setTeacherGuide] = useState(lesson?.teacherGuide ?? "");
+  const [expectedOutput, setExpectedOutput] = useState(lesson?.expectedOutput ?? "");
+  const [homeworkDefault, setHomeworkDefault] = useState(lesson?.homeworkDefault ?? "");
+  const [assessmentCriteria, setAssessmentCriteria] = useState(lesson?.assessmentCriteria ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -67,6 +75,10 @@ export function LessonFormDialog({
       setObjectives([]);
       setMaterials([]);
       setNotes("");
+      setTeacherGuide("");
+      setExpectedOutput("");
+      setHomeworkDefault("");
+      setAssessmentCriteria("");
     }
   };
 
@@ -83,6 +95,10 @@ export function LessonFormDialog({
       objectives,
       materials,
       notes: notes.trim() || null,
+      teacherGuide: teacherGuide.trim() || null,
+      expectedOutput: expectedOutput.trim() || null,
+      homeworkDefault: homeworkDefault.trim() || null,
+      assessmentCriteria: assessmentCriteria.trim() || null,
     };
     startTransition(async () => {
       const res = isEdit
@@ -228,17 +244,71 @@ export function LessonFormDialog({
 
               <div>
                 <span className="mb-1 block text-xs font-semibold text-neutral-600">
-                  Tài liệu (URL)
+                  Thiết bị cần chuẩn bị
                 </span>
                 <StringArrayEditor
                   value={materials}
                   onChange={setMaterials}
-                  placeholder="VD: https://drive.google.com/..."
+                  placeholder="VD: 5 bộ kit Alpha, cảm biến siêu âm, pin sạc…"
                 />
-                <span className="mt-1 block text-xs text-neutral-500">
-                  E4 sẽ thay bằng upload trực tiếp lên R2; hiện tại paste URL.
-                </span>
               </div>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-neutral-600">
+                  Hướng dẫn giảng dạy (cho GV)
+                </span>
+                <textarea
+                  value={teacherGuide}
+                  onChange={(e) => setTeacherGuide(e.target.value)}
+                  placeholder="Các bước lên lớp, lưu ý sư phạm, phân bổ thời gian…"
+                  rows={4}
+                  disabled={pending}
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-neutral-600">
+                    Kết quả mong đợi
+                  </span>
+                  <textarea
+                    value={expectedOutput}
+                    onChange={(e) => setExpectedOutput(e.target.value)}
+                    placeholder="Sản phẩm/kỹ năng HS đạt được sau bài"
+                    rows={3}
+                    disabled={pending}
+                    className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-neutral-600">
+                    Tiêu chí đánh giá
+                  </span>
+                  <textarea
+                    value={assessmentCriteria}
+                    onChange={(e) => setAssessmentCriteria(e.target.value)}
+                    placeholder="Cách chấm/đánh giá mức đạt của HS"
+                    rows={3}
+                    disabled={pending}
+                    className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-neutral-600">
+                  Bài tập mặc định
+                </span>
+                <textarea
+                  value={homeworkDefault}
+                  onChange={(e) => setHomeworkDefault(e.target.value)}
+                  placeholder="Bài tập về nhà gợi ý cho bài này"
+                  rows={2}
+                  disabled={pending}
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                />
+              </label>
 
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold text-neutral-600">

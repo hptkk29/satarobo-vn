@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { CurriculumStatus } from "@prisma/client";
 import {
   createCurriculumAndRedirect,
   updateCurriculum,
@@ -13,6 +14,12 @@ interface CourseOption {
   name: string;
 }
 
+const STATUS_LABEL: Record<CurriculumStatus, string> = {
+  DRAFT: "Nháp",
+  ACTIVE: "Đang dùng",
+  ARCHIVED: "Lưu trữ",
+};
+
 export type CurriculumFormValue = {
   id: string;
   courseId: string;
@@ -20,6 +27,7 @@ export type CurriculumFormValue = {
   version: number;
   description: string | null;
   isActive: boolean;
+  status: CurriculumStatus;
 };
 
 export function CurriculumForm({
@@ -36,6 +44,7 @@ export function CurriculumForm({
   const [version, setVersion] = useState<number>(curriculum?.version ?? 1);
   const [description, setDescription] = useState(curriculum?.description ?? "");
   const [isActive, setIsActive] = useState(curriculum?.isActive ?? true);
+  const [status, setStatus] = useState<CurriculumStatus>(curriculum?.status ?? "ACTIVE");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -48,6 +57,7 @@ export function CurriculumForm({
       version,
       description: description.trim() || null,
       isActive,
+      status,
     };
     startTransition(async () => {
       const res = isEdit
@@ -154,6 +164,22 @@ export function CurriculumForm({
           disabled={pending}
           className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
         />
+      </label>
+
+      <label className="block sm:max-w-xs">
+        <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          Trạng thái giáo trình
+        </span>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value as CurriculumStatus)}
+          disabled={pending}
+          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+        >
+          {(Object.keys(STATUS_LABEL) as CurriculumStatus[]).map((s) => (
+            <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+          ))}
+        </select>
       </label>
 
       <label className="flex items-center gap-2 text-sm">
