@@ -4,6 +4,7 @@ import { ChevronLeft, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SessionFeedbackEditor } from "./_components/session-feedback-editor";
+import { SessionChecklist } from "./_components/session-checklist";
 import { canManageSessionClass } from "./_actions";
 
 export const metadata = { title: "Chi tiết buổi học | Admin" };
@@ -28,6 +29,13 @@ export default async function SessionDetailPage({ params }: Props) {
       date: true,
       topic: true,
       notes: true,
+      lessonId: true,
+      status: true,
+      ckLessonConfirmed: true,
+      ckMedia: true,
+      ckHomework: true,
+      ckIncident: true,
+      incidentNote: true,
       lesson: { select: { title: true, order: true } },
       class: {
         select: {
@@ -115,6 +123,27 @@ export default async function SessionDetailPage({ params }: Props) {
         </dl>
         {sess.notes && <p className="mt-3 text-sm text-gray-600">Ghi chú: {sess.notes}</p>}
       </section>
+
+      {/* LMS-3 — checklist sau buổi */}
+      <SessionChecklist
+        sessionId={sess.id}
+        status={sess.status}
+        lessonLinked={!!sess.lessonId}
+        derived={{
+          ckAttendance: sess.attendances.length > 0,
+          ckFeedback:
+            studentRows.filter((s) => s.present).length > 0 &&
+            studentRows.filter((s) => s.present).every((s) => s.comment.trim().length > 0),
+        }}
+        stored={{
+          ckLessonConfirmed: sess.ckLessonConfirmed,
+          ckMedia: sess.ckMedia,
+          ckHomework: sess.ckHomework,
+          ckIncident: sess.ckIncident,
+          incidentNote: sess.incidentNote ?? "",
+        }}
+        canEdit={canEdit}
+      />
 
       {/* LMS-2 — nhận xét từng học sinh */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">

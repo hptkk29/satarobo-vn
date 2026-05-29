@@ -81,6 +81,30 @@ export default async function DashboardPage() {
     59,
   );
 
+  // LMS-3 — cảnh báo buổi đã qua chưa hoàn tất checklist (SUPER_ADMIN/CM, scope cơ sở).
+  const isSessionManager =
+    session.user.role === "SUPER_ADMIN" || session.user.role === "CENTER_MANAGER";
+  const incompleteSessions = isSessionManager
+    ? await db.classSession.findMany({
+        where: {
+          date: { lte: endOfToday },
+          status: { not: "COMPLETED" },
+          ...(session.user.role === "CENTER_MANAGER" && session.user.centerId
+            ? { class: { centerId: session.user.centerId } }
+            : {}),
+        },
+        orderBy: { date: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          date: true,
+          class: {
+            select: { name: true, classCode: true, teacher: { select: { name: true } } },
+          },
+        },
+      })
+    : [];
+
   const [
     totalLeads,
     newLeadsThisMonth,
@@ -159,6 +183,32 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {incompleteSessions.length > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-sm font-bold text-rose-700">
+              ⚠ {incompleteSessions.length} buổi đã qua chưa hoàn tất checklist
+            </span>
+          </div>
+          <ul className="space-y-1 text-sm">
+            {incompleteSessions.slice(0, 8).map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2">
+                <Link href={`/sessions/${s.id}`} className="font-medium text-rose-800 hover:underline">
+                  {s.class.classCode ? `${s.class.classCode} · ` : ""}{s.class.name}
+                </Link>
+                <span className="text-xs text-rose-600">
+                  {new Date(s.date).toLocaleDateString("vi-VN")}
+                  {s.class.teacher?.name ? ` · ${s.class.teacher.name}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {incompleteSessions.length > 8 && (
+            <p className="mt-1 text-xs text-rose-500">…và {incompleteSessions.length - 8} buổi khác.</p>
+          )}
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold text-neutral-900">
           Xin chào, {session.user.name?.split(" ").slice(-1)[0] ?? "Admin"}

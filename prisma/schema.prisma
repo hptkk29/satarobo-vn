@@ -848,6 +848,18 @@ model ClassSession {
   lessonId    String?
   lessonNotes String? @db.Text
 
+  // LMS-3 — quy trình sau buổi + checklist
+  status      SessionStatus @default(SCHEDULED)
+  startedAt   DateTime?
+  completedAt DateTime?
+  ckAttendance      Boolean @default(false)
+  ckLessonConfirmed Boolean @default(false)
+  ckFeedback        Boolean @default(false)
+  ckMedia           Boolean @default(false)
+  ckHomework        Boolean @default(false)
+  ckIncident        Boolean @default(false)
+  incidentNote      String? @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -859,6 +871,12 @@ model ClassSession {
   @@index([classId])
   @@index([date])
   @@index([lessonId])
+}
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
 }
 
 // LMS-2 — nhận xét RIÊNG từng học sinh mỗi buổi (GV viết, PH xem con mình).
