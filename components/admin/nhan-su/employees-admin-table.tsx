@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Edit, Eye, EyeOff, UserCheck, UserX, Trash2, Crown } from "lucide-react";
-import type { Employee, Department } from "@prisma/client";
+import type { Employee, Department, Role } from "@prisma/client";
 import {
   deleteEmployeeAction,
   toggleEmployeeActiveAction,
@@ -14,8 +14,31 @@ import {
 interface EmployeeRow extends Employee {
   center: { name: string } | null;
   manager: { fullName: string } | null;
+  userAccount: { role: Role } | null;
   _count: { honors: number };
 }
+
+const ROLE_LABEL: Record<Role, string> = {
+  SUPER_ADMIN: "Super Admin",
+  CENTER_MANAGER: "Quản lý",
+  HR: "Nhân sự",
+  SALES_CSM: "Tư vấn",
+  TEACHER: "Giáo viên",
+  MARKETING: "Marketing",
+  ACCOUNTANT: "Kế toán",
+  PARENT: "Phụ huynh",
+};
+
+const ROLE_COLOR: Record<Role, string> = {
+  SUPER_ADMIN: "bg-red-100 text-red-700",
+  CENTER_MANAGER: "bg-purple-100 text-purple-700",
+  HR: "bg-pink-100 text-pink-700",
+  SALES_CSM: "bg-blue-100 text-blue-700",
+  TEACHER: "bg-green-100 text-green-700",
+  MARKETING: "bg-orange-100 text-orange-700",
+  ACCOUNTANT: "bg-gray-100 text-gray-600",
+  PARENT: "bg-teal-100 text-teal-700",
+};
 
 interface Props {
   employees: EmployeeRow[];
@@ -91,6 +114,7 @@ export function EmployeesAdminTable({ employees, canDelete }: Props) {
             <th className="px-4 py-3">Họ tên / Chức danh</th>
             <th className="px-4 py-3">Phòng ban</th>
             <th className="px-4 py-3">Cơ sở / Quản lý</th>
+            <th className="px-4 py-3">Vai trò</th>
             <th className="px-4 py-3">Honors</th>
             <th className="px-4 py-3 text-center">Active</th>
             <th className="px-4 py-3 text-center">Public</th>
@@ -119,6 +143,18 @@ export function EmployeesAdminTable({ employees, canDelete }: Props) {
                 {emp.center?.name || "—"}
                 {emp.manager && (
                   <p className="text-gray-400">↑ {emp.manager.fullName}</p>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                {emp.userAccount ? (
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${ROLE_COLOR[emp.userAccount.role]}`}
+                    title="Đổi vai trò: bấm Sửa → nút Đổi vai trò"
+                  >
+                    {ROLE_LABEL[emp.userAccount.role]}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">Chưa có TK</span>
                 )}
               </td>
               <td className="px-4 py-3 text-center">

@@ -237,6 +237,15 @@ export async function changeEmployeeRoleAction(input: {
     };
   }
 
+  // Chống tự khoá: không được đổi vai trò CHÍNH tài khoản mình (vd tự hạ xuống
+  // TEACHER → mất quyền admin ngay request kế tiếp).
+  if (employee.userAccount.id === session.user.id) {
+    return {
+      ok: false,
+      error: "Không thể tự đổi vai trò của chính mình (tránh tự khoá quyền).",
+    };
+  }
+
   const fromRole = employee.userAccount.role;
   if (fromRole === parsed.data.newRole) {
     return { ok: false, error: "Vai trò không thay đổi" };
@@ -246,7 +255,10 @@ export async function changeEmployeeRoleAction(input: {
     await db.$transaction([
       db.user.update({
         where: { id: employee.userAccount.id },
-        data: { role: parsed.data.newRole },
+        // Bump tokenVersion → JWT cũ (mang role cũ) bị vô hiệu ngay request kế
+        // tiếp (admin layout check tokenVersion mismatch → buộc re-login), nên
+        // vai trò mới có hiệu lực NGAY, không phải chờ token hết hạn ~30 ngày.
+        data: { role: parsed.data.newRole, tokenVersion: { increment: 1 } },
       }),
       db.roleAuditLog.create({
         data: {
