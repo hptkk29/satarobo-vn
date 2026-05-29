@@ -19,6 +19,7 @@ declare module "next-auth" {
     user: {
       id: string;
       role: string;
+      roles: string[]; // Đợt 3B — tất cả vai trò (union quyền)
       centerId: string | null;
       grants: SessionGrant[];
       tokenVersion: number;
@@ -26,6 +27,7 @@ declare module "next-auth" {
   }
   interface User {
     role?: string;
+    roles?: string[];
     centerId?: string | null;
     grants?: SessionGrant[];
     tokenVersion?: number;
@@ -57,6 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: true,
             password: true,
             role: true,
+            roles: true,
             centerId: true,
             isActive: true,
             deletedAt: true,
@@ -92,6 +95,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           role: user.role,
+          // Đợt 3B — đảm bảo roles luôn chứa vai trò chính (back-compat user cũ).
+          roles: user.roles.length > 0 ? user.roles : [user.role],
           centerId: user.centerId,
           grants,
           tokenVersion: fresh?.tokenVersion ?? 0,
@@ -105,6 +110,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = user.role ?? "SALES_CSM";
+        token.roles = user.roles ?? (user.role ? [user.role] : []);
         token.centerId = user.centerId ?? null;
         token.grants = user.grants ?? [];
         token.tokenVersion = user.tokenVersion ?? 0;
@@ -120,6 +126,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = migrateLegacyRole(
           (token.role as string) ?? "SALES_CSM",
         );
+        // Đợt 3B — roles (union), map legacy + đảm bảo chứa vai trò chính.
+        // Token cũ (trước 3B) chưa có roles → fallback [role]. User cần re-login
+        // để token mang roles đầy đủ khi được gán thêm vai trò.
+        const rawRoles = (token.roles as string[] | undefined) ?? [];
+        const mappedRoles = rawRoles.map(migrateLegacyRole);
+        const withPrimary = mappedRoles.includes(session.user.role)
+          ? mappedRoles
+          : [session.user.role, ...mappedRoles];
+        session.user.roles = withPrimary.length > 0 ? withPrimary : [session.user.role];
         session.user.centerId = (token.centerId as string | null) ?? null;
         session.user.grants = (token.grants as SessionGrant[]) ?? [];
         session.user.tokenVersion = (token.tokenVersion as number) ?? 0;

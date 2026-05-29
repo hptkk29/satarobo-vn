@@ -448,23 +448,46 @@ export type UserGrant = {
 
 export type CanUser = {
   role: Role | string | null | undefined;
+  roles?: (Role | string)[]; // Đợt 3B — đa vai trò (union quyền). Trống → dùng role.
   grants?: UserGrant[];
 };
 
+/** Đợt 3B — các vai trò HỮU HIỆU của 1 user (union). Trống roles → [role]. */
+export function getEffectiveRoles(user: {
+  role?: Role | string | null;
+  roles?: (Role | string)[] | null;
+}): Role[] {
+  const arr =
+    user.roles && user.roles.length > 0
+      ? user.roles
+      : user.role
+        ? [user.role]
+        : [];
+  return arr.filter(Boolean) as Role[];
+}
+
+function roleListAllows(roles: Role[], action: Action): boolean {
+  const allowed = PERMISSIONS[action];
+  if (!allowed) return false;
+  return roles.some((r) => allowed.includes(r));
+}
+
 /**
- * Check if a user (or role string) can perform action.
+ * Check if a user (role / role[] / CanUser) can perform action.
  *
- * Resolution order (DENY beats ALLOW beats role):
- *   1. If user.grants has DENY for action → false
- *   2. If user.grants has ALLOW for action → true
- *   3. Fall back to PERMISSIONS matrix (role-based)
- *
- * Backward compat: pass role string (or null) → behaves like before.
+ * Đa vai trò: quyền = HỢP (union) — true nếu BẤT KỲ vai trò nào được phép.
+ * Resolution (CanUser): SUPER_ADMIN bypass > grant DENY > grant ALLOW > union role.
+ * Back-compat: truyền 1 Role string / null vẫn chạy như cũ.
  */
 export function can(
-  userOrRole: CanUser | Role | string | null | undefined,
+  userOrRole: CanUser | Role | Role[] | string | null | undefined,
   action: Action,
 ): boolean {
+  // Path 0: mảng vai trò → union.
+  if (Array.isArray(userOrRole)) {
+    return roleListAllows(userOrRole, action);
+  }
+
   // Path 1: legacy signature — role string / null / undefined
   if (
     userOrRole === null ||
@@ -476,13 +499,12 @@ export function can(
     return PERMISSIONS[action]?.includes(role as Role) ?? false;
   }
 
-  // Path 2: user object with grants
+  // Path 2: user object (role + roles + grants)
   const user = userOrRole;
+  const effective = getEffectiveRoles(user);
 
-  // 2a. SUPER_ADMIN bypass — không thể bị DENY override (safety against
-  // self-lockout). Vẫn check matrix nhưng matrix gần như luôn cấp quyền
-  // cho SUPER_ADMIN.
-  if (user.role === "SUPER_ADMIN") {
+  // 2a. SUPER_ADMIN bypass — không thể bị DENY override (chống tự khoá).
+  if (effective.includes("SUPER_ADMIN")) {
     return PERMISSIONS[action]?.includes("SUPER_ADMIN") ?? false;
   }
 
@@ -491,9 +513,8 @@ export function can(
   if (grant?.grant === "DENY") return false;
   if (grant?.grant === "ALLOW") return true;
 
-  // 2c. Role matrix fallback
-  if (!user.role) return false;
-  return PERMISSIONS[action]?.includes(user.role as Role) ?? false;
+  // 2c. Union role matrix fallback
+  return roleListAllows(effective, action);
 }
 
 // =============================================================================
@@ -503,13 +524,11 @@ export function can(
 export const ALL_ACTIONS = Object.keys(PERMISSIONS) as Action[];
 
 export function assertCan(
-  role: Role | string | undefined | null,
+  roleOrRoles: CanUser | Role | Role[] | string | undefined | null,
   action: Action,
 ): void {
-  if (!can(role, action)) {
-    throw new Error(
-      `Forbidden: role ${role ?? "anonymous"} không có quyền ${action}`,
-    );
+  if (!can(roleOrRoles, action)) {
+    throw new Error(`Forbidden: không có quyền ${action}`);
   }
 }
 
@@ -518,23 +537,25 @@ export function assertCan(
 // =============================================================================
 
 export function getEmployeeFieldVisibility(
-  role: Role | string | null | undefined,
+  roleOrRoles: Role | string | (Role | string)[] | null | undefined,
 ): {
   basic: boolean; // name, jobTitle, department, avatar, bio, joinedAt
   contact: boolean; // phone, email
   salary: boolean; // salaryRank, salaryLevel, bhxhBase
   personal: boolean; // dateOfBirth, gender, contractType, managerId, nationalId
 } {
-  if (!role) {
+  const roles = (Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles]).filter(
+    Boolean,
+  ) as Role[];
+  if (roles.length === 0) {
     return { basic: false, contact: false, salary: false, personal: false };
   }
+  const any = (allowed: Role[]) => roles.some((r) => allowed.includes(r));
   return {
     basic: true,
-    contact: (["SUPER_ADMIN", "CENTER_MANAGER", "HR"] as Role[]).includes(role as Role),
-    salary: (["SUPER_ADMIN", "HR", "ACCOUNTANT"] as Role[]).includes(
-      role as Role,
-    ),
-    personal: (["SUPER_ADMIN", "HR"] as Role[]).includes(role as Role),
+    contact: any(["SUPER_ADMIN", "CENTER_MANAGER", "HR"]),
+    salary: any(["SUPER_ADMIN", "HR", "ACCOUNTANT"]),
+    personal: any(["SUPER_ADMIN", "HR"]),
   };
 }
 
@@ -554,4 +575,32 @@ export function isRole(
 /** True if SUPER_ADMIN — equivalent to legacy isSuperAdmin(). */
 export function isSuperAdmin(role: Role | string | null | undefined): boolean {
   return role === "SUPER_ADMIN";
+}
+
+// =============================================================================
+// MULTI-ROLE HELPERS — Đợt 3B
+// =============================================================================
+
+type RoleHolder = { role?: Role | string | null; roles?: (Role | string)[] | null };
+
+/** User có giữ vai trò r không (xét union roles, fallback role). */
+export function hasRole(user: RoleHolder, r: Role): boolean {
+  return getEffectiveRoles(user).includes(r);
+}
+
+/** User có giữ BẤT KỲ vai trò nào trong danh sách không. */
+export function hasAnyRole(user: RoleHolder, allowed: Role[]): boolean {
+  const eff = getEffectiveRoles(user);
+  return allowed.some((r) => eff.includes(r));
+}
+
+/** True nếu user có ≥1 vai trò NHÂN VIÊN (≠ PARENT). */
+export function hasStaffRole(user: RoleHolder): boolean {
+  return getEffectiveRoles(user).some((r) => r !== "PARENT");
+}
+
+/** True nếu user CHỈ là PARENT (không kèm vai trò nhân viên). */
+export function isParentOnly(user: RoleHolder): boolean {
+  const eff = getEffectiveRoles(user);
+  return eff.length > 0 && eff.every((r) => r === "PARENT");
 }
