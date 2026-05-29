@@ -8,6 +8,7 @@ import { TeacherProfileForm } from "./_components/profile-form";
 import { ClassAssignmentSection } from "./_components/class-assignment";
 import { WeeklySchedule } from "./_components/weekly-schedule";
 import type { TeacherClassSlot } from "@/lib/teachers/schedule";
+import { computeTeachingLoad, OVERLOAD_HOURS_PER_WEEK } from "@/lib/teachers/load";
 
 export const metadata = { title: "Hồ sơ giáo viên | Admin" };
 export const dynamic = "force-dynamic";
@@ -186,6 +187,45 @@ export default async function TeacherProfilePage({ params }: Props) {
       />
 
       <WeeklySchedule slots={scheduleSlots} />
+
+      {/* PHẦN 4 — Tải giảng dạy (tính từ lớp GV chính phụ trách) */}
+      {(() => {
+        const load = computeTeachingLoad(
+          mainClasses.map((c) => ({
+            scheduleDays: c.scheduleDays,
+            startTime: c.startTime,
+            endTime: c.endTime,
+          })),
+        );
+        return (
+          <section className="rounded-xl border border-gray-200 bg-white p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+                Tải giảng dạy / tuần
+              </h2>
+              {load.overloaded && (
+                <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
+                  Quá tải (&gt; {OVERLOAD_HOURS_PER_WEEK}h/tuần)
+                </span>
+              )}
+            </div>
+            <dl className="grid grid-cols-3 gap-3 text-center">
+              <Stat label="Lớp đang dạy" value={String(load.classCount)} />
+              <Stat label="Buổi / tuần" value={String(load.sessionsPerWeek)} />
+              <Stat label="Giờ / tuần" value={`${load.hoursPerWeek}h`} />
+            </dl>
+          </section>
+        );
+      })()}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-gray-50 p-3">
+      <div className="text-2xl font-bold text-gray-900 tabular-nums">{value}</div>
+      <div className="mt-0.5 text-xs text-gray-500">{label}</div>
     </div>
   );
 }

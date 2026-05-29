@@ -11,6 +11,7 @@ import {
   TEACHER_STATUS_LABEL,
   TEACHER_STATUS_COLOR,
 } from "@/lib/teachers/labels";
+import { computeTeachingLoad } from "@/lib/teachers/load";
 
 export const metadata = { title: "Giáo viên | Admin" };
 
@@ -54,7 +55,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
       employmentType: keyof typeof EMPLOYMENT_LABEL;
       status: keyof typeof TEACHER_STATUS_LABEL;
     } | null;
-    _count: { teacherClass: number };
+    teacherClass: { scheduleDays: number[]; startTime: string | null; endTime: string | null }[];
   }> = [];
 
   try {
@@ -69,8 +70,9 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
         teacherProfile: {
           select: { rank: true, employmentType: true, status: true },
         },
-        _count: {
-          select: { teacherClass: { where: { isActive: true, deletedAt: null } } },
+        teacherClass: {
+          where: { isActive: true, deletedAt: null },
+          select: { scheduleDays: true, startTime: true, endTime: true },
         },
       },
     });
@@ -115,18 +117,21 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Ngạch</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Loại HĐ</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Trạng thái</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">Lớp đang dạy</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">Lớp</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">Tải / tuần</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {staff.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
                     Chưa có giáo viên nào
                   </td>
                 </tr>
               ) : (
-                staff.map((u) => (
+                staff.map((u) => {
+                  const load = computeTeachingLoad(u.teacherClass);
+                  return (
                   <tr key={u.id} className="hover:bg-gray-50/60">
                     <td className="px-4 py-3">
                       <Link href={`/teachers/${u.id}`} className="flex items-center gap-3 group">
@@ -160,10 +165,21 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center text-sm font-medium tabular-nums text-gray-700">
-                      {u._count.teacherClass}
+                      {load.classCount}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="text-sm tabular-nums text-gray-700">
+                        {load.sessionsPerWeek} buổi · {load.hoursPerWeek}h
+                      </div>
+                      {load.overloaded && (
+                        <span className="mt-0.5 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                          Quá tải
+                        </span>
+                      )}
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
