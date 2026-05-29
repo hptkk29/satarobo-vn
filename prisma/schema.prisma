@@ -302,7 +302,8 @@ model User {
   emailVerified DateTime?
   password      String?
   image         String?
-  role          Role      @default(SALES_CSM)
+  role          Role      @default(SALES_CSM) // Đợt 3B — vai trò CHÍNH (primary)
+  roles         Role[]    @default([]) // Đợt 3B — tất cả vai trò người này giữ (union quyền)
   centerId      String?
   isActive      Boolean   @default(true)
   deletedAt     DateTime?
