@@ -351,6 +351,7 @@ export async function closeLeadAsEnrolled(
 ): Promise<{
   ok: boolean
   studentId?: string
+  studentCode?: string | null
   enrollmentId?: string
   parentAccountEmail?: string
   parentTempPasswordIsPhone?: boolean
@@ -570,6 +571,7 @@ export async function closeLeadAsEnrolled(
 
       return {
         studentId: student.id,
+        studentCode: student.studentCode,
         enrollmentId: enrollment.id,
         parentLinked: !!parentUserId,
       }
@@ -586,6 +588,7 @@ export async function closeLeadAsEnrolled(
     return {
       ok: true,
       studentId: result.studentId,
+      studentCode: result.studentCode,
       enrollmentId: result.enrollmentId,
       parentAccountEmail: linked ? (parentEmail as string) : undefined,
       // Nếu mật khẩu mặc định = SĐT, báo sale để dặn phụ huynh đổi sau.
@@ -594,5 +597,55 @@ export async function closeLeadAsEnrolled(
   } catch (err) {
     console.error('[closeLeadAsEnrolled] error:', err)
     return { ok: false, error: 'Lỗi tạo học viên/đăng ký' }
+  }
+}
+
+/**
+ * FIX 4 — Lấy dữ liệu để mở form "Chốt deal" NGAY từ Kanban/table (không cần
+ * vào trang chi tiết): tên học viên gợi ý, email PH mặc định, danh sách lớp
+ * đang mở (ưu tiên cùng cơ sở với lead).
+ */
+export async function getLeadCloseDealOptions(leadId: string): Promise<{
+  ok: boolean
+  error?: string
+  defaultStudentName?: string
+  defaultParentEmail?: string | null
+  classes?: { id: string; label: string }[]
+}> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'students:create') || !can(session.user, 'enrollments:create')) {
+    return { ok: false, error: 'Không có quyền chốt deal' }
+  }
+
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, deletedAt: null },
+    select: { parentName: true, childName: true, email: true, centerId: true, status: true },
+  })
+  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+  if (lead.status === 'ENROLLED') return { ok: false, error: 'Lead này đã được chốt' }
+  if (lead.status === 'LOST' || lead.status === 'DUPLICATE') {
+    return { ok: false, error: `Lead đang ${lead.status} — không thể chốt` }
+  }
+
+  const classes = await db.class.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ['PLANNED', 'RECRUITING', 'ACTIVE'] },
+      ...(lead.centerId ? { centerId: lead.centerId } : {}),
+    },
+    select: { id: true, name: true, classCode: true },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  })
+
+  return {
+    ok: true,
+    defaultStudentName: lead.childName?.trim() || `Con của ${lead.parentName}`,
+    defaultParentEmail: lead.email ?? null,
+    classes: classes.map((c) => ({
+      id: c.id,
+      label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+    })),
   }
 }

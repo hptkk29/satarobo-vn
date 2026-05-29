@@ -10,7 +10,8 @@ import {
   LEAD_STATUS_LABEL,
   LEAD_STATUS_ACCENT,
 } from "@/lib/leads/status";
-import { updateLeadStatus } from "../actions";
+import { updateLeadStatus, autoAssignLeadAction } from "../actions";
+import { CloseDealDialog } from "./close-deal-dialog";
 
 export type KanbanLead = {
   id: string;
@@ -35,15 +36,42 @@ function fmtDate(iso: string): string {
 export function LeadsKanban({
   leads,
   canUpdate,
+  canCloseDeal = false,
+  canAssign = false,
 }: {
   leads: KanbanLead[];
   canUpdate: boolean;
+  canCloseDeal?: boolean;
+  canAssign?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [items, setItems] = useState<KanbanLead[]>(leads);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<LeadStatus | null>(null);
+  const [closeLead, setCloseLead] = useState<{ id: string; name: string } | null>(null);
+
+  /** Chuyển sang ENROLLED = chốt deal → mở dialog thay vì set status trơn. */
+  function requestMove(leadId: string, to: LeadStatus) {
+    if (to === "ENROLLED" && canCloseDeal) {
+      const l = items.find((x) => x.id === leadId);
+      setCloseLead({ id: leadId, name: l?.parentName ?? "Lead" });
+      return;
+    }
+    move(leadId, to);
+  }
+
+  function quickAssign(leadId: string) {
+    startTransition(async () => {
+      const res = await autoAssignLeadAction(leadId);
+      if (res.ok) {
+        toast.success("Đã phân công lead (round-robin)");
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Không phân công được");
+      }
+    });
+  }
 
   function move(leadId: string, to: LeadStatus) {
     const lead = items.find((l) => l.id === leadId);
@@ -89,7 +117,7 @@ export function LeadsKanban({
               onDrop={(e) => {
                 e.preventDefault();
                 setOverCol(null);
-                if (canUpdate && dragId) move(dragId, col);
+                if (canUpdate && dragId) requestMove(dragId, col);
                 setDragId(null);
               }}
             >
@@ -147,11 +175,38 @@ export function LeadsKanban({
                     <div className="mt-1 space-y-0.5 text-xs text-gray-500">
                       {lead.courseName && <div>Khoá: {lead.courseName}</div>}
                       {lead.source && <div>Nguồn: {lead.source}</div>}
-                      <div>
-                        Sale: {lead.assignedToName ?? "Chưa gán"} ·{" "}
-                        {fmtDate(lead.createdAt)}
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className={lead.assignedToName ? "" : "font-medium text-amber-600"}>
+                          Sale: {lead.assignedToName ?? "Chưa phân công"}
+                        </span>
+                        {!lead.assignedToName && canAssign && (
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => quickAssign(lead.id)}
+                            className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+                          >
+                            Phân công
+                          </button>
+                        )}
+                        <span>· {fmtDate(lead.createdAt)}</span>
                       </div>
                     </div>
+
+                    {canCloseDeal &&
+                      lead.status !== "ENROLLED" &&
+                      lead.status !== "LOST" &&
+                      lead.status !== "DUPLICATE" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCloseLead({ id: lead.id, name: lead.parentName })
+                          }
+                          className="mt-2 w-full rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                        >
+                          Chốt deal
+                        </button>
+                      )}
 
                     {/* Mobile / fallback: đổi status qua select (native DnD không
                         chạy tốt trên touch). */}
@@ -160,7 +215,7 @@ export function LeadsKanban({
                         value={lead.status}
                         disabled={isPending}
                         onChange={(e) =>
-                          move(lead.id, e.target.value as LeadStatus)
+                          requestMove(lead.id, e.target.value as LeadStatus)
                         }
                         className="mt-2 w-full rounded border border-gray-200 bg-gray-50 px-1.5 py-1 text-xs text-gray-700 sm:hidden"
                         aria-label="Đổi trạng thái"
@@ -179,6 +234,13 @@ export function LeadsKanban({
           );
         })}
       </div>
+
+      <CloseDealDialog
+        leadId={closeLead?.id ?? null}
+        leadName={closeLead?.name ?? ""}
+        onClose={() => setCloseLead(null)}
+        onSuccess={() => router.refresh()}
+      />
     </div>
   );
 }

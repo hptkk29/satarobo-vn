@@ -93,6 +93,9 @@ export default async function LeadsPage({
   }
 
   const isMarketing = session.user.role === 'MARKETING'
+  const canCloseDeal =
+    can(session.user, 'students:create') && can(session.user, 'enrollments:create')
+  const canAssign = can(session.user, 'leads:assign')
 
   // Filter dropdown data (chỉ cần cho role view-all).
   const [centers, sales] = canViewAll
@@ -152,7 +155,12 @@ export default async function LeadsPage({
           canViewAll={canViewAll}
           view={view}
         />
-        <LeadsKanban leads={kanbanLeads} canUpdate={canUpdate} />
+        <LeadsKanban
+          leads={kanbanLeads}
+          canUpdate={canUpdate}
+          canCloseDeal={canCloseDeal}
+          canAssign={canAssign}
+        />
       </div>
     )
   }
@@ -216,6 +224,7 @@ export default async function LeadsPage({
         pageSize={PAGE_SIZE}
         canUpdate={canUpdate}
         canDelete={canDelete}
+        canCloseDeal={canCloseDeal}
         currentStatus={statusFilter}
         currentQ={q}
       />
