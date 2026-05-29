@@ -11,10 +11,12 @@ type ClassOpt = { id: string; label: string };
 export function CloseDealButton({
   leadId,
   defaultStudentName,
+  defaultParentEmail,
   classes,
 }: {
   leadId: string;
   defaultStudentName: string;
+  defaultParentEmail: string | null;
   classes: ClassOpt[];
 }) {
   const router = useRouter();
@@ -25,10 +27,17 @@ export function CloseDealButton({
   const [studentName, setStudentName] = useState(defaultStudentName);
   const [tuition, setTuition] = useState("");
   const [paid, setPaid] = useState(false);
+  const [createParent, setCreateParent] = useState(false);
+  const [parentEmail, setParentEmail] = useState(defaultParentEmail ?? "");
+  const [parentPassword, setParentPassword] = useState("");
 
   function submit() {
     if (!classId) {
       toast.error("Vui lòng chọn lớp");
+      return;
+    }
+    if (createParent && !parentEmail.trim()) {
+      toast.error("Nhập email phụ huynh để cấp tài khoản");
       return;
     }
     startTransition(async () => {
@@ -37,9 +46,20 @@ export function CloseDealButton({
         studentName: studentName.trim() || undefined,
         tuition: tuition ? Number.parseInt(tuition, 10) : null,
         paid,
+        createParentAccount: createParent,
+        parentEmail: createParent ? parentEmail.trim() : undefined,
+        parentPassword: createParent ? parentPassword.trim() || undefined : undefined,
       });
       if (res.ok) {
-        toast.success("Đã chốt deal — tạo học viên & đăng ký");
+        if (res.parentAccountEmail) {
+          toast.success(
+            `Đã chốt deal + cấp tài khoản phụ huynh (${res.parentAccountEmail})${
+              res.parentTempPasswordIsPhone ? " — mật khẩu tạm = SĐT, dặn PH đổi sau" : ""
+            }`,
+          );
+        } else {
+          toast.success("Đã chốt deal — tạo học viên & đăng ký");
+        }
         setOpen(false);
         router.refresh();
       } else {
@@ -133,6 +153,47 @@ export function CloseDealButton({
           Chưa có lớp nào đang mở. Tạo lớp ở mục Lớp học trước khi chốt.
         </p>
       )}
+
+      {/* C2 — cấp tài khoản phụ huynh portal */}
+      <div className="mt-3 rounded-lg border border-emerald-200 bg-white p-3">
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={createParent}
+            onChange={(e) => setCreateParent(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          Cấp tài khoản phụ huynh (portal hocvien.satarobo.vn)
+        </label>
+        {createParent && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-gray-500">
+                Email đăng nhập *
+              </span>
+              <input
+                type="email"
+                value={parentEmail}
+                onChange={(e) => setParentEmail(e.target.value)}
+                placeholder="phuhuynh@email.com"
+                className={inputCls}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-gray-500">
+                Mật khẩu tạm
+              </span>
+              <input
+                type="text"
+                value={parentPassword}
+                onChange={(e) => setParentPassword(e.target.value)}
+                placeholder="Để trống = dùng SĐT"
+                className={inputCls}
+              />
+            </label>
+          </div>
+        )}
+      </div>
 
       <div className="mt-4 flex gap-2">
         <button

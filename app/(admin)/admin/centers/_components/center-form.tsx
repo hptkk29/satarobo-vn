@@ -24,6 +24,9 @@ export type CenterFormValue = {
   description: string | null;
   isActive: boolean;
   displayOrder: number;
+  latitude: number | null;
+  longitude: number | null;
+  allowedRadiusMeters: number | null;
 };
 
 export function CenterForm({ center }: { center?: CenterFormValue }) {
@@ -158,6 +161,34 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
             <input type="hidden" name="bannerUrl" value={bannerUrl ?? ""} />
           </div>
         </Grid>
+      </Section>
+
+      <Section title="Chấm công (geofence GPS)">
+        <Grid cols={3}>
+          <Field
+            label="Vĩ độ (latitude)"
+            name="latitude"
+            defaultValue={center?.latitude ?? undefined}
+            placeholder="16.0471"
+          />
+          <Field
+            label="Kinh độ (longitude)"
+            name="longitude"
+            defaultValue={center?.longitude ?? undefined}
+            placeholder="108.2068"
+          />
+          <Field
+            label="Bán kính cho phép (m)"
+            name="allowedRadiusMeters"
+            type="number"
+            defaultValue={center?.allowedRadiusMeters ?? 150}
+            placeholder="150"
+          />
+        </Grid>
+        <p className="text-xs text-neutral-500">
+          Toạ độ để chấm công QR kiểm tra nhân viên đang ở gần cơ sở. Lấy từ Google
+          Maps (chuột phải vào vị trí → toạ độ). Để trống = bỏ qua kiểm tra vị trí.
+        </p>
       </Section>
 
       <Section title="Hiển thị">

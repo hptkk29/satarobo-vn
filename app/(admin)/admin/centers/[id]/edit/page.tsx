@@ -35,6 +35,9 @@ export default async function EditCenterPage({ params }: Props) {
           description: center.description,
           isActive: center.isActive,
           displayOrder: center.displayOrder,
+          latitude: center.latitude,
+          longitude: center.longitude,
+          allowedRadiusMeters: center.allowedRadiusMeters,
         }}
       />
     </div>

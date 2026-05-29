@@ -32,6 +32,10 @@ const centerSchema = z.object({
   description: z.string().trim().optional(),
   isActive: z.boolean(),
   displayOrder: z.number().int().default(0),
+  // Phase NHÓM 4 — geofence chấm công.
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
+  allowedRadiusMeters: z.number().int().min(10).max(5000).nullable(),
 });
 
 function emptyToUndefined(value: FormDataEntryValue | null): string | undefined {
@@ -48,6 +52,18 @@ function parseInteger(value: FormDataEntryValue | null): number {
   if (typeof value !== "string" || value.trim() === "") return 0;
   const n = Number.parseInt(value, 10);
   return Number.isNaN(n) ? 0 : n;
+}
+
+function parseFloatOrNull(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const n = Number.parseFloat(value);
+  return Number.isNaN(n) ? null : n;
+}
+
+function parseIntOrNull(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? null : n;
 }
 
 async function requireAdmin() {
@@ -77,6 +93,9 @@ function readForm(formData: FormData) {
     description: emptyToUndefined(formData.get("description")),
     isActive: formData.get("isActive") === "on",
     displayOrder: parseInteger(formData.get("displayOrder")),
+    latitude: parseFloatOrNull(formData.get("latitude")),
+    longitude: parseFloatOrNull(formData.get("longitude")),
+    allowedRadiusMeters: parseIntOrNull(formData.get("allowedRadiusMeters")),
   };
 }
 
@@ -98,6 +117,9 @@ function toData(c: z.infer<typeof centerSchema>): Prisma.CenterCreateInput {
     description: emptyToNull(c.description),
     isActive: c.isActive,
     displayOrder: c.displayOrder,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    allowedRadiusMeters: c.allowedRadiusMeters,
   };
 }
 

@@ -127,6 +127,7 @@ export default async function LeadDetailPage({ params }: Props) {
           <CloseDealButton
             leadId={lead.id}
             defaultStudentName={lead.childName ?? `Con của ${lead.parentName}`}
+            defaultParentEmail={lead.email ?? null}
             classes={classOptions.map((c) => ({
               id: c.id,
               label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,

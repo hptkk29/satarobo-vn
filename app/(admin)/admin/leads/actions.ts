@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { can } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import bcrypt from 'bcryptjs'
 import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { genStudentCode } from '@/lib/codegen'
@@ -338,12 +339,23 @@ const closeDealSchema = z.object({
   studentName: z.string().trim().max(120).optional(),
   tuition: z.number().int().nonnegative().nullable().optional(),
   paid: z.boolean().optional(),
+  // C2 — tuỳ chọn cấp tài khoản phụ huynh (portal) ngay khi chốt.
+  createParentAccount: z.boolean().optional(),
+  parentEmail: z.string().trim().email('Email phụ huynh không hợp lệ').optional().or(z.literal('')),
+  parentPassword: z.string().trim().min(8, 'Mật khẩu tối thiểu 8 ký tự').optional().or(z.literal('')),
 })
 
 export async function closeLeadAsEnrolled(
   leadId: string,
   input: unknown,
-): Promise<{ ok: boolean; studentId?: string; enrollmentId?: string; error?: string }> {
+): Promise<{
+  ok: boolean
+  studentId?: string
+  enrollmentId?: string
+  parentAccountEmail?: string
+  parentTempPasswordIsPhone?: boolean
+  error?: string
+}> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   // Chốt deal = tạo học viên + đăng ký → cần cả 2 quyền (loại MARKETING ra).
@@ -356,6 +368,7 @@ export async function closeLeadAsEnrolled(
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
   }
   const { classId, tuition, paid } = parsed.data
+  const wantParentAccount = parsed.data.createParentAccount === true
 
   const lead = await db.lead.findFirst({
     where: { id: leadId, deletedAt: null },
@@ -403,6 +416,28 @@ export async function closeLeadAsEnrolled(
   const { actorId, actorName } = getAuditActor(session)
   const centerId = lead.centerId ?? cls.centerId ?? null
 
+  // C2 — chuẩn bị thông tin tài khoản phụ huynh (validate ngoài transaction).
+  let parentEmail: string | null = null
+  let parentPassword: string | null = null
+  let parentUsedPhonePassword = false
+  if (wantParentAccount) {
+    parentEmail =
+      (parsed.data.parentEmail?.trim() || lead.email?.trim() || '').toLowerCase() || null
+    if (!parentEmail) {
+      return { ok: false, error: 'Cần email phụ huynh để cấp tài khoản portal' }
+    }
+    parentPassword = parsed.data.parentPassword?.trim() || lead.phone
+    parentUsedPhonePassword = !parsed.data.parentPassword?.trim()
+
+    const existing = await db.user.findUnique({
+      where: { email: parentEmail },
+      select: { role: true },
+    })
+    if (existing && existing.role !== 'PARENT') {
+      return { ok: false, error: 'Email này đã dùng cho tài khoản nhân viên khác' }
+    }
+  }
+
   try {
     const result = await db.$transaction(async (tx) => {
       // studentCode tự sinh nếu cơ sở có mã.
@@ -415,6 +450,32 @@ export async function closeLeadAsEnrolled(
         if (center?.code) studentCode = await genStudentCode(center.code, tx)
       }
 
+      // Tạo / dùng lại tài khoản phụ huynh trước để gán parentUserId cho student.
+      let parentUserId: string | undefined
+      if (wantParentAccount && parentEmail && parentPassword) {
+        const existing = await tx.user.findUnique({
+          where: { email: parentEmail },
+          select: { id: true },
+        })
+        if (existing) {
+          parentUserId = existing.id
+        } else {
+          const hashed = await bcrypt.hash(parentPassword, 10)
+          const createdUser = await tx.user.create({
+            data: {
+              name: lead.parentName,
+              email: parentEmail,
+              password: hashed,
+              role: 'PARENT',
+              isActive: true,
+              tokenVersion: 0,
+            },
+            select: { id: true },
+          })
+          parentUserId = createdUser.id
+        }
+      }
+
       const student = await tx.student.create({
         data: {
           name: studentName,
@@ -422,6 +483,7 @@ export async function closeLeadAsEnrolled(
           parentName: lead.parentName,
           parentPhone: lead.phone,
           parentEmail: lead.email ?? undefined,
+          parentUserId: parentUserId ?? undefined,
           centerId: centerId ?? undefined,
           preferredCenterId: centerId ?? undefined,
           enrollmentDate: new Date(),
@@ -492,7 +554,7 @@ export async function closeLeadAsEnrolled(
           type: 'STATUS_CHANGE',
           content: `Chốt deal → tạo học viên "${studentName}"${
             student.studentCode ? ` (${student.studentCode})` : ''
-          } + đăng ký lớp.`,
+          } + đăng ký lớp.${parentUserId ? ' Đã cấp tài khoản phụ huynh.' : ''}`,
           metadata: { studentId: student.id, enrollmentId: enrollment.id, classId: cls.id },
         },
       })
@@ -506,7 +568,11 @@ export async function closeLeadAsEnrolled(
         data: { status: 'ENROLLED' },
       })
 
-      return { studentId: student.id, enrollmentId: enrollment.id }
+      return {
+        studentId: student.id,
+        enrollmentId: enrollment.id,
+        parentLinked: !!parentUserId,
+      }
     })
 
     revalidatePath('/leads')
@@ -516,7 +582,15 @@ export async function closeLeadAsEnrolled(
     revalidatePath('/trials')
     revalidatePath('/dashboard')
     revalidatePath('/crm')
-    return { ok: true, ...result }
+    const linked = result.parentLinked && !!parentEmail
+    return {
+      ok: true,
+      studentId: result.studentId,
+      enrollmentId: result.enrollmentId,
+      parentAccountEmail: linked ? (parentEmail as string) : undefined,
+      // Nếu mật khẩu mặc định = SĐT, báo sale để dặn phụ huynh đổi sau.
+      parentTempPasswordIsPhone: linked ? parentUsedPhonePassword : undefined,
+    }
   } catch (err) {
     console.error('[closeLeadAsEnrolled] error:', err)
     return { ok: false, error: 'Lỗi tạo học viên/đăng ký' }
