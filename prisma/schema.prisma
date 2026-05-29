@@ -364,6 +364,12 @@ model UserPermissionGrant {
   @@index([grantedBy])
 }
 
+// Đợt 3D — 2 danh mục khoá học (nguồn chân lý nghiệp vụ).
+enum CourseCategory {
+  LUYEN_THI_ROBOSIM
+  LAP_TRINH_ROBOT
+}
+
 model Course {
   id          String     @id @default(cuid())
   name        String
@@ -378,6 +384,10 @@ model Course {
   code             String? // Code ngắn cho product cards (vd. "LTR", "LTRS")
   shortDescription String? @db.Text
   priceDisplay     String? // "2,400,000đ" hoặc "Liên hệ"
+
+  // Đợt 3D — phân loại danh mục + cờ "khoá cụ thể dùng để mở lớp/giảng dạy".
+  category    CourseCategory? // null = không phải khoá dạy (vd mục landing cũ LTR/LTRS)
+  isTeachable Boolean         @default(false)
   durationDisplay  String? // "6 tháng" hoặc "Tuỳ chỉnh"
   studentCount     Int     @default(0)
   displayOrder     Int     @default(0)
