@@ -1,0 +1,87 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { isNextMonthWindowOpen, isWeekendEditWindow } from "@/lib/shifts";
+import { MyShiftsCalendar } from "./_components/my-shifts-calendar";
+
+export const metadata = { title: "Lịch ca của tôi | Admin" };
+export const dynamic = "force-dynamic";
+
+interface Props {
+  searchParams: Promise<{ month?: string }>;
+}
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export default async function MyShiftsPage({ searchParams }: Props) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (session.user.role === "PARENT") redirect("/dashboard");
+
+  const { month } = await searchParams;
+  const now = new Date();
+  const m = month && /^\d{4}-\d{2}$/.test(month) ? month : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const year = Number(m.slice(0, 4));
+  const monthIdx = Number(m.slice(5, 7)) - 1;
+  const monthStart = new Date(year, monthIdx, 1);
+  const monthEnd = new Date(year, monthIdx + 1, 1);
+
+  const regs = await db.shiftRegistration.findMany({
+    where: { userId: session.user.id, date: { gte: monthStart, lt: monthEnd } },
+    select: { date: true, shifts: true, status: true, note: true },
+  });
+  const byDate = new Map(
+    regs.map((r) => [ymd(new Date(r.date)), { shifts: r.shifts, status: r.status, note: r.note ?? "" }]),
+  );
+
+  // Lưới: padding đầu tuần (CN=0).
+  const firstWeekday = monthStart.getDay();
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  const cells: { dateStr: string | null; day: number | null }[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push({ dateStr: null, day: null });
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ dateStr: ymd(new Date(year, monthIdx, d)), day: d });
+  }
+
+  const prev = new Date(year, monthIdx - 1, 1);
+  const next = new Date(year, monthIdx + 1, 1);
+  const monthLabel = `Tháng ${monthIdx + 1}/${year}`;
+  const todayStr = ymd(now);
+
+  const windowHint = isNextMonthWindowOpen(now)
+    ? "Đang trong cửa sổ đăng ký THÁNG SAU (ngày 25–cuối tháng)."
+    : isWeekendEditWindow(now)
+      ? "Cuối tuần — được phép sửa lịch trong tháng."
+      : "Ngoài cửa sổ đăng ký chuẩn (25–30 cho tháng sau / cuối tuần để sửa). Vẫn lưu được nhưng nên đăng ký đúng hạn.";
+
+  return (
+    <div className="max-w-4xl p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <CalendarDays className="h-6 w-6 text-[#7C3AED]" /> Lịch ca của tôi
+        </h1>
+        <div className="flex items-center gap-2">
+          <Link href={`/cham-cong/lich-ca?month=${ymd(prev).slice(0, 7)}`} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+            <ChevronLeft className="h-4 w-4" />
+          </Link>
+          <span className="text-sm font-semibold text-gray-700">{monthLabel}</span>
+          <Link href={`/cham-cong/lich-ca?month=${ymd(next).slice(0, 7)}`} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+
+      <p className="mb-4 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">{windowHint}</p>
+
+      <MyShiftsCalendar
+        cells={cells}
+        byDate={Object.fromEntries(byDate)}
+        todayStr={todayStr}
+      />
+    </div>
+  );
+}
