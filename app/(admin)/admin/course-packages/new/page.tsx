@@ -25,7 +25,7 @@ export default async function NewPackagePage() {
           <ChevronLeft className="h-4 w-4" />
           Quay lai
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-gray-900">Them Course Package</h1>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Thêm gói khoá học</h1>
       </div>
 
       <PackageForm />

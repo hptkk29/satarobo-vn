@@ -76,7 +76,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
         ...(filterCenter ? { centerId: filterCenter } : {}),
       };
 
-  const [staff, regs, checkins, adjustments] = await Promise.all([
+  const [staffRaw, regs, checkins, adjustments] = await Promise.all([
     db.user.findMany({
       where: userWhere,
       orderBy: { name: "asc" },
@@ -105,6 +105,9 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
       select: { userId: true, date: true, reason: true, status: true },
     }),
   ]);
+
+  // #12 — gộp đúng 1 dòng/nhân viên (dedup theo userId, phòng nhân đôi).
+  const staff = Array.from(new Map(staffRaw.map((u) => [u.id, u])).values());
 
   // reg map[userId][dateStr] = shifts
   const regMap = new Map<string, Map<string, WorkShift[]>>();

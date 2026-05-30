@@ -75,7 +75,7 @@ export default async function EditPackagePage({ params }: EditPackagePageProps) 
           <ChevronLeft className="h-4 w-4" />
           Quay lai
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-gray-900">Sua: {pkg.name}</h1>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Sửa: {pkg.name}</h1>
       </div>
 
       <PackageForm pkg={pkg} />

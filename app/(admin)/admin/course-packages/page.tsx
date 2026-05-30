@@ -35,9 +35,9 @@ export default async function CoursePackagesPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Course Packages</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Gói khoá học</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Quan ly cac goi khoa hoc Sata1-8 va Combo
+            Quản lý các gói khoá học Sata1-8 và Combo
           </p>
         </div>
         <Link
@@ -45,7 +45,7 @@ export default async function CoursePackagesPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-[#F7941D] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e58510]"
         >
           <Plus className="h-4 w-4" />
-          Them Package
+          Thêm gói
         </Link>
       </div>
 
@@ -55,25 +55,25 @@ export default async function CoursePackagesPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Code
+                  Mã
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Name
+                  Tên gói
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Level
+                  Cấp độ
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Price
+                  Giá
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Lessons
+                  Số buổi
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Status
+                  Trạng thái
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Actions
+                  Thao tác
                 </th>
               </tr>
             </thead>
@@ -81,7 +81,7 @@ export default async function CoursePackagesPage() {
               {packages.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
-                    Chua co package nao
+                    Chưa có gói khoá học nào
                   </td>
                 </tr>
               ) : (

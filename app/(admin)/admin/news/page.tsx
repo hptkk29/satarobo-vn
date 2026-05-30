@@ -42,7 +42,7 @@ export default async function NewsAdminPage() {
           <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
             <tr>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Tiêu đề</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Category</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Danh mục</th>
               <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Trạng thái</th>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Ngày đăng</th>
               <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">Thao tác</th>

@@ -192,7 +192,7 @@ export function PackageForm({ pkg }: PackageFormProps) {
         </div>
       ) : null}
 
-      <Section title="Thong tin co ban">
+      <Section title="Thông tin cơ bản">
         <Grid cols={2}>
           <Field
             label="Code (Sata1, Sata2, ...)"
@@ -205,22 +205,22 @@ export function PackageForm({ pkg }: PackageFormProps) {
             label="Slug"
             name="slug"
             defaultValue={pkg?.slug}
-            placeholder="auto-generate from code"
+            placeholder="Tự tạo từ mã"
           />
         </Grid>
 
-        <Field label="Ten" name="name" defaultValue={pkg?.name} required />
-        <Field label="Ten ngan" name="shortName" defaultValue={pkg?.shortName} />
-        <Field label="Subtitle" name="subtitle" defaultValue={pkg?.subtitle} />
+        <Field label="Tên" name="name" defaultValue={pkg?.name} required />
+        <Field label="Tên ngắn" name="shortName" defaultValue={pkg?.shortName} />
+        <Field label="Phụ đề" name="subtitle" defaultValue={pkg?.subtitle} />
         <Field
-          label="Short Description"
+          label="Mô tả ngắn"
           name="shortDescription"
           type="textarea"
           rows={2}
           defaultValue={pkg?.shortDescription}
         />
         <Field
-          label="Description"
+          label="Mô tả"
           name="description"
           type="textarea"
           rows={6}
@@ -228,43 +228,43 @@ export function PackageForm({ pkg }: PackageFormProps) {
         />
       </Section>
 
-      <Section title="Doi tuong va cap do">
+      <Section title="Đối tượng và cấp độ">
         <Grid cols={2}>
           <Field
-            label="Age Group"
+            label="Nhóm tuổi"
             name="ageGroup"
             defaultValue={pkg?.ageGroup}
-            placeholder="Lop 1-8"
+            placeholder="Lớp 1-8"
           />
-          <SelectField label="Level" name="level" defaultValue={pkg?.level} options={LEVEL_OPTIONS} />
+          <SelectField label="Cấp độ" name="level" defaultValue={pkg?.level} options={LEVEL_OPTIONS} />
         </Grid>
       </Section>
 
-      <Section title="Lich va gia">
+      <Section title="Lịch và giá">
         <Grid cols={2}>
-          <Field label="So buoi" name="lessons" type="number" defaultValue={pkg?.lessons} />
+          <Field label="Số buổi" name="lessons" type="number" defaultValue={pkg?.lessons} />
           <Field
-            label="Duration"
+            label="Thời lượng"
             name="duration"
             defaultValue={pkg?.duration}
-            placeholder="2 thang"
+            placeholder="2 tháng"
           />
         </Grid>
         <Grid cols={3}>
           <Field
-            label="Gia niem yet (VND)"
+            label="Giá niêm yết (VND)"
             name="priceOriginal"
             type="number"
             defaultValue={pkg?.priceOriginal}
           />
           <Field
-            label="Early Bird (VND)"
+            label="Giá ưu đãi sớm (VND)"
             name="priceEarlyBird"
             type="number"
             defaultValue={pkg?.priceEarlyBird}
           />
           <Field
-            label="Member (VND)"
+            label="Giá hội viên (VND)"
             name="priceMember"
             type="number"
             defaultValue={pkg?.priceMember}
@@ -272,54 +272,54 @@ export function PackageForm({ pkg }: PackageFormProps) {
         </Grid>
       </Section>
 
-      <Section title="Features (JSON)">
+      <Section title="Tính năng (JSON)">
         <JsonArrayEditor
           value={features}
           onChange={setFeatures}
           template={{ icon: "", title: "", desc: "" }}
-          placeholder="Click Them de them feature"
+          placeholder="Bấm Thêm để thêm tính năng"
         />
       </Section>
 
-      <Section title="Highlights (JSON)">
+      <Section title="Điểm nổi bật (JSON)">
         <JsonArrayEditor
           value={highlights}
           onChange={setHighlights}
           template=""
           type="string"
-          placeholder="Click Them de them highlight"
+          placeholder="Bấm Thêm để thêm điểm nổi bật"
         />
       </Section>
 
-      <Section title="Curriculum (JSON)">
+      <Section title="Giáo trình (JSON)">
         <JsonArrayEditor
           value={curriculum}
           onChange={setCurriculum}
           template={{ topic: "", lessons: 0 }}
-          placeholder="Click Them de them topic"
+          placeholder="Bấm Thêm để thêm chủ đề"
         />
       </Section>
 
-      <Section title="Hien thi">
+      <Section title="Hiển thị">
         <Grid cols={3}>
           <Field label="Badge" name="badge" defaultValue={pkg?.badge} />
-          <SelectField label="Color" name="color" defaultValue={pkg?.color} options={COLOR_OPTIONS} />
+          <SelectField label="Màu" name="color" defaultValue={pkg?.color} options={COLOR_OPTIONS} />
           <Field
-            label="Display Order"
+            label="Thứ tự hiển thị"
             name="displayOrder"
             type="number"
             defaultValue={pkg?.displayOrder ?? 0}
           />
         </Grid>
         <div className="flex flex-wrap gap-6">
-          <CheckboxField label="Published" name="isPublished" defaultChecked={pkg?.isPublished} />
-          <CheckboxField label="Featured" name="isFeatured" defaultChecked={pkg?.isFeatured} />
+          <CheckboxField label="Đã đăng" name="isPublished" defaultChecked={pkg?.isPublished} />
+          <CheckboxField label="Nổi bật" name="isFeatured" defaultChecked={pkg?.isFeatured} />
         </div>
       </Section>
 
-      <Section title="Image">
+      <Section title="Hình ảnh">
         <ImageUploader
-          label="Thumbnail"
+          label="Ảnh đại diện"
           value={thumbnail}
           onChange={setThumbnail}
           prefix="uploads/courses"
@@ -329,9 +329,9 @@ export function PackageForm({ pkg }: PackageFormProps) {
       </Section>
 
       <Section title="SEO">
-        <Field label="SEO Title" name="seoTitle" defaultValue={pkg?.seoTitle} />
+        <Field label="Tiêu đề SEO" name="seoTitle" defaultValue={pkg?.seoTitle} />
         <Field
-          label="SEO Description"
+          label="Mô tả SEO"
           name="seoDescription"
           type="textarea"
           rows={2}
@@ -339,9 +339,9 @@ export function PackageForm({ pkg }: PackageFormProps) {
         />
       </Section>
 
-      <Section title="Parent Course">
+      <Section title="Khoá cha">
         <SelectField
-          label="Parent Course Slug"
+          label="Slug khoá cha"
           name="parentCourseSlug"
           defaultValue={pkg?.parentCourseSlug}
           options={PARENT_COURSE_OPTIONS}
@@ -557,7 +557,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
       disabled={pending}
       className="rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#e58510] disabled:cursor-not-allowed disabled:opacity-70"
     >
-      {pending ? "Dang luu..." : isEdit ? "Cap nhat" : "Tao moi"}
+      {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo mới"}
     </button>
   );
 }

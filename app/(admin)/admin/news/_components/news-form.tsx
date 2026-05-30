@@ -82,7 +82,7 @@ export function NewsForm({ news }: NewsFormProps) {
       <Section title="Phân loại & hiển thị">
         <Grid cols={2}>
           <Field
-            label="Category"
+            label="Danh mục"
             name="category"
             defaultValue={news?.category ?? undefined}
             placeholder="Tin công ty, Khoá học mới, ..."

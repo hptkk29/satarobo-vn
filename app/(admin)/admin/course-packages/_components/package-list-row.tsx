@@ -19,7 +19,7 @@ export type CoursePackageListItem = {
 
 function formatCurrency(value: number | null) {
   if (value === null) return "--";
-  return `${new Intl.NumberFormat("vi-VN").format(value)}d`;
+  return `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
 }
 
 export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
@@ -65,16 +65,16 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
         <div className="flex items-center justify-center gap-1.5">
           {pkg.isPublished ? (
             <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-              Published
+              Đã đăng
             </span>
           ) : (
             <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-500">
-              Draft
+              Nháp
             </span>
           )}
           {pkg.isFeatured ? (
             <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-              Featured
+              Nổi bật
             </span>
           ) : null}
         </div>
