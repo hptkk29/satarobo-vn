@@ -13,6 +13,7 @@ import {
   getAuditActor,
 } from "@/lib/audit/log";
 import { genClassCode } from "@/lib/codegen";
+import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 
 type ActionResult = { error?: string };
 
@@ -394,5 +395,93 @@ export async function rejectClass(classId: string, reason: string): Promise<WfRe
   revalidatePath("/classes");
   revalidatePath(`/classes/${classId}/edit`);
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// ─── Module Quản lý lớp PHẦN 2 — dời buổi tương lai theo lịch mới ────────────
+
+async function computeFutureReschedule(classId: string) {
+  const cls = await db.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { id: true, centerId: true, scheduleDays: true, startTime: true },
+  });
+  if (!cls) return { ok: false as const, error: "Lớp không tồn tại" };
+  if (cls.scheduleDays.length === 0) {
+    return { ok: false as const, error: "Lớp chưa có lịch (scheduleDays) để dời buổi" };
+  }
+
+  const now = new Date();
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const future = await db.classSession.findMany({
+    where: { classId, date: { gt: todayEnd } },
+    orderBy: { date: "asc" },
+    select: { id: true, date: true, topic: true },
+  });
+  if (future.length === 0) return { ok: false as const, error: "Không có buổi tương lai để dời" };
+
+  const holidayRows = await db.holiday.findMany({
+    where: { OR: [{ centerId: cls.centerId }, { centerId: null }] },
+    select: { date: true, endDate: true },
+  });
+  const holidays = expandHolidaySet(holidayRows);
+
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const newDates = computeSessionDates({
+    from: tomorrow,
+    scheduleDays: cls.scheduleDays,
+    count: future.length,
+    holidays,
+  });
+
+  // Giờ buổi = startTime của lớp (nếu có), giữ ngày mới.
+  const [hh, mm] = (cls.startTime ?? "00:00").split(":").map((x) => parseInt(x, 10));
+  const items = future.map((s, i) => {
+    const d = newDates[i] ?? new Date(s.date);
+    const nd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh || 0, mm || 0);
+    return { id: s.id, topic: s.topic, oldDate: s.date, newDate: nd };
+  });
+  return { ok: true as const, items };
+}
+
+/** Xem trước dời buổi tương lai (không lưu). */
+export async function previewClassReschedule(classId: string): Promise<
+  | { ok: true; items: { id: string; topic: string | null; oldDate: string; newDate: string }[] }
+  | { ok: false; error: string }
+> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  const res = await computeFutureReschedule(classId);
+  if (!res.ok) return res;
+  return {
+    ok: true,
+    items: res.items.map((it) => ({
+      id: it.id,
+      topic: it.topic,
+      oldDate: it.oldDate.toISOString(),
+      newDate: it.newDate.toISOString(),
+    })),
+  };
+}
+
+/** Áp dụng dời buổi tương lai theo lịch lớp + lịch nghỉ cơ sở. */
+export async function applyClassReschedule(classId: string): Promise<WfResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  const res = await computeFutureReschedule(classId);
+  if (!res.ok) return res;
+
+  try {
+    await db.$transaction(
+      res.items.map((it) =>
+        db.classSession.update({ where: { id: it.id }, data: { date: it.newDate } }),
+      ),
+    );
+  } catch (err) {
+    return { ok: false, error: `Lỗi dời buổi: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/sessions");
   return { ok: true };
 }

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { can, hasAnyRole } from "@/lib/auth/permissions";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
 import { ClassApprovalActions } from "../_components/class-approval-actions";
+import { ClassReschedule } from "../_components/class-reschedule";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -128,6 +129,10 @@ export default async function EditClassPage({ params }: Props) {
           }
           approvedByName={cls.approvedByName}
         />
+      </div>
+
+      <div className="mb-6">
+        <ClassReschedule classId={cls.id} canEdit={can(session.user, "classes:edit")} />
       </div>
 
       <ClassForm
