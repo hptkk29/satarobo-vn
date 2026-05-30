@@ -6,6 +6,7 @@ import { TeacherDashboard } from "./_components/teacher-dashboard";
 import { SalesDashboard } from "./_components/sales-dashboard";
 import { AccountantDashboard } from "./_components/accountant-dashboard";
 import { MarketingDashboard, HrDashboard } from "./_components/marketing-hr-dashboards";
+import { PendingTasksSection } from "./_components/pending-tasks-section";
 
 // Đợt 3B/3C — Dashboard GỘP (union): hiển thị panel của TẤT CẢ vai trò user giữ.
 // Thứ tự: Quản lý → Giáo viên → Tư vấn → Kế toán → Marketing → Nhân sự.
@@ -70,6 +71,9 @@ export default async function DashboardPage() {
             : new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long" })}
         </p>
       </div>
+
+      {/* Module nhắc việc — khu "Cần xử lý" gom mọi nguồn theo quyền + cơ sở. */}
+      <PendingTasksSection user={session.user} />
 
       {panels.map((p) => (
         <section key={p.key} className="space-y-4">
