@@ -98,6 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:view"] },
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Lịch ca nhân viên", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:view"] },
+      { label: "Checklist cơ sở", href: "/cham-cong/checklist-co-so", icon: ClipboardCheck, perm: ["hr_attendance:view"] },
       { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
       { label: "Tuyển dụng", href: "/jobs", icon: Briefcase, perm: ["jobs:view"] },
       { label: "Vinh danh", href: "/honors", icon: Trophy, perm: ["honors:view"] },

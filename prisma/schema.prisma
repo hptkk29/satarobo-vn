@@ -2934,6 +2934,34 @@ model ShiftRegistration {
   @@index([userId, date])
 }
 
+// Module Quản lý lớp phần 4 — checklist mở/đóng cơ sở theo ngày.
+model CenterDayChecklist {
+  id       String   @id @default(cuid())
+  centerId String
+  date     DateTime @db.Date
+
+  // Đầu ngày
+  openPower       Boolean @default(false)
+  openDevices     Boolean @default(false)
+  openRoomsReady  Boolean @default(false)
+  openCleanCommon Boolean @default(false)
+  openSecurity    Boolean @default(false)
+  // Cuối ngày
+  closePower    Boolean @default(false)
+  closeDevices  Boolean @default(false)
+  closeLock     Boolean @default(false)
+  closeKpiBoard Boolean @default(false)
+  closeSafety   Boolean @default(false)
+  closeHandover Boolean @default(false)
+
+  note      String?  @db.Text
+  byUserId  String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([centerId, date])
+  @@index([centerId, date])
+}
+
 model EmployeeCheckin {
   id             String      @id @default(cuid())
   userId         String

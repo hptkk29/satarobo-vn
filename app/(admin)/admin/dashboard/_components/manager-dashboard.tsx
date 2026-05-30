@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/design-system/admin/status-badge";
 import { DataTableShell } from "@/components/design-system/admin/data-table-shell";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
+import { isChecklistComplete } from "@/lib/center-checklist";
 
 // Đợt 3C #4 / 3B — Dashboard QUẢN LÝ + SUPER_ADMIN (tổng quan tuyển sinh + vận
 // hành). Tách thành component để dashboard GỘP (union) render được như 1 panel.
@@ -111,6 +112,17 @@ export async function ManagerDashboard({
     }),
   ]);
 
+  // Phần 4 — checklist mở/đóng cơ sở HÔM QUA chưa đủ.
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const scopeCenterIds = centerScope
+    ? [centerScope]
+    : (await db.center.findMany({ where: { isActive: true }, select: { id: true } })).map((c) => c.id);
+  const ydChecklists = await db.centerDayChecklist.findMany({
+    where: { date: yesterday, centerId: { in: scopeCenterIds } },
+  });
+  const completeCenters = new Set(ydChecklists.filter((c) => isChecklistComplete(c)).map((c) => c.centerId));
+  const checklistMissing = scopeCenterIds.filter((id) => !completeCenters.has(id)).length;
+
   const monthDelta = newLeadsLastMonth > 0 ? ((newLeadsThisMonth - newLeadsLastMonth) / newLeadsLastMonth) * 100 : 0;
   const conversionRate = totalLeads > 0 ? ((enrolledLeads / totalLeads) * 100).toFixed(1) : "0";
   const dailyLeadsChart = lastNDaysData(leadsLast14Days);
@@ -157,6 +169,12 @@ export async function ManagerDashboard({
             ))}
           </ul>
         </div>
+      )}
+
+      {checklistMissing > 0 && (
+        <Link href="/cham-cong/checklist-co-so" className="block rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400">
+          <span className="font-bold">{checklistMissing}</span> cơ sở chưa hoàn tất checklist mở/đóng hôm qua.
+        </Link>
       )}
 
       {(parentReqPending > 0 || mediaPending > 0 || leaveReqs > 0) && (
