@@ -70,6 +70,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Leads", href: "/leads", icon: Users, perm: ["leads:view-all", "leads:view-own"] },
       { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign"] },
+      { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
       { label: "Yêu cầu PH", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Báo vắng cần xử lý", href: "/parent-requests/bao-vang", icon: CalendarX, perm: ["parent-requests:manage"] },
