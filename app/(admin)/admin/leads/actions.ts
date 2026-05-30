@@ -2,12 +2,13 @@
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { can } from '@/lib/auth/permissions'
+import { can, hasRole } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
+import { autoAssignNewLead, manualAssignLead } from '@/lib/lead/auto-assign'
 import { genStudentCode } from '@/lib/codegen'
 
 const statusSchema = z.enum([
@@ -701,11 +702,20 @@ export async function createLeadManual(
       note: d.note || null,
       status: 'NEW',
       activities: {
-        create: { actorId, actorName, type: 'NOTE', content: 'Tạo lead thủ công' },
+        create: {
+          actorId,
+          actorName,
+          type: 'NOTE',
+          content: 'Tạo lead thủ công',
+          metadata: { system: true },
+        },
       },
     },
     select: { id: true },
   })
+
+  // Auto-chia theo cơ sở → chế độ cơ sở (PHẦN 2).
+  await autoAssignNewLead(lead.id, { actorId, actorName }).catch(() => {})
 
   revalidatePath('/leads')
   return { ok: true, id: lead.id }
@@ -760,5 +770,73 @@ export async function updateLeadFields(
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
+  return { ok: true }
+}
+
+// ─── Module CRM & Lead PHẦN 2 — gán tay + auto-chia + cấu hình chế độ ─────────
+
+/** Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác). */
+export async function autoAssignNewLeadAction(
+  leadId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+
+  const { actorId, actorName } = getAuditActor(session)
+  const res = await autoAssignNewLead(leadId, { actorId, actorName })
+  if (!res.ok) return { ok: false, error: res.error }
+
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${leadId}`)
+  return { ok: true }
+}
+
+/** Quản lý gán tay 1 lead cho 1 sale cụ thể. */
+export async function assignLeadToSaleAction(
+  leadId: string,
+  saleId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+
+  const { actorId, actorName } = getAuditActor(session)
+  const res = await manualAssignLead(leadId, saleId, { actorId, actorName })
+  if (!res.ok) return res
+
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${leadId}`)
+  return { ok: true }
+}
+
+const ASSIGN_MODES = ['ROUND_ROBIN', 'CLOSE_RATE', 'MANUAL'] as const
+
+/** Quản lý cơ sở đặt chế độ chia cho cơ sở mình; SUPER_ADMIN đặt mọi cơ sở. */
+export async function setCenterAssignModeAction(
+  centerId: string,
+  mode: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+
+  if (!ASSIGN_MODES.includes(mode as (typeof ASSIGN_MODES)[number])) {
+    return { ok: false, error: 'Chế độ không hợp lệ' }
+  }
+
+  // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ đặt cơ sở mình.
+  const isSuper = hasRole(session.user, 'SUPER_ADMIN')
+  if (!isSuper && hasRole(session.user, 'CENTER_MANAGER') && session.user.centerId !== centerId) {
+    return { ok: false, error: 'Chỉ đặt được cơ sở của bạn' }
+  }
+
+  await db.leadAssignmentConfig.upsert({
+    where: { centerId },
+    create: { centerId, mode: mode as (typeof ASSIGN_MODES)[number] },
+    update: { mode: mode as (typeof ASSIGN_MODES)[number] },
+  })
+
+  revalidatePath('/leads/cau-hinh-chia')
   return { ok: true }
 }

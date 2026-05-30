@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { parseLeadImportRow } from "@/lib/lead/import";
+import { autoAssignNewLead } from "@/lib/lead/auto-assign";
 
 const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"];
 
@@ -125,10 +126,11 @@ export async function POST(req: NextRequest) {
 
   const { actorId, actorName } = getAuditActor(session);
   let success = 0;
+  const createdIds: string[] = [];
   try {
     await db.$transaction(async (tx) => {
       for (const v of valid) {
-        await tx.lead.create({
+        const created = await tx.lead.create({
           data: {
             parentName: v.parentName,
             phone: v.phone,
@@ -146,10 +148,13 @@ export async function POST(req: NextRequest) {
                 actorName,
                 type: "NOTE",
                 content: "Nhập lead từ Excel (sự kiện)",
+                metadata: { system: true },
               },
             },
           },
+          select: { id: true },
         });
+        createdIds.push(created.id);
         success++;
       }
     });
@@ -157,6 +162,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { success: 0, errors: [...errors, { row: 0, error: `Lỗi ghi: ${err instanceof Error ? err.message : "Unknown"}` }] },
       { status: 500 },
+    );
+  }
+
+  // Auto-chia từng lead vừa tạo (theo cơ sở → chế độ cơ sở).
+  for (const id of createdIds) {
+    await autoAssignNewLead(id, { actorId, actorName }).catch((err) =>
+      console.error("[import/leads] auto-assign error:", err),
     );
   }
 

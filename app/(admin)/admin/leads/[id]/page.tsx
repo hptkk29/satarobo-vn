@@ -9,6 +9,7 @@ import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { ReassignButton } from "./_components/reassign-button";
+import { AssignSelect } from "./_components/assign-select";
 import { CloseDealButton } from "./_components/close-deal-button";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
@@ -55,6 +56,20 @@ export default async function LeadDetailPage({ params }: Props) {
   const canCloseDeal =
     can(session.user, "students:create") && can(session.user, "enrollments:create");
   const status = lead.status as LeadStatus;
+
+  // PHẦN 2 — danh sách sale để gán tay (ưu tiên sale cùng cơ sở lead).
+  const assignableSales = canAssign
+    ? await db.user.findMany({
+        where: {
+          role: "SALES_CSM",
+          isActive: true,
+          deletedAt: null,
+          ...(lead.centerId ? { centerId: lead.centerId } : {}),
+        },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      })
+    : [];
   const dealClosable =
     canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
 
@@ -107,6 +122,13 @@ export default async function LeadDetailPage({ params }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {canAssign && (
+            <AssignSelect
+              leadId={lead.id}
+              sales={assignableSales}
+              current={lead.assignedToId}
+            />
+          )}
           {canAssign && <ReassignButton leadId={lead.id} />}
         </div>
       </div>

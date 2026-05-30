@@ -2094,6 +2094,22 @@ enum LeadActivityType {
   NOTE
   STATUS_CHANGE
   EMAIL
+  HANDOVER // Module CRM PHẦN 3 — bàn giao khi chuyển lead
+}
+
+// Module CRM & Lead PHẦN 2 — cấu hình chia lead trong cơ sở.
+enum LeadAssignMode {
+  ROUND_ROBIN // luân phiên đều
+  CLOSE_RATE // theo tỷ lệ chốt tháng gần nhất
+  MANUAL // quản lý gán tay
+}
+
+model LeadAssignmentConfig {
+  id        String         @id @default(cuid())
+  centerId  String         @unique
+  mode      LeadAssignMode @default(ROUND_ROBIN)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 }
 
 enum LeadTaskStatus {

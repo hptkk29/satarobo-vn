@@ -5,7 +5,7 @@ import { leadCreateSchema } from '@/lib/validators/lead'
 import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
 import { rateLimit } from '@/lib/rate-limit'
 import { findRecentDuplicate, logDuplicateAttempt } from '@/lib/lead/dedup'
-import { autoAssignLead } from '@/lib/lead/assign'
+import { autoAssignNewLead } from '@/lib/lead/auto-assign'
 
 // Rate limit — uses Upstash Redis when env vars set, in-memory fallback otherwise.
 const RATE_LIMIT_MAX = 5
@@ -141,10 +141,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ─── Auto-assign round-robin (Phase T1.3) ───────────────────────
-    // Lead web chưa có assignedToId → gán cho SALES_CSM ít tải nhất.
+    // ─── Auto-assign theo cơ sở → chế độ (Module CRM PHẦN 2) ─────────
+    // Lead web chưa có assignedToId → định cơ sở rồi chia theo chế độ cơ sở.
     // Await để đảm bảo gán (serverless có thể kill fire-and-forget).
-    await autoAssignLead(lead.id, {
+    await autoAssignNewLead(lead.id, {
       actorId: null,
       actorName: 'Hệ thống (web)',
     }).catch((err) => console.error('[/api/leads] auto-assign error:', err))

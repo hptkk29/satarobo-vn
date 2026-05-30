@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { autoAssignLeadAction } from "../../actions";
+import { autoAssignNewLeadAction } from "../../actions";
 
 export function ReassignButton({ leadId }: { leadId: string }) {
   const router = useRouter();
@@ -16,9 +16,9 @@ export function ReassignButton({ leadId }: { leadId: string }) {
       disabled={isPending}
       onClick={() =>
         startTransition(async () => {
-          const res = await autoAssignLeadAction(leadId);
+          const res = await autoAssignNewLeadAction(leadId);
           if (res.ok) {
-            toast.success("Đã chia lại lead (round-robin)");
+            toast.success("Đã chia lại lead theo cấu hình cơ sở");
             router.refresh();
           } else {
             toast.error(res.error ?? "Lỗi chia lead");
