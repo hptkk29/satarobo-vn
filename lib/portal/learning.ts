@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getStudentClassProgress } from "@/lib/students/progress";
+import { getClassExpectedEndDate, NEAR_END_THRESHOLD } from "@/lib/students/renewal";
 
 // =============================================================================
 // PORTAL LEARNING DATA — Phase T2.2
@@ -56,16 +57,21 @@ export type ClassProgressSummary = {
   attended: number;
   remaining: number;
   currentSession: number;
+  expectedEndDate: string | null; // ISO — PHẦN 4
+  nearingEnd: boolean; // còn ≤ 5 buổi
 };
 
-/** Module QL học viên PHẦN 1 — "Con đang học buổi X / tổng N" theo lịch thực. */
+/** Module QL học viên PHẦN 1 + 4 — tiến độ + ngày kết thúc dự kiến theo lịch thực. */
 export async function getStudentProgressSummaries(
   studentId: string,
 ): Promise<ClassProgressSummary[]> {
   const classes = await getStudentClasses(studentId);
   return Promise.all(
     classes.map(async (c) => {
-      const p = await getStudentClassProgress(studentId, c.id);
+      const [p, end] = await Promise.all([
+        getStudentClassProgress(studentId, c.id),
+        getClassExpectedEndDate(c.id),
+      ]);
       return {
         classId: c.id,
         className: c.name,
@@ -74,6 +80,8 @@ export async function getStudentProgressSummaries(
         attended: p.attended,
         remaining: p.remaining,
         currentSession: p.currentSession,
+        expectedEndDate: end?.toISOString() ?? null,
+        nearingEnd: p.remaining > 0 && p.remaining <= NEAR_END_THRESHOLD,
       };
     }),
   );

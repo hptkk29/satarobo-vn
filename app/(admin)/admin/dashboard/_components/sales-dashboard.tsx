@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Users, CheckSquare, FlaskConical, TrendingUp } from "lucide-react";
+import { Users, CheckSquare, FlaskConical, TrendingUp, GraduationCap } from "lucide-react";
 import { db } from "@/lib/db";
 import type { LeadStatus } from "@prisma/client";
 import { KANBAN_COLUMNS, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
+import { getNearingEndEnrollments } from "@/lib/students/renewal";
 
 // Đợt 3C — Dashboard SALES_CSM. Chỉ lead/việc CỦA TÔI. KHÔNG tài chính/quản trị.
 export async function SalesDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
@@ -12,7 +13,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
   dayEnd.setDate(dayEnd.getDate() + 1);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [pipeline, totalMine, enrolledMonth, openTasks, trials] = await Promise.all([
+  const [pipeline, totalMine, enrolledMonth, openTasks, trials, nearingEnd] = await Promise.all([
     db.lead.groupBy({
       by: ["status"],
       where: { assignedToId: userId, deletedAt: null },
@@ -38,6 +39,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
       take: 6,
       select: { id: true, scheduledAt: true, lead: { select: { id: true, parentName: true, childName: true } } },
     }),
+    getNearingEndEnrollments(),
   ]);
 
   const countByStatus = new Map<LeadStatus, number>(
@@ -59,6 +61,18 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
         <DashStat label="Tỷ lệ chốt" value={`${closeRate}%`} href="/leads" icon={<TrendingUp className="h-5 w-5" />} />
         <DashStat label="Việc quá hạn" value={overdue.length} href="/leads?view=kanban" tone={overdue.length > 0 ? "danger" : "ok"} icon={<CheckSquare className="h-5 w-5" />} />
       </div>
+
+      {nearingEnd.length > 0 && (
+        <Link
+          href="/students/sap-het-khoa"
+          className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400"
+        >
+          <GraduationCap className="h-5 w-5 shrink-0" />
+          <span>
+            <b>{nearingEnd.length}</b> học viên sắp hết khoá (≤ 5 buổi) — nhắc phụ huynh tái tục.
+          </span>
+        </Link>
+      )}
 
       {/* Pipeline của tôi */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">

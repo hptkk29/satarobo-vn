@@ -36,6 +36,17 @@ export default async function LichHocPage() {
               <p className="text-xs text-neutral-600">
                 Đã học {p.attended} · Còn lại {p.remaining}
               </p>
+              {p.expectedEndDate && (
+                <p className="mt-1 text-xs text-neutral-500">
+                  Dự kiến kết thúc:{" "}
+                  {new Date(p.expectedEndDate).toLocaleDateString("vi-VN")}
+                </p>
+              )}
+              {p.nearingEnd && (
+                <p className="mt-2 rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                  Sắp hết khoá — liên hệ trung tâm để tái tục cho con.
+                </p>
+              )}
             </div>
           ))}
         </div>
