@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Thiếu centerId" }, { status: 400 });
   }
 
-  const { token, expiresAt } = generateQrToken(centerId);
+  const { token } = generateQrToken(centerId);
   const checkinUrl = `${req.nextUrl.origin}/cham-cong/checkin?c=${encodeURIComponent(
     centerId,
   )}&t=${encodeURIComponent(token)}`;
@@ -33,5 +33,5 @@ export async function GET(req: NextRequest) {
     errorCorrectionLevel: "M",
   });
 
-  return NextResponse.json({ token, expiresAt, qrDataUrl, checkinUrl });
+  return NextResponse.json({ token, qrDataUrl, checkinUrl });
 }

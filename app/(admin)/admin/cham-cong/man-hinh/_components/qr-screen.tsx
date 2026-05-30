@@ -1,14 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 export function QrScreen({ centerId, centerName }: { centerId: string; centerName: string }) {
   const [qr, setQr] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState(0);
-  const [remaining, setRemaining] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchToken = useCallback(async () => {
     try {
@@ -17,33 +14,18 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
         { cache: "no-store" },
       );
       if (!res.ok) throw new Error("Không tải được mã");
-      const data = (await res.json()) as { qrDataUrl: string; expiresAt: number };
+      const data = (await res.json()) as { qrDataUrl: string };
       setQr(data.qrDataUrl);
-      setExpiresAt(data.expiresAt);
       setError(null);
     } catch {
       setError("Lỗi tải mã QR — kiểm tra kết nối");
     }
   }, [centerId]);
 
+  // QR CỐ ĐỊNH — tải 1 lần (mã không hết hạn). Có thể in/dán tại quầy.
   useEffect(() => {
     void fetchToken();
-    const refresh = setInterval(fetchToken, 25_000);
-    return () => clearInterval(refresh);
   }, [fetchToken]);
-
-  // Countdown + tự refresh khi hết hạn.
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      const rem = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
-      setRemaining(rem);
-      if (rem <= 0) void fetchToken();
-    }, 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [expiresAt, fetchToken]);
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 rounded-2xl bg-white p-10 text-center shadow-sm">
@@ -67,7 +49,7 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
           Quét mã bằng điện thoại để chấm công
         </p>
         <p className="mt-1 text-sm text-neutral-400">
-          Mã tự làm mới sau {remaining}s · cần bật định vị (GPS)
+          Mã cố định của cơ sở · cần bật định vị (GPS) trong bán kính 100m
         </p>
       </div>
     </div>

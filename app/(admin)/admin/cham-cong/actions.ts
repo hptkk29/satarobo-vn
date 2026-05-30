@@ -5,13 +5,13 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { verifyQrToken, distanceMeters } from "@/lib/attendance/qr";
+import { verifyQrToken, distanceMeters, GEOFENCE_RADIUS_METERS } from "@/lib/attendance/qr";
 
 // =============================================================================
-// EMPLOYEE CHECK-IN — Phase NHÓM 4
-// Nhân viên scan QR (token) trên điện thoại → gửi kèm GPS → ghi EmployeeCheckin.
-// Verify: token hợp lệ (cửa sổ 30s), geofence theo Center, single-use (unique
-// [userId, type, qrToken]). Bắt buộc cả check-in lẫn check-out trong ngày.
+// EMPLOYEE CHECK-IN — Phase NHÓM 4 (Module Chấm công PHẦN 1)
+// Nhân viên scan QR CỐ ĐỊNH của cơ sở → gửi kèm GPS → ghi EmployeeCheckin.
+// Verify: token đúng cơ sở (cố định, không hết hạn) + GPS trong bán kính 100m.
+// qrToken lưu kèm ngày → unique [userId, type, qrToken] = 1 lần/loại/ngày.
 // =============================================================================
 
 const schema = z.object({
@@ -42,7 +42,7 @@ export async function recordCheckin(input: {
   const d = parsed.data;
 
   if (!verifyQrToken(d.token, d.centerId)) {
-    return { ok: false, error: "Mã QR hết hạn — quét lại mã trên màn hình" };
+    return { ok: false, error: "Mã QR không đúng cơ sở — quét lại mã tại quầy" };
   }
 
   // Geofence (nếu cơ sở có toạ độ).
@@ -59,20 +59,22 @@ export async function recordCheckin(input: {
       return { ok: false, error: "Cần bật định vị (GPS) để chấm công" };
     }
     dist = distanceMeters(d.latitude, d.longitude, center.latitude, center.longitude);
-    const radius = center.allowedRadiusMeters ?? 150;
+    const radius = center.allowedRadiusMeters ?? GEOFENCE_RADIUS_METERS;
     withinGeofence = dist <= radius;
     if (!withinGeofence) {
       return {
         ok: false,
-        error: `Bạn đang cách ${center.name} ~${dist}m (cho phép ${radius}m). Hãy đến gần cơ sở.`,
+        error: `Ngoài vùng cho phép: bạn cách ${center.name} ~${dist}m (cho phép ${radius}m). Hãy đến trong bán kính ${radius}m của cơ sở.`,
         withinGeofence: false,
       };
     }
   }
 
-  // Single-use token + 1 lần mỗi loại / ngày.
+  // QR cố định → lưu qrToken kèm NGÀY để unique [userId,type,qrToken] = 1 lần/loại/ngày.
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
+  const dayKey = `${startOfDay.getFullYear()}-${String(startOfDay.getMonth() + 1).padStart(2, "0")}-${String(startOfDay.getDate()).padStart(2, "0")}`;
+  const storedToken = `${d.centerId}:${dayKey}`;
   const dupToday = await db.employeeCheckin.findFirst({
     where: { userId: session.user.id, type: d.type, checkedAt: { gte: startOfDay } },
     select: { id: true },
@@ -95,7 +97,7 @@ export async function recordCheckin(input: {
         longitude: d.longitude ?? null,
         distanceMeters: dist,
         withinGeofence,
-        qrToken: d.token,
+        qrToken: storedToken,
       },
     });
   } catch (err) {

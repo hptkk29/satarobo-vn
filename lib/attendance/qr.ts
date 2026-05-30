@@ -2,58 +2,39 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "crypto";
 
 // =============================================================================
-// QR ATTENDANCE TOKEN — Phase NHÓM 4
-// Token xoay theo cửa sổ 30s (HMAC), không cần lưu DB. Chấp nhận cửa sổ hiện
-// tại + 1 cửa sổ trước (grace ~30-60s) để bù trễ scan/clock skew.
-// Token = "<centerId>.<window>.<sig>" — single-use enforced ở DB
-// (unique [userId, type, qrToken]).
+// QR ATTENDANCE — Phase NHÓM 4 (Module Chấm công PHẦN 1)
+// QR CỐ ĐỊNH mỗi cơ sở: mã gắn centerId, KHÔNG hết hạn (bỏ cửa sổ xoay 30s).
+// Token = "<centerId>.<sig>" với sig = HMAC(centerId). Dán cố định tại quầy.
+// Hợp lệ check-in ⇔ quét đúng QR cơ sở + GPS trong bán kính 100m của cơ sở.
 // =============================================================================
 
-const WINDOW_MS = 30_000;
+/** Bán kính geofence chấm công (mét). */
+export const GEOFENCE_RADIUS_METERS = 100;
 
 function secret(): string {
   return process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
 }
 
-function sign(centerId: string, windowIdx: number): string {
+function sign(centerId: string): string {
   return createHmac("sha256", secret())
-    .update(`attendance:${centerId}:${windowIdx}`)
+    .update(`attendance:${centerId}`)
     .digest("base64url")
     .slice(0, 24);
 }
 
-function currentWindow(now = Date.now()): number {
-  return Math.floor(now / WINDOW_MS);
+/** Token QR CỐ ĐỊNH cho cơ sở (không hết hạn). */
+export function generateQrToken(centerId: string): { token: string } {
+  return { token: `${centerId}.${sign(centerId)}` };
 }
 
-/** Token QR cho cửa sổ hiện tại + thời điểm hết hạn (ms). */
-export function generateQrToken(centerId: string): {
-  token: string;
-  expiresAt: number;
-} {
-  const w = currentWindow();
-  return {
-    token: `${centerId}.${w}.${sign(centerId, w)}`,
-    expiresAt: (w + 1) * WINDOW_MS,
-  };
-}
-
-/** Verify token; chấp nhận cửa sổ hiện tại và cửa sổ liền trước (grace). */
-export function verifyQrToken(
-  token: string,
-  expectedCenterId: string,
-): boolean {
+/** Verify token QR cố định: đúng định dạng + đúng centerId + chữ ký hợp lệ. */
+export function verifyQrToken(token: string, expectedCenterId: string): boolean {
   const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  const [centerId, windowStr, sig] = parts;
+  if (parts.length !== 2) return false;
+  const [centerId, sig] = parts;
   if (centerId !== expectedCenterId) return false;
-  const w = Number.parseInt(windowStr, 10);
-  if (Number.isNaN(w)) return false;
 
-  const now = currentWindow();
-  if (w !== now && w !== now - 1) return false; // chỉ chấp nhận 2 cửa sổ gần nhất
-
-  const expected = sign(centerId, w);
+  const expected = sign(centerId);
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);

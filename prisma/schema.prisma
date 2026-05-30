@@ -222,7 +222,7 @@ model Center {
   // Phase NHÓM 4 — geofence chấm công QR.
   latitude            Float?
   longitude           Float?
-  allowedRadiusMeters Int?   @default(150)
+  allowedRadiusMeters Int?   @default(100)
   logoUrl      String?
   bannerUrl    String?
   description  String?  @db.Text
