@@ -33,6 +33,9 @@ export default async function SessionDetailPage({ params }: Props) {
       notes: true,
       lessonId: true,
       status: true,
+      ckClean: true,
+      ckEquipment: true,
+      ckKit: true,
       ckLessonConfirmed: true,
       ckMedia: true,
       ckHomework: true,
@@ -217,6 +220,9 @@ export default async function SessionDetailPage({ params }: Props) {
             studentRows.filter((s) => s.present).every((s) => s.comment.trim().length > 0),
         }}
         stored={{
+          ckClean: sess.ckClean,
+          ckEquipment: sess.ckEquipment,
+          ckKit: sess.ckKit,
           ckLessonConfirmed: sess.ckLessonConfirmed,
           ckMedia: sess.ckMedia,
           ckHomework: sess.ckHomework,

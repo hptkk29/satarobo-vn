@@ -31,6 +31,9 @@ export function SessionChecklist({
   lessonLinked: boolean;
   derived: { ckAttendance: boolean; ckFeedback: boolean };
   stored: {
+    ckClean: boolean;
+    ckEquipment: boolean;
+    ckKit: boolean;
     ckLessonConfirmed: boolean;
     ckMedia: boolean;
     ckHomework: boolean;
@@ -41,6 +44,9 @@ export function SessionChecklist({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [ckClean, setClean] = useState(stored.ckClean);
+  const [ckEquipment, setEquipment] = useState(stored.ckEquipment);
+  const [ckKit, setKit] = useState(stored.ckKit);
   const [ckLessonConfirmed, setLesson] = useState(stored.ckLessonConfirmed);
   const [ckMedia, setMedia] = useState(stored.ckMedia);
   const [ckHomework, setHomework] = useState(stored.ckHomework);
@@ -51,6 +57,9 @@ export function SessionChecklist({
     startTransition(async () => {
       const res = await updateSessionChecklist({
         sessionId,
+        ckClean,
+        ckEquipment,
+        ckKit,
         ckLessonConfirmed,
         ckMedia,
         ckHomework,
@@ -97,10 +106,17 @@ export function SessionChecklist({
         </span>
       </div>
 
+      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-gray-400">Chuẩn bị</p>
+      <ul className="mb-3 space-y-2">
+        <ToggleStep n={1} checked={ckClean} onChange={setClean} disabled={!canEdit || pending} label="Vệ sinh phòng học" hint="Phòng sạch trước buổi" />
+        <ToggleStep n={2} checked={ckEquipment} onChange={setEquipment} disabled={!canEdit || pending} label="Thiết bị dạy học OK" hint="Máy chiếu/màn/điện" />
+        <ToggleStep n={3} checked={ckKit} onChange={setKit} disabled={!canEdit || pending} label="Học cụ / kit đủ cho buổi" hint="Đủ bộ kit cho HS" />
+      </ul>
+      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-gray-400">Trong / sau buổi</p>
       <ul className="space-y-2">
-        <AutoStep n={1} done={derived.ckAttendance} label="Điểm danh xong" hint="Tự động khi có điểm danh" />
+        <AutoStep n={4} done={derived.ckAttendance} label="Điểm danh xong" hint="Tự động khi có điểm danh" required />
         <ToggleStep
-          n={2}
+          n={5}
           checked={ckLessonConfirmed}
           onChange={setLesson}
           disabled={!canEdit || pending}
@@ -109,15 +125,15 @@ export function SessionChecklist({
           required
         />
         <AutoStep
-          n={3}
+          n={6}
           done={derived.ckFeedback}
           label="Nhận xét từng HS có mặt"
           hint="Tự động khi mọi HS có mặt đã được nhận xét (mục trên)"
           required
         />
-        <ToggleStep n={4} checked={ckMedia} onChange={setMedia} disabled={!canEdit || pending} label="Upload + tag ảnh lớp" hint="Tuỳ chọn" />
-        <ToggleStep n={5} checked={ckHomework} onChange={setHomework} disabled={!canEdit || pending} label="Giao bài tập (hoặc không có)" hint="Tuỳ chọn" />
-        <ToggleStep n={6} checked={ckIncident} onChange={setIncident} disabled={!canEdit || pending} label="Ghi chú sự cố (hoặc không có)" hint="Tuỳ chọn" />
+        <ToggleStep n={7} checked={ckMedia} onChange={setMedia} disabled={!canEdit || pending} label="Upload + tag ảnh lớp" hint="Tuỳ chọn" />
+        <ToggleStep n={8} checked={ckHomework} onChange={setHomework} disabled={!canEdit || pending} label="Giao bài tập (hoặc không có)" hint="Tuỳ chọn" />
+        <ToggleStep n={9} checked={ckIncident} onChange={setIncident} disabled={!canEdit || pending} label="Ghi chú sự cố (hoặc không có)" hint="Tuỳ chọn" />
       </ul>
 
       {ckIncident && (

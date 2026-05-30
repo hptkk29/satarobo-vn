@@ -140,6 +140,9 @@ async function deriveSteps(sessionId: string): Promise<{ ckAttendance: boolean; 
 
 const checklistSchema = z.object({
   sessionId: z.string().min(1),
+  ckClean: z.boolean(),
+  ckEquipment: z.boolean(),
+  ckKit: z.boolean(),
   ckLessonConfirmed: z.boolean(),
   ckMedia: z.boolean(),
   ckHomework: z.boolean(),
@@ -161,6 +164,9 @@ export async function updateSessionChecklist(input: unknown): Promise<Result> {
     await db.classSession.update({
       where: { id: parsed.data.sessionId },
       data: {
+        ckClean: parsed.data.ckClean,
+        ckEquipment: parsed.data.ckEquipment,
+        ckKit: parsed.data.ckKit,
         ckLessonConfirmed: parsed.data.ckLessonConfirmed,
         ckMedia: parsed.data.ckMedia,
         ckHomework: parsed.data.ckHomework,
