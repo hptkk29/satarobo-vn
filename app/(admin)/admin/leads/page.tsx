@@ -172,6 +172,7 @@ export default async function LeadsPage({
       where,
       include: {
         center: { select: { name: true } },
+        course: { select: { name: true } },
         assignedTo: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -205,6 +206,7 @@ export default async function LeadsPage({
     consentMarketing: lead.consentMarketing,
     createdAt: lead.createdAt.toISOString(),
     center: lead.center,
+    courseName: lead.course?.name ?? null,
     assignedTo: lead.assignedTo,
   }))
 
@@ -290,6 +292,13 @@ function Header({
       </div>
       {canCreate && (
         <div className="flex items-center gap-2">
+          <a
+            href="/templates/mau-lead.xlsx"
+            download
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Tải file mẫu
+          </a>
           <Link
             href="/leads/import"
             className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"

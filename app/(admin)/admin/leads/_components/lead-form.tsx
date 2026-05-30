@@ -90,7 +90,7 @@ export function LeadForm({
         </Field>
         <Field label="Cơ sở">
           <select value={centerId} onChange={(e) => setCenterId(e.target.value)} className={inputCls}>
-            <option value="">— Chưa chọn —</option>
+            <option value="">Chưa xác định (chia đều 2 cơ sở)</option>
             {centers.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}

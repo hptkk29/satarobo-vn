@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFormStatus } from "react-dom";
 import { createClass, updateClass } from "../_actions";
 
 export type ClassFormValue = {
@@ -103,6 +102,7 @@ export function ClassForm({
   const router = useRouter();
   const isEdit = Boolean(cls);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   const [centerId, setCenterId] = useState<string>(cls?.centerId ?? "");
   const [roomId, setRoomId] = useState<string>(cls?.roomId ?? "");
@@ -119,17 +119,25 @@ export function ClassForm({
     [teachers, teacherId],
   );
 
-  async function action(formData: FormData) {
+  // Dùng onSubmit + preventDefault thay cho <form action> để React 19 KHÔNG tự
+  // reset các field khi submit lỗi validation (#7 Đợt 4). Server action vẫn
+  // redirect() khi thành công.
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setError(null);
-    // Replace scheduleDays entries with our state, in case checkboxes were
-    // toggled but the controlled state is canonical.
+    setPending(true);
+    const formData = new FormData(e.currentTarget);
     formData.delete("scheduleDays");
     for (const d of scheduleDays) formData.append("scheduleDays", String(d));
 
     const res = isEdit
       ? await updateClass(cls!.id, formData)
       : await createClass(formData);
-    if (res?.error) setError(res.error);
+    // Thành công → server action redirect (không tới đây). Lỗi → giữ nguyên form.
+    if (res?.error) {
+      setError(res.error);
+      setPending(false);
+    }
   }
 
   function toggleDay(d: number, checked: boolean) {
@@ -154,7 +162,7 @@ export function ClassForm({
   }
 
   return (
-    <form action={action} className="max-w-4xl space-y-6">
+    <form onSubmit={handleSubmit} className="max-w-4xl space-y-6">
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -390,7 +398,7 @@ export function ClassForm({
       </Section>
 
       <div className="flex gap-3 border-t border-neutral-200 pt-6">
-        <SubmitButton isEdit={isEdit} />
+        <SubmitButton isEdit={isEdit} pending={pending} />
         <button
           type="button"
           onClick={() => router.push("/classes")}
@@ -403,8 +411,7 @@ export function ClassForm({
   );
 }
 
-function SubmitButton({ isEdit }: { isEdit: boolean }) {
-  const { pending } = useFormStatus();
+function SubmitButton({ isEdit, pending }: { isEdit: boolean; pending: boolean }) {
   return (
     <button
       type="submit"

@@ -32,6 +32,7 @@ export type LeadRow = {
   consentMarketing: boolean
   createdAt: string
   center: { name: string } | null
+  courseName: string | null
   assignedTo: { name: string | null } | null
 }
 
@@ -199,7 +200,8 @@ function LeadDrawer({
               <DetailItem label="Tên con" value={lead.childName} />
               <DetailItem label="Tuổi" value={lead.childAge} />
               <DetailItem label="Cơ sở" value={lead.center?.name} />
-              <DetailItem label="Khóa quan tâm" value={shortSource(lead.source)} />
+              <DetailItem label="Khóa quan tâm" value={lead.courseName ?? '—'} />
+              <DetailItem label="Nguồn" value={shortSource(lead.source)} />
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Trạng thái</dt>
                 <dd className="mt-1">
@@ -425,9 +427,14 @@ export function LeadsTable({
                       {lead.phone}
                     </td>
                     <td className="px-4 py-3 max-w-[200px]">
-                      <span className="block truncate text-sm text-gray-600" title={lead.source ?? ''}>
-                        {shortSource(lead.source)}
+                      <span className="block truncate text-sm text-gray-600" title={lead.courseName ?? lead.source ?? ''}>
+                        {lead.courseName ?? '—'}
                       </span>
+                      {lead.source && (
+                        <span className="block truncate text-xs text-gray-400" title={lead.source}>
+                          {shortSource(lead.source)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <StatusCell lead={lead} canUpdate={canUpdate} />

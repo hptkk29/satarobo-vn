@@ -16,7 +16,8 @@ export default async function NewLeadPage() {
 
   const [centers, courses] = await Promise.all([
     db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
-    db.course.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // Chỉ khoá LÁ dạy được (Sata1-8/Combo) — bỏ danh mục cha, khớp form tạo lớp.
+    db.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   return (
