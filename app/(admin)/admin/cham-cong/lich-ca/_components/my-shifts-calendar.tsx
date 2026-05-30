@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { WorkShift } from "@prisma/client";
 import { SHIFT_ORDER, SHIFT_DEFS, registrationWindowWarning } from "@/lib/shifts";
+import { teachingUncovered } from "@/lib/work-schedule";
 import { saveMyShifts } from "../_actions";
 
 type DayReg = { shifts: WorkShift[]; status: string; note: string };
+type Teaching = { start: string; end: string; label: string };
 type Cell = { dateStr: string | null; day: number | null };
 
 const WEEKDAYS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -15,10 +17,12 @@ const WEEKDAYS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 export function MyShiftsCalendar({
   cells,
   byDate,
+  teachingByDate = {},
   todayStr,
 }: {
   cells: Cell[];
   byDate: Record<string, DayReg>;
+  teachingByDate?: Record<string, Teaching[]>;
   todayStr: string;
 }) {
   const router = useRouter();
@@ -26,6 +30,7 @@ export function MyShiftsCalendar({
   const [selected, setSelected] = useState<string | null>(null);
 
   const sel = selected ? byDate[selected] : undefined;
+  const selTeaching = selected ? teachingByDate[selected] ?? [] : [];
   const [picked, setPicked] = useState<WorkShift[]>([]);
   const [note, setNote] = useState("");
 
@@ -64,6 +69,7 @@ export function MyShiftsCalendar({
         {cells.map((c, i) => {
           if (!c.dateStr) return <div key={i} />;
           const reg = byDate[c.dateStr];
+          const teach = teachingByDate[c.dateStr] ?? [];
           const isToday = c.dateStr === todayStr;
           return (
             <button
@@ -74,7 +80,17 @@ export function MyShiftsCalendar({
                 isToday ? "border-[#7C3AED] bg-purple-50/40" : "border-gray-200 bg-white"
               }`}
             >
-              <div className="text-xs font-semibold text-gray-700">{c.day}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-700">{c.day}</span>
+                {teach.length > 0 && (
+                  <span
+                    title={`${teach.length} tiết dạy`}
+                    className="rounded bg-emerald-100 px-1 text-[9px] font-bold text-emerald-700"
+                  >
+                    📚{teach.length}
+                  </span>
+                )}
+              </div>
               <div className="mt-0.5 flex flex-wrap gap-0.5">
                 {reg?.shifts.map((s) => (
                   <span key={s} className="rounded bg-[#7C3AED] px-1 text-[9px] font-bold text-white">
@@ -97,6 +113,27 @@ export function MyShiftsCalendar({
             <h3 className="mb-1 text-sm font-bold text-gray-900">Đăng ký ca · {selected}</h3>
             {sel?.status === "LEAVE_REQUESTED" && (
               <p className="mb-2 text-xs font-medium text-rose-600">Đang ở trạng thái xin nghỉ khẩn.</p>
+            )}
+            {selTeaching.length > 0 && (
+              <div className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
+                <p className="font-semibold">📚 Ngày này bạn có tiết dạy:</p>
+                <ul className="mt-0.5 space-y-0.5">
+                  {selTeaching.map((t, k) => (
+                    <li key={k}>
+                      lúc <b>{t.start}</b>
+                      {t.end ? `–${t.end}` : ""} ({t.label})
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-[11px] text-emerald-700">
+                  Hãy chọn ca <b>phủ</b> giờ dạy ở trên.
+                </p>
+              </div>
+            )}
+            {selTeaching.length > 0 && teachingUncovered(picked, selTeaching) && (
+              <p className="mb-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-700">
+                ⚠ Ca đang chọn chưa phủ giờ có tiết dạy.
+              </p>
             )}
             <div className="space-y-2">
               {SHIFT_ORDER.map((s) => {

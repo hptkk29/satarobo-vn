@@ -30,13 +30,37 @@ export default async function MyShiftsPage({ searchParams }: Props) {
   const monthStart = new Date(year, monthIdx, 1);
   const monthEnd = new Date(year, monthIdx + 1, 1);
 
-  const regs = await db.shiftRegistration.findMany({
-    where: { userId: session.user.id, date: { gte: monthStart, lt: monthEnd } },
-    select: { date: true, shifts: true, status: true, note: true },
-  });
+  const [regs, teachingSessions] = await Promise.all([
+    db.shiftRegistration.findMany({
+      where: { userId: session.user.id, date: { gte: monthStart, lt: monthEnd } },
+      select: { date: true, shifts: true, status: true, note: true },
+    }),
+    // PHẦN 3 — buổi dạy của GV (lớp GV phụ trách chính/trợ giảng) trong tháng.
+    db.classSession.findMany({
+      where: {
+        date: { gte: monthStart, lt: monthEnd },
+        class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
+      },
+      select: {
+        date: true,
+        class: { select: { name: true, classCode: true, startTime: true, endTime: true } },
+      },
+      orderBy: { date: "asc" },
+    }),
+  ]);
   const byDate = new Map(
     regs.map((r) => [ymd(new Date(r.date)), { shifts: r.shifts, status: r.status, note: r.note ?? "" }]),
   );
+
+  // teachingByDate: ngày → danh sách tiết dạy {start,end,label}.
+  const teachingByDate: Record<string, { start: string; end: string; label: string }[]> = {};
+  for (const s of teachingSessions) {
+    const ds = ymd(new Date(s.date));
+    const start = s.class.startTime ?? "00:00";
+    const end = s.class.endTime ?? start;
+    const label = s.class.classCode ? `${s.class.classCode} · ${s.class.name}` : s.class.name;
+    (teachingByDate[ds] ??= []).push({ start, end, label });
+  }
 
   // Lưới: padding đầu tuần (CN=0).
   const firstWeekday = monthStart.getDay();
@@ -80,6 +104,7 @@ export default async function MyShiftsPage({ searchParams }: Props) {
       <MyShiftsCalendar
         cells={cells}
         byDate={Object.fromEntries(byDate)}
+        teachingByDate={teachingByDate}
         todayStr={todayStr}
       />
     </div>

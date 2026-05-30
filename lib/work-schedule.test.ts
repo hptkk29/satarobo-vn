@@ -4,7 +4,32 @@ import {
   mergeShiftIntervals,
   formatVNTime,
   vnMinutesOfDay,
+  teachingUncovered,
 } from "./work-schedule";
+
+describe("teachingUncovered — phủ giờ dạy", () => {
+  it("không có tiết dạy → không cảnh báo", () => {
+    expect(teachingUncovered([], [])).toBe(false);
+    expect(teachingUncovered(["CA_SANG"], [])).toBe(false);
+  });
+  it("ca chiều phủ tiết 14:00–15:30 → ok", () => {
+    expect(teachingUncovered(["CA_CHIEU"], [{ start: "14:00", end: "15:30" }])).toBe(false);
+  });
+  it("không đăng ký ca mà có tiết dạy → cảnh báo", () => {
+    expect(teachingUncovered([], [{ start: "14:00", end: "15:30" }])).toBe(true);
+  });
+  it("đăng ký ca sáng nhưng dạy chiều → cảnh báo (chưa phủ)", () => {
+    expect(teachingUncovered(["CA_SANG"], [{ start: "14:00", end: "15:30" }])).toBe(true);
+  });
+  it("một trong nhiều tiết không phủ → cảnh báo", () => {
+    expect(
+      teachingUncovered(["CA_CHIEU"], [
+        { start: "14:00", end: "15:00" },
+        { start: "18:00", end: "19:00" },
+      ]),
+    ).toBe(true);
+  });
+});
 
 // Date từ giờ tường VN (UTC+7).
 function vn(hm: string): Date {

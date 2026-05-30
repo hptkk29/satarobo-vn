@@ -59,6 +59,24 @@ function overlap(a: number, b: number, c: number, d: number): number {
   return Math.max(0, Math.min(b, d) - Math.max(a, c));
 }
 
+/**
+ * Module Chấm công PHẦN 3 — kiểm tra ca đăng ký có PHỦ giờ dạy không.
+ * teaching: các khoảng tiết dạy {start,end} (HH:MM). Trả về true nếu có ÍT NHẤT
+ * một tiết dạy KHÔNG được ca đăng ký phủ trọn → nhắc GV chọn ca phủ giờ dạy.
+ */
+export function teachingUncovered(
+  shifts: WorkShift[],
+  teaching: { start: string; end: string }[],
+): boolean {
+  if (teaching.length === 0) return false;
+  const intervals = mergeShiftIntervals(shifts);
+  return teaching.some((t) => {
+    const ts = hmToMinutes(t.start);
+    const te = hmToMinutes(t.end);
+    return !intervals.some((iv) => iv.start <= ts && iv.end >= te);
+  });
+}
+
 export type AttendanceTag = { label: string; tone: "ok" | "warn" | "danger" };
 
 export type ShiftAttendance = {
