@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
 export default async function AuditLogPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "users:manage")) {
+  // Khớp với quyền hiển thị menu (audit-logs:view) — trước đây gate users:manage
+  // khiến CENTER_MANAGER thấy menu nhưng bị redirect về dashboard.
+  if (!can(session.user, "audit-logs:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

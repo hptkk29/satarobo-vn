@@ -59,14 +59,16 @@ interface TeacherOption {
   role: string;
 }
 
+// "Chờ duyệt" KHÔNG cho chọn tay — chỉ set tự động khi sale "Gửi duyệt".
 const STATUS_OPTIONS = [
   { value: "PLANNED", label: "Đang lên KH" },
   { value: "RECRUITING", label: "Tuyển sinh" },
-  { value: "PENDING_APPROVAL", label: "Chờ duyệt" },
   { value: "ACTIVE", label: "Đang dạy" },
   { value: "COMPLETED", label: "Hoàn thành" },
   { value: "CANCELLED", label: "Huỷ" },
 ] as const;
+
+const PENDING_OPTION = { value: "PENDING_APPROVAL", label: "Chờ duyệt" } as const;
 
 const WEEKDAY_OPTIONS = [
   { value: 1, label: "T2" },
@@ -210,7 +212,11 @@ export function ClassForm({
             name="status"
             defaultValue={cls?.status ?? "PLANNED"}
             required
-            options={[...STATUS_OPTIONS]}
+            options={
+              cls?.status === "PENDING_APPROVAL"
+                ? [PENDING_OPTION, ...STATUS_OPTIONS]
+                : [...STATUS_OPTIONS]
+            }
           />
         </Grid>
 

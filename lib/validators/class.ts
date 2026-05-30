@@ -3,6 +3,7 @@ import { z } from "zod";
 export const ClassStatusEnum = z.enum([
   "PLANNED",
   "RECRUITING",
+  "PENDING_APPROVAL", // set TỰ ĐỘNG khi sale "Gửi duyệt" — không chọn tay ở form
   "ACTIVE",
   "COMPLETED",
   "CANCELLED",
