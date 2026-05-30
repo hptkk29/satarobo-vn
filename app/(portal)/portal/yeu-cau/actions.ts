@@ -15,12 +15,14 @@ const createSchema = z.object({
   type: z.enum(["ABSENCE", "MAKEUP", "TRANSFER_CLASS", "TRANSFER_CENTER", "RESERVE", "OTHER"]),
   content: z.string().trim().min(5, "Vui lòng mô tả chi tiết hơn").max(2000),
   preferredDate: z.string().optional().nullable(),
+  sessionId: z.string().optional().nullable(),
 });
 
 export async function createParentRequest(input: {
   type: string;
   content: string;
   preferredDate?: string | null;
+  sessionId?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const { ctx, studentId } = await requireActiveStudent();
 
@@ -29,10 +31,32 @@ export async function createParentRequest(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
   const d = parsed.data;
+
+  // Báo vắng: buổi phải thuộc lớp con đang học → lấy luôn ngày buổi làm preferredDate.
+  let sessionId: string | null = null;
+  let sessionDate: Date | null = null;
+  if (d.type === "ABSENCE" && d.sessionId) {
+    const sess = await db.classSession.findFirst({
+      where: {
+        id: d.sessionId,
+        class: {
+          enrollments: {
+            some: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } },
+          },
+        },
+      },
+      select: { id: true, date: true },
+    });
+    if (!sess) return { ok: false, error: "Buổi học không hợp lệ" };
+    sessionId = sess.id;
+    sessionDate = sess.date;
+  }
+
   const preferredDate =
-    d.preferredDate && !Number.isNaN(new Date(d.preferredDate).getTime())
+    sessionDate ??
+    (d.preferredDate && !Number.isNaN(new Date(d.preferredDate).getTime())
       ? new Date(d.preferredDate)
-      : null;
+      : null);
 
   await db.parentRequest.create({
     data: {
@@ -41,6 +65,7 @@ export async function createParentRequest(input: {
       type: d.type,
       content: d.content,
       preferredDate,
+      sessionId,
       status: "PENDING",
     },
   });

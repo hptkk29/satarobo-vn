@@ -5,6 +5,7 @@ import {
   REQUEST_STATUS_LABEL,
   REQUEST_STATUS_BADGE,
 } from "@/lib/portal/request-labels";
+import { getStudentSessions } from "@/lib/portal/learning";
 import { RequestForm } from "./_components/request-form";
 import { CancelButton } from "./_components/cancel-button";
 
@@ -13,17 +14,32 @@ export const metadata = { title: "Yêu cầu | Sata Robo", robots: { index: fals
 
 export default async function YeuCauPage() {
   const { studentId } = await requireActiveStudent();
-  const requests = await db.parentRequest.findMany({
-    where: { studentId },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  const [requests, sessions] = await Promise.all([
+    db.parentRequest.findMany({
+      where: { studentId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    getStudentSessions(studentId),
+  ]);
+
+  // Báo vắng: chỉ chọn buổi SẮP TỚI (chưa diễn ra).
+  const upcomingSessions = sessions
+    .filter((s) => !s.past)
+    .map((s) => ({
+      id: s.id,
+      label: `${new Date(s.date).toLocaleDateString("vi-VN", {
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+      })} · ${s.className}${s.lessonTitle ? ` — ${s.lessonTitle}` : ""}`,
+    }));
 
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-bold text-neutral-900">Yêu cầu</h1>
 
-      <RequestForm />
+      <RequestForm upcomingSessions={upcomingSessions} />
 
       <section>
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-700">

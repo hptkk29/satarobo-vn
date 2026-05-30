@@ -9,30 +9,42 @@ import { createParentRequest } from "../actions";
 const inputCls =
   "w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none";
 
-export function RequestForm() {
+export function RequestForm({
+  upcomingSessions = [],
+}: {
+  upcomingSessions?: { id: string; label: string }[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [type, setType] = useState("ABSENCE");
   const [content, setContent] = useState("");
   const [date, setDate] = useState("");
+  const [sessionId, setSessionId] = useState("");
 
   function submit() {
+    if (type === "ABSENCE" && upcomingSessions.length > 0 && !sessionId) {
+      toast.error("Vui lòng chọn buổi xin vắng");
+      return;
+    }
     startTransition(async () => {
       const res = await createParentRequest({
         type,
         content,
         preferredDate: date || null,
+        sessionId: type === "ABSENCE" ? sessionId || null : null,
       });
       if (res.ok) {
         toast.success("Đã gửi yêu cầu");
         setContent("");
         setDate("");
+        setSessionId("");
         router.refresh();
       } else toast.error(res.error ?? "Lỗi gửi yêu cầu");
     });
   }
 
-  const showDate = type === "ABSENCE" || type === "MAKEUP" || type === "RESERVE";
+  const isAbsence = type === "ABSENCE";
+  const showDate = (type === "MAKEUP" || type === "RESERVE") && !isAbsence;
 
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-4">
@@ -47,6 +59,25 @@ export function RequestForm() {
             </option>
           ))}
         </select>
+        {isAbsence && upcomingSessions.length > 0 && (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">
+              Buổi xin vắng
+            </span>
+            <select
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">— Chọn buổi —</option>
+              {upcomingSessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {showDate && (
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-500">

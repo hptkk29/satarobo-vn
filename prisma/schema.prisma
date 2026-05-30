@@ -2842,6 +2842,8 @@ model ParentRequest {
   type          ParentRequestType
   content       String              @db.Text
   preferredDate DateTime?
+  // Module QL học viên PHẦN 3 — buổi xin vắng (báo vắng ABSENCE); cột phẳng, không FK
+  sessionId     String?
   status        ParentRequestStatus @default(PENDING)
   response      String?             @db.Text
   handledById   String?
