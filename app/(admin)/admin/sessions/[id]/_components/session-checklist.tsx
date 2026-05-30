@@ -39,6 +39,7 @@ export function SessionChecklist({
     ckHomework: boolean;
     ckIncident: boolean;
     incidentNote: string;
+    lessonNotes: string;
   };
   canEdit: boolean;
 }) {
@@ -52,6 +53,7 @@ export function SessionChecklist({
   const [ckHomework, setHomework] = useState(stored.ckHomework);
   const [ckIncident, setIncident] = useState(stored.ckIncident);
   const [incidentNote, setIncidentNote] = useState(stored.incidentNote);
+  const [lessonNotes, setLessonNotes] = useState(stored.lessonNotes);
 
   function saveProgress() {
     startTransition(async () => {
@@ -65,6 +67,7 @@ export function SessionChecklist({
         ckHomework,
         ckIncident,
         incidentNote: incidentNote.trim(),
+        lessonNotes: lessonNotes.trim(),
       });
       if (res.ok) {
         toast.success("Đã lưu tiến trình");
@@ -146,6 +149,22 @@ export function SessionChecklist({
           className="mt-3 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
         />
       )}
+
+      {/* #15 — ghi chú buổi học của GV (lưu trước khi Hoàn tất) */}
+      <div className="mt-4">
+        <label className="mb-1 block text-sm font-semibold text-gray-700">
+          Ghi chú buổi học (GV)
+        </label>
+        <textarea
+          value={lessonNotes}
+          onChange={(e) => setLessonNotes(e.target.value)}
+          disabled={!canEdit || pending}
+          rows={3}
+          placeholder="Tóm tắt nội dung đã dạy, tình hình lớp, lưu ý cho buổi sau…"
+          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+        />
+        <p className="mt-1 text-xs text-gray-400">Nhớ bấm “Lưu tiến trình” trước khi “Hoàn tất buổi”.</p>
+      </div>
 
       {canEdit && (
         <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-100 pt-4">

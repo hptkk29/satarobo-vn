@@ -41,6 +41,7 @@ export default async function SessionDetailPage({ params }: Props) {
       ckHomework: true,
       ckIncident: true,
       incidentNote: true,
+      lessonNotes: true,
       lesson: { select: { title: true, order: true } },
       class: {
         select: {
@@ -228,6 +229,7 @@ export default async function SessionDetailPage({ params }: Props) {
           ckHomework: sess.ckHomework,
           ckIncident: sess.ckIncident,
           incidentNote: sess.incidentNote ?? "",
+          lessonNotes: sess.lessonNotes ?? "",
         }}
         canEdit={canEdit}
       />

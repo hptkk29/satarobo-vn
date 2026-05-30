@@ -148,6 +148,7 @@ const checklistSchema = z.object({
   ckHomework: z.boolean(),
   ckIncident: z.boolean(),
   incidentNote: z.string().trim().max(3000).optional().or(z.literal("")),
+  lessonNotes: z.string().trim().max(5000).optional().or(z.literal("")),
 });
 
 /** Lưu các bước thủ công + đồng bộ 2 bước suy ra. */
@@ -172,6 +173,7 @@ export async function updateSessionChecklist(input: unknown): Promise<Result> {
         ckHomework: parsed.data.ckHomework,
         ckIncident: parsed.data.ckIncident,
         incidentNote: parsed.data.incidentNote || null,
+        lessonNotes: parsed.data.lessonNotes || null,
         ckAttendance: derived.ckAttendance,
         ckFeedback: derived.ckFeedback,
       },

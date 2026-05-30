@@ -172,6 +172,26 @@ export default async function EditStudentPage({ params }: Props) {
 
   const absences = await getStudentAbsences(id);
 
+  // #14 — Lịch sử học tập: TẤT CẢ lớp/khoá đã & đang học + tiến độ buổi.
+  const historyRaw = await db.enrollment.findMany({
+    where: { studentId: id },
+    select: {
+      id: true,
+      status: true,
+      classId: true,
+      enrolledAt: true,
+      endedAt: true,
+      class: { select: { name: true, classCode: true, course: { select: { name: true } } } },
+    },
+    orderBy: { enrolledAt: "desc" },
+  });
+  const learningHistory = await Promise.all(
+    historyRaw.map(async (e) => ({
+      ...e,
+      sessions: await getStudentClassProgress(id, e.classId),
+    })),
+  );
+
   return (
     <div className="space-y-8">
       <div>
@@ -315,6 +335,57 @@ export default async function EditStudentPage({ params }: Props) {
                           Không bù
                         </span>
                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* #14 — Lịch sử học tập */}
+      {learningHistory.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
+            <LineChart className="h-5 w-5 text-[#7C3AED]" /> Lịch sử học tập
+          </h2>
+          <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
+                <tr>
+                  <th className="px-4 py-2">Lớp / Khoá</th>
+                  <th className="px-4 py-2 text-center">Buổi (đã học/tổng)</th>
+                  <th className="px-4 py-2 text-center">Trạng thái</th>
+                  <th className="px-4 py-2">Bắt đầu</th>
+                  <th className="px-4 py-2">Kết thúc</th>
+                </tr>
+              </thead>
+              <tbody>
+                {learningHistory.map((h) => (
+                  <tr key={h.id} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-4 py-2">
+                      <Link href={`/classes/${h.classId}/progress`} className="font-medium text-[#7C3AED] hover:underline">
+                        {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
+                      </Link>
+                      <span className="block text-xs text-neutral-400">{h.class.course.name}</span>
+                    </td>
+                    <td className="px-4 py-2 text-center tabular-nums text-neutral-700">
+                      {h.sessions.attended}/{h.sessions.total || "—"}
+                      {h.sessions.absentNoMakeup > 0 && (
+                        <span className="ml-1 text-xs text-rose-500">(vắng {h.sessions.absentNoMakeup})</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-600">
+                        {h.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 tabular-nums text-neutral-600">
+                      {h.enrolledAt ? new Date(h.enrolledAt).toLocaleDateString("vi-VN") : "—"}
+                    </td>
+                    <td className="px-4 py-2 tabular-nums text-neutral-600">
+                      {h.endedAt ? new Date(h.endedAt).toLocaleDateString("vi-VN") : "—"}
                     </td>
                   </tr>
                 ))}
