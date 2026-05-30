@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { WorkShift } from "@prisma/client";
-import { needsLeaveRequest } from "@/lib/shifts";
+import { needsLeaveRequest, emergencyLimitReached, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
 
 type Result = { ok: true; status?: string } | { ok: false; error: string };
 
@@ -33,6 +33,33 @@ export async function saveMyShifts(input: unknown): Promise<Result> {
 
   // Sát ngày (<2 ngày) → đánh dấu xin nghỉ khẩn để quản lý sắp người bù.
   const status = needsLeaveRequest(new Date(), workDate) ? "LEAVE_REQUESTED" : "REGISTERED";
+
+  // PHẦN 6 — chặn khẩn cấp quá 3 lần/tháng/nhân viên. Chỉ tính khi đây là MỘT
+  // emergency MỚI (ngày này chưa đang ở trạng thái khẩn cấp).
+  if (status === "LEAVE_REQUESTED") {
+    const monthStart = new Date(workDate.getFullYear(), workDate.getMonth(), 1);
+    const monthEnd = new Date(workDate.getFullYear(), workDate.getMonth() + 1, 1);
+    const existingToday = await db.shiftRegistration.findUnique({
+      where: { userId_date: { userId: session.user.id, date: workDate } },
+      select: { status: true },
+    });
+    const alreadyEmergency = existingToday?.status === "LEAVE_REQUESTED";
+    if (!alreadyEmergency) {
+      const used = await db.shiftRegistration.count({
+        where: {
+          userId: session.user.id,
+          status: "LEAVE_REQUESTED",
+          date: { gte: monthStart, lt: monthEnd },
+        },
+      });
+      if (emergencyLimitReached(used)) {
+        return {
+          ok: false,
+          error: `Đã dùng hết ${EMERGENCY_MONTHLY_LIMIT} lần đổi/nghỉ khẩn cấp trong tháng. Liên hệ quản lý.`,
+        };
+      }
+    }
+  }
 
   try {
     if (shifts.length === 0) {

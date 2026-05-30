@@ -3,6 +3,7 @@ import { CalendarCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { isManagerImportWindowOpen, lastDayOfMonth } from "@/lib/shifts";
 import { ShiftApproval } from "./_components/shift-approval";
 
 export const metadata = { title: "Duyệt ca (Excel) | Admin" };
@@ -22,6 +23,9 @@ export default async function DuyetCaPage() {
     select: { id: true, name: true },
   });
 
+  const now = new Date();
+  const importOpen = isManagerImportWindowOpen(now);
+
   return (
     <div className="max-w-3xl p-6">
       <div className="mb-4">
@@ -33,6 +37,16 @@ export default async function DuyetCaPage() {
           thức (chỉ lịch chính thức mới dùng tính công).
         </p>
       </div>
+
+      <p
+        className={`mb-4 rounded-lg px-3 py-2 text-xs ${
+          importOpen ? "bg-indigo-50 text-indigo-700" : "bg-amber-50 text-amber-700"
+        }`}
+      >
+        {importOpen
+          ? `Cửa sổ duyệt/import: trước ngày cuối tháng (${lastDayOfMonth(now)}). Hãy chốt lịch chính thức trước hạn.`
+          : `Đã đến ngày cuối tháng (${lastDayOfMonth(now)}) — quá hạn duyệt/import khuyến nghị. Quản lý/admin vẫn import được nhưng nên chốt sớm.`}
+      </p>
 
       {centers.length === 0 ? (
         <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">

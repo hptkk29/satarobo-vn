@@ -3,6 +3,7 @@ import { ClipboardEdit } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { isWeekendEditWindow } from "@/lib/shifts";
 import { AdjustRequestForm } from "./_components/request-form";
 
 export const metadata = { title: "Yêu cầu chỉnh công | Admin" };
@@ -40,6 +41,13 @@ export default async function YeuCauCongPage() {
           Bạn không tự sửa công — gửi yêu cầu kèm lý do, quản lý cơ sở duyệt (admin cấp cao duyệt mọi lúc).
         </p>
       </div>
+
+      {!isWeekendEditWindow(new Date()) && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          Khuyến nghị gửi yêu cầu chỉnh sửa vào Thứ 7 / Chủ nhật. Ngày thường vẫn gửi được, quản lý
+          sẽ xử lý theo lịch.
+        </p>
+      )}
 
       <AdjustRequestForm />
 

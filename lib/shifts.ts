@@ -27,19 +27,36 @@ export function shiftLabel(s: WorkShift): string {
   return SHIFT_DEFS[s].label;
 }
 
-// ── Quy tắc cửa sổ đăng ký (cảnh báo, không khoá cứng giai đoạn đầu) ─────────
+// ── Quy tắc cửa sổ đăng ký (Module Chấm công PHẦN 6) ────────────────────────
 
-/** Đăng ký THÁNG SAU: mở ngày 25–30 (hoặc cuối tháng) của tháng hiện tại. */
+/** Số lần KHẨN CẤP (đổi/nghỉ gấp ngoài lịch) tối đa / tháng / nhân viên. */
+export const EMERGENCY_MONTHLY_LIMIT = 3;
+
+/** Ngày cuối cùng của tháng chứa `now`. */
+export function lastDayOfMonth(now: Date): number {
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+}
+
+/** Nhân viên ĐỀ XUẤT ca THÁNG SAU: mở ngày 25–28 của tháng hiện tại. */
 export function isNextMonthWindowOpen(now: Date): boolean {
   const d = now.getDate();
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return d >= 25 && d <= lastDay;
+  return d >= 25 && d <= 28;
+}
+
+/** Quản lý DUYỆT + IMPORT: trước NGÀY CUỐI CÙNG của tháng (tự nhận 28/30/31). */
+export function isManagerImportWindowOpen(now: Date): boolean {
+  return now.getDate() < lastDayOfMonth(now);
 }
 
 /** Sửa trong tháng: cho phép vào Thứ 7 (6) / Chủ nhật (0). */
 export function isWeekendEditWindow(now: Date): boolean {
   const day = now.getDay();
   return day === 0 || day === 6;
+}
+
+/** Đã chạm trần khẩn cấp khi số lần khẩn cấp trong tháng ≥ giới hạn. */
+export function emergencyLimitReached(usedThisMonth: number): boolean {
+  return usedThisMonth >= EMERGENCY_MONTHLY_LIMIT;
 }
 
 /** Số ngày từ now tới ngày làm (âm nếu đã qua). */

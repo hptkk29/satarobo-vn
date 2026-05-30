@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isNextMonthWindowOpen, isWeekendEditWindow } from "@/lib/shifts";
+import { isNextMonthWindowOpen, isWeekendEditWindow, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
 import { MyShiftsCalendar } from "./_components/my-shifts-calendar";
 
 export const metadata = { title: "Lịch ca của tôi | Admin" };
@@ -52,6 +52,11 @@ export default async function MyShiftsPage({ searchParams }: Props) {
     regs.map((r) => [ymd(new Date(r.date)), { shifts: r.shifts, status: r.status, note: r.note ?? "" }]),
   );
 
+  // PHẦN 6 — số lần khẩn cấp đã dùng trong tháng đang xem.
+  const emergencyUsed = await db.shiftRegistration.count({
+    where: { userId: session.user.id, status: "LEAVE_REQUESTED", date: { gte: monthStart, lt: monthEnd } },
+  });
+
   // teachingByDate: ngày → danh sách tiết dạy {start,end,label}.
   const teachingByDate: Record<string, { start: string; end: string; label: string }[]> = {};
   for (const s of teachingSessions) {
@@ -99,7 +104,15 @@ export default async function MyShiftsPage({ searchParams }: Props) {
         </div>
       </div>
 
-      <p className="mb-4 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">{windowHint}</p>
+      <p className="mb-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">{windowHint}</p>
+      <p
+        className={`mb-4 rounded-lg px-3 py-2 text-xs ${
+          emergencyUsed >= EMERGENCY_MONTHLY_LIMIT ? "bg-rose-50 text-rose-700" : "bg-gray-50 text-gray-600"
+        }`}
+      >
+        Khẩn cấp (đổi/nghỉ gấp) tháng này: <b>{emergencyUsed}/{EMERGENCY_MONTHLY_LIMIT}</b>
+        {emergencyUsed >= EMERGENCY_MONTHLY_LIMIT && " — đã hết lượt, liên hệ quản lý."}
+      </p>
 
       <MyShiftsCalendar
         cells={cells}
