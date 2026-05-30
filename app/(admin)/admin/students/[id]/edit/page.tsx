@@ -5,6 +5,7 @@ import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { getStudentProgress } from "@/lib/progress";
+import { getStudentClassProgress } from "@/lib/students/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
 import { GeneratePdfButton } from "./_pdf-button";
 import { LifecycleActions } from "../../_components/lifecycle-actions";
@@ -165,6 +166,7 @@ export default async function EditStudentPage({ params }: Props) {
     activeEnrollments.map(async (e) => ({
       enrollment: e,
       progress: await getStudentProgress(id, e.class.id),
+      sessions: await getStudentClassProgress(id, e.class.id),
     })),
   );
 
@@ -203,11 +205,22 @@ export default async function EditStudentPage({ params }: Props) {
             Tiến độ học tập
           </h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {progressByClass.map(({ enrollment, progress }) => (
+            {progressByClass.map(({ enrollment, progress, sessions }) => (
               <div
                 key={enrollment.id}
                 className="rounded-xl border border-neutral-200 bg-white p-4"
               >
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-purple-50 px-3 py-2 text-sm">
+                  <span className="font-bold text-[#7C3AED]">
+                    Buổi {sessions.currentSession}/{sessions.total || "—"}
+                  </span>
+                  <span className="text-neutral-600">
+                    Đã học <b className="text-neutral-900">{sessions.attended}</b>
+                  </span>
+                  <span className="text-neutral-600">
+                    Còn lại <b className="text-neutral-900">{sessions.remaining}</b>
+                  </span>
+                </div>
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h3 className="font-bold text-neutral-900">

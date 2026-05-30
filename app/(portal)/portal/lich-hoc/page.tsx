@@ -1,12 +1,15 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { getStudentSessions } from "@/lib/portal/learning";
+import { getStudentSessions, getStudentProgressSummaries } from "@/lib/portal/learning";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Lịch học | Sata Robo" };
 
 export default async function LichHocPage() {
   const { studentId } = await requireActiveStudent();
-  const sessions = await getStudentSessions(studentId);
+  const [sessions, progress] = await Promise.all([
+    getStudentSessions(studentId),
+    getStudentProgressSummaries(studentId),
+  ]);
 
   const upcoming = sessions.filter((s) => !s.past);
   const past = sessions.filter((s) => s.past).reverse();
@@ -14,6 +17,29 @@ export default async function LichHocPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-neutral-900">Lịch học</h1>
+
+      {progress.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {progress.map((p) => (
+            <div
+              key={p.classId}
+              className="rounded-xl border border-orange-200 bg-orange-50 p-4"
+            >
+              <p className="text-sm font-semibold text-neutral-900">{p.courseName}</p>
+              <p className="text-xs text-neutral-500">{p.className}</p>
+              <p className="mt-2 text-lg font-bold text-orange-700">
+                Đang học buổi {p.currentSession}
+                <span className="text-sm font-medium text-neutral-500">
+                  {" "}/ tổng {p.total || "—"}
+                </span>
+              </p>
+              <p className="text-xs text-neutral-600">
+                Đã học {p.attended} · Còn lại {p.remaining}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Section title="Sắp tới">
         {upcoming.length === 0 ? (

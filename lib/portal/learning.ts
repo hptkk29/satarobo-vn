@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { getStudentClassProgress } from "@/lib/students/progress";
 
 // =============================================================================
 // PORTAL LEARNING DATA — Phase T2.2
@@ -45,6 +46,37 @@ export async function getStudentClasses(studentId: string): Promise<StudentClass
 async function classIdsFor(studentId: string): Promise<string[]> {
   const classes = await getStudentClasses(studentId);
   return classes.map((c) => c.id);
+}
+
+export type ClassProgressSummary = {
+  classId: string;
+  className: string;
+  courseName: string;
+  total: number;
+  attended: number;
+  remaining: number;
+  currentSession: number;
+};
+
+/** Module QL học viên PHẦN 1 — "Con đang học buổi X / tổng N" theo lịch thực. */
+export async function getStudentProgressSummaries(
+  studentId: string,
+): Promise<ClassProgressSummary[]> {
+  const classes = await getStudentClasses(studentId);
+  return Promise.all(
+    classes.map(async (c) => {
+      const p = await getStudentClassProgress(studentId, c.id);
+      return {
+        classId: c.id,
+        className: c.name,
+        courseName: c.courseName,
+        total: p.total,
+        attended: p.attended,
+        remaining: p.remaining,
+        currentSession: p.currentSession,
+      };
+    }),
+  );
 }
 
 export type SessionRow = {
