@@ -48,7 +48,8 @@ export default async function ChamCongPage({ searchParams }: Props) {
       orderBy: { checkedAt: "asc" },
     }),
     db.shiftRegistration.findMany({
-      where: { date: { gte: start, lt: end }, ...(centerScope ? { centerId: centerScope } : {}) },
+      // Chỉ lịch CHÍNH THỨC (APPROVED) mới dùng tính công (PHẦN 2).
+      where: { date: { gte: start, lt: end }, status: "APPROVED", ...(centerScope ? { centerId: centerScope } : {}) },
       select: { userId: true, shifts: true, user: { select: { name: true, centerId: true } } },
     }),
   ]);

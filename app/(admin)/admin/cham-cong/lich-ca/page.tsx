@@ -53,10 +53,10 @@ export default async function MyShiftsPage({ searchParams }: Props) {
   const todayStr = ymd(now);
 
   const windowHint = isNextMonthWindowOpen(now)
-    ? "Đang trong cửa sổ đăng ký THÁNG SAU (ngày 25–cuối tháng)."
+    ? "Đang trong cửa sổ ĐỀ XUẤT ca THÁNG SAU (ngày 25–28). Lịch bạn chọn là ĐỀ XUẤT — quản lý duyệt (import Excel) để chốt chính thức."
     : isWeekendEditWindow(now)
-      ? "Cuối tuần — được phép sửa lịch trong tháng."
-      : "Ngoài cửa sổ đăng ký chuẩn (25–30 cho tháng sau / cuối tuần để sửa). Vẫn lưu được nhưng nên đăng ký đúng hạn.";
+      ? "Cuối tuần — được phép sửa đề xuất ca trong tháng."
+      : "Ngoài cửa sổ đề xuất chuẩn (25–28 cho tháng sau / cuối tuần để sửa). Vẫn lưu được, lịch là ĐỀ XUẤT chờ quản lý duyệt.";
 
   return (
     <div className="max-w-4xl p-6">
