@@ -23,7 +23,7 @@ export type ClassFormValue = {
   endTime: string | null;
   maxStudents: number;
   minStudents: number;
-  status: "PLANNED" | "RECRUITING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+  status: "PLANNED" | "RECRUITING" | "PENDING_APPROVAL" | "ACTIVE" | "COMPLETED" | "CANCELLED";
   notes: string | null;
 };
 
@@ -62,6 +62,7 @@ interface TeacherOption {
 const STATUS_OPTIONS = [
   { value: "PLANNED", label: "Đang lên KH" },
   { value: "RECRUITING", label: "Tuyển sinh" },
+  { value: "PENDING_APPROVAL", label: "Chờ duyệt" },
   { value: "ACTIVE", label: "Đang dạy" },
   { value: "COMPLETED", label: "Hoàn thành" },
   { value: "CANCELLED", label: "Huỷ" },

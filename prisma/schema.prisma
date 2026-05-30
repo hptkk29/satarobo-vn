@@ -680,6 +680,7 @@ model Student {
 enum ClassStatus {
   PLANNED
   RECRUITING
+  PENDING_APPROVAL // chờ quản lý duyệt (sau khi sale gán đủ HS)
   ACTIVE
   COMPLETED
   CANCELLED
@@ -743,6 +744,12 @@ model Class {
   // Status (new) + legacy isActive flag (kept for back-compat)
   status   ClassStatus @default(PLANNED)
   isActive Boolean     @default(true)
+
+  // Module Quản lý lớp — workflow phê duyệt (approvedBy plain, không FK)
+  submittedForApprovalAt DateTime?
+  approvedAt             DateTime?
+  approvedById          String?
+  approvedByName        String?
 
   // Other
   notes     String?   @db.Text

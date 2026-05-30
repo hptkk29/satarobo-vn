@@ -10,6 +10,7 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
   PLANNED: { label: 'Đang lên KH', color: 'bg-gray-100 text-gray-700' },
   RECRUITING: { label: 'Tuyển sinh', color: 'bg-amber-100 text-amber-700' },
+  PENDING_APPROVAL: { label: 'Chờ duyệt', color: 'bg-orange-100 text-orange-700' },
   ACTIVE: { label: 'Đang dạy', color: 'bg-green-100 text-green-700' },
   COMPLETED: { label: 'Hoàn thành', color: 'bg-blue-100 text-blue-700' },
   CANCELLED: { label: 'Huỷ', color: 'bg-red-100 text-red-700' },

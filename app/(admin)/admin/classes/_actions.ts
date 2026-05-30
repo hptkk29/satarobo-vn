@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
-import { can, type Action } from "@/lib/auth/permissions";
+import { can, hasAnyRole, type Action } from "@/lib/auth/permissions";
 import { classCreateSchema } from "@/lib/validators/class";
 import {
   logClassAudit,
@@ -295,4 +295,104 @@ export async function deleteClass(id: string): Promise<ActionResult> {
   }
   revalidatePath("/classes");
   return {};
+}
+
+// ─── Module Quản lý lớp PHẦN 1 — workflow phê duyệt ─────────────────────────
+
+type WfResult = { ok: true } | { ok: false; error: string };
+
+const SUBMIT_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"] as const;
+const APPROVE_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"] as const;
+
+/** Sale/quản lý gửi lớp đi duyệt (PLANNED/RECRUITING → PENDING_APPROVAL). */
+export async function submitClassForApproval(classId: string): Promise<WfResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!hasAnyRole(session.user, [...SUBMIT_ROLES])) {
+    return { ok: false, error: "Không có quyền gửi duyệt lớp" };
+  }
+  const cls = await db.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { status: true, centerId: true, _count: { select: { enrollments: true } } },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+  if (cls.status !== "PLANNED" && cls.status !== "RECRUITING") {
+    return { ok: false, error: `Lớp đang ${cls.status}, không thể gửi duyệt` };
+  }
+  if (cls._count.enrollments === 0) {
+    return { ok: false, error: "Lớp chưa có học sinh nào — gán HS trước khi gửi duyệt" };
+  }
+  await db.class.update({
+    where: { id: classId },
+    data: { status: "PENDING_APPROVAL", submittedForApprovalAt: new Date() },
+  });
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+async function requireApprover(classId: string) {
+  const session = await auth();
+  if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
+  if (!hasAnyRole(session.user, [...APPROVE_ROLES])) {
+    return { ok: false as const, error: "Chỉ quản lý cơ sở / SUPER_ADMIN được duyệt" };
+  }
+  const cls = await db.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { status: true, centerId: true },
+  });
+  if (!cls) return { ok: false as const, error: "Lớp không tồn tại" };
+  // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ duyệt cơ sở mình.
+  const isSuper = hasAnyRole(session.user, ["SUPER_ADMIN"]);
+  if (!isSuper && cls.centerId !== session.user.centerId) {
+    return { ok: false as const, error: "Lớp không thuộc cơ sở của bạn" };
+  }
+  return { ok: true as const, session, cls };
+}
+
+/** Quản lý duyệt lớp (PENDING_APPROVAL → ACTIVE). */
+export async function approveClass(classId: string): Promise<WfResult> {
+  const gate = await requireApprover(classId);
+  if (!gate.ok) return gate;
+  if (gate.cls.status !== "PENDING_APPROVAL") {
+    return { ok: false, error: "Lớp không ở trạng thái chờ duyệt" };
+  }
+  await db.class.update({
+    where: { id: classId },
+    data: {
+      status: "ACTIVE",
+      approvedAt: new Date(),
+      approvedById: gate.session.user.id,
+      approvedByName: gate.session.user.name ?? gate.session.user.email ?? "Quản lý",
+    },
+  });
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+/** Quản lý trả lại lớp (PENDING_APPROVAL → RECRUITING) kèm lý do. */
+export async function rejectClass(classId: string, reason: string): Promise<WfResult> {
+  const gate = await requireApprover(classId);
+  if (!gate.ok) return gate;
+  if (gate.cls.status !== "PENDING_APPROVAL") {
+    return { ok: false, error: "Lớp không ở trạng thái chờ duyệt" };
+  }
+  const trimmed = reason.trim();
+  if (trimmed.length < 5) return { ok: false, error: "Nhập lý do trả lại (≥5 ký tự)" };
+  const stamp = new Date().toLocaleDateString("vi-VN");
+  await db.class.update({
+    where: { id: classId },
+    data: {
+      status: "RECRUITING",
+      submittedForApprovalAt: null,
+      notes: `[Trả lại ${stamp}] ${trimmed}`,
+    },
+  });
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/dashboard");
+  return { ok: true };
 }

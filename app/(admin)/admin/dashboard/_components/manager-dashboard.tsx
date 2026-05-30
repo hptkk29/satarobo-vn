@@ -69,11 +69,24 @@ export async function ManagerDashboard({
     select: { id: true, date: true, class: { select: { name: true, classCode: true, teacher: { select: { name: true } } } } },
   });
 
-  const [parentReqPending, mediaPending, leaveReqs] = await Promise.all([
+  const twoDaysAgo = new Date(now.getTime() - 2 * 86400000);
+  const [parentReqPending, mediaPending, leaveReqs, approvalOverdue] = await Promise.all([
     db.parentRequest.count({ where: { status: "PENDING", ...(centerScope ? { student: { centerId: centerScope } } : {}) } }),
     db.classSessionMedia.count({ where: { status: "PENDING" } }),
     db.shiftRegistration.count({
       where: { status: "LEAVE_REQUESTED", date: { gte: monthStart, lt: weekAhead }, ...(centerScope ? { centerId: centerScope } : {}) },
+    }),
+    // Lớp chờ duyệt quá 2 ngày.
+    db.class.findMany({
+      where: {
+        deletedAt: null,
+        status: "PENDING_APPROVAL",
+        submittedForApprovalAt: { lt: twoDaysAgo },
+        ...(centerScope ? { centerId: centerScope } : {}),
+      },
+      orderBy: { submittedForApprovalAt: "asc" },
+      take: 10,
+      select: { id: true, name: true, classCode: true, submittedForApprovalAt: true },
     }),
   ]);
 
@@ -123,6 +136,26 @@ export async function ManagerDashboard({
             ))}
           </ul>
           {incompleteSessions.length > 8 && <p className="mt-1 text-xs text-rose-500">…và {incompleteSessions.length - 8} buổi khác.</p>}
+        </div>
+      )}
+
+      {approvalOverdue.length > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p className="mb-2 text-sm font-bold text-amber-800">
+            ⏳ {approvalOverdue.length} lớp chờ duyệt quá 2 ngày
+          </p>
+          <ul className="space-y-1 text-sm">
+            {approvalOverdue.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                <Link href={`/classes/${c.id}/edit`} className="font-medium text-amber-900 hover:underline">
+                  {c.classCode ? `${c.classCode} · ` : ""}{c.name}
+                </Link>
+                <span className="text-xs text-amber-600">
+                  Gửi {c.submittedForApprovalAt ? new Date(c.submittedForApprovalAt).toLocaleDateString("vi-VN") : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

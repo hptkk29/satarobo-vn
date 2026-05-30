@@ -2,8 +2,9 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, hasAnyRole } from "@/lib/auth/permissions";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
+import { ClassApprovalActions } from "../_components/class-approval-actions";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -44,6 +45,7 @@ export default async function EditClassPage({ params }: Props) {
         minStudents: true,
         status: true,
         notes: true,
+        approvedByName: true,
       },
     }),
     db.course.findMany({
@@ -114,6 +116,20 @@ export default async function EditClassPage({ params }: Props) {
           📊 Tiến độ lớp
         </Link>
       </div>
+
+      <div className="mb-6">
+        <ClassApprovalActions
+          classId={cls.id}
+          status={cls.status}
+          canSubmit={hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"])}
+          canApprove={
+            hasAnyRole(session.user, ["SUPER_ADMIN"]) ||
+            (hasAnyRole(session.user, ["CENTER_MANAGER"]) && cls.centerId === session.user.centerId)
+          }
+          approvedByName={cls.approvedByName}
+        />
+      </div>
+
       <ClassForm
         cls={formValue}
         courses={courses}
