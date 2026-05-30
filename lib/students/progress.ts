@@ -97,7 +97,7 @@ export async function getStudentClassProgress(
     db.classSession.count({ where: { classId, date: { lte: todayEnd } } }),
     db.attendance.findMany({
       where: { studentId, session: { classId } },
-      select: { status: true },
+      select: { status: true, makeupStatus: true },
     }),
   ]);
 
@@ -106,6 +106,36 @@ export async function getStudentClassProgress(
     sessionsHeld,
     attendances: attendances.map((a) => ({
       status: a.status as AttendanceLiteStatus,
+      makeupStatus: a.makeupStatus as MakeupStatusLite,
     })),
   });
+}
+
+export interface StudentAbsence {
+  date: Date;
+  className: string;
+  status: AttendanceLiteStatus;
+  makeupStatus: MakeupStatusLite;
+  absenceReason: string | null;
+}
+
+/** Chi tiết buổi vắng (ABSENT/EXCUSED) của HS — ngày, lý do, trạng thái bù. */
+export async function getStudentAbsences(studentId: string): Promise<StudentAbsence[]> {
+  const rows = await db.attendance.findMany({
+    where: { studentId, status: { in: ["ABSENT", "EXCUSED"] } },
+    select: {
+      status: true,
+      makeupStatus: true,
+      absenceReason: true,
+      session: { select: { date: true, class: { select: { name: true } } } },
+    },
+    orderBy: { session: { date: "desc" } },
+  });
+  return rows.map((r) => ({
+    date: r.session.date,
+    className: r.session.class.name,
+    status: r.status as AttendanceLiteStatus,
+    makeupStatus: r.makeupStatus as MakeupStatusLite,
+    absenceReason: r.absenceReason,
+  }));
 }

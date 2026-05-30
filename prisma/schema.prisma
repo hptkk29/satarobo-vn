@@ -71,6 +71,13 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+// Module QL học viên PHẦN 2 — trạng thái học bù của buổi vắng.
+enum MakeupStatus {
+  NONE // không cần bù (mặc định)
+  NEEDS_MAKEUP // vắng cần xếp buổi bù
+  MADE_UP // đã học bù xong (tính như có mặt)
+}
+
 enum JobStatus {
   DRAFT
   OPEN
@@ -960,7 +967,13 @@ model Attendance {
   studentId String
   status    AttendanceStatus @default(PRESENT)
   note      String?
-  createdAt DateTime         @default(now())
+
+  // Module QL học viên PHẦN 2 — vắng có cấu trúc.
+  makeupStatus    MakeupStatus @default(NONE)
+  makeupSessionId String? // buổi đã học bù (set khi MADE_UP) — cột phẳng, không FK
+  absenceReason   String?  @db.Text // lý do phụ huynh xin vắng
+
+  createdAt DateTime @default(now())
 
   session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -968,6 +981,7 @@ model Attendance {
   @@unique([sessionId, studentId])
   @@index([sessionId])
   @@index([studentId])
+  @@index([studentId, makeupStatus])
 }
 
 // ─── Content & Marketing ─────────────────────────────────────────────────────

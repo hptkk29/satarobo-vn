@@ -5,7 +5,7 @@ import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { getStudentProgress } from "@/lib/progress";
-import { getStudentClassProgress } from "@/lib/students/progress";
+import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
 import { GeneratePdfButton } from "./_pdf-button";
 import { LifecycleActions } from "../../_components/lifecycle-actions";
@@ -170,6 +170,8 @@ export default async function EditStudentPage({ params }: Props) {
     })),
   );
 
+  const absences = await getStudentAbsences(id);
+
   return (
     <div className="space-y-8">
       <div>
@@ -272,6 +274,52 @@ export default async function EditStudentPage({ params }: Props) {
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {absences.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-bold text-neutral-900">
+            Chi tiết buổi vắng ({absences.length})
+          </h2>
+          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
+                <tr>
+                  <th className="px-4 py-2">Ngày</th>
+                  <th className="px-4 py-2">Lớp</th>
+                  <th className="px-4 py-2">Lý do</th>
+                  <th className="px-4 py-2">Học bù</th>
+                </tr>
+              </thead>
+              <tbody>
+                {absences.map((a, i) => (
+                  <tr key={i} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-4 py-2 tabular-nums text-neutral-700">
+                      {new Date(a.date).toLocaleDateString("vi-VN")}
+                    </td>
+                    <td className="px-4 py-2 text-neutral-700">{a.className}</td>
+                    <td className="px-4 py-2 text-neutral-600">{a.absenceReason ?? "—"}</td>
+                    <td className="px-4 py-2">
+                      {a.makeupStatus === "MADE_UP" ? (
+                        <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                          Đã bù
+                        </span>
+                      ) : a.makeupStatus === "NEEDS_MAKEUP" ? (
+                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                          Cần bù
+                        </span>
+                      ) : (
+                        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500">
+                          Không bù
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}

@@ -5,6 +5,7 @@ import { Check, X, Clock, FileText, Save } from "lucide-react";
 import { markAttendance } from "../_actions";
 
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+type MakeupStatus = "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
 
 interface StudentRow {
   studentId: string;
@@ -15,6 +16,8 @@ interface StudentRow {
     id: string;
     status: AttendanceStatus;
     note: string | null;
+    makeupStatus: MakeupStatus;
+    absenceReason: string | null;
   } | null;
 }
 
@@ -58,8 +61,12 @@ const STATUS_ORDER: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"
 interface RowState {
   status: AttendanceStatus;
   note: string;
+  makeupStatus: MakeupStatus;
+  absenceReason: string;
   dirty: boolean;
 }
+
+const isAbsent = (s: AttendanceStatus) => s === "ABSENT" || s === "EXCUSED";
 
 export function AttendanceGrid({ sessionId, rows }: Props) {
   const [state, setState] = useState<Record<string, RowState>>(() => {
@@ -68,6 +75,8 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
       init[r.studentId] = {
         status: r.existing?.status ?? "PRESENT",
         note: r.existing?.note ?? "",
+        makeupStatus: r.existing?.makeupStatus ?? "NONE",
+        absenceReason: r.existing?.absenceReason ?? "",
         dirty: false,
       };
     }
@@ -96,6 +105,22 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
     setFeedback(null);
   }
 
+  function setAbsenceReason(studentId: string, absenceReason: string) {
+    setState((prev) => ({
+      ...prev,
+      [studentId]: { ...prev[studentId], absenceReason, dirty: true },
+    }));
+    setFeedback(null);
+  }
+
+  function setMakeupStatus(studentId: string, makeupStatus: MakeupStatus) {
+    setState((prev) => ({
+      ...prev,
+      [studentId]: { ...prev[studentId], makeupStatus, dirty: true },
+    }));
+    setFeedback(null);
+  }
+
   function markAllPresent() {
     setState((prev) => {
       const next: Record<string, RowState> = {};
@@ -103,6 +128,8 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
         next[id] = {
           status: "PRESENT",
           note: r.note,
+          makeupStatus: r.makeupStatus,
+          absenceReason: r.absenceReason,
           dirty: r.status !== "PRESENT" || r.dirty,
         };
       }
@@ -123,6 +150,8 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
           studentId,
           status: r.status,
           note: r.note.trim() || null,
+          makeupStatus: isAbsent(r.status) ? r.makeupStatus : "NONE",
+          absenceReason: isAbsent(r.status) ? r.absenceReason.trim() || null : null,
         })),
       );
       if (res.error) {
@@ -267,6 +296,44 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                       disabled={pending}
                       className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 disabled:opacity-50"
                     />
+                    {s && isAbsent(s.status) && (
+                      <div className="mt-2 space-y-2 rounded-lg border border-red-100 bg-red-50/60 p-2">
+                        <input
+                          type="text"
+                          value={s.absenceReason}
+                          onChange={(e) => setAbsenceReason(r.studentId, e.target.value)}
+                          placeholder="Lý do phụ huynh xin vắng"
+                          disabled={pending}
+                          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-red-400 disabled:opacity-50"
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(
+                            [
+                              ["NONE", "Không bù"],
+                              ["NEEDS_MAKEUP", "Cần học bù"],
+                              ["MADE_UP", "Đã học bù"],
+                            ] as [MakeupStatus, string][]
+                          ).map(([value, label]) => {
+                            const active = s.makeupStatus === value;
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setMakeupStatus(r.studentId, value)}
+                                disabled={pending}
+                                className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${
+                                  active
+                                    ? "border-[#7C3AED] bg-[#7C3AED] text-white"
+                                    : "border-neutral-200 bg-white text-neutral-600 hover:border-[#7C3AED]"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

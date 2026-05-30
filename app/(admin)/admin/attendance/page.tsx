@@ -62,7 +62,13 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     studentName: string;
     studentPhone: string | null;
     enrollmentStatus: string;
-    existing: { id: string; status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED"; note: string | null } | null;
+    existing: {
+      id: string;
+      status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+      note: string | null;
+      makeupStatus: "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
+      absenceReason: string | null;
+    } | null;
   }> = [];
 
   if (sessionId) {
@@ -84,7 +90,14 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
           },
         },
         attendances: {
-          select: { id: true, studentId: true, status: true, note: true },
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
+            note: true,
+            makeupStatus: true,
+            absenceReason: true,
+          },
         },
       },
     });
@@ -105,7 +118,13 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
           studentPhone: enr.student.phone,
           enrollmentStatus: enr.status,
           existing: existing
-            ? { id: existing.id, status: existing.status, note: existing.note }
+            ? {
+                id: existing.id,
+                status: existing.status,
+                note: existing.note,
+                makeupStatus: existing.makeupStatus,
+                absenceReason: existing.absenceReason,
+              }
             : null,
         };
       });

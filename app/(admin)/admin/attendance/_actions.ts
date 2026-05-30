@@ -10,10 +10,16 @@ type ActionResult = { error?: string; saved?: number };
 const ATTENDANCE_STATUSES = ["PRESENT", "ABSENT", "LATE", "EXCUSED"] as const;
 type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+const MAKEUP_STATUSES = ["NONE", "NEEDS_MAKEUP", "MADE_UP"] as const;
+type MakeupStatus = (typeof MAKEUP_STATUSES)[number];
+
 const recordSchema = z.object({
   studentId: z.string().min(1),
   status: z.enum(ATTENDANCE_STATUSES),
   note: z.string().optional().nullable(),
+  // PHẦN 2 — vắng có cấu trúc.
+  makeupStatus: z.enum(MAKEUP_STATUSES).optional(),
+  absenceReason: z.string().optional().nullable(),
 });
 
 const payloadSchema = z.object({
@@ -33,7 +39,13 @@ async function requireTeacherOrAdmin() {
 
 export async function markAttendance(
   sessionId: string,
-  records: Array<{ studentId: string; status: string; note?: string | null }>,
+  records: Array<{
+    studentId: string;
+    status: string;
+    note?: string | null;
+    makeupStatus?: string;
+    absenceReason?: string | null;
+  }>,
 ): Promise<ActionResult> {
   try {
     await requireTeacherOrAdmin();
@@ -53,8 +65,12 @@ export async function markAttendance(
   // (atomicity matters when teacher hits Save with concurrent edits open).
   try {
     await db.$transaction(
-      data.records.map((r) =>
-        db.attendance.upsert({
+      data.records.map((r) => {
+        const absent = r.status === "ABSENT" || r.status === "EXCUSED";
+        // Có mặt → reset makeup/lý do vắng; vắng → giữ giá trị nhập (mặc định NONE).
+        const makeupStatus: MakeupStatus = absent ? (r.makeupStatus ?? "NONE") : "NONE";
+        const absenceReason = absent ? (r.absenceReason?.trim() || null) : null;
+        return db.attendance.upsert({
           where: {
             sessionId_studentId: {
               sessionId: data.sessionId,
@@ -66,13 +82,17 @@ export async function markAttendance(
             studentId: r.studentId,
             status: r.status as AttendanceStatus,
             note: r.note ?? null,
+            makeupStatus,
+            absenceReason,
           },
           update: {
             status: r.status as AttendanceStatus,
             note: r.note ?? null,
+            makeupStatus,
+            absenceReason,
           },
-        }),
-      ),
+        });
+      }),
     );
   } catch (err) {
     console.error("[markAttendance]", err);
