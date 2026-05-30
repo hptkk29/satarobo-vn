@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LogOut, ChevronDown, User, Search, Bell } from "lucide-react";
+import { LogOut, ChevronDown, User, Search } from "lucide-react";
+import { NotificationBell } from "@/components/admin/notification-bell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,14 +55,8 @@ export function Topbar({ userName, userRole }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Notifications bell (placeholder) */}
-        <button
-          type="button"
-          className="relative w-9 h-9 inline-flex items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
-          aria-label="Thông báo"
-        >
-          <Bell className="h-4 w-4" />
-        </button>
+        {/* Module nhắc việc — chuông thông báo việc cần xử lý */}
+        <NotificationBell />
 
         {/* User dropdown */}
         <DropdownMenu>

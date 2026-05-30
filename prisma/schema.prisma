@@ -2832,6 +2832,25 @@ enum NotificationAudience {
   CLASS
 }
 
+// Module nhắc việc PHẦN 3 — thông báo CHUÔNG cho NHÂN VIÊN (per-user, có đọc/chưa).
+// Khác Notification (broadcast phụ huynh). dedupeKey chống tạo trùng cùng 1 việc.
+model StaffNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  category  String // = PendingTaskType (loại việc)
+  title     String
+  body      String    @db.Text
+  href      String?
+  dedupeKey String // duy nhất theo user → chống trùng
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
 model Notification {
   id          String               @id @default(cuid())
   title       String
