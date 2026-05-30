@@ -84,6 +84,7 @@ export type Action =
   // --- HR attendance / chấm công QR (Phase NHÓM 4) ---
   | "hr_attendance:checkin"
   | "hr_attendance:view"
+  | "hr_attendance:adjust"
 
   // --- Blog / News (existing + expanded) ---
   | "blog:view"
@@ -285,6 +286,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
     "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
   "hr_attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
+  // Chỉnh bản ghi công + duyệt yêu cầu chỉnh công (giới hạn thời gian áp ở action).
+  "hr_attendance:adjust": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Blog / News ---
   "blog:view": [

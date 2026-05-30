@@ -2950,6 +2950,51 @@ model ShiftRegistration {
   @@index([userId, date])
 }
 
+// Module Chấm công PHẦN 4 — yêu cầu chỉnh công + log chỉnh sửa.
+enum AdjustStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model TimesheetAdjustmentRequest {
+  id           String       @id @default(cuid())
+  userId       String // người xin chỉnh
+  centerId     String? // cơ sở (để quản lý lọc phạm vi)
+  date         DateTime     @db.Date
+  reason       String       @db.Text // lý do / giải trình
+  requested    String? // nội dung đề nghị (vd giờ vào/ra đúng)
+  status       AdjustStatus @default(PENDING)
+  reviewedById String?
+  reviewedByName String?
+  reviewedAt   DateTime?
+  reviewNote   String?      @db.Text
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, date])
+  @@index([centerId, date])
+}
+
+// Log mọi lần chỉnh bản ghi công (ai, khi nào, từ→đến, lý do).
+model TimesheetEditLog {
+  id            String   @id @default(cuid())
+  userId        String // chủ bản ghi công
+  date          DateTime @db.Date
+  field         String // "CHECK_IN" | "CHECK_OUT"
+  fromValue     String? // giờ cũ (ISO) hoặc null
+  toValue       String? // giờ mới (ISO)
+  reason        String?  @db.Text
+  editedById    String?
+  editedByName  String?
+  requestId     String? // gắn yêu cầu chỉnh công (nếu duyệt từ yêu cầu)
+  createdAt     DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([createdAt])
+}
+
 // Module Quản lý lớp phần 4 — checklist mở/đóng cơ sở theo ngày.
 model CenterDayChecklist {
   id       String   @id @default(cuid())
