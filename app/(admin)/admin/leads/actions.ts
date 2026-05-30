@@ -650,3 +650,115 @@ export async function getLeadCloseDealOptions(leadId: string): Promise<{
     })),
   }
 }
+
+// ─── Module CRM & Lead PHẦN 1 — CRUD lead thủ công ───────────────────────────
+
+const PHONE_VN_RE = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/
+
+const manualLeadSchema = z.object({
+  parentName: z.string().trim().min(2, 'Tên phụ huynh tối thiểu 2 ký tự').max(100),
+  phone: z.string().trim().regex(PHONE_VN_RE, 'SĐT không hợp lệ'),
+  email: z.string().trim().email('Email không hợp lệ').optional().or(z.literal('')),
+  childName: z.string().trim().max(100).optional().or(z.literal('')),
+  childAge: z.coerce.number().int().min(3).max(18).optional().nullable(),
+  centerId: z.string().trim().optional().or(z.literal('')),
+  courseId: z.string().trim().optional().or(z.literal('')),
+  source: z.string().trim().min(1).max(100).optional().or(z.literal('')),
+  note: z.string().trim().max(2000).optional().or(z.literal('')),
+})
+
+/** Tạo 1 lead thủ công (thu ở sự kiện/trung tâm). Chống trùng theo SĐT. */
+export async function createLeadManual(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string; id?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:create')) return { ok: false, error: 'Không có quyền' }
+
+  const parsed = manualLeadSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  }
+  const d = parsed.data
+
+  const dup = await db.lead.findFirst({
+    where: { phone: d.phone, deletedAt: null },
+    select: { id: true },
+  })
+  if (dup) return { ok: false, error: 'SĐT đã tồn tại trong CRM' }
+
+  const { actorId, actorName } = getAuditActor(session)
+  const lead = await db.lead.create({
+    data: {
+      parentName: d.parentName,
+      phone: d.phone,
+      email: d.email || null,
+      childName: d.childName || null,
+      childAge: d.childAge ?? null,
+      centerId: d.centerId || null,
+      courseId: d.courseId || null,
+      source: d.source || 'Nhập tay',
+      note: d.note || null,
+      status: 'NEW',
+      activities: {
+        create: { actorId, actorName, type: 'NOTE', content: 'Tạo lead thủ công' },
+      },
+    },
+    select: { id: true },
+  })
+
+  revalidatePath('/leads')
+  return { ok: true, id: lead.id }
+}
+
+const updateLeadFieldsSchema = manualLeadSchema.partial()
+
+/** Sửa thông tin cơ bản của 1 lead. */
+export async function updateLeadFields(
+  leadId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const parsed = updateLeadFieldsSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  }
+  const d = parsed.data
+
+  const before = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, phone: true },
+  })
+  if (!before) return { ok: false, error: 'Lead không tồn tại' }
+
+  // Đổi SĐT → kiểm tra trùng.
+  if (d.phone && d.phone !== before.phone) {
+    const dup = await db.lead.findFirst({
+      where: { phone: d.phone, deletedAt: null, id: { not: leadId } },
+      select: { id: true },
+    })
+    if (dup) return { ok: false, error: 'SĐT đã tồn tại ở lead khác' }
+  }
+
+  await db.lead.update({
+    where: { id: leadId },
+    data: {
+      ...(d.parentName !== undefined ? { parentName: d.parentName } : {}),
+      ...(d.phone !== undefined ? { phone: d.phone } : {}),
+      ...(d.email !== undefined ? { email: d.email || null } : {}),
+      ...(d.childName !== undefined ? { childName: d.childName || null } : {}),
+      ...(d.childAge !== undefined ? { childAge: d.childAge ?? null } : {}),
+      ...(d.centerId !== undefined ? { centerId: d.centerId || null } : {}),
+      ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
+      ...(d.source !== undefined ? { source: d.source || null } : {}),
+      ...(d.note !== undefined ? { note: d.note || null } : {}),
+    },
+  })
+
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  return { ok: true }
+}

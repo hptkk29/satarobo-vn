@@ -40,6 +40,7 @@ export default async function LeadsPage({
   if (!session?.user) redirect('/login')
 
   const canViewAll = can(session.user, 'leads:view-all')
+  const canCreate = can(session.user, 'leads:create')
   const canViewOwn = can(session.user, 'leads:view-own')
   if (!canViewAll && !canViewOwn) redirect('/dashboard')
 
@@ -147,7 +148,7 @@ export default async function LeadsPage({
 
     return (
       <div>
-        <Header total={rawLeads.length} view={view} params={params} />
+        <Header total={rawLeads.length} view={view} params={params} canCreate={canCreate} />
         <FilterBar
           params={params}
           centers={centers}
@@ -209,7 +210,7 @@ export default async function LeadsPage({
 
   return (
     <div>
-      <Header total={total} view={view} params={params} />
+      <Header total={total} view={view} params={params} canCreate={canCreate} />
       <FilterBar
         params={params}
         centers={centers}
@@ -237,10 +238,12 @@ function Header({
   total,
   view,
   params,
+  canCreate,
 }: {
   total: number
   view: string
   params: SP
+  canCreate?: boolean
 }) {
   const qs = (v: 'table' | 'kanban') => {
     const u = new URLSearchParams()
@@ -285,6 +288,22 @@ function Header({
           Kanban
         </Link>
       </div>
+      {canCreate && (
+        <div className="flex items-center gap-2">
+          <Link
+            href="/leads/import"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Import Excel
+          </Link>
+          <Link
+            href="/leads/new"
+            className="rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+          >
+            + Thêm lead
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

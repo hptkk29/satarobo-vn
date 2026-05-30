@@ -588,6 +588,46 @@ const TEMPLATES: Template[] = [
       },
     ],
   },
+  {
+    // Module CRM & Lead PHẦN 1 — chuẩn file import lead (cột cố định).
+    filename: "mau-lead.xlsx",
+    sheetName: "Lead",
+    headers: [
+      "Tên phụ huynh",
+      "SĐT",
+      "Email",
+      "Tên con",
+      "Tuổi con",
+      "Cơ sở (CS1/CS2/để trống)",
+      "Khoá quan tâm",
+      "Nguồn",
+      "Ghi chú",
+    ],
+    sampleRows: [
+      {
+        "Tên phụ huynh": "Nguyễn Văn A",
+        "SĐT": "0901234567",
+        Email: "a@example.com",
+        "Tên con": "Nguyễn Bảo Bo",
+        "Tuổi con": 8,
+        "Cơ sở (CS1/CS2/để trống)": "CS1",
+        "Khoá quan tâm": "Lập trình Robot",
+        "Nguồn": "Sự kiện hè",
+        "Ghi chú": "Quan tâm lớp K-3",
+      },
+      {
+        "Tên phụ huynh": "Trần Thị B",
+        "SĐT": "0912345678",
+        Email: "",
+        "Tên con": "Trần Minh",
+        "Tuổi con": 10,
+        "Cơ sở (CS1/CS2/để trống)": "",
+        "Khoá quan tâm": "",
+        "Nguồn": "Walk-in",
+        "Ghi chú": "",
+      },
+    ],
+  },
 ];
 
 const outDir = path.join(process.cwd(), "public", "templates");
