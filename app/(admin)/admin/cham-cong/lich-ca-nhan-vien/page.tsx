@@ -1,16 +1,27 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Users, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users, AlertTriangle, MessageSquareWarning } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import type { Prisma, WorkShift } from "@prisma/client";
-import { SHIFT_DEFS, SHIFT_TONE } from "@/lib/shifts";
+import {
+  computeShiftAttendance,
+  formatVNTime,
+  formatRegisteredShifts,
+  type AttendanceTag,
+} from "@/lib/work-schedule";
 
-export const metadata = { title: "Lịch ca nhân viên | Admin" };
+export const metadata = { title: "Tổng hợp công ca | Admin" };
 export const dynamic = "force-dynamic";
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+
+const TAG_TONE: Record<AttendanceTag["tone"], string> = {
+  ok: "bg-emerald-100 text-emerald-700",
+  warn: "bg-amber-100 text-amber-700",
+  danger: "bg-rose-100 text-rose-700",
+};
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -23,15 +34,17 @@ function mondayOf(d: Date): Date {
 }
 
 interface Props {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; centerId?: string }>;
 }
 
 export default async function ManagerShiftsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:view")) redirect("/dashboard");
+  // Quản lý/HR xem theo phạm vi; nhân viên thường chỉ xem CHÍNH MÌNH.
+  const canViewAll = can(session.user, "hr_attendance:view");
+  if (!canViewAll && !can(session.user, "hr_attendance:checkin")) redirect("/dashboard");
 
-  const { date } = await searchParams;
+  const { date, centerId } = await searchParams;
   const anchor = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : new Date();
   const weekStart = mondayOf(anchor);
   const weekEnd = new Date(weekStart);
@@ -42,16 +55,28 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
     return ymd(d);
   });
 
-  // Phạm vi cơ sở: CM chỉ nhân viên cơ sở mình; SUPER_ADMIN/HR toàn bộ.
-  const centerScope = session.user.role === "CENTER_MANAGER" ? session.user.centerId : null;
-  const userWhere: Prisma.UserWhereInput = {
-    role: { not: "PARENT" },
-    isActive: true,
-    deletedAt: null,
-    ...(centerScope ? { centerId: centerScope } : {}),
-  };
+  // Phạm vi: CM (không super) → cơ sở mình; super/HR → tất cả (lọc tuỳ chọn);
+  // nhân viên thường → chỉ chính mình.
+  const isSuper = hasRole(session.user, "SUPER_ADMIN");
+  const isCM = hasRole(session.user, "CENTER_MANAGER");
+  const forcedCenter = isCM && !isSuper ? session.user.centerId : null;
+  const filterCenter = forcedCenter ?? (canViewAll ? centerId ?? null : null);
+  const selfOnly = !canViewAll;
 
-  const [staff, regs] = await Promise.all([
+  const centers = canViewAll && !forcedCenter
+    ? await db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
+    : [];
+
+  const userWhere: Prisma.UserWhereInput = selfOnly
+    ? { id: session.user.id }
+    : {
+        role: { not: "PARENT" },
+        isActive: true,
+        deletedAt: null,
+        ...(filterCenter ? { centerId: filterCenter } : {}),
+      };
+
+  const [staff, regs, checkins, adjustments] = await Promise.all([
     db.user.findMany({
       where: userWhere,
       orderBy: { name: "asc" },
@@ -60,62 +85,98 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
     db.shiftRegistration.findMany({
       where: {
         date: { gte: weekStart, lt: weekEnd },
-        ...(centerScope ? { user: { centerId: centerScope } } : {}),
+        status: "APPROVED", // chỉ lịch CHÍNH THỨC
+        ...(selfOnly ? { userId: session.user.id } : filterCenter ? { user: { centerId: filterCenter } } : {}),
       },
-      select: { userId: true, date: true, shifts: true, status: true, note: true },
+      select: { userId: true, date: true, shifts: true },
+    }),
+    db.employeeCheckin.findMany({
+      where: {
+        checkedAt: { gte: weekStart, lt: weekEnd },
+        ...(selfOnly ? { userId: session.user.id } : filterCenter ? { centerId: filterCenter } : {}),
+      },
+      select: { userId: true, type: true, checkedAt: true, withinGeofence: true },
+    }),
+    db.timesheetAdjustmentRequest.findMany({
+      where: {
+        date: { gte: weekStart, lt: weekEnd },
+        ...(selfOnly ? { userId: session.user.id } : filterCenter ? { centerId: filterCenter } : {}),
+      },
+      select: { userId: true, date: true, reason: true, status: true },
     }),
   ]);
 
-  // map[userId][dateStr] = reg
-  const map = new Map<string, Map<string, { shifts: WorkShift[]; status: string; note: string }>>();
+  // reg map[userId][dateStr] = shifts
+  const regMap = new Map<string, Map<string, WorkShift[]>>();
   for (const r of regs) {
     const ds = ymd(new Date(r.date));
-    if (!map.has(r.userId)) map.set(r.userId, new Map());
-    map.get(r.userId)!.set(ds, { shifts: r.shifts, status: r.status, note: r.note ?? "" });
+    if (!regMap.has(r.userId)) regMap.set(r.userId, new Map());
+    regMap.get(r.userId)!.set(ds, r.shifts);
   }
-
-  // Cảnh báo: ngày không ai đăng ký ca + xin nghỉ khẩn.
-  const understaffed = weekDates.filter(
-    (ds) => !regs.some((r) => ymd(new Date(r.date)) === ds && r.shifts.length > 0),
-  );
-  const leaveReqs = regs.filter((r) => r.status === "LEAVE_REQUESTED");
+  // checkin map[userId][dateStr] = {in,out,geo}
+  type Att = { checkIn: Date | null; checkOut: Date | null; geo: boolean };
+  const attMap = new Map<string, Map<string, Att>>();
+  for (const c of checkins) {
+    const ds = ymd(new Date(c.checkedAt));
+    if (!attMap.has(c.userId)) attMap.set(c.userId, new Map());
+    const day = attMap.get(c.userId)!;
+    const cur = day.get(ds) ?? { checkIn: null, checkOut: null, geo: false };
+    if (c.type === "CHECK_IN") cur.checkIn = c.checkedAt;
+    else cur.checkOut = c.checkedAt;
+    if (!c.withinGeofence) cur.geo = true;
+    day.set(ds, cur);
+  }
+  // adjustment map[userId][dateStr] = {reason,status}
+  const adjMap = new Map<string, Map<string, { reason: string; status: string }>>();
+  for (const a of adjustments) {
+    const ds = ymd(new Date(a.date));
+    if (!adjMap.has(a.userId)) adjMap.set(a.userId, new Map());
+    adjMap.get(a.userId)!.set(ds, { reason: a.reason, status: a.status });
+  }
 
   const prev = new Date(weekStart); prev.setDate(prev.getDate() - 7);
   const next = new Date(weekStart); next.setDate(next.getDate() + 7);
+  const linkBase = (d: Date) =>
+    `/cham-cong/lich-ca-nhan-vien?date=${ymd(d)}${filterCenter ? `&centerId=${filterCenter}` : ""}`;
 
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Users className="h-6 w-6 text-[#7C3AED]" /> Lịch ca nhân viên
+          <Users className="h-6 w-6 text-[#7C3AED]" /> Tổng hợp công ca
         </h1>
         <div className="flex items-center gap-2">
-          <Link href={`/cham-cong/lich-ca-nhan-vien?date=${ymd(prev)}`} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+          {centers.length > 0 && (
+            <form method="GET" className="flex items-center gap-1">
+              <input type="hidden" name="date" value={ymd(weekStart)} />
+              <select
+                name="centerId"
+                defaultValue={filterCenter ?? ""}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Tất cả cơ sở</option>
+                {centers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button type="submit" className="rounded-lg bg-gray-800 px-2 py-1.5 text-xs font-medium text-white">Lọc</button>
+            </form>
+          )}
+          <Link href={linkBase(prev)} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
             <ChevronLeft className="h-4 w-4" />
           </Link>
           <span className="text-sm font-semibold text-gray-700">
             Tuần {weekDates[0]} → {weekDates[6]}
           </span>
-          <Link href={`/cham-cong/lich-ca-nhan-vien?date=${ymd(next)}`} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+          <Link href={linkBase(next)} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
       </div>
 
-      {(understaffed.length > 0 || leaveReqs.length > 0) && (
-        <div className="mb-4 space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          {understaffed.length > 0 && (
-            <p className="flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4" /> Ngày chưa có ai đăng ký ca: {understaffed.join(", ")}
-            </p>
-          )}
-          {leaveReqs.length > 0 && (
-            <p className="flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4" /> {leaveReqs.length} lượt xin nghỉ khẩn cần sắp người bù.
-            </p>
-          )}
-        </div>
-      )}
+      <p className="mb-3 text-xs text-gray-500">
+        Ca chính thức (APPROVED) · giờ vào/ra (GMT+7) · trạng thái · <MessageSquareWarning className="inline h-3.5 w-3.5 text-amber-600" /> = có giải trình/yêu cầu chỉnh công.
+      </p>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="min-w-full divide-y divide-gray-100 text-sm">
@@ -134,30 +195,58 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
               <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">Không có nhân viên trong phạm vi.</td></tr>
             ) : (
               staff.map((u) => {
-                const row = map.get(u.id);
+                const uRegs = regMap.get(u.id);
+                const uAtt = attMap.get(u.id);
+                const uAdj = adjMap.get(u.id);
                 return (
-                  <tr key={u.id} className="hover:bg-gray-50/60">
+                  <tr key={u.id} className="align-top hover:bg-gray-50/60">
                     <td className="px-3 py-2">
                       <div className="font-medium text-gray-900">{u.name ?? u.email}</div>
-                      {!centerScope && u.center?.name && (
+                      {!filterCenter && u.center?.name && (
                         <div className="text-xs text-gray-400">{u.center.name}</div>
                       )}
                     </td>
                     {weekDates.map((ds) => {
-                      const reg = row?.get(ds);
+                      const shifts = uRegs?.get(ds) ?? [];
+                      const att = uAtt?.get(ds) ?? { checkIn: null, checkOut: null, geo: false };
+                      const adj = uAdj?.get(ds);
+                      const result = computeShiftAttendance({
+                        checkIn: att.checkIn,
+                        checkOut: att.checkOut,
+                        geofenceFlag: att.geo,
+                        registeredShifts: shifts,
+                      });
+                      const hasData = shifts.length > 0 || att.checkIn || att.checkOut || adj;
                       return (
-                        <td key={ds} className="px-2 py-2 text-center align-top">
-                          {reg?.status === "LEAVE_REQUESTED" && reg.shifts.length === 0 ? (
-                            <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">Nghỉ?</span>
+                        <td key={ds} className="px-2 py-2 text-center">
+                          {!hasData ? (
+                            <span className="text-gray-300">—</span>
                           ) : (
                             <div className="flex flex-col items-center gap-0.5">
-                              {reg?.shifts.map((s) => (
-                                <span key={s} className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${SHIFT_TONE[s]}`}>
-                                  {SHIFT_DEFS[s].label.replace("Ca ", "")}
+                              {shifts.length > 0 ? (
+                                <span className="text-[10px] font-semibold text-gray-700">
+                                  {formatRegisteredShifts(shifts)}
+                                </span>
+                              ) : (
+                                att.checkIn && <span className="text-[9px] text-amber-600">Chưa ĐK ca</span>
+                              )}
+                              {(att.checkIn || att.checkOut) && (
+                                <span className="text-[10px] tabular-nums text-gray-500">
+                                  {formatVNTime(att.checkIn)}–{formatVNTime(att.checkOut)}
+                                </span>
+                              )}
+                              {result.tags.slice(0, 1).map((t, k) => (
+                                <span key={k} className={`rounded px-1 text-[9px] font-semibold ${TAG_TONE[t.tone]}`}>
+                                  {t.label}
                                 </span>
                               ))}
-                              {reg?.status === "LEAVE_REQUESTED" && reg.shifts.length > 0 && (
-                                <span className="text-[9px] font-bold text-rose-600">nghỉ?</span>
+                              {adj && (
+                                <span
+                                  title={`Giải trình (${adj.status}): ${adj.reason}`}
+                                  className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1 text-[9px] font-semibold text-amber-700"
+                                >
+                                  <MessageSquareWarning className="h-3 w-3" /> giải trình
+                                </span>
                               )}
                             </div>
                           )}
@@ -171,6 +260,12 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
           </tbody>
         </table>
       </div>
+
+      {!selfOnly && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-gray-400">
+          <AlertTriangle className="h-3.5 w-3.5" /> Chỉ lịch chính thức (đã duyệt qua import Excel) mới tính công.
+        </p>
+      )}
     </div>
   );
 }

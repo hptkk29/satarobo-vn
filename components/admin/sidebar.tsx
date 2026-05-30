@@ -104,7 +104,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
       { label: "Duyệt chỉnh công", href: "/cham-cong/chinh-cong", icon: ClipboardEdit, perm: ["hr_attendance:adjust"] },
-      { label: "Lịch ca nhân viên", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:view"] },
+      { label: "Tổng hợp công ca", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:checkin"] },
       { label: "Duyệt ca (Excel)", href: "/cham-cong/duyet-ca", icon: CalendarCheck, perm: ["hr_attendance:view"] },
       { label: "Checklist cơ sở", href: "/cham-cong/checklist-co-so", icon: ClipboardCheck, perm: ["hr_attendance:view"] },
       { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
