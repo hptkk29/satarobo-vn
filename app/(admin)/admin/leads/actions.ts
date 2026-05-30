@@ -8,7 +8,7 @@ import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
-import { autoAssignNewLead, manualAssignLead } from '@/lib/lead/auto-assign'
+import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { genStudentCode } from '@/lib/codegen'
 
 const statusSchema = z.enum([
@@ -838,5 +838,127 @@ export async function setCenterAssignModeAction(
   })
 
   revalidatePath('/leads/cau-hinh-chia')
+  return { ok: true }
+}
+
+// ─── Module CRM & Lead PHẦN 3 — chuyển lead + note bàn giao bắt buộc ──────────
+
+const transferSchema = z.object({
+  leadId: z.string().min(1),
+  toSaleId: z.string().trim().optional().or(z.literal('')),
+  toCenterId: z.string().trim().optional().or(z.literal('')),
+  handoverNote: z.string().trim().min(5, 'Bắt buộc ghi đã tư vấn gì cho khách (≥5 ký tự)').max(2000),
+  reason: z.string().trim().max(500).optional().or(z.literal('')),
+})
+
+export async function transferLead(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const parsed = transferSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  }
+  const d = parsed.data
+
+  const lead = await db.lead.findFirst({
+    where: { id: d.leadId, deletedAt: null },
+    select: { id: true, assignedToId: true, centerId: true, status: true },
+  })
+  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+
+  // SALE (chỉ view-own) chỉ tự chuyển lead của mình.
+  if (!can(session.user, 'leads:view-all') && lead.assignedToId !== session.user.id) {
+    return { ok: false, error: 'Chỉ chuyển được lead của bạn' }
+  }
+
+  const toCenterId = d.toCenterId || lead.centerId || null
+  const centerChanged = !!toCenterId && toCenterId !== lead.centerId
+
+  // Xác định sale nhận.
+  let toSaleId: string | null = null
+  if (d.toSaleId) {
+    const sale = await db.user.findFirst({
+      where: { id: d.toSaleId, role: 'SALES_CSM', deletedAt: null },
+      select: { id: true },
+    })
+    if (!sale) return { ok: false, error: 'Sale nhận không hợp lệ' }
+    toSaleId = sale.id
+  } else if (centerChanged && toCenterId) {
+    // Đổi cơ sở, không chỉ định người → chia theo chế độ cơ sở mới.
+    toSaleId = await reassignForCenter(toCenterId, lead.assignedToId)
+  } else {
+    return { ok: false, error: 'Chọn sale mới hoặc cơ sở mới để chuyển' }
+  }
+
+  const { actorId, actorName } = getAuditActor(session)
+  const [toSale, fromCenter, toCenter] = await Promise.all([
+    toSaleId ? db.user.findUnique({ where: { id: toSaleId }, select: { name: true } }) : null,
+    lead.centerId ? db.center.findUnique({ where: { id: lead.centerId }, select: { name: true } }) : null,
+    toCenterId ? db.center.findUnique({ where: { id: toCenterId }, select: { name: true } }) : null,
+  ])
+
+  await db.$transaction(async (tx) => {
+    await tx.lead.update({
+      where: { id: lead.id },
+      data: {
+        centerId: toCenterId,
+        assignedToId: toSaleId,
+        handoverNote: d.handoverNote,
+        ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
+      },
+    })
+
+    await tx.leadActivity.create({
+      data: {
+        leadId: lead.id,
+        actorId,
+        actorName,
+        type: 'HANDOVER',
+        content: d.handoverNote,
+        metadata: {
+          fromSaleId: lead.assignedToId,
+          toSaleId,
+          fromCenterId: lead.centerId,
+          toCenterId,
+          reason: d.reason || null,
+        },
+      },
+    })
+
+    await tx.leadTransfer.create({
+      data: {
+        leadId: lead.id,
+        fromCenterId: lead.centerId,
+        toCenterId,
+        fromSaleId: lead.assignedToId,
+        toSaleId,
+        note: d.handoverNote,
+        reason: d.reason || null,
+        transferredById: actorId,
+        transferredByName: actorName,
+      },
+    })
+
+    await logLeadAudit({
+      leadId: lead.id,
+      action: 'ASSIGN',
+      actorId,
+      actorName,
+      oldValues: { assignedToId: lead.assignedToId, centerId: lead.centerId },
+      newValues: { assignedToId: toSaleId, centerId: toCenterId },
+      changedFields: ['assignedToId', 'centerId'],
+      tx,
+    })
+  })
+
+  void toSale
+  void fromCenter
+  void toCenter
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${lead.id}`)
   return { ok: true }
 }

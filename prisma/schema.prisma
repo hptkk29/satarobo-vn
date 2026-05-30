@@ -532,6 +532,7 @@ model Lead {
   userAgent        String?    @db.Text
   consentMarketing Boolean    @default(false)
   note             String?    @db.Text
+  handoverNote     String?    @db.Text // Module CRM PHẦN 3 — note bàn giao gần nhất (nổi bật)
   deletedAt        DateTime?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
@@ -2110,6 +2111,25 @@ model LeadAssignmentConfig {
   mode      LeadAssignMode @default(ROUND_ROBIN)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
+}
+
+// Module CRM & Lead PHẦN 3/4 — log chuyển lead (sale/cơ sở) + bàn giao.
+model LeadTransfer {
+  id                String   @id @default(cuid())
+  leadId            String
+  fromCenterId      String?
+  toCenterId        String?
+  fromSaleId        String?
+  toSaleId          String?
+  note              String   @db.Text // nội dung bàn giao "đã tư vấn gì"
+  reason            String? // lý do chuyển (tuỳ chọn)
+  transferredById   String?
+  transferredByName String
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([leadId])
+  @@index([fromCenterId, toCenterId])
 }
 
 enum LeadTaskStatus {

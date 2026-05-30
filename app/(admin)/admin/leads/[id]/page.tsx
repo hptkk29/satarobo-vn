@@ -10,6 +10,7 @@ import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { ReassignButton } from "./_components/reassign-button";
 import { AssignSelect } from "./_components/assign-select";
+import { TransferDialog } from "./_components/transfer-dialog";
 import { CloseDealButton } from "./_components/close-deal-button";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
@@ -70,6 +71,19 @@ export default async function LeadDetailPage({ params }: Props) {
         select: { id: true, name: true },
       })
     : [];
+
+  // PHẦN 3 — chuyển lead: sale tự chuyển (cần leads:edit). Mọi cơ sở + mọi sale.
+  const canTransfer = can(session.user, "leads:edit");
+  const [transferCenters, transferSales] = canTransfer
+    ? await Promise.all([
+        db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
+        db.user.findMany({
+          where: { role: "SALES_CSM", isActive: true, deletedAt: null },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, centerId: true },
+        }),
+      ])
+    : [[], []];
   const dealClosable =
     canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
 
@@ -129,9 +143,26 @@ export default async function LeadDetailPage({ params }: Props) {
               current={lead.assignedToId}
             />
           )}
+          {canTransfer && (
+            <TransferDialog
+              leadId={lead.id}
+              centers={transferCenters}
+              sales={transferSales}
+              currentCenterId={lead.centerId}
+              currentSaleId={lead.assignedToId}
+            />
+          )}
           {canAssign && <ReassignButton leadId={lead.id} />}
         </div>
       </div>
+
+      {/* PHẦN 3 — note bàn giao nổi bật */}
+      {lead.handoverNote && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Bàn giao — đã tư vấn</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{lead.handoverNote}</p>
+        </div>
+      )}
 
       {/* Info grid */}
       <dl className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-4">

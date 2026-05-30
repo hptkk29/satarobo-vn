@@ -184,6 +184,22 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
   return { ok: true, assignedToId: target, centerId, mode };
 }
 
+/**
+ * Chuyển lead sang cơ sở mới → chia theo CHẾ ĐỘ cơ sở mới (PHẦN 3). KHÔNG bị
+ * khoá tương tác (đây là chuyển có chủ đích). Trả về sale được chọn (hoặc null
+ * nếu MANUAL / không có sale).
+ */
+export async function reassignForCenter(
+  centerId: string,
+  excludeSaleId?: string | null,
+): Promise<string | null> {
+  const mode = await getCenterMode(centerId);
+  if (mode === "MANUAL") return null;
+  let stats = (await getSaleStats(centerId)).filter((s) => s.id !== excludeSaleId);
+  if (stats.length === 0) stats = (await getSaleStats(null)).filter((s) => s.id !== excludeSaleId);
+  return mode === "CLOSE_RATE" ? pickByCloseRate(stats) : pickRoundRobin(stats);
+}
+
 /** Quản lý gán tay 1 lead cho 1 sale cụ thể. */
 export async function manualAssignLead(
   leadId: string,
