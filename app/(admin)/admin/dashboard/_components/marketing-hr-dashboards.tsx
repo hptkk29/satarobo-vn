@@ -9,7 +9,7 @@ function startOfWeek(now: Date): Date {
 }
 
 // Đợt 3C #5 — Dashboard MARKETING (nguồn lead, hiệu quả kênh tóm tắt).
-export async function MarketingDashboard({ name }: { name: string }) {
+export async function MarketingDashboard({ name, embedded = false }: { name: string; embedded?: boolean }) {
   const now = new Date();
   const weekStart = startOfWeek(now);
 
@@ -31,7 +31,7 @@ export async function MarketingDashboard({ name }: { name: string }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Marketing</h1>
+      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Marketing</h1>}
       <div className="grid grid-cols-3 gap-4">
         <Stat label="Lead mới tuần này" value={newThisWeek} />
         <Stat label="Tổng lead" value={total} />
@@ -64,7 +64,7 @@ export async function MarketingDashboard({ name }: { name: string }) {
 }
 
 // Đợt 3C #5 — Dashboard HR (nhân sự, tuyển dụng, đăng ký ca).
-export async function HrDashboard({ name }: { name: string }) {
+export async function HrDashboard({ name, embedded = false }: { name: string; embedded?: boolean }) {
   const now = new Date();
   const weekStart = startOfWeek(now);
   const weekEnd = new Date(weekStart);
@@ -79,7 +79,7 @@ export async function HrDashboard({ name }: { name: string }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Nhân sự</h1>
+      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Nhân sự</h1>}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label="Nhân viên đang làm" value={activeStaff} href="/nhan-su" icon={<Users className="h-5 w-5" />} />
         <Stat label="Tuyển dụng đang mở" value={openJobs} href="/jobs" icon={<Briefcase className="h-5 w-5" />} />

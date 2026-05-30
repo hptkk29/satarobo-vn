@@ -5,7 +5,7 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { buildWeeklySchedule, WEEKDAY_LABELS, type TeacherClassSlot } from "@/lib/teachers/schedule";
 
 // Đợt 3C — Dashboard GIÁO VIÊN. KHÔNG doanh thu/lead/quản trị.
-export async function TeacherDashboard({ userId, name }: { userId: string; name: string }) {
+export async function TeacherDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
   const now = new Date();
   const todayWd = now.getDay(); // 0=CN..6=T7
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -47,7 +47,7 @@ export async function TeacherDashboard({ userId, name }: { userId: string; name:
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Chào {name || "thầy/cô"} 👋</h1>
+      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "thầy/cô"} 👋</h1>}
 
       {/* Lớp hôm nay */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">

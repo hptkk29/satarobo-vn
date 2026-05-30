@@ -5,7 +5,7 @@ import type { LeadStatus } from "@prisma/client";
 import { KANBAN_COLUMNS, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 
 // Đợt 3C — Dashboard SALES_CSM. Chỉ lead/việc CỦA TÔI. KHÔNG tài chính/quản trị.
-export async function SalesDashboard({ userId, name }: { userId: string; name: string }) {
+export async function SalesDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
   const now = new Date();
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dayEnd = new Date(dayStart);
@@ -51,7 +51,7 @@ export async function SalesDashboard({ userId, name }: { userId: string; name: s
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋</h1>
+      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋</h1>}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DashStat label="Lead của tôi" value={totalMine} href="/leads" icon={<Users className="h-5 w-5" />} />

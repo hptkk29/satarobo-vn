@@ -9,7 +9,7 @@ function vnd(n: number): string {
 }
 
 // Đợt 3C — Dashboard KẾ TOÁN. Tài chính toàn hệ thống. KHÔNG pipeline/điểm danh/giáo trình.
-export async function AccountantDashboard({ name }: { name: string }) {
+export async function AccountantDashboard({ name, embedded = false }: { name: string; embedded?: boolean }) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const overdueBefore = new Date(now.getTime() - 7 * 86400000); // PENDING_PAYMENT > 7 ngày
@@ -45,7 +45,7 @@ export async function AccountantDashboard({ name }: { name: string }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Tài chính</h1>
+      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Tài chính</h1>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBig label="Đã thu (tổng)" value={vnd(paid)} tone="ok" icon={<Wallet className="h-5 w-5" />} />
