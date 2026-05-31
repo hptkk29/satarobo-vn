@@ -10,6 +10,9 @@ import {
   type AssignmentInput,
 } from "@/lib/validators/assignment";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { RUBRIC_CRITERION_KEYS, RUBRIC_LEVEL_KEYS, rubricToScore } from "@/lib/rubric/criteria";
+import { enqueueEmail } from "@/lib/email/queue";
+import type { RubricCriterion, RubricLevel } from "@prisma/client";
 
 type Result<T = undefined> =
   | { ok: true; data?: T }
@@ -425,6 +428,99 @@ export async function gradeSubmission(
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
     };
   }
+  revalidatePath(`/assignments/${submission.assignmentId}/edit`);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Cụm C3 — Chấm bài theo rubric robotics (6 tiêu chí, nhận xét BẮT BUỘC)
+// ──────────────────────────────────────────────────────────────────────────
+
+const RubricGradeSchema = z.object({
+  submissionId: z.string().min(1),
+  scores: z
+    .array(
+      z.object({
+        criterion: z.enum(RUBRIC_CRITERION_KEYS as [string, ...string[]]),
+        level: z.enum(RUBRIC_LEVEL_KEYS as [string, ...string[]]),
+      }),
+    )
+    .length(RUBRIC_CRITERION_KEYS.length, "Phải chấm đủ 6 tiêu chí"),
+  feedback: z.string().trim().min(5, "Nhận xét là bắt buộc (tối thiểu 5 ký tự)"),
+  sendEmail: z.boolean().optional(),
+});
+
+export async function gradeSubmissionRubric(
+  input: z.infer<typeof RubricGradeSchema>,
+): Promise<Result> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const parsed = RubricGradeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  // Mỗi tiêu chí chỉ chấm 1 lần.
+  const seen = new Set(data.scores.map((s) => s.criterion));
+  if (seen.size !== RUBRIC_CRITERION_KEYS.length) {
+    return { ok: false, error: "Tiêu chí bị trùng hoặc thiếu" };
+  }
+
+  const submission = await db.assignmentSubmission.findUnique({
+    where: { id: data.submissionId },
+    include: {
+      assignment: { select: { title: true } },
+      student: { select: { name: true, parentUser: { select: { email: true, name: true } } } },
+    },
+  });
+  if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  if (submission.status === "NOT_SUBMITTED") {
+    return { ok: false, error: "HS chưa nộp — không thể chấm" };
+  }
+
+  const score = rubricToScore(
+    data.scores.map((s) => ({ criterion: s.criterion as RubricCriterion, level: s.level as RubricLevel })),
+  );
+  const graderEmployeeId = await resolveEmployeeId(gate.userId);
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.submissionRubricScore.deleteMany({ where: { submissionId: data.submissionId } });
+      await tx.submissionRubricScore.createMany({
+        data: data.scores.map((s) => ({
+          submissionId: data.submissionId,
+          criterion: s.criterion as RubricCriterion,
+          level: s.level as RubricLevel,
+        })),
+      });
+      await tx.assignmentSubmission.update({
+        where: { id: data.submissionId },
+        data: {
+          score: score ?? undefined,
+          feedback: data.feedback,
+          status: "GRADED",
+          gradedAt: new Date(),
+          gradedById: graderEmployeeId,
+        },
+      });
+    });
+  } catch (err) {
+    return { ok: false, error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+
+  // Email tuỳ chọn cho phụ huynh (A2 — chỉ enqueue, không gửi ngay).
+  if (data.sendEmail && submission.student.parentUser?.email) {
+    await enqueueEmail({
+      to: submission.student.parentUser.email,
+      toName: submission.student.parentUser.name ?? undefined,
+      subject: `Kết quả chấm bài: ${submission.assignment.title} — ${submission.student.name}`,
+      bodyText: `Bài "${submission.assignment.title}" của bé ${submission.student.name} đã được chấm.\nĐiểm: ${score ?? "—"}/10.\nNhận xét: ${data.feedback}\nXem chi tiết rubric tại cổng học viên.`,
+      context: { type: "RUBRIC_GRADED", id: data.submissionId },
+    }).catch(() => {});
+  }
+
   revalidatePath(`/assignments/${submission.assignmentId}/edit`);
   return { ok: true };
 }

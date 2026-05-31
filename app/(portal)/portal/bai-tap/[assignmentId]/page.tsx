@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, FileText } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getAssignmentDetail } from "@/lib/portal/learning";
+import { RUBRIC_CRITERIA, RUBRIC_LEVELS, criterionLabel } from "@/lib/rubric/criteria";
 import { SubmitForm } from "./_components/submit-form";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +87,31 @@ export default async function AssignmentDetailPage({ params }: Props) {
           {sub?.feedback && (
             <p className="mt-1 text-sm text-emerald-700">Nhận xét: {sub.feedback}</p>
           )}
+        </div>
+      )}
+
+      {graded && sub?.rubricScores && sub.rubricScores.length > 0 && (
+        <div className="rounded-xl border border-neutral-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-700">
+            Đánh giá theo tiêu chí (rubric)
+          </h2>
+          <ul className="space-y-2">
+            {(() => {
+              const byCrit = new Map(sub.rubricScores.map((r) => [r.criterion, r.level]));
+              return RUBRIC_CRITERIA.filter((c) => byCrit.has(c.key)).map((c) => {
+                const lvl = byCrit.get(c.key);
+                const meta = RUBRIC_LEVELS.find((l) => l.key === lvl);
+                return (
+                  <li key={c.key} className="flex items-center justify-between border-b border-neutral-100 pb-2 text-sm last:border-0">
+                    <span className="text-neutral-700">{criterionLabel(c.key)}</span>
+                    <span className={`font-semibold ${meta?.color ?? "text-neutral-600"}`}>
+                      {meta?.label ?? lvl} ({meta?.points ?? "—"}/4)
+                    </span>
+                  </li>
+                );
+              });
+            })()}
+          </ul>
         </div>
       )}
 

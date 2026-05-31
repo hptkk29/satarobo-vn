@@ -1822,6 +1822,8 @@ model AssignmentSubmission {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  rubricScores SubmissionRubricScore[]
+
   @@unique([assignmentId, studentId])
   @@index([status, assignmentId])
   @@index([studentId])
@@ -3478,4 +3480,37 @@ model LeadAssignmentHistory {
   @@index([leadId])
   @@index([fromUserId])
   @@index([toUserId])
+}
+
+// =============================================================================
+// Cụm C3 — Rubric chấm bài robotics (6 tiêu chí, 4 mức)
+// =============================================================================
+
+enum RubricCriterion {
+  ANALYSIS // Phân tích vấn đề
+  DESIGN // Thiết kế & lắp ráp
+  PROGRAMMING // Lập trình
+  TESTING // Kiểm thử & gỡ lỗi
+  CREATIVITY // Sáng tạo
+  PRESENTATION // Trình bày & hợp tác
+}
+
+enum RubricLevel {
+  NEED_SUPPORT // 1 — cần hỗ trợ
+  BASIC // 2 — cơ bản
+  GOOD // 3 — tốt
+  EXCELLENT // 4 — xuất sắc
+}
+
+model SubmissionRubricScore {
+  id           String          @id @default(cuid())
+  submissionId String
+  criterion    RubricCriterion
+  level        RubricLevel
+  createdAt    DateTime        @default(now())
+
+  submission AssignmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, criterion])
+  @@index([submissionId])
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getStudentClassProgress } from "@/lib/students/progress";
 import { getClassExpectedEndDate, NEAR_END_THRESHOLD } from "@/lib/students/renewal";
@@ -377,6 +378,7 @@ export type AssignmentDetail = {
     fileName: string | null;
     score: number | null;
     feedback: string | null;
+    rubricScores: { criterion: RubricCriterion; level: RubricLevel }[];
   } | null;
 };
 
@@ -409,6 +411,7 @@ export async function getAssignmentDetail(
           fileName: true,
           score: true,
           feedback: true,
+          rubricScores: { select: { criterion: true, level: true } },
         },
         take: 1,
       },

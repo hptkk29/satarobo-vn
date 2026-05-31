@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, FileText, Gavel, X } from "lucide-react";
+import { ClipboardCheck, FileText, Gavel, ListChecks, X } from "lucide-react";
 import { DocumentUploader, type UploadedFile } from "@/components/admin/DocumentUploader";
-import { gradeSubmission, recordSubmission } from "../_actions";
+import { gradeSubmission, gradeSubmissionRubric, recordSubmission } from "../_actions";
+import { RUBRIC_CRITERIA, RUBRIC_LEVELS } from "@/lib/rubric/criteria";
 
 type Status = "NOT_SUBMITTED" | "SUBMITTED" | "LATE" | "GRADED";
 
@@ -51,6 +52,7 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
   const statusInfo = STATUS_INFO[row.status];
   const [recordOpen, setRecordOpen] = useState(false);
   const [gradeOpen, setGradeOpen] = useState(false);
+  const [rubricOpen, setRubricOpen] = useState(false);
 
   const canRecord = row.status === "NOT_SUBMITTED";
   const canGrade = row.status === "SUBMITTED" || row.status === "LATE" || row.status === "GRADED";
@@ -141,6 +143,16 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
               {row.status === "GRADED" ? "Sửa điểm" : "Chấm"}
             </button>
           )}
+          {canGrade && (
+            <button
+              type="button"
+              onClick={() => setRubricOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              Rubric
+            </button>
+          )}
         </div>
       </td>
 
@@ -175,7 +187,148 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
           />,
           document.body,
         )}
+      {rubricOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <RubricGradeDialog
+            submissionId={row.id}
+            studentName={row.studentName}
+            onClose={() => setRubricOpen(false)}
+            onSuccess={() => {
+              setRubricOpen(false);
+              router.refresh();
+            }}
+          />,
+          document.body,
+        )}
     </tr>
+  );
+}
+
+function RubricGradeDialog({
+  submissionId,
+  studentName,
+  onClose,
+  onSuccess,
+}: {
+  submissionId: string;
+  studentName: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [levels, setLevels] = useState<Record<string, string>>(
+    Object.fromEntries(RUBRIC_CRITERIA.map((c) => [c.key, "GOOD"])),
+  );
+  const [feedback, setFeedback] = useState("");
+  const [sendEmail, setSendEmail] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function close() {
+    if (pending) return;
+    onClose();
+  }
+
+  function submit() {
+    setError(null);
+    if (feedback.trim().length < 5) {
+      setError("Nhận xét là bắt buộc (tối thiểu 5 ký tự)");
+      return;
+    }
+    startTransition(async () => {
+      const res = await gradeSubmissionRubric({
+        submissionId,
+        scores: RUBRIC_CRITERIA.map((c) => ({ criterion: c.key, level: levels[c.key] })),
+        feedback: feedback.trim(),
+        sendEmail,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      onSuccess();
+    });
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-8"
+      onClick={close}
+    >
+      <div className="relative w-full max-w-xl rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={close} className="absolute right-4 top-4 text-neutral-400 hover:text-neutral-700">
+          <X className="h-5 w-5" />
+        </button>
+        <h3 className="mb-1 text-lg font-bold text-neutral-900">Chấm theo rubric</h3>
+        <p className="mb-4 text-sm text-neutral-500">{studentName}</p>
+
+        <div className="space-y-3">
+          {RUBRIC_CRITERIA.map((c) => (
+            <div key={c.key} className="rounded-lg border border-neutral-200 p-3">
+              <div className="mb-2">
+                <div className="text-sm font-semibold text-neutral-800">{c.label}</div>
+                <div className="text-xs text-neutral-400">{c.desc}</div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {RUBRIC_LEVELS.map((l) => (
+                  <button
+                    key={l.key}
+                    type="button"
+                    onClick={() => setLevels((prev) => ({ ...prev, [c.key]: l.key }))}
+                    className={`rounded-full border px-2.5 py-1 text-xs ${
+                      levels[c.key] === l.key
+                        ? "border-emerald-600 bg-emerald-50 font-semibold text-emerald-700"
+                        : "border-neutral-300 text-neutral-500"
+                    }`}
+                  >
+                    {l.label} ({l.points})
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <label className="mt-4 block text-sm">
+          <span className="mb-1 block font-medium text-neutral-700">Nhận xét (bắt buộc)</span>
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            placeholder="Nhận xét chung về bài làm của học viên…"
+          />
+        </label>
+
+        <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+          <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+          Gửi email kết quả cho phụ huynh
+        </label>
+
+        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={close}
+            disabled={pending}
+            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600"
+          >
+            Huỷ
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={pending}
+            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {pending ? "Đang lưu…" : "Lưu chấm"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
