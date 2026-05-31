@@ -11,6 +11,7 @@ const SCOPE: Record<string, string> = {
   ALL_PARENTS: "Tất cả phụ huynh",
   CENTER: "Theo cơ sở",
   CLASS: "Theo lớp",
+  STUDENT: "Theo học viên",
 };
 
 export default async function AdminNotificationsPage() {
@@ -18,7 +19,7 @@ export default async function AdminNotificationsPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "notifications:manage")) redirect("/dashboard");
 
-  const [rows, centers, classes] = await Promise.all([
+  const [rows, centers, classes, students] = await Promise.all([
     db.notification.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
     db.center.findMany({
       where: { isActive: true },
@@ -30,6 +31,13 @@ export default async function AdminNotificationsPage() {
       select: { id: true, name: true, classCode: true },
       orderBy: { createdAt: "desc" },
       take: 200,
+    }),
+    // #7 — học viên CÓ liên kết tài khoản phụ huynh (mới gửi riêng được).
+    db.student.findMany({
+      where: { deletedAt: null, parentUserId: { not: null } },
+      select: { id: true, name: true, studentCode: true },
+      orderBy: { name: "asc" },
+      take: 500,
     }),
   ]);
 
@@ -58,6 +66,10 @@ export default async function AdminNotificationsPage() {
         classes={classes.map((c) => ({
           id: c.id,
           label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+        }))}
+        students={students.map((s) => ({
+          id: s.id,
+          label: s.studentCode ? `${s.name} (${s.studentCode})` : s.name,
         }))}
       />
     </div>

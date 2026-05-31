@@ -55,6 +55,8 @@ export async function getParentNotifications(
         { audience: "ALL_PARENTS" },
         { audience: "CENTER", centerId: { in: [...centerIds] } },
         { audience: "CLASS", classId: { in: [...classIds] } },
+        // Đợt 6 #7 — thông báo gửi riêng cho con của phụ huynh này.
+        { audience: "STUDENT", studentId: { in: studentIds } },
       ],
       AND: [{ OR: [{ publishedAt: null }, { publishedAt: { lte: now } }] }],
     },
@@ -74,6 +76,7 @@ export async function getParentNotifications(
     ALL_PARENTS: "Toàn trung tâm",
     CENTER: "Cơ sở",
     CLASS: "Lớp học",
+    STUDENT: "Riêng con bạn",
   };
 
   return rows.map((r) => ({
@@ -83,4 +86,12 @@ export async function getParentNotifications(
     publishedAt: (r.publishedAt ?? r.createdAt).toISOString(),
     scope: scopeLabel[r.audience] ?? "",
   }));
+}
+
+/** Số thông báo GẦN ĐÂY (7 ngày) cho badge chuông portal. */
+export async function getParentNotificationCount(parentUserId: string): Promise<number> {
+  const since = new Date();
+  since.setDate(since.getDate() - 7);
+  const rows = await getParentNotifications(parentUserId);
+  return rows.filter((r) => new Date(r.publishedAt) >= since).length;
 }

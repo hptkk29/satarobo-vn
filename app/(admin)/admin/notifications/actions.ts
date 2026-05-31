@@ -16,9 +16,10 @@ const createSchema = z
   .object({
     title: z.string().trim().min(3, "Tiêu đề quá ngắn").max(200),
     body: z.string().trim().min(5, "Nội dung quá ngắn").max(5000),
-    audience: z.enum(["ALL_PARENTS", "CENTER", "CLASS"]),
+    audience: z.enum(["ALL_PARENTS", "CENTER", "CLASS", "STUDENT"]),
     centerId: z.string().trim().optional().nullable(),
     classId: z.string().trim().optional().nullable(),
+    studentId: z.string().trim().optional().nullable(),
     publish: z.boolean().optional(),
   })
   .refine((d) => d.audience !== "CENTER" || !!d.centerId, {
@@ -28,6 +29,10 @@ const createSchema = z
   .refine((d) => d.audience !== "CLASS" || !!d.classId, {
     message: "Chọn lớp",
     path: ["classId"],
+  })
+  .refine((d) => d.audience !== "STUDENT" || !!d.studentId, {
+    message: "Chọn học viên",
+    path: ["studentId"],
   });
 
 export async function createNotification(
@@ -53,6 +58,7 @@ export async function createNotification(
       audience: d.audience,
       centerId: d.audience === "CENTER" ? d.centerId : null,
       classId: d.audience === "CLASS" ? d.classId : null,
+      studentId: d.audience === "STUDENT" ? d.studentId : null,
       isPublished: d.publish ?? true,
       publishedAt: d.publish === false ? null : new Date(),
       createdById: actorId,

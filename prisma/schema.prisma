@@ -2832,6 +2832,7 @@ enum NotificationAudience {
   ALL_PARENTS
   CENTER
   CLASS
+  STUDENT // Đợt 6 #7 — gửi cho 1 học viên/phụ huynh cụ thể
 }
 
 // Module nhắc việc PHẦN 3 — thông báo CHUÔNG cho NHÂN VIÊN (per-user, có đọc/chưa).
@@ -2860,6 +2861,7 @@ model Notification {
   audience    NotificationAudience @default(ALL_PARENTS)
   centerId    String?
   classId     String?
+  studentId   String? // Đợt 6 #7 — target 1 học viên (audience=STUDENT)
   isPublished Boolean              @default(true)
   publishedAt DateTime?            @default(now())
   createdById String?
@@ -2870,6 +2872,7 @@ model Notification {
   @@index([audience, isPublished])
   @@index([centerId])
   @@index([classId])
+  @@index([studentId])
   @@index([createdAt])
 }
 

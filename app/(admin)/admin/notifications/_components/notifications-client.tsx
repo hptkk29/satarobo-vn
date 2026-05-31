@@ -28,10 +28,12 @@ export function NotificationsClient({
   items,
   centers,
   classes,
+  students = [],
 }: {
   items: Item[];
   centers: Opt[];
   classes: Opt[];
+  students?: Opt[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -40,6 +42,7 @@ export function NotificationsClient({
   const [audience, setAudience] = useState("ALL_PARENTS");
   const [centerId, setCenterId] = useState("");
   const [classId, setClassId] = useState("");
+  const [studentId, setStudentId] = useState("");
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
 
   function submit() {
@@ -50,6 +53,7 @@ export function NotificationsClient({
         audience,
         centerId: centerId || null,
         classId: classId || null,
+        studentId: studentId || null,
         publish: true,
       });
       if (res.ok) {
@@ -59,6 +63,7 @@ export function NotificationsClient({
         setAudience("ALL_PARENTS");
         setCenterId("");
         setClassId("");
+        setStudentId("");
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -92,6 +97,7 @@ export function NotificationsClient({
             <option value="ALL_PARENTS">Tất cả phụ huynh</option>
             <option value="CENTER">Theo cơ sở</option>
             <option value="CLASS">Theo lớp</option>
+            <option value="STUDENT">Theo học viên (riêng)</option>
           </select>
           {audience === "CENTER" && (
             <select
@@ -117,6 +123,20 @@ export function NotificationsClient({
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {audience === "STUDENT" && (
+            <select
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">— Chọn học viên —</option>
+              {students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
                 </option>
               ))}
             </select>

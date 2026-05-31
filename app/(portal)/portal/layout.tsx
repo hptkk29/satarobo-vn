@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { hasStaffRole } from "@/lib/auth/permissions";
 import { getPortalContext } from "@/lib/portal/session";
+import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
 
@@ -27,6 +28,7 @@ export default async function PortalLayout({
   const ctx = await getPortalContext();
   // ctx luôn khác null vì role PARENT, nhưng guard cho chắc.
   const children_ = ctx?.children ?? [];
+  const notifCount = await getParentNotificationCount(session.user.id).catch(() => 0);
 
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50">
@@ -54,7 +56,7 @@ export default async function PortalLayout({
         </div>
         {children_.length > 0 && (
           <div className="mx-auto max-w-4xl px-4 pb-2">
-            <PortalNav />
+            <PortalNav notifCount={notifCount} />
           </div>
         )}
       </header>

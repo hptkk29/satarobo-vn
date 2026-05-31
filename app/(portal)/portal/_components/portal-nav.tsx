@@ -34,21 +34,23 @@ const ITEMS = [
   { label: "Hồ sơ", href: "/portal/ho-so", icon: User },
 ];
 
-export function PortalNav() {
+export function PortalNav({ notifCount = 0 }: { notifCount?: number }) {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 overflow-x-auto">
+    // #9 — flex-wrap: mọi mục xuống dòng khi tràn, KHÔNG scroll ngang ẩn mục.
+    <nav className="flex flex-wrap gap-1">
       {ITEMS.map((item) => {
         const Icon = item.icon;
         const active =
           item.href === "/portal"
             ? pathname === "/portal"
             : pathname.startsWith(item.href);
+        const badge = item.href === "/portal/thong-bao" && notifCount > 0 ? notifCount : 0;
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`relative flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               active
                 ? "bg-orange-500 text-white"
                 : "text-neutral-600 hover:bg-neutral-100"
@@ -56,6 +58,11 @@ export function PortalNav() {
           >
             <Icon className="h-4 w-4" />
             {item.label}
+            {badge > 0 && (
+              <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                {badge > 9 ? "9+" : badge}
+              </span>
+            )}
           </Link>
         );
       })}
