@@ -3312,3 +3312,71 @@ model StudentCareTask {
   @@index([centerId, status])
   @@index([studentId])
 }
+
+// ─── Cụm B3 — Khảo sát / NPS ────────────────────────────────────────────────
+
+enum SurveyMilestone {
+  AFTER_TRIAL
+  AFTER_3_SESSIONS
+  MID_COURSE
+  END_COURSE
+  AFTER_COMPLAINT
+  GENERAL
+}
+
+enum SurveyQuestionType {
+  NPS // 0-10
+  RATING // 1-5
+  TEXT
+}
+
+model Survey {
+  id          String          @id @default(cuid())
+  title       String
+  description String?         @db.Text
+  milestone   SurveyMilestone @default(GENERAL)
+  isActive    Boolean         @default(true)
+  centerId    String? // null = mọi cơ sở
+  createdById String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  questions SurveyQuestion[]
+  responses SurveyResponse[]
+
+  @@index([isActive, milestone])
+  @@index([centerId])
+}
+
+model SurveyQuestion {
+  id       String             @id @default(cuid())
+  surveyId String
+  survey   Survey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  text     String             @db.Text
+  type     SurveyQuestionType @default(RATING)
+  order    Int                @default(0)
+
+  @@index([surveyId, order])
+}
+
+// 1 lần phụ huynh trả lời. Gắn center/class/teacher/csm → cơ sở KPI CSKH.
+model SurveyResponse {
+  id           String   @id @default(cuid())
+  surveyId     String
+  survey       Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  studentId    String?
+  parentUserId String?
+  centerId     String?
+  classId      String?
+  teacherId    String?
+  csmId        String? // SALES_CSM phụ trách
+  npsScore     Int? // 0-10
+  comment      String?  @db.Text
+  answers      Json? // {questionId: value}
+  createdAt    DateTime @default(now())
+
+  @@index([surveyId, createdAt])
+  @@index([centerId, createdAt])
+  @@index([csmId])
+  @@index([teacherId])
+}

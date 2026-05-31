@@ -80,6 +80,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "honors",
   "inventory",
   "jobs",
+  "khao-sat",
   "kits",
   "leads",
   "marketing",

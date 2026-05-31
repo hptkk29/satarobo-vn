@@ -32,6 +32,7 @@ const ITEMS = [
   { label: "Yêu cầu", href: "/portal/yeu-cau", icon: MessageSquarePlus },
   { label: "Học phí", href: "/portal/hoc-phi", icon: CreditCard },
   { label: "Đánh giá", href: "/portal/danh-gia", icon: Star },
+  { label: "Khảo sát", href: "/portal/khao-sat", icon: ClipboardList },
   { label: "Hồ sơ con", href: "/portal/ho-so-con", icon: GraduationCap },
   { label: "Hồ sơ", href: "/portal/ho-so", icon: User },
 ];
