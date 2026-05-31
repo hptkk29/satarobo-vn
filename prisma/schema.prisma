@@ -3557,3 +3557,30 @@ model SataCoinRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// =============================================================================
+// Cụm C5 — Zalo OA/ZNS adapter (SKELETON). Tắt an toàn khi thiếu credential →
+// fallback email, không phá hệ thống. Log mọi lần gửi.
+// =============================================================================
+
+enum ZaloMessageStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED // chưa cấu hình credential → bỏ qua (fallback email)
+}
+
+model ZaloMessageLog {
+  id                String            @id @default(cuid())
+  toPhone           String?
+  templateKey       String?
+  payload           Json              @default("{}")
+  status            ZaloMessageStatus @default(PENDING)
+  providerMessageId String?
+  errorMessage      String?           @db.Text
+  fallbackEmailed   Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  sentAt            DateTime?
+
+  @@index([status, createdAt])
+}
