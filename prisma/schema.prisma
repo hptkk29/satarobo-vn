@@ -3584,3 +3584,43 @@ model ZaloMessageLog {
 
   @@index([status, createdAt])
 }
+
+// =============================================================================
+// Cụm C6 — MISA AMIS sync (SKELETON) + IntegrationLog/IntegrationConfig chung.
+// Bật/tắt qua config; KHÔNG push API thật khi tắt hoặc thiếu credential.
+// =============================================================================
+
+enum IntegrationStatus {
+  PENDING
+  SUCCESS
+  SKIPPED // tắt hoặc thiếu credential → bỏ qua, không lỗi
+  FAILED
+}
+
+enum IntegrationDirection {
+  PUSH
+  PULL
+}
+
+model IntegrationConfig {
+  id        String   @id @default(cuid())
+  provider  String   @unique // "MISA"
+  isEnabled Boolean  @default(false)
+  settings  Json     @default("{}")
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model IntegrationLog {
+  id              String               @id @default(cuid())
+  provider        String // "MISA"
+  direction       IntegrationDirection @default(PUSH)
+  action          String // "PUSH_INVOICE", "PUSH_PAYMENT", ...
+  status          IntegrationStatus    @default(PENDING)
+  requestPayload  Json                 @default("{}")
+  responsePayload Json?
+  errorMessage    String?              @db.Text
+  createdAt       DateTime             @default(now())
+
+  @@index([provider, status, createdAt])
+}
