@@ -94,6 +94,9 @@ export type SessionRow = {
   className: string;
   lessonTitle: string | null;
   past: boolean;
+  // #10 — giờ học THẬT lấy từ lịch lớp (HH:mm), KHÔNG dùng giờ tạo record.
+  startTime: string | null;
+  endTime: string | null;
 };
 
 export async function getStudentSessions(studentId: string): Promise<SessionRow[]> {
@@ -106,7 +109,7 @@ export async function getStudentSessions(studentId: string): Promise<SessionRow[
       id: true,
       date: true,
       topic: true,
-      class: { select: { name: true } },
+      class: { select: { name: true, startTime: true, endTime: true } },
       lesson: { select: { title: true } },
     },
     orderBy: { date: "asc" },
@@ -118,6 +121,8 @@ export async function getStudentSessions(studentId: string): Promise<SessionRow[
     className: s.class.name,
     lessonTitle: s.lesson?.title ?? null,
     past: s.date.getTime() < now,
+    startTime: s.class.startTime ?? null,
+    endTime: s.class.endTime ?? null,
   }));
 }
 

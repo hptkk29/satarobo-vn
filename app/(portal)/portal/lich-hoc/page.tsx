@@ -98,10 +98,18 @@ function Row({
     topic: string | null;
     className: string;
     lessonTitle: string | null;
+    startTime: string | null;
+    endTime: string | null;
   };
   dim?: boolean;
 }) {
   const d = new Date(s.date);
+  // #10 — giờ THẬT từ lịch lớp (startTime–endTime), không dùng giờ tạo record.
+  const timeRange = s.startTime
+    ? `${s.startTime}${s.endTime ? `–${s.endTime}` : ""}`
+    : null;
+  const weekday = d.toLocaleDateString("vi-VN", { weekday: "long" });
+  const dateStr = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
   return (
     <li
       className={`flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 ${
@@ -117,12 +125,8 @@ function Row({
           {s.lessonTitle ?? s.topic ?? "Buổi học"}
         </p>
         <p className="text-xs text-neutral-500">
-          {s.className} ·{" "}
-          {d.toLocaleString("vi-VN", {
-            weekday: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {s.className} · {timeRange ? `${timeRange} · ` : ""}
+          {weekday}, {dateStr}
         </p>
       </div>
     </li>
