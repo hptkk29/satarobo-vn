@@ -684,6 +684,8 @@ model Student {
   // Phase NHÓM 3 — yêu cầu phụ huynh
   parentRequests ParentRequest[] @relation("StudentParentRequests")
   makeupNeeds    MakeupNeed[]
+  riskAlerts     StudentRiskAlert[]
+  careTasks      StudentCareTask[]
 
   @@index([phone])
   @@index([centerId])
@@ -3236,4 +3238,77 @@ model MakeupNeed {
   @@index([centerId, status])
   @@index([classId])
   @@unique([studentId, missedSessionId])
+}
+
+// ─── Cụm B2 — Cảnh báo rủi ro học viên + task chăm sóc ──────────────────────
+
+enum RiskAlertType {
+  CONSECUTIVE_ABSENCE // nghỉ 2 buổi liên tiếp
+  HIGH_ABSENCE // nghỉ quá ngưỡng
+  MISSED_SUBMISSIONS // không nộp bài nhiều lần
+  NEEDS_SUPPORT // GV đánh dấu cần hỗ trợ nhiều lần
+  NEARING_END_NO_RENEWAL // sắp hết khoá chưa tái đăng ký
+  OVERDUE_PAYMENT // công nợ quá hạn
+}
+
+enum RiskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RiskStatus {
+  OPEN
+  RESOLVED
+  ESCALATED
+}
+
+model StudentRiskAlert {
+  id           String        @id @default(cuid())
+  studentId    String
+  centerId     String?
+  type         RiskAlertType
+  severity     RiskSeverity  @default(MEDIUM)
+  status       RiskStatus    @default(OPEN)
+  detail       String?       @db.Text
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  student   Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  careTasks StudentCareTask[]
+
+  @@index([studentId, status])
+  @@index([centerId, status])
+  // Idempotent: 1 alert OPEN / loại / học viên (tạo lại sau khi resolve thì cần key khác — dùng app logic).
+}
+
+enum CareTaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+model StudentCareTask {
+  id           String         @id @default(cuid())
+  studentId    String
+  centerId     String?
+  assignedToId String? // SALES_CSM phụ trách
+  riskAlertId  String?
+  title        String
+  description  String?        @db.Text
+  dueAt        DateTime
+  status       CareTaskStatus @default(OPEN)
+  completedAt  DateTime?
+  createdById  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  riskAlert StudentRiskAlert? @relation(fields: [riskAlertId], references: [id], onDelete: SetNull)
+
+  @@index([assignedToId, status, dueAt])
+  @@index([centerId, status])
+  @@index([studentId])
 }

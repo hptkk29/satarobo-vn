@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createMakeupNeed } from "@/lib/makeup/service";
+import { evaluateAbsenceRisk } from "@/lib/risk/service";
 
 type ActionResult = { error?: string; saved?: number };
 
@@ -108,6 +109,19 @@ export async function markAttendance(
     }
   } catch (err) {
     console.error("[markAttendance] makeup error:", err);
+  }
+
+  // B2 — đánh giá rủi ro (nghỉ 2 buổi liên tiếp) cho HV vừa bị đánh vắng.
+  try {
+    const absent = data.records.filter((r) => r.status === "ABSENT" || r.status === "EXCUSED");
+    const sess = absent.length
+      ? await db.classSession.findUnique({ where: { id: data.sessionId }, select: { classId: true } })
+      : null;
+    if (sess) {
+      for (const r of absent) await evaluateAbsenceRisk(r.studentId, sess.classId);
+    }
+  } catch (err) {
+    console.error("[markAttendance] risk error:", err);
   }
 
   revalidatePath("/attendance");

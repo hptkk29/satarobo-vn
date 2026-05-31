@@ -18,7 +18,9 @@ export type PendingTaskType =
   | "session_incomplete"
   | "center_checklist"
   | "lead_followup"
-  | "renewal";
+  | "renewal"
+  | "student_risk"
+  | "student_care";
 
 export interface PendingTaskItem {
   id: string;
@@ -297,6 +299,64 @@ async function renewal(user: TaskUser): Promise<PendingTaskGroup | null> {
   };
 }
 
+async function studentRisk(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+  const { isManager, centerScope } = scope(user);
+  if (!isManager) return null;
+  const twoDaysAgo = new Date(now.getTime() - TWO_DAYS_MS);
+  const rows = await db.studentRiskAlert.findMany({
+    where: { status: "OPEN", ...(centerScope ? { centerId: centerScope } : {}) },
+    select: { id: true, type: true, severity: true, createdAt: true, student: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+  });
+  const overdueCount = rows.filter((r) => r.severity === "HIGH" || r.createdAt < twoDaysAgo).length;
+  return {
+    type: "student_risk",
+    label: "Cảnh báo rủi ro HV",
+    count: rows.length,
+    overdueCount,
+    href: "/canh-bao-rui-ro",
+    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+      id: r.id,
+      label: `${r.student.name} — ${r.type}`,
+      href: `/students/${r.student.id}/edit`,
+      overdue: r.severity === "HIGH",
+    })),
+  };
+}
+
+async function studentCare(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+  const { isSuper, isCM } = scope(user);
+  const isSales = hasRole(user, "SALES_CSM");
+  if (!isSuper && !isCM && !isSales) return null;
+  const centerScope = isCM && !isSuper ? (user.centerId ?? null) : null;
+  // SALES (không quản lý) → task của mình; CM → cơ sở; super → tất cả.
+  const where = isSales && !isSuper && !isCM
+    ? { status: "OPEN" as const, assignedToId: user.id }
+    : { status: "OPEN" as const, ...(centerScope ? { centerId: centerScope } : {}) };
+
+  const rows = await db.studentCareTask.findMany({
+    where,
+    select: { id: true, title: true, dueAt: true, student: { select: { id: true } } },
+    orderBy: { dueAt: "asc" },
+    take: 50,
+  });
+  const overdueCount = rows.filter((r) => r.dueAt < now).length;
+  return {
+    type: "student_care",
+    label: "Việc chăm sóc HV",
+    count: rows.length,
+    overdueCount,
+    href: "/cham-soc-hv",
+    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+      id: r.id,
+      label: r.title,
+      href: `/students/${r.student.id}/edit`,
+      overdue: r.dueAt < now,
+    })),
+  };
+}
+
 /**
  * Gom mọi loại việc cần xử lý theo quyền + cơ sở của user. Trả về các nhóm
  * (chỉ nhóm user có quyền), sắp xếp nhóm có việc QUÁ HẠN lên đầu.
@@ -312,6 +372,8 @@ export async function getPendingTasks(user: TaskUser): Promise<PendingTaskGroup[
     centerChecklist(user, now),
     leadFollowup(user, now),
     renewal(user),
+    studentRisk(user, now),
+    studentCare(user, now),
   ]);
   return groups
     .filter((g): g is PendingTaskGroup => g !== null)
