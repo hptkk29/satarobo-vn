@@ -321,6 +321,9 @@ model User {
   tokenVersion Int       @default(0)
   lastLoginAt  DateTime?
 
+  // Cụm A1 — trạng thái kích hoạt tài khoản (phụ huynh tạo qua chuyển lead).
+  accountStatus AccountStatus @default(ACTIVE)
+
   // Link 1-1 với Employee (1 user account ↔ 1 employee record)
   employeeId String?   @unique
   employee   Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
@@ -3100,4 +3103,61 @@ model EmployeeCheckin {
   @@unique([userId, type, qrToken])
   @@index([userId, checkedAt])
   @@index([centerId, checkedAt])
+}
+
+// ─── Cụm A1 — OTP service + kích hoạt tài khoản ─────────────────────────────
+
+enum AccountStatus {
+  PENDING_ACTIVATION // tài khoản phụ huynh mới tạo — chờ kích hoạt qua OTP
+  ACTIVE
+  DISABLED
+}
+
+enum OtpChannel {
+  EMAIL
+  SMS // TODO: chưa dùng (chưa đăng ký brandname) — provider abstraction chừa sẵn
+}
+
+enum OtpPurpose {
+  ACTIVATION
+  RESET
+  CHANGE_CONTACT
+}
+
+// 1 yêu cầu OTP. LƯU CODE DẠNG HASH (HMAC) — không lưu plain.
+model OtpRequest {
+  id          String     @id @default(cuid())
+  target      String // email hoặc SĐT nhận OTP
+  channel     OtpChannel @default(EMAIL)
+  purpose     OtpPurpose
+  codeHash    String // HMAC-SHA256(secret, code)
+  expiresAt   DateTime
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  verifiedAt  DateTime?
+  consumedAt  DateTime? // đã dùng để hoàn tất nghiệp vụ (set mật khẩu…)
+  userId      String? // tài khoản liên quan (nếu có)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  deliveries OtpDeliveryLog[]
+
+  @@index([target, purpose, createdAt])
+  @@index([expiresAt])
+}
+
+// Log mỗi lần gửi OTP qua provider.
+model OtpDeliveryLog {
+  id           String     @id @default(cuid())
+  otpRequestId String
+  otpRequest   OtpRequest @relation(fields: [otpRequestId], references: [id], onDelete: Cascade)
+  channel      OtpChannel
+  target       String
+  provider     String // "resend" | "speedsms" | …
+  status       String // "SENT" | "FAILED"
+  error        String?    @db.Text
+  createdAt    DateTime   @default(now())
+
+  @@index([otpRequestId])
+  @@index([target, createdAt])
 }

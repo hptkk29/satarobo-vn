@@ -110,6 +110,12 @@ export function LoginForm() {
           Đăng nhập
         </Button>
       </form>
+      <p className="mt-4 text-center text-xs text-gray-400">
+        Phụ huynh mới?{" "}
+        <a href="/kich-hoat" className="text-orange-600 hover:underline">
+          Kích hoạt tài khoản
+        </a>
+      </p>
     </Form>
   );
 }

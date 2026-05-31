@@ -112,6 +112,12 @@ export function isAdminRoute(p: string): boolean {
   return ADMIN_ROUTE_SEGMENTS.has(firstSegment(p));
 }
 
+// Cụm A1 — trang auth công khai (chưa đăng nhập vẫn vào): login + kích hoạt OTP.
+const PUBLIC_AUTH_PATHS = new Set<string>(["/login", "/kich-hoat"]);
+export function isPublicAuthPath(p: string): boolean {
+  return PUBLIC_AUTH_PATHS.has(p);
+}
+
 export function isInfraPath(p: string): boolean {
   return (
     p.startsWith("/_next/") ||
@@ -210,6 +216,12 @@ export function decideRoute(input: RouteInput): RouteDecision {
       return { type: "next" }; // chưa login → form login
     }
 
+    // Trang kích hoạt OTP — công khai (chưa login vẫn vào).
+    if (pathname === "/kich-hoat") {
+      if (isParent) return { type: "redirectPath", path: PORTAL_HOME };
+      return { type: "next" };
+    }
+
     if (!authed) {
       return {
         type: "redirectPath",
@@ -265,6 +277,13 @@ export function decideRoute(input: RouteInput): RouteDecision {
         return { type: "redirectHost", host: "portal", path: "/", status: 307 };
       }
       return { type: "next" }; // chưa login → form login
+    }
+
+    // Trang kích hoạt OTP — công khai (chưa login vẫn vào).
+    if (pathname === "/kich-hoat") {
+      if (isStaff) return { type: "redirectPath", path: STAFF_HOME };
+      if (isParent) return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      return { type: "next" };
     }
 
     if (isAdminRoute(pathname)) {
