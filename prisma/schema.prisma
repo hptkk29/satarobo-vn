@@ -566,6 +566,7 @@ model Lead {
 
   // Phase 5.6 — Order
   orders Order[] @relation("LeadOrders")
+  assignmentHistory LeadAssignmentHistory[]
 
   @@index([phone])
   @@index([status])
@@ -3457,4 +3458,24 @@ model StudentCenterHistory {
 
   @@index([studentId])
   @@index([centerId])
+}
+
+// =============================================================================
+// Cụm C2 — Lịch sử phân công lead (bàn giao khi sale nghỉ)
+// =============================================================================
+
+model LeadAssignmentHistory {
+  id           String   @id @default(cuid())
+  leadId       String
+  fromUserId   String? // sale cũ
+  toUserId     String? // sale mới
+  assignedById String? // người thực hiện bàn giao
+  reason       String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([fromUserId])
+  @@index([toUserId])
 }

@@ -56,6 +56,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "assignments",
   "attendance",
   "audit-log",
+  "ban-giao-lead",
   "canh-bao-rui-ro",
   "centers",
   "cham-cong",
