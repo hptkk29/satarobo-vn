@@ -5,11 +5,13 @@ import { db } from '@/lib/db'
 import { can, hasRole } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import bcrypt from 'bcryptjs'
 import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { genStudentCode } from '@/lib/codegen'
+import { generateOrderCode } from '@/lib/orders/code'
+import { requestOtp } from '@/lib/otp/service'
+import { enqueueEnrollmentConfirmation } from '@/lib/email/triggers'
 
 const statusSchema = z.enum([
   'NEW',
@@ -344,6 +346,10 @@ const closeDealSchema = z.object({
   createParentAccount: z.boolean().optional(),
   parentEmail: z.string().trim().email('Email phụ huynh không hợp lệ').optional().or(z.literal('')),
   parentPassword: z.string().trim().min(8, 'Mật khẩu tối thiểu 8 ký tự').optional().or(z.literal('')),
+  // Cụm A3 — học phí + hoá đơn.
+  discountAmount: z.number().int().nonnegative().nullable().optional(),
+  paymentMethodId: z.string().trim().optional().or(z.literal('')),
+  startDate: z.string().trim().optional().or(z.literal('')),
 })
 
 export async function closeLeadAsEnrolled(
@@ -354,8 +360,9 @@ export async function closeLeadAsEnrolled(
   studentId?: string
   studentCode?: string | null
   enrollmentId?: string
+  orderCode?: string
   parentAccountEmail?: string
-  parentTempPasswordIsPhone?: boolean
+  parentPendingActivation?: boolean
   error?: string
 }> {
   const session = await auth()
@@ -382,11 +389,16 @@ export async function closeLeadAsEnrolled(
       phone: true,
       email: true,
       centerId: true,
+      assignedToId: true,
     },
   })
   if (!lead) return { ok: false, error: 'Lead không tồn tại' }
   if (lead.status === 'ENROLLED') {
     return { ok: false, error: 'Lead này đã được chốt (ENROLLED)' }
+  }
+  // Center scope: SALE (chỉ view-own) chỉ chuyển lead CỦA MÌNH.
+  if (!can(session.user, 'leads:view-all') && lead.assignedToId !== session.user.id) {
+    return { ok: false, error: 'Chỉ chuyển được lead của bạn' }
   }
 
   // Lớp đích: kiểm tra tồn tại + còn chỗ.
@@ -418,19 +430,15 @@ export async function closeLeadAsEnrolled(
   const { actorId, actorName } = getAuditActor(session)
   const centerId = lead.centerId ?? cls.centerId ?? null
 
-  // C2 — chuẩn bị thông tin tài khoản phụ huynh (validate ngoài transaction).
+  // A3 — chuẩn bị tài khoản phụ huynh: PENDING_ACTIVATION + OTP email (không đặt
+  // mật khẩu tạm). Chống trùng theo EMAIL hoặc SĐT.
   let parentEmail: string | null = null
-  let parentPassword: string | null = null
-  let parentUsedPhonePassword = false
   if (wantParentAccount) {
     parentEmail =
       (parsed.data.parentEmail?.trim() || lead.email?.trim() || '').toLowerCase() || null
     if (!parentEmail) {
-      return { ok: false, error: 'Cần email phụ huynh để cấp tài khoản portal' }
+      return { ok: false, error: 'Cần email phụ huynh để cấp tài khoản portal (gửi kích hoạt)' }
     }
-    parentPassword = parsed.data.parentPassword?.trim() || lead.phone
-    parentUsedPhonePassword = !parsed.data.parentPassword?.trim()
-
     const existing = await db.user.findUnique({
       where: { email: parentEmail },
       select: { role: true },
@@ -452,29 +460,35 @@ export async function closeLeadAsEnrolled(
         if (center?.code) studentCode = await genStudentCode(center.code, tx)
       }
 
-      // Tạo / dùng lại tài khoản phụ huynh trước để gán parentUserId cho student.
+      // Tạo / dùng lại tài khoản phụ huynh — chống trùng theo EMAIL hoặc SĐT.
+      // Tài khoản mới = PENDING_ACTIVATION (không mật khẩu) → gửi OTP kích hoạt sau tx.
       let parentUserId: string | undefined
-      if (wantParentAccount && parentEmail && parentPassword) {
-        const existing = await tx.user.findUnique({
-          where: { email: parentEmail },
+      let parentIsNewPending = false
+      if (wantParentAccount && parentEmail) {
+        const existing = await tx.user.findFirst({
+          where: {
+            role: 'PARENT',
+            deletedAt: null,
+            OR: [{ email: parentEmail }, ...(lead.phone ? [{ children: { some: { parentPhone: lead.phone } } }] : [])],
+          },
           select: { id: true },
         })
         if (existing) {
-          parentUserId = existing.id
+          parentUserId = existing.id // dùng lại, KHÔNG reset mật khẩu
         } else {
-          const hashed = await bcrypt.hash(parentPassword, 10)
           const createdUser = await tx.user.create({
             data: {
               name: lead.parentName,
               email: parentEmail,
-              password: hashed,
               role: 'PARENT',
               isActive: true,
+              accountStatus: 'PENDING_ACTIVATION',
               tokenVersion: 0,
             },
             select: { id: true },
           })
           parentUserId = createdUser.id
+          parentIsNewPending = true
         }
       }
 
@@ -536,8 +550,66 @@ export async function closeLeadAsEnrolled(
         },
       })
 
-      // Lead → ENROLLED + audit + activity.
-      await tx.lead.update({ where: { id: leadId }, data: { status: 'ENROLLED' } })
+      // A3 — hoá đơn (Order) nếu có dữ liệu học phí.
+      let orderId: string | undefined
+      let orderCode: string | undefined
+      if (tuition != null) {
+        const discount = parsed.data.discountAmount ?? 0
+        const total = Math.max(0, tuition - discount)
+        const code = await generateOrderCode()
+        const order = await tx.order.create({
+          data: {
+            code,
+            type: 'COURSE',
+            status: paid ? 'CONFIRMED' : 'PENDING_PAYMENT',
+            customerName: lead.parentName,
+            customerPhone: lead.phone,
+            customerEmail: lead.email ?? undefined,
+            studentId: student.id,
+            leadId: lead.id,
+            centerId: centerId ?? undefined,
+            paymentMethodId: parsed.data.paymentMethodId || undefined,
+            subtotal: tuition,
+            discountAmount: discount,
+            totalAmount: total,
+            paidAt: paid ? new Date() : null,
+            confirmedByUserId: paid ? actorId : undefined,
+            confirmedAt: paid ? new Date() : undefined,
+            internalNote: `Tạo từ chuyển lead ${lead.id}`,
+            items: {
+              create: {
+                type: 'COURSE_ENROLLMENT',
+                enrollmentId: enrollment.id,
+                itemName: `Học phí lớp ${cls.id}`,
+                quantity: 1,
+                unitPrice: tuition,
+                totalPrice: total,
+              },
+            },
+          },
+          select: { id: true, code: true },
+        })
+        orderId = order.id
+        orderCode = order.code
+      }
+
+      // A3 — care task "sau đăng ký" cho sale phụ trách.
+      await tx.leadTask.create({
+        data: {
+          leadId,
+          assignedToId: lead.assignedToId ?? actorId,
+          assignedToName: actorName,
+          title: `Chăm sóc sau đăng ký — ${studentName}`,
+          description: 'Liên hệ phụ huynh xác nhận lịch học, hướng dẫn kích hoạt tài khoản portal.',
+          dueAt: new Date(Date.now() + 2 * 86400000),
+        },
+      })
+
+      // Lead → ENROLLED + convertedBy + audit + activity.
+      await tx.lead.update({
+        where: { id: leadId },
+        data: { status: 'ENROLLED', convertedById: actorId, convertedAt: new Date() },
+      })
       await logLeadAudit({
         leadId,
         action: 'STATUS_CHANGE',
@@ -573,27 +645,54 @@ export async function closeLeadAsEnrolled(
       return {
         studentId: student.id,
         studentCode: student.studentCode,
+        studentName: student.name,
         enrollmentId: enrollment.id,
         parentLinked: !!parentUserId,
+        parentIsNewPending,
+        orderId,
+        orderCode,
       }
     })
+
+    // A3 — sau transaction: gửi OTP kích hoạt (tài khoản mới) + email xác nhận đăng ký.
+    const linked = result.parentLinked && !!parentEmail
+    if (linked && parentEmail) {
+      const courseName = await db.class
+        .findUnique({ where: { id: classId }, select: { name: true, course: { select: { name: true } } } })
+        .catch(() => null)
+      // Email xác nhận đăng ký (chỉ con liên quan).
+      await enqueueEnrollmentConfirmation({
+        to: parentEmail,
+        parentName: lead.parentName,
+        studentName: result.studentName,
+        studentCode: result.studentCode,
+        className: courseName?.name ?? '',
+        courseName: courseName?.course.name ?? '',
+        startDate: parsed.data.startDate || null,
+      }).catch(() => {})
+      // Tài khoản mới PENDING_ACTIVATION → gửi OTP kích hoạt email.
+      if (result.parentIsNewPending) {
+        await requestOtp({ target: parentEmail, purpose: 'ACTIVATION' }).catch(() => {})
+      }
+    }
 
     revalidatePath('/leads')
     revalidatePath(`/leads/${leadId}`)
     revalidatePath('/students')
     revalidatePath('/enrollments')
+    revalidatePath('/orders')
     revalidatePath('/trials')
     revalidatePath('/dashboard')
     revalidatePath('/crm')
-    const linked = result.parentLinked && !!parentEmail
     return {
       ok: true,
       studentId: result.studentId,
       studentCode: result.studentCode,
       enrollmentId: result.enrollmentId,
+      orderCode: result.orderCode,
       parentAccountEmail: linked ? (parentEmail as string) : undefined,
-      // Nếu mật khẩu mặc định = SĐT, báo sale để dặn phụ huynh đổi sau.
-      parentTempPasswordIsPhone: linked ? parentUsedPhonePassword : undefined,
+      // Tài khoản mới cần kích hoạt qua email (OTP đã gửi).
+      parentPendingActivation: linked ? result.parentIsNewPending : undefined,
     }
   } catch (err) {
     console.error('[closeLeadAsEnrolled] error:', err)

@@ -538,6 +538,9 @@ model Lead {
   consentMarketing Boolean    @default(false)
   note             String?    @db.Text
   handoverNote     String?    @db.Text // Module CRM PHẦN 3 — note bàn giao gần nhất (nổi bật)
+  // Cụm A3 — ai/khi nào chuyển lead sang ĐÃ ĐĂNG KÝ.
+  convertedById    String?
+  convertedAt      DateTime?
   deletedAt        DateTime?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt

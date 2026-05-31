@@ -38,7 +38,6 @@ export function CloseDealButton({
   }
   const [createParent, setCreateParent] = useState(false);
   const [parentEmail, setParentEmail] = useState(defaultParentEmail ?? "");
-  const [parentPassword, setParentPassword] = useState("");
 
   function submit() {
     if (!classId) {
@@ -57,17 +56,16 @@ export function CloseDealButton({
         paid,
         createParentAccount: createParent,
         parentEmail: createParent ? parentEmail.trim() : undefined,
-        parentPassword: createParent ? parentPassword.trim() || undefined : undefined,
       });
       if (res.ok) {
         if (res.parentAccountEmail) {
           toast.success(
-            `Đã chốt deal + cấp tài khoản phụ huynh (${res.parentAccountEmail})${
-              res.parentTempPasswordIsPhone ? " — mật khẩu tạm = SĐT, dặn PH đổi sau" : ""
+            `Đã chuyển sang Đã đăng ký${res.orderCode ? ` + hoá đơn ${res.orderCode}` : ""} + tài khoản PH (${res.parentAccountEmail})${
+              res.parentPendingActivation ? " — đã gửi email kích hoạt" : ""
             }`,
           );
         } else {
-          toast.success("Đã chốt deal — tạo học viên & đăng ký");
+          toast.success(`Đã chuyển sang Đã đăng ký — tạo học viên & đăng ký${res.orderCode ? ` + hoá đơn ${res.orderCode}` : ""}`);
         }
         setOpen(false);
         router.refresh();
@@ -85,7 +83,7 @@ export function CloseDealButton({
         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
       >
         <CheckCircle2 size={14} />
-        Chốt deal
+        Chuyển sang Đã đăng ký
       </button>
     );
   }
@@ -94,7 +92,7 @@ export function CloseDealButton({
     <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-emerald-800">
-          Chốt deal — tạo học viên + đăng ký
+          Chuyển sang Đã đăng ký — tạo gộp hồ sơ
         </h3>
         <button
           type="button"
@@ -191,18 +189,9 @@ export function CloseDealButton({
                 className={inputCls}
               />
             </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-gray-500">
-                Mật khẩu tạm
-              </span>
-              <input
-                type="text"
-                value={parentPassword}
-                onChange={(e) => setParentPassword(e.target.value)}
-                placeholder="Để trống = dùng SĐT"
-                className={inputCls}
-              />
-            </label>
+            <p className="text-xs text-gray-400">
+              Tài khoản tạo ở trạng thái chờ kích hoạt; gửi email OTP để phụ huynh tự đặt mật khẩu.
+            </p>
           </div>
         )}
       </div>

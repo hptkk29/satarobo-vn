@@ -204,7 +204,7 @@ export function LeadsKanban({
                           }
                           className="mt-2 w-full rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
                         >
-                          Chốt deal
+                          Chuyển Đã đăng ký
                         </button>
                       )}
 

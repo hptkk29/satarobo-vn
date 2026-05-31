@@ -48,7 +48,6 @@ export function CloseDealDialog({
   }
   const [createParent, setCreateParent] = useState(false);
   const [parentEmail, setParentEmail] = useState("");
-  const [parentPassword, setParentPassword] = useState("");
 
   const open = leadId !== null;
 
@@ -62,7 +61,6 @@ export function CloseDealDialog({
     setTuitionEdited(false);
     setPaid(false);
     setCreateParent(false);
-    setParentPassword("");
     getLeadCloseDealOptions(leadId)
       .then((res) => {
         if (!res.ok) {
@@ -97,18 +95,17 @@ export function CloseDealDialog({
         paid,
         createParentAccount: createParent,
         parentEmail: createParent ? parentEmail.trim() : undefined,
-        parentPassword: createParent ? parentPassword.trim() || undefined : undefined,
       });
       if (!res.ok) {
         toast.error(res.error ?? "Lỗi chốt deal");
         return;
       }
       const code = res.studentCode ? ` (${res.studentCode})` : "";
-      const parentNote =
-        res.parentAccountEmail
-          ? ` · tài khoản PH: ${res.parentAccountEmail}${res.parentTempPasswordIsPhone ? " (mật khẩu = SĐT)" : ""}`
-          : "";
-      toast.success(`Đã chốt deal — tạo học viên${code}${parentNote}`, {
+      const orderNote = res.orderCode ? ` · hoá đơn ${res.orderCode}` : "";
+      const parentNote = res.parentAccountEmail
+        ? ` · tài khoản PH: ${res.parentAccountEmail}${res.parentPendingActivation ? " (đã gửi email kích hoạt)" : ""}`
+        : "";
+      toast.success(`Đã chuyển sang Đã đăng ký — tạo học viên${code}${orderNote}${parentNote}`, {
         action: res.studentId
           ? {
               label: "Xem hồ sơ",
@@ -134,7 +131,7 @@ export function CloseDealDialog({
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-1.5 text-sm font-bold text-emerald-800">
             <CheckCircle2 size={16} />
-            Chốt deal — {leadName}
+            Chuyển sang Đã đăng ký — {leadName}
           </h3>
           <button
             type="button"
@@ -228,10 +225,10 @@ export function CloseDealDialog({
                 Cấp tài khoản phụ huynh (portal hocvien.satarobo.vn)
               </label>
               {createParent && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 space-y-2">
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium text-gray-500">
-                      Email đăng nhập *
+                      Email đăng nhập * (gửi mã kích hoạt)
                     </span>
                     <input
                       type="email"
@@ -241,18 +238,10 @@ export function CloseDealDialog({
                       className={inputCls}
                     />
                   </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-gray-500">
-                      Mật khẩu tạm
-                    </span>
-                    <input
-                      type="text"
-                      value={parentPassword}
-                      onChange={(e) => setParentPassword(e.target.value)}
-                      placeholder="Để trống = dùng SĐT"
-                      className={inputCls}
-                    />
-                  </label>
+                  <p className="text-xs text-gray-400">
+                    Tài khoản tạo ở trạng thái <b>chờ kích hoạt</b>; hệ thống gửi email OTP để phụ
+                    huynh tự đặt mật khẩu. (Không tạo trùng nếu email/SĐT đã có.)
+                  </p>
                 </div>
               )}
             </div>

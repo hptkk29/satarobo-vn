@@ -470,7 +470,7 @@ export function LeadsTable({
                                 className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5" />
-                                Chốt deal
+                                Chuyển Đã đăng ký
                               </button>
                             )}
                           {canDelete && (
