@@ -3161,3 +3161,40 @@ model OtpDeliveryLog {
   @@index([otpRequestId])
   @@index([target, createdAt])
 }
+
+// ─── Cụm A2 — Email tự động (queue + worker/cron) ───────────────────────────
+
+enum EmailQueueStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// Hàng đợi email — KHÔNG gửi trực tiếp trong transaction nghiệp vụ; worker/cron
+// xử lý + retry. templateKey = EmailTemplate.code (render qua template) hoặc dùng
+// subject/body inline khi không có template.
+model EmailQueue {
+  id          String           @id @default(cuid())
+  toEmail     String
+  toName      String?
+  templateKey String? // EmailTemplate.code để render; null = inline
+  subject     String? // inline fallback (nếu không có template)
+  bodyText    String?          @db.Text
+  bodyHtml    String?          @db.Text
+  payload     Json // biến render (vars)
+  status      EmailQueueStatus @default(PENDING)
+  attempts    Int              @default(0)
+  maxAttempts Int              @default(3)
+  error       String?          @db.Text
+  contextType String?
+  contextId   String?
+  scheduledAt DateTime         @default(now())
+  sentAt      DateTime?
+  emailLogId  String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([contextType, contextId])
+  @@index([createdAt])
+}

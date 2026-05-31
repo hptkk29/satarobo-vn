@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { enqueueNewFeedback } from "@/lib/email/triggers";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -89,6 +90,36 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
     );
   } catch (err) {
     return { ok: false, error: `Lỗi lưu nhận xét: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+
+  // A2 — đẩy email "nhận xét mới" cho phụ huynh (chỉ con liên quan, không lộ con khác).
+  try {
+    const withComment = items.filter((it) => it.comment.trim().length > 0);
+    if (withComment.length > 0) {
+      const [students, cls] = await Promise.all([
+        db.student.findMany({
+          where: { id: { in: withComment.map((i) => i.studentId) }, parentUserId: { not: null } },
+          select: { id: true, name: true, parentName: true, parentUser: { select: { email: true, name: true } } },
+        }),
+        db.classSession.findUnique({ where: { id: sessionId }, select: { class: { select: { name: true } } } }),
+      ]);
+      const byId = new Map(withComment.map((i) => [i.studentId, i]));
+      for (const s of students) {
+        const email = s.parentUser?.email;
+        if (!email) continue;
+        const it = byId.get(s.id);
+        await enqueueNewFeedback({
+          to: email,
+          parentName: s.parentUser?.name ?? s.parentName,
+          studentName: s.name,
+          className: cls?.class.name ?? "",
+          comment: it?.comment.trim() ?? "",
+          rating: it?.rating ?? null,
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[saveSessionFeedback] enqueue email error:", err);
   }
 
   revalidatePath(`/sessions/${sessionId}`);

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requestOtp, verifyOtp, consumeOtp } from "@/lib/otp/service";
 import { logUserAudit } from "@/lib/audit/log";
+import { enqueueAccountActivated } from "@/lib/email/triggers";
 
 // Cụm A1 — kích hoạt tài khoản phụ huynh qua OTP email. Public (chưa đăng nhập).
 
@@ -64,7 +65,7 @@ export async function activateAccount(input: unknown): Promise<Result> {
 
   const user = await db.user.findUnique({
     where: { email },
-    select: { id: true, accountStatus: true },
+    select: { id: true, accountStatus: true, name: true, children: { select: { name: true }, take: 1 } },
   });
   if (!user) return { ok: false, error: "Không tìm thấy tài khoản" };
   // Phụ huynh đã ACTIVE → KHÔNG đặt lại mật khẩu.
@@ -78,6 +79,13 @@ export async function activateAccount(input: unknown): Promise<Result> {
     data: { password: hashed, accountStatus: "ACTIVE", isActive: true, emailVerified: new Date() },
   });
   await consumeOtp(v.otpId);
+
+  // A2 — email chào mừng kích hoạt (qua queue).
+  await enqueueAccountActivated({
+    to: email,
+    parentName: user.name,
+    childName: user.children[0]?.name ?? null,
+  }).catch(() => {});
 
   await logUserAudit({
     userId: user.id,
