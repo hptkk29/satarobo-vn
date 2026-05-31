@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createLeadManual, updateLeadFields } from "../actions";
+import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
 
 type Option = { id: string; name: string };
 
@@ -29,12 +30,13 @@ export function LeadForm({
   initial,
 }: {
   centers: Option[];
-  courses: Option[];
+  courses: TeachableCourse[];
   initial?: LeadFormInitial;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const isEdit = !!initial?.id;
+  const courseGroups = groupTeachableCourses(courses);
 
   const [parentName, setParentName] = useState(initial?.parentName ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
@@ -99,8 +101,12 @@ export function LeadForm({
         <Field label="Khoá quan tâm">
           <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={inputCls}>
             <option value="">— Chưa chọn —</option>
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            {courseGroups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </Field>

@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClass, updateClass } from "../_actions";
+import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
 
 export type ClassFormValue = {
   id: string;
@@ -26,16 +27,8 @@ export type ClassFormValue = {
   notes: string | null;
 };
 
-interface CourseOption {
-  id: string;
-  name: string;
-  category: "LUYEN_THI_ROBOSIM" | "LAP_TRINH_ROBOT" | null;
-}
+type CourseOption = TeachableCourse;
 
-const COURSE_CATEGORY_LABEL: Record<"LUYEN_THI_ROBOSIM" | "LAP_TRINH_ROBOT", string> = {
-  LUYEN_THI_ROBOSIM: "Khoá luyện thi RoboSim",
-  LAP_TRINH_ROBOT: "Khoá lập trình Robot",
-};
 interface CenterOption {
   id: string;
   name: string;
@@ -195,14 +188,7 @@ export function ClassForm({
             defaultValue={cls?.courseId ?? ""}
             required
             options={[{ value: "", label: "— Chọn khoá cụ thể —" }]}
-            groups={(["LUYEN_THI_ROBOSIM", "LAP_TRINH_ROBOT"] as const)
-              .map((cat) => ({
-                label: COURSE_CATEGORY_LABEL[cat],
-                options: courses
-                  .filter((c) => c.category === cat)
-                  .map((c) => ({ value: c.id, label: c.name })),
-              }))
-              .filter((g) => g.options.length > 0)}
+            groups={groupTeachableCourses(courses)}
           />
           <SelectField
             label="Cơ sở"
