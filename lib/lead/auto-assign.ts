@@ -45,7 +45,7 @@ export async function getCenterMode(centerId: string): Promise<LeadAssignMode> {
 /** Thống kê sale active trong cơ sở: tải hiện tại + chốt/đã xử lý 30 ngày gần nhất. */
 export async function getSaleStats(centerId: string | null): Promise<SaleStat[]> {
   const sales = await db.user.findMany({
-    where: { role: "SALES_CSM", isActive: true, deletedAt: null, ...(centerId ? { centerId } : {}) },
+    where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null, ...(centerId ? { centerId } : {}) },
     select: { id: true },
   });
   if (sales.length === 0) return [];
@@ -208,7 +208,7 @@ export async function manualAssignLead(
 ): Promise<{ ok: boolean; error?: string }> {
   const [lead, sale] = await Promise.all([
     db.lead.findUnique({ where: { id: leadId }, select: { id: true, assignedToId: true, status: true } }),
-    db.user.findFirst({ where: { id: saleId, role: "SALES_CSM", deletedAt: null }, select: { id: true, name: true } }),
+    db.user.findFirst({ where: { id: saleId, roles: { has: "SALES_CSM" }, deletedAt: null }, select: { id: true, name: true } }),
   ]);
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
   if (!sale) return { ok: false, error: "Sale không hợp lệ" };

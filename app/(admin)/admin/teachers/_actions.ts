@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { hasRole } from "@/lib/auth/permissions";
 import { TeacherRank, EmploymentType, TeacherStatus } from "@prisma/client";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -50,12 +51,12 @@ export async function updateTeacherProfile(input: unknown): Promise<Result> {
   const gate = await requireTeacherManager(userId);
   if (!gate.ok) return gate;
 
-  // Xác nhận user là TEACHER.
+  // Xác nhận user CÓ vai trò TEACHER (kể cả vị trí phụ — đa vai trò 3B).
   const teacher = await db.user.findUnique({
     where: { id: userId },
-    select: { role: true },
+    select: { role: true, roles: true },
   });
-  if (!teacher || teacher.role !== "TEACHER") {
+  if (!teacher || !hasRole(teacher, "TEACHER")) {
     return { ok: false, error: "User không phải giáo viên" };
   }
 

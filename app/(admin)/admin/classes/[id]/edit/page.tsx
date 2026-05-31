@@ -73,7 +73,8 @@ export default async function EditClassPage({ params }: Props) {
       where: {
         deletedAt: null,
         isActive: true,
-        role: { in: ["TEACHER", "CENTER_MANAGER"] },
+        // Đa vai trò (3B): gồm người có TEACHER/CENTER_MANAGER ở bất kỳ vị trí nào.
+        roles: { hasSome: ["TEACHER", "CENTER_MANAGER"] },
       },
       orderBy: { name: "asc" },
       select: { id: true, name: true, role: true },

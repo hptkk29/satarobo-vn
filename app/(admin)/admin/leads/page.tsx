@@ -107,7 +107,7 @@ export default async function LeadsPage({
           orderBy: { displayOrder: 'asc' },
         }),
         db.user.findMany({
-          where: { isActive: true, deletedAt: null, role: 'SALES_CSM' },
+          where: { isActive: true, deletedAt: null, roles: { has: 'SALES_CSM' } },
           select: { id: true, name: true },
           orderBy: { name: 'asc' },
         }),

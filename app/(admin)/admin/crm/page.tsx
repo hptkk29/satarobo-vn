@@ -61,7 +61,7 @@ export default async function CrmDashboardPage() {
         _count: { _all: true },
       }),
       db.user.findMany({
-        where: { role: "SALES_CSM", isActive: true, deletedAt: null },
+        where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null },
         select: { id: true, name: true, email: true },
         orderBy: { name: "asc" },
       }),

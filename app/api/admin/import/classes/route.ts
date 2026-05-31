@@ -223,7 +223,8 @@ export async function POST(req: NextRequest) {
             userAccount: {
               isActive: true,
               deletedAt: null,
-              role: { in: ["TEACHER", "CENTER_MANAGER"] },
+              // Đa vai trò (3B): TEACHER/CENTER_MANAGER ở bất kỳ vị trí nào.
+              roles: { hasSome: ["TEACHER", "CENTER_MANAGER"] },
             },
           },
           select: {

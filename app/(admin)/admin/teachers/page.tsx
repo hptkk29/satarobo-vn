@@ -33,7 +33,8 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
   const where: Prisma.UserWhereInput = {
     isActive: true,
     deletedAt: null,
-    role: "TEACHER",
+    // Đa vai trò (3B): gồm cả người có TEACHER ở vị trí PHỤ (vd CENTER_MANAGER+TEACHER).
+    roles: { has: "TEACHER" },
     ...(centerScope ? { centerId: centerScope } : {}),
     ...(q
       ? {

@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { TeacherProfileForm } from "./_components/profile-form";
 import { ClassAssignmentSection } from "./_components/class-assignment";
 import { WeeklySchedule } from "./_components/weekly-schedule";
@@ -32,6 +32,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
       name: true,
       email: true,
       role: true,
+      roles: true,
       centerId: true,
       center: { select: { name: true } },
       employee: { select: { employeeCode: true, jobTitle: true, phone: true } },
@@ -46,7 +47,8 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
       },
     },
   });
-  if (!teacher || teacher.role !== "TEACHER") notFound();
+  // Đa vai trò (3B): gồm cả người có TEACHER ở vị trí phụ (vd CENTER_MANAGER+TEACHER).
+  if (!teacher || !hasRole(teacher, "TEACHER")) notFound();
 
   const me = session.user;
   const isOwn = me.id === id;

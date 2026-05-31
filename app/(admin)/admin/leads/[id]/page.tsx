@@ -62,7 +62,7 @@ export default async function LeadDetailPage({ params }: Props) {
   const assignableSales = canAssign
     ? await db.user.findMany({
         where: {
-          role: "SALES_CSM",
+          roles: { has: "SALES_CSM" },
           isActive: true,
           deletedAt: null,
           ...(lead.centerId ? { centerId: lead.centerId } : {}),
@@ -78,7 +78,7 @@ export default async function LeadDetailPage({ params }: Props) {
     ? await Promise.all([
         db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
         db.user.findMany({
-          where: { role: "SALES_CSM", isActive: true, deletedAt: null },
+          where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null },
           orderBy: { name: "asc" },
           select: { id: true, name: true, centerId: true },
         }),

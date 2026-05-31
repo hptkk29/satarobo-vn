@@ -54,7 +54,8 @@ export async function getSalesLoad(
 ): Promise<AssigneeLoad[]> {
   const sales = await db.user.findMany({
     where: {
-      role: "SALES_CSM",
+      // Đa vai trò (3B): tính cả người có SALES_CSM ở vị trí PHỤ.
+      roles: { has: "SALES_CSM" },
       isActive: true,
       deletedAt: null,
       ...(centerId ? { centerId } : {}),

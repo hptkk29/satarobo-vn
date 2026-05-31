@@ -882,7 +882,7 @@ export async function transferLead(
   let toSaleId: string | null = null
   if (d.toSaleId) {
     const sale = await db.user.findFirst({
-      where: { id: d.toSaleId, role: 'SALES_CSM', deletedAt: null },
+      where: { id: d.toSaleId, roles: { has: 'SALES_CSM' }, deletedAt: null },
       select: { id: true },
     })
     if (!sale) return { ok: false, error: 'Sale nhận không hợp lệ' }

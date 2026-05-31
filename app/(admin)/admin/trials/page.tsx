@@ -42,7 +42,7 @@ export default async function TrialsPage({ searchParams }: Props) {
       },
     }),
     db.user.findMany({
-      where: { role: "TEACHER", isActive: true, deletedAt: null },
+      where: { roles: { has: "TEACHER" }, isActive: true, deletedAt: null },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
