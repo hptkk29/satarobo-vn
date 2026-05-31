@@ -130,6 +130,9 @@ export type Action =
   | "enrollments:transfer"
   | "enrollments:cancel"
 
+  // --- Course completion (B4) ---
+  | "completions:manage"
+
   // --- Class sessions + Attendance (NEW) ---
   | "sessions:view"
   | "sessions:create"
@@ -335,6 +338,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "enrollments:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "enrollments:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "enrollments:transfer": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "completions:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "enrollments:cancel": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Sessions + Attendance ---

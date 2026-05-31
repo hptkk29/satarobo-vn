@@ -1,0 +1,103 @@
+import { db } from "@/lib/db";
+import { enqueueEmail } from "@/lib/email/queue";
+
+// =============================================================================
+// Cụm B4 — hoàn thành khoá: tạo CourseCompletion + gợi ý khoá tiếp + care task
+// tái tục + email + (END_COURSE survey đã hiển thị ở portal).
+// =============================================================================
+
+function genCertCode(): string {
+  const d = new Date();
+  const yymmdd =
+    String(d.getFullYear()).slice(2) +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0");
+  // 4 ký tự ngẫu nhiên (không cần crypto mạnh cho mã chứng chỉ).
+  const rand = Math.abs(Date.now() % 1_000_000).toString(36).slice(-4).toUpperCase().padStart(4, "X");
+  return `CERT-${yymmdd}-${rand}`;
+}
+
+/** Gợi ý khoá tiếp: khoá mà khoá hiện tại là TIÊN QUYẾT (requiredByCourses). */
+async function suggestNextCourse(courseId: string): Promise<string | null> {
+  const prereq = await db.coursePrerequisite.findFirst({
+    where: { requiredCourseId: courseId },
+    select: { courseId: true },
+  });
+  return prereq?.courseId ?? null;
+}
+
+export async function completeCourse(params: {
+  studentId: string;
+  courseId: string;
+  classId?: string | null;
+  finalAssessment?: string | null;
+  finalGrade?: string | null;
+  createdById?: string | null;
+}): Promise<{ ok: boolean; completionId?: string; certificateCode?: string; error?: string }> {
+  const [student, course] = await Promise.all([
+    db.student.findUnique({
+      where: { id: params.studentId },
+      select: { id: true, name: true, centerId: true, parentUser: { select: { email: true, name: true } } },
+    }),
+    db.course.findUnique({ where: { id: params.courseId }, select: { id: true, name: true } }),
+  ]);
+  if (!student) return { ok: false, error: "Học viên không tồn tại" };
+  if (!course) return { ok: false, error: "Khoá không tồn tại" };
+
+  const nextCourseId = await suggestNextCourse(params.courseId);
+
+  const completion = await db.courseCompletion.upsert({
+    where: { studentId_courseId: { studentId: params.studentId, courseId: params.courseId } },
+    update: {
+      finalAssessment: params.finalAssessment ?? undefined,
+      finalGrade: params.finalGrade ?? undefined,
+      nextCourseId,
+    },
+    create: {
+      studentId: params.studentId,
+      courseId: params.courseId,
+      classId: params.classId ?? null,
+      finalAssessment: params.finalAssessment ?? null,
+      finalGrade: params.finalGrade ?? null,
+      certificateCode: genCertCode(),
+      nextCourseId,
+      createdById: params.createdById ?? null,
+    },
+    select: { id: true, certificateCode: true },
+  });
+
+  // Care task tái tục cho SALES_CSM cơ sở.
+  const csm = await db.user.findFirst({
+    where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null, ...(student.centerId ? { centerId: student.centerId } : {}) },
+    select: { id: true },
+  });
+  await db.studentCareTask.create({
+    data: {
+      studentId: student.id,
+      centerId: student.centerId,
+      assignedToId: csm?.id ?? null,
+      title: `Tư vấn tái đăng ký sau khoá ${course.name} — ${student.name}`,
+      description: "Học viên vừa hoàn thành khoá — tư vấn khoá tiếp theo.",
+      dueAt: new Date(Date.now() + 3 * 86400000),
+    },
+  }).catch(() => {});
+
+  // Email hoàn thành khoá (A2) + mời khảo sát.
+  if (student.parentUser?.email) {
+    await enqueueEmail({
+      to: student.parentUser.email,
+      toName: student.parentUser.name ?? undefined,
+      subject: `Chúc mừng bé ${student.name} hoàn thành khoá ${course.name}`,
+      bodyText: `Chào ${student.parentUser.name ?? "quý phụ huynh"},\nBé ${student.name} đã hoàn thành khoá ${course.name}. Mã chứng chỉ: ${completion.certificateCode}.\nMời quý phụ huynh làm khảo sát cuối khoá tại cổng học viên (mục Khảo sát).\n— Sata Robo`,
+      bodyHtml: `<div style="font-family:system-ui,sans-serif">
+        <h2 style="color:#F97316">Chúc mừng hoàn thành khoá!</h2>
+        <p>Bé <b>${student.name}</b> đã hoàn thành khoá <b>${course.name}</b>.</p>
+        <p>Mã chứng chỉ: <b>${completion.certificateCode}</b></p>
+        <p>Mời quý phụ huynh làm <b>khảo sát cuối khoá</b> tại cổng học viên (mục Khảo sát).</p>
+      </div>`,
+      context: { type: "COURSE_COMPLETION", id: completion.id },
+    }).catch(() => {});
+  }
+
+  return { ok: true, completionId: completion.id, certificateCode: completion.certificateCode };
+}
