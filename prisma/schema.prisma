@@ -683,6 +683,7 @@ model Student {
 
   // Phase NHÓM 3 — yêu cầu phụ huynh
   parentRequests ParentRequest[] @relation("StudentParentRequests")
+  makeupNeeds    MakeupNeed[]
 
   @@index([phone])
   @@index([centerId])
@@ -785,6 +786,7 @@ model Class {
   assignments     Assignment[]
   progressReports ProgressReportLog[]
   trialClasses    TrialClass[]
+  makeupNeeds     MakeupNeed[]
 
   // Phase 5.4.0 — Audit log
   auditLogs ClassAuditLog[] @relation("ClassAuditLogs")
@@ -3200,4 +3202,38 @@ model EmailQueue {
   @@index([status, scheduledAt])
   @@index([contextType, contextId])
   @@index([createdAt])
+}
+
+// ─── Cụm B1 — MakeupNeed: nhu cầu học bù ────────────────────────────────────
+
+enum MakeupNeedStatus {
+  PENDING // mới phát sinh, chờ xếp buổi bù
+  SCHEDULED // đã gắn buổi bù
+  COMPLETED // đã học bù xong
+  CANCELLED
+}
+
+model MakeupNeed {
+  id              String           @id @default(cuid())
+  studentId       String
+  classId         String
+  centerId        String? // để lọc theo cơ sở
+  missedSessionId String // buổi đã lỡ
+  missedLessonId  String? // lesson của buổi lỡ
+  status          MakeupNeedStatus @default(PENDING)
+  makeupSessionId String? // buổi được xếp để bù
+  note            String?          @db.Text
+  createdById     String?
+  scheduledById   String?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, status])
+  @@index([centerId, status])
+  @@index([classId])
+  @@unique([studentId, missedSessionId])
 }

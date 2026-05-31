@@ -14,14 +14,28 @@ export const metadata = { title: "Yêu cầu | Sata Robo", robots: { index: fals
 
 export default async function YeuCauPage() {
   const { studentId } = await requireActiveStudent();
-  const [requests, sessions] = await Promise.all([
+  const [requests, sessions, makeups] = await Promise.all([
     db.parentRequest.findMany({
       where: { studentId },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
     getStudentSessions(studentId),
+    // B1 — trạng thái học bù của con.
+    db.makeupNeed.findMany({
+      where: { studentId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: { id: true, status: true, class: { select: { name: true } } },
+    }),
   ]);
+
+  const MAKEUP_LABEL: Record<string, string> = {
+    PENDING: "Chờ xếp buổi bù",
+    SCHEDULED: "Đã xếp buổi bù",
+    COMPLETED: "Đã học bù xong",
+    CANCELLED: "Đã huỷ",
+  };
 
   // Báo vắng: chỉ chọn buổi SẮP TỚI (chưa diễn ra).
   const upcomingSessions = sessions
@@ -40,6 +54,32 @@ export default async function YeuCauPage() {
       <h1 className="text-xl font-bold text-neutral-900">Yêu cầu</h1>
 
       <RequestForm upcomingSessions={upcomingSessions} />
+
+      {makeups.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
+            Trạng thái học bù
+          </h2>
+          <ul className="space-y-2">
+            {makeups.map((m) => (
+              <li key={m.id} className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3 text-sm">
+                <span className="text-neutral-700">{m.class.name}</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    m.status === "COMPLETED"
+                      ? "bg-green-100 text-green-700"
+                      : m.status === "SCHEDULED"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {MAKEUP_LABEL[m.status] ?? m.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-700">

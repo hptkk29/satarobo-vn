@@ -73,6 +73,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "email-templates",
   "enrollments",
   "exams",
+  "hoc-bu",
   "holidays",
   "honors",
   "inventory",

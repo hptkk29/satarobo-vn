@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { createMakeupNeed } from "@/lib/makeup/service";
 
 type ActionResult = { error?: string; saved?: number };
 
@@ -99,8 +100,19 @@ export async function markAttendance(
     return { error: "Lỗi cơ sở dữ liệu — không lưu được điểm danh" };
   }
 
+  // B1 — record "Cần học bù" (NEEDS_MAKEUP) → tạo MakeupNeed PENDING gắn buổi này.
+  try {
+    const needMakeup = data.records.filter((r) => r.makeupStatus === "NEEDS_MAKEUP");
+    for (const r of needMakeup) {
+      await createMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId, note: r.absenceReason ?? null });
+    }
+  } catch (err) {
+    console.error("[markAttendance] makeup error:", err);
+  }
+
   revalidatePath("/attendance");
   revalidatePath(`/attendance?sessionId=${data.sessionId}`);
+  revalidatePath("/hoc-bu");
   return { saved: data.records.length };
 }
 

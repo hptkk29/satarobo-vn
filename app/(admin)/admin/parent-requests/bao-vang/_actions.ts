@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
+import { createMakeupNeed } from "@/lib/makeup/service";
 
 // Module QL học viên PHẦN 3 — tư vấn viên xử lý báo vắng:
 //   (a) "Xếp học bù"  → Attendance EXCUSED + makeupStatus NEEDS_MAKEUP
@@ -72,9 +73,20 @@ export async function resolveAbsence(input: {
     return { ok: false, error: "Lỗi cơ sở dữ liệu" };
   }
 
+  // B1 — "Xếp học bù" → tạo MakeupNeed PENDING gắn buổi đã lỡ.
+  if (input.action === "MAKEUP") {
+    await createMakeupNeed({
+      studentId: req.studentId,
+      missedSessionId: req.sessionId,
+      createdById: actorId,
+      note: absenceReason,
+    }).catch(() => {});
+  }
+
   revalidatePath("/parent-requests/bao-vang");
   revalidatePath("/parent-requests");
   revalidatePath("/attendance");
+  revalidatePath("/hoc-bu");
   revalidatePath("/portal/yeu-cau");
   return { ok: true };
 }
