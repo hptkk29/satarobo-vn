@@ -61,7 +61,13 @@ export function projectEndDate(input: ProjectEndDateInput): Date | null {
 export async function getClassExpectedEndDate(classId: string): Promise<Date | null> {
   const cls = await db.class.findUnique({
     where: { id: classId },
-    select: { centerId: true, courseId: true, scheduleDays: true, startDate: true },
+    select: {
+      centerId: true,
+      courseId: true,
+      scheduleDays: true,
+      startDate: true,
+      course: { select: { totalSessions: true } },
+    },
   });
   if (!cls) return null;
 
@@ -84,7 +90,8 @@ export async function getClassExpectedEndDate(classId: string): Promise<Date | n
 
   return projectEndDate({
     sessionDates: sessions.map((s) => s.date),
-    totalLessons: curriculum?._count.lessons ?? 0,
+    // Ưu tiên số buổi chuẩn của khoá (Đợt 6), fallback giáo trình.
+    totalLessons: cls.course?.totalSessions ?? curriculum?._count.lessons ?? 0,
     scheduleDays: cls.scheduleDays,
     holidays: expandHolidaySet(holidayRows),
     fallbackStart: cls.startDate,
@@ -137,7 +144,7 @@ export async function getNearingEndEnrollments(opts?: {
           courseId: true,
           scheduleDays: true,
           startDate: true,
-          course: { select: { name: true } },
+          course: { select: { name: true, totalSessions: true } },
           center: { select: { name: true } },
         },
       },
@@ -217,7 +224,8 @@ export async function getNearingEndEnrollments(opts?: {
 
   const items: NearingEndItem[] = [];
   for (const e of enrollments) {
-    const total = lessonByCourse.get(e.class.courseId) ?? 0;
+    // Ưu tiên số buổi chuẩn của khoá (Đợt 6), fallback giáo trình.
+    const total = e.class.course?.totalSessions ?? lessonByCourse.get(e.class.courseId) ?? 0;
     if (total <= 0) continue;
     const classSessions = sessionsByClass.get(e.class.id) ?? [];
     const sessionsHeld = classSessions.filter((d) => d.getTime() <= todayEnd.getTime()).length;

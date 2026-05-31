@@ -397,6 +397,8 @@ model Course {
   // Đợt 3D — phân loại danh mục + cờ "khoá cụ thể dùng để mở lớp/giảng dạy".
   category    CourseCategory? // null = không phải khoá dạy (vd mục landing cũ LTR/LTRS)
   isTeachable Boolean         @default(false)
+  // Đợt 6 — số buổi CHUẨN (cam kết) của khoá; ưu tiên hơn đếm Curriculum lessons.
+  totalSessions Int?
   durationDisplay  String? // "6 tháng" hoặc "Tuỳ chỉnh"
   studentCount     Int     @default(0)
   displayOrder     Int     @default(0)

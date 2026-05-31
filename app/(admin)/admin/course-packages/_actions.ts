@@ -201,8 +201,28 @@ export async function createPackage(formData: FormData): Promise<ActionResult> {
     return { error: "Slug hoac code da ton tai, hoac co loi co so du lieu" };
   }
 
+  // Đợt 6 — đồng bộ "Số buổi" sang Course.totalSessions (khớp slug/code).
+  await syncCourseTotalSessions({ slug: data.slug, code: data.code, lessons: data.lessons ?? null });
+
   revalidatePath("/course-packages");
   redirect("/course-packages");
+}
+
+/** Đồng bộ số buổi (CoursePackage.lessons) → Course.totalSessions theo slug/code. */
+async function syncCourseTotalSessions(opts: {
+  slug?: string | null;
+  code?: string | null;
+  lessons: number | null;
+}): Promise<void> {
+  const or: { slug?: string; code?: string }[] = [];
+  if (opts.slug) or.push({ slug: opts.slug });
+  if (opts.code) or.push({ code: opts.code });
+  if (or.length === 0) return;
+  try {
+    await db.course.updateMany({ where: { OR: or }, data: { totalSessions: opts.lessons } });
+  } catch {
+    /* khoá chưa có bản Course tương ứng — bỏ qua */
+  }
 }
 
 export async function updatePackage(id: string, formData: FormData): Promise<ActionResult> {
@@ -255,6 +275,17 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
     await db.coursePackage.update({ where: { id }, data });
   } catch {
     return { error: "Package khong ton tai, slug bi trung, hoac co loi co so du lieu" };
+  }
+
+  // Đợt 6 — đồng bộ "Số buổi" sang Course.totalSessions (đọc lại slug/code đã lưu).
+  try {
+    const saved = await db.coursePackage.findUnique({
+      where: { id },
+      select: { slug: true, code: true, lessons: true },
+    });
+    if (saved) await syncCourseTotalSessions(saved);
+  } catch {
+    /* bỏ qua lỗi đồng bộ — không chặn lưu package */
   }
 
   revalidatePath("/course-packages");

@@ -6,6 +6,7 @@ import {
   getLatestProgressReport,
 } from "@/lib/portal/learning";
 import { getStudentProgress } from "@/lib/progress";
+import { getStudentClassProgress } from "@/lib/students/progress";
 import { db } from "@/lib/db";
 import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
@@ -32,6 +33,7 @@ export default async function KetQuaPage() {
     classes.map(async (c) => ({
       cls: c,
       p: await getStudentProgress(studentId, c.id),
+      sessions: await getStudentClassProgress(studentId, c.id),
     })),
   );
 
@@ -87,13 +89,21 @@ export default async function KetQuaPage() {
         </p>
       ) : (
         <div className="space-y-3">
-          {results.map(({ cls, p }) => (
+          {results.map(({ cls, p, sessions }) => (
             <section
               key={cls.id}
               className="rounded-xl border border-neutral-200 bg-white p-4"
             >
               <h2 className="font-semibold text-neutral-900">{cls.name}</h2>
               <p className="mb-3 text-xs text-neutral-500">{cls.courseName}</p>
+              <div className="mb-3 rounded-lg bg-orange-50 px-3 py-2 text-sm">
+                <span className="font-bold text-orange-700">
+                  Đang học buổi {sessions.currentSession} / tổng {sessions.total || "—"}
+                </span>
+                <span className="ml-2 text-neutral-600">
+                  · đã học {sessions.attended} · còn lại {sessions.remaining}
+                </span>
+              </div>
               <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Metric
                   label="Điểm danh"

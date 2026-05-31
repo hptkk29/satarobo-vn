@@ -66,15 +66,21 @@ export function computeStudentProgress(input: ComputeProgressInput): StudentProg
   return { total, attended, remaining, absentNoMakeup, sessionsHeld, currentSession };
 }
 
-/** Số buổi (lesson) của giáo trình active ứng với khoá của lớp. */
+/**
+ * Tổng số buổi của khoá ứng với lớp.
+ * Ưu tiên Course.totalSessions (số buổi CHUẨN cam kết), fallback đếm Curriculum
+ * lessons, cuối cùng 0. (Đợt 6 #1+2 — lớp chưa soạn giáo trình vẫn ra đúng N.)
+ */
 async function getTotalLessons(classId: string): Promise<number> {
   const cls = await db.class.findUnique({
     where: { id: classId },
-    select: { courseId: true },
+    select: { course: { select: { id: true, totalSessions: true } } },
   });
-  if (!cls?.courseId) return 0;
+  if (!cls?.course) return 0;
+  if (cls.course.totalSessions != null) return cls.course.totalSessions;
+
   const curriculum = await db.curriculum.findFirst({
-    where: { courseId: cls.courseId, isActive: true },
+    where: { courseId: cls.course.id, isActive: true },
     orderBy: { version: "desc" },
     select: { _count: { select: { lessons: true } } },
   });
