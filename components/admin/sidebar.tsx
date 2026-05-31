@@ -8,6 +8,7 @@ import {
   Users,
   GraduationCap,
   Award,
+  ArrowLeftRight,
   BookOpen,
   UserCog,
   BarChart3,
@@ -89,6 +90,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all", "enrollments:view-own"] },
+      { label: "Chuyển lớp / cơ sở", href: "/chuyen-lop", icon: ArrowLeftRight, perm: ["enrollments:transfer"] },
     ],
   },
   {

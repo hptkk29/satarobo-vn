@@ -688,6 +688,8 @@ model Student {
   riskAlerts     StudentRiskAlert[]
   careTasks      StudentCareTask[]
   courseCompletions CourseCompletion[]
+  transferRequests StudentTransferRequest[]
+  centerHistory    StudentCenterHistory[]
 
   @@index([phone])
   @@index([centerId])
@@ -3405,4 +3407,54 @@ model CourseCompletion {
   @@unique([studentId, courseId])
   @@index([studentId])
   @@index([courseId])
+}
+
+// =============================================================================
+// Cụm C1 — Chuyển lớp / chuyển cơ sở (StudentTransferRequest + lịch sử cơ sở)
+// =============================================================================
+
+enum TransferRequestStatus {
+  PENDING // chờ duyệt
+  APPROVED // đã chuyển
+  REJECTED
+  WAITLISTED // chưa có lớp đích phù hợp → chờ
+  CANCELLED
+}
+
+model StudentTransferRequest {
+  id          String                @id @default(cuid())
+  studentId   String
+  fromClassId String? // lớp hiện tại
+  fromCenterId String?
+  toClassId   String? // lớp đích (null nếu waitlist)
+  toCenterId  String?
+  status      TransferRequestStatus @default(PENDING)
+  reason      String?               @db.Text
+  note        String?               @db.Text // ghi chú khi duyệt/từ chối
+  requestedById String?
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, status])
+  @@index([status])
+  @@index([toCenterId])
+}
+
+model StudentCenterHistory {
+  id        String    @id @default(cuid())
+  studentId String
+  centerId  String
+  fromDate  DateTime  @default(now())
+  toDate    DateTime? // null = đang ở cơ sở này
+  reason    String?
+  createdAt DateTime  @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([centerId])
 }
