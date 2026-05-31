@@ -57,7 +57,7 @@ export default async function KitsAdminPage() {
             <tr>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Sản phẩm</th>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Brand / Series</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Gallery</th>
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Thư viện ảnh</th>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Giá</th>
               <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Trạng thái</th>
               <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">Thao tác</th>

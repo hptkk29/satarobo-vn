@@ -98,7 +98,7 @@ export function KitListRow({ kit }: { kit: Row }) {
                 : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
             }`}
           >
-            {kit.isPublished ? "Published" : "Draft"}
+            {kit.isPublished ? "Đã đăng" : "Nháp"}
           </button>
           <button
             type="button"

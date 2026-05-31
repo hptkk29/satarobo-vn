@@ -31,6 +31,21 @@ const STATUS_LABEL: Record<EmploymentStatus, string> = {
   TERMINATED: "Cho nghỉ",
 };
 
+// Nhãn phòng ban tiếng Việt CÓ DẤU.
+const DEPARTMENT_LABEL: Record<Department, string> = {
+  BAN_GIAM_DOC: "Ban Giám Đốc",
+  DAO_TAO: "Đào Tạo",
+  MARKETING: "Marketing",
+  KINH_DOANH: "Kinh Doanh",
+  IT: "IT",
+  HANH_CHANH_NHAN_SU: "Hành Chính Nhân Sự",
+  KE_TOAN: "Kế Toán",
+  TUYEN_SINH: "Tuyển Sinh",
+  GIAO_VU: "Giáo Vụ",
+  GIANG_DAY: "Giảng Dạy",
+};
+const deptLabel = (d: string) => DEPARTMENT_LABEL[d as Department] ?? d.replace(/_/g, " ");
+
 interface PageProps {
   searchParams: Promise<{
     q?: string;
@@ -110,7 +125,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-bold text-gray-900">Quản lý nhân sự</h1>
           <p className="mt-1 text-sm text-gray-500">
             {employees.length} nhân sự
-            {departmentParam && ` · ${departmentParam.replace(/_/g, " ")}`}
+            {departmentParam && ` · ${deptLabel(departmentParam)}`}
             {statusParam && ` · ${STATUS_LABEL[statusParam]}`}
             {q && ` · "${q}"`}
             {employees.length >= 200 && " (giới hạn 200, dùng filter để thu hẹp)"}
@@ -159,7 +174,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
           <option value="">Tất cả phòng ban</option>
           {DEPARTMENTS.map((d) => (
             <option key={d} value={d}>
-              {d.replace(/_/g, " ")}
+              {deptLabel(d)}
             </option>
           ))}
         </select>
@@ -217,7 +232,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            {d.department.replace(/_/g, " ")} ({d._count.id})
+            {deptLabel(d.department)} ({d._count.id})
           </Link>
         ))}
       </div>

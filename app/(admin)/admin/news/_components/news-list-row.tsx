@@ -59,7 +59,7 @@ export function NewsListRow({ news }: { news: Row }) {
               : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
           }`}
         >
-          {news.isPublished ? "Published" : "Draft"}
+          {news.isPublished ? "Đã đăng" : "Nháp"}
         </button>
         {news.isFeatured && (
           <span className="ml-1 inline-block rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">

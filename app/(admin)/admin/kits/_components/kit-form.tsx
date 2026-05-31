@@ -159,7 +159,7 @@ export function KitForm({ kit }: { kit?: KitFormValue }) {
         </div>
         <div>
           <label className="mb-1 block text-sm font-semibold text-neutral-700">
-            Gallery (URLs ảnh phụ)
+            Thư viện ảnh (URL ảnh phụ)
           </label>
           <p className="mb-2 text-xs text-neutral-500">
             Tạm thời nhập URL — gallery uploader sẽ thêm ở Phase B.
@@ -175,7 +175,7 @@ export function KitForm({ kit }: { kit?: KitFormValue }) {
       <Section title="Trạng thái">
         <div className="flex flex-wrap items-center gap-6">
           <CheckboxField
-            label="Published (hiển thị trên /hoc-cu)"
+            label="Đã đăng (hiển thị trên /hoc-cu)"
             name="isPublished"
             defaultChecked={kit?.isPublished ?? true}
           />

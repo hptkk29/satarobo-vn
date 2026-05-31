@@ -118,7 +118,7 @@ export function NewsForm({ news }: NewsFormProps) {
       <Section title="Trạng thái">
         <div className="flex gap-6">
           <CheckboxField
-            label="Published (hiển thị công khai)"
+            label="Đã đăng (hiển thị công khai)"
             name="isPublished"
             defaultChecked={news?.isPublished}
           />
