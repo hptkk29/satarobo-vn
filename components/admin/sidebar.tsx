@@ -85,6 +85,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Học viên", href: "/students", icon: GraduationCap, perm: ["students:view-all", "students:view-own-class"] },
       { label: "Sắp hết khoá", href: "/students/sap-het-khoa", icon: GraduationCap, perm: ["enrollments:view-all"] },
       { label: "Hoàn thành khoá", href: "/hoan-thanh-khoa", icon: Award, perm: ["completions:manage"] },
+      { label: "Học bạ", href: "/hoc-ba", icon: ScrollText, perm: ["students:view-all", "students:view-own-class"] },
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all", "enrollments:view-own"] },
