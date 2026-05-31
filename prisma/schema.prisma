@@ -691,6 +691,7 @@ model Student {
   courseCompletions CourseCompletion[]
   transferRequests StudentTransferRequest[]
   centerHistory    StudentCenterHistory[]
+  satacoinTxns     SataCoinTransaction[]
 
   @@index([phone])
   @@index([centerId])
@@ -3513,4 +3514,46 @@ model SubmissionRubricScore {
 
   @@unique([submissionId, criterion])
   @@index([submissionId])
+}
+
+// =============================================================================
+// Cụm C4 — SataCoin (điểm thưởng nội bộ). KHÔNG blockchain. Sổ cái BẤT BIẾN:
+// điều chỉnh = ghi giao dịch đảo (reversal). Số dư = tổng amount.
+// =============================================================================
+
+enum SataCoinTxType {
+  EARN // cộng coin (thưởng)
+  SPEND // trừ coin (đổi quà)
+  ADJUST // điều chỉnh thủ công (+/-)
+  REVERSAL // đảo 1 giao dịch trước đó
+}
+
+model SataCoinTransaction {
+  id           String         @id @default(cuid())
+  studentId    String
+  amount       Int // dương = cộng, âm = trừ
+  type         SataCoinTxType
+  reason       String // mã/lý do (vd "ATTENDANCE", "REDEEM_GIFT")
+  note         String?        @db.Text
+  centerId     String?
+  ruleCode     String? // rule áp dụng (nếu có)
+  reversedTxId String?        @unique // trỏ tới giao dịch bị đảo (1-1)
+  createdById  String?
+  createdAt    DateTime       @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@index([centerId])
+}
+
+model SataCoinRule {
+  id        String   @id @default(cuid())
+  code      String   @unique // ATTENDANCE, ASSIGNMENT_GOOD, ...
+  label     String
+  amount    Int // coin cộng khi áp rule
+  isActive  Boolean  @default(true)
+  centerId  String? // null = áp mọi cơ sở
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -100,6 +100,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "questions",
   "r2-test",
   "rooms",
+  "satacoin",
   "sessions",
   "settings",
   "site-content",

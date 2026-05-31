@@ -1,0 +1,115 @@
+"use server";
+
+import { z } from "zod";
+import { revalidatePath } from "next/cache";
+import type { Session } from "next-auth";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
+import { db } from "@/lib/db";
+import { logStudentAudit, getAuditActor } from "@/lib/audit/log";
+import { recordTransaction, reverseTransaction } from "@/lib/satacoin/service";
+
+// C4 — SataCoin admin. Gate satacoin:manage.
+
+function gate(session: Session | null) {
+  if (!session?.user) return "Chưa đăng nhập";
+  if (!can(session.user, "satacoin:manage")) return "Không có quyền";
+  return null;
+}
+
+const ruleSchema = z.object({
+  code: z.string().trim().min(2).max(50).regex(/^[A-Z0-9_]+$/, "Mã chỉ gồm A-Z, 0-9, _"),
+  label: z.string().trim().min(2).max(200),
+  amount: z.coerce.number().int().refine((n) => n !== 0, "Khác 0"),
+  centerId: z.string().optional().or(z.literal("")),
+});
+
+export async function createRule(input: unknown): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  const err = gate(session);
+  if (err) return { ok: false, error: err };
+
+  const parsed = ruleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  const d = parsed.data;
+  try {
+    await db.sataCoinRule.create({
+      data: { code: d.code, label: d.label, amount: d.amount, centerId: d.centerId || null },
+    });
+  } catch {
+    return { ok: false, error: "Mã rule đã tồn tại" };
+  }
+  revalidatePath("/admin/satacoin");
+  return { ok: true };
+}
+
+export async function toggleRule(id: string): Promise<{ ok: boolean }> {
+  const session = await auth();
+  if (gate(session)) return { ok: false };
+  const r = await db.sataCoinRule.findUnique({ where: { id }, select: { isActive: true } });
+  if (r) await db.sataCoinRule.update({ where: { id }, data: { isActive: !r.isActive } });
+  revalidatePath("/admin/satacoin");
+  return { ok: true };
+}
+
+const grantSchema = z.object({
+  studentId: z.string().min(1),
+  amount: z.coerce.number().int().refine((n) => n !== 0, "Khác 0"),
+  reason: z.string().trim().min(2).max(100),
+  note: z.string().trim().max(500).optional().or(z.literal("")),
+});
+
+export async function grantCoins(input: unknown): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  const err = gate(session);
+  if (err) return { ok: false, error: err };
+
+  const parsed = grantSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  const d = parsed.data;
+
+  const res = await recordTransaction({
+    studentId: d.studentId,
+    amount: d.amount,
+    type: d.amount > 0 ? "EARN" : "ADJUST",
+    reason: d.reason,
+    note: d.note || null,
+    createdById: session!.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  const actor = getAuditActor(session);
+  await logStudentAudit({
+    studentId: d.studentId,
+    action: "UPDATE",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    changedFields: ["satacoin"],
+    newValues: { amount: d.amount, reason: d.reason },
+    reason: "Cấp/điều chỉnh SataCoin",
+  });
+  revalidatePath("/admin/satacoin");
+  return { ok: true };
+}
+
+export async function reverseCoinTx(txId: string, studentId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  const err = gate(session);
+  if (err) return { ok: false, error: err };
+
+  const res = await reverseTransaction(txId, session!.user.id, null);
+  if (!res.ok) return { ok: false, error: res.error };
+
+  const actor = getAuditActor(session);
+  await logStudentAudit({
+    studentId,
+    action: "UPDATE",
+    actorId: actor.actorId,
+    actorName: actor.actorName,
+    changedFields: ["satacoin"],
+    newValues: { reversedTxId: txId },
+    reason: "Đảo giao dịch SataCoin",
+  });
+  revalidatePath("/admin/satacoin");
+  return { ok: true };
+}

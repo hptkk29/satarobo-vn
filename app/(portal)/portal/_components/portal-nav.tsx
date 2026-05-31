@@ -18,6 +18,7 @@ import {
   MessageCircle,
   GraduationCap,
   ScrollText,
+  Coins,
 } from "lucide-react";
 
 const ITEMS = [
@@ -35,6 +36,7 @@ const ITEMS = [
   { label: "Đánh giá", href: "/portal/danh-gia", icon: Star },
   { label: "Khảo sát", href: "/portal/khao-sat", icon: ClipboardList },
   { label: "Học bạ", href: "/portal/hoc-ba", icon: ScrollText },
+  { label: "SataCoin", href: "/portal/satacoin", icon: Coins },
   { label: "Hồ sơ con", href: "/portal/ho-so-con", icon: GraduationCap },
   { label: "Hồ sơ", href: "/portal/ho-so", icon: User },
 ];
