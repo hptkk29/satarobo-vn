@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, CalendarDays } from "lucide-react";
 import { db } from "@/lib/db";
 import { SessionListRow } from "./_components/session-list-row";
+import { SessionFilters } from "./_components/session-filters";
 
 export const dynamic = "force-dynamic";
 
@@ -52,8 +53,12 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
             Buổi học
           </h1>
           <p className="mt-1 text-neutral-600">
-            Quản lý lịch buổi học · {sessions.length}{" "}
-            {scope === "upcoming" ? "sắp tới" : scope === "past" ? "đã diễn ra" : "tổng cộng"}
+            Đang xem:{" "}
+            <span className="font-semibold text-neutral-800">
+              {scope === "upcoming" ? "Sắp tới" : scope === "past" ? "Đã diễn ra" : "Tất cả"}
+            </span>{" "}
+            · {sessions.length} buổi
+            {sessions.length >= 200 ? "+ (hiển thị 200 mới nhất)" : ""}
           </p>
         </div>
         <Link
@@ -65,42 +70,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
         </Link>
       </div>
 
-      <form method="GET" className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5">
-          {(["upcoming", "past", "all"] as const).map((s) => (
-            <label key={s} className="cursor-pointer">
-              <input
-                type="radio"
-                name="scope"
-                value={s}
-                defaultChecked={scope === s}
-                className="peer sr-only"
-              />
-              <span className="inline-block rounded-md px-3 py-1.5 text-xs font-semibold text-neutral-600 peer-checked:bg-orange-500 peer-checked:text-white">
-                {s === "upcoming" ? "Sắp tới" : s === "past" ? "Đã diễn ra" : "Tất cả"}
-              </span>
-            </label>
-          ))}
-        </div>
-        <select
-          name="classId"
-          defaultValue={classFilter ?? ""}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
-        >
-          <option value="">Tất cả lớp</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
-        >
-          Lọc
-        </button>
-      </form>
+      <SessionFilters scope={scope} classId={classFilter ?? ""} classes={classes} />
 
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
         <table className="w-full">

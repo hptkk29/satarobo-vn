@@ -406,6 +406,7 @@ export async function closeLeadAsEnrolled(
     where: { id: classId, deletedAt: null },
     select: {
       id: true,
+      name: true,
       courseId: true,
       centerId: true,
       maxStudents: true,
@@ -580,7 +581,7 @@ export async function closeLeadAsEnrolled(
               create: {
                 type: 'COURSE_ENROLLMENT',
                 enrollmentId: enrollment.id,
-                itemName: `Học phí lớp ${cls.id}`,
+                itemName: `Học phí lớp ${cls.name}`,
                 quantity: 1,
                 unitPrice: tuition,
                 totalPrice: total,
