@@ -343,9 +343,10 @@ const closeDealSchema = z.object({
   tuition: z.number().int().nonnegative().nullable().optional(),
   paid: z.boolean().optional(),
   // C2 — tuỳ chọn cấp tài khoản phụ huynh (portal) ngay khi chốt.
+  // A3/P2: tài khoản tạo ở PENDING_ACTIVATION + OTP kích hoạt (A1) — KHÔNG đặt
+  // mật khẩu lúc chốt deal (bỏ field parentPassword cũ).
   createParentAccount: z.boolean().optional(),
   parentEmail: z.string().trim().email('Email phụ huynh không hợp lệ').optional().or(z.literal('')),
-  parentPassword: z.string().trim().min(8, 'Mật khẩu tối thiểu 8 ký tự').optional().or(z.literal('')),
   // Cụm A3 — học phí + hoá đơn.
   discountAmount: z.number().int().nonnegative().nullable().optional(),
   paymentMethodId: z.string().trim().optional().or(z.literal('')),
