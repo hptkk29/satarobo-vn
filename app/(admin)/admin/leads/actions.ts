@@ -838,6 +838,21 @@ export async function createLeadManual(
     select: { id: true },
   })
 
+  // P2-1: ghi nhật ký kiểm toán tạo lead.
+  await logLeadAudit({
+    leadId: lead.id,
+    action: 'CREATE',
+    actorId,
+    actorName,
+    newValues: {
+      parentName: d.parentName,
+      phone: d.phone,
+      childName: d.childName ?? null,
+      centerId: d.centerId || null,
+      source: d.source || 'Nhập tay',
+    },
+  }).catch(() => {})
+
   // Auto-chia theo cơ sở → chế độ cơ sở (PHẦN 2).
   await autoAssignNewLead(lead.id, { actorId, actorName }).catch(() => {})
 
@@ -864,7 +879,18 @@ export async function updateLeadFields(
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
-    select: { id: true, phone: true },
+    select: {
+      id: true,
+      parentName: true,
+      phone: true,
+      email: true,
+      childName: true,
+      childAge: true,
+      centerId: true,
+      courseId: true,
+      source: true,
+      note: true,
+    },
   })
   if (!before) return { ok: false, error: 'Lead không tồn tại' }
 
@@ -877,20 +903,37 @@ export async function updateLeadFields(
     if (dup) return { ok: false, error: 'SĐT đã tồn tại ở lead khác' }
   }
 
-  await db.lead.update({
-    where: { id: leadId },
-    data: {
-      ...(d.parentName !== undefined ? { parentName: d.parentName } : {}),
-      ...(d.phone !== undefined ? { phone: d.phone } : {}),
-      ...(d.email !== undefined ? { email: d.email || null } : {}),
-      ...(d.childName !== undefined ? { childName: d.childName || null } : {}),
-      ...(d.childAge !== undefined ? { childAge: d.childAge ?? null } : {}),
-      ...(d.centerId !== undefined ? { centerId: d.centerId || null } : {}),
-      ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
-      ...(d.source !== undefined ? { source: d.source || null } : {}),
-      ...(d.note !== undefined ? { note: d.note || null } : {}),
-    },
-  })
+  const updateData = {
+    ...(d.parentName !== undefined ? { parentName: d.parentName } : {}),
+    ...(d.phone !== undefined ? { phone: d.phone } : {}),
+    ...(d.email !== undefined ? { email: d.email || null } : {}),
+    ...(d.childName !== undefined ? { childName: d.childName || null } : {}),
+    ...(d.childAge !== undefined ? { childAge: d.childAge ?? null } : {}),
+    ...(d.centerId !== undefined ? { centerId: d.centerId || null } : {}),
+    ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
+    ...(d.source !== undefined ? { source: d.source || null } : {}),
+    ...(d.note !== undefined ? { note: d.note || null } : {}),
+  }
+  await db.lead.update({ where: { id: leadId }, data: updateData })
+
+  // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
+  const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter(
+    (k) => (before as Record<string, unknown>)[k] !== (updateData as Record<string, unknown>)[k],
+  )
+  if (changedFields.length > 0) {
+    const { actorId, actorName } = getAuditActor(session)
+    const pick = (obj: Record<string, unknown>) =>
+      Object.fromEntries(changedFields.map((k) => [k, obj[k]]))
+    await logLeadAudit({
+      leadId,
+      action: 'UPDATE',
+      actorId,
+      actorName,
+      oldValues: pick(before as Record<string, unknown>),
+      newValues: pick(updateData as Record<string, unknown>),
+      changedFields: changedFields as string[],
+    }).catch(() => {})
+  }
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
