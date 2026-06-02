@@ -12,6 +12,7 @@ import { genStudentCode } from '@/lib/codegen'
 import { generateOrderCode } from '@/lib/orders/code'
 import { requestOtp } from '@/lib/otp/service'
 import { enqueueEnrollmentConfirmation } from '@/lib/email/triggers'
+import { LEAD_STATUS_LABEL } from '@/lib/leads/status'
 
 const statusSchema = z.enum([
   'NEW',
@@ -783,11 +784,33 @@ export async function createLeadManual(
   }
   const d = parsed.data
 
+  // P2-2: trùng SĐT → báo lỗi RÕ (không fail thầm lặng). Kèm trạng thái + người
+  // phụ trách nếu nhân viên có quyền xem (view-all hoặc cùng cơ sở).
   const dup = await db.lead.findFirst({
     where: { phone: d.phone, deletedAt: null },
-    select: { id: true },
+    select: {
+      id: true,
+      status: true,
+      centerId: true,
+      assignedTo: { select: { name: true } },
+    },
   })
-  if (dup) return { ok: false, error: 'SĐT đã tồn tại trong CRM' }
+  if (dup) {
+    const canSeeDetail =
+      can(session.user, 'leads:view-all') ||
+      (!!dup.centerId && dup.centerId === session.user.centerId)
+    if (canSeeDetail) {
+      const who = dup.assignedTo?.name ? `, phụ trách: ${dup.assignedTo.name}` : ''
+      return {
+        ok: false,
+        error: `SĐT đã tồn tại trong CRM (trạng thái: ${LEAD_STATUS_LABEL[dup.status] ?? dup.status}${who}). Mở lead hiện có thay vì tạo mới.`,
+      }
+    }
+    return {
+      ok: false,
+      error: 'SĐT đã tồn tại trong hệ thống (thuộc cơ sở khác). Vui lòng báo quản lý cơ sở kiểm tra.',
+    }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
   const lead = await db.lead.create({
