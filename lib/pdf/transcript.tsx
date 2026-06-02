@@ -64,7 +64,9 @@ export function TranscriptPdf({ t }: { t: StudentTranscript }) {
             <Text style={s.c1}>{c.className}</Text>
             <Text style={s.c2}>{c.courseName}</Text>
             <Text style={s.c3}>
-              {c.attendedSessions}/{c.totalSessions} ({c.attendanceRate}%)
+              {c.totalSessions === 0
+                ? "Chưa diễn ra"
+                : `${c.attendedSessions}/${c.totalSessions} (${c.attendanceRate}%)`}
             </Text>
             <Text style={s.c4}>{c.averageScore ?? "—"}</Text>
             <Text style={s.c5}>{c.status}</Text>

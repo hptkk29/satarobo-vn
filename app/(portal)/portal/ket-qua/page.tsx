@@ -107,8 +107,12 @@ export default async function KetQuaPage() {
               <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Metric
                   label="Điểm danh"
-                  value={`${p.attendedSessions}/${p.totalSessions}`}
-                  sub={`${p.attendanceRate}%`}
+                  value={
+                    p.totalSessions === 0
+                      ? "Chưa diễn ra"
+                      : `${p.attendedSessions}/${p.totalSessions}`
+                  }
+                  sub={p.totalSessions === 0 ? undefined : `${p.attendanceRate}%`}
                 />
                 <Metric
                   label="Bài học"

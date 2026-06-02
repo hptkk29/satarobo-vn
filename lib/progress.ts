@@ -51,11 +51,14 @@ export async function getStudentProgress(
             sessionId: { in: sessions.map((s) => s.id) },
             studentId,
           },
-          select: { status: true },
+          select: { status: true, makeupStatus: true },
         })
       : [];
+  // P1-1: thống nhất với lib/students/progress — buổi tính có mặt = PRESENT/LATE
+  // HOẶC vắng đã học bù (makeupStatus MADE_UP). Tránh lệch chuyên cần giữa các trang.
   const attendedSessions = attendances.filter(
-    (a) => a.status === "PRESENT" || a.status === "LATE",
+    (a) =>
+      a.status === "PRESENT" || a.status === "LATE" || a.makeupStatus === "MADE_UP",
   ).length;
   const attendanceRate =
     totalSessions > 0

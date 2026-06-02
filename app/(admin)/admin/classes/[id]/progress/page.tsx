@@ -113,7 +113,10 @@ export default async function ClassProgressPage({ params }: Props) {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="Sĩ số đang học" value={String(progresses.length)} />
         <StatCard label="Buổi đã diễn ra" value={String(heldSessionsCount)} />
-        <StatCard label="Điểm danh TB" value={`${avgAttendance}%`} />
+        <StatCard
+          label="Điểm danh TB"
+          value={heldSessionsCount === 0 ? "—" : `${avgAttendance}%`}
+        />
         <StatCard
           label="Điểm TB lớp"
           value={avgScore !== null ? `${avgScore}/10` : "—"}
@@ -210,12 +213,20 @@ export default async function ClassProgressPage({ params }: Props) {
                       <td
                         className={`px-4 py-3 text-center font-semibold tabular-nums ${attendanceColor}`}
                       >
-                        <div>
-                          {progress.attendedSessions}/{progress.totalSessions}
-                        </div>
-                        <div className="text-xs font-normal">
-                          ({progress.attendanceRate}%)
-                        </div>
+                        {progress.totalSessions === 0 ? (
+                          <div className="text-xs font-normal text-neutral-400">
+                            Chưa diễn ra
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              {progress.attendedSessions}/{progress.totalSessions}
+                            </div>
+                            <div className="text-xs font-normal">
+                              ({progress.attendanceRate}%)
+                            </div>
+                          </>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center text-sm tabular-nums text-neutral-700">
                         {progress.coveredLessons}/{progress.totalLessons}

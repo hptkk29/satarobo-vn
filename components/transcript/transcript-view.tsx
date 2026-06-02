@@ -62,7 +62,9 @@ export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: 
                   <td className="px-4 py-2 font-medium">{c.className}</td>
                   <td className="px-4 py-2">{c.courseName}</td>
                   <td className="px-4 py-2 text-center">
-                    {c.attendedSessions}/{c.totalSessions} ({c.attendanceRate}%)
+                    {c.totalSessions === 0
+                      ? "Chưa diễn ra"
+                      : `${c.attendedSessions}/${c.totalSessions} (${c.attendanceRate}%)`}
                   </td>
                   <td className="px-4 py-2 text-center">{c.averageScore ?? "—"}</td>
                   <td className="px-4 py-2 text-center text-neutral-500">{c.status}</td>
