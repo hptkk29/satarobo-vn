@@ -1,8 +1,8 @@
 "use server";
 
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { requestOtp } from "@/lib/otp/service";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -678,16 +678,16 @@ export async function withdrawStudentAction(input: {
 const parentAccountSchema = z.object({
   studentId: z.string().min(1),
   email: z.string().email("Email không hợp lệ"),
-  password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
   name: z.string().trim().max(120).optional(),
 });
 
+// P0-2: cấp tài khoản phụ huynh = PENDING_ACTIVATION + gửi OTP kích hoạt (KHÔNG
+// đặt mật khẩu tạm). Phụ huynh tự đặt mật khẩu khi kích hoạt (flow A1).
 export async function createParentAccount(input: {
   studentId: string;
   email: string;
-  password: string;
   name?: string;
-}): Promise<{ ok: boolean; linkedCount?: number; error?: string }> {
+}): Promise<{ ok: boolean; linkedCount?: number; pendingActivation?: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "students:edit")) {
@@ -698,7 +698,7 @@ export async function createParentAccount(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { studentId, password } = parsed.data;
+  const { studentId } = parsed.data;
   const email = parsed.data.email.trim().toLowerCase();
 
   const student = await db.student.findFirst({
@@ -722,22 +722,24 @@ export async function createParentAccount(input: {
   const parentName = parsed.data.name?.trim() || student.parentName || "Phụ huynh";
 
   try {
-    const linkedCount = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       let parentUserId = existingUser?.id;
+      let isNewPending = false;
       if (!parentUserId) {
-        const hashed = await bcrypt.hash(password, 10);
+        // Tài khoản mới: PENDING_ACTIVATION, KHÔNG mật khẩu — kích hoạt qua OTP.
         const created = await tx.user.create({
           data: {
             name: parentName,
             email,
-            password: hashed,
             role: "PARENT",
             isActive: true,
+            accountStatus: "PENDING_ACTIVATION",
             tokenVersion: 0,
           },
           select: { id: true },
         });
         parentUserId = created.id;
+        isNewPending = true;
       }
 
       // Link student hiện tại + anh chị em cùng SĐT phụ huynh (chưa có parent).
@@ -753,14 +755,44 @@ export async function createParentAccount(input: {
         where: siblingFilter,
         data: { parentUserId },
       });
-      return res.count;
+      return { linkedCount: res.count, isNewPending };
     });
 
+    // Tài khoản mới PENDING_ACTIVATION → gửi OTP kích hoạt (ngoài transaction).
+    if (result.isNewPending) {
+      await requestOtp({ target: email, purpose: "ACTIVATION" }).catch(() => {});
+    }
+
     revalidatePath(`/students/${studentId}/edit`);
-    return { ok: true, linkedCount };
+    return { ok: true, linkedCount: result.linkedCount, pendingActivation: result.isNewPending };
   } catch {
     return { ok: false, error: "Lỗi tạo tài khoản phụ huynh" };
   }
+}
+
+// P0-2: gửi LẠI mã kích hoạt cho phụ huynh đang chờ kích hoạt.
+export async function resendParentActivationOtp(
+  studentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+
+  const student = await db.student.findFirst({
+    where: { id: studentId, deletedAt: null },
+    select: { parentUser: { select: { email: true, accountStatus: true } } },
+  });
+  const parent = student?.parentUser;
+  if (!parent?.email) return { ok: false, error: "Học viên chưa có tài khoản phụ huynh" };
+  if (parent.accountStatus !== "PENDING_ACTIVATION") {
+    return { ok: false, error: "Tài khoản đã kích hoạt — không cần gửi lại mã" };
+  }
+
+  const res = await requestOtp({ target: parent.email, purpose: "ACTIVATION" });
+  if (!res.ok) {
+    return { ok: false, error: res.error ?? "Không gửi được mã (thử lại sau ít phút)" };
+  }
+  return { ok: true };
 }
 
 // ─── REACTIVATE STUDENT (INACTIVE/PAUSED → ACTIVE) ───────────────────

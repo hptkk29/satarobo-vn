@@ -63,7 +63,7 @@ export default async function EditStudentPage({ params }: Props) {
         status: true,
         centerId: true,
         parentUserId: true,
-        parentUser: { select: { email: true, name: true } },
+        parentUser: { select: { email: true, name: true, accountStatus: true } },
       },
     }),
     db.center.findMany({
@@ -216,6 +216,7 @@ export default async function EditStudentPage({ params }: Props) {
         parentEmail={student.parentUser?.email ?? null}
         parentName={student.parentUser?.name ?? student.parentName}
         defaultEmail={student.parentEmail}
+        pendingActivation={student.parentUser?.accountStatus === "PENDING_ACTIVATION"}
       />
 
       <ReserveHistorySection studentId={student.id} />

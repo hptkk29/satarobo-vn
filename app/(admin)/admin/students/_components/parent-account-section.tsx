@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, CheckCircle2 } from "lucide-react";
+import { KeyRound, CheckCircle2, Send } from "lucide-react";
 import { toast } from "sonner";
-import { createParentAccount } from "../_actions";
+import { createParentAccount, resendParentActivationOtp } from "../_actions";
 
 type Props = {
   studentId: string;
@@ -12,6 +12,7 @@ type Props = {
   parentEmail: string | null;
   parentName: string | null;
   defaultEmail: string | null;
+  pendingActivation?: boolean;
 };
 
 export function ParentAccountSection({
@@ -20,27 +21,37 @@ export function ParentAccountSection({
   parentEmail,
   parentName,
   defaultEmail,
+  pendingActivation,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState(defaultEmail ?? "");
-  const [password, setPassword] = useState("");
   const [name, setName] = useState(parentName ?? "");
 
   function submit() {
-    if (!email || password.length < 8) {
-      toast.error("Nhập email + mật khẩu tối thiểu 8 ký tự");
+    if (!email) {
+      toast.error("Nhập email đăng nhập của phụ huynh");
       return;
     }
     startTransition(async () => {
-      const res = await createParentAccount({ studentId, email, password, name: name || undefined });
+      const res = await createParentAccount({ studentId, email, name: name || undefined });
       if (res.ok) {
-        toast.success(`Đã cấp tài khoản phụ huynh · liên kết ${res.linkedCount} con`);
-        setPassword("");
+        toast.success(
+          `Đã cấp tài khoản phụ huynh · liên kết ${res.linkedCount} con` +
+            (res.pendingActivation ? " · đã gửi email kích hoạt" : ""),
+        );
         router.refresh();
       } else {
         toast.error(res.error ?? "Lỗi cấp tài khoản");
       }
+    });
+  }
+
+  function resend() {
+    startTransition(async () => {
+      const res = await resendParentActivationOtp(studentId);
+      if (res.ok) toast.success("Đã gửi lại mã kích hoạt qua email phụ huynh");
+      else toast.error(res.error ?? "Lỗi gửi lại mã");
     });
   }
 
@@ -52,28 +63,51 @@ export function ParentAccountSection({
       </h2>
 
       {linked ? (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          <CheckCircle2 className="h-5 w-5 shrink-0" />
-          <div>
-            Đã liên kết tài khoản phụ huynh
-            {parentEmail && (
-              <span className="font-semibold"> ({parentEmail})</span>
-            )}
-            . Phụ huynh đăng nhập tại{" "}
-            <span className="font-mono">hocvien.satarobo.vn</span> để xem &quot;site
-            con&quot;.
+        <div
+          className={`rounded-xl border p-4 text-sm ${
+            pendingActivation
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
+            <div>
+              Đã liên kết tài khoản phụ huynh
+              {parentEmail && <span className="font-semibold"> ({parentEmail})</span>}.{" "}
+              {pendingActivation ? (
+                <>Tài khoản <b>đang chờ kích hoạt</b> — phụ huynh cần mở email + nhập mã để đặt mật khẩu.</>
+              ) : (
+                <>
+                  Phụ huynh đăng nhập tại{" "}
+                  <span className="font-mono">hocvien.satarobo.vn</span> để xem &quot;site con&quot;.
+                </>
+              )}
+            </div>
           </div>
+          {pendingActivation && (
+            <button
+              type="button"
+              onClick={resend}
+              disabled={pending}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+            >
+              <Send className="h-3.5 w-3.5" />
+              {pending ? "Đang gửi…" : "Gửi lại mã kích hoạt"}
+            </button>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <p className="mb-3 text-sm text-neutral-500">
-            Tạo tài khoản đăng nhập portal cho phụ huynh. Các con cùng số điện
-            thoại phụ huynh sẽ được liên kết tự động.
+            Tạo tài khoản đăng nhập portal cho phụ huynh. Hệ thống gửi email mã kích
+            hoạt để phụ huynh tự đặt mật khẩu (không đặt mật khẩu tạm). Các con cùng số
+            điện thoại phụ huynh sẽ được liên kết tự động.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-neutral-500">
-                Email đăng nhập
+                Email đăng nhập (nhận mã kích hoạt)
               </span>
               <input
                 type="email"
@@ -92,18 +126,6 @@ export function ParentAccountSection({
                 onChange={(e) => setName(e.target.value)}
                 className={inputCls}
                 placeholder="Tên hiển thị"
-              />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs font-medium text-neutral-500">
-                Mật khẩu tạm (tối thiểu 8 ký tự)
-              </span>
-              <input
-                type="text"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={inputCls}
-                placeholder="Phụ huynh đổi sau khi đăng nhập"
               />
             </label>
           </div>
