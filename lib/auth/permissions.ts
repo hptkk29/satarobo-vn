@@ -615,3 +615,18 @@ export function isParentOnly(user: RoleHolder): boolean {
   const eff = getEffectiveRoles(user);
   return eff.length > 0 && eff.every((r) => r === "PARENT");
 }
+
+// Vai trò ĐƯỢC PHÉP xem thông tin liên hệ phụ huynh (SĐT/email) — dữ liệu PII.
+// GIÁO VIÊN/trợ giảng/MARKETING/HR KHÔNG được xem (P0-3: chống lộ SĐT toàn lớp ở
+// trang tiến độ lớp). CENTER_MANAGER/ACCOUNTANT vẫn cần center scope ở tầng query.
+const PARENT_CONTACT_ROLES: Role[] = [
+  "SUPER_ADMIN",
+  "CENTER_MANAGER",
+  "ACCOUNTANT",
+  "SALES_CSM",
+];
+
+/** User có được xem SĐT/email phụ huynh không (PII). */
+export function canViewParentContact(user: RoleHolder): boolean {
+  return hasAnyRole(user, PARENT_CONTACT_ROLES);
+}

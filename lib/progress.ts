@@ -170,6 +170,10 @@ export interface ClassStudentProgress {
 
 export async function getClassProgress(
   classId: string,
+  // P0-3: chỉ KÈM SĐT phụ huynh khi caller có quyền xem PII (mặc định KHÔNG).
+  // Caller PHẢI truyền canViewParentContact(session.user). Khi false, parentPhone
+  // luôn null trong kết quả → KHÔNG gửi xuống client cho GV.
+  includeParentContact = false,
 ): Promise<ClassStudentProgress[]> {
   const enrollments = await db.enrollment.findMany({
     where: {
@@ -194,7 +198,10 @@ export async function getClassProgress(
   return Promise.all(
     enrollments.map(async (e) => ({
       enrollmentId: e.id,
-      student: e.student,
+      student: {
+        ...e.student,
+        parentPhone: includeParentContact ? e.student.parentPhone : null,
+      },
       progress: await getStudentProgress(e.student.id, classId),
     })),
   );

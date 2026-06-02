@@ -3,7 +3,7 @@ import { ChevronLeft, LineChart } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, canViewParentContact } from "@/lib/auth/permissions";
 import { getClassProgress, getClassGradebook } from "@/lib/progress";
 import { GenerateReportsButton } from "./_components/generate-reports-button";
 
@@ -56,8 +56,11 @@ export default async function ClassProgressPage({ params }: Props) {
     session.user.role === "CENTER_MANAGER" ||
     (session.user.role === "TEACHER" && cls.teacherId === session.user.id);
 
+  // P0-3: GV (chỉ view-own) KHÔNG được nhận SĐT phụ huynh — chỉ quản lý/kế toán/CSM.
+  const showParentContact = canViewParentContact(session.user);
+
   const [progresses, heldSessionsCount, gradebook] = await Promise.all([
-    getClassProgress(id),
+    getClassProgress(id, showParentContact),
     db.classSession.count({ where: { classId: id, date: { lte: now } } }),
     getClassGradebook(id),
   ]);
