@@ -12,6 +12,7 @@ import {
 } from "@/components/legacy-laptrinhrobot/_data/courses-details";
 import { ConsultCtaButton } from "@/components/khoa-hoc/consult-cta-button";
 import { ExamDetailSections } from "@/components/khoa-hoc/exam-detail-sections";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { LongtermDetailSections } from "@/components/khoa-hoc/longterm-detail-sections";
 
 const BASE_URL = "https://satarobo.vn";
@@ -368,12 +369,15 @@ export default async function CoursePage({
               size="lg"
             />
 
-            <a
-              href="tel:0818823720"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white px-8 py-4 text-lg font-bold text-white transition hover:bg-white/10"
-            >
-              Hotline 0818.823.720
-            </a>
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <a
+                key={c.code}
+                href={`tel:${c.hotlineRaw}`}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white px-6 py-4 text-lg font-bold text-white transition hover:bg-white/10"
+              >
+                {c.code}: {c.hotline}
+              </a>
+            ))}
           </div>
           <div className="mt-6">
             <Link

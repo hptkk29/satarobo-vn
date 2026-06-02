@@ -8,7 +8,7 @@ import { HeroParticles } from "@/components/design-system/heroes/hero-particles"
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { CTASecondary } from "@/components/design-system/ctas/cta-secondary";
-import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { tokens } from "@/lib/design-tokens";
 
 const BASE_URL = "https://satarobo.vn";
@@ -97,9 +97,11 @@ export default async function HocCuPage() {
         <CTAPrimary href="#kits" size="lg">
           Xem 3 bộ học cụ
         </CTAPrimary>
-        <CTASecondary href={SATA_ROBO_CONTACT.zalo} size="lg">
-          Chat Zalo tư vấn
-        </CTASecondary>
+        {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+          <CTASecondary key={c.code} href={c.zalo} size="lg">
+            Chat Zalo {c.code}
+          </CTASecondary>
+        ))}
       </HeroParticles>
 
       {/* ABOUT ZMROBO */}
@@ -137,12 +139,17 @@ export default async function HocCuPage() {
           {kits.length === 0 ? (
             <p className="text-center text-neutral-500 py-12">
               Đang cập nhật danh mục học cụ. Vui lòng liên hệ{" "}
-              <a
-                href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-                className="font-bold text-orange-600 hover:underline"
-              >
-                {SATA_ROBO_CONTACT.hotline}
-              </a>{" "}
+              {SATA_ROBO_CONTACT_CENTERS.map((c, i) => (
+                <span key={c.code}>
+                  {i > 0 ? " · " : ""}
+                  <a
+                    href={`tel:${c.hotlineRaw}`}
+                    className="font-bold text-orange-600 hover:underline"
+                  >
+                    {c.code}: {c.hotline}
+                  </a>
+                </span>
+              ))}{" "}
               để được tư vấn.
             </p>
           ) : (
@@ -335,15 +342,18 @@ export default async function HocCuPage() {
             tuổi và mục tiêu của con để gợi ý bộ học cụ phù hợp nhất.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a
-              href={SATA_ROBO_CONTACT.zalo}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-white text-orange-600 font-bold px-6 py-3 rounded-xl hover:bg-orange-50 transition-colors shadow-lg"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Chat Zalo: {SATA_ROBO_CONTACT.hotline}
-            </a>
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <a
+                key={c.code}
+                href={c.zalo}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-white text-orange-600 font-bold px-6 py-3 rounded-xl hover:bg-orange-50 transition-colors shadow-lg"
+              >
+                <MessageCircle className="w-5 h-5" />
+                Zalo {c.code}: {c.hotline}
+              </a>
+            ))}
             <Link
               href="/lien-he?subject=tu-van-hoc-cu"
               className="inline-flex items-center gap-2 bg-purple-700 text-white font-bold px-6 py-3 rounded-xl hover:bg-purple-800 transition-colors shadow-lg"

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Phone, ArrowRight } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { MobileNavDrawer } from "@/components/sections/mobile-nav-drawer";
 
 const NAV_LINKS = [
@@ -90,15 +90,21 @@ export function Header() {
           })}
         </nav>
 
-        {/* Desktop CTA */}
+        {/* Desktop CTA — hiển thị SĐT của CẢ 2 cơ sở */}
         <div className="hidden lg:flex items-center gap-3">
-          <a
-            href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-            className="hidden xl:inline-flex items-center gap-1.5 text-sm font-semibold text-neutral-600 hover:text-orange-600 transition-colors"
-          >
-            <Phone className="h-4 w-4" />
-            {SATA_ROBO_CONTACT.hotline}
-          </a>
+          <div className="hidden xl:flex flex-col gap-0.5">
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <a
+                key={c.code}
+                href={`tel:${c.hotlineRaw}`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-orange-600 transition-colors"
+              >
+                <Phone className="h-3.5 w-3.5" />
+                <span className="text-neutral-400">{c.code}</span>
+                {c.hotline}
+              </a>
+            ))}
+          </div>
           <Link
             href="/lien-he?free-trial=true"
             className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-xl hover:shadow-orange-500/40 hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none"

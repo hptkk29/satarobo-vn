@@ -96,7 +96,7 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
             label="Số điện thoại"
             name="phone"
             defaultValue={center?.phone ?? undefined}
-            placeholder="0818823720"
+            placeholder="Số điện thoại cơ sở"
           />
           <Field
             label="Email"

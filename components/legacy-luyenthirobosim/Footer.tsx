@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -57,21 +58,25 @@ export default function Footer() {
           <address>
             <h4>Liên hệ</h4>
             <ul className="footer-links">
-              <li>
-                <a href="tel:0818823720" aria-label="Gọi hotline Sata Robo">
-                  <span className="fi">📞</span> 0818.823.720
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://zalo.me/0818823720"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Chat Zalo với Sata Robo"
-                >
-                  <span className="fi">💬</span> Zalo: 0818.823.720
-                </a>
-              </li>
+              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                <li key={`tel-${c.code}`}>
+                  <a href={`tel:${c.hotlineRaw}`} aria-label={`Gọi ${c.code} Sata Robo`}>
+                    <span className="fi">📞</span> {c.code}: {c.hotline}
+                  </a>
+                </li>
+              ))}
+              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                <li key={`zalo-${c.code}`}>
+                  <a
+                    href={c.zalo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Chat Zalo ${c.code}`}
+                  >
+                    <span className="fi">💬</span> Zalo {c.code}: {c.hotline}
+                  </a>
+                </li>
+              ))}
               <li>
                 <a href="mailto:thongtin@satarobo.vn" aria-label="Gửi email cho Sata Robo">
                   <span className="fi">✉️</span> thongtin@satarobo.vn

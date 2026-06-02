@@ -5,17 +5,12 @@ import Image from "next/image";
 import { Phone, Mail, MapPin, Plus } from "lucide-react";
 import {
   SATA_ROBO_CONTACT,
-  SATA_ROBO_LOCATIONS,
   operationalLocations,
   upcomingLocations,
 } from "@/lib/locations";
 
-// F-UI-4 — New footer. Real data từ SATA_ROBO_CONTACT (memory rule:
-// official hotline/email không được hard-code), 4-col desktop / 1-col
-// accordion mobile dùng native <details open>. Trên desktop summary
-// có pointer-events-none + chevron ẩn (luôn mở); mobile cho phép toggle.
-const HQ = SATA_ROBO_LOCATIONS.find((l) => l.isHQ) ?? SATA_ROBO_LOCATIONS[0];
-
+// F-UI-4 — New footer. Real data từ SATA_ROBO_LOCATIONS (mỗi cơ sở SĐT + Zalo
+// riêng — không hard-code), 4-col desktop / 1-col accordion mobile.
 const SECTIONS = [
   {
     title: "Khoá học",
@@ -41,7 +36,10 @@ const SECTIONS = [
   {
     title: "Hỗ trợ",
     links: [
-      { label: "Chat Zalo hỗ trợ", href: SATA_ROBO_CONTACT.zalo },
+      ...operationalLocations().map((c) => ({
+        label: `Chat Zalo ${c.code} (${c.hotline})`,
+        href: c.zalo,
+      })),
       { label: "Chính sách hoàn trả", href: "/chinh-sach-hoan-tra" },
       { label: "Chính sách bảo mật", href: "/chinh-sach-bao-mat" },
       { label: "Điều khoản sử dụng", href: "/dieu-khoan-su-dung" },
@@ -92,19 +90,19 @@ const SOCIAL_LINKS = [
       </svg>
     ),
   },
-  {
-    label: "Zalo",
-    href: SATA_ROBO_CONTACT.zalo,
+  ...operationalLocations().map((c) => ({
+    label: `Zalo ${c.code}`,
+    href: c.zalo,
     bg: "bg-[#0068FF] hover:bg-[#0050cc]",
     icon: (
       <span
-        className="text-xs font-black leading-none text-white"
+        className="text-[10px] font-black leading-none text-white"
         aria-hidden="true"
       >
-        Z
+        {c.code}
       </span>
     ),
-  },
+  })),
 ];
 
 function isExternal(href: string) {
@@ -139,14 +137,25 @@ export function SiteFooter() {
               {ops > 0 ? ` ${ops} cơ sở đang hoạt động` : ""}
               {upcoming > 0 ? ` · ${upcoming} sắp khai trương` : ""}.
             </p>
-            <div className="space-y-2 text-sm">
-              <a
-                href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-                className="flex items-center gap-2 transition-colors hover:text-orange-400"
-              >
-                <Phone className="h-4 w-4 text-orange-400" />
-                {SATA_ROBO_CONTACT.hotline}
-              </a>
+            <div className="space-y-3 text-sm">
+              {operationalLocations().map((c) => (
+                <div key={c.code} className="space-y-1">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                    {c.code} — {c.name}
+                  </p>
+                  <a
+                    href={`tel:${c.hotlineRaw}`}
+                    className="flex items-center gap-2 transition-colors hover:text-orange-400"
+                  >
+                    <Phone className="h-4 w-4 text-orange-400" />
+                    {c.hotline}
+                  </a>
+                  <div className="flex items-start gap-2 text-gray-400">
+                    <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-400" />
+                    <span>{c.address}</span>
+                  </div>
+                </div>
+              ))}
               <a
                 href={`mailto:${SATA_ROBO_CONTACT.emails.general}`}
                 className="flex items-center gap-2 break-all transition-colors hover:text-orange-400"
@@ -154,10 +163,6 @@ export function SiteFooter() {
                 <Mail className="h-4 w-4 flex-shrink-0 text-orange-400" />
                 {SATA_ROBO_CONTACT.emails.general}
               </a>
-              <div className="flex items-start gap-2 text-gray-400">
-                <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-400" />
-                <span>{HQ.address}</span>
-              </div>
             </div>
           </div>
 

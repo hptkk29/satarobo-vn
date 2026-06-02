@@ -15,17 +15,19 @@ export function organizationJsonLd() {
     description: 'Trung tâm đào tạo STEM – Lập trình Robotics & AI – Sata Robo',
     taxID: SATA_ROBO_CONTACT.taxCode,
     contactPoint: [
-      {
+      // 1 contactPoint cho MỖI cơ sở (mỗi cơ sở 1 số riêng).
+      ...SATA_ROBO_LOCATIONS.filter((loc) => loc.status === 'operational').map((loc) => ({
         '@type': 'ContactPoint',
-        telephone: SATA_ROBO_CONTACT.hotlineE164,
+        telephone: loc.hotlineE164,
         contactType: 'customer service',
         email: SATA_ROBO_CONTACT.emails.general,
         areaServed: 'VN',
         availableLanguage: 'Vietnamese',
-      },
+        name: `${loc.code} - ${loc.name}`,
+      })),
       {
         '@type': 'ContactPoint',
-        telephone: SATA_ROBO_CONTACT.hotlineE164,
+        telephone: '+84' + HR_CONTACT.phoneRaw.substring(1),
         contactType: 'HR',
         email: SATA_ROBO_CONTACT.emails.recruitment,
         areaServed: 'VN',
@@ -44,7 +46,7 @@ export function organizationJsonLd() {
       SATA_ROBO_CONTACT.facebook,
       SATA_ROBO_CONTACT.tiktok,
       SATA_ROBO_CONTACT.youtube,
-      SATA_ROBO_CONTACT.zalo,
+      ...SATA_ROBO_LOCATIONS.filter((loc) => loc.status === 'operational').map((loc) => loc.zalo),
     ],
   }
 }

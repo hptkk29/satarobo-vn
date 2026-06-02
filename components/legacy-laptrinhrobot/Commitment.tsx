@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { commitments, type Commitment as CommitmentType } from "./_data/commitments";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import {
   BadgeDollarSign,
   ChevronLeft,
@@ -189,9 +190,11 @@ export default function Commitment() {
             >
               Đăng ký tư vấn miễn phí
             </a>
-            <a href="https://zalo.me/0818823720" target="_blank" rel="noopener noreferrer" className="btn-outline">
-              Hỏi thêm qua Zalo
-            </a>
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <a key={c.code} href={c.zalo} target="_blank" rel="noopener noreferrer" className="btn-outline">
+                Hỏi qua Zalo {c.code}
+              </a>
+            ))}
           </div>
         </div>
       </div>

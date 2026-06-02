@@ -129,7 +129,7 @@ export const faqs: FAQ[] = [
     id: 8,
     question: "Muốn tư vấn thêm trước khi quyết định, liên hệ ở đâu?",
     answer: [
-      "Phụ huynh có thể liên hệ Zalo 0818.823.720 để được tư vấn nhanh về khóa học, lớp phù hợp, cơ sở gần nhà và lịch học còn chỗ.",
+      "Phụ huynh có thể liên hệ Zalo theo từng cơ sở — CS1 (Nguyễn Hữu Thọ): 0818.823.720 · CS2 (Hoàng Diệu): 0702.193.933 — để được tư vấn nhanh về khóa học, lớp phù hợp, cơ sở gần nhà và lịch học còn chỗ.",
       "Nếu điền form trên website, Sata Robo sẽ gọi lại để xác nhận thông tin. Việc để lại thông tin không bắt buộc phụ huynh phải đăng ký ngay.",
     ],
   },

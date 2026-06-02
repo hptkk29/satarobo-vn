@@ -26,6 +26,7 @@ import { CTASecondary } from "@/components/design-system/ctas/cta-secondary";
 import { tokens } from "@/lib/design-tokens";
 import {
   SATA_ROBO_CONTACT,
+  SATA_ROBO_CONTACT_CENTERS,
   operationalLocations,
 } from "@/lib/locations";
 import { AutoCarousel } from "@/components/public/auto-carousel";
@@ -389,17 +390,21 @@ export default function VeChungToiPage() {
 
               {/* Cột phải — Liên hệ */}
               <div className="flex flex-col gap-2.5 text-sm md:border-l md:border-neutral-200 md:pl-10">
-                <a
-                  href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-                  className="group flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-orange-50"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 group-hover:bg-orange-200">
-                    <Phone className="h-4 w-4" />
-                  </span>
-                  <span className="font-semibold text-neutral-800 group-hover:text-orange-700">
-                    {SATA_ROBO_CONTACT.hotline}
-                  </span>
-                </a>
+                {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                  <a
+                    key={c.code}
+                    href={`tel:${c.hotlineRaw}`}
+                    className="group flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-orange-50"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 group-hover:bg-orange-200">
+                      <Phone className="h-4 w-4" />
+                    </span>
+                    <span className="font-semibold text-neutral-800 group-hover:text-orange-700">
+                      <span className="text-neutral-400">{c.code}: </span>
+                      {c.hotline}
+                    </span>
+                  </a>
+                ))}
                 <a
                   href={`mailto:${SATA_ROBO_CONTACT.emails.general}`}
                   className="group flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-orange-50"

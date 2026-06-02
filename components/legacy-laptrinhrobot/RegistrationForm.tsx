@@ -31,7 +31,7 @@ import {
 } from "./_utils/tracking";
 
 const ZALO_GROUP_LINK = "https://zalo.me/g/ovma9qgjuedypjy8mnxc";
-const ZALO_FALLBACK = "https://zalo.me/0818823720";
+const CONTACT_CENTERS = locations.filter((l) => !l.isUpcoming);
 
 interface FormData {
   name: string;
@@ -148,7 +148,9 @@ export default function RegistrationForm() {
       setIsSuccess(true);
     } catch (err) {
       console.error("Submit error:", err);
-      alert("Có lỗi xảy ra, bố mẹ thử lại hoặc liên hệ Zalo 0818.823.720 nhé!");
+      alert(
+        `Có lỗi xảy ra, bố mẹ thử lại hoặc liên hệ Zalo ${CONTACT_CENTERS.map((c) => `${c.code}: ${c.hotline}`).join(" / ")} nhé!`,
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -193,9 +195,11 @@ export default function RegistrationForm() {
 
             <div className="flex flex-col justify-center gap-3 sm:flex-row">
               <a href={ZALO_GROUP_LINK} className="btn-primary">Tham gia nhóm Zalo ngay</a>
-              <a href={ZALO_FALLBACK} target="_blank" rel="noopener noreferrer" className="btn-outline">
-                Zalo cá nhân: 0818.823.720
-              </a>
+              {CONTACT_CENTERS.map((c) => (
+                <a key={c.code} href={c.zalo} target="_blank" rel="noopener noreferrer" className="btn-outline">
+                  Zalo {c.code}: {c.hotline}
+                </a>
+              ))}
               {shouldRedirectToZalo && (
                 <button type="button" onClick={() => setShouldRedirectToZalo(false)} className="btn-outline">
                   Ở lại trang

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { X, Phone, Loader2 } from "lucide-react";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { toast } from "sonner";
 
 type ConsultModalProps = {
@@ -314,12 +315,17 @@ export function ConsultModal({
 
           <p className="pt-1 text-center text-xs text-gray-500">
             Hoặc gọi ngay{" "}
-            <a
-              href="tel:0818823720"
-              className="font-bold text-orange-600 hover:underline"
-            >
-              0818.823.720
-            </a>
+            {SATA_ROBO_CONTACT_CENTERS.map((c, i) => (
+              <span key={c.code}>
+                {i > 0 ? " · " : ""}
+                <a
+                  href={`tel:${c.hotlineRaw}`}
+                  className="font-bold text-orange-600 hover:underline"
+                >
+                  {c.code}: {c.hotline}
+                </a>
+              </span>
+            ))}
           </p>
         </form>
       </div>

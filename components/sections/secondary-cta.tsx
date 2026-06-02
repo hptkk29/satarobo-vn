@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Calendar, Phone } from "lucide-react";
 import { FadeIn } from "@/components/motion/fade-in";
 import { ShimmerButton } from "@/components/magic/shimmer-button";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 // F-UI-3 — Final conversion section trước Footer. Dark zinc + purple
 // gradient với grid mask + 2 glow halos để focus vào CTA chính.
@@ -64,13 +65,16 @@ export function SecondaryCta() {
               </ShimmerButton>
             </Link>
 
-            <a
-              href="tel:0818823720"
-              className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 text-base font-medium text-white backdrop-blur transition-colors hover:bg-white/10 sm:h-auto sm:w-auto sm:py-3.5"
-            >
-              <Phone className="h-5 w-5" />
-              Gọi 0818.823.720
-            </a>
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <a
+                key={c.code}
+                href={`tel:${c.hotlineRaw}`}
+                className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 text-base font-medium text-white backdrop-blur transition-colors hover:bg-white/10 sm:h-auto sm:w-auto sm:py-3.5"
+              >
+                <Phone className="h-5 w-5" />
+                Gọi {c.code}: {c.hotline}
+              </a>
+            ))}
           </div>
         </FadeIn>
 

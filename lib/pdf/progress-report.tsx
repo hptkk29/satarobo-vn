@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Font,
 } from "@react-pdf/renderer";
+import { hotlinesInline } from "@/lib/locations";
 
 // Register Noto Sans (Vietnamese diacritics support) once at module load.
 // The same TTF is registered for both Regular and Bold; @react-pdf synthesizes
@@ -179,7 +180,7 @@ export function ProgressReportPdf({ data }: { data: ProgressReportData }) {
         <View style={s.header}>
           <View style={s.brandRow}>
             <Text style={s.brandName}>SATA ROBO</Text>
-            <Text style={s.brandMeta}>satarobo.vn · 0818.823.720</Text>
+            <Text style={s.brandMeta}>satarobo.vn · {hotlinesInline()}</Text>
           </View>
           <Text style={s.reportTitle}>BÁO CÁO TIẾN ĐỘ HỌC TẬP</Text>
           <Text style={s.reportMeta}>
@@ -331,7 +332,7 @@ export function ProgressReportPdf({ data }: { data: ProgressReportData }) {
 
         <Text style={s.footer} fixed>
           Sata Robo — Công ty Cổ phần Công nghệ Giáo dục · satarobo.vn ·
-          Hotline 0818.823.720
+          Hotline {hotlinesInline()}
         </Text>
       </Page>
     </Document>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getParentOrders } from "@/lib/portal/billing";
+import { hotlinesInline } from "@/lib/locations";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Học phí | Sata Robo", robots: { index: false } };
@@ -34,7 +35,7 @@ export default async function HocPhiPage() {
       {unpaid > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Còn <span className="font-bold">{vnd(unpaid)}</span> chờ thanh toán. Vui
-          lòng liên hệ trung tâm (0818823720) để được hướng dẫn.
+          lòng liên hệ trung tâm ({hotlinesInline()}) để được hướng dẫn.
         </div>
       )}
 

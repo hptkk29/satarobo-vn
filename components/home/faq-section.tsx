@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { HelpCircle, Plus, Minus, MessageCircle, CheckCircle2 } from "lucide-react";
-import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 // FAQ answer = mảng các block. Mỗi block là:
 // - string → 1 đoạn paragraph
@@ -235,15 +235,20 @@ export function FAQSection() {
             hồi trong{" "}
             <strong className="text-orange-600">ít phút</strong>.
           </p>
-          <a
-            href={SATA_ROBO_CONTACT.zalo}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:bg-purple-700 sm:text-base"
-          >
-            <MessageCircle className="h-5 w-5" />
-            Chat Zalo Ngay →
-          </a>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <a
+                key={c.code}
+                href={c.zalo}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:bg-purple-700 sm:text-base"
+              >
+                <MessageCircle className="h-5 w-5" />
+                Chat Zalo {c.code}
+              </a>
+            ))}
+          </div>
         </div>
       </div>
     </section>

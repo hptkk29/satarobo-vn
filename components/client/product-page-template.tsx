@@ -9,6 +9,7 @@ import { SectionStats } from "@/components/design-system/sections/section-stats"
 import { CourseCard } from "@/components/design-system/cards/course-card";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { CTASecondary } from "@/components/design-system/ctas/cta-secondary";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { Sparkles } from "@/components/design-system/effects/sparkles";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { tokens } from "@/lib/design-tokens";
@@ -242,9 +243,11 @@ export function ProductPageTemplate({
             <CTAPrimary href={`/lien-he?subject=${slug}`} size="lg" magnetic>
               {ctaPrimaryLabel}
             </CTAPrimary>
-            <CTASecondary href="tel:0818823720" size="lg">
-              Gọi 0818 823 720
-            </CTASecondary>
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <CTASecondary key={c.code} href={`tel:${c.hotlineRaw}`} size="lg">
+                Gọi {c.code}: {c.hotline}
+              </CTASecondary>
+            ))}
           </div>
         </div>
       </section>

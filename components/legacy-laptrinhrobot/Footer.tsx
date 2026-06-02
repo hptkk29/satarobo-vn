@@ -4,6 +4,7 @@
 
 import Image from "next/image";
 import { Clock, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 // Inline SVG icons — Facebook + Youtube not exported by this lucide-react version
 function Facebook({ className }: { className?: string }) {
@@ -50,10 +51,13 @@ export default function Footer() {
                 className="w-9 h-9 rounded-lg bg-white/10 hover:bg-primary-orange flex items-center justify-center transition">
                 <Youtube className="w-4 h-4" />
               </a>
-              <a href="https://zalo.me/0818823720" target="_blank" rel="noopener noreferrer" aria-label="Zalo"
-                className="w-9 h-9 rounded-lg bg-white/10 hover:bg-primary-purple flex items-center justify-center transition">
-                <MessageCircle className="w-4 h-4" />
-              </a>
+              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                <a key={c.code} href={c.zalo} target="_blank" rel="noopener noreferrer" aria-label={`Zalo ${c.code}`}
+                  className="relative w-9 h-9 rounded-lg bg-white/10 hover:bg-primary-purple flex items-center justify-center transition">
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="absolute -bottom-1 -right-1 rounded bg-primary-purple px-1 text-[8px] font-bold leading-tight text-white">{c.code}</span>
+                </a>
+              ))}
             </div>
           </div>
 
@@ -70,10 +74,12 @@ export default function Footer() {
             <div>
               <h4 className="font-black text-xs uppercase tracking-wider text-primary-orange mb-3">Liên Hệ</h4>
               <ul className="space-y-2 text-xs text-gray-300">
-                <li className="flex items-center gap-1.5">
-                  <Phone className="w-3 h-3 text-primary-orange flex-shrink-0" />
-                  <a href="tel:0818823720" className="hover:text-primary-orange transition">0818.823.720</a>
-                </li>
+                {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                  <li key={c.code} className="flex items-center gap-1.5">
+                    <Phone className="w-3 h-3 text-primary-orange flex-shrink-0" />
+                    <a href={`tel:${c.hotlineRaw}`} className="hover:text-primary-orange transition">{c.code}: {c.hotline}</a>
+                  </li>
+                ))}
                 <li className="flex items-center gap-1.5">
                   <Mail className="w-3 h-3 text-primary-orange flex-shrink-0" />
                   <a href="mailto:thongtin@satarobo.vn" className="hover:text-primary-orange transition text-[10px]">thongtin@satarobo.vn</a>
@@ -118,10 +124,13 @@ export default function Footer() {
                 className="w-9 h-9 rounded-lg bg-white/10 hover:bg-primary-orange flex items-center justify-center transition">
                 <Youtube className="w-4 h-4" />
               </a>
-              <a href="https://zalo.me/0818823720" target="_blank" rel="noopener noreferrer" aria-label="Zalo"
-                className="w-9 h-9 rounded-lg bg-white/10 hover:bg-primary-purple flex items-center justify-center transition">
-                <MessageCircle className="w-4 h-4" />
-              </a>
+              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                <a key={c.code} href={c.zalo} target="_blank" rel="noopener noreferrer" aria-label={`Zalo ${c.code}`}
+                  className="relative w-9 h-9 rounded-lg bg-white/10 hover:bg-primary-purple flex items-center justify-center transition">
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="absolute -bottom-1 -right-1 rounded bg-primary-purple px-1 text-[8px] font-bold leading-tight text-white">{c.code}</span>
+                </a>
+              ))}
             </div>
           </div>
 
@@ -150,10 +159,12 @@ export default function Footer() {
           <div>
             <h4 className="font-black text-sm uppercase tracking-wider text-primary-orange mb-4">Liên Hệ</h4>
             <ul className="space-y-3 text-sm text-gray-300">
-              <li className="flex items-start gap-2">
-                <Phone className="w-4 h-4 text-primary-orange flex-shrink-0 mt-0.5" />
-                <a href="tel:0818823720" className="hover:text-primary-orange transition">Zalo / Hotline: 0818.823.720</a>
-              </li>
+              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                <li key={c.code} className="flex items-start gap-2">
+                  <Phone className="w-4 h-4 text-primary-orange flex-shrink-0 mt-0.5" />
+                  <a href={`tel:${c.hotlineRaw}`} className="hover:text-primary-orange transition">Zalo / Hotline {c.code}: {c.hotline}</a>
+                </li>
+              ))}
               <li className="flex items-start gap-2">
                 <Mail className="w-4 h-4 text-primary-orange flex-shrink-0 mt-0.5" />
                 <a href="mailto:thongtin@satarobo.vn" className="hover:text-primary-orange transition">thongtin@satarobo.vn</a>

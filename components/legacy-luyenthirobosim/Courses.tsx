@@ -3,6 +3,7 @@
 import Image from "next/image";
 import courses from "./_data/courses";
 import { trackAndRedirect } from "./_utils/tracking";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 export default function Courses() {
   return (
@@ -130,15 +131,18 @@ export default function Courses() {
         <div className="lp-courses__support">
           <p>💡 Bố mẹ phân vân con thuộc bảng nào?</p>
           <p>Inbox mình ngay — gửi tên lớp con đang học, tư vấn miễn phí trong 10 phút.</p>
-          <a
-            href="https://zalo.me/0818823720"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-zalo"
-            aria-label="Chat Zalo với Sata Robo để được tư vấn miễn phí"
-          >
-            💬 Chat Zalo với mình →
-          </a>
+          {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+            <a
+              key={c.code}
+              href={c.zalo}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-zalo"
+              aria-label={`Chat Zalo ${c.code} để được tư vấn miễn phí`}
+            >
+              💬 Chat Zalo {c.code} →
+            </a>
+          ))}
         </div>
       </div>
     </section>

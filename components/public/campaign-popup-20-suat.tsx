@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { X, Calendar, Clock, MapPin, Phone, Star } from "lucide-react";
-import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import {
   getNextOpeningDate,
   getNextMondayOpeningDate,
@@ -46,8 +46,6 @@ function computeBatches(now: Date): BatchInfo[] {
     },
   ];
 }
-
-const ZALO_LINK = `https://zalo.me/${SATA_ROBO_CONTACT.hotlineRaw}`;
 
 function hasBeenDismissed(): boolean {
   if (typeof window === "undefined") return false;
@@ -217,24 +215,28 @@ export function CampaignPopup20Suat() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row">
-            <a
-              href={ZALO_LINK}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleDismiss}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 sm:py-3 sm:text-base"
-            >
-              💬 Giữ suất ngay qua Zalo
-            </a>
-            <a
-              href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-              onClick={handleDismiss}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border-2 border-orange-500 px-4 py-2.5 text-sm font-semibold text-orange-500 transition-colors hover:bg-orange-50 sm:py-3 sm:text-base"
-            >
-              <Phone className="h-4 w-4" />
-              {SATA_ROBO_CONTACT.hotline}
-            </a>
+          <div className="space-y-2 pt-2">
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <div key={c.code} className="flex flex-col gap-2 sm:flex-row">
+                <a
+                  href={c.zalo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleDismiss}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 sm:py-3 sm:text-base"
+                >
+                  💬 Giữ suất qua Zalo {c.code}
+                </a>
+                <a
+                  href={`tel:${c.hotlineRaw}`}
+                  onClick={handleDismiss}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border-2 border-orange-500 px-4 py-2.5 text-sm font-semibold text-orange-500 transition-colors hover:bg-orange-50 sm:py-3 sm:text-base"
+                >
+                  <Phone className="h-4 w-4" />
+                  {c.code} {c.hotline}
+                </a>
+              </div>
+            ))}
           </div>
 
           <p className="pt-1 text-center text-[11px] text-gray-500 sm:text-xs">

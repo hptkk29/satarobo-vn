@@ -2,6 +2,7 @@
 
 import useScrollPosition from "./_hooks/useScrollPosition";
 import { trackAndRedirect } from "./_utils/tracking";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 export default function FloatingButtons() {
   const scrollY = useScrollPosition();
@@ -26,15 +27,18 @@ export default function FloatingButtons() {
       >
         🟪 Đăng ký R2
       </button>
-      <a
-        href="https://zalo.me/0818823720"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="lp-floating__btn lp-floating__btn--zalo"
-        aria-label="Chat Zalo với tư vấn viên"
-      >
-        💬 Chat Zalo
-      </a>
+      {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+        <a
+          key={c.code}
+          href={c.zalo}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="lp-floating__btn lp-floating__btn--zalo"
+          aria-label={`Chat Zalo ${c.code}`}
+        >
+          💬 Zalo {c.code}
+        </a>
+      ))}
     </div>
   );
 }

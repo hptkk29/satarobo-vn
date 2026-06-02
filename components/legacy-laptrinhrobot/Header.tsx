@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Menu, X, MessageCircle } from "lucide-react";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 // Phase 4.UI.FIX.3 PART E — UPDATED mobile menu "4 cơ sở" → "2 cơ sở"
 
@@ -37,15 +38,18 @@ export default function Header() {
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
-            <a
-              href="https://zalo.me/0818823720"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-bold text-primary-purple border-2 border-primary-purple rounded-lg hover:bg-primary-purple hover:text-white transition"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Zalo
-            </a>
+            {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+              <a
+                key={c.code}
+                href={c.zalo}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-bold text-primary-purple border-2 border-primary-purple rounded-lg hover:bg-primary-purple hover:text-white transition"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Zalo {c.code}
+              </a>
+            ))}
             <button
               onClick={() => scrollTo("registration-form")}
               className="px-4 py-2 bg-primary-orange text-white text-sm font-bold rounded-lg hover:bg-primary-orange-dark transition"
@@ -72,14 +76,17 @@ export default function Header() {
               <button onClick={() => scrollTo("gifts")} className="text-left px-2 py-3 text-sm font-semibold text-text-dark hover:bg-soft-cream rounded-lg">Quà tặng</button>
               <button onClick={() => scrollTo("faq")} className="text-left px-2 py-3 text-sm font-semibold text-text-dark hover:bg-soft-cream rounded-lg">FAQ</button>
               <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-gray-100">
-                <a
-                  href="https://zalo.me/0818823720"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-3 text-center text-sm font-bold text-primary-purple border-2 border-primary-purple rounded-lg"
-                >
-                  💬 Chat Zalo
-                </a>
+                {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                  <a
+                    key={c.code}
+                    href={c.zalo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-3 text-center text-sm font-bold text-primary-purple border-2 border-primary-purple rounded-lg"
+                  >
+                    💬 Chat Zalo {c.code}
+                  </a>
+                ))}
                 <button
                   onClick={() => scrollTo("registration-form")}
                   className="px-4 py-3 bg-primary-orange text-white text-sm font-bold rounded-lg"

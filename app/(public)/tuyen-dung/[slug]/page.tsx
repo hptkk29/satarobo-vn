@@ -17,12 +17,15 @@ import {
 import { db } from "@/lib/db";
 import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { HR_CONTACT } from "@/lib/data/job-options";
 
 export const revalidate = 60;
 
 const BASE_URL = "https://satarobo.vn";
 const DEFAULT_HR_EMAIL = SATA_ROBO_CONTACT.emails.recruitment;
-const DEFAULT_HR_PHONE = SATA_ROBO_CONTACT.hotline;
+// Liên hệ tuyển dụng = bộ phận HR (đặt tại CS1). Đây là contact người tuyển,
+// không phải hotline chung của website.
+const DEFAULT_HR_PHONE = HR_CONTACT.phone;
 
 const EXPERIENCE_LABELS: Record<string, string> = {
   ENTRY: "Mới ra trường",
@@ -93,7 +96,7 @@ export default async function JobDetailPage({
   const salaryLabel = formatSalary(job);
   const hrEmail = job.contactEmail ?? DEFAULT_HR_EMAIL;
   const hrPhone = job.contactPhone ?? DEFAULT_HR_PHONE;
-  const hrPhoneTel = (job.contactPhone ?? SATA_ROBO_CONTACT.hotlineRaw).replace(/\D/g, "");
+  const hrPhoneTel = (job.contactPhone ?? HR_CONTACT.phoneRaw).replace(/\D/g, "");
 
   return (
     <>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { hasStaffRole } from "@/lib/auth/permissions";
 import { getPortalContext } from "@/lib/portal/session";
+import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
@@ -66,7 +67,7 @@ export default async function PortalLayout({
           <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
             <p className="text-sm text-neutral-500">
               Tài khoản chưa được liên kết với học viên nào. Vui lòng liên hệ
-              trung tâm Sata Robo (0818823720) để được hỗ trợ.
+              trung tâm Sata Robo ({hotlinesInline()}) để được hỗ trợ.
             </p>
           </div>
         ) : (

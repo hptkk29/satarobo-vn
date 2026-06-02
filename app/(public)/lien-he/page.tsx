@@ -15,10 +15,11 @@ import { GlowOrb } from "@/components/design-system/effects/glow-orb";
 import { getPageImage, pageImages } from "@/lib/page-images";
 import { tokens } from "@/lib/design-tokens";
 import {
-  SATA_ROBO_LOCATIONS,
   SATA_ROBO_CONTACT,
+  SATA_ROBO_CONTACT_CENTERS,
   operationalLocations,
   upcomingLocations,
+  hotlinesInline,
 } from "@/lib/locations";
 
 const BASE_URL = "https://satarobo.vn";
@@ -27,21 +28,27 @@ export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Liên hệ — Sata Robo Đà Nẵng",
-  description: `Liên hệ Sata Robo — Hotline ${SATA_ROBO_CONTACT.hotline}, email ${SATA_ROBO_CONTACT.emails.general}. 2 cơ sở tại Đà Nẵng.`,
+  description: `Liên hệ Sata Robo — Hotline ${hotlinesInline()}, email ${SATA_ROBO_CONTACT.emails.general}. 2 cơ sở tại Đà Nẵng.`,
   alternates: { canonical: `${BASE_URL}/lien-he` },
   openGraph: {
     title: "Liên hệ — Sata Robo",
-    description: `Hotline ${SATA_ROBO_CONTACT.hotline} — phản hồi 30 phút giờ hành chính.`,
+    description: `Hotline ${hotlinesInline()} — phản hồi 30 phút giờ hành chính.`,
     url: `${BASE_URL}/lien-he`,
     siteName: "Sata Robo",
     images: [{ url: pageImages.contact.src, width: 1600, height: 900 }],
   },
 };
 
-const hqLocation = SATA_ROBO_LOCATIONS.find((l) => l.isHQ) ?? SATA_ROBO_LOCATIONS[0];
+const hqLocation =
+  operationalLocations().find((l) => l.isHQ) ?? operationalLocations()[0];
 
 const QUICK_INFO = [
-  { icon: Phone, label: "Hotline", value: SATA_ROBO_CONTACT.hotline, href: `tel:${SATA_ROBO_CONTACT.hotlineRaw}` },
+  ...SATA_ROBO_CONTACT_CENTERS.map((c) => ({
+    icon: Phone,
+    label: `Hotline ${c.code}`,
+    value: c.hotline,
+    href: `tel:${c.hotlineRaw}`,
+  })),
   { icon: Mail, label: "Email", value: SATA_ROBO_CONTACT.emails.general, href: `mailto:${SATA_ROBO_CONTACT.emails.general}` },
   {
     icon: MapPin,
@@ -49,7 +56,7 @@ const QUICK_INFO = [
     value: hqLocation.address,
     href: `https://maps.google.com/?q=${encodeURIComponent(hqLocation.address)}`,
   },
-  { icon: Clock, label: "Giờ làm việc", value: hqLocation.workingHours },
+  { icon: Clock, label: "Giờ làm việc", value: hqLocation.workingHours, href: undefined as string | undefined },
 ];
 
 export default async function ContactPage() {
@@ -60,7 +67,7 @@ export default async function ContactPage() {
     id: loc.id,
     name: loc.name,
     address: loc.address,
-    phone: loc.hotline,
+    phone: loc.hotlineE164,
     email: SATA_ROBO_CONTACT.emails.general,
   }));
 
@@ -113,10 +120,12 @@ export default async function ContactPage() {
               Chúng tôi sẵn sàng tư vấn 1-1 miễn phí về lộ trình học Robotics phù hợp với con bạn — phản hồi trong 30 phút giờ hành chính
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <CTAPrimary href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`} magnetic>
-                <Phone className="w-4 h-4" />
-                <span>Gọi ngay {SATA_ROBO_CONTACT.hotline}</span>
-              </CTAPrimary>
+              {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                <CTAPrimary key={c.code} href={`tel:${c.hotlineRaw}`} magnetic>
+                  <Phone className="w-4 h-4" />
+                  <span>Gọi {c.code}: {c.hotline}</span>
+                </CTAPrimary>
+              ))}
             </div>
           </div>
           <div className="relative aspect-video rounded-2xl overflow-hidden shadow-xl">
@@ -207,10 +216,11 @@ export default async function ContactPage() {
               </div>
               <div className="space-y-2 text-sm pt-4 border-t border-neutral-100">
                 <a
-                  href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
+                  href={`tel:${loc.hotlineRaw}`}
                   className="flex items-center gap-2 text-neutral-700 hover:text-orange-600"
                 >
                   <Phone className="w-4 h-4" />
+                  <span className="text-neutral-400">{loc.code}</span>
                   {loc.hotline}
                 </a>
                 <div className="flex items-center gap-2 text-neutral-600">

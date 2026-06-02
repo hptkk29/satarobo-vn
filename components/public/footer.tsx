@@ -41,16 +41,16 @@ const SOCIAL_LINKS = [
       </svg>
     ),
   },
-  {
-    label: "Zalo",
-    href: SATA_ROBO_CONTACT.zalo,
+  ...operationalLocations().map((c) => ({
+    label: `Zalo ${c.code}`,
+    href: c.zalo,
     bg: "bg-[#0068FF]",
     icon: (
-      <span className="text-white text-xs font-black leading-none" aria-hidden="true">
-        Z
+      <span className="text-white text-[10px] font-black leading-none" aria-hidden="true">
+        {c.code}
       </span>
     ),
-  },
+  })),
 ];
 
 export function Footer() {
@@ -158,16 +158,18 @@ export function Footer() {
           <div>
             <h4 className="mb-4 font-semibold text-white">Hỗ trợ</h4>
             <ul className="space-y-2 text-sm">
-              <li>
-                <a
-                  href={SATA_ROBO_CONTACT.zalo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-[#F97316] transition-colors"
-                >
-                  Chat Zalo hỗ trợ
-                </a>
-              </li>
+              {operationalLocations().map((c) => (
+                <li key={c.code}>
+                  <a
+                    href={c.zalo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-[#F97316] transition-colors"
+                  >
+                    Chat Zalo {c.code}
+                  </a>
+                </li>
+              ))}
               <li>
                 <Link href="/chinh-sach-hoan-tra" className="hover:text-[#F97316] transition-colors">
                   Chính sách hoàn trả
@@ -214,15 +216,17 @@ export function Footer() {
             </div>
             {/* Contact */}
             <ul className="mt-5 space-y-2 text-sm">
-              <li className="flex items-center gap-2">
-                <Phone className="h-4 w-4 shrink-0 text-[#F97316]" />
-                <a
-                  href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-                  className="hover:text-[#F97316] transition-colors"
-                >
-                  {SATA_ROBO_CONTACT.hotline}
-                </a>
-              </li>
+              {operationalLocations().map((c) => (
+                <li key={c.code} className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 shrink-0 text-[#F97316]" />
+                  <a
+                    href={`tel:${c.hotlineRaw}`}
+                    className="hover:text-[#F97316] transition-colors"
+                  >
+                    <span className="text-gray-500">{c.code}</span> {c.hotline}
+                  </a>
+                </li>
+              ))}
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4 shrink-0 text-[#F97316]" />
                 <a

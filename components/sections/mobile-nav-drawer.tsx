@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Phone, ChevronRight, ArrowRight } from "lucide-react";
-import { SATA_ROBO_CONTACT } from "@/lib/locations";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 // F-UI-4 — Right-slide drawer cho mobile. Replace mobile half của
 // <Header /> (Sheet trigger trước đó). Nav data dùng slug thực tế
@@ -211,13 +211,17 @@ export function MobileNavDrawer() {
                   Đăng ký tư vấn
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-                <a
-                  href={`tel:${SATA_ROBO_CONTACT.hotlineRaw}`}
-                  className="flex w-full items-center justify-center gap-2 rounded-full border border-orange-300 py-3 font-semibold text-orange-700 transition-colors hover:bg-orange-50"
-                >
-                  <Phone className="h-4 w-4" />
-                  {SATA_ROBO_CONTACT.hotline}
-                </a>
+                {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+                  <a
+                    key={c.code}
+                    href={`tel:${c.hotlineRaw}`}
+                    className="flex w-full items-center justify-center gap-2 rounded-full border border-orange-300 py-3 font-semibold text-orange-700 transition-colors hover:bg-orange-50"
+                  >
+                    <Phone className="h-4 w-4" />
+                    <span className="text-orange-400">{c.code}</span>
+                    {c.hotline}
+                  </a>
+                ))}
               </div>
             </motion.aside>
           </>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import faqs from "./_data/faqs";
+import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -56,15 +57,18 @@ export default function FAQ() {
 
         <div className="lp-faq__footer">
           <p>Vẫn còn câu hỏi khác? Inbox mình Zalo — phản hồi trong 30 phút.</p>
-          <a
-            href="https://zalo.me/0818823720"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-zalo"
-            aria-label="Chat Zalo với Sata Robo — phản hồi trong 30 phút"
-          >
-            💬 Chat Zalo với mình →
-          </a>
+          {SATA_ROBO_CONTACT_CENTERS.map((c) => (
+            <a
+              key={c.code}
+              href={c.zalo}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-zalo"
+              aria-label={`Chat Zalo ${c.code} — phản hồi trong 30 phút`}
+            >
+              💬 Chat Zalo {c.code} →
+            </a>
+          ))}
         </div>
       </div>
     </section>

@@ -84,7 +84,7 @@ Theo Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân, Anh/Ch
 Để thực hiện các quyền trên, Anh/Chị liên hệ:
 
 - **Email:** dpo@satarobo.vn (tạm thời: phuc@satarobo.vn)
-- **Điện thoại:** 0818.823.720
+- **Điện thoại:** CS1 (Nguyễn Hữu Thọ) 0818.823.720 · CS2 (Hoàng Diệu) 0702.193.933
 
 Chúng tôi sẽ phản hồi trong vòng **72 giờ làm việc**.
 
@@ -113,7 +113,7 @@ Mọi câu hỏi, yêu cầu liên quan đến Chính sách Bảo mật, vui lò
 **CÔNG TY CỔ PHẦN CÔNG NGHỆ GIÁO DỤC SATA ROBO**
 
 - 📍 Trụ sở: 211 Nguyễn Hữu Thọ, Hải Châu, Đà Nẵng
-- 📞 Hotline: 0818.823.720
+- 📞 Hotline CS1 (Nguyễn Hữu Thọ): 0818.823.720 · CS2 (Hoàng Diệu): 0702.193.933
 - 📧 Email: dpo@satarobo.vn
 - 📧 Email công ty: thongtin@satarobo.vn
 - 🏢 Mã số thuế: 0402301783
