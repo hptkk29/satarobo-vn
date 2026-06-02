@@ -17,13 +17,45 @@ function genCertCode(): string {
   return `CERT-${yymmdd}-${rand}`;
 }
 
-/** Gợi ý khoá tiếp: khoá mà khoá hiện tại là TIÊN QUYẾT (requiredByCourses). */
+/**
+ * Gợi ý khoá tiếp theo:
+ *  1) Ưu tiên CoursePrerequisite (khoá mà khoá hiện tại là TIÊN QUYẾT).
+ *  2) P1-2 fallback (khi CHƯA cấu hình tiên quyết): suy luận theo trình tự khoá —
+ *     2a. slug dạng "...N" → "...N+1" (sata3 → sata4); 2b. cùng category,
+ *     displayOrder kế tiếp. Không tạo model mới.
+ */
 async function suggestNextCourse(courseId: string): Promise<string | null> {
   const prereq = await db.coursePrerequisite.findFirst({
     where: { requiredCourseId: courseId },
     select: { courseId: true },
   });
-  return prereq?.courseId ?? null;
+  if (prereq) return prereq.courseId;
+
+  const cur = await db.course.findUnique({
+    where: { id: courseId },
+    select: { slug: true, category: true, displayOrder: true },
+  });
+  if (!cur) return null;
+
+  // 2a. slug có hậu tố số: sata3 → sata4.
+  const m = cur.slug.match(/^(.*?)(\d+)$/);
+  if (m) {
+    const nextSlug = `${m[1]}${Number(m[2]) + 1}`;
+    const bySlug = await db.course.findUnique({ where: { slug: nextSlug }, select: { id: true } });
+    if (bySlug) return bySlug.id;
+  }
+
+  // 2b. cùng category, displayOrder lớn hơn gần nhất.
+  if (cur.category) {
+    const next = await db.course.findFirst({
+      where: { category: cur.category, displayOrder: { gt: cur.displayOrder } },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    });
+    if (next) return next.id;
+  }
+
+  return null;
 }
 
 export async function completeCourse(params: {
