@@ -6,10 +6,11 @@ import { StatusBadge } from "@/components/design-system/admin/status-badge";
 import { DataTableShell } from "@/components/design-system/admin/data-table-shell";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
-import { isChecklistComplete } from "@/lib/center-checklist";
 
-// Đợt 3C #4 / 3B — Dashboard QUẢN LÝ + SUPER_ADMIN (tổng quan tuyển sinh + vận
-// hành). Tách thành component để dashboard GỘP (union) render được như 1 panel.
+// Đợt 3C #4 / 3B — Dashboard QUẢN LÝ + SUPER_ADMIN (tổng quan tuyển sinh + vận hành).
+// BỐ CỤC GỌN (commit 1): KPI → biểu đồ → hoạt động gần đây. Các thẻ "việc tồn đọng"
+// (lớp chờ duyệt, buổi chưa hoàn tất, ảnh/yêu cầu chờ duyệt, checklist cơ sở) ĐÃ gom
+// ở khu "Cần xử lý" (PendingTasksSection) cấp trang → KHÔNG lặp lại tại đây.
 // centerScope: != null → giới hạn cơ sở (CENTER_MANAGER không kèm SUPER_ADMIN).
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -44,12 +45,10 @@ function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
 export async function ManagerDashboard({
   userId,
   name,
-  centerScope,
   embedded = false,
 }: {
   userId: string;
   name: string;
-  centerScope: string | null;
   embedded?: boolean;
 }) {
   const now = new Date();
@@ -57,39 +56,6 @@ export async function ManagerDashboard({
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  const weekAhead = new Date(now.getTime() + 7 * 86400000);
-
-  const incompleteSessions = await db.classSession.findMany({
-    where: {
-      date: { lte: endOfToday },
-      status: { not: "COMPLETED" },
-      ...(centerScope ? { class: { centerId: centerScope } } : {}),
-    },
-    orderBy: { date: "desc" },
-    take: 20,
-    select: { id: true, date: true, class: { select: { name: true, classCode: true, teacher: { select: { name: true } } } } },
-  });
-
-  const twoDaysAgo = new Date(now.getTime() - 2 * 86400000);
-  const [parentReqPending, mediaPending, leaveReqs, approvalOverdue] = await Promise.all([
-    db.parentRequest.count({ where: { status: "PENDING", ...(centerScope ? { student: { centerId: centerScope } } : {}) } }),
-    db.classSessionMedia.count({ where: { status: "PENDING" } }),
-    db.shiftRegistration.count({
-      where: { status: "LEAVE_REQUESTED", date: { gte: monthStart, lt: weekAhead }, ...(centerScope ? { centerId: centerScope } : {}) },
-    }),
-    // Lớp chờ duyệt quá 2 ngày.
-    db.class.findMany({
-      where: {
-        deletedAt: null,
-        status: "PENDING_APPROVAL",
-        submittedForApprovalAt: { lt: twoDaysAgo },
-        ...(centerScope ? { centerId: centerScope } : {}),
-      },
-      orderBy: { submittedForApprovalAt: "asc" },
-      take: 10,
-      select: { id: true, name: true, classCode: true, submittedForApprovalAt: true },
-    }),
-  ]);
 
   const [
     totalLeads, newLeadsThisMonth, newLeadsLastMonth, enrolledLeads, totalStudents,
@@ -112,17 +78,6 @@ export async function ManagerDashboard({
     }),
   ]);
 
-  // Phần 4 — checklist mở/đóng cơ sở HÔM QUA chưa đủ.
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const scopeCenterIds = centerScope
-    ? [centerScope]
-    : (await db.center.findMany({ where: { isActive: true }, select: { id: true } })).map((c) => c.id);
-  const ydChecklists = await db.centerDayChecklist.findMany({
-    where: { date: yesterday, centerId: { in: scopeCenterIds } },
-  });
-  const completeCenters = new Set(ydChecklists.filter((c) => isChecklistComplete(c)).map((c) => c.centerId));
-  const checklistMissing = scopeCenterIds.filter((id) => !completeCenters.has(id)).length;
-
   const monthDelta = newLeadsLastMonth > 0 ? ((newLeadsThisMonth - newLeadsLastMonth) / newLeadsLastMonth) * 100 : 0;
   const conversionRate = totalLeads > 0 ? ((enrolledLeads / totalLeads) * 100).toFixed(1) : "0";
   const dailyLeadsChart = lastNDaysData(leadsLast14Days);
@@ -130,73 +85,6 @@ export async function ManagerDashboard({
 
   return (
     <div className="space-y-6">
-      {incompleteSessions.length > 0 && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="text-sm font-bold text-rose-700">⚠ {incompleteSessions.length} buổi đã qua chưa hoàn tất checklist</span>
-          </div>
-          <ul className="space-y-1 text-sm">
-            {incompleteSessions.slice(0, 8).map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2">
-                <Link href={`/sessions/${s.id}`} className="font-medium text-rose-800 hover:underline">
-                  {s.class.classCode ? `${s.class.classCode} · ` : ""}{s.class.name}
-                </Link>
-                <span className="text-xs text-rose-600">
-                  {new Date(s.date).toLocaleDateString("vi-VN")}{s.class.teacher?.name ? ` · ${s.class.teacher.name}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {incompleteSessions.length > 8 && <p className="mt-1 text-xs text-rose-500">…và {incompleteSessions.length - 8} buổi khác.</p>}
-        </div>
-      )}
-
-      {approvalOverdue.length > 0 && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <p className="mb-2 text-sm font-bold text-amber-800">
-            ⏳ {approvalOverdue.length} lớp chờ duyệt quá 2 ngày
-          </p>
-          <ul className="space-y-1 text-sm">
-            {approvalOverdue.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
-                <Link href={`/classes/${c.id}/edit`} className="font-medium text-amber-900 hover:underline">
-                  {c.classCode ? `${c.classCode} · ` : ""}{c.name}
-                </Link>
-                <span className="text-xs text-amber-600">
-                  Gửi {c.submittedForApprovalAt ? new Date(c.submittedForApprovalAt).toLocaleDateString("vi-VN") : "—"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {checklistMissing > 0 && (
-        <Link href="/cham-cong/checklist-co-so" className="block rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400">
-          <span className="font-bold">{checklistMissing}</span> cơ sở chưa hoàn tất checklist mở/đóng hôm qua.
-        </Link>
-      )}
-
-      {(parentReqPending > 0 || mediaPending > 0 || leaveReqs > 0) && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {parentReqPending > 0 && (
-            <Link href="/parent-requests" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400">
-              <span className="text-lg font-bold">{parentReqPending}</span> yêu cầu phụ huynh chờ duyệt
-            </Link>
-          )}
-          {mediaPending > 0 && (
-            <Link href="/media" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400">
-              <span className="text-lg font-bold">{mediaPending}</span> ảnh lớp chờ duyệt
-            </Link>
-          )}
-          {leaveReqs > 0 && (
-            <Link href="/cham-cong/lich-ca-nhan-vien" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 hover:border-rose-400">
-              <span className="text-lg font-bold">{leaveReqs}</span> lượt xin nghỉ khẩn cần sắp người
-            </Link>
-          )}
-        </div>
-      )}
-
       {!embedded && (
         <div>
           <h1 className="text-2xl font-bold text-neutral-900">Xin chào, {name.split(" ").slice(-1)[0] || "Admin"}</h1>
@@ -206,10 +94,12 @@ export async function ManagerDashboard({
         </div>
       )}
 
+      {/* Việc CÁ NHÂN hôm nay (lead task của chính mình) — khác với khu "Cần xử lý"
+          tổng hợp ở trên; giữ vì có giờ hẹn + thao tác nhanh. */}
       {myTasksToday.length > 0 && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-orange-800">Việc hôm nay ({myTasksToday.length})</h2>
+            <h2 className="text-sm font-bold text-orange-800">Việc của tôi hôm nay ({myTasksToday.length})</h2>
             <Link href="/leads?view=kanban" className="text-xs text-orange-700 hover:underline">Xem pipeline →</Link>
           </div>
           <ul className="space-y-2">
@@ -233,6 +123,7 @@ export async function ManagerDashboard({
         </div>
       )}
 
+      {/* (1) KPI số liệu chính */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCardAdmin label="Tổng leads" value={totalLeads} icon={<Users className="w-4 h-4" />} iconColor="orange" />
         <StatCardAdmin
@@ -246,6 +137,7 @@ export async function ManagerDashboard({
         <StatCardAdmin label="Conversion rate" value={`${conversionRate}%`} icon={<TrendingUp className="w-4 h-4" />} iconColor="purple" />
       </div>
 
+      {/* (2) Biểu đồ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white border border-neutral-200 rounded-xl p-6">
           <h2 className="font-semibold text-neutral-900 mb-1">Leads 14 ngày qua</h2>
@@ -267,6 +159,7 @@ export async function ManagerDashboard({
         </div>
       </div>
 
+      {/* (3) Hoạt động gần đây */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-neutral-900">Leads mới nhất</h2>

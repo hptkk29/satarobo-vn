@@ -18,20 +18,16 @@ export default async function DashboardPage() {
   const name = session.user.name ?? "";
   const roles = getEffectiveRoles(session.user);
 
-  // Manager panel cho SUPER_ADMIN/CENTER_MANAGER. Center-scope: chỉ CM (không
-  // kèm SUPER_ADMIN) bị giới hạn cơ sở; SUPER_ADMIN xem tất cả.
+  // Manager panel cho SUPER_ADMIN/CENTER_MANAGER. Việc tồn đọng theo cơ sở đã
+  // gom ở khu "Cần xử lý" (center-scoped); panel quản lý là KPI/biểu đồ tổng quan.
   const isManager = hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER"]);
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
 
   const panels: { key: string; label: string; node: React.ReactNode }[] = [];
   if (isManager) {
     panels.push({
       key: "manager",
       label: "Quản lý & Tổng quan",
-      node: <ManagerDashboard userId={userId} name={name} centerScope={centerScope} embedded />,
+      node: <ManagerDashboard userId={userId} name={name} embedded />,
     });
   }
   if (hasRole(session.user, "TEACHER")) {
@@ -54,7 +50,7 @@ export default async function DashboardPage() {
     panels.push({
       key: "manager",
       label: "Tổng quan",
-      node: <ManagerDashboard userId={userId} name={name} centerScope={centerScope} embedded />,
+      node: <ManagerDashboard userId={userId} name={name} embedded />,
     });
   }
 
