@@ -22,7 +22,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
     ...(classFilter ? { classId: classFilter } : {}),
   };
 
-  const [sessions, classes] = await Promise.all([
+  const [sessions, classes, holidays] = await Promise.all([
     db.classSession.findMany({
       where,
       orderBy: { date: scope === "past" ? "desc" : "asc" },
@@ -41,6 +41,13 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
       orderBy: { name: "asc" },
       select: { id: true, name: true },
       take: 200,
+    }),
+    // P1-f — ngày nghỉ sắp tới (90 ngày) để hiển thị trên lịch buổi học.
+    db.holiday.findMany({
+      where: { date: { gte: now, lte: new Date(now.getTime() + 90 * 86400000) } },
+      orderBy: { date: "asc" },
+      take: 20,
+      select: { id: true, name: true, date: true, endDate: true, center: { select: { name: true } } },
     }),
   ]);
 
@@ -71,6 +78,23 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
       </div>
 
       <SessionFilters scope={scope} classId={classFilter ?? ""} classes={classes} />
+
+      {holidays.length > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">
+            🎌 Ngày nghỉ sắp tới (buổi trùng đã được tự dời)
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs text-amber-800">
+            {holidays.map((h) => (
+              <span key={h.id} className="rounded-full bg-white px-2.5 py-1">
+                {h.name}: {new Date(h.date).toLocaleDateString("vi-VN")}
+                {h.endDate ? `–${new Date(h.endDate).toLocaleDateString("vi-VN")}` : ""}
+                {h.center?.name ? ` · ${h.center.name}` : " · Toàn hệ thống"}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
         <table className="w-full">

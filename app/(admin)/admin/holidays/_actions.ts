@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { applyHolidayShift } from "@/lib/holidays/apply";
 
 type ActionResult = { error?: string };
 
@@ -127,13 +128,25 @@ export async function createHoliday(formData: FormData): Promise<ActionResult> {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  let created: { date: Date; endDate: Date | null; centerId: string | null };
   try {
-    await db.holiday.create({ data: toCreate(parsed.data) });
+    created = await db.holiday.create({
+      data: toCreate(parsed.data),
+      select: { date: true, endDate: true, centerId: true },
+    });
   } catch {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được ngày nghỉ" };
   }
 
+  // P1-f — dời các buổi tương lai trùng ngày nghỉ + báo GV (best-effort).
+  try {
+    await applyHolidayShift(created);
+  } catch (err) {
+    console.error("[createHoliday] shift error:", err);
+  }
+
   revalidatePath("/holidays");
+  revalidatePath("/sessions");
   redirect("/holidays");
 }
 
@@ -148,14 +161,27 @@ export async function updateHoliday(
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  let updated: { date: Date; endDate: Date | null; centerId: string | null };
   try {
-    await db.holiday.update({ where: { id }, data: toUpdate(parsed.data) });
+    updated = await db.holiday.update({
+      where: { id },
+      data: toUpdate(parsed.data),
+      select: { date: true, endDate: true, centerId: true },
+    });
   } catch {
     return { error: "Ngày nghỉ không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
+  // P1-f — dời buổi trùng ngày nghỉ + báo GV (best-effort).
+  try {
+    await applyHolidayShift(updated);
+  } catch (err) {
+    console.error("[updateHoliday] shift error:", err);
+  }
+
   revalidatePath("/holidays");
   revalidatePath(`/holidays/${id}/edit`);
+  revalidatePath("/sessions");
   redirect("/holidays");
 }
 
