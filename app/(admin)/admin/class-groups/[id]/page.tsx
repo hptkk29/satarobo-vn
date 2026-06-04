@@ -4,6 +4,8 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { GroupMembers } from "../_components/group-members";
+import { GroupEnrollPanel } from "../_components/group-enroll-panel";
 
 export const metadata = { title: "Chi tiết nhóm lớp | Admin" };
 export const dynamic = "force-dynamic";
@@ -51,6 +53,11 @@ export default async function ClassGroupDetailPage({ params }: Props) {
           _count: { select: { enrollments: true } },
         },
         orderBy: [{ startDate: "asc" }],
+      },
+      students: {
+        where: { deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, studentCode: true },
       },
     },
   });
@@ -111,6 +118,16 @@ export default async function ClassGroupDetailPage({ params }: Props) {
           />
         </div>
       </div>
+
+      {/* P2 — thành viên cố định của nhóm + gán cả nhóm vào lớp */}
+      <GroupMembers groupId={group.id} members={group.students} canManage={canManage} />
+      {canManage && (
+        <GroupEnrollPanel
+          groupId={group.id}
+          members={group.students}
+          classes={group.classes.map((c) => ({ id: c.id, name: c.name }))}
+        />
+      )}
 
       {/* Các lớp/khoá đã & đang học */}
       <h2 className="mb-3 text-lg font-bold text-gray-900">

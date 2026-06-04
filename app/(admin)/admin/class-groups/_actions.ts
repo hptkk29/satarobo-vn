@@ -123,3 +123,103 @@ export async function deleteClassGroup(id: string): Promise<ActionResult> {
   revalidatePath("/class-groups");
   return {};
 }
+
+// ─── P2 — thành viên nhóm (cohort) + gán cả nhóm vào lớp ─────────────
+const ENROLL_ACTIVE = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"] as const;
+
+/** Tìm HV (cùng cơ sở nhóm) CHƯA thuộc nhóm nào để thêm vào nhóm. */
+export async function searchStudentsForGroup(
+  groupId: string,
+  query: string,
+): Promise<{ ok: boolean; items?: { id: string; name: string; studentCode: string | null }[]; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
+
+  const group = await db.classGroup.findUnique({ where: { id: groupId }, select: { centerId: true } });
+  if (!group) return { ok: false, error: "Không tìm thấy nhóm" };
+
+  const q = query.trim();
+  const items = await db.student.findMany({
+    where: {
+      deletedAt: null,
+      classGroupId: null,
+      centerId: group.centerId,
+      ...(q
+        ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { studentCode: { contains: q, mode: "insensitive" } }] }
+        : {}),
+    },
+    orderBy: { name: "asc" },
+    take: 15,
+    select: { id: true, name: true, studentCode: true },
+  });
+  return { ok: true, items };
+}
+
+/** Thêm HV vào nhóm (1 HV tối đa 1 nhóm). */
+export async function addStudentToGroup(input: { groupId: string; studentId: string }): Promise<ActionResult & { ok?: boolean }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
+
+  const student = await db.student.findFirst({
+    where: { id: input.studentId, deletedAt: null },
+    select: { id: true, classGroupId: true },
+  });
+  if (!student) return { ok: false, error: "Không tìm thấy học viên" };
+  if (student.classGroupId && student.classGroupId !== input.groupId) {
+    return { ok: false, error: "Học viên đã thuộc nhóm khác — gỡ khỏi nhóm cũ trước" };
+  }
+  await db.student.update({ where: { id: student.id }, data: { classGroupId: input.groupId } });
+  revalidatePath(`/class-groups/${input.groupId}`);
+  return { ok: true };
+}
+
+/** Gỡ HV khỏi nhóm (không xoá HV). */
+export async function removeStudentFromGroup(input: { groupId: string; studentId: string }): Promise<ActionResult & { ok?: boolean }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
+  await db.student.update({ where: { id: input.studentId }, data: { classGroupId: null } });
+  revalidatePath(`/class-groups/${input.groupId}`);
+  return { ok: true };
+}
+
+/** Gán (ghi danh) các HV ĐÃ CHỌN của nhóm vào 1 lớp của nhóm. */
+export async function enrollGroupIntoClass(input: {
+  groupId: string;
+  classId: string;
+  studentIds: string[];
+}): Promise<{ ok: boolean; created?: number; skipped?: number; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "enrollments:create")) return { ok: false, error: "Không có quyền ghi danh" };
+
+  const cls = await db.class.findFirst({
+    where: { id: input.classId, deletedAt: null },
+    select: { id: true, courseId: true, classGroupId: true },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+  if (cls.classGroupId !== input.groupId) return { ok: false, error: "Lớp không thuộc nhóm này" };
+  if (input.studentIds.length === 0) return { ok: false, error: "Chưa chọn học viên" };
+
+  let created = 0;
+  let skipped = 0;
+  for (const studentId of input.studentIds) {
+    const existing = await db.enrollment.findFirst({
+      where: { studentId, classId: cls.id, status: { in: [...ENROLL_ACTIVE] } },
+      select: { id: true },
+    });
+    if (existing) {
+      skipped++;
+      continue;
+    }
+    await db.enrollment.create({
+      data: { studentId, classId: cls.id, courseId: cls.courseId, status: "CONFIRMED", confirmedAt: new Date(), notes: `Ghi danh theo nhóm ${input.groupId}` },
+    });
+    created++;
+  }
+  revalidatePath(`/class-groups/${input.groupId}`);
+  revalidatePath(`/classes/${cls.id}`);
+  return { ok: true, created, skipped };
+}

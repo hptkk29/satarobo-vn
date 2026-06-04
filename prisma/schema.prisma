@@ -692,11 +692,15 @@ model Student {
   transferRequests StudentTransferRequest[]
   centerHistory    StudentCenterHistory[]
   satacoinTxns     SataCoinTransaction[]
+  // P2 — nhóm lớp (cohort): 1 HV thuộc TỐI ĐA 1 nhóm.
+  classGroupId String?
+  classGroup   ClassGroup? @relation("ClassGroupStudents", fields: [classGroupId], references: [id], onDelete: SetNull)
 
   @@index([phone])
   @@index([centerId])
   @@index([deletedAt])
   @@index([status])
+  @@index([classGroupId])
   @@index([preferredCenterId])
   @@index([parentPhone])
   @@index([parentUserId])
@@ -730,8 +734,9 @@ model ClassGroup {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  center  Center  @relation(fields: [centerId], references: [id])
-  classes Class[]
+  center   Center    @relation(fields: [centerId], references: [id])
+  classes  Class[]
+  students Student[] @relation("ClassGroupStudents")
 
   @@index([centerId])
   @@index([status])
