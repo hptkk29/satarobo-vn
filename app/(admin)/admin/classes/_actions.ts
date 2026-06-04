@@ -14,6 +14,7 @@ import {
 } from "@/lib/audit/log";
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { generateClassSessions } from "@/lib/classes/generate";
 
 type ActionResult = { error?: string };
 
@@ -368,10 +369,31 @@ export async function approveClass(classId: string): Promise<WfResult> {
       approvedByName: gate.session.user.name ?? gate.session.user.email ?? "Quản lý",
     },
   });
+
+  // P2 — duyệt lớp ACTIVE → TỰ SINH buổi học (nếu chưa có). Best-effort.
+  try {
+    await generateClassSessions(classId, { onlyIfEmpty: true });
+  } catch (err) {
+    console.error("[approveClass] generate sessions error:", err);
+  }
+
   revalidatePath("/classes");
   revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/sessions");
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+/** P2 — nút sinh buổi học thủ công cho 1 lớp (khi cần sinh lại / lớp cũ chưa có buổi). */
+export async function generateSessionsAction(classId: string): Promise<WfResult & { generated?: number }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  const res = await generateClassSessions(classId, { onlyIfEmpty: true });
+  if (!res.ok) return { ok: false, error: res.error ?? "Không sinh được buổi học" };
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/sessions");
+  return { ok: true, generated: res.generated };
 }
 
 /** Quản lý trả lại lớp (PENDING_APPROVAL → RECRUITING) kèm lý do. */

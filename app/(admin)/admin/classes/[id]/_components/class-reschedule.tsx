@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarClock } from "lucide-react";
-import { previewClassReschedule, applyClassReschedule } from "../../_actions";
+import { CalendarClock, CalendarPlus } from "lucide-react";
+import { previewClassReschedule, applyClassReschedule, generateSessionsAction } from "../../_actions";
 
 type Item = { id: string; topic: string | null; oldDate: string; newDate: string };
 
@@ -46,21 +46,44 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
 
   const changed = items?.filter((it) => fmt(it.oldDate) !== fmt(it.newDate)) ?? [];
 
+  function generate() {
+    startTransition(async () => {
+      const res = await generateSessionsAction(classId);
+      if (res.ok) {
+        toast.success(res.generated ? `Đã sinh ${res.generated} buổi học` : "Lớp đã có buổi học");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
-          <CalendarClock className="h-4 w-4" /> Dời buổi tương lai theo lịch
+          <CalendarClock className="h-4 w-4" /> Buổi học theo lịch
         </h2>
-        <button
-          type="button"
-          onClick={preview}
-          disabled={pending}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          Xem trước
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={generate}
+            disabled={pending}
+            className="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+          >
+            <CalendarPlus className="h-4 w-4" /> Sinh buổi học
+          </button>
+          <button
+            type="button"
+            onClick={preview}
+            disabled={pending}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Xem trước dời
+          </button>
+        </div>
       </div>
+      <p className="mb-2 text-xs text-gray-500">
+        &quot;Sinh buổi học&quot; tạo buổi theo lịch lớp + số buổi chuẩn của khoá, bỏ qua ngày nghỉ (chỉ khi lớp chưa có buổi). Lớp duyệt ACTIVE tự sinh.
+      </p>
       <p className="text-xs text-gray-500">
         Áp lịch lớp hiện tại cho các buổi CHƯA diễn ra; buổi trùng lịch nghỉ cơ sở sẽ dời sang buổi kế (giữ đủ tổng buổi). Buổi đã diễn ra giữ nguyên.
       </p>
