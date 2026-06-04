@@ -12,6 +12,7 @@ import {
 } from "@/lib/validators/order";
 import { generateOrderCode } from "@/lib/orders/code";
 import { canTransition } from "@/lib/orders/status";
+import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { validateAndComputeDiscount } from "@/lib/vouchers/compute";
@@ -730,6 +731,40 @@ export async function sendManualOrderEmailAction(input: {
 
   revalidatePath(`/orders/${input.orderId}`);
   return { ok: true as const, logId: result.logId };
+}
+
+// ─── Commit 4 — thanh toán 2 đợt ─────────────────────────────────────
+export async function recordOrderInstallmentsAction(input: {
+  orderId: string;
+  dot1Amount: number;
+  dot2Amount: number;
+  dot2DueDate: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "orders:manage")) return { ok: false, error: "Không có quyền" };
+
+  const res = await recordInstallmentPlan({
+    orderId: input.orderId,
+    dot1Amount: Math.round(input.dot1Amount),
+    dot2Amount: Math.round(input.dot2Amount),
+    dot2DueDate: input.dot2DueDate ? new Date(input.dot2DueDate) : null,
+    actorId: session.user.id ?? null,
+  });
+  if (res.ok) revalidatePath(`/orders/${input.orderId}`);
+  return res;
+}
+
+export async function markOrderInstallmentPaidAction(
+  installmentId: string,
+  orderId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "orders:manage")) return { ok: false, error: "Không có quyền" };
+  const res = await markInstallmentPaid(installmentId, session.user.id ?? null);
+  if (res.ok) revalidatePath(`/orders/${orderId}`);
+  return res;
 }
 
 // ─── Row type for client ─────────────────────────────────────────────

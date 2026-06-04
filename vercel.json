@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/email-queue",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/debt-reminder",
+      "schedule": "0 3 * * *"
     }
   ]
 }

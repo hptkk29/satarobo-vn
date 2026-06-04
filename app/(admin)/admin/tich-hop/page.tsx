@@ -4,7 +4,9 @@ import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { znsProvider } from "@/lib/zalo/provider";
 import { isMisaConfigured, isMisaLive, getMisaConfig } from "@/lib/misa/service";
+import { getPaymentConfig } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
+import { VietQrConfig } from "./_components/vietqr-config";
 
 export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
@@ -42,6 +44,7 @@ export default async function IntegrationsPage() {
   ]);
   const misaConfigured = isMisaConfigured();
   const misaLive = isMisaLive();
+  const payCfg = await getPaymentConfig();
 
   return (
     <div className="space-y-6 p-4">
@@ -49,6 +52,8 @@ export default async function IntegrationsPage() {
         <h1 className="text-xl font-bold text-neutral-900">Tích hợp ngoài</h1>
         <p className="text-sm text-neutral-500">Trạng thái các adapter. Khi thiếu credential, hệ thống tự fallback an toàn.</p>
       </div>
+
+      <VietQrConfig canEdit={canEdit} current={payCfg} />
 
       <section className="rounded-xl border border-neutral-200 bg-white p-4">
         <div className="flex items-center justify-between">

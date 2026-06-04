@@ -106,12 +106,17 @@ export function CloseDealDialog({
         ? ` · tài khoản PH: ${res.parentAccountEmail}${res.parentPendingActivation ? " (đã gửi email kích hoạt)" : ""}`
         : "";
       toast.success(`Đã chuyển sang Đã đăng ký — tạo học viên${code}${orderNote}${parentNote}`, {
-        action: res.studentId
+        action: res.orderId
           ? {
-              label: "Xem hồ sơ",
-              onClick: () => router.push(`/students/${res.studentId}`),
+              label: "Đơn & QR thanh toán",
+              onClick: () => router.push(`/orders/${res.orderId}`),
             }
-          : undefined,
+          : res.studentId
+            ? {
+                label: "Xem hồ sơ",
+                onClick: () => router.push(`/students/${res.studentId}`),
+              }
+            : undefined,
       });
       onClose();
       onSuccess?.();

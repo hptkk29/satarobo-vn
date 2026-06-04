@@ -2356,6 +2356,9 @@ model Order {
   // Sprint 5.7 — Voucher
   voucherRedemption VoucherRedemption? @relation("OrderVoucherRedemption")
 
+  // Commit 4 — thanh toán tối đa 2 đợt
+  installments OrderInstallment[]
+
   @@index([code])
   @@index([status])
   @@index([type, status])
@@ -2364,6 +2367,32 @@ model Order {
   @@index([centerId, createdAt])
   @@index([createdAt])
   @@index([customerPhone])
+}
+
+// Commit 4 — lịch thanh toán tối đa 2 đợt cho 1 Order.
+enum InstallmentStatus {
+  PENDING
+  PAID
+}
+
+model OrderInstallment {
+  id           String            @id @default(cuid())
+  orderId      String
+  soDot        Int // 1 hoặc 2
+  amount       Int
+  status       InstallmentStatus @default(PENDING)
+  dueDate      DateTime?
+  paidAt       DateTime?
+  recordedById String?
+  // Mốc nhắc công nợ gần nhất (chống spam — 1 nhắc/ngày).
+  lastReminderAt DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, soDot])
+  @@index([status, dueDate])
 }
 
 model OrderItem {

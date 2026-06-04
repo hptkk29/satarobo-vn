@@ -6,8 +6,11 @@ import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
+import { OrderPaymentSection } from "../_components/order-payment-section";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL } from "@/lib/orders/status";
+import { getOrderInstallments } from "@/lib/orders/installments";
+import { getPaymentConfig, buildTransferContent, buildVietQrImageUrl } from "@/lib/payments/vietqr";
 import type { OrderStatus } from "@prisma/client";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
@@ -60,6 +63,18 @@ export default async function OrderDetailPage({ params }: Props) {
   if (!order) notFound();
 
   const canManage = can(session.user, "orders:manage");
+
+  // Commit 4 — thanh toán 2 đợt + QR (nội dung CK: tên HV + SĐT PH + tên khoá).
+  const [installments, payCfg] = await Promise.all([
+    getOrderInstallments(order.id),
+    getPaymentConfig(),
+  ]);
+  const transferContent = buildTransferContent(
+    order.student?.name ?? order.customerName,
+    order.customerPhone,
+    order.items[0]?.itemName,
+  );
+  const qrUrl = buildVietQrImageUrl(payCfg, order.totalAmount, transferContent);
 
   const emailTemplates = canManage
     ? await db.emailTemplate.findMany({
@@ -120,6 +135,22 @@ export default async function OrderDetailPage({ params }: Props) {
       </div>
 
       <OrderDetailClient order={order} canManage={canManage} />
+
+      <OrderPaymentSection
+        orderId={order.id}
+        totalAmount={order.totalAmount}
+        canManage={canManage}
+        qrUrl={qrUrl}
+        transferContent={transferContent}
+        installments={installments.map((i) => ({
+          id: i.id,
+          soDot: i.soDot,
+          amount: i.amount,
+          status: i.status,
+          dueDate: i.dueDate ? i.dueDate.toISOString() : null,
+          paidAt: i.paidAt ? i.paidAt.toISOString() : null,
+        }))}
+      />
     </div>
   );
 }

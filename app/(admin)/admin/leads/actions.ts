@@ -362,6 +362,7 @@ export async function closeLeadAsEnrolled(
   studentId?: string
   studentCode?: string | null
   enrollmentId?: string
+  orderId?: string
   orderCode?: string
   parentAccountEmail?: string
   parentPendingActivation?: boolean
@@ -692,6 +693,7 @@ export async function closeLeadAsEnrolled(
       studentId: result.studentId,
       studentCode: result.studentCode,
       enrollmentId: result.enrollmentId,
+      orderId: result.orderId,
       orderCode: result.orderCode,
       parentAccountEmail: linked ? (parentEmail as string) : undefined,
       // Tài khoản mới cần kích hoạt qua email (OTP đã gửi).
