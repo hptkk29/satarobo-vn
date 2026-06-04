@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClipboardCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -49,9 +50,14 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
 
   return (
     <div className="max-w-3xl p-6">
-      <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold text-gray-900">
-        <ClipboardCheck className="h-6 w-6 text-[#7C3AED]" /> Checklist mở/đóng cơ sở
-      </h1>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <ClipboardCheck className="h-6 w-6 text-[#7C3AED]" /> Checklist mở/đóng cơ sở
+        </h1>
+        <Link href="/cham-cong/checklist-co-so/tong-quan" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+          Tổng quan →
+        </Link>
+      </div>
       <p className="mb-4 text-sm text-gray-500">Tick đầu ngày khi mở cơ sở và cuối ngày khi đóng.</p>
 
       <form method="GET" className="mb-4 flex flex-wrap items-end gap-2">
