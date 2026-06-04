@@ -36,7 +36,14 @@ export default async function BaiTapPage() {
                   className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-4 transition-shadow hover:shadow-sm"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium text-neutral-900">{a.title}</p>
+                    <p className="flex items-center gap-2 font-medium text-neutral-900">
+                      {a.title}
+                      {a.kind === "HOMEWORK" && (
+                        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+                          Về nhà
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-neutral-500">
                       {a.className}
                       {a.dueAt &&

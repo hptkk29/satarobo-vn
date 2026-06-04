@@ -188,6 +188,7 @@ export async function getStudentLessons(studentId: string): Promise<LessonRow[]>
 export type AssignmentRow = {
   id: string;
   title: string;
+  kind: "CLASSWORK" | "HOMEWORK";
   className: string;
   dueAt: string | null;
   totalPoints: number;
@@ -204,6 +205,7 @@ export async function getStudentAssignments(studentId: string): Promise<Assignme
     select: {
       id: true,
       title: true,
+      kind: true,
       dueAt: true,
       totalPoints: true,
       class: { select: { name: true } },
@@ -219,6 +221,7 @@ export async function getStudentAssignments(studentId: string): Promise<Assignme
   return assignments.map((a) => ({
     id: a.id,
     title: a.title,
+    kind: a.kind,
     className: a.class.name,
     dueAt: a.dueAt?.toISOString() ?? null,
     totalPoints: a.totalPoints,

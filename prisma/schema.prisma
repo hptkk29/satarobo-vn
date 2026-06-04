@@ -1753,12 +1753,19 @@ enum SubmissionStatus {
   GRADED
 }
 
+enum AssignmentKind {
+  CLASSWORK // bài trên lớp
+  HOMEWORK // bài tập về nhà
+}
+
 model Assignment {
   id String @id @default(cuid())
 
   title        String
   description  String  @db.Text
   instructions String? @db.Text
+  // P-new — phân biệt bài về nhà vs bài trên lớp.
+  kind         AssignmentKind @default(CLASSWORK)
 
   classId  String
   class    Class   @relation(fields: [classId], references: [id])

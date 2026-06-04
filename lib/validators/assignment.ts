@@ -33,6 +33,8 @@ export const assignmentSchema = z
     title: z.string().trim().min(1, "Tiêu đề bắt buộc").max(200),
     description: z.string().trim().min(1, "Mô tả bắt buộc"),
     instructions: nullableStr,
+    // P-new — loại bài: trên lớp / về nhà.
+    kind: z.enum(["CLASSWORK", "HOMEWORK"]).default("CLASSWORK"),
     classId: z.string().trim().min(1, "Chọn lớp"),
     lessonId: nullableStr,
     totalPoints: z.coerce.number().min(0.1, "Tổng điểm > 0").default(10),

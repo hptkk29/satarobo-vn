@@ -27,6 +27,7 @@ interface LessonOption {
 export type AssignmentFormValue = {
   id: string;
   title: string;
+  kind: "CLASSWORK" | "HOMEWORK";
   description: string;
   instructions: string | null;
   classId: string;
@@ -58,6 +59,7 @@ export function AssignmentForm({
   const isEdit = Boolean(assignment);
 
   const [title, setTitle] = useState(assignment?.title ?? "");
+  const [kind, setKind] = useState<"CLASSWORK" | "HOMEWORK">(assignment?.kind ?? "CLASSWORK");
   const [description, setDescription] = useState(assignment?.description ?? "");
   const [instructions, setInstructions] = useState(assignment?.instructions ?? "");
   const [classId, setClassId] = useState(assignment?.classId ?? "");
@@ -78,6 +80,7 @@ export function AssignmentForm({
     setInfo(null);
     const payload = {
       title,
+      kind,
       description,
       instructions: instructions.trim() || null,
       classId,
@@ -193,6 +196,19 @@ export function AssignmentForm({
             placeholder="VD: Bài tập tuần 1 — Lập trình cơ bản"
             className={inputClass}
           />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-neutral-700">Loại bài</span>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as "CLASSWORK" | "HOMEWORK")}
+            disabled={pending}
+            className={inputClass}
+          >
+            <option value="CLASSWORK">Bài trên lớp</option>
+            <option value="HOMEWORK">Bài tập về nhà</option>
+          </select>
         </label>
 
         <label className="block">

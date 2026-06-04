@@ -93,6 +93,7 @@ export default async function EditAssignmentPage({ params }: Props) {
   const formValue: AssignmentFormValue = {
     id: assignment.id,
     title: assignment.title,
+    kind: assignment.kind,
     description: assignment.description,
     instructions: assignment.instructions,
     classId: assignment.classId,
