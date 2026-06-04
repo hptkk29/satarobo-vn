@@ -3,6 +3,7 @@ import { Star } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { FeedbackReply } from "./_components/feedback-reply";
 
 export const metadata = { title: "Đánh giá phụ huynh | Admin" };
 export const dynamic = "force-dynamic";
@@ -68,6 +69,11 @@ export default async function AdminParentFeedbackPage() {
                 {f.parentName ?? "Phụ huynh"}
                 {f.studentName ? ` · HV: ${f.studentName}` : ""}
               </p>
+              <FeedbackReply
+                id={f.id}
+                existing={f.adminResponse}
+                respondedAt={f.respondedAt ? f.respondedAt.toISOString() : null}
+              />
             </li>
           ))}
         </ul>

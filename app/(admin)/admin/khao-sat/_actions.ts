@@ -10,10 +10,14 @@ import { db } from "@/lib/db";
 
 const MILESTONES = ["AFTER_TRIAL", "AFTER_3_SESSIONS", "MID_COURSE", "END_COURSE", "AFTER_COMPLAINT", "GENERAL"] as const;
 
+const DEFAULT_NPS_QUESTION = "Anh/chị có sẵn sàng giới thiệu Sata Robo cho phụ huynh khác?";
+
 const createSchema = z.object({
   title: z.string().trim().min(3, "Tiêu đề quá ngắn").max(200),
   milestone: z.enum(MILESTONES),
   centerId: z.string().trim().optional().or(z.literal("")),
+  // P1-h — câu hỏi NPS (0-10) có thể tuỳ biến.
+  questionText: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
 export async function createSurvey(input: unknown): Promise<{ ok: boolean; error?: string }> {
@@ -33,7 +37,7 @@ export async function createSurvey(input: unknown): Promise<{ ok: boolean; error
       createdById: session.user.id,
       questions: {
         create: {
-          text: "Anh/chị có sẵn sàng giới thiệu Sata Robo cho phụ huynh khác?",
+          text: d.questionText?.trim() || DEFAULT_NPS_QUESTION,
           type: "NPS",
           order: 0,
         },

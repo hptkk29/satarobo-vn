@@ -2977,6 +2977,10 @@ model ParentFeedback {
   studentName  String?
   rating       Int // 1-5
   content      String   @db.Text
+  // P1-g — admin phản hồi lại đánh giá (tuỳ chọn).
+  adminResponse String?  @db.Text
+  respondedById String?
+  respondedAt   DateTime?
   createdAt    DateTime @default(now())
 
   @@index([createdAt])

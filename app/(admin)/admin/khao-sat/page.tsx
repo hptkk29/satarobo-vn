@@ -29,10 +29,18 @@ export default async function SurveyPage() {
     }),
     db.surveyResponse.findMany({
       where: { npsScore: { not: null }, ...(centerScope ? { centerId: centerScope } : {}) },
-      select: { npsScore: true, centerId: true },
+      select: { npsScore: true, centerId: true, surveyId: true },
       take: 5000,
     }),
   ]);
+
+  // P1-h — NPS theo TỪNG khảo sát (để admin thấy "ra điểm" ngay ở danh sách).
+  const bySurvey = new Map<string, number[]>();
+  for (const r of responses) {
+    const arr = bySurvey.get(r.surveyId) ?? [];
+    arr.push(r.npsScore as number);
+    bySurvey.set(r.surveyId, arr);
+  }
 
   const overall = computeNps(responses.map((r) => r.npsScore));
   const centerName = new Map(centers.map((c) => [c.id, c.name]));
@@ -79,7 +87,14 @@ export default async function SurveyPage() {
 
       <SurveyAdmin
         centers={centers}
-        surveys={surveys.map((s) => ({ id: s.id, title: s.title, milestone: s.milestone, isActive: s.isActive, responses: s._count.responses }))}
+        surveys={surveys.map((s) => ({
+          id: s.id,
+          title: s.title,
+          milestone: s.milestone,
+          isActive: s.isActive,
+          responses: s._count.responses,
+          nps: bySurvey.has(s.id) ? computeNps(bySurvey.get(s.id)!).nps : null,
+        }))}
       />
     </div>
   );
