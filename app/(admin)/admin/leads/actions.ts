@@ -366,6 +366,7 @@ export async function closeLeadAsEnrolled(
   orderCode?: string
   parentAccountEmail?: string
   parentPendingActivation?: boolean
+  parentAccountDeferred?: boolean
   error?: string
 }> {
   const session = await auth()
@@ -434,21 +435,28 @@ export async function closeLeadAsEnrolled(
   const { actorId, actorName } = getAuditActor(session)
   const centerId = lead.centerId ?? cls.centerId ?? null
 
-  // A3 — chuẩn bị tài khoản phụ huynh: PENDING_ACTIVATION + OTP email (không đặt
+  // A3/P0 — chuẩn bị tài khoản phụ huynh: PENDING_ACTIVATION + OTP email (không đặt
   // mật khẩu tạm). Chống trùng theo EMAIL hoặc SĐT.
+  // QUAN TRỌNG: thiếu email KHÔNG được làm hỏng deal. Tài khoản portal cần email
+  // để đăng nhập → nếu thiếu email thì HOÃN cấp tài khoản (deal vẫn chạy), sale bổ
+  // sung email ở hồ sơ HV rồi cấp + gửi OTP sau.
   let parentEmail: string | null = null
+  let parentAccountDeferred = false
   if (wantParentAccount) {
     parentEmail =
       (parsed.data.parentEmail?.trim() || lead.email?.trim() || '').toLowerCase() || null
     if (!parentEmail) {
-      return { ok: false, error: 'Cần email phụ huynh để cấp tài khoản portal (gửi kích hoạt)' }
-    }
-    const existing = await db.user.findUnique({
-      where: { email: parentEmail },
-      select: { role: true },
-    })
-    if (existing && existing.role !== 'PARENT') {
-      return { ok: false, error: 'Email này đã dùng cho tài khoản nhân viên khác' }
+      parentAccountDeferred = true // hoãn — không chặn deal
+    } else {
+      const existing = await db.user.findUnique({
+        where: { email: parentEmail },
+        select: { role: true },
+      })
+      if (existing && existing.role !== 'PARENT') {
+        // Email trùng tài khoản nhân viên → không cấp account nhưng KHÔNG hỏng deal.
+        parentEmail = null
+        parentAccountDeferred = true
+      }
     }
   }
 
@@ -658,25 +666,28 @@ export async function closeLeadAsEnrolled(
       }
     })
 
-    // A3 — sau transaction: gửi OTP kích hoạt (tài khoản mới) + email xác nhận đăng ký.
+    // A3/P0 — sau transaction: gửi OTP kích hoạt + email xác nhận đăng ký.
+    // Bọc toàn bộ: lỗi gửi mail/OTP TUYỆT ĐỐI KHÔNG ảnh hưởng deal đã commit.
     const linked = result.parentLinked && !!parentEmail
     if (linked && parentEmail) {
-      const courseName = await db.class
-        .findUnique({ where: { id: classId }, select: { name: true, course: { select: { name: true } } } })
-        .catch(() => null)
-      // Email xác nhận đăng ký (chỉ con liên quan).
-      await enqueueEnrollmentConfirmation({
-        to: parentEmail,
-        parentName: lead.parentName,
-        studentName: result.studentName,
-        studentCode: result.studentCode,
-        className: courseName?.name ?? '',
-        courseName: courseName?.course.name ?? '',
-        startDate: parsed.data.startDate || null,
-      }).catch(() => {})
-      // Tài khoản mới PENDING_ACTIVATION → gửi OTP kích hoạt email.
-      if (result.parentIsNewPending) {
-        await requestOtp({ target: parentEmail, purpose: 'ACTIVATION' }).catch(() => {})
+      try {
+        const courseName = await db.class
+          .findUnique({ where: { id: classId }, select: { name: true, course: { select: { name: true } } } })
+          .catch(() => null)
+        await enqueueEnrollmentConfirmation({
+          to: parentEmail,
+          parentName: lead.parentName,
+          studentName: result.studentName,
+          studentCode: result.studentCode,
+          className: courseName?.name ?? '',
+          courseName: courseName?.course.name ?? '',
+          startDate: parsed.data.startDate || null,
+        }).catch(() => {})
+        if (result.parentIsNewPending) {
+          await requestOtp({ target: parentEmail, purpose: 'ACTIVATION' }).catch(() => {})
+        }
+      } catch (notifyErr) {
+        console.error('[closeLeadAsEnrolled] notify/otp error (deal vẫn thành công):', notifyErr)
       }
     }
 
@@ -698,6 +709,8 @@ export async function closeLeadAsEnrolled(
       parentAccountEmail: linked ? (parentEmail as string) : undefined,
       // Tài khoản mới cần kích hoạt qua email (OTP đã gửi).
       parentPendingActivation: linked ? result.parentIsNewPending : undefined,
+      // Hoãn cấp tài khoản (thiếu email / email trùng nhân viên) → bổ sung sau.
+      parentAccountDeferred,
     }
   } catch (err) {
     console.error('[closeLeadAsEnrolled] error:', err)

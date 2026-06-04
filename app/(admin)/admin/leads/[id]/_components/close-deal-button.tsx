@@ -45,8 +45,7 @@ export function CloseDealButton({
       return;
     }
     if (createParent && !parentEmail.trim()) {
-      toast.error("Nhập email phụ huynh để cấp tài khoản");
-      return;
+      toast.warning("Chưa có email PH — vẫn chốt deal, cấp tài khoản portal sau khi bổ sung email ở hồ sơ HV.");
     }
     startTransition(async () => {
       const res = await closeLeadAsEnrolled(leadId, {
@@ -65,7 +64,10 @@ export function CloseDealButton({
             }`,
           );
         } else {
-          toast.success(`Đã chuyển sang Đã đăng ký — tạo học viên & đăng ký${res.orderCode ? ` + hoá đơn ${res.orderCode}` : ""}`);
+          toast.success(
+            `Đã chuyển sang Đã đăng ký — tạo học viên & đăng ký${res.orderCode ? ` + hoá đơn ${res.orderCode}` : ""}` +
+              (res.parentAccountDeferred ? " (⚠ chưa cấp tài khoản PH — bổ sung email ở hồ sơ HV)" : ""),
+          );
         }
         setOpen(false);
         router.refresh();

@@ -260,16 +260,17 @@ export async function toggleUserActiveAction(id: string) {
 
   const user = await db.user.findUnique({
     where: { id },
-    select: { isActive: true, role: true },
+    select: { isActive: true, role: true, roles: true },
   });
   if (!user) return { ok: false, error: "Không tìm thấy user" };
-  const wasSalesCsm = user.role === "SALES_CSM";
+  // Đa vai trò: nhận diện SALES_CSM theo cả role chính lẫn roles[].
+  const wasSalesCsm = user.role === "SALES_CSM" || user.roles.includes("SALES_CSM");
 
   // Last SUPER_ADMIN check (chỉ áp dụng khi đang active + đi disable)
-  if (user.role === "SUPER_ADMIN" && user.isActive) {
+  if ((user.role === "SUPER_ADMIN" || user.roles.includes("SUPER_ADMIN")) && user.isActive) {
     const remaining = await db.user.count({
       where: {
-        role: "SUPER_ADMIN",
+        roles: { has: "SUPER_ADMIN" },
         isActive: true,
         deletedAt: null,
         id: { not: id },
@@ -283,29 +284,35 @@ export async function toggleUserActiveAction(id: string) {
   const willBeActive = !user.isActive;
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id },
-      data: {
-        isActive: willBeActive,
-        tokenVersion: { increment: 1 }, // force logout
-      },
-    });
+  // P0-c: bọc try/catch — lỗi DB trả message rõ, không ném stack trace cho client.
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: {
+          isActive: willBeActive,
+          tokenVersion: { increment: 1 }, // force logout
+        },
+      });
 
-    await logUserAudit({
-      userId: id,
-      action: willBeActive ? "ENABLE" : "DISABLE",
-      actorId,
-      actorName,
-      oldValues: { isActive: user.isActive },
-      newValues: { isActive: willBeActive },
-      changedFields: ["isActive"],
-      tx,
+      await logUserAudit({
+        userId: id,
+        action: willBeActive ? "ENABLE" : "DISABLE",
+        actorId,
+        actorName,
+        oldValues: { isActive: user.isActive },
+        newValues: { isActive: willBeActive },
+        changedFields: ["isActive"],
+        tx,
+      });
     });
-  });
+  } catch (err) {
+    console.error("[toggleUserActive] error:", err);
+    return { ok: false, error: "Không cập nhật được trạng thái tài khoản — thử lại" };
+  }
 
   // Phase T1.3 — sale SALES_CSM bị disable → chia lại lead OPEN cho người còn lại.
-  // Gọi SAU tx (isActive đã false) nên getSalesLoad không tính người này.
+  // Gọi SAU tx (isActive đã false), best-effort: lỗi chia lead KHÔNG làm hỏng disable.
   if (!willBeActive && wasSalesCsm) {
     await reassignOpenLeads(id, { actorId, actorName }).catch((err) =>
       console.error("[toggleUserActive] reassign leads error:", err),

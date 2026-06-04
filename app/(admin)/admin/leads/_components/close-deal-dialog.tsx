@@ -83,9 +83,9 @@ export function CloseDealDialog({
       toast.error("Vui lòng chọn lớp");
       return;
     }
+    // Cấp tài khoản nhưng thiếu email → vẫn cho chốt (account sẽ HOÃN, bổ sung sau).
     if (createParent && !parentEmail.trim()) {
-      toast.error("Nhập email phụ huynh để cấp tài khoản");
-      return;
+      toast.warning("Chưa có email PH — vẫn chốt deal, cấp tài khoản portal sau khi bổ sung email ở hồ sơ HV.");
     }
     startTransition(async () => {
       const res = await closeLeadAsEnrolled(leadId, {
@@ -104,7 +104,9 @@ export function CloseDealDialog({
       const orderNote = res.orderCode ? ` · hoá đơn ${res.orderCode}` : "";
       const parentNote = res.parentAccountEmail
         ? ` · tài khoản PH: ${res.parentAccountEmail}${res.parentPendingActivation ? " (đã gửi email kích hoạt)" : ""}`
-        : "";
+        : res.parentAccountDeferred
+          ? " · ⚠ chưa cấp được tài khoản PH (bổ sung email ở hồ sơ HV để cấp + gửi mã)"
+          : "";
       toast.success(`Đã chuyển sang Đã đăng ký — tạo học viên${code}${orderNote}${parentNote}`, {
         action: res.orderId
           ? {

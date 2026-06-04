@@ -34,17 +34,22 @@ export default async function AdminTranscriptPage({
 
   const { studentId } = await searchParams;
 
-  // Center scope guard cho transcript đang xem.
+  // Center scope guard cho transcript đang xem. SUPER_ADMIN: centerScope=null →
+  // KHÔNG lọc cơ sở. Bọc try/catch để lỗi tổng hợp không làm trắng trang.
   let t = null;
   if (studentId) {
-    if (centerScope) {
-      const inScope = await db.student.findFirst({
-        where: { id: studentId, centerId: centerScope },
-        select: { id: true },
-      });
-      if (inScope) t = await getStudentTranscript(studentId);
-    } else {
-      t = await getStudentTranscript(studentId);
+    try {
+      if (centerScope) {
+        const inScope = await db.student.findFirst({
+          where: { id: studentId, centerId: centerScope },
+          select: { id: true },
+        });
+        if (inScope) t = await getStudentTranscript(studentId);
+      } else {
+        t = await getStudentTranscript(studentId);
+      }
+    } catch (err) {
+      console.error("[hoc-ba] transcript error:", err);
     }
   }
 
@@ -55,7 +60,9 @@ export default async function AdminTranscriptPage({
         <p className="text-sm text-neutral-500">Chọn học viên để xem quá trình học tổng hợp + xuất PDF.</p>
       </div>
 
-      <form className="flex gap-2" action="/admin/hoc-ba" method="get">
+      {/* KHÔNG đặt action tuyệt đối — submit về CHÍNH trang (đúng cả khi admin
+          chạy ở host admin.satarobo.vn nơi route ở gốc /hoc-ba). */}
+      <form className="flex gap-2" method="get">
         <select name="studentId" defaultValue={studentId ?? ""} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
           <option value="">— Chọn học viên —</option>
           {students.map((s) => (
