@@ -13,7 +13,9 @@ const ACTIVE_ENROLLMENT_STATUSES = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 export default async function TransferPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "enrollments:transfer")) redirect("/dashboard");
+  // P1-c: sale/quản lý TẠO yêu cầu (enrollments:create); chỉ quản lý (transfer) DUYỆT.
+  if (!can(session.user, "enrollments:create")) redirect("/dashboard");
+  const canApprove = can(session.user, "enrollments:transfer");
 
   const centerScope =
     hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
@@ -120,7 +122,7 @@ export default async function TransferPage() {
                   <td className="px-4 py-2 text-neutral-500">{r.reason ?? "—"}</td>
                   <td className="px-4 py-2 text-neutral-500">{r.createdAt.toISOString().slice(0, 10)}</td>
                   <td className="px-4 py-2">
-                    <RequestActions id={r.id} canApprove={!!r.toClassId} />
+                    <RequestActions id={r.id} hasTarget={!!r.toClassId} canManage={canApprove} />
                   </td>
                 </tr>
               ))

@@ -4,9 +4,23 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { approveTransferAction, rejectTransferAction } from "../_actions";
 
-export function RequestActions({ id, canApprove }: { id: string; canApprove: boolean }) {
+export function RequestActions({
+  id,
+  hasTarget,
+  canManage,
+}: {
+  id: string;
+  hasTarget: boolean;
+  canManage: boolean;
+}) {
   const [pending, start] = useTransition();
   const [confirmReject, setConfirmReject] = useState(false);
+
+  // P1-c: chỉ người có quyền DUYỆT (CENTER_MANAGER/SUPER_ADMIN) thấy nút. Người
+  // tạo (sale) chỉ xem trạng thái chờ duyệt.
+  if (!canManage) {
+    return <span className="text-xs text-neutral-400">Chờ quản lý duyệt</span>;
+  }
 
   function approve() {
     start(async () => {
@@ -30,7 +44,7 @@ export function RequestActions({ id, canApprove }: { id: string; canApprove: boo
 
   return (
     <div className="flex gap-2">
-      {canApprove ? (
+      {hasTarget ? (
         <button
           onClick={approve}
           disabled={pending}

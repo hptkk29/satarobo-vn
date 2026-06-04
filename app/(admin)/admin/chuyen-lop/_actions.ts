@@ -29,14 +29,16 @@ export async function listEligibleClassesAction(input: {
 }): Promise<{ ok: boolean; error?: string; studentCovered?: number; classes?: unknown[] }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:transfer")) return { ok: false, error: "Không có quyền" };
+  // P1-c: TẠO yêu cầu = enrollments:create (gồm SALES_CSM). Duyệt mới cần transfer.
+  if (!can(session.user, "enrollments:create")) return { ok: false, error: "Không có quyền" };
   return findEligibleTargetClasses(input.studentId, input.fromClassId, input.toCenterId || null);
 }
 
 export async function createTransferRequestAction(input: unknown): Promise<{ ok: boolean; error?: string; waitlisted?: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:transfer")) return { ok: false, error: "Không có quyền" };
+  // P1-c: sale/quản lý TẠO yêu cầu (chờ duyệt). KHÔNG tự thực hiện.
+  if (!can(session.user, "enrollments:create")) return { ok: false, error: "Không có quyền" };
 
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useRef, useState, useEffect } from 'react'
 import { Search, ChevronLeft, ChevronRight, Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
@@ -262,6 +263,15 @@ function LeadDrawer({
               >
                 {pending ? 'Đang lưu...' : 'Save'}
               </button>
+            )}
+            {canUpdate && (
+              // P1-d — sửa đầy đủ hồ sơ lead.
+              <Link
+                href={`/leads/${lead.id}/edit`}
+                className="ml-2 mt-3 inline-block text-sm font-semibold text-primary-purple hover:underline"
+              >
+                Sửa đầy đủ →
+              </Link>
             )}
           </section>
         </div>
