@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
-import { can, type Action } from "@/lib/auth/permissions";
+import { can, hasRole, type Action } from "@/lib/auth/permissions";
 import {
   studentCreateSchema,
   studentUpdateSchema,
@@ -792,6 +792,84 @@ export async function resendParentActivationOtp(
   if (!res.ok) {
     return { ok: false, error: res.error ?? "Không gửi được mã (thử lại sau ít phút)" };
   }
+  return { ok: true };
+}
+
+// ─── ĐA CON: thêm/bỏ liên kết con cho 1 phụ huynh (commit 3) ─────────
+// 1 phụ huynh (User PARENT) quản lý nhiều con qua Student.parentUserId.
+
+/** Tìm học viên CHƯA gắn phụ huynh để liên kết thêm vào 1 phụ huynh. */
+export async function searchLinkableStudents(
+  query: string,
+): Promise<{ ok: boolean; items?: { id: string; name: string; studentCode: string | null }[]; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+
+  const q = query.trim();
+  if (q.length < 1) return { ok: true, items: [] };
+
+  // CENTER_MANAGER (không super) chỉ thấy HV cơ sở mình.
+  const centerScope =
+    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
+      ? session.user.centerId
+      : null;
+
+  const items = await db.student.findMany({
+    where: {
+      deletedAt: null,
+      parentUserId: null,
+      ...(centerScope ? { centerId: centerScope } : {}),
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { studentCode: { contains: q, mode: "insensitive" } },
+        { parentPhone: { contains: q } },
+      ],
+    },
+    orderBy: { name: "asc" },
+    take: 10,
+    select: { id: true, name: true, studentCode: true },
+  });
+  return { ok: true, items };
+}
+
+/** Gắn 1 học viên (đang chưa có phụ huynh) vào phụ huynh của studentId hiện tại. */
+export async function addChildToParent(input: {
+  parentUserId: string;
+  childStudentId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+
+  const [parent, child] = await Promise.all([
+    db.user.findFirst({ where: { id: input.parentUserId, role: "PARENT", deletedAt: null }, select: { id: true } }),
+    db.student.findFirst({
+      where: { id: input.childStudentId, deletedAt: null },
+      select: { id: true, parentUserId: true },
+    }),
+  ]);
+  if (!parent) return { ok: false, error: "Không tìm thấy tài khoản phụ huynh" };
+  if (!child) return { ok: false, error: "Không tìm thấy học viên" };
+  if (child.parentUserId && child.parentUserId !== input.parentUserId) {
+    return { ok: false, error: "Học viên đã thuộc phụ huynh khác — gỡ liên kết cũ trước" };
+  }
+
+  await db.student.update({ where: { id: child.id }, data: { parentUserId: input.parentUserId } });
+  revalidatePath(`/students/${child.id}/edit`);
+  return { ok: true };
+}
+
+/** Gỡ liên kết 1 con khỏi phụ huynh (không xoá học viên). */
+export async function unlinkChildFromParent(
+  childStudentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+
+  await db.student.update({ where: { id: childStudentId }, data: { parentUserId: null } });
+  revalidatePath(`/students/${childStudentId}/edit`);
   return { ok: true };
 }
 

@@ -11,6 +11,7 @@ import { GeneratePdfButton } from "./_pdf-button";
 import { LifecycleActions } from "../../_components/lifecycle-actions";
 import { ReserveHistorySection } from "../../_components/reserve-history-section";
 import { ParentAccountSection } from "../../_components/parent-account-section";
+import { ParentChildrenManager } from "../../_components/parent-children-manager";
 import { SkillEditor } from "../_components/skill-editor";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
@@ -74,6 +75,15 @@ export default async function EditStudentPage({ params }: Props) {
   ]);
 
   if (!student) notFound();
+
+  // Commit 3 — đa con: các con đang gắn cùng phụ huynh này.
+  const parentChildren = student.parentUserId
+    ? await db.student.findMany({
+        where: { parentUserId: student.parentUserId, deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, studentCode: true },
+      })
+    : [];
 
   // LMS-5 — năng lực: lấy bản đánh giá mới nhất mỗi kỹ năng.
   const skillRows = await db.studentSkillAssessment.findMany({
@@ -218,6 +228,14 @@ export default async function EditStudentPage({ params }: Props) {
         defaultEmail={student.parentEmail}
         pendingActivation={student.parentUser?.accountStatus === "PENDING_ACTIVATION"}
       />
+
+      {student.parentUserId && (
+        <ParentChildrenManager
+          parentUserId={student.parentUserId}
+          currentStudentId={student.id}
+          children={parentChildren}
+        />
+      )}
 
       <ReserveHistorySection studentId={student.id} />
 
