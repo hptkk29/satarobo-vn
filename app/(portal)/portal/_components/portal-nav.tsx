@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -19,6 +20,8 @@ import {
   GraduationCap,
   ScrollText,
   Coins,
+  Menu,
+  X,
 } from "lucide-react";
 
 const ITEMS = [
@@ -41,38 +44,80 @@ const ITEMS = [
   { label: "Hồ sơ", href: "/portal/ho-so", icon: User },
 ];
 
+// Sidebar DỌC (commit 2): desktop hiển thị cố định bên trái; mobile thu gọn thành
+// nút "Menu" mở/đóng. Mọi mục truy cập được, không scroll ngang.
 export function PortalNav({ notifCount = 0 }: { notifCount?: number }) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  function List({ onNavigate }: { onNavigate?: () => void }) {
+    return (
+      <nav className="flex flex-col gap-0.5">
+        {ITEMS.map((item) => {
+          const Icon = item.icon;
+          const active =
+            item.href === "/portal"
+              ? pathname === "/portal"
+              : pathname.startsWith(item.href);
+          const badge = item.href === "/portal/thong-bao" && notifCount > 0 ? notifCount : 0;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={`relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? "bg-orange-500 text-white"
+                  : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{item.label}</span>
+              {badge > 0 && (
+                <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                  {badge > 9 ? "9+" : badge}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+    );
+  }
+
   return (
-    // #9 — flex-wrap: mọi mục xuống dòng khi tràn, KHÔNG scroll ngang ẩn mục.
-    <nav className="flex flex-wrap gap-1">
-      {ITEMS.map((item) => {
-        const Icon = item.icon;
-        const active =
-          item.href === "/portal"
-            ? pathname === "/portal"
-            : pathname.startsWith(item.href);
-        const badge = item.href === "/portal/thong-bao" && notifCount > 0 ? notifCount : 0;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`relative flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-              active
-                ? "bg-orange-500 text-white"
-                : "text-neutral-600 hover:bg-neutral-100"
-            }`}
-          >
-            <Icon className="h-4 w-4" />
-            {item.label}
-            {badge > 0 && (
-              <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                {badge > 9 ? "9+" : badge}
-              </span>
-            )}
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      {/* Mobile: nút Menu mở danh sách dọc */}
+      <div className="lg:hidden">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="inline-flex w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-700"
+          aria-expanded={open}
+        >
+          <span className="inline-flex items-center gap-2">
+            {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            Menu
+          </span>
+          {!open && notifCount > 0 && (
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+              {notifCount > 9 ? "9+" : notifCount}
+            </span>
+          )}
+        </button>
+        {open && (
+          <div className="mt-2 rounded-xl border border-neutral-200 bg-white p-2">
+            <List onNavigate={() => setOpen(false)} />
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: sidebar dọc cố định */}
+      <aside className="hidden w-56 shrink-0 lg:block">
+        <div className="sticky top-20 rounded-xl border border-neutral-200 bg-white p-2">
+          <List />
+        </div>
+      </aside>
+    </>
   );
 }

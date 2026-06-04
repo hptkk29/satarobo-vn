@@ -34,7 +34,7 @@ export default async function PortalLayout({
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50">
       <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <Link href="/portal" className="text-lg font-bold">
             <span className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-transparent">
               Sata
@@ -55,25 +55,24 @@ export default async function PortalLayout({
             activeId={ctx?.activeStudent?.id ?? null}
           />
         </div>
-        {children_.length > 0 && (
-          <div className="mx-auto max-w-4xl px-4 pb-2">
-            <PortalNav notifCount={notifCount} />
-          </div>
-        )}
       </header>
 
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">
-        {children_.length === 0 ? (
+      {children_.length === 0 ? (
+        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">
           <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
             <p className="text-sm text-neutral-500">
               Tài khoản chưa được liên kết với học viên nào. Vui lòng liên hệ
               trung tâm Sata Robo ({hotlinesInline()}) để được hỗ trợ.
             </p>
           </div>
-        ) : (
-          children
-        )}
-      </main>
+        </main>
+      ) : (
+        // Sidebar DỌC + nội dung: desktop 2 cột, mobile xếp dọc (nav thu gọn "Menu").
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6 lg:flex-row lg:gap-6">
+          <PortalNav notifCount={notifCount} />
+          <main className="min-w-0 flex-1">{children}</main>
+        </div>
+      )}
     </div>
   );
 }
