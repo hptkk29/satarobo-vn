@@ -33,17 +33,28 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
   const where: Prisma.UserWhereInput = {
     isActive: true,
     deletedAt: null,
-    // Đa vai trò (3B): gồm cả người có TEACHER ở vị trí PHỤ (vd CENTER_MANAGER+TEACHER).
-    roles: { has: "TEACHER" },
     ...(centerScope ? { centerId: centerScope } : {}),
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { email: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {}),
+    // P1-b: là GV nếu CÓ TEACHER ở roles[] HOẶC role chính = TEACHER (user cũ chưa
+    // sync roles[]) HOẶC đã có hồ sơ giáo viên → không sót GV nào.
+    AND: [
+      {
+        OR: [
+          { roles: { has: "TEACHER" } },
+          { role: "TEACHER" },
+          { teacherProfile: { isNot: null } },
+        ],
+      },
+      ...(q
+        ? [
+            {
+              OR: [
+                { name: { contains: q, mode: "insensitive" as const } },
+                { email: { contains: q, mode: "insensitive" as const } },
+              ],
+            },
+          ]
+        : []),
+    ],
   };
 
   let staff: Array<{

@@ -51,17 +51,24 @@ export async function updateTeacherProfile(input: unknown): Promise<Result> {
   const gate = await requireTeacherManager(userId);
   if (!gate.ok) return gate;
 
-  // Xác nhận user CÓ vai trò TEACHER (kể cả vị trí phụ — đa vai trò 3B).
   const teacher = await db.user.findUnique({
     where: { id: userId },
     select: { role: true, roles: true },
   });
-  if (!teacher || !hasRole(teacher, "TEACHER")) {
-    return { ok: false, error: "User không phải giáo viên" };
-  }
+  if (!teacher) return { ok: false, error: "Không tìm thấy người dùng" };
+
+  // P1-b: lưu/duyệt hồ sơ GV → ĐẢM BẢO vai trò TEACHER có trong roles[] (đa vai
+  // trò 3B). User cũ chỉ có role chính = TEACHER cũng được đồng bộ vào roles[].
+  const needsTeacherRole = !hasRole(teacher, "TEACHER");
 
   try {
     await db.$transaction(async (tx) => {
+      if (needsTeacherRole) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { roles: { set: Array.from(new Set([...teacher.roles, "TEACHER"])) } },
+        });
+      }
       const profile = await tx.teacherProfile.upsert({
         where: { userId },
         update: { rank, employmentType, status, bio: bio || null },

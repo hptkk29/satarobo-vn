@@ -93,7 +93,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "SataCoin", href: "/satacoin", icon: Coins, perm: ["satacoin:manage"] },
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
-      { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all", "enrollments:view-own"] },
+      { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all"] },
       { label: "Chuyển lớp / cơ sở", href: "/chuyen-lop", icon: ArrowLeftRight, perm: ["enrollments:transfer"] },
     ],
   },
@@ -127,7 +127,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Checklist cơ sở", href: "/cham-cong/checklist-co-so", icon: ClipboardCheck, perm: ["hr_attendance:view"] },
       { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
       { label: "Tuyển dụng", href: "/jobs", icon: Briefcase, perm: ["jobs:view"] },
-      { label: "Vinh danh", href: "/honors", icon: Trophy, perm: ["honors:view"] },
+      { label: "Vinh danh", href: "/honors", icon: Trophy, perm: ["honors:settings"] },
     ],
   },
   {

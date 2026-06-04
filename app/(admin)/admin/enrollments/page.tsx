@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, ClipboardList, Pencil } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 
@@ -42,6 +45,11 @@ interface SearchParams {
 }
 
 export default async function EnrollmentsAdminPage({ searchParams }: SearchParams) {
+  // P1-a: trang Đăng ký học KHÔNG dành cho GV — chỉ quản lý/sale/kế toán (view-all).
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!can(session.user, "enrollments:view-all")) redirect("/dashboard");
+
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
   const statusParam = sp.status;
