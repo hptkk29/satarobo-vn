@@ -37,5 +37,24 @@ Interface `ZaloProvider` (mô phỏng OTP provider):
 
 1. Không set env Zalo → gọi `sendZaloNotification({ toPhone, fallbackEmail })` →
    ZaloMessageLog SKIPPED, EmailQueue có 1 bản PENDING, hàm trả ok.
-2. Set `ZALO_APP_ID` + `ZALO_OA_ACCESS_TOKEN` (không set ZALO_LIVE) → SENT (mô phỏng), không fallback.
+2. Set `ZALO_OA_ACCESS_TOKEN` (không set ZALO_LIVE) → SENT (mô phỏng), không fallback.
 3. `/admin/tich-hop` hiển thị đúng trạng thái + log.
+
+## Commit 5 — gửi thật + thông báo điểm danh
+
+- **Provider hoàn thiện** (`lib/zalo/provider.ts`): `ZALO_OA_ID` mặc định `40213330288531842`
+  (override qua env); `isConfigured` = có `ZALO_OA_ACCESS_TOKEN`; `isLive` = configured + `ZALO_LIVE=true`.
+  Khi live + có `templateKey` → POST thật `business.openapi.zalo.me/message/template` (error===0 = OK),
+  lỗi → service fallback EMAIL.
+- **Thông báo điểm danh** (`lib/notify/attendance.ts` → `notifyAttendanceForSession`): khi GV lưu điểm
+  danh (`markAttendance`) → báo phụ huynh "Bé [tên] đã điểm danh [trạng thái] buổi [ngày] lớp [tên]".
+  GỘP nhiều con cùng phụ huynh; mỗi (buổi, HV) chỉ 1 lần (mốc `Attendance.notifiedAt`); đúng phụ huynh
+  con đó (không lộ con khác). Email chạy ngay; Zalo khi đã cấu hình token.
+- **Nhắc công nợ** (cron debt-reminder) cũng qua Zalo + fallback email (commit 4).
+- ENV (xem `.env.example`): `ZALO_OA_ACCESS_TOKEN`, `ZALO_LIVE`, `ZALO_ZNS_TEMPLATE_ATTENDANCE`,
+  `ZALO_ZNS_TEMPLATE_DEBT`. **CHỜ NGƯỜI DÙNG** cung cấp access token + template ZNS đã duyệt.
+
+## Test commit 5
+1. Lưu điểm danh 1 buổi (HV ZZTEST_ có email PH) → EmailQueue có thông báo điểm danh (PENDING),
+   `Attendance.notifiedAt` set; lưu lại lần nữa → KHÔNG gửi trùng.
+2. Có token + `ZALO_LIVE=true` + template → gửi ZNS thật; lỗi → fallback email. KHÔNG gửi thật khi test.

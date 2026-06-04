@@ -992,6 +992,9 @@ model Attendance {
   makeupSessionId String? // buổi đã học bù (set khi MADE_UP) — cột phẳng, không FK
   absenceReason   String?  @db.Text // lý do phụ huynh xin vắng
 
+  // Commit 5 — mốc đã gửi thông báo điểm danh cho phụ huynh (chống gửi trùng).
+  notifiedAt DateTime?
+
   createdAt DateTime @default(now())
 
   session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

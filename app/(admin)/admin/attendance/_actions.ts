@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createMakeupNeed } from "@/lib/makeup/service";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
+import { notifyAttendanceForSession } from "@/lib/notify/attendance";
 
 type ActionResult = { error?: string; saved?: number };
 
@@ -122,6 +123,14 @@ export async function markAttendance(
     }
   } catch (err) {
     console.error("[markAttendance] risk error:", err);
+  }
+
+  // Commit 5 — thông báo điểm danh cho phụ huynh (email ngay; Zalo khi đã cấu hình).
+  // Best-effort: lỗi gửi KHÔNG ảnh hưởng việc lưu điểm danh.
+  try {
+    await notifyAttendanceForSession(data.sessionId);
+  } catch (err) {
+    console.error("[markAttendance] notify error:", err);
   }
 
   revalidatePath("/attendance");
