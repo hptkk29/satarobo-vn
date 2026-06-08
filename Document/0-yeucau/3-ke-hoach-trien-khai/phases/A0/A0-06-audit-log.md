@@ -3,7 +3,13 @@
 | | |
 |---|---|
 | **PR** | PR-A0-06 | **Ưu tiên** | P1 | **Ước lượng** | 3 ngày |
-| **Phụ thuộc** | A0-02 (dùng chung), A0-03 (actor) | **Feature flag** | không | **Trạng thái** | TODO |
+| **Phụ thuộc** | A0-02 (dùng chung), A0-03 (actor) | **Feature flag** | không | **Trạng thái** | 🟡 model+helper+test PASS local (2026-06-08); viewer UI boy-scout |
+
+> ⚙️ **Tiến độ (2026-06-08) — chạy thật trên PG local:**
+> - ✅ **Model `AuditLog`** hợp nhất (migration `20260608030000_add_audit_log`).
+> - ✅ **`lib/audit/audit-log.ts`:** `writeAudit` (immutable — KHÔNG có update/delete; auto `detectChangedFields`; ip/UA truyền vào, không gọi headers() → test/cron dùng được), `maskAuditValues` (mask SĐT/email theo `pii:view`), `visibleOrgUnitIds`/`getAuditLogsScoped` (scope viewer theo orgUnit; SUPER_ADMIN/HO → ALL).
+> - ✅ **Test PASS:** Vitest 5 (mask AC6 + scope) + e2e 4 (writeAudit AC1, System AC7, scope viewer AC3/T5, EXPORT AC5).
+> - ⏳ **Deferred:** trang viewer `/admin/audit-log` cho AuditLog mới (route đã tồn tại cho audit cũ Sprint 5.4 — gắn tab/migrate sau, boy-scout); gộp 8 bảng audit cũ = Phase B. AC4 (immutable) đảm bảo bằng KHÔNG có server action update/delete.
 | **Nguồn** | Doc 15 §8.1 | | | |
 
 ---

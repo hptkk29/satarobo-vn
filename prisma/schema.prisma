@@ -360,6 +360,32 @@ model RbacAuditLog {
   @@index([createdAt])
 }
 
+// ─── A0-06 — AuditLog HỢP NHẤT (Doc 15 §8.1) ───
+// 1 bảng cho mọi module (thay 8 bảng audit cũ — giữ đọc-only). Immutable: KHÔNG
+// có server action update/delete. Viewer scope theo orgUnitId + mask PII theo quyền.
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorId       String? // null = System (cron/dispatcher)
+  actorName     String // snapshot tên actor
+  module        String // 'rbac','orders','employees',...
+  entityType    String
+  entityId      String
+  action        String // CREATE/UPDATE/DELETE/STATUS_CHANGE/EXPORT/SCOPE_BYPASS...
+  oldValues     Json?
+  newValues     Json?
+  changedFields String[]
+  reason        String?
+  orgUnitId     String? // để scope viewer theo cơ sở
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([orgUnitId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([module, createdAt])
+}
+
 enum RoomStatus {
   ACTIVE
   MAINTENANCE
