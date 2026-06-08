@@ -1,21 +1,24 @@
 # CLAUDE.md — Sata Robo VN
 
-Brand hub + admin CMS cho Sata Robo (Đà Nẵng). Public marketing site (`/`, `/khoa-hoc`, `/vinh-danh`, `/tin-tuc`, `/tuyen-dung`) + internal admin (`/admin/*`) chia route group `app/(public)/`, `app/(admin)/admin/`, `app/(auth)/`.
+Brand hub + admin CMS + portal phụ huynh cho Sata Robo (Đà Nẵng). 3 site / 3 domain (public `satarobo.vn`, admin `admin.satarobo.vn`, portal `hocvien.satarobo.vn`) chạy chung 1 app Next.js, chia route group `app/(public)/`, `app/(legacy)/`, `app/(admin)/admin/`, `app/(portal)/portal/`, `app/(auth)/`.
+
+> ⭐ **BLUEPRINT CHỐT:** [`Document/2-architecture-design/15-final-architecture-blueprint.md`](Document/2-architecture-design/15-final-architecture-blueprint.md) là nguồn kiến trúc đúng nhất. Khi xung đột giữa "hiện trạng" trong file này và Doc 15 → **Doc 15 thắng cho việc xây MỚI**. File CLAUDE.md mô tả hiện trạng repo + hướng chuyển dịch (mục "Kiến trúc đích" cuối file). Kế hoạch thực thi theo phase: [`Document/0-yeucau/3-ke-hoach-trien-khai/phases/`](Document/0-yeucau/3-ke-hoach-trien-khai/phases/README.md) (A0 → R5).
 
 ## Tech stack (FROZEN — đừng đổi nếu không hỏi)
 
 - Next.js 16 App Router · React 19 · TypeScript strict
 - Tailwind v4 · shadcn/ui · Magic UI (client only) · Framer Motion / Motion (client only) · Recharts (admin only)
 - PostgreSQL (Supabase) · Prisma 5 · Auth.js v5 · Cloudflare R2 storage
-- Resend (email) · pnpm 11
+- Resend (email) · Upstash Redis (rate limit) · Sentry (server+edge) · pnpm 11 · Vercel (region hnd1) + Cron
+- **KHÔNG microservice** — modular monolith (Doc 15 Q1). KHÔNG message broker — dùng DB-backed queue + Vercel Cron.
 
 ## Critical conventions
 
 1. **Server-first** — default Server Component. `'use client'` chỉ khi cần state/effect/handler. Data fetch trong RSC (`async`), mutations qua Server Actions (`'use server'`).
 2. **Strict TS** — không `any` (dùng `unknown` + narrow). Zod schema là source of truth → suy ra type qua `z.infer`.
-3. **Route groups** — public: `app/(public)/...`, admin: `app/(admin)/admin/...`, auth: `app/(auth)/login/...`. Không tạo `/admin/*` ngoài route group.
-4. **Imports** — `@/lib/db` (Prisma), `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`).
-5. **Auth gate** — admin layout đã redirect `/login`. Server Actions vẫn phải `auth()` + `can(role, action)` từ `@/lib/auth/permissions` (Phase 4.7+).
+3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, auth: `app/(auth)/login/...`. Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
+4. **Imports** — `@/lib/db` (Prisma), `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Target (sau A0-04):** code đọc nghiệp vụ trong `app/**` đi qua `scopedDb(actor)` — KHÔNG import `@/lib/db` trần (ESLint sẽ chặn).
+5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Hiện tại: `can(role, action)` từ `@/lib/auth/permissions`. **Target (A0-03):** `can(actor, action, target)` đọc role động từ DB. Portal actions thêm ownership check `assertOwnsStudent`.
 6. **Prisma migrations** — KHÔNG raw SQL trừ khi cần. Mỗi schema change: `pnpm db:migrate` + tên rõ nghĩa. Sau migration: restart dev server (Prisma Client cache stale trong memory).
 7. **UI library split** (Phase 4.X.1): admin = shadcn/ui + Recharts; client = shadcn/ui + Magic UI + Framer Motion. ESLint chặn cross-import — đừng workaround.
 8. **Security (ENFORCED by hooks):**
@@ -31,9 +34,11 @@ Brand hub + admin CMS cho Sata Robo (Đà Nẵng). Public marketing site (`/`, `
 ```
 app/
 ├── (public)/          # /, /khoa-hoc, /vinh-danh, /tin-tuc, /tuyen-dung, /lien-he, ...
+├── (legacy)/          # landing khóa học cũ
 ├── (admin)/admin/     # /admin/dashboard, /admin/leads, /admin/honors, /admin/nhan-su, ...
-├── (auth)/login/
-└── api/               # /api/leads, /api/admin/upload-url, /api/admin/upload-delete, /api/auth/...
+├── (portal)/portal/   # cổng phụ huynh: /portal/ho-so, /portal/bai-thi, /portal/yeu-cau, ...
+├── (auth)/login/      # cổng login (target: chung satarobo.vn/login → redirect theo role)
+└── api/               # /api/leads, /api/admin/upload-url, /api/cron/*, /api/public/webhook/*, /api/auth/...
 
 components/
 ├── ui/                # shadcn base (shared)
@@ -48,27 +53,39 @@ components/
 └── seo/               # JSON-LD schemas
 
 lib/
-├── db.ts              # Prisma singleton
+├── db.ts              # Prisma singleton (target: dùng qua scopedDb cho app/**)
 ├── auth.ts            # Auth.js config
-├── auth/permissions.ts # can(), assertCan(), getEmployeeFieldVisibility()
+├── auth/permissions.ts # can(), assertCan(), getEmployeeFieldVisibility()  (hiện trạng: matrix tĩnh)
+├── auth/route-policy.ts # decideRoute() host×role (unit-tested)
+├── audit/             # log helpers (target: AuditLog hợp nhất 1 bảng)
+├── email/             # Resend client, queue, triggers
 ├── storage/           # R2 client + upload-config
-├── honors/            # category-meta, honor-view helper
-├── validators/        # Zod schemas per resource
-├── seo/               # jsonld helpers
-└── utils.ts
+├── pdf/               # certificate / transcript / progress-report (@react-pdf)
+├── honors/ · validators/ · seo/ · utils.ts
+# Target (Doc 15) — sẽ thêm khi A0 chạy:
+# lib/org/ (OrgUnit tree) · lib/auth/actor.ts + can.ts (can() v2) · lib/db-scope.ts (scopedDb)
+# lib/events/ (DomainEvent outbox + dispatcher) · modules/* (modular monolith boundary)
 
 prisma/
-├── schema.prisma
+├── schema.prisma      # (target: tách multi-file prisma/schema/*.prisma — Doc 15 Q5)
 ├── migrations/        # NEVER edit applied migrations
-├── seed.ts
-└── seed-honors.ts
+└── seed*.ts
 ```
 
-## Permission matrix (`lib/auth/permissions.ts`)
+## Permission & tổ chức
 
-- 7 roles: `SUPER_ADMIN`, `MANAGER`, `HR`, `SALES`, `TEACHER`, `MARKETING`, `ACCOUNTANT`.
-- Field-level visibility (Employee): `basic` (all), `contact` (SUPER_ADMIN/MANAGER/HR), `salary` (SUPER_ADMIN/HR/ACCOUNTANT), `personal` (SUPER_ADMIN/HR).
-- Pattern: `can(session.user.role, 'employees:edit')` returns boolean. `assertCan(...)` throws inside Server Actions/API routes.
+**Hiện trạng (`lib/auth/permissions.ts`):**
+- 8 roles (enum): `SUPER_ADMIN`, `CENTER_MANAGER`, `HR`, `SALES_CSM`, `TEACHER`, `MARKETING`, `ACCOUNTANT`, `PARENT`. (Đã rename `MANAGER→CENTER_MANAGER`, `SALES→SALES_CSM` — legacy shim trong JWT callback.)
+- Multi-role: `User.roles[]` (quyền = union). Per-user grant ALLOW/DENY: `UserPermissionGrant` (Sprint 5.3). `User.centerId` scope theo cơ sở.
+- Field-level visibility (Employee): `basic` (all), `contact` (SUPER_ADMIN/CENTER_MANAGER/HR), `salary` (SUPER_ADMIN/HR/ACCOUNTANT), `personal` (SUPER_ADMIN/HR). `canViewParentContact` chặn TEACHER.
+- Pattern: `can(session.user, 'employees:edit')` → boolean; `assertCan(...)` throw trong Server Actions/API.
+
+**Target (Doc 15 §2 — A0, đã chốt §11 Open Items) — dùng cho việc xây MỚI:**
+- **Tổ chức = OrgUnit tree:** ROOT(SataRobo) → **HO, CS1, CS2 độc lập ngang hàng**. HO (Hội sở) KHÔNG thuộc CS2 dù trùng địa chỉ. Mở CS mới = thêm data, không sửa code. KHÔNG dùng `address` để suy quan hệ quản lý.
+- **RBAC động trong DB:** `RoleDef` + `RolePermission(action, scopeType GLOBAL/CENTER/CLASS/OWN/CHILDREN/ASSIGNED)` + `UserOrgRole(user × orgUnit × role, có effectiveFrom/To/status)`. Chỉ SUPER_ADMIN tạo/sửa role + **audit + reason bắt buộc**. **KHÔNG có role `HO_MANAGER`.** Role HO = cross-center theo chức năng (HO_ACCOUNTANT/HO_HR/HO_MARKETING xem+sửa toàn hệ thống theo module; HO_SALE xem lead scope A&B, **không sửa**).
+- **Conflict: ALLOW thắng nếu ≥1 role cho phép — KHÔNG dùng DENY override** ở giai đoạn này.
+- **`EmployeeOrgAssignment`** (nhân sự/kiêm nhiệm/lương — 5 assignmentType + allocationPercent) **KHÔNG tự sinh quyền**; quyền chỉ từ `UserOrgRole`.
+- **scopedDb(actor)** ép cách ly cơ sở: CS1 không xem CS2 (test CI bắt buộc).
 
 ## Performance budget
 
@@ -84,6 +101,11 @@ prisma/
 - ❌ KHÔNG drop Honor old columns (`fullName`, `jobTitle`, `avatarUrl`, `yearsAtCompany`) — 2-phase migration, sẽ làm ở 4.7.1.
 - ❌ KHÔNG `gc --prune=now` ngay sau filter-branch khi có stash (mất WIP).
 - ❌ KHÔNG comment `// eslint-disable-next-line @next/next/no-img-element` — project không có plugin Next ESLint.
+- ❌ KHÔNG thiết kế `HO = CS2` / HO nằm dưới CS2 (Doc 15 OI-1) — HO là OrgUnit độc lập dưới ROOT.
+- ❌ KHÔNG hardcode danh sách center / "HO + CS2" — đi qua OrgUnit tree (CS3/CS4... thêm không sửa code).
+- ❌ KHÔNG để side-effect "dính chùm" inline trong action (target: side-effect không-atomic đi qua DomainEvent; tiền/enrollment đi transaction).
+- ❌ KHÔNG đưa lại scope đã LOẠI (Doc 15 §0): AI camera/sinh trắc/định vị học sinh · Web3/NFT/blockchain · marketplace · student login riêng · teacher domain riêng · online video LMS · AI learning path/prediction. Nhu cầu "dự báo/khuyến nghị" làm **rule-based**.
+- ❌ KHÔNG lưu giấy tờ tùy thân học viên; media phải tag + tôn trọng `StudentConsent`; KHÔNG lộ `studentId` trên URL portal.
 
 ## Workflow
 
@@ -96,9 +118,27 @@ prisma/
 ## Business context
 
 - Công ty Cổ phần Công nghệ Giáo dục Sata Robo (Đà Nẵng), CEO Hồ Đắc Phúc.
-- 2 khoá học chủ lực: **Lập trình Robot** (offline K-9, slug `laptrinhrobot`) và **Luyện thi RoboSim** (online + coaching, slug `luyenthirobosim`).
+- 2 khoá học chủ lực: **Lập trình Robot** (offline K-9, slug `laptrinhrobot`) và **Luyện thi RoboSim** (slug `luyenthirobosim`).
+- **Scope core (Doc 15):** vận hành đào tạo **offline Sata 1–8 + Combo 1&2**; online course trỏ Sataworld (không build video LMS). Lead **Messenger-first** (Page HO) theo phễu SR.QD.217 L1→L2→L3.
+- Tổ chức thật: HO (Hội sở) + CS1 (211 Nguyễn Hữu Thọ) + CS2 (114 Hoàng Diệu).
 - B2C: phụ huynh con lớp 1-8.
 - 2 domain cũ redirect qua middleware (`proxy.ts`): `laptrinhrobot.vn` → `/khoa-hoc/laptrinhrobot`; `luyenthirobosim.vn` → `/khoa-hoc/luyenthirobosim`.
+
+## Kiến trúc đích (Doc 15) — đang chuyển dịch A0 → R5
+
+> Khi xây tính năng MỚI, theo blueprint Doc 15. Hệ thống nâng cấp **dần, additive trước — drop sau khi ổn định** (2-phase); hệ thống không dừng. Đừng import thứ chưa tồn tại (scopedDb/can() v2/OrgUnit chỉ có sau khi A0 chạy — kiểm tra trước khi dùng).
+
+- **6 trụ kiến trúc:** OrgUnit tree · RBAC động (DB) · scopedDb (cách ly cơ sở) · DomainEvent outbox (tách side-effect) · modular monolith (`modules/*` + ESLint boundary) · login chung + portal.
+- **Quy tắc atomic vs event:** tiền/invoice/enrollment/kho → trong **transaction**; thông báo/stats/đồng bộ ngoài → **DomainEvent** (handler idempotent). External call (Resend/Zalo/MISA/Meta/CAPI/GA4) CHỈ qua `modules/integration`.
+- **API contract (target):** success `{ ok, data, meta }` · error `{ ok:false, error:{ code(EN), message(VI), field?, requestId } }`. Idempotency bắt buộc cho webhook + confirm payment.
+- **AuditLog hợp nhất** + mask PII theo quyền; export nhạy cảm có watermark + audit lại. Backup Supabase (RPO 24h/RTO 4–8h).
+- **Lộ trình & test:** mỗi phase có ticket + test (Playwright + Vitest) phủ **12 nhóm** (T1–T12), quy trình Task→Test→Check. Xem `Document/0-yeucau/3-ke-hoach-trien-khai/phases/`.
+
+## Tài liệu kiến trúc (đọc khi cần)
+
+- ⭐ [Document/2-architecture-design/15-final-architecture-blueprint.md](Document/2-architecture-design/15-final-architecture-blueprint.md) — BLUEPRINT CHỐT (nguồn đúng nhất).
+- [Document/0-yeucau/3-ke-hoach-trien-khai/phases/](Document/0-yeucau/3-ke-hoach-trien-khai/phases/README.md) — kế hoạch + test theo phase A0→R5 (A0 có ticket chi tiết).
+- [Document/README.md](Document/README.md) — bộ tài liệu PRD→DB→API→Flow→Security→Test (mô tả hiện trạng).
 
 ## Detailed rules (load on-demand)
 

@@ -1,5 +1,7 @@
 # Roadmap triển khai theo Release
 
+> 📂 **KẾ HOẠCH CHI TIẾT THEO PHASE (kèm test Playwright + quy trình task→test→check):** xem thư mục [`phases/`](phases/README.md) — mỗi phase A0→R5 có file riêng với danh sách task, test case bắt buộc, exit criteria.
+>
 > ⚠️ **SUPERSEDED (2026-06-05):** Roadmap CHỐT hiện tại nằm ở `Document/2-architecture-design/15-final-architecture-blueprint.md` §9 (A0 → R1 CRM Messenger/Marketing/Commission → R2 SIS/Finance → R3 LMS → R4 Portal → R5 HR). Khác biệt chính so với file này: **Zalo OA/ZNS + SataCoin quà + payment gateway lùi về backlog sau core**; commission nằm trong R1; thêm Ads Insights sync + Messenger inbox. File này giữ làm tham chiếu chi tiết task R2-cũ (trùng lịch/TKB/consent — nay phân bổ vào R3/R4 mới).
 
 > **Input:** 2 gap analysis + user stories (`2-ba-phan-tich/`).
