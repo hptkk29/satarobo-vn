@@ -11,7 +11,7 @@
 | A0-01 | [OrgUnit](A0-01-orgunit.md) | P0 | 5d | 00 | 8 | 13/24 | ✅ DONE — domain (29 ✓) + DB layer; migration apply OK + 11 e2e PASS trên Postgres local (2026-06-08) |
 | A0-02 | [RBAC động](A0-02-rbac.md) | P0 | 6d | 01 | 9 | 14/25 | 🟡 data+service+seed+UI DONE; 22 test PASS local (8 Vitest + 14 e2e, AC1–AC9); browser-UI e2e + setPermissions UI nâng cao deferred |
 | A0-03 | [ActorResolver + can() v2](A0-03-actor-resolver-can-v2.md) | P0 | 4d | 02 | 12 | 28/40 | ✅ DONE — engine (actor/can/shadow/flag); 31 test PASS local (27 Vitest + 4 e2e, AC1–AC12); wire runtime + shadow ở phase chuyển dịch |
-| A0-04 | [scopedDb](A0-04-scoped-db.md) | P0 ⚠️ | 4d | 03 | 10 | 16/24 | TODO |
+| A0-04 | [scopedDb](A0-04-scoped-db.md) | P0 ⚠️ | 4d | 03 | 10 | 16/24 | 🟡 cơ chế scopedDb + 25 test PASS local (14 Vitest + 11 e2e, T5 6 góc 2 chiều, IDOR, bypass); flip ESLint→error + AC7 nested chờ migrate (219 callsite) |
 | A0-05 | [Common login](A0-05-common-login.md) | P0 | 3d | 03 | 7 | 9/14 | TODO |
 | A0-06 | [AuditLog](A0-06-audit-log.md) | P1 | 3d | 02 | 7 | 10/15 | TODO |
 | A0-07 | [DomainEvent outbox](A0-07-domain-event-outbox.md) | P1 | 4d | 01 | 8 | 11/15 | TODO |

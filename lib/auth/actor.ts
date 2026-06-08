@@ -28,6 +28,8 @@ export type PermEntry = {
 export type Actor = {
   userId: string;
   isSuperAdmin: boolean;
+  /** Có ≥1 role tại OrgUnit type HO/ROOT → cross-center theo chức năng (A0-04 bypass scope). */
+  isHoLevel: boolean;
   orgRoles: { orgUnitId: string; roleCode: string }[];
   permissions: PermEntry[];
   visibleCenterIds: string[];
@@ -96,6 +98,8 @@ export function buildActor(input: {
   const isSuperAdmin = liveRows.some(
     (r) => r.role.code === "SUPER_ADMIN" && isHoRoot(orgById.get(r.orgUnitId)),
   );
+  // HO-level = bất kỳ role nào tại HO/ROOT (cross-center theo chức năng).
+  const isHoLevel = liveRows.some((r) => isHoRoot(orgById.get(r.orgUnitId)));
 
   const orgRoles = liveRows.map((r) => ({ orgUnitId: r.orgUnitId, roleCode: r.role.code }));
 
@@ -132,6 +136,7 @@ export function buildActor(input: {
   return {
     userId: input.userId,
     isSuperAdmin,
+    isHoLevel,
     orgRoles,
     permissions,
     visibleCenterIds: [...visible],

@@ -4,7 +4,17 @@
 |---|---|
 | **PR** | PR-A0-04 | **Ưu tiên** | P0 — CỔNG AN TOÀN DỮ LIỆU |
 | **Ước lượng** | 4 ngày | **Phụ thuộc** | A0-03 |
-| **Feature flag** | `scoped_db_enforced` (bypass cho hotfix) | **Trạng thái** | TODO |
+| **Feature flag** | `scoped_db_enforced` (bypass cho hotfix) | **Trạng thái** | 🟡 cơ chế + test PASS local (2026-06-08); flip ESLint→error chờ migrate callsite |
+
+> ⚙️ **Tiến độ (2026-06-08) — đã chạy thật trên Postgres local:**
+> - ✅ **`lib/db-scope.ts`:** `scopedDb(actor)` Prisma Client Extension — inject `centerId IN visibleCenterIds` cho `findMany/findFirst/count/aggregate/groupBy`; `findUnique` lọc hậu kỳ (IDOR→null); SUPER_ADMIN/HO bypass (cross-center); `injectScope`/`passesScope` THUẦN (test riêng); `bypass:true` (per-call, an toàn hơn env-flag) + `logScopeBypass` ghi RbacAuditLog.
+> - ✅ **SCOPED_MODELS (24) + SCOPE_EXEMPT (4: OrgUnit/User/LeadAssignmentConfig/SataCoinRule).** Introspection test (DMMF) bắt mọi model có `centerId` phải thuộc 1 trong 2 set → chống miss model mới (T12-01).
+> - ✅ **Test PASS:** Vitest `db-scope.test.ts` 14 (inject/passes/introspection, AC9/AC10) + e2e `scoped-db.spec.ts` 11 (T5 6 góc ×2 chiều: AC1–AC6, IDOR AC3, count AC4, search, null-record T8-02/03, empty T8-01, bypass AC10). Toàn repo: Vitest 210 ✓, e2e a0 43 ✓.
+> - 📌 **Quyết định:** bypass per-call (`{bypass:true}`+audit) thay vì env `scoped_db_enforced` toàn cục — giảm rủi ro tắt nhầm prod.
+> - ⏳ **CÒN LẠI (Phase chuyển dịch — KHÔNG đóng được trong A0-04 đơn lẻ):**
+>   - **AC8 flip ESLint→error:** rule `app-no-direct-prisma` đang `warn` (đã có). **219 file** `app/**` còn import `@/lib/db` trần → flip 'error' = phải migrate hết (boy-scout/Phase C). Cơ chế đã sẵn, scopedDb là đường thay thế.
+>   - **AC7 (nested include):** ⚠️ Prisma extension chỉ scope query TOP-LEVEL; `include` model scoped khác KHÔNG tự lọc → phải thêm `where` ở include. Đã ghi cảnh báo trong `db-scope.ts`. Cần lint/guard riêng ở Phase sau.
+>   - Migrate `leads/orders` page sang scopedDb (chứng minh production) — e2e đã chứng minh cơ chế trên model Lead thật.
 | **Nguồn** | Doc 15 §4.4/§4.10, P3 | | |
 
 ---
