@@ -14,7 +14,7 @@
 | A0-04 | [scopedDb](A0-04-scoped-db.md) | P0 ⚠️ | 4d | 03 | 10 | 16/24 | 🟡 cơ chế scopedDb + 25 test PASS local (14 Vitest + 11 e2e, T5 6 góc 2 chiều, IDOR, bypass); flip ESLint→error + AC7 nested chờ migrate (219 callsite) |
 | A0-05 | [Common login](A0-05-common-login.md) | P0 | 3d | 03 | 7 | 9/14 | ✅ DONE — lõi decideRoute/sanitize có sẵn + flag + 7 test AC (2026-06-08) |
 | A0-06 | [AuditLog](A0-06-audit-log.md) | P1 | 3d | 02 | 7 | 10/15 | 🟡 model+writeAudit+mask+scope; 9 test PASS local; viewer UI boy-scout (2026-06-08) |
-| A0-07 | [DomainEvent outbox](A0-07-domain-event-outbox.md) | P1 | 4d | 01 | 8 | 11/15 | TODO |
+| A0-07 | [DomainEvent outbox](A0-07-domain-event-outbox.md) | P1 | 4d | 01 | 8 | 11/15 | ✅ DONE — outbox+dispatcher+cron+demo; 12 test PASS local (AC1–AC8) (2026-06-08) |
 | A0-08 | [EmployeeOrgAssignment](A0-08-employee-assignment.md) | P1 | 3d | 01 | 9 | 12/18 | TODO |
 
 > Số test là ước lượng để tester biết khối lượng — con số thực tế khi viết có thể nhiều hơn (khuyến khích phủ thêm case E).

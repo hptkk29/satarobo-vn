@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/debt-reminder",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch-events",
+      "schedule": "* * * * *"
     }
   ]
 }

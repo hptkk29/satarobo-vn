@@ -386,6 +386,25 @@ model AuditLog {
   @@index([module, createdAt])
 }
 
+// ─── A0-07 — DomainEvent outbox (Doc 15 §4.5) ───
+// Ghi event TRONG transaction nghiệp vụ → dispatcher (cron) gọi handler theo type,
+// idempotent + retry. Thêm consumer = 1 dòng on(), không sửa publisher.
+model DomainEvent {
+  id          String    @id @default(cuid())
+  type        String
+  payloadJson Json
+  status      String    @default("PENDING") // PENDING/PROCESSING/DONE/FAILED
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lastError   String?
+  dedupeKey   String?   @unique // idempotency producer-side
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([type])
+}
+
 enum RoomStatus {
   ACTIVE
   MAINTENANCE

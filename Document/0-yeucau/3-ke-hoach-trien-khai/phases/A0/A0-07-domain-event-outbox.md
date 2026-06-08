@@ -3,7 +3,14 @@
 | | |
 |---|---|
 | **PR** | PR-A0-07 | **Ưu tiên** | P1 | **Ước lượng** | 4 ngày |
-| **Phụ thuộc** | A0-01 | **Feature flag** | `dispatcher_enabled` (tắt được) | **Trạng thái** | TODO |
+| **Phụ thuộc** | A0-01 | **Feature flag** | `dispatcher_enabled` (tắt được) | **Trạng thái** | ✅ DONE — cơ chế + test PASS local (2026-06-08) |
+
+> ⚙️ **Tiến độ (2026-06-08) — chạy thật trên PG local:**
+> - ✅ **Model `DomainEvent`** (migration `20260608040000_add_domain_event`).
+> - ✅ **`lib/events/`:** `publish.ts` (publishEvent trong tx + dedupeKey idempotent), `registry.ts` (on/getHandlers + decideOutcome thuần), `dispatcher.ts` (claim optimistic PENDING→PROCESSING chống xử lý đôi; allSettled; retry→maxAttempts→FAILED; `reapStuckEvents`), `_demo/ping-handlers.ts` (2 handler + idempotent + always-fail), `register.ts` (đăng ký 1 lần/process).
+> - ✅ **Cron** `/api/cron/dispatch-events` (verifyCronAuth) + vercel.json `* * * * *`. Cờ `isDispatcherEnabled` (lib/flags.ts).
+> - ✅ **Test PASS:** Vitest registry 5 (on/decideOutcome) + e2e 7 (AC1 atomic rollback, AC2 DONE, AC3 retry/FAILED, AC6 allSettled, AC7 dedupe, AC8 flag-off, claim T6-04).
+> - ⏳ **Out (đúng ticket):** chuyển luồng thật (order.confirmed/attendance.marked) sang event = R1/R2/R3.
 | **Nguồn** | Doc 15 §4.5 | | | |
 
 ---
