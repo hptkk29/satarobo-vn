@@ -70,6 +70,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Boundaries (dependency-cruiser)
+        # Architecture governance (Doc 15 §4.10). Hiện chỉ chặn rule severity 'error'
+        # (circular / unresolvable / not-to-test / deep cross-module import).
+        # Rule app→lib/db đang 'warn' (không fail) tới khi A0-04 (scopedDb) hoàn tất → đổi 'error'.
+        run: pnpm lint:boundaries
+
       - name: Build
         run: pnpm build
         env:
