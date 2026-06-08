@@ -4,8 +4,14 @@
 |---|---|
 | **PR** | PR-A0-01 | **Ưu tiên** | P0 (chặn toàn bộ A0) |
 | **Ước lượng** | 5 ngày | **Phụ thuộc** | A0-00 (test infra) |
-| **Feature flag** | không (additive thuần) | **Trạng thái** | TODO |
+| **Feature flag** | không (additive thuần) | **Trạng thái** | 🟡 IN PROGRESS — lớp domain thuần + tests DONE (2026-06-08); DB layer chờ env có Postgres |
 | **Nguồn** | Doc 15 §2.1, §11 OI-1/OI-2/OI-11/OI-12 | | |
+
+> ⚙️ **Tiến độ thực thi (2026-06-08):**
+> - ✅ **DONE + test xanh (29/29 Vitest, typecheck 0, lint 0, depcruise 0):** lớp domain THUẦN `lib/org/{types,orgunit-rules,org-tree}.ts` + `lib/validators/orgunit.ts` + tests. Đây là toàn bộ thuật toán + validation rule (V2/V3/V5/V6/V7) + helper cây — decoupled khỏi Prisma nên test được không cần DB.
+> - ⏳ **CHỜ MÔI TRƯỜNG CÓ DB (chưa làm — không có Docker/Postgres tại đây, không chạy migration vào Supabase prod):** Prisma model `OrgUnit` + migration, `lib/org/org-service.ts` (create/read/softDelete gọi rule + Prisma), `prisma/seed-orgunit.ts`, Playwright e2e. Chạy trong dev/CI có Postgres.
+>
+> 🛠️ **SỬA MÂU THUẪN ticket vs Doc 15 (phát hiện khi code):** AC5 bản gốc ghi `getSubtreeCenterIds(HO) = [CS1,CS2]` — **SAI** theo Doc 15 OI-1 (ROOT → HO/CS1/CS2 độc lập ngang hàng; HO KHÔNG phải cha CS1/CS2). Đã sửa: `getSubtreeCenterIds(HO) = []`; `getSubtreeCenterIds(ROOT) = [CS1,CS2]`. Quyền **cross-center của role HO KHÔNG đến từ subtree** mà do `ActorResolver`/`isHO()` xử lý riêng (ticket A0-03 §3).
 
 ---
 
@@ -79,7 +85,7 @@ CS2   code=CS2      type=CENTER parent=ROOT  address="114 Hoàng Diệu, Đà N�
 - **AC2** Seed tạo đúng 4 OrgUnit; `HO.parentId = ROOT.id` (KHÔNG = CS2); CS1/CS2 cùng cấp HO.
 - **AC3** HO và CS2 cùng `address` ("114 Hoàng Diệu") nhưng khác `id/code/type` — vẫn tạo được.
 - **AC4** Vi phạm V1–V8 đều bị từ chối với lỗi rõ ràng (mã + message tiếng Việt).
-- **AC5** `getSubtreeCenterIds(HO)` = [CS1.centerId, CS2.centerId]; `getSubtreeCenterIds(CS1)` = [CS1.centerId].
+- **AC5** (SỬA theo Doc 15 OI-1) `getSubtreeCenterIds(ROOT)` = [CS1.centerId, CS2.centerId]; `getSubtreeCenterIds(CS1)` = [CS1.centerId]; **`getSubtreeCenterIds(HO)` = []** (HO độc lập, không phải cha CS1/CS2 — cross-center của HO do A0-03 ActorResolver xử lý).
 - **AC6** Thêm CS3 (type CENTER, parent ROOT) → tree hợp lệ, helper tự gồm CS3, **không sửa code seed/helper**.
 - **AC7** Soft-delete CS1 → không xuất hiện ở query mặc định; subtree HO không còn CS1.
 - **AC8** Seed chạy 2 lần → không tạo trùng (idempotent).

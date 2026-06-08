@@ -7,8 +7,8 @@
 
 | Task | Ticket | Ưu tiên | Ước lượng | Phụ thuộc | Số AC | Số test (B/tổng ~) | Trạng thái |
 |---|---|---|---|---|---|---|---|
-| A0-00 | [Test infra](A0-00-test-infra.md) | P0 | 2d | — | 4 | 2/4 | TODO |
-| A0-01 | [OrgUnit](A0-01-orgunit.md) | P0 | 5d | 00 | 8 | 13/24 | TODO |
+| A0-00 | [Test infra](A0-00-test-infra.md) | P0 | 2d | — | 4 | 2/4 | TODO (cần DB cho e2e) |
+| A0-01 | [OrgUnit](A0-01-orgunit.md) | P0 | 5d | 00 | 8 | 13/24 | 🟡 domain layer DONE (29 test ✓) · DB layer chờ env |
 | A0-02 | [RBAC động](A0-02-rbac.md) | P0 | 6d | 01 | 9 | 14/25 | TODO |
 | A0-03 | [ActorResolver + can() v2](A0-03-actor-resolver-can-v2.md) | P0 | 4d | 02 | 12 | 28/40 | TODO |
 | A0-04 | [scopedDb](A0-04-scoped-db.md) | P0 ⚠️ | 4d | 03 | 10 | 16/24 | TODO |
