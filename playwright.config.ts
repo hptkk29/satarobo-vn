@@ -6,6 +6,9 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests/e2e",
+  // A0 chạy trên Postgres LOCAL qua playwright.a0.config.ts — loại khỏi suite smoke
+  // (smoke chạy trên DB seed CI/Supabase, resetDb sẽ từ chối ở đó).
+  testIgnore: ["**/a0/**"],
   // Each test gets 30s timeout
   timeout: 30_000,
   expect: { timeout: 5_000 },

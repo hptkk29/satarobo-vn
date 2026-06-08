@@ -1,0 +1,21 @@
+# Postgres LOCAL cho test (A0-00). KHÔNG dùng cho dev/prod (đó là Supabase).
+# Khớp Postgres service của CI job `e2e-a0` (postgres:16, db=satarobo_test).
+#   pnpm db:test:up      # dựng
+#   pnpm db:test:deploy  # apply migrations
+#   pnpm test:e2e:a0     # chạy e2e A0
+services:
+  test-db:
+    image: postgres:16
+    container_name: satarobo-test-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: satarobo_test
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d satarobo_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Dữ liệu test ephemeral — không mount volume để mỗi lần up là sạch.

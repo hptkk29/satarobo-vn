@@ -12,7 +12,6 @@ patterns=(
   'git[[:space:]]+push.*--force.*master'        # force push master
   'git[[:space:]]+reset[[:space:]]+--hard'      # hard reset
   'git[[:space:]]+clean[[:space:]]+-fd'         # clean force deep
-  'prisma[[:space:]]+migrate[[:space:]]+reset'  # nuke DB
   'DROP[[:space:]]+TABLE'                       # SQL drop table
   'DROP[[:space:]]+DATABASE'                    # SQL drop db
   'TRUNCATE[[:space:]]+TABLE'                   # SQL truncate
@@ -27,5 +26,17 @@ for pattern in "${patterns[@]}"; do
     exit 1
   fi
 done
+
+# prisma migrate reset: cho phép CHỈ KHI target là DB test/local; chặn mọi trường hợp khác (prod).
+if echo "$cmd" | grep -qE 'prisma[[:space:]]+migrate[[:space:]]+reset'; then
+  if echo "$cmd" | grep -qE '(localhost|127\.0\.0\.1|\.env\.test|satarobo_test)'; then
+    exit 0   # local/test DB — an toàn
+  fi
+  echo "🚫 BLOCKED: 'prisma migrate reset' chỉ được phép trên DB test local." >&2
+  echo "   Thiếu marker local (localhost / 127.0.0.1 / .env.test / satarobo_test) trong command." >&2
+  echo "   Command: $cmd" >&2
+  echo "   Set DATABASE_URL về Postgres local rồi chạy lại (xem .claude/rules/prisma-db.md)." >&2
+  exit 1
+fi
 
 exit 0

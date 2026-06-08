@@ -3,7 +3,13 @@
 | | |
 |---|---|
 | **PR** | PR-A0-00 | **Ưu tiên** | P0 (chặn mọi task có test) | **Ước lượng** | 2 ngày |
-| **Phụ thuộc** | — | **Trạng thái** | TODO |
+| **Phụ thuộc** | — | **Trạng thái** | 🟡 IN PROGRESS — harness DONE (2026-06-08) |
+
+> ⚙️ **Tiến độ (2026-06-08):**
+> - ✅ **DONE (typecheck 0, lint 0, `playwright --list` 6 spec ✓):** hạ tầng harness — `docker-compose.test.yml` (Postgres 16 local), `.env.test` (gitignored), `tests/e2e/_helpers/{fixtures,seed,auth}.ts`, `tests/e2e/a0/{global-setup,_setup.spec}.ts`, `playwright.a0.config.ts` (load `.env.test`, webServer dùng DB test), scripts `test:e2e:a0`/`test:phase`/`db:test:up`/`db:test:down`, CI job `e2e-a0` (Postgres service). `playwright.config.ts` (smoke) `testIgnore: **/a0/**`.
+> - ✅ **Helper chạy được ngay:** `resetDb()` (TRUNCATE CASCADE + `assertTestDb()` chặn non-localhost — fail-safe chống prod), `seedUser()` (multi-role theo model User hiện có), `loginAs()`/`login()` (đăng nhập THẬT qua form `/login`).
+> - ⏳ **CHỜ ENV CÓ DOCKER (chưa chạy được tại đây — không có Docker/Postgres):** thực thi `pnpm db:test:up && pnpm test:e2e:a0` để PASS AC1–AC4. Code đã sẵn, chỉ cần máy/CI có Postgres.
+> - ⏳ **CHỜ MODEL DB:** `seedOrg()` (A0-01 `OrgUnit`) + `seedRoles()` (A0-02 `RoleDef`) hiện ném lỗi PENDING rõ ràng; spec tương ứng để `test.fixme` (C0.5/C0.6). API đã ổn định để A0-01/02 fill body. Con số "11 role" (AC2) chốt ở A0-02 theo Doc 15 §2.
 
 ---
 

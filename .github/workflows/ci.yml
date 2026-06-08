@@ -187,3 +187,71 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  e2e-a0:
+    name: E2E Phase A0 (Playwright + Postgres local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # assertTestDb chấp nhận host localhost + db ci_test (không phải Supabase prod).
+      DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+      DIRECT_URL: ${{ env.CI_DATABASE_URL }}
+      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+      # A0 webServer chạy cổng 3100 (xem playwright.a0.config.ts).
+      NEXTAUTH_URL: "http://localhost:3100"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3100"
+      BASE_URL: "http://localhost:3100"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Migrate DB schema (local CI Postgres)
+        run: pnpm exec prisma migrate deploy
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build app
+        run: pnpm build
+
+      - name: Run Phase A0 e2e
+        # playwright.a0.config.ts: .env.test vắng ở CI → giữ env CI ở trên (localhost).
+        run: pnpm test:e2e:a0
+
+      - name: Upload A0 Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-a0
+          path: playwright-report/
+          retention-days: 7
