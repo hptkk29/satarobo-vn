@@ -25,6 +25,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:smoke": "playwright test smoke.spec.ts",
     "test:e2e:a0": "playwright test -c playwright.a0.config.ts",
+    "test:e2e:r1": "playwright test -c playwright.r1.config.ts",
     "test:phase": "pnpm test:unit -- --run && pnpm test:e2e:a0",
     "db:test:up": "docker compose -f docker-compose.test.yml up -d --wait",
     "db:test:down": "docker compose -f docker-compose.test.yml down -v",

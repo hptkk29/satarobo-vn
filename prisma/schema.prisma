@@ -432,6 +432,55 @@ model EmployeeOrgAssignment {
   @@index([orgUnitId, status])
 }
 
+// ─── R1-01 — CRM Messenger (SR.QD.217, Doc 15 §5) ───
+// Page HO/CS → hội thoại → message. centerId để scopedDb cách ly (C1.4).
+model FacebookPageMapping {
+  id        String      @id @default(cuid())
+  pageId    String      @unique
+  pageName  String?
+  scopeType OrgUnitType // HO | CENTER (validate ở service)
+  centerId  String? // chỉ khi scopeType=CENTER
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+
+  @@index([scopeType])
+}
+
+model MessengerConversation {
+  id             String             @id @default(cuid())
+  pageId         String
+  psid           String // page-scoped user id
+  parentName     String?
+  phone          String?
+  status         String             @default("OPEN") // OPEN/QUALIFIED/CLOSED
+  centerId       String? // suy từ page mapping → scopedDb
+  firstMessageAt DateTime?
+  respondedAt    DateTime?
+  leadId         String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  messages       MessengerMessage[]
+
+  @@unique([pageId, psid])
+  @@index([centerId])
+  @@index([status])
+  @@index([leadId])
+}
+
+model MessengerMessage {
+  id              String                @id @default(cuid())
+  conversationId  String
+  direction       String // IN | OUT
+  text            String?               @db.Text
+  attachments     Json?
+  externalEventId String?               @unique // idempotency webhook (R1-02 C2.4)
+  sentAt          DateTime
+  createdAt       DateTime              @default(now())
+  conversation    MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, sentAt])
+}
+
 enum RoomStatus {
   ACTIVE
   MAINTENANCE

@@ -14,6 +14,7 @@ export const SCOPED_MODELS = new Set<string>([
   "CenterDayChecklist", "MakeupNeed", "Notification", "ShiftRegistration",
   "SataCoinTransaction", "StudentCareTask", "StudentCenterHistory", "StudentRiskAlert",
   "Survey", "SurveyResponse", "TimesheetAdjustmentRequest",
+  "MessengerConversation", // R1-01 — hội thoại CRM theo cơ sở
 ]);
 
 /** Có centerId nhưng KHÔNG scope (lý do rõ) — để introspection không báo "miss model". */
@@ -22,6 +23,7 @@ export const SCOPE_EXEMPT = new Set<string>([
   "User", // identity/auth — đọc toàn cục
   "LeadAssignmentConfig", // config, centerId null = quy tắc toàn hệ thống
   "SataCoinRule", // config, centerId null = áp mọi cơ sở
+  "FacebookPageMapping", // mapping Page→center (cấu hình hạ tầng, không phải dữ liệu nghiệp vụ)
 ]);
 
 function bypassesScope(actor: Actor): boolean {
