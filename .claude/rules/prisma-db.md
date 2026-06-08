@@ -25,6 +25,16 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
     -e POSTGRES_DB=satarobo_test postgres:16
   ```
   (Trùng cấu hình Postgres service của CI job `e2e-a0` trong A0-00.)
+- **Không có Docker / không có quyền admin (Windows):** Docker Desktop CẦN admin (WSL2/Hyper-V) → dùng **Postgres portable qua scoop** (không cần admin), đã verify chạy được:
+  ```powershell
+  irm get.scoop.sh | iex                 # cài scoop (user-scope)
+  scoop install postgresql               # portable, superuser=postgres, trust auth local
+  $bin="$env:USERPROFILE\scoop\apps\postgresql\current"
+  & "$bin\bin\pg_ctl" -D "$bin\data" -l "$bin\pg.log" -o "-p 5432" start
+  & "$bin\bin\createdb" -U postgres -h 127.0.0.1 -p 5432 satarobo_test
+  # dừng: & "$bin\bin\pg_ctl" -D "$bin\data" stop
+  ```
+  `trust` auth → password trong URL bị bỏ qua nhưng vẫn kết nối OK. Cùng port/DB nên `.env.test` không đổi.
 - **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit):
   ```
   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"

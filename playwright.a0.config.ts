@@ -38,18 +38,22 @@ export default defineConfig({
     { name: "a0", use: { ...devices["Desktop Chrome"] } },
   ],
 
-  webServer: {
-    command: process.env.CI ? "pnpm start -p 3100" : "pnpm dev -p 3100",
-    url: "http://localhost:3100",
-    // Luôn dựng server test mới với env test — KHÔNG tái dùng dev server có sẵn.
-    reuseExistingServer: false,
-    timeout: 120_000,
-    env: {
-      DATABASE_URL: process.env.DATABASE_URL ?? "",
-      DIRECT_URL: process.env.DIRECT_URL ?? "",
-      NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "",
-      NEXTAUTH_URL: "http://localhost:3100",
-      NEXT_PUBLIC_APP_URL: "http://localhost:3100",
-    },
-  },
+  // A0_SKIP_WEBSERVER=1 → bỏ qua dựng Next (chạy nhanh nhóm test thuần-DB,
+  // không cần browser). Mặc định vẫn dựng server cho test cần page (loginAs).
+  webServer: process.env.A0_SKIP_WEBSERVER
+    ? undefined
+    : {
+        command: process.env.CI ? "pnpm start -p 3100" : "pnpm dev -p 3100",
+        url: "http://localhost:3100",
+        // Dựng server test mới với env test — KHÔNG tái dùng dev server có sẵn.
+        reuseExistingServer: false,
+        timeout: 120_000,
+        env: {
+          DATABASE_URL: process.env.DATABASE_URL ?? "",
+          DIRECT_URL: process.env.DIRECT_URL ?? "",
+          NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "",
+          NEXTAUTH_URL: "http://localhost:3100",
+          NEXT_PUBLIC_APP_URL: "http://localhost:3100",
+        },
+      },
 });
