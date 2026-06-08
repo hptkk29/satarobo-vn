@@ -3,7 +3,9 @@
 | | |
 |---|---|
 | **PR** | PR-A0-05 | **Ưu tiên** | P0 | **Ước lượng** | 3 ngày |
-| **Phụ thuộc** | A0-03 | **Feature flag** | `common_login_enabled` | **Trạng thái** | TODO |
+| **Phụ thuộc** | A0-03 | **Feature flag** | `common_login_enabled` | **Trạng thái** | ✅ DONE (2026-06-08) |
+
+> ⚙️ **Tiến độ (2026-06-08):** Lõi `decideRoute()` + `sanitizeCallbackUrl()` ĐÃ có từ đợt auth-hardening (2026-05-29) — xử lý đủ staff→admin, parent→portal, anonymous→/login giữ callbackUrl, parent-vào-admin→portal, staff-vào-portal→admin, đa-vai ưu tiên staff. login-form.tsx có lỗi VN chung "Email hoặc mật khẩu không đúng" (AC7, không lộ email tồn tại). Bổ sung: cờ `isCommonLoginEnabled` (lib/flags.ts, mặc định ON) + test ánh xạ AC `lib/auth/login-redirect.test.ts` (7 case: AC1–AC6, đa-vai). Vitest xanh. (route-policy.test.ts cũ vẫn xanh — T12-01.)
 | **Nguồn** | Doc 15 §3.1, Q9 | | | |
 
 ---

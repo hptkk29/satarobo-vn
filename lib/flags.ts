@@ -7,3 +7,13 @@
 export function isRbacV2Enabled(): boolean {
   return process.env.RBAC_V2_ENABLED === "true";
 }
+
+/** A0-05 — login chung satarobo.vn/login + redirect theo role. OFF → giữ login theo host. */
+export function isCommonLoginEnabled(): boolean {
+  return process.env.COMMON_LOGIN_ENABLED !== "false"; // mặc định ON (hành vi đã triển khai)
+}
+
+/** A0-07 — dispatcher DomainEvent (cron). OFF → không xử lý (event vẫn tích PENDING). */
+export function isDispatcherEnabled(): boolean {
+  return process.env.DISPATCHER_ENABLED !== "false"; // mặc định ON
+}
