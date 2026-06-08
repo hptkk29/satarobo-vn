@@ -4,7 +4,13 @@
 |---|---|
 | **PR** | PR-A0-03 | **Ưu tiên** | P0 |
 | **Ước lượng** | 4 ngày | **Phụ thuộc** | A0-02 |
-| **Feature flag** | `rbac_v2_enabled` (env, mặc định OFF → fallback matrix cũ) | **Trạng thái** | TODO |
+| **Feature flag** | `rbac_v2_enabled` (env, mặc định OFF → fallback matrix cũ) | **Trạng thái** | ✅ DONE — engine + test PASS local (2026-06-08) |
+
+> ⚙️ **Tiến độ (2026-06-08) — đã chạy thật trên Postgres local:**
+> - ✅ **Engine:** `lib/auth/actor.ts` (`buildActor()` THUẦN + `resolveActor()` React.cache — 1 query/request, lọc role hiệu lực status/effectiveFrom/To + RoleDef.isActive); `lib/auth/can.ts` (`can/assertCan` ALLOW-wins, KHÔNG DENY — OI-7; scope GLOBAL/CENTER/OWN/CHILDREN/CLASS/ASSIGNED; HO/ROOT → cross-center; `getVisibleCenterIds`/`getEffectivePermissions`/`PermissionError`); `lib/auth/shadow-compare.ts` (`decidePermission` v1↔v2 + log lệch); `lib/flags.ts` (`isRbacV2Enabled`, env `RBAC_V2_ENABLED` mặc định OFF).
+> - ✅ **Test PASS:** Vitest `can.test.ts` (17) + `actor.test.ts` (10) — ma trận T4 đầy đủ (AC1–AC10, AC12, T6/T7/T8) + `can-integration.spec.ts` (4, DB thật: cross-center, cách ly, role hết hạn, SUPER_ADMIN). Toàn repo: Vitest 191 ✓, e2e a0 32 ✓.
+> - 📌 **Quyết định khi code:** (1) tách `buildActor` thuần để test ma trận không cần DB (resolver DB test qua e2e a0). (2) `isSuperAdmin` chỉ khi SUPER_ADMIN tại HO/ROOT. (3) CENTER scope của role HO/ROOT = "ALL" (cross-center theo chức năng, KHÔNG từ subtree vì OI-1 subtree(HO)=[]).
+> - ⏳ **Còn lại:** wire `decidePermission`/`resolveActor` vào server actions/middleware thực tế + bật shadow-compare ở runtime (Phase chuyển dịch); AC11 (1 query/request) đảm bảo bằng `React.cache` ở RSC (không assert bằng đếm query trong test). `visibleCenterIds` dùng cho **A0-04 (scopedDb)**.
 | **Nguồn** | Doc 15 §2.4/§4.6, OI-5/OI-7/OI-8 | | |
 
 ---
