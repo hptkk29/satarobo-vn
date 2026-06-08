@@ -252,6 +252,38 @@ model Center {
   @@index([displayOrder])
 }
 
+// ─── A0-01 — OrgUnit tree (Doc 15 §2.1, OI-1) ───
+// ROOT(SataRobo) → HO, CS1, CS2 ĐỘC LẬP NGANG HÀNG. HO KHÔNG phải cha CS1/CS2.
+// Additive thuần — KHÔNG đụng Center/User.centerId hiện hữu (Phase A: centerId trỏ Center cũ).
+enum OrgUnitType {
+  ROOT
+  HO
+  CENTER
+  CAMPUS
+  PARTNER
+  FRANCHISE
+}
+
+model OrgUnit {
+  id        String      @id @default(cuid())
+  type      OrgUnitType
+  code      String      @unique // "SATAROBO","HO","CS1","CS2"
+  name      String
+  address   String? // chỉ thông tin, KHÔNG suy ra quan hệ quản lý
+  parentId  String?
+  parent    OrgUnit?    @relation("OrgUnitTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children  OrgUnit[]   @relation("OrgUnitTree")
+  centerId  String?     @unique // Phase A: trỏ Center cũ (chỉ type=CENTER)
+  isActive  Boolean     @default(true)
+  deletedAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([type])
+  @@index([parentId])
+  @@index([deletedAt])
+}
+
 enum RoomStatus {
   ACTIVE
   MAINTENANCE

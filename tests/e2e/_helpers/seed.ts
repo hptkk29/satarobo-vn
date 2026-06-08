@@ -12,6 +12,7 @@
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { db } from "../../../lib/db";
+import { seedOrgUnits } from "../../../prisma/seed-orgunit";
 import { TEST_PASSWORD } from "./fixtures";
 
 /** Chặn thao tác phá hủy nếu DATABASE_URL không trỏ DB test local. */
@@ -115,12 +116,12 @@ const PENDING = (ticket: string, model: string) =>
   );
 
 /**
- * Seed cây OrgUnit (ROOT + các code yêu cầu). CHỜ A0-01 (model OrgUnit).
- * Khi có model: tạo ROOT(SATAROBO) + mỗi code (HO/CS1/CS2...) parent=ROOT, idempotent.
+ * Seed cây OrgUnit: ROOT(SATAROBO) + các code yêu cầu (HO/CS1/CS2), idempotent.
+ * `seedOrg(["HO","CS1","CS2"])` → 4 OrgUnit (gồm ROOT). (A0-01)
  */
-export async function seedOrg(_codes: string[]): Promise<void> {
+export async function seedOrg(codes: string[]): Promise<void> {
   assertTestDb();
-  throw PENDING("A0-01", "OrgUnit");
+  await seedOrgUnits(db, codes);
 }
 
 /**

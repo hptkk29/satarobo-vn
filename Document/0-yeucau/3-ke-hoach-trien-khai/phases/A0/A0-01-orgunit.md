@@ -9,7 +9,9 @@
 
 > ⚙️ **Tiến độ thực thi (2026-06-08):**
 > - ✅ **DONE + test xanh (29/29 Vitest, typecheck 0, lint 0, depcruise 0):** lớp domain THUẦN `lib/org/{types,orgunit-rules,org-tree}.ts` + `lib/validators/orgunit.ts` + tests. Đây là toàn bộ thuật toán + validation rule (V2/V3/V5/V6/V7) + helper cây — decoupled khỏi Prisma nên test được không cần DB.
-> - ⏳ **CHỜ MÔI TRƯỜNG CÓ DB (chưa làm — không có Docker/Postgres tại đây, không chạy migration vào Supabase prod):** Prisma model `OrgUnit` + migration, `lib/org/org-service.ts` (create/read/softDelete gọi rule + Prisma), `prisma/seed-orgunit.ts`, Playwright e2e. Chạy trong dev/CI có Postgres.
+> - ✅ **DB LAYER DONE (authored; typecheck 0 / lint 0 / `prisma validate` ✓ / `playwright --list` 11 spec ✓):** `model OrgUnit` + `enum OrgUnitType` (schema.prisma), migration tay `prisma/migrations/20260608010000_add_orgunit/`, `lib/org/org-service.ts` (create/get/list/update/softDelete + tree helper DB-backed gọi lại rule thuần), `prisma/seed-orgunit.ts` (idempotent, tái dùng cho helper test `seedOrg`), e2e `tests/e2e/a0/orgunit.spec.ts` (11 case AC1–AC8).
+> - ⏳ **CHỜ CHẠY (cần Postgres):** `pnpm db:test:up && pnpm test:e2e:a0` để 11 case PASS. Tại máy này không có Docker → chưa chạy thực; migration sẽ apply qua `prisma migrate deploy` ở dev/CI.
+> - 📌 **2 quyết định khi code (cần biết):** (1) coverage org-service đặt ở **e2e a0** (DB-backed), KHÔNG để Vitest — giữ `pnpm test:unit` không cần DB (CI unit-tests job không có Postgres). (2) **T7-05** code đã soft-delete KHÔNG tái dùng được (cột `code` unique toàn cục) — muốn dùng lại thì khôi phục bản cũ. centerId là scalar `@unique` (không phải Prisma relation) để không đụng model `Center`.
 >
 > 🛠️ **SỬA MÂU THUẪN ticket vs Doc 15 (phát hiện khi code):** AC5 bản gốc ghi `getSubtreeCenterIds(HO) = [CS1,CS2]` — **SAI** theo Doc 15 OI-1 (ROOT → HO/CS1/CS2 độc lập ngang hàng; HO KHÔNG phải cha CS1/CS2). Đã sửa: `getSubtreeCenterIds(HO) = []`; `getSubtreeCenterIds(ROOT) = [CS1,CS2]`. Quyền **cross-center của role HO KHÔNG đến từ subtree** mà do `ActorResolver`/`isHO()` xử lý riêng (ticket A0-03 §3).
 

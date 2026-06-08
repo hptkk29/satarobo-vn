@@ -57,11 +57,8 @@ test.describe("[A0-00] Test infrastructure", () => {
     expect(await db.user.count()).toBe(0);
   });
 
-  // ── CHỜ ticket sau (model DB chưa có) — giữ làm RTM để A0-01/A0-02 fill ──
-  test.fixme(
-    "[A0-00-C0.5] seedOrg(['HO','CS1','CS2']) → 4 OrgUnit (AC2) — chờ A0-01",
-    () => {},
-  );
+  // seedOrg đã hiện thực ở A0-01 → coverage trong tests/e2e/a0/orgunit.spec.ts.
+  // seedRoles còn chờ A0-02 (model RoleDef).
   test.fixme(
     "[A0-00-C0.6] seedRoles() → danh mục RoleDef (AC2) — chờ A0-02",
     () => {},
