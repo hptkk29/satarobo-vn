@@ -284,6 +284,82 @@ model OrgUnit {
   @@index([deletedAt])
 }
 
+// ─── A0-02 — RBAC động (Doc 15 §2.2/§2.3) ───
+// Role + permission + gán quyền nằm trong DB; admin cấu hình qua UI. can() v2 (A0-03)
+// đọc các bảng này. KHÔNG đụng matrix tĩnh permissions.ts / User.role[] (cắt ở Phase C).
+enum ScopeType {
+  GLOBAL
+  CENTER
+  CLASS
+  OWN
+  CHILDREN
+  ASSIGNED
+}
+
+enum AssignStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+}
+
+model RoleDef {
+  id          String           @id @default(cuid())
+  code        String           @unique // HO_ACCOUNTANT, CENTER_MANAGER...
+  name        String
+  isSystem    Boolean          @default(false) // SUPER_ADMIN, PARENT — không xóa/đổi code
+  isActive    Boolean          @default(true)
+  permissions RolePermission[]
+  userRoles   UserOrgRole[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model RolePermission {
+  roleId    String
+  action    String // validate qua ACTION_REGISTRY
+  scopeType ScopeType
+  role      RoleDef   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, action])
+  @@index([roleId])
+}
+
+model UserOrgRole {
+  userId        String
+  orgUnitId     String
+  roleId        String
+  effectiveFrom DateTime     @default(now())
+  effectiveTo   DateTime? // null = vô thời hạn
+  status        AssignStatus @default(ACTIVE)
+  grantedById   String // ai cấp (audit)
+  createdAt     DateTime     @default(now())
+  role          RoleDef      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, orgUnitId, roleId])
+  @@index([userId])
+  @@index([orgUnitId])
+  @@index([roleId])
+}
+
+// Audit cho thay đổi role/permission/assignment (AC4). A0-06 sẽ hợp nhất AuditLog.
+model RbacAuditLog {
+  id              String   @id @default(cuid())
+  entity          String // ROLE | PERMISSION | ASSIGNMENT
+  entityId        String
+  action          String // CREATE | UPDATE | DELETE | ASSIGN | REVOKE
+  changedByUserId String?
+  changedByName   String
+  oldValues       Json?
+  newValues       Json?
+  reason          String
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([changedByUserId])
+  @@index([createdAt])
+}
+
 enum RoomStatus {
   ACTIVE
   MAINTENANCE

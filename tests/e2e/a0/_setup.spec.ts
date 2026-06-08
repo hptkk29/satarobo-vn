@@ -57,10 +57,6 @@ test.describe("[A0-00] Test infrastructure", () => {
     expect(await db.user.count()).toBe(0);
   });
 
-  // seedOrg đã hiện thực ở A0-01 → coverage trong tests/e2e/a0/orgunit.spec.ts.
-  // seedRoles còn chờ A0-02 (model RoleDef).
-  test.fixme(
-    "[A0-00-C0.6] seedRoles() → danh mục RoleDef (AC2) — chờ A0-02",
-    () => {},
-  );
+  // seedOrg/seedRoles đã hiện thực (A0-01/A0-02) → coverage trong
+  // tests/e2e/a0/{orgunit,rbac}.spec.ts. Không còn helper PENDING nào.
 });

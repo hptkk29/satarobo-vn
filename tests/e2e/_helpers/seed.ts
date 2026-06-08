@@ -13,6 +13,7 @@ import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { db } from "../../../lib/db";
 import { seedOrgUnits } from "../../../prisma/seed-orgunit";
+import { seedRoles as seedRoleDefs } from "../../../prisma/seed-roles";
 import { TEST_PASSWORD } from "./fixtures";
 
 /** Chặn thao tác phá hủy nếu DATABASE_URL không trỏ DB test local. */
@@ -105,16 +106,6 @@ export async function disconnectDb(): Promise<void> {
   await db.$disconnect();
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// PENDING — cần model DB từ ticket sau. Để API ổn định cho A0-01/A0-02 fill.
-// ─────────────────────────────────────────────────────────────────────────
-
-const PENDING = (ticket: string, model: string) =>
-  new Error(
-    `[A0-00] Helper chờ ${ticket}: model Prisma \`${model}\` chưa tồn tại. ` +
-      `Triển khai body khi migration ${ticket} đã apply.`,
-  );
-
 /**
  * Seed cây OrgUnit: ROOT(SATAROBO) + các code yêu cầu (HO/CS1/CS2), idempotent.
  * `seedOrg(["HO","CS1","CS2"])` → 4 OrgUnit (gồm ROOT). (A0-01)
@@ -124,10 +115,8 @@ export async function seedOrg(codes: string[]): Promise<void> {
   await seedOrgUnits(db, codes);
 }
 
-/**
- * Seed danh mục RoleDef + RolePermission. CHỜ A0-02 (model RoleDef/RolePermission).
- */
+/** Seed 11 RoleDef + RolePermission mẫu (Doc 15 §2.3), idempotent. (A0-02) */
 export async function seedRoles(): Promise<void> {
   assertTestDb();
-  throw PENDING("A0-02", "RoleDef");
+  await seedRoleDefs(db);
 }

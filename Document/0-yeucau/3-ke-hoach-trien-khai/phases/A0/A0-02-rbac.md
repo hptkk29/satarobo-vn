@@ -4,7 +4,15 @@
 |---|---|
 | **PR** | PR-A0-02 | **Ưu tiên** | P0 |
 | **Ước lượng** | 6 ngày | **Phụ thuộc** | A0-01, A0-06 (audit — có thể song song, gắn sau) |
-| **Feature flag** | không (data mới; can() v2 bật ở A0-03) | **Trạng thái** | TODO |
+| **Feature flag** | không (data mới; can() v2 bật ở A0-03) | **Trạng thái** | 🟡 IN PROGRESS — data+service+seed+UI DONE, test PASS local (2026-06-08) |
+
+> ⚙️ **Tiến độ (2026-06-08) — đã chạy thật trên Postgres local:**
+> - ✅ **Data + migration:** `RoleDef`/`RolePermission`/`UserOrgRole` + `RbacAuditLog` + enum `ScopeType`/`AssignStatus` (schema.prisma); migration tay `20260608020000_add_dynamic_rbac` (apply OK).
+> - ✅ **Logic (lõi bảo mật):** `lib/auth/action-registry.ts` (AC5), `lib/validators/role.ts` (reason bắt buộc, code format, effective dates), `lib/auth/rbac-service.ts` (create/update/delete/setPermissions + assign/revoke — enforce roles:manage/roles:assign **ở service**, không chỉ UI; isSystem immutable; ROLE_IN_USE; idempotent; orgUnit soft-deleted; audit) + `logRbacAudit`. `roles:manage` thêm vào `permissions.ts`.
+> - ✅ **Seed:** `prisma/seed-roles.ts` 11 role §2.3 (KHÔNG HO_MANAGER); `seedRoles()` helper.
+> - ✅ **UI:** `/admin/roles` (page gate roles:manage + tạo role) + actions.ts; vai trò-theo-đơn-vị đặt ở **`/admin/users/[id]/org-roles`** (KHÔNG dùng `…/permissions` vì route đó đã là per-user grant ALLOW/DENY của Sprint 5.3) + actions.ts + client manager.
+> - ✅ **Test PASS:** Vitest 8 (action-registry + role-validator) + e2e `rbac.spec.ts` **14 case** trên Postgres local (AC1–AC9, T2/T7/T10-01). Enforce kiểm ở tầng service nên test gọi thẳng service với actor SA/non-SA.
+> - ⏳ **Còn lại (deferred):** browser-e2e cho UI gate (logic đã phủ ở service/action); `setRolePermissions` UI chi tiết (hiện tạo role + gán qua action; bảng quyền/role UI nâng cao để sau). can() v2 đọc DB = **A0-03**.
 | **Nguồn** | Doc 15 §2.2/§2.3, OI-2/OI-3/OI-8/OI-9 | | |
 
 ---

@@ -273,6 +273,45 @@ export async function logProductAudit(params: {
   });
 }
 
+// ─── RBAC AUDIT (A0-02) ─────────────────────────────────────────────
+// KHÔNG gọi getRequestMetadata() → dùng được cả ngoài request context
+// (service test). Metadata truyền tường minh nếu cần.
+export type RbacAuditEntity = "ROLE" | "PERMISSION" | "ASSIGNMENT";
+export type RbacAuditAction =
+  | "CREATE"
+  | "UPDATE"
+  | "DELETE"
+  | "ASSIGN"
+  | "REVOKE";
+
+export async function logRbacAudit(params: {
+  entity: RbacAuditEntity;
+  entityId: string;
+  action: RbacAuditAction;
+  actorId: string | null;
+  actorName: string;
+  reason: string;
+  oldValues?: Record<string, unknown>;
+  newValues?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  tx?: TxClient;
+}) {
+  const client: DbClient = params.tx ?? db;
+  await client.rbacAuditLog.create({
+    data: {
+      entity: params.entity,
+      entityId: params.entityId,
+      action: params.action,
+      changedByUserId: params.actorId ?? null,
+      changedByName: params.actorName,
+      oldValues: params.oldValues as Prisma.InputJsonValue | undefined,
+      newValues: params.newValues as Prisma.InputJsonValue | undefined,
+      reason: params.reason,
+      metadata: params.metadata as Prisma.InputJsonValue | undefined,
+    },
+  });
+}
+
 // ─── UTILITY: detect changed fields ─────────────────────────────────
 /**
  * Compare old vs new object, return list of changed field names.

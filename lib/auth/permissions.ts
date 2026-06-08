@@ -209,6 +209,7 @@ export type Action =
   | "settings:edit"
   | "users:manage" // CRUD User accounts (different from Employee records)
   | "roles:assign"
+  | "roles:manage" // A0-02 — CRUD RoleDef + gán RolePermission (chỉ SUPER_ADMIN)
 
   // --- Phase 5.6 — Financial (Payment + Order) ---
   | "payments:manage"
@@ -428,6 +429,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "settings:edit": ["SUPER_ADMIN"],
   "users:manage": ["SUPER_ADMIN"], // create/disable User accounts
   "roles:assign": ["SUPER_ADMIN"],
+  "roles:manage": ["SUPER_ADMIN"], // A0-02 — chỉ SUPER_ADMIN cấu hình role/permission
 
   // --- Phase 5.6 — Financial ---
   "payments:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],

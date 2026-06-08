@@ -1,0 +1,76 @@
+import { redirect } from "next/navigation";
+import { ShieldCheck } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
+import { listRoles } from "@/lib/auth/rbac-service";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { CreateRoleForm } from "./_components/create-role-form";
+
+export const dynamic = "force-dynamic";
+
+export default async function RolesAdminPage() {
+  const session = await auth();
+  // AC2 — chỉ SUPER_ADMIN (roles:manage). Defense-in-depth: action cũng tự chặn.
+  if (!can(session?.user ?? null, "roles:manage")) {
+    redirect("/admin/dashboard");
+  }
+
+  const roles = await listRoles();
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
+          <ShieldCheck className="h-7 w-7 text-orange-500" />
+          Vai trò & quyền (RBAC)
+        </h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          Cấu hình role động. Mọi thay đổi yêu cầu lý do và được ghi nhật ký.
+        </p>
+      </div>
+
+      <CreateRoleForm />
+
+      <div className="mt-8 rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Mã</TableHead>
+              <TableHead>Tên</TableHead>
+              <TableHead>Loại</TableHead>
+              <TableHead className="text-right">Số quyền</TableHead>
+              <TableHead className="text-right">Người dùng</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {roles.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="font-mono font-semibold">{r.code}</TableCell>
+                <TableCell>{r.name}</TableCell>
+                <TableCell>
+                  {r.isSystem ? (
+                    <Badge variant="secondary">Hệ thống</Badge>
+                  ) : r.isActive ? (
+                    <Badge>Hoạt động</Badge>
+                  ) : (
+                    <Badge variant="outline">Tắt</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">{r.permissions.length}</TableCell>
+                <TableCell className="text-right">{r._count.userRoles}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
