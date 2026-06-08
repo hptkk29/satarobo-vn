@@ -405,6 +405,33 @@ model DomainEvent {
   @@index([type])
 }
 
+// ─── A0-08 — EmployeeOrgAssignment (Doc 15 §2.2, OI-6/OI-8/OI-10) ───
+// Nhân sự/kiêm nhiệm/lương — KHÔNG sinh quyền (quyền chỉ từ UserOrgRole).
+enum AssignmentType {
+  PRIMARY
+  SECONDARY
+  SUPPORT
+  SUBSTITUTE
+  SHARED
+}
+
+model EmployeeOrgAssignment {
+  id                String         @id @default(cuid())
+  employeeId        String
+  orgUnitId         String
+  roleInOrg         String? // mô tả vai trò nghiệp vụ (KHÔNG phải RoleDef)
+  assignmentType    AssignmentType
+  effectiveFrom     DateTime       @default(now())
+  effectiveTo       DateTime?
+  status            AssignStatus   @default(ACTIVE)
+  allocationPercent Int? // 0..100 — phân bổ chi phí/lương
+  createdById       String
+  createdAt         DateTime       @default(now())
+
+  @@index([employeeId, status])
+  @@index([orgUnitId, status])
+}
+
 enum RoomStatus {
   ACTIVE
   MAINTENANCE

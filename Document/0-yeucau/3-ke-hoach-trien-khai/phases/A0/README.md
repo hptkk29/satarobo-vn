@@ -15,7 +15,7 @@
 | A0-05 | [Common login](A0-05-common-login.md) | P0 | 3d | 03 | 7 | 9/14 | ✅ DONE — lõi decideRoute/sanitize có sẵn + flag + 7 test AC (2026-06-08) |
 | A0-06 | [AuditLog](A0-06-audit-log.md) | P1 | 3d | 02 | 7 | 10/15 | 🟡 model+writeAudit+mask+scope; 9 test PASS local; viewer UI boy-scout (2026-06-08) |
 | A0-07 | [DomainEvent outbox](A0-07-domain-event-outbox.md) | P1 | 4d | 01 | 8 | 11/15 | ✅ DONE — outbox+dispatcher+cron+demo; 12 test PASS local (AC1–AC8) (2026-06-08) |
-| A0-08 | [EmployeeOrgAssignment](A0-08-employee-assignment.md) | P1 | 3d | 01 | 9 | 12/18 | TODO |
+| A0-08 | [EmployeeOrgAssignment](A0-08-employee-assignment.md) | P1 | 3d | 01 | 9 | 12/18 | 🟡 model+service; 18 test PASS local (AC1–AC9, đặc biệt AC2 assignment≠quyền); UI boy-scout (2026-06-08) |
 
 > Số test là ước lượng để tester biết khối lượng — con số thực tế khi viết có thể nhiều hơn (khuyến khích phủ thêm case E).
 

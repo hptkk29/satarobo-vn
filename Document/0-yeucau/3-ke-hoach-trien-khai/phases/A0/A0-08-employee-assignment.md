@@ -3,7 +3,13 @@
 | | |
 |---|---|
 | **PR** | PR-A0-08 | **Ưu tiên** | P1 | **Ước lượng** | 3 ngày |
-| **Phụ thuộc** | A0-01 | **Feature flag** | không | **Trạng thái** | TODO |
+| **Phụ thuộc** | A0-01 | **Feature flag** | không | **Trạng thái** | 🟡 model+service+test PASS local (2026-06-08); UI nhan-su boy-scout |
+
+> ⚙️ **Tiến độ (2026-06-08) — chạy thật trên PG local:**
+> - ✅ **Model `EmployeeOrgAssignment` + enum `AssignmentType`** (migration `20260608050000`).
+> - ✅ **`lib/org/assignment-service.ts`:** createAssignment/updateAssignment + `validateAllocation`/`isActiveAssignment` (thuần) + `getActiveAssignments`/`getStaffOfCenter` (OI-6). Rule: allocation [0,100], tổng>100 → cảnh báo (không chặn), effectiveTo≥From, orgUnit active, ≤1 PRIMARY active. Ghi AuditLog (A0-06).
+> - ✅ **Test PASS:** Vitest 7 (validateAllocation/isActiveAssignment) + e2e 11 — **đặc biệt T4-01 (AC2): NV chỉ có assignment, KHÔNG UserOrgRole → can()=false** (assignment KHÔNG sinh quyền, OI-4); T4-02 thêm UserOrgRole → có quyền (AC3); + 5 type, validation, PRIMARY-unique, getStaffOfCenter, lifecycle, audit.
+> - ⏳ **Deferred:** UI `/admin/nhan-su/[id]/assignments` (boy-scout); công thức lương/chi phí = phase sau (chỉ chuẩn bị data).
 | **Nguồn** | Doc 15 §2.2, OI-6/OI-8/OI-9/OI-10 | | | |
 
 ---
