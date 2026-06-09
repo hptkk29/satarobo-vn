@@ -16,6 +16,29 @@ export class ConvertError extends Error {
   }
 }
 
+/**
+ * C5.1 — kiểm tra trùng SĐT trước khi convert: trả lead/student cũ (90 ngày) để UI cảnh báo.
+ * Không chặn — chỉ cung cấp dữ liệu để hiển thị (quyết định do người dùng).
+ */
+export async function findConvertDuplicates(
+  phone: string,
+  now: Date = new Date(),
+): Promise<{ leads: { id: string; status: string }[]; students: { id: string; name: string }[] }> {
+  const norm = phone.replace(/\D/g, "");
+  const cutoff = new Date(now.getTime() - 90 * 86_400_000);
+  const [leads, students] = await Promise.all([
+    db.lead.findMany({
+      where: { phone: norm, deletedAt: null, createdAt: { gte: cutoff } },
+      select: { id: true, status: true },
+    }),
+    db.student.findMany({
+      where: { parentPhone: norm },
+      select: { id: true, name: true },
+    }),
+  ]);
+  return { leads, students };
+}
+
 export type ConvertLeadInput = {
   leadId: string;
   classId: string;

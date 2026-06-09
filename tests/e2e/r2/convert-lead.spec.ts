@@ -4,7 +4,10 @@
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb, seedOrg } from "../../e2e/_helpers/seed";
-import { convertLeadToEnrollment, ConvertError } from "../../../lib/crm/convert-lead";
+import { convertLeadToEnrollment, ConvertError, findConvertDuplicates } from "../../../lib/crm/convert-lead";
+import { clearHandlers } from "../../../lib/events/registry";
+import { registerLeadConvertedHandlers } from "../../../lib/crm/_handlers/lead-converted";
+import { dispatchPendingEvents } from "../../../lib/events/dispatcher";
 
 const ACTOR = { id: "csm", name: "Tư vấn" };
 
@@ -38,6 +41,31 @@ test.describe("[R2-02] Convert lead (transaction)", () => {
     expect(await db.enrollment.count({ where: { studentId: r.student.id } })).toBe(1);
     expect(r.order.code).toMatch(/^INV-CS1-\d{4}-0001$/); // C3.1
     expect(r.order.status).toBe("CONFIRMED"); // đã thanh toán
+    expect(r.order.centerId).toBe(cs1); // C3.2 — invoice gắn đúng center
+    // C2.4 — AuditLog ghi convert (actor + chuyển trạng thái)
+    const audit = await db.auditLog.findFirst({
+      where: { entityType: "Lead", entityId: lead.id, action: "STATUS_CHANGE", module: "enrollment" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.actorName).toBe("Tư vấn");
+  });
+
+  test("[R2-02-C2.5] notify đi qua EVENT (sau commit): dispatch → email xác nhận vào hàng đợi", async () => {
+    const { course, klass, lead } = await setup();
+    await convertLeadToEnrollment(ACTOR, { leadId: lead.id, classId: klass.id, courseId: course.id, parentEmail: "ph-evt@test.local", amount: 1 });
+    clearHandlers();
+    registerLeadConvertedHandlers();
+    await dispatchPendingEvents({ flagOn: true });
+    expect(await db.emailQueue.count({ where: { toEmail: "ph-evt@test.local" } })).toBeGreaterThanOrEqual(1);
+  });
+
+  test("[R2-05-C5.1] findConvertDuplicates trả lead/student trùng phone (cảnh báo)", async () => {
+    const { cs1 } = await setup();
+    await db.lead.create({ data: { parentName: "Trùng", phone: "0907777777", centerId: cs1, status: "NEW" } });
+    await db.student.create({ data: { name: "Bé cũ", parentPhone: "0907777777" } });
+    const dup = await findConvertDuplicates("0907777777");
+    expect(dup.leads.length).toBeGreaterThanOrEqual(1);
+    expect(dup.students.length).toBe(1);
   });
 
   test("[R2-02-C2.2] 1 bước lỗi → ROLLBACK toàn bộ (không student/order mồ côi)", async () => {
