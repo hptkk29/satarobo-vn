@@ -76,11 +76,35 @@ export async function handleMessengerWebhook(input: {
     return { status: 400, created: 0 };
   }
 
-  // Log mọi payload hợp lệ (R1-11 dùng lại để replay).
-  await db.webhookDelivery.create({
-    data: { source: "facebook-messenger", payload: body as object, status: "RECEIVED" },
+  // Log MỌI payload hợp lệ (R1-11 dùng lại để replay — kể cả khi xử lý lỗi).
+  const events0 = parseMessengerEvents(body);
+  const delivery = await db.webhookDelivery.create({
+    data: {
+      source: "facebook-messenger",
+      externalId: events0[0]?.mid ?? null,
+      payload: body as object,
+      status: "RECEIVED",
+    },
   });
 
+  try {
+    const created = await ingestMessengerEvents(body);
+    await db.webhookDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "PROCESSED", processedAt: new Date() },
+    });
+    return { status: 200, created };
+  } catch (e) {
+    await db.webhookDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "FAILED", errorMessage: String(e).slice(0, 1000) },
+    });
+    return { status: 200, created: 0 }; // vẫn 200 với Meta; đã lưu FAILED để replay (C11.1)
+  }
+}
+
+/** Parse + ghi tin nhắn (idempotent mid). Tách để replay (R1-11) tái dùng. */
+export async function ingestMessengerEvents(body: unknown): Promise<number> {
   const events = parseMessengerEvents(body);
   let created = 0;
   for (const ev of events) {
@@ -89,9 +113,9 @@ export async function handleMessengerWebhook(input: {
       psid: ev.psid,
       text: ev.text,
       sentAt: ev.sentAt,
-      externalEventId: ev.mid, // idempotent (C2.4)
+      externalEventId: ev.mid, // idempotent (C2.4 / C11.3)
     });
     if (!r.deduped) created++;
   }
-  return { status: 200, created };
+  return created;
 }

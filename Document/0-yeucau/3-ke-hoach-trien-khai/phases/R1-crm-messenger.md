@@ -21,7 +21,7 @@
 | R1-08 | Marketing dashboard (funnel + CPL/CPA/ROAS) | R1-04,07 | C8.1–C8.4 | TODO |
 | R1-09 | Cost allocation (CPL/CPA/CP_TT, DRAFT→CONFIRMED→REOPENED) | R1-07 | C9.1–C9.5 | TODO |
 | R1-10 | Commission engine 4 tầng + duyệt + export | R1-04 | C10.1–C10.7 | 🟡 engine calc DONE (C10.1–C10.5, 6 Vitest PASS); persistence DRAFT→APPROVED + "của tôi" (C10.6/7) chờ model+R1-04 |
-| R1-11 | WebhookDelivery log + UI replay (OI-20) | R1-02 | C11.1–C11.3 | TODO |
+| R1-11 | WebhookDelivery log + UI replay (OI-20) | R1-02 | C11.1–C11.3 | 🟡 log + replay service DONE (C11.1–C11.3, 3 e2e); UI replay button boy-scout (2026-06-09) |
 | R1-12 | Export Excel 3 biểu mẫu + báo cáo tuần/tháng | R1-08,09,10 | C12.1–C12.3 | TODO |
 
 ---
