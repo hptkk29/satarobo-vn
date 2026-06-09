@@ -12,7 +12,7 @@
 | Task ID | Mô tả | Phụ thuộc | Test bắt buộc | Trạng thái |
 |---|---|---|---|---|
 | R1-01 | FacebookPageMapping + MessengerConversation/Message | A0 | C1.1–C1.4 | ✅ DONE (2026-06-08) — models+service+5 e2e PASS local; MessengerConversation ∈ scopedDb |
-| R1-02 | Webhook `/api/webhooks/meta/messenger` (verify sig, idempotent) | R1-01 | C2.1–C2.5 | TODO |
+| R1-02 | Webhook `/api/webhooks/meta/messenger` (verify sig, idempotent) | R1-01 | C2.1–C2.5 | ✅ DONE (2026-06-09) — X-Hub-Signature-256 (META_APP_SECRET) + idempotent mid + WebhookDelivery log; 5 e2e + 3 Vitest |
 | R1-03 | Inbox CRM `/admin/crm/messenger` | R1-02 | C3.1–C3.3 | TODO |
 | R1-04 | L1→L2 conversion + timestamps phễu trên Lead | R1-03 | C4.1–C4.4 | TODO |
 | R1-05 | Handover HO→CS1/CS2 + xác nhận tiếp nhận | R1-04 | C5.1–C5.4 | TODO |

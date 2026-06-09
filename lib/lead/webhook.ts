@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import type { WebhookStatus } from "@prisma/client";
 import { ingestLead } from "./ingest";
@@ -53,6 +53,44 @@ export function verifyWebhookSecret(
     "";
 
   return { ok: provided.length > 0 && safeEqual(provided, expected) };
+}
+
+// Nguồn webhook ký payload bằng HMAC App Secret (chuẩn Meta X-Hub-Signature-256).
+const META_SIGNATURE_SOURCES = new Set(["facebook"]);
+
+/**
+ * Xác minh chữ ký `X-Hub-Signature-256` của Meta (Facebook Lead Ads / Messenger).
+ * Meta gửi header `sha256=<hex>` = HMAC-SHA256(rawBody, APP_SECRET).
+ *
+ * - Chỉ áp dụng cho nguồn Meta (facebook); nguồn khác bỏ qua (ok).
+ * - `FACEBOOK_APP_SECRET` CHƯA set → chế độ stub (cảnh báo + ok), để dev/test
+ *   chạy được mà chưa cần secret thật. PHẢI set trước go-live Messenger webhook.
+ * - Đã set → bắt buộc header đúng, so sánh timing-safe. Sai/thiếu → từ chối.
+ *
+ * `rawBody` PHẢI là chuỗi body GỐC (chưa qua JSON.parse rồi stringify lại) — vì
+ * HMAC tính trên byte gốc; reformat sẽ làm lệch chữ ký.
+ */
+export function verifyMetaSignature(
+  source: string,
+  rawBody: string,
+  signatureHeader: string | null,
+): { ok: boolean; reason?: string } {
+  if (!META_SIGNATURE_SOURCES.has(source)) return { ok: true };
+
+  const secret = process.env.FACEBOOK_APP_SECRET;
+  if (!secret) {
+    console.warn(
+      `[webhook:${source}] CHƯA cấu hình FACEBOOK_APP_SECRET — bỏ qua verify X-Hub-Signature-256 (stub). Đặt Meta App Secret thật trước go-live.`,
+    );
+    return { ok: true };
+  }
+
+  if (!signatureHeader) return { ok: false, reason: "missing-signature" };
+  const expected =
+    "sha256=" + createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+  return safeEqual(signatureHeader, expected)
+    ? { ok: true }
+    : { ok: false, reason: "signature-mismatch" };
 }
 
 /** Ghi 1 dòng WebhookDelivery (status mặc định RECEIVED). Trả về id. */
@@ -188,9 +226,23 @@ export async function processLeadWebhook(
     return { httpStatus: 401, body: { ok: false, error: "Unauthorized" } };
   }
 
+  // Đọc raw body 1 lần — cần cho HMAC verify (chữ ký tính trên byte gốc).
+  let raw: string;
+  try {
+    raw = await req.text();
+  } catch {
+    raw = "";
+  }
+
+  const sig = verifyMetaSignature(source, raw, req.headers.get("x-hub-signature-256"));
+  if (!sig.ok) {
+    console.warn(`[webhook:${source}] X-Hub-Signature-256 không hợp lệ: ${sig.reason}`);
+    return { httpStatus: 401, body: { ok: false, error: "Chữ ký không hợp lệ" } };
+  }
+
   let payload: unknown;
   try {
-    payload = await req.json();
+    payload = raw ? JSON.parse(raw) : null;
   } catch {
     payload = null;
   }
