@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { TrendingUp } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
 import { getFunnelCounts } from "@/lib/crm/funnel-query";
 import { computeFunnelMetrics } from "@/lib/crm/marketing-metrics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,10 @@ export default async function MarketingFunnelPage() {
   const session = await auth();
   if (!can(session?.user ?? null, "leads:view-all")) redirect("/admin/dashboard");
 
-  const counts = await getFunnelCounts();
+  // C8.3 — SUPER_ADMIN/HO xem toàn hệ thống; role cơ sở chỉ thấy cơ sở mình.
+  const actor = await resolveActor(session!.user.id);
+  const centerIds = actor.isSuperAdmin || actor.isHoLevel ? undefined : actor.visibleCenterIds;
+  const counts = await getFunnelCounts({ centerIds });
   const m = computeFunnelMetrics(counts);
 
   const cards: { label: string; value: string }[] = [
