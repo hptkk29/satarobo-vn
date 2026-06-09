@@ -488,6 +488,24 @@ model MessengerMessage {
   @@index([conversationId, sentAt])
 }
 
+// R1-09 — Kỳ phân bổ chi phí marketing (SR.QD.217). DRAFT→CONFIRMED→REOPENED.
+enum CostPeriodStatus {
+  DRAFT
+  CONFIRMED
+  REOPENED
+}
+
+model MarketingCostPeriod {
+  id            String           @id @default(cuid())
+  period        String           @unique // "2026-06"
+  totalQcCost   Float            @default(0)
+  status        CostPeriodStatus @default(DRAFT)
+  confirmedById String?
+  confirmedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
 // R1-07 — Ads Insights theo ngày/kênh (SR.QD.217, CPL/CPA/ROAS). unique (date,channel).
 model AdsInsightDaily {
   id          String   @id @default(cuid())
