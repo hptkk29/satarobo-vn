@@ -2,6 +2,7 @@
 import type { Order } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
+import { enqueueDebtReminder } from "@/lib/email/triggers";
 
 /** Công nợ = tổng hoá đơn − đã trả (không âm). THUẦN (C6.1). */
 export function computeDebt(totalAmount: number, paidAmount: number): number {
@@ -52,4 +53,40 @@ export async function getOverdueOrders(opts: { olderThanDays?: number; now?: Dat
     where: { status: "PENDING_PAYMENT", createdAt: { lt: cutoff } },
     orderBy: { createdAt: "asc" },
   });
+}
+
+/**
+ * C6.3 — nhắc nợ cho ĐƠN LẺ (trả 1 lần, không trả góp) qua email/Resend.
+ * Bỏ qua đơn có installments (đã được /api/cron/debt-reminder lo). Chống spam 1 lần/ngày.
+ */
+export async function remindOverdueSingleOrders(
+  opts: { olderThanDays?: number; now?: Date } = {},
+): Promise<{ found: number; sent: number; skipped: number }> {
+  const now = opts.now ?? new Date();
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const orders = await getOverdueOrders({ olderThanDays: opts.olderThanDays, now });
+
+  let sent = 0;
+  let skipped = 0;
+  for (const o of orders) {
+    if (!o.customerEmail) { skipped++; continue; }
+    const installmentCount = await db.orderInstallment.count({ where: { orderId: o.id } });
+    if (installmentCount > 0) { skipped++; continue; } // trả góp → cron installment lo
+
+    const remindedToday = await db.emailQueue.findFirst({
+      where: { contextType: "DEBT_REMINDER_ORDER", contextId: o.id, createdAt: { gte: startOfToday } },
+      select: { id: true },
+    });
+    if (remindedToday) { skipped++; continue; } // chống spam 1/ngày
+
+    await enqueueDebtReminder({
+      to: o.customerEmail,
+      customerName: o.customerName,
+      orderId: o.id,
+      orderCode: o.code,
+      amount: o.totalAmount,
+    });
+    sent++;
+  }
+  return { found: orders.length, sent, skipped };
 }

@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb, seedUser } from "../../e2e/_helpers/seed";
 import { testEmail } from "../../e2e/_helpers/fixtures";
-import { confirmOrderPayment, getOverdueOrders } from "../../../lib/finance/debt";
+import { confirmOrderPayment, getOverdueOrders, remindOverdueSingleOrders } from "../../../lib/finance/debt";
 
 const ACC = { id: "acc", name: "Kế toán" };
 
@@ -32,6 +32,24 @@ test.describe("[R2-03/06] Finance", () => {
     await db.order.create({ data: { code: "INV-PAID", type: "COURSE", customerName: "C", customerPhone: "0900000004", status: "CONFIRMED", totalAmount: 1, createdAt: new Date("2020-01-01") } });
     const overdue = await getOverdueOrders({ olderThanDays: 7 });
     expect(overdue.map((o) => o.code)).toEqual(["INV-OLD"]); // chỉ đơn cũ chưa trả
+  });
+
+  test("[R2-06-C6.3] nhắc nợ đơn lẻ qua email (Resend) + chống spam 1/ngày + bỏ qua trả góp", async () => {
+    const old = new Date("2020-01-01");
+    // đơn lẻ quá hạn có email → nhắc
+    await db.order.create({ data: { code: "INV-SOLO", type: "COURSE", customerName: "PH A", customerPhone: "0900000010", customerEmail: "a@test.local", status: "PENDING_PAYMENT", totalAmount: 3_000_000, createdAt: old } });
+    // đơn trả góp → bỏ qua (cron installment lo)
+    const inst = await db.order.create({ data: { code: "INV-INST", type: "COURSE", customerName: "PH B", customerPhone: "0900000011", customerEmail: "b@test.local", status: "PENDING_PAYMENT", totalAmount: 6_000_000, createdAt: old } });
+    await db.orderInstallment.create({ data: { orderId: inst.id, soDot: 2, amount: 3_000_000, dueDate: new Date(), status: "PENDING" } });
+
+    const r1 = await remindOverdueSingleOrders({ olderThanDays: 7 });
+    expect(r1.sent).toBe(1); // chỉ đơn lẻ
+    expect(await db.emailQueue.count({ where: { contextType: "DEBT_REMINDER_ORDER", toEmail: "a@test.local" } })).toBe(1);
+    expect(await db.emailQueue.count({ where: { toEmail: "b@test.local" } })).toBe(0); // trả góp bỏ qua
+
+    const r2 = await remindOverdueSingleOrders({ olderThanDays: 7 }); // chạy lại cùng ngày
+    expect(r2.sent).toBe(0); // chống spam
+    expect(await db.emailQueue.count({ where: { contextType: "DEBT_REMINDER_ORDER", toEmail: "a@test.local" } })).toBe(1);
   });
 
   test("[R2-01-C1.1/C1.3] 1 phụ huynh nhiều con (Student.parentUserId)", async () => {

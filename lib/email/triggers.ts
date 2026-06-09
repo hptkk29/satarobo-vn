@@ -56,6 +56,29 @@ export function enqueueEnrollmentConfirmation(p: {
   });
 }
 
+/** (d2) Nhắc thanh toán hoá đơn đơn lẻ (R2-06 C6.3 — qua Resend). */
+export function enqueueDebtReminder(p: {
+  to: string;
+  customerName?: string | null;
+  orderId: string;
+  orderCode: string;
+  amount: number;
+}) {
+  const amt = p.amount.toLocaleString("vi-VN");
+  return enqueueEmail({
+    to: p.to,
+    toName: p.customerName ?? undefined,
+    subject: `Nhắc thanh toán học phí — ${p.orderCode}`,
+    bodyText: `Chào ${p.customerName ?? "quý phụ huynh"},\nHoá đơn ${p.orderCode} còn ${amt}đ chưa thanh toán. Vui lòng hoàn tất giúp trung tâm.${SIGNATURE}`,
+    bodyHtml: wrap("Nhắc thanh toán học phí", [
+      `Chào <b>${p.customerName ?? "quý phụ huynh"}</b>,`,
+      `Hoá đơn <b>${p.orderCode}</b> còn <b>${amt}đ</b> chưa thanh toán.`,
+      `Vui lòng hoàn tất giúp trung tâm. Cảm ơn quý phụ huynh.`,
+    ]),
+    context: { type: "DEBT_REMINDER_ORDER", id: p.orderId },
+  });
+}
+
 /** (e) Có nhận xét mới cho bé. */
 export function enqueueNewFeedback(p: {
   to: string;
