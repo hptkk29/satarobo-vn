@@ -488,6 +488,38 @@ model MessengerMessage {
   @@index([conversationId, sentAt])
 }
 
+// R1-10 — Bảng hoa hồng theo kỳ (SR.QD.217, tiền). DRAFT→APPROVED→REOPENED.
+enum CommissionStatus {
+  DRAFT
+  APPROVED
+  REOPENED
+}
+
+model CommissionStatement {
+  id           String              @id @default(cuid())
+  period       String              @unique // "2026-06"
+  status       CommissionStatus    @default(DRAFT)
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  lines        CommissionLine[]
+}
+
+model CommissionLine {
+  id          String              @id @default(cuid())
+  statementId String
+  recipientId String // user hưởng hoa hồng
+  tier        String // QC | SALE_ADMIN | SALE | QL_TT
+  amount      Int // VND; âm = clawback
+  isClawback  Boolean             @default(false)
+  leadId      String?
+  statement   CommissionStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@index([statementId])
+  @@index([recipientId])
+}
+
 // R1-09 — Kỳ phân bổ chi phí marketing (SR.QD.217). DRAFT→CONFIRMED→REOPENED.
 enum CostPeriodStatus {
   DRAFT
