@@ -63,8 +63,8 @@ const META_SIGNATURE_SOURCES = new Set(["facebook"]);
  * Meta gửi header `sha256=<hex>` = HMAC-SHA256(rawBody, APP_SECRET).
  *
  * - Chỉ áp dụng cho nguồn Meta (facebook); nguồn khác bỏ qua (ok).
- * - `FACEBOOK_APP_SECRET` CHƯA set → chế độ stub (cảnh báo + ok), để dev/test
- *   chạy được mà chưa cần secret thật. PHẢI set trước go-live Messenger webhook.
+ * - `META_APP_SECRET` CHƯA set → chế độ stub (cảnh báo + ok), để dev/test
+ *   chạy được mà chưa cần secret thật. PHẢI set trước go-live webhook Meta.
  * - Đã set → bắt buộc header đúng, so sánh timing-safe. Sai/thiếu → từ chối.
  *
  * `rawBody` PHẢI là chuỗi body GỐC (chưa qua JSON.parse rồi stringify lại) — vì
@@ -77,10 +77,10 @@ export function verifyMetaSignature(
 ): { ok: boolean; reason?: string } {
   if (!META_SIGNATURE_SOURCES.has(source)) return { ok: true };
 
-  const secret = process.env.FACEBOOK_APP_SECRET;
+  const secret = process.env.META_APP_SECRET;
   if (!secret) {
     console.warn(
-      `[webhook:${source}] CHƯA cấu hình FACEBOOK_APP_SECRET — bỏ qua verify X-Hub-Signature-256 (stub). Đặt Meta App Secret thật trước go-live.`,
+      `[webhook:${source}] CHƯA cấu hình META_APP_SECRET — bỏ qua verify X-Hub-Signature-256 (stub). Đặt Meta App Secret thật trước go-live.`,
     );
     return { ok: true };
   }
