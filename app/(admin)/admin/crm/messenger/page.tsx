@@ -1,0 +1,58 @@
+import { redirect } from "next/navigation";
+import { MessageCircle } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
+import { Badge } from "@/components/ui/badge";
+import { ReplyBox } from "./_components/reply-box";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Inbox Messenger | Admin" };
+
+export default async function MessengerInboxPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // C3.3 — không có quyền lead/CRM → không vào inbox.
+  if (!can(session.user, "leads:view-all") && !can(session.user, "leads:view-own")) {
+    redirect("/admin/dashboard");
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const conversations = await scopedDb(actor).messengerConversation.findMany({
+    orderBy: { updatedAt: "desc" },
+    take: 50,
+    include: { messages: { orderBy: { sentAt: "desc" }, take: 1 } },
+  });
+
+  return (
+    <div>
+      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
+        <MessageCircle className="h-7 w-7 text-orange-500" />
+        Inbox Messenger
+      </h1>
+
+      {conversations.length === 0 ? (
+        <p className="text-sm text-neutral-500">Chưa có hội thoại nào trong phạm vi của bạn.</p>
+      ) : (
+        <div className="space-y-4">
+          {conversations.map((c) => (
+            <div key={c.id} className="rounded-lg border p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="font-semibold text-neutral-900">
+                  {c.parentName ?? `PSID ${c.psid.slice(0, 8)}`}
+                  {c.phone ? <span className="ml-2 text-sm text-neutral-500">{c.phone}</span> : null}
+                </div>
+                <Badge variant={c.status === "QUALIFIED" ? "default" : "secondary"}>{c.status}</Badge>
+              </div>
+              <p className="mb-3 text-sm text-neutral-600">
+                {c.messages[0]?.text ?? <span className="italic text-neutral-400">(chưa có tin nhắn)</span>}
+              </p>
+              <ReplyBox conversationId={c.id} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

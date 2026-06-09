@@ -13,16 +13,16 @@
 |---|---|---|---|---|
 | R1-01 | FacebookPageMapping + MessengerConversation/Message | A0 | C1.1–C1.4 | ✅ DONE (2026-06-08) — models+service+5 e2e PASS local; MessengerConversation ∈ scopedDb |
 | R1-02 | Webhook `/api/webhooks/meta/messenger` (verify sig, idempotent) | R1-01 | C2.1–C2.5 | ✅ DONE (2026-06-09) — X-Hub-Signature-256 (META_APP_SECRET) + idempotent mid + WebhookDelivery log; 5 e2e + 3 Vitest |
-| R1-03 | Inbox CRM `/admin/crm/messenger` | R1-02 | C3.1–C3.3 | TODO |
+| R1-03 | Inbox CRM `/admin/crm/messenger` | R1-02 | C3.1–C3.3 | 🟡 DONE (2026-06-09) — inbox scopedDb + reply + quick-reply (C3.2) + gate (C3.3); browser-e2e defer |
 | R1-04 | L1→L2 conversion + timestamps phễu trên Lead | R1-03 | C4.1–C4.4 | ✅ DONE (2026-06-09) — Lead funnel fields + commissionSource + dedup 90d; 3 e2e + 3 Vitest |
 | R1-05 | Handover HO→CS1/CS2 + xác nhận tiếp nhận | R1-04 | C5.1–C5.4 | ✅ DONE (2026-06-09) — handover/confirm/assign/firstContact + audit + cách ly C5.4; 2 e2e |
 | R1-06 | SLA engine (cron 15' + alert) | R1-05 | C6.1–C6.6 | ✅ DONE (2026-06-09) — evaluateSla 5 rule + cron→StaffNotification dedupeKey; 6 Vitest + 2 e2e |
 | R1-07 | Ads Insights sync (Meta API) + AdsInsightDaily | A0 | C7.1–C7.3 | ✅ DONE (2026-06-09) — model+parse+upsert+canEditAds+syncMetaAds; 3 Vitest + 2 e2e (sync live cần token) |
-| R1-08 | Marketing dashboard (funnel + CPL/CPA/ROAS) | R1-04,07 | C8.1–C8.4 | TODO |
+| R1-08 | Marketing dashboard (funnel + CPL/CPA/ROAS) | R1-04,07 | C8.1–C8.4 | ✅ DONE (2026-06-09) — getFunnelCounts + metrics + page; 2 Vitest + 1 e2e (revenue/ROAS gắn Order ở R2) |
 | R1-09 | Cost allocation (CPL/CPA/CP_TT, DRAFT→CONFIRMED→REOPENED) | R1-07 | C9.1–C9.5 | ✅ DONE (2026-06-09) — calc + kỳ DRAFT/CONFIRMED/REOPENED + role guard; 4 Vitest + 3 e2e (C9.5 alert cron defer) |
 | R1-10 | Commission engine 4 tầng + duyệt + export | R1-04 | C10.1–C10.7 | ✅ DONE (2026-06-09) — engine (C10.1–5, 6 Vitest) + persistence Statement/Line DRAFT→APPROVED→REOPENED + "của tôi" (C10.6/7, 2 e2e) |
 | R1-11 | WebhookDelivery log + UI replay (OI-20) | R1-02 | C11.1–C11.3 | 🟡 log + replay service DONE (C11.1–C11.3, 3 e2e); UI replay button boy-scout (2026-06-09) |
-| R1-12 | Export Excel 3 biểu mẫu + báo cáo tuần/tháng | R1-08,09,10 | C12.1–C12.3 | TODO |
+| R1-12 | Export Excel 3 biểu mẫu + báo cáo tuần/tháng | R1-08,09,10 | C12.1–C12.3 | 🟡 export hoa hồng Excel DONE (C12.1, 2 Vitest); báo cáo tuần/tháng + alert trễ (C12.2/3) defer |
 
 ---
 
