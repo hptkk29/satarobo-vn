@@ -8,11 +8,16 @@ export async function getFunnelCounts(opts: {
 } = {}): Promise<FunnelCounts> {
   const centerFilter = opts.centerIds ? { centerId: { in: opts.centerIds } } : {};
 
-  const [l1, l2, l3, spendAgg] = await Promise.all([
+  const [l1, l2, l3, spendAgg, revenueAgg] = await Promise.all([
     db.messengerConversation.count({ where: centerFilter }), // L1 = hội thoại
     db.lead.count({ where: { deletedAt: null, qualifiedAt: { not: null }, ...centerFilter } }), // L2
     db.lead.count({ where: { deletedAt: null, convertedAt: { not: null }, ...centerFilter } }), // L3
     db.adsInsightDaily.aggregate({ _sum: { spend: true } }),
+    // Doanh thu = đơn đã chốt/hoàn tất (CONFIRMED/COMPLETED).
+    db.order.aggregate({
+      _sum: { totalAmount: true },
+      where: { status: { in: ["CONFIRMED", "COMPLETED"] }, ...centerFilter },
+    }),
   ]);
 
   return {
@@ -20,6 +25,6 @@ export async function getFunnelCounts(opts: {
     l2,
     l3,
     spend: spendAgg._sum.spend ?? 0,
-    revenue: 0, // R2 — gắn doanh thu Order khi conversion finance xong
+    revenue: revenueAgg._sum.totalAmount ?? 0,
   };
 }

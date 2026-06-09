@@ -27,15 +27,24 @@ test.describe("[R1-08] Funnel dashboard", () => {
     await db.lead.create({ data: { parentName: "C", phone: "0900000003" } });
     // spend
     await db.adsInsightDaily.create({ data: { date: new Date("2026-06-01"), channel: "facebook", spend: 1_000_000 } });
+    // revenue = 2tr (đơn CONFIRMED) + 1 đơn DRAFT không tính
+    await db.order.create({ data: { code: "ORD-1", type: "COURSE", customerName: "A", customerPhone: "0900000001", status: "CONFIRMED", totalAmount: 2_000_000 } });
+    await db.order.create({ data: { code: "ORD-2", type: "COURSE", customerName: "B", customerPhone: "0900000002", status: "DRAFT", totalAmount: 9_000_000 } });
 
     const counts = await getFunnelCounts();
     expect(counts.l1).toBe(3);
     expect(counts.l2).toBe(2);
     expect(counts.l3).toBe(1);
     expect(counts.spend).toBe(1_000_000);
+    expect(counts.revenue).toBe(2_000_000); // chỉ đơn CONFIRMED
 
     const m = computeFunnelMetrics(counts);
     expect(m.cpl).toBe(500_000); // 1tr/2
     expect(m.crL2L3).toBe(0.5); // 1/2
+    expect(m.roas).toBe(2); // 2tr/1tr
+  });
+
+  test.afterEach(async () => {
+    await db.order.deleteMany({});
   });
 });

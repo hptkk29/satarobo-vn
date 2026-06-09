@@ -49,7 +49,7 @@ export default async function MarketingFunnelPage() {
         ))}
       </div>
       <p className="mt-4 text-xs text-neutral-400">
-        ROAS dùng doanh thu Order (tích hợp ở R2 — hiện tạm 0).
+        ROAS = doanh thu (đơn CONFIRMED/COMPLETED) / chi phí QC.
       </p>
     </div>
   );

@@ -520,6 +520,24 @@ model CommissionLine {
   @@index([recipientId])
 }
 
+// R1-12 — Báo cáo marketing tuần/tháng (snapshot) của QL TT (SR.QD.217 C12.2).
+enum ReportPeriodType {
+  WEEK
+  MONTH
+}
+
+model MarketingReport {
+  id            String           @id @default(cuid())
+  periodType    ReportPeriodType
+  periodKey     String // "2026-W23" | "2026-06"
+  submittedById String
+  snapshot      Json
+  submittedAt   DateTime         @default(now())
+
+  @@unique([periodType, periodKey, submittedById])
+  @@index([periodType, periodKey])
+}
+
 // R1-09 — Kỳ phân bổ chi phí marketing (SR.QD.217). DRAFT→CONFIRMED→REOPENED.
 enum CostPeriodStatus {
   DRAFT
