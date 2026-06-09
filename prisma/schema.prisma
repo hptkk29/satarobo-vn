@@ -26,6 +26,13 @@ enum Role {
   PARENT // Phase T0.1 — phụ huynh (portal hocvien.satarobo.vn), KHÔNG vào /admin
 }
 
+// R1-04 — nguồn hoa hồng (SR.QD.217): từ ads/admin · sale tự kiếm · giới thiệu.
+enum CommissionSource {
+  MARKETING_ADMIN
+  SALE_SELF
+  REFERRAL
+}
+
 enum LeadStatus {
   // Phase T1.1 — pipeline mở rộng (giữ giá trị cũ để back-compat)
   NEW
@@ -771,6 +778,16 @@ model Lead {
   // Cụm A3 — ai/khi nào chuyển lead sang ĐÃ ĐĂNG KÝ.
   convertedById    String?
   convertedAt      DateTime?
+
+  // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
+  qualifiedAt          DateTime? // L2 — có SĐT + note
+  handedAt             DateTime? // HO bàn giao về CS
+  receivedConfirmedAt  DateTime? // CS xác nhận tiếp nhận
+  assignedAt           DateTime? // phân Sale
+  firstContactAt       DateTime? // Sale liên hệ lần đầu
+  commissionSource     CommissionSource? // nguồn để chia hoa hồng
+  adminId              String? // Sale Admin xử lý L1→L2
+
   deletedAt        DateTime?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
