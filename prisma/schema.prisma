@@ -572,6 +572,29 @@ model AdsInsightDaily {
   @@index([date])
 }
 
+// R3-06 — Đồng ý dùng hình ảnh học viên (privacy-first, Doc 15 §8.3).
+enum ConsentType {
+  CLASS_MEDIA
+}
+
+enum ConsentStatus {
+  GRANTED
+  REVOKED
+}
+
+model StudentConsent {
+  id        String        @id @default(cuid())
+  studentId String
+  type      ConsentType
+  status    ConsentStatus @default(GRANTED)
+  grantedAt DateTime      @default(now())
+  revokedAt DateTime?
+  updatedAt DateTime      @updatedAt
+
+  @@unique([studentId, type])
+  @@index([studentId])
+}
+
 enum RoomStatus {
   ACTIVE
   MAINTENANCE
