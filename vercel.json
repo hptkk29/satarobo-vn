@@ -28,6 +28,10 @@
     {
       "path": "/api/cron/marketing-alerts",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/zalo-token-refresh",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
