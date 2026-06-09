@@ -15,7 +15,7 @@
 | R1-02 | Webhook `/api/webhooks/meta/messenger` (verify sig, idempotent) | R1-01 | C2.1–C2.5 | ✅ DONE (2026-06-09) — X-Hub-Signature-256 (META_APP_SECRET) + idempotent mid + WebhookDelivery log; 5 e2e + 3 Vitest |
 | R1-03 | Inbox CRM `/admin/crm/messenger` | R1-02 | C3.1–C3.3 | TODO |
 | R1-04 | L1→L2 conversion + timestamps phễu trên Lead | R1-03 | C4.1–C4.4 | ✅ DONE (2026-06-09) — Lead funnel fields + commissionSource + dedup 90d; 3 e2e + 3 Vitest |
-| R1-05 | Handover HO→CS1/CS2 + xác nhận tiếp nhận | R1-04 | C5.1–C5.4 | TODO |
+| R1-05 | Handover HO→CS1/CS2 + xác nhận tiếp nhận | R1-04 | C5.1–C5.4 | ✅ DONE (2026-06-09) — handover/confirm/assign/firstContact + audit + cách ly C5.4; 2 e2e |
 | R1-06 | SLA engine (cron 15' + alert) | R1-05 | C6.1–C6.6 | ✅ DONE (2026-06-09) — evaluateSla 5 rule + cron→StaffNotification dedupeKey; 6 Vitest + 2 e2e |
 | R1-07 | Ads Insights sync (Meta API) + AdsInsightDaily | A0 | C7.1–C7.3 | TODO |
 | R1-08 | Marketing dashboard (funnel + CPL/CPA/ROAS) | R1-04,07 | C8.1–C8.4 | TODO |
