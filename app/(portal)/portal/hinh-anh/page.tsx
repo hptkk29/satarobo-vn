@@ -1,5 +1,6 @@
 import { requireActiveStudent } from "@/lib/portal/session";
 import { db } from "@/lib/db";
+import { hasMediaConsent } from "@/lib/lms/media-consent";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Hình ảnh | Sata Robo", robots: { index: false } };
@@ -9,6 +10,9 @@ const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 export default async function HinhAnhPage() {
   const { studentId } = await requireActiveStudent();
 
+  // Privacy (C3.2/C6.4): chỉ hiện ảnh khi PH đã ĐỒNG Ý dùng hình ảnh. Thu hồi → ẩn ngay.
+  const consentGranted = await hasMediaConsent(studentId);
+
   // Lớp của con + ảnh APPROVED có tag con (chỉ ảnh được gắn thẻ con mới hiện).
   const enr = await db.enrollment.findMany({
     where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] } },
@@ -17,7 +21,7 @@ export default async function HinhAnhPage() {
   const classIds = enr.map((e) => e.classId);
 
   const media =
-    classIds.length > 0
+    consentGranted && classIds.length > 0
       ? await db.classSessionMedia.findMany({
           where: {
             classId: { in: classIds },

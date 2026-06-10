@@ -1,9 +1,9 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createHmac, timingSafeEqual } from "crypto";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { makeToken, verifyToken } from "@/lib/portal/active-site-token";
 
 // =============================================================================
 // PORTAL SESSION — Phase T2.2 (PHƯƠNG ÁN A)
@@ -34,25 +34,13 @@ function secret(): string {
   return s;
 }
 
-function sign(value: string): string {
-  return createHmac("sha256", secret()).update(value).digest("base64url");
-}
-
 function verifySigned(token: string): string | null {
-  const dot = token.lastIndexOf(".");
-  if (dot < 0) return null;
-  const value = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  const expected = sign(value);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-  return value;
+  return verifyToken(token, secret());
 }
 
 /** Tạo token đã ký cho studentId (dùng khi set cookie). */
 export function makeActiveSiteToken(studentId: string): string {
-  return `${studentId}.${sign(studentId)}`;
+  return makeToken(studentId, secret());
 }
 
 export const ACTIVE_SITE_COOKIE = COOKIE_NAME;
