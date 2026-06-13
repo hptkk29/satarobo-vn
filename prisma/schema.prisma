@@ -4025,3 +4025,33 @@ model IntegrationLog {
 
   @@index([provider, status, createdAt])
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// R6-A — Cấu hình hệ thống 2 tầng (Flexibility & Hardening).
+// Resolve giá trị: CenterSetting (theo OrgUnit) → SystemSetting (GLOBAL) →
+// default trong code (registry lib/settings/registry.ts). Key phải có schema
+// trong registry mới được ghi (validate Zod). Mọi thay đổi ghi AuditLog.
+// ───────────────────────────────────────────────────────────────────────────
+/// Tham số vận hành toàn hệ thống (GLOBAL). Chỉ SUPER_ADMIN sửa.
+model SystemSetting {
+  key           String   @id // khớp key registry, vd "student.nearEndThreshold"
+  valueJson     Json
+  updatedById   String?
+  updatedByName String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+}
+
+/// Override tham số theo cơ sở (OrgUnit). CENTER_MANAGER cơ sở đó / SUPER_ADMIN sửa.
+model CenterSetting {
+  orgUnitId     String // OrgUnit.id (cơ sở áp dụng)
+  key           String // khớp key registry, phải centerOverridable=true
+  valueJson     Json
+  updatedById   String?
+  updatedByName String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@id([orgUnitId, key])
+  @@index([key])
+}

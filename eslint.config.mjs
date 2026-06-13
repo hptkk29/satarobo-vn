@@ -2,6 +2,23 @@ import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
+import { DB_IMPORT_ALLOWLIST } from './lib/eslint/db-import-allowlist.mjs'
+
+// R6-F1 — chặn import @/lib/db TRẦN trong route group admin/portal (nơi cần cách ly
+// cơ sở). Code mới PHẢI đi qua scopedDb(actor) (cổng an toàn dữ liệu, A0-04/D1).
+// Public pages = read toàn cục (không có scope) → KHÔNG áp rule. API cron/webhook
+// dùng SYSTEM_ACTOR + scopedDb(actor,{bypass:true}).
+const dbBlockedImports = {
+  patterns: [
+    {
+      group: ['@/lib/db'],
+      message:
+        '❌ R6-F1: KHÔNG import @/lib/db trần trong admin/portal. Dùng scopedDb(actor) ' +
+        '(cách ly cơ sở) — vd `const sdb = scopedDb(await resolveActor(session.user.id))`. ' +
+        'Cron/webhook: SYSTEM_ACTOR + scopedDb(actor,{bypass:true}).',
+    },
+  ],
+}
 
 // Patterns chặn import sai giữa Admin và Client sites (Phase 4.X.1).
 const adminBlockedImports = {
@@ -65,15 +82,26 @@ export default tseslint.config(
     },
   },
 
-  // Admin scope — chặn import Magic UI + Framer Motion
+  // Admin components (ngoài route group app) — chặn Magic UI + Framer Motion.
   {
     files: [
-      'app/(admin)/**/*.{ts,tsx}',
       'components/admin/**/*.{ts,tsx}',
       'components/design-system/admin/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': ['error', adminBlockedImports],
+    },
+  },
+
+  // app/(admin)/** — Magic/Motion block + R6-F1 db block (gộp patterns vì
+  // no-restricted-imports bị REPLACE giữa các override, không merge).
+  {
+    files: ['app/(admin)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...adminBlockedImports.patterns, ...dbBlockedImports.patterns] },
+      ],
     },
   },
 
@@ -99,6 +127,24 @@ export default tseslint.config(
     ],
     rules: {
       'no-restricted-imports': ['error', clientBlockedImports],
+    },
+  },
+
+  // app/(portal)/** — R6-F1 db block (portal không có Magic/Motion rule riêng).
+  {
+    files: ['app/(portal)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', dbBlockedImports],
+    },
+  },
+
+  // R6-F1 — grandfather: 201 file hiện trạng tạm miễn db block (whitelist→0 theo
+  // từng epic). Vẫn GIỮ Magic/Motion block (chỉ bỏ pattern @/lib/db). Override này
+  // đặt CUỐI để thắng. Migrate file sang scopedDb → xóa entry khỏi allowlist.
+  {
+    files: DB_IMPORT_ALLOWLIST,
+    rules: {
+      'no-restricted-imports': ['error', adminBlockedImports],
     },
   },
 )
