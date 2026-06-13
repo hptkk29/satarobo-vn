@@ -520,6 +520,21 @@ model CommissionLine {
   @@index([recipientId])
 }
 
+// R6-F2 — Bản ghi LỆCH giữa can() v1 (matrix) và v2 (DB actor) khi shadow-run.
+// Mục tiêu: report = 0 trong N ngày → an toàn bật RBAC_V2_ENABLED. Chỉ ghi khi LỆCH.
+model RbacShadowDiff {
+  id        String   @id @default(cuid())
+  action    String
+  userId    String
+  v1        Boolean
+  v2        Boolean
+  targetKey String? // mô tả target (centerId/classId...) để truy vết
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+}
+
 // R6-B1 — Tỉ lệ hoa hồng theo kỳ trong DB (thay hằng số DEFAULT_RATES).
 // Mỗi tier có chuỗi version theo effectiveFrom/To; rate hiệu lực = row phủ thời điểm
 // đóng đơn. Trần Σ rate ≤ 8% enforce khi ghi. SUPER_ADMIN sửa + audit + reason.

@@ -30,7 +30,7 @@
 | **R6-E3** | E | Bảo lưu: ParentRequest RESERVE → enrollment PAUSED + suspendedUntil (≤6 tháng=setting), atomic; nhắc đến hạn | Must | R6-A, R4 | R6-E3-T1(duyệt→PAUSED atomic) · R6-E3-T3(>6 tháng→từ chối) · R6-E3-T8(portal hiển thị) · R6-E3-T9(audit) | ✅ DONE (suspendedUntil = StudentReserve.expectedEndAt) |
 | ~~R6-E4~~ | E | Học bù chéo cơ sở | Must | — | — | ➡️ **R7-08** (QĐ-O2 12/06, đổi rule liên cơ sở) |
 | **R6-F1** | F | ESLint chặn `@/lib/db` trong `app/**` → error; system-actor cho cron/webhook; whitelist→0 | Must | A0-04 | R6-F1-T2(isolation CI) · R6-F1-T10(lint error khi vi phạm) | 🟡 PARTIAL (rule+ratchet ON, system-actor; whitelist=201→giảm dần theo epic) |
-| **R6-F2** | F | Bật RBAC v2: shadow-diff report = 0 N ngày → flag ON, rollback ≤5' | Must | A0-03 | R6-F2-T1(shadow-diff report) · R6-F2-T12(v1 vs v2 khớp) | ⏳ TODO |
+| **R6-F2** | F | Bật RBAC v2: shadow-diff report = 0 N ngày → flag ON, rollback ≤5' | Must | A0-03 | R6-F2-T1(shadow-diff report) · R6-F2-T12(v1 vs v2 khớp) | 🟡 PARTIAL (persist+report+gate+rollback-env xong; flip flag = vận hành sau N ngày prod sạch) |
 | **R6-G2** | G | Chống race tiền/convert (idempotency + unique) | Should | R2 | R6-G2-T6(2 convert song song→1 bộ) · R6-G2-T6(double-confirm idempotent) | ⏳ TODO |
 | **R6-G3** | G | 4 metric SLO + alert (event pending, webhook fail, email queue, cron) | Should | — | R6-G3-T1(ngưỡng→alert) · R6-G3-T6(dedupe) | ⏳ TODO |
 | **R6-G1** | G | Restore-test backup runbook | Should | — | (runbook + checklist, không code) | 📄 DOC |
