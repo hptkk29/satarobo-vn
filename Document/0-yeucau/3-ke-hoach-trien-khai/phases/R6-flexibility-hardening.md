@@ -23,11 +23,11 @@
 | **R6-D2** | D | DataTable generic: sort/filter/pagination server-side + chọn cột | Should | R6-D1 | R6-D2-T1(sort/filter) · R6-D2-T11(pagination bắt buộc) | ⏳ TODO |
 | **R6-D3** | D | Dashboard widget registry lọc theo `can()` (không theo tên role) | Should | A0-02,03 | R6-D3-T1(render theo perm) · R6-D3-T4(role mới thấy widget) | ⏳ TODO |
 | **R6-D4** | D | Label/màu enum về 1 registry + exhaustiveness check | Should | — | R6-D4-T1(label lookup) · R6-D4-T2(enum thiếu label→fail) | ⏳ TODO |
-| **R6-E1** | E | Học phí đóng đủ HOẶC 2 đợt (atomic khi convert) + màn công nợ | Must | R6-A, R2 | R6-E1-T1(2 đợt tổng khớp) · R6-E1-T2(tổng lệch→từ chối) · R6-E1-T6(atomic) | ⏳ TODO |
+| **R6-E1** | E | Học phí đóng đủ HOẶC 2 đợt (atomic khi convert) + màn công nợ | Must | R6-A, R2 | R6-E1-T1(2 đợt tổng khớp) · R6-E1-T2(tổng lệch→từ chối) · R6-E1-T6(atomic) | ✅ DONE |
 | ~~R6-E1b~~ | E | Nhắc nợ trước X ngày (X=setting) | Must | R6-E1 | — | ➡️ **R7-04** (QĐ-O7 12/06) |
-| **R6-E2** | E | Chuyển lớp giữa kỳ **cùng mức phí** (atomic, check sức chứa, CM duyệt chéo cơ sở) | Must | R6-A | R6-E2-T1(transfer atomic) · R6-E2-T7(lớp đầy→chặn) · R6-E2-T9(audit+reason) | ⏳ TODO |
+| **R6-E2** | E | Chuyển lớp giữa kỳ **cùng mức phí** (atomic, check sức chứa, CM duyệt chéo cơ sở) | Must | R6-A | R6-E2-T1(transfer atomic) · R6-E2-T7(lớp đầy→chặn) · R6-E2-T9(audit+reason) | ✅ DONE |
 | ~~R6-E2b~~ | E | Hoàn tiền (RefundRequest, công thức) + clawback | Must | TBD-2 | — | ⛔ **BLOCKED TBD-2** (chưa code) |
-| **R6-E3** | E | Bảo lưu: ParentRequest RESERVE → enrollment PAUSED + suspendedUntil (≤6 tháng=setting), atomic; nhắc đến hạn | Must | R6-A, R4 | R6-E3-T1(duyệt→PAUSED atomic) · R6-E3-T3(>6 tháng→từ chối) · R6-E3-T8(portal hiển thị) · R6-E3-T9(audit) | ⏳ TODO |
+| **R6-E3** | E | Bảo lưu: ParentRequest RESERVE → enrollment PAUSED + suspendedUntil (≤6 tháng=setting), atomic; nhắc đến hạn | Must | R6-A, R4 | R6-E3-T1(duyệt→PAUSED atomic) · R6-E3-T3(>6 tháng→từ chối) · R6-E3-T8(portal hiển thị) · R6-E3-T9(audit) | ✅ DONE (suspendedUntil = StudentReserve.expectedEndAt) |
 | ~~R6-E4~~ | E | Học bù chéo cơ sở | Must | — | — | ➡️ **R7-08** (QĐ-O2 12/06, đổi rule liên cơ sở) |
 | **R6-F1** | F | ESLint chặn `@/lib/db` trong `app/**` → error; system-actor cho cron/webhook; whitelist→0 | Must | A0-04 | R6-F1-T2(isolation CI) · R6-F1-T10(lint error khi vi phạm) | 🟡 PARTIAL (rule+ratchet ON, system-actor; whitelist=201→giảm dần theo epic) |
 | **R6-F2** | F | Bật RBAC v2: shadow-diff report = 0 N ngày → flag ON, rollback ≤5' | Must | A0-03 | R6-F2-T1(shadow-diff report) · R6-F2-T12(v1 vs v2 khớp) | ⏳ TODO |

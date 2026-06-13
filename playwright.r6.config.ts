@@ -11,6 +11,8 @@ dotenv.config({ path: ".env.test", override: true });
 
 export default defineConfig({
   testDir: "./tests/e2e/r6",
+  // R6-E1 — stub "server-only" cho test node context (lib/orders/installments import nó).
+  tsconfig: "./tsconfig.playwright.json",
   globalSetup: "./tests/e2e/a0/global-setup.ts",
   timeout: 30_000,
   expect: { timeout: 5_000 },
