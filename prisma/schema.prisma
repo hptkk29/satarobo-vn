@@ -520,6 +520,23 @@ model CommissionLine {
   @@index([recipientId])
 }
 
+// R6-B1 — Tỉ lệ hoa hồng theo kỳ trong DB (thay hằng số DEFAULT_RATES).
+// Mỗi tier có chuỗi version theo effectiveFrom/To; rate hiệu lực = row phủ thời điểm
+// đóng đơn. Trần Σ rate ≤ 8% enforce khi ghi. SUPER_ADMIN sửa + audit + reason.
+model CommissionRateConfig {
+  id            String    @id @default(cuid())
+  tier          String // QC | SALE_ADMIN | SALE | QL_TT
+  rate          Float // 0..1
+  effectiveFrom DateTime
+  effectiveTo   DateTime? // null = đang hiệu lực
+  reason        String?
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime  @default(now())
+
+  @@index([tier, effectiveFrom])
+}
+
 // R1-12 — Báo cáo marketing tuần/tháng (snapshot) của QL TT (SR.QD.217 C12.2).
 enum ReportPeriodType {
   WEEK

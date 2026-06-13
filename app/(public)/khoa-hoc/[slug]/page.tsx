@@ -6,6 +6,7 @@ import {
   getCourseBundle,
   getCoursePackageFromDb,
 } from "@/components/legacy-laptrinhrobot/_data/courses-helpers";
+import { resolveCoursePrice } from "@/lib/courses/pricing";
 import {
   VALID_COURSE_SLUGS,
   courseDetails,
@@ -78,10 +79,18 @@ export default async function CoursePage({
   const bundle = getCourseBundle(slugLower);
   if (!bundle) notFound();
 
-  const { course, detail: hardcodedDetail, type, exam, longterm } = bundle;
+  const { course: hardcodedCourse, detail: hardcodedDetail, type, exam, longterm } = bundle;
 
   // Phase TD-1 — ưu tiên DB content nếu có, fallback hardcode
   const dbPkg = await getCoursePackageFromDb(slugLower);
+
+  // R6-B4 — giá hiển thị ưu tiên DB (CoursePackage), fallback hardcode courses-data.
+  // priceOriginal=listPrice, priceEarlyBird=earlyBirdPrice. Đổi giá ở admin không cần deploy.
+  const resolvedPrice = resolveCoursePrice(dbPkg, {
+    listPrice: hardcodedCourse.listPrice,
+    earlyBirdPrice: hardcodedCourse.earlyBirdPrice,
+  });
+  const course = { ...hardcodedCourse, ...resolvedPrice };
 
   const dbOutcomes = Array.isArray(dbPkg?.outcomesJson)
     ? (dbPkg.outcomesJson.filter((v) => typeof v === "string") as string[])

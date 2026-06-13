@@ -15,10 +15,10 @@
 | Task ID | Epic | Mô tả | Ưu tiên | Phụ thuộc | Test case bắt buộc | Trạng thái |
 |---|---|---|---|---|---|---|
 | **R6-A** | A | SystemSetting + CenterSetting 2 tầng + service resolve (Center→Global→default) + UI admin + audit | Must | A0-01,06 | R6-A-T1(resolve/validate) · R6-A-T2(RBAC GLOBAL) · R6-A-T5(center isolation) · R6-A-T9(audit) | ✅ DONE |
-| **R6-B1** | B | CommissionRateConfig trong DB (rate theo tier + effectiveFrom/To + trần) thay `DEFAULT_RATES` | Must | R6-A, R1 commission | R6-B1-T1(rate hiệu lực theo kỳ) · R6-B1-T2(trần) · R6-B1-T6(recalc DRAFT, APPROVED bất biến) · R6-B1-T9(audit) | ⏳ TODO |
+| **R6-B1** | B | CommissionRateConfig trong DB (rate theo tier + effectiveFrom/To + trần) thay `DEFAULT_RATES` | Must | R6-A, R1 commission | R6-B1-T1(rate hiệu lực theo kỳ) · R6-B1-T2(trần) · R6-B1-T6(recalc DRAFT, APPROVED bất biến) · R6-B1-T9(audit) | ✅ DONE |
 | **R6-B2** | B | WorkShift per-center trong DB; check-in R5 đọc giờ/dung sai từ DB | Should | R6-A, R5 | R6-B2-T1(CRUD) · R6-B2-T7(ca đang dùng không xóa) · R6-B2-T12(seed 3 ca cũ) | ⏳ TODO |
 | **R6-B3** | B | CourseCategory thành danh mục (model) — 2-phase, enum cũ giữ | Should | — | R6-B3-T1(thêm category→tạo course) · R6-B3-T7(category có course không xóa) · R6-B3-T12(backfill enum) | ⏳ TODO |
-| **R6-B4** | B | Giá/gói khóa đọc từ DB (CoursePackage), public hiển thị giá DB | Must | R6-A | R6-B4-T1(public đọc giá DB) · R6-B4-T9(audit đổi giá) | ⏳ TODO |
+| **R6-B4** | B | Giá/gói khóa đọc từ DB (CoursePackage), public hiển thị giá DB | Must | R6-A | R6-B4-T1(public đọc giá DB) · R6-B4-T9(audit đổi giá) | ✅ DONE |
 | **R6-D1** | D | Action factory chuẩn (auth→can→zod→scopedDb→mutation→audit→revalidate) | Must | A0-03,04,06 | R6-D1-T1(factory happy) · R6-D1-T2(thiếu perm/schema fail) · R6-D1-T9(audit auto) · R6-D1-T5(scoped) | ✅ DONE |
 | **R6-D2** | D | DataTable generic: sort/filter/pagination server-side + chọn cột | Should | R6-D1 | R6-D2-T1(sort/filter) · R6-D2-T11(pagination bắt buộc) | ⏳ TODO |
 | **R6-D3** | D | Dashboard widget registry lọc theo `can()` (không theo tên role) | Should | A0-02,03 | R6-D3-T1(render theo perm) · R6-D3-T4(role mới thấy widget) | ⏳ TODO |
