@@ -31,7 +31,7 @@ PRD → API Contract → System Architecture → DB Design → Tech Spec (FE+BE)
 | 0. Tài liệu gốc | `0-yeucau/0-tai-lieu-goc/` | File khách gửi (PDF/DOCX) — không sửa |
 | 1. PM tiếp nhận | `0-yeucau/1-pm-tiep-nhan/` | Phiếu tiếp nhận, phân loại, câu hỏi xác nhận |
 | 2. BA phân tích | `0-yeucau/2-ba-phan-tich/` | Gap analysis vs hiện trạng, user stories + AC |
-| 3. Kế hoạch | `0-yeucau/3-ke-hoach-trien-khai/` | Roadmap release, task breakdown |
+| 3. Kế hoạch | `0-yeucau/3-ke-hoach-trien-khai/` | Roadmap release, task breakdown; phases A0→R5 ✅ + **R6 Hardening (BA #04) + R7 LMS v3.1 (18 ticket — chờ duyệt)** trong [`phases/`](0-yeucau/3-ke-hoach-trien-khai/phases/README.md) |
 
 ### Nhóm 1 — Project Overview
 | Doc | File | Ai đọc |

@@ -1,12 +1,25 @@
 # Roadmap triển khai theo Release
 
-> 📂 **KẾ HOẠCH CHI TIẾT THEO PHASE (kèm test Playwright + quy trình task→test→check):** xem thư mục [`phases/`](phases/README.md) — mỗi phase A0→R5 có file riêng với danh sách task, test case bắt buộc, exit criteria.
+> 📂 **KẾ HOẠCH CHI TIẾT THEO PHASE (kèm test Playwright + quy trình task→test→check):** xem thư mục [`phases/`](phases/README.md) — mỗi phase A0→R7 có file riêng với danh sách task, test case bắt buộc, exit criteria.
 >
 > ⚠️ **SUPERSEDED (2026-06-05):** Roadmap CHỐT hiện tại nằm ở `Document/2-architecture-design/15-final-architecture-blueprint.md` §9 (A0 → R1 CRM Messenger/Marketing/Commission → R2 SIS/Finance → R3 LMS → R4 Portal → R5 HR). Khác biệt chính so với file này: **Zalo OA/ZNS + SataCoin quà + payment gateway lùi về backlog sau core**; commission nằm trong R1; thêm Ads Insights sync + Messenger inbox. File này giữ làm tham chiếu chi tiết task R2-cũ (trùng lịch/TKB/consent — nay phân bổ vào R3/R4 mới).
 
 > **Input:** 2 gap analysis + user stories (`2-ba-phan-tich/`).
 > **Điều kiện khởi động:** khách trả lời `1-pm-tiep-nhan/03-cau-hoi-xac-nhan-khach-hang.md` (tối thiểu nhóm B trước R1).
 > Ước lượng theo 1 dev chính (mô hình hiện tại) — chạy tuần tự, mỗi release verify + demo trước khi sang release sau.
+
+---
+
+## ✅ CẬP NHẬT 2026-06-12 — Roadmap SAU CORE (A0→R5 đã đóng 2026-06-10)
+
+> Core A0→R5 hoàn thành 2026-06-10 (build PASS, Vitest 308). Hai phase tiếp theo — **không phá thứ tự đã đóng A0–R5**:
+
+| Phase | Nội dung | Nguồn yêu cầu | Điều kiện tiên quyết | Trạng thái |
+|---|---|---|---|---|
+| **R6 — Flexibility & Hardening** | Settings động (SystemSetting/CenterSetting), commission/shift/category cấu hình, đóng lỗ B1–B4, **vá C1 (scopedDb rộng + ESLint error) + C2 (bật RBAC_V2) + C3 (webhook fail-closed)**, hardening vận hành | BA #04 (`2-ba-phan-tich/04-ba-r6-flexibility-hardening.md`, BASELINE 11/06 + cập nhật 12/06) | A0→R5 done ✅ · prod migrate (TBD-3) | 🟡 BA baseline — kế hoạch phase bung từ BA #04 (chưa lập ticket) |
+| **R7 — LMS v3.1** (tách **R7a** lõi vận hành / **R7b** nội dung đào tạo) | SRS LMS v3.1 chốt cuối 12/06: LeadChild + lớp trải nghiệm N buổi, convert có điều kiện thanh toán, thanh toán 2 tầng + nhắc nợ X ngày, snapshot chương trình, SCORM, import Word, học bù **liên cơ sở**, học bạ phát hành, đánh giá GV + khảo sát (form builder 4 loại), báo cáo | Phiếu #04 + BA #05/#06 (duyệt 12/06) | **R6 vá C1–C3 xong (gate R7-00)** · prod migrate (TBD-3) | 🟢 **Kế hoạch DUYỆT 12/06/2026** ([phases/R7-lms-v3.1.md](phases/R7-lms-v3.1.md)) — khởi động từ R7-00 |
+
+> Quyết định nền: QĐ-O1…O10 + XĐ-8 phương án 2 (TGĐ 12/06) — xem `2-ba-phan-tich/05-gap-analysis-lms-v3.1.md` mục 0–1. Satacoin tiếp tục **PENDING** (chỉ schema cấu hình điểm, cuối R7b).
 
 ---
 

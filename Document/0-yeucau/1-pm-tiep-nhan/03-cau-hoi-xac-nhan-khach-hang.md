@@ -46,6 +46,22 @@
 |---|---|---|---|
 | D2 | Ảnh lớp học hiện đăng portal đã có duyệt (manager) — có cần PH **đồng ý trước** (opt-in per học viên)? | Thêm cờ consent per Student khi nhập học | |
 
+## Nhóm E — SRS LMS v3.1 (Phiếu #04, tiếp nhận 12/06/2026 — ✅ TGĐ ĐÃ TRẢ LỜI 12/06/2026)
+
+| # | Câu hỏi | Phương án đề xuất | Trả lời (TGĐ 12/06/2026) |
+|---|---|---|---|
+| E1 | **Xếp phase**: slot R6 đã được đặt cho "Flexibility & Hardening" (BA #04, TGĐ baseline 11/06). LMS v3.1 xếp thế nào? | **Phương án đề xuất:** giữ R6 = Hardening (gồm tiền đề C1–C3 + B1–B4) rút gọn phần chồng lấn → LMS v3.1 = **R7** (tách R7a lõi vận hành / R7b nội dung đào tạo nếu >4 tuần). Phương án khác: gộp tất cả vào 1 phase R6 lớn (rủi ro kéo dài) | ✅ **Làm theo đề xuất** — R6 = Hardening, LMS v3.1 = R7 (R7a/R7b) |
+| E2 | **Học bù liên cơ sở (XĐ-1)**: SRS v3.1 (TGĐ 12/06) cho phép CS1↔CS2 mặc định, nhưng BA #04 (TGĐ baseline 11/06) chốt "mặc định cùng cơ sở, chéo = exception duyệt". Bản nào thắng? | SRS v3.1 thắng (mới hơn, ghi "TGĐ xác nhận lần cuối") → sửa baseline BA #04 tương ứng; kỹ thuật: đọc chéo cơ sở qua exception có kiểm soát trong scopedDb + audit | ✅ **Học bù LIÊN CƠ SỞ thắng** — sửa baseline BA #04 |
+| E3 | **Form builder (XĐ-2)**: SRS yêu cầu Admin tự cấu hình câu hỏi/phương án cho đánh giá GV + khảo sát; BA #04 IR-2 cấm form-builder tổng quát. Chốt phạm vi? | Form builder **giới hạn cho 2 nghiệp vụ khảo sát/đánh giá** — không phải page-builder tổng quát; cập nhật wording IR-2 | ✅ **4 loại câu hỏi: thang mức (1–5 sao), radio (chọn 1), checkbox (chọn nhiều), textbox (tự luận)** — giới hạn cho khảo sát/đánh giá |
+| E4 | **Mã học viên (XĐ-7)**: format hiện tại `CS1.HV.26.001` (tuần tự) đã phát hành cho học viên thật. Đổi sang `CSx-YY-RANDOM`? | Mã mới áp dụng từ thời điểm triển khai (2-phase); mã cũ giữ nguyên không đổi | ✅ **Xác nhận format mã mới** `CSx-YY-RANDOM` — để kiểm soát tốt khi nhiều chi nhánh |
+| E5 | **SCORM (XĐ-6)**: xác nhận SCORM thuộc scope — không vi phạm "không build video LMS" (Doc 15 Q12)? Chấp nhận giới hạn chống quay/chụp mức trình duyệt như SRS §12.4? | Xác nhận thuộc scope (khác bản chất video LMS); nghiệm thu theo wording trung thực SRS §12.4 | ✅ **Xác nhận** |
+| E6 | **Chặn convert chưa thanh toán (XĐ-4)**: flow prod hiện cho convert không cần tiền. Lead/Order PENDING_PAYMENT đang tồn xử lý thế nào? | Ngoại lệ duy nhất: giá phải thanh toán = 0 (học bổng toàn phần); dữ liệu cũ giữ nguyên | ✅ **Không có dữ liệu thanh toán thật cũ → toàn quyền áp rule mới**, không cần migrate đặc biệt |
+| E7 | **Nhắc nợ X ngày (XĐ-3)**: X do Sale nhập per-Enrollment (SRS) hay SystemSetting toàn hệ thống (BA #04)? | Kết hợp: X mặc định = SystemSetting, Sale được override per-Enrollment | ✅ **X mặc định = 14 ngày trước ngày đợt 2 (PH chọn ngày); Sale nhập X → dùng X, bỏ 14** |
+| E8 | **Migrate lead cũ**: lead hiện tại chỉ có 1 con (childName/childAge phẳng). Khi thêm LeadChild, migrate thế nào? | Migrate tự động (script idempotent), giữ field cũ đọc-only theo 2-phase | ✅ **Lead cũ đa phần là lead test — KHÔNG cần quan tâm, build theo rule mới**; khi có lead thật TGĐ sẽ báo |
+| E9 | **Trạng thái Lead**: thêm "Đã đăng ký" tách khỏi "Đã chuyển đổi", và "Đang học thử"? | Thêm trạng thái mới vào enum (additive); L3 giữ nguyên định nghĩa | ✅ **"Đã đăng ký" = lead đã đăng ký khóa học VÀ đã thanh toán (đợt 1 hoặc full)** — sau đó mới "Đã chuyển đổi" (convert xong) |
+
+> **Bổ sung TGĐ chốt cùng đợt (XĐ-5):** mô hình lớp trải nghiệm chuyển từ **cố định 4 buổi** sang **LINH ĐỘNG số buổi** — bộ phận Đào tạo cấu hình số buổi qua trang admin; hệ thống sinh lịch theo cấu hình.
+
 ---
 
 **Sau khi nhận trả lời:** PM cập nhật 2 phiếu tiếp nhận → BA hoàn thiện spec trong `2-ba-phan-tich/` → chốt roadmap `3-ke-hoach-trien-khai/`.
