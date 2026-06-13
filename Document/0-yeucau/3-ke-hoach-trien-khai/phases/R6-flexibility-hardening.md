@@ -16,13 +16,13 @@
 |---|---|---|---|---|---|---|
 | **R6-A** | A | SystemSetting + CenterSetting 2 tầng + service resolve (Center→Global→default) + UI admin + audit | Must | A0-01,06 | R6-A-T1(resolve/validate) · R6-A-T2(RBAC GLOBAL) · R6-A-T5(center isolation) · R6-A-T9(audit) | ✅ DONE |
 | **R6-B1** | B | CommissionRateConfig trong DB (rate theo tier + effectiveFrom/To + trần) thay `DEFAULT_RATES` | Must | R6-A, R1 commission | R6-B1-T1(rate hiệu lực theo kỳ) · R6-B1-T2(trần) · R6-B1-T6(recalc DRAFT, APPROVED bất biến) · R6-B1-T9(audit) | ✅ DONE |
-| **R6-B2** | B | WorkShift per-center trong DB; check-in R5 đọc giờ/dung sai từ DB | Should | R6-A, R5 | R6-B2-T1(CRUD) · R6-B2-T7(ca đang dùng không xóa) · R6-B2-T12(seed 3 ca cũ) | ⏳ TODO |
-| **R6-B3** | B | CourseCategory thành danh mục (model) — 2-phase, enum cũ giữ | Should | — | R6-B3-T1(thêm category→tạo course) · R6-B3-T7(category có course không xóa) · R6-B3-T12(backfill enum) | ⏳ TODO |
+| **R6-B2** | B | WorkShift per-center trong DB; check-in R5 đọc giờ/dung sai từ DB | Should | R6-A, R5 | R6-B2-T1(CRUD) · R6-B2-T7(ca đang dùng không xóa) · R6-B2-T12(seed 3 ca cũ) | ✅ DONE |
+| **R6-B3** | B | CourseCategory thành danh mục (model) — 2-phase, enum cũ giữ | Should | — | R6-B3-T1(thêm category→tạo course) · R6-B3-T7(category có course không xóa) · R6-B3-T12(backfill enum) | ✅ DONE |
 | **R6-B4** | B | Giá/gói khóa đọc từ DB (CoursePackage), public hiển thị giá DB | Must | R6-A | R6-B4-T1(public đọc giá DB) · R6-B4-T9(audit đổi giá) | ✅ DONE |
 | **R6-D1** | D | Action factory chuẩn (auth→can→zod→scopedDb→mutation→audit→revalidate) | Must | A0-03,04,06 | R6-D1-T1(factory happy) · R6-D1-T2(thiếu perm/schema fail) · R6-D1-T9(audit auto) · R6-D1-T5(scoped) | ✅ DONE |
-| **R6-D2** | D | DataTable generic: sort/filter/pagination server-side + chọn cột | Should | R6-D1 | R6-D2-T1(sort/filter) · R6-D2-T11(pagination bắt buộc) | ⏳ TODO |
-| **R6-D3** | D | Dashboard widget registry lọc theo `can()` (không theo tên role) | Should | A0-02,03 | R6-D3-T1(render theo perm) · R6-D3-T4(role mới thấy widget) | ⏳ TODO |
-| **R6-D4** | D | Label/màu enum về 1 registry + exhaustiveness check | Should | — | R6-D4-T1(label lookup) · R6-D4-T2(enum thiếu label→fail) | ⏳ TODO |
+| **R6-D2** | D | DataTable generic: sort/filter/pagination server-side + chọn cột | Should | R6-D1 | R6-D2-T1(sort/filter) · R6-D2-T11(pagination bắt buộc) | ✅ DONE |
+| **R6-D3** | D | Dashboard widget registry lọc theo `can()` (không theo tên role) | Should | A0-02,03 | R6-D3-T1(render theo perm) · R6-D3-T4(role mới thấy widget) | ✅ DONE |
+| **R6-D4** | D | Label/màu enum về 1 registry + exhaustiveness check | Should | — | R6-D4-T1(label lookup) · R6-D4-T2(enum thiếu label→fail) | ✅ DONE |
 | **R6-E1** | E | Học phí đóng đủ HOẶC 2 đợt (atomic khi convert) + màn công nợ | Must | R6-A, R2 | R6-E1-T1(2 đợt tổng khớp) · R6-E1-T2(tổng lệch→từ chối) · R6-E1-T6(atomic) | ✅ DONE |
 | ~~R6-E1b~~ | E | Nhắc nợ trước X ngày (X=setting) | Must | R6-E1 | — | ➡️ **R7-04** (QĐ-O7 12/06) |
 | **R6-E2** | E | Chuyển lớp giữa kỳ **cùng mức phí** (atomic, check sức chứa, CM duyệt chéo cơ sở) | Must | R6-A | R6-E2-T1(transfer atomic) · R6-E2-T7(lớp đầy→chặn) · R6-E2-T9(audit+reason) | ✅ DONE |
@@ -31,8 +31,8 @@
 | ~~R6-E4~~ | E | Học bù chéo cơ sở | Must | — | — | ➡️ **R7-08** (QĐ-O2 12/06, đổi rule liên cơ sở) |
 | **R6-F1** | F | ESLint chặn `@/lib/db` trong `app/**` → error; system-actor cho cron/webhook; whitelist→0 | Must | A0-04 | R6-F1-T2(isolation CI) · R6-F1-T10(lint error khi vi phạm) | 🟡 PARTIAL (rule+ratchet ON, system-actor; whitelist=201→giảm dần theo epic) |
 | **R6-F2** | F | Bật RBAC v2: shadow-diff report = 0 N ngày → flag ON, rollback ≤5' | Must | A0-03 | R6-F2-T1(shadow-diff report) · R6-F2-T12(v1 vs v2 khớp) | 🟡 PARTIAL (persist+report+gate+rollback-env xong; flip flag = vận hành sau N ngày prod sạch) |
-| **R6-G2** | G | Chống race tiền/convert (idempotency + unique) | Should | R2 | R6-G2-T6(2 convert song song→1 bộ) · R6-G2-T6(double-confirm idempotent) | ⏳ TODO |
-| **R6-G3** | G | 4 metric SLO + alert (event pending, webhook fail, email queue, cron) | Should | — | R6-G3-T1(ngưỡng→alert) · R6-G3-T6(dedupe) | ⏳ TODO |
+| **R6-G2** | G | Chống race tiền/convert (idempotency + unique) | Should | R2 | R6-G2-T6(2 convert song song→1 bộ) · R6-G2-T6(double-confirm idempotent) | ✅ DONE |
+| **R6-G3** | G | 4 metric SLO + alert (event pending, webhook fail, email queue, cron) | Should | — | R6-G3-T1(ngưỡng→alert) · R6-G3-T6(dedupe) | ✅ DONE |
 | **R6-G1** | G | Restore-test backup runbook | Should | — | (runbook + checklist, không code) | 📄 DOC |
 | **R6-C1** | C | Landing khóa học content-block (section registry) | Could | R6-B4 | R6-C1-T1(render section) · NFR perf | ⏳ TODO (sau Must/Should) |
 

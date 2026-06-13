@@ -757,6 +757,21 @@ enum CourseCategory {
   LAP_TRINH_ROBOT
 }
 
+// R6-B3 — Danh mục khoá học dạng MODEL (thêm danh mục không sửa code). 2-phase: enum
+// CourseCategory + Course.category giữ; thêm Course.categoryId trỏ model. code khớp enum (T12).
+model CourseCategoryDef {
+  id           String   @id @default(cuid())
+  code         String   @unique // khớp enum cũ khi backfill (LAP_TRINH_ROBOT...)
+  name         String
+  slug         String?  @unique
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  courses Course[] @relation("CourseCategoryDef")
+}
+
 model Course {
   id          String     @id @default(cuid())
   name        String
@@ -774,6 +789,9 @@ model Course {
 
   // Đợt 3D — phân loại danh mục + cờ "khoá cụ thể dùng để mở lớp/giảng dạy".
   category    CourseCategory? // null = không phải khoá dạy (vd mục landing cũ LTR/LTRS)
+  // R6-B3 — danh mục dạng model (2-phase, song song enum `category`).
+  categoryId  String?
+  categoryDef CourseCategoryDef? @relation("CourseCategoryDef", fields: [categoryId], references: [id])
   isTeachable Boolean         @default(false)
   // Đợt 6 — số buổi CHUẨN (cam kết) của khoá; ưu tiên hơn đếm Curriculum lessons.
   totalSessions Int?
@@ -3436,6 +3454,24 @@ enum WorkShift {
   CA_SANG
   CA_CHIEU
   CA_TOI
+}
+
+// R6-B2 — Ca làm việc cấu hình trong DB (per-center giờ/dung sai). 2-phase: enum WorkShift
+// giữ nguyên để back-compat; check-in đọc giờ/tolerance từ đây. code khớp enum cũ (T12).
+model WorkShiftConfig {
+  id               String   @id @default(cuid())
+  centerId         String? // null = mặc định toàn hệ thống
+  code             String // CA_SANG | CA_CHIEU | CA_TOI (khớp enum cũ)
+  name             String
+  startTime        String // "08:00"
+  endTime          String // "11:30"
+  toleranceMinutes Int      @default(15)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([centerId, code])
+  @@index([centerId, isActive])
 }
 
 enum ShiftRegStatus {
