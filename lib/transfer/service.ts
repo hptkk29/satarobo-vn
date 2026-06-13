@@ -1,4 +1,6 @@
 import { db } from "@/lib/db";
+import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
+import { isSameFeeTransfer } from "@/lib/transfer/transfer-policy";
 
 // =============================================================================
 // Cụm C1 — Chuyển lớp / chuyển cơ sở.
@@ -152,6 +154,7 @@ export async function approveTransfer(
   requestId: string,
   decidedById: string | null,
   note?: string | null,
+  opts?: { actor?: AuditActor; reason?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   const req = await db.studentTransferRequest.findUnique({ where: { id: requestId } });
   if (!req) return { ok: false, error: "Không tìm thấy yêu cầu" };
@@ -163,6 +166,17 @@ export async function approveTransfer(
     select: { id: true, courseId: true, centerId: true, maxStudents: true },
   });
   if (!toClass) return { ok: false, error: "Lớp đích không tồn tại" };
+
+  // R6-E2 — "cùng mức phí": lớp đích phải CÙNG KHOÁ với lớp nguồn (khác khoá = đổi phí → chặn).
+  if (req.fromClassId) {
+    const fromClass = await db.class.findUnique({
+      where: { id: req.fromClassId },
+      select: { courseId: true },
+    });
+    if (fromClass && !isSameFeeTransfer(fromClass.courseId, toClass.courseId)) {
+      return { ok: false, error: "Lớp đích khác khoá/mức phí — không cho chuyển giữa kỳ" };
+    }
+  }
 
   const seats = await classOpenSeats(toClass.id, toClass.maxStudents);
   if (seats <= 0) return { ok: false, error: "Lớp đích đã hết chỗ" };
@@ -204,6 +218,21 @@ export async function approveTransfer(
       where: { id: requestId },
       data: { status: "APPROVED", decidedById, decidedAt: new Date(), note: note ?? null },
     });
+
+    // 5) R6-E2 — audit ATOMIC trong cùng transaction (actor + reason).
+    if (opts?.actor) {
+      await writeAudit({
+        actor: opts.actor,
+        module: "transfer",
+        entityType: "StudentTransferRequest",
+        entityId: requestId,
+        action: "APPROVE",
+        newValues: { toClassId: toClass.id, toCenterId: toClass.centerId, studentId: req.studentId },
+        reason: opts.reason ?? req.reason ?? "Duyệt chuyển lớp",
+        orgUnitId: null,
+        tx,
+      });
+    }
   });
 
   return { ok: true };

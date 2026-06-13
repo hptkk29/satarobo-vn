@@ -73,6 +73,10 @@ export const getCoursePackageFromDb = cache(async (slug: string) => {
       where: { slug: slug.toLowerCase() },
       select: {
         slug: true,
+        // R6-B4 — giá đọc từ DB (override hardcode khi có).
+        priceOriginal: true,
+        priceEarlyBird: true,
+        priceMember: true,
         audienceTag: true,
         audienceDescription: true,
         mission: true,

@@ -24,6 +24,7 @@ export const SCOPE_EXEMPT = new Set<string>([
   "LeadAssignmentConfig", // config, centerId null = quy tắc toàn hệ thống
   "SataCoinRule", // config, centerId null = áp mọi cơ sở
   "FacebookPageMapping", // mapping Page→center (cấu hình hạ tầng, không phải dữ liệu nghiệp vụ)
+  "WorkShiftConfig", // R6-B2 — cấu hình ca per-center, centerId null = mặc định toàn hệ thống
 ]);
 
 function bypassesScope(actor: Actor): boolean {

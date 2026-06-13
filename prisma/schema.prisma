@@ -520,6 +520,38 @@ model CommissionLine {
   @@index([recipientId])
 }
 
+// R6-F2 — Bản ghi LỆCH giữa can() v1 (matrix) và v2 (DB actor) khi shadow-run.
+// Mục tiêu: report = 0 trong N ngày → an toàn bật RBAC_V2_ENABLED. Chỉ ghi khi LỆCH.
+model RbacShadowDiff {
+  id        String   @id @default(cuid())
+  action    String
+  userId    String
+  v1        Boolean
+  v2        Boolean
+  targetKey String? // mô tả target (centerId/classId...) để truy vết
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+}
+
+// R6-B1 — Tỉ lệ hoa hồng theo kỳ trong DB (thay hằng số DEFAULT_RATES).
+// Mỗi tier có chuỗi version theo effectiveFrom/To; rate hiệu lực = row phủ thời điểm
+// đóng đơn. Trần Σ rate ≤ 8% enforce khi ghi. SUPER_ADMIN sửa + audit + reason.
+model CommissionRateConfig {
+  id            String    @id @default(cuid())
+  tier          String // QC | SALE_ADMIN | SALE | QL_TT
+  rate          Float // 0..1
+  effectiveFrom DateTime
+  effectiveTo   DateTime? // null = đang hiệu lực
+  reason        String?
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime  @default(now())
+
+  @@index([tier, effectiveFrom])
+}
+
 // R1-12 — Báo cáo marketing tuần/tháng (snapshot) của QL TT (SR.QD.217 C12.2).
 enum ReportPeriodType {
   WEEK
@@ -725,6 +757,21 @@ enum CourseCategory {
   LAP_TRINH_ROBOT
 }
 
+// R6-B3 — Danh mục khoá học dạng MODEL (thêm danh mục không sửa code). 2-phase: enum
+// CourseCategory + Course.category giữ; thêm Course.categoryId trỏ model. code khớp enum (T12).
+model CourseCategoryDef {
+  id           String   @id @default(cuid())
+  code         String   @unique // khớp enum cũ khi backfill (LAP_TRINH_ROBOT...)
+  name         String
+  slug         String?  @unique
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  courses Course[] @relation("CourseCategoryDef")
+}
+
 model Course {
   id          String     @id @default(cuid())
   name        String
@@ -742,6 +789,9 @@ model Course {
 
   // Đợt 3D — phân loại danh mục + cờ "khoá cụ thể dùng để mở lớp/giảng dạy".
   category    CourseCategory? // null = không phải khoá dạy (vd mục landing cũ LTR/LTRS)
+  // R6-B3 — danh mục dạng model (2-phase, song song enum `category`).
+  categoryId  String?
+  categoryDef CourseCategoryDef? @relation("CourseCategoryDef", fields: [categoryId], references: [id])
   isTeachable Boolean         @default(false)
   // Đợt 6 — số buổi CHUẨN (cam kết) của khoá; ưu tiên hơn đếm Curriculum lessons.
   totalSessions Int?
@@ -3406,6 +3456,24 @@ enum WorkShift {
   CA_TOI
 }
 
+// R6-B2 — Ca làm việc cấu hình trong DB (per-center giờ/dung sai). 2-phase: enum WorkShift
+// giữ nguyên để back-compat; check-in đọc giờ/tolerance từ đây. code khớp enum cũ (T12).
+model WorkShiftConfig {
+  id               String   @id @default(cuid())
+  centerId         String? // null = mặc định toàn hệ thống
+  code             String // CA_SANG | CA_CHIEU | CA_TOI (khớp enum cũ)
+  name             String
+  startTime        String // "08:00"
+  endTime          String // "11:30"
+  toleranceMinutes Int      @default(15)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([centerId, code])
+  @@index([centerId, isActive])
+}
+
 enum ShiftRegStatus {
   REGISTERED
   LEAVE_REQUESTED
@@ -4024,4 +4092,34 @@ model IntegrationLog {
   createdAt       DateTime             @default(now())
 
   @@index([provider, status, createdAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// R6-A — Cấu hình hệ thống 2 tầng (Flexibility & Hardening).
+// Resolve giá trị: CenterSetting (theo OrgUnit) → SystemSetting (GLOBAL) →
+// default trong code (registry lib/settings/registry.ts). Key phải có schema
+// trong registry mới được ghi (validate Zod). Mọi thay đổi ghi AuditLog.
+// ───────────────────────────────────────────────────────────────────────────
+/// Tham số vận hành toàn hệ thống (GLOBAL). Chỉ SUPER_ADMIN sửa.
+model SystemSetting {
+  key           String   @id // khớp key registry, vd "student.nearEndThreshold"
+  valueJson     Json
+  updatedById   String?
+  updatedByName String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+}
+
+/// Override tham số theo cơ sở (OrgUnit). CENTER_MANAGER cơ sở đó / SUPER_ADMIN sửa.
+model CenterSetting {
+  orgUnitId     String // OrgUnit.id (cơ sở áp dụng)
+  key           String // khớp key registry, phải centerOverridable=true
+  valueJson     Json
+  updatedById   String?
+  updatedByName String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@id([orgUnitId, key])
+  @@index([key])
 }

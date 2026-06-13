@@ -60,6 +60,14 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
     if (lead.status === "ENROLLED") throw new ConvertError("ALREADY_ENROLLED", "Lead đã được chốt.");
     if (!lead.centerId) throw new ConvertError("LEAD_NO_CENTER", "Lead chưa thuộc cơ sở nào — bàn giao trước.");
 
+    // R6-G2 — CLAIM atomic chống race: 2 convert song song chỉ 1 bộ. updateMany có điều
+    // kiện status!=ENROLLED khoá hàng lead; lượt thua thấy count=0 → ALREADY_ENROLLED.
+    const claim = await tx.lead.updateMany({
+      where: { id: lead.id, status: { not: "ENROLLED" }, deletedAt: null },
+      data: { status: "ENROLLED", convertedById: actor.id, convertedAt: now },
+    });
+    if (claim.count === 0) throw new ConvertError("ALREADY_ENROLLED", "Lead đã được chốt.");
+
     const center = await tx.center.findUnique({ where: { id: lead.centerId }, select: { code: true } });
     const centerCode = center?.code ?? "CS";
 
@@ -107,10 +115,7 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
       },
     });
 
-    await tx.lead.update({
-      where: { id: lead.id },
-      data: { status: "ENROLLED", convertedById: actor.id, convertedAt: now },
-    });
+    // (status=ENROLLED + convertedBy/At đã set ở bước CLAIM atomic phía trên — G2.)
 
     await writeAudit({
       actor, module: "enrollment", entityType: "Lead", entityId: lead.id, action: "STATUS_CHANGE",

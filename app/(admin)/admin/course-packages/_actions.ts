@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { auditPackagePriceChange, getPackagePrice } from "@/lib/courses/pricing";
 
 type ActionResult = {
   error?: string;
@@ -226,12 +227,15 @@ async function syncCourseTotalSessions(opts: {
 }
 
 export async function updatePackage(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const parsed = packageSchema.safeParse(readPackageForm(formData, false));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Du lieu khong hop le" };
   }
+
+  // R6-B4 — giá cũ (trước update) để audit nếu đổi giá.
+  const oldPrice = await getPackagePrice(id);
 
   const pkg = parsed.data;
   const data: Prisma.CoursePackageUpdateInput = {
@@ -275,6 +279,22 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
     await db.coursePackage.update({ where: { id }, data });
   } catch {
     return { error: "Package khong ton tai, slug bi trung, hoac co loi co so du lieu" };
+  }
+
+  // R6-B4 — audit khi giá đổi (T9).
+  if (oldPrice) {
+    await auditPackagePriceChange(
+      { id: admin.id, name: admin.name ?? admin.email ?? "Admin" },
+      {
+        packageId: id,
+        oldPrice,
+        newPrice: {
+          priceOriginal: pkg.priceOriginal,
+          priceEarlyBird: pkg.priceEarlyBird,
+          priceMember: pkg.priceMember,
+        },
+      },
+    );
   }
 
   // Đợt 6 — đồng bộ "Số buổi" sang Course.totalSessions (đọc lại slug/code đã lưu).
