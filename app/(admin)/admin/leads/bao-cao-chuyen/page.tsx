@@ -85,8 +85,16 @@ export default async function TransferReportPage({ searchParams }: Props) {
 
   const total = rows.length;
   const closedCount = rows.filter((r) => r.closed).length;
-  const cs1ToCs2 = rows.filter((r) => r.from === "CS1" && r.to === "CS2").length;
-  const cs2ToCs1 = rows.filter((r) => r.from === "CS2" && r.to === "CS1").length;
+  // Thống kê theo hướng chuyển động — không hardcode CS1/CS2 (CS3/CS4 tự gộp).
+  const dirCounts = new Map<string, number>();
+  for (const r of rows) {
+    if (r.from === "—" || r.to === "—" || r.from === r.to) continue;
+    const key = `${r.from} → ${r.to}`;
+    dirCounts.set(key, (dirCounts.get(key) ?? 0) + 1);
+  }
+  const topDirections = [...dirCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 2);
 
   const prevM = new Date(year, monthIdx - 1, 1);
   const nextM = new Date(year, monthIdx + 1, 1);
@@ -112,8 +120,9 @@ export default async function TransferReportPage({ searchParams }: Props) {
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Tổng chuyển" value={total} />
-        <Stat label="CS1 → CS2" value={cs1ToCs2} />
-        <Stat label="CS2 → CS1" value={cs2ToCs1} />
+        {topDirections.map(([dir, count]) => (
+          <Stat key={dir} label={dir} value={count} />
+        ))}
         <Stat label="Đã chốt" value={`${closedCount}/${total}`} tone="ok" />
       </div>
 

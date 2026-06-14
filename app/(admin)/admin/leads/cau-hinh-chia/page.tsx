@@ -34,7 +34,7 @@ export default async function AssignConfigPage() {
           <Settings2 className="h-6 w-6 text-[#7C3AED]" /> Cấu hình chia lead
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Chọn cách chia lead trong cơ sở. Lead chưa chọn cơ sở được chia đều CS1/CS2 trước. Lead đã
+          Chọn cách chia lead trong cơ sở. Lead chưa chọn cơ sở được chia đều giữa các cơ sở vận hành trước. Lead đã
           có tương tác (gọi/nhắn/ghi chú) sẽ không bị tự động chia lại.
         </p>
       </div>

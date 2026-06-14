@@ -6,6 +6,7 @@ import {
   getAncestors,
   isAncestor,
   getDescendants,
+  selectableOrgUnits,
 } from "./org-tree";
 import type { OrgUnitNode } from "./types";
 
@@ -17,6 +18,66 @@ function baseTree(): OrgUnitNode[] {
     { id: "cs2", code: "CS2", type: "CENTER", parentId: "r", centerId: "c2" },
   ];
 }
+
+function namedTree(): (OrgUnitNode & { name: string })[] {
+  return [
+    { id: "r", code: "SATAROBO", type: "ROOT", parentId: null, name: "Sata Robo" },
+    { id: "ho", code: "HO", type: "HO", parentId: "r", name: "Hội sở" },
+    { id: "cs1", code: "CS1", type: "CENTER", parentId: "r", centerId: "c1", name: "Cơ sở 1" },
+    { id: "cs2", code: "CS2", type: "CENTER", parentId: "r", centerId: "c2", name: "Cơ sở 2" },
+  ];
+}
+
+describe("[Đợt0a] selectableOrgUnits — picker gồm HO, loại ROOT", () => {
+  it("SUPER_ADMIN thấy HO + CS1 + CS2, KHÔNG có ROOT (sửa lỗi 'HO không hiện')", () => {
+    const r = selectableOrgUnits(namedTree(), { isSuperAdmin: true });
+    expect(r.map((u) => u.code)).toEqual(["CS1", "CS2", "HO"]);
+    expect(r.find((u) => u.code === "HO")).toBeTruthy();
+    expect(r.some((u) => u.type === "ROOT")).toBe(false);
+  });
+
+  it("HO-level (cross-center) thấy mọi đơn vị", () => {
+    const r = selectableOrgUnits(namedTree(), { isHoLevel: true });
+    expect(r.map((u) => u.code).sort()).toEqual(["CS1", "CS2", "HO"]);
+  });
+
+  it("types:['CENTER'] chỉ trả cơ sở vận hành (gán lead/lớp) — kèm centerId cũ", () => {
+    const r = selectableOrgUnits(namedTree(), { isSuperAdmin: true }, { types: ["CENTER"] });
+    expect(r.map((u) => u.code)).toEqual(["CS1", "CS2"]);
+    expect(r.map((u) => u.centerId)).toEqual(["c1", "c2"]);
+  });
+
+  it("actor scope CS1: chỉ thấy CS1, cách ly khỏi CS2 + HO", () => {
+    const r = selectableOrgUnits(namedTree(), { visibleCenterIds: ["c1"] });
+    expect(r.map((u) => u.code)).toEqual(["CS1"]);
+  });
+
+  it("actor có role trực tiếp tại HO → thấy HO dù không HO-level toàn cục", () => {
+    const r = selectableOrgUnits(namedTree(), {
+      visibleCenterIds: ["c1"],
+      roleOrgUnitIds: ["ho"],
+    });
+    expect(r.map((u) => u.code).sort()).toEqual(["CS1", "HO"]);
+  });
+
+  it("thêm CS3 (data) → picker tự gồm, không sửa code", () => {
+    const tree = [
+      ...namedTree(),
+      { id: "cs3", code: "CS3", type: "CENTER" as const, parentId: "r", centerId: "c3", name: "Cơ sở 3" },
+    ];
+    const r = selectableOrgUnits(tree, { isSuperAdmin: true }, { types: ["CENTER"] });
+    expect(r.map((u) => u.code)).toEqual(["CS1", "CS2", "CS3"]);
+  });
+
+  it("loại đơn vị đã soft-delete trừ khi includeDeleted", () => {
+    const tree = namedTree();
+    tree[1].deletedAt = new Date("2020-01-01");
+    expect(selectableOrgUnits(tree, { isSuperAdmin: true }).some((u) => u.code === "HO")).toBe(false);
+    expect(
+      selectableOrgUnits(tree, { isSuperAdmin: true }, { includeDeleted: true }).some((u) => u.code === "HO"),
+    ).toBe(true);
+  });
+});
 
 describe("[A0-01] org-tree — subtree & quan hệ", () => {
   it("[A0-01-T1-03] getSubtreeCenterIds(CS1) = [c1]", () => {

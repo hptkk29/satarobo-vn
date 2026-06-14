@@ -6,6 +6,7 @@ import {
   normalizeCenterCode,
   parseLeadImportRow,
   LEAD_IMPORT_COLUMNS,
+  LEAD_IMPORT_CENTER_HEADER,
 } from "./import";
 
 describe("lead import helpers", () => {
@@ -28,11 +29,14 @@ describe("lead import helpers", () => {
     expect("error" in parseChildAge("25")).toBe(true);
   });
 
-  it("normalizeCenterCode", () => {
+  it("normalizeCenterCode — chỉ chuẩn hoá format, KHÔNG hardcode CS hợp lệ", () => {
     expect(normalizeCenterCode("")).toEqual({ code: null });
     expect(normalizeCenterCode("cs1")).toEqual({ code: "CS1" });
     expect(normalizeCenterCode(" CS2 ")).toEqual({ code: "CS2" });
-    expect("error" in normalizeCenterCode("CS3")).toBe(true);
+    // CS3/CS4… mở thêm = data, helper phải chấp nhận (validity do DB resolve).
+    expect(normalizeCenterCode("CS3")).toEqual({ code: "CS3" });
+    // Format rõ ràng sai → lỗi sớm.
+    expect("error" in normalizeCenterCode("@@")).toBe(true);
   });
 
   it("parseLeadImportRow hợp lệ", () => {
@@ -42,7 +46,7 @@ describe("lead import helpers", () => {
       Email: "a@example.com",
       "Tên con": "Bé Bo",
       "Tuổi con": "8",
-      "Cơ sở (CS1/CS2/để trống)": "CS1",
+      [LEAD_IMPORT_CENTER_HEADER]: "CS1",
       "Khoá quan tâm": "Lập trình Robot",
       "Nguồn": "Sự kiện",
       "Ghi chú": "Quan tâm khoá hè",

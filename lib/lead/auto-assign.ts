@@ -91,7 +91,7 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
   }));
 }
 
-/** Tải lead mở theo cơ sở (cho chia đều CS1/CS2). */
+/** Tải lead mở theo cơ sở (cho chia đều giữa các cơ sở vận hành). */
 async function getCenterLoads(centerIds: string[]) {
   const counts = await db.lead.groupBy({
     by: ["centerId"],
@@ -113,7 +113,7 @@ export type AutoAssignResult = {
 
 /**
  * Chia 1 lead MỚI: (1) định cơ sở (lead có cơ sở → giữ; chưa có → chia đều
- * CS1/CS2); (2) trong cơ sở theo chế độ. Bỏ qua nếu lead đã được gán hoặc đã có
+ * giữa các cơ sở vận hành đang hoạt động); (2) trong cơ sở theo chế độ. Bỏ qua nếu lead đã được gán hoặc đã có
  * tương tác (khoá auto).
  */
 export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<AutoAssignResult> {
@@ -125,11 +125,12 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
   if (lead.assignedToId) return { ok: true, skipped: true, assignedToId: lead.assignedToId };
   if (await hasSaleInteraction(leadId)) return { ok: true, skipped: true };
 
-  // (1) Cơ sở.
+  // (1) Cơ sở — chia đều cho MỌI cơ sở vận hành đang hoạt động (CS3/CS4 thêm
+  // không cần sửa code). HO không có row Center nên tự loại khỏi phân phối lead.
   let centerId = lead.centerId;
   if (!centerId) {
     const cs = await db.center.findMany({
-      where: { code: { in: ["CS1", "CS2"] }, isActive: true },
+      where: { isActive: true },
       select: { id: true },
     });
     if (cs.length > 0) {

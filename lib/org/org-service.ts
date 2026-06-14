@@ -14,7 +14,10 @@ import {
   getAncestors as getAncestorsPure,
   getSubtreeCenterIds as getSubtreeCenterIdsPure,
   isAncestor as isAncestorPure,
+  selectableOrgUnits,
+  type SelectableOrgUnit,
 } from "./org-tree";
+import type { Actor } from "@/lib/auth/actor";
 
 export type CreateOrgUnitInput = {
   type: OrgUnitType;
@@ -193,4 +196,29 @@ export async function getAncestors(orgUnitId: string): Promise<OrgUnitNode[]> {
 export async function isAncestor(a: string, b: string): Promise<boolean> {
   const nodes = await loadNodes(true);
   return isAncestorPure(nodes, a, b);
+}
+
+/**
+ * Đơn vị tổ chức actor được phép chọn/lọc — NGUỒN DUY NHẤT cho mọi center-picker FE/BE.
+ * Thay cho list cứng ["CS1","CS2"] và bảng Center: gồm cả HO (Doc 15 OI-1).
+ * `opts.types: ["CENTER"]` khi chỉ cần cơ sở vận hành (gán lead/lớp); mặc định gồm HO.
+ */
+export async function getSelectableOrgUnits(
+  actor: Actor,
+  opts: { types?: OrgUnitType[]; includeDeleted?: boolean } = {},
+): Promise<SelectableOrgUnit[]> {
+  const rows = await db.orgUnit.findMany({
+    where: opts.includeDeleted ? {} : { deletedAt: null },
+  });
+  const nodes = rows.map((o) => ({ ...toNode(o), name: o.name }));
+  return selectableOrgUnits(
+    nodes,
+    {
+      isSuperAdmin: actor.isSuperAdmin,
+      isHoLevel: actor.isHoLevel,
+      visibleCenterIds: actor.visibleCenterIds,
+      roleOrgUnitIds: actor.orgRoles.map((r) => r.orgUnitId),
+    },
+    opts,
+  );
 }

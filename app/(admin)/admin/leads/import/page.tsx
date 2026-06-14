@@ -65,7 +65,7 @@ export default function ImportLeadsPage() {
         </ol>
         <ul className="mt-2 list-disc list-inside space-y-0.5">
           <li><b>SĐT</b> bắt buộc + hợp lệ (09xx / +84). Trùng SĐT → bỏ qua, không tạo mới.</li>
-          <li><b>Cơ sở</b>: để trống / CS1 / CS2. <b>Khoá quan tâm</b>: nếu điền phải khớp khoá có thật.</li>
+          <li><b>Cơ sở</b>: để trống hoặc mã cơ sở (vd CS1) — phải khớp cơ sở đang hoạt động. <b>Khoá quan tâm</b>: nếu điền phải khớp khoá có thật.</li>
           <li><b>Tuổi con</b>: 3–18 (hoặc trống).</li>
         </ul>
       </div>
