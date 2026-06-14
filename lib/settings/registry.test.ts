@@ -1,50 +1,106 @@
-// Vitest — R6-A registry (pure, không cần DB). US-R6A AC2: fallback default an toàn.
+/**
+ * R6-A — Unit test registry + resolve (thuần, không DB).
+ * Phủ: T1 (resolve precedence), T2 (validation), T3 (boundary), T12 (default an toàn).
+ */
 import { describe, it, expect } from "vitest";
 import {
-  SETTING_REGISTRY,
-  isSettingKey,
-  parseSetting,
-  settingDefault,
-} from "./registry";
+  SETTINGS,
+  SETTING_KEYS,
+  getSettingDef,
+  validateSettingValue,
+} from "@/lib/settings/registry";
+import { resolveSettingValue } from "@/lib/settings/resolve";
 
-describe("[Đợt0b] SETTING_REGISTRY", () => {
-  it("mọi key có default thỏa schema của chính nó", () => {
-    for (const [key, def] of Object.entries(SETTING_REGISTRY)) {
-      const r = def.schema.safeParse(def.default);
-      expect(r.success, `default của ${key} không hợp lệ`).toBe(true);
+describe("[R6-A] registry — validate giá trị (US-R6A-1 AC4)", () => {
+  it("[R6-A-T2-01] key không có schema → từ chối", () => {
+    const r = validateSettingValue("khong.ton.tai", 1);
+    expect(r.ok).toBe(false);
+  });
+
+  it("[R6-A-T2-02] sai kiểu (string cho key số) → từ chối", () => {
+    const r = validateSettingValue("student.nearEndThreshold", "abc");
+    expect(r.ok).toBe(false);
+  });
+
+  it("[R6-A-T3-01] vượt khoảng (sĩ số 0 < min 1) → từ chối", () => {
+    expect(validateSettingValue("class.minStudents.default", 0).ok).toBe(false);
+    expect(validateSettingValue("class.maxStudents.default", 101).ok).toBe(false);
+  });
+
+  it("[R6-A-T3-02] đúng biên (=1, =50) → chấp nhận", () => {
+    expect(validateSettingValue("student.nearEndThreshold", 1).ok).toBe(true);
+    expect(validateSettingValue("student.nearEndThreshold", 50).ok).toBe(true);
+  });
+
+  it("[R6-A-T2-03] proposalWindow fromDay > toDay → từ chối", () => {
+    const r = validateSettingValue("shift.proposalWindow", { fromDay: 28, toDay: 25 });
+    expect(r.ok).toBe(false);
+  });
+
+  it("[R6-A-T2-04] email sai định dạng → từ chối", () => {
+    const r = validateSettingValue("contact.emails", { primary: "not-email", recruitment: "a@b.vn" });
+    expect(r.ok).toBe(false);
+  });
+
+  it("[R6-A-T1-01] giá trị hợp lệ → ok + trả về value đã parse", () => {
+    const r = validateSettingValue("shift.toleranceMinutes", 10);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
+  });
+
+  it("[R6-A-T12-01] mọi default trong registry tự thỏa schema của nó", () => {
+    for (const key of SETTING_KEYS) {
+      const d = getSettingDef(key)!;
+      const r = d.schema.safeParse(d.default);
+      expect(r.success, `default của ${key} phải hợp lệ`).toBe(true);
     }
   });
+});
 
-  it("isSettingKey nhận diện key hợp lệ / loại key lạ", () => {
-    expect(isSettingKey("student.nearEndThreshold")).toBe(true);
-    expect(isSettingKey("khong.ton.tai")).toBe(false);
+describe("[R6-A] resolve — Center → Global → default (US-R6A-2)", () => {
+  const numDef = SETTINGS["class.maxStudents.default"]; // centerOverridable=true
+  const globalOnly = SETTINGS["enrollment.suspendMaxMonths"]; // centerOverridable=false
+
+  it("[R6-A-T1-02] không có row → trả default", () => {
+    expect(resolveSettingValue({ def: numDef })).toBe(20);
   });
 
-  it("parseSetting: value hợp lệ → giữ nguyên", () => {
-    expect(parseSetting("student.nearEndThreshold", 3)).toBe(3);
+  it("[R6-A-T1-03] chỉ có global → trả global", () => {
+    expect(resolveSettingValue({ def: numDef, globalRow: { valueJson: 24 } })).toBe(24);
   });
 
-  it("parseSetting: value invalid → rơi về default (AC2, không throw)", () => {
-    expect(parseSetting("student.nearEndThreshold", "bậy")).toBe(5);
-    expect(parseSetting("student.nearEndThreshold", -1)).toBe(5);
-    expect(parseSetting("otp.dailyLimit", null)).toBe(8);
+  it("[R6-A-T1-04] có center override → center thắng global", () => {
+    expect(
+      resolveSettingValue({
+        def: numDef,
+        globalRow: { valueJson: 24 },
+        centerRow: { valueJson: 12 },
+      }),
+    ).toBe(12);
   });
 
-  it("parseSetting: object setting (proposalWindow) validate được", () => {
-    expect(parseSetting("shift.proposalWindow", { startDay: 20, endDay: 24 })).toEqual({
-      startDay: 20,
-      endDay: 24,
-    });
-    // startDay > endDay → invalid → default
-    expect(parseSetting("shift.proposalWindow", { startDay: 28, endDay: 25 })).toEqual({
-      startDay: 25,
-      endDay: 28,
-    });
+  it("[R6-A-T1-05] key KHÔNG centerOverridable → bỏ qua center row, dùng global", () => {
+    expect(
+      resolveSettingValue({
+        def: globalOnly,
+        globalRow: { valueJson: 9 },
+        centerRow: { valueJson: 3 },
+      }),
+    ).toBe(9);
   });
 
-  it("settingDefault khớp giá trị hardcode cũ", () => {
-    expect(settingDefault("shift.geofenceRadiusMeters")).toBe(100);
-    expect(settingDefault("finance.debtReminderDaysBefore")).toBe(14);
-    expect(settingDefault("crm.dedupWindowDays")).toBe(90);
+  it("[R6-A-T8-01] center row hỏng schema → fallback global (không sập)", () => {
+    expect(
+      resolveSettingValue({
+        def: numDef,
+        globalRow: { valueJson: 24 },
+        centerRow: { valueJson: "hỏng" },
+      }),
+    ).toBe(24);
+  });
+
+  it("[R6-A-T8-02] global row hỏng schema → fallback default", () => {
+    expect(resolveSettingValue({ def: numDef, globalRow: { valueJson: 999999 } })).toBe(20);
+    // 999999 > max 100 → invalid → default
   });
 });

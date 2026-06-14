@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { WorkShift } from "@prisma/client";
 import { needsLeaveRequest, emergencyLimitReached } from "@/lib/shifts";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 type Result = { ok: true; status?: string } | { ok: false; error: string };
 

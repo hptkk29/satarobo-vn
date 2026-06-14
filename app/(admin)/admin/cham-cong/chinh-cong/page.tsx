@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { canAdjustTimesheet } from "@/lib/attendance/adjust";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 import { ReviewRow, type ReviewItem } from "./_components/review-row";
 
 export const metadata = { title: "Duyệt chỉnh công | Admin" };

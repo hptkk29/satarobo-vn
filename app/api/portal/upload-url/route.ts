@@ -5,7 +5,7 @@ import { v4 as uuid } from "uuid";
 import { auth } from "@/lib/auth";
 import { getR2Client, getR2Bucket, getPublicUrl } from "@/lib/storage/r2-client";
 import { UPLOAD_CONFIG, validateFile } from "@/lib/storage/upload-config";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 // POST /api/portal/upload-url — Phase T2.4
 // Presigned URL cho PHỤ HUYNH (PARENT) nộp bài tập của con. Chỉ cho ảnh/tài

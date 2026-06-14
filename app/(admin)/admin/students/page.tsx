@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 import { StudentStatus, type Prisma } from "@prisma/client";
 import {
   buildLifecycleWhere,

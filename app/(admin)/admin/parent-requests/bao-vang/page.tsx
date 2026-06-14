@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { classifyAbsenceUrgency } from "@/lib/students/absence";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 import { AbsenceRow, type AbsenceItem } from "./_components/absence-row";
 
 export const metadata = { title: "Báo vắng cần xử lý | Admin" };

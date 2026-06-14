@@ -6,7 +6,7 @@ import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
 import { rateLimit } from '@/lib/rate-limit'
 import { findRecentDuplicate, logDuplicateAttempt } from '@/lib/lead/dedup'
 import { autoAssignNewLead } from '@/lib/lead/auto-assign'
-import { getSetting } from '@/lib/settings'
+import { getSetting } from '@/lib/settings/service'
 
 // Rate limit — uses Upstash Redis when env vars set, in-memory fallback otherwise.
 // Ngưỡng đọc động từ SystemSetting "public.leadRateLimit*" (default 5 / 60s).

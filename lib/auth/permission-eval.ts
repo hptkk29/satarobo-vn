@@ -17,12 +17,15 @@ export function evaluatePermission(params: {
   target?: Target;
   flagOn: boolean;
   logger?: ShadowLogger;
+  /** R6-F2 — nhận (v1,v2) đã tính để persist shadow-diff (fire-and-forget ở runtime). */
+  onEvaluated?: (r: { v1: boolean; v2: boolean }) => void;
 }): boolean {
   const v1 =
     params.sessionUser && isValidAction(params.action)
       ? canMatrix(params.sessionUser, params.action as Action)
       : false;
   const v2 = params.actor ? canV2(params.actor, params.action, params.target) : false;
+  params.onEvaluated?.({ v1, v2 });
   return decidePermission({
     action: params.action,
     userId: params.actor?.userId ?? "anon",

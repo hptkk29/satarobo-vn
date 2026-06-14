@@ -2,7 +2,7 @@ import "server-only";
 import { createHmac, randomInt, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import { getPrimaryOtpProvider } from "./provider";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 // =============================================================================
 // Cụm A1 — OTP service (request + verify).

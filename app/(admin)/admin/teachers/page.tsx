@@ -12,7 +12,7 @@ import {
   TEACHER_STATUS_COLOR,
 } from "@/lib/teachers/labels";
 import { computeTeachingLoad } from "@/lib/teachers/load";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 export const metadata = { title: "Giáo viên | Admin" };
 

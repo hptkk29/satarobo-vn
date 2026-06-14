@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isNextMonthWindowOpen, isWeekendEditWindow, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 import { MyShiftsCalendar } from "./_components/my-shifts-calendar";
 
 export const metadata = { title: "Lịch ca của tôi | Admin" };
@@ -83,7 +83,7 @@ export default async function MyShiftsPage({ searchParams }: Props) {
   const todayStr = ymd(now);
 
   const proposalWindow = await getSetting("shift.proposalWindow");
-  const winLabel = `${proposalWindow.startDay}–${proposalWindow.endDay}`;
+  const winLabel = `${proposalWindow.fromDay}–${proposalWindow.toDay}`;
   const windowHint = isNextMonthWindowOpen(now, proposalWindow)
     ? `Đang trong cửa sổ ĐỀ XUẤT ca THÁNG SAU (ngày ${winLabel}). Lịch bạn chọn là ĐỀ XUẤT — quản lý duyệt (import Excel) để chốt chính thức.`
     : isWeekendEditWindow(now)

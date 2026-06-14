@@ -1,175 +1,318 @@
-// lib/settings/registry.ts — R6-A: đăng ký tham số vận hành động (SystemSetting).
-// THUẦN (không chạm DB) → test được. Mỗi key có: schema (Zod) + default an toàn =
-// GIÁ TRỊ HARDCODE HIỆN TẠI (BA US-R6A AC2: key chưa có trong DB → trả default, không lỗi).
-// Thêm key mới = thêm 1 entry ở đây (kèm default = hằng số cũ ở call-site) rồi wire getSetting.
+/**
+ * R6-A — Registry tham số vận hành (SystemSetting / CenterSetting).
+ *
+ * Mỗi key có: schema (Zod, source-of-truth validate), default (giá trị hardcode
+ * hiện tại — fallback an toàn), centerOverridable (cho phép override theo cơ sở?).
+ * KEY KHÔNG CÓ TRONG REGISTRY → không được ghi (US-R6A-1 AC4).
+ *
+ * Default lấy đúng giá trị đang hardcode trong code (additive, không đổi hành vi
+ * khi DB trống): student.nearEndThreshold=5 (lib/students/renewal.ts),
+ * class 5–20 (lib/validators/class.ts), shift.toleranceMinutes=5 /
+ * emergencyMonthlyLimit=3 (lib/shifts.ts), contact (lib/locations.ts),
+ * finance.debtReminderDaysBefore=14 (QĐ-O7), enrollment.suspendMaxMonths=6 (TBD-4).
+ */
 import { z } from "zod";
 
-export type SettingDef<T> = {
+export type SettingGroup =
+  | "student"
+  | "risk"
+  | "class"
+  | "shift"
+  | "contact"
+  | "finance"
+  | "enrollment"
+  | "crm"
+  | "otp"
+  | "teacher"
+  | "lms"
+  | "storage"
+  | "public";
+
+export interface SettingDef<T = unknown> {
+  key: string;
+  group: SettingGroup;
+  label: string;
   schema: z.ZodType<T>;
   default: T;
-  /** Mô tả ngắn cho UI admin. */
-  description: string;
-  /** Nhóm hiển thị trên UI (student/shift/otp/...). */
-  group: string;
-};
+  /** true = CenterSetting được override key này; false = chỉ GLOBAL. */
+  centerOverridable: boolean;
+}
+
+function def<T>(d: SettingDef<T>): SettingDef<T> {
+  return d;
+}
+
+const hotlineSchema = z.array(
+  z.object({
+    code: z.string().min(1),
+    label: z.string().min(1),
+    phone: z.string().min(1),
+  }),
+);
 
 const proposalWindowSchema = z
-  .object({ startDay: z.number().int().min(1).max(31), endDay: z.number().int().min(1).max(31) })
-  .refine((w) => w.startDay <= w.endDay, "startDay phải ≤ endDay");
+  .object({
+    fromDay: z.number().int().min(1).max(28),
+    toDay: z.number().int().min(1).max(28),
+  })
+  .refine((v) => v.fromDay <= v.toDay, {
+    message: "fromDay phải ≤ toDay",
+    path: ["fromDay"],
+  });
 
-// satisfies: giữ literal type của default để suy ra SettingValue<K> chính xác.
-export const SETTING_REGISTRY = {
-  // ── Học viên / vòng đời ──
-  "student.nearEndThreshold": {
-    schema: z.number().int().min(1).max(50),
-    default: 5, // lib/students/renewal.ts NEAR_END_THRESHOLD
-    description: "Số buổi còn lại để coi là 'sắp hết khóa' (nhắc gia hạn).",
-    group: "student",
-  },
-  "student.absenceUrgentThresholdDays": {
-    schema: z.number().int().min(1).max(30),
-    default: 3, // lib/students/absence.ts URGENT_THRESHOLD_DAYS
-    description: "Số ngày vắng để gắn cờ khẩn.",
-    group: "student",
-  },
-  "student.renewalWindowDays": {
-    schema: z.number().int().min(1).max(365),
-    default: 90, // lib/students/lifecycle.ts RENEWAL_WINDOW_DAYS
-    description: "Cửa sổ (ngày) coi là tái tục sau khi hoàn thành khoá.",
-    group: "student",
-  },
-  "student.frequentAbsentThreshold": {
-    schema: z.number().int().min(1).max(20),
-    default: 3, // lib/students/lifecycle.ts FREQUENT_ABSENT_THRESHOLD
-    description: "Số buổi vắng để coi là 'hay vắng'.",
-    group: "student",
-  },
-  "student.frequentAbsentWindow": {
-    schema: z.number().int().min(1).max(50),
-    default: 5, // lib/students/lifecycle.ts FREQUENT_ABSENT_WINDOW
-    description: "Số buổi gần nhất xét 'hay vắng'.",
-    group: "student",
-  },
-  // ── CRM / lead ──
-  "crm.dedupWindowDays": {
-    schema: z.number().int().min(1).max(365),
-    default: 90, // lib/crm/lead-qualify.ts & lib/lead/dedup.ts DEDUP_WINDOW_DAYS (trùng 2 nơi)
-    description: "Cửa sổ (ngày) coi lead trùng.",
-    group: "crm",
-  },
-  // ── Ca làm / chấm công ──
-  "shift.proposalWindow": {
-    schema: proposalWindowSchema,
-    default: { startDay: 25, endDay: 28 }, // lib/shifts.ts d>=25 && d<=28
-    description: "Cửa sổ ngày trong tháng cho phép đăng ký ca tháng sau.",
-    group: "shift",
-  },
-  "shift.geofenceRadiusMeters": {
-    schema: z.number().int().min(10).max(2000),
-    default: 100, // lib/attendance/qr.ts GEOFENCE_RADIUS_METERS
-    description: "Bán kính geofence (m) cho check-in QR.",
-    group: "shift",
-  },
-  "shift.managerEditWindowDays": {
-    schema: z.number().int().min(0).max(31),
-    default: 2, // lib/attendance/adjust.ts MANAGER_EDIT_WINDOW_DAYS
-    description: "Số ngày quản lý được sửa bảng công sau ngày công.",
-    group: "shift",
-  },
-  "shift.emergencyMonthlyLimit": {
-    schema: z.number().int().min(1).max(31),
-    default: 3, // lib/shifts.ts EMERGENCY_MONTHLY_LIMIT
-    description: "Số lần đổi/nghỉ khẩn cấp tối đa / tháng / nhân viên.",
-    group: "shift",
-  },
-  // ── OTP ──
-  "otp.ttlMinutes": {
-    schema: z.number().int().min(1).max(60),
-    default: 5, // lib/otp/service.ts OTP_TTL_MINUTES
-    description: "Hiệu lực OTP (phút).",
-    group: "otp",
-  },
-  "otp.maxAttempts": {
-    schema: z.number().int().min(1).max(20),
-    default: 5, // MAX_ATTEMPTS
-    description: "Số lần nhập sai OTP tối đa.",
-    group: "otp",
-  },
-  "otp.resendCooldownSec": {
-    schema: z.number().int().min(10).max(600),
-    default: 60, // RESEND_COOLDOWN_SEC
-    description: "Thời gian chờ gửi lại OTP (giây).",
-    group: "otp",
-  },
-  "otp.dailyLimit": {
-    schema: z.number().int().min(1).max(50),
-    default: 8, // DAILY_LIMIT
-    description: "Số OTP tối đa/ngày cho 1 số.",
-    group: "otp",
-  },
-  // ── Giáo viên ──
-  "teacher.overloadHoursPerWeek": {
-    schema: z.number().int().min(1).max(80),
-    default: 24, // lib/teachers/load.ts OVERLOAD_HOURS_PER_WEEK
-    description: "Ngưỡng giờ/tuần coi là quá tải.",
-    group: "teacher",
-  },
-  // ── LMS / media ──
-  "lms.mediaSignedUrlTtl": {
-    schema: z.number().int().min(60).max(86400),
-    default: 900, // lib/lms/media-key.ts MEDIA_SIGNED_URL_TTL_SECONDS
-    description: "Hiệu lực signed URL media (giây).",
-    group: "lms",
-  },
-  // ── Tài chính ──
-  "finance.debtReminderDaysBefore": {
-    schema: z.number().int().min(1).max(60),
-    default: 14, // app/api/cron/debt-reminder/route.ts
-    description: "Số ngày trước hạn để nhắc công nợ.",
-    group: "finance",
-  },
-  // ── Storage ──
-  "storage.presignTtlSec": {
-    schema: z.number().int().min(30).max(3600),
-    default: 300, // app/api/{portal,admin}/upload-url presign TTL
-    description: "Hiệu lực presigned upload URL (giây).",
-    group: "storage",
-  },
-  // ── Public form (chống spam) ──
-  "public.leadRateLimitMax": {
-    schema: z.number().int().min(1).max(100),
-    default: 5, // app/api/leads/route.ts RATE_LIMIT_MAX
-    description: "Số lần gửi form lead tối đa mỗi cửa sổ / IP.",
-    group: "public",
-  },
-  "public.leadRateLimitWindowMs": {
-    schema: z.number().int().min(1000).max(3_600_000),
-    default: 60_000, // RATE_LIMIT_WINDOW_MS
-    description: "Cửa sổ rate-limit form lead (ms).",
-    group: "public",
-  },
-} as const satisfies Record<string, SettingDef<unknown>>;
-
-export type SettingKey = keyof typeof SETTING_REGISTRY;
-
-export type SettingValue<K extends SettingKey> = z.infer<
-  (typeof SETTING_REGISTRY)[K]["schema"]
->;
-
-export function isSettingKey(key: string): key is SettingKey {
-  return Object.prototype.hasOwnProperty.call(SETTING_REGISTRY, key);
-}
+const emailsSchema = z.object({
+  primary: z.string().email(),
+  recruitment: z.string().email(),
+});
 
 /**
- * Parse raw value (từ DB Json) theo schema của key.
- * Lỗi/invalid → trả default an toàn (AC2: không bao giờ throw ra call-site).
+ * Bảng key cấu hình. Thêm key mới = thêm 1 entry ở đây (schema + default).
  */
-export function parseSetting<K extends SettingKey>(key: K, raw: unknown): SettingValue<K> {
-  const def = SETTING_REGISTRY[key];
-  const r = def.schema.safeParse(raw);
-  return (r.success ? r.data : def.default) as SettingValue<K>;
+export const SETTINGS = {
+  "student.nearEndThreshold": def({
+    key: "student.nearEndThreshold",
+    group: "student",
+    label: "Ngưỡng 'sắp hết khóa' (số buổi còn lại)",
+    schema: z.number().int().min(1).max(50),
+    default: 5,
+    centerOverridable: true,
+  }),
+  "risk.careTaskDueDays": def({
+    key: "risk.careTaskDueDays",
+    group: "risk",
+    label: "Hạn xử lý task chăm sóc (ngày)",
+    schema: z.number().int().min(1).max(30),
+    default: 2,
+    centerOverridable: true,
+  }),
+  "class.minStudents.default": def({
+    key: "class.minStudents.default",
+    group: "class",
+    label: "Sĩ số tối thiểu mặc định",
+    schema: z.number().int().min(1).max(100),
+    default: 5,
+    centerOverridable: true,
+  }),
+  "class.maxStudents.default": def({
+    key: "class.maxStudents.default",
+    group: "class",
+    label: "Sĩ số tối đa mặc định",
+    schema: z.number().int().min(1).max(100),
+    default: 20,
+    centerOverridable: true,
+  }),
+  "shift.toleranceMinutes": def({
+    key: "shift.toleranceMinutes",
+    group: "shift",
+    label: "Dung sai chấm công (phút)",
+    schema: z.number().int().min(0).max(120),
+    default: 5,
+    centerOverridable: true,
+  }),
+  "shift.emergencyMonthlyLimit": def({
+    key: "shift.emergencyMonthlyLimit",
+    group: "shift",
+    label: "Quota đăng ký ca khẩn cấp / tháng",
+    schema: z.number().int().min(0).max(31),
+    default: 3,
+    centerOverridable: true,
+  }),
+  "shift.proposalWindow": def({
+    key: "shift.proposalWindow",
+    group: "shift",
+    label: "Cửa sổ đăng ký ca tháng sau (ngày trong tháng)",
+    schema: proposalWindowSchema,
+    default: { fromDay: 25, toDay: 28 },
+    centerOverridable: true,
+  }),
+  "contact.hotlines": def({
+    key: "contact.hotlines",
+    group: "contact",
+    label: "Hotline hiển thị theo cơ sở",
+    schema: hotlineSchema,
+    default: [
+      { code: "CS1", label: "Cơ sở 1 - Nguyễn Hữu Thọ", phone: "0818.823.720" },
+      { code: "CS2", label: "Cơ sở 2 - Hoàng Diệu", phone: "0702.193.933" },
+    ],
+    centerOverridable: false,
+  }),
+  "contact.emails": def({
+    key: "contact.emails",
+    group: "contact",
+    label: "Email hiển thị",
+    schema: emailsSchema,
+    default: {
+      primary: "thongtin@satarobo.vn",
+      recruitment: "tuyendung@satarobo.vn",
+    },
+    centerOverridable: false,
+  }),
+  "finance.debtReminderDaysBefore": def({
+    key: "finance.debtReminderDaysBefore",
+    group: "finance",
+    label: "Nhắc công nợ trước đợt 2 (ngày)",
+    schema: z.number().int().min(1).max(60),
+    default: 14,
+    centerOverridable: true,
+  }),
+  "enrollment.suspendMaxMonths": def({
+    key: "enrollment.suspendMaxMonths",
+    group: "enrollment",
+    label: "Trần thời hạn bảo lưu (tháng)",
+    schema: z.number().int().min(1).max(24),
+    default: 6,
+    centerOverridable: false,
+  }),
+  // ── Bổ sung (hardcode remediation Đợt 3): wire hằng số call-site về registry ──
+  "student.absenceUrgentThresholdDays": def({
+    key: "student.absenceUrgentThresholdDays",
+    group: "student",
+    label: "Số ngày báo vắng coi là khẩn",
+    schema: z.number().int().min(1).max(30),
+    default: 3, // lib/students/absence.ts URGENT_THRESHOLD_DAYS
+    centerOverridable: true,
+  }),
+  "student.renewalWindowDays": def({
+    key: "student.renewalWindowDays",
+    group: "student",
+    label: "Cửa sổ tái tục sau hoàn thành khoá (ngày)",
+    schema: z.number().int().min(1).max(365),
+    default: 90, // lib/students/lifecycle.ts RENEWAL_WINDOW_DAYS
+    centerOverridable: true,
+  }),
+  "student.frequentAbsentThreshold": def({
+    key: "student.frequentAbsentThreshold",
+    group: "student",
+    label: "Số buổi vắng coi là 'hay vắng'",
+    schema: z.number().int().min(1).max(20),
+    default: 3, // lib/students/lifecycle.ts FREQUENT_ABSENT_THRESHOLD
+    centerOverridable: true,
+  }),
+  "student.frequentAbsentWindow": def({
+    key: "student.frequentAbsentWindow",
+    group: "student",
+    label: "Số buổi gần nhất xét 'hay vắng'",
+    schema: z.number().int().min(1).max(50),
+    default: 5, // lib/students/lifecycle.ts FREQUENT_ABSENT_WINDOW
+    centerOverridable: true,
+  }),
+  "crm.dedupWindowDays": def({
+    key: "crm.dedupWindowDays",
+    group: "crm",
+    label: "Cửa sổ chống trùng lead (ngày)",
+    schema: z.number().int().min(1).max(365),
+    default: 90, // lib/crm/lead-qualify.ts & lib/lead/dedup.ts
+    centerOverridable: false,
+  }),
+  "shift.geofenceRadiusMeters": def({
+    key: "shift.geofenceRadiusMeters",
+    group: "shift",
+    label: "Bán kính geofence check-in QR (m)",
+    schema: z.number().int().min(10).max(2000),
+    default: 100, // lib/attendance/qr.ts GEOFENCE_RADIUS_METERS
+    centerOverridable: true,
+  }),
+  "shift.managerEditWindowDays": def({
+    key: "shift.managerEditWindowDays",
+    group: "shift",
+    label: "Số ngày quản lý được sửa bảng công",
+    schema: z.number().int().min(0).max(31),
+    default: 2, // lib/attendance/adjust.ts MANAGER_EDIT_WINDOW_DAYS
+    centerOverridable: true,
+  }),
+  "otp.ttlMinutes": def({
+    key: "otp.ttlMinutes",
+    group: "otp",
+    label: "Hiệu lực OTP (phút)",
+    schema: z.number().int().min(1).max(60),
+    default: 5, // lib/otp/service.ts
+    centerOverridable: false,
+  }),
+  "otp.maxAttempts": def({
+    key: "otp.maxAttempts",
+    group: "otp",
+    label: "Số lần nhập sai OTP tối đa",
+    schema: z.number().int().min(1).max(20),
+    default: 5,
+    centerOverridable: false,
+  }),
+  "otp.resendCooldownSec": def({
+    key: "otp.resendCooldownSec",
+    group: "otp",
+    label: "Chờ gửi lại OTP (giây)",
+    schema: z.number().int().min(10).max(600),
+    default: 60,
+    centerOverridable: false,
+  }),
+  "otp.dailyLimit": def({
+    key: "otp.dailyLimit",
+    group: "otp",
+    label: "Số OTP tối đa/ngày cho 1 số",
+    schema: z.number().int().min(1).max(50),
+    default: 8,
+    centerOverridable: false,
+  }),
+  "teacher.overloadHoursPerWeek": def({
+    key: "teacher.overloadHoursPerWeek",
+    group: "teacher",
+    label: "Ngưỡng giờ/tuần coi là quá tải",
+    schema: z.number().int().min(1).max(80),
+    default: 24, // lib/teachers/load.ts OVERLOAD_HOURS_PER_WEEK
+    centerOverridable: true,
+  }),
+  "lms.mediaSignedUrlTtl": def({
+    key: "lms.mediaSignedUrlTtl",
+    group: "lms",
+    label: "Hiệu lực signed URL media (giây)",
+    schema: z.number().int().min(60).max(86400),
+    default: 900, // lib/lms/media-key.ts
+    centerOverridable: false,
+  }),
+  "storage.presignTtlSec": def({
+    key: "storage.presignTtlSec",
+    group: "storage",
+    label: "Hiệu lực presigned upload URL (giây)",
+    schema: z.number().int().min(30).max(3600),
+    default: 300, // app/api/{portal,admin}/upload-url
+    centerOverridable: false,
+  }),
+  "public.leadRateLimitMax": def({
+    key: "public.leadRateLimitMax",
+    group: "public",
+    label: "Số lần gửi form lead tối đa / cửa sổ / IP",
+    schema: z.number().int().min(1).max(100),
+    default: 5, // app/api/leads/route.ts
+    centerOverridable: false,
+  }),
+  "public.leadRateLimitWindowMs": def({
+    key: "public.leadRateLimitWindowMs",
+    group: "public",
+    label: "Cửa sổ rate-limit form lead (ms)",
+    schema: z.number().int().min(1000).max(3_600_000),
+    default: 60_000,
+    centerOverridable: false,
+  }),
+} as const;
+
+export type SettingKey = keyof typeof SETTINGS;
+
+export const SETTING_KEYS = Object.keys(SETTINGS) as SettingKey[];
+
+export function getSettingDef(key: string): SettingDef | undefined {
+  return (SETTINGS as Record<string, SettingDef>)[key];
 }
 
-export function settingDefault<K extends SettingKey>(key: K): SettingValue<K> {
-  return SETTING_REGISTRY[key].default as SettingValue<K>;
+export type ValidateResult =
+  | { ok: true; value: unknown }
+  | { ok: false; error: string };
+
+/** Validate value theo schema của key. Key không có schema → từ chối. */
+export function validateSettingValue(key: string, value: unknown): ValidateResult {
+  const d = getSettingDef(key);
+  if (!d) return { ok: false, error: `Key cấu hình không hợp lệ (không có schema): ${key}` };
+  const r = d.schema.safeParse(value);
+  if (!r.success) {
+    return { ok: false, error: r.error.issues[0]?.message ?? "Giá trị không hợp lệ" };
+  }
+  return { ok: true, value: r.data };
 }

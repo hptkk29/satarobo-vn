@@ -7,10 +7,17 @@ import { resolveActor, type Target } from "@/lib/auth/actor";
 import { PermissionError } from "@/lib/auth/can";
 import { isRbacV2Enabled } from "@/lib/flags";
 import { evaluatePermission } from "@/lib/auth/permission-eval";
+import { recordPermissionShadow } from "@/lib/auth/shadow-report";
 
 export { evaluatePermission };
 
-/** Runtime: lấy session + resolveActor (1 query/request) → evaluatePermission. */
+function targetKey(target?: Target): string | null {
+  if (!target) return null;
+  return target.centerId ?? target.classId ?? target.createdById ?? null;
+}
+
+/** Runtime: lấy session + resolveActor (1 query/request) → evaluatePermission.
+ *  R6-F2: persist shadow-diff khi v1≠v2 (fire-and-forget) để dựng report bật flag. */
 export async function checkPermission(action: string, target?: Target): Promise<boolean> {
   const session = await auth();
   if (!session?.user) return false;
@@ -21,6 +28,11 @@ export async function checkPermission(action: string, target?: Target): Promise<
     action,
     target,
     flagOn: isRbacV2Enabled(),
+    onEvaluated: ({ v1, v2 }) => {
+      if (v1 !== v2) {
+        void recordPermissionShadow({ action, userId: actor.userId, v1, v2, targetKey: targetKey(target) });
+      }
+    },
   });
 }
 

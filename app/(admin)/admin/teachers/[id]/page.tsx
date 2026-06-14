@@ -9,7 +9,7 @@ import { ClassAssignmentSection } from "./_components/class-assignment";
 import { WeeklySchedule } from "./_components/weekly-schedule";
 import type { TeacherClassSlot } from "@/lib/teachers/schedule";
 import { computeTeachingLoad } from "@/lib/teachers/load";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 import { TeacherEvaluations } from "./_components/evaluations";
 
 export const metadata = { title: "Hồ sơ giáo viên | Admin" };

@@ -2,7 +2,7 @@
 // Có SĐT + note → tạo Lead (qualifiedAt), dedup phone 90 ngày, set commissionSource.
 import type { CommissionSource, Lead } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 export class LeadQualifyError extends Error {
   readonly code: string;

@@ -5,7 +5,7 @@
 // vào danh sách "Sắp hết khoá" cho sale + hiển thị cho phụ huynh.
 
 import { db } from "@/lib/db";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import {

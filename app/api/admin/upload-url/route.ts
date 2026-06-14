@@ -9,7 +9,7 @@ import {
   UploadCategory,
   validateFile,
 } from "@/lib/storage/upload-config";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 // POST /api/admin/upload-url
 // Sinh presigned URL để browser PUT trực tiếp lên R2 (không qua server).

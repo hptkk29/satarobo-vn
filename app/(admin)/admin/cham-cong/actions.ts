@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { verifyQrToken, distanceMeters } from "@/lib/attendance/qr";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 // =============================================================================
 // EMPLOYEE CHECK-IN — Phase NHÓM 4 (Module Chấm công PHẦN 1)

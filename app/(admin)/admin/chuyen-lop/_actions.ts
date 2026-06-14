@@ -62,7 +62,11 @@ export async function approveTransferAction(requestId: string, note?: string): P
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "enrollments:transfer")) return { ok: false, error: "Không có quyền" };
 
-  const res = await approveTransfer(requestId, session.user.id, note ?? null);
+  const auditActor = getAuditActor(session);
+  const res = await approveTransfer(requestId, session.user.id, note ?? null, {
+    actor: { id: auditActor.actorId, name: auditActor.actorName },
+    reason: note ?? undefined,
+  });
   if (!res.ok) return res;
 
   const req = await (await import("@/lib/db")).db.studentTransferRequest.findUnique({

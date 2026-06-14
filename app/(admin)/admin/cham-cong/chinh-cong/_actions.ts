@@ -7,7 +7,7 @@ import { can, hasRole } from "@/lib/auth/permissions";
 import { getAuditActor } from "@/lib/audit/log";
 import { db } from "@/lib/db";
 import { canAdjustTimesheet, combineVNDateTime } from "@/lib/attendance/adjust";
-import { getSetting } from "@/lib/settings";
+import { getSetting } from "@/lib/settings/service";
 
 // Module Chấm công PHẦN 4 — yêu cầu chỉnh công (NV gửi) + duyệt/áp chỉnh (quản lý).
 
