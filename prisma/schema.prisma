@@ -4025,3 +4025,15 @@ model IntegrationLog {
 
   @@index([provider, status, createdAt])
 }
+
+// ─── R6-A — SystemSetting (tham số vận hành động, thay hằng số trong code) ───
+// Doc 15 + BA R6 US-R6A: key đăng ký trong lib/settings/registry.ts (default an toàn =
+// giá trị hardcode cũ → AC2). getSetting() cache TTL ≤60s (AC1). Đổi value qua UI admin
+// + audit (updatedById). CenterSetting override theo OrgUnit = mở rộng "Should" về sau.
+model SystemSetting {
+  key         String   @id // vd "student.nearEndThreshold" — validate qua SETTING_REGISTRY
+  value       Json
+  updatedById String? // user đổi gần nhất (audit nhẹ; chi tiết ở AuditLog)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
