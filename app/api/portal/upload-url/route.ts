@@ -5,6 +5,7 @@ import { v4 as uuid } from "uuid";
 import { auth } from "@/lib/auth";
 import { getR2Client, getR2Bucket, getPublicUrl } from "@/lib/storage/r2-client";
 import { UPLOAD_CONFIG, validateFile } from "@/lib/storage/upload-config";
+import { getSetting } from "@/lib/settings";
 
 // POST /api/portal/upload-url — Phase T2.4
 // Presigned URL cho PHỤ HUYNH (PARENT) nộp bài tập của con. Chỉ cho ảnh/tài
@@ -80,12 +81,13 @@ export async function POST(req: NextRequest) {
       Key: key,
       ContentType: mimeType,
     });
-    const uploadUrl = await getSignedUrl(getR2Client(), command, { expiresIn: 300 });
+    const ttl = await getSetting("storage.presignTtlSec");
+    const uploadUrl = await getSignedUrl(getR2Client(), command, { expiresIn: ttl });
     return NextResponse.json({
       uploadUrl,
       publicUrl: getPublicUrl(key),
       key,
-      expiresIn: 300,
+      expiresIn: ttl,
     });
   } catch (err) {
     console.error("[portal upload-url]", err);

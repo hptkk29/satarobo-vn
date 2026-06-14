@@ -76,6 +76,12 @@ export const SETTING_REGISTRY = {
     description: "Số ngày quản lý được sửa bảng công sau ngày công.",
     group: "shift",
   },
+  "shift.emergencyMonthlyLimit": {
+    schema: z.number().int().min(1).max(31),
+    default: 3, // lib/shifts.ts EMERGENCY_MONTHLY_LIMIT
+    description: "Số lần đổi/nghỉ khẩn cấp tối đa / tháng / nhân viên.",
+    group: "shift",
+  },
   // ── OTP ──
   "otp.ttlMinutes": {
     schema: z.number().int().min(1).max(60),
@@ -121,6 +127,13 @@ export const SETTING_REGISTRY = {
     default: 14, // app/api/cron/debt-reminder/route.ts
     description: "Số ngày trước hạn để nhắc công nợ.",
     group: "finance",
+  },
+  // ── Storage ──
+  "storage.presignTtlSec": {
+    schema: z.number().int().min(30).max(3600),
+    default: 300, // app/api/{portal,admin}/upload-url presign TTL
+    description: "Hiệu lực presigned upload URL (giây).",
+    group: "storage",
   },
   // ── Public form (chống spam) ──
   "public.leadRateLimitMax": {

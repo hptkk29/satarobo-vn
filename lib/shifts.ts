@@ -61,9 +61,13 @@ export function isWeekendEditWindow(now: Date): boolean {
   return day === 0 || day === 6;
 }
 
-/** Đã chạm trần khẩn cấp khi số lần khẩn cấp trong tháng ≥ giới hạn. */
-export function emergencyLimitReached(usedThisMonth: number): boolean {
-  return usedThisMonth >= EMERGENCY_MONTHLY_LIMIT;
+/** Đã chạm trần khẩn cấp khi số lần khẩn cấp trong tháng ≥ giới hạn.
+ * `limit`: caller async truyền từ SystemSetting "shift.emergencyMonthlyLimit". */
+export function emergencyLimitReached(
+  usedThisMonth: number,
+  limit: number = EMERGENCY_MONTHLY_LIMIT,
+): boolean {
+  return usedThisMonth >= limit;
 }
 
 /** Số ngày từ now tới ngày làm (âm nếu đã qua). */
