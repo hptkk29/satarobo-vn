@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, X } from "lucide-react";
 import { changeEmployeeRoleAction } from "@/app/(admin)/admin/nhan-su/actions";
+import { ROLE_LABELS, getRoleOptions } from "@/lib/labels";
 
+// Role gán cho nhân viên (loại PARENT) — nhãn lấy từ single source lib/labels.
 type Role =
   | "SUPER_ADMIN"
   | "CENTER_MANAGER"
@@ -14,19 +16,17 @@ type Role =
   | "MARKETING"
   | "ACCOUNTANT";
 
-const ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "SUPER_ADMIN", label: "Super Admin" },
-  { value: "CENTER_MANAGER", label: "Quản lý" },
-  { value: "HR", label: "Nhân sự" },
-  { value: "SALES_CSM", label: "Tư vấn tuyển sinh" },
-  { value: "TEACHER", label: "Giáo viên" },
-  { value: "MARKETING", label: "Marketing" },
-  { value: "ACCOUNTANT", label: "Kế toán" },
-];
+const ROLE_OPTIONS = getRoleOptions([
+  "SUPER_ADMIN",
+  "CENTER_MANAGER",
+  "HR",
+  "SALES_CSM",
+  "TEACHER",
+  "MARKETING",
+  "ACCOUNTANT",
+]) as Array<{ value: Role; label: string }>;
 
-const ROLE_LABEL: Record<Role, string> = Object.fromEntries(
-  ROLE_OPTIONS.map((r) => [r.value, r.label]),
-) as Record<Role, string>;
+const ROLE_LABEL = ROLE_LABELS;
 
 interface Props {
   employeeId: string;

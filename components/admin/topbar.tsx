@@ -12,22 +12,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { roleLabel } from "@/lib/labels";
 
 interface TopbarProps {
   userName?: string | null;
   userRole?: string;
 }
-
-const ROLE_LABELS: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  CENTER_MANAGER: "Quản lý cơ sở",
-  HR: "Nhân sự (HR)",
-  SALES_CSM: "Tư vấn & Chăm sóc",
-  TEACHER: "Giáo viên",
-  MARKETING: "Marketing",
-  ACCOUNTANT: "Kế toán",
-  PARENT: "Phụ huynh",
-};
 
 export function Topbar({ userName, userRole }: TopbarProps) {
   const router = useRouter();
@@ -69,7 +59,7 @@ export function Topbar({ userName, userRole }: TopbarProps) {
             <div className="hidden text-left md:block">
               <p className="text-sm font-medium text-neutral-900">{userName ?? "Admin"}</p>
               <p className="text-xs text-neutral-500">
-                {ROLE_LABELS[userRole ?? ""] ?? userRole}
+                {roleLabel(userRole)}
               </p>
             </div>
             <ChevronDown className="h-4 w-4 text-neutral-400" />
