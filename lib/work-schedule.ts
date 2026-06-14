@@ -91,15 +91,18 @@ export type ShiftAttendance = {
  * - đăng ký mà không quét → "Thiếu ca".
  * - Đủ công = giờ công thực ≥ giờ kỳ vọng (tổng khoảng liên tục) − dung sai.
  */
-export function computeShiftAttendance(input: {
-  checkIn: Date | null;
-  checkOut: Date | null;
-  geofenceFlag: boolean;
-  registeredShifts: WorkShift[];
-}): ShiftAttendance {
+export function computeShiftAttendance(
+  input: {
+    checkIn: Date | null;
+    checkOut: Date | null;
+    geofenceFlag: boolean;
+    registeredShifts: WorkShift[];
+  },
+  toleranceMinutes: number = SHIFT_TOLERANCE_MIN, // caller async truyền từ SystemSetting "shift.toleranceMinutes"
+): ShiftAttendance {
   const { checkIn, checkOut, geofenceFlag, registeredShifts } = input;
   const tags: AttendanceTag[] = [];
-  const tolH = SHIFT_TOLERANCE_MIN / 60;
+  const tolH = toleranceMinutes / 60;
 
   if (geofenceFlag) tags.push({ label: "Ngoài vùng", tone: "danger" });
 
@@ -132,8 +135,8 @@ export function computeShiftAttendance(input: {
 
   const firstStart = intervals[0].start;
   const lastEnd = intervals[intervals.length - 1].end;
-  const late = ci > firstStart + SHIFT_TOLERANCE_MIN;
-  const earlyLeave = co < lastEnd - SHIFT_TOLERANCE_MIN;
+  const late = ci > firstStart + toleranceMinutes;
+  const earlyLeave = co < lastEnd - toleranceMinutes;
   const enough = workedHours >= expectedHours - tolH;
 
   if (late) tags.push({ label: "Đi muộn", tone: "warn" });

@@ -12,6 +12,7 @@ import {
   type AttendanceTag,
 } from "@/lib/work-schedule";
 import { SHIFT_DEFS, SHIFT_ORDER } from "@/lib/shifts";
+import { getSetting } from "@/lib/settings/service";
 
 export const metadata = { title: "Chấm công | Admin" };
 export const dynamic = "force-dynamic";
@@ -84,16 +85,20 @@ export default async function ChamCongPage({ searchParams }: Props) {
     a.registeredShifts = reg.shifts;
   }
 
+  const shiftTolerance = await getSetting("shift.toleranceMinutes");
   const list = [...byUser.values()]
     .sort((x, y) => x.userName.localeCompare(y.userName))
     .map((a) => ({
       ...a,
-      status: computeShiftAttendance({
-        checkIn: a.checkIn,
-        checkOut: a.checkOut,
-        geofenceFlag: a.geofenceFlag,
-        registeredShifts: a.registeredShifts,
-      }),
+      status: computeShiftAttendance(
+        {
+          checkIn: a.checkIn,
+          checkOut: a.checkOut,
+          geofenceFlag: a.geofenceFlag,
+          registeredShifts: a.registeredShifts,
+        },
+        shiftTolerance,
+      ),
     }));
 
   const centers = await db.center.findMany({ select: { id: true, name: true } });
