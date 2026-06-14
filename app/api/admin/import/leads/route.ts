@@ -33,9 +33,9 @@ export async function POST(req: NextRequest) {
   // Stage 1: parse thuần từng dòng.
   const parsed = rows.map((r) => parseLeadImportRow((r ?? {}) as Record<string, unknown>));
 
-  // Resolve cơ sở (CS1/CS2 → centerId) + khoá (tên/slug → courseId).
+  // Resolve cơ sở (mã CS → centerId, mọi cơ sở có code) + khoá (tên/slug → courseId).
   const [centers, courses] = await Promise.all([
-    db.center.findMany({ where: { code: { in: ["CS1", "CS2"] } }, select: { id: true, code: true } }),
+    db.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
     db.course.findMany({ select: { id: true, name: true, slug: true } }),
   ]);
   const centerByCode = new Map(centers.map((c) => [c.code, c.id]));

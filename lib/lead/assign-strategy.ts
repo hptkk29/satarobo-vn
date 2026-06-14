@@ -42,8 +42,8 @@ export function pickRoundRobin(candidates: { id: string; openCount: number }[]):
 export type CenterLoad = { centerId: string; openCount: number };
 
 /**
- * Lead CHƯA chọn cơ sở → chia ĐỀU 2 cơ sở: chọn cơ sở có ÍT lead mở hơn.
- * Tie-break theo centerId để ổn định.
+ * Lead CHƯA chọn cơ sở → chia ĐỀU giữa các cơ sở: chọn cơ sở có ÍT lead mở hơn.
+ * Tie-break theo centerId để ổn định. Số cơ sở do caller truyền (động, không cố định 2).
  */
 export function pickCenterEvenly(centers: CenterLoad[]): string | null {
   if (centers.length === 0) return null;

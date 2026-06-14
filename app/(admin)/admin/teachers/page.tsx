@@ -12,6 +12,7 @@ import {
   TEACHER_STATUS_COLOR,
 } from "@/lib/teachers/labels";
 import { computeTeachingLoad } from "@/lib/teachers/load";
+import { getSetting } from "@/lib/settings/service";
 
 export const metadata = { title: "Giáo viên | Admin" };
 
@@ -92,6 +93,8 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
     /* empty DB returns [] */
   }
 
+  const overloadHours = await getSetting("teacher.overloadHoursPerWeek");
+
   return (
     <div>
       <div className="mb-6">
@@ -142,7 +145,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
                 </tr>
               ) : (
                 staff.map((u) => {
-                  const load = computeTeachingLoad(u.teacherClass);
+                  const load = computeTeachingLoad(u.teacherClass, overloadHours);
                   return (
                   <tr key={u.id} className="hover:bg-gray-50/60">
                     <td className="px-4 py-3">

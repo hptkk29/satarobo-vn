@@ -2,6 +2,7 @@
 // Có SĐT + note → tạo Lead (qualifiedAt), dedup phone 90 ngày, set commissionSource.
 import type { CommissionSource, Lead } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings/service";
 
 export class LeadQualifyError extends Error {
   readonly code: string;
@@ -11,8 +12,6 @@ export class LeadQualifyError extends Error {
     this.code = code;
   }
 }
-
-const DEDUP_WINDOW_DAYS = 90;
 
 /** Chuẩn hóa SĐT VN: giữ chữ số. THUẦN. */
 export function normalizePhone(raw: string | null | undefined): string {
@@ -56,8 +55,9 @@ export async function qualifyConversationToLead(input: {
   const conv = await db.messengerConversation.findUnique({ where: { id: input.conversationId } });
   if (!conv) throw new LeadQualifyError("CONVERSATION_NOT_FOUND", "Không tìm thấy hội thoại.");
 
-  // Dedup phone 90 ngày (C4.3).
-  const cutoff = new Date(now.getTime() - DEDUP_WINDOW_DAYS * 86_400_000);
+  // Dedup phone trong cửa sổ cấu hình (C4.3) — SystemSetting "crm.dedupWindowDays" (default 90).
+  const dedupWindowDays = await getSetting("crm.dedupWindowDays");
+  const cutoff = new Date(now.getTime() - dedupWindowDays * 86_400_000);
   const existing = await db.lead.findFirst({
     where: { phone, deletedAt: null, createdAt: { gte: cutoff } },
     orderBy: { createdAt: "desc" },

@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { WorkShift } from "@prisma/client";
-import { needsLeaveRequest, emergencyLimitReached, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
+import { needsLeaveRequest, emergencyLimitReached } from "@/lib/shifts";
+import { getSetting } from "@/lib/settings/service";
 
 type Result = { ok: true; status?: string } | { ok: false; error: string };
 
@@ -52,10 +53,11 @@ export async function saveMyShifts(input: unknown): Promise<Result> {
           date: { gte: monthStart, lt: monthEnd },
         },
       });
-      if (emergencyLimitReached(used)) {
+      const emergencyLimit = await getSetting("shift.emergencyMonthlyLimit");
+      if (emergencyLimitReached(used, emergencyLimit)) {
         return {
           ok: false,
-          error: `Đã dùng hết ${EMERGENCY_MONTHLY_LIMIT} lần đổi/nghỉ khẩn cấp trong tháng. Liên hệ quản lý.`,
+          error: `Đã dùng hết ${emergencyLimit} lần đổi/nghỉ khẩn cấp trong tháng. Liên hệ quản lý.`,
         };
       }
     }

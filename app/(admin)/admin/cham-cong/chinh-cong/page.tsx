@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { canAdjustTimesheet } from "@/lib/attendance/adjust";
+import { getSetting } from "@/lib/settings/service";
 import { ReviewRow, type ReviewItem } from "./_components/review-row";
 
 export const metadata = { title: "Duyệt chỉnh công | Admin" };
@@ -34,9 +35,10 @@ export default async function ChinhCongPage() {
   const userMap = new Map(users.map((u) => [u.id, u]));
 
   const now = new Date();
+  const editWindowDays = await getSetting("shift.managerEditWindowDays");
   const items: ReviewItem[] = rows.map((r) => {
     const u = userMap.get(r.userId);
-    const gate = canAdjustTimesheet({ isSuperAdmin: isSuper, isCenterManager: isCM, workDate: r.date, now });
+    const gate = canAdjustTimesheet({ isSuperAdmin: isSuper, isCenterManager: isCM, workDate: r.date, now }, editWindowDays);
     return {
       id: r.id,
       userName: u?.name ?? u?.email ?? "(không tên)",

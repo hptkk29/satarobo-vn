@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
+import { getSetting } from "@/lib/settings/service";
 import { StudentStatus, type Prisma } from "@prisma/client";
 import {
   buildLifecycleWhere,
@@ -140,7 +141,12 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   // Status filter only meaningful on "all" view — other views encode status implicitly.
   if (view === "all" && statusParam) baseFilters.status = statusParam;
 
-  const where = buildLifecycleWhere(view, baseFilters);
+  const [renewalWindowDays, absentThreshold, absentWindow] = await Promise.all([
+    getSetting("student.renewalWindowDays"),
+    getSetting("student.frequentAbsentThreshold"),
+    getSetting("student.frequentAbsentWindow"),
+  ]);
+  const where = buildLifecycleWhere(view, baseFilters, renewalWindowDays);
 
   // ─── DATA FETCH ───
   let students: StudentRow[] = [];
@@ -155,6 +161,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     });
     const filteredIds = await postFilterFrequentlyAbsent(
       baseStudents.map((s) => s.id),
+      absentThreshold,
+      absentWindow,
     );
     const filteredArr = Array.from(filteredIds);
     totalCount = filteredArr.length;

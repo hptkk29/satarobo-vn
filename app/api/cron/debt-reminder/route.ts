@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { sendZaloNotification } from "@/lib/zalo/service";
+import { getSetting } from "@/lib/settings/service";
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +17,16 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date();
-  const in14d = new Date(now.getTime() + 14 * 86400 * 1000);
+  // Cửa sổ nhắc nợ trước hạn — SystemSetting "finance.debtReminderDaysBefore" (default 14).
+  const daysBefore = await getSetting("finance.debtReminderDaysBefore");
+  const dueWindowEnd = new Date(now.getTime() + daysBefore * 86400 * 1000);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const dueSoon = await db.orderInstallment.findMany({
     where: {
       soDot: 2,
       status: "PENDING",
-      dueDate: { gte: now, lte: in14d },
+      dueDate: { gte: now, lte: dueWindowEnd },
       order: { status: { notIn: ["CANCELLED", "REFUNDED"] } },
     },
     select: {

@@ -1,16 +1,17 @@
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings/service";
 
 // =============================================================================
-// LEAD DEDUP — chống trùng SĐT trong 90 ngày (Phase T1.3)
+// LEAD DEDUP — chống trùng SĐT trong cửa sổ cấu hình được (Phase T1.3)
+// Cửa sổ ngày: SystemSetting "crm.dedupWindowDays" (default 90, dùng chung với lead-qualify).
 // =============================================================================
 
-const DEDUP_WINDOW_DAYS = 90;
-
-/** Tìm lead gần nhất cùng SĐT trong cửa sổ 90 ngày (chưa xoá). */
+/** Tìm lead gần nhất cùng SĐT trong cửa sổ dedup (chưa xoá). */
 export async function findRecentDuplicate(
   phone: string,
 ): Promise<{ id: string } | null> {
-  const since = new Date(Date.now() - DEDUP_WINDOW_DAYS * 86400 * 1000);
+  const windowDays = await getSetting("crm.dedupWindowDays");
+  const since = new Date(Date.now() - windowDays * 86400 * 1000);
   return db.lead.findFirst({
     where: { phone, deletedAt: null, createdAt: { gte: since } },
     orderBy: { createdAt: "desc" },

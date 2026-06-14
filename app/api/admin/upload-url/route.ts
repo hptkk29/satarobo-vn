@@ -9,6 +9,7 @@ import {
   UploadCategory,
   validateFile,
 } from "@/lib/storage/upload-config";
+import { getSetting } from "@/lib/settings/service";
 
 // POST /api/admin/upload-url
 // Sinh presigned URL để browser PUT trực tiếp lên R2 (không qua server).
@@ -102,15 +103,16 @@ export async function POST(req: NextRequest) {
       ContentType: mimeType,
     });
 
+    const ttl = await getSetting("storage.presignTtlSec");
     const uploadUrl = await getSignedUrl(getR2Client(), command, {
-      expiresIn: 300,
+      expiresIn: ttl,
     });
 
     return NextResponse.json({
       uploadUrl,
       publicUrl: getPublicUrl(key),
       key,
-      expiresIn: 300,
+      expiresIn: ttl,
     });
   } catch (err) {
     console.error("Failed to generate presigned URL:", err);

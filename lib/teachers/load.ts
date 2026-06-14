@@ -26,8 +26,12 @@ function durationHours(start: string | null, end: string | null): number {
   return mins > 0 ? mins / 60 : 0;
 }
 
-/** Tải/tuần: số lớp + số buổi (tổng scheduleDays) + tổng giờ (buổi × thời lượng). */
-export function computeTeachingLoad(classes: LoadClass[]): TeachingLoad {
+/** Tải/tuần: số lớp + số buổi (tổng scheduleDays) + tổng giờ (buổi × thời lượng).
+ * `overloadHours`: ngưỡng quá tải — caller async truyền từ SystemSetting "teacher.overloadHoursPerWeek". */
+export function computeTeachingLoad(
+  classes: LoadClass[],
+  overloadHours: number = OVERLOAD_HOURS_PER_WEEK,
+): TeachingLoad {
   let sessionsPerWeek = 0;
   let hoursPerWeek = 0;
   for (const c of classes) {
@@ -40,6 +44,6 @@ export function computeTeachingLoad(classes: LoadClass[]): TeachingLoad {
     classCount: classes.length,
     sessionsPerWeek,
     hoursPerWeek,
-    overloaded: hoursPerWeek > OVERLOAD_HOURS_PER_WEEK,
+    overloaded: hoursPerWeek > overloadHours,
   };
 }

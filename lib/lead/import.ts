@@ -1,9 +1,12 @@
 // Module CRM & Lead PHẦN 1 — format file Excel nhập lead (CHUẨN cho skill AI).
 //
 // Cột CỐ ĐỊNH (đúng thứ tự) — đây là CHUẨN file mẫu import lead:
-//   [Tên phụ huynh | SĐT | Email | Tên con | Tuổi con | Cơ sở (CS1/CS2/để trống)
+//   [Tên phụ huynh | SĐT | Email | Tên con | Tuổi con | Cơ sở (mã CS, để trống)
 //    | Khoá quan tâm | Nguồn | Ghi chú]
-// Pure — không "use server", testable.
+// Pure — không "use server", testable. Mã cơ sở chỉ chuẩn hoá format; tính hợp lệ
+// (CS1/CS2/CS3…) do call-site validate động theo Center active (không hardcode).
+
+export const LEAD_IMPORT_CENTER_HEADER = "Cơ sở (mã CS, để trống)";
 
 export const LEAD_IMPORT_COLUMNS = [
   "Tên phụ huynh",
@@ -11,7 +14,7 @@ export const LEAD_IMPORT_COLUMNS = [
   "Email",
   "Tên con",
   "Tuổi con",
-  "Cơ sở (CS1/CS2/để trống)",
+  LEAD_IMPORT_CENTER_HEADER,
   "Khoá quan tâm",
   "Nguồn",
   "Ghi chú",
@@ -40,12 +43,18 @@ export function parseChildAge(raw: unknown): { age: number | null } | { error: s
   return { age: n };
 }
 
-/** Chuẩn hoá mã cơ sở nhập tay → "CS1"/"CS2" hoặc null (để trống). */
+/**
+ * Chuẩn hoá mã cơ sở nhập tay → mã in hoa (vd "CS1") hoặc null (để trống).
+ * KHÔNG hardcode danh sách CS hợp lệ — call-site resolve theo Center active.
+ * Chỉ chặn format rõ ràng sai (ký tự lạ) để báo lỗi sớm.
+ */
 export function normalizeCenterCode(raw: unknown): { code: string | null } | { error: string } {
   const s = String(raw ?? "").trim().toUpperCase().replace(/\s+/g, "");
   if (s === "") return { code: null };
-  if (s === "CS1" || s === "CS2") return { code: s };
-  return { error: `Cơ sở phải là CS1/CS2 hoặc để trống (nhận: "${raw}")` };
+  if (!/^[A-Z0-9_]{2,16}$/.test(s)) {
+    return { error: `Mã cơ sở không hợp lệ (nhận: "${raw}")` };
+  }
+  return { code: s };
 }
 
 export interface ParsedLeadRow {
@@ -54,7 +63,7 @@ export interface ParsedLeadRow {
   email: string | null;
   childName: string | null;
   childAge: number | null;
-  centerCode: string | null; // CS1/CS2/null
+  centerCode: string | null; // mã CS (resolve hợp lệ ở DB) / null
   courseRaw: string | null; // khoá quan tâm (resolve ở DB)
   source: string;
   note: string | null;
@@ -78,7 +87,7 @@ export function parseLeadImportRow(
   const ageRes = parseChildAge(raw["Tuổi con"]);
   if ("error" in ageRes) return { ok: false, error: ageRes.error };
 
-  const centerRes = normalizeCenterCode(raw["Cơ sở (CS1/CS2/để trống)"]);
+  const centerRes = normalizeCenterCode(raw[LEAD_IMPORT_CENTER_HEADER]);
   if ("error" in centerRes) return { ok: false, error: centerRes.error };
 
   const email = cell(raw, "Email") || null;

@@ -20,7 +20,13 @@ export type SettingGroup =
   | "shift"
   | "contact"
   | "finance"
-  | "enrollment";
+  | "enrollment"
+  | "crm"
+  | "otp"
+  | "teacher"
+  | "lms"
+  | "storage"
+  | "public";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -155,6 +161,135 @@ export const SETTINGS = {
     label: "Trần thời hạn bảo lưu (tháng)",
     schema: z.number().int().min(1).max(24),
     default: 6,
+    centerOverridable: false,
+  }),
+  // ── Bổ sung (hardcode remediation Đợt 3): wire hằng số call-site về registry ──
+  "student.absenceUrgentThresholdDays": def({
+    key: "student.absenceUrgentThresholdDays",
+    group: "student",
+    label: "Số ngày báo vắng coi là khẩn",
+    schema: z.number().int().min(1).max(30),
+    default: 3, // lib/students/absence.ts URGENT_THRESHOLD_DAYS
+    centerOverridable: true,
+  }),
+  "student.renewalWindowDays": def({
+    key: "student.renewalWindowDays",
+    group: "student",
+    label: "Cửa sổ tái tục sau hoàn thành khoá (ngày)",
+    schema: z.number().int().min(1).max(365),
+    default: 90, // lib/students/lifecycle.ts RENEWAL_WINDOW_DAYS
+    centerOverridable: true,
+  }),
+  "student.frequentAbsentThreshold": def({
+    key: "student.frequentAbsentThreshold",
+    group: "student",
+    label: "Số buổi vắng coi là 'hay vắng'",
+    schema: z.number().int().min(1).max(20),
+    default: 3, // lib/students/lifecycle.ts FREQUENT_ABSENT_THRESHOLD
+    centerOverridable: true,
+  }),
+  "student.frequentAbsentWindow": def({
+    key: "student.frequentAbsentWindow",
+    group: "student",
+    label: "Số buổi gần nhất xét 'hay vắng'",
+    schema: z.number().int().min(1).max(50),
+    default: 5, // lib/students/lifecycle.ts FREQUENT_ABSENT_WINDOW
+    centerOverridable: true,
+  }),
+  "crm.dedupWindowDays": def({
+    key: "crm.dedupWindowDays",
+    group: "crm",
+    label: "Cửa sổ chống trùng lead (ngày)",
+    schema: z.number().int().min(1).max(365),
+    default: 90, // lib/crm/lead-qualify.ts & lib/lead/dedup.ts
+    centerOverridable: false,
+  }),
+  "shift.geofenceRadiusMeters": def({
+    key: "shift.geofenceRadiusMeters",
+    group: "shift",
+    label: "Bán kính geofence check-in QR (m)",
+    schema: z.number().int().min(10).max(2000),
+    default: 100, // lib/attendance/qr.ts GEOFENCE_RADIUS_METERS
+    centerOverridable: true,
+  }),
+  "shift.managerEditWindowDays": def({
+    key: "shift.managerEditWindowDays",
+    group: "shift",
+    label: "Số ngày quản lý được sửa bảng công",
+    schema: z.number().int().min(0).max(31),
+    default: 2, // lib/attendance/adjust.ts MANAGER_EDIT_WINDOW_DAYS
+    centerOverridable: true,
+  }),
+  "otp.ttlMinutes": def({
+    key: "otp.ttlMinutes",
+    group: "otp",
+    label: "Hiệu lực OTP (phút)",
+    schema: z.number().int().min(1).max(60),
+    default: 5, // lib/otp/service.ts
+    centerOverridable: false,
+  }),
+  "otp.maxAttempts": def({
+    key: "otp.maxAttempts",
+    group: "otp",
+    label: "Số lần nhập sai OTP tối đa",
+    schema: z.number().int().min(1).max(20),
+    default: 5,
+    centerOverridable: false,
+  }),
+  "otp.resendCooldownSec": def({
+    key: "otp.resendCooldownSec",
+    group: "otp",
+    label: "Chờ gửi lại OTP (giây)",
+    schema: z.number().int().min(10).max(600),
+    default: 60,
+    centerOverridable: false,
+  }),
+  "otp.dailyLimit": def({
+    key: "otp.dailyLimit",
+    group: "otp",
+    label: "Số OTP tối đa/ngày cho 1 số",
+    schema: z.number().int().min(1).max(50),
+    default: 8,
+    centerOverridable: false,
+  }),
+  "teacher.overloadHoursPerWeek": def({
+    key: "teacher.overloadHoursPerWeek",
+    group: "teacher",
+    label: "Ngưỡng giờ/tuần coi là quá tải",
+    schema: z.number().int().min(1).max(80),
+    default: 24, // lib/teachers/load.ts OVERLOAD_HOURS_PER_WEEK
+    centerOverridable: true,
+  }),
+  "lms.mediaSignedUrlTtl": def({
+    key: "lms.mediaSignedUrlTtl",
+    group: "lms",
+    label: "Hiệu lực signed URL media (giây)",
+    schema: z.number().int().min(60).max(86400),
+    default: 900, // lib/lms/media-key.ts
+    centerOverridable: false,
+  }),
+  "storage.presignTtlSec": def({
+    key: "storage.presignTtlSec",
+    group: "storage",
+    label: "Hiệu lực presigned upload URL (giây)",
+    schema: z.number().int().min(30).max(3600),
+    default: 300, // app/api/{portal,admin}/upload-url
+    centerOverridable: false,
+  }),
+  "public.leadRateLimitMax": def({
+    key: "public.leadRateLimitMax",
+    group: "public",
+    label: "Số lần gửi form lead tối đa / cửa sổ / IP",
+    schema: z.number().int().min(1).max(100),
+    default: 5, // app/api/leads/route.ts
+    centerOverridable: false,
+  }),
+  "public.leadRateLimitWindowMs": def({
+    key: "public.leadRateLimitWindowMs",
+    group: "public",
+    label: "Cửa sổ rate-limit form lead (ms)",
+    schema: z.number().int().min(1000).max(3_600_000),
+    default: 60_000,
     centerOverridable: false,
   }),
 } as const;
