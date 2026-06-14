@@ -32,6 +32,24 @@ export const SETTING_REGISTRY = {
     description: "Số ngày vắng để gắn cờ khẩn.",
     group: "student",
   },
+  "student.renewalWindowDays": {
+    schema: z.number().int().min(1).max(365),
+    default: 90, // lib/students/lifecycle.ts RENEWAL_WINDOW_DAYS
+    description: "Cửa sổ (ngày) coi là tái tục sau khi hoàn thành khoá.",
+    group: "student",
+  },
+  "student.frequentAbsentThreshold": {
+    schema: z.number().int().min(1).max(20),
+    default: 3, // lib/students/lifecycle.ts FREQUENT_ABSENT_THRESHOLD
+    description: "Số buổi vắng để coi là 'hay vắng'.",
+    group: "student",
+  },
+  "student.frequentAbsentWindow": {
+    schema: z.number().int().min(1).max(50),
+    default: 5, // lib/students/lifecycle.ts FREQUENT_ABSENT_WINDOW
+    description: "Số buổi gần nhất xét 'hay vắng'.",
+    group: "student",
+  },
   // ── CRM / lead ──
   "crm.dedupWindowDays": {
     schema: z.number().int().min(1).max(365),
@@ -103,6 +121,19 @@ export const SETTING_REGISTRY = {
     default: 14, // app/api/cron/debt-reminder/route.ts
     description: "Số ngày trước hạn để nhắc công nợ.",
     group: "finance",
+  },
+  // ── Public form (chống spam) ──
+  "public.leadRateLimitMax": {
+    schema: z.number().int().min(1).max(100),
+    default: 5, // app/api/leads/route.ts RATE_LIMIT_MAX
+    description: "Số lần gửi form lead tối đa mỗi cửa sổ / IP.",
+    group: "public",
+  },
+  "public.leadRateLimitWindowMs": {
+    schema: z.number().int().min(1000).max(3_600_000),
+    default: 60_000, // RATE_LIMIT_WINDOW_MS
+    description: "Cửa sổ rate-limit form lead (ms).",
+    group: "public",
   },
 } as const satisfies Record<string, SettingDef<unknown>>;
 

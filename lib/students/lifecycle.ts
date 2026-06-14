@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
-// Tuning constants (hardcoded for v1, configurable later)
+// Default tuning constants — caller async truyền từ SystemSetting "student.*".
 export const RENEWAL_WINDOW_DAYS = 90;
 export const FREQUENT_ABSENT_THRESHOLD = 3;
 export const FREQUENT_ABSENT_WINDOW = 5;
@@ -55,6 +55,7 @@ export const LIFECYCLE_VIEW_DESCRIPTION: Record<LifecycleView, string> = {
 export function buildLifecycleWhere(
   view: LifecycleView,
   baseWhere: Prisma.StudentWhereInput = {},
+  renewalWindowDays: number = RENEWAL_WINDOW_DAYS,
 ): Prisma.StudentWhereInput {
   const base: Prisma.StudentWhereInput = { ...baseWhere, deletedAt: null };
 
@@ -108,7 +109,7 @@ export function buildLifecycleWhere(
 
     case "renewal": {
       const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - RENEWAL_WINDOW_DAYS);
+      cutoff.setDate(cutoff.getDate() - renewalWindowDays);
       return {
         AND: [
           base,
@@ -138,6 +139,8 @@ export function buildLifecycleWhere(
  */
 export async function postFilterFrequentlyAbsent(
   studentIds: string[],
+  threshold: number = FREQUENT_ABSENT_THRESHOLD,
+  window: number = FREQUENT_ABSENT_WINDOW,
 ): Promise<Set<string>> {
   if (studentIds.length === 0) return new Set();
 
@@ -147,7 +150,7 @@ export async function postFilterFrequentlyAbsent(
     where: { studentId: { in: studentIds } },
     orderBy: [{ studentId: "asc" }, { createdAt: "desc" }],
     select: { studentId: true, status: true },
-    take: studentIds.length * FREQUENT_ABSENT_WINDOW * 3,
+    take: studentIds.length * window * 3,
   });
 
   // Group by student, take latest N per student.
@@ -155,14 +158,14 @@ export async function postFilterFrequentlyAbsent(
   for (const a of recentAttendance) {
     if (!byStudent.has(a.studentId)) byStudent.set(a.studentId, []);
     const list = byStudent.get(a.studentId)!;
-    if (list.length < FREQUENT_ABSENT_WINDOW) list.push(a.status);
+    if (list.length < window) list.push(a.status);
   }
 
   const result = new Set<string>();
   for (const [studentId, statuses] of byStudent.entries()) {
-    if (statuses.length < FREQUENT_ABSENT_WINDOW) continue;
+    if (statuses.length < window) continue;
     const absentCount = statuses.filter((s) => s === "ABSENT").length;
-    if (absentCount >= FREQUENT_ABSENT_THRESHOLD) {
+    if (absentCount >= threshold) {
       result.add(studentId);
     }
   }

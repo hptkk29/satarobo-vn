@@ -6,10 +6,10 @@ import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
 import { rateLimit } from '@/lib/rate-limit'
 import { findRecentDuplicate, logDuplicateAttempt } from '@/lib/lead/dedup'
 import { autoAssignNewLead } from '@/lib/lead/auto-assign'
+import { getSetting } from '@/lib/settings'
 
 // Rate limit — uses Upstash Redis when env vars set, in-memory fallback otherwise.
-const RATE_LIMIT_MAX = 5
-const RATE_LIMIT_WINDOW_MS = 60_000
+// Ngưỡng đọc động từ SystemSetting "public.leadRateLimit*" (default 5 / 60s).
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,10 +44,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, leadId: 'ab-' + Date.now() })
     }
 
+    const [rlMax, rlWindowMs] = await Promise.all([
+      getSetting('public.leadRateLimitMax'),
+      getSetting('public.leadRateLimitWindowMs'),
+    ])
     const limit = await rateLimit({
       key: `leads:${ip}`,
-      max: RATE_LIMIT_MAX,
-      windowMs: RATE_LIMIT_WINDOW_MS,
+      max: rlMax,
+      windowMs: rlWindowMs,
     })
 
     if (!limit.success) {
