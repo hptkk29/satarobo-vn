@@ -5,6 +5,7 @@
 // vào danh sách "Sắp hết khoá" cho sale + hiển thị cho phụ huynh.
 
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import {
@@ -120,7 +121,8 @@ export async function getNearingEndEnrollments(opts?: {
   threshold?: number;
   centerId?: string | null;
 }): Promise<NearingEndItem[]> {
-  const threshold = opts?.threshold ?? NEAR_END_THRESHOLD;
+  // Đợt 3 — đọc động từ SystemSetting (default = NEAR_END_THRESHOLD nếu chưa cấu hình).
+  const threshold = opts?.threshold ?? (await getSetting("student.nearEndThreshold"));
   const now = new Date();
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 

@@ -16,10 +16,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export function classifyAbsenceUrgency(
   sessionDate: Date,
   reportedAt: Date,
+  thresholdDays: number = URGENT_THRESHOLD_DAYS, // caller async truyền từ SystemSetting
 ): AbsenceUrgency {
-  // So sánh theo NGÀY (bỏ giờ) để "báo trước 3 ngày" ổn định.
+  // So sánh theo NGÀY (bỏ giờ) để "báo trước N ngày" ổn định.
   const s = Date.UTC(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
   const r = Date.UTC(reportedAt.getFullYear(), reportedAt.getMonth(), reportedAt.getDate());
   const daysAhead = Math.round((s - r) / MS_PER_DAY);
-  return daysAhead >= URGENT_THRESHOLD_DAYS ? "ON_TIME" : "URGENT";
+  return daysAhead >= thresholdDays ? "ON_TIME" : "URGENT";
 }

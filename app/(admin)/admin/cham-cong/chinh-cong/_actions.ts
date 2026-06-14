@@ -7,6 +7,7 @@ import { can, hasRole } from "@/lib/auth/permissions";
 import { getAuditActor } from "@/lib/audit/log";
 import { db } from "@/lib/db";
 import { canAdjustTimesheet, combineVNDateTime } from "@/lib/attendance/adjust";
+import { getSetting } from "@/lib/settings";
 
 // Module Chấm công PHẦN 4 — yêu cầu chỉnh công (NV gửi) + duyệt/áp chỉnh (quản lý).
 
@@ -145,12 +146,15 @@ export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
 
   if (p.decision === "APPROVED" && (p.checkIn || p.checkOut)) {
     // Áp chỉnh sửa theo quy tắc thời gian.
-    const gate = canAdjustTimesheet({
-      isSuperAdmin: isSuper,
-      isCenterManager: isCM,
-      workDate: req.date,
-      now: new Date(),
-    });
+    const gate = canAdjustTimesheet(
+      {
+        isSuperAdmin: isSuper,
+        isCenterManager: isCM,
+        workDate: req.date,
+        now: new Date(),
+      },
+      await getSetting("shift.managerEditWindowDays"),
+    );
     if (!gate.ok) return { ok: false, error: gate.reason };
 
     await applyCorrection({
@@ -212,12 +216,15 @@ export async function adjustTimesheetDirect(input: unknown): Promise<Result> {
     return { ok: false, error: "Nhân viên thuộc cơ sở khác" };
   }
 
-  const gate = canAdjustTimesheet({
-    isSuperAdmin: isSuper,
-    isCenterManager: isCM,
-    workDate: new Date(`${p.date}T00:00:00`),
-    now: new Date(),
-  });
+  const gate = canAdjustTimesheet(
+    {
+      isSuperAdmin: isSuper,
+      isCenterManager: isCM,
+      workDate: new Date(`${p.date}T00:00:00`),
+      now: new Date(),
+    },
+    await getSetting("shift.managerEditWindowDays"),
+  );
   if (!gate.ok) return { ok: false, error: gate.reason };
 
   const { actorId, actorName } = getAuditActor(session);

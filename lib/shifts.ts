@@ -37,10 +37,17 @@ export function lastDayOfMonth(now: Date): number {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
 
-/** Nhân viên ĐỀ XUẤT ca THÁNG SAU: mở ngày 25–28 của tháng hiện tại. */
-export function isNextMonthWindowOpen(now: Date): boolean {
+/** Cửa sổ đề xuất ca tháng sau (ngày trong tháng). Default 25–28; caller async truyền từ SystemSetting "shift.proposalWindow". */
+export type ProposalWindow = { startDay: number; endDay: number };
+export const DEFAULT_PROPOSAL_WINDOW: ProposalWindow = { startDay: 25, endDay: 28 };
+
+/** Nhân viên ĐỀ XUẤT ca THÁNG SAU: mở trong cửa sổ ngày (default 25–28). */
+export function isNextMonthWindowOpen(
+  now: Date,
+  window: ProposalWindow = DEFAULT_PROPOSAL_WINDOW,
+): boolean {
   const d = now.getDate();
-  return d >= 25 && d <= 28;
+  return d >= window.startDay && d <= window.endDay;
 }
 
 /** Quản lý DUYỆT + IMPORT: trước NGÀY CUỐI CÙNG của tháng (tự nhận 28/30/31). */

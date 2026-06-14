@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isNextMonthWindowOpen, isWeekendEditWindow, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
+import { getSetting } from "@/lib/settings";
 import { MyShiftsCalendar } from "./_components/my-shifts-calendar";
 
 export const metadata = { title: "Lịch ca của tôi | Admin" };
@@ -81,11 +82,13 @@ export default async function MyShiftsPage({ searchParams }: Props) {
   const monthLabel = `Tháng ${monthIdx + 1}/${year}`;
   const todayStr = ymd(now);
 
-  const windowHint = isNextMonthWindowOpen(now)
-    ? "Đang trong cửa sổ ĐỀ XUẤT ca THÁNG SAU (ngày 25–28). Lịch bạn chọn là ĐỀ XUẤT — quản lý duyệt (import Excel) để chốt chính thức."
+  const proposalWindow = await getSetting("shift.proposalWindow");
+  const winLabel = `${proposalWindow.startDay}–${proposalWindow.endDay}`;
+  const windowHint = isNextMonthWindowOpen(now, proposalWindow)
+    ? `Đang trong cửa sổ ĐỀ XUẤT ca THÁNG SAU (ngày ${winLabel}). Lịch bạn chọn là ĐỀ XUẤT — quản lý duyệt (import Excel) để chốt chính thức.`
     : isWeekendEditWindow(now)
       ? "Cuối tuần — được phép sửa đề xuất ca trong tháng."
-      : "Ngoài cửa sổ đề xuất chuẩn (25–28 cho tháng sau / cuối tuần để sửa). Vẫn lưu được, lịch là ĐỀ XUẤT chờ quản lý duyệt.";
+      : `Ngoài cửa sổ đề xuất chuẩn (${winLabel} cho tháng sau / cuối tuần để sửa). Vẫn lưu được, lịch là ĐỀ XUẤT chờ quản lý duyệt.`;
 
   return (
     <div className="max-w-4xl p-6">

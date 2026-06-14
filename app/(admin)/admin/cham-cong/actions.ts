@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { verifyQrToken, distanceMeters, GEOFENCE_RADIUS_METERS } from "@/lib/attendance/qr";
+import { verifyQrToken, distanceMeters } from "@/lib/attendance/qr";
+import { getSetting } from "@/lib/settings";
 
 // =============================================================================
 // EMPLOYEE CHECK-IN — Phase NHÓM 4 (Module Chấm công PHẦN 1)
@@ -59,7 +60,7 @@ export async function recordCheckin(input: {
       return { ok: false, error: "Cần bật định vị (GPS) để chấm công" };
     }
     dist = distanceMeters(d.latitude, d.longitude, center.latitude, center.longitude);
-    const radius = center.allowedRadiusMeters ?? GEOFENCE_RADIUS_METERS;
+    const radius = center.allowedRadiusMeters ?? (await getSetting("shift.geofenceRadiusMeters"));
     withinGeofence = dist <= radius;
     if (!withinGeofence) {
       return {

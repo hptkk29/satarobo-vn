@@ -2,6 +2,7 @@ import "server-only";
 import { createHmac, randomInt, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import { getPrimaryOtpProvider } from "./provider";
+import { getSetting } from "@/lib/settings";
 
 // =============================================================================
 // Cụm A1 — OTP service (request + verify).
@@ -57,7 +58,15 @@ export async function requestOtp(input: {
   const target = input.target.trim().toLowerCase();
   if (!target) return { ok: false, error: "Thiếu email/SĐT" };
 
-  // Cooldown: lần gửi gần nhất < 60s.
+  // Tham số động (SystemSetting "otp.*"); default = hằng số cũ nếu chưa cấu hình.
+  const [ttlMinutes, cooldownSec, dailyLimit, maxAttempts] = await Promise.all([
+    getSetting("otp.ttlMinutes"),
+    getSetting("otp.resendCooldownSec"),
+    getSetting("otp.dailyLimit"),
+    getSetting("otp.maxAttempts"),
+  ]);
+
+  // Cooldown: lần gửi gần nhất < cooldownSec.
   const last = await db.otpRequest.findFirst({
     where: { target, purpose: input.purpose },
     orderBy: { createdAt: "desc" },
@@ -65,11 +74,11 @@ export async function requestOtp(input: {
   });
   if (last) {
     const elapsed = (Date.now() - last.createdAt.getTime()) / 1000;
-    if (elapsed < OTP_RESEND_COOLDOWN_SEC) {
+    if (elapsed < cooldownSec) {
       return {
         ok: false,
-        error: `Vui lòng chờ ${Math.ceil(OTP_RESEND_COOLDOWN_SEC - elapsed)}s trước khi gửi lại.`,
-        cooldownSec: Math.ceil(OTP_RESEND_COOLDOWN_SEC - elapsed),
+        error: `Vui lòng chờ ${Math.ceil(cooldownSec - elapsed)}s trước khi gửi lại.`,
+        cooldownSec: Math.ceil(cooldownSec - elapsed),
       };
     }
   }
@@ -78,12 +87,12 @@ export async function requestOtp(input: {
   const todayCount = await db.otpRequest.count({
     where: { target, purpose: input.purpose, createdAt: { gte: startOfToday() } },
   });
-  if (todayCount >= OTP_DAILY_LIMIT) {
+  if (todayCount >= dailyLimit) {
     return { ok: false, error: "Đã vượt số lần gửi mã trong ngày. Vui lòng thử lại sau." };
   }
 
   const code = genCode();
-  const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
   const provider = getPrimaryOtpProvider();
 
   const otp = await db.otpRequest.create({
@@ -93,6 +102,7 @@ export async function requestOtp(input: {
       purpose: input.purpose,
       codeHash: hashCode(code),
       expiresAt,
+      maxAttempts,
       userId: input.userId ?? null,
     },
     select: { id: true },
@@ -102,7 +112,7 @@ export async function requestOtp(input: {
     target,
     code,
     purpose: input.purpose,
-    minutesValid: OTP_TTL_MINUTES,
+    minutesValid: ttlMinutes,
   });
 
   await db.otpDeliveryLog.create({
@@ -120,7 +130,7 @@ export async function requestOtp(input: {
     return { ok: false, error: sent.error ?? "Không gửi được mã. Thử lại sau." };
   }
 
-  return { ok: true, otpId: otp.id, expiresAt, cooldownSec: OTP_RESEND_COOLDOWN_SEC };
+  return { ok: true, otpId: otp.id, expiresAt, cooldownSec };
 }
 
 export type VerifyOtpResult =

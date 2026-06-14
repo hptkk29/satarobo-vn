@@ -8,7 +8,8 @@ import { TeacherProfileForm } from "./_components/profile-form";
 import { ClassAssignmentSection } from "./_components/class-assignment";
 import { WeeklySchedule } from "./_components/weekly-schedule";
 import type { TeacherClassSlot } from "@/lib/teachers/schedule";
-import { computeTeachingLoad, OVERLOAD_HOURS_PER_WEEK } from "@/lib/teachers/load";
+import { computeTeachingLoad } from "@/lib/teachers/load";
+import { getSetting } from "@/lib/settings";
 import { TeacherEvaluations } from "./_components/evaluations";
 
 export const metadata = { title: "Hồ sơ giáo viên | Admin" };
@@ -50,6 +51,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   // Đa vai trò (3B): gồm cả người có TEACHER ở vị trí phụ (vd CENTER_MANAGER+TEACHER).
   if (!teacher || !hasRole(teacher, "TEACHER")) notFound();
 
+  const overloadHours = await getSetting("teacher.overloadHoursPerWeek");
   const me = session.user;
   const isOwn = me.id === id;
   const cmInScope = me.role === "CENTER_MANAGER" && teacher.centerId === me.centerId;
@@ -260,6 +262,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
             startTime: c.startTime,
             endTime: c.endTime,
           })),
+          overloadHours,
         );
         return (
           <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -269,7 +272,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
               </h2>
               {load.overloaded && (
                 <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
-                  Quá tải (&gt; {OVERLOAD_HOURS_PER_WEEK}h/tuần)
+                  Quá tải (&gt; {overloadHours}h/tuần)
                 </span>
               )}
             </div>

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { classifyAbsenceUrgency } from "@/lib/students/absence";
+import { getSetting } from "@/lib/settings";
 import { AbsenceRow, type AbsenceItem } from "./_components/absence-row";
 
 export const metadata = { title: "Báo vắng cần xử lý | Admin" };
@@ -16,6 +17,7 @@ export default async function AbsenceQueuePage() {
   if (!can(session.user, "parent-requests:manage")) redirect("/dashboard");
 
   const now = new Date();
+  const urgentThresholdDays = await getSetting("student.absenceUrgentThresholdDays");
   const rows = await db.parentRequest.findMany({
     where: { type: "ABSENCE", status: "PENDING" },
     orderBy: { createdAt: "asc" },
@@ -60,7 +62,7 @@ export default async function AbsenceQueuePage() {
       className: sess?.class.name ?? r.student.enrollments[0]?.class.name ?? null,
       sessionDate: sessionDate?.toISOString() ?? null,
       reason: r.content,
-      urgency: sessionDate ? classifyAbsenceUrgency(sessionDate, now) : "URGENT",
+      urgency: sessionDate ? classifyAbsenceUrgency(sessionDate, now, urgentThresholdDays) : "URGENT",
       createdAt: r.createdAt.toISOString(),
       hasSession: !!r.sessionId,
     };

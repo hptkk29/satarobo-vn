@@ -22,15 +22,18 @@ export function daysSinceWork(workDate: Date, now: Date): number {
   return Math.round((b - a) / 86400000);
 }
 
-export function canAdjustTimesheet(input: CanAdjustInput): CanAdjustResult {
+export function canAdjustTimesheet(
+  input: CanAdjustInput,
+  windowDays: number = MANAGER_EDIT_WINDOW_DAYS, // caller async truyền từ SystemSetting "shift.managerEditWindowDays"
+): CanAdjustResult {
   if (input.isSuperAdmin) return { ok: true };
   if (!input.isCenterManager) return { ok: false, reason: "Không có quyền chỉnh công" };
 
   const days = daysSinceWork(input.workDate, input.now);
-  if (days > MANAGER_EDIT_WINDOW_DAYS) {
+  if (days > windowDays) {
     return {
       ok: false,
-      reason: `Quá ${MANAGER_EDIT_WINDOW_DAYS} ngày kể từ ngày công — quản lý không chỉnh được (cần admin cấp cao).`,
+      reason: `Quá ${windowDays} ngày kể từ ngày công — quản lý không chỉnh được (cần admin cấp cao).`,
     };
   }
   return { ok: true };
