@@ -9,10 +9,10 @@
 | [R7-00](R7-00-security-gate.md) | Tiền đề bảo mật C1–C3 (gate) | R7a | M | R6 | TODO |
 | [R7-01](R7-01-lead-child.md) | LeadChild + trạng thái lead mới + SLA 24h | R7a | L | R7-00 | 🟡 CODE DONE (2026-06-15) — model+migration+service+UI+unit; chờ `migrate deploy` + e2e (test DB) |
 | [R7-02](R7-02-trial-class.md) | Lớp trải nghiệm N buổi end-to-end | R7a | XL | R7-01 | TODO |
-| [R7-03](R7-03-course-pricing.md) | Ưu đãi theo khóa + snapshot giá Enrollment | R7a | M | R7-00 | TODO |
+| [R7-03](R7-03-course-pricing.md) | Ưu đãi theo khóa + snapshot giá Enrollment | R7a | M | R7-00 | 🟡 CODE DONE (2026-06-15) — CourseDiscount+migration+pricing helper+UI; snapshot ghi tại convert (R7-05); chờ migrate+e2e |
 | [R7-04](R7-04-payment-two-tier.md) | Payment 2 tầng + Receipt + 2 đợt X ngày + công nợ | R7a | XL | R7-03 | TODO |
 | [R7-05](R7-05-convert-v2.md) | Convert v2 (chặn thanh toán, multi-student, dedupe, consent, mã HV) | R7a | XL | R7-01,03,04 | TODO |
-| [R7-06](R7-06-class-snapshot.md) | ClassProgramSnapshot + guard + điều chỉnh buổi | R7a | L | R7-00 | TODO |
+| [R7-06](R7-06-class-snapshot.md) | ClassProgramSnapshot + guard + điều chỉnh buổi | R7a | L | R7-00 | 🟡 CODE DONE (2026-06-15) — pin curriculum+ClassSessionPlan+adopt+cancel/makeup+generate plan-aware+UI; adjust GV/phòng ghi audit (thiếu cột per-session — TODO schema); chờ migrate+e2e |
 | [R7-07](R7-07-assign-session.md) | Gán học viên + state machine buổi học | R7a | L | R7-06 | TODO |
 | [R7-08](R7-08-makeup-cross-center.md) | Học bù liên cơ sở + 5 chỉ số + 6 nhãn điểm danh | R7a | L | R7-07 | TODO |
 | [R7-09](R7-09-portal-media.md) | Portal dashboard mở rộng + media buổi + consent + signed URL | R7a | L | R7-04,07,08 | TODO |

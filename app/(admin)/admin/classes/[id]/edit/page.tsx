@@ -6,6 +6,8 @@ import { can, hasAnyRole } from "@/lib/auth/permissions";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
 import { ClassApprovalActions } from "../_components/class-approval-actions";
 import { ClassReschedule } from "../_components/class-reschedule";
+import { ClassCurriculum } from "../_components/class-curriculum";
+import { ClassSessionsManage } from "../_components/class-sessions-manage";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -47,6 +49,7 @@ export default async function EditClassPage({ params }: Props) {
         status: true,
         notes: true,
         approvedByName: true,
+        curriculumVersion: true,
       },
     }),
     db.course.findMany({
@@ -82,6 +85,62 @@ export default async function EditClassPage({ params }: Props) {
   ]);
 
   if (!cls) notFound();
+
+  // R7-06 — dữ liệu cho tab "Chương trình" + "Quản lý buổi học".
+  const [plans, sessions, curricula] = await Promise.all([
+    db.classSessionPlan.findMany({
+      where: { classId: cls.id },
+      orderBy: { order: "asc" },
+      select: { id: true, seq: true, order: true, customTitle: true, note: true, lessonId: true },
+    }),
+    db.classSession.findMany({
+      where: { classId: cls.id },
+      orderBy: { date: "asc" },
+      select: { id: true, date: true, topic: true, status: true },
+    }),
+    db.curriculum.findMany({
+      where: { courseId: cls.courseId, isActive: true, status: "ACTIVE" },
+      orderBy: { version: "desc" },
+      select: { version: true, name: true },
+    }),
+  ]);
+
+  const lessonIds = plans
+    .map((p) => p.lessonId)
+    .filter((id): id is string => Boolean(id));
+  const lessons = lessonIds.length
+    ? await db.lesson.findMany({
+        where: { id: { in: lessonIds } },
+        select: { id: true, title: true },
+      })
+    : [];
+  const lessonTitleById = new Map(lessons.map((l) => [l.id, l.title]));
+
+  const planRows = plans.map((p) => ({
+    id: p.id,
+    seq: p.seq,
+    order: p.order,
+    customTitle: p.customTitle,
+    note: p.note,
+    lessonTitle: p.lessonId ? lessonTitleById.get(p.lessonId) ?? null : null,
+  }));
+
+  const sessionRows = sessions.map((s) => ({
+    id: s.id,
+    date: s.date.toISOString(),
+    topic: s.topic,
+    status: s.status,
+  }));
+
+  const teacherOptions = teachers.map((t) => ({
+    id: t.id,
+    label: t.name ?? "(chưa đặt tên)",
+  }));
+  const roomOptions = rooms
+    .filter((r) => !cls.centerId || r.centerId === cls.centerId)
+    .map((r) => ({ id: r.id, label: `${r.code} — ${r.name}` }));
+
+  const canEdit = can(session.user, "classes:edit");
 
   const formValue: ClassFormValue = {
     id: cls.id,
@@ -133,7 +192,26 @@ export default async function EditClassPage({ params }: Props) {
       </div>
 
       <div className="mb-6">
-        <ClassReschedule classId={cls.id} canEdit={can(session.user, "classes:edit")} />
+        <ClassReschedule classId={cls.id} canEdit={canEdit} />
+      </div>
+
+      <div className="mb-6">
+        <ClassCurriculum
+          classId={cls.id}
+          pinnedVersion={cls.curriculumVersion}
+          plans={planRows}
+          versions={curricula}
+          canEdit={canEdit}
+        />
+      </div>
+
+      <div className="mb-6">
+        <ClassSessionsManage
+          sessions={sessionRows}
+          teachers={teacherOptions}
+          rooms={roomOptions}
+          canEdit={canEdit}
+        />
       </div>
 
       <ClassForm

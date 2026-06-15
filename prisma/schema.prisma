@@ -792,6 +792,9 @@ model Course {
   price       Int?
   duration    Int?
   isActive    Boolean    @default(true)
+  // R7-03 — phân loại độ tuổi / trình độ cho khóa dạy.
+  ageRange    String? // vd "6-8 tuổi"
+  level       String? // vd "Cơ bản"
 
   // Marketing fields (Phase 4.UI.FINAL)
   code             String? // Code ngắn cho product cards (vd. "LTR", "LTRS")
@@ -820,6 +823,7 @@ model Course {
   classes            Class[]
   enrollments        Enrollment[]
   curriculums        Curriculum[]
+  discounts          CourseDiscount[] // R7-03
   trialRecommended   TrialFeedback[] @relation("TrialRecommendedCourse")
 
   // FIX 7 — khoá tiên quyết (cấu hình qua UI admin).
@@ -1227,6 +1231,10 @@ model Class {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // R7-06 — pin curriculum version lúc tạo lớp (snapshot; null = lớp cũ, helper fallback).
+  curriculumId      String?
+  curriculumVersion Int?
+
   course          Course              @relation(fields: [courseId], references: [id])
   center          Center?             @relation(fields: [centerId], references: [id])
   classGroup      ClassGroup?         @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
@@ -1235,6 +1243,7 @@ model Class {
   room            Room?               @relation(fields: [roomId], references: [id], onDelete: SetNull)
   enrollments     Enrollment[]
   sessions        ClassSession[]
+  sessionPlans    ClassSessionPlan[] // R7-06
   exams           Exam[]
   assignments     Assignment[]
   progressReports ProgressReportLog[]
@@ -1264,6 +1273,13 @@ model Enrollment {
   // Financial (legacy)
   tuition Int?
   paidAt  DateTime?
+
+  // R7-03 — snapshot giá 4 thành phần (ghi tại convert/R7-05; bất biến khi đổi bảng giá).
+  // `tuition` cũ giữ (2-phase); helper computeEnrollmentPrice fallback tuition khi null.
+  listPrice      Int? // giá niêm yết Course tại thời điểm chốt
+  discountType   String? // CourseDiscountType áp dụng (snapshot dạng string)
+  discountAmount Int? // số tiền giảm thực tế
+  finalPrice     Int? // phải thu sau giảm (clamp ≥ 0)
 
   // Legacy dates (kept for back-compat)
   startDate DateTime?
@@ -1338,6 +1354,8 @@ model ClassSession {
   // Phase E6 — link session to curriculum lesson for progress tracking
   lessonId    String?
   lessonNotes String? @db.Text
+  // R7-06 — trỏ tới ClassSessionPlan (kế hoạch buổi của lớp); lessonId cũ giữ 2-phase.
+  planId      String?
 
   // LMS-3 — quy trình sau buổi + checklist
   status      SessionStatus @default(SCHEDULED)
@@ -1360,18 +1378,29 @@ model ClassSession {
 
   class            Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
   lesson           Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  plan             ClassSessionPlan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
   attendances      Attendance[]
   studentFeedbacks StudentSessionFeedback[] // LMS-2
 
   @@index([classId])
   @@index([date])
   @@index([lessonId])
+  @@index([planId])
 }
 
 enum SessionStatus {
   SCHEDULED
   IN_PROGRESS
   COMPLETED
+  CANCELLED // R7-06 — hủy buổi (không xóa); buổi bù sinh cuối lịch
+}
+
+/// R7-03 — loại ưu đãi theo khóa (áp toàn hệ thống, KHÔNG per-center).
+enum CourseDiscountType {
+  AMOUNT // giảm số tiền tuyệt đối (VND)
+  PERCENT // giảm theo %
+  SCHOLARSHIP // học bổng (PERCENT đặc biệt, có điều kiện)
+  PROGRAM // ưu đãi chương trình (combo/đợt)
 }
 
 // LMS-5 — Hồ sơ năng lực robotics.
@@ -4218,4 +4247,43 @@ model Testimonial {
   updatedAt DateTime @updatedAt
 
   @@index([courseSlug, isPublished, displayOrder])
+}
+
+// ─── R7-03 — Ưu đãi theo khóa ────────────────────────────────────────────────
+/// Ưu đãi/học bổng cấu hình theo Course (áp toàn hệ thống, KHÔNG per-center — QĐ-9).
+model CourseDiscount {
+  id         String             @id @default(cuid())
+  courseId   String
+  course     Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  type       CourseDiscountType
+  value      Int // AMOUNT: VND; PERCENT/SCHOLARSHIP: %; PROGRAM: tùy note
+  note       String?
+  conditions String?            @db.Text
+  active     Boolean            @default(true)
+  validFrom  DateTime?
+  validTo    DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@index([courseId, active])
+}
+
+// ─── R7-06 — Kế hoạch buổi học theo lớp (snapshot từ curriculum pin) ──────────
+/// Kế hoạch từng buổi của 1 lớp, sao từ Lesson của curriculum version pin lúc tạo lớp.
+/// Reorder/ghi chú sửa ở đây — KHÔNG đụng Lesson gốc (AC4).
+model ClassSessionPlan {
+  id          String   @id @default(cuid())
+  classId     String
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  seq         Int // số thứ tự buổi gốc theo curriculum
+  lessonId    String? // tham chiếu Lesson nguồn (snapshot; không ràng FK cứng)
+  customTitle String?
+  note        String?  @db.Text
+  order       Int      @default(0) // thứ tự hiển thị (cho phép reorder)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions ClassSession[]
+
+  @@index([classId, order])
 }
