@@ -7,7 +7,7 @@
 | Ticket | Title | Đợt | ƯL | Phụ thuộc | Trạng thái |
 |---|---|---|---|---|---|
 | [R7-00](R7-00-security-gate.md) | Tiền đề bảo mật C1–C3 (gate) | R7a | M | R6 | TODO |
-| [R7-01](R7-01-lead-child.md) | LeadChild + trạng thái lead mới + SLA 24h | R7a | L | R7-00 | TODO |
+| [R7-01](R7-01-lead-child.md) | LeadChild + trạng thái lead mới + SLA 24h | R7a | L | R7-00 | 🟡 CODE DONE (2026-06-15) — model+migration+service+UI+unit; chờ `migrate deploy` + e2e (test DB) |
 | [R7-02](R7-02-trial-class.md) | Lớp trải nghiệm N buổi end-to-end | R7a | XL | R7-01 | TODO |
 | [R7-03](R7-03-course-pricing.md) | Ưu đãi theo khóa + snapshot giá Enrollment | R7a | M | R7-00 | TODO |
 | [R7-04](R7-04-payment-two-tier.md) | Payment 2 tầng + Receipt + 2 đợt X ngày + công nợ | R7a | XL | R7-03 | TODO |

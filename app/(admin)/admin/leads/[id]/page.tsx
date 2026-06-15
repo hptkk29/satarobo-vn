@@ -12,6 +12,7 @@ import { ReassignButton } from "./_components/reassign-button";
 import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { CloseDealButton } from "./_components/close-deal-button";
+import { LeadChildrenManager } from "../_components/lead-children";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ export default async function LeadDetailPage({ params }: Props) {
       assignedTo: { select: { id: true, name: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 100 },
       tasks: { orderBy: [{ status: "asc" }, { dueAt: "asc" }] },
+      children: { orderBy: { createdAt: "asc" } },
       trialClasses: {
         orderBy: { scheduledAt: "desc" },
         include: {
@@ -86,6 +88,22 @@ export default async function LeadDetailPage({ params }: Props) {
     : [[], []];
   const dealClosable =
     canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
+
+  // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
+  const [childCenters, childCourses] = await Promise.all([
+    db.center.findMany({
+      where: { isActive: true },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true, name: true },
+    }),
+    db.course.findMany({
+      where: { isActive: true, isTeachable: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, category: true },
+    }),
+  ]);
+  // Lead LOST (hoặc không có quyền sửa) → con hiển thị read-only.
+  const childrenReadOnly = !canTransfer || status === "LOST";
 
   // Lớp đang mở để chọn khi chốt deal (ưu tiên cùng cơ sở với lead).
   const classOptions = dealClosable
@@ -186,6 +204,31 @@ export default async function LeadDetailPage({ params }: Props) {
         />
         <Info label="Ghi chú" value={lead.note} />
       </dl>
+
+      {/* R7-01 — danh sách con (LeadChild) + field phẳng cũ read-only */}
+      <div className="mb-6">
+        <LeadChildrenManager
+          leadId={lead.id}
+          childrenList={lead.children.map((c) => ({
+            id: c.id,
+            fullName: c.fullName,
+            dob: c.dob ? c.dob.toISOString() : null,
+            ageYears: c.ageYears,
+            gender: c.gender,
+            schoolName: c.schoolName,
+            gradeLevel: c.gradeLevel,
+            interestedCourseId: c.interestedCourseId,
+            interestedCenterId: c.interestedCenterId,
+            note: c.note,
+            trialStatus: c.trialStatus,
+          }))}
+          centers={childCenters}
+          courses={childCourses}
+          readOnly={childrenReadOnly}
+          legacyChildName={lead.childName}
+          legacyChildAge={lead.childAge}
+        />
+      </div>
 
       {/* Chốt deal (Phase T1.5) */}
       {dealClosable && (

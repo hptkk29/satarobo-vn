@@ -1,6 +1,7 @@
 // R1-06 — SLA engine (THUẦN, C6.1–C6.5). Pure.
 import { describe, it, expect } from "vitest";
-import { evaluateSla } from "@/lib/crm/sla";
+import { evaluateSla, isLeadIdle } from "@/lib/crm/sla";
+import { canTransitionLeadStatus } from "@/lib/leads/status";
 
 const NOW = new Date("2026-06-09T12:00:00Z");
 const ago = (ms: number) => new Date(NOW.getTime() - ms);
@@ -37,5 +38,46 @@ describe("[R1-06] evaluateSla", () => {
   it("nhiều vi phạm cùng lúc", () => {
     const r = evaluateSla({ qualifiedAt: ago(5 * H), assignedAt: ago(4 * H) }, NOW);
     expect(r).toEqual(expect.arrayContaining(["SLA-1", "SLA-3"]));
+  });
+});
+
+describe("[R7-01-C3] isLeadIdle", () => {
+  it("NEW + 13h ago vượt ngưỡng 12h → idle", () => {
+    expect(isLeadIdle({ status: "NEW", lastActivityAt: ago(13 * H) }, NOW, 12)).toBe(true);
+  });
+  it("NEW + 13h ago dưới ngưỡng 24h → không idle", () => {
+    expect(isLeadIdle({ status: "NEW", lastActivityAt: ago(13 * H) }, NOW, 24)).toBe(false);
+  });
+  it("status CONTACTED → không idle (ngoài NEW/ASSIGNED)", () => {
+    expect(isLeadIdle({ status: "CONTACTED", lastActivityAt: ago(13 * H) }, NOW, 12)).toBe(false);
+  });
+  it("lastActivityAt null → không idle", () => {
+    expect(isLeadIdle({ status: "NEW", lastActivityAt: null }, NOW, 12)).toBe(false);
+  });
+});
+
+describe("[R7-01-C4] canTransitionLeadStatus", () => {
+  it("NEW→REGISTERED → ok:false", () => {
+    expect(canTransitionLeadStatus("NEW", "REGISTERED", { hasRecordedPayment: true }).ok).toBe(false);
+  });
+  it("AWAITING_DECISION→REGISTERED không có khoản ghi nhận → ok:false", () => {
+    expect(
+      canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: false }).ok,
+    ).toBe(false);
+  });
+  it("AWAITING_DECISION→REGISTERED có khoản ghi nhận → ok:true", () => {
+    expect(
+      canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: true }).ok,
+    ).toBe(true);
+  });
+  it("AWAITING_DECISION→CONTACTED → ok:true (permissive)", () => {
+    expect(
+      canTransitionLeadStatus("AWAITING_DECISION", "CONTACTED", { hasRecordedPayment: false }).ok,
+    ).toBe(true);
+  });
+  it("REGISTERED→ENROLLED → ok:true", () => {
+    expect(
+      canTransitionLeadStatus("REGISTERED", "ENROLLED", { hasRecordedPayment: false }).ok,
+    ).toBe(true);
   });
 });

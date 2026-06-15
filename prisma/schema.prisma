@@ -48,6 +48,17 @@ enum LeadStatus {
   LOST
   DUPLICATE
   DEMO_SCHEDULED // deprecated — data đã map sang TRIAL_SCHEDULED, giữ cho back-compat
+  // R7-01 (additive) — QĐ-O9
+  TRIAL_IN_PROGRESS // đang học thử (lớp trải nghiệm đang diễn ra)
+  REGISTERED // đã đăng ký (đã có khoản Sale ghi nhận, chưa convert)
+}
+
+/// R7-01 — trạng thái học thử của từng con trong 1 lead (LeadChild).
+enum LeadChildTrialStatus {
+  NONE
+  SCHEDULED
+  IN_PROGRESS
+  ATTENDED
 }
 
 enum CourseType {
@@ -971,6 +982,10 @@ model Lead {
   orders Order[] @relation("LeadOrders")
   assignmentHistory LeadAssignmentHistory[]
 
+  // R7-01 — LeadChild (N con) + mốc hoạt động gần nhất cho SLA idle.
+  children       LeadChild[]
+  lastActivityAt DateTime? // cập nhật khi có LeadActivity; SLA lead_idle_24h đọc field này
+
   @@index([phone])
   @@index([status])
   @@index([assignedToId])
@@ -978,6 +993,28 @@ model Lead {
   @@index([createdAt])
   @@index([deletedAt])
   @@index([eventId])
+}
+
+/// R7-01 — 1 Lead có N con. Nền cho lớp trải nghiệm (R7-02). Field phẳng cũ
+/// (Lead.childName/childAge) giữ đọc-only (2-phase, KHÔNG drop).
+model LeadChild {
+  id                 String               @id @default(cuid())
+  leadId             String
+  lead               Lead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fullName           String
+  dob                DateTime?            @db.Date
+  ageYears           Int?
+  gender             String?
+  schoolName         String?
+  gradeLevel         String?
+  interestedCourseId String? // tham chiếu Course (không ràng FK cứng — additive)
+  interestedCenterId String? // tham chiếu Center
+  note               String?              @db.Text
+  trialStatus        LeadChildTrialStatus @default(NONE)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([leadId])
 }
 
 model Note {
