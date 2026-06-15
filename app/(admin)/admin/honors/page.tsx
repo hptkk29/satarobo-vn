@@ -4,13 +4,14 @@ import { db } from "@/lib/db";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { HonorsAdminTable } from "@/components/admin/honors/honors-admin-table";
+import { can } from "@/lib/auth/permissions";
 
 export const metadata = { title: "Quản lý Hall of Fame | Admin" };
 
 export default async function HonorsAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!["SUPER_ADMIN", "CENTER_MANAGER"].includes(session.user.role)) {
+  if (!can(session.user, "honors:settings")) {
     redirect("/dashboard");
   }
 
@@ -19,7 +20,7 @@ export default async function HonorsAdminPage() {
     include: { createdBy: { select: { name: true } } },
   });
 
-  const canDelete = session.user.role === "SUPER_ADMIN";
+  const canDelete = can(session.user, "honors:delete");
 
   return (
     <div>

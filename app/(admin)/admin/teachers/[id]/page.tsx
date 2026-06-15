@@ -54,15 +54,15 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   const overloadHours = await getSetting("teacher.overloadHoursPerWeek");
   const me = session.user;
   const isOwn = me.id === id;
-  const cmInScope = me.role === "CENTER_MANAGER" && teacher.centerId === me.centerId;
+  const cmInScope = hasRole(me, "CENTER_MANAGER") && teacher.centerId === me.centerId;
   // Xem: SUPER_ADMIN/HR (employees:view-all & không phải CM), CM cùng cơ sở, hoặc GV xem chính mình.
   const canViewByRole =
     can(me, "employees:view-all") &&
-    (me.role !== "CENTER_MANAGER" || cmInScope);
+    (!hasRole(me, "CENTER_MANAGER") || cmInScope);
   const canView = isOwn || canViewByRole;
   if (!canView) redirect("/dashboard");
   // Sửa: SUPER_ADMIN, hoặc CM cùng cơ sở.
-  const canEdit = me.role === "SUPER_ADMIN" || cmInScope;
+  const canEdit = hasRole(me, "SUPER_ADMIN") || cmInScope;
 
   const p = teacher.teacherProfile;
   const teacherCourseIds = p?.teachableCourses.map((t) => t.courseId) ?? [];

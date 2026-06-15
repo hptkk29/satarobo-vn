@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClipboardCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 import { CenterChecklistForm } from "./_components/checklist-form";
@@ -26,8 +26,8 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
       ? sp.date
       : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-  const isSuper = session.user.role === "SUPER_ADMIN" || (session.user.roles?.includes("SUPER_ADMIN") ?? false);
-  const isCM = session.user.role === "CENTER_MANAGER" || (session.user.roles?.includes("CENTER_MANAGER") ?? false);
+  const isSuper = hasRole(session.user, "SUPER_ADMIN");
+  const isCM = hasRole(session.user, "CENTER_MANAGER");
 
   const centers = isSuper
     ? await db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })

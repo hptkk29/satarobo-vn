@@ -3,16 +3,15 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 import { QuestionForm } from "../_components/question-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
-
 export default async function NewQuestionPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "questions:author")) {
     redirect("/dashboard?error=unauthorized");
   }
 

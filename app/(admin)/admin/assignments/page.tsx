@@ -3,11 +3,10 @@ import { ClipboardList, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 import { AssignmentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const STATUS_INFO: Record<AssignmentStatus, { label: string; color: string }> = {
   DRAFT: { label: "Đang soạn", color: "bg-gray-100 text-gray-700" },
@@ -34,7 +33,7 @@ interface SearchParams {
 export default async function AssignmentsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "assignments:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

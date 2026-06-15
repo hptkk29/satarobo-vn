@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { can } from '@/lib/auth/permissions'
+import { can, hasRole } from '@/lib/auth/permissions'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { LeadStatus } from '@prisma/client'
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  const isMarketing = session.user.role === 'MARKETING'
+  const isMarketing = hasRole(session.user, 'MARKETING')
 
   const headers = [
     'ID', 'Phụ huynh', 'SĐT', 'Email', 'Tên con', 'Tuổi',

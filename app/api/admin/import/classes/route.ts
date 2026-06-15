@@ -4,8 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ClassStatusEnum } from "@/lib/validators/class";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"];
+import { can } from "@/lib/auth/permissions";
 
 // Excel date parser — reused from D2 / B3.
 function parseExcelDate(v: unknown): Date | null {
@@ -151,7 +150,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "classes:create")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

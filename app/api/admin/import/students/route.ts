@@ -8,8 +8,7 @@ import {
   BloodTypeEnum,
   GenderEnum,
 } from "@/lib/validators/student";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"];
+import { can } from "@/lib/auth/permissions";
 
 // Excel date parser — reused pattern from B3 / C2.
 function parseExcelDate(v: unknown): Date | null {
@@ -145,7 +144,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "students:import")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

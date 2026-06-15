@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { enqueueNewFeedback } from "@/lib/email/triggers";
+import { hasRole } from "@/lib/auth/permissions";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -22,9 +23,9 @@ export async function canManageSessionClass(
   user: { id: string; role: string; centerId: string | null },
   cls: ClassGate,
 ): Promise<boolean> {
-  if (user.role === "SUPER_ADMIN") return true;
-  if (user.role === "CENTER_MANAGER") return !!cls.centerId && cls.centerId === user.centerId;
-  if (user.role === "TEACHER") return cls.teacherId === user.id || cls.assistantId === user.id;
+  if (hasRole(user, "SUPER_ADMIN")) return true;
+  if (hasRole(user, "CENTER_MANAGER")) return !!cls.centerId && cls.centerId === user.centerId;
+  if (hasRole(user, "TEACHER")) return cls.teacherId === user.id || cls.assistantId === user.id;
   return false;
 }
 

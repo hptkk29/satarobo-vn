@@ -12,11 +12,10 @@ import {
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 import { DocumentType, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const TYPE_INFO: Record<DocumentType, { label: string; color: string }> = {
   PDF: { label: "PDF", color: "bg-red-100 text-red-700" },
@@ -66,7 +65,7 @@ interface SearchParams {
 export default async function DocumentsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "documents:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

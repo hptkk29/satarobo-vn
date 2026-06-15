@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import type { Prisma } from "@prisma/client";
 import {
   RANK_LABEL,
@@ -29,7 +29,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
   const q = params.q?.trim();
   // CENTER_MANAGER chỉ xem GV trong cơ sở mình.
   const centerScope =
-    session.user.role === "CENTER_MANAGER" ? session.user.centerId : null;
+    hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
 
   const where: Prisma.UserWhereInput = {
     isActive: true,

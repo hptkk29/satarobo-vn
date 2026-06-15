@@ -2,14 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRightLeft, ChevronLeft, ClipboardList, History } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { ChangeStatusDialog } from "../../_components/change-status-dialog";
 import { TransferDialog } from "../../_components/transfer-dialog";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"];
-const AUDIT_VIEWER_ROLES = new Set(["SUPER_ADMIN", "CENTER_MANAGER"]);
 const TERMINAL_STATUSES = new Set([
   "COMPLETED",
   "WITHDREW",
@@ -53,12 +52,12 @@ interface Props {
 export default async function EditEnrollmentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "enrollments:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
-  const canViewAudit = AUDIT_VIEWER_ROLES.has(session.user.role);
+  const canViewAudit = can(session.user, "audit-logs:view");
 
   const enrollment = await db.enrollment.findUnique({
     where: { id },

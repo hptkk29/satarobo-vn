@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   receiptSchema,
@@ -18,15 +19,13 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"] as const;
-
 async function requireRole(): Promise<
   | { ok: true; userId: string }
   | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!ALLOWED_ROLES.includes(session.user.role as (typeof ALLOWED_ROLES)[number])) {
+  if (!can(session.user, "inventory:movement")) {
     return { ok: false, error: "Không có quyền ghi nhận giao dịch kho" };
   }
   return { ok: true, userId: session.user.id ?? "" };

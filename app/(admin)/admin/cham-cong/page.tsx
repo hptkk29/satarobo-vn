@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import type { WorkShift } from "@prisma/client";
 import {
@@ -41,7 +41,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const dateStr = start.toISOString().slice(0, 10);
 
   // Phạm vi cơ sở: CENTER_MANAGER chỉ xem cơ sở mình.
-  const centerScope = session.user.role === "CENTER_MANAGER" ? session.user.centerId : null;
+  const centerScope = hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
 
   const [rows, regs] = await Promise.all([
     db.employeeCheckin.findMany({

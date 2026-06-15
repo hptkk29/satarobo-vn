@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { can } from '@/lib/auth/permissions'
+import { can, hasRole } from '@/lib/auth/permissions'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
@@ -93,7 +93,7 @@ export default async function LeadsPage({
       : {}),
   }
 
-  const isMarketing = session.user.role === 'MARKETING'
+  const isMarketing = hasRole(session.user, 'MARKETING')
   const canCloseDeal =
     can(session.user, 'students:create') && can(session.user, 'enrollments:create')
   const canAssign = can(session.user, 'leads:assign')

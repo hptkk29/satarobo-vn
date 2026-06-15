@@ -3,11 +3,10 @@ import { BookOpen, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 interface SearchParams {
   searchParams: Promise<{
@@ -20,7 +19,7 @@ interface SearchParams {
 export default async function CurriculumsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "curriculum:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

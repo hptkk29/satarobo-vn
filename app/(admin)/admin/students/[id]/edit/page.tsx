@@ -3,7 +3,7 @@ import { LineChart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { getStudentProgress } from "@/lib/progress";
 import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
@@ -96,8 +96,8 @@ export default async function EditStudentPage({ params }: Props) {
     if (!latestSkills[r.skill]) latestSkills[r.skill] = { level: r.level, note: r.note ?? "" };
   }
   const canAssessSkills =
-    session.user.role === "SUPER_ADMIN" ||
-    (session.user.role === "CENTER_MANAGER" && student.centerId === session.user.centerId);
+    hasRole(session.user, "SUPER_ADMIN") ||
+    (hasRole(session.user, "CENTER_MANAGER") && student.centerId === session.user.centerId);
 
   const formValue: StudentFormValue = {
     id: student.id,

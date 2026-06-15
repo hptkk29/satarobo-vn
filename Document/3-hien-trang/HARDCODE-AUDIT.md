@@ -60,9 +60,11 @@
 
 ---
 
-## 2. 🔴 HARDCODE QUYỀN / ROLE (nên dùng `can()` thay vì tên role)
+## 2. 🔴 HARDCODE QUYỀN / ROLE (nên dùng `can()` thay vì tên role) — ✅ ĐÃ XỬ LÝ (Đợt 4)
 
 > Kiến trúc đích: RBAC động (`RoleDef`/`RolePermission`) + `can(actor, action)`. KHÔNG check theo TÊN role. (~75 file vi phạm.)
+>
+> **✅ Đợt 4 (matrix = source of truth):** ~70 file đã chuyển `ALLOWED_ROLES`/`role === "..."` → `can()` / `hasRole()` / `hasAnyRole()`. Xoá file chết `lib/permissions.ts` (role cũ MANAGER/SALES, không ai import). **Đổi hành vi có chủ đích** (matrix thắng): reports/transcript|certificate|student-progress bỏ TEACHER + thêm MARKETING/ACCOUNTANT (`students:view-all`); course-packages thêm MARKETING (`course-packages:edit`); teachers-mgmt thêm HR (`employees:edit`). **GIỮ nguyên** (không phải actor-gate): check role của record đích trong `users/*` (last-super-admin), `nhan-su/actions.ts` VALID_ROLES (Zod enum), `classes/_actions.ts` SUBMIT/APPROVE_ROLES (đã dùng `hasAnyRole`, chưa có action khớp submit/approve), nhãn hiển thị (`class-form` "(QL)", `weekly-schedule` assistant).
 
 ### 2.1 Mảng `ALLOWED_ROLES` cứng (Frontend pages + Backend actions) — ~20 file
 
@@ -122,7 +124,7 @@ Mẫu lặp lại: `const ALLOWED_ROLES = ["SUPER_ADMIN","CENTER_MANAGER","TEACH
 
 | File:dòng | Hằng số | Đề xuất key |
 |---|---|---|
-| `lib/crm/sla.ts:8-14` | SLA-0..4 (5'/4h/30'/3h/2 ngày) | `crm.sla.*` |
+| ~~`lib/crm/sla.ts:8-14`~~ ✅ wired (Dot 3) | SLA-0..4 (5'/4h/30'/3h/2 ngày) | `crm.sla.*` (5 key phút, `loadSlaThresholds()`) |
 | `lib/crm/lead-qualify.ts:15` · `lib/lead/dedup.ts:7` | `DEDUP_WINDOW_DAYS = 90` (trùng 2 nơi) | `crm.dedupWindowDays` |
 | `lib/students/lifecycle.ts:5-7` | `RENEWAL_WINDOW_DAYS=90`, `FREQUENT_ABSENT_THRESHOLD=3`, `FREQUENT_ABSENT_WINDOW=5` | `student.*` |
 | `lib/students/absence.ts:8` | `URGENT_THRESHOLD_DAYS = 3` | `student.absenceUrgentThresholdDays` |

@@ -4,8 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { InventoryCategoryEnum } from "@/lib/validators/inventory";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
+import { can } from "@/lib/auth/permissions";
 
 function parseBoolean(v: unknown): boolean {
   if (typeof v === "boolean") return v;
@@ -98,7 +97,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:edit")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

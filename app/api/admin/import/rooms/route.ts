@@ -3,8 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"];
+import { can } from "@/lib/auth/permissions";
 
 const intish = z
   .union([z.number(), z.string()])
@@ -72,7 +71,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "rooms:edit")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

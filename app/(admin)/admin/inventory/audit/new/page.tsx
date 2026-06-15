@@ -1,18 +1,17 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { StartAuditForm } from "../_components/start-audit-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
-
 export default async function NewAuditPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:audit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

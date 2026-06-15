@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { ChevronLeft, ClipboardCheck, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { InventoryAuditStatus, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 const STATUS_INFO: Record<
   InventoryAuditStatus,
@@ -41,7 +40,7 @@ interface SearchParams {
 export default async function AuditListPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:audit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

@@ -5,10 +5,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { AttemptStatus } from "@prisma/client";
 import { GradeButton } from "../../_components/grade-button";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const ATTEMPT_STATUS_INFO: Record<
   AttemptStatus,
@@ -38,7 +37,7 @@ interface Props {
 export default async function ExamAttemptsPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "exams:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

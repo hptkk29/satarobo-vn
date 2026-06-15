@@ -3,14 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { hasRole } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { getStudentTranscript } from "@/lib/transcript/service";
 import { TranscriptPdf } from "@/lib/pdf/transcript";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "HR", "SALES_CSM"];
 
 function safeFilename(s: string): string {
   return s
@@ -23,7 +21,7 @@ function safeFilename(s: string): string {
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "students:view-all")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

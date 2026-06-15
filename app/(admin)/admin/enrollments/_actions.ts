@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -11,8 +12,6 @@ type ActionResult = { error?: string };
 type WorkflowResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"] as const;
 
 // Statuses that count toward a class's capacity.
 const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"] as const;
@@ -110,8 +109,7 @@ export async function checkPrerequisites(
 async function requireSalesOrAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const role = session.user.role;
-  if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
+  if (!can(session.user, "enrollments:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -265,7 +263,7 @@ export async function enrollStudent(
 ): Promise<WorkflowResult<{ enrollmentId: string }>> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!ALLOWED_ROLES.includes(session.user.role as (typeof ALLOWED_ROLES)[number])) {
+  if (!can(session.user, "enrollments:create")) {
     return { ok: false, error: "Không có quyền đăng ký HS" };
   }
 
@@ -382,7 +380,7 @@ export async function changeEnrollmentStatus(
 ): Promise<WorkflowResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!ALLOWED_ROLES.includes(session.user.role as (typeof ALLOWED_ROLES)[number])) {
+  if (!can(session.user, "enrollments:edit")) {
     return { ok: false, error: "Không có quyền đổi trạng thái" };
   }
 
@@ -486,7 +484,7 @@ export async function transferEnrollment(
 ): Promise<WorkflowResult<{ newEnrollmentId: string }>> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!ALLOWED_ROLES.includes(session.user.role as (typeof ALLOWED_ROLES)[number])) {
+  if (!can(session.user, "enrollments:transfer")) {
     return { ok: false, error: "Không có quyền chuyển lớp" };
   }
 

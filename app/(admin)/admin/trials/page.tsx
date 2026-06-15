@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import type { Prisma, TrialClassStatus } from "@prisma/client";
 import { TrialsList } from "./_components/trials-list";
@@ -19,7 +19,7 @@ export default async function TrialsPage({ searchParams }: Props) {
   if (!can(session.user, "trials:view")) redirect("/dashboard");
 
   const { status } = await searchParams;
-  const isTeacher = session.user.role === "TEACHER";
+  const isTeacher = hasRole(session.user, "TEACHER");
   const canManage = can(session.user, "trials:manage");
 
   const where: Prisma.TrialClassWhereInput = {};

@@ -5,10 +5,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { CurriculumForm } from "../../_components/curriculum-form";
 import { LessonList } from "../../_components/lesson-list";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -17,7 +16,7 @@ interface Props {
 export default async function EditCurriculumPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "curriculum:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
 
