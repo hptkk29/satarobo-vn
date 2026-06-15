@@ -204,6 +204,47 @@ export const SETTINGS = {
     default: 90, // lib/crm/lead-qualify.ts & lib/lead/dedup.ts
     centerOverridable: false,
   }),
+  // SLA phễu SR.QD.217 (lib/crm/sla.ts SLA_THRESHOLDS) — ngưỡng tính bằng PHÚT.
+  "crm.sla.respondMinutes": def({
+    key: "crm.sla.respondMinutes",
+    group: "crm",
+    label: "SLA-0: chưa phản hồi tin nhắn (phút)",
+    schema: z.number().int().min(1).max(1440),
+    default: 5, // 5'
+    centerOverridable: false,
+  }),
+  "crm.sla.handoverMinutes": def({
+    key: "crm.sla.handoverMinutes",
+    group: "crm",
+    label: "SLA-1: chưa bàn giao lead sau L2 (phút)",
+    schema: z.number().int().min(1).max(10080),
+    default: 240, // 4h
+    centerOverridable: false,
+  }),
+  "crm.sla.assignMinutes": def({
+    key: "crm.sla.assignMinutes",
+    group: "crm",
+    label: "SLA-2: chưa phân công Sale (phút)",
+    schema: z.number().int().min(1).max(10080),
+    default: 30, // 30'
+    centerOverridable: false,
+  }),
+  "crm.sla.contactMinutes": def({
+    key: "crm.sla.contactMinutes",
+    group: "crm",
+    label: "SLA-3: chưa liên hệ khách sau phân công (phút)",
+    schema: z.number().int().min(1).max(10080),
+    default: 180, // 3h
+    centerOverridable: false,
+  }),
+  "crm.sla.silentMinutes": def({
+    key: "crm.sla.silentMinutes",
+    group: "crm",
+    label: "SLA-4: lead im lặng chưa xử lý (phút)",
+    schema: z.number().int().min(1).max(43200),
+    default: 2880, // 2 ngày
+    centerOverridable: false,
+  }),
   "shift.geofenceRadiusMeters": def({
     key: "shift.geofenceRadiusMeters",
     group: "shift",
