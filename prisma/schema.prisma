@@ -1018,6 +1018,8 @@ model LeadChild {
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
+  trialEnrollments TrialEnrollment[] // R7-02
+
   @@index([leadId])
 }
 
@@ -1315,6 +1317,8 @@ model Enrollment {
   // Phase 5.9 — Reserve link (enrollment-specific reserves only; whole-student
   // reserves leave enrollmentId NULL)
   reserves StudentReserve[] @relation("EnrollmentReserves")
+  payments Payment[]        @relation("EnrollmentPayments") // R7-04
+  receipts Receipt[]        @relation("EnrollmentReceipts") // R7-04
 
   @@unique([studentId, classId])
   @@index([studentId])
@@ -2842,6 +2846,7 @@ model Order {
 
   // Commit 4 — thanh toán tối đa 2 đợt
   installments OrderInstallment[]
+  payments     Payment[]         @relation("OrderPayments") // R7-04
 
   @@index([code])
   @@index([status])
@@ -2868,6 +2873,8 @@ model OrderInstallment {
   dueDate      DateTime?
   paidAt       DateTime?
   recordedById String?
+  // R7-04 — số ngày nhắc trước hạn (QĐ-O7); null → đọc SystemSetting default 14.
+  reminderDays Int?
   // Mốc nhắc công nợ gần nhất (chống spam — 1 nhắc/ngày).
   lastReminderAt DateTime?
   createdAt    DateTime          @default(now())
@@ -4286,4 +4293,192 @@ model ClassSessionPlan {
   sessions ClassSession[]
 
   @@index([classId, order])
+}
+
+// ═══ R7-04 — Payment 2 tầng + Receipt ════════════════════════════════════════
+enum PaymentSaleStatus {
+  RECORDED // Sale ghi nhận đã thu
+  COLLECT_CONFIRMED // Sale xác nhận thực thu (chuẩn bị bàn giao kế toán)
+}
+
+enum PaymentAccountantStatus {
+  PENDING // chờ kế toán
+  CONFIRMED // kế toán xác nhận (giảm công nợ, sinh Receipt)
+  REJECTED // kế toán từ chối (bắt buộc reason)
+  REFUNDED // hoàn (bút toán âm, không xóa gốc)
+  ADJUSTED // bản điều chỉnh (trỏ adjustmentOfId)
+}
+
+enum ReceiptStatus {
+  ACTIVE
+  VOID // thu hồi khi khoản bị reject sau khi đã sinh receipt
+}
+
+/// R7-04 — khoản thanh toán 2 tầng (Sale ghi nhận ↔ Kế toán xác nhận). Center-scoped.
+model Payment {
+  id           String  @id @default(cuid())
+  orderId      String
+  order        Order   @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Cascade)
+  enrollmentId String?
+  enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull)
+  amount       Int
+  method       String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
+  paidDate     DateTime
+  evidenceUrl  String?
+  note         String? @db.Text
+
+  saleStatus       PaymentSaleStatus       @default(RECORDED)
+  accountantStatus PaymentAccountantStatus @default(PENDING)
+  recordedById     String?
+  confirmedById    String?
+  confirmedAt      DateTime?
+  rejectReason     String? @db.Text
+
+  adjustmentOfId String?
+  adjustmentOf   Payment?  @relation("PaymentAdjustment", fields: [adjustmentOfId], references: [id], onDelete: SetNull)
+  adjustments    Payment[] @relation("PaymentAdjustment")
+
+  centerId  String? // cách ly cơ sở (scopedDb)
+  receipts  Receipt[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([enrollmentId])
+  @@index([centerId])
+  @@index([accountantStatus])
+}
+
+/// R7-04 — phiếu thu per Enrollment (nhiều phiếu), sinh khi kế toán CONFIRMED.
+model Receipt {
+  id           String        @id @default(cuid())
+  code         String        @unique // RCP-{CENTER}-{YY}-{SEQ}
+  enrollmentId String
+  enrollment   Enrollment    @relation("EnrollmentReceipts", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  paymentId    String
+  payment      Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  issuedById   String?
+  issuedAt     DateTime      @default(now())
+  status       ReceiptStatus @default(ACTIVE)
+
+  @@index([enrollmentId])
+  @@index([paymentId])
+}
+
+// ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════
+enum TrialClassV2Status {
+  OPEN
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+enum TrialSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum TrialEnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  WITHDRAWN
+}
+
+enum TrialAttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+/// R7-02 — cấu hình số buổi lớp trải nghiệm (Đào tạo cấu hình, QĐ-O10).
+model TrialProgramConfig {
+  id           String         @id @default(cuid())
+  name         String
+  sessionCount Int
+  active       Boolean        @default(true)
+  updatedById  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  trialClasses TrialClassV2[]
+}
+
+/// R7-02 — lớp trải nghiệm (mới; TrialClass cũ giữ đọc-only 2-phase). Center-scoped.
+model TrialClassV2 {
+  id           String             @id @default(cuid())
+  code         String             @unique
+  name         String
+  type         String             @default("TRIAL_ROBOSIM")
+  centerId     String // cách ly cơ sở (scopedDb)
+  roomId       String?
+  startDate    DateTime           @db.Date
+  startTime    String
+  endTime      String
+  capacity     Int
+  teacherId    String?
+  assistantId  String?
+  status       TrialClassV2Status @default(OPEN)
+  configId     String?
+  config       TrialProgramConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+  sessionCount Int // snapshot lúc tạo (lớp cũ giữ N cũ khi config đổi)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  sessions    TrialClassSession[]
+  enrollments TrialEnrollment[]
+
+  @@index([centerId, status])
+}
+
+/// R7-02 — buổi của lớp trải nghiệm (sinh tự động khi tạo lớp, né Holiday).
+model TrialClassSession {
+  id           String             @id @default(cuid())
+  trialClassId String
+  trialClass   TrialClassV2       @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  seq          Int // 1..N
+  date         DateTime           @db.Date
+  startTime    String
+  endTime      String
+  roomId       String?
+  teacherId    String?
+  status       TrialSessionStatus @default(SCHEDULED)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  attendances TrialAttendance[]
+
+  @@index([trialClassId, seq])
+}
+
+/// R7-02 — ghi danh 1 LeadChild vào 1 lớp trải nghiệm. Partial-unique 1 lớp ACTIVE/con (migration).
+model TrialEnrollment {
+  id           String                @id @default(cuid())
+  trialClassId String
+  trialClass   TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  leadChildId  String
+  leadChild    LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
+  status       TrialEnrollmentStatus @default(ACTIVE)
+  summaryNote  String?               @db.Text // nhận xét tổng kết học thử
+  addedById    String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  attendances TrialAttendance[]
+
+  @@index([trialClassId])
+  @@index([leadChildId])
+}
+
+/// R7-02 — điểm danh + nhận xét per buổi per LeadChild.
+model TrialAttendance {
+  id                String                @id @default(cuid())
+  trialSessionId    String
+  trialSession      TrialClassSession     @relation(fields: [trialSessionId], references: [id], onDelete: Cascade)
+  trialEnrollmentId String
+  trialEnrollment   TrialEnrollment       @relation(fields: [trialEnrollmentId], references: [id], onDelete: Cascade)
+  status            TrialAttendanceStatus @default(PRESENT)
+  note              String?               @db.Text
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([trialSessionId, trialEnrollmentId])
 }

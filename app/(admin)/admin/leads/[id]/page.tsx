@@ -13,6 +13,7 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { CloseDealButton } from "./_components/close-deal-button";
 import { LeadChildrenManager } from "../_components/lead-children";
+import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -104,6 +105,26 @@ export default async function LeadDetailPage({ params }: Props) {
   ]);
   // Lead LOST (hoặc không có quyền sửa) → con hiển thị read-only.
   const childrenReadOnly = !canTransfer || status === "LOST";
+
+  // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
+  const canTrialManage = can(session.user, "trials:manage");
+  const openTrialClasses = canTrialManage
+    ? await db.trialClassV2.findMany({
+        where: {
+          status: "OPEN",
+          ...(lead.centerId ? { centerId: lead.centerId } : {}),
+        },
+        orderBy: { startDate: "asc" },
+        take: 50,
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          capacity: true,
+          enrollments: { where: { status: "ACTIVE" }, select: { id: true } },
+        },
+      })
+    : [];
 
   // Lớp đang mở để chọn khi chốt deal (ưu tiên cùng cơ sở với lead).
   const classOptions = dealClosable
@@ -229,6 +250,23 @@ export default async function LeadDetailPage({ params }: Props) {
           legacyChildAge={lead.childAge}
         />
       </div>
+
+      {/* R7-02 — xếp con vào lớp trải nghiệm */}
+      {canTrialManage && lead.children.length > 0 && (
+        <div className="mb-6">
+          <TrialEnrollWidget
+            children={lead.children.map((c) => ({ id: c.id, fullName: c.fullName }))}
+            openClasses={openTrialClasses.map((cl) => ({
+              id: cl.id,
+              name: cl.name,
+              code: cl.code,
+              capacity: cl.capacity,
+              used: cl.enrollments.length,
+            }))}
+            canOverride={can(session.user, "trials:override-capacity")}
+          />
+        </div>
+      )}
 
       {/* Chốt deal (Phase T1.5) */}
       {dealClosable && (

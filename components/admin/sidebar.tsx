@@ -51,6 +51,7 @@ import {
   Clock,
   ChevronDown,
   Workflow,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
+      { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
       { label: "Yêu cầu PH", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Báo vắng cần xử lý", href: "/parent-requests/bao-vang", icon: CalendarX, perm: ["parent-requests:manage"] },
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
@@ -156,6 +158,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
+      { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage"] },
+      { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage"] },
       { label: "Mã khuyến mãi", href: "/vouchers", icon: Ticket, perm: ["vouchers:view"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
     ],

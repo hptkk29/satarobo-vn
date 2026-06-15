@@ -3,14 +3,16 @@
 > Bảng tổng + test case bắt buộc: [../R7-lms-v3.1.md](../R7-lms-v3.1.md). Quy trình + template 11 mục: [../00-quy-trinh-thuc-hien.md](../00-quy-trinh-thuc-hien.md).
 > Nguồn spec: BA #05 (gap + QĐ-O1…O10 + XĐ-8 PA2) · BA #06 (US) · SRS v3.1.
 > 🟢 Kế hoạch ĐÃ DUYỆT (TGĐ 12/06/2026) — ticket ở TODO, sẵn sàng nhận việc từ R7-00. Điều kiện trước R7-01+: gate R7-00 xanh + TBD-3 (prod migrate) chốt.
+>
+> **📊 Tiến độ (2026-06-15):** R7-00/01/03/06 + R7-02/04 = CODE DONE. Postgres test local đã dựng (scoop), **toàn bộ migration apply sạch** (validate SQL tay), seed OK, **24 e2e R7-00→06 PASS** (`pnpm test:e2e:r7` với `R7_SKIP_WEBSERVER=1`). 403 unit + build + typecheck + lint xanh. **CÒN LẠI:** apply migration lên Supabase (`migrate deploy`), e2e cho R7-02/04, verify UI 375px; xem từng row.
 
 | Ticket | Title | Đợt | ƯL | Phụ thuộc | Trạng thái |
 |---|---|---|---|---|---|
 | [R7-00](R7-00-security-gate.md) | Tiền đề bảo mật C1–C3 (gate) | R7a | M | R6 | TODO |
 | [R7-01](R7-01-lead-child.md) | LeadChild + trạng thái lead mới + SLA 24h | R7a | L | R7-00 | 🟡 CODE DONE (2026-06-15) — model+migration+service+UI+unit; chờ `migrate deploy` + e2e (test DB) |
-| [R7-02](R7-02-trial-class.md) | Lớp trải nghiệm N buổi end-to-end | R7a | XL | R7-01 | TODO |
+| [R7-02](R7-02-trial-class.md) | Lớp trải nghiệm N buổi end-to-end | R7a | XL | R7-01 | 🟡 CODE DONE (2026-06-15) — TrialClassV2 model+migration+service+UI+unit; chờ e2e |
 | [R7-03](R7-03-course-pricing.md) | Ưu đãi theo khóa + snapshot giá Enrollment | R7a | M | R7-00 | 🟡 CODE DONE (2026-06-15) — CourseDiscount+migration+pricing helper+UI; snapshot ghi tại convert (R7-05); chờ migrate+e2e |
-| [R7-04](R7-04-payment-two-tier.md) | Payment 2 tầng + Receipt + 2 đợt X ngày + công nợ | R7a | XL | R7-03 | TODO |
+| [R7-04](R7-04-payment-two-tier.md) | Payment 2 tầng + Receipt + 2 đợt X ngày + công nợ | R7a | XL | R7-03 | 🟡 CODE DONE (2026-06-15) — Payment/Receipt model+migration+payment/debt/receipt logic+UI+cron+unit; chờ e2e |
 | [R7-05](R7-05-convert-v2.md) | Convert v2 (chặn thanh toán, multi-student, dedupe, consent, mã HV) | R7a | XL | R7-01,03,04 | TODO |
 | [R7-06](R7-06-class-snapshot.md) | ClassProgramSnapshot + guard + điều chỉnh buổi | R7a | L | R7-00 | 🟡 CODE DONE (2026-06-15) — pin curriculum+ClassSessionPlan+adopt+cancel/makeup+generate plan-aware+UI; adjust GV/phòng ghi audit (thiếu cột per-session — TODO schema); chờ migrate+e2e |
 | [R7-07](R7-07-assign-session.md) | Gán học viên + state machine buổi học | R7a | L | R7-06 | TODO |

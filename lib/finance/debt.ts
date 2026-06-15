@@ -1,8 +1,9 @@
-// lib/finance/debt.ts — R2-06 công nợ + R2-03 confirm payment (Doc 15 §4.9).
+// lib/finance/debt.ts — R2-06 công nợ + R2-03 confirm payment (Doc 15 §4.9) + R7-04 công nợ đa chiều.
 import type { Order } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { enqueueDebtReminder } from "@/lib/email/triggers";
+import type { ScopedDb } from "@/lib/actions/factory";
 
 /** Công nợ = tổng hoá đơn − đã trả (không âm). THUẦN (C6.1). */
 export function computeDebt(totalAmount: number, paidAmount: number): number {
@@ -43,6 +44,111 @@ export async function confirmOrderPayment(
     oldValues: { status: order.status }, newValues: { status: "CONFIRMED" }, reason, orgUnitId: order.centerId,
   });
   return { order: updated, alreadyConfirmed: false };
+}
+
+// ═══ R7-04 — công nợ đa chiều theo Enrollment (Payment 2 tầng) ═════════════════
+
+/**
+ * Công nợ 1 ghi danh = finalPrice − Σ amount(Payment CONFIRMED). THUẦN.
+ * Có thể ÂM (đóng thừa) — trả raw, caller tự bucket/hiển thị. finalPrice null → 0.
+ */
+export function computeEnrollmentDebt(
+  finalPrice: number | null,
+  confirmedPayments: { amount: number }[],
+): number {
+  const paid = confirmedPayments.reduce((s, p) => s + p.amount, 0);
+  return (finalPrice ?? 0) - paid;
+}
+
+const DAY_MS = 86_400_000;
+
+/** Bucket quá hạn theo dueDate vs now. THUẦN. dueDate null / chưa tới hạn → "none". */
+export function overdueBucket(dueDate: Date | null, now: Date): "none" | "1-7" | "8-30" | ">30" {
+  if (!dueDate) return "none";
+  const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / DAY_MS);
+  if (overdueDays <= 0) return "none";
+  if (overdueDays <= 7) return "1-7";
+  if (overdueDays <= 30) return "8-30";
+  return ">30";
+}
+
+/** Số ngày nhắc hiệu lực: per-row override → fallback default setting. THUẦN. */
+export function effectiveReminderDays(reminderDays: number | null, defaultDays: number): number {
+  return reminderDays ?? defaultDays;
+}
+
+/**
+ * Có đến hạn nhắc chưa: nhắc khi `dueDate − effectiveDays ≤ now`. THUẦN.
+ * (Chống spam 1/ngày là lastReminderAt — tách khỏi quyết định này.)
+ */
+export function isReminderDue(dueDate: Date | null, effectiveDays: number, now: Date): boolean {
+  if (!dueDate) return false;
+  const remindFrom = dueDate.getTime() - effectiveDays * DAY_MS;
+  return remindFrom <= now.getTime();
+}
+
+/** 1 dòng công nợ theo ghi danh (cho trang /admin/cong-no). */
+export type DebtRow = {
+  enrollmentId: string;
+  studentId: string | null;
+  studentName: string | null;
+  centerId: string | null;
+  finalPrice: number;
+  confirmedPaid: number;
+  debt: number;
+};
+
+/**
+ * Tổng hợp công nợ theo ghi danh — CHỈ tính Payment accountantStatus=CONFIRMED.
+ * Nhận client đã scope (tầng action truyền scopedDb(actor) → cách ly cơ sở tự động).
+ */
+export async function getDebtRows(
+  scopedDbClient: ScopedDb,
+  filters?: { enrollmentId?: string; studentId?: string },
+): Promise<DebtRow[]> {
+  const payments = await scopedDbClient.payment.findMany({
+    where: {
+      accountantStatus: "CONFIRMED",
+      enrollmentId: { not: null },
+      ...(filters?.enrollmentId ? { enrollmentId: filters.enrollmentId } : {}),
+      ...(filters?.studentId ? { enrollment: { studentId: filters.studentId } } : {}),
+    },
+    select: {
+      enrollmentId: true,
+      amount: true,
+      centerId: true,
+      enrollment: {
+        select: {
+          finalPrice: true,
+          tuition: true,
+          studentId: true,
+          student: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  const byEnrollment = new Map<string, DebtRow>();
+  for (const p of payments) {
+    if (!p.enrollmentId || !p.enrollment) continue;
+    const finalPrice = p.enrollment.finalPrice ?? p.enrollment.tuition ?? 0;
+    const existing = byEnrollment.get(p.enrollmentId);
+    if (existing) {
+      existing.confirmedPaid += p.amount;
+      existing.debt = existing.finalPrice - existing.confirmedPaid;
+    } else {
+      byEnrollment.set(p.enrollmentId, {
+        enrollmentId: p.enrollmentId,
+        studentId: p.enrollment.studentId,
+        studentName: p.enrollment.student?.name ?? null,
+        centerId: p.centerId,
+        finalPrice,
+        confirmedPaid: p.amount,
+        debt: finalPrice - p.amount,
+      });
+    }
+  }
+  return [...byEnrollment.values()];
 }
 
 /** Order quá hạn chưa thanh toán (cho cron nhắc nợ C6.2). */

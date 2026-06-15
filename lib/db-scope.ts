@@ -15,6 +15,8 @@ export const SCOPED_MODELS = new Set<string>([
   "SataCoinTransaction", "StudentCareTask", "StudentCenterHistory", "StudentRiskAlert",
   "Survey", "SurveyResponse", "TimesheetAdjustmentRequest",
   "MessengerConversation", // R1-01 — hội thoại CRM theo cơ sở
+  "Payment", // R7-04 — khoản thanh toán theo cơ sở
+  "TrialClassV2", // R7-02 — lớp trải nghiệm theo cơ sở
 ]);
 
 /** Có centerId nhưng KHÔNG scope (lý do rõ) — để introspection không báo "miss model". */
