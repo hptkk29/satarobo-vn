@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { organizationJsonLd, websiteJsonLd } from "@/lib/seo/jsonld";
 import { HomePage, type MainCourseCard } from "@/components/home/home-page";
+import { getTestimonials } from "@/lib/testimonials";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -61,6 +62,17 @@ export default async function Page() {
     thumbnail: c.thumbnail,
   }));
 
+  // Cảm nhận từ DB (model Testimonial); rỗng → component dùng fallback inline.
+  const testimonialRows = await getTestimonials("home");
+  const testimonials = testimonialRows.length
+    ? testimonialRows.map((r) => ({
+        name: r.name,
+        role: r.role,
+        body: r.content,
+        location: r.location,
+      }))
+    : undefined;
+
   return (
     <>
       <script
@@ -71,7 +83,7 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
       />
-      <HomePage courses={courses} />
+      <HomePage courses={courses} testimonials={testimonials} />
     </>
   );
 }

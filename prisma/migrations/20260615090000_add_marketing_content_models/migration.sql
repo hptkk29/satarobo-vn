@@ -37,6 +37,7 @@ CREATE TABLE "Testimonial" (
     "avatar" TEXT NOT NULL,
     "avatarColor" TEXT NOT NULL,
     "content" TEXT NOT NULL,
+    "videoId" TEXT,
     "courseSlug" TEXT,
     "displayOrder" INTEGER NOT NULL DEFAULT 0,
     "isPublished" BOOLEAN NOT NULL DEFAULT true,

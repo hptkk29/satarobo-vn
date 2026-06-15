@@ -1,27 +1,37 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { gifts, totalGiftValue } from "./_data/gifts";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  gifts as staticGifts,
+  totalGiftValue as staticTotalGiftValue,
+  type Gift as GiftType,
+} from "./_data/gifts";
 import { Gift, Flame } from "lucide-react";
 
-export default function Gifts() {
+export default function Gifts({
+  gifts = staticGifts,
+  totalGiftValue = staticTotalGiftValue,
+}: {
+  gifts?: GiftType[];
+  totalGiftValue?: string;
+} = {}) {
   const [activeIdx, setActiveIdx] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const touchStartX = useRef<number | null>(null);
 
-  const startAuto = () => {
+  const startAuto = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       setActiveIdx((i) => (i + 1) % gifts.length);
     }, 3000);
-  };
+  }, [gifts.length]);
 
   useEffect(() => {
     startAuto();
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, [startAuto]);
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     touchStartX.current = e.touches[0].clientX;

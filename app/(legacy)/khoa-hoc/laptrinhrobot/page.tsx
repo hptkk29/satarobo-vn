@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import LapTrinhRobotClient from "./client-page";
 import { getPromotions } from "@/lib/promotions";
+import { getTestimonials } from "@/lib/testimonials";
+import { getInternalAwards, getGifts, getCommitments } from "@/lib/marketing-policy";
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -26,7 +28,33 @@ export const metadata: Metadata = {
 };
 
 export default async function LapTrinhRobotPage() {
-  // Ưu đãi đọc từ DB (model Promotion); bảng trống → fallback dữ liệu tĩnh.
-  const promotions = await getPromotions("laptrinhrobot");
-  return <LapTrinhRobotClient promotions={promotions} />;
+  // Nội dung đọc từ DB; bảng/Setting chưa có → helper tự fallback dữ liệu tĩnh.
+  const [promotions, testimonialRows, internalAwards, gifts, commitments] = await Promise.all([
+    getPromotions("laptrinhrobot"),
+    getTestimonials("laptrinhrobot"),
+    getInternalAwards(),
+    getGifts(),
+    getCommitments(),
+  ]);
+  // Map sang shape TestiItem; rỗng → undefined để component dùng fallback inline.
+  const testimonials = testimonialRows.length
+    ? testimonialRows.map((r, i) => ({
+        id: `t${i + 1}`,
+        initials: r.avatar,
+        name: r.name,
+        role: r.role,
+        quote: `"${r.content}"`,
+        videoId: r.videoId ?? "",
+        avatarBg: r.avatarColor,
+      }))
+    : undefined;
+  return (
+    <LapTrinhRobotClient
+      promotions={promotions}
+      testimonials={testimonials}
+      internalAwards={internalAwards}
+      gifts={gifts}
+      commitments={commitments}
+    />
+  );
 }

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 // F-UI-3 — 8 PH reviews chia 2 hàng marquee ngược chiều. Hard-coded
 // hiện tại; future pull từ DB/CMS khi có testimonial admin module.
-const TESTIMONIALS = [
+const FALLBACK_TESTIMONIALS = [
   {
     name: "Chị Nguyễn Thị Hà",
     role: "PH bé Tom (8 tuổi)",
@@ -57,7 +57,7 @@ const TESTIMONIALS = [
   },
 ];
 
-type Testimonial = (typeof TESTIMONIALS)[number];
+type Testimonial = (typeof FALLBACK_TESTIMONIALS)[number];
 
 function initialOf(name: string) {
   const last = name.split(" ").slice(-1)[0];
@@ -97,9 +97,13 @@ function TestimonialCard({ body, name, role, location }: Testimonial) {
   );
 }
 
-export function Testimonials() {
-  const firstRow = TESTIMONIALS.slice(0, 4);
-  const secondRow = TESTIMONIALS.slice(4);
+export function Testimonials({
+  testimonials = FALLBACK_TESTIMONIALS,
+}: {
+  testimonials?: typeof FALLBACK_TESTIMONIALS;
+}) {
+  const firstRow = testimonials.slice(0, 4);
+  const secondRow = testimonials.slice(4);
 
   return (
     <section className="overflow-hidden bg-gradient-to-b from-gray-50 to-white py-16">

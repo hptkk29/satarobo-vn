@@ -4169,9 +4169,10 @@ model Testimonial {
   location    String  @default("Đà Nẵng")
   rating      Int     @default(5)
   avatar      String // chữ cái viết tắt "NA"
-  avatarColor String // class gradient tailwind
+  avatarColor String // class gradient tailwind hoặc mã hex nền avatar
   content     String  @db.Text
-  courseSlug  String? // landing áp dụng; null = chung
+  videoId     String? // YouTube id video cảm nhận (nếu có)
+  courseSlug  String? // landing áp dụng: laptrinhrobot/luyenthirobosim/home; null = chung
 
   displayOrder Int     @default(0)
   isPublished  Boolean @default(true)

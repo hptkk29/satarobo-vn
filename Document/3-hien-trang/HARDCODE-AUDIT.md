@@ -150,9 +150,13 @@ Mẫu lặp lại: `const ALLOWED_ROLES = ["SUPER_ADMIN","CENTER_MANAGER","TEACH
 
 > Đã có `CoursePackage` DB + R6-B4 (giá đọc DB cho `/khoa-hoc/[slug]`). Nhưng phần lớn nội dung marketing vẫn nằm trong file `_data/*.ts`.
 >
-> **✅ Đợt 5 (foundation):** thêm model **`Promotion`** (+ enum `PromotionKind`) và **`Testimonial`** (migration `20260615090000_add_marketing_content_models`, **CHƯA apply lên Supabase** — DB đang có 4 migration R6 pending; apply bằng `prisma migrate deploy` ở môi trường sạch). Seed `prisma/seed-marketing-content.ts` (idempotent, từ `_data/*`). Helper `lib/promotions.ts` + `lib/testimonials.ts` đọc DB, **fallback dữ liệu tĩnh** khi bảng trống/chưa tồn tại (try/catch → 2-phase additive, site không vỡ trước migration).
-> **✅ Đã wire:** `/khoa-hoc/laptrinhrobot` `page.tsx` (server, ISR 300s) fetch `getPromotions("laptrinhrobot")` → `SpecialOfferCountdown` (prop optional, default tĩnh ⇒ no-op thị giác). `Product` model ĐÃ CÓ SẴN (Phase 5.10) — `lib/data/products.ts` chỉ cần seed, chưa làm.
-> **⏳ CÒN LẠI (cần verify thị giác 375px):** `Testimonials.tsx` của landing dùng **data inline RIÊNG** (có `videoId`/video) — KHÁC `_data/testimonials.ts` → KHÔNG swap mù (đổi nội dung hiển thị + mất video); cần đối chiếu nguồn live + (có thể) thêm cột `videoId`. Course pricing/details/roadmap → `CoursePackage`. luyenthirobosim. awards/gifts/commitments → SystemSetting. products seed.
+> **✅ Đợt 5 (models + wire):** model **`Promotion`** (+enum `PromotionKind`) và **`Testimonial`** (+`videoId`) — migration `20260615090000_add_marketing_content_models`, **CHƯA apply lên Supabase** (DB còn 4 migration R6 pending; apply bằng `prisma migrate deploy` ở môi trường sạch). Tất cả helper try/catch **fallback dữ liệu tĩnh** khi bảng/Setting chưa tồn tại (2-phase additive, site không vỡ trước migration).
+>   - **Promotion** → `lib/promotions.ts`; wire `/khoa-hoc/laptrinhrobot` (ISR 300s) → `SpecialOfferCountdown`.
+>   - **Testimonial** → `lib/testimonials.ts` + `prisma/seed-testimonials.ts` (seed từ **data LIVE** của 3 component, gồm `videoId`). Wire cả 3: `/khoa-hoc/laptrinhrobot`, `/khoa-hoc/luyenthirobosim`, trang chủ `/` (mỗi nơi map về shape component, prop optional → no-op thị giác khi DB trống).
+>   - **Policy** (awards/gifts/commitments) → `SystemSetting` group `content.*` (`lib/settings/registry.ts` default = static) + `lib/marketing-policy.ts`; wire vào laptrinhrobot.
+> **🟡 Foundation (chưa kích hoạt DB-path):** `lib/course-pricing.ts` `getCourseGroups()` — map `CoursePackage`→`courseGroups` bị LOSSY (thiếu cột cho `comboPrice/fixedPrice/value` dropdown + cấu trúc nhóm) nên hiện trả static; component `Roadmap5Years`/`RegistrationForm` đã nhận prop optional (default static) sẵn sàng wire khi bổ sung cột. `RegistrationForm` (conversion-critical) **không** wire DB cho đến khi map đủ + UAT. `lib/data/products.ts` = DEAD (không ai import) → bỏ qua.
+> **⏳ CÒN LẠI:** map đủ `CoursePackage`→courseGroups (thêm cột) rồi wire pricing/roadmap; luyenthirobosim courses/roadmap/faqs; **apply migration + seed + verify thị giác 375px** (data DB chỉ hiện sau `migrate deploy`).
+> **Verify:** typecheck + lint + 350 unit test + build (98/98 static) PASS; fallback hoạt động đúng khi bảng chưa tồn tại.
 
 | File | Nội dung cứng | Nên đọc từ |
 |---|---|---|

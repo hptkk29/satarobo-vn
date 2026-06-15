@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { commitments, type Commitment as CommitmentType } from "./_data/commitments";
+import { commitments as staticCommitments, type Commitment as CommitmentType } from "./_data/commitments";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import {
   BadgeDollarSign,
@@ -120,7 +120,11 @@ function SlideCarousel<T>({ items, renderItem }: SlideCarouselProps<T>) {
   );
 }
 
-export default function Commitment() {
+export default function Commitment({
+  commitments = staticCommitments,
+}: {
+  commitments?: CommitmentType[];
+} = {}) {
   const renderCard = (commitment: CommitmentType, index: number) => {
     const Icon = iconMap[commitment.icon] ?? ShieldCheck;
     const tone = toneClasses[index % toneClasses.length];

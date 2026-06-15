@@ -42,14 +42,20 @@ export interface MainCourseCard {
 }
 
 // ============== Main composer ==============
-export function HomePage({ courses }: { courses: MainCourseCard[] }) {
+export function HomePage({
+  courses,
+  testimonials,
+}: {
+  courses: MainCourseCard[];
+  testimonials?: { name: string; role: string; body: string; location: string }[];
+}) {
   return (
     <>
       <HeroMain />
       <TrustBadges />
       <UspGrid />
       <CatalogSection courses={courses} />
-      <Testimonials />
+      <Testimonials testimonials={testimonials} />
       <SecondaryCta />
       <StatsBar />
       <UuTheSection />

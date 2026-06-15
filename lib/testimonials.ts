@@ -1,41 +1,44 @@
-// lib/testimonials.ts — đọc cảm nhận PH/HV từ DB (model Testimonial), fallback
-// về dữ liệu tĩnh _data/testimonials.ts khi bảng trống (2-phase additive: site
-// chạy bình thường trước khi migration + seed được apply).
+// lib/testimonials.ts — đọc cảm nhận PH/HV từ DB (model Testimonial). 2-phase
+// additive: bảng trống HOẶC lỗi (migration chưa apply) → trả [] để component tự
+// dùng dữ liệu fallback inline (KHÔNG trả dữ liệu cũ stale).
 import { db } from "@/lib/db";
-import {
-  testimonials as STATIC_TESTIMONIALS,
-  type Testimonial,
-} from "@/components/legacy-laptrinhrobot/_data/testimonials";
 
-export type TestimonialView = Testimonial;
+export interface TestimonialView {
+  name: string;
+  role: string;
+  content: string;
+  avatar: string;
+  avatarColor: string;
+  videoId: string | null;
+  location: string;
+  rating: number;
+}
 
 /**
  * Cảm nhận đã publish, ưu tiên theo `displayOrder`. `courseSlug` lọc theo landing
- * (kèm bản chung `courseSlug = null`). Bảng trống → trả dữ liệu tĩnh (fallback).
+ * (kèm bản chung `courseSlug = null`). Bảng trống / lỗi → trả `[]` (fallback ở UI).
  */
 export async function getTestimonials(courseSlug?: string): Promise<TestimonialView[]> {
-  let rows;
   try {
-    rows = await db.testimonial.findMany({
+    const rows = await db.testimonial.findMany({
       where: {
         isPublished: true,
         ...(courseSlug ? { OR: [{ courseSlug }, { courseSlug: null }] } : {}),
       },
       orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
     });
+    return rows.map((r) => ({
+      name: r.name,
+      role: r.role,
+      content: r.content,
+      avatar: r.avatar,
+      avatarColor: r.avatarColor,
+      videoId: r.videoId,
+      location: r.location,
+      rating: r.rating,
+    }));
   } catch {
-    // Bảng chưa tồn tại (migration chưa apply) → dùng dữ liệu tĩnh (2-phase additive).
-    return STATIC_TESTIMONIALS;
+    // Bảng chưa tồn tại (migration chưa apply) → để UI dùng fallback inline.
+    return [];
   }
-  if (rows.length === 0) return STATIC_TESTIMONIALS;
-  return rows.map((r, i) => ({
-    id: i + 1,
-    name: r.name,
-    role: r.role,
-    location: r.location,
-    rating: r.rating,
-    avatar: r.avatar,
-    avatarColor: r.avatarColor,
-    content: r.content,
-  }));
 }

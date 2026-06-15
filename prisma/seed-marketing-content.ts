@@ -1,12 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 import { promotions } from "../components/legacy-laptrinhrobot/_data/promotions";
-import { testimonials } from "../components/legacy-laptrinhrobot/_data/testimonials";
 
-// Seed nội dung marketing (Promotion + Testimonial) từ dữ liệu tĩnh _data/*.
-// Idempotent: Promotion upsert theo slug; Testimonial findFirst theo name+content.
+// Seed nội dung marketing (Promotion) từ dữ liệu tĩnh _data/*.
+// Idempotent: Promotion upsert theo slug.
 // Nguồn gốc: trang khoá học Lập trình Robot (courseSlug = "laptrinhrobot").
+// (Testimonial tách sang prisma/seed-testimonials.ts.)
 export async function seedMarketingContent(db: PrismaClient) {
-  console.log("🎁 Seeding marketing content (Promotion + Testimonial)...");
+  console.log("🎁 Seeding marketing content (Promotion)...");
 
   // ─── Promotions ─────────────────────────────────────────────────────────────
   let order = 0;
@@ -75,34 +75,8 @@ export async function seedMarketingContent(db: PrismaClient) {
     order++;
   }
 
-  // ─── Testimonials ─────────────────────────────────────────────────────────────
-  let tOrder = 0;
-  for (const t of testimonials) {
-    const existing = await db.testimonial.findFirst({
-      where: { name: t.name, content: t.content },
-      select: { id: true },
-    });
-    const data = {
-      name: t.name,
-      role: t.role,
-      location: t.location,
-      rating: t.rating,
-      avatar: t.avatar,
-      avatarColor: t.avatarColor,
-      content: t.content,
-      displayOrder: tOrder,
-      isPublished: true,
-    };
-    if (existing) {
-      await db.testimonial.update({ where: { id: existing.id }, data });
-    } else {
-      await db.testimonial.create({ data });
-    }
-    tOrder++;
-  }
-
   console.log(
-    `✅ Marketing content: ${promotions.primary.length + promotions.secondary.length} promotion, ${testimonials.length} testimonial`,
+    `✅ Marketing content: ${promotions.primary.length + promotions.secondary.length} promotion`,
   );
 }
 

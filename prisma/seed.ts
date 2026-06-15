@@ -4,6 +4,7 @@ import { seedHonors } from "./seed-honors";
 import { seedEmailTemplates } from "./seed-email-templates";
 import { seedCoursePackageContent } from "./seed-coursepackage-content";
 import { seedMarketingContent } from "./seed-marketing-content";
+import { seedTestimonials } from "./seed-testimonials";
 
 const db = new PrismaClient();
 
@@ -383,6 +384,7 @@ PHÙ HỢP CHO:
 
   // ─── Marketing content: Promotion + Testimonial (hardcode remediation Đợt 5) ─
   await seedMarketingContent(db);
+  await seedTestimonials(db);
 
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));

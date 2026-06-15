@@ -12,6 +12,9 @@
  * finance.debtReminderDaysBefore=14 (QĐ-O7), enrollment.suspendMaxMonths=6 (TBD-4).
  */
 import { z } from "zod";
+import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
+import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
+import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
 
 export type SettingGroup =
   | "student"
@@ -26,7 +29,8 @@ export type SettingGroup =
   | "teacher"
   | "lms"
   | "storage"
-  | "public";
+  | "public"
+  | "content";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -64,6 +68,42 @@ const emailsSchema = z.object({
   primary: z.string().email(),
   recruitment: z.string().email(),
 });
+
+// ── Nội dung chính sách marketing (group "content") — shape khớp _data/* ──
+const internalAwardsSchema = z.object({
+  totalValue: z.string(),
+  perYear: z.number(),
+  perEvent: z.string(),
+  description: z.string(),
+  prizes: z.array(
+    z.object({
+      rank: z.union([z.number(), z.string()]),
+      icon: z.string(),
+      name: z.string(),
+      reward: z.string(),
+      note: z.string(),
+    }),
+  ),
+});
+
+const giftsSchema = z.array(
+  z.object({
+    id: z.number(),
+    icon: z.string(),
+    title: z.string(),
+    value: z.string(),
+    description: z.string(),
+  }),
+);
+
+const commitmentsSchema = z.array(
+  z.object({
+    id: z.number(),
+    icon: z.string(),
+    title: z.string(),
+    description: z.string(),
+  }),
+);
 
 /**
  * Bảng key cấu hình. Thêm key mới = thêm 1 entry ở đây (schema + default).
@@ -331,6 +371,31 @@ export const SETTINGS = {
     label: "Cửa sổ rate-limit form lead (ms)",
     schema: z.number().int().min(1000).max(3_600_000),
     default: 60_000,
+    centerOverridable: false,
+  }),
+  // ── Nội dung chính sách marketing (legacy-laptrinhrobot) — default = static _data ──
+  "content.internalAwards": def({
+    key: "content.internalAwards",
+    group: "content",
+    label: "Giải thưởng nội bộ (Sata Robo Championship)",
+    schema: internalAwardsSchema,
+    default: internalAwards,
+    centerOverridable: false,
+  }),
+  "content.gifts": def({
+    key: "content.gifts",
+    group: "content",
+    label: "Bộ quà tặng khi đăng ký",
+    schema: giftsSchema,
+    default: gifts,
+    centerOverridable: false,
+  }),
+  "content.commitments": def({
+    key: "content.commitments",
+    group: "content",
+    label: "Cam kết với phụ huynh",
+    schema: commitmentsSchema,
+    default: commitments,
     centerOverridable: false,
   }),
 } as const;

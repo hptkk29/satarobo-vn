@@ -12,13 +12,13 @@ import {
   Bot,
   type LucideIcon,
 } from "lucide-react";
-import { courseGroups, type Course } from "./_data/courses-pricing";
+import {
+  courseGroups as staticCourseGroups,
+  type Course,
+  type CourseGroup,
+} from "./_data/courses-pricing";
 
 const fmt = (n?: number) => (n ? `${n.toLocaleString("vi-VN")}đ` : "-");
-
-const allCourses: Course[] = courseGroups.flatMap((g) => g.courses);
-const getCourse = (id: string): Course | undefined =>
-  allCourses.find((c) => c.id === id);
 
 // Map Course.id -> slug cho URL
 const ID_TO_SLUG: Record<string, string> = {
@@ -75,10 +75,10 @@ const LONGTERM_META: Record<string, LongtermMeta> = {
 };
 
 // ─── EXAM CARD (Sata1, Sata2, Combo, Sata8) ─────────────────────────
-function ExamCard({ courseId }: { courseId: string }) {
-  const course = getCourse(courseId);
+function ExamCard({ course }: { course?: Course }) {
   if (!course) return null;
 
+  const courseId = course.id;
   const slug = ID_TO_SLUG[courseId];
   const isCombo = courseId === "Combo";
   const isSata8 = courseId === "Sata8";
@@ -195,10 +195,10 @@ function ExamCard({ courseId }: { courseId: string }) {
 }
 
 // ─── LONGTERM CARD (Sata3-Sata7) ────────────────────────────────────
-function LongtermCard({ courseId }: { courseId: string }) {
-  const course = getCourse(courseId);
+function LongtermCard({ course }: { course?: Course }) {
   if (!course) return null;
 
+  const courseId = course.id;
   const slug = ID_TO_SLUG[courseId];
   const meta = LONGTERM_META[courseId] ?? LONGTERM_META.Sata3;
   const { Icon, gradient, accent, year } = meta;
@@ -307,7 +307,15 @@ function LongtermCard({ courseId }: { courseId: string }) {
 }
 
 // ─── MAIN COMPONENT ─────────────────────────────────────────────────
-export default function Roadmap5Years() {
+export default function Roadmap5Years({
+  courseGroups = staticCourseGroups,
+}: {
+  courseGroups?: CourseGroup[];
+}) {
+  const allCourses: Course[] = courseGroups.flatMap((g) => g.courses);
+  const getCourse = (id: string): Course | undefined =>
+    allCourses.find((c) => c.id === id);
+
   return (
     <section className="bg-gradient-to-br from-orange-50/30 via-white to-purple-50/30 py-16">
       <div className="container mx-auto max-w-6xl px-4">
@@ -325,10 +333,10 @@ export default function Roadmap5Years() {
             </p>
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <ExamCard courseId="Sata1" />
-            <ExamCard courseId="Sata2" />
-            <ExamCard courseId="Combo" />
-            <ExamCard courseId="Sata8" />
+            <ExamCard course={getCourse("Sata1")} />
+            <ExamCard course={getCourse("Sata2")} />
+            <ExamCard course={getCourse("Combo")} />
+            <ExamCard course={getCourse("Sata8")} />
           </div>
         </div>
 
@@ -377,11 +385,11 @@ export default function Roadmap5Years() {
             </div>
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <LongtermCard courseId="Sata3" />
-            <LongtermCard courseId="Sata4" />
-            <LongtermCard courseId="Sata5" />
-            <LongtermCard courseId="Sata6" />
-            <LongtermCard courseId="Sata7" />
+            <LongtermCard course={getCourse("Sata3")} />
+            <LongtermCard course={getCourse("Sata4")} />
+            <LongtermCard course={getCourse("Sata5")} />
+            <LongtermCard course={getCourse("Sata6")} />
+            <LongtermCard course={getCourse("Sata7")} />
           </div>
         </div>
       </div>

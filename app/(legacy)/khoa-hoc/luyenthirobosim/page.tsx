@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import LuyenThiRobosimClient from "./client-page";
+import { getTestimonials } from "@/lib/testimonials";
 
 const BASE_URL = "https://satarobo.vn";
+
+// ISR: trang marketing tĩnh, regen mỗi 5' để pick up cảm nhận từ DB.
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title:
@@ -22,6 +26,18 @@ export const metadata: Metadata = {
   },
 };
 
-export default function LuyenThiRobosimPage() {
-  return <LuyenThiRobosimClient />;
+export default async function LuyenThiRobosimPage() {
+  const rows = await getTestimonials("luyenthirobosim");
+  const testimonials = rows.length
+    ? rows.map((r, i) => ({
+        id: `t${i + 1}`,
+        initials: r.avatar,
+        name: r.name,
+        role: r.role,
+        quote: `"${r.content}"`,
+        videoId: r.videoId ?? "",
+        avatarBg: r.avatarColor,
+      }))
+    : undefined;
+  return <LuyenThiRobosimClient testimonials={testimonials} />;
 }

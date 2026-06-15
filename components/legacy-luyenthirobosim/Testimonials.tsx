@@ -13,7 +13,7 @@ interface TestiItem {
   avatarBg: string;
 }
 
-const items: TestiItem[] = [
+const FALLBACK_ITEMS: TestiItem[] = [
   {
     id: "t1",
     initials: "NA",
@@ -127,7 +127,7 @@ function VideoModal({ videoId, onClose }: { videoId: string; onClose: () => void
   );
 }
 
-export default function Testimonials() {
+export default function Testimonials({ items = FALLBACK_ITEMS }: { items?: TestiItem[] }) {
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
   const openVideo = (videoId: string) => setActiveVideo(videoId);
   const closeVideo = () => setActiveVideo(null);
