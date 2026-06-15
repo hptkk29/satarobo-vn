@@ -1,17 +1,38 @@
 // lib/crm/sla.ts — R1-06: SLA engine phễu SR.QD.217 (Doc 15 §5.4).
 // evaluateSla THUẦN (C6.1–C6.5) + runSlaCheck (cron → StaffNotification dedupeKey, C6.6).
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings/service";
 
 export type SlaRule = "SLA-0" | "SLA-1" | "SLA-2" | "SLA-3" | "SLA-4";
 
-/** Ngưỡng vi phạm (ms). */
-export const SLA_THRESHOLDS: Record<SlaRule, number> = {
+export type SlaThresholds = Record<SlaRule, number>;
+
+/** Ngưỡng vi phạm (ms) — default = hằng số gốc (fallback khi chưa cấu hình). */
+export const SLA_THRESHOLDS: SlaThresholds = {
   "SLA-0": 5 * 60_000, // chưa respond > 5'
   "SLA-1": 4 * 3_600_000, // chưa bàn giao > 4h
   "SLA-2": 30 * 60_000, // chưa phân công > 30'
   "SLA-3": 3 * 3_600_000, // chưa liên hệ > 3h
   "SLA-4": 2 * 86_400_000, // lead im > 2 ngày
 };
+
+/** Đọc ngưỡng SLA động từ SystemSetting "crm.sla.*" (phút → ms). */
+export async function loadSlaThresholds(): Promise<SlaThresholds> {
+  const [respond, handover, assign, contact, silent] = await Promise.all([
+    getSetting("crm.sla.respondMinutes"),
+    getSetting("crm.sla.handoverMinutes"),
+    getSetting("crm.sla.assignMinutes"),
+    getSetting("crm.sla.contactMinutes"),
+    getSetting("crm.sla.silentMinutes"),
+  ]);
+  return {
+    "SLA-0": respond * 60_000,
+    "SLA-1": handover * 60_000,
+    "SLA-2": assign * 60_000,
+    "SLA-3": contact * 60_000,
+    "SLA-4": silent * 60_000,
+  };
+}
 
 export const SLA_LABEL: Record<SlaRule, string> = {
   "SLA-0": "Chưa phản hồi tin nhắn > 5 phút",
@@ -36,20 +57,25 @@ export type SlaInput = {
 const over = (start: Date | null | undefined, now: Date, ms: number): boolean =>
   start != null && now.getTime() - start.getTime() > ms;
 
-/** Trả danh sách rule bị vi phạm tại thời điểm `now`. THUẦN. */
-export function evaluateSla(input: SlaInput, now: Date): SlaRule[] {
+/** Trả danh sách rule bị vi phạm tại thời điểm `now`. THUẦN.
+ * `thresholds` cho phép truyền ngưỡng động (SystemSetting); mặc định hằng số gốc. */
+export function evaluateSla(
+  input: SlaInput,
+  now: Date,
+  thresholds: SlaThresholds = SLA_THRESHOLDS,
+): SlaRule[] {
   const v: SlaRule[] = [];
   // SLA-0 — đã có tin đến nhưng chưa phản hồi.
-  if (!input.respondedAt && over(input.firstMessageAt, now, SLA_THRESHOLDS["SLA-0"])) v.push("SLA-0");
+  if (!input.respondedAt && over(input.firstMessageAt, now, thresholds["SLA-0"])) v.push("SLA-0");
   // SLA-1 — đã L2 nhưng chưa bàn giao.
-  if (!input.handedAt && over(input.qualifiedAt, now, SLA_THRESHOLDS["SLA-1"])) v.push("SLA-1");
+  if (!input.handedAt && over(input.qualifiedAt, now, thresholds["SLA-1"])) v.push("SLA-1");
   // SLA-2 — đã tiếp nhận/bàn giao nhưng chưa phân công.
   const handoverBase = input.receivedConfirmedAt ?? input.handedAt;
-  if (!input.assignedAt && over(handoverBase, now, SLA_THRESHOLDS["SLA-2"])) v.push("SLA-2");
+  if (!input.assignedAt && over(handoverBase, now, thresholds["SLA-2"])) v.push("SLA-2");
   // SLA-3 — đã phân công nhưng chưa liên hệ.
-  if (!input.firstContactAt && over(input.assignedAt, now, SLA_THRESHOLDS["SLA-3"])) v.push("SLA-3");
+  if (!input.firstContactAt && over(input.assignedAt, now, thresholds["SLA-3"])) v.push("SLA-3");
   // SLA-4 — lead im lặng quá lâu (chưa xử lý xong).
-  if (!input.resolved && over(input.lastActivityAt, now, SLA_THRESHOLDS["SLA-4"])) v.push("SLA-4");
+  if (!input.resolved && over(input.lastActivityAt, now, thresholds["SLA-4"])) v.push("SLA-4");
   return v;
 }
 
@@ -58,6 +84,7 @@ export function evaluateSla(input: SlaInput, now: Date): SlaRule[] {
  * Người nhận: assignedToId (ưu tiên) → adminId. Không có người nhận → bỏ qua.
  */
 export async function runSlaCheck(now = new Date()): Promise<{ violations: number; notified: number }> {
+  const thresholds = await loadSlaThresholds();
   const leads = await db.lead.findMany({
     where: { deletedAt: null, convertedAt: null },
     select: {
@@ -80,6 +107,7 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
         lastActivityAt: lead.updatedAt,
       },
       now,
+      thresholds,
     );
     violations += rules.length;
     const userId = lead.assignedToId ?? lead.adminId;

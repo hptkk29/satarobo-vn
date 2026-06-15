@@ -1,17 +1,17 @@
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { can } from "@/lib/auth/permissions";
 import { EnrollForm } from "../_components/enroll-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM"];
 const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"];
 
 export default async function NewEnrollmentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "enrollments:create")) {
     redirect("/dashboard?error=unauthorized");
   }
 

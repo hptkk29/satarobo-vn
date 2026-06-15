@@ -4,19 +4,16 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PackageForm } from "../../_components/package-form";
+import { can } from "@/lib/auth/permissions";
 
 interface EditPackagePageProps {
   params: Promise<{ id: string }>;
 }
 
-function canManageCoursePackages(role: string | undefined) {
-  return role === "SUPER_ADMIN" || role === "CENTER_MANAGER";
-}
-
 export default async function EditPackagePage({ params }: EditPackagePageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canManageCoursePackages(session.user.role)) {
+  if (!can(session.user, "course-packages:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

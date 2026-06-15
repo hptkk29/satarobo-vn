@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -31,8 +31,8 @@ export async function saveCenterChecklist(input: unknown): Promise<Result> {
   const { centerId, note } = parsed.data;
 
   // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ cơ sở mình.
-  const isSuper = session.user.role === "SUPER_ADMIN" || session.user.roles?.includes("SUPER_ADMIN");
-  if (!isSuper && session.user.role === "CENTER_MANAGER" && centerId !== session.user.centerId) {
+  const isSuper = hasRole(session.user, "SUPER_ADMIN");
+  if (!isSuper && hasRole(session.user, "CENTER_MANAGER") && centerId !== session.user.centerId) {
     return { ok: false, error: "Cơ sở không thuộc phạm vi của bạn" };
   }
 

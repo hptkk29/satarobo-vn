@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 import {
   detectDocumentType,
   documentSchema,
@@ -14,15 +15,13 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"] as const;
-
 async function requireRole(): Promise<
   | { ok: true; userId: string }
   | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!ALLOWED_ROLES.includes(session.user.role as (typeof ALLOWED_ROLES)[number])) {
+  if (!can(session.user, "documents:upload")) {
     return { ok: false, error: "Không có quyền quản lý tài liệu" };
   }
   return { ok: true, userId: session.user.id ?? "" };

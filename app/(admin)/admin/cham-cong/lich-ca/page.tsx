@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isNextMonthWindowOpen, isWeekendEditWindow, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
 import { getSetting } from "@/lib/settings/service";
+import { can } from "@/lib/auth/permissions";
 import { MyShiftsCalendar } from "./_components/my-shifts-calendar";
 
 export const metadata = { title: "Lịch ca của tôi | Admin" };
@@ -21,7 +22,7 @@ function ymd(d: Date): string {
 export default async function MyShiftsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role === "PARENT") redirect("/dashboard");
+  if (!can(session.user, "hr_attendance:checkin")) redirect("/dashboard");
 
   const { month } = await searchParams;
   const now = new Date();

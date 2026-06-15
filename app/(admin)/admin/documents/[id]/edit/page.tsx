@@ -7,10 +7,9 @@ import {
   DocumentForm,
   type DocumentFormValue,
 } from "../../_components/document-form";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -19,7 +18,7 @@ interface Props {
 export default async function EditDocumentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "documents:upload")) {
     redirect("/dashboard?error=unauthorized");
   }
 

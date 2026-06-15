@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   BulkAuditForm,
@@ -10,8 +11,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
-
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -19,7 +18,7 @@ interface Props {
 export default async function EditAuditPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:audit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

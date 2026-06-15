@@ -6,21 +6,19 @@ import { db } from "@/lib/db";
 import { getStudentProgress } from "@/lib/progress";
 import { sendProgressReportEmail } from "@/lib/email/progress-report";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { can, hasRole } from "@/lib/auth/permissions";
 
 // =============================================================================
 // CLASS LMS ACTIONS — Phase T2.1
 // Tạo báo cáo tiến độ hàng loạt cho cả lớp + gửi email phụ huynh.
 // =============================================================================
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"] as const;
-
 export async function generateClassProgressReports(
   classId: string,
 ): Promise<{ ok: boolean; created?: number; emailed?: number; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  const role = session.user.role;
-  if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
+  if (!can(session.user, "completions:manage")) {
     return { ok: false, error: "Không có quyền tạo báo cáo" };
   }
 
@@ -31,7 +29,7 @@ export async function generateClassProgressReports(
   if (!cls) return { ok: false, error: "Không tìm thấy lớp" };
 
   // TEACHER chỉ tạo báo cáo cho lớp mình phụ trách.
-  if (role === "TEACHER" && cls.teacherId !== session.user.id) {
+  if (hasRole(session.user, "TEACHER") && cls.teacherId !== session.user.id) {
     return { ok: false, error: "Chỉ giáo viên phụ trách lớp mới tạo được báo cáo" };
   }
 

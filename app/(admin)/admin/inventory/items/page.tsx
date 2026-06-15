@@ -8,13 +8,12 @@ import {
   Plus,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { InventoryCategory, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 const CATEGORY_INFO: Record<InventoryCategory, { label: string; color: string }> = {
   MAINBOARD: { label: "Bo mạch", color: "bg-blue-100 text-blue-700" },
@@ -42,7 +41,7 @@ interface SearchParams {
 export default async function InventoryItemsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

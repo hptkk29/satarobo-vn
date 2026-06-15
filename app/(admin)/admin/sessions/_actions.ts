@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { can } from "@/lib/auth/permissions";
 
 type ActionResult = { error?: string };
 
@@ -38,8 +39,7 @@ function parseDateTimeLocal(value: FormDataEntryValue | null): Date | null {
 async function requireTeacherOrAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const role = session.user.role;
-  if (role !== "SUPER_ADMIN" && role !== "CENTER_MANAGER" && role !== "TEACHER") {
+  if (!can(session.user, "sessions:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;

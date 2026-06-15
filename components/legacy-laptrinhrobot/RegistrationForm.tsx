@@ -15,7 +15,12 @@ import {
   Sparkles,
   User,
 } from "lucide-react";
-import { courseGroups, CONSULT_OPTION, type Course } from "./_data/courses-pricing";
+import {
+  courseGroups as staticCourseGroups,
+  CONSULT_OPTION,
+  type Course,
+  type CourseGroup,
+} from "./_data/courses-pricing";
 import {
   isValidCourseSelection,
   readStoredCourseSelection,
@@ -51,7 +56,11 @@ interface FormErrors {
   consent?: string;
 }
 
-export default function RegistrationForm() {
+export default function RegistrationForm({
+  courseGroups = staticCourseGroups,
+}: {
+  courseGroups?: CourseGroup[];
+} = {}) {
   const [formData, setFormData] = useState<FormData>({
     name: "",
     phone: "",

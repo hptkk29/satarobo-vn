@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { SessionFeedbackEditor } from "./_components/session-feedback-editor";
 import { SessionChecklist } from "./_components/session-checklist";
 import { canManageSessionClass } from "./_actions";
+import { hasRole } from "@/lib/auth/permissions";
 import { getPreSessionInfo } from "@/lib/lms/pre-session";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { BookOpen, Users, AlertTriangle, FileWarning } from "lucide-react";
@@ -69,7 +70,7 @@ export default async function SessionDetailPage({ params }: Props) {
     { id: session.user.id, role: session.user.role, centerId: session.user.centerId },
     sess.class,
   );
-  if (!canEdit && session.user.role !== "HR") {
+  if (!canEdit && !hasRole(session.user, "HR")) {
     // HR có employees:view-all nhưng buổi học không thuộc phạm vi → chặn hẳn nếu không quản lý được.
     redirect("/sessions");
   }

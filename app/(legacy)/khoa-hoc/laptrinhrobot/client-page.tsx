@@ -20,8 +20,35 @@ import FinalCTA from "@/components/legacy-laptrinhrobot/FinalCTA";
 import Footer from "@/components/legacy-laptrinhrobot/Footer";
 import FloatingCTA from "@/components/legacy-laptrinhrobot/FloatingCTA";
 import AgeCoursePopup from "@/components/legacy-laptrinhrobot/AgeCoursePopup";
+import type { Promotions } from "@/components/legacy-laptrinhrobot/_data/promotions";
+import type { InternalAwards as InternalAwardsType } from "@/components/legacy-laptrinhrobot/_data/awards";
+import type { Gift } from "@/components/legacy-laptrinhrobot/_data/gifts";
+import type { Commitment as CommitmentType } from "@/components/legacy-laptrinhrobot/_data/commitments";
 
-export default function LapTrinhRobotClient() {
+// Khớp shape TestiItem nội bộ của Testimonials.tsx (không export → khai báo structural).
+type TestiItem = {
+  id: string;
+  initials: string;
+  name: string;
+  role: string;
+  quote: string;
+  videoId: string;
+  avatarBg: string;
+};
+
+export default function LapTrinhRobotClient({
+  promotions,
+  testimonials,
+  internalAwards,
+  gifts,
+  commitments,
+}: {
+  promotions?: Promotions;
+  testimonials?: TestiItem[];
+  internalAwards?: InternalAwardsType;
+  gifts?: Gift[];
+  commitments?: CommitmentType[];
+}) {
   return (
     <>
       <div className="fixed left-0 right-0 top-0 z-[100] isolate">
@@ -37,13 +64,13 @@ export default function LapTrinhRobotClient() {
         <Hero />
         <ContestInfo />
         <Roadmap5Years />
-        <SpecialOfferCountdown />
+        <SpecialOfferCountdown promotions={promotions} />
         <TeachingMethod />
         <Locations />
-        <Commitment />
-        <Gifts />
-        <InternalAwards />
-        <Testimonials />
+        <Commitment commitments={commitments} />
+        <Gifts gifts={gifts} />
+        <InternalAwards internalAwards={internalAwards} />
+        <Testimonials items={testimonials} />
         <RegistrationForm />
         <FAQ />
         <FinalCTA />

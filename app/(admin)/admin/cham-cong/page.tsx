@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import type { WorkShift } from "@prisma/client";
 import {
@@ -12,6 +12,7 @@ import {
   type AttendanceTag,
 } from "@/lib/work-schedule";
 import { SHIFT_DEFS, SHIFT_ORDER } from "@/lib/shifts";
+import { getSetting } from "@/lib/settings/service";
 
 export const metadata = { title: "Chấm công | Admin" };
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const dateStr = start.toISOString().slice(0, 10);
 
   // Phạm vi cơ sở: CENTER_MANAGER chỉ xem cơ sở mình.
-  const centerScope = session.user.role === "CENTER_MANAGER" ? session.user.centerId : null;
+  const centerScope = hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
 
   const [rows, regs] = await Promise.all([
     db.employeeCheckin.findMany({
@@ -84,16 +85,20 @@ export default async function ChamCongPage({ searchParams }: Props) {
     a.registeredShifts = reg.shifts;
   }
 
+  const shiftTolerance = await getSetting("shift.toleranceMinutes");
   const list = [...byUser.values()]
     .sort((x, y) => x.userName.localeCompare(y.userName))
     .map((a) => ({
       ...a,
-      status: computeShiftAttendance({
-        checkIn: a.checkIn,
-        checkOut: a.checkOut,
-        geofenceFlag: a.geofenceFlag,
-        registeredShifts: a.registeredShifts,
-      }),
+      status: computeShiftAttendance(
+        {
+          checkIn: a.checkIn,
+          checkOut: a.checkOut,
+          geofenceFlag: a.geofenceFlag,
+          registeredShifts: a.registeredShifts,
+        },
+        shiftTolerance,
+      ),
     }));
 
   const centers = await db.center.findMany({ select: { id: true, name: true } });

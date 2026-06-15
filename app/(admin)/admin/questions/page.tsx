@@ -3,11 +3,10 @@ import { FileSpreadsheet, HelpCircle, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 import { QuestionType, QuestionDifficulty, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
 
 const TYPE_INFO: Record<QuestionType, { label: string; color: string }> = {
   MULTIPLE_CHOICE: { label: "Trắc nghiệm", color: "bg-blue-100 text-blue-700" },
@@ -40,7 +39,7 @@ interface SearchParams {
 export default async function QuestionsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "questions:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

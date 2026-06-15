@@ -4123,3 +4123,62 @@ model CenterSetting {
   @@id([orgUnitId, key])
   @@index([key])
 }
+
+// ─── Marketing content (hardcode remediation Đợt 5) ──────────────────────────
+// Chuyển nội dung marketing tĩnh (components/legacy-*/_data/*) sang DB để CMS hoá.
+
+enum PromotionKind {
+  PRIMARY // ưu đãi chính (có CTA + details bullet)
+  SECONDARY // chính sách phụ (referral/sibling/team — có condition + note)
+}
+
+/// Ưu đãi/khuyến mãi hiển thị trang khoá học. Nguồn cũ: _data/promotions.ts.
+model Promotion {
+  id          String        @id @default(cuid())
+  slug        String        @unique // "early-bird", "combo", "installment"...
+  kind        PromotionKind @default(PRIMARY)
+  title       String
+  highlight   String
+  description String        @db.Text
+  details     String[]      @default([]) // PRIMARY: bullet list
+  cta         String? // PRIMARY: nhãn nút
+  target      String? // PRIMARY: anchor/target
+  condition   String?       @db.Text // SECONDARY: điều kiện
+  note        String?       @db.Text // SECONDARY: ghi chú
+  icon        String // tên icon lucide
+  featured    Boolean       @default(false)
+  courseSlug  String? // giới hạn theo landing (laptrinhrobot/luyenthirobosim); null = chung
+
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  startsAt     DateTime?
+  endsAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, isActive, displayOrder])
+  @@index([courseSlug, isActive])
+}
+
+/// Cảm nhận phụ huynh/học viên. Nguồn cũ: _data/testimonials.ts.
+model Testimonial {
+  id          String  @id @default(cuid())
+  name        String
+  role        String // "Phụ huynh bạn Duy Tùng" / "Học sinh lớp 4"
+  location    String  @default("Đà Nẵng")
+  rating      Int     @default(5)
+  avatar      String // chữ cái viết tắt "NA"
+  avatarColor String // class gradient tailwind hoặc mã hex nền avatar
+  content     String  @db.Text
+  videoId     String? // YouTube id video cảm nhận (nếu có)
+  courseSlug  String? // landing áp dụng: laptrinhrobot/luyenthirobosim/home; null = chung
+
+  displayOrder Int     @default(0)
+  isPublished  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseSlug, isPublished, displayOrder])
+}

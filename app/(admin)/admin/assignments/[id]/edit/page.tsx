@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 import { AssignmentForm, type AssignmentFormValue } from "../../_components/assignment-form";
 import { DocumentPicker } from "../../_components/document-picker";
 import {
@@ -12,8 +13,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"];
-
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -21,7 +20,7 @@ interface Props {
 export default async function EditAssignmentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "assignments:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

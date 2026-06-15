@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { EmployeeForm } from "@/components/admin/nhan-su/employee-form";
 import {
   ChangeRoleDialog,
@@ -60,8 +60,8 @@ export default async function EditEmployeePage({ params }: Props) {
     }),
   ]);
 
-  const isSuperAdmin = session.user.role === "SUPER_ADMIN";
-  const canViewAudit = ["SUPER_ADMIN", "CENTER_MANAGER"].includes(session.user.role);
+  const isSuperAdmin = hasRole(session.user, "SUPER_ADMIN");
+  const canViewAudit = can(session.user, "audit-logs:view");
   const showScheduleLink = TEACHING_DEPARTMENTS.has(employee.department);
 
   const auditLogs = canViewAudit

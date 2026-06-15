@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, ClipboardCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { OPEN_FIELDS, CLOSE_FIELDS, type ChecklistKey } from "@/lib/center-checklist";
 
@@ -21,8 +21,8 @@ export default async function ChecklistOverviewPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "hr_attendance:view")) redirect("/dashboard");
 
-  const isSuper = session.user.role === "SUPER_ADMIN" || (session.user.roles?.includes("SUPER_ADMIN") ?? false);
-  const isCM = session.user.role === "CENTER_MANAGER" || (session.user.roles?.includes("CENTER_MANAGER") ?? false);
+  const isSuper = hasRole(session.user, "SUPER_ADMIN");
+  const isCM = hasRole(session.user, "CENTER_MANAGER");
   const centerScope = isCM && !isSuper ? session.user.centerId : null;
 
   const now = new Date();

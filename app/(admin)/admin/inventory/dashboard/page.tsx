@@ -9,12 +9,11 @@ import {
   Package,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
 import { getInventoryStats } from "@/lib/inventory-stats";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 function formatVnd(value: number): string {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(
@@ -34,7 +33,7 @@ function formatRelative(d: Date | null): string {
 export default async function InventoryDashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:view")) {
     redirect("/dashboard?error=unauthorized");
   }
 

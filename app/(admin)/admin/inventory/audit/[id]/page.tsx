@@ -2,12 +2,11 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { InventoryAuditStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
 
 const STATUS_INFO: Record<
   InventoryAuditStatus,
@@ -36,7 +35,7 @@ interface Props {
 export default async function AuditDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:audit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

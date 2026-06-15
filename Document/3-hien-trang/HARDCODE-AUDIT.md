@@ -60,9 +60,11 @@
 
 ---
 
-## 2. 🔴 HARDCODE QUYỀN / ROLE (nên dùng `can()` thay vì tên role)
+## 2. 🔴 HARDCODE QUYỀN / ROLE (nên dùng `can()` thay vì tên role) — ✅ ĐÃ XỬ LÝ (Đợt 4)
 
 > Kiến trúc đích: RBAC động (`RoleDef`/`RolePermission`) + `can(actor, action)`. KHÔNG check theo TÊN role. (~75 file vi phạm.)
+>
+> **✅ Đợt 4 (matrix = source of truth):** ~70 file đã chuyển `ALLOWED_ROLES`/`role === "..."` → `can()` / `hasRole()` / `hasAnyRole()`. Xoá file chết `lib/permissions.ts` (role cũ MANAGER/SALES, không ai import). **Đổi hành vi có chủ đích** (matrix thắng): reports/transcript|certificate|student-progress bỏ TEACHER + thêm MARKETING/ACCOUNTANT (`students:view-all`); course-packages thêm MARKETING (`course-packages:edit`); teachers-mgmt thêm HR (`employees:edit`). **GIỮ nguyên** (không phải actor-gate): check role của record đích trong `users/*` (last-super-admin), `nhan-su/actions.ts` VALID_ROLES (Zod enum), `classes/_actions.ts` SUBMIT/APPROVE_ROLES (đã dùng `hasAnyRole`, chưa có action khớp submit/approve), nhãn hiển thị (`class-form` "(QL)", `weekly-schedule` assistant).
 
 ### 2.1 Mảng `ALLOWED_ROLES` cứng (Frontend pages + Backend actions) — ~20 file
 
@@ -122,7 +124,7 @@ Mẫu lặp lại: `const ALLOWED_ROLES = ["SUPER_ADMIN","CENTER_MANAGER","TEACH
 
 | File:dòng | Hằng số | Đề xuất key |
 |---|---|---|
-| `lib/crm/sla.ts:8-14` | SLA-0..4 (5'/4h/30'/3h/2 ngày) | `crm.sla.*` |
+| ~~`lib/crm/sla.ts:8-14`~~ ✅ wired (Dot 3) | SLA-0..4 (5'/4h/30'/3h/2 ngày) | `crm.sla.*` (5 key phút, `loadSlaThresholds()`) |
 | `lib/crm/lead-qualify.ts:15` · `lib/lead/dedup.ts:7` | `DEDUP_WINDOW_DAYS = 90` (trùng 2 nơi) | `crm.dedupWindowDays` |
 | `lib/students/lifecycle.ts:5-7` | `RENEWAL_WINDOW_DAYS=90`, `FREQUENT_ABSENT_THRESHOLD=3`, `FREQUENT_ABSENT_WINDOW=5` | `student.*` |
 | `lib/students/absence.ts:8` | `URGENT_THRESHOLD_DAYS = 3` | `student.absenceUrgentThresholdDays` |
@@ -144,9 +146,17 @@ Mẫu lặp lại: `const ALLOWED_ROLES = ["SUPER_ADMIN","CENTER_MANAGER","TEACH
 
 ---
 
-## 4. 🟠 NỘI DUNG / KHÓA HỌC / GIÁ set cứng ở Frontend (nên đọc DB)
+## 4. 🟠 NỘI DUNG / KHÓA HỌC / GIÁ set cứng ở Frontend (nên đọc DB) — 🟡 ĐANG LÀM (Đợt 5)
 
 > Đã có `CoursePackage` DB + R6-B4 (giá đọc DB cho `/khoa-hoc/[slug]`). Nhưng phần lớn nội dung marketing vẫn nằm trong file `_data/*.ts`.
+>
+> **✅ Đợt 5 (models + wire):** model **`Promotion`** (+enum `PromotionKind`) và **`Testimonial`** (+`videoId`) — migration `20260615090000_add_marketing_content_models`, **CHƯA apply lên Supabase** (DB còn 4 migration R6 pending; apply bằng `prisma migrate deploy` ở môi trường sạch). Tất cả helper try/catch **fallback dữ liệu tĩnh** khi bảng/Setting chưa tồn tại (2-phase additive, site không vỡ trước migration).
+>   - **Promotion** → `lib/promotions.ts`; wire `/khoa-hoc/laptrinhrobot` (ISR 300s) → `SpecialOfferCountdown`.
+>   - **Testimonial** → `lib/testimonials.ts` + `prisma/seed-testimonials.ts` (seed từ **data LIVE** của 3 component, gồm `videoId`). Wire cả 3: `/khoa-hoc/laptrinhrobot`, `/khoa-hoc/luyenthirobosim`, trang chủ `/` (mỗi nơi map về shape component, prop optional → no-op thị giác khi DB trống).
+>   - **Policy** (awards/gifts/commitments) → `SystemSetting` group `content.*` (`lib/settings/registry.ts` default = static) + `lib/marketing-policy.ts`; wire vào laptrinhrobot.
+> **🟡 Foundation (chưa kích hoạt DB-path):** `lib/course-pricing.ts` `getCourseGroups()` — map `CoursePackage`→`courseGroups` bị LOSSY (thiếu cột cho `comboPrice/fixedPrice/value` dropdown + cấu trúc nhóm) nên hiện trả static; component `Roadmap5Years`/`RegistrationForm` đã nhận prop optional (default static) sẵn sàng wire khi bổ sung cột. `RegistrationForm` (conversion-critical) **không** wire DB cho đến khi map đủ + UAT. `lib/data/products.ts` = DEAD (không ai import) → bỏ qua.
+> **⏳ CÒN LẠI:** map đủ `CoursePackage`→courseGroups (thêm cột) rồi wire pricing/roadmap; luyenthirobosim courses/roadmap/faqs; **apply migration + seed + verify thị giác 375px** (data DB chỉ hiện sau `migrate deploy`).
+> **Verify:** typecheck + lint + 350 unit test + build (98/98 static) PASS; fallback hoạt động đúng khi bảng chưa tồn tại.
 
 | File | Nội dung cứng | Nên đọc từ |
 |---|---|---|

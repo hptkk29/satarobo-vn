@@ -4,22 +4,19 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { hasRole } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { TeacherRank, EmploymentType, TeacherStatus } from "@prisma/client";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-const MANAGER_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"] as const;
-
-// Gác quyền quản lý GV: SUPER_ADMIN toàn quyền; CENTER_MANAGER chỉ trong cơ sở mình.
+// Gác quyền quản lý GV: SUPER_ADMIN/HR toàn quyền; CENTER_MANAGER chỉ trong cơ sở mình.
 async function requireTeacherManager(targetUserId: string) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
-  const role = session.user.role;
-  if (!MANAGER_ROLES.includes(role as (typeof MANAGER_ROLES)[number])) {
+  if (!can(session.user, "employees:edit")) {
     return { ok: false as const, error: "Không có quyền quản lý giáo viên" };
   }
-  if (role === "CENTER_MANAGER") {
+  if (hasRole(session.user, "CENTER_MANAGER")) {
     const target = await db.user.findUnique({
       where: { id: targetUserId },
       select: { centerId: true },
@@ -123,7 +120,7 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
     select: { id: true, centerId: true },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
-  if (gate.session.user.role === "CENTER_MANAGER" && cls.centerId !== gate.session.user.centerId) {
+  if (hasRole(gate.session.user, "CENTER_MANAGER") && cls.centerId !== gate.session.user.centerId) {
     return { ok: false, error: "Lớp không thuộc cơ sở của bạn" };
   }
 
@@ -207,7 +204,7 @@ export async function unassignClassFromTeacher(input: unknown): Promise<Result> 
     select: { centerId: true, teacherId: true, assistantId: true },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
-  if (gate.session.user.role === "CENTER_MANAGER" && cls.centerId !== gate.session.user.centerId) {
+  if (hasRole(gate.session.user, "CENTER_MANAGER") && cls.centerId !== gate.session.user.centerId) {
     return { ok: false, error: "Lớp không thuộc cơ sở của bạn" };
   }
 

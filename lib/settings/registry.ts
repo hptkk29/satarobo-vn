@@ -12,6 +12,9 @@
  * finance.debtReminderDaysBefore=14 (QĐ-O7), enrollment.suspendMaxMonths=6 (TBD-4).
  */
 import { z } from "zod";
+import { internalAwards } from "@/components/legacy-laptrinhrobot/_data/awards";
+import { gifts } from "@/components/legacy-laptrinhrobot/_data/gifts";
+import { commitments } from "@/components/legacy-laptrinhrobot/_data/commitments";
 
 export type SettingGroup =
   | "student"
@@ -26,7 +29,8 @@ export type SettingGroup =
   | "teacher"
   | "lms"
   | "storage"
-  | "public";
+  | "public"
+  | "content";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -64,6 +68,42 @@ const emailsSchema = z.object({
   primary: z.string().email(),
   recruitment: z.string().email(),
 });
+
+// ── Nội dung chính sách marketing (group "content") — shape khớp _data/* ──
+const internalAwardsSchema = z.object({
+  totalValue: z.string(),
+  perYear: z.number(),
+  perEvent: z.string(),
+  description: z.string(),
+  prizes: z.array(
+    z.object({
+      rank: z.union([z.number(), z.string()]),
+      icon: z.string(),
+      name: z.string(),
+      reward: z.string(),
+      note: z.string(),
+    }),
+  ),
+});
+
+const giftsSchema = z.array(
+  z.object({
+    id: z.number(),
+    icon: z.string(),
+    title: z.string(),
+    value: z.string(),
+    description: z.string(),
+  }),
+);
+
+const commitmentsSchema = z.array(
+  z.object({
+    id: z.number(),
+    icon: z.string(),
+    title: z.string(),
+    description: z.string(),
+  }),
+);
 
 /**
  * Bảng key cấu hình. Thêm key mới = thêm 1 entry ở đây (schema + default).
@@ -204,6 +244,47 @@ export const SETTINGS = {
     default: 90, // lib/crm/lead-qualify.ts & lib/lead/dedup.ts
     centerOverridable: false,
   }),
+  // SLA phễu SR.QD.217 (lib/crm/sla.ts SLA_THRESHOLDS) — ngưỡng tính bằng PHÚT.
+  "crm.sla.respondMinutes": def({
+    key: "crm.sla.respondMinutes",
+    group: "crm",
+    label: "SLA-0: chưa phản hồi tin nhắn (phút)",
+    schema: z.number().int().min(1).max(1440),
+    default: 5, // 5'
+    centerOverridable: false,
+  }),
+  "crm.sla.handoverMinutes": def({
+    key: "crm.sla.handoverMinutes",
+    group: "crm",
+    label: "SLA-1: chưa bàn giao lead sau L2 (phút)",
+    schema: z.number().int().min(1).max(10080),
+    default: 240, // 4h
+    centerOverridable: false,
+  }),
+  "crm.sla.assignMinutes": def({
+    key: "crm.sla.assignMinutes",
+    group: "crm",
+    label: "SLA-2: chưa phân công Sale (phút)",
+    schema: z.number().int().min(1).max(10080),
+    default: 30, // 30'
+    centerOverridable: false,
+  }),
+  "crm.sla.contactMinutes": def({
+    key: "crm.sla.contactMinutes",
+    group: "crm",
+    label: "SLA-3: chưa liên hệ khách sau phân công (phút)",
+    schema: z.number().int().min(1).max(10080),
+    default: 180, // 3h
+    centerOverridable: false,
+  }),
+  "crm.sla.silentMinutes": def({
+    key: "crm.sla.silentMinutes",
+    group: "crm",
+    label: "SLA-4: lead im lặng chưa xử lý (phút)",
+    schema: z.number().int().min(1).max(43200),
+    default: 2880, // 2 ngày
+    centerOverridable: false,
+  }),
   "shift.geofenceRadiusMeters": def({
     key: "shift.geofenceRadiusMeters",
     group: "shift",
@@ -290,6 +371,31 @@ export const SETTINGS = {
     label: "Cửa sổ rate-limit form lead (ms)",
     schema: z.number().int().min(1000).max(3_600_000),
     default: 60_000,
+    centerOverridable: false,
+  }),
+  // ── Nội dung chính sách marketing (legacy-laptrinhrobot) — default = static _data ──
+  "content.internalAwards": def({
+    key: "content.internalAwards",
+    group: "content",
+    label: "Giải thưởng nội bộ (Sata Robo Championship)",
+    schema: internalAwardsSchema,
+    default: internalAwards,
+    centerOverridable: false,
+  }),
+  "content.gifts": def({
+    key: "content.gifts",
+    group: "content",
+    label: "Bộ quà tặng khi đăng ký",
+    schema: giftsSchema,
+    default: gifts,
+    centerOverridable: false,
+  }),
+  "content.commitments": def({
+    key: "content.commitments",
+    group: "content",
+    label: "Cam kết với phụ huynh",
+    schema: commitmentsSchema,
+    default: commitments,
     centerOverridable: false,
   }),
 } as const;

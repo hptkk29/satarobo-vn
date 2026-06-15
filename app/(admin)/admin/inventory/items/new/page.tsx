@@ -1,17 +1,16 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
 import { ItemForm } from "../_components/item-form";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"];
-
 export default async function NewInventoryItemPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "inventory:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

@@ -11,6 +11,7 @@ import {
   formatRegisteredShifts,
   type AttendanceTag,
 } from "@/lib/work-schedule";
+import { getSetting } from "@/lib/settings/service";
 
 export const metadata = { title: "Tổng hợp công ca | Admin" };
 export const dynamic = "force-dynamic";
@@ -142,6 +143,8 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
   const linkBase = (d: Date) =>
     `/cham-cong/lich-ca-nhan-vien?date=${ymd(d)}${filterCenter ? `&centerId=${filterCenter}` : ""}`;
 
+  const shiftTolerance = await getSetting("shift.toleranceMinutes");
+
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -213,12 +216,15 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
                       const shifts = uRegs?.get(ds) ?? [];
                       const att = uAtt?.get(ds) ?? { checkIn: null, checkOut: null, geo: false };
                       const adj = uAdj?.get(ds);
-                      const result = computeShiftAttendance({
-                        checkIn: att.checkIn,
-                        checkOut: att.checkOut,
-                        geofenceFlag: att.geo,
-                        registeredShifts: shifts,
-                      });
+                      const result = computeShiftAttendance(
+                        {
+                          checkIn: att.checkIn,
+                          checkOut: att.checkOut,
+                          geofenceFlag: att.geo,
+                          registeredShifts: shifts,
+                        },
+                        shiftTolerance,
+                      );
                       const hasData = shifts.length > 0 || att.checkIn || att.checkOut || adj;
                       return (
                         <td key={ds} className="px-2 py-2 text-center">

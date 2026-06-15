@@ -8,12 +8,11 @@ import {
   ProgressReportPdf,
   type ProgressReportData,
 } from "@/lib/pdf/progress-report";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 // PDF generation needs Node APIs (fs for font loading); pin runtime.
 export const runtime = "nodejs";
-
-const ALLOWED_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "HR", "SALES_CSM"];
 
 const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
@@ -31,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!ALLOWED_ROLES.includes(session.user.role)) {
+  if (!can(session.user, "students:view-all")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -3,15 +3,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PackageForm } from "../_components/package-form";
-
-function canManageCoursePackages(role: string | undefined) {
-  return role === "SUPER_ADMIN" || role === "CENTER_MANAGER";
-}
+import { can } from "@/lib/auth/permissions";
 
 export default async function NewPackagePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canManageCoursePackages(session.user.role)) {
+  if (!can(session.user, "course-packages:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
 

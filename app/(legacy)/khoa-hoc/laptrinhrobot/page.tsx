@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import LapTrinhRobotClient from "./client-page";
+import { getPromotions } from "@/lib/promotions";
+import { getTestimonials } from "@/lib/testimonials";
+import { getInternalAwards, getGifts, getCommitments } from "@/lib/marketing-policy";
 
 const BASE_URL = "https://satarobo.vn";
+
+// ISR: trang marketing tĩnh, regen mỗi 5' để pick up thay đổi ưu đãi từ DB.
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title:
@@ -21,6 +27,34 @@ export const metadata: Metadata = {
   },
 };
 
-export default function LapTrinhRobotPage() {
-  return <LapTrinhRobotClient />;
+export default async function LapTrinhRobotPage() {
+  // Nội dung đọc từ DB; bảng/Setting chưa có → helper tự fallback dữ liệu tĩnh.
+  const [promotions, testimonialRows, internalAwards, gifts, commitments] = await Promise.all([
+    getPromotions("laptrinhrobot"),
+    getTestimonials("laptrinhrobot"),
+    getInternalAwards(),
+    getGifts(),
+    getCommitments(),
+  ]);
+  // Map sang shape TestiItem; rỗng → undefined để component dùng fallback inline.
+  const testimonials = testimonialRows.length
+    ? testimonialRows.map((r, i) => ({
+        id: `t${i + 1}`,
+        initials: r.avatar,
+        name: r.name,
+        role: r.role,
+        quote: `"${r.content}"`,
+        videoId: r.videoId ?? "",
+        avatarBg: r.avatarColor,
+      }))
+    : undefined;
+  return (
+    <LapTrinhRobotClient
+      promotions={promotions}
+      testimonials={testimonials}
+      internalAwards={internalAwards}
+      gifts={gifts}
+      commitments={commitments}
+    />
+  );
 }

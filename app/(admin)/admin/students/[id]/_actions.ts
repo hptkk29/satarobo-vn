@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { RoboticsSkill, SkillLevel } from "@prisma/client";
+import { hasRole } from "@/lib/auth/permissions";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -13,16 +14,16 @@ async function canAssessStudent(
   user: { id: string; role: string; centerId: string | null },
   studentId: string,
 ): Promise<boolean> {
-  if (user.role === "SUPER_ADMIN") return true;
+  if (hasRole(user, "SUPER_ADMIN")) return true;
   const student = await db.student.findUnique({
     where: { id: studentId },
     select: { centerId: true },
   });
   if (!student) return false;
-  if (user.role === "CENTER_MANAGER") {
+  if (hasRole(user, "CENTER_MANAGER")) {
     return !!student.centerId && student.centerId === user.centerId;
   }
-  if (user.role === "TEACHER") {
+  if (hasRole(user, "TEACHER")) {
     const teaches = await db.enrollment.findFirst({
       where: {
         studentId,

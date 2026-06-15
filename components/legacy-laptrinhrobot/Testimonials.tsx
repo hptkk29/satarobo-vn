@@ -13,7 +13,7 @@ interface TestiItem {
   avatarBg: string;
 }
 
-const items: TestiItem[] = [
+const FALLBACK_ITEMS: TestiItem[] = [
   { id: "t1", initials: "NA", name: "Anh Ngọc Anh", role: "Phụ huynh bạn Duy Tùng · Đà Nẵng",
     quote: '"Con học 3 tuần, từ chỗ không biết bắt đầu từ đâu đến khi thi thử đạt 85% điểm. Điều tôi thích nhất là AI chấm bài ngay — tôi biết chắc con hiểu bài trước khi học tiếp, khác hoàn toàn so với xem YouTube."',
     videoId: "anInoYFGrF0", avatarBg: "#5B2D8E" },
@@ -79,7 +79,7 @@ function VideoModal({ videoId, onClose }: { videoId: string; onClose: () => void
   );
 }
 
-export default function Testimonials() {
+export default function Testimonials({ items = FALLBACK_ITEMS }: { items?: TestiItem[] }) {
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
   const openVideo = (videoId: string) => setActiveVideo(videoId);
   const closeVideo = () => setActiveVideo(null);

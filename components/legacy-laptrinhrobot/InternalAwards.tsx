@@ -1,9 +1,13 @@
 "use client";
 
-import { internalAwards } from "./_data/awards";
+import { internalAwards as staticAwards, type InternalAwards as InternalAwardsType } from "./_data/awards";
 import { Medal, Trophy } from "lucide-react";
 
-export default function InternalAwards() {
+export default function InternalAwards({
+  internalAwards = staticAwards,
+}: {
+  internalAwards?: InternalAwardsType;
+} = {}) {
   return (
     <section id="awards" className="section-padding bg-soft-cream">
       <div className="container-site">

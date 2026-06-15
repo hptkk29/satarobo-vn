@@ -19,7 +19,22 @@ import Footer from "@/components/legacy-luyenthirobosim/Footer";
 import FloatingButtons from "@/components/legacy-luyenthirobosim/FloatingButtons";
 import ExitIntentPopup from "@/components/legacy-luyenthirobosim/ExitIntentPopup";
 
-export default function LuyenThiRobosimClient() {
+// Khớp shape TestiItem nội bộ của Testimonials.tsx (không export → structural).
+type TestiItem = {
+  id: string;
+  initials: string;
+  name: string;
+  role: string;
+  quote: string;
+  videoId: string;
+  avatarBg: string;
+};
+
+export default function LuyenThiRobosimClient({
+  testimonials,
+}: {
+  testimonials?: TestiItem[];
+}) {
   return (
     <>
       <TopCountdownBar />
@@ -33,7 +48,7 @@ export default function LuyenThiRobosimClient() {
         <Solution />
         <Courses />
         <Roadmap />
-        <Testimonials />
+        <Testimonials items={testimonials} />
         <FinalCTA />
         <FAQ />
       </main>
