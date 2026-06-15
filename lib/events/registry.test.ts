@@ -1,9 +1,17 @@
 // A0-07 — registry + decideOutcome (THUẦN). Pure, không DB.
 import { describe, it, expect, beforeEach } from "vitest";
 import { on, getHandlers, clearHandlers, decideOutcome } from "@/lib/events/registry";
+import { registerR7NotificationHandlers } from "@/lib/_handlers/r7-notifications";
 
 describe("[A0-07] registry", () => {
   beforeEach(() => clearHandlers());
+
+  it("[R7-17] đăng ký consumer cho 3 event R7 (payment/class/lead trial)", () => {
+    registerR7NotificationHandlers();
+    expect(getHandlers("payment.confirmed")).toHaveLength(1);
+    expect(getHandlers("class.session_changed")).toHaveLength(1);
+    expect(getHandlers("lead.trialAttended")).toHaveLength(1);
+  });
 
   it("[A0-07-T5-01] nhiều handler/1 type (thêm = 1 dòng on)", async () => {
     on("demo.ping", async () => {});

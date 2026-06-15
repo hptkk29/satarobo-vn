@@ -17,3 +17,8 @@ export function isCommonLoginEnabled(): boolean {
 export function isDispatcherEnabled(): boolean {
   return process.env.DISPATCHER_ENABLED !== "false"; // mặc định ON
 }
+
+/** R7-05 — Convert v2 (guard payment + multi-student + dedupe). OFF → giữ flow convert cũ. */
+export function isConvertV2Enabled(): boolean {
+  return process.env.CONVERT_V2_ENABLED === "true"; // mặc định OFF
+}
