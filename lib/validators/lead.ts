@@ -70,6 +70,8 @@ export const leadUpdateSchema = leadCreateSchema.partial().extend({
       'LOST',
       'DUPLICATE',
       'DEMO_SCHEDULED',
+      'TRIAL_IN_PROGRESS',
+      'REGISTERED',
     ])
     .optional(),
   assignedToId: z.string().min(1).optional(),

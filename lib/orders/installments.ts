@@ -45,8 +45,10 @@ export async function recordInstallmentPlan(params: {
   dot2Amount: number;
   dot2DueDate: Date | null;
   actorId: string | null;
+  // R7-04 (QĐ-O7) — số ngày nhắc trước hạn đợt 2; null → cron dùng SystemSetting default 14.
+  reminderDays?: number | null;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { orderId, dot1Amount, dot2Amount, dot2DueDate, actorId } = params;
+  const { orderId, dot1Amount, dot2Amount, dot2DueDate, actorId, reminderDays } = params;
   if (dot1Amount < 0 || dot2Amount < 0) return { ok: false, error: "Số tiền không hợp lệ" };
 
   const order = await db.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } });
@@ -64,7 +66,7 @@ export async function recordInstallmentPlan(params: {
     });
     if (dot2Amount > 0) {
       await tx.orderInstallment.create({
-        data: { orderId, soDot: 2, amount: dot2Amount, status: "PENDING", dueDate: dot2DueDate, recordedById: actorId },
+        data: { orderId, soDot: 2, amount: dot2Amount, status: "PENDING", dueDate: dot2DueDate, recordedById: actorId, reminderDays: reminderDays ?? null },
       });
     }
   });

@@ -71,7 +71,7 @@ export async function adoptCurriculumVersion(opts: {
   reason: string;
   actorId: string | null;
   actorName: string;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; warning?: string }> {
   const { classId, version, reason, actorId, actorName } = opts;
   if (!reason || reason.trim().length === 0) {
     return { ok: false, error: "Lý do (reason) là bắt buộc khi đổi version giáo trình" };
@@ -168,5 +168,14 @@ export async function adoptCurriculumVersion(opts: {
     });
   });
 
+  // R7-06 §6 (GAP-4): version mới ít buổi hơn số buổi còn lại → buổi dư bị bỏ trống
+  // nội dung (planId/lessonId = null) → cảnh báo để xử lý tay.
+  const remainingCount = Math.max(0, target.lessons.length - keptCount);
+  if (remainingCount < futureSessions.length) {
+    return {
+      ok: true,
+      warning: `Version mới có ít buổi hơn số buổi còn lại — ${futureSessions.length - remainingCount} buổi cuối chưa có nội dung, cần xử lý tay`,
+    };
+  }
   return { ok: true };
 }

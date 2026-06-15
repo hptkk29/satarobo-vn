@@ -217,6 +217,8 @@ export type Action =
 
   // --- Phase 5.6 — Financial (Payment + Order) ---
   | "payments:manage"
+  | "payments:record" // R7-04 — Sale ghi nhận khoản
+  | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "orders:view"
   | "orders:manage"
 
@@ -441,6 +443,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Phase 5.6 — Financial ---
   "payments:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
+  "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
 

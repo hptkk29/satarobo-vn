@@ -207,16 +207,20 @@ export async function addLeadTask(input: {
   }
 
   const { actorId, actorName } = getAuditActor(session)
-  await db.leadTask.create({
-    data: {
-      leadId: input.leadId,
-      // Giao cho sale phụ trách lead nếu có, mặc định người tạo.
-      assignedToId: lead.assignedToId ?? actorId,
-      assignedToName: actorName,
-      title,
-      description: input.description?.trim() || null,
-      dueAt: due,
-    },
+  // AC4 — tạo việc cũng là hoạt động → reset đồng hồ SLA idle trong 1 tx.
+  await db.$transaction(async (tx) => {
+    await tx.leadTask.create({
+      data: {
+        leadId: input.leadId,
+        // Giao cho sale phụ trách lead nếu có, mặc định người tạo.
+        assignedToId: lead.assignedToId ?? actorId,
+        assignedToName: actorName,
+        title,
+        description: input.description?.trim() || null,
+        dueAt: due,
+      },
+    })
+    await tx.lead.update({ where: { id: input.leadId }, data: { lastActivityAt: new Date() } })
   })
 
   revalidatePath(`/leads/${input.leadId}`)
@@ -241,11 +245,15 @@ export async function completeLeadTask(
     return { ok: false, error: 'Việc không tồn tại' }
   }
 
-  await db.leadTask.update({
-    where: { id: taskId },
-    data: done
-      ? { status: 'DONE', completedAt: new Date() }
-      : { status: 'OPEN', completedAt: null },
+  await db.$transaction(async (tx) => {
+    await tx.leadTask.update({
+      where: { id: taskId },
+      data: done
+        ? { status: 'DONE', completedAt: new Date() }
+        : { status: 'OPEN', completedAt: null },
+    })
+    // AC4 — hoàn tất việc là hoạt động → reset đồng hồ SLA idle.
+    await tx.lead.update({ where: { id: task.leadId }, data: { lastActivityAt: new Date() } })
   })
 
   revalidatePath(`/leads/${task.leadId}`)
@@ -1320,6 +1328,15 @@ export async function deleteLeadChild(
   const actor = await resolveActor(session.user.id)
   if (!child || !passesScope('Lead', { centerId: child.lead?.centerId ?? null }, actor)) {
     return { ok: false, error: 'Không tìm thấy con của lead' }
+  }
+
+  // R7-02 edge: con đang ở lớp trải nghiệm ACTIVE → CHẶN xoá (FK Cascade sẽ xoá luôn
+  // TrialEnrollment/attendance — mất dữ liệu). Yêu cầu rút khỏi lớp trước.
+  const activeTrials = await db.trialEnrollment.count({
+    where: { leadChildId: childId, status: 'ACTIVE' },
+  })
+  if (activeTrials > 0) {
+    return { ok: false, error: 'Học viên đang ở lớp trải nghiệm — rút khỏi lớp trước khi xoá' }
   }
 
   const { actorId, actorName } = getAuditActor(session)

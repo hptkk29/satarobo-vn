@@ -782,6 +782,17 @@ export async function markOrderInstallmentPaidAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "orders:manage")) return { ok: false, error: "Không có quyền" };
+
+  // R7-00 AC4 — chặn IDOR chéo cơ sở: xác nhận đơn nằm trong scope trước khi mutate.
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, centerId: true },
+  });
+  const actor = await resolveActor(session.user.id);
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false, error: "Không tìm thấy đơn hàng" };
+  }
+
   const res = await markInstallmentPaid(installmentId, session.user.id ?? null);
   if (res.ok) revalidatePath(`/orders/${orderId}`);
   return res;

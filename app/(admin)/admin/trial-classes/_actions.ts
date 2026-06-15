@@ -15,6 +15,7 @@ import {
   enrollLeadChild,
   markAttendance,
   completeTrialSession,
+  cancelTrialClass,
 } from "@/lib/trial/service";
 
 // ───────────────────────────── helpers ─────────────────────────────
@@ -246,6 +247,32 @@ export async function assignTrialTeacherAction(
     where: { id: trialClassId },
     data: { teacherId: teacherId || null },
   });
+  // GAP-1: propagate GV xuống các buổi CHƯA diễn ra (SCHEDULED) — buổi xong giữ nguyên.
+  await sdb.trialClassSession.updateMany({
+    where: { trialClassId, status: "SCHEDULED" },
+    data: { teacherId: teacherId || null },
+  });
+
+  revalidatePath(`/trial-classes/${trialClassId}`);
+  revalidatePath("/trial-classes");
+  return { ok: true };
+}
+
+// ───────────────────────── 4b) huỷ lớp ─────────────────────────────
+
+/** Huỷ lớp trải nghiệm — gate `trials:manage` + scope. Giải phóng ghi danh ACTIVE. */
+export async function cancelTrialClassAction(trialClassId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "trials:manage")) {
+    return { ok: false, error: "Không có quyền huỷ lớp" };
+  }
+  const actor = await resolveActor(session.user.id);
+  const cls = await loadScopedTrialClass(actor, trialClassId);
+  if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
+
+  const res = await cancelTrialClass({ trialClassId, actorId: session.user.id });
+  if (!res.ok) return { ok: false, error: res.error ?? "Huỷ lớp thất bại" };
 
   revalidatePath(`/trial-classes/${trialClassId}`);
   revalidatePath("/trial-classes");

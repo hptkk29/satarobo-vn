@@ -17,6 +17,7 @@ import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { generateClassSessions } from "@/lib/classes/generate";
 import { courseHasActiveCurriculum } from "@/lib/courses/activation-guard";
 import { createSessionPlansForClass } from "@/lib/classes/snapshot";
+import { publishEvent } from "@/lib/events/publish";
 
 type ActionResult = { error?: string };
 
@@ -493,7 +494,9 @@ async function computeFutureReschedule(classId: string) {
   const now = new Date();
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   const future = await db.classSession.findMany({
-    where: { classId, date: { gt: todayEnd } },
+    // R7-06 AC6: chỉ dời buổi SCHEDULED tương lai — KHÔNG đụng buổi đã COMPLETED/
+    // đang IN_PROGRESS hay đã CANCELLED (giữ tổng buổi + không hồi sinh buổi huỷ).
+    where: { classId, date: { gt: todayEnd }, status: { notIn: ["COMPLETED", "CANCELLED", "IN_PROGRESS"] } },
     orderBy: { date: "asc" },
     select: { id: true, date: true, topic: true },
   });
@@ -553,11 +556,17 @@ export async function applyClassReschedule(classId: string): Promise<WfResult> {
   if (!res.ok) return res;
 
   try {
-    await db.$transaction(
-      res.items.map((it) =>
-        db.classSession.update({ where: { id: it.id }, data: { date: it.newDate } }),
-      ),
-    );
+    await db.$transaction(async (tx) => {
+      for (const it of res.items) {
+        await tx.classSession.update({ where: { id: it.id }, data: { date: it.newDate } });
+      }
+      // R7-06 AC6 — phát event để PH/GV được thông báo (handler ở R7-17).
+      await publishEvent(
+        "class.session_changed",
+        { classId, change: "RESCHEDULED", count: res.items.length },
+        { tx },
+      );
+    });
   } catch (err) {
     return { ok: false, error: `Lỗi dời buổi: ${err instanceof Error ? err.message : "Unknown"}` };
   }

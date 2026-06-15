@@ -106,49 +106,44 @@ export async function getDebtRows(
   scopedDbClient: ScopedDb,
   filters?: { enrollmentId?: string; studentId?: string },
 ): Promise<DebtRow[]> {
-  const payments = await scopedDbClient.payment.findMany({
+  // G4 fix: lái theo ENROLLMENT (không theo payment) để ghi danh CHƯA đóng đồng nào
+  // — nợ nhiều nhất — vẫn hiện. Cách ly cơ sở: lọc theo lớp NẰM TRONG scope của actor
+  // (Class là SCOPED_MODEL → scopedDbClient.class.findMany tự inject centerId).
+  const scopedClasses = await scopedDbClient.class.findMany({ select: { id: true } });
+  const classIds = scopedClasses.map((c) => c.id);
+  if (classIds.length === 0) return [];
+
+  const enrollments = await db.enrollment.findMany({
     where: {
-      accountantStatus: "CONFIRMED",
-      enrollmentId: { not: null },
-      ...(filters?.enrollmentId ? { enrollmentId: filters.enrollmentId } : {}),
-      ...(filters?.studentId ? { enrollment: { studentId: filters.studentId } } : {}),
+      classId: { in: classIds },
+      finalPrice: { not: null }, // chỉ ghi danh đã chốt giá (snapshot tại convert R7-05)
+      ...(filters?.enrollmentId ? { id: filters.enrollmentId } : {}),
+      ...(filters?.studentId ? { studentId: filters.studentId } : {}),
     },
     select: {
-      enrollmentId: true,
-      amount: true,
-      centerId: true,
-      enrollment: {
-        select: {
-          finalPrice: true,
-          tuition: true,
-          studentId: true,
-          student: { select: { name: true } },
-        },
-      },
+      id: true,
+      finalPrice: true,
+      tuition: true,
+      studentId: true,
+      student: { select: { name: true } },
+      class: { select: { centerId: true } },
+      payments: { where: { accountantStatus: "CONFIRMED" }, select: { amount: true } },
     },
   });
 
-  const byEnrollment = new Map<string, DebtRow>();
-  for (const p of payments) {
-    if (!p.enrollmentId || !p.enrollment) continue;
-    const finalPrice = p.enrollment.finalPrice ?? p.enrollment.tuition ?? 0;
-    const existing = byEnrollment.get(p.enrollmentId);
-    if (existing) {
-      existing.confirmedPaid += p.amount;
-      existing.debt = existing.finalPrice - existing.confirmedPaid;
-    } else {
-      byEnrollment.set(p.enrollmentId, {
-        enrollmentId: p.enrollmentId,
-        studentId: p.enrollment.studentId,
-        studentName: p.enrollment.student?.name ?? null,
-        centerId: p.centerId,
-        finalPrice,
-        confirmedPaid: p.amount,
-        debt: finalPrice - p.amount,
-      });
-    }
-  }
-  return [...byEnrollment.values()];
+  return enrollments.map((e) => {
+    const finalPrice = e.finalPrice ?? e.tuition ?? 0;
+    const confirmedPaid = e.payments.reduce((s, p) => s + p.amount, 0);
+    return {
+      enrollmentId: e.id,
+      studentId: e.studentId,
+      studentName: e.student?.name ?? null,
+      centerId: e.class?.centerId ?? null,
+      finalPrice,
+      confirmedPaid,
+      debt: finalPrice - confirmedPaid,
+    };
+  });
 }
 
 /** Order quá hạn chưa thanh toán (cho cron nhắc nợ C6.2). */

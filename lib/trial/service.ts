@@ -244,7 +244,7 @@ export async function enrollLeadChild(params: {
         return { ok: false, overCapacity: true, error: "Vượt sĩ số" };
       }
 
-      await tx.trialEnrollment.create({
+      const enrollment = await tx.trialEnrollment.create({
         data: {
           trialClassId: params.trialClassId,
           leadChildId: params.leadChildId,
@@ -255,6 +255,18 @@ export async function enrollLeadChild(params: {
         where: { id: params.leadChildId },
         data: { trialStatus: "SCHEDULED" },
       });
+      // AC4 — ghi audit khi override sĩ số (xếp vượt capacity bằng quyền override).
+      if (allowOverride && activeCount >= cls.capacity) {
+        await writeAudit({
+          actor: { id: params.addedById, name: await actorName(params.addedById, tx) },
+          module: "trial",
+          entityType: "TrialEnrollment",
+          entityId: enrollment.id,
+          action: "CREATE",
+          newValues: { override: true, capacity: cls.capacity, activeCount, trialClassId: params.trialClassId, leadChildId: params.leadChildId },
+          tx,
+        });
+      }
       return { ok: true };
     });
   } catch (e) {
@@ -263,6 +275,47 @@ export async function enrollLeadChild(params: {
       return { ok: false, error: "Học viên đang ở lớp trải nghiệm khác" };
     }
     return { ok: false, error: e instanceof Error ? e.message : "Lỗi ghi danh" };
+  }
+}
+
+/**
+ * Huỷ lớp trải nghiệm: status=CANCELLED + mọi TrialEnrollment ACTIVE → WITHDRAWN
+ * (giải phóng partial-unique 1 lớp ACTIVE/con). Audit. (§6 edge case.)
+ */
+export async function cancelTrialClass(params: {
+  trialClassId: string;
+  actorId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const cls = await tx.trialClassV2.findUnique({
+        where: { id: params.trialClassId },
+        select: { id: true, status: true },
+      });
+      if (!cls) return { ok: false, error: "Lớp trải nghiệm không tồn tại" };
+      if (cls.status === "CANCELLED") return { ok: true };
+      await tx.trialClassV2.update({
+        where: { id: params.trialClassId },
+        data: { status: "CANCELLED" },
+      });
+      const freed = await tx.trialEnrollment.updateMany({
+        where: { trialClassId: params.trialClassId, status: "ACTIVE" },
+        data: { status: "WITHDRAWN" },
+      });
+      await writeAudit({
+        actor: { id: params.actorId, name: await actorName(params.actorId, tx) },
+        module: "trial",
+        entityType: "TrialClassV2",
+        entityId: params.trialClassId,
+        action: "STATUS_CHANGE",
+        oldValues: { status: cls.status },
+        newValues: { status: "CANCELLED", withdrawnEnrollments: freed.count },
+        tx,
+      });
+      return { ok: true };
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Lỗi huỷ lớp" };
   }
 }
 

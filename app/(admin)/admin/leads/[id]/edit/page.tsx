@@ -23,6 +23,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
       where: { id, deletedAt: null },
       select: {
         id: true,
+        status: true,
         parentName: true,
         phone: true,
         email: true,
@@ -99,6 +100,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
           courses={courses}
           legacyChildName={lead.childName}
           legacyChildAge={lead.childAge}
+          readOnly={lead.status === "LOST"}
         />
       </div>
     </div>

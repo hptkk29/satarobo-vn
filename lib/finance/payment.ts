@@ -117,11 +117,17 @@ export async function confirmPayment(params: {
   const centerCode = await centerCodeOf(existing.centerId);
   const now = new Date();
 
-  const receiptId = await db.$transaction(async (tx) => {
-    await tx.payment.update({
-      where: { id: existing.id },
+  const result = await db.$transaction(async (tx) => {
+    // AC8 — guard chống đua: chỉ chuyển CONFIRMED khi đang PENDING (atomic).
+    const upd = await tx.payment.updateMany({
+      where: { id: existing.id, accountantStatus: "PENDING" },
       data: { accountantStatus: "CONFIRMED", confirmedById: params.confirmedById, confirmedAt: now },
     });
+    if (upd.count === 0) {
+      // Một request khác đã xác nhận đồng thời → trả receipt hiện có, KHÔNG sinh thêm.
+      const r = await tx.receipt.findFirst({ where: { paymentId: existing.id } });
+      return { receiptId: r?.id, raced: true };
+    }
     const receipt = await issueReceipt({
       enrollmentId: existing.enrollmentId as string,
       paymentId: existing.id,
@@ -153,10 +159,10 @@ export async function confirmPayment(params: {
       },
       { tx, dedupeKey: `payment.confirmed:${existing.id}` },
     );
-    return receipt.id;
+    return { receiptId: receipt.id, raced: false };
   });
 
-  return { ok: true, alreadyConfirmed: false, receiptId };
+  return { ok: true, alreadyConfirmed: result.raced, receiptId: result.receiptId };
 }
 
 // ─── AC3 — Kế toán từ chối (reason bắt buộc) ──────────────────────────────────

@@ -89,13 +89,16 @@ export function evaluateSla(
  * THUẦN. lastActivityAt = null → NOT idle (UI/cron sẽ set lastActivityAt).
  */
 export function isLeadIdle(
-  input: { status: LeadStatus; lastActivityAt: Date | null },
+  input: { status: LeadStatus; lastActivityAt: Date | null; createdAt?: Date | null },
   now: Date,
   idleHours: number,
 ): boolean {
   if (input.status !== "NEW" && input.status !== "ASSIGNED") return false;
-  if (input.lastActivityAt == null) return false;
-  return now.getTime() - input.lastActivityAt.getTime() > idleHours * 3_600_000;
+  // R7-01 fix (G3): lead mới chưa có hoạt động → mốc tham chiếu = createdAt, để rule
+  // idle vẫn bắt được lead NEW bị bỏ quên (lastActivityAt chỉ set khi có LeadActivity).
+  const ref = input.lastActivityAt ?? input.createdAt ?? null;
+  if (ref == null) return false;
+  return now.getTime() - ref.getTime() > idleHours * 3_600_000;
 }
 
 /**
@@ -111,6 +114,7 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
       id: true, assignedToId: true, adminId: true, status: true,
       qualifiedAt: true, handedAt: true, receivedConfirmedAt: true,
       assignedAt: true, firstContactAt: true, updatedAt: true, lastActivityAt: true,
+      createdAt: true,
     },
   });
 
@@ -149,7 +153,7 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
     }
 
     // R7-01 — lead im lặng (NEW/ASSIGNED quá idleHours giờ) → 1 cảnh báo idempotent.
-    if (isLeadIdle({ status: lead.status, lastActivityAt: lead.lastActivityAt }, now, idleHours)) {
+    if (isLeadIdle({ status: lead.status, lastActivityAt: lead.lastActivityAt, createdAt: lead.createdAt }, now, idleHours)) {
       const idleBody = `Lead chưa được xử lý quá ${idleHours} giờ`;
       const idleKey = `sla:idle24:${lead.id}`;
       await db.staffNotification.upsert({

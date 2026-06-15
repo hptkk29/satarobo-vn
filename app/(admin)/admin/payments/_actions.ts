@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 // ─── lib/finance/* — parallel agent owns these. Combined typecheck resolves. ──
@@ -25,31 +25,21 @@ import {
 const PAGE_SIZE = 30;
 
 // ─── AUTH GATES ─────────────────────────────────────────────────────
-// Ghi nhận khoản (Sale) = payments:manage.
+// R7-04 AC1/AC5 — tách nhiệm vụ: Sale GHI NHẬN (payments:record, gồm SALES_CSM),
+// Kế toán XÁC NHẬN (payments:confirm = SUPER_ADMIN/ACCOUNTANT). Sale không confirm được.
 async function requireRecord() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:manage")) {
+  if (!can(session.user, "payments:record")) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
 }
 
-// Kế toán confirm/reject/adjust/refund. AC5 fine-grained "Sale không được tự
-// confirm" cần 1 action riêng (payments:confirm) về sau — TẠM gate bằng
-// payments:manage AND giữ vai trò kế toán/quản lý.
-function isAccountantLike(user: Parameters<typeof hasRole>[0]): boolean {
-  return (
-    hasRole(user, "ACCOUNTANT") ||
-    hasRole(user, "SUPER_ADMIN") ||
-    hasRole(user, "CENTER_MANAGER")
-  );
-}
-
 async function requireAccountant() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:manage") || !isAccountantLike(session.user)) {
+  if (!can(session.user, "payments:confirm")) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -187,18 +177,18 @@ export async function recordPaymentAction(input: unknown) {
 async function loadScopedPayment(
   userId: string | undefined,
   paymentId: string,
-): Promise<{ ok: true; uid: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; uid: string; recordedById: string | null } | { ok: false; error: string }> {
   if (!userId) return { ok: false, error: "Phiên không hợp lệ" };
   const actor = await resolveActor(userId);
   const sdb = scopedDb(actor);
   const row = await sdb.payment.findUnique({
     where: { id: paymentId },
-    select: { id: true, centerId: true, accountantStatus: true },
+    select: { id: true, centerId: true, accountantStatus: true, recordedById: true },
   });
   if (!row || !passesScope("Payment", row, actor)) {
     return { ok: false, error: "Không tìm thấy khoản thanh toán" };
   }
-  return { ok: true, uid: userId };
+  return { ok: true, uid: userId, recordedById: row.recordedById };
 }
 
 // ─── CONFIRM (Kế toán xác nhận → sinh Receipt) ──────────────────────────
@@ -206,6 +196,10 @@ export async function confirmPaymentAction(paymentId: string) {
   const session = await requireAccountant();
   const scope = await loadScopedPayment(session.user.id, paymentId);
   if (!scope.ok) return { ok: false as const, error: scope.error };
+  // AC5 — tách nhiệm vụ: người ghi nhận không được tự xác nhận khoản của mình.
+  if (scope.recordedById && scope.recordedById === scope.uid) {
+    return { ok: false as const, error: "Người ghi nhận không được tự xác nhận khoản của mình" };
+  }
 
   const res = await confirmPayment({ paymentId, confirmedById: scope.uid });
   if (!res.ok) return { ok: false as const, error: res.error };

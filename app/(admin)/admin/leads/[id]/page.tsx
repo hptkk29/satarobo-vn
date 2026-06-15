@@ -4,6 +4,8 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
@@ -108,8 +110,10 @@ export default async function LeadDetailPage({ params }: Props) {
 
   // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
   const canTrialManage = can(session.user, "trials:manage");
+  // GAP-5: dùng scopedDb (TrialClassV2 là SCOPED_MODEL) — tránh lộ lớp toàn hệ thống
+  // khi lead.centerId null. Cách ly cơ sở theo visibleCenterIds của actor.
   const openTrialClasses = canTrialManage
-    ? await db.trialClassV2.findMany({
+    ? await scopedDb(await resolveActor(session.user.id)).trialClassV2.findMany({
         where: {
           status: "OPEN",
           ...(lead.centerId ? { centerId: lead.centerId } : {}),
