@@ -55,3 +55,86 @@ export async function getParentOrders(parentUserId: string): Promise<OrderRow[]>
     items: o.items.map((i) => i.itemName),
   }));
 }
+
+// =============================================================================
+// R7-04 — PH chỉ thấy khoản đã được KẾ TOÁN XÁC NHẬN (accountantStatus=CONFIRMED).
+// Khoản Sale mới ghi nhận (PENDING) KHÔNG hiện cho phụ huynh (AC1).
+// =============================================================================
+
+export type ConfirmedPaymentRow = {
+  id: string;
+  orderId: string;
+  orderCode: string | null;
+  enrollmentId: string | null;
+  studentName: string | null;
+  amount: number;
+  method: string;
+  paidDate: string;
+  confirmedAt: string | null;
+  receiptCode: string | null;
+};
+
+/** Resolve childIds: nhận sẵn mảng studentIds, hoặc tra theo parentUserId. */
+async function resolveChildIds(
+  client: typeof db,
+  parentUserIdOrStudentIds: string | string[],
+): Promise<string[]> {
+  if (Array.isArray(parentUserIdOrStudentIds)) return parentUserIdOrStudentIds;
+  const children = await client.student.findMany({
+    where: { parentUserId: parentUserIdOrStudentIds, deletedAt: null },
+    select: { id: true },
+  });
+  return children.map((c) => c.id);
+}
+
+/**
+ * Khoản thanh toán ĐÃ XÁC NHẬN của các con (read-only, cho portal — AC1: chỉ CONFIRMED).
+ * Dùng db trần: ràng buộc theo childIds là cổng sở hữu; PARENT actor không có center-role
+ * nên KHÔNG center-scope (scopedDb sẽ lọc rỗng). `client` mặc định db.
+ */
+export async function getParentConfirmedPayments(
+  client: typeof db,
+  parentUserIdOrStudentIds: string | string[],
+): Promise<ConfirmedPaymentRow[]> {
+  const childIds = await resolveChildIds(client, parentUserIdOrStudentIds);
+  if (childIds.length === 0) return [];
+
+  const payments = await client.payment.findMany({
+    where: {
+      accountantStatus: "CONFIRMED",
+      enrollment: { studentId: { in: childIds } },
+    },
+    select: {
+      id: true,
+      orderId: true,
+      amount: true,
+      method: true,
+      paidDate: true,
+      confirmedAt: true,
+      enrollmentId: true,
+      order: { select: { code: true } },
+      enrollment: { select: { student: { select: { name: true } } } },
+      receipts: {
+        where: { status: "ACTIVE" },
+        select: { code: true },
+        orderBy: { issuedAt: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { paidDate: "desc" },
+    take: 200,
+  });
+
+  return payments.map((p) => ({
+    id: p.id,
+    orderId: p.orderId,
+    orderCode: p.order?.code ?? null,
+    enrollmentId: p.enrollmentId,
+    studentName: p.enrollment?.student?.name ?? null,
+    amount: p.amount,
+    method: p.method,
+    paidDate: p.paidDate.toISOString(),
+    confirmedAt: p.confirmedAt?.toISOString() ?? null,
+    receiptCode: p.receipts[0]?.code ?? null,
+  }));
+}

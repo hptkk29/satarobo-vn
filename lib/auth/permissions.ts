@@ -66,6 +66,10 @@ export type Action =
   | "trials:view"
   | "trials:manage"
   | "trials:feedback"
+  // --- Trial class V2 (R7-02) ---
+  | "trials:assign-teacher"
+  | "trials:override-capacity"
+  | "training:manage"
 
   // --- Notifications (Phase NHÓM 3) ---
   | "notifications:manage"
@@ -213,6 +217,8 @@ export type Action =
 
   // --- Phase 5.6 — Financial (Payment + Order) ---
   | "payments:manage"
+  | "payments:record" // R7-04 — Sale ghi nhận khoản
+  | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "orders:view"
   | "orders:manage"
 
@@ -272,6 +278,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
+  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "training:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Notifications (Phase NHÓM 3) ---
   "notifications:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
@@ -433,6 +443,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Phase 5.6 — Financial ---
   "payments:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
+  "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
 

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { LeadForm } from "../../_components/lead-form";
+import { LeadChildrenManager } from "../../_components/lead-children";
 
 export const metadata = { title: "Sửa lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
       where: { id, deletedAt: null },
       select: {
         id: true,
+        status: true,
         parentName: true,
         phone: true,
         email: true,
@@ -31,6 +33,22 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
         courseId: true,
         source: true,
         note: true,
+        children: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            fullName: true,
+            dob: true,
+            ageYears: true,
+            gender: true,
+            schoolName: true,
+            gradeLevel: true,
+            interestedCourseId: true,
+            interestedCenterId: true,
+            note: true,
+            trialStatus: true,
+          },
+        },
       },
     }),
     db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
@@ -60,6 +78,31 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
           note: lead.note,
         }}
       />
+
+      {/* R7-01 — quản lý con đã lưu (thêm/sửa/xoá ngay) */}
+      <div className="mt-6 max-w-xl">
+        <LeadChildrenManager
+          leadId={lead.id}
+          childrenList={lead.children.map((c) => ({
+            id: c.id,
+            fullName: c.fullName,
+            dob: c.dob ? c.dob.toISOString() : null,
+            ageYears: c.ageYears,
+            gender: c.gender,
+            schoolName: c.schoolName,
+            gradeLevel: c.gradeLevel,
+            interestedCourseId: c.interestedCourseId,
+            interestedCenterId: c.interestedCenterId,
+            note: c.note,
+            trialStatus: c.trialStatus,
+          }))}
+          centers={centers}
+          courses={courses}
+          legacyChildName={lead.childName}
+          legacyChildAge={lead.childAge}
+          readOnly={lead.status === "LOST"}
+        />
+      </div>
     </div>
   );
 }

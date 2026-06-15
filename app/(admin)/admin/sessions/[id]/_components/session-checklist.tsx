@@ -11,11 +11,13 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
   SCHEDULED: "Chưa bắt đầu",
   IN_PROGRESS: "Đang diễn ra",
   COMPLETED: "Đã hoàn tất",
+  CANCELLED: "Đã hủy",
 };
 const STATUS_COLOR: Record<SessionStatus, string> = {
   SCHEDULED: "bg-gray-100 text-gray-600",
   IN_PROGRESS: "bg-amber-100 text-amber-700",
   COMPLETED: "bg-emerald-100 text-emerald-700",
+  CANCELLED: "bg-rose-100 text-rose-700",
 };
 
 export function SessionChecklist({

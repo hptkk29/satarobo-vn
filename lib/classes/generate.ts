@@ -22,7 +22,13 @@ export async function generateClassSessions(
       scheduleDays: true,
       startDate: true,
       startTime: true,
+      curriculumId: true,
       course: { select: { id: true, totalSessions: true } },
+      // R7-06 — kế hoạch buổi của RIÊNG lớp (nếu đã pin curriculum/snapshot).
+      sessionPlans: {
+        orderBy: { order: "asc" },
+        select: { id: true, lessonId: true },
+      },
     },
   });
   if (!cls) return { ok: false, generated: 0, error: "Lớp không tồn tại" };
@@ -33,6 +39,41 @@ export async function generateClassSessions(
   const existing = await db.classSession.count({ where: { classId } });
   if (onlyIfEmpty && existing > 0) return { ok: true, generated: 0 };
 
+  // ── R7-06: PLAN-AWARE (additive) ──────────────────────────────────────────
+  // Lớp đã có ClassSessionPlan (giáo trình ghim / snapshot) → sinh buổi TỪ plan,
+  // gắn planId + lessonId theo thứ tự plan. Số buổi = số plan.
+  const plans = cls.sessionPlans ?? [];
+  if (plans.length > 0) {
+    const holidayRows = await db.holiday.findMany({
+      where: { OR: [{ centerId: cls.centerId }, { centerId: null }] },
+      select: { date: true, endDate: true },
+    });
+    const holidays = expandHolidaySet(holidayRows);
+
+    const from = cls.startDate ?? new Date();
+    const dates = computeSessionDates({
+      from,
+      scheduleDays: cls.scheduleDays,
+      count: plans.length,
+      holidays,
+    });
+    if (dates.length === 0) {
+      return { ok: false, generated: 0, error: "Không tính được ngày buổi học" };
+    }
+
+    const [ph, pm] = (cls.startTime ?? "00:00").split(":").map((x) => parseInt(x, 10));
+    const data = dates.map((d, i) => ({
+      classId,
+      date: new Date(d.getFullYear(), d.getMonth(), d.getDate(), ph || 0, pm || 0),
+      planId: plans[i]?.id ?? null,
+      lessonId: plans[i]?.lessonId ?? null,
+    }));
+
+    await db.classSession.createMany({ data });
+    return { ok: true, generated: data.length };
+  }
+
+  // ── FALLBACK (lớp cũ, chưa pin): GIỮ NGUYÊN hành vi cũ ─────────────────────
   // Số buổi chuẩn: Course.totalSessions → fallback đếm Lesson giáo trình active.
   let count = cls.course?.totalSessions ?? 0;
   // Lessons giáo trình (để gắn lessonId theo thứ tự).

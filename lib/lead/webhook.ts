@@ -35,11 +35,19 @@ function safeEqual(a: string, b: string): boolean {
 export function verifyWebhookSecret(
   source: string,
   req: Request,
-): { ok: boolean } {
+): { ok: boolean; reason?: string } {
   const envKey = SECRET_ENV[source];
   const expected = envKey ? process.env[envKey] : undefined;
 
   if (!expected) {
+    // Fail-CLOSED trên production: thiếu secret = từ chối (caller trả 503 —
+    // server cấu hình sai, KHÔNG tạo record). Dev/test giữ stub pass-through.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        `[webhook:${source}] THIẾU ${envKey ?? "secret"} trên production — TỪ CHỐI request (fail-closed).`,
+      );
+      return { ok: false, reason: "missing-secret" };
+    }
     console.warn(
       `[webhook:${source}] CHƯA cấu hình ${envKey ?? "secret"} — đang chạy chế độ stub (không xác thực). Đặt secret trước khi go-live.`,
     );
@@ -79,6 +87,14 @@ export function verifyMetaSignature(
 
   const secret = process.env.META_APP_SECRET;
   if (!secret) {
+    // Fail-CLOSED trên production: thiếu Meta App Secret = từ chối (không bỏ qua
+    // verify). Dev/test giữ stub pass-through để chạy local.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        `[webhook:${source}] THIẾU META_APP_SECRET trên production — TỪ CHỐI request (fail-closed).`,
+      );
+      return { ok: false, reason: "missing-secret" };
+    }
     console.warn(
       `[webhook:${source}] CHƯA cấu hình META_APP_SECRET — bỏ qua verify X-Hub-Signature-256 (stub). Đặt Meta App Secret thật trước go-live.`,
     );
@@ -222,8 +238,13 @@ export async function processLeadWebhook(
   source: string,
   req: Request,
 ): Promise<WebhookResult> {
-  if (!verifyWebhookSecret(source, req).ok) {
-    return { httpStatus: 401, body: { ok: false, error: "Unauthorized" } };
+  // AC3: thiếu secret trên production → 503 (server misconfig, không tạo record);
+  // token sai → 401 (request không hợp lệ).
+  const secretCheck = verifyWebhookSecret(source, req);
+  if (!secretCheck.ok) {
+    return secretCheck.reason === "missing-secret"
+      ? { httpStatus: 503, body: { ok: false, error: "Webhook chưa cấu hình secret" } }
+      : { httpStatus: 401, body: { ok: false, error: "Unauthorized" } };
   }
 
   // Đọc raw body 1 lần — cần cho HMAC verify (chữ ký tính trên byte gốc).
@@ -237,7 +258,10 @@ export async function processLeadWebhook(
   const sig = verifyMetaSignature(source, raw, req.headers.get("x-hub-signature-256"));
   if (!sig.ok) {
     console.warn(`[webhook:${source}] X-Hub-Signature-256 không hợp lệ: ${sig.reason}`);
-    return { httpStatus: 401, body: { ok: false, error: "Chữ ký không hợp lệ" } };
+    // Thiếu META_APP_SECRET trên production → 503 (misconfig); chữ ký sai → 401.
+    return sig.reason === "missing-secret"
+      ? { httpStatus: 503, body: { ok: false, error: "Webhook chưa cấu hình secret" } }
+      : { httpStatus: 401, body: { ok: false, error: "Chữ ký không hợp lệ" } };
   }
 
   let payload: unknown;

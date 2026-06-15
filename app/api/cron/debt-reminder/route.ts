@@ -3,36 +3,38 @@ import { db } from "@/lib/db";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { getSetting } from "@/lib/settings/service";
+import { effectiveReminderDays, isReminderDue } from "@/lib/finance/debt";
 
 export const dynamic = "force-dynamic";
 
 const ZNS_TEMPLATE_DEBT = process.env.ZALO_ZNS_TEMPLATE_DEBT || null;
 
-// Commit 4/5 — nhắc công nợ ĐỢT 2: từ ≤14 ngày trước dueDate đến khi đóng đủ (hoặc
-// tới dueDate). Gửi qua ZALO OA (khi cấu hình) + fallback EMAIL. Chống spam: tối đa
-// 1 nhắc/ngày/đợt (mốc lastReminderAt).
+// R7-04 — nhắc công nợ ĐỢT 2 theo PER-ROW reminderDays (QĐ-O7): mỗi đợt nhắc khi
+// `dueDate − (reminderDays ?? default) ≤ hôm nay`, tiếp tục đến khi đóng đủ. Gửi qua
+// ZALO OA (khi cấu hình) + fallback EMAIL. Chống spam: tối đa 1 nhắc/ngày/đợt (lastReminderAt).
 export async function GET(req: NextRequest) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   const now = new Date();
-  // Cửa sổ nhắc nợ trước hạn — SystemSetting "finance.debtReminderDaysBefore" (default 14).
-  const daysBefore = await getSetting("finance.debtReminderDaysBefore");
-  const dueWindowEnd = new Date(now.getTime() + daysBefore * 86400 * 1000);
+  // Số ngày nhắc trước hạn MẶC ĐỊNH — SystemSetting "finance.debtReminderDaysBefore" (14).
+  const defaultDays = await getSetting("finance.debtReminderDaysBefore");
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const dueSoon = await db.orderInstallment.findMany({
+  // Lấy mọi đợt 2 còn PENDING (per-row reminderDays quyết định đã đến hạn nhắc chưa).
+  const candidates = await db.orderInstallment.findMany({
     where: {
       soDot: 2,
       status: "PENDING",
-      dueDate: { gte: now, lte: dueWindowEnd },
+      dueDate: { not: null },
       order: { status: { notIn: ["CANCELLED", "REFUNDED"] } },
     },
     select: {
       id: true,
       amount: true,
       dueDate: true,
+      reminderDays: true,
       lastReminderAt: true,
       order: {
         select: {
@@ -48,9 +50,21 @@ export async function GET(req: NextRequest) {
     take: 500,
   });
 
-  const stats = { found: dueSoon.length, sent: 0, skippedToday: 0, skippedNoChannel: 0 };
+  const stats = {
+    found: candidates.length,
+    sent: 0,
+    skippedNotDue: 0,
+    skippedToday: 0,
+    skippedNoChannel: 0,
+  };
 
-  for (const inst of dueSoon) {
+  for (const inst of candidates) {
+    // Chưa tới mốc nhắc (per-row X) → bỏ qua.
+    const days = effectiveReminderDays(inst.reminderDays, defaultDays);
+    if (!isReminderDue(inst.dueDate, days, now)) {
+      stats.skippedNotDue++;
+      continue;
+    }
     // Đã nhắc hôm nay rồi → bỏ qua.
     if (inst.lastReminderAt && inst.lastReminderAt >= startOfToday) {
       stats.skippedToday++;
