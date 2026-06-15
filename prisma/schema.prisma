@@ -3404,6 +3404,8 @@ model Notification {
   publishedAt DateTime?            @default(now())
   createdById String?
   createdByName String?
+  // R7-17 — khoá chống trùng cho thông báo sinh từ DomainEvent (null = announcement thủ công).
+  dedupeKey   String?              @unique
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
