@@ -20,8 +20,9 @@ import FinalCTA from "@/components/legacy-laptrinhrobot/FinalCTA";
 import Footer from "@/components/legacy-laptrinhrobot/Footer";
 import FloatingCTA from "@/components/legacy-laptrinhrobot/FloatingCTA";
 import AgeCoursePopup from "@/components/legacy-laptrinhrobot/AgeCoursePopup";
+import type { Promotions } from "@/components/legacy-laptrinhrobot/_data/promotions";
 
-export default function LapTrinhRobotClient() {
+export default function LapTrinhRobotClient({ promotions }: { promotions?: Promotions }) {
   return (
     <>
       <div className="fixed left-0 right-0 top-0 z-[100] isolate">
@@ -37,7 +38,7 @@ export default function LapTrinhRobotClient() {
         <Hero />
         <ContestInfo />
         <Roadmap5Years />
-        <SpecialOfferCountdown />
+        <SpecialOfferCountdown promotions={promotions} />
         <TeachingMethod />
         <Locations />
         <Commitment />

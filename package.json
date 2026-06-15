@@ -18,6 +18,7 @@
     "db:seed:course-categories": "tsx prisma/seed-course-categories.ts",
     "db:seed:orgunit": "tsx prisma/seed-orgunit.ts",
     "db:seed:roles": "tsx prisma/seed-roles.ts",
+    "db:seed:marketing": "tsx prisma/seed-marketing-content.ts",
     "db:reset": "prisma migrate reset",
     "test:unit": "vitest",
     "test:unit:watch": "vitest watch",

@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import useCountdown from "./_hooks/useCountdown";
 import { formatDeadline } from "./_utils/deadlines";
-import { promotions, type PrimaryPromotion, type SecondaryPromotion } from "./_data/promotions";
+import {
+  promotions as staticPromotions,
+  type PrimaryPromotion,
+  type SecondaryPromotion,
+  type Promotions,
+} from "./_data/promotions";
 import {
   ArrowRight,
   CheckCircle2,
@@ -99,7 +104,11 @@ type UnifiedPromo =
   | (PrimaryPromotion & { _type: "primary" })
   | (SecondaryPromotion & { _type: "secondary" });
 
-export default function SpecialOfferCountdown() {
+export default function SpecialOfferCountdown({
+  promotions = staticPromotions,
+}: {
+  promotions?: Promotions;
+}) {
   const { deadline, timeLeft } = useCountdown();
   const pad = (n: number) => String(n).padStart(2, "0");
 

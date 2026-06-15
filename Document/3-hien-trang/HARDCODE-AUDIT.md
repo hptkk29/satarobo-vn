@@ -146,9 +146,13 @@ Mẫu lặp lại: `const ALLOWED_ROLES = ["SUPER_ADMIN","CENTER_MANAGER","TEACH
 
 ---
 
-## 4. 🟠 NỘI DUNG / KHÓA HỌC / GIÁ set cứng ở Frontend (nên đọc DB)
+## 4. 🟠 NỘI DUNG / KHÓA HỌC / GIÁ set cứng ở Frontend (nên đọc DB) — 🟡 ĐANG LÀM (Đợt 5)
 
 > Đã có `CoursePackage` DB + R6-B4 (giá đọc DB cho `/khoa-hoc/[slug]`). Nhưng phần lớn nội dung marketing vẫn nằm trong file `_data/*.ts`.
+>
+> **✅ Đợt 5 (foundation):** thêm model **`Promotion`** (+ enum `PromotionKind`) và **`Testimonial`** (migration `20260615090000_add_marketing_content_models`, **CHƯA apply lên Supabase** — DB đang có 4 migration R6 pending; apply bằng `prisma migrate deploy` ở môi trường sạch). Seed `prisma/seed-marketing-content.ts` (idempotent, từ `_data/*`). Helper `lib/promotions.ts` + `lib/testimonials.ts` đọc DB, **fallback dữ liệu tĩnh** khi bảng trống/chưa tồn tại (try/catch → 2-phase additive, site không vỡ trước migration).
+> **✅ Đã wire:** `/khoa-hoc/laptrinhrobot` `page.tsx` (server, ISR 300s) fetch `getPromotions("laptrinhrobot")` → `SpecialOfferCountdown` (prop optional, default tĩnh ⇒ no-op thị giác). `Product` model ĐÃ CÓ SẴN (Phase 5.10) — `lib/data/products.ts` chỉ cần seed, chưa làm.
+> **⏳ CÒN LẠI (cần verify thị giác 375px):** `Testimonials.tsx` của landing dùng **data inline RIÊNG** (có `videoId`/video) — KHÁC `_data/testimonials.ts` → KHÔNG swap mù (đổi nội dung hiển thị + mất video); cần đối chiếu nguồn live + (có thể) thêm cột `videoId`. Course pricing/details/roadmap → `CoursePackage`. luyenthirobosim. awards/gifts/commitments → SystemSetting. products seed.
 
 | File | Nội dung cứng | Nên đọc từ |
 |---|---|---|

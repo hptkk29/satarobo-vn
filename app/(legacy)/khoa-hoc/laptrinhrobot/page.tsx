@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import LapTrinhRobotClient from "./client-page";
+import { getPromotions } from "@/lib/promotions";
 
 const BASE_URL = "https://satarobo.vn";
+
+// ISR: trang marketing tĩnh, regen mỗi 5' để pick up thay đổi ưu đãi từ DB.
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title:
@@ -21,6 +25,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function LapTrinhRobotPage() {
-  return <LapTrinhRobotClient />;
+export default async function LapTrinhRobotPage() {
+  // Ưu đãi đọc từ DB (model Promotion); bảng trống → fallback dữ liệu tĩnh.
+  const promotions = await getPromotions("laptrinhrobot");
+  return <LapTrinhRobotClient promotions={promotions} />;
 }
