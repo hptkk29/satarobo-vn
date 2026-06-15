@@ -3425,6 +3425,7 @@ enum ParentRequestType {
   TRANSFER_CENTER
   RESERVE
   OTHER
+  CONSENT_CHANGE // R7-05 AC5 — PH yêu cầu đổi consent ảnh sau convert (có log)
 }
 
 enum ParentRequestStatus {
@@ -4483,4 +4484,39 @@ model TrialAttendance {
   updatedAt         DateTime              @updatedAt
 
   @@unique([trialSessionId, trialEnrollmentId])
+}
+
+// ═══ R7-05 — Convert v2 ═══════════════════════════════════════════════════════
+enum ConvertConflictStatus {
+  OPEN
+  RESOLVED
+}
+
+/// R7-05 §8.4 — xung đột dedupe parent (email thuộc hồ sơ A, phone thuộc hồ sơ B)
+/// → khoá convert, Admin gộp/sửa ở /admin/convert-conflicts rồi RESOLVED để mở khoá.
+model ConvertConflict {
+  id           String                @id @default(cuid())
+  leadId       String
+  parentAId    String // User.id khớp theo email
+  parentBId    String // User.id khớp theo phone
+  status       ConvertConflictStatus @default(OPEN)
+  resolvedById String?
+  note         String?               @db.Text
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([leadId, status])
+  @@index([status])
+}
+
+/// R7-05 — chống double-submit/idempotency cho thao tác nhạy cảm (convert...).
+/// key = hash ổn định của payload (vd `convert:${leadId}:${hash}`).
+model IdempotencyKey {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  scope     String? // "convert" | ...
+  result    Json? // tham chiếu kết quả (vd enrollmentIds) để trả lại khi trùng
+  createdAt DateTime @default(now())
+
+  @@index([scope, createdAt])
 }

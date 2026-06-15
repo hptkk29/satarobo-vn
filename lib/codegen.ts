@@ -47,6 +47,43 @@ export async function genStudentCode(centerCode: string, client: DbClient = db):
   return `${cc}.HV.${y}.${pad(seq, 3)}`;
 }
 
+// ─── R7-05 — mã học viên v2: CS1-26-AB3K9P (charset không nhập nhằng, ngẫu nhiên) ──
+/** Charset bỏ ký tự dễ nhầm: I, L, O, 0, 1. */
+export const STUDENT_CODE_V2_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+/** Thân mã ngẫu nhiên 6 ký tự (THUẦN — inject `rand` để test). */
+export function randomStudentCodeBody(rand: () => number = Math.random): string {
+  let s = "";
+  for (let i = 0; i < 6; i++) {
+    s += STUDENT_CODE_V2_CHARSET[Math.floor(rand() * STUDENT_CODE_V2_CHARSET.length)];
+  }
+  return s;
+}
+
+/** Định dạng mã v2 `${CS}-${YY}-${body}` (THUẦN). */
+export function formatStudentCodeV2(centerCode: string, body: string, date = new Date()): string {
+  return `${sanitize(centerCode)}-${yy(date)}-${body}`;
+}
+
+/** Sinh mã HV v2 duy nhất (retry khi đụng unique — C9). */
+export async function genStudentCodeV2(
+  centerCode: string,
+  client: DbClient = db,
+  opts?: { rand?: () => number; maxRetries?: number },
+): Promise<string> {
+  const rand = opts?.rand ?? Math.random;
+  const maxRetries = opts?.maxRetries ?? 10;
+  for (let i = 0; i < maxRetries; i++) {
+    const code = formatStudentCodeV2(centerCode, randomStudentCodeBody(rand));
+    const existing = await client.student.findUnique({
+      where: { studentCode: code },
+      select: { id: true },
+    });
+    if (!existing) return code;
+  }
+  throw new Error("Không sinh được mã học viên duy nhất sau nhiều lần thử");
+}
+
 /** CS1.NV.26.001 — nhân viên (seq 3 số). */
 export async function genEmployeeCode(centerCode: string, client: DbClient = db): Promise<string> {
   const cc = sanitize(centerCode);

@@ -13,7 +13,7 @@
 | [R7-02](R7-02-trial-class.md) | Lớp trải nghiệm N buổi end-to-end | R7a | XL | R7-01 | 🟡 CODE DONE (2026-06-15) — TrialClassV2 model+migration+service+UI+unit; chờ e2e |
 | [R7-03](R7-03-course-pricing.md) | Ưu đãi theo khóa + snapshot giá Enrollment | R7a | M | R7-00 | 🟡 CODE DONE (2026-06-15) — CourseDiscount+migration+pricing helper+UI; snapshot ghi tại convert (R7-05); chờ migrate+e2e |
 | [R7-04](R7-04-payment-two-tier.md) | Payment 2 tầng + Receipt + 2 đợt X ngày + công nợ | R7a | XL | R7-03 | 🟡 CODE DONE (2026-06-15) — Payment/Receipt model+migration+payment/debt/receipt logic+UI+cron+unit; chờ e2e |
-| [R7-05](R7-05-convert-v2.md) | Convert v2 (chặn thanh toán, multi-student, dedupe, consent, mã HV) | R7a | XL | R7-01,03,04 | TODO |
+| [R7-05](R7-05-convert-v2.md) | Convert v2 (chặn thanh toán, multi-student, dedupe, consent, mã HV) | R7a | XL | R7-01,03,04 | 🟡 BACKEND DONE (2026-06-15) — service+guard PAYMENT_REQUIRED+multi-student tx+dedupe+genStudentCodeV2+ConvertConflict+IdempotencyKey+consent, sau cờ CONVERT_V2_ENABLED (OFF). CÒN: form convert UI + /convert-conflicts + e2e |
 | [R7-06](R7-06-class-snapshot.md) | ClassProgramSnapshot + guard + điều chỉnh buổi | R7a | L | R7-00 | 🟡 CODE DONE (2026-06-15) — pin curriculum+ClassSessionPlan+adopt+cancel/makeup+generate plan-aware+UI; adjust GV/phòng ghi audit (thiếu cột per-session — TODO schema); chờ migrate+e2e |
 | [R7-07](R7-07-assign-session.md) | Gán học viên + state machine buổi học | R7a | L | R7-06 | TODO |
 | [R7-08](R7-08-makeup-cross-center.md) | Học bù liên cơ sở + 5 chỉ số + 6 nhãn điểm danh | R7a | L | R7-07 | TODO |

@@ -8,6 +8,7 @@ export const REQUEST_TYPE_LABEL: Record<ParentRequestType, string> = {
   TRANSFER_CENTER: "Chuyển cơ sở",
   RESERVE: "Bảo lưu",
   OTHER: "Khác",
+  CONSENT_CHANGE: "Đổi đồng ý dùng ảnh",
 };
 
 export const REQUEST_STATUS_LABEL: Record<ParentRequestStatus, string> = {
