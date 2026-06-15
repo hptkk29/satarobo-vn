@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, KeyRound, Shield, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, isSuperAdmin } from "@/lib/auth/permissions";
 import { RoleBadge } from "./_components/role-badge";
 import {
   UserStatusToggle,
@@ -65,7 +65,7 @@ export default async function UsersAdminPage() {
 
   // Đếm SUPER_ADMIN active để disable nút toggle/role-change nếu chỉ còn 1
   const activeSuperAdminCount = users.filter(
-    (u) => u.role === "SUPER_ADMIN" && u.isActive,
+    (u) => isSuperAdmin(u.role) && u.isActive,
   ).length;
 
   return (
@@ -133,7 +133,7 @@ export default async function UsersAdminPage() {
                 users.map((u) => {
                   const isSelf = u.id === session.user.id;
                   const isLastActiveSuperAdmin =
-                    u.role === "SUPER_ADMIN" &&
+                    isSuperAdmin(u.role) &&
                     u.isActive &&
                     activeSuperAdminCount === 1;
                   const toggleDisabled = isSelf || isLastActiveSuperAdmin;

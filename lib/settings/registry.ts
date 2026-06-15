@@ -30,7 +30,9 @@ export type SettingGroup =
   | "lms"
   | "storage"
   | "public"
-  | "content";
+  | "content"
+  | "cron"
+  | "dashboard";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -371,6 +373,64 @@ export const SETTINGS = {
     label: "Cửa sổ rate-limit form lead (ms)",
     schema: z.number().int().min(1000).max(3_600_000),
     default: 60_000,
+    centerOverridable: false,
+  }),
+  // ── Cron nhắc lịch (hardcode remediation): cửa sổ quét + idempotency ──
+  "cron.renewalReminderMinDays": def({
+    key: "cron.renewalReminderMinDays",
+    group: "cron",
+    label: "Nhắc tái tục: từ N ngày trước khi hết khoá",
+    schema: z.number().int().min(1).max(365),
+    default: 13, // app/api/cron/renewal-reminder/route.ts
+    centerOverridable: false,
+  }),
+  "cron.renewalReminderMaxDays": def({
+    key: "cron.renewalReminderMaxDays",
+    group: "cron",
+    label: "Nhắc tái tục: đến N ngày trước khi hết khoá",
+    schema: z.number().int().min(1).max(365),
+    default: 15, // app/api/cron/renewal-reminder/route.ts
+    centerOverridable: false,
+  }),
+  "cron.renewalReminderIdempotencyDays": def({
+    key: "cron.renewalReminderIdempotencyDays",
+    group: "cron",
+    label: "Nhắc tái tục: không gửi lại trong N ngày",
+    schema: z.number().int().min(1).max(365),
+    default: 30, // app/api/cron/renewal-reminder/route.ts
+    centerOverridable: false,
+  }),
+  "cron.classReminderMinHours": def({
+    key: "cron.classReminderMinHours",
+    group: "cron",
+    label: "Nhắc buổi học: từ N giờ trước buổi",
+    schema: z.number().int().min(1).max(168),
+    default: 12, // app/api/cron/class-reminder/route.ts
+    centerOverridable: false,
+  }),
+  "cron.classReminderMaxHours": def({
+    key: "cron.classReminderMaxHours",
+    group: "cron",
+    label: "Nhắc buổi học: đến N giờ trước buổi",
+    schema: z.number().int().min(1).max(168),
+    default: 48, // app/api/cron/class-reminder/route.ts
+    centerOverridable: false,
+  }),
+  // ── Dashboard việc cần xử lý (lib/pending-tasks.ts) ──
+  "dashboard.pendingItemLimit": def({
+    key: "dashboard.pendingItemLimit",
+    group: "dashboard",
+    label: "Số item hiển thị mỗi nhóm việc cần xử lý",
+    schema: z.number().int().min(1).max(50),
+    default: 6, // lib/pending-tasks.ts ITEM_LIMIT
+    centerOverridable: false,
+  }),
+  "dashboard.pendingStaleDays": def({
+    key: "dashboard.pendingStaleDays",
+    group: "dashboard",
+    label: "Số ngày coi việc cần xử lý là quá hạn",
+    schema: z.number().int().min(1).max(30),
+    default: 2, // lib/pending-tasks.ts TWO_DAYS_MS
     centerOverridable: false,
   }),
   // ── Nội dung chính sách marketing (legacy-laptrinhrobot) — default = static _data ──

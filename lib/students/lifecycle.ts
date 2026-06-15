@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings/service";
 
 // Default tuning constants — caller async truyền từ SystemSetting "student.*".
 export const RENEWAL_WINDOW_DAYS = 90;
@@ -139,10 +140,14 @@ export function buildLifecycleWhere(
  */
 export async function postFilterFrequentlyAbsent(
   studentIds: string[],
-  threshold: number = FREQUENT_ABSENT_THRESHOLD,
-  window: number = FREQUENT_ABSENT_WINDOW,
+  threshold?: number,
+  window?: number,
 ): Promise<Set<string>> {
   if (studentIds.length === 0) return new Set();
+
+  // Đợt 3 — đọc động từ SystemSetting (default = hằng số nếu chưa cấu hình).
+  const absentThreshold = threshold ?? (await getSetting("student.frequentAbsentThreshold"));
+  const absentWindow = window ?? (await getSetting("student.frequentAbsentWindow"));
 
   // Generous limit to capture enough recent records per student. At the
   // current attendance volume this is single-digit MB at worst.
@@ -150,7 +155,7 @@ export async function postFilterFrequentlyAbsent(
     where: { studentId: { in: studentIds } },
     orderBy: [{ studentId: "asc" }, { createdAt: "desc" }],
     select: { studentId: true, status: true },
-    take: studentIds.length * window * 3,
+    take: studentIds.length * absentWindow * 3,
   });
 
   // Group by student, take latest N per student.
@@ -158,14 +163,14 @@ export async function postFilterFrequentlyAbsent(
   for (const a of recentAttendance) {
     if (!byStudent.has(a.studentId)) byStudent.set(a.studentId, []);
     const list = byStudent.get(a.studentId)!;
-    if (list.length < window) list.push(a.status);
+    if (list.length < absentWindow) list.push(a.status);
   }
 
   const result = new Set<string>();
   for (const [studentId, statuses] of byStudent.entries()) {
-    if (statuses.length < window) continue;
+    if (statuses.length < absentWindow) continue;
     const absentCount = statuses.filter((s) => s === "ABSENT").length;
-    if (absentCount >= threshold) {
+    if (absentCount >= absentThreshold) {
       result.add(studentId);
     }
   }

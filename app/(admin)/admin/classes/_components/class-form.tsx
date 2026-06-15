@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClass, updateClass } from "../_actions";
 import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
+import { hasRole } from "@/lib/auth/permissions";
 
 export type ClassFormValue = {
   id: string;
@@ -268,7 +269,7 @@ export function ClassForm({
               { value: "", label: "— Chưa phân —" },
               ...teachers.map((t) => ({
                 value: t.id,
-                label: `${t.name}${t.role === "CENTER_MANAGER" ? " (QL)" : ""}`,
+                label: `${t.name}${hasRole(t, "CENTER_MANAGER") ? " (QL)" : ""}`,
               })),
             ]}
           />

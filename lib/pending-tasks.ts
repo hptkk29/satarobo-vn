@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { can, hasRole, type CanUser } from "@/lib/auth/permissions";
 import { isChecklistComplete } from "@/lib/center-checklist";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
+import { getSetting } from "@/lib/settings/service";
 
 // =============================================================================
 // MODULE TRUNG TÂM PHÊ DUYỆT & NHẮC VIỆC — PHẦN 1
@@ -43,8 +44,11 @@ export type TaskUser = CanUser & {
   centerId?: string | null;
 };
 
-const ITEM_LIMIT = 6;
-const TWO_DAYS_MS = 2 * 86400000;
+/** Tham số hiển thị/ngưỡng quá hạn, resolve từ SystemSetting (dashboard.*). */
+interface PendingCfg {
+  itemLimit: number;
+  staleMs: number;
+}
 
 function scope(user: TaskUser) {
   const isSuper = hasRole(user, "SUPER_ADMIN");
@@ -57,10 +61,10 @@ function scope(user: TaskUser) {
 
 // ─── Từng nguồn việc ─────────────────────────────────────────────────────────
 
-async function classApproval(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function classApproval(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const { isManager, centerScope } = scope(user);
   if (!isManager) return null;
-  const twoDaysAgo = new Date(now.getTime() - TWO_DAYS_MS);
+  const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
   const rows = await db.class.findMany({
     where: { status: "PENDING_APPROVAL", deletedAt: null, ...(centerScope ? { centerId: centerScope } : {}) },
@@ -75,7 +79,7 @@ async function classApproval(user: TaskUser, now: Date): Promise<PendingTaskGrou
     count: rows.length,
     overdueCount,
     href: "/classes?status=PENDING_APPROVAL",
-    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: r.classCode ? `${r.classCode} · ${r.name}` : r.name,
       href: `/classes/${r.id}/edit`,
@@ -84,10 +88,10 @@ async function classApproval(user: TaskUser, now: Date): Promise<PendingTaskGrou
   };
 }
 
-async function timesheetAdjust(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function timesheetAdjust(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   if (!can(user, "hr_attendance:adjust")) return null;
   const { centerScope } = scope(user);
-  const twoDaysAgo = new Date(now.getTime() - TWO_DAYS_MS);
+  const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
   const rows = await db.timesheetAdjustmentRequest.findMany({
     where: { status: "PENDING", ...(centerScope ? { centerId: centerScope } : {}) },
@@ -102,7 +106,7 @@ async function timesheetAdjust(user: TaskUser, now: Date): Promise<PendingTaskGr
     count: rows.length,
     overdueCount,
     href: "/cham-cong/chinh-cong",
-    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: `Chỉnh công ${new Date(r.date).toLocaleDateString("vi-VN")}`,
       href: "/cham-cong/chinh-cong",
@@ -111,10 +115,10 @@ async function timesheetAdjust(user: TaskUser, now: Date): Promise<PendingTaskGr
   };
 }
 
-async function parentRequest(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function parentRequest(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   if (!can(user, "parent-requests:manage")) return null;
   const { centerScope } = scope(user);
-  const twoDaysAgo = new Date(now.getTime() - TWO_DAYS_MS);
+  const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
   const rows = await db.parentRequest.findMany({
     where: { status: "PENDING", ...(centerScope ? { student: { centerId: centerScope } } : {}) },
@@ -129,7 +133,7 @@ async function parentRequest(user: TaskUser, now: Date): Promise<PendingTaskGrou
     count: rows.length,
     overdueCount,
     href: "/parent-requests",
-    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: `${r.student.name} — ${r.type}`,
       href: r.type === "ABSENCE" ? "/parent-requests/bao-vang" : "/parent-requests",
@@ -138,10 +142,10 @@ async function parentRequest(user: TaskUser, now: Date): Promise<PendingTaskGrou
   };
 }
 
-async function mediaApproval(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function mediaApproval(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   if (!can(user, "media:approve")) return null;
   const { centerScope } = scope(user);
-  const twoDaysAgo = new Date(now.getTime() - TWO_DAYS_MS);
+  const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
   // ClassSessionMedia.classId là cột phẳng → lọc cơ sở qua tập classId trong cơ sở.
   let classFilter: { classId: { in: string[] } } | undefined;
@@ -162,7 +166,7 @@ async function mediaApproval(user: TaskUser, now: Date): Promise<PendingTaskGrou
     count: rows.length,
     overdueCount,
     href: "/media",
-    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: r.fileName ?? "Ảnh lớp học",
       href: "/media",
@@ -171,7 +175,7 @@ async function mediaApproval(user: TaskUser, now: Date): Promise<PendingTaskGrou
   };
 }
 
-async function sessionIncomplete(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function sessionIncomplete(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const { isManager, centerScope } = scope(user);
   if (!isManager) return null;
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -192,7 +196,7 @@ async function sessionIncomplete(user: TaskUser, now: Date): Promise<PendingTask
     count: rows.length,
     overdueCount: rows.length, // quá ngày mà chưa xong → đều quá hạn
     href: "/sessions",
-    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: `${r.class.classCode ? `${r.class.classCode} · ` : ""}${r.class.name} (${new Date(r.date).toLocaleDateString("vi-VN")})`,
       href: `/sessions/${r.id}`,
@@ -201,7 +205,7 @@ async function sessionIncomplete(user: TaskUser, now: Date): Promise<PendingTask
   };
 }
 
-async function centerChecklist(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function centerChecklist(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const { isManager, centerScope } = scope(user);
   if (!isManager) return null;
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -222,7 +226,7 @@ async function centerChecklist(user: TaskUser, now: Date): Promise<PendingTaskGr
     count: missing.length,
     overdueCount: missing.length,
     href: "/cham-cong/checklist-co-so",
-    items: missing.slice(0, ITEM_LIMIT).map((c) => ({
+    items: missing.slice(0, cfg.itemLimit).map((c) => ({
       id: c.id,
       label: `${c.name} — chưa hoàn tất`,
       href: "/cham-cong/checklist-co-so",
@@ -231,7 +235,7 @@ async function centerChecklist(user: TaskUser, now: Date): Promise<PendingTaskGr
   };
 }
 
-async function leadFollowup(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function leadFollowup(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const canAll = can(user, "leads:view-all");
   const canOwn = can(user, "leads:view-own");
   if (!canAll && !canOwn) return null;
@@ -255,7 +259,7 @@ async function leadFollowup(user: TaskUser, now: Date): Promise<PendingTaskGroup
       },
       select: { id: true, parentName: true, status: true },
       orderBy: { createdAt: "asc" },
-      take: ITEM_LIMIT,
+      take: cfg.itemLimit,
     }),
   ]);
   const count = newLeads + overdueLeads;
@@ -276,7 +280,7 @@ async function leadFollowup(user: TaskUser, now: Date): Promise<PendingTaskGroup
   };
 }
 
-async function renewal(user: TaskUser): Promise<PendingTaskGroup | null> {
+async function renewal(user: TaskUser, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const canAll = can(user, "enrollments:view-all");
   if (!canAll && !can(user, "enrollments:view-own")) return null;
   const { isSuper, isCM } = scope(user);
@@ -290,7 +294,7 @@ async function renewal(user: TaskUser): Promise<PendingTaskGroup | null> {
     count: list.length,
     overdueCount,
     href: "/students/sap-het-khoa",
-    items: list.slice(0, ITEM_LIMIT).map((i) => ({
+    items: list.slice(0, cfg.itemLimit).map((i) => ({
       id: i.enrollmentId,
       label: `${i.studentName} — còn ${i.remaining} buổi`,
       href: `/students/${i.studentId}/edit`,
@@ -299,10 +303,10 @@ async function renewal(user: TaskUser): Promise<PendingTaskGroup | null> {
   };
 }
 
-async function studentRisk(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function studentRisk(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const { isManager, centerScope } = scope(user);
   if (!isManager) return null;
-  const twoDaysAgo = new Date(now.getTime() - TWO_DAYS_MS);
+  const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
   const rows = await db.studentRiskAlert.findMany({
     where: { status: "OPEN", ...(centerScope ? { centerId: centerScope } : {}) },
     select: { id: true, type: true, severity: true, createdAt: true, student: { select: { id: true, name: true } } },
@@ -316,7 +320,7 @@ async function studentRisk(user: TaskUser, now: Date): Promise<PendingTaskGroup 
     count: rows.length,
     overdueCount,
     href: "/canh-bao-rui-ro",
-    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: `${r.student.name} — ${r.type}`,
       href: `/students/${r.student.id}/edit`,
@@ -325,7 +329,7 @@ async function studentRisk(user: TaskUser, now: Date): Promise<PendingTaskGroup 
   };
 }
 
-async function studentCare(user: TaskUser, now: Date): Promise<PendingTaskGroup | null> {
+async function studentCare(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const { isSuper, isCM } = scope(user);
   const isSales = hasRole(user, "SALES_CSM");
   if (!isSuper && !isCM && !isSales) return null;
@@ -348,7 +352,7 @@ async function studentCare(user: TaskUser, now: Date): Promise<PendingTaskGroup 
     count: rows.length,
     overdueCount,
     href: "/cham-soc-hv",
-    items: rows.slice(0, ITEM_LIMIT).map((r) => ({
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: r.title,
       href: `/students/${r.student.id}/edit`,
@@ -363,17 +367,22 @@ async function studentCare(user: TaskUser, now: Date): Promise<PendingTaskGroup 
  */
 export async function getPendingTasks(user: TaskUser): Promise<PendingTaskGroup[]> {
   const now = new Date();
+  const [itemLimit, staleDays] = await Promise.all([
+    getSetting("dashboard.pendingItemLimit"),
+    getSetting("dashboard.pendingStaleDays"),
+  ]);
+  const cfg: PendingCfg = { itemLimit, staleMs: staleDays * 86400000 };
   const groups = await Promise.all([
-    classApproval(user, now),
-    timesheetAdjust(user, now),
-    parentRequest(user, now),
-    mediaApproval(user, now),
-    sessionIncomplete(user, now),
-    centerChecklist(user, now),
-    leadFollowup(user, now),
-    renewal(user),
-    studentRisk(user, now),
-    studentCare(user, now),
+    classApproval(user, now, cfg),
+    timesheetAdjust(user, now, cfg),
+    parentRequest(user, now, cfg),
+    mediaApproval(user, now, cfg),
+    sessionIncomplete(user, now, cfg),
+    centerChecklist(user, now, cfg),
+    leadFollowup(user, now, cfg),
+    renewal(user, cfg),
+    studentRisk(user, now, cfg),
+    studentCare(user, now, cfg),
   ]);
   return groups
     .filter((g): g is PendingTaskGroup => g !== null)

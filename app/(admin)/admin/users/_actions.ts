@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, hasRole, isSuperAdmin } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   userCreateSchema,
@@ -153,7 +153,7 @@ export async function updateUserAction(id: string, formData: FormData) {
   }
 
   // Last SUPER_ADMIN protection
-  if (current.role === "SUPER_ADMIN" && parsed.data.role !== "SUPER_ADMIN") {
+  if (isSuperAdmin(current.role) && !isSuperAdmin(parsed.data.role)) {
     const remaining = await db.user.count({
       where: {
         role: "SUPER_ADMIN",
@@ -264,10 +264,10 @@ export async function toggleUserActiveAction(id: string) {
   });
   if (!user) return { ok: false, error: "Không tìm thấy user" };
   // Đa vai trò: nhận diện SALES_CSM theo cả role chính lẫn roles[].
-  const wasSalesCsm = user.role === "SALES_CSM" || user.roles.includes("SALES_CSM");
+  const wasSalesCsm = hasRole(user, "SALES_CSM");
 
   // Last SUPER_ADMIN check (chỉ áp dụng khi đang active + đi disable)
-  if ((user.role === "SUPER_ADMIN" || user.roles.includes("SUPER_ADMIN")) && user.isActive) {
+  if (hasRole(user, "SUPER_ADMIN") && user.isActive) {
     const remaining = await db.user.count({
       where: {
         roles: { has: "SUPER_ADMIN" },

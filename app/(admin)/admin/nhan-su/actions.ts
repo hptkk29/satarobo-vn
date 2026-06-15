@@ -1,10 +1,12 @@
 "use server";
 
 import { z } from "zod";
+import type { Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { assertCan, hasRole } from "@/lib/auth/permissions";
+import { ASSIGNABLE_ROLES } from "@/lib/labels";
 import {
   employeeCreateSchema,
   employeeUpdateSchema,
@@ -184,24 +186,19 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
 // Employees without a linked User account cannot have their role changed
 // from this UI (there's nothing to update). SUPER_ADMIN only.
 
-const VALID_ROLES = [
-  "SUPER_ADMIN",
-  "CENTER_MANAGER",
-  "HR",
-  "SALES_CSM",
-  "TEACHER",
-  "MARKETING",
-  "ACCOUNTANT",
-] as const;
-type ValidRole = (typeof VALID_ROLES)[number];
+// Vai trò gán được = ASSIGNABLE_ROLES (lib/labels) — loại PARENT (chỉ staff).
+// z.enum cần tuple literal nên ép kiểu Role[] -> [Role, ...Role[]] (chỉ thu hẹp,
+// runtime vẫn chặn giá trị ngoài danh sách 7 vai trò).
+const roleEnum = z.enum(ASSIGNABLE_ROLES as [Role, ...Role[]]);
+type ValidRole = z.infer<typeof roleEnum>;
 
 // Đợt 3B — gán NHIỀU vai trò + 1 vai trò chính (primary). PARENT loại khỏi
-// VALID_ROLES (chỉ staff) nên không thể trộn PARENT với staff ở đây.
+// ASSIGNABLE_ROLES (chỉ staff) nên không thể trộn PARENT với staff ở đây.
 const changeRoleSchema = z
   .object({
     employeeId: z.string().min(1),
-    roles: z.array(z.enum(VALID_ROLES)).min(1, "Chọn ít nhất 1 vai trò"),
-    primaryRole: z.enum(VALID_ROLES),
+    roles: z.array(roleEnum).min(1, "Chọn ít nhất 1 vai trò"),
+    primaryRole: roleEnum,
     reason: z.string().trim().min(5, "Lý do phải có ít nhất 5 ký tự").max(500),
   })
   .refine((d) => d.roles.includes(d.primaryRole), {

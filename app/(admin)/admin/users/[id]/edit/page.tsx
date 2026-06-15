@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, KeyRound, Power, Shield, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, isSuperAdmin } from "@/lib/auth/permissions";
 import { UserForm } from "../../_components/user-form";
 import { toggleUserActiveAction } from "../../_actions";
 
@@ -71,7 +71,7 @@ export default async function EditUserPage({ params }: Props) {
     where: { role: "SUPER_ADMIN", isActive: true, deletedAt: null },
   });
   const isLastActiveSuperAdmin =
-    user.role === "SUPER_ADMIN" &&
+    isSuperAdmin(user.role) &&
     user.isActive &&
     activeSuperAdminCount === 1;
 
