@@ -6,6 +6,8 @@ import { can, hasRole } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
+import { resolveActor } from '@/lib/auth/actor'
+import { passesScope } from '@/lib/db-scope'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { genStudentCode } from '@/lib/codegen'
@@ -45,7 +47,10 @@ export async function updateLeadStatus(
     where: { id: leadId },
     select: { status: true, centerId: true },
   })
-  if (!before) return { ok: false, error: 'Lead khong ton tai' }
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead khong ton tai' }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
 
@@ -134,9 +139,12 @@ export async function addLeadActivity(input: {
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true },
+    select: { id: true, centerId: true },
   })
-  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+  const actor = await resolveActor(session.user.id)
+  if (!lead || !passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
   await db.leadActivity.create({
@@ -170,9 +178,12 @@ export async function addLeadTask(input: {
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, assignedToId: true },
+    select: { id: true, assignedToId: true, centerId: true },
   })
-  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+  const actor = await resolveActor(session.user.id)
+  if (!lead || !passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
   await db.leadTask.create({
@@ -202,9 +213,12 @@ export async function completeLeadTask(
 
   const task = await db.leadTask.findUnique({
     where: { id: taskId },
-    select: { leadId: true },
+    select: { leadId: true, lead: { select: { centerId: true } } },
   })
-  if (!task) return { ok: false, error: 'Việc không tồn tại' }
+  const actor = await resolveActor(session.user.id)
+  if (!task || !passesScope('Lead', { centerId: task.lead?.centerId ?? null }, actor)) {
+    return { ok: false, error: 'Việc không tồn tại' }
+  }
 
   await db.leadTask.update({
     where: { id: taskId },
@@ -228,9 +242,12 @@ export async function updateLeadNote(
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
-    select: { note: true },
+    select: { note: true, centerId: true },
   })
-  if (!before) return { ok: false, error: 'Lead khong ton tai' }
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead khong ton tai' }
+  }
 
   const newNote = note.trim() || null
   const { actorId, actorName } = getAuditActor(session)
@@ -269,9 +286,12 @@ export async function deleteLead(
 
   const before = await db.lead.findUnique({
     where: { id: leadId, deletedAt: null },
-    select: { parentName: true, phone: true, status: true },
+    select: { parentName: true, phone: true, status: true, centerId: true },
   })
-  if (!before) return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
 

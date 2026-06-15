@@ -62,6 +62,12 @@ describe("[A0-04] passesScope (IDOR findUnique)", () => {
     expect(passesScope("Lead", { centerId: "c1" }, center)).toBe(true);
     expect(passesScope("Lead", { centerId: "c2" }, center)).toBe(false);
   });
+  it("[R7-00-AC4] Order/Lead chéo cơ sở → false (chặn IDOR sửa-theo-id)", () => {
+    // CM@CS1 thao tác record CS2 bằng id → bị chặn ở tầng passesScope.
+    expect(passesScope("Order", { centerId: "c2" }, center)).toBe(false);
+    expect(passesScope("Order", { centerId: "c1" }, center)).toBe(true);
+    expect(passesScope("Order", { centerId: "c2" }, sa)).toBe(true); // SUPER_ADMIN bypass
+  });
   it("[A0-04-T8-02] center: record centerId=null → false (an toàn)", () => {
     expect(passesScope("Lead", { centerId: null }, center)).toBe(false);
   });

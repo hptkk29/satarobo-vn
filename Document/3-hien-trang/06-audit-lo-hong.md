@@ -16,6 +16,7 @@
   - `app/(admin)/admin/orders/_actions.ts` `changeOrderStatusAction`, `updateOrderNoteAction` — load record bằng `findUnique(id)` trần, không ràng buộc centerId của actor.
 - **Mức:** Cao (dữ liệu trẻ em + tiền, đa cơ sở).
 - **Khắc phục:** đẩy nhanh A0-04 — thay `db` → `scopedDb(actor)` cho module có centerId; đổi rule sang `error`. Trước mắt: với action sửa-theo-id (lead/order/student/class) thêm `where:{ id, centerId:{ in: actor.visibleCenterIds } }` hoặc `passesScope()` sau `findUnique`.
+- 🟡 **R7-00 (2026-06-15) — đã vá 2 IDOR đích danh (AC4):** `leads/actions.ts` (`updateLeadStatus`, `addLeadActivity`, `addLeadTask`, `completeLeadTask`, `updateLeadNote`, `deleteLead`) + `orders/_actions.ts` (`changeOrderStatusAction`, `updateOrderNoteAction`, `recordOrderInstallmentsAction`, `sendManualOrderEmailAction`) đã thêm `resolveActor` + `passesScope("Lead"/"Order", record, actor)` (chéo cơ sở → trả "không tìm thấy"). Unit test `db-scope.test.ts` phủ Lead/Order. **CÒN LẠI (A0-04 epic):** migrate rộng `db`→`scopedDb` + đổi rule `warn`→`error` (chưa làm — sẽ vỡ CI ~236 file).
 
 ### C2. RBAC vẫn chạy matrix tĩnh v1 (`RBAC_V2_ENABLED` mặc định OFF)
 - `lib/flags.ts` — `isRbacV2Enabled()` chỉ true khi env `="true"`; `.env.example` đặt `"false"`.
@@ -24,7 +25,8 @@
 - **Mức:** Cao (quyền không khớp mô hình tổ chức đã thiết kế).
 - **Khắc phục:** hoàn tất shadow-compare → bật `RBAC_V2_ENABLED` ở staging, soát log lệch v1/v2 trước prod.
 
-### C3. Webhook & cron "stub mode" (bỏ xác thực) khi thiếu secret → fail-OPEN
+### C3. Webhook & cron "stub mode" (bỏ xác thực) khi thiếu secret → fail-OPEN — ✅ FIXED (R7-00, 2026-06-15)
+> `lib/lead/webhook.ts` `verifyWebhookSecret` + `verifyMetaSignature`: trên `NODE_ENV==='production'` thiếu secret → `{ok:false, reason:"missing-secret"}`; `processLeadWebhook` trả **503** (không tạo record). Dev/test giữ stub để chạy local. Unit test `webhook.test.ts` (R7-00-AC3). `handleMessengerWebhook` (meta-webhook.ts) vốn đã fail-closed (401). Cron `CRON_SECRET` vốn đã fail-closed. → Checklist go-live secret vẫn cần.
 - `lib/lead/webhook.ts` `verifyWebhookSecret` + `verifyMetaSignature`: env secret **chưa set → return ok=true** (chỉ `console.warn`). Áp cho cả 3 webhook lead (facebook/zalo/google-form) + X-Hub-Signature Meta.
 - **Hệ quả:** lên prod mà quên set `WEBHOOK_*_SECRET` / `META_APP_SECRET` → endpoint nhận lead/messenger **mở hoàn toàn** (bất kỳ ai POST cũng tạo lead/inject hội thoại).
 - **Mức:** Cao nếu go-live thiếu cấu hình.

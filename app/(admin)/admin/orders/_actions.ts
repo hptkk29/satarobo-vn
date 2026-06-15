@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { Prisma, type OrderStatus, type OrderType } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { passesScope } from "@/lib/db-scope";
 import { db } from "@/lib/db";
 import {
   orderCreateManualSchema,
@@ -484,9 +486,12 @@ export async function changeOrderStatusAction(
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, centerId: true },
   });
-  if (!order) return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  const actor = await resolveActor(session.user.id);
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
 
   if (order.status === parsed.data.toStatus) {
     return {
@@ -574,7 +579,7 @@ export async function updateOrderNoteAction(
   orderId: string,
   internalNote: string,
 ) {
-  await requireOrdersManage();
+  const session = await requireOrdersManage();
 
   if (internalNote.length > 2000) {
     return { ok: false as const, error: "Ghi chú quá dài (max 2000 ký tự)" };
@@ -582,9 +587,12 @@ export async function updateOrderNoteAction(
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { id: true },
+    select: { id: true, centerId: true },
   });
-  if (!order) return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  const actor = await resolveActor(session.user.id);
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
 
   await db.order.update({
     where: { id: orderId },
@@ -684,7 +692,10 @@ export async function sendManualOrderEmailAction(input: {
     return { ok: false as const, error: "Template không tồn tại" };
   if (!template.isActive)
     return { ok: false as const, error: "Template đã bị tắt" };
-  if (!order) return { ok: false as const, error: "Đơn hàng không tồn tại" };
+  const actor = await resolveActor(session.user.id);
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Đơn hàng không tồn tại" };
+  }
 
   const itemsListInner = order.items
     .map(
@@ -743,6 +754,15 @@ export async function recordOrderInstallmentsAction(input: {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "orders:manage")) return { ok: false, error: "Không có quyền" };
+
+  const order = await db.order.findUnique({
+    where: { id: input.orderId },
+    select: { id: true, centerId: true },
+  });
+  const actor = await resolveActor(session.user.id);
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false, error: "Không tìm thấy đơn hàng" };
+  }
 
   const res = await recordInstallmentPlan({
     orderId: input.orderId,
