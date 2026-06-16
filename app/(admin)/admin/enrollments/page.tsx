@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
+import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!can(session.user, "enrollments:view-all")) redirect("/dashboard");
+  const canDelete = can(session.user, "enrollments:delete");
 
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
@@ -285,13 +287,16 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                         {formatDate(e.enrolledAt)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/enrollments/${e.id}/edit`}
-                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Sửa
-                        </Link>
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <Link
+                            href={`/enrollments/${e.id}/edit`}
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Sửa
+                          </Link>
+                          {canDelete && <DeleteEnrollmentButton id={e.id} />}
+                        </div>
                       </td>
                     </tr>
                   );
