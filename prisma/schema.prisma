@@ -4277,6 +4277,28 @@ model SataCoinRule {
   updatedAt DateTime @updatedAt
 }
 
+// R7-17 (PR3) — Cấu hình quy tắc Satacoin (PENDING — QĐ-O10/O20). SCHEMA-ONLY:
+// migrate được + seed rỗng, KHÔNG code đọc runtime, KHÔNG UI cho tới khi TGĐ ban
+// hành bảng quy đổi. behaviorKey = hành vi; points = điểm; cap ngày/tổng; source =
+// nguồn phát sinh; active mặc định false (trơ). Không centerId → không qua scopedDb.
+enum CoinRuleSource {
+  HOMEWORK_RESULT // kết quả bài tập
+  TEACHER_EVAL_DONE // hoàn tất đánh giá GV
+  CENTER_SURVEY_DONE // hoàn tất khảo sát trung tâm
+}
+
+model CoinRuleConfig {
+  id          String         @id @default(cuid())
+  behaviorKey String         @unique // khóa hành vi (vd HOMEWORK_PASSED)
+  points      Int // điểm cộng
+  dailyCap    Int? // trần điểm/ngày (null = không trần)
+  totalCap    Int? // trần điểm tổng (null = không trần)
+  source      CoinRuleSource
+  active      Boolean        @default(false) // trơ tới khi ban hành
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
 // =============================================================================
 // Cụm C5 — Zalo OA/ZNS adapter (SKELETON). Tắt an toàn khi thiếu credential →
 // fallback email, không phá hệ thống. Log mọi lần gửi.
