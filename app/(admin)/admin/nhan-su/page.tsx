@@ -91,7 +91,14 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
     ];
   }
 
-  const [employees, departmentCounts, centers] = await Promise.all([
+  // Đơn vị Hội sở (HO) — OrgUnit type=HO (Doc 15 OI-1). Dùng để gắn cờ "Nhân viên HO"
+  // trên cột Cơ sở cho NV không gán Center mà có EmployeeOrgAssignment PRIMARY tới HO.
+  const hoUnit = await db.orgUnit.findFirst({
+    where: { type: "HO", deletedAt: null },
+    select: { id: true },
+  });
+
+  const [employees, departmentCounts, centers, hoAssignments] = await Promise.all([
     db.employee.findMany({
       where,
       orderBy: [{ displayOrder: "asc" }, { fullName: "asc" }],
@@ -99,8 +106,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
       include: {
         center: { select: { name: true } },
         manager: { select: { fullName: true } },
-        userAccount: { select: { role: true } },
-        _count: { select: { honors: true } },
+        userAccount: { select: { role: true, roles: true } },
       },
     }),
     db.employee.groupBy({
@@ -113,7 +119,15 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
+    hoUnit
+      ? db.employeeOrgAssignment.findMany({
+          where: { orgUnitId: hoUnit.id, status: "ACTIVE" },
+          select: { employeeId: true },
+        })
+      : Promise.resolve([] as { employeeId: string }[]),
   ]);
+
+  const hoEmployeeIds = hoAssignments.map((a) => a.employeeId);
 
   const canCreate = can(session.user, "employees:create");
   const canDelete = can(session.user, "employees:delete");
@@ -237,7 +251,11 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         ))}
       </div>
 
-      <EmployeesAdminTable employees={employees} canDelete={canDelete} />
+      <EmployeesAdminTable
+        employees={employees}
+        canDelete={canDelete}
+        hoEmployeeIds={hoEmployeeIds}
+      />
     </div>
   );
 }

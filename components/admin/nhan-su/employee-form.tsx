@@ -26,6 +26,8 @@ interface Props {
   centers: { id: string; name: string }[];
   managers: { id: string; fullName: string; jobTitle: string }[];
   userRole: string;
+  /** NV có EmployeeOrgAssignment PRIMARY active tới OrgUnit HO (Hội sở). */
+  initialIsHO?: boolean;
 }
 
 const DEPARTMENT_OPTIONS: { value: Department; label: string }[] = [
@@ -72,10 +74,12 @@ export function EmployeeForm({
   centers,
   managers,
   userRole,
+  initialIsHO = false,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const visibility = getEmployeeFieldVisibility(userRole);
+  const [isHO, setIsHO] = useState(initialIsHO);
 
   const [data, setData] = useState({
     employeeCode: initial?.employeeCode ?? defaultCode ?? "",
@@ -116,6 +120,12 @@ export function EmployeeForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // NV không phải HO bắt buộc chọn cơ sở; NV HO không gán cơ sở (centerId null).
+    if (!isHO && !data.centerId) {
+      toast.error("Chọn cơ sở làm việc (hoặc bật 'Nhân viên HO').");
+      return;
+    }
+
     const input = {
       ...data,
       // Convert empty strings to null for optional fields
@@ -129,7 +139,7 @@ export function EmployeeForm({
       contractType: data.contractType || null,
       salaryRank: data.salaryRank ? Number(data.salaryRank) : null,
       salaryLevel: data.salaryLevel ? Number(data.salaryLevel) : null,
-      centerId: data.centerId || null,
+      centerId: isHO ? null : data.centerId || null,
       managerId: data.managerId || null,
       // Phase 4.7 extension
       endDate: data.endDate || null,
@@ -149,8 +159,8 @@ export function EmployeeForm({
     startTransition(async () => {
       const res =
         mode === "create"
-          ? await createEmployeeAction(input)
-          : await updateEmployeeAction(initial!.id, input);
+          ? await createEmployeeAction(input, isHO)
+          : await updateEmployeeAction(initial!.id, input, isHO);
 
       if (res.ok) {
         toast.success(mode === "create" ? "Đã tạo nhân sự" : "Đã cập nhật");
@@ -326,14 +336,39 @@ export function EmployeeForm({
             </div>
           )}
 
+          <div className="sm:col-span-2">
+            <label className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+              <Switch
+                checked={isHO}
+                onCheckedChange={(v) => {
+                  setIsHO(v);
+                  if (v) setData((d) => ({ ...d, centerId: "" }));
+                }}
+              />
+              <span className="text-sm font-medium text-indigo-900">
+                Nhân viên HO (Hội sở)
+              </span>
+            </label>
+            <p className="mt-1 text-xs text-gray-500">
+              Bật khi NV thuộc <strong>Hội sở</strong> (cross-center, không gắn 1 cơ sở
+              cụ thể). Hệ thống gán <code>EmployeeOrgAssignment</code> PRIMARY tới đơn vị
+              HO thay vì chọn cơ sở.
+            </p>
+          </div>
+
           <div>
-            <label className="mb-1 block text-sm font-semibold">Cơ sở làm việc</label>
+            <label className="mb-1 block text-sm font-semibold">
+              Cơ sở làm việc {!isHO && <span className="text-red-500">*</span>}
+            </label>
             <select
               value={data.centerId}
+              disabled={isHO}
               onChange={(e) => setData({ ...data, centerId: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
             >
-              <option value="">— Không chỉ định —</option>
+              <option value="">
+                {isHO ? "— Hội sở (HO) —" : "— Chọn cơ sở —"}
+              </option>
               {centers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
