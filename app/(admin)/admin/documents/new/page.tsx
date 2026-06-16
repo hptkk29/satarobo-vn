@@ -31,7 +31,9 @@ export default async function NewDocumentPage() {
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">Tải lên tài liệu</h1>
+        <h1 className="text-2xl font-bold text-neutral-900">
+          Tải lên tài liệu giảng dạy
+        </h1>
       </div>
 
       <DocumentForm

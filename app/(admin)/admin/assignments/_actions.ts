@@ -4,12 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, assertCan } from "@/lib/auth/permissions";
 import { z } from "zod";
 import {
   assignmentSchema,
   type AssignmentInput,
 } from "@/lib/validators/assignment";
+import { QuestionTypeEnum } from "@/lib/validators/question";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { RUBRIC_CRITERION_KEYS, RUBRIC_LEVEL_KEYS, rubricToScore } from "@/lib/rubric/criteria";
 import { enqueueEmail } from "@/lib/email/queue";
@@ -428,6 +429,248 @@ export async function gradeSubmission(
     };
   }
   revalidatePath(`/assignments/${submission.assignmentId}/edit`);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// #14.4 — Bộ câu hỏi trong bài tập (Question gắn assignmentId)
+// Lưu ý: schema Question CHỈ thêm `assignmentId` (không có cột points/order).
+// Vì vậy points/order được nhận trong input để khớp hợp đồng nhưng KHÔNG lưu;
+// thứ tự hiển thị dựa theo createdAt.
+// ──────────────────────────────────────────────────────────────────────────
+
+async function requireAssignmentEdit(): Promise<
+  { ok: true; userId: string } | { ok: false; error: string }
+> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  try {
+    assertCan(session.user, "assignments:edit");
+  } catch {
+    return { ok: false, error: "Không có quyền chỉnh sửa bài tập" };
+  }
+  return { ok: true, userId: session.user.id ?? "" };
+}
+
+// questionCode là @unique (nullable) — sinh mã riêng cho câu hỏi trong bài tập.
+async function generateAssignmentQuestionCode(): Promise<string> {
+  for (let i = 0; i < 6; i++) {
+    const code = `AQ-${Date.now().toString(36).toUpperCase()}${Math.random()
+      .toString(36)
+      .slice(2, 6)
+      .toUpperCase()}`;
+    const dup = await db.question.findUnique({
+      where: { questionCode: code },
+      select: { id: true },
+    });
+    if (!dup) return code;
+  }
+  return `AQ-${Date.now().toString(36).toUpperCase()}${Math.random()
+    .toString(36)
+    .slice(2, 10)
+    .toUpperCase()}`;
+}
+
+const AQChoiceSchema = z.object({
+  text: z.string().trim().min(1, "Nội dung lựa chọn không được trống"),
+  isCorrect: z.coerce.boolean().default(false),
+});
+
+const AQBaseShape = {
+  text: z.string().trim().min(1, "Nội dung câu hỏi bắt buộc"),
+  type: QuestionTypeEnum,
+  correctAnswer: z.union([z.string(), z.null()]).optional(),
+  choices: z.array(AQChoiceSchema).default([]),
+  // Nhận nhưng KHÔNG lưu (Question chưa có cột points/order).
+  points: z.coerce.number().optional(),
+  order: z.coerce.number().int().optional(),
+};
+
+function refineAQ(
+  d: { type: string; choices: { isCorrect: boolean }[] },
+  ctx: z.RefinementCtx,
+) {
+  if (d.type === "MULTIPLE_CHOICE") {
+    if (d.choices.length < 2 || d.choices.length > 6) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["choices"],
+        message: "Trắc nghiệm cần 2 đến 6 lựa chọn",
+      });
+    }
+    if (!d.choices.some((c) => c.isCorrect)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["choices"],
+        message: "Cần ít nhất 1 đáp án đúng",
+      });
+    }
+  } else if (d.type === "TRUE_FALSE") {
+    if (d.choices.length !== 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["choices"],
+        message: "Đúng/Sai cần đúng 2 lựa chọn",
+      });
+    }
+    if (d.choices.filter((c) => c.isCorrect).length !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["choices"],
+        message: "Đúng/Sai cần đúng 1 đáp án đúng",
+      });
+    }
+  }
+}
+
+const AddAQSchema = z
+  .object({ assignmentId: z.string().min(1), ...AQBaseShape })
+  .superRefine(refineAQ);
+
+const UpdateAQSchema = z.object(AQBaseShape).superRefine(refineAQ);
+
+function buildChoices(
+  type: string,
+  choices: { text: string; isCorrect: boolean }[],
+) {
+  if (type !== "MULTIPLE_CHOICE" && type !== "TRUE_FALSE") return [];
+  return choices.map((c, i) => ({
+    order: i + 1,
+    text: c.text,
+    isCorrect: c.isCorrect,
+  }));
+}
+
+export async function addAssignmentQuestion(
+  input: z.infer<typeof AddAQSchema>,
+): Promise<Result<{ questionId: string }>> {
+  const gate = await requireAssignmentEdit();
+  if (!gate.ok) return gate;
+
+  const parsed = AddAQSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const assignment = await db.assignment.findUnique({
+    where: { id: data.assignmentId },
+    select: { id: true },
+  });
+  if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
+
+  const authorEmployeeId = await resolveEmployeeId(gate.userId);
+  const useChoices = data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE";
+  const choices = buildChoices(data.type, data.choices);
+  const correctAnswer = useChoices ? null : data.correctAnswer?.trim() || null;
+
+  try {
+    const code = await generateAssignmentQuestionCode();
+    const q = await db.$transaction(async (tx) => {
+      const created = await tx.question.create({
+        data: {
+          questionCode: code,
+          assignmentId: data.assignmentId,
+          type: data.type,
+          text: data.text,
+          correctAnswer,
+          authorId: authorEmployeeId,
+          isPublic: false,
+        },
+        select: { id: true },
+      });
+      if (choices.length > 0) {
+        await tx.choice.createMany({
+          data: choices.map((c) => ({ questionId: created.id, ...c })),
+        });
+      }
+      return created;
+    });
+    revalidatePath(`/assignments/${data.assignmentId}/edit`);
+    return { ok: true, data: { questionId: q.id } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+}
+
+export async function updateAssignmentQuestion(
+  id: string,
+  input: z.infer<typeof UpdateAQSchema>,
+): Promise<Result> {
+  const gate = await requireAssignmentEdit();
+  if (!gate.ok) return gate;
+
+  const parsed = UpdateAQSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const current = await db.question.findUnique({
+    where: { id },
+    select: { assignmentId: true },
+  });
+  if (!current) return { ok: false, error: "Không tìm thấy câu hỏi" };
+  if (!current.assignmentId) {
+    return { ok: false, error: "Câu hỏi này không thuộc bài tập nào" };
+  }
+
+  const useChoices = data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE";
+  const choices = buildChoices(data.type, data.choices);
+  const correctAnswer = useChoices ? null : data.correctAnswer?.trim() || null;
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.choice.deleteMany({ where: { questionId: id } });
+      await tx.question.update({
+        where: { id },
+        data: {
+          type: data.type,
+          text: data.text,
+          correctAnswer,
+        },
+      });
+      if (choices.length > 0) {
+        await tx.choice.createMany({
+          data: choices.map((c) => ({ questionId: id, ...c })),
+        });
+      }
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+  revalidatePath(`/assignments/${current.assignmentId}/edit`);
+  return { ok: true };
+}
+
+export async function deleteAssignmentQuestion(id: string): Promise<Result> {
+  const gate = await requireAssignmentEdit();
+  if (!gate.ok) return gate;
+
+  const current = await db.question.findUnique({
+    where: { id },
+    select: { assignmentId: true },
+  });
+  if (!current) return { ok: false, error: "Không tìm thấy câu hỏi" };
+
+  try {
+    // Choice cascades via onDelete: Cascade.
+    await db.question.delete({ where: { id } });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Không xoá được: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+  if (current.assignmentId) {
+    revalidatePath(`/assignments/${current.assignmentId}/edit`);
+  }
   return { ok: true };
 }
 

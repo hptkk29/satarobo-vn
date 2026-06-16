@@ -7,6 +7,10 @@ import { can } from "@/lib/auth/permissions";
 import { AssignmentForm, type AssignmentFormValue } from "../../_components/assignment-form";
 import { DocumentPicker } from "../../_components/document-picker";
 import {
+  QuestionBank,
+  type AssignmentQuestionData,
+} from "../../_components/question-bank";
+import {
   SubmissionRow,
   type SubmissionRowData,
 } from "../../_components/submission-row";
@@ -58,6 +62,12 @@ export default async function EditAssignmentPage({ params }: Props) {
             gradedBy: { select: { fullName: true } },
           },
           orderBy: [{ status: "asc" }, { createdAt: "asc" }],
+        },
+        questions: {
+          include: {
+            choices: { orderBy: { order: "asc" } },
+          },
+          orderBy: { createdAt: "asc" },
         },
       },
     }),
@@ -112,6 +122,18 @@ export default async function EditAssignmentPage({ params }: Props) {
     fileSize: ad.document.fileSize,
     fileUrl: ad.document.fileUrl,
     type: ad.document.type,
+  }));
+
+  const questions: AssignmentQuestionData[] = assignment.questions.map((q) => ({
+    id: q.id,
+    type: q.type,
+    text: q.text,
+    correctAnswer: q.correctAnswer,
+    choices: q.choices.map((c) => ({
+      text: c.text,
+      isCorrect: c.isCorrect,
+      order: c.order,
+    })),
   }));
 
   const submissions: SubmissionRowData[] = assignment.submissions.map((s) => ({
@@ -169,6 +191,8 @@ export default async function EditAssignmentPage({ params }: Props) {
         documentBank={documentBank}
         initialAttached={attached}
       />
+
+      <QuestionBank assignmentId={assignment.id} questions={questions} />
 
       {assignment.status !== "DRAFT" && (
         <section className="rounded-xl border border-neutral-200 bg-white">
