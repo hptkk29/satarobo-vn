@@ -28,8 +28,7 @@ export default async function EditClassPage({ params }: Props) {
   const { id } = await params;
 
   const actor = await resolveActor(session.user.id);
-  const [cls, courses, orgUnits, classGroups, rooms, teachers] =
-  const [cls, courses, centers, classGroups, rooms] =
+  const [cls, courses, orgUnits, classGroups, rooms] =
     await Promise.all([
     db.class.findFirst({
       where: { id, deletedAt: null },

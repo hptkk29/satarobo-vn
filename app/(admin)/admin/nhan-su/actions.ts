@@ -182,6 +182,13 @@ export async function createEmployeeAction(
     );
   }
 
+  // #10 — NV HO: gán phân công PRIMARY vào OrgUnit Hội sở (khi isHO, orgUnitId rỗng).
+  await syncHoAssignment(
+    { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" },
+    created.id,
+    isHO,
+  );
+
   revalidateAll();
   return { ok: true, data: { id: created.id } };
 }
@@ -291,6 +298,15 @@ export async function updateEmployeeAction(
         reason: "Bỏ đơn vị PRIMARY",
       });
     }
+  }
+
+  // #10 — NV HO: đồng bộ phân công PRIMARY vào OrgUnit Hội sở.
+  if (isHO !== undefined) {
+    await syncHoAssignment(
+      { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" },
+      id,
+      isHO,
+    );
   }
 
   revalidateAll();
