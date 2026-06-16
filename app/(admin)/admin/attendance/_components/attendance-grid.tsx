@@ -6,6 +6,14 @@ import { markAttendance } from "../_actions";
 
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
 type MakeupStatus = "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
+// R7-08 — DB thêm ABSENT_EXCUSED/ABSENT_UNEXCUSED (2-phase). Lưới điểm danh chỉ chỉnh
+// 4 trạng thái gốc; 2 nhãn mới quy về gốc khi nạp state ban đầu.
+type DbAttendanceStatus = AttendanceStatus | "ABSENT_EXCUSED" | "ABSENT_UNEXCUSED";
+function toEditableStatus(s: DbAttendanceStatus | null | undefined): AttendanceStatus {
+  if (s === "ABSENT_EXCUSED") return "EXCUSED";
+  if (s === "ABSENT_UNEXCUSED") return "ABSENT";
+  return s ?? "PRESENT";
+}
 
 interface StudentRow {
   studentId: string;
@@ -14,11 +22,13 @@ interface StudentRow {
   enrollmentStatus: string;
   existing: {
     id: string;
-    status: AttendanceStatus;
+    status: DbAttendanceStatus;
     note: string | null;
     makeupStatus: MakeupStatus;
     absenceReason: string | null;
   } | null;
+  // R7-08 — HS học bù liên cơ sở: tên CS gốc để hiện badge "Học bù từ <CS>".
+  makeupFromCenter?: string | null;
 }
 
 interface Props {
@@ -73,7 +83,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
     const init: Record<string, RowState> = {};
     for (const r of rows) {
       init[r.studentId] = {
-        status: r.existing?.status ?? "PRESENT",
+        status: toEditableStatus(r.existing?.status),
         note: r.existing?.note ?? "",
         makeupStatus: r.existing?.makeupStatus ?? "NONE",
         absenceReason: r.existing?.absenceReason ?? "",
@@ -254,10 +264,17 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                   className={`border-b border-neutral-200 ${dirty ? "bg-orange-50/40" : "hover:bg-neutral-50"}`}
                 >
                   <td className="p-4">
-                    <div className="font-bold text-neutral-900">{r.studentName}</div>
+                    <div className="flex items-center gap-2 font-bold text-neutral-900">
+                      {r.studentName}
+                      {r.makeupFromCenter && (
+                        <span className="rounded-full bg-[#7C3AED]/10 px-2 py-0.5 text-[11px] font-semibold text-[#7C3AED]">
+                          Học bù từ {r.makeupFromCenter}
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-neutral-500">
                       {r.studentPhone && <span className="font-mono">{r.studentPhone}</span>}
-                      {r.enrollmentStatus !== "ACTIVE" && (
+                      {!r.makeupFromCenter && r.enrollmentStatus !== "ACTIVE" && (
                         <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">
                           {r.enrollmentStatus}
                         </span>

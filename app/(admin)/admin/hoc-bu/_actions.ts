@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getAuditActor } from "@/lib/audit/log";
 import {
   suggestMakeupSessions,
   scheduleMakeup,
@@ -27,13 +29,22 @@ async function gate() {
 export async function getMakeupSuggestions(makeupNeedId: string): Promise<MakeupSuggestion[]> {
   const g = await gate();
   if (!g.ok) return [];
-  return suggestMakeupSessions(makeupNeedId);
+  const actor = await resolveActor(g.session.user.id);
+  return suggestMakeupSessions(makeupNeedId, actor);
 }
 
 export async function scheduleMakeupAction(makeupNeedId: string, makeupSessionId: string): Promise<Result> {
   const g = await gate();
   if (!g.ok) return g;
-  const res = await scheduleMakeup({ makeupNeedId, makeupSessionId, scheduledById: g.session.user.id });
+  const actor = await resolveActor(g.session.user.id);
+  const { actorName } = getAuditActor(g.session);
+  const res = await scheduleMakeup({
+    makeupNeedId,
+    makeupSessionId,
+    scheduledById: g.session.user.id,
+    scheduledByName: actorName,
+    actor,
+  });
   if (res.ok) revalidatePath("/hoc-bu");
   return res;
 }

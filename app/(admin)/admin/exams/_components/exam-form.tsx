@@ -22,6 +22,8 @@ interface LessonOption {
   curriculumName: string;
 }
 
+type ScoringMode = "HIGHEST" | "LATEST" | "AVERAGE" | "FIRST";
+
 export type ExamFormValue = {
   id: string;
   examCode: string | null;
@@ -34,10 +36,21 @@ export type ExamFormValue = {
   passingScore: number;
   shuffleQuestions: boolean;
   shuffleChoices: boolean;
+  maxAttempts: number | null;
+  defaultDueDays: number | null;
+  scoringMode: ScoringMode | null;
+  showResultAfterSubmit: boolean;
   openAt: Date | null;
   closeAt: Date | null;
   status: ExamStatus;
 };
+
+const SCORING_MODE_OPTIONS: { value: ScoringMode; label: string }[] = [
+  { value: "HIGHEST", label: "Lấy điểm cao nhất" },
+  { value: "LATEST", label: "Lấy lần làm gần nhất" },
+  { value: "AVERAGE", label: "Trung bình các lần" },
+  { value: "FIRST", label: "Lấy lần làm đầu tiên" },
+];
 
 const STATUS_OPTIONS: { value: ExamStatus; label: string }[] = [
   { value: "DRAFT", label: "Đang soạn" },
@@ -82,6 +95,18 @@ export function ExamForm({
   const [shuffleChoices, setShuffleChoices] = useState(
     exam?.shuffleChoices ?? false,
   );
+  const [maxAttempts, setMaxAttempts] = useState(
+    exam?.maxAttempts != null ? String(exam.maxAttempts) : "",
+  );
+  const [defaultDueDays, setDefaultDueDays] = useState(
+    exam?.defaultDueDays != null ? String(exam.defaultDueDays) : "",
+  );
+  const [scoringMode, setScoringMode] = useState<ScoringMode | "">(
+    exam?.scoringMode ?? "",
+  );
+  const [showResultAfterSubmit, setShowResultAfterSubmit] = useState(
+    exam?.showResultAfterSubmit ?? true,
+  );
   const [openAt, setOpenAt] = useState(toDateTimeInput(exam?.openAt ?? null));
   const [closeAt, setCloseAt] = useState(toDateTimeInput(exam?.closeAt ?? null));
   const [status, setStatus] = useState<ExamStatus>(exam?.status ?? "DRAFT");
@@ -102,6 +127,10 @@ export function ExamForm({
       passingScore,
       shuffleQuestions,
       shuffleChoices,
+      maxAttempts: maxAttempts === "" ? null : Number(maxAttempts),
+      defaultDueDays: defaultDueDays === "" ? null : Number(defaultDueDays),
+      scoringMode: scoringMode === "" ? null : scoringMode,
+      showResultAfterSubmit,
       openAt: openAt ? new Date(openAt) : null,
       closeAt: closeAt ? new Date(closeAt) : null,
       status,
@@ -295,6 +324,63 @@ export function ExamForm({
             </span>
           </label>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+          Cấu hình làm bài (R7-13)
+        </h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Field label="Số lần làm tối đa">
+            <input
+              type="number"
+              min={1}
+              value={maxAttempts}
+              onChange={(e) => setMaxAttempts(e.target.value)}
+              placeholder="Không giới hạn"
+              disabled={pending}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Hạn nộp mặc định (ngày)">
+            <input
+              type="number"
+              min={0}
+              value={defaultDueDays}
+              onChange={(e) => setDefaultDueDays(e.target.value)}
+              placeholder="Không đặt"
+              disabled={pending}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Cách tính điểm khi làm nhiều lần">
+            <select
+              value={scoringMode}
+              onChange={(e) => setScoringMode(e.target.value as ScoringMode | "")}
+              disabled={pending}
+              className={inputClass}
+            >
+              <option value="">— Mặc định —</option>
+              {SCORING_MODE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={showResultAfterSubmit}
+            onChange={(e) => setShowResultAfterSubmit(e.target.checked)}
+            disabled={pending}
+            className="h-4 w-4 rounded border-neutral-300"
+          />
+          <span className="font-medium text-neutral-700">
+            Hiển thị kết quả ngay sau khi nộp bài
+          </span>
+        </label>
       </section>
 
       <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">

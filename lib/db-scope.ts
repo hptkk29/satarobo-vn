@@ -92,6 +92,70 @@ export function scopedDb(actor: Actor, opts?: { bypass?: boolean }) {
   });
 }
 
+// =============================================================================
+// R7-08 — Makeup cross-center EXCEPTION (QĐ-O2).
+// Luồng học bù LIÊN CƠ SỞ cần đọc CHÉO cơ sở (lớp/buổi/nhu cầu bù ở CS khác) để
+// gợi ý + xếp bù. Exception này HẸP: chỉ nới scope cho whitelist model dưới đây,
+// MỌI model khác (Lead/Order/Student/Payment...) VẪN bị cách ly nguyên vẹn (AC6).
+// CHỈ dùng bên trong lib/makeup/service.ts + roster "Học bù" của trang điểm danh.
+// =============================================================================
+
+/** Model được ĐỌC CHÉO cơ sở trong luồng makeup. KHÔNG gồm Lead/Order/Student. */
+export const MAKEUP_EXCEPTION_MODELS = new Set<string>([
+  "Class", // lớp đích ở cơ sở khác (scoped → cần nới để xếp bù chéo)
+  "ClassSession", // buổi ứng viên (vốn không scoped, liệt kê để rõ ý định)
+  "Lesson", // bài giảng (không scoped)
+  "MakeupNeed", // nhu cầu bù: GV cơ sở đích đọc HS bù theo makeupSessionId
+]);
+
+/** Model `model` có được miễn cách ly trong luồng makeup không? (THUẦN — test). */
+export function isMakeupExceptionModel(model: string): boolean {
+  return MAKEUP_EXCEPTION_MODELS.has(model);
+}
+
+/**
+ * scopedDb biến thể cho luồng học bù liên cơ sở: model ∈ MAKEUP_EXCEPTION_MODELS
+ * → đọc chéo cơ sở; model khác → scope y như scopedDb(actor) (cách ly nguyên vẹn).
+ * Exception là FUNCTION-SCOPED: chỉ client trả về ở đây mới nới — không rò sang
+ * scopedDb thường hay query khác (AC6).
+ */
+export function withMakeupException(actor: Actor) {
+  const bypass = bypassesScope(actor); // SUPER_ADMIN/HO vốn cross-center
+  const inject = <A>(model: string, args: A): A =>
+    bypass || MAKEUP_EXCEPTION_MODELS.has(model) ? args : injectScope(model, args, actor);
+  return db.$extends({
+    query: {
+      $allModels: {
+        async findMany({ model, args, query }) {
+          return query(inject(model, args));
+        },
+        async findFirst({ model, args, query }) {
+          return query(inject(model, args));
+        },
+        async count({ model, args, query }) {
+          return query(inject(model, args));
+        },
+        async aggregate({ model, args, query }) {
+          return query(inject(model, args));
+        },
+        async groupBy({ model, args, query }) {
+          return query(inject(model, args));
+        },
+        async findUnique({ model, args, query }) {
+          const r = await query(args);
+          if (bypass || MAKEUP_EXCEPTION_MODELS.has(model)) return r;
+          return passesScope(model, r as { centerId?: string | null } | null, actor)
+            ? r
+            : null;
+        },
+        async findFirstOrThrow({ model, args, query }) {
+          return query(inject(model, args));
+        },
+      },
+    },
+  });
+}
+
 /** Ghi AuditLog mỗi lần bypass scope (AC10). Gọi khi dùng scopedDb(actor,{bypass:true}). */
 export async function logScopeBypass(actor: Actor, reason: string): Promise<void> {
   await logRbacAudit({

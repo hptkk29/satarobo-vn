@@ -3,6 +3,7 @@ import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getStudentClassProgress } from "@/lib/students/progress";
 import { getClassExpectedEndDate, NEAR_END_THRESHOLD } from "@/lib/students/renewal";
+import { attendanceSummary, type AttendanceSummary } from "@/lib/attendance/summary";
 
 // =============================================================================
 // PORTAL LEARNING DATA — Phase T2.2
@@ -85,6 +86,37 @@ export async function getStudentProgressSummaries(
         nearingEnd: p.remaining > 0 && p.remaining <= NEAR_END_THRESHOLD,
       };
     }),
+  );
+}
+
+export type ClassAttendanceSummary = AttendanceSummary & {
+  classId: string;
+  className: string;
+  courseName: string;
+};
+
+/**
+ * R7-08 — 5 chỉ số điểm danh theo từng lớp đang học của HS (cho portal).
+ * { total, attended (gồm đã-bù), absent, needMakeup, madeUp }.
+ */
+export async function getStudentAttendanceSummaries(
+  studentId: string,
+): Promise<ClassAttendanceSummary[]> {
+  const enrollments = await db.enrollment.findMany({
+    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] } },
+    select: {
+      id: true,
+      class: { select: { id: true, name: true, course: { select: { name: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return Promise.all(
+    enrollments.map(async (e) => ({
+      classId: e.class.id,
+      className: e.class.name,
+      courseName: e.class.course.name,
+      ...(await attendanceSummary(e.id)),
+    })),
   );
 }
 

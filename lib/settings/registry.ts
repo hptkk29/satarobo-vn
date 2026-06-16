@@ -32,7 +32,8 @@ export type SettingGroup =
   | "public"
   | "content"
   | "cron"
-  | "dashboard";
+  | "dashboard"
+  | "makeup";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -440,6 +441,15 @@ export const SETTINGS = {
     schema: z.number().int().min(1).max(30),
     default: 2, // lib/pending-tasks.ts TWO_DAYS_MS
     centerOverridable: false,
+  }),
+  // ── R7-08 — học bù liên cơ sở (QĐ-O2) ──
+  "makeup.crossCenterEnabled": def({
+    key: "makeup.crossCenterEnabled",
+    group: "makeup",
+    label: "Cho phép xếp học bù liên cơ sở",
+    schema: z.boolean(),
+    default: true, // QĐ-O2: liên cơ sở mặc định bật
+    centerOverridable: true,
   }),
   // ── Nội dung chính sách marketing (legacy-laptrinhrobot) — default = static _data ──
   "content.internalAwards": def({

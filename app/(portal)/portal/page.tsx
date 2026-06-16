@@ -6,18 +6,32 @@ import {
   getStudentSessions,
   getStudentAssignments,
   getStudentExams,
+  getStudentAttendanceSummaries,
 } from "@/lib/portal/learning";
 
 export const dynamic = "force-dynamic";
 
 export default async function PortalHome() {
   const { ctx, studentId } = await requireActiveStudent();
-  const [classes, sessions, assignments, exams] = await Promise.all([
+  const [classes, sessions, assignments, exams, summaries] = await Promise.all([
     getStudentClasses(studentId),
     getStudentSessions(studentId),
     getStudentAssignments(studentId),
     getStudentExams(studentId),
+    getStudentAttendanceSummaries(studentId),
   ]);
+
+  // R7-08 — tổng hợp 5 chỉ số điểm danh trên toàn bộ lớp đang học.
+  const attendance = summaries.reduce(
+    (acc, s) => ({
+      total: acc.total + s.total,
+      attended: acc.attended + s.attended,
+      absent: acc.absent + s.absent,
+      needMakeup: acc.needMakeup + s.needMakeup,
+      madeUp: acc.madeUp + s.madeUp,
+    }),
+    { total: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 },
+  );
 
   const nextSession = sessions.find((s) => !s.past);
   const pendingAssignments = assignments.filter(
@@ -68,6 +82,38 @@ export default async function PortalHome() {
           href="/portal/bai-thi"
         />
       </div>
+
+      {summaries.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
+            Tiến độ điểm danh
+          </h2>
+          <Link
+            href="/portal/lich-hoc"
+            className="block rounded-xl border border-neutral-200 bg-white p-4 transition-shadow hover:shadow-sm"
+          >
+            <dl className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {(
+                [
+                  ["Tổng buổi", attendance.total, "text-neutral-900"],
+                  ["Đã học", attendance.attended, "text-green-700"],
+                  ["Vắng", attendance.absent, "text-red-600"],
+                  ["Chờ học bù", attendance.needMakeup, "text-amber-600"],
+                  ["Đã học bù", attendance.madeUp, "text-[#7C3AED]"],
+                ] as [string, number, string][]
+              ).map(([label, value, tone]) => (
+                <div
+                  key={label}
+                  className="rounded-lg border border-neutral-100 bg-neutral-50 p-2 text-center"
+                >
+                  <dd className={`text-lg font-bold ${tone}`}>{value}</dd>
+                  <dt className="text-[11px] text-neutral-500">{label}</dt>
+                </div>
+              ))}
+            </dl>
+          </Link>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
