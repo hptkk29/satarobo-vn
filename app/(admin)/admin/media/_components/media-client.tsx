@@ -40,6 +40,7 @@ export function MediaClient({
   const [classId, setClassId] = useState("");
   const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
   const [tagged, setTagged] = useState<string[]>([]);
+  const [wholeClass, setWholeClass] = useState(false);
   const [caption, setCaption] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
@@ -48,6 +49,7 @@ export function MediaClient({
   async function onClass(id: string) {
     setClassId(id);
     setTagged([]);
+    setWholeClass(false);
     if (!id) return setStudents([]);
     setStudents(await getClassStudentsForTag(id));
   }
@@ -93,13 +95,18 @@ export function MediaClient({
   function submit() {
     if (!classId) return toast.error("Chọn lớp");
     if (!fileUrl) return toast.error("Tải ảnh trước");
+    if (!wholeClass && tagged.length === 0) {
+      return toast.error('Gắn thẻ học sinh hoặc chọn "Ảnh chung cả lớp"');
+    }
     startTransition(async () => {
       const res = await uploadClassMedia({
         classId,
         fileUrl,
         fileName,
         caption,
-        studentIds: tagged,
+        // Ảnh chung cả lớp = đánh dấu isClassWide (không gắn thẻ HS cụ thể).
+        isClassWide: wholeClass,
+        studentIds: wholeClass ? [] : tagged,
       });
       if (res.ok) {
         toast.success("Đã đăng ảnh");
@@ -107,6 +114,7 @@ export function MediaClient({
         setFileName("");
         setCaption("");
         setTagged([]);
+        setWholeClass(false);
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -147,29 +155,46 @@ export function MediaClient({
           />
 
           {students.length > 0 && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-gray-500">
-                Gắn thẻ học sinh (phụ huynh được tag mới thấy ảnh)
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {students.map((s) => {
-                  const on = tagged.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() =>
-                        setTagged((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
-                      }
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                        on ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {s.name}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={wholeClass}
+                  onChange={(e) => {
+                    setWholeClass(e.target.checked);
+                    if (e.target.checked) setTagged([]);
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                />
+                Ảnh chung cả lớp (mọi phụ huynh trong lớp đều xem được)
+              </label>
+
+              {!wholeClass && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-gray-500">
+                    Gắn thẻ học sinh (chỉ phụ huynh được gắn thẻ mới thấy ảnh)
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {students.map((s) => {
+                      const on = tagged.includes(s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() =>
+                            setTagged((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
+                          }
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                            on ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
