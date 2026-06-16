@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, KeyRound, Loader2, Shield } from "lucide-react";
-import { toggleUserActiveAction } from "../_actions";
+import { Pencil, KeyRound, Loader2, Shield, Trash2 } from "lucide-react";
+import { toggleUserActiveAction, deleteUserAction } from "../_actions";
 
 export function UserStatusToggle({
   userId,
@@ -56,7 +56,62 @@ export function UserStatusToggle({
   );
 }
 
-export function UserRowActions({ userId }: { userId: string }) {
+// 2-click confirm: lần 1 hiện "Chắc chắn?", lần 2 mới xóa.
+// Chỉ render cho tài khoản đã vô hiệu hóa (isActive=false) và không phải chính mình.
+function UserDeleteButton({ userId }: { userId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
+
+  if (confirming) {
+    return (
+      <button
+        type="button"
+        disabled={pending}
+        title="Bấm lần nữa để xóa vĩnh viễn"
+        onClick={() => {
+          startTransition(async () => {
+            const res = await deleteUserAction(userId);
+            if (res.ok) {
+              toast.success("Đã xóa tài khoản");
+            } else {
+              toast.error(res.error ?? "Lỗi xóa tài khoản");
+              setConfirming(false);
+            }
+          });
+        }}
+        className="inline-flex h-8 items-center gap-1 rounded-md bg-red-600 px-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Trash2 className="h-3.5 w-3.5" />
+        )}
+        Chắc chắn?
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      title="Xóa tài khoản (dọn dữ liệu test)"
+      onClick={() => setConfirming(true)}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-red-100 hover:text-red-700"
+    >
+      <Trash2 className="h-4 w-4" />
+    </button>
+  );
+}
+
+export function UserRowActions({
+  userId,
+  isActive,
+  isSelf,
+}: {
+  userId: string;
+  isActive: boolean;
+  isSelf: boolean;
+}) {
   return (
     <div className="flex items-center justify-end gap-1">
       <Link
@@ -80,6 +135,7 @@ export function UserRowActions({ userId }: { userId: string }) {
       >
         <KeyRound className="h-4 w-4" />
       </Link>
+      {!isActive && !isSelf && <UserDeleteButton userId={userId} />}
     </div>
   );
 }
