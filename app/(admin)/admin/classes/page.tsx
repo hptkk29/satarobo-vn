@@ -6,6 +6,8 @@ import { db } from '@/lib/db'
 import { can } from '@/lib/auth/permissions'
 import { ClassStatus, type Prisma } from '@prisma/client'
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
+import { getAssignableTeachers } from '@/lib/teachers/assignable'
+import { ClassDeleteButton } from './_components/class-delete-button'
 
 const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
   PLANNED: { label: 'Đang lên KH', color: 'bg-gray-100 text-gray-700' },
@@ -70,6 +72,8 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
 
   const canCreate = can(session.user, 'classes:create')
   const canUpdate = can(session.user, 'classes:edit')
+  const canDelete = can(session.user, 'classes:delete')
+  const canManage = canUpdate || canDelete
 
   const params = await searchParams
   const q = params.q?.trim() || undefined
@@ -145,18 +149,10 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
         select: { id: true, name: true },
       })
       .catch(() => [] as Array<{ id: string; name: string }>),
-    db.user
-      .findMany({
-        where: {
-          deletedAt: null,
-          isActive: true,
-          // Đa vai trò (3B): gồm người có TEACHER/CENTER_MANAGER ở bất kỳ vị trí nào.
-          roles: { hasSome: ['TEACHER', 'CENTER_MANAGER'] },
-        },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      })
-      .catch(() => [] as Array<{ id: string; name: string | null }>),
+    // Fix #9 — bộ lọc GV dùng chung nguồn assignable (không lọt quản lý/sale thuần).
+    getAssignableTeachers().catch(
+      () => [] as Array<{ id: string; name: string | null }>,
+    ),
   ])
 
   return (
@@ -284,7 +280,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Trạng thái
                 </th>
-                {canUpdate && (
+                {canManage && (
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Hành động
                   </th>
@@ -295,7 +291,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
               {classes.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canUpdate ? 9 : 8}
+                    colSpan={canManage ? 9 : 8}
                     className="px-4 py-12 text-center text-sm text-gray-400"
                   >
                     Chưa có lớp nào
@@ -350,14 +346,21 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                           {statusInfo.label}
                         </span>
                       </td>
-                      {canUpdate && (
+                      {canManage && (
                         <td className="px-4 py-3 text-right">
-                          <Link
-                            href={`/classes/${cls.id}/edit`}
-                            className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                          >
-                            Sửa
-                          </Link>
+                          <div className="flex items-center justify-end gap-2">
+                            {canUpdate && (
+                              <Link
+                                href={`/classes/${cls.id}/edit`}
+                                className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Sửa
+                              </Link>
+                            )}
+                            {canDelete && (
+                              <ClassDeleteButton classId={cls.id} name={cls.name} />
+                            )}
+                          </div>
                         </td>
                       )}
                     </tr>

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { can, hasAnyRole } from "@/lib/auth/permissions";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
 import { ClassApprovalActions } from "../_components/class-approval-actions";
 import { ClassReschedule } from "../_components/class-reschedule";
@@ -24,7 +25,7 @@ export default async function EditClassPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [cls, courses, centers, classGroups, rooms, teachers] =
+  const [cls, courses, centers, classGroups, rooms] =
     await Promise.all([
     db.class.findFirst({
       where: { id, deletedAt: null },
@@ -72,22 +73,15 @@ export default async function EditClassPage({ params }: Props) {
       orderBy: [{ centerId: "asc" }, { code: "asc" }],
       select: { id: true, code: true, name: true, centerId: true },
     }),
-    db.user.findMany({
-      where: {
-        deletedAt: null,
-        isActive: true,
-        // Đa vai trò (3B): gồm người có TEACHER/CENTER_MANAGER ở bất kỳ vị trí nào.
-        roles: { hasSome: ["TEACHER", "CENTER_MANAGER"] },
-      },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, role: true },
-    }),
   ]);
 
   if (!cls) notFound();
 
   // R7-06 — dữ liệu cho tab "Chương trình" + "Quản lý buổi học".
-  const [plans, sessions, curricula] = await Promise.all([
+  // Fix #9 — `teachers` = GV có thể phân lớp + LUÔN kèm GV/trợ giảng đang gán cho lớp
+  // này (kể cả khi họ được gán từ trang Giáo viên và không còn match điều kiện lọc)
+  // để <Select> không tự rớt giá trị đang chọn → gốc của bug "Lớp học hiện trống".
+  const [plans, sessions, curricula, teachers] = await Promise.all([
     db.classSessionPlan.findMany({
       where: { classId: cls.id },
       orderBy: { order: "asc" },
@@ -103,6 +97,7 @@ export default async function EditClassPage({ params }: Props) {
       orderBy: { version: "desc" },
       select: { version: true, name: true },
     }),
+    getAssignableTeachers({ includeIds: [cls.teacherId, cls.assistantId] }),
   ]);
 
   const lessonIds = plans
