@@ -16,6 +16,9 @@ import {
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { generateClassSessions } from "@/lib/classes/generate";
+import { courseHasActiveCurriculum } from "@/lib/courses/activation-guard";
+import { createSessionPlansForClass } from "@/lib/classes/snapshot";
+import { publishEvent } from "@/lib/events/publish";
 
 type ActionResult = { error?: string };
 
@@ -197,6 +200,45 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
   const { centerId, orgUnitId } = await resolveClassOrg(data);
 
+  // R7-06 — CHẶN tạo/kích hoạt lớp khi khoá chưa có giáo trình ACTIVE.
+  if (!(await courseHasActiveCurriculum(data.courseId))) {
+    return {
+      error:
+        "Khoá học chưa có giáo trình đang áp dụng (ACTIVE) — không thể tạo lớp. Hãy kích hoạt giáo trình trước.",
+    };
+  }
+
+  // R7-06 — chốt (pin) curriculum version lúc tạo. Lấy version người dùng chọn
+  // nếu hợp lệ, mặc định = version ACTIVE mới nhất của khoá.
+  const pickedCurriculumIdRaw = formData.get("curriculumId");
+  const pickedCurriculumId =
+    typeof pickedCurriculumIdRaw === "string" && pickedCurriculumIdRaw.trim()
+      ? pickedCurriculumIdRaw.trim()
+      : null;
+
+  let curriculum =
+    pickedCurriculumId &&
+    (await db.curriculum.findFirst({
+      where: {
+        id: pickedCurriculumId,
+        courseId: data.courseId,
+        isActive: true,
+        status: "ACTIVE",
+      },
+      select: { id: true, version: true },
+    }));
+  if (!curriculum) {
+    curriculum = await db.curriculum.findFirst({
+      where: { courseId: data.courseId, isActive: true, status: "ACTIVE" },
+      orderBy: { version: "desc" },
+      select: { id: true, version: true },
+    });
+  }
+  if (!curriculum) {
+    return { error: "Khoá học chưa có giáo trình ACTIVE — không thể tạo lớp." };
+  }
+
+  let createdId = "";
   try {
     await db.$transaction(async (tx) => {
       // Phase T0.2 — tự sinh classCode nếu admin để trống (giữ mã cũ nếu có).
@@ -220,9 +262,14 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
       }
 
       const created = await tx.class.create({
-        data: toCreateData(data, classCode, centerId, orgUnitId),
+        data: {
+          ...toCreateData(data, classCode),
+          curriculumId: curriculum.id,
+          curriculumVersion: curriculum.version,
+        },
         select: { id: true, ...CLASS_SNAPSHOT_SELECT },
       });
+      createdId = created.id;
 
       const { id: _id, ...newValues } = created;
       void _id;
@@ -241,6 +288,18 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
       return { error: "Mã lớp đã tồn tại" };
     }
     return { error: "Lỗi cơ sở dữ liệu — không tạo được lớp" };
+  }
+
+  // R7-06 — sinh kế hoạch buổi (ClassSessionPlan) từ giáo trình đã chốt.
+  // Best-effort: lỗi không chặn happy path (lớp đã tạo).
+  try {
+    await createSessionPlansForClass({
+      classId: createdId,
+      curriculumId: curriculum.id,
+      version: curriculum.version,
+    });
+  } catch (err) {
+    console.error("[createClass] createSessionPlansForClass error:", err);
   }
 
   revalidatePath("/classes");
@@ -471,7 +530,9 @@ async function computeFutureReschedule(classId: string) {
   const now = new Date();
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   const future = await db.classSession.findMany({
-    where: { classId, date: { gt: todayEnd } },
+    // R7-06 AC6: chỉ dời buổi SCHEDULED tương lai — KHÔNG đụng buổi đã COMPLETED/
+    // đang IN_PROGRESS hay đã CANCELLED (giữ tổng buổi + không hồi sinh buổi huỷ).
+    where: { classId, date: { gt: todayEnd }, status: { notIn: ["COMPLETED", "CANCELLED", "IN_PROGRESS"] } },
     orderBy: { date: "asc" },
     select: { id: true, date: true, topic: true },
   });
@@ -531,11 +592,17 @@ export async function applyClassReschedule(classId: string): Promise<WfResult> {
   if (!res.ok) return res;
 
   try {
-    await db.$transaction(
-      res.items.map((it) =>
-        db.classSession.update({ where: { id: it.id }, data: { date: it.newDate } }),
-      ),
-    );
+    await db.$transaction(async (tx) => {
+      for (const it of res.items) {
+        await tx.classSession.update({ where: { id: it.id }, data: { date: it.newDate } });
+      }
+      // R7-06 AC6 — phát event để PH/GV được thông báo (handler ở R7-17).
+      await publishEvent(
+        "class.session_changed",
+        { classId, change: "RESCHEDULED", count: res.items.length },
+        { tx },
+      );
+    });
   } catch (err) {
     return { ok: false, error: `Lỗi dời buổi: ${err instanceof Error ? err.message : "Unknown"}` };
   }

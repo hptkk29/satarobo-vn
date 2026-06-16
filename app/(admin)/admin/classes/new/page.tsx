@@ -43,6 +43,15 @@ export default async function NewClassPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true, role: true },
     }),
+    db.curriculum.findMany({
+      where: {
+        isActive: true,
+        status: "ACTIVE",
+        course: { isActive: true, isTeachable: true },
+      },
+      orderBy: [{ courseId: "asc" }, { version: "desc" }],
+      select: { id: true, courseId: true, version: true, name: true },
+    }),
   ]);
 
   return (
@@ -62,6 +71,7 @@ export default async function NewClassPage() {
           name: t.name ?? "(chưa đặt tên)",
           role: t.role,
         }))}
+        curricula={curricula}
       />
     </div>
   );

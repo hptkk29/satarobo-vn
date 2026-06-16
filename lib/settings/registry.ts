@@ -287,6 +287,14 @@ export const SETTINGS = {
     default: 2880, // 2 ngày
     centerOverridable: false,
   }),
+  "sla.leadIdleHours": def({
+    key: "sla.leadIdleHours",
+    group: "crm",
+    label: "R7-01: lead NEW/ASSIGNED im lặng coi là idle (giờ)",
+    schema: z.number().int().min(1).max(720),
+    default: 24, // QĐ-O: 24h không hoạt động
+    centerOverridable: true,
+  }),
   "shift.geofenceRadiusMeters": def({
     key: "shift.geofenceRadiusMeters",
     group: "shift",

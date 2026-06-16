@@ -6,6 +6,8 @@ import { can, hasRole } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
+import { resolveActor } from '@/lib/auth/actor'
+import { passesScope } from '@/lib/db-scope'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
@@ -13,7 +15,8 @@ import { genStudentCode } from '@/lib/codegen'
 import { generateOrderCode } from '@/lib/orders/code'
 import { requestOtp } from '@/lib/otp/service'
 import { enqueueEnrollmentConfirmation } from '@/lib/email/triggers'
-import { LEAD_STATUS_LABEL } from '@/lib/leads/status'
+import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
+import { leadChildSchema } from '@/lib/validators/lead'
 
 const statusSchema = z.enum([
   'NEW',
@@ -23,7 +26,9 @@ const statusSchema = z.enum([
   'CONSULTING',
   'TRIAL_SCHEDULED',
   'TRIAL_ATTENDED',
+  'TRIAL_IN_PROGRESS',
   'AWAITING_DECISION',
+  'REGISTERED',
   'ENROLLED',
   'NURTURING',
   'LOST',
@@ -46,7 +51,21 @@ export async function updateLeadStatus(
     where: { id: leadId },
     select: { status: true, centerId: true },
   })
-  if (!before) return { ok: false, error: 'Lead khong ton tai' }
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead khong ton tai' }
+  }
+
+  // R7-01 — chỉ cho phép chuyển trạng thái hợp lệ theo pipeline.
+  // TODO(R7-04): đọc khoản Sale ghi nhận → hasRecordedPayment thực
+  // (tạm false ⇒ AWAITING_DECISION→REGISTERED bị chặn tới R7-04).
+  const hasRecordedPayment = false
+  const transition = canTransitionLeadStatus(before.status, parsed.data, {
+    hasRecordedPayment,
+  })
+  if (!transition.ok) {
+    return { ok: false, error: transition.reason }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
 
@@ -135,19 +154,29 @@ export async function addLeadActivity(input: {
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true },
+    select: { id: true, centerId: true },
   })
-  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+  const actor = await resolveActor(session.user.id)
+  if (!lead || !passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
-  await db.leadActivity.create({
-    data: {
-      leadId: input.leadId,
-      actorId,
-      actorName,
-      type: parsedType.data,
-      content,
-    },
+  // AC4 — ghi hoạt động + reset đồng hồ SLA idle (lastActivityAt) trong 1 tx.
+  await db.$transaction(async (tx) => {
+    await tx.leadActivity.create({
+      data: {
+        leadId: input.leadId,
+        actorId,
+        actorName,
+        type: parsedType.data,
+        content,
+      },
+    })
+    await tx.lead.update({
+      where: { id: input.leadId },
+      data: { lastActivityAt: new Date() },
+    })
   })
 
   revalidatePath(`/leads/${input.leadId}`)
@@ -171,21 +200,28 @@ export async function addLeadTask(input: {
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, assignedToId: true },
+    select: { id: true, assignedToId: true, centerId: true },
   })
-  if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+  const actor = await resolveActor(session.user.id)
+  if (!lead || !passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
-  await db.leadTask.create({
-    data: {
-      leadId: input.leadId,
-      // Giao cho sale phụ trách lead nếu có, mặc định người tạo.
-      assignedToId: lead.assignedToId ?? actorId,
-      assignedToName: actorName,
-      title,
-      description: input.description?.trim() || null,
-      dueAt: due,
-    },
+  // AC4 — tạo việc cũng là hoạt động → reset đồng hồ SLA idle trong 1 tx.
+  await db.$transaction(async (tx) => {
+    await tx.leadTask.create({
+      data: {
+        leadId: input.leadId,
+        // Giao cho sale phụ trách lead nếu có, mặc định người tạo.
+        assignedToId: lead.assignedToId ?? actorId,
+        assignedToName: actorName,
+        title,
+        description: input.description?.trim() || null,
+        dueAt: due,
+      },
+    })
+    await tx.lead.update({ where: { id: input.leadId }, data: { lastActivityAt: new Date() } })
   })
 
   revalidatePath(`/leads/${input.leadId}`)
@@ -203,15 +239,22 @@ export async function completeLeadTask(
 
   const task = await db.leadTask.findUnique({
     where: { id: taskId },
-    select: { leadId: true },
+    select: { leadId: true, lead: { select: { centerId: true } } },
   })
-  if (!task) return { ok: false, error: 'Việc không tồn tại' }
+  const actor = await resolveActor(session.user.id)
+  if (!task || !passesScope('Lead', { centerId: task.lead?.centerId ?? null }, actor)) {
+    return { ok: false, error: 'Việc không tồn tại' }
+  }
 
-  await db.leadTask.update({
-    where: { id: taskId },
-    data: done
-      ? { status: 'DONE', completedAt: new Date() }
-      : { status: 'OPEN', completedAt: null },
+  await db.$transaction(async (tx) => {
+    await tx.leadTask.update({
+      where: { id: taskId },
+      data: done
+        ? { status: 'DONE', completedAt: new Date() }
+        : { status: 'OPEN', completedAt: null },
+    })
+    // AC4 — hoàn tất việc là hoạt động → reset đồng hồ SLA idle.
+    await tx.lead.update({ where: { id: task.leadId }, data: { lastActivityAt: new Date() } })
   })
 
   revalidatePath(`/leads/${task.leadId}`)
@@ -229,9 +272,12 @@ export async function updateLeadNote(
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
-    select: { note: true },
+    select: { note: true, centerId: true },
   })
-  if (!before) return { ok: false, error: 'Lead khong ton tai' }
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead khong ton tai' }
+  }
 
   const newNote = note.trim() || null
   const { actorId, actorName } = getAuditActor(session)
@@ -270,9 +316,12 @@ export async function deleteLead(
 
   const before = await db.lead.findUnique({
     where: { id: leadId, deletedAt: null },
-    select: { parentName: true, phone: true, status: true },
+    select: { parentName: true, phone: true, status: true, centerId: true },
   })
-  if (!before) return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead khong ton tai hoac da bi xoa' }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
 
@@ -1158,5 +1207,167 @@ export async function transferLead(
   void toCenter
   revalidatePath('/leads')
   revalidatePath(`/leads/${lead.id}`)
+  return { ok: true }
+}
+
+// ─── R7-01 — LeadChild (1 Lead có N con) ─────────────────────────────────────
+
+/** Map dữ liệu đã validate → payload ghi LeadChild (chuẩn hoá rỗng → null). */
+function leadChildData(parsed: unknown) {
+  const d = parsed as {
+    fullName: string
+    dob?: string | Date | null
+    ageYears?: number | null
+    gender?: string | null
+    schoolName?: string | null
+    gradeLevel?: string | null
+    interestedCourseId?: string | null
+    interestedCenterId?: string | null
+    note?: string | null
+  }
+  return {
+    fullName: d.fullName,
+    dob: d.dob ? new Date(d.dob) : null,
+    ageYears: d.ageYears ?? null,
+    gender: d.gender || null,
+    schoolName: d.schoolName || null,
+    gradeLevel: d.gradeLevel || null,
+    interestedCourseId: d.interestedCourseId || null,
+    interestedCenterId: d.interestedCenterId || null,
+    note: d.note || null,
+  }
+}
+
+/** Thêm 1 con vào lead. `input` gồm `leadId` + các field con (leadChildSchema). */
+export async function addLeadChild(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const leadId = (input as { leadId?: unknown })?.leadId
+  if (typeof leadId !== 'string' || !leadId) {
+    return { ok: false, error: 'Thiếu lead' }
+  }
+
+  // LeadChild không có centerId riêng → scope theo lead cha.
+  const lead = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, centerId: true },
+  })
+  const actor = await resolveActor(session.user.id)
+  if (!lead || !passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
+
+  const parsed = leadChildSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  }
+  const data = leadChildData(parsed.data)
+
+  const { actorId, actorName } = getAuditActor(session)
+  const child = await db.leadChild.create({
+    data: { leadId, ...data },
+    select: { id: true, fullName: true },
+  })
+
+  await logLeadAudit({
+    leadId,
+    action: 'UPDATE',
+    actorId,
+    actorName,
+    newValues: { childAdded: child.fullName, leadChildId: child.id },
+    changedFields: ['children'],
+  }).catch(() => {})
+
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  return { ok: true }
+}
+
+/** Sửa thông tin 1 con. Scope theo lead cha của con. */
+export async function updateLeadChild(
+  childId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const child = await db.leadChild.findUnique({
+    where: { id: childId },
+    select: { id: true, leadId: true, fullName: true, lead: { select: { centerId: true } } },
+  })
+  const actor = await resolveActor(session.user.id)
+  if (!child || !passesScope('Lead', { centerId: child.lead?.centerId ?? null }, actor)) {
+    return { ok: false, error: 'Không tìm thấy con của lead' }
+  }
+
+  const parsed = leadChildSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  }
+  const data = leadChildData(parsed.data)
+
+  const { actorId, actorName } = getAuditActor(session)
+  await db.leadChild.update({ where: { id: childId }, data })
+
+  await logLeadAudit({
+    leadId: child.leadId,
+    action: 'UPDATE',
+    actorId,
+    actorName,
+    oldValues: { childUpdated: child.fullName, leadChildId: childId },
+    newValues: { fullName: data.fullName },
+    changedFields: ['children'],
+  }).catch(() => {})
+
+  revalidatePath(`/leads/${child.leadId}`)
+  revalidatePath('/leads')
+  return { ok: true }
+}
+
+/** Xoá 1 con khỏi lead. Scope theo lead cha của con. */
+export async function deleteLeadChild(
+  childId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const child = await db.leadChild.findUnique({
+    where: { id: childId },
+    select: { id: true, leadId: true, fullName: true, lead: { select: { centerId: true } } },
+  })
+  const actor = await resolveActor(session.user.id)
+  if (!child || !passesScope('Lead', { centerId: child.lead?.centerId ?? null }, actor)) {
+    return { ok: false, error: 'Không tìm thấy con của lead' }
+  }
+
+  // R7-02 edge: con đang ở lớp trải nghiệm ACTIVE → CHẶN xoá (FK Cascade sẽ xoá luôn
+  // TrialEnrollment/attendance — mất dữ liệu). Yêu cầu rút khỏi lớp trước.
+  const activeTrials = await db.trialEnrollment.count({
+    where: { leadChildId: childId, status: 'ACTIVE' },
+  })
+  if (activeTrials > 0) {
+    return { ok: false, error: 'Học viên đang ở lớp trải nghiệm — rút khỏi lớp trước khi xoá' }
+  }
+
+  const { actorId, actorName } = getAuditActor(session)
+  await db.leadChild.delete({ where: { id: childId } })
+
+  await logLeadAudit({
+    leadId: child.leadId,
+    action: 'UPDATE',
+    actorId,
+    actorName,
+    oldValues: { childRemoved: child.fullName, leadChildId: childId },
+    changedFields: ['children'],
+  }).catch(() => {})
+
+  revalidatePath(`/leads/${child.leadId}`)
+  revalidatePath('/leads')
   return { ok: true }
 }

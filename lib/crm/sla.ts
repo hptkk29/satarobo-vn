@@ -1,5 +1,6 @@
 // lib/crm/sla.ts — R1-06: SLA engine phễu SR.QD.217 (Doc 15 §5.4).
 // evaluateSla THUẦN (C6.1–C6.5) + runSlaCheck (cron → StaffNotification dedupeKey, C6.6).
+import type { LeadStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
 
@@ -79,18 +80,41 @@ export function evaluateSla(
   return v;
 }
 
+// =============================================================================
+// R7-01 — Lead idle rule (lead chưa xử lý im lặng quá lâu).
+// =============================================================================
+
+/**
+ * Lead "idle" khi đang ở NEW/ASSIGNED và `lastActivityAt` cách `now` quá `idleHours` giờ.
+ * THUẦN. lastActivityAt = null → NOT idle (UI/cron sẽ set lastActivityAt).
+ */
+export function isLeadIdle(
+  input: { status: LeadStatus; lastActivityAt: Date | null; createdAt?: Date | null },
+  now: Date,
+  idleHours: number,
+): boolean {
+  if (input.status !== "NEW" && input.status !== "ASSIGNED") return false;
+  // R7-01 fix (G3): lead mới chưa có hoạt động → mốc tham chiếu = createdAt, để rule
+  // idle vẫn bắt được lead NEW bị bỏ quên (lastActivityAt chỉ set khi có LeadActivity).
+  const ref = input.lastActivityAt ?? input.createdAt ?? null;
+  if (ref == null) return false;
+  return now.getTime() - ref.getTime() > idleHours * 3_600_000;
+}
+
 /**
  * Quét lead → sinh StaffNotification cho mỗi vi phạm (idempotent qua dedupeKey, C6.6).
  * Người nhận: assignedToId (ưu tiên) → adminId. Không có người nhận → bỏ qua.
  */
 export async function runSlaCheck(now = new Date()): Promise<{ violations: number; notified: number }> {
   const thresholds = await loadSlaThresholds();
+  const idleHours = await getSetting("sla.leadIdleHours");
   const leads = await db.lead.findMany({
     where: { deletedAt: null, convertedAt: null },
     select: {
-      id: true, assignedToId: true, adminId: true,
+      id: true, assignedToId: true, adminId: true, status: true,
       qualifiedAt: true, handedAt: true, receivedConfirmedAt: true,
-      assignedAt: true, firstContactAt: true, updatedAt: true,
+      assignedAt: true, firstContactAt: true, updatedAt: true, lastActivityAt: true,
+      createdAt: true,
     },
   });
 
@@ -123,6 +147,25 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
           body: SLA_LABEL[rule],
           href: `/leads/${lead.id}`,
           dedupeKey: `sla:${rule}:${lead.id}`,
+        },
+      });
+      notified++;
+    }
+
+    // R7-01 — lead im lặng (NEW/ASSIGNED quá idleHours giờ) → 1 cảnh báo idempotent.
+    if (isLeadIdle({ status: lead.status, lastActivityAt: lead.lastActivityAt, createdAt: lead.createdAt }, now, idleHours)) {
+      const idleBody = `Lead chưa được xử lý quá ${idleHours} giờ`;
+      const idleKey = `sla:idle24:${lead.id}`;
+      await db.staffNotification.upsert({
+        where: { userId_dedupeKey: { userId, dedupeKey: idleKey } },
+        update: { body: idleBody },
+        create: {
+          userId,
+          category: "SLA",
+          title: "Cảnh báo lead im lặng",
+          body: idleBody,
+          href: `/leads/${lead.id}`,
+          dedupeKey: idleKey,
         },
       });
       notified++;

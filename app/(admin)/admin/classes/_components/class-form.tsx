@@ -52,6 +52,12 @@ interface TeacherOption {
   name: string;
   role: string;
 }
+export interface CurriculumOption {
+  id: string;
+  courseId: string;
+  version: number;
+  name: string;
+}
 
 // "Chờ duyệt" KHÔNG cho chọn tay — chỉ set tự động khi sale "Gửi duyệt".
 const STATUS_OPTIONS = [
@@ -86,6 +92,7 @@ export function ClassForm({
   classGroups,
   rooms,
   teachers,
+  curricula = [],
 }: {
   cls?: ClassFormValue;
   courses: CourseOption[];
@@ -93,13 +100,23 @@ export function ClassForm({
   classGroups: ClassGroupOption[];
   rooms: RoomOption[];
   teachers: TeacherOption[];
+  /** R7-06 — giáo trình ACTIVE (sắp xếp version giảm dần) để chốt version lúc tạo lớp. */
+  curricula?: CurriculumOption[];
 }) {
   const router = useRouter();
   const isEdit = Boolean(cls);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const [orgUnitId, setOrgUnitId] = useState<string>(cls?.orgUnitId ?? "");
+  const [courseId, setCourseId] = useState<string>(cls?.courseId ?? "");
+  const [curriculumId, setCurriculumId] = useState<string>(() => {
+    if (!cls?.courseId) return "";
+    const list = curricula
+      .filter((c) => c.courseId === cls.courseId)
+      .sort((a, b) => b.version - a.version);
+    return list[0]?.id ?? "";
+  });
+  const [centerId, setCenterId] = useState<string>(cls?.centerId ?? "");
   const [roomId, setRoomId] = useState<string>(cls?.roomId ?? "");
   const [teacherId, setTeacherId] = useState<string>(cls?.teacherId ?? "");
   const [assistantId, setAssistantId] = useState<string>(cls?.assistantId ?? "");
@@ -123,6 +140,21 @@ export function ClassForm({
     () => teachers.filter((t) => t.id !== teacherId),
     [teachers, teacherId],
   );
+  const courseCurricula = useMemo(
+    () =>
+      curricula
+        .filter((c) => c.courseId === courseId)
+        .sort((a, b) => b.version - a.version),
+    [curricula, courseId],
+  );
+
+  function onCourseChange(value: string) {
+    setCourseId(value);
+    const latest = curricula
+      .filter((c) => c.courseId === value)
+      .sort((a, b) => b.version - a.version)[0];
+    setCurriculumId(latest?.id ?? "");
+  }
 
   // Dùng onSubmit + preventDefault thay cho <form action> để React 19 KHÔNG tự
   // reset các field khi submit lỗi validation (#7 Đợt 4). Server action vẫn
@@ -198,7 +230,8 @@ export function ClassForm({
           <SelectField
             label="Khoá học"
             name="courseId"
-            defaultValue={cls?.courseId ?? ""}
+            value={courseId}
+            onChange={onCourseChange}
             required
             options={[{ value: "", label: "— Chọn khoá cụ thể —" }]}
             groups={groupTeachableCourses(courses)}
@@ -249,6 +282,46 @@ export function ClassForm({
           defaultValue={cls?.description ?? undefined}
           placeholder="Mô tả lớp học (có thể hiển thị public)"
         />
+
+        {/* R7-06 — chốt version giáo trình lúc tạo lớp (chỉ khi tạo mới). */}
+        {!isEdit && (
+          <div>
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-neutral-700">
+                Giáo trình áp dụng
+                <span className="ml-1 text-red-500">*</span>
+              </span>
+              <select
+                name="curriculumId"
+                value={curriculumId}
+                onChange={(e) => setCurriculumId(e.target.value)}
+                disabled={!courseId || courseCurricula.length === 0}
+                className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-neutral-100"
+              >
+                {courseCurricula.length === 0 ? (
+                  <option value="">— Khoá chưa có giáo trình ACTIVE —</option>
+                ) : (
+                  courseCurricula.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      v{c.version} · {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            {courseId && courseCurricula.length === 0 ? (
+              <span className="mt-1 block text-xs text-red-600">
+                Khoá học chưa có giáo trình đang áp dụng (ACTIVE) — không thể tạo
+                lớp. Hãy kích hoạt giáo trình trước.
+              </span>
+            ) : (
+              <span className="mt-1 block text-xs text-neutral-500">
+                Mặc định = version ACTIVE mới nhất. Version được chốt (snapshot)
+                vào lớp và sinh kế hoạch buổi.
+              </span>
+            )}
+          </div>
+        )}
       </Section>
 
       {/* 2. Assignment */}

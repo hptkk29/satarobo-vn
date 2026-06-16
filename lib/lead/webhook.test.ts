@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("./ingest", () => ({ ingestLead: vi.fn() }));
 
-import { verifyMetaSignature } from "./webhook";
+import { verifyMetaSignature, verifyWebhookSecret } from "./webhook";
 
 const RAW = JSON.stringify({ object: "page", entry: [{ id: "1", time: 1 }] });
 
@@ -60,5 +60,40 @@ describe("verifyMetaSignature (X-Hub-Signature-256)", () => {
     const goodSig = sign(secret, RAW);
     const tampered = RAW.replace('"page"', '"PAGE"');
     expect(verifyMetaSignature("facebook", tampered, goodSig).ok).toBe(false);
+  });
+});
+
+describe("[R7-00-AC3] webhook fail-CLOSED khi thiếu secret trên production", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("verifyMetaSignature: prod + thiếu META_APP_SECRET → từ chối (missing-secret)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("META_APP_SECRET", "");
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = verifyMetaSignature("facebook", RAW, null);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe("missing-secret");
+    expect(err).toHaveBeenCalled();
+  });
+
+  it("verifyWebhookSecret: prod + thiếu WEBHOOK_FACEBOOK_SECRET → từ chối (missing-secret)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("WEBHOOK_FACEBOOK_SECRET", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const req = new Request("https://x.test/api/public/webhook/facebook");
+    const r = verifyWebhookSecret("facebook", req);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe("missing-secret");
+  });
+
+  it("dev/test: thiếu secret → stub ok (không chặn local)", () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("WEBHOOK_FACEBOOK_SECRET", "");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const req = new Request("https://x.test/api/public/webhook/facebook");
+    expect(verifyWebhookSecret("facebook", req).ok).toBe(true);
   });
 });

@@ -2,6 +2,7 @@
 // Nghiệp vụ thật thêm registerXxx() ở đây. Hiện chỉ demo.ping (A0 dựng cơ chế).
 import { registerPingDemo } from "@/lib/events/_demo/ping-handlers";
 import { registerLeadConvertedHandlers } from "@/lib/crm/_handlers/lead-converted";
+import { registerR7NotificationHandlers } from "@/lib/_handlers/r7-notifications";
 
 let registered = false;
 
@@ -10,5 +11,5 @@ export function ensureHandlersRegistered(): void {
   registered = true;
   registerPingDemo();
   registerLeadConvertedHandlers(); // R2 C2.5 — gửi xác nhận đăng ký sau convert
-  // TODO(R3+): registerAttendanceHandlers(), ...
+  registerR7NotificationHandlers(); // R7-17 — payment.confirmed / class.session_changed / lead.trialAttended
 }

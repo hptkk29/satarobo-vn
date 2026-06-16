@@ -1,6 +1,29 @@
 import { z } from 'zod'
+import { LeadChildTrialStatus } from '@prisma/client'
 
 export const PHONE_VN = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/
+
+// Helpers — convert empty string → null, preserve type (R7-01 LeadChild).
+const nullableStr = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((v) => (v === '' || v === undefined ? null : v))
+
+const nullableInt = (min: number, max: number) =>
+  z
+    .union([z.coerce.number().int().min(min).max(max), z.literal(''), z.null()])
+    .optional()
+    .transform((v) => (v === '' || v === undefined ? null : (v as number)))
+
+// DOB: chấp nhận Date hoặc date string; '' → null; KHÔNG cho ngày tương lai.
+const nullablePastDate = z
+  .union([z.coerce.date(), z.literal(''), z.null()])
+  .optional()
+  .transform((v) => (v === '' || v === undefined ? null : (v as Date)))
+  .refine((v) => v === null || v <= new Date(), {
+    message: 'Ngày sinh không được ở tương lai',
+  })
 
 export const leadCreateSchema = z.object({
   parentName: z.string().min(2, 'Họ tên tối thiểu 2 ký tự').max(100),
@@ -48,10 +71,27 @@ export const leadUpdateSchema = leadCreateSchema.partial().extend({
       'LOST',
       'DUPLICATE',
       'DEMO_SCHEDULED',
+      'TRIAL_IN_PROGRESS',
+      'REGISTERED',
     ])
     .optional(),
   assignedToId: z.string().min(1).optional(),
 })
 
+// R7-01 — LeadChild (1 lead có nhiều con). Create/edit input.
+export const leadChildSchema = z.object({
+  fullName: z.string().trim().min(1, 'Họ tên con là bắt buộc'),
+  dob: nullablePastDate,
+  ageYears: nullableInt(1, 18),
+  gender: nullableStr,
+  schoolName: nullableStr,
+  gradeLevel: nullableStr,
+  interestedCourseId: nullableStr,
+  interestedCenterId: nullableStr,
+  note: nullableStr,
+  trialStatus: z.nativeEnum(LeadChildTrialStatus).default(LeadChildTrialStatus.NONE),
+})
+
 export type LeadCreateInput = z.infer<typeof leadCreateSchema>
 export type LeadUpdateInput = z.infer<typeof leadUpdateSchema>
+export type LeadChildInput = z.infer<typeof leadChildSchema>
