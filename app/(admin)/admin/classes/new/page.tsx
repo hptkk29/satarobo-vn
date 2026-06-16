@@ -16,7 +16,7 @@ export default async function NewClassPage() {
   }
 
   const actor = await resolveActor(session.user.id);
-  const [courses, orgUnits, classGroups, rooms, teachers] = await Promise.all([
+  const [courses, orgUnits, classGroups, rooms, teachers, curricula] = await Promise.all([
     db.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },

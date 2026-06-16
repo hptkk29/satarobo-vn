@@ -181,7 +181,7 @@ export function LeadForm({
                   <ChildFields
                     value={kid}
                     onChange={(p) => patchKid(i, p)}
-                    centers={centers}
+                    centers={orgUnits}
                     courseGroups={courseGroups}
                   />
                 </div>

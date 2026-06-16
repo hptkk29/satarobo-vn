@@ -263,7 +263,7 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
 
       const created = await tx.class.create({
         data: {
-          ...toCreateData(data, classCode),
+          ...toCreateData(data, classCode, centerId, orgUnitId),
           curriculumId: curriculum.id,
           curriculumVersion: curriculum.version,
         },

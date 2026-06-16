@@ -100,7 +100,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
             note: c.note,
             trialStatus: c.trialStatus,
           }))}
-          centers={centers}
+          centers={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
           courses={courses}
           legacyChildName={lead.childName}
           legacyChildAge={lead.childAge}

@@ -116,7 +116,7 @@ export function ClassForm({
       .sort((a, b) => b.version - a.version);
     return list[0]?.id ?? "";
   });
-  const [centerId, setCenterId] = useState<string>(cls?.centerId ?? "");
+  const [orgUnitId, setOrgUnitId] = useState<string>(cls?.orgUnitId ?? "");
   const [roomId, setRoomId] = useState<string>(cls?.roomId ?? "");
   const [teacherId, setTeacherId] = useState<string>(cls?.teacherId ?? "");
   const [assistantId, setAssistantId] = useState<string>(cls?.assistantId ?? "");
