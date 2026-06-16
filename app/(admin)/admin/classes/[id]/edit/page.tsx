@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { can, hasAnyRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
 import { ClassApprovalActions } from "../_components/class-approval-actions";
 import { ClassReschedule } from "../_components/class-reschedule";
@@ -22,7 +24,8 @@ export default async function EditClassPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [cls, courses, centers, classGroups, rooms, teachers] =
+  const actor = await resolveActor(session.user.id);
+  const [cls, courses, orgUnits, classGroups, rooms, teachers] =
     await Promise.all([
     db.class.findFirst({
       where: { id, deletedAt: null },
@@ -33,6 +36,7 @@ export default async function EditClassPage({ params }: Props) {
         description: true,
         courseId: true,
         centerId: true,
+        orgUnitId: true,
         classGroupId: true,
         roomId: true,
         teacherId: true,
@@ -54,11 +58,7 @@ export default async function EditClassPage({ params }: Props) {
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true },
     }),
-    db.center.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: "asc" },
-      select: { id: true, name: true },
-    }),
+    getSelectableOrgUnits(actor),
     db.classGroup.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
       orderBy: { displayCode: "asc" },
@@ -89,7 +89,7 @@ export default async function EditClassPage({ params }: Props) {
     name: cls.name,
     description: cls.description,
     courseId: cls.courseId,
-    centerId: cls.centerId,
+    orgUnitId: cls.orgUnitId,
     classGroupId: cls.classGroupId,
     roomId: cls.roomId,
     teacherId: cls.teacherId,
@@ -139,7 +139,11 @@ export default async function EditClassPage({ params }: Props) {
       <ClassForm
         cls={formValue}
         courses={courses}
-        centers={centers}
+        orgUnits={orgUnits.map((o) => ({
+          id: o.orgUnitId,
+          name: o.name,
+          centerId: o.centerId,
+        }))}
         classGroups={classGroups}
         rooms={rooms}
         teachers={teachers.map((t) => ({

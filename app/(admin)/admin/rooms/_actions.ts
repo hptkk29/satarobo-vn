@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { centerIdForOrgUnit } from "@/lib/org/org-service";
 
 type ActionResult = { error?: string };
 
@@ -19,7 +20,8 @@ const roomSchema = z.object({
     .trim()
     .min(1, "Mã phòng không được để trống")
     .regex(/^[A-Z0-9-]+$/, "Mã chỉ A-Z, 0-9, dấu -"),
-  centerId: z.string().trim().min(1, "Chọn cơ sở"),
+  // PR-C: đơn vị (OrgUnit) là nguồn chính; centerId suy ra (CENTER-only nên non-null).
+  orgUnitId: z.string().trim().min(1, "Chọn cơ sở"),
   capacity: z.number().int().min(1, "Sức chứa tối thiểu 1"),
   equipment: z.array(z.string().trim().min(1)).default([]),
   status: z.enum(ROOM_STATUSES).default("ACTIVE"),
@@ -67,7 +69,7 @@ function readForm(formData: FormData) {
   return {
     name: emptyToUndefined(formData.get("name")) ?? "",
     code: (emptyToUndefined(formData.get("code")) ?? "").toUpperCase(),
-    centerId: emptyToUndefined(formData.get("centerId")) ?? "",
+    orgUnitId: emptyToUndefined(formData.get("orgUnitId")) ?? "",
     capacity: parseInteger(formData.get("capacity"), 15),
     equipment: parseEquipment(formData.get("equipment")),
     status: (emptyToUndefined(formData.get("status")) ?? "ACTIVE") as
@@ -79,7 +81,11 @@ function readForm(formData: FormData) {
   };
 }
 
-function toCreate(c: z.infer<typeof roomSchema>): Prisma.RoomCreateInput {
+// PR-C dual-write: ghi orgUnitId (nguồn chính) + centerId (suy ra, scopedDb cũ).
+function toCreate(
+  c: z.infer<typeof roomSchema>,
+  centerId: string,
+): Prisma.RoomCreateInput {
   return {
     name: c.name,
     code: c.code,
@@ -88,11 +94,15 @@ function toCreate(c: z.infer<typeof roomSchema>): Prisma.RoomCreateInput {
     status: c.status,
     notes: c.notes ?? null,
     displayOrder: c.displayOrder,
-    center: { connect: { id: c.centerId } },
+    orgUnitId: c.orgUnitId,
+    center: { connect: { id: centerId } },
   };
 }
 
-function toUpdate(c: z.infer<typeof roomSchema>): Prisma.RoomUpdateInput {
+function toUpdate(
+  c: z.infer<typeof roomSchema>,
+  centerId: string,
+): Prisma.RoomUpdateInput {
   return {
     name: c.name,
     code: c.code,
@@ -101,7 +111,8 @@ function toUpdate(c: z.infer<typeof roomSchema>): Prisma.RoomUpdateInput {
     status: c.status,
     notes: c.notes ?? null,
     displayOrder: c.displayOrder,
-    center: { connect: { id: c.centerId } },
+    orgUnitId: c.orgUnitId,
+    center: { connect: { id: centerId } },
   };
 }
 
@@ -113,8 +124,14 @@ export async function createRoom(formData: FormData): Promise<ActionResult> {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  // PR-C: suy centerId từ orgUnitId (Room phải là CENTER nên centerId non-null).
+  const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
+  if (!centerId) {
+    return { error: "Đơn vị không hợp lệ — phòng học phải thuộc một cơ sở" };
+  }
+
   try {
-    await db.room.create({ data: toCreate(parsed.data) });
+    await db.room.create({ data: toCreate(parsed.data, centerId) });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã phòng đã tồn tại trong cơ sở này" };
@@ -134,8 +151,14 @@ export async function updateRoom(id: string, formData: FormData): Promise<Action
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  // PR-C: suy centerId từ orgUnitId (Room phải là CENTER nên centerId non-null).
+  const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
+  if (!centerId) {
+    return { error: "Đơn vị không hợp lệ — phòng học phải thuộc một cơ sở" };
+  }
+
   try {
-    await db.room.update({ where: { id }, data: toUpdate(parsed.data) });
+    await db.room.update({ where: { id }, data: toUpdate(parsed.data, centerId) });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã phòng đã tồn tại trong cơ sở này" };

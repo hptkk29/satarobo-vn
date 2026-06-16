@@ -51,6 +51,11 @@ import {
   Clock,
   ChevronDown,
   Workflow,
+  Library,
+  FileText,
+  FileQuestion,
+  FileCheck2,
+  NotebookPen,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -104,6 +109,16 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view"] },
       { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: ["media:view"] },
+    ],
+  },
+  {
+    label: "Đào tạo (LMS)",
+    items: [
+      { label: "Giáo trình", href: "/curriculums", icon: Library, perm: ["curriculum:view"] },
+      { label: "Tài liệu", href: "/documents", icon: FileText, perm: ["documents:view"] },
+      { label: "Ngân hàng câu hỏi", href: "/questions", icon: FileQuestion, perm: ["questions:view"] },
+      { label: "Đề thi", href: "/exams", icon: FileCheck2, perm: ["exams:view"] },
+      { label: "Bài tập", href: "/assignments", icon: NotebookPen, perm: ["assignments:view"] },
     ],
   },
   {

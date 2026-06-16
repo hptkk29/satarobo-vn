@@ -222,3 +222,31 @@ export async function getSelectableOrgUnits(
     opts,
   );
 }
+
+// ─── PR-B dual-write: map Center.id ↔ OrgUnit.id ──────────────────────────────
+// Giai đoạn 2-phase: mọi write set CẢ centerId + orgUnitId. OrgUnit.centerId @unique
+// nên ánh xạ 1-1 (chỉ type=CENTER có centerId; HO/ROOT centerId=null).
+
+/** Center.id → OrgUnit.id. null nếu centerId rỗng hoặc không OrgUnit nào trỏ tới. */
+export async function orgUnitIdForCenter(
+  centerId: string | null | undefined,
+): Promise<string | null> {
+  if (!centerId) return null;
+  const ou = await db.orgUnit.findFirst({
+    where: { centerId, deletedAt: null },
+    select: { id: true },
+  });
+  return ou?.id ?? null;
+}
+
+/** OrgUnit.id → Center.id. HO/ROOT (centerId=null) → null (đơn vị không có Center). */
+export async function centerIdForOrgUnit(
+  orgUnitId: string | null | undefined,
+): Promise<string | null> {
+  if (!orgUnitId) return null;
+  const ou = await db.orgUnit.findUnique({
+    where: { id: orgUnitId },
+    select: { centerId: true },
+  });
+  return ou?.centerId ?? null;
+}

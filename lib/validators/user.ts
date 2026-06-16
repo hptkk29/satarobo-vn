@@ -1,19 +1,37 @@
 import { z } from "zod";
 import { Role } from "@prisma/client";
 
-export const userCreateSchema = z.object({
+// Đợt 3B — đa vai trò: form gửi roles[] (union quyền) + primaryRole (vai trò
+// chính, dùng cho dashboard mặc định + back-compat User.role). primaryRole PHẢI
+// nằm trong roles. HO KHÔNG phải role — center độc lập đi qua orgUnitId (đơn vị).
+const userFields = z.object({
   name: z.string().min(1, "Tên không được rỗng").max(100),
   email: z.string().email("Email không hợp lệ").toLowerCase().trim(),
-  password: z
-    .string()
-    .min(8, "Mật khẩu tối thiểu 8 ký tự")
-    .max(72, "Mật khẩu tối đa 72 ký tự"),
-  role: z.nativeEnum(Role),
+  roles: z.array(z.nativeEnum(Role)).min(1, "Chọn ít nhất 1 vai trò"),
+  primaryRole: z.nativeEnum(Role),
+  // PR-B dual-write: giữ centerId, thêm orgUnitId (đơn vị tổ chức — gồm cả HO).
   centerId: z.string().min(1).nullable().optional(),
+  orgUnitId: z.string().min(1).nullable().optional(),
   employeeId: z.string().min(1).nullable().optional(),
 });
 
-export const userUpdateSchema = userCreateSchema.omit({ password: true });
+const primaryInRoles = (d: { roles: Role[]; primaryRole: Role }) =>
+  d.roles.includes(d.primaryRole);
+const primaryRefine = {
+  message: "Vai trò chính phải nằm trong các vai trò đã chọn",
+  path: ["primaryRole"],
+};
+
+export const userCreateSchema = userFields
+  .extend({
+    password: z
+      .string()
+      .min(8, "Mật khẩu tối thiểu 8 ký tự")
+      .max(72, "Mật khẩu tối đa 72 ký tự"),
+  })
+  .refine(primaryInRoles, primaryRefine);
+
+export const userUpdateSchema = userFields.refine(primaryInRoles, primaryRefine);
 
 export const passwordResetSchema = z
   .object({

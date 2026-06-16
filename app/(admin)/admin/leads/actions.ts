@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
+import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { genStudentCode } from '@/lib/codegen'
 import { generateOrderCode } from '@/lib/orders/code'
 import { requestOtp } from '@/lib/otp/service'
@@ -780,6 +781,7 @@ const manualLeadSchema = z.object({
   childName: z.string().trim().max(100).optional().or(z.literal('')),
   childAge: z.coerce.number().int().min(3).max(18).optional().nullable(),
   centerId: z.string().trim().optional().or(z.literal('')),
+  orgUnitId: z.string().trim().optional().or(z.literal('')), // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra (HO→null)
   courseId: z.string().trim().optional().or(z.literal('')),
   source: z.string().trim().min(1).max(100).optional().or(z.literal('')),
   note: z.string().trim().max(2000).optional().or(z.literal('')),
@@ -828,6 +830,11 @@ export async function createLeadManual(
   }
 
   const { actorId, actorName } = getAuditActor(session)
+
+  // PR-C: orgUnitId là nguồn chính; centerId suy ra (HO→null) để dual-write/scopedDb cũ.
+  const orgUnitId = d.orgUnitId || null
+  const centerId = await centerIdForOrgUnit(orgUnitId)
+
   const lead = await db.lead.create({
     data: {
       parentName: d.parentName,
@@ -835,7 +842,8 @@ export async function createLeadManual(
       email: d.email || null,
       childName: d.childName || null,
       childAge: d.childAge ?? null,
-      centerId: d.centerId || null,
+      centerId,
+      orgUnitId,
       courseId: d.courseId || null,
       source: d.source || 'Nhập tay',
       note: d.note || null,
@@ -863,7 +871,8 @@ export async function createLeadManual(
       parentName: d.parentName,
       phone: d.phone,
       childName: d.childName ?? null,
-      centerId: d.centerId || null,
+      centerId,
+      orgUnitId,
       source: d.source || 'Nhập tay',
     },
   }).catch(() => {})
@@ -902,6 +911,7 @@ export async function updateLeadFields(
       childName: true,
       childAge: true,
       centerId: true,
+      orgUnitId: true,
       courseId: true,
       source: true,
       note: true,
@@ -918,13 +928,19 @@ export async function updateLeadFields(
     if (dup) return { ok: false, error: 'SĐT đã tồn tại ở lead khác' }
   }
 
+  // PR-C dual-write: đổi đơn vị → orgUnitId là nguồn chính, suy centerId (HO→null).
+  let centerId: string | null | undefined
+  if (d.orgUnitId !== undefined) {
+    centerId = await centerIdForOrgUnit(d.orgUnitId || null)
+  }
+
   const updateData = {
     ...(d.parentName !== undefined ? { parentName: d.parentName } : {}),
     ...(d.phone !== undefined ? { phone: d.phone } : {}),
     ...(d.email !== undefined ? { email: d.email || null } : {}),
     ...(d.childName !== undefined ? { childName: d.childName || null } : {}),
     ...(d.childAge !== undefined ? { childAge: d.childAge ?? null } : {}),
-    ...(d.centerId !== undefined ? { centerId: d.centerId || null } : {}),
+    ...(d.orgUnitId !== undefined ? { orgUnitId: d.orgUnitId || null, centerId } : {}),
     ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
     ...(d.source !== undefined ? { source: d.source || null } : {}),
     ...(d.note !== undefined ? { note: d.note || null } : {}),

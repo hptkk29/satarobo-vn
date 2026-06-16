@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { can, hasRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getStudentProgress } from "@/lib/progress";
 import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
@@ -30,7 +32,8 @@ export default async function EditStudentPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [student, centers] = await Promise.all([
+  const actor = await resolveActor(session.user.id);
+  const [student, orgUnits] = await Promise.all([
     db.student.findFirst({
       where: { id, deletedAt: null },
       select: {
@@ -60,18 +63,17 @@ export default async function EditStudentPage({ params }: Props) {
         healthNotes: true,
         enrollmentDate: true,
         preferredCenterId: true,
+        preferredOrgUnitId: true,
         notes: true,
         status: true,
         centerId: true,
+        orgUnitId: true,
         parentUserId: true,
         parentUser: { select: { email: true, name: true, accountStatus: true } },
       },
     }),
-    db.center.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
+    // PR-C: picker đơn vị qua OrgUnit tree (gồm cả HO) — không dùng db.center.findMany.
+    getSelectableOrgUnits(actor),
   ]);
 
   if (!student) notFound();
@@ -126,9 +128,11 @@ export default async function EditStudentPage({ params }: Props) {
     healthNotes: student.healthNotes,
     enrollmentDate: student.enrollmentDate,
     preferredCenterId: student.preferredCenterId,
+    preferredOrgUnitId: student.preferredOrgUnitId,
     notes: student.notes,
     status: student.status,
     centerId: student.centerId,
+    orgUnitId: student.orgUnitId,
   };
 
   const activeEnrollments = await db.enrollment.findMany({
@@ -209,7 +213,10 @@ export default async function EditStudentPage({ params }: Props) {
           Sửa học viên:{" "}
           <span className="font-bold text-orange-600">{student.name}</span>
         </h1>
-        <StudentForm student={formValue} centers={centers} />
+        <StudentForm
+          student={formValue}
+          orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+        />
       </div>
 
       <LifecycleActions

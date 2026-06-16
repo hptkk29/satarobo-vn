@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ClassStatusEnum } from "@/lib/validators/class";
 import { can } from "@/lib/auth/permissions";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Excel date parser — reused from D2 / B3.
 function parseExcelDate(v: unknown): Date | null {
@@ -238,6 +239,11 @@ export async function POST(req: NextRequest) {
 
   const courseMap = new Map(courses.map((c) => [c.slug, c.id]));
   const centerMap = new Map(centers.map((c) => [c.slug, c.id]));
+  // Dual-write 2-phase: dựng map centerId → orgUnitId 1 lần (số cơ sở nhỏ).
+  const centerIdToOrgUnitId = new Map<string, string | null>();
+  for (const c of centers) {
+    centerIdToOrgUnitId.set(c.id, await orgUnitIdForCenter(c.id));
+  }
   // employeeCode → linked User.id (since Class.teacherId FK → User)
   const teacherUserMap = new Map<string, string>();
   for (const e of employees) {
@@ -274,6 +280,7 @@ export async function POST(req: NextRequest) {
     data: Parsed;
     courseId: string;
     centerId: string;
+    orgUnitId: string | null;
     roomId: string | null;
     teacherId: string | null;
     assistantId: string | null;
@@ -361,7 +368,8 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    validRows.push({ data: d, courseId, centerId, roomId, teacherId, assistantId });
+    const orgUnitId = centerIdToOrgUnitId.get(centerId) ?? null;
+    validRows.push({ data: d, courseId, centerId, orgUnitId, roomId, teacherId, assistantId });
   }
 
   if (validRows.length === 0) {
@@ -379,6 +387,7 @@ export async function POST(req: NextRequest) {
           description: r.data.description,
           courseId: r.courseId,
           centerId: r.centerId,
+          orgUnitId: r.orgUnitId, // dual-write 2-phase
           roomId: r.roomId,
           teacherId: r.teacherId,
           assistantId: r.assistantId,

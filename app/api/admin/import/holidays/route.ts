@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Parse a date from Excel: Date object, ISO string YYYY-MM-DD, DD/MM/YYYY,
 // or Excel serial number (days since 1899-12-30).
@@ -137,7 +138,17 @@ export async function POST(req: NextRequest) {
     : [];
   const slugToId = new Map(centers.map((c) => [c.slug, c.id]));
 
-  const validRows: { data: z.infer<typeof HolidayImportSchema>; centerId: string | null }[] = [];
+  // Dual-write 2-phase: dựng map centerId → orgUnitId 1 lần (số cơ sở nhỏ).
+  const centerIdToOrgUnitId = new Map<string, string | null>();
+  for (const c of centers) {
+    centerIdToOrgUnitId.set(c.id, await orgUnitIdForCenter(c.id));
+  }
+
+  const validRows: {
+    data: z.infer<typeof HolidayImportSchema>;
+    centerId: string | null;
+    orgUnitId: string | null;
+  }[] = [];
   const errors: ImportError[] = [];
 
   for (let i = 0; i < stageOne.length; i++) {
@@ -158,7 +169,10 @@ export async function POST(req: NextRequest) {
       }
       centerId = id;
     }
-    validRows.push({ data: entry.data, centerId });
+    const orgUnitId = centerId
+      ? (centerIdToOrgUnitId.get(centerId) ?? null)
+      : null;
+    validRows.push({ data: entry.data, centerId, orgUnitId });
   }
 
   if (validRows.length === 0) {
@@ -194,6 +208,7 @@ export async function POST(req: NextRequest) {
             date: r.data.date,
             endDate: r.data.endDate,
             centerId: r.centerId,
+            orgUnitId: r.orgUnitId, // dual-write 2-phase
             type: r.data.type,
             note: r.data.note,
           },

@@ -88,6 +88,7 @@ export const employeeCreateSchema = z.object({
   salaryLevel: nullableInt(1, 5),
 
   centerId: nullableStr,
+  orgUnitId: nullableStr, // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra (HO→null)
   managerId: nullableStr,
 
   // Phase 4.7 extension — additional Tier 2 fields

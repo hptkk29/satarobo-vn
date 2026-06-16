@@ -6,6 +6,12 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { assertCan, hasRole } from "@/lib/auth/permissions";
+import { centerIdForOrgUnit } from "@/lib/org/org-service";
+import {
+  createAssignment,
+  getActiveAssignments,
+  updateAssignment,
+} from "@/lib/org/assignment-service";
 import { ASSIGNABLE_ROLES } from "@/lib/labels";
 import {
   employeeCreateSchema,
@@ -70,12 +76,33 @@ export async function createEmployeeAction(
     });
   }
 
+  // Track Department dual-write: map enum code → DepartmentDef.id (giữ cả 2 tới PR-E).
+  const dept = await db.departmentDef.findUnique({
+    where: { code: parsed.data.department },
+    select: { id: true },
+  });
+
+  // PR-C: orgUnitId là nguồn chính; centerId suy ra (HO→null) để dual-write/scopedDb cũ.
+  const orgUnitId = parsed.data.orgUnitId ?? null;
+  const centerId = await centerIdForOrgUnit(orgUnitId);
+
   const created = await db.employee.create({
     data: {
       ...parsed.data,
+      orgUnitId,
+      centerId,
+      departmentId: dept?.id ?? null,
       createdById: session.user.id,
     },
   });
+
+  // A0-08: phân công PRIMARY vào đơn vị (KHÔNG sinh quyền — quyền từ UserOrgRole).
+  if (orgUnitId) {
+    await createAssignment(
+      { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" },
+      { employeeId: created.id, orgUnitId, assignmentType: "PRIMARY", reason: "Tạo nhân sự" },
+    );
+  }
 
   revalidateAll();
   return { ok: true, data: { id: created.id } };
@@ -115,7 +142,68 @@ export async function updateEmployeeAction(
     });
   }
 
-  await db.employee.update({ where: { id }, data });
+  // Track Department dual-write: nếu đổi phòng ban → đồng bộ departmentId.
+  let departmentId: string | null | undefined;
+  if (data.department) {
+    const dept = await db.departmentDef.findUnique({
+      where: { code: data.department },
+      select: { id: true },
+    });
+    departmentId = dept?.id ?? null;
+  }
+
+  // PR-C dual-write: nếu đổi đơn vị → suy centerId (HO→null) + đồng bộ phân công PRIMARY.
+  let centerId: string | null | undefined;
+  if (data.orgUnitId !== undefined) {
+    centerId = await centerIdForOrgUnit(data.orgUnitId ?? null);
+  }
+
+  await db.employee.update({
+    where: { id },
+    data: {
+      ...data,
+      ...(departmentId !== undefined ? { departmentId } : {}),
+      ...(centerId !== undefined ? { centerId } : {}),
+    },
+  });
+
+  // Đồng bộ EmployeeOrgAssignment PRIMARY khớp đơn vị mới (A0-08).
+  if (data.orgUnitId !== undefined) {
+    const newOrg = data.orgUnitId ?? null;
+    const auditActor = {
+      id: session.user.id,
+      name: session.user.name ?? session.user.email ?? "Unknown",
+    };
+    const actives = await getActiveAssignments(id);
+    const primary = actives.find((a) => a.assignmentType === "PRIMARY");
+    if (newOrg) {
+      if (!primary) {
+        await createAssignment(auditActor, {
+          employeeId: id,
+          orgUnitId: newOrg,
+          assignmentType: "PRIMARY",
+          reason: "Cập nhật đơn vị nhân sự",
+        });
+      } else if (primary.orgUnitId !== newOrg) {
+        await updateAssignment(auditActor, primary.id, {
+          status: "EXPIRED",
+          reason: "Đổi đơn vị PRIMARY",
+        });
+        await createAssignment(auditActor, {
+          employeeId: id,
+          orgUnitId: newOrg,
+          assignmentType: "PRIMARY",
+          reason: "Đổi đơn vị PRIMARY",
+        });
+      }
+    } else if (primary) {
+      await updateAssignment(auditActor, primary.id, {
+        status: "EXPIRED",
+        reason: "Bỏ đơn vị PRIMARY",
+      });
+    }
+  }
+
   revalidateAll();
   return { ok: true };
 }

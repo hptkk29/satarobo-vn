@@ -34,12 +34,14 @@ export type StudentFormValue = {
   healthNotes: string | null;
   enrollmentDate: Date | null;
   preferredCenterId: string | null;
+  preferredOrgUnitId: string | null;
   notes: string | null;
   status: "ACTIVE" | "PAUSED" | "GRADUATED" | "INACTIVE";
   centerId: string | null;
+  orgUnitId: string | null;
 };
 
-interface CenterOption {
+interface OrgUnitOption {
   id: string;
   name: string;
 }
@@ -76,10 +78,10 @@ function toDateInput(d: Date | null): string {
 
 export function StudentForm({
   student,
-  centers,
+  orgUnits,
 }: {
   student?: StudentFormValue;
-  centers: CenterOption[];
+  orgUnits: OrgUnitOption[];
 }) {
   const router = useRouter();
   const isEdit = Boolean(student);
@@ -283,25 +285,25 @@ export function StudentForm({
             defaultValue={toDateInput(student?.enrollmentDate ?? null)}
           />
           <SelectField
-            label="Cơ sở mong muốn"
-            name="preferredCenterId"
-            defaultValue={student?.preferredCenterId ?? ""}
+            label="Đơn vị mong muốn"
+            name="preferredOrgUnitId"
+            defaultValue={student?.preferredOrgUnitId ?? ""}
             options={[
               { value: "", label: "— Chưa chọn —" },
-              ...centers.map((c) => ({ value: c.id, label: c.name })),
+              ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
             ]}
-            helper="Cơ sở gần nhà — gợi ý xếp lớp khi enrollment"
+            helper="Đơn vị gần nhà — gợi ý xếp lớp khi enrollment"
           />
         </Grid>
         <SelectField
-          label="Cơ sở đang học (legacy)"
-          name="centerId"
-          defaultValue={student?.centerId ?? ""}
+          label="Đơn vị đang học (legacy)"
+          name="orgUnitId"
+          defaultValue={student?.orgUnitId ?? ""}
           options={[
             { value: "", label: "— Chưa gắn —" },
-            ...centers.map((c) => ({ value: c.id, label: c.name })),
+            ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
           ]}
-          helper="Field cũ từ trước D1; quan hệ học sinh ↔ cơ sở qua Class sẽ thay thế ở D3."
+          helper="Field cũ từ trước D1; quan hệ học sinh ↔ đơn vị qua Class sẽ thay thế ở D3."
         />
         <Field
           label="Ghi chú nội bộ"

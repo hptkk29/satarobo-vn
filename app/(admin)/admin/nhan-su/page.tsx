@@ -99,7 +99,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
       include: {
         center: { select: { name: true } },
         manager: { select: { fullName: true } },
-        userAccount: { select: { role: true } },
+        userAccount: { select: { role: true, roles: true } },
         _count: { select: { honors: true } },
       },
     }),

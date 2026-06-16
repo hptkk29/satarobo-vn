@@ -95,11 +95,14 @@ export const studentCreateSchema = z.object({
 
   enrollmentDate: nullableDate,
   preferredCenterId: nullableStr,
+  // PR-C: OrgUnit là nguồn chính cho picker; centerId/preferredCenterId suy ra (dual-write).
+  preferredOrgUnitId: nullableStr,
   notes: nullableStr,
   status: StudentStatusEnum.default("ACTIVE"),
 
   // Existing legacy fields — keep for compat (kept in schema, can still be edited)
   centerId: nullableStr,
+  orgUnitId: nullableStr,
 });
 
 export type StudentCreateInput = z.infer<typeof studentCreateSchema>;

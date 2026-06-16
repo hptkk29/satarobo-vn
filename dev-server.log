@@ -1,0 +1,192 @@
+﻿corepack : [WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: 
+"pnpm.onlyBuiltDependencies". See https://pnpm.io/settings for the new home of each setting.
+At line:1 char:252
++ ... ACK_ENABLE_DOWNLOAD_PROMPT='0'; corepack pnpm@11 run dev *>&1 | Out-F ...
++                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([WARN] The "pnp...f each setting.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+$ next dev
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.12:3000
+- Environments: .env.local, .env
+✓ Ready in 8.4s
+[@sentry/nextjs] DEPRECATION WARNING: disableLogger is deprecated and will be removed in a future version. Use 
+webpack.treeshake.removeDebugLogging instead. (Not supported with Turbopack.)
+[@sentry/nextjs] DEPRECATION WARNING: reactComponentAnnotation is deprecated and will be removed in a future version. 
+Use webpack.reactComponentAnnotation instead. (Not supported with Turbopack.)
+⚠ Slow filesystem detected. The benchmark took 514ms. If D:\Code\RoboDev\satarobo-vn\.next/dev is a network drive, 
+consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+○ Compiling instrumentation Node.js ...
+○ Compiling instrumentation Edge ...
+○ Compiling proxy ...
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+[31m[auth][error][0m JWTSessionError: Read more at https://errors.authjs.dev#jwtsessionerror
+[31m[auth][cause][0m: Error: no matching decryption secret
+    at clockTolerance (D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0n_x_@auth_core_0b83zj8._.js:916:15)
+    at async flattenedDecrypt 
+(D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\12gq_jose_dist_webapi_0-ga00~._.js:3337:15)
+    at async compactDecrypt 
+(D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\12gq_jose_dist_webapi_0-ga00~._.js:3431:23)
+    at async jwtDecrypt 
+(D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\12gq_jose_dist_webapi_0-ga00~._.js:3465:23)
+    at async Object.decode (D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0n_x_@auth_core_0b83zj8._.js:906:25)
+    at async Module.session (D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0n_x_@auth_core_0b83zj8._.js:4547:29)
+    at async AuthInternal (D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0n_x_@auth_core_0b83zj8._.js:5146:24)
+    at async Auth (D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0n_x_@auth_core_0b83zj8._.js:5385:34)
+    at async handleAuth 
+(D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\[root-of-the-server]__13ku9t2._.js:4041:29)
+    at async D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0niv_next_08-hk1y._.js:21428:20
+    at async D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0niv_next_08-hk1y._.js:7063:28
+    at async adapter (D:\Code\RoboDev\satarobo-vn\.next\dev\server\chunks\0niv_next_08-hk1y._.js:7017:16)
+    at async DevServer.runMiddleware (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63f
+b340c0bf22509ddf5b0e3ea812\node_modules\next\dist\server\next-server.js:1192:26)
+    at async DevServer.runMiddleware (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63f
+b340c0bf22509ddf5b0e3ea812\node_modules\next\dist\server\dev\next-dev-server.js:278:28)
+    at async NextNodeServer.handleCatchallMiddlewareRequest (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6
+_@babel+core@7.2_a2b63fb340c0bf22509ddf5b0e3ea812\node_modules\next\dist\server\next-server.js:392:26)
+    at async DevServer.handleRequestImpl (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2
+b63fb340c0bf22509ddf5b0e3ea812\node_modules\next\dist\server\base-server.js:941:28)
+    at async D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63fb340c0bf22509ddf5b0e3ea81
+2\node_modules\next\dist\server\dev\next-dev-server.js:394:20
+    at async Span.traceAsyncFn (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63fb340c0
+bf22509ddf5b0e3ea812\node_modules\next\dist\trace\trace.js:164:20)
+    at async DevServer.handleRequest (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63f
+b340c0bf22509ddf5b0e3ea812\node_modules\next\dist\server\dev\next-dev-server.js:390:24)
+    at async handleRoute (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63fb340c0bf2250
+9ddf5b0e3ea812\node_modules\next\dist\server\lib\router-utils\resolve-routes.js:366:33)
+    at async resolveRoutes (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63fb340c0bf22
+509ddf5b0e3ea812\node_modules\next\dist\server\lib\router-utils\resolve-routes.js:622:28)
+    at async handleRequest (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63fb340c0bf22
+509ddf5b0e3ea812\node_modules\next\dist\server\lib\router-server.js:314:96)
+    at async requestHandlerImpl (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63fb340c
+0bf22509ddf5b0e3ea812\node_modules\next\dist\server\lib\router-server.js:514:13)
+    at async Server.requestListener (D:\Code\RoboDev\satarobo-vn\node_modules\.pnpm\next@16.2.6_@babel+core@7.2_a2b63fb
+340c0bf22509ddf5b0e3ea812\node_modules\next\dist\server\lib\start-server.js:225:13)
+[31m[auth][details][0m: {}
+○ Compiling / ...
+ GET / 200 in 95s (next.js: 92s, proxy.ts: 1855ms, application-code: 923ms)
+ GET / 200 in 95s (next.js: 93s, proxy.ts: 1885ms, application-code: 496ms)
+○ Compiling /login ...
+ GET /login 200 in 14.8s (next.js: 14.4s, proxy.ts: 47ms, application-code: 330ms)
+ GET /login 200 in 8.7s (next.js: 8.5s, proxy.ts: 11ms, application-code: 141ms)
+○ Compiling /api/auth/[...nextauth] ...
+ GET /api/auth/providers 200 in 9.9s (next.js: 9.8s, proxy.ts: 6ms, application-code: 23ms)
+ GET /api/auth/csrf 200 in 144ms (next.js: 127ms, proxy.ts: 5ms, application-code: 11ms)
+✓ Finished writing to filesystem cache in 11.6s
+ POST /api/auth/callback/credentials? 200 in 1541ms (next.js: 57ms, proxy.ts: 8ms, application-code: 1476ms)
+○ Compiling /admin/dashboard ...
+ GET /dashboard 200 in 26.6s (next.js: 24.6s, proxy.ts: 16ms, application-code: 2.1s)
+ GET /dashboard 200 in 1779ms (next.js: 82ms, proxy.ts: 335ms, application-code: 1362ms)
+○ Compiling /api/admin/notifications/bell ...
+ GET /api/admin/notifications/bell 200 in 21.8s (next.js: 17.9s, proxy.ts: 25ms, application-code: 3.9s)
+ GET /api/admin/notifications/bell 200 in 21.8s (next.js: 17.9s, proxy.ts: 27ms, application-code: 3.9s)
+ GET /teachers 200 in 15.6s (next.js: 15.0s, proxy.ts: 14ms, application-code: 591ms)
+ GET /nhan-su 200 in 24.4s (next.js: 21.2s, proxy.ts: 24ms, application-code: 3.2s)
+ GET /nhan-su 200 in 3.1s (next.js: 183ms, proxy.ts: 26ms, application-code: 2.9s)
+○ Compiling /admin/nhan-su/new ...
+ GET /nhan-su/new 200 in 16.6s (next.js: 15.8s, proxy.ts: 11ms, application-code: 823ms)
+ GET /api/admin/notifications/bell 200 in 2.2s (next.js: 94ms, proxy.ts: 10ms, application-code: 2.1s)
+○ Compiling /admin/users ...
+✓ Finished filesystem cache database compaction in 115s
+✓ Finished writing to filesystem cache in 16.9s
+ GET /api/admin/notifications/bell 200 in 617ms (next.js: 11ms, proxy.ts: 13ms, application-code: 593ms)
+ GET /users 200 in 62s (next.js: 62s, proxy.ts: 12ms, application-code: 110ms)
+○ Compiling /admin/users/new ...
+ GET /users/new 200 in 19.8s (next.js: 19.2s, proxy.ts: 14ms, application-code: 627ms)
+ GET /api/admin/notifications/bell 200 in 159ms (next.js: 7ms, proxy.ts: 12ms, application-code: 141ms)
+ GET /teachers 200 in 171ms (next.js: 21ms, proxy.ts: 16ms, application-code: 134ms)
+ GET /nhan-su 200 in 123ms (next.js: 32ms, proxy.ts: 12ms, application-code: 79ms)
+ GET /nhan-su/new 200 in 133ms (next.js: 19ms, proxy.ts: 15ms, application-code: 100ms)
+○ Compiling /admin/centers ...
+ GET /dashboard 200 in 812ms (next.js: 64ms, proxy.ts: 24ms, application-code: 724ms)
+ GET /api/admin/notifications/bell 200 in 104ms (next.js: 13ms, proxy.ts: 25ms, application-code: 66ms)
+ GET /crm 200 in 7.2s (next.js: 6.7s, proxy.ts: 15ms, application-code: 514ms)
+ GET /centers 200 in 21.1s (next.js: 21.1s, proxy.ts: 14ms, application-code: 60ms)
+○ Compiling /admin/leads ...
+ GET /leads 200 in 5.7s (next.js: 5.3s, proxy.ts: 15ms, application-code: 327ms)
+○ Compiling /admin/leads/new ...
+ GET /leads/new 200 in 10.8s (next.js: 10.4s, proxy.ts: 15ms, application-code: 369ms)
+ GET /api/admin/notifications/bell 200 in 235ms (next.js: 25ms, proxy.ts: 9ms, application-code: 201ms)
+○ Compiling /admin/leads/cau-hinh-chia ...
+ GET /leads/cau-hinh-chia 200 in 10.9s (next.js: 10.7s, proxy.ts: 11ms, application-code: 156ms)
+ GET /leads/cau-hinh-chia 200 in 142ms (next.js: 22ms, proxy.ts: 22ms, application-code: 97ms)
+ GET /leads/cau-hinh-chia 200 in 235ms (next.js: 82ms, proxy.ts: 55ms, application-code: 99ms)
+○ Compiling /admin/ban-giao-lead ...
+ GET /ban-giao-lead 200 in 10.2s (next.js: 9.9s, proxy.ts: 18ms, application-code: 283ms)
+ GET /centers 200 in 109ms (next.js: 14ms, proxy.ts: 34ms, application-code: 61ms)
+ GET /sessions 200 in 2.9s (next.js: 2.8s, proxy.ts: 13ms, application-code: 66ms)
+ GET /api/admin/notifications/bell 200 in 225ms (next.js: 51ms, proxy.ts: 13ms, application-code: 160ms)
+ GET /teachers 200 in 3.3s (next.js: 1500ms, proxy.ts: 12ms, application-code: 1799ms)
+ GET /nhan-su 200 in 1583ms (next.js: 552ms, proxy.ts: 24ms, application-code: 1007ms)
+ GET /nhan-su/new 200 in 303ms (next.js: 73ms, proxy.ts: 13ms, application-code: 217ms)
+ GET /api/admin/notifications/bell 200 in 177ms (next.js: 18ms, proxy.ts: 13ms, application-code: 146ms)
+
+-----
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred. A panic log has been written to 
+C:\Users\dolua\AppData\Local\Temp\next-panic-36debd7debb099c44228917e034bb4fc.log.
+
+To help make Turbopack better, report this error by clicking here: https://bugs.nextjs.org/search?category=turbopack-er
+ror-report&title=Turbopack%20Error%3A%20creating%20new%20process&body=Turbopack%20version%3A%20%60ee6e79b1%60%0ANext.js
+%20version%3A%20%600.0.0%60%0A%0AError%20message%3A%0A%60%60%60%0Acreating%20new%20process%0A%0ACaused%20by%3A%0A-%20no
+de%20process%20exited%20before%20we%20could%20connect%20to%20it%20with%20exit%20code%3A%200xc0000142%0A%0ADebug%20info%
+3A%0A-%20Execution%20of%20hmr_update_with_issues_operation%20failed%0A-%20Execution%20of%20PlainIssue%3A%3Afrom_issue%2
+0failed%0A-%20Execution%20of%20PlainSource%3A%3Afrom_source%20failed%0A-%20Execution%20of%20%3CWebpackLoadersProcessedA
+sset%20as%20Asset%3E%3A%3Acontent%20failed%0A-%20Execution%20of%20WebpackLoadersProcessedAsset%3A%3Aprocess%20failed%0A
+-%20Execution%20of%20evaluate_webpack_loader%20failed%0A-%20creating%20new%20process%0A-%20node%20process%20exited%20be
+fore%20we%20could%20connect%20to%20it%20with%20exit%20code%3A%200xc0000142%0A%20%20Process%20output%3A%0A%20%20%0A%20%2
+0Process%20error%20output%3A%0A%60%60%60&labels=Turbopack,Turbopack%20Panic%20Backtrace
+-----
+
+[Server HMR] Subscription error: Error [TurbopackInternalError]: creating new process
+
+Caused by:
+- node process exited before we could connect to it with exit code: 0xc0000142
+
+Debug info:
+- Execution of hmr_update_with_issues_operation failed
+- Execution of PlainIssue::from_issue failed
+- Execution of PlainSource::from_source failed
+- Execution of <WebpackLoadersProcessedAsset as Asset>::content failed
+- Execution of WebpackLoadersProcessedAsset::process failed
+- Execution of evaluate_webpack_loader failed
+- creating new process
+- node process exited before we could connect to it with exit code: 0xc0000142
+  Process output:
+  
+  Process error output:
+    at <unknown> (TurbopackInternalError: creating new process) {
+  location: undefined
+}
+[Server HMR] Subscription error: Error [TurbopackInternalError]: creating new process
+
+Caused by:
+- node process exited before we could connect to it with exit code: 0xc0000142
+
+Debug info:
+- Execution of hmr_update_with_issues_operation failed
+- Execution of PlainIssue::from_issue failed
+- Execution of PlainSource::from_source failed
+- Execution of <WebpackLoadersProcessedAsset as Asset>::content failed
+- Execution of WebpackLoadersProcessedAsset::process failed
+- Execution of evaluate_webpack_loader failed
+- creating new process
+- node process exited before we could connect to it with exit code: 0xc0000142
+  Process output:
+  
+  Process error output:
+    at <unknown> (TurbopackInternalError: creating new process) {
+  location: undefined
+}
+ GET /nhan-su/new 200 in 261ms (next.js: 7ms, proxy.ts: 79ms, application-code: 174ms)
+ GET /nhan-su/new 200 in 12.0s (next.js: 3.6s, proxy.ts: 7.7s, application-code: 723ms)
+ GET /api/admin/notifications/bell 200 in 5.9s (next.js: 5.7s, proxy.ts: 12ms, application-code: 155ms)
+ GET /cham-cong 200 in 1730ms (next.js: 1447ms, proxy.ts: 12ms, application-code: 271ms)
+○ Compiling /admin/cham-cong/lich-ca ...
+ GET /users 200 in 1327ms (next.js: 1192ms, proxy.ts: 13ms, application-code: 122ms)
+ GET /users 200 in 157ms (next.js: 14ms, proxy.ts: 53ms, application-code: 90ms)
+ GET /users/new 200 in 1773ms (next.js: 1499ms, proxy.ts: 13ms, application-code: 261ms)

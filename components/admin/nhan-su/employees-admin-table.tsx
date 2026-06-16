@@ -14,7 +14,8 @@ import {
 interface EmployeeRow extends Employee {
   center: { name: string } | null;
   manager: { fullName: string } | null;
-  userAccount: { role: Role } | null;
+  // Đợt 3B — role chính + toàn bộ vai trò (union quyền).
+  userAccount: { role: Role; roles: Role[] } | null;
   _count: { honors: number };
 }
 
@@ -147,12 +148,37 @@ export function EmployeesAdminTable({ employees, canDelete }: Props) {
               </td>
               <td className="px-4 py-3">
                 {emp.userAccount ? (
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${ROLE_COLOR[emp.userAccount.role]}`}
-                    title="Đổi vai trò: bấm Sửa → nút Đổi vai trò"
-                  >
-                    {ROLE_LABEL[emp.userAccount.role]}
-                  </span>
+                  (() => {
+                    const acc = emp.userAccount;
+                    const effective =
+                      acc.roles.length > 0 ? acc.roles : [acc.role];
+                    // Vai trò chính lên đầu, có viền nổi bật.
+                    const ordered = [
+                      ...effective.filter((r) => r === acc.role),
+                      ...effective.filter((r) => r !== acc.role),
+                    ];
+                    return (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {ordered.map((r) => (
+                          <span
+                            key={r}
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${ROLE_COLOR[r]} ${
+                              r === acc.role
+                                ? "ring-2 ring-amber-400 ring-offset-1"
+                                : ""
+                            }`}
+                            title={
+                              r === acc.role
+                                ? "Vai trò chính · Đổi: Sửa → Đổi vai trò"
+                                : "Đổi vai trò: bấm Sửa → nút Đổi vai trò"
+                            }
+                          >
+                            {ROLE_LABEL[r]}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()
                 ) : (
                   <span className="text-xs text-gray-400">Chưa có TK</span>
                 )}

@@ -5,6 +5,7 @@ import { seedEmailTemplates } from "./seed-email-templates";
 import { seedCoursePackageContent } from "./seed-coursepackage-content";
 import { seedMarketingContent } from "./seed-marketing-content";
 import { seedTestimonials } from "./seed-testimonials";
+import { seedDepartments } from "./seed-departments";
 
 const db = new PrismaClient();
 
@@ -32,6 +33,20 @@ async function main() {
       slug: "co-so-hoang-dieu",
       name: "Cơ sở Hoàng Diệu",
       address: "114 Hoàng Diệu",
+      city: "Đà Nẵng",
+      phone: "0818823720",
+      email: "thongtin@satarobo.vn",
+      isActive: true,
+    },
+    {
+      // Hội sở (back-office: HR/Kế toán/Marketing). Là đơn vị độc lập, KHÔNG
+      // phải cơ sở vận hành public (không nằm trong lib/locations.ts). Cần có
+      // trong Center để gán nhân sự HO + tạo tài khoản HO (đồng bộ OrgUnit code "HO").
+      id: "hoi-so",
+      code: "HO",
+      slug: "hoi-so",
+      name: "Hội sở",
+      address: "Đà Nẵng",
       city: "Đà Nẵng",
       phone: "0818823720",
       email: "thongtin@satarobo.vn",
@@ -385,6 +400,9 @@ PHÙ HỢP CHO:
   // ─── Marketing content: Promotion + Testimonial (hardcode remediation Đợt 5) ─
   await seedMarketingContent(db);
   await seedTestimonials(db);
+
+  // ─── DepartmentDef (Track Department — phòng ban động) ──────────────────────
+  await seedDepartments(db);
 
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));

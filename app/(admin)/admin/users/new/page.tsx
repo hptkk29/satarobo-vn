@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { UserForm } from "../_components/user-form";
 
 export const metadata = { title: "Tạo tài khoản mới | Admin" };
@@ -57,12 +59,10 @@ export default async function NewUserPage({ searchParams }: Props) {
     }
   }
 
-  const [centers, unlinkedEmployees] = await Promise.all([
-    db.center.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
+  // PR-C: picker đơn vị tổ chức qua OrgUnit tree (gồm HO) thay cho db.center.
+  const actor = await resolveActor(session.user.id);
+  const [orgUnits, unlinkedEmployees] = await Promise.all([
+    getSelectableOrgUnits(actor),
     db.employee.findMany({
       where: { status: "ACTIVE", userAccount: null },
       orderBy: { fullName: "asc" },
@@ -95,7 +95,7 @@ export default async function NewUserPage({ searchParams }: Props) {
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <UserForm
           mode="create"
-          centers={centers}
+          orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
           employees={unlinkedEmployees}
           initialData={prefillData}
         />

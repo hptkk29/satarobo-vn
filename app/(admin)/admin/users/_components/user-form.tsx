@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ROLE_OPTIONS } from "./role-badge";
 import { createUserAction, updateUserAction } from "../_actions";
 
-type CenterOption = { id: string; name: string };
+type OrgUnitOption = { id: string; name: string };
 type EmployeeOption = { id: string; fullName: string; employeeCode: string | null };
 
 type UserFormInitialData = {
@@ -18,15 +18,16 @@ type UserFormInitialData = {
   id?: string;
   name?: string | null;
   email?: string;
-  role?: Role;
-  centerId?: string | null;
+  role?: Role; // vai trò chính (primary)
+  roles?: Role[]; // Đợt 3B — tất cả vai trò đang giữ
+  orgUnitId?: string | null;
   employeeId?: string | null;
 };
 
 interface UserFormProps {
   mode: "create" | "edit";
   initialData?: UserFormInitialData;
-  centers: CenterOption[];
+  orgUnits: OrgUnitOption[];
   employees: EmployeeOption[]; // unlinked employees + current employee (if edit) + prefill employee (if create-from-employee)
 }
 
@@ -36,16 +37,47 @@ const selectClass =
 export function UserForm({
   mode,
   initialData,
-  centers,
+  orgUnits,
   employees,
 }: UserFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  // Đợt 3B — đa vai trò: chọn nhiều role (union quyền) + 1 vai trò chính.
+  const initialRoles: Role[] =
+    initialData?.roles && initialData.roles.length > 0
+      ? initialData.roles
+      : initialData?.role
+        ? [initialData.role]
+        : ["SALES_CSM"];
+  const [selectedRoles, setSelectedRoles] = useState<Role[]>(initialRoles);
+  const [primaryRole, setPrimaryRole] = useState<Role>(
+    initialData?.role ?? initialRoles[0],
+  );
+
+  function toggleRole(r: Role) {
+    setSelectedRoles((cur) => {
+      const next = cur.includes(r)
+        ? cur.filter((x) => x !== r)
+        : [...cur, r];
+      // Bỏ vai trò chính → primary = phần tử đầu còn lại.
+      if (!next.includes(primaryRole) && next.length > 0) {
+        setPrimaryRole(next[0]);
+      }
+      return next;
+    });
+  }
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+
+    if (selectedRoles.length === 0) {
+      setError("Chọn ít nhất 1 vai trò");
+      return;
+    }
+
     const fd = new FormData(e.currentTarget);
 
     startTransition(async () => {
@@ -123,36 +155,68 @@ export function UserForm({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="role">Role *</Label>
-          <select
-            id="role"
-            name="role"
-            required
-            defaultValue={initialData?.role ?? "SALES_CSM"}
-            className={selectClass}
-          >
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
+      <div className="space-y-1.5">
+        <Label>Vai trò * (chọn nhiều)</Label>
+        {/* Hidden inputs → FormData mang roles[] + primaryRole cho server action. */}
+        {selectedRoles.map((r) => (
+          <input key={r} type="hidden" name="roles" value={r} />
+        ))}
+        <input type="hidden" name="primaryRole" value={primaryRole} />
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {ROLE_OPTIONS.map((opt) => {
+            const on = selectedRoles.includes(opt.value);
+            return (
+              <div
+                key={opt.value}
+                className="flex items-center justify-between gap-2 rounded-lg border border-input px-3 py-1.5"
+              >
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggleRole(opt.value)}
+                    disabled={pending}
+                    className="h-4 w-4 rounded border-input"
+                  />
+                  {opt.label}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => on && setPrimaryRole(opt.value)}
+                  disabled={!on || pending}
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    primaryRole === opt.value
+                      ? "bg-orange-500 text-white"
+                      : on
+                        ? "bg-gray-100 text-gray-600 hover:bg-orange-100"
+                        : "bg-gray-50 text-gray-300"
+                  }`}
+                >
+                  {primaryRole === opt.value ? "Vai trò chính" : "Đặt chính"}
+                </button>
+              </div>
+            );
+          })}
         </div>
+        <p className="text-xs text-gray-500">
+          Quyền = hợp của tất cả vai trò. Vai trò chính dùng cho dashboard mặc
+          định. Hội sở (HO) không phải vai trò — chọn ở ô <strong>Đơn vị</strong>.
+        </p>
+      </div>
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="centerId">Cơ sở</Label>
+          <Label htmlFor="orgUnitId">Đơn vị</Label>
           <select
-            id="centerId"
-            name="centerId"
-            defaultValue={initialData?.centerId ?? ""}
+            id="orgUnitId"
+            name="orgUnitId"
+            defaultValue={initialData?.orgUnitId ?? ""}
             className={selectClass}
           >
             <option value="">— Không gán —</option>
-            {centers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
+            {orgUnits.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
               </option>
             ))}
           </select>

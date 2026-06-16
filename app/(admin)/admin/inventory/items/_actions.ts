@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { z } from "zod";
 import {
   inventoryItemSchema,
@@ -52,6 +53,16 @@ export async function createItem(
     select: { id: true },
   });
 
+  // PR-C dual-write: map Center → OrgUnit(CENTER) để ghi kèm orgUnitId trên
+  // StockBalance (scopedDb còn đọc centerId tới khi flip ở PR-D).
+  const orgUnitRows = await db.orgUnit.findMany({
+    where: { centerId: { not: null }, deletedAt: null },
+    select: { id: true, centerId: true },
+  });
+  const orgUnitByCenter = new Map(
+    orgUnitRows.map((o) => [o.centerId as string, o.id]),
+  );
+
   try {
     const created = await db.$transaction(async (tx) => {
       const item = await tx.inventoryItem.create({
@@ -63,6 +74,7 @@ export async function createItem(
           data: centers.map((c) => ({
             itemId: item.id,
             centerId: c.id,
+            orgUnitId: orgUnitByCenter.get(c.id) ?? null,
             quantity: 0,
             reserved: 0,
           })),
@@ -217,11 +229,15 @@ export async function syncBalancesForCenter(
   const items = await db.inventoryItem.findMany({ select: { id: true } });
   if (items.length === 0) return { ok: true, data: { created: 0 } };
 
+  // PR-C dual-write: suy orgUnitId của cơ sở để ghi kèm (giữ centerId tới PR-D).
+  const orgUnitId = await orgUnitIdForCenter(centerId);
+
   try {
     const result = await db.stockBalance.createMany({
       data: items.map((i) => ({
         itemId: i.id,
         centerId,
+        orgUnitId,
         quantity: 0,
         reserved: 0,
       })),

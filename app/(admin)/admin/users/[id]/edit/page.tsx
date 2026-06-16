@@ -3,7 +3,9 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, KeyRound, Power, Shield, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
-import { can, isSuperAdmin } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { UserForm } from "../../_components/user-form";
 import { toggleUserActiveAction } from "../../_actions";
 
@@ -43,12 +45,10 @@ export default async function EditUserPage({ params }: Props) {
   });
   if (!user) notFound();
 
-  const [centers, unlinkedEmployees] = await Promise.all([
-    db.center.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
+  // PR-C: picker đơn vị tổ chức qua OrgUnit tree (gồm HO) thay cho db.center.
+  const actor = await resolveActor(session.user.id);
+  const [orgUnits, unlinkedEmployees] = await Promise.all([
+    getSelectableOrgUnits(actor),
     db.employee.findMany({
       where: { status: "ACTIVE", userAccount: null },
       orderBy: { fullName: "asc" },
@@ -66,12 +66,12 @@ export default async function EditUserPage({ params }: Props) {
 
   const isSelf = user.id === session.user.id;
 
-  // Last active SUPER_ADMIN protection mirror với list page
+  // Last active SUPER_ADMIN protection mirror với list page (xét union roles).
   const activeSuperAdminCount = await db.user.count({
-    where: { role: "SUPER_ADMIN", isActive: true, deletedAt: null },
+    where: { roles: { has: "SUPER_ADMIN" }, isActive: true, deletedAt: null },
   });
   const isLastActiveSuperAdmin =
-    isSuperAdmin(user.role) &&
+    hasRole(user, "SUPER_ADMIN") &&
     user.isActive &&
     activeSuperAdminCount === 1;
 
@@ -106,10 +106,11 @@ export default async function EditUserPage({ params }: Props) {
             name: user.name,
             email: user.email,
             role: user.role,
-            centerId: user.centerId,
+            roles: user.roles,
+            orgUnitId: user.orgUnitId,
             employeeId: user.employeeId,
           }}
-          centers={centers}
+          orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
           employees={employees}
         />
       </div>

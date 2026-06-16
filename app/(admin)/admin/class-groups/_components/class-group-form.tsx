@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { createClassGroup, updateClassGroup } from "../_actions";
 
-type CenterOption = { id: string; name: string; code: string | null };
+type OrgUnitOption = { id: string; name: string; code: string | null };
 
 export type ClassGroupFormValue = {
   id?: string;
   displayCode: string;
   name: string | null;
-  centerId: string;
+  orgUnitId: string | null;
   status: string;
   notes: string | null;
 };
@@ -24,10 +24,10 @@ const STATUS_OPTIONS = [
 
 export function ClassGroupForm({
   group,
-  centers,
+  orgUnits,
 }: {
   group?: ClassGroupFormValue;
-  centers: CenterOption[];
+  orgUnits: OrgUnitOption[];
 }) {
   const router = useRouter();
   const isEdit = Boolean(group);
@@ -80,18 +80,18 @@ export function ClassGroupForm({
 
       <div>
         <label className="mb-1 block text-sm font-semibold text-gray-700">
-          Cơ sở *
+          Đơn vị *
         </label>
         <select
-          name="centerId"
-          defaultValue={group?.centerId ?? ""}
+          name="orgUnitId"
+          defaultValue={group?.orgUnitId ?? ""}
           required
           className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
         >
-          <option value="">-- Chọn cơ sở --</option>
-          {centers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} {c.code ? `(${c.code})` : ""}
+          <option value="">-- Chọn đơn vị --</option>
+          {orgUnits.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name} {o.code ? `(${o.code})` : ""}
             </option>
           ))}
         </select>

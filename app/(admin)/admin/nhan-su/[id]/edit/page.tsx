@@ -4,6 +4,8 @@ import { redirect, notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { db } from "@/lib/db";
 import { can, hasRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { EmployeeForm } from "@/components/admin/nhan-su/employee-form";
 import {
   ChangeRoleDialog,
@@ -47,16 +49,18 @@ export default async function EditEmployeePage({ params }: Props) {
 
   const canManageUsers = can(session.user, "users:manage");
 
-  const [centers, managers] = await Promise.all([
-    db.center.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
+  const actor = await resolveActor(session.user.id);
+  const [orgUnits, managers, departments] = await Promise.all([
+    getSelectableOrgUnits(actor),
     db.employee.findMany({
       where: { isActive: true, NOT: { id } },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, jobTitle: true },
+    }),
+    db.departmentDef.findMany({
+      where: { isActive: true },
+      orderBy: { displayOrder: "asc" },
+      select: { code: true, name: true, isTeaching: true },
     }),
   ]);
 
@@ -111,8 +115,9 @@ export default async function EditEmployeePage({ params }: Props) {
       <EmployeeForm
         mode="edit"
         initial={employee}
-        centers={centers}
+        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
         managers={managers}
+        departments={departments}
         userRole={session.user.role}
       />
 

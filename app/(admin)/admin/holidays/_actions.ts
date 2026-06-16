@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { applyHolidayShift } from "@/lib/holidays/apply";
+import { centerIdForOrgUnit } from "@/lib/org/org-service";
 
 type ActionResult = { error?: string };
 
@@ -44,7 +45,8 @@ const holidaySchema = z
             }),
         ]),
       ),
-    centerId: z
+    // PR-C: đơn vị (OrgUnit) là nguồn chính; "ALL"/"" = toàn hệ thống (null).
+    orgUnitId: z
       .string()
       .optional()
       .transform((s) => {
@@ -86,7 +88,7 @@ function readForm(formData: FormData) {
     name: emptyToUndefined(formData.get("name")) ?? "",
     date: emptyToUndefined(formData.get("date")) ?? "",
     endDate: emptyToUndefined(formData.get("endDate")),
-    centerId: emptyToUndefined(formData.get("centerId")),
+    orgUnitId: emptyToUndefined(formData.get("orgUnitId")),
     type: (emptyToUndefined(formData.get("type")) ?? "HOLIDAY") as
       | "HOLIDAY"
       | "MAINTENANCE"
@@ -96,27 +98,35 @@ function readForm(formData: FormData) {
   };
 }
 
-function toCreate(c: z.infer<typeof holidaySchema>): Prisma.HolidayCreateInput {
+// PR-C dual-write: ghi orgUnitId (nguồn chính) + centerId (suy ra, scopedDb cũ).
+// HO → orgUnitId set nhưng centerId null; "ALL" → cả 2 null (toàn hệ thống).
+function toCreate(
+  c: z.infer<typeof holidaySchema>,
+  centerId: string | null,
+): Prisma.HolidayCreateInput {
   return {
     name: c.name,
     date: c.date,
     endDate: c.endDate,
     type: c.type,
     note: c.note,
-    center: c.centerId ? { connect: { id: c.centerId } } : undefined,
+    orgUnitId: c.orgUnitId,
+    center: centerId ? { connect: { id: centerId } } : undefined,
   };
 }
 
-function toUpdate(c: z.infer<typeof holidaySchema>): Prisma.HolidayUpdateInput {
+function toUpdate(
+  c: z.infer<typeof holidaySchema>,
+  centerId: string | null,
+): Prisma.HolidayUpdateInput {
   return {
     name: c.name,
     date: c.date,
     endDate: c.endDate,
     type: c.type,
     note: c.note,
-    center: c.centerId
-      ? { connect: { id: c.centerId } }
-      : { disconnect: true },
+    orgUnitId: c.orgUnitId,
+    center: centerId ? { connect: { id: centerId } } : { disconnect: true },
   };
 }
 
@@ -128,10 +138,13 @@ export async function createHoliday(formData: FormData): Promise<ActionResult> {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  // PR-C: suy centerId từ orgUnitId (HO → null; "ALL" → null).
+  const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
+
   let created: { date: Date; endDate: Date | null; centerId: string | null };
   try {
     created = await db.holiday.create({
-      data: toCreate(parsed.data),
+      data: toCreate(parsed.data, centerId),
       select: { date: true, endDate: true, centerId: true },
     });
   } catch {
@@ -161,11 +174,14 @@ export async function updateHoliday(
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  // PR-C: suy centerId từ orgUnitId (HO → null; "ALL" → null).
+  const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
+
   let updated: { date: Date; endDate: Date | null; centerId: string | null };
   try {
     updated = await db.holiday.update({
       where: { id },
-      data: toUpdate(parsed.data),
+      data: toUpdate(parsed.data, centerId),
       select: { date: true, endDate: true, centerId: true },
     });
   } catch {

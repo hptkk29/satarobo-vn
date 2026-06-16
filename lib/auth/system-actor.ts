@@ -19,6 +19,7 @@ export const SYSTEM_ACTOR: Actor = {
   orgRoles: [],
   permissions: [],
   visibleCenterIds: [],
+  visibleOrgUnitIds: [],
   grantsAllow: new Set(),
   assignedClassIds: new Set(),
 };

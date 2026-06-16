@@ -33,11 +33,18 @@ export async function POST(req: NextRequest) {
   const parsed = rows.map((r) => parseLeadImportRow((r ?? {}) as Record<string, unknown>));
 
   // Resolve cơ sở (mã CS → centerId, mọi cơ sở có code) + khoá (tên/slug → courseId).
-  const [centers, courses] = await Promise.all([
+  // Dual-write 2-phase: resolve OrgUnit theo mã (tự nhiên gồm cả HO "HO" — HO
+  // không có Center row nên chỉ map được qua OrgUnit).
+  const [centers, orgUnits, courses] = await Promise.all([
     db.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
+    db.orgUnit.findMany({
+      where: { deletedAt: null },
+      select: { id: true, code: true },
+    }),
     db.course.findMany({ select: { id: true, name: true, slug: true } }),
   ]);
   const centerByCode = new Map(centers.map((c) => [c.code, c.id]));
+  const orgUnitByCode = new Map(orgUnits.map((o) => [o.code, o.id]));
   const courseByKey = new Map<string, string>();
   for (const c of courses) {
     courseByKey.set(c.name.trim().toLowerCase(), c.id);
@@ -52,6 +59,7 @@ export async function POST(req: NextRequest) {
     childName: string | null;
     childAge: number | null;
     centerId: string | null;
+    orgUnitId: string | null;
     courseId: string | null;
     source: string;
     note: string | null;
@@ -69,9 +77,12 @@ export async function POST(req: NextRequest) {
     const d = p.data;
 
     let centerId: string | null = null;
+    let orgUnitId: string | null = null;
     if (d.centerCode) {
       centerId = centerByCode.get(d.centerCode) ?? null;
-      if (!centerId) {
+      orgUnitId = orgUnitByCode.get(d.centerCode) ?? null;
+      // HO không có Center row → cho phép nếu khớp OrgUnit theo mã.
+      if (!centerId && !orgUnitId) {
         errors.push({ row: rowNo, error: `Không tìm thấy cơ sở ${d.centerCode}` });
         continue;
       }
@@ -100,6 +111,7 @@ export async function POST(req: NextRequest) {
       childName: d.childName,
       childAge: d.childAge,
       centerId,
+      orgUnitId,
       courseId,
       source: d.source,
       note: d.note,
@@ -137,6 +149,7 @@ export async function POST(req: NextRequest) {
             childName: v.childName,
             childAge: v.childAge,
             centerId: v.centerId,
+            orgUnitId: v.orgUnitId, // dual-write 2-phase
             courseId: v.courseId,
             source: v.source,
             note: v.note,

@@ -212,31 +212,31 @@ model VerificationToken {
 // ─── Core Business ───────────────────────────────────────────────────────────
 
 model Center {
-  id           String   @id @default(cuid())
-  code         String?  @unique // Phase T0.2 — mã cơ sở "CS1", "CS2" cho codegen
+  id           String  @id @default(cuid())
+  code         String? @unique // Phase T0.2 — mã cơ sở "CS1", "CS2" cho codegen
   name         String
-  slug         String   @unique
+  slug         String  @unique
   address      String
   ward         String?
   district     String?
-  city         String   @default("")
+  city         String  @default("")
   phone        String?
   email        String?
-  googleMapUrl String?  @db.Text
+  googleMapUrl String? @db.Text
   workingHours String?
   managerName  String?
 
   // Phase NHÓM 4 — geofence chấm công QR.
   latitude            Float?
   longitude           Float?
-  allowedRadiusMeters Int?   @default(100)
-  logoUrl      String?
-  bannerUrl    String?
-  description  String?  @db.Text
-  isActive     Boolean  @default(true)
-  displayOrder Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  allowedRadiusMeters Int?     @default(100)
+  logoUrl             String?
+  bannerUrl           String?
+  description         String?  @db.Text
+  isActive            Boolean  @default(true)
+  displayOrder        Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   users             User[]
   leads             Lead[]
@@ -461,6 +461,7 @@ model MessengerConversation {
   phone          String?
   status         String             @default("OPEN") // OPEN/QUALIFIED/CLOSED
   centerId       String? // suy từ page mapping → scopedDb
+  orgUnitId      String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   firstMessageAt DateTime?
   respondedAt    DateTime?
   leadId         String?
@@ -472,6 +473,7 @@ model MessengerConversation {
   @@index([centerId])
   @@index([status])
   @@index([leadId])
+  @@index([orgUnitId])
 }
 
 model MessengerMessage {
@@ -496,13 +498,13 @@ enum CommissionStatus {
 }
 
 model CommissionStatement {
-  id           String              @id @default(cuid())
-  period       String              @unique // "2026-06"
-  status       CommissionStatus    @default(DRAFT)
+  id           String           @id @default(cuid())
+  period       String           @unique // "2026-06"
+  status       CommissionStatus @default(DRAFT)
   approvedById String?
   approvedAt   DateTime?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
   lines        CommissionLine[]
 }
 
@@ -638,6 +640,7 @@ model Room {
   name         String
   code         String
   centerId     String
+  orgUnitId    String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   center       Center     @relation(fields: [centerId], references: [id], onDelete: Cascade)
   capacity     Int        @default(15)
   equipment    String[]   @default([])
@@ -652,6 +655,7 @@ model Room {
 
   @@unique([centerId, code])
   @@index([centerId, status])
+  @@index([orgUnitId])
 }
 
 enum HolidayType {
@@ -667,6 +671,7 @@ model Holiday {
   date      DateTime    @db.Date
   endDate   DateTime?   @db.Date
   centerId  String?
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   center    Center?     @relation(fields: [centerId], references: [id], onDelete: Cascade)
   type      HolidayType @default(HOLIDAY)
   note      String?     @db.Text
@@ -675,6 +680,7 @@ model Holiday {
 
   @@index([date])
   @@index([centerId, date])
+  @@index([orgUnitId])
 }
 
 model User {
@@ -687,6 +693,7 @@ model User {
   role          Role      @default(SALES_CSM) // Đợt 3B — vai trò CHÍNH (primary)
   roles         Role[]    @default([]) // Đợt 3B — tất cả vai trò người này giữ (union quyền)
   centerId      String?
+  orgUnitId     String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   isActive      Boolean   @default(true)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
@@ -703,18 +710,18 @@ model User {
   employeeId String?   @unique
   employee   Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
 
-  center         Center?      @relation(fields: [centerId], references: [id])
-  accounts       Account[]
-  children       Student[]    @relation("ParentChildren")
-  assignedLeads  Lead[]       @relation("AssignedLeads")
-  notes          Note[]
-  teacherClass   Class[]      @relation("TeacherClasses")
-  assistantClass Class[]      @relation("AssistantClasses")
-  teacherProfile TeacherProfile? @relation("UserTeacherProfile") // FIX 10
+  center             Center?             @relation(fields: [centerId], references: [id])
+  accounts           Account[]
+  children           Student[]           @relation("ParentChildren")
+  assignedLeads      Lead[]              @relation("AssignedLeads")
+  notes              Note[]
+  teacherClass       Class[]             @relation("TeacherClasses")
+  assistantClass     Class[]             @relation("AssistantClasses")
+  teacherProfile     TeacherProfile?     @relation("UserTeacherProfile") // FIX 10
   shiftRegistrations ShiftRegistration[] // Đợt 3E
-  teacherReviews TeacherReview[] @relation("TeacherReviewer")     // FIX 10 — đánh giá nội bộ do user này tạo
-  trialClasses   TrialClass[] @relation("TrialTeacher")
-  jobPostings    JobPosting[]
+  teacherReviews     TeacherReview[]     @relation("TeacherReviewer") // FIX 10 — đánh giá nội bộ do user này tạo
+  trialClasses       TrialClass[]        @relation("TrialTeacher")
+  jobPostings        JobPosting[]
 
   honorsCreated      Honor[]           @relation("HonorCreatedBy")
   pageContentUpdated SitePageContent[] @relation("PageContentUpdatedBy")
@@ -731,6 +738,7 @@ model User {
   @@index([centerId])
   @@index([role])
   @@index([deletedAt])
+  @@index([orgUnitId])
 }
 
 model UserPermissionGrant {
@@ -788,36 +796,36 @@ model Course {
   priceDisplay     String? // "2,400,000đ" hoặc "Liên hệ"
 
   // Đợt 3D — phân loại danh mục + cờ "khoá cụ thể dùng để mở lớp/giảng dạy".
-  category    CourseCategory? // null = không phải khoá dạy (vd mục landing cũ LTR/LTRS)
+  category        CourseCategory? // null = không phải khoá dạy (vd mục landing cũ LTR/LTRS)
   // R6-B3 — danh mục dạng model (2-phase, song song enum `category`).
-  categoryId  String?
-  categoryDef CourseCategoryDef? @relation("CourseCategoryDef", fields: [categoryId], references: [id])
-  isTeachable Boolean         @default(false)
+  categoryId      String?
+  categoryDef     CourseCategoryDef? @relation("CourseCategoryDef", fields: [categoryId], references: [id])
+  isTeachable     Boolean            @default(false)
   // Đợt 6 — số buổi CHUẨN (cam kết) của khoá; ưu tiên hơn đếm Curriculum lessons.
-  totalSessions Int?
-  durationDisplay  String? // "6 tháng" hoặc "Tuỳ chỉnh"
-  studentCount     Int     @default(0)
-  displayOrder     Int     @default(0)
-  isPublished      Boolean @default(true)
+  totalSessions   Int?
+  durationDisplay String? // "6 tháng" hoặc "Tuỳ chỉnh"
+  studentCount    Int                @default(0)
+  displayOrder    Int                @default(0)
+  isPublished     Boolean            @default(true)
 
   thumbnail String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  leads              Lead[]
-  classes            Class[]
-  enrollments        Enrollment[]
-  curriculums        Curriculum[]
-  trialRecommended   TrialFeedback[] @relation("TrialRecommendedCourse")
+  leads            Lead[]
+  classes          Class[]
+  enrollments      Enrollment[]
+  curriculums      Curriculum[]
+  trialRecommended TrialFeedback[] @relation("TrialRecommendedCourse")
 
   // FIX 7 — khoá tiên quyết (cấu hình qua UI admin).
   prerequisites     CoursePrerequisite[] @relation("CoursePrereqOwner")
   requiredByCourses CoursePrerequisite[] @relation("CoursePrereqRequired")
 
   // FIX 10 — khoá GV dạy được.
-  teacherCourses    TeacherCourse[]
-  completions       CourseCompletion[] @relation("CourseCompletions")
+  teacherCourses TeacherCourse[]
+  completions    CourseCompletion[] @relation("CourseCompletions")
 
   @@index([slug])
   @@index([type])
@@ -911,6 +919,7 @@ model Lead {
   childName        String?
   childAge         Int?
   centerId         String?
+  orgUnitId        String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   courseId         String?
   assignedToId     String?
   status           LeadStatus @default(NEW)
@@ -937,17 +946,17 @@ model Lead {
   convertedAt      DateTime?
 
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
-  qualifiedAt          DateTime? // L2 — có SĐT + note
-  handedAt             DateTime? // HO bàn giao về CS
-  receivedConfirmedAt  DateTime? // CS xác nhận tiếp nhận
-  assignedAt           DateTime? // phân Sale
-  firstContactAt       DateTime? // Sale liên hệ lần đầu
-  commissionSource     CommissionSource? // nguồn để chia hoa hồng
-  adminId              String? // Sale Admin xử lý L1→L2
+  qualifiedAt         DateTime? // L2 — có SĐT + note
+  handedAt            DateTime? // HO bàn giao về CS
+  receivedConfirmedAt DateTime? // CS xác nhận tiếp nhận
+  assignedAt          DateTime? // phân Sale
+  firstContactAt      DateTime? // Sale liên hệ lần đầu
+  commissionSource    CommissionSource? // nguồn để chia hoa hồng
+  adminId             String? // Sale Admin xử lý L1→L2
 
-  deletedAt        DateTime?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   center     Center? @relation(fields: [centerId], references: [id])
   course     Course? @relation(fields: [courseId], references: [id])
@@ -968,7 +977,7 @@ model Lead {
   auditLogs LeadAuditLog[] @relation("LeadAuditLogs")
 
   // Phase 5.6 — Order
-  orders Order[] @relation("LeadOrders")
+  orders            Order[]                 @relation("LeadOrders")
   assignmentHistory LeadAssignmentHistory[]
 
   @@index([phone])
@@ -978,6 +987,7 @@ model Lead {
   @@index([createdAt])
   @@index([deletedAt])
   @@index([eventId])
+  @@index([orgUnitId])
 }
 
 model Note {
@@ -1050,15 +1060,17 @@ model Student {
   healthNotes String?    @db.Text
 
   // Sata Robo specific
-  enrollmentDate    DateTime?     @db.Date
-  preferredCenterId String?
-  preferredCenter   Center?       @relation("StudentPreferredCenter", fields: [preferredCenterId], references: [id])
-  notes             String?       @db.Text
-  status            StudentStatus @default(ACTIVE)
+  enrollmentDate     DateTime?     @db.Date
+  preferredCenterId  String?
+  preferredOrgUnitId String? // PR-A: song song preferredCenterId
+  preferredCenter    Center?       @relation("StudentPreferredCenter", fields: [preferredCenterId], references: [id])
+  notes              String?       @db.Text
+  status             StudentStatus @default(ACTIVE)
 
   // Legacy "current center" — pre-D1 association, kept for compat.
-  centerId String?
-  center   Center? @relation(fields: [centerId], references: [id])
+  centerId  String?
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  center    Center? @relation(fields: [centerId], references: [id])
 
   // Phase T2.2 — liên kết tài khoản phụ huynh (portal "site con").
   // 1 PARENT User ↔ nhiều Student (các con). Học sinh KHÔNG có account riêng.
@@ -1087,17 +1099,17 @@ model Student {
   reserves StudentReserve[] @relation("StudentReserves")
 
   // Phase NHÓM 3 — yêu cầu phụ huynh
-  parentRequests ParentRequest[] @relation("StudentParentRequests")
-  makeupNeeds    MakeupNeed[]
-  riskAlerts     StudentRiskAlert[]
-  careTasks      StudentCareTask[]
+  parentRequests    ParentRequest[]          @relation("StudentParentRequests")
+  makeupNeeds       MakeupNeed[]
+  riskAlerts        StudentRiskAlert[]
+  careTasks         StudentCareTask[]
   courseCompletions CourseCompletion[]
-  transferRequests StudentTransferRequest[]
-  centerHistory    StudentCenterHistory[]
-  satacoinTxns     SataCoinTransaction[]
+  transferRequests  StudentTransferRequest[]
+  centerHistory     StudentCenterHistory[]
+  satacoinTxns      SataCoinTransaction[]
   // P2 — nhóm lớp (cohort): 1 HV thuộc TỐI ĐA 1 nhóm.
-  classGroupId String?
-  classGroup   ClassGroup? @relation("ClassGroupStudents", fields: [classGroupId], references: [id], onDelete: SetNull)
+  classGroupId      String?
+  classGroup        ClassGroup?              @relation("ClassGroupStudents", fields: [classGroupId], references: [id], onDelete: SetNull)
 
   @@index([phone])
   @@index([centerId])
@@ -1107,6 +1119,7 @@ model Student {
   @@index([preferredCenterId])
   @@index([parentPhone])
   @@index([parentUserId])
+  @@index([orgUnitId])
 }
 
 enum ClassStatus {
@@ -1131,6 +1144,7 @@ model ClassGroup {
   displayCode String // mã ngắn admin tự đặt, hiển thị cho người dùng (vd "A1", "B2")
   name        String?
   centerId    String
+  orgUnitId   String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   status      ClassGroupStatus @default(ACTIVE)
   notes       String?          @db.Text
   deletedAt   DateTime?
@@ -1144,6 +1158,7 @@ model ClassGroup {
   @@index([centerId])
   @@index([status])
   @@index([deletedAt])
+  @@index([orgUnitId])
 }
 
 model Class {
@@ -1155,12 +1170,13 @@ model Class {
   description String? @db.Text
 
   // Relations (existing target preserved: teacher → User)
-  courseId      String
-  centerId      String?
-  classGroupId  String? // Phase T0.2 — lớp cố định (nhóm đi cùng nhau qua các khoá)
-  teacherId     String?
-  assistantId   String?
-  roomId        String?
+  courseId     String
+  centerId     String?
+  orgUnitId    String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  classGroupId String? // Phase T0.2 — lớp cố định (nhóm đi cùng nhau qua các khoá)
+  teacherId    String?
+  assistantId  String?
+  roomId       String?
 
   // Schedule
   schedule     String? // legacy free-text (e.g. "T2 T4 17:30")
@@ -1181,8 +1197,8 @@ model Class {
   // Module Quản lý lớp — workflow phê duyệt (approvedBy plain, không FK)
   submittedForApprovalAt DateTime?
   approvedAt             DateTime?
-  approvedById          String?
-  approvedByName        String?
+  approvedById           String?
+  approvedByName         String?
 
   // Other
   notes     String?   @db.Text
@@ -1215,6 +1231,7 @@ model Class {
   @@index([status, centerId])
   @@index([courseId, status])
   @@index([roomId])
+  @@index([orgUnitId])
 }
 
 model Enrollment {
@@ -1303,20 +1320,20 @@ model ClassSession {
   lessonNotes String? @db.Text
 
   // LMS-3 — quy trình sau buổi + checklist
-  status      SessionStatus @default(SCHEDULED)
-  startedAt   DateTime?
-  completedAt DateTime?
+  status            SessionStatus @default(SCHEDULED)
+  startedAt         DateTime?
+  completedAt       DateTime?
   // Chuẩn bị phòng học (Module QL lớp phần 3)
-  ckClean     Boolean @default(false)
-  ckEquipment Boolean @default(false)
-  ckKit       Boolean @default(false)
-  ckAttendance      Boolean @default(false)
-  ckLessonConfirmed Boolean @default(false)
-  ckFeedback        Boolean @default(false)
-  ckMedia           Boolean @default(false)
-  ckHomework        Boolean @default(false)
-  ckIncident        Boolean @default(false)
-  incidentNote      String? @db.Text
+  ckClean           Boolean       @default(false)
+  ckEquipment       Boolean       @default(false)
+  ckKit             Boolean       @default(false)
+  ckAttendance      Boolean       @default(false)
+  ckLessonConfirmed Boolean       @default(false)
+  ckFeedback        Boolean       @default(false)
+  ckMedia           Boolean       @default(false)
+  ckHomework        Boolean       @default(false)
+  ckIncident        Boolean       @default(false)
+  incidentNote      String?       @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1398,7 +1415,7 @@ model Attendance {
   // Module QL học viên PHẦN 2 — vắng có cấu trúc.
   makeupStatus    MakeupStatus @default(NONE)
   makeupSessionId String? // buổi đã học bù (set khi MADE_UP) — cột phẳng, không FK
-  absenceReason   String?  @db.Text // lý do phụ huynh xin vắng
+  absenceReason   String?      @db.Text // lý do phụ huynh xin vắng
 
   // Commit 5 — mốc đã gửi thông báo điểm danh cho phụ huynh (chống gửi trùng).
   notifiedAt DateTime?
@@ -1540,14 +1557,14 @@ model CoursePackage {
   parentCourseSlug String?
 
   // Phase TD-1 — Detail content cho /khoa-hoc/[slug]
-  audienceTag         String?
-  audienceDescription String? @db.Text
-  mission             String? @db.Text
-  outcomesJson        Json?
-  methodsJson         Json?
-  conditionsJson      Json?
-  noteForParents      String? @db.Text
-  faqsJson            Json?
+  audienceTag          String?
+  audienceDescription  String? @db.Text
+  mission              String? @db.Text
+  outcomesJson         Json?
+  methodsJson          Json?
+  conditionsJson       Json?
+  noteForParents       String? @db.Text
+  faqsJson             Json?
   heroImageUrl         String?
   galleryImageUrlsJson Json?
 
@@ -1675,6 +1692,23 @@ model SitePageContent {
 // EMPLOYEE MODULE
 // ============================================
 
+// Track Department (R6 flexibility-hardening): phòng ban ĐỘNG (model DB) thay enum cứng.
+// 2-phase: model + giữ enum Department → backfill → form đọc DB → drop enum ở PR-E.
+// `code` khớp giá trị enum cũ để map. SUPER_ADMIN/HR thêm phòng ban không cần redeploy.
+model DepartmentDef {
+  id           String     @id @default(cuid())
+  code         String     @unique // khớp enum cũ: DAO_TAO, MARKETING, ...
+  name         String
+  displayOrder Int        @default(0)
+  isTeaching   Boolean    @default(false) // GIANG_DAY/DAO_TAO → hiện UI giảng dạy
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  employees    Employee[]
+
+  @@index([isActive, displayOrder])
+}
+
 enum Department {
   BAN_GIAM_DOC
   DAO_TAO
@@ -1717,17 +1751,19 @@ model Employee {
   id String @id @default(cuid())
 
   // Tier 1: cơ bản
-  employeeCode String     @unique
-  fullName     String
-  jobTitle     String
-  department   Department
-  avatarUrl    String?
-  email        String?    @unique
-  joinedAt     DateTime?
-  bio          String?    @db.Text
-  isActive     Boolean    @default(true)
-  isPublic     Boolean    @default(false)
-  displayOrder Int        @default(0)
+  employeeCode  String         @unique
+  fullName      String
+  jobTitle      String
+  department    Department // 2-phase: enum cũ, dual-write với departmentId (drop ở PR-E)
+  departmentId  String? // Track Department: FK Department động (đọc động thay enum)
+  departmentRef DepartmentDef? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  avatarUrl     String?
+  email         String?        @unique
+  joinedAt      DateTime?
+  bio           String?        @db.Text
+  isActive      Boolean        @default(true)
+  isPublic      Boolean        @default(false)
+  displayOrder  Int            @default(0)
 
   // Tier 2: HR cơ bản
   phone        String?
@@ -1751,8 +1787,9 @@ model Employee {
   certifications String[]         @default([]) // Chứng chỉ chuyên môn
 
   // Cơ sở làm việc
-  centerId String?
-  center   Center? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  centerId  String?
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  center    Center? @relation(fields: [centerId], references: [id], onDelete: SetNull)
 
   // Self-relation: quản lý trực tiếp
   managerId    String?
@@ -1787,6 +1824,7 @@ model Employee {
   @@index([isPublic])
   @@index([isCEO])
   @@index([status])
+  @@index([orgUnitId])
 }
 
 // Audit trail for User.role changes scoped to one Employee (the linked
@@ -2170,8 +2208,8 @@ model Assignment {
   id String @id @default(cuid())
 
   title        String
-  description  String  @db.Text
-  instructions String? @db.Text
+  description  String         @db.Text
+  instructions String?        @db.Text
   // P-new — phân biệt bài về nhà vs bài trên lớp.
   kind         AssignmentKind @default(CLASSWORK)
 
@@ -2314,11 +2352,12 @@ model InventoryItem {
 }
 
 model StockBalance {
-  id       String        @id @default(cuid())
-  itemId   String
-  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  centerId String
-  center   Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  id        String        @id @default(cuid())
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  centerId  String
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  center    Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   quantity     Int  @default(0)
   reserved     Int  @default(0)
@@ -2331,6 +2370,7 @@ model StockBalance {
 
   @@unique([itemId, centerId])
   @@index([centerId, quantity])
+  @@index([orgUnitId])
 }
 
 // ─── Phase F2 — Stock movement workflow ──────────────────────────────────
@@ -2346,10 +2386,11 @@ enum StockMovementType {
 model StockMovement {
   id String @id @default(cuid())
 
-  itemId   String
-  item     InventoryItem @relation(fields: [itemId], references: [id])
-  centerId String
-  center   Center        @relation(fields: [centerId], references: [id])
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id])
+  centerId  String
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  center    Center        @relation(fields: [centerId], references: [id])
 
   type     StockMovementType
   quantity Int
@@ -2379,6 +2420,7 @@ model StockMovement {
   @@index([centerId, performedAt])
   @@index([type, performedAt])
   @@index([transferPairId])
+  @@index([orgUnitId])
 }
 
 // ─── Phase F4 — Inventory audit (kiểm kê) ────────────────────────────────
@@ -2392,6 +2434,7 @@ model InventoryAudit {
   id        String  @id @default(cuid())
   auditCode String? @unique
   centerId  String
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   center    Center  @relation(fields: [centerId], references: [id])
 
   status InventoryAuditStatus @default(DRAFT)
@@ -2415,6 +2458,7 @@ model InventoryAudit {
 
   @@index([centerId, performedAt])
   @@index([status])
+  @@index([orgUnitId])
 }
 
 model InventoryAuditItem {
@@ -2738,8 +2782,9 @@ model Order {
   leadId String?
   lead   Lead?   @relation("LeadOrders", fields: [leadId], references: [id])
 
-  centerId String?
-  center   Center? @relation(fields: [centerId], references: [id])
+  centerId  String?
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  center    Center? @relation(fields: [centerId], references: [id])
 
   paymentMethodId String?
   paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
@@ -2785,6 +2830,7 @@ model Order {
   @@index([centerId, createdAt])
   @@index([createdAt])
   @@index([customerPhone])
+  @@index([orgUnitId])
 }
 
 // Commit 4 — lịch thanh toán tối đa 2 đợt cho 1 Order.
@@ -2794,18 +2840,18 @@ enum InstallmentStatus {
 }
 
 model OrderInstallment {
-  id           String            @id @default(cuid())
-  orderId      String
-  soDot        Int // 1 hoặc 2
-  amount       Int
-  status       InstallmentStatus @default(PENDING)
-  dueDate      DateTime?
-  paidAt       DateTime?
-  recordedById String?
+  id             String            @id @default(cuid())
+  orderId        String
+  soDot          Int // 1 hoặc 2
+  amount         Int
+  status         InstallmentStatus @default(PENDING)
+  dueDate        DateTime?
+  paidAt         DateTime?
+  recordedById   String?
   // Mốc nhắc công nợ gần nhất (chống spam — 1 nhắc/ngày).
   lastReminderAt DateTime?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -3234,6 +3280,7 @@ model TrialClass {
   leadId      String
   lead        Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
   centerId    String?
+  orgUnitId   String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   center      Center?          @relation(fields: [centerId], references: [id])
   classId     String?
   class       Class?           @relation(fields: [classId], references: [id], onDelete: SetNull)
@@ -3253,6 +3300,7 @@ model TrialClass {
   @@index([leadId])
   @@index([centerId, scheduledAt])
   @@index([status, scheduledAt])
+  @@index([orgUnitId])
 }
 
 model TrialFeedback {
@@ -3320,25 +3368,27 @@ model StaffNotification {
 }
 
 model Notification {
-  id          String               @id @default(cuid())
-  title       String
-  body        String               @db.Text
-  audience    NotificationAudience @default(ALL_PARENTS)
-  centerId    String?
-  classId     String?
-  studentId   String? // Đợt 6 #7 — target 1 học viên (audience=STUDENT)
-  isPublished Boolean              @default(true)
-  publishedAt DateTime?            @default(now())
-  createdById String?
+  id            String               @id @default(cuid())
+  title         String
+  body          String               @db.Text
+  audience      NotificationAudience @default(ALL_PARENTS)
+  centerId      String?
+  orgUnitId     String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  classId       String?
+  studentId     String? // Đợt 6 #7 — target 1 học viên (audience=STUDENT)
+  isPublished   Boolean              @default(true)
+  publishedAt   DateTime?            @default(now())
+  createdById   String?
   createdByName String?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
   @@index([audience, isPublished])
   @@index([centerId])
   @@index([classId])
   @@index([studentId])
   @@index([createdAt])
+  @@index([orgUnitId])
 }
 
 // ─── ParentRequest (Phase NHÓM 3) ────────────────────────────────────────────
@@ -3385,18 +3435,18 @@ model ParentRequest {
 // ─── ParentFeedback (Phase NHÓM 3) ───────────────────────────────────────────
 // Phụ huynh đánh giá (sao + nội dung). studentId là cột phẳng (không FK).
 model ParentFeedback {
-  id           String   @id @default(cuid())
-  parentUserId String?
-  parentName   String?
-  studentId    String?
-  studentName  String?
-  rating       Int // 1-5
-  content      String   @db.Text
+  id            String    @id @default(cuid())
+  parentUserId  String?
+  parentName    String?
+  studentId     String?
+  studentName   String?
+  rating        Int // 1-5
+  content       String    @db.Text
   // P1-g — admin phản hồi lại đánh giá (tuỳ chọn).
-  adminResponse String?  @db.Text
+  adminResponse String?   @db.Text
   respondedById String?
   respondedAt   DateTime?
-  createdAt    DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   @@index([createdAt])
   @@index([studentId])
@@ -3412,18 +3462,18 @@ enum MediaStatus {
 }
 
 model ClassSessionMedia {
-  id             String            @id @default(cuid())
+  id             String      @id @default(cuid())
   classId        String
   fileUrl        String
   fileName       String?
-  caption        String?           @db.Text
-  status         MediaStatus       @default(PENDING)
+  caption        String?     @db.Text
+  status         MediaStatus @default(PENDING)
   uploadedById   String?
   uploadedByName String?
   approvedById   String?
   approvedByName String?
   approvedAt     DateTime?
-  createdAt      DateTime          @default(now())
+  createdAt      DateTime    @default(now())
 
   tags MediaStudentTag[]
 
@@ -3484,6 +3534,7 @@ model ShiftRegistration {
   id        String         @id @default(cuid())
   userId    String
   centerId  String?
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   date      DateTime       @db.Date // 1 record / nhân viên / ngày
   shifts    WorkShift[]
   status    ShiftRegStatus @default(REGISTERED)
@@ -3495,6 +3546,7 @@ model ShiftRegistration {
   @@unique([userId, date])
   @@index([centerId, date])
   @@index([userId, date])
+  @@index([orgUnitId])
 }
 
 // Module Chấm công PHẦN 4 — yêu cầu chỉnh công + log chỉnh sửa.
@@ -3505,38 +3557,40 @@ enum AdjustStatus {
 }
 
 model TimesheetAdjustmentRequest {
-  id           String       @id @default(cuid())
-  userId       String // người xin chỉnh
-  centerId     String? // cơ sở (để quản lý lọc phạm vi)
-  date         DateTime     @db.Date
-  reason       String       @db.Text // lý do / giải trình
-  requested    String? // nội dung đề nghị (vd giờ vào/ra đúng)
-  status       AdjustStatus @default(PENDING)
-  reviewedById String?
+  id             String       @id @default(cuid())
+  userId         String // người xin chỉnh
+  centerId       String? // cơ sở (để quản lý lọc phạm vi)
+  orgUnitId      String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  date           DateTime     @db.Date
+  reason         String       @db.Text // lý do / giải trình
+  requested      String? // nội dung đề nghị (vd giờ vào/ra đúng)
+  status         AdjustStatus @default(PENDING)
+  reviewedById   String?
   reviewedByName String?
-  reviewedAt   DateTime?
-  reviewNote   String?      @db.Text
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  reviewedAt     DateTime?
+  reviewNote     String?      @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([status, createdAt])
   @@index([userId, date])
   @@index([centerId, date])
+  @@index([orgUnitId])
 }
 
 // Log mọi lần chỉnh bản ghi công (ai, khi nào, từ→đến, lý do).
 model TimesheetEditLog {
-  id            String   @id @default(cuid())
-  userId        String // chủ bản ghi công
-  date          DateTime @db.Date
-  field         String // "CHECK_IN" | "CHECK_OUT"
-  fromValue     String? // giờ cũ (ISO) hoặc null
-  toValue       String? // giờ mới (ISO)
-  reason        String?  @db.Text
-  editedById    String?
-  editedByName  String?
-  requestId     String? // gắn yêu cầu chỉnh công (nếu duyệt từ yêu cầu)
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String // chủ bản ghi công
+  date         DateTime @db.Date
+  field        String // "CHECK_IN" | "CHECK_OUT"
+  fromValue    String? // giờ cũ (ISO) hoặc null
+  toValue      String? // giờ mới (ISO)
+  reason       String?  @db.Text
+  editedById   String?
+  editedByName String?
+  requestId    String? // gắn yêu cầu chỉnh công (nếu duyệt từ yêu cầu)
+  createdAt    DateTime @default(now())
 
   @@index([userId, date])
   @@index([createdAt])
@@ -3544,9 +3598,10 @@ model TimesheetEditLog {
 
 // Module Quản lý lớp phần 4 — checklist mở/đóng cơ sở theo ngày.
 model CenterDayChecklist {
-  id       String   @id @default(cuid())
-  centerId String
-  date     DateTime @db.Date
+  id        String   @id @default(cuid())
+  centerId  String
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  date      DateTime @db.Date
 
   // Đầu ngày
   openPower       Boolean @default(false)
@@ -3555,12 +3610,12 @@ model CenterDayChecklist {
   openCleanCommon Boolean @default(false)
   openSecurity    Boolean @default(false)
   // Cuối ngày
-  closePower    Boolean @default(false)
-  closeDevices  Boolean @default(false)
-  closeLock     Boolean @default(false)
-  closeKpiBoard Boolean @default(false)
-  closeSafety   Boolean @default(false)
-  closeHandover Boolean @default(false)
+  closePower      Boolean @default(false)
+  closeDevices    Boolean @default(false)
+  closeLock       Boolean @default(false)
+  closeKpiBoard   Boolean @default(false)
+  closeSafety     Boolean @default(false)
+  closeHandover   Boolean @default(false)
 
   note      String?  @db.Text
   byUserId  String?
@@ -3568,6 +3623,7 @@ model CenterDayChecklist {
 
   @@unique([centerId, date])
   @@index([centerId, date])
+  @@index([orgUnitId])
 }
 
 model EmployeeCheckin {
@@ -3575,6 +3631,7 @@ model EmployeeCheckin {
   userId         String
   userName       String?
   centerId       String?
+  orgUnitId      String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   type           CheckinType
   checkedAt      DateTime    @default(now())
   latitude       Float?
@@ -3587,6 +3644,7 @@ model EmployeeCheckin {
   @@unique([userId, type, qrToken])
   @@index([userId, checkedAt])
   @@index([centerId, checkedAt])
+  @@index([orgUnitId])
 }
 
 // ─── Cụm A1 — OTP service + kích hoạt tài khoản ─────────────────────────────
@@ -3697,6 +3755,7 @@ model MakeupNeed {
   studentId       String
   classId         String
   centerId        String? // để lọc theo cơ sở
+  orgUnitId       String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   missedSessionId String // buổi đã lỡ
   missedLessonId  String? // lesson của buổi lỡ
   status          MakeupNeedStatus @default(PENDING)
@@ -3708,13 +3767,14 @@ model MakeupNeed {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class   Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
 
+  @@unique([studentId, missedSessionId])
   @@index([studentId, status])
   @@index([centerId, status])
   @@index([classId])
-  @@unique([studentId, missedSessionId])
+  @@index([orgUnitId])
 }
 
 // ─── Cụm B2 — Cảnh báo rủi ro học viên + task chăm sóc ──────────────────────
@@ -3744,6 +3804,7 @@ model StudentRiskAlert {
   id           String        @id @default(cuid())
   studentId    String
   centerId     String?
+  orgUnitId    String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   type         RiskAlertType
   severity     RiskSeverity  @default(MEDIUM)
   status       RiskStatus    @default(OPEN)
@@ -3753,12 +3814,13 @@ model StudentRiskAlert {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  student   Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   careTasks StudentCareTask[]
 
   @@index([studentId, status])
   @@index([centerId, status])
   // Idempotent: 1 alert OPEN / loại / học viên (tạo lại sau khi resolve thì cần key khác — dùng app logic).
+  @@index([orgUnitId])
 }
 
 enum CareTaskStatus {
@@ -3771,6 +3833,7 @@ model StudentCareTask {
   id           String         @id @default(cuid())
   studentId    String
   centerId     String?
+  orgUnitId    String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   assignedToId String? // SALES_CSM phụ trách
   riskAlertId  String?
   title        String
@@ -3788,6 +3851,7 @@ model StudentCareTask {
   @@index([assignedToId, status, dueAt])
   @@index([centerId, status])
   @@index([studentId])
+  @@index([orgUnitId])
 }
 
 // ─── Cụm B3 — Khảo sát / NPS ────────────────────────────────────────────────
@@ -3814,6 +3878,7 @@ model Survey {
   milestone   SurveyMilestone @default(GENERAL)
   isActive    Boolean         @default(true)
   centerId    String? // null = mọi cơ sở
+  orgUnitId   String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   createdById String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
@@ -3823,6 +3888,7 @@ model Survey {
 
   @@index([isActive, milestone])
   @@index([centerId])
+  @@index([orgUnitId])
 }
 
 model SurveyQuestion {
@@ -3844,6 +3910,7 @@ model SurveyResponse {
   studentId    String?
   parentUserId String?
   centerId     String?
+  orgUnitId    String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   classId      String?
   teacherId    String?
   csmId        String? // SALES_CSM phụ trách
@@ -3856,6 +3923,7 @@ model SurveyResponse {
   @@index([centerId, createdAt])
   @@index([csmId])
   @@index([teacherId])
+  @@index([orgUnitId])
 }
 
 // ─── Cụm B4 — Hoàn thành khoá + chứng chỉ ───────────────────────────────────
@@ -3895,20 +3963,20 @@ enum TransferRequestStatus {
 }
 
 model StudentTransferRequest {
-  id          String                @id @default(cuid())
-  studentId   String
-  fromClassId String? // lớp hiện tại
-  fromCenterId String?
-  toClassId   String? // lớp đích (null nếu waitlist)
-  toCenterId  String?
-  status      TransferRequestStatus @default(PENDING)
-  reason      String?               @db.Text
-  note        String?               @db.Text // ghi chú khi duyệt/từ chối
+  id            String                @id @default(cuid())
+  studentId     String
+  fromClassId   String? // lớp hiện tại
+  fromCenterId  String?
+  toClassId     String? // lớp đích (null nếu waitlist)
+  toCenterId    String?
+  status        TransferRequestStatus @default(PENDING)
+  reason        String?               @db.Text
+  note          String?               @db.Text // ghi chú khi duyệt/từ chối
   requestedById String?
   decidedById   String?
   decidedAt     DateTime?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -3921,6 +3989,7 @@ model StudentCenterHistory {
   id        String    @id @default(cuid())
   studentId String
   centerId  String
+  orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   fromDate  DateTime  @default(now())
   toDate    DateTime? // null = đang ở cơ sở này
   reason    String?
@@ -3930,6 +3999,7 @@ model StudentCenterHistory {
 
   @@index([studentId])
   @@index([centerId])
+  @@index([orgUnitId])
 }
 
 // =============================================================================
@@ -4005,6 +4075,7 @@ model SataCoinTransaction {
   reason       String // mã/lý do (vd "ATTENDANCE", "REDEEM_GIFT")
   note         String?        @db.Text
   centerId     String?
+  orgUnitId    String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   ruleCode     String? // rule áp dụng (nếu có)
   reversedTxId String?        @unique // trỏ tới giao dịch bị đảo (1-1)
   createdById  String?
@@ -4014,6 +4085,7 @@ model SataCoinTransaction {
 
   @@index([studentId, createdAt])
   @@index([centerId])
+  @@index([orgUnitId])
 }
 
 model SataCoinRule {
@@ -4149,8 +4221,8 @@ model Promotion {
   featured    Boolean       @default(false)
   courseSlug  String? // giới hạn theo landing (laptrinhrobot/luyenthirobosim); null = chung
 
-  displayOrder Int      @default(0)
-  isActive     Boolean  @default(true)
+  displayOrder Int       @default(0)
+  isActive     Boolean   @default(true)
   startsAt     DateTime?
   endsAt       DateTime?
 

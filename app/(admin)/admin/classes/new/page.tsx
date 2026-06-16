@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { ClassForm } from "../_components/class-form";
 
 export const dynamic = "force-dynamic";
@@ -13,17 +15,14 @@ export default async function NewClassPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const [courses, centers, classGroups, rooms, teachers] = await Promise.all([
+  const actor = await resolveActor(session.user.id);
+  const [courses, orgUnits, classGroups, rooms, teachers] = await Promise.all([
     db.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true },
     }),
-    db.center.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: "asc" },
-      select: { id: true, name: true },
-    }),
+    getSelectableOrgUnits(actor),
     db.classGroup.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
       orderBy: { displayCode: "asc" },
@@ -51,7 +50,11 @@ export default async function NewClassPage() {
       <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm lớp học mới</h1>
       <ClassForm
         courses={courses}
-        centers={centers}
+        orgUnits={orgUnits.map((o) => ({
+          id: o.orgUnitId,
+          name: o.name,
+          centerId: o.centerId,
+        }))}
         classGroups={classGroups}
         rooms={rooms}
         teachers={teachers.map((t) => ({

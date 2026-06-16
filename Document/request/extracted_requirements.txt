@@ -1,0 +1,63 @@
+=========================================
+FILE: 1 - Yeu cau tinh nang QL HV.pdf
+=========================================
+
+--- PDF PAGE 1 ---
+YÊU CẦU NGƯỜI SỬ DỤNG ỨNG DỤNG QUẢN LÝ HỌC VIÊN & LMS TÍCH HỢP 1. Quản lý hồ sơ & lớp học - Lưu trữ thông tin cá nhân, ảnh, giấy tờ tùy thân. - Theo dõi quá trình học tập, lịch sử lớp học, điểm số. - Quản lý trạng thái: nhập học, chuyển lớp, bảo lưu, thôi học. - Cho phép phụ huynh và học viên tự cập nhật thông tin cơ bản qua app. - Hỗ trợ tìm kiếm, lọc theo tiêu chí. - Lập kế hoạch giảng dạy, phân công giáo viên. - Quản lý phòng học, ca học, số lượng học viên. - Xếp lớp tự động dựa trên số lượng và trình độ sau khi test. - Hiển thị thời khóa biểu trên app học viên và giáo viên. - Cảnh báo trùng lịch hoặc vượt sức chứa phòng. 2. Quản lý điểm danh & chuyên cần (AI Camera & IoT) - Tích hợp camera AI nhận diện khuôn mặt để điểm danh tự động. - Cảnh báo vắng mặt bất thường tới phụ huynh. - Lưu trữ log điểm danh kèm ảnh đối chiếu. - Cho phép điểm danh thủ công khi cần. - Đồng bộ dữ liệu với học bạ điện tử và báo cáo. - Phân tích tình trạng sức khỏe qua camera (nhiệt độ, dấu hiệu mệt mỏi): nâng cao cần nghiên cứu thêm hoặc mua các source có sẵn để tích hợp. - Check-in định vị (geofencing) cho hoạt động ngoại khóa: sử dụng cần thiết khi triển khai các dịch vụ liên quan đến ngoại khóa. Đây là tính năng mở rộng có thể phát triển ở giai đoạn sau và liên kết với các thiết bị vòng đeo tay thông minh hoặc các IOT khác. 3. Quản lý học tập & LMS - Quản lý nội dung bài học, giáo trình. - Giao và chấm bài tập online, lưu kết quả vào học bạ. - Tổ chức kiểm tra, thi online có giám sát. - Theo dõi tiến độ học tập, báo cáo kết quả cho phụ huynh. - AI gợi ý lộ trình học tập cá nhân hóa. - Gamification & Learn2Earn: thưởng điểm/SataCoin cho học viên hoàn thành bài học. 
+--- PDF PAGE 2 ---
+- Quản lý kỹ năng & hồ sơ năng lực (Competency Management) phục vụ định hướng nghề. Dạng như profile cho học viên giúp cho việc trích xuất thông tin để bổ sung hồ sơ du học … 4. Kết nối & chăm sóc phụ huynh - Cổng thông tin phụ huynh đa nền tảng (App + Web). - Thông báo đa kênh: App push, Zalo OA, Email. - Chatbot AI trả lời câu hỏi 24/7: hiện đã tích hợp trên zalo OA chăm sóc. Có thể nghiên cứu tích hợp. - Sổ liên lạc điện tử nâng cao: nhận xét, ảnh/video, phản hồi trực tiếp. - Cá nhân hóa thông tin & ưu đãi. - Báo cáo học tập định kỳ. - Chăm sóc sau khóa học: gửi chứng chỉ, mời khảo sát, gợi ý khóa tiếp theo. - Công cụ khảo sát & đánh giá NPS định kỳ (Mức độ hài lòng của khách hàng). Điểm số này làm cơ sở để đánh giá KPI cho bộ phận chăm sóc khách hàng, phục vụ của các nhân sự trong trung tâm toán. 5. Quản lý tài chính & thanh toán - Lập và gửi hóa đơn học phí, nhắc nhở thanh toán. - Thu học phí online qua nhiều cổng thanh toán. - Gửi thông tin thanh toán và QR code tự động, đồng bộ về hệ thống kế toán. Hiện đã làm dc trên zalo OA và đã đồng bộ về kế toán. - Ghi nhận doanh số cho nhân viên tư vấn, tỉ lệ tái tục cho nhân viên chăm sóc và giáo viên nhằm làm cơ sở tính KPI. - Theo dõi công nợ, nhắc nợ tự động cho phụ huynh - Đồng bộ danh sách khách hàng module CRM, số liệu về doanh thu và học phí với kế toán trên nền tảng của Misa Amis. - Chính sách ưu đãi, giảm phí, đảm bảo đúng với mức phí và thống nhất chính sách phí trong hệ thống.  - Ví điện tử nội bộ (SataCoin) dùng như các tích luy điểm thưởng cho khách hàng và dùng để đổi quà tặng. Phát triền phiên bản trên nền tảng Blockchain gia đoạn tiếp theo. 
+--- PDF PAGE 3 ---
+6. Học bạ điện tử & Web3/NFT - Cấu trúc chuẩn hóa dữ liệu học bạ. nghiên cứu phương án 1 phụ huynh với nhiều con cùng quản lý trên 1 user … - Đồng bộ từ LMS, SIS (Student	Information	System)	, điểm danh AI. - AI phân tích xu hướngs điểm số, kỹ năng, khuyến nghị cải thiện. - Chứng chỉ NFT động, lưu trữ IPFS/Arweave. - Quyền chia sẻ linh hoạt, thu hồi khi cần. - Tương thích chuẩn quốc tế (Europass, IMS eTranscript, Open Badges): Nghiên cứu chuẩn hóa theo các bộ tiêu chuẩn này. 7. Báo cáo & phân tích - Báo cáo chuyên cần, kết quả học tập, doanh thu, tuyển sinh. - Dashboard trực quan đa tầng (toàn hệ thống, theo cơ sở, theo lớp). - AI dự đoán doanh thu, tỷ lệ nghỉ học, nhu cầu tuyển sinh. - Hỗ trợ xuất dữ liệu ra Excel/PDF. 8. Bảo mật & quyền riêng tư - Mã hóa dữ liệu khi truyền và lưu trữ. - Quy trình xin quyền khi lưu trữ ảnh, dữ liệu cá nhân. - Log truy cập và chỉnh sửa dữ liệu. 9. Mở rộng thị trường & doanh thu - Marketplace khóa học online. - Tích hợp hệ thống riêng cho các đối tác giáo dục khác. Có thể nghiên cứu đóng gói giải pháp này để cung cấp giải pháp quản lý cho các trường, trung tâm khác 
+
+=========================================
+FILE: TomTat_QuyTrinh_TuyenSinh_SR217.docx
+=========================================
+TÓM TẮT QUY TRÌNH PHỐI HỢP TUYỂN SINH
+Hệ thống Trung tâm Đào tạo Robotics Sata Robo — Tài liệu chuyển giao Bộ phận Công nghệ
+1. PHỄU CHUYỂN ĐỔI LEADS
+  LEADS_1: Tin nhắn/tương tác vào page từ QC.  LEADS_2: Có SĐT + tóm tắt trao đổi → đủ điều kiện bàn giao TT.  LEADS_3: Đã đóng học phí = doanh số thực tế = cơ sở tính hoa hồng.
+2. QUY TRÌNH 8 BƯỚC — CỘT "DATA FIELDS" DÙNG ĐỂ THIẾT KẾ DATABASE/API
+3. CÔNG THỨC PHÂN BỔ CHI PHÍ QUẢNG CÁO
+Deadline: Phòng Kế toán hoàn thành bảng phân bổ trước ngày 05 hàng tháng.
+4. CƠ CHẾ HOA HỒNG 4 TẦNG (tự động tính trên LEADS_3)
+Tổng tối đa 8% trên doanh số khai thác mới. Tính trước thuế TNCN. Thanh toán cùng kỳ lương tháng.
+5. YÊU CẦU MODULE CRM — DÀNH CHO BỘ PHẬN CÔNG NGHỆ
+6. GHI CHÚ KỸ THUẬT QUAN TRỌNG
+1. Realtime first: Mọi thay đổi trạng thái lead phải ghi timestamp tự động (created_at, updated_at, handed_at, closed_at).
+2. Multi-center: Hệ thống phục vụ N trung tâm (nhượng quyền). Mỗi TT là 1 entity độc lập với hạch toán riêng. Dùng center_id làm foreign key xuyên suốt.
+3. Source tracking: Mỗi LEADS_3 phải lưu source ('marketing_admin', 'sale_self', 'referral'…) để tính hoa hồng đúng tầng.
+4. Commission engine: Chạy auto cuối tháng. Input: tất cả LEADS_3 trong tháng. Output: bảng hoa hồng từng nhân sự. Xem xét audit log để phòng tranh chấp.
+5. Alert/SLA: L2 chưa được bàn giao sau 4 giờ → alert QL TT. Sale chưa liên hệ sau 2 giờ → alert QL. Báo cáo tuần chưa nộp trước 17h T2 → alert tự động.
+6. Báo cáo: Dashboard realtime (L1/L2/L3, DS, CPL, CPA, CR). Export Excel theo tháng tương thích với 3 file Excel hiện hành (QC / Admin / TT).
+7. Văn bản gốc: SR.QD.217 — Quy trình Phối hợp Tuyển sinh và Phân bổ Chi phí Quảng cáo, ban hành 01/06/2026.
+LEADS_1
+Tin nhắn vào page (QC tạo ra) | → | LEADS_2
+Có SĐT + ghi chú (Admin bàn giao TT) | → | LEADS_3
+Đóng học phí (Doanh số thực tế)
+# | Bộ phận | Hành động | Đầu ra | Deadline | Data fields cần ghi nhận (cho CRM)
+1 | QC Marketing | Chạy ads → LEADS_1 phát sinh | LEADS_1 vào page/Messenger/Zalo | Nhập file QC trước 21:00 | leads_1_count, channel, cost, date
+2 | Sale Admin | Trực page, phản hồi ≤5 phút. Xin SĐT + ghi tóm tắt → LEADS_2 | LEADS_2 đủ điều kiện (SĐT + ghi chú) | Bàn giao TT trong ngày | phone, summary, assigned_center, admin_id
+3 | Sale Admin | Bàn giao LEADS_2 cho Trung tâm phù hợp | TT xác nhận tiếp nhận | Trong ngày, không để qua đêm | center_id, handover_time, status='handed'
+4 | QL Trung tâm | Tiếp nhận, phân công Sale/TVV trong vòng 30 phút | Sale nhận lead + bắt đầu chăm sóc | 30 phút sau khi nhận | sale_id, assigned_time, lead_status='in_progress'
+5 | Sale / TVV | Liên hệ KH ≤2h, tư vấn, mời thử học, chốt | Cập nhật trạng thái sau mỗi tương tác | Cập nhật ngay sau tương tác | contact_log, status, next_action
+6 | Sale / TVV | KH đóng tiền → LEADS_3 → nhập doanh số ngay trong ngày | LEADS_3 ghi nhận, hoa hồng tự tính | Trong ngày đóng tiền | revenue, course, source, leads_3=true
+7 | QL Trung tâm | Theo dõi Dashboard hàng ngày. Báo cáo tuần/tháng | Báo cáo gửi TGĐ đúng hạn | Thứ 2 ≤17h / Ngày 01 ≤17h | weekly_report, monthly_report, kpi_score
+8 | Kế toán Hội sở + TT | Tổng hợp CP QC, tính CPL, phân bổ chi phí về TT theo LEADS_2 | Bảng phân bổ CP gửi TT trước ngày 05 | Trước ngày 05 tháng sau | total_qc_cost, leads2_per_center, allocated_cost
+Đơn giá CP quảng cáo/LEADS_2: | CPL = Tổng CP QC tháng ÷ Tổng LEADS_2 toàn hệ thống
+Phân bổ về từng Trung tâm: | CP_TT = CPL × Số LEADS_2 bàn giao cho TT đó
+Chi phí/học viên thực tế (CPA): | CPA = Tổng CP QC tháng ÷ Tổng LEADS_3 toàn hệ thống
+Bộ phận | Mức % | Cơ sở tính | Điều kiện | Gợi ý field CRM
+QC Marketing | 1% | DS LEADS_3 từ nguồn MKT (toàn TT) | KH đã đóng HP (LEADS_3) | commission_qc = revenue_from_mkt × 0.01
+Sale Admin | 1% | DS LEADS_3 từ leads Admin đã bàn giao | KH đã đóng HP (LEADS_3) | commission_admin = admin_leads3_revenue × 0.01
+Sale / TVV | 4% | DS LEADS_3 mình trực tiếp chốt | KH đã đóng HP (LEADS_3) | commission_sale = sale_leads3_revenue × 0.04
+QL Trung tâm | 2% | Tổng DS LEADS_3 khai thác mới của TT | KH đã đóng HP (LEADS_3) | commission_manager = center_leads3_total × 0.02
+Module CRM | Người dùng | Tính năng chính | API endpoint gợi ý
+LEADS Management | QC + Admin | Tạo/chuyển trạng thái L1→L2→L3; gán Admin; timestamp tự động | POST /leads, PATCH /leads/:id/status
+Handover (Bàn giao) | Admin → QL TT | Bàn giao L2 → TT; xác nhận nhận; phân công Sale; alert nếu quá 30' | POST /handover, GET /handover/pending
+Sales Pipeline | Sale / TVV | Cập nhật tương tác, trạng thái; chuyển L3 khi đóng HP; tính DS | POST /deals, PATCH /deals/:id/close
+Commission Engine | Hệ thống tự tính | Tự động tính 4 tầng HH khi L3 xác nhận; xuất bảng lương | GET /commission?month=&center_id=
+Dashboard / Report | QL TT + TGĐ | Realtime: L1/L2/L3 theo ngày, DS theo Sale, % KH, CPL, CPA | GET /reports/funnel, GET /reports/revenue
+Cost Allocation | Kế toán Hội sở | Nhập tổng CP QC; hệ thống tự chia theo LEADS_2 từng TT | POST /cost-allocation, GET /cost-allocation/summary
+Notification Engine | Tất cả | Alert: L2 chưa bàn giao >4h; Sale chưa liên hệ >2h; báo cáo đến hạn | Webhook / Push notification / Zalo OA
+
+

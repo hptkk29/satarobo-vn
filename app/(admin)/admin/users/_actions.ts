@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
-import { can, hasRole, isSuperAdmin } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   userCreateSchema,
@@ -12,6 +12,7 @@ import {
   passwordResetSchema,
 } from "@/lib/validators/user";
 import { reassignOpenLeads } from "@/lib/lead/assign";
+import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import {
   logUserAudit,
   detectChangedFields,
@@ -35,8 +36,10 @@ export async function createUserAction(formData: FormData) {
     name: formData.get("name"),
     email: formData.get("email"),
     password: formData.get("password"),
-    role: formData.get("role"),
+    roles: formData.getAll("roles"),
+    primaryRole: formData.get("primaryRole"),
     centerId: formData.get("centerId") || null,
+    orgUnitId: formData.get("orgUnitId") || null,
     employeeId: formData.get("employeeId") || null,
   });
 
@@ -70,14 +73,21 @@ export async function createUserAction(formData: FormData) {
   const hashed = await bcrypt.hash(parsed.data.password, 10);
   const { actorId, actorName } = getAuditActor(session);
 
+  // PR-B dual-write: chốt theo OrgUnit, suy centerId từ orgUnitId (HO → null).
+  const orgUnitId = parsed.data.orgUnitId ?? null;
+  const centerId = await centerIdForOrgUnit(orgUnitId);
+
   const user = await db.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
         name: parsed.data.name,
         email: parsed.data.email,
         password: hashed,
-        role: parsed.data.role,
-        centerId: parsed.data.centerId ?? null,
+        // Đợt 3B — role = vai trò chính (primary), roles = toàn bộ (union quyền).
+        role: parsed.data.primaryRole,
+        roles: parsed.data.roles,
+        centerId,
+        orgUnitId,
         employeeId: parsed.data.employeeId ?? null,
         isActive: true,
         tokenVersion: 0,
@@ -86,6 +96,7 @@ export async function createUserAction(formData: FormData) {
         id: true,
         email: true,
         role: true,
+        roles: true,
         centerId: true,
         employeeId: true,
         isActive: true,
@@ -100,6 +111,7 @@ export async function createUserAction(formData: FormData) {
       newValues: {
         email: created.email,
         role: created.role,
+        roles: created.roles,
         centerId: created.centerId,
         employeeId: created.employeeId,
         isActive: created.isActive,
@@ -122,8 +134,10 @@ export async function updateUserAction(id: string, formData: FormData) {
   const parsed = userUpdateSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
-    role: formData.get("role"),
+    roles: formData.getAll("roles"),
+    primaryRole: formData.get("primaryRole"),
     centerId: formData.get("centerId") || null,
+    orgUnitId: formData.get("orgUnitId") || null,
     employeeId: formData.get("employeeId") || null,
   });
 
@@ -141,22 +155,34 @@ export async function updateUserAction(id: string, formData: FormData) {
       name: true,
       email: true,
       role: true,
+      roles: true,
       centerId: true,
       employeeId: true,
     },
   });
   if (!current) return { ok: false, error: "Không tìm thấy user" };
 
-  // Self-protection: không cho self-demote role
-  if (id === me.id && parsed.data.role !== current.role) {
-    return { ok: false, error: "Không thể tự đổi role của chính mình" };
+  // Đợt 3B — vai trò hữu hiệu hiện tại (roles[] ưu tiên, fallback role chính).
+  const currentRoles =
+    current.roles.length > 0 ? current.roles : [current.role];
+  const nextRoles = parsed.data.roles;
+  const sameRoleSet =
+    currentRoles.length === nextRoles.length &&
+    currentRoles.every((r) => nextRoles.includes(r));
+  const rolesChanged = !sameRoleSet || parsed.data.primaryRole !== current.role;
+
+  // Self-protection: không cho tự đổi vai trò của chính mình (chống tự khoá).
+  if (id === me.id && rolesChanged) {
+    return { ok: false, error: "Không thể tự đổi vai trò của chính mình" };
   }
 
-  // Last SUPER_ADMIN protection
-  if (isSuperAdmin(current.role) && !isSuperAdmin(parsed.data.role)) {
+  // Last SUPER_ADMIN protection — xét theo union roles, không chỉ role chính.
+  const wasSuperAdmin = currentRoles.includes("SUPER_ADMIN");
+  const willBeSuperAdmin = nextRoles.includes("SUPER_ADMIN");
+  if (wasSuperAdmin && !willBeSuperAdmin) {
     const remaining = await db.user.count({
       where: {
-        role: "SUPER_ADMIN",
+        roles: { has: "SUPER_ADMIN" },
         isActive: true,
         deletedAt: null,
         id: { not: id },
@@ -192,9 +218,12 @@ export async function updateUserAction(id: string, formData: FormData) {
     }
   }
 
-  // Increment tokenVersion nếu role thay đổi → force re-login
-  const roleChanged = parsed.data.role !== current.role;
+  // Increment tokenVersion nếu vai trò thay đổi → force re-login (token mang roles).
   const { actorId, actorName } = getAuditActor(session);
+
+  // PR-B dual-write: chốt theo OrgUnit, suy centerId từ orgUnitId (HO → null).
+  const orgUnitId = parsed.data.orgUnitId ?? null;
+  const centerId = await centerIdForOrgUnit(orgUnitId);
 
   await db.$transaction(async (tx) => {
     const updated = await tx.user.update({
@@ -202,16 +231,20 @@ export async function updateUserAction(id: string, formData: FormData) {
       data: {
         name: parsed.data.name,
         email: parsed.data.email,
-        role: parsed.data.role,
-        centerId: parsed.data.centerId ?? null,
+        // Đợt 3B — role chính + roles (union quyền).
+        role: parsed.data.primaryRole,
+        roles: parsed.data.roles,
+        centerId,
+        orgUnitId,
         employeeId: parsed.data.employeeId ?? null,
-        ...(roleChanged && { tokenVersion: { increment: 1 } }),
+        ...(rolesChanged && { tokenVersion: { increment: 1 } }),
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        roles: true,
         centerId: true,
         employeeId: true,
       },
@@ -221,6 +254,7 @@ export async function updateUserAction(id: string, formData: FormData) {
       name: current.name,
       email: current.email,
       role: current.role,
+      roles: current.roles,
       centerId: current.centerId,
       employeeId: current.employeeId,
     };
@@ -228,13 +262,14 @@ export async function updateUserAction(id: string, formData: FormData) {
       name: updated.name,
       email: updated.email,
       role: updated.role,
+      roles: updated.roles,
       centerId: updated.centerId,
       employeeId: updated.employeeId,
     };
 
     await logUserAudit({
       userId: id,
-      action: roleChanged ? "ROLE_CHANGE" : "UPDATE",
+      action: rolesChanged ? "ROLE_CHANGE" : "UPDATE",
       actorId,
       actorName,
       oldValues,

@@ -1,7 +1,10 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { RoomForm } from "../../_components/room-form";
 import { DeleteRoomButton } from "../../_components/delete-button";
 
@@ -14,12 +17,14 @@ export const dynamic = "force-dynamic";
 export default async function EditRoomPage({ params }: Props) {
   const { id } = await params;
 
-  const [room, centers] = await Promise.all([
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const actor = await resolveActor(session.user.id);
+
+  // Room = vị trí vật lý → chỉ chọn CENTER, loại HO (Hội sở không có phòng học).
+  const [room, orgUnits] = await Promise.all([
     db.room.findUnique({ where: { id } }),
-    db.center.findMany({
-      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, slug: true },
-    }),
+    getSelectableOrgUnits(actor, { types: ["CENTER"] }),
   ]);
 
   if (!room) notFound();
@@ -48,14 +53,14 @@ export default async function EditRoomPage({ params }: Props) {
           id: room.id,
           name: room.name,
           code: room.code,
-          centerId: room.centerId,
+          orgUnitId: room.orgUnitId,
           capacity: room.capacity,
           equipment: room.equipment,
           status: room.status,
           notes: room.notes,
           displayOrder: room.displayOrder,
         }}
-        centers={centers}
+        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
       />
     </div>
   );

@@ -12,7 +12,7 @@ export type ClassFormValue = {
   name: string;
   description: string | null;
   courseId: string;
-  centerId: string | null;
+  orgUnitId: string | null;
   classGroupId: string | null;
   roomId: string | null;
   teacherId: string | null;
@@ -30,9 +30,10 @@ export type ClassFormValue = {
 
 type CourseOption = TeachableCourse;
 
-interface CenterOption {
+interface OrgUnitOption {
   id: string;
   name: string;
+  centerId: string | null; // để lọc phòng học theo cơ sở (HO không có cơ sở → null)
 }
 interface ClassGroupOption {
   id: string;
@@ -81,14 +82,14 @@ function toDateInput(d: Date | null): string {
 export function ClassForm({
   cls,
   courses,
-  centers,
+  orgUnits,
   classGroups,
   rooms,
   teachers,
 }: {
   cls?: ClassFormValue;
   courses: CourseOption[];
-  centers: CenterOption[];
+  orgUnits: OrgUnitOption[];
   classGroups: ClassGroupOption[];
   rooms: RoomOption[];
   teachers: TeacherOption[];
@@ -98,15 +99,25 @@ export function ClassForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const [centerId, setCenterId] = useState<string>(cls?.centerId ?? "");
+  const [orgUnitId, setOrgUnitId] = useState<string>(cls?.orgUnitId ?? "");
   const [roomId, setRoomId] = useState<string>(cls?.roomId ?? "");
   const [teacherId, setTeacherId] = useState<string>(cls?.teacherId ?? "");
   const [assistantId, setAssistantId] = useState<string>(cls?.assistantId ?? "");
   const [scheduleDays, setScheduleDays] = useState<number[]>(cls?.scheduleDays ?? []);
 
+  // Cơ sở của đơn vị đang chọn — dùng để lọc phòng học (HO → null → không có phòng cơ sở).
+  const selectedCenterId = useMemo(
+    () => orgUnits.find((o) => o.id === orgUnitId)?.centerId ?? null,
+    [orgUnits, orgUnitId],
+  );
   const filteredRooms = useMemo(
-    () => (centerId ? rooms.filter((r) => r.centerId === centerId) : rooms),
-    [rooms, centerId],
+    () =>
+      orgUnitId && selectedCenterId
+        ? rooms.filter((r) => r.centerId === selectedCenterId)
+        : orgUnitId
+          ? []
+          : rooms,
+    [rooms, orgUnitId, selectedCenterId],
   );
   const filteredAssistants = useMemo(
     () => teachers.filter((t) => t.id !== teacherId),
@@ -142,10 +153,11 @@ export function ClassForm({
     );
   }
 
-  function onCenterChange(value: string) {
-    setCenterId(value);
-    // Reset room if it doesn't belong to the new center
-    if (roomId && !rooms.some((r) => r.id === roomId && r.centerId === value)) {
+  function onOrgUnitChange(value: string) {
+    setOrgUnitId(value);
+    // Reset phòng học nếu không thuộc cơ sở của đơn vị mới.
+    const newCenterId = orgUnits.find((o) => o.id === value)?.centerId ?? null;
+    if (roomId && !rooms.some((r) => r.id === roomId && r.centerId === newCenterId)) {
       setRoomId("");
     }
   }
@@ -192,14 +204,14 @@ export function ClassForm({
             groups={groupTeachableCourses(courses)}
           />
           <SelectField
-            label="Cơ sở"
-            name="centerId"
-            value={centerId}
-            onChange={onCenterChange}
+            label="Đơn vị"
+            name="orgUnitId"
+            value={orgUnitId}
+            onChange={onOrgUnitChange}
             required
             options={[
-              { value: "", label: "— Chọn cơ sở —" },
-              ...centers.map((c) => ({ value: c.id, label: c.name })),
+              { value: "", label: "— Chọn đơn vị —" },
+              ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
             ]}
           />
           <SelectField
@@ -255,9 +267,9 @@ export function ClassForm({
               })),
             ]}
             helper={
-              centerId
-                ? "Chỉ hiển thị phòng của cơ sở đã chọn"
-                : "Chọn cơ sở để lọc phòng"
+              orgUnitId
+                ? "Chỉ hiển thị phòng của cơ sở thuộc đơn vị đã chọn"
+                : "Chọn đơn vị để lọc phòng"
             }
           />
           <SelectField

@@ -4,14 +4,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { startAuditAndRedirect } from "../_actions";
 
-interface CenterOption {
+interface OrgUnitOption {
   id: string;
   name: string;
 }
 
-export function StartAuditForm({ centers }: { centers: CenterOption[] }) {
+export function StartAuditForm({ orgUnits }: { orgUnits: OrgUnitOption[] }) {
   const router = useRouter();
-  const [centerId, setCenterId] = useState("");
+  const [orgUnitId, setOrgUnitId] = useState("");
   const [auditCode, setAuditCode] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,13 +20,13 @@ export function StartAuditForm({ centers }: { centers: CenterOption[] }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!centerId) {
+    if (!orgUnitId) {
       setError("Chọn cơ sở");
       return;
     }
     startTransition(async () => {
       const res = await startAuditAndRedirect({
-        centerId,
+        orgUnitId,
         auditCode: auditCode.trim() || null,
         notes: notes.trim() || null,
       });
@@ -47,16 +47,16 @@ export function StartAuditForm({ centers }: { centers: CenterOption[] }) {
           Cơ sở <span className="text-red-500">*</span>
         </span>
         <select
-          value={centerId}
-          onChange={(e) => setCenterId(e.target.value)}
+          value={orgUnitId}
+          onChange={(e) => setOrgUnitId(e.target.value)}
           required
           disabled={pending}
           className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
         >
           <option value="">— Chọn cơ sở —</option>
-          {centers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
+          {orgUnits.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
             </option>
           ))}
         </select>

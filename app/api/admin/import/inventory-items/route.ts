@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { InventoryCategoryEnum } from "@/lib/validators/inventory";
 import { can } from "@/lib/auth/permissions";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 function parseBoolean(v: unknown): boolean {
   if (typeof v === "boolean") return v;
@@ -142,6 +143,15 @@ export async function POST(req: NextRequest) {
     select: { id: true },
   });
 
+  // Dual-write 2-phase: gắn orgUnitId song song centerId cho từng StockBalance.
+  // (InventoryItem là catalog — không có centerId/orgUnitId, không đổi.)
+  const centersWithOrg = await Promise.all(
+    centers.map(async (c) => ({
+      id: c.id,
+      orgUnitId: await orgUnitIdForCenter(c.id),
+    })),
+  );
+
   let success = 0;
   try {
     await db.$transaction(async (tx) => {
@@ -171,9 +181,10 @@ export async function POST(req: NextRequest) {
             // skipDuplicates protects existing balances (quantity stays put
             // when re-importing item metadata).
             await tx.stockBalance.createMany({
-              data: centers.map((c) => ({
+              data: centersWithOrg.map((c) => ({
                 itemId: item.id,
                 centerId: c.id,
+                orgUnitId: c.orgUnitId, // dual-write 2-phase
                 quantity: 0,
                 reserved: 0,
               })),

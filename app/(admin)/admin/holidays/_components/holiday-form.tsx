@@ -11,22 +11,22 @@ export type HolidayFormValue = {
   name: string;
   date: Date;
   endDate: Date | null;
-  centerId: string | null;
+  orgUnitId: string | null; // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra ở action
   type: "HOLIDAY" | "MAINTENANCE" | "EVENT" | "OTHER";
   note: string | null;
 };
 
-export type CenterOption = {
+export type OrgUnitOption = {
   id: string;
   name: string;
 };
 
 export function HolidayForm({
   holiday,
-  centers,
+  orgUnits,
 }: {
   holiday?: HolidayFormValue;
-  centers: CenterOption[];
+  orgUnits: OrgUnitOption[];
 }) {
   const router = useRouter();
   const isEdit = Boolean(holiday);
@@ -82,11 +82,11 @@ export function HolidayForm({
         <Grid cols={2}>
           <SelectField
             label="Phạm vi"
-            name="centerId"
-            defaultValue={holiday?.centerId ?? "ALL"}
+            name="orgUnitId"
+            defaultValue={holiday?.orgUnitId ?? "ALL"}
             options={[
               { value: "ALL", label: "Toàn hệ thống" },
-              ...centers.map((c) => ({ value: c.id, label: c.name })),
+              ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
             ]}
             required
           />

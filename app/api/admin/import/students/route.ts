@@ -9,6 +9,7 @@ import {
   GenderEnum,
 } from "@/lib/validators/student";
 import { can } from "@/lib/auth/permissions";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Excel date parser — reused pattern from B3 / C2.
 function parseExcelDate(v: unknown): Date | null {
@@ -196,8 +197,18 @@ export async function POST(req: NextRequest) {
     : [];
   const slugToId = new Map(centers.map((c) => [c.slug, c.id]));
 
+  // Dual-write 2-phase: dựng map centerId → orgUnitId 1 lần (số cơ sở nhỏ).
+  const centerIdToOrgUnitId = new Map<string, string | null>();
+  for (const c of centers) {
+    centerIdToOrgUnitId.set(c.id, await orgUnitIdForCenter(c.id));
+  }
+
   const errors: ImportError[] = [];
-  const validRows: { data: Parsed; preferredCenterId: string | null }[] = [];
+  const validRows: {
+    data: Parsed;
+    preferredCenterId: string | null;
+    preferredOrgUnitId: string | null;
+  }[] = [];
 
   for (let i = 0; i < stageOne.length; i++) {
     const entry = stageOne[i];
@@ -219,7 +230,11 @@ export async function POST(req: NextRequest) {
       preferredCenterId = id;
     }
 
-    validRows.push({ data: entry.data, preferredCenterId });
+    const preferredOrgUnitId = preferredCenterId
+      ? (centerIdToOrgUnitId.get(preferredCenterId) ?? null)
+      : null;
+
+    validRows.push({ data: entry.data, preferredCenterId, preferredOrgUnitId });
   }
 
   if (validRows.length === 0) {
@@ -251,6 +266,7 @@ export async function POST(req: NextRequest) {
           district: r.data.district,
           city: r.data.city,
           preferredCenterId: r.preferredCenterId,
+          preferredOrgUnitId: r.preferredOrgUnitId, // dual-write 2-phase
           enrollmentDate: r.data.enrollmentDate,
           status: r.data.status,
           bloodType: r.data.bloodType,
