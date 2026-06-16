@@ -87,6 +87,9 @@ enum AttendanceStatus {
   ABSENT
   LATE
   EXCUSED
+  // R7-08 — 2-phase bước A: thêm giá trị mới, map dần, chưa drop ABSENT/EXCUSED cũ.
+  ABSENT_EXCUSED
+  ABSENT_UNEXCUSED
 }
 
 // Module QL học viên PHẦN 2 — trạng thái học bù của buổi vắng.
@@ -2100,6 +2103,7 @@ model Question {
   type         QuestionType
   text         String       @db.Text
   explanation  String?      @db.Text
+  imageUrl     String? // R7-13 — ảnh đề bài (upload R2)
 
   difficulty QuestionDifficulty @default(MEDIUM)
   tags       String[]           @default([])
@@ -2141,6 +2145,7 @@ model Choice {
   order     Int
   text      String  @db.Text
   isCorrect Boolean @default(false)
+  imageUrl  String? // R7-13 — ảnh đáp án (upload R2)
 
   @@unique([questionId, order])
 }
@@ -2177,6 +2182,12 @@ model Exam {
   passingScore     Float   @default(5)
   shuffleQuestions Boolean @default(false)
   shuffleChoices   Boolean @default(false)
+
+  // R7-13 — cấu hình bài kiểm tra bổ sung.
+  maxAttempts           Int?
+  defaultDueDays        Int?
+  scoringMode           String?
+  showResultAfterSubmit Boolean @default(true)
 
   openAt  DateTime?
   closeAt DateTime?
