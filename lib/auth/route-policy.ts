@@ -67,6 +67,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "classes",
   "course-packages",
   "course-prerequisites",
+  "courses",
   "crm",
   "curriculums",
   "dashboard",
