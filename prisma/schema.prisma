@@ -3614,6 +3614,9 @@ model ClassSessionMedia {
   // được. KHÁC với "không gắn thẻ" — ảnh không tag & không phải class-wide vẫn
   // ẩn với PH (giữ bất biến C6.2 trong lib/lms/media-consent.ts).
   isClassWide    Boolean     @default(false)
+  // R7-09 — gắn ảnh vào BUỔI cụ thể + ngày chụp (scalar, fallback mức lớp nếu null).
+  classSessionId String?
+  takenAt        DateTime?
   uploadedById   String?
   uploadedByName String?
   approvedById   String?
@@ -3625,6 +3628,35 @@ model ClassSessionMedia {
 
   @@index([classId, status])
   @@index([status, createdAt])
+  @@index([classSessionId])
+}
+
+// R7-14 — auto-giao bài khi "Hoàn tất buổi". 1 bản ghi / (buổi × bài thi × HV);
+// unique đảm bảo idempotent khi event session.taught replay. ID phẳng (soft-ref).
+enum HomeworkAssignmentStatus {
+  ASSIGNED
+  SUBMITTED
+  GRADED
+  MISSED
+}
+
+model HomeworkAssignment {
+  id             String                   @id @default(cuid())
+  classSessionId String
+  examId         String
+  studentId      String
+  dueAt          DateTime?
+  status         HomeworkAssignmentStatus @default(ASSIGNED)
+  assignMode     String? // NOW / DEFER / CUSTOM_DUE
+  assignedById   String?
+  assignedAt     DateTime                 @default(now())
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@unique([classSessionId, examId, studentId])
+  @@index([studentId])
+  @@index([examId])
+  @@index([classSessionId])
 }
 
 model MediaStudentTag {
