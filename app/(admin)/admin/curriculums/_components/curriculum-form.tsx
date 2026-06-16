@@ -17,6 +17,7 @@ interface CourseOption {
 const STATUS_LABEL: Record<CurriculumStatus, string> = {
   DRAFT: "Nháp",
   ACTIVE: "Đang dùng",
+  UNPUBLISHED: "Ngưng xuất bản",
   ARCHIVED: "Lưu trữ",
 };
 

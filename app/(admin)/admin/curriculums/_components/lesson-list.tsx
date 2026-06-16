@@ -2,25 +2,95 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  ChevronUp,
+  Lock,
+  MessageSquarePlus,
+  Pencil,
+  Plus,
+  Trash2,
+  Unlock,
+} from "lucide-react";
+import type { LessonStatus } from "@prisma/client";
 import { LessonFormDialog, type LessonFormValue } from "./lesson-form-dialog";
-import { deleteLesson, reorderLessons } from "../_actions";
+import { LessonChangeRequestDialog } from "./lesson-change-request-dialog";
+import {
+  archiveLessonAction,
+  deleteLesson,
+  reorderLessons,
+  setLessonStatusAction,
+  unarchiveLessonAction,
+} from "../_actions";
+
+export type LessonRow = LessonFormValue & {
+  status: LessonStatus;
+  version: number;
+  archivedAt: string | null;
+  openChangeRequests: number;
+};
+
+const STATUS_LABEL: Record<LessonStatus, string> = {
+  INCOMPLETE: "Chưa hoàn thiện",
+  COMPLETE: "Hoàn thiện",
+  IN_USE: "Đang sử dụng",
+  NEEDS_UPDATE: "Cần cập nhật",
+  LOCKED: "Đã khóa",
+};
+
+const STATUS_CLASS: Record<LessonStatus, string> = {
+  INCOMPLETE: "bg-neutral-100 text-neutral-600",
+  COMPLETE: "bg-emerald-100 text-emerald-700",
+  IN_USE: "bg-blue-100 text-blue-700",
+  NEEDS_UPDATE: "bg-amber-100 text-amber-700",
+  LOCKED: "bg-red-100 text-red-700",
+};
+
+const SELECTABLE_STATUSES: LessonStatus[] = [
+  "INCOMPLETE",
+  "COMPLETE",
+  "IN_USE",
+  "NEEDS_UPDATE",
+];
 
 export function LessonList({
   curriculumId,
   initialLessons,
+  canManageTraining,
+  canAuthor,
 }: {
   curriculumId: string;
-  initialLessons: LessonFormValue[];
+  initialLessons: LessonRow[];
+  // Đào tạo (training:manage) — mở khóa buổi LOCKED.
+  canManageTraining: boolean;
+  // GV (questions:author) — gửi đề xuất chỉnh sửa.
+  canAuthor: boolean;
 }) {
   const router = useRouter();
-  // Local copy so reorder feels instant; server refresh confirms.
-  const [lessons, setLessons] = useState<LessonFormValue[]>(initialLessons);
+  const active = initialLessons.filter((l) => !l.archivedAt);
+  const archived = initialLessons.filter((l) => l.archivedAt);
+  const [lessons, setLessons] = useState<LessonRow[]>(active);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const nextOrder =
-    lessons.length === 0 ? 1 : Math.max(...lessons.map((l) => l.order)) + 1;
+    initialLessons.length === 0
+      ? 1
+      : Math.max(...initialLessons.map((l) => l.order)) + 1;
+
+  function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const res = await fn();
+      if (!res.ok) {
+        setError(res.error ?? "Có lỗi xảy ra");
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   function move(idx: number, dir: -1 | 1) {
     const j = idx + dir;
@@ -28,7 +98,6 @@ export function LessonList({
     const next = [...lessons];
     [next[idx], next[j]] = [next[j], next[idx]];
     setLessons(next);
-
     setError(null);
     startTransition(async () => {
       const res = await reorderLessons({
@@ -37,30 +106,27 @@ export function LessonList({
       });
       if (!res.ok) {
         setError(res.error);
-        setLessons(initialLessons);
+        setLessons(active);
         return;
       }
       router.refresh();
     });
   }
 
-  function handleDelete(lesson: LessonFormValue) {
+  function handleDelete(lesson: LessonRow) {
     if (
       !confirm(
-        `Xoá "Bài ${lesson.order}: ${lesson.title}"? Hành động này không hoàn tác.`,
+        `Xoá vĩnh viễn "Bài ${lesson.order}: ${lesson.title}"? Cân nhắc "Lưu trữ" thay vì xoá. Hành động này không hoàn tác.`,
       )
     ) {
       return;
     }
-    setError(null);
-    startTransition(async () => {
-      const res = await deleteLesson(lesson.id);
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      router.refresh();
-    });
+    run(() => deleteLesson(lesson.id));
+  }
+
+  function handleStatusChange(lesson: LessonRow, status: LessonStatus) {
+    if (status === lesson.status) return;
+    run(() => setLessonStatusAction({ lessonId: lesson.id, status }));
   }
 
   return (
@@ -71,7 +137,7 @@ export function LessonList({
             Bài học ({lessons.length})
           </h2>
           <p className="text-xs text-neutral-500">
-            Sắp xếp bằng nút ↑↓; số thứ tự cập nhật theo thời gian thực.
+            Sắp xếp bằng nút ↑↓; đổi trạng thái / khóa / lưu trữ từng buổi.
           </p>
         </div>
         <LessonFormDialog
@@ -98,57 +164,110 @@ export function LessonList({
 
       {lessons.length === 0 ? (
         <div className="p-8 text-center text-sm text-neutral-400">
-          Chưa có bài học. Bấm “Thêm bài” để bắt đầu.
+          Chưa có bài học. Bấm “Thêm bài” hoặc dùng “Số buổi” để sinh nhanh.
         </div>
       ) : (
-        <table className="w-full">
-          <thead className="bg-neutral-50 text-left">
-            <tr>
-              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 w-20">
-                Bài
-              </th>
-              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                Tiêu đề
-              </th>
-              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 w-24">
-                Thời lượng
-              </th>
-              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 w-20 text-center">
-                MT
-              </th>
-              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 w-20 text-center">
-                TL
-              </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500 w-40">
-                Hành động
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {lessons.map((lesson, idx) => (
-              <tr key={lesson.id} className="hover:bg-neutral-50/60">
-                <td className="px-3 py-3 font-bold tabular-nums text-neutral-700">
-                  Bài {lesson.order}
-                </td>
-                <td className="px-3 py-3">
-                  <div className="font-medium text-neutral-900">{lesson.title}</div>
-                  {lesson.description && (
-                    <div className="mt-0.5 text-xs text-neutral-500 line-clamp-1">
-                      {lesson.description}
+        <ul className="divide-y divide-neutral-100">
+          {lessons.map((lesson, idx) => {
+            const locked = lesson.status === "LOCKED";
+            return (
+              <li key={lesson.id} className="p-3 hover:bg-neutral-50/60">
+                <div className="flex items-start gap-3">
+                  <div className="pt-1 font-bold tabular-nums text-neutral-700 w-16 shrink-0">
+                    Bài {lesson.order}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-neutral-900">
+                        {lesson.title}
+                      </span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-xs font-semibold ${STATUS_CLASS[lesson.status]}`}
+                      >
+                        {STATUS_LABEL[lesson.status]}
+                      </span>
+                      {lesson.openChangeRequests > 0 && (
+                        <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-semibold text-purple-700">
+                          {lesson.openChangeRequests} đề xuất chờ
+                        </span>
+                      )}
                     </div>
-                  )}
-                </td>
-                <td className="px-3 py-3 text-sm tabular-nums text-neutral-600">
-                  {lesson.duration}′
-                </td>
-                <td className="px-3 py-3 text-center text-sm tabular-nums text-neutral-600">
-                  {lesson.objectives.length}
-                </td>
-                <td className="px-3 py-3 text-center text-sm tabular-nums text-neutral-600">
-                  {lesson.materials.length}
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center justify-end gap-1">
+                    {lesson.description && (
+                      <div className="mt-0.5 text-xs text-neutral-500 line-clamp-1">
+                        {lesson.description}
+                      </div>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <select
+                        value={locked ? "LOCKED" : lesson.status}
+                        onChange={(e) =>
+                          handleStatusChange(lesson, e.target.value as LessonStatus)
+                        }
+                        disabled={pending || locked}
+                        title={locked ? "Buổi đang khóa — dùng nút Mở khóa" : "Đổi trạng thái"}
+                        className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-[#7C3AED] disabled:opacity-60"
+                      >
+                        {locked && <option value="LOCKED">Đã khóa</option>}
+                        {SELECTABLE_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {STATUS_LABEL[s]}
+                          </option>
+                        ))}
+                      </select>
+
+                      {locked ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            run(() =>
+                              setLessonStatusAction({ lessonId: lesson.id, status: "COMPLETE" }),
+                            )
+                          }
+                          disabled={pending || !canManageTraining}
+                          title={
+                            canManageTraining
+                              ? "Mở khóa (Đào tạo)"
+                              : "Chỉ Đào tạo mới mở khóa được"
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                        >
+                          <Unlock className="h-3.5 w-3.5" /> Mở khóa
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            run(() =>
+                              setLessonStatusAction({ lessonId: lesson.id, status: "LOCKED" }),
+                            )
+                          }
+                          disabled={pending}
+                          title="Khóa nội dung buổi"
+                          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                        >
+                          <Lock className="h-3.5 w-3.5" /> Khóa
+                        </button>
+                      )}
+
+                      {canAuthor && (
+                        <LessonChangeRequestDialog
+                          lessonId={lesson.id}
+                          lessonTitle={`Bài ${lesson.order}: ${lesson.title}`}
+                          trigger={(open) => (
+                            <button
+                              type="button"
+                              onClick={open}
+                              className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+                            >
+                              <MessageSquarePlus className="h-3.5 w-3.5" /> Đề xuất sửa
+                            </button>
+                          )}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={() => move(idx, -1)}
@@ -176,9 +295,10 @@ export function LessonList({
                         <button
                           type="button"
                           onClick={open}
-                          className="rounded p-1.5 text-[#7C3AED] hover:bg-[#7C3AED]/10"
+                          disabled={locked}
+                          className="rounded p-1.5 text-[#7C3AED] hover:bg-[#7C3AED]/10 disabled:opacity-30"
                           aria-label="Sửa"
-                          title="Sửa"
+                          title={locked ? "Buổi đang khóa" : "Sửa"}
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -186,20 +306,59 @@ export function LessonList({
                     />
                     <button
                       type="button"
+                      onClick={() => run(() => archiveLessonAction(lesson.id))}
+                      disabled={pending}
+                      className="rounded p-1.5 text-amber-600 hover:bg-amber-50 disabled:opacity-30"
+                      aria-label="Lưu trữ"
+                      title="Lưu trữ (soft, có thể khôi phục)"
+                    >
+                      <Archive className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleDelete(lesson)}
                       disabled={pending}
                       className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-30"
                       aria-label="Xoá"
-                      title="Xoá"
+                      title="Xoá vĩnh viễn"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                </td>
-              </tr>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {archived.length > 0 && (
+        <div className="border-t border-neutral-100 p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+            Buổi đã lưu trữ ({archived.length}) — đọc-only
+          </h3>
+          <ul className="mt-2 space-y-1.5">
+            {archived.map((lesson) => (
+              <li
+                key={lesson.id}
+                className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm"
+              >
+                <span className="text-neutral-500">
+                  <span className="font-semibold">Bài {lesson.order}:</span>{" "}
+                  {lesson.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => run(() => unarchiveLessonAction(lesson.id))}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                >
+                  <ArchiveRestore className="h-3.5 w-3.5" /> Khôi phục
+                </button>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+        </div>
       )}
     </section>
   );

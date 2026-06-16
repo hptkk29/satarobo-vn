@@ -22,3 +22,12 @@ export function isDispatcherEnabled(): boolean {
 export function isConvertV2Enabled(): boolean {
   return process.env.CONVERT_V2_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * R7-07 — Session lifecycle v2 ("Hoàn tất buổi": state machine SCHEDULED→COMPLETED +
+ * dữ liệu thực tế GV/giờ/phòng + event session.taught). OFF → giữ checklist 9 mục cũ
+ * (2-phase, song song). Bật dần như các flag khác.
+ */
+export function isSessionLifecycleV2Enabled(): boolean {
+  return process.env.SESSION_LIFECYCLE_V2 === "true"; // mặc định OFF
+}

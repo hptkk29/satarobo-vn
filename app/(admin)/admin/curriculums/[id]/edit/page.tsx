@@ -4,7 +4,12 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { CurriculumForm } from "../../_components/curriculum-form";
-import { LessonList } from "../../_components/lesson-list";
+import { LessonList, type LessonRow } from "../../_components/lesson-list";
+import { CurriculumSessionsForm } from "../../_components/curriculum-sessions-form";
+import {
+  LessonChangeRequests,
+  type ChangeRequestRow,
+} from "../../_components/lesson-change-requests";
 import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +27,7 @@ export default async function EditCurriculumPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [curriculum, courses] = await Promise.all([
+  const [curriculum, courses, changeRequests] = await Promise.all([
     db.curriculum.findUnique({
       where: { id },
       include: {
@@ -44,6 +49,9 @@ export default async function EditCurriculumPage({ params }: Props) {
             expectedOutput: true,
             homeworkDefault: true,
             assessmentCriteria: true,
+            status: true,
+            version: true,
+            archivedAt: true,
           },
         },
       },
@@ -53,9 +61,74 @@ export default async function EditCurriculumPage({ params }: Props) {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    db.lessonChangeRequest.findMany({
+      where: { lesson: { curriculumId: id } },
+      orderBy: { createdAt: "desc" },
+      include: { lesson: { select: { order: true, title: true } } },
+    }),
   ]);
 
   if (!curriculum) notFound();
+
+  // Tên người gửi đề xuất (requestedById = User.id, không có relation trực tiếp).
+  const requesterIds = [...new Set(changeRequests.map((r) => r.requestedById))];
+  const requesters = requesterIds.length
+    ? await db.user.findMany({
+        where: { id: { in: requesterIds } },
+        select: { id: true, name: true, email: true },
+      })
+    : [];
+  const requesterName = new Map(
+    requesters.map((u) => [u.id, u.name ?? u.email ?? "Người dùng"]),
+  );
+
+  // Số đề xuất OPEN theo từng buổi.
+  const openByLesson = new Map<string, number>();
+  for (const r of changeRequests) {
+    if (r.status === "OPEN") {
+      const cur = openByLesson.get(r.lessonId) ?? 0;
+      openByLesson.set(r.lessonId, cur + 1);
+    }
+  }
+
+  const canManageTraining = can(session.user, "training:manage");
+  const canAuthor = can(session.user, "questions:author");
+
+  const lessons: LessonRow[] = curriculum.lessons.map((l) => ({
+    id: l.id,
+    curriculumId: l.curriculumId,
+    order: l.order,
+    title: l.title,
+    description: l.description,
+    content: l.content,
+    duration: l.duration,
+    objectives: l.objectives,
+    materials: l.materials,
+    notes: l.notes,
+    teacherGuide: l.teacherGuide,
+    expectedOutput: l.expectedOutput,
+    homeworkDefault: l.homeworkDefault,
+    assessmentCriteria: l.assessmentCriteria,
+    status: l.status,
+    version: l.version,
+    archivedAt: l.archivedAt ? l.archivedAt.toISOString() : null,
+    openChangeRequests: openByLesson.get(l.id) ?? 0,
+  }));
+
+  const activeLessons = lessons.filter((l) => !l.archivedAt);
+  const expectedVersions: Record<string, number> = {};
+  for (const l of activeLessons) expectedVersions[l.id] = l.version;
+
+  const changeRequestRows: ChangeRequestRow[] = changeRequests.map((r) => ({
+    id: r.id,
+    lessonOrder: r.lesson.order,
+    lessonTitle: r.lesson.title,
+    requestedByName: requesterName.get(r.requestedById) ?? "Người dùng",
+    content: r.content,
+    status: r.status,
+    response: r.response,
+    createdAt: r.createdAt.toLocaleDateString("vi-VN"),
+  }));
 
   return (
     <div className="space-y-6">
@@ -88,24 +161,22 @@ export default async function EditCurriculumPage({ params }: Props) {
         }}
       />
 
+      <CurriculumSessionsForm
+        curriculumId={curriculum.id}
+        currentCount={activeLessons.length}
+        expectedVersions={expectedVersions}
+      />
+
       <LessonList
         curriculumId={curriculum.id}
-        initialLessons={curriculum.lessons.map((l) => ({
-          id: l.id,
-          curriculumId: l.curriculumId,
-          order: l.order,
-          title: l.title,
-          description: l.description,
-          content: l.content,
-          duration: l.duration,
-          objectives: l.objectives,
-          materials: l.materials,
-          notes: l.notes,
-          teacherGuide: l.teacherGuide,
-          expectedOutput: l.expectedOutput,
-          homeworkDefault: l.homeworkDefault,
-          assessmentCriteria: l.assessmentCriteria,
-        }))}
+        initialLessons={lessons}
+        canManageTraining={canManageTraining}
+        canAuthor={canAuthor}
+      />
+
+      <LessonChangeRequests
+        requests={changeRequestRows}
+        canHandle={canManageTraining}
       />
     </div>
   );

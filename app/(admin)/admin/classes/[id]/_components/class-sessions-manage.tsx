@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalendarRange, Ban, Pencil } from "lucide-react";
 import { cancelSessionAction, adjustSessionAction } from "../_curriculum-actions";
+import { CompleteSession } from "../session/_components/complete-session";
 
 export type SessionRow = {
   id: string;
@@ -38,11 +39,14 @@ export function ClassSessionsManage({
   teachers,
   rooms,
   canEdit,
+  lifecycleV2 = false,
 }: {
   sessions: SessionRow[];
   teachers: Option[];
   rooms: Option[];
   canEdit: boolean;
+  /** R7-07 — bật state machine "Hoàn tất buổi" (flag SESSION_LIFECYCLE_V2). */
+  lifecycleV2?: boolean;
 }) {
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -62,6 +66,7 @@ export function ClassSessionsManage({
               teachers={teachers}
               rooms={rooms}
               canEdit={canEdit}
+              lifecycleV2={lifecycleV2}
             />
           ))}
         </ul>
@@ -75,11 +80,13 @@ function SessionItem({
   teachers,
   rooms,
   canEdit,
+  lifecycleV2,
 }: {
   session: SessionRow;
   teachers: Option[];
   rooms: Option[];
   canEdit: boolean;
+  lifecycleV2: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -168,6 +175,18 @@ function SessionItem({
           )}
         </div>
       </div>
+
+      {lifecycleV2 &&
+        canEdit &&
+        (session.status === "SCHEDULED" || session.status === "IN_PROGRESS") && (
+          <div className="mt-2">
+            <CompleteSession
+              sessionId={session.id}
+              teachers={teachers}
+              rooms={rooms}
+            />
+          </div>
+        )}
 
       {mode === "adjust" && (
         <div className="mt-2 space-y-2 rounded-lg bg-gray-50 p-3">
