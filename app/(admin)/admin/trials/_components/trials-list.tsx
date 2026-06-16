@@ -9,7 +9,11 @@ import {
   ALL_TRIAL_STATUSES,
   CHILD_GRASP_LABEL,
 } from "@/lib/trials/status";
-import { updateTrialAction, saveTrialFeedbackAction } from "../actions";
+import {
+  updateTrialAction,
+  saveTrialFeedbackAction,
+  deleteTrialAction,
+} from "../actions";
 
 type Opt = { id: string; name: string };
 type LabelOpt = { id: string; label: string };
@@ -74,7 +78,12 @@ export function TrialsList({
     <div>
       {/* Filter */}
       <div className="mb-4 flex flex-wrap gap-2">
-        <FilterChip label="Tất cả" href="/trials" active={!statusFilter} />
+        <FilterChip label="Đang xử lý" href="/trials" active={!statusFilter} />
+        <FilterChip
+          label="Tất cả"
+          href="/trials?status=all"
+          active={statusFilter === "all"}
+        />
         {ALL_TRIAL_STATUSES.map((s) => (
           <FilterChip
             key={s}
@@ -154,6 +163,7 @@ function TrialCard({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Manage form state
   const [scheduledAt, setScheduledAt] = useState(toLocalInput(item.scheduledAt));
@@ -189,6 +199,21 @@ function TrialCard({
       });
       if (res.ok) toast.success("Đã cập nhật buổi học thử");
       else toast.error(res.error ?? "Lỗi cập nhật");
+    });
+  }
+
+  function handleDelete() {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    startTransition(async () => {
+      const res = await deleteTrialAction(item.id);
+      if (res.ok) toast.success("Đã xoá buổi học thử");
+      else {
+        toast.error(res.error ?? "Lỗi xoá");
+        setConfirmDelete(false);
+      }
     });
   }
 
@@ -332,14 +357,29 @@ function TrialCard({
                 />
               </Field>
               {canManage && (
-                <button
-                  type="button"
-                  onClick={saveManage}
-                  disabled={pending}
-                  className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
-                >
-                  Lưu lịch
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={saveManage}
+                    disabled={pending}
+                    className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+                  >
+                    Lưu lịch
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    onBlur={() => setConfirmDelete(false)}
+                    disabled={pending}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 ${
+                      confirmDelete
+                        ? "bg-rose-600 text-white hover:bg-rose-700"
+                        : "border border-rose-300 text-rose-600 hover:bg-rose-50"
+                    }`}
+                  >
+                    {confirmDelete ? "Bấm lần nữa để xoá" : "Xoá buổi học thử"}
+                  </button>
+                </div>
               )}
             </div>
           </div>

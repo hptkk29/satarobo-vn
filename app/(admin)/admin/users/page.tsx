@@ -231,7 +231,11 @@ export default async function UsersAdminPage() {
                         })()}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <UserRowActions userId={u.id} />
+                        <UserRowActions
+                          userId={u.id}
+                          isActive={u.isActive}
+                          isSelf={isSelf}
+                        />
                       </td>
                     </tr>
                   );

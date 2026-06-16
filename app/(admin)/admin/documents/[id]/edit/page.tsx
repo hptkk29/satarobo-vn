@@ -61,7 +61,7 @@ export default async function EditDocumentPage({ params }: Props) {
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
-          Sửa tài liệu:{" "}
+          Sửa tài liệu giảng dạy:{" "}
           <span className="font-bold text-orange-600">{document.title}</span>
         </h1>
       </div>

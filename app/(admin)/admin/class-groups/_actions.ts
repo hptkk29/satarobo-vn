@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, assertCan } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -122,6 +122,34 @@ export async function deleteClassGroup(id: string): Promise<ActionResult> {
   });
   revalidatePath("/class-groups");
   return {};
+}
+
+/**
+ * Xoá (mềm) nhóm lớp — dùng cho nút "Xóa" trên bảng danh sách admin.
+ * ClassGroup có cột `deletedAt` → soft delete (set deletedAt = now).
+ */
+export async function deleteClassGroupAction(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  try {
+    assertCan(session.user, "class_group:delete");
+  } catch {
+    return { ok: false, error: "Không có quyền" };
+  }
+
+  try {
+    await db.classGroup.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  } catch {
+    return { ok: false, error: "Không thể xoá nhóm lớp này" };
+  }
+
+  revalidatePath("/class-groups");
+  return { ok: true };
 }
 
 // ─── P2 — thành viên nhóm (cohort) + gán cả nhóm vào lớp ─────────────

@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { DeleteGroupButton } from "./_components/delete-group-button";
 
 export const metadata = { title: "Nhóm lớp | Admin" };
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function ClassGroupsPage() {
     redirect("/dashboard?error=unauthorized");
   }
   const canManage = can(session.user, "class_group:create");
+  const canDelete = can(session.user, "class_group:delete");
 
   const groups = await db.classGroup.findMany({
     where: { deletedAt: null },
@@ -68,12 +70,13 @@ export default async function ClassGroupsPage() {
               <th className="px-3 py-2 text-right">Số lớp/khoá</th>
               <th className="px-3 py-2 text-left">Mã định danh</th>
               <th className="px-3 py-2 text-left">Trạng thái</th>
+              {canDelete && <th className="px-3 py-2 text-right">Hành động</th>}
             </tr>
           </thead>
           <tbody>
             {groups.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-gray-500">
+                <td colSpan={canDelete ? 7 : 6} className="py-8 text-center text-gray-500">
                   Chưa có nhóm lớp nào.
                 </td>
               </tr>
@@ -101,6 +104,11 @@ export default async function ClassGroupsPage() {
                     {STATUS_LABEL[g.status]}
                   </span>
                 </td>
+                {canDelete && (
+                  <td className="px-3 py-2 text-right">
+                    <DeleteGroupButton id={g.id} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

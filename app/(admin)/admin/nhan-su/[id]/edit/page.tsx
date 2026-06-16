@@ -60,6 +60,17 @@ export default async function EditEmployeePage({ params }: Props) {
     }),
   ]);
 
+  // Cờ "Nhân viên HO": có EmployeeOrgAssignment active tới OrgUnit type=HO (Doc 15 OI-1).
+  const hoUnit = await db.orgUnit.findFirst({
+    where: { type: "HO", deletedAt: null },
+    select: { id: true },
+  });
+  const initialIsHO = hoUnit
+    ? (await db.employeeOrgAssignment.count({
+        where: { employeeId: id, orgUnitId: hoUnit.id, status: "ACTIVE" },
+      })) > 0
+    : false;
+
   const isSuperAdmin = hasRole(session.user, "SUPER_ADMIN");
   const canViewAudit = can(session.user, "audit-logs:view");
   const showScheduleLink = TEACHING_DEPARTMENTS.has(employee.department);
@@ -114,6 +125,7 @@ export default async function EditEmployeePage({ params }: Props) {
         centers={centers}
         managers={managers}
         userRole={session.user.role}
+        initialIsHO={initialIsHO}
       />
 
       {canManageUsers && (
