@@ -39,3 +39,11 @@ export function isSessionLifecycleV2Enabled(): boolean {
 export function isMediaSignedUrlEnabled(): boolean {
   return process.env.MEDIA_SIGNED_URL === "true"; // mặc định OFF
 }
+
+/**
+ * R7-16 — Đánh giá GV (học viên) + Khảo sát trung tâm (PH) qua form builder Eval*.
+ * Gate menu portal/admin + luồng nộp. OFF → ẩn menu, không đụng Survey NPS cũ.
+ */
+export function isEvalV2Enabled(): boolean {
+  return process.env.EVAL_V2_ENABLED === "true"; // mặc định OFF
+}

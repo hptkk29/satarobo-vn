@@ -65,6 +65,8 @@ type NavItem = {
   icon: LucideIcon;
   /** Hiện mục nếu user có quyền với BẤT KỲ action nào trong đây. Bỏ trống = luôn hiện. */
   perm?: Action[];
+  /** Mục gắn feature flag — chỉ hiện khi flag bật (R7-16: "eval"). */
+  flag?: "eval";
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -97,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Sắp hết khoá", href: "/students/sap-het-khoa", icon: GraduationCap, perm: ["enrollments:view-all"] },
       { label: "Hoàn thành khoá & chứng chỉ", href: "/hoan-thanh-khoa", icon: Award, perm: ["completions:manage"] },
       { label: "Học bạ", href: "/hoc-ba", icon: ScrollText, perm: ["students:view-all", "students:view-own-class"] },
+      { label: "Học bạ năng lực", href: "/report-cards", icon: NotebookPen, perm: ["report-cards:manage", "report-cards:review"] },
       { label: "SataCoin", href: "/satacoin", icon: Coins, perm: ["satacoin:manage"] },
     ],
   },
@@ -131,6 +134,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },
+      { label: "Đánh giá & Khảo sát", href: "/evaluations", icon: ClipboardList, perm: ["evaluations:manage"], flag: "eval" },
       { label: "Thông báo PH", href: "/notifications", icon: Bell, perm: ["notifications:manage"] },
       { label: "Cảnh báo rủi ro", href: "/canh-bao-rui-ro", icon: AlertTriangle, perm: ["students:view-all"] },
       { label: "Chăm sóc HV", href: "/cham-soc-hv", icon: HeartHandshake, perm: ["students:view-all", "students:view-own-class"] },
@@ -198,19 +202,21 @@ type SidebarUser = {
 
 const STORAGE_KEY = "satarobo:sidebar:collapsed";
 
-export function Sidebar({ user }: { user: SidebarUser }) {
+export function Sidebar({ user, evalV2Enabled = false }: { user: SidebarUser; evalV2Enabled?: boolean }) {
   const pathname = usePathname();
 
   // Lọc menu theo quyền — chỉ giữ mục user được phép thấy. Mục không có `perm`
-  // (Dashboard) luôn hiện. Nhóm rỗng sau lọc → ẩn cả tiêu đề.
+  // (Dashboard) luôn hiện. Mục gắn flag chỉ hiện khi flag bật. Nhóm rỗng sau lọc → ẩn.
   const visibleGroups = useMemo(() => {
     return NAV_GROUPS.map((g) => ({
       label: g.label,
       items: g.items.filter(
-        (it) => !it.perm || it.perm.some((p) => can(user, p)),
+        (it) =>
+          (!it.flag || (it.flag === "eval" && evalV2Enabled)) &&
+          (!it.perm || it.perm.some((p) => can(user, p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [user]);
+  }, [user, evalV2Enabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {
