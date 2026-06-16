@@ -192,6 +192,15 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cài đặt", href: "/settings", icon: Settings, perm: ["settings:view"] },
     ],
   },
+  {
+    label: "Báo cáo",
+    items: [
+      { label: "Báo cáo Lead", href: "/bao-cao/lead", icon: BarChart3, perm: ["leads:view-all", "leads:view-own"] },
+      { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial", icon: FlaskConical, perm: ["trials:view"] },
+      { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: ["classes:view-all", "training:manage"] },
+      { label: "Báo cáo trung tâm", href: "/bao-cao/trung-tam", icon: Coins, perm: ["payments:manage"] },
+    ],
+  },
 ];
 
 type SidebarUser = {
