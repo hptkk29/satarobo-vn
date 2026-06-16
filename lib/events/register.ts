@@ -6,6 +6,10 @@ import { registerR7NotificationHandlers } from "@/lib/_handlers/r7-notifications
 import { registerR7LifecycleHandlers } from "@/lib/_handlers/r7-lifecycle";
 import { registerReportCardHandlers } from "@/lib/_handlers/report-card";
 import { registerHomeworkAssignHandlers } from "@/lib/events/handlers/homework-assign";
+import { registerTrialNotifHandlers } from "@/lib/_handlers/trial-notif";
+import { registerMakeupNotifHandlers } from "@/lib/_handlers/makeup-notif";
+import { registerEvalNotifHandlers } from "@/lib/_handlers/eval-notif";
+import { registerHomeworkNotifHandlers } from "@/lib/_handlers/homework-notif";
 
 let registered = false;
 
@@ -18,4 +22,8 @@ export function ensureHandlersRegistered(): void {
   registerR7LifecycleHandlers(); // R7-07 — enrollment.assigned / session.taught
   registerReportCardHandlers(); // R7-15 — reportcard.published → thông báo PH
   registerHomeworkAssignHandlers(); // R7-14 — session.taught → auto-giao HomeworkAssignment
+  registerTrialNotifHandlers(); // R7-17 — trial.assigned → báo Sale xếp lớp trải nghiệm
+  registerMakeupNotifHandlers(); // R7-17 — makeup.requested / makeup.confirmed → thông báo HV
+  registerEvalNotifHandlers(); // R7-17 — eval.opened → thông báo HV/PH đợt đánh giá/khảo sát
+  registerHomeworkNotifHandlers(); // R7-17 — session.taught → thông báo "Bài tập mới" cho HV
 }

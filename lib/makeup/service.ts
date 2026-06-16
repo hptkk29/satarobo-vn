@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { withMakeupException } from "@/lib/db-scope";
+import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { getSetting } from "@/lib/settings/service";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -46,6 +47,14 @@ export async function createMakeupNeed(params: {
     },
     select: { id: true },
   });
+
+  // R7-17 — báo PH/HV nhu cầu bù đã ghi nhận (side-effect tách qua outbox).
+  await publishEvent(
+    "makeup.requested",
+    { makeupNeedId: need.id, studentId: params.studentId, centerId: sess.class.centerId },
+    { dedupeKey: `makeup.requested:${need.id}` },
+  );
+
   return { ok: true, id: need.id };
 }
 
@@ -246,6 +255,18 @@ export async function scheduleMakeup(params: {
           scheduledById: params.scheduledById ?? null,
         },
       });
+
+      // R7-17 — báo PH/HV lịch bù đã xác nhận. Ghi CÙNG tx → rollback nghiệp vụ
+      // (re-check sức chứa fail) thì không có event (atomic).
+      await publishEvent(
+        "makeup.confirmed",
+        {
+          makeupNeedId: params.makeupNeedId,
+          studentId: need.studentId,
+          makeupSessionId: params.makeupSessionId,
+        },
+        { tx, dedupeKey: `makeup.confirmed:${params.makeupNeedId}` },
+      );
     });
   } catch (err) {
     if (err instanceof Error && err.message === "FULL") {

@@ -2,6 +2,7 @@
 import { z } from "zod";
 import type { EvaluationRoundStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { publishEvent } from "@/lib/events/publish";
 
 export const roundInputSchema = z
   .object({
@@ -49,7 +50,22 @@ export async function createRound(input: RoundInput) {
 }
 
 export async function setRoundStatus(roundId: string, status: EvaluationRoundStatus) {
-  return db.evaluationRound.update({ where: { id: roundId }, data: { status } });
+  const round = await db.evaluationRound.update({ where: { id: roundId }, data: { status } });
+  // R7-17 — đợt chuyển sang MỞ → thông báo HV/PH đủ điều kiện (handler eval-notif).
+  // dedupeKey ổn định theo roundId: replay/đổi-lại-trạng-thái KHÔNG tạo event trùng.
+  if (status === "OPEN") {
+    await publishEvent(
+      "eval.opened",
+      {
+        roundId: round.id,
+        scope: round.scope,
+        centerId: round.centerId,
+        courseId: round.courseId,
+      },
+      { dedupeKey: `eval.opened:${round.id}` },
+    );
+  }
+  return round;
 }
 
 export async function listRounds(opts?: { centerIds?: string[] | null }) {
