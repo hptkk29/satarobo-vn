@@ -99,9 +99,15 @@ test.describe("[R7-07] Assign students + session lifecycle", () => {
   // ── AC1/C1 — dropdown filter ─────────────────────────────────────────────
   test("[R7-07-C1] chỉ enrollment hợp lệ hiện; CS khác/PAUSED/đã STUDYING ẩn", async () => {
     const { course, cls } = await seedClassWithCourse({ slug: "asg1", centerId: "CS1" });
+    // Lớp giữ chỗ KHÁC cls (enrollment "chờ xếp lớp" nằm ở lớp khác cùng khóa/CS →
+    // buildAssignableWhere có classId:{not: cls.id}, nếu giữ ở chính cls sẽ bị ẩn).
+    const holding = await db.class.create({
+      data: { name: "Holding asg1", courseId: course.id, centerId: "CS1", status: "ACTIVE" },
+      select: { id: true },
+    });
 
-    // hợp lệ: cùng khóa, cùng CS1, CONFIRMED.
-    await seedPendingEnrollment({ courseId: course.id, centerId: "CS1", holdingClassId: cls.id, name: "Hợp lệ" });
+    // hợp lệ: cùng khóa, cùng CS1, CONFIRMED, đang ở lớp giữ chỗ khác.
+    await seedPendingEnrollment({ courseId: course.id, centerId: "CS1", holdingClassId: holding.id, name: "Hợp lệ" });
     // CS2 → ẩn.
     await db.center.upsert({ where: { id: "CS2" }, create: { id: "CS2", name: "CS2", code: "CS2", slug: "cs2", address: "test" }, update: {} });
     await seedPendingEnrollment({ courseId: course.id, centerId: "CS2", holdingClassId: cls.id, name: "CS khác" });

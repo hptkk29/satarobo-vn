@@ -128,11 +128,15 @@ test.describe("[R7-10] Curriculum sessions", () => {
       resizeCurriculum({ curriculumId: id, targetN: 10, confirm: true, expectedVersions }),
     ]);
 
-    // Đúng 1 thắng, 1 CONFLICT (báo reload).
-    const oks = [a, b].filter((r) => r.ok);
-    const conflicts = [a, b].filter((r) => !r.ok && r.code === "CONFLICT");
-    expect(oks).toHaveLength(1);
-    expect(conflicts).toHaveLength(1);
+    // Tính an toàn (optimistic lock): ĐÚNG 1 lần archive thật (archived===2); lần còn
+    // lại KHÔNG được archive trùng — hoặc CONFLICT (version lệch) hoặc noop (re-plan thấy
+    // đã 10 buổi, tuỳ thời điểm chạy). Quan trọng: KHÔNG double-archive + hội tụ 10 buổi.
+    const archivers = [a, b].filter((r) => r.ok && r.archived === 2);
+    const losers = [a, b].filter(
+      (r) => (r.ok && r.archived === 0) || (!r.ok && r.code === "CONFLICT"),
+    );
+    expect(archivers).toHaveLength(1);
+    expect(losers).toHaveLength(1);
     expect(await db.lesson.count({ where: { curriculumId: id, archivedAt: null } })).toBe(10);
   });
 });

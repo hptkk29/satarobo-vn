@@ -27,6 +27,13 @@ export const SCOPE_EXEMPT = new Set<string>([
   "SataCoinRule", // config, centerId null = áp mọi cơ sở
   "FacebookPageMapping", // mapping Page→center (cấu hình hạ tầng, không phải dữ liệu nghiệp vụ)
   "WorkShiftConfig", // R6-B2 — cấu hình ca per-center, centerId null = mặc định toàn hệ thống
+  // R7-15/R7-16 (tech-debt — xem db-import-allowlist): ReportCard/EvaluationRound dùng
+  // bare db + manual scope-check (ownership/center) trong lib/lms/* + lib/eval/*. CHƯA
+  // auto-scope: ReportCard.centerId nullable, EvaluationRound có round TEACHER_EVAL
+  // centerId=null (toàn hệ thống) → inject `centerId IN ...` sẽ ẩn nhầm. TODO: chuyển
+  // sang SCOPED_MODELS + scopedDb khi 2 model này center-scope hẳn.
+  "ReportCard",
+  "EvaluationRound",
 ]);
 
 function bypassesScope(actor: Actor): boolean {

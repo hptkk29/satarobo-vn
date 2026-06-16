@@ -71,7 +71,9 @@ test.describe("[R7-05] Convert v2", () => {
     expect([...body].every((ch) => STUDENT_CODE_V2_CHARSET.includes(ch))).toBe(true);
     const code = formatStudentCodeV2("CS1", "AB3K9P", new Date("2026-01-01"));
     expect(code).toBe("CS1-26-AB3K9P");
-    expect(code).not.toMatch(/[ILO01]/); // bỏ ký tự dễ nhầm
+    // charset không nhập nhằng CHỈ áp cho thân mã ngẫu nhiên — phần CS code (vd "CS1")
+    // do người đặt, có thể chứa số. Kiểm I/L/O/0/1 trên body, không trên cả mã.
+    expect(body).not.toMatch(/[ILO01]/); // bỏ ký tự dễ nhầm
   });
 
   test("[R7-05-C11] flag CONVERT_V2_ENABLED đọc từ env (mặc định OFF)", () => {
