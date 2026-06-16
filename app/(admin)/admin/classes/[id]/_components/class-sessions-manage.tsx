@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { CalendarRange, Ban, Pencil } from "lucide-react";
 import { cancelSessionAction, adjustSessionAction } from "../_curriculum-actions";
 import { CompleteSession } from "../session/_components/complete-session";
+import { GiveHomework } from "../session/_components/give-homework";
 
 export type SessionRow = {
   id: string;
@@ -187,6 +188,13 @@ function SessionItem({
             />
           </div>
         )}
+
+      {/* R7-14 — buổi đã hoàn tất: cho GV "Giao bài" sau (trường hợp đã chọn DEFER). */}
+      {lifecycleV2 && canEdit && session.status === "COMPLETED" && (
+        <div className="mt-2">
+          <GiveHomework sessionId={session.id} />
+        </div>
+      )}
 
       {mode === "adjust" && (
         <div className="mt-2 space-y-2 rounded-lg bg-gray-50 p-3">

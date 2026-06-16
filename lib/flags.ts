@@ -31,3 +31,11 @@ export function isConvertV2Enabled(): boolean {
 export function isSessionLifecycleV2Enabled(): boolean {
   return process.env.SESSION_LIFECYCLE_V2 === "true"; // mặc định OFF
 }
+
+/**
+ * R7-09 — Signed URL R2 cho ảnh lớp (portal + admin render qua presigned GET, TTL ngắn).
+ * OFF → dùng fileUrl công khai như cũ. Bật dần để siết quyền truy cập ảnh.
+ */
+export function isMediaSignedUrlEnabled(): boolean {
+  return process.env.MEDIA_SIGNED_URL === "true"; // mặc định OFF
+}

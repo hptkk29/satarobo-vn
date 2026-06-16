@@ -45,6 +45,11 @@ export async function completeSession(opts: {
   classComment?: string | null;
   /** true → bỏ qua cảnh báo thiếu điểm danh (người dùng đã xác nhận). */
   confirmNoAttendance?: boolean;
+  // R7-14 — GV chọn cách giao bài kèm khi hoàn tất buổi:
+  //   NOW (mặc định) = giao ngay, hạn = Exam.defaultDueDays;
+  //   DEFER = chưa giao (bấm "Giao bài" sau); CUSTOM_DUE = giao với hạn assignDueAt.
+  assignMode?: "NOW" | "DEFER" | "CUSTOM_DUE";
+  assignDueAt?: Date | null;
   actorId: string | null;
   actorName: string;
   now?: Date;
@@ -125,7 +130,14 @@ export async function completeSession(opts: {
 
     await publishEvent(
       "session.taught",
-      { sessionId: session.id, classId: session.classId },
+      {
+        sessionId: session.id,
+        classId: session.classId,
+        // R7-14 — handler homework-assign đọc các field này để quyết cách giao bài.
+        assignMode: opts.assignMode ?? "NOW",
+        dueAt: opts.assignDueAt ? opts.assignDueAt.toISOString() : null,
+        assignedById: opts.actorId,
+      },
       { tx, dedupeKey: `session.taught:${session.id}` },
     );
   });

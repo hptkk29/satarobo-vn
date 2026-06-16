@@ -360,6 +360,17 @@ export const SETTINGS = {
     default: 900, // lib/lms/media-key.ts
     centerOverridable: false,
   }),
+  // R7-14 — phụ huynh xem điểm tổng quan bài tập/kiểm tra của con (mặc định TẮT;
+  // PH chỉ thấy trạng thái đã giao/đã làm trừ khi bật key này). Không bao giờ lộ
+  // nội dung câu hỏi cho PH — đó là kiểm soát ở tầng query (lib/portal/learning.ts).
+  "homework.showScoreToParent": def({
+    key: "homework.showScoreToParent",
+    group: "lms",
+    label: "Cho phụ huynh xem điểm tổng quan bài tập/kiểm tra",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: true,
+  }),
   "storage.presignTtlSec": def({
     key: "storage.presignTtlSec",
     group: "storage",

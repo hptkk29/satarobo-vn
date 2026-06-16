@@ -28,6 +28,9 @@ export function CompleteSession({
   const [actualStartAt, setActualStartAt] = useState("");
   const [actualEndAt, setActualEndAt] = useState("");
   const [classComment, setClassComment] = useState("");
+  // R7-14 — cách giao bài kèm: NOW (hạn mặc định) / CUSTOM_DUE (hạn chọn) / DEFER (giao sau).
+  const [assignMode, setAssignMode] = useState<"NOW" | "DEFER" | "CUSTOM_DUE">("NOW");
+  const [assignDueAt, setAssignDueAt] = useState("");
 
   function submit(confirmNoAttendance = false) {
     startTransition(async () => {
@@ -38,6 +41,8 @@ export function CompleteSession({
         actualEndAt: actualEndAt || null,
         classComment: classComment || null,
         confirmNoAttendance,
+        assignMode,
+        assignDueAt: assignMode === "CUSTOM_DUE" ? assignDueAt || null : null,
       });
       if (res.ok) {
         toast.success(
@@ -142,6 +147,50 @@ export function CompleteSession({
           className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
         />
       </label>
+
+      {/* R7-14 — giao bài tự động (exam gắn lesson của buổi) cho HV đang học. */}
+      <div className="rounded-lg border border-green-200 bg-white p-2">
+        <span className="mb-1 block text-xs font-semibold text-gray-600">
+          Giao bài kiểm tra/bài tập của buổi
+        </span>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-700">
+          <label className="inline-flex items-center gap-1">
+            <input
+              type="radio"
+              name={`assignMode-${sessionId}`}
+              checked={assignMode === "NOW"}
+              onChange={() => setAssignMode("NOW")}
+            />
+            Giao ngay (hạn mặc định)
+          </label>
+          <label className="inline-flex items-center gap-1">
+            <input
+              type="radio"
+              name={`assignMode-${sessionId}`}
+              checked={assignMode === "CUSTOM_DUE"}
+              onChange={() => setAssignMode("CUSTOM_DUE")}
+            />
+            Giao ngay, hạn khác
+          </label>
+          <label className="inline-flex items-center gap-1">
+            <input
+              type="radio"
+              name={`assignMode-${sessionId}`}
+              checked={assignMode === "DEFER"}
+              onChange={() => setAssignMode("DEFER")}
+            />
+            Giao sau
+          </label>
+        </div>
+        {assignMode === "CUSTOM_DUE" && (
+          <input
+            type="datetime-local"
+            value={assignDueAt}
+            onChange={(e) => setAssignDueAt(e.target.value)}
+            className="mt-2 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
+          />
+        )}
+      </div>
       <div className="flex gap-2">
         <button
           type="button"

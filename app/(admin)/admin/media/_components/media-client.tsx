@@ -2,16 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, Loader2, Check, X, Trash2 } from "lucide-react";
+import { Upload, Loader2, Check, X, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   uploadClassMedia,
   reviewMedia,
   deleteMedia,
-  getClassStudentsForTag,
+  getClassUploadContext,
 } from "../actions";
 
 type Opt = { id: string; label: string };
+type SessionOpt = { id: string; label: string; date: string };
 type MediaItem = {
   id: string;
   fileUrl: string;
@@ -20,6 +21,8 @@ type MediaItem = {
   className: string;
   uploadedByName: string | null;
   tagNames: string[];
+  takenAt: string | null;
+  hasSession: boolean;
   createdAt: string;
 };
 
@@ -39,19 +42,46 @@ export function MediaClient({
   const [pending, startTransition] = useTransition();
   const [classId, setClassId] = useState("");
   const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
+  const [nonConsent, setNonConsent] = useState<{ id: string; name: string }[]>([]);
+  const [sessions, setSessions] = useState<SessionOpt[]>([]);
+  const [sessionId, setSessionId] = useState("");
+  const [takenAt, setTakenAt] = useState("");
   const [tagged, setTagged] = useState<string[]>([]);
   const [wholeClass, setWholeClass] = useState(false);
   const [caption, setCaption] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+
+  const nonConsentIds = new Set(nonConsent.map((s) => s.id));
 
   async function onClass(id: string) {
     setClassId(id);
     setTagged([]);
     setWholeClass(false);
-    if (!id) return setStudents([]);
-    setStudents(await getClassStudentsForTag(id));
+    setSessionId("");
+    setTakenAt("");
+    if (!id) {
+      setStudents([]);
+      setNonConsent([]);
+      setSessions([]);
+      setBlocked(false);
+      return;
+    }
+    const ctx = await getClassUploadContext(id);
+    setBlocked(!ctx.canUpload);
+    setStudents(ctx.students);
+    setNonConsent(ctx.nonConsent);
+    setSessions(ctx.sessions);
+    if (!ctx.canUpload) toast.error("Bạn không phụ trách lớp này");
+  }
+
+  function onSession(id: string) {
+    setSessionId(id);
+    // Mặc định ngày chụp = ngày buổi đã chọn (có thể chỉnh tay).
+    const ses = sessions.find((s) => s.id === id);
+    if (ses && !takenAt) setTakenAt(ses.date.slice(0, 10));
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -107,6 +137,8 @@ export function MediaClient({
         // Ảnh chung cả lớp = đánh dấu isClassWide (không gắn thẻ HS cụ thể).
         isClassWide: wholeClass,
         studentIds: wholeClass ? [] : tagged,
+        classSessionId: sessionId || null,
+        takenAt: takenAt ? new Date(takenAt).toISOString() : null,
       });
       if (res.ok) {
         toast.success("Đã đăng ảnh");
@@ -115,6 +147,8 @@ export function MediaClient({
         setCaption("");
         setTagged([]);
         setWholeClass(false);
+        setSessionId("");
+        setTakenAt("");
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -135,6 +169,51 @@ export function MediaClient({
               </option>
             ))}
           </select>
+
+          {blocked && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
+              Bạn không phụ trách lớp này nên không thể đăng ảnh.
+            </div>
+          )}
+
+          {/* Banner cảnh báo HS chưa đồng ý dùng hình ảnh (consent). */}
+          {classId && !blocked && nonConsent.length > 0 && (
+            <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Học viên CHƯA đồng ý dùng hình ảnh:</p>
+                <p className="mt-0.5">{nonConsent.map((s) => s.name).join(", ")}</p>
+                <p className="mt-1 text-amber-700">
+                  Vui lòng làm mờ thủ công hoặc loại các em này khỏi khung hình. Không
+                  thể gắn thẻ các em này.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {classId && !blocked && sessions.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={sessionId}
+                onChange={(e) => onSession(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">— Buổi học (tuỳ chọn) —</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={takenAt}
+                onChange={(e) => setTakenAt(e.target.value)}
+                className={inputCls}
+                aria-label="Ngày chụp"
+              />
+            </div>
+          )}
 
           {fileUrl ? (
             <img src={fileUrl} alt="preview" className="h-40 w-full rounded-lg object-cover" />
@@ -177,15 +256,22 @@ export function MediaClient({
                   <div className="flex flex-wrap gap-1.5">
                     {students.map((s) => {
                       const on = tagged.includes(s.id);
+                      const noConsent = nonConsentIds.has(s.id);
                       return (
                         <button
                           key={s.id}
                           type="button"
+                          disabled={noConsent}
+                          title={noConsent ? "Chưa đồng ý dùng hình ảnh" : undefined}
                           onClick={() =>
                             setTagged((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
                           }
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            on ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"
+                            noConsent
+                              ? "cursor-not-allowed bg-gray-100 text-gray-300 line-through"
+                              : on
+                                ? "bg-orange-500 text-white"
+                                : "bg-gray-100 text-gray-600"
                           }`}
                         >
                           {s.name}
@@ -201,7 +287,7 @@ export function MediaClient({
           <button
             type="button"
             onClick={submit}
-            disabled={pending || uploading}
+            disabled={pending || uploading || blocked}
             className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
           >
             Đăng ảnh
@@ -235,6 +321,11 @@ export function MediaClient({
                       {m.status === "APPROVED" ? "Duyệt" : m.status === "REJECTED" ? "Từ chối" : "Chờ"}
                     </span>
                   </div>
+                  {m.takenAt && (
+                    <p className="mt-0.5 text-[10px] text-gray-400">
+                      Buổi {new Date(m.takenAt).toLocaleDateString("vi-VN")}
+                    </p>
+                  )}
                   {m.caption && <p className="mt-1 line-clamp-2 text-xs text-gray-600">{m.caption}</p>}
                   {m.tagNames.length > 0 && (
                     <p className="mt-0.5 text-[10px] text-gray-400">Tag: {m.tagNames.join(", ")}</p>

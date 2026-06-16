@@ -2,6 +2,7 @@
 // C6.1 upload phải tag ≥1 HS · C6.2 không tag → không hiển thị PH · C6.3 chưa consent → không tag
 // · C6.4 thu hồi consent → media có tag con đó ẩn ngay.
 import { db } from "@/lib/db";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 export class ConsentError extends Error {
   readonly code: string;
@@ -36,6 +37,34 @@ export async function hasMediaConsent(studentId: string): Promise<boolean> {
     select: { status: true },
   });
   return c?.status === "GRANTED";
+}
+
+/**
+ * R7-09 — HS đang học của 1 lớp CHƯA có consent CLASS_MEDIA (status != GRANTED).
+ * Dùng cho banner cảnh báo lúc upload: nhắc GV làm mờ thủ công / loại khỏi khung,
+ * và chặn tag các HS này (server-side). Trả [] nếu lớp không có HS.
+ */
+export async function getNonConsentStudents(
+  classId: string,
+): Promise<{ id: string; name: string }[]> {
+  const enrollments = await db.enrollment.findMany({
+    where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+    select: { student: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const students = enrollments.map((e) => e.student);
+  if (students.length === 0) return [];
+
+  const granted = await db.studentConsent.findMany({
+    where: {
+      studentId: { in: students.map((s) => s.id) },
+      type: "CLASS_MEDIA",
+      status: "GRANTED",
+    },
+    select: { studentId: true },
+  });
+  const grantedSet = new Set(granted.map((g) => g.studentId));
+  return students.filter((s) => !grantedSet.has(s.id));
 }
 
 /** C6.3 — chỉ tag được HS đã GRANTED consent. */

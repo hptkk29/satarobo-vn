@@ -1,6 +1,7 @@
 import { requireActiveStudent } from "@/lib/portal/session";
 import { db } from "@/lib/db";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
+import { resolveMediaUrl } from "@/lib/storage/signed-url";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Hình ảnh | Sata Robo", robots: { index: false } };
@@ -23,7 +24,7 @@ export default async function HinhAnhPage() {
   });
   const classIds = enr.map((e) => e.classId);
 
-  const media =
+  const rawMedia =
     consentGranted && classIds.length > 0
       ? await db.classSessionMedia.findMany({
           where: {
@@ -34,11 +35,36 @@ export default async function HinhAnhPage() {
               { isClassWide: true }, // (b) ảnh chung cả lớp (đánh dấu rõ ràng)
             ],
           },
-          select: { id: true, fileUrl: true, caption: true, approvedAt: true, createdAt: true },
-          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            fileUrl: true,
+            caption: true,
+            takenAt: true,
+            approvedAt: true,
+            createdAt: true,
+            // Đánh dấu ảnh có tag con → ưu tiên hiển thị trước (AC3).
+            tags: { where: { studentId }, select: { id: true }, take: 1 },
+          },
+          orderBy: [{ takenAt: "desc" }, { createdAt: "desc" }],
           take: 200,
         })
       : [];
+
+  // Ưu tiên ảnh có tag con, rồi tới ảnh chung cả lớp.
+  const sorted = [...rawMedia].sort(
+    (a, b) => (b.tags.length > 0 ? 1 : 0) - (a.tags.length > 0 ? 1 : 0),
+  );
+
+  // Signed URL khi bật flag MEDIA_SIGNED_URL (OFF → fileUrl trần).
+  const displayUrls = await Promise.all(sorted.map((m) => resolveMediaUrl(m.fileUrl)));
+
+  const media = sorted.map((m, i) => ({
+    id: m.id,
+    url: displayUrls[i] ?? m.fileUrl,
+    caption: m.caption,
+    takenAt: m.takenAt?.toISOString() ?? null,
+    tagged: m.tags.length > 0,
+  }));
 
   return (
     <div className="space-y-5">
@@ -58,16 +84,21 @@ export default async function HinhAnhPage() {
               key={m.id}
               className="overflow-hidden rounded-xl border border-neutral-200 bg-white"
             >
-              <a href={m.fileUrl} target="_blank" rel="noopener noreferrer">
+              <a href={m.url} target="_blank" rel="noopener noreferrer">
                 <img
-                  src={m.fileUrl}
+                  src={m.url}
                   alt={m.caption ?? "Ảnh lớp"}
                   className="h-32 w-full object-cover sm:h-40"
                 />
               </a>
-              {m.caption && (
-                <figcaption className="p-2 text-xs text-neutral-600">{m.caption}</figcaption>
-              )}
+              <figcaption className="space-y-0.5 p-2">
+                {m.takenAt && (
+                  <p className="text-[11px] text-neutral-400">
+                    {new Date(m.takenAt).toLocaleDateString("vi-VN")}
+                  </p>
+                )}
+                {m.caption && <p className="text-xs text-neutral-600">{m.caption}</p>}
+              </figcaption>
             </figure>
           ))}
         </div>
