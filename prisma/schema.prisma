@@ -2049,6 +2049,7 @@ model Lesson {
   assignments    Assignment[]
   classSessions  ClassSession[]
   changeRequests LessonChangeRequest[]
+  scormPackages  ScormPackage[]
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
@@ -4297,6 +4298,69 @@ model CoinRuleConfig {
   active      Boolean        @default(false) // trơ tới khi ban hành
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+}
+
+// =============================================================================
+// R7-11/R7-12 — SCORM: gói bài giảng giải nén lên R2 private + player có bảo vệ.
+// Giải nén qua DB-backed job (DomainEvent outbox A0-07) vì Vercel serverless
+// không giữ tiến trình dài. Flag SCORM_ENABLED gate menu/route. Không centerId
+// (gắn buổi qua lessonId) → không qua scopedDb.
+// =============================================================================
+
+enum ScormVersion {
+  SCORM_12 // SCORM 1.2
+  SCORM_2004
+}
+
+enum ScormPackageStatus {
+  UPLOADING // đang upload zip lên R2 (presigned)
+  PROCESSING // job đang giải nén + đọc manifest
+  FAILED // job lỗi (xem error) — resume được
+  TESTING // giải nén xong, Đào tạo xem thử trước publish
+  PUBLISHED // đã phát hành, GV mở được
+  ARCHIVED // bản cũ (không xóa vật lý trong R7)
+}
+
+model ScormPackage {
+  id               String             @id @default(cuid())
+  lessonId         String // gắn buổi (FK)
+  name             String
+  scormVersion     ScormVersion?      // đọc từ manifest sau khi giải nén
+  storagePrefix    String // prefix R2 `scorm/{packageId}/`
+  uploadKey        String? // key R2 của zip gốc đã upload
+  launchUrl        String? // đường dẫn launch (tương đối trong prefix)
+  sizeBytes        Int? // tổng kích thước
+  fileCount        Int? // số entry đã giải nén
+  status           ScormPackageStatus @default(UPLOADING)
+  version          Int                @default(1) // version per lesson
+  isActiveForLesson Boolean           @default(false) // chỉ 1 active/buổi
+  entryCursor      Int                @default(0) // con trỏ entry để job resume (idempotent)
+  error            String? // lý do FAILED
+  uploadedById     String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  lesson     Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  accessLogs ScormAccessLog[]
+
+  // 1 active duy nhất mỗi buổi: PARTIAL unique `(lessonId) WHERE isActiveForLesson`
+  // tạo bằng raw SQL trong migration (Prisma không khai báo partial index native).
+  @@index([lessonId])
+  @@index([status])
+}
+
+model ScormAccessLog {
+  id             String   @id @default(cuid())
+  packageId      String
+  classSessionId String? // buổi GV mở (nếu mở theo lớp)
+  userId         String // ai mở
+  openedAt       DateTime @default(now())
+  ip             String?
+
+  package ScormPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId, openedAt])
+  @@index([userId])
 }
 
 // =============================================================================

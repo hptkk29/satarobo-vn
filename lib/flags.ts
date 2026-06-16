@@ -47,3 +47,11 @@ export function isMediaSignedUrlEnabled(): boolean {
 export function isEvalV2Enabled(): boolean {
   return process.env.EVAL_V2_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * R7-11/R7-12 — SCORM (upload/giải nén/publish + player blur/watermark). Gate
+ * menu + route admin/scorm + api asset. OFF → ẩn hoàn toàn, không ảnh hưởng hệ khác.
+ */
+export function isScormEnabled(): boolean {
+  return process.env.SCORM_ENABLED === "true"; // mặc định OFF
+}
