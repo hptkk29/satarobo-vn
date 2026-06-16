@@ -4694,3 +4694,164 @@ model IdempotencyKey {
 
   @@index([scope, createdAt])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R7-15 — Học bạ ReportCard (nhập → duyệt → phát hành). 1 học bạ / Enrollment.
+// ═══════════════════════════════════════════════════════════════════════════
+enum ReportCardStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  RECALLED
+}
+
+model ReportCard {
+  id                String           @id @default(cuid())
+  enrollmentId      String           @unique // 1-1 với Enrollment (ref phẳng)
+  status            ReportCardStatus @default(DRAFT)
+  periodComments    Json? // nhận xét theo giai đoạn [{period, comment}]
+  finalComment      String?          @db.Text
+  completionStatus  String?
+  teacherId         String?
+  reviewedById      String?
+  publishedById     String?
+  publishedAt       DateTime?
+  publishedSnapshot Json? // đóng băng số liệu lúc phát hành
+  centerId          String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  scores ReportCardScore[]
+
+  @@index([status])
+  @@index([centerId])
+  @@index([teacherId])
+}
+
+model ReportCardCriterion {
+  id        String   @id @default(cuid())
+  courseId  String // Đào tạo cấu hình tiêu chí năng lực per khóa (ref phẳng)
+  name      String
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([courseId, active])
+}
+
+model ReportCardScore {
+  id           String     @id @default(cuid())
+  reportCardId String
+  reportCard   ReportCard @relation(fields: [reportCardId], references: [id], onDelete: Cascade)
+  criterionId  String // ref phẳng tới ReportCardCriterion
+  level        Int // thang 1..4
+  note         String?    @db.Text
+
+  @@unique([reportCardId, criterionId])
+  @@index([reportCardId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R7-16 — Form builder (4 loại câu hỏi) + Đánh giá GV + Khảo sát trung tâm.
+// Bảng Eval* MỚI — KHÔNG đụng Survey NPS cũ.
+// ═══════════════════════════════════════════════════════════════════════════
+enum EvalScope {
+  TEACHER_EVAL
+  CENTER_SURVEY
+}
+
+enum EvalFormStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum EvalQuestionType {
+  STAR_RATING
+  RADIO
+  CHECKBOX
+  TEXTBOX
+}
+
+enum EvaluationRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+model EvalForm {
+  id          String         @id @default(cuid())
+  title       String
+  scope       EvalScope
+  status      EvalFormStatus @default(DRAFT)
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  questions EvalQuestion[]
+  rounds    EvaluationRound[]
+
+  @@index([scope, status])
+}
+
+model EvalQuestion {
+  id       String           @id @default(cuid())
+  formId   String
+  form     EvalForm         @relation(fields: [formId], references: [id], onDelete: Cascade)
+  type     EvalQuestionType
+  label    String
+  options  Json? // cho RADIO/CHECKBOX
+  required Boolean          @default(false)
+  order    Int              @default(0)
+
+  @@index([formId])
+}
+
+model EvaluationRound {
+  id        String                @id @default(cuid())
+  formId    String
+  form      EvalForm              @relation(fields: [formId], references: [id], onDelete: Restrict)
+  scope     EvalScope
+  name      String
+  centerId  String?
+  courseId  String?
+  opensAt   DateTime?
+  closesAt  DateTime?
+  status    EvaluationRoundStatus @default(DRAFT)
+  createdAt DateTime              @default(now())
+
+  responses EvalResponse[]
+
+  @@index([scope, status])
+  @@index([centerId])
+}
+
+model EvalResponse {
+  id           String          @id @default(cuid())
+  roundId      String
+  round        EvaluationRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  enrollmentId String?
+  teacherId    String? // GV được đánh giá (TEACHER_EVAL)
+  parentUserId String? // PH làm khảo sát (CENTER_SURVEY)
+  studentId    String?
+  submittedAt  DateTime        @default(now())
+
+  answers EvalAnswer[]
+
+  // Chống trùng: TEACHER_EVAL theo (đợt×enrollment×GV); CENTER_SURVEY theo (đợt×PH).
+  @@unique([roundId, enrollmentId, teacherId])
+  @@unique([roundId, parentUserId])
+  @@index([roundId])
+}
+
+model EvalAnswer {
+  id           String       @id @default(cuid())
+  responseId   String
+  response     EvalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId   String // ref phẳng tới EvalQuestion
+  valueNumber  Int? // STAR_RATING
+  valueOptions Json? // RADIO/CHECKBOX
+  valueText    String?      @db.Text
+
+  @@index([responseId])
+}

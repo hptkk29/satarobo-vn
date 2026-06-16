@@ -135,6 +135,15 @@ export type Action =
   | "enrollments:cancel"
   | "enrollments:delete"
 
+  // --- Evaluations / surveys (R7-16) ---
+  | "evaluations:manage"
+  | "evaluations:view-aggregate"
+  | "evaluations:view-detail"
+
+  // --- Report cards (R7-15) ---
+  | "report-cards:manage"
+  | "report-cards:review"
+
   // --- Course completion (B4) ---
   | "completions:manage"
 
@@ -354,6 +363,15 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "enrollments:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "enrollments:transfer": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "completions:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+
+  // --- Evaluations / surveys (R7-16) ---
+  "evaluations:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "evaluations:view-aggregate": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "evaluations:view-detail": ["SUPER_ADMIN", "CENTER_MANAGER"],
+
+  // --- Report cards (R7-15) ---
+  "report-cards:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "report-cards:review": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "satacoin:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "enrollments:cancel": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "enrollments:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
