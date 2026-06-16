@@ -23,22 +23,15 @@ interface Props {
   mode: "create" | "edit";
   initial?: Employee;
   defaultCode?: string;
-  centers: { id: string; name: string }[];
+  // PR-C: đơn vị làm việc đọc từ OrgUnit tree (gồm HO), lưu orgUnitId. centerId suy ra ở server.
+  orgUnits: { id: string; name: string }[];
   managers: { id: string; fullName: string; jobTitle: string }[];
+  // Track Department: phòng ban đọc động từ DB (DepartmentDef), không hardcode enum.
+  departments: { code: string; name: string; isTeaching: boolean }[];
   userRole: string;
   /** NV có EmployeeOrgAssignment PRIMARY active tới OrgUnit HO (Hội sở). */
   initialIsHO?: boolean;
 }
-
-const DEPARTMENT_OPTIONS: { value: Department; label: string }[] = [
-  { value: "BAN_GIAM_DOC", label: "Ban Giám đốc" },
-  { value: "DAO_TAO", label: "Phòng Đào tạo" },
-  { value: "MARKETING", label: "Phòng Marketing" },
-  { value: "KINH_DOANH", label: "Phòng Kinh doanh / Sale" },
-  { value: "IT", label: "Phòng IT / Công nghệ" },
-  { value: "HANH_CHANH_NHAN_SU", label: "Hành chính - Nhân sự" },
-  { value: "KE_TOAN", label: "Phòng Kế toán" },
-];
 
 const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "MALE", label: "Nam" },
@@ -60,7 +53,6 @@ const EMPLOYMENT_STATUS_OPTIONS: { value: EmploymentStatus; label: string }[] = 
   { value: "TERMINATED", label: "Cho nghỉ" },
 ];
 
-const TEACHING_DEPARTMENTS: Department[] = ["GIANG_DAY", "DAO_TAO"];
 
 function dateInputValue(d: Date | null | undefined): string {
   if (!d) return "";
@@ -71,11 +63,16 @@ export function EmployeeForm({
   mode,
   initial,
   defaultCode,
-  centers,
+  orgUnits,
   managers,
+  departments,
   userRole,
   initialIsHO = false,
 }: Props) {
+  // Track Department: tập code phòng ban "giảng dạy" suy từ DB (thay hardcode).
+  const teachingCodes = new Set(
+    departments.filter((d) => d.isTeaching).map((d) => d.code),
+  );
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const visibility = getEmployeeFieldVisibility(userRole);
@@ -100,7 +97,7 @@ export function EmployeeForm({
     contractType: (initial?.contractType ?? "") as ContractType | "",
     salaryRank: initial?.salaryRank ?? "",
     salaryLevel: initial?.salaryLevel ?? "",
-    centerId: initial?.centerId ?? "",
+    orgUnitId: initial?.orgUnitId ?? "",
     managerId: initial?.managerId ?? "",
     // Phase 4.7 extension
     endDate: dateInputValue(initial?.endDate),
@@ -139,6 +136,7 @@ export function EmployeeForm({
       contractType: data.contractType || null,
       salaryRank: data.salaryRank ? Number(data.salaryRank) : null,
       salaryLevel: data.salaryLevel ? Number(data.salaryLevel) : null,
+      orgUnitId: data.orgUnitId || null,
       centerId: isHO ? null : data.centerId || null,
       managerId: data.managerId || null,
       // Phase 4.7 extension
@@ -220,9 +218,9 @@ export function EmployeeForm({
               }
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
             >
-              {DEPARTMENT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+              {departments.map((d) => (
+                <option key={d.code} value={d.code}>
+                  {d.name}
                 </option>
               ))}
             </select>
@@ -357,24 +355,22 @@ export function EmployeeForm({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-semibold">
-              Cơ sở làm việc {!isHO && <span className="text-red-500">*</span>}
-            </label>
+            <label className="mb-1 block text-sm font-semibold">Đơn vị làm việc</label>
             <select
-              value={data.centerId}
-              disabled={isHO}
-              onChange={(e) => setData({ ...data, centerId: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              value={data.orgUnitId}
+              onChange={(e) => setData({ ...data, orgUnitId: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
             >
-              <option value="">
-                {isHO ? "— Hội sở (HO) —" : "— Chọn cơ sở —"}
-              </option>
-              {centers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              <option value="">— Không chỉ định —</option>
+              {orgUnits.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Gồm Hội sở (HO) + các cơ sở. Lưu phân công PRIMARY vào đơn vị này.
+            </p>
           </div>
 
           {visibility.personal && (
@@ -587,7 +583,7 @@ export function EmployeeForm({
       </section>
 
       {/* ─── Chuyên môn giảng dạy (chỉ Đào tạo / Giảng dạy) ─── */}
-      {TEACHING_DEPARTMENTS.includes(data.department) && (
+      {teachingCodes.has(data.department) && (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="mb-4 text-lg font-bold">Chuyên môn giảng dạy</h2>
           <p className="mb-4 text-xs text-gray-500">

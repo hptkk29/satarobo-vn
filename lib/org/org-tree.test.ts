@@ -3,6 +3,7 @@
 import { describe, it, expect } from "vitest";
 import {
   getSubtreeCenterIds,
+  getSubtreeOrgUnitIds,
   getAncestors,
   isAncestor,
   getDescendants,
@@ -125,6 +126,31 @@ describe("[A0-01] org-tree — subtree & quan hệ", () => {
     expect(getDescendants(t, "cs1").map((n) => n.id)).toEqual(["camp"]);
     // CAMPUS không có centerId → subtree(CS1) vẫn chỉ [c1]
     expect(getSubtreeCenterIds(t, "cs1")).toEqual(["c1"]);
+  });
+
+  it("[Phase0] getSubtreeOrgUnitIds(CS1) = [cs1] (chính nó, mọi type)", () => {
+    expect(getSubtreeOrgUnitIds(baseTree(), "cs1")).toEqual(["cs1"]);
+  });
+
+  it("[Phase0] getSubtreeOrgUnitIds(HO) = [ho] — HO độc lập (OI-1)", () => {
+    expect(getSubtreeOrgUnitIds(baseTree(), "ho")).toEqual(["ho"]);
+  });
+
+  it("[Phase0] getSubtreeOrgUnitIds(ROOT) = mọi node sống (gồm cả non-CENTER)", () => {
+    expect(getSubtreeOrgUnitIds(baseTree(), "r").sort()).toEqual(["cs1", "cs2", "ho", "r"]);
+  });
+
+  it("[Phase0] subtree(CS1) gồm CAMPUS con — khác getSubtreeCenterIds (chỉ centerId)", () => {
+    const t = baseTree();
+    t.push({ id: "camp", code: "CS1A", type: "CAMPUS", parentId: "cs1" });
+    expect(getSubtreeOrgUnitIds(t, "cs1").sort()).toEqual(["camp", "cs1"]);
+  });
+
+  it("[Phase0] soft-delete loại khỏi subtree orgUnitIds trừ includeDeleted", () => {
+    const t = baseTree();
+    t.find((n) => n.id === "cs1")!.deletedAt = new Date("2026-06-08");
+    expect(getSubtreeOrgUnitIds(t, "r")).not.toContain("cs1");
+    expect(getSubtreeOrgUnitIds(t, "r", { includeDeleted: true })).toContain("cs1");
   });
 
   it("[A0-01-T8-02] dữ liệu vòng bẩn (parent trỏ vòng) không gây loop vô hạn", () => {

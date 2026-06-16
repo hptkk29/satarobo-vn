@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import {
   startAuditSchema,
   saveAuditDraftSchema,
@@ -67,10 +68,19 @@ export async function startAudit(
     }
   }
 
+  // PR-C: orgUnitId là nguồn chính; centerId suy ra để dual-write (HO loại khỏi
+  // picker nên CENTER luôn có centerId — guard để chắc chắn còn ràng buộc NOT NULL).
+  const orgUnitId = data.orgUnitId;
+  const centerId = await centerIdForOrgUnit(orgUnitId);
+  if (!centerId) {
+    return { ok: false, error: "Đơn vị không hợp lệ (không gắn cơ sở kho)" };
+  }
+
   try {
     const audit = await db.inventoryAudit.create({
       data: {
-        centerId: data.centerId,
+        centerId,
+        orgUnitId,
         auditCode: data.auditCode,
         notes: data.notes,
         status: "DRAFT",

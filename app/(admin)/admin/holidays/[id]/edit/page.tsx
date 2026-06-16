@@ -1,7 +1,10 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { HolidayForm } from "../../_components/holiday-form";
 import { DeleteHolidayButton } from "../../_components/delete-button";
 
@@ -14,12 +17,14 @@ export const dynamic = "force-dynamic";
 export default async function EditHolidayPage({ params }: Props) {
   const { id } = await params;
 
-  const [holiday, centers] = await Promise.all([
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const actor = await resolveActor(session.user.id);
+
+  // Ngày nghỉ = vận hành → áp được cho cả HO (default scope, gồm HO).
+  const [holiday, orgUnits] = await Promise.all([
     db.holiday.findUnique({ where: { id } }),
-    db.center.findMany({
-      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true },
-    }),
+    getSelectableOrgUnits(actor),
   ]);
 
   if (!holiday) notFound();
@@ -48,11 +53,11 @@ export default async function EditHolidayPage({ params }: Props) {
           name: holiday.name,
           date: holiday.date,
           endDate: holiday.endDate,
-          centerId: holiday.centerId,
+          orgUnitId: holiday.orgUnitId,
           type: holiday.type,
           note: holiday.note,
         }}
-        centers={centers}
+        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
       />
     </div>
   );

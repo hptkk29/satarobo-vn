@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { classGroupCreateSchema } from "@/lib/validators/class-group";
+import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import { genClassGroupCode } from "@/lib/codegen";
 
 type ActionResult = { error?: string };
@@ -34,7 +35,7 @@ function readForm(formData: FormData) {
   return {
     displayCode: s("displayCode") ?? "",
     name: s("name"),
-    centerId: s("centerId") ?? "",
+    orgUnitId: s("orgUnitId"),
     status: s("status") ?? "ACTIVE",
     notes: s("notes"),
   };
@@ -51,8 +52,13 @@ export async function createClassGroup(
   }
   const data = parsed.data;
 
+  // PR-C: orgUnitId là picker; centerId suy ra (HO loại khỏi list nên phải có center).
+  const orgUnitId = data.orgUnitId ?? null;
+  const centerId = await centerIdForOrgUnit(orgUnitId);
+  if (!centerId) return { error: "Nhóm lớp phải thuộc một cơ sở cụ thể" };
+
   const center = await db.center.findUnique({
-    where: { id: data.centerId },
+    where: { id: centerId },
     select: { code: true },
   });
   if (!center) return { error: "Cơ sở không tồn tại" };
@@ -66,7 +72,9 @@ export async function createClassGroup(
           code,
           displayCode: data.displayCode,
           name: data.name,
-          centerId: data.centerId,
+          // PR-C dual-write: ghi cả centerId + orgUnitId.
+          centerId,
+          orgUnitId,
           status: data.status,
           notes: data.notes,
         },
@@ -98,12 +106,19 @@ export async function updateClassGroup(
   });
   if (!existing) return { error: "Nhóm lớp không tồn tại" };
 
+  // PR-C: orgUnitId là picker; centerId suy ra (HO loại khỏi list nên phải có center).
+  const orgUnitId = data.orgUnitId ?? null;
+  const centerId = await centerIdForOrgUnit(orgUnitId);
+  if (!centerId) return { error: "Nhóm lớp phải thuộc một cơ sở cụ thể" };
+
   await db.classGroup.update({
     where: { id },
     data: {
       displayCode: data.displayCode,
       name: data.name,
-      centerId: data.centerId,
+      // PR-C dual-write: ghi cả centerId + orgUnitId.
+      centerId,
+      orgUnitId,
       status: data.status,
       notes: data.notes,
     },

@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Shield, AlertTriangle, BadgeCheck } from "lucide-react";
 import { db } from "@/lib/db";
-import { can, PERMISSIONS } from "@/lib/auth/permissions";
+import { can, PERMISSIONS, isSuperAdmin as checkSuperAdmin } from "@/lib/auth/permissions";
 import { RoleBadge } from "../../_components/role-badge";
 import { GrantsTable } from "./_components/grants-table";
 import { AddGrantForm } from "./_components/add-grant-form";
@@ -38,7 +38,7 @@ export default async function UserPermissionsPage({ params }: Props) {
   });
   if (!user) notFound();
 
-  const isSuperAdmin = user.role === "SUPER_ADMIN";
+  const isSuperAdmin = checkSuperAdmin(user.role);
   const existingActions = user.permissionGrants.map((g) => g.action);
   const grants = user.permissionGrants.map((g) => ({
     action: g.action,

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can, getEffectiveRoles } from "@/lib/auth/permissions";
+import { can, hasRole } from "@/lib/auth/permissions";
 import {
   approveStatement,
   reopenStatement,
@@ -15,7 +15,7 @@ function actorFromSession(s: { id: string; name?: string | null; email?: string 
   return {
     id: s.id,
     name: s.name ?? s.email ?? "Unknown",
-    isSuperAdmin: getEffectiveRoles(s).includes("SUPER_ADMIN"),
+    isSuperAdmin: hasRole(s, "SUPER_ADMIN"),
   };
 }
 

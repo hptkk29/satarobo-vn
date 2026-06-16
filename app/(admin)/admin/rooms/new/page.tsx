@@ -1,18 +1,22 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { RoomForm } from "../_components/room-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewRoomPage() {
-  const centers = await db.center.findMany({
-    where: { isActive: true },
-    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, slug: true },
-  });
+  const session = await auth();
+  if (!session?.user) redirect("/login");
 
-  if (centers.length === 0) {
+  // Room = vị trí vật lý → chỉ chọn CENTER, loại HO (Hội sở không có phòng học).
+  const actor = await resolveActor(session.user.id);
+  const orgUnits = await getSelectableOrgUnits(actor, { types: ["CENTER"] });
+
+  if (orgUnits.length === 0) {
     return (
       <div className="max-w-3xl">
         <Link
@@ -47,7 +51,7 @@ export default async function NewRoomPage() {
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
       </Link>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm phòng học</h1>
-      <RoomForm centers={centers} />
+      <RoomForm orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))} />
     </div>
   );
 }

@@ -32,6 +32,7 @@ export const leadCreateSchema = z.object({
   phone: z.string().regex(PHONE_VN, 'SĐT không hợp lệ'),
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
   centerId: z.string().min(1).optional(),
+  orgUnitId: z.string().min(1).optional(), // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra (HO→null)
   courseId: z.string().min(1).optional(),
   source: z.string().min(1),
   utmSource: z.string().max(100).optional(),

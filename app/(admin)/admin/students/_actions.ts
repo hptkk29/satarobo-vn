@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { can, hasRole, type Action } from "@/lib/auth/permissions";
+import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import {
   studentCreateSchema,
   studentUpdateSchema,
@@ -100,6 +101,10 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
 
+  // PR-C dual-write: OrgUnit là nguồn chính; suy centerId/preferredCenterId (HO→null).
+  data.centerId = await centerIdForOrgUnit(data.orgUnitId ?? null);
+  data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
+
   try {
     await db.$transaction(async (tx) => {
       // Phase T0.2 — tự sinh studentCode nếu admin để trống (giữ mã cũ nếu có).
@@ -157,12 +162,21 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   if (!before) return { error: "Không tìm thấy học viên" };
 
   const { actorId, actorName } = getAuditActor(session);
+  const data = parsed.data;
+
+  // PR-C dual-write: nếu đổi đơn vị → suy centerId/preferredCenterId (HO→null).
+  if (data.orgUnitId !== undefined) {
+    data.centerId = await centerIdForOrgUnit(data.orgUnitId ?? null);
+  }
+  if (data.preferredOrgUnitId !== undefined) {
+    data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
+  }
 
   try {
     await db.$transaction(async (tx) => {
       const updated = await tx.student.update({
         where: { id },
-        data: toUpdateData(parsed.data),
+        data: toUpdateData(data),
         select: STUDENT_SNAPSHOT_SELECT,
       });
 
@@ -281,11 +295,12 @@ function readForm(formData: FormData) {
     healthNotes: emptyToUndefined(formData.get("healthNotes")),
 
     enrollmentDate: emptyToUndefined(formData.get("enrollmentDate")),
-    preferredCenterId: emptyToUndefined(formData.get("preferredCenterId")),
+    // PR-C: picker gửi OrgUnit.id; centerId/preferredCenterId suy ra trong action (dual-write).
+    preferredOrgUnitId: emptyToUndefined(formData.get("preferredOrgUnitId")),
     notes: emptyToUndefined(formData.get("notes")),
     status: emptyToUndefined(formData.get("status")) ?? "ACTIVE",
 
-    centerId: emptyToUndefined(formData.get("centerId")),
+    orgUnitId: emptyToUndefined(formData.get("orgUnitId")),
   };
 }
 

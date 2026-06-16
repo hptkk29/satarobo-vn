@@ -160,7 +160,10 @@ export const InventoryAuditStatusEnum = z.enum([
 ]);
 
 export const startAuditSchema = z.object({
-  centerId: z.string().trim().min(1, "Chọn cơ sở"),
+  // PR-C: orgUnitId là nguồn chính (chỉ cơ sở vận hành — loại HO); centerId suy ra
+  // trong action để dual-write (giữ tới khi scopedDb flip ở PR-D).
+  orgUnitId: z.string().trim().min(1, "Chọn cơ sở"),
+  // centerId KHÔNG nhận từ client — action suy ra từ orgUnitId (dual-write tới PR-D).
   auditCode: nullableStr,
   notes: nullableStr,
 });

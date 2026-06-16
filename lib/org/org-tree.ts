@@ -60,6 +60,26 @@ export function getSubtreeCenterIds(
   return ids;
 }
 
+/**
+ * Mọi OrgUnit ID thuộc subtree của `id` (GỒM chính nó). Khác getSubtreeCenterIds:
+ * trả về node.id cho MỌI type (không chỉ CENTER) → dùng cho scope theo orgUnitId
+ * (Phase 0 migrate Center→OrgUnit, Doc 15 §4.4). HO không có con → [HO.id] (OI-1).
+ */
+export function getSubtreeOrgUnitIds(
+  nodes: OrgUnitNode[],
+  id: string,
+  opts: { includeDeleted?: boolean } = {},
+): string[] {
+  const self = indexBy(nodes).get(id);
+  const scope = self ? [self, ...getDescendants(nodes, id, opts)] : getDescendants(nodes, id, opts);
+  const ids: string[] = [];
+  for (const n of scope) {
+    if (!opts.includeDeleted && !isLive(n)) continue;
+    ids.push(n.id);
+  }
+  return ids;
+}
+
 /** Đường đi từ node lên ROOT, GỒM chính nó: [self, parent, ..., root]. */
 export function getAncestors(nodes: OrgUnitNode[], id: string): OrgUnitNode[] {
   const byId = indexBy(nodes);

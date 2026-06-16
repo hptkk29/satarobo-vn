@@ -1,16 +1,20 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { HolidayForm } from "../_components/holiday-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewHolidayPage() {
-  const centers = await db.center.findMany({
-    where: { isActive: true },
-    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-    select: { id: true, name: true },
-  });
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  // Ngày nghỉ = vận hành → áp được cho cả HO (default scope, gồm HO).
+  const actor = await resolveActor(session.user.id);
+  const orgUnits = await getSelectableOrgUnits(actor);
 
   return (
     <div>
@@ -21,7 +25,7 @@ export default async function NewHolidayPage() {
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
       </Link>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm ngày nghỉ</h1>
-      <HolidayForm centers={centers} />
+      <HolidayForm orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))} />
     </div>
   );
 }

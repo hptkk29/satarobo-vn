@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import type { LeadStatus, Prisma, LeadAssignMode } from "@prisma/client";
 import {
   pickRoundRobin,
@@ -136,7 +137,11 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
     if (cs.length > 0) {
       const loads = await getCenterLoads(cs.map((c) => c.id));
       centerId = pickCenterEvenly(loads);
-      if (centerId) await db.lead.update({ where: { id: leadId }, data: { centerId } });
+      if (centerId) {
+        // PR-C dual-write: chia về cơ sở → suy orgUnitId tương ứng (giữ cả centerId).
+        const orgUnitId = await orgUnitIdForCenter(centerId);
+        await db.lead.update({ where: { id: leadId }, data: { centerId, orgUnitId } });
+      }
     }
   }
 

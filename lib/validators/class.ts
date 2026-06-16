@@ -47,7 +47,9 @@ export const classCreateSchema = z
     description: nullableStr,
 
     courseId: z.string().trim().min(1, "Chọn khoá học"),
-    centerId: z.string().trim().min(1, "Chọn cơ sở"),
+    // PR-C: orgUnitId là nguồn chính (đơn vị); centerId suy ra từ org (HO→null) để dual-write.
+    centerId: nullableStr,
+    orgUnitId: nullableStr,
     classGroupId: nullableStr,
     roomId: nullableStr,
     teacherId: nullableStr,

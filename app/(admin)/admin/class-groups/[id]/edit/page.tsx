@@ -3,6 +3,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { db } from "@/lib/db";
 import { ClassGroupForm } from "../../_components/class-group-form";
 
@@ -21,7 +23,9 @@ export default async function EditClassGroupPage({ params }: Props) {
   }
 
   const { id } = await params;
-  const [group, centers] = await Promise.all([
+  // Nhóm lớp BẮT BUỘC thuộc 1 cơ sở → loại HO khỏi danh sách (types: ["CENTER"]).
+  const actor = await resolveActor(session.user.id);
+  const [group, orgUnits] = await Promise.all([
     db.classGroup.findFirst({
       where: { id, deletedAt: null },
       select: {
@@ -29,15 +33,12 @@ export default async function EditClassGroupPage({ params }: Props) {
         displayCode: true,
         name: true,
         centerId: true,
+        orgUnitId: true,
         status: true,
         notes: true,
       },
     }),
-    db.center.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, code: true },
-      orderBy: { displayOrder: "asc" },
-    }),
+    getSelectableOrgUnits(actor, { types: ["CENTER"] }),
   ]);
   if (!group) notFound();
 
@@ -50,7 +51,10 @@ export default async function EditClassGroupPage({ params }: Props) {
         <ChevronLeft className="h-4 w-4" /> Quay lại
       </Link>
       <h1 className="mb-4 text-2xl font-bold">Sửa nhóm lớp: {group.displayCode}</h1>
-      <ClassGroupForm group={group} centers={centers} />
+      <ClassGroupForm
+        group={group}
+        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name, code: o.code }))}
+      />
     </div>
   );
 }

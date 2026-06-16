@@ -4,6 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import {
   ItemForm,
   type BalanceRow,
@@ -25,21 +27,24 @@ export default async function EditInventoryItemPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [item, balances, allCenters] = await Promise.all([
+  const actor = await resolveActor(session.user.id);
+  const [item, balances, selectableOrgUnits] = await Promise.all([
     db.inventoryItem.findUnique({ where: { id } }),
     db.stockBalance.findMany({
       where: { itemId: id },
       include: { center: { select: { name: true, displayOrder: true } } },
       orderBy: { center: { displayOrder: "asc" } },
     }),
-    db.center.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { displayOrder: "asc" },
-    }),
+    // PR-C: nguồn cơ sở qua OrgUnit tree (loại HO). Giữ id = centerId vì StockBalance
+    // + movement (Nhập/Xuất/Chuyển) còn khoá theo centerId tới khi flip ở PR-D.
+    getSelectableOrgUnits(actor, { types: ["CENTER"] }),
   ]);
 
   if (!item) notFound();
+
+  const allCenters = selectableOrgUnits
+    .filter((o) => o.centerId)
+    .map((o) => ({ id: o.centerId as string, name: o.name }));
 
   const formValue: ItemFormValue = {
     id: item.id,

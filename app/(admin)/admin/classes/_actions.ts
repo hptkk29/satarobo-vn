@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { can, hasAnyRole, type Action } from "@/lib/auth/permissions";
+import { centerIdForOrgUnit, orgUnitIdForCenter } from "@/lib/org/org-service";
 import { classCreateSchema } from "@/lib/validators/class";
 import {
   logClassAudit,
@@ -40,10 +41,13 @@ async function requireClassWrite(action: "create" | "update" | "delete") {
 function toCreateData(
   parsed: ReturnType<typeof classCreateSchema.parse>,
   classCode: string | null,
+  centerId: string | null,
+  orgUnitId: string | null,
 ): Prisma.ClassCreateInput {
   const {
     courseId,
-    centerId,
+    centerId: _ignoredCenter,
+    orgUnitId: _ignoredOrg,
     classGroupId,
     roomId,
     teacherId,
@@ -52,12 +56,16 @@ function toCreateData(
     ...rest
   } = parsed;
   void _ignoredCode;
+  void _ignoredCenter;
+  void _ignoredOrg;
 
   return {
     ...rest,
     classCode,
+    // PR-C dual-write: orgUnitId nguồn chính, centerId suy ra (HO→null).
+    orgUnitId,
     course: { connect: { id: courseId } },
-    center: { connect: { id: centerId } },
+    ...(centerId ? { center: { connect: { id: centerId } } } : {}),
     ...(classGroupId ? { classGroup: { connect: { id: classGroupId } } } : {}),
     ...(roomId ? { room: { connect: { id: roomId } } } : {}),
     ...(teacherId ? { teacher: { connect: { id: teacherId } } } : {}),
@@ -67,21 +75,28 @@ function toCreateData(
 
 function toUpdateData(
   parsed: ReturnType<typeof classCreateSchema.parse>,
+  centerId: string | null,
+  orgUnitId: string | null,
 ): Prisma.ClassUpdateInput {
   const {
     courseId,
-    centerId,
+    centerId: _ignoredCenter,
+    orgUnitId: _ignoredOrg,
     classGroupId,
     roomId,
     teacherId,
     assistantId,
     ...rest
   } = parsed;
+  void _ignoredCenter;
+  void _ignoredOrg;
 
   return {
     ...rest,
+    // PR-C dual-write: orgUnitId nguồn chính, centerId suy ra (HO→null).
+    orgUnitId,
     course: { connect: { id: courseId } },
-    center: { connect: { id: centerId } },
+    center: centerId ? { connect: { id: centerId } } : { disconnect: true },
     classGroup: classGroupId
       ? { connect: { id: classGroupId } }
       : { disconnect: true },
@@ -91,6 +106,29 @@ function toUpdateData(
       ? { connect: { id: assistantId } }
       : { disconnect: true },
   };
+}
+
+/**
+ * PR-C: từ input form (orgUnitId là picker) suy ra { centerId, orgUnitId } để dual-write.
+ * Nếu gán nhóm lớp → kế thừa đơn vị (center + org) của nhóm (Phase T0.2).
+ */
+async function resolveClassOrg(
+  data: ReturnType<typeof classCreateSchema.parse>,
+): Promise<{ centerId: string | null; orgUnitId: string | null }> {
+  let orgUnitId = data.orgUnitId ?? null;
+  let centerId = await centerIdForOrgUnit(orgUnitId);
+
+  if (data.classGroupId) {
+    const group = await db.classGroup.findUnique({
+      where: { id: data.classGroupId },
+      select: { centerId: true, orgUnitId: true },
+    });
+    if (group) {
+      centerId = group.centerId;
+      orgUnitId = group.orgUnitId ?? (await orgUnitIdForCenter(group.centerId));
+    }
+  }
+  return { centerId, orgUnitId };
 }
 
 function readForm(formData: FormData) {
@@ -112,7 +150,7 @@ function readForm(formData: FormData) {
     description: s("description"),
 
     courseId: s("courseId") ?? "",
-    centerId: s("centerId") ?? "",
+    orgUnitId: s("orgUnitId"),
     classGroupId: s("classGroupId"),
     roomId: s("roomId"),
     teacherId: s("teacherId"),
@@ -159,14 +197,8 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
 
-  // Phase T0.2 — nếu gán nhóm lớp, kế thừa centerId của nhóm.
-  if (data.classGroupId) {
-    const group = await db.classGroup.findUnique({
-      where: { id: data.classGroupId },
-      select: { centerId: true },
-    });
-    if (group) data.centerId = group.centerId;
-  }
+  // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
+  const { centerId, orgUnitId } = await resolveClassOrg(data);
 
   // R7-06 — CHẶN tạo/kích hoạt lớp khi khoá chưa có giáo trình ACTIVE.
   if (!(await courseHasActiveCurriculum(data.courseId))) {
@@ -210,11 +242,12 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   try {
     await db.$transaction(async (tx) => {
       // Phase T0.2 — tự sinh classCode nếu admin để trống (giữ mã cũ nếu có).
+      // HO (centerId=null) không tự sinh mã — admin nhập tay nếu cần.
       let classCode = data.classCode;
-      if (!classCode) {
+      if (!classCode && centerId) {
         const [center, course] = await Promise.all([
           tx.center.findUnique({
-            where: { id: data.centerId },
+            where: { id: centerId },
             select: { code: true },
           }),
           tx.course.findUnique({
@@ -230,7 +263,7 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
 
       const created = await tx.class.create({
         data: {
-          ...toCreateData(data, classCode),
+          ...toCreateData(data, classCode, centerId, orgUnitId),
           curriculumId: curriculum.id,
           curriculumVersion: curriculum.version,
         },
@@ -293,11 +326,14 @@ export async function updateClass(
 
   const { actorId, actorName } = getAuditActor(session);
 
+  // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
+  const { centerId, orgUnitId } = await resolveClassOrg(parsed.data);
+
   try {
     await db.$transaction(async (tx) => {
       const updated = await tx.class.update({
         where: { id },
-        data: toUpdateData(parsed.data),
+        data: toUpdateData(parsed.data, centerId, orgUnitId),
         select: CLASS_SNAPSHOT_SELECT,
       });
 

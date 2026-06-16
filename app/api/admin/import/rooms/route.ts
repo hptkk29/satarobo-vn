@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 const intish = z
   .union([z.number(), z.string()])
@@ -119,7 +120,17 @@ export async function POST(req: NextRequest) {
     : [];
   const slugToId = new Map(centers.map((c) => [c.slug, c.id]));
 
-  const validRows: { data: z.infer<typeof RoomImportSchema>; centerId: string }[] = [];
+  // Dual-write 2-phase: dựng map centerId → orgUnitId 1 lần (số cơ sở nhỏ).
+  const centerIdToOrgUnitId = new Map<string, string | null>();
+  for (const c of centers) {
+    centerIdToOrgUnitId.set(c.id, await orgUnitIdForCenter(c.id));
+  }
+
+  const validRows: {
+    data: z.infer<typeof RoomImportSchema>;
+    centerId: string;
+    orgUnitId: string | null;
+  }[] = [];
   const errors: ImportError[] = [];
 
   for (let i = 0; i < stageOne.length; i++) {
@@ -136,7 +147,11 @@ export async function POST(req: NextRequest) {
       });
       continue;
     }
-    validRows.push({ data: entry.data, centerId });
+    validRows.push({
+      data: entry.data,
+      centerId,
+      orgUnitId: centerIdToOrgUnitId.get(centerId) ?? null,
+    });
   }
 
   if (validRows.length === 0) {
@@ -154,6 +169,7 @@ export async function POST(req: NextRequest) {
             name: r.data.name,
             code: r.data.code,
             centerId: r.centerId,
+            orgUnitId: r.orgUnitId, // dual-write 2-phase
             capacity: r.data.capacity,
             equipment: r.data.equipment ?? [],
             status: r.data.status,
@@ -162,6 +178,7 @@ export async function POST(req: NextRequest) {
           },
           update: {
             name: r.data.name,
+            orgUnitId: r.orgUnitId, // dual-write 2-phase
             capacity: r.data.capacity,
             equipment: r.data.equipment ?? [],
             status: r.data.status,

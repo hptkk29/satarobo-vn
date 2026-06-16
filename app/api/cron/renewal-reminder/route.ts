@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { wasReminderSent } from "@/lib/email/reminder-helpers";
+import { getSetting } from "@/lib/settings/service";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +15,17 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Tìm Enrollment ACTIVE/STUDYING có endDate trong khoảng 13-15 ngày tới
-  // (window 2 ngày — cron chạy daily, safe nếu skip 1 ngày)
+  // Tìm Enrollment ACTIVE/STUDYING có endDate trong cửa sổ nhắc tái tục
+  // (SystemSetting cron.renewalReminderMin/MaxDays — default 13-15 ngày).
+  // Window ~2 ngày — cron chạy daily, safe nếu skip 1 ngày.
   const now = new Date();
-  const minEnd = new Date(now.getTime() + 13 * 86400 * 1000);
-  const maxEnd = new Date(now.getTime() + 15 * 86400 * 1000);
+  const [minDays, maxDays, idempotencyDays] = await Promise.all([
+    getSetting("cron.renewalReminderMinDays"),
+    getSetting("cron.renewalReminderMaxDays"),
+    getSetting("cron.renewalReminderIdempotencyDays"),
+  ]);
+  const minEnd = new Date(now.getTime() + minDays * 86400 * 1000);
+  const maxEnd = new Date(now.getTime() + maxDays * 86400 * 1000);
 
   const enrollments = await db.enrollment.findMany({
     where: {
@@ -60,11 +67,11 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    // Idempotency: 1 renewal reminder per enrollment trong 30 ngày
+    // Idempotency: 1 renewal reminder per enrollment trong N ngày (cấu hình)
     const alreadySent = await wasReminderSent(
       "EnrollmentRenewal",
       enrollment.id,
-      30 * 24,
+      idempotencyDays * 24,
     );
     if (alreadySent) {
       stats.skippedAlreadySent++;

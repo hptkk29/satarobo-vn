@@ -3,7 +3,8 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { StartAuditForm } from "../_components/start-audit-form";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +16,11 @@ export default async function NewAuditPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const centers = await db.center.findMany({
-    where: { isActive: true },
-    select: { id: true, name: true },
-    orderBy: { displayOrder: "asc" },
-  });
+  // PR-C: kho là tồn vật lý tại cơ sở vận hành → chỉ chọn CENTER (loại HO).
+  const actor = await resolveActor(session.user.id);
+  const orgUnits = (
+    await getSelectableOrgUnits(actor, { types: ["CENTER"] })
+  ).map((o) => ({ id: o.orgUnitId, name: o.name }));
 
   return (
     <div className="space-y-4">
@@ -39,7 +40,7 @@ export default async function NewAuditPage() {
         </p>
       </div>
 
-      {centers.length === 0 ? (
+      {orgUnits.length === 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Chưa có cơ sở active nào. Tạo / kích hoạt cơ sở trước tại{" "}
           <Link
@@ -51,7 +52,7 @@ export default async function NewAuditPage() {
           .
         </div>
       ) : (
-        <StartAuditForm centers={centers} />
+        <StartAuditForm orgUnits={orgUnits} />
       )}
     </div>
   );

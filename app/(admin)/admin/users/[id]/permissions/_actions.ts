@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, isSuperAdmin } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   grantCreateSchema,
@@ -45,7 +45,7 @@ export async function addGrantAction(userId: string, formData: FormData) {
   if (!targetUser) return { ok: false as const, error: "Không tìm thấy user" };
 
   // SUPER_ADMIN bypass grants → tạo grants không có hiệu lực
-  if (targetUser.role === "SUPER_ADMIN") {
+  if (isSuperAdmin(targetUser.role)) {
     return {
       ok: false as const,
       error: "SUPER_ADMIN có toàn quyền — không cần override permissions",

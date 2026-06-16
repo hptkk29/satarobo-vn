@@ -22,7 +22,7 @@ export interface LeadFormInitial {
   email?: string;
   childName?: string;
   childAge?: number | null;
-  centerId?: string | null;
+  orgUnitId?: string | null;
   courseId?: string | null;
   source?: string | null;
   note?: string | null;
@@ -32,11 +32,11 @@ const inputCls =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none";
 
 export function LeadForm({
-  centers,
+  orgUnits,
   courses,
   initial,
 }: {
-  centers: Option[];
+  orgUnits: Option[];
   courses: TeachableCourse[];
   initial?: LeadFormInitial;
 }) {
@@ -50,7 +50,7 @@ export function LeadForm({
   const [email, setEmail] = useState(initial?.email ?? "");
   const [childName, setChildName] = useState(initial?.childName ?? "");
   const [childAge, setChildAge] = useState(initial?.childAge != null ? String(initial.childAge) : "");
-  const [centerId, setCenterId] = useState(initial?.centerId ?? "");
+  const [orgUnitId, setOrgUnitId] = useState(initial?.orgUnitId ?? "");
   const [courseId, setCourseId] = useState(initial?.courseId ?? "");
   const [source, setSource] = useState(initial?.source ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
@@ -71,7 +71,7 @@ export function LeadForm({
       email,
       childName,
       childAge: childAge ? Number(childAge) : null,
-      centerId,
+      orgUnitId,
       courseId,
       source,
       note,
@@ -121,11 +121,11 @@ export function LeadForm({
         <Field label="Tuổi con">
           <input type="number" min={3} max={18} value={childAge} onChange={(e) => setChildAge(e.target.value)} className={inputCls} />
         </Field>
-        <Field label="Cơ sở">
-          <select value={centerId} onChange={(e) => setCenterId(e.target.value)} className={inputCls}>
+        <Field label="Đơn vị">
+          <select value={orgUnitId} onChange={(e) => setOrgUnitId(e.target.value)} className={inputCls}>
             <option value="">Chưa xác định (tự chia đều theo cơ sở)</option>
-            {centers.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            {orgUnits.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
         </Field>
@@ -181,7 +181,7 @@ export function LeadForm({
                   <ChildFields
                     value={kid}
                     onChange={(p) => patchKid(i, p)}
-                    centers={centers}
+                    centers={orgUnits}
                     courseGroups={courseGroups}
                   />
                 </div>

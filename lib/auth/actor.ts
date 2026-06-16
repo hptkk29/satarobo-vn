@@ -4,7 +4,7 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
-import { getSubtreeCenterIds } from "@/lib/org/org-tree";
+import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
 import type { OrgUnitNode } from "@/lib/org/types";
 
 export type ScopeType =
@@ -33,6 +33,12 @@ export type Actor = {
   orgRoles: { orgUnitId: string; roleCode: string }[];
   permissions: PermEntry[];
   visibleCenterIds: string[];
+  /**
+   * OrgUnit IDs actor nhìn thấy (Phase 0 migrate Center→OrgUnit). Song song với
+   * visibleCenterIds; scopedDb sẽ chuyển sang dùng field này ở Phase D. HO/ROOT →
+   * mọi đơn vị; CENTER → subtree theo orgUnitId.
+   */
+  visibleOrgUnitIds: string[];
   grantsAllow: Set<string>;
   assignedClassIds: Set<string>;
 };
@@ -84,6 +90,7 @@ export function buildActor(input: {
   const now = input.now ?? new Date();
   const orgById = new Map(input.orgNodes.map((n) => [n.id, n]));
   const everyCenter = allCenterIds(input.orgNodes);
+  const everyOrgUnit = input.orgNodes.filter(isLiveNode).map((n) => n.id);
   const validActions = input.validActions ?? new Set(ACTION_REGISTRY);
 
   // Lọc role ĐANG hiệu lực (T7).
@@ -105,6 +112,7 @@ export function buildActor(input: {
 
   const permissions: PermEntry[] = [];
   const visible = new Set<string>();
+  const visibleOrg = new Set<string>();
 
   for (const r of liveRows) {
     const node = orgById.get(r.orgUnitId);
@@ -114,6 +122,11 @@ export function buildActor(input: {
       ? everyCenter
       : getSubtreeCenterIds(input.orgNodes, r.orgUnitId);
     rowCenters.forEach((c) => visible.add(c));
+    // visibleOrgUnitIds (song song): HO/ROOT → mọi đơn vị; còn lại → subtree orgUnitId.
+    const rowOrgUnits = hoRoot
+      ? everyOrgUnit
+      : getSubtreeOrgUnitIds(input.orgNodes, r.orgUnitId);
+    rowOrgUnits.forEach((o) => visibleOrg.add(o));
 
     for (const p of r.role.permissions) {
       permissions.push({
@@ -140,6 +153,7 @@ export function buildActor(input: {
     orgRoles,
     permissions,
     visibleCenterIds: [...visible],
+    visibleOrgUnitIds: [...visibleOrg],
     grantsAllow,
     assignedClassIds: new Set(input.assignedClassIds ?? []),
   };

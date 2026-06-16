@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, KeyRound, Shield, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
-import { RoleBadge } from "./_components/role-badge";
+import { can, hasRole } from "@/lib/auth/permissions";
+import { RoleBadges } from "./_components/role-badge";
 import {
   UserStatusToggle,
   UserRowActions,
@@ -63,9 +63,9 @@ export default async function UsersAdminPage() {
     },
   });
 
-  // Đếm SUPER_ADMIN active để disable nút toggle/role-change nếu chỉ còn 1
+  // Đếm SUPER_ADMIN active (xét union roles) để disable toggle nếu chỉ còn 1.
   const activeSuperAdminCount = users.filter(
-    (u) => u.role === "SUPER_ADMIN" && u.isActive,
+    (u) => hasRole(u, "SUPER_ADMIN") && u.isActive,
   ).length;
 
   return (
@@ -133,7 +133,7 @@ export default async function UsersAdminPage() {
                 users.map((u) => {
                   const isSelf = u.id === session.user.id;
                   const isLastActiveSuperAdmin =
-                    u.role === "SUPER_ADMIN" &&
+                    hasRole(u, "SUPER_ADMIN") &&
                     u.isActive &&
                     activeSuperAdminCount === 1;
                   const toggleDisabled = isSelf || isLastActiveSuperAdmin;
@@ -162,7 +162,7 @@ export default async function UsersAdminPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <RoleBadge role={u.role} />
+                          <RoleBadges role={u.role} roles={u.roles} />
                           {u._count.permissionGrants > 0 && (
                             <Link
                               href={`/users/${u.id}/permissions`}

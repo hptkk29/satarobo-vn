@@ -17,6 +17,7 @@ function actorWith(actions: { action: string; scopeType: "GLOBAL" }[]): Actor {
       centerScope: null,
     })),
     visibleCenterIds: [],
+    visibleOrgUnitIds: [],
     grantsAllow: new Set<string>(),
     assignedClassIds: new Set<string>(),
   };

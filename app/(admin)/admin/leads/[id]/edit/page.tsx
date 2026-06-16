@@ -4,6 +4,8 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { LeadForm } from "../../_components/lead-form";
 import { LeadChildrenManager } from "../../_components/lead-children";
 
@@ -18,7 +20,8 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
   if (!can(session.user, "leads:edit")) redirect("/leads");
 
   const { id } = await params;
-  const [lead, centers, courses] = await Promise.all([
+  const actor = await resolveActor(session.user.id);
+  const [lead, orgUnits, courses] = await Promise.all([
     db.lead.findFirst({
       where: { id, deletedAt: null },
       select: {
@@ -30,6 +33,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
         childName: true,
         childAge: true,
         centerId: true,
+        orgUnitId: true,
         courseId: true,
         source: true,
         note: true,
@@ -51,7 +55,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
         },
       },
     }),
-    db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
+    getSelectableOrgUnits(actor),
     db.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
   ]);
   if (!lead) notFound();
@@ -63,7 +67,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
       </Link>
       <h1 className="mb-4 text-2xl font-bold text-gray-900">Sửa thông tin lead</h1>
       <LeadForm
-        centers={centers}
+        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
         courses={courses}
         initial={{
           id: lead.id,
@@ -72,7 +76,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
           email: lead.email ?? undefined,
           childName: lead.childName ?? undefined,
           childAge: lead.childAge,
-          centerId: lead.centerId,
+          orgUnitId: lead.orgUnitId,
           courseId: lead.courseId,
           source: lead.source,
           note: lead.note,
@@ -96,7 +100,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
             note: c.note,
             trialStatus: c.trialStatus,
           }))}
-          centers={centers}
+          centers={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
           courses={courses}
           legacyChildName={lead.childName}
           legacyChildAge={lead.childAge}

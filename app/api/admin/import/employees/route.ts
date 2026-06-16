@@ -10,6 +10,7 @@ import {
   EmploymentStatusEnum,
 } from "@/lib/validators/employee";
 import { can } from "@/lib/auth/permissions";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Excel date parser — reused pattern from B3 holidays / B2 rooms.
 function parseExcelDate(v: unknown): Date | null {
@@ -182,8 +183,19 @@ export async function POST(req: NextRequest) {
   const slugToId = new Map(centers.map((c) => [c.slug, c.id]));
   const codeToManagerId = new Map(managers.map((m) => [m.employeeCode, m.id]));
 
+  // Dual-write 2-phase: dựng map centerId → orgUnitId 1 lần (số cơ sở nhỏ).
+  const centerIdToOrgUnitId = new Map<string, string | null>();
+  for (const c of centers) {
+    centerIdToOrgUnitId.set(c.id, await orgUnitIdForCenter(c.id));
+  }
+
   const errors: ImportError[] = [];
-  const validRows: { data: Parsed; centerId: string | null; managerId: string | null }[] = [];
+  const validRows: {
+    data: Parsed;
+    centerId: string | null;
+    orgUnitId: string | null;
+    managerId: string | null;
+  }[] = [];
 
   for (let i = 0; i < stageOne.length; i++) {
     const entry = stageOne[i];
@@ -218,7 +230,10 @@ export async function POST(req: NextRequest) {
       managerId = id;
     }
 
-    validRows.push({ data: entry.data, centerId, managerId });
+    const orgUnitId = centerId
+      ? (centerIdToOrgUnitId.get(centerId) ?? null)
+      : null;
+    validRows.push({ data: entry.data, centerId, orgUnitId, managerId });
   }
 
   if (validRows.length === 0) {
@@ -243,6 +258,7 @@ export async function POST(req: NextRequest) {
           nationalId: r.data.nationalId,
           contractType: r.data.contractType,
           centerId: r.centerId,
+          orgUnitId: r.orgUnitId, // dual-write 2-phase
           managerId: r.managerId,
           joinedAt: r.data.joinedAt,
           endDate: r.data.endDate,

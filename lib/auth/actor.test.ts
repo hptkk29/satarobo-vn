@@ -45,6 +45,29 @@ describe("[A0-03] buildActor.visibleCenterIds (AC8)", () => {
   });
 });
 
+describe("[Phase0] buildActor.visibleOrgUnitIds (song song visibleCenterIds)", () => {
+  it("CENTER_MANAGER@CS1 → [cs1] (chỉ orgUnit của mình)", () => {
+    expect(build([row("cs1", "CENTER_MANAGER")]).visibleOrgUnitIds).toEqual(["cs1"]);
+  });
+
+  it("HO role → mọi đơn vị sống (gồm cả HO + ROOT)", () => {
+    expect(build([row("ho", "HO_ACCOUNTANT")]).visibleOrgUnitIds.sort()).toEqual([
+      "cs1", "cs2", "ho", "root",
+    ]);
+  });
+
+  it("multi-role HO+CS1 → mọi đơn vị (HO trùm)", () => {
+    const a = build([row("ho", "HO_HR"), row("cs1", "CENTER_MANAGER")]);
+    expect(a.visibleOrgUnitIds.sort()).toEqual(["cs1", "cs2", "ho", "root"]);
+  });
+
+  it("CS1 KHÔNG thấy cs2/ho (cách ly — nền Phase D)", () => {
+    const v = build([row("cs1", "CENTER_MANAGER")]).visibleOrgUnitIds;
+    expect(v).not.toContain("cs2");
+    expect(v).not.toContain("ho");
+  });
+});
+
 describe("[A0-03] buildActor — lọc hiệu lực (T7)", () => {
   it("[A0-03-T7-01] effectiveTo < now → không tính", () => {
     const a = build([row("cs1", "CENTER_MANAGER", { effectiveTo: new Date("2020-01-01") })]);

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { wasReminderSent } from "@/lib/email/reminder-helpers";
+import { getSetting } from "@/lib/settings/service";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +15,16 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Daily cron chạy 8h sáng VN (UTC 01:00) — quét sessions từ 12h-48h tới
-  // Bắt được mọi session ngày hôm sau bất kể giờ học sáng/chiều/tối
+  // Daily cron chạy 8h sáng VN (UTC 01:00) — quét sessions trong cửa sổ nhắc
+  // (SystemSetting cron.classReminderMin/MaxHours — default 12h-48h tới).
+  // Bắt được mọi session ngày hôm sau bất kể giờ học sáng/chiều/tối.
   const now = new Date();
-  const windowStart = new Date(now.getTime() + 12 * 3600 * 1000);
-  const windowEnd = new Date(now.getTime() + 48 * 3600 * 1000);
+  const [minHours, maxHours] = await Promise.all([
+    getSetting("cron.classReminderMinHours"),
+    getSetting("cron.classReminderMaxHours"),
+  ]);
+  const windowStart = new Date(now.getTime() + minHours * 3600 * 1000);
+  const windowEnd = new Date(now.getTime() + maxHours * 3600 * 1000);
 
   const sessions = await db.classSession.findMany({
     where: {
@@ -80,11 +86,12 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // Idempotency: 1 reminder/session/student trong 48h window
+      // Idempotency: 1 reminder/session/student trong cửa sổ nhắc (maxHours)
       const contextId = `${session.id}:${student.id}`;
       const alreadySent = await wasReminderSent(
         "ClassSessionReminder",
         contextId,
+        maxHours,
       );
       if (alreadySent) {
         stats.skippedAlreadySent++;

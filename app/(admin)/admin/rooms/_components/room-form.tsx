@@ -10,7 +10,7 @@ export type RoomFormValue = {
   id: string;
   name: string;
   code: string;
-  centerId: string;
+  orgUnitId: string | null; // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra ở action
   capacity: number;
   equipment: string[];
   status: "ACTIVE" | "MAINTENANCE" | "INACTIVE";
@@ -18,18 +18,17 @@ export type RoomFormValue = {
   displayOrder: number;
 };
 
-export type CenterOption = {
+export type OrgUnitOption = {
   id: string;
   name: string;
-  slug: string;
 };
 
 export function RoomForm({
   room,
-  centers,
+  orgUnits,
 }: {
   room?: RoomFormValue;
-  centers: CenterOption[];
+  orgUnits: OrgUnitOption[];
 }) {
   const router = useRouter();
   const isEdit = Boolean(room);
@@ -68,10 +67,10 @@ export function RoomForm({
         <Grid cols={2}>
           <SelectField
             label="Cơ sở"
-            name="centerId"
-            defaultValue={room?.centerId}
+            name="orgUnitId"
+            defaultValue={room?.orgUnitId}
             required
-            options={centers.map((c) => ({ value: c.id, label: c.name }))}
+            options={orgUnits.map((o) => ({ value: o.id, label: o.name }))}
           />
           <Field
             label="Sức chứa"

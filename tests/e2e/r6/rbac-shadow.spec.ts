@@ -59,6 +59,7 @@ test.describe("[R6-F2] RBAC v2 shadow-diff", () => {
       orgRoles: [],
       permissions: [],
       visibleCenterIds: [],
+      visibleOrgUnitIds: [],
       grantsAllow: new Set<string>(),
       assignedClassIds: new Set<string>(),
     };

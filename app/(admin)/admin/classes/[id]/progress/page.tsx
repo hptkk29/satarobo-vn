@@ -3,7 +3,7 @@ import { ChevronLeft, LineChart } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, canViewParentContact } from "@/lib/auth/permissions";
+import { can, hasRole, canViewParentContact } from "@/lib/auth/permissions";
 import { getClassProgress, getClassGradebook } from "@/lib/progress";
 import { GenerateReportsButton } from "./_components/generate-reports-button";
 
@@ -52,9 +52,9 @@ export default async function ClassProgressPage({ params }: Props) {
     redirect("/dashboard?error=unauthorized");
   }
   const canGenerateReports =
-    session.user.role === "SUPER_ADMIN" ||
-    session.user.role === "CENTER_MANAGER" ||
-    (session.user.role === "TEACHER" && cls.teacherId === session.user.id);
+    hasRole(session.user, "SUPER_ADMIN") ||
+    hasRole(session.user, "CENTER_MANAGER") ||
+    (hasRole(session.user, "TEACHER") && cls.teacherId === session.user.id);
 
   // P0-3: GV (chỉ view-own) KHÔNG được nhận SĐT phụ huynh — chỉ quản lý/kế toán/CSM.
   const showParentContact = canViewParentContact(session.user);

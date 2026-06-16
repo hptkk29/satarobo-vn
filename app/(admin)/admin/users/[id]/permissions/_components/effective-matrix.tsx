@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, Search, Check, Ban } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { Input } from "@/components/ui/input";
-import { ALL_ACTIONS } from "@/lib/auth/permissions";
+import { ALL_ACTIONS, isSuperAdmin } from "@/lib/auth/permissions";
 import { getActionMeta, groupActionsByCategory } from "@/lib/auth/action-labels";
 
 type UserGrant = { action: string; grant: "ALLOW" | "DENY" };
@@ -23,7 +23,7 @@ function getEffective(
   grants: UserGrant[],
   roleMatrix: Record<string, Role[]>,
 ): { allowed: boolean; source: Source } {
-  if (role === "SUPER_ADMIN") {
+  if (isSuperAdmin(role)) {
     return {
       allowed: roleMatrix[action]?.includes("SUPER_ADMIN") ?? false,
       source: "super_admin",

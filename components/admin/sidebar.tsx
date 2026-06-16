@@ -54,6 +54,11 @@ import {
   ChevronDown,
   Workflow,
   Wallet,
+  Library,
+  FileText,
+  FileQuestion,
+  FileCheck2,
+  NotebookPen,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
