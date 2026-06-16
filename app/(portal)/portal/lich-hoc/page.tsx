@@ -1,14 +1,20 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { getStudentSessions, getStudentProgressSummaries } from "@/lib/portal/learning";
+import {
+  getStudentSessions,
+  getStudentProgressSummaries,
+  getStudentAttendanceSummaries,
+  type ClassAttendanceSummary,
+} from "@/lib/portal/learning";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Lịch học | Sata Robo" };
 
 export default async function LichHocPage() {
   const { studentId } = await requireActiveStudent();
-  const [sessions, progress] = await Promise.all([
+  const [sessions, progress, summaries] = await Promise.all([
     getStudentSessions(studentId),
     getStudentProgressSummaries(studentId),
+    getStudentAttendanceSummaries(studentId),
   ]);
 
   const upcoming = sessions.filter((s) => !s.past);
@@ -17,6 +23,14 @@ export default async function LichHocPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-neutral-900">Lịch học</h1>
+
+      {summaries.length > 0 && (
+        <div className="space-y-3">
+          {summaries.map((s) => (
+            <AttendanceMetrics key={s.classId} s={s} />
+          ))}
+        </div>
+      )}
 
       {progress.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -67,6 +81,33 @@ export default async function LichHocPage() {
           ))}
         </Section>
       )}
+    </div>
+  );
+}
+
+function AttendanceMetrics({ s }: { s: ClassAttendanceSummary }) {
+  const items: { label: string; value: number; tone: string }[] = [
+    { label: "Tổng buổi", value: s.total, tone: "text-neutral-900" },
+    { label: "Đã học", value: s.attended, tone: "text-green-700" },
+    { label: "Vắng", value: s.absent, tone: "text-red-600" },
+    { label: "Chờ học bù", value: s.needMakeup, tone: "text-amber-600" },
+    { label: "Đã học bù", value: s.madeUp, tone: "text-[#7C3AED]" },
+  ];
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-4">
+      <p className="text-sm font-semibold text-neutral-900">{s.className}</p>
+      <p className="text-xs text-neutral-500">{s.courseName}</p>
+      <dl className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+        {items.map((it) => (
+          <div
+            key={it.label}
+            className="rounded-lg border border-neutral-100 bg-neutral-50 p-2 text-center"
+          >
+            <dd className={`text-lg font-bold ${it.tone}`}>{it.value}</dd>
+            <dt className="text-[11px] text-neutral-500">{it.label}</dt>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

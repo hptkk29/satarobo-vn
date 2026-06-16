@@ -6,6 +6,8 @@ import {
   passesScope,
   SCOPED_MODELS,
   SCOPE_EXEMPT,
+  isMakeupExceptionModel,
+  MAKEUP_EXCEPTION_MODELS,
 } from "@/lib/db-scope";
 import { buildActor } from "@/lib/auth/actor";
 import type { OrgUnitNode } from "@/lib/org/types";
@@ -98,5 +100,29 @@ describe("[A0-04-T12-01] introspection — mọi model có centerId đều đư�
   it("SCOPED_MODELS và SCOPE_EXEMPT rời nhau", () => {
     const overlap = [...SCOPED_MODELS].filter((m) => SCOPE_EXEMPT.has(m));
     expect(overlap).toEqual([]);
+  });
+});
+
+describe("[R7-08-AC6] makeup exception KHÔNG rò sang query khác", () => {
+  it("whitelist chỉ gồm model lịch/lớp/bù — Class & MakeupNeed được nới", () => {
+    expect(isMakeupExceptionModel("Class")).toBe(true);
+    expect(isMakeupExceptionModel("MakeupNeed")).toBe(true);
+    expect(isMakeupExceptionModel("ClassSession")).toBe(true);
+    expect(isMakeupExceptionModel("Lesson")).toBe(true);
+  });
+
+  it("Lead/Order/Student/Payment KHÔNG nằm trong exception → vẫn cách ly cơ sở", () => {
+    for (const m of ["Lead", "Order", "Student", "Payment"]) {
+      expect(isMakeupExceptionModel(m)).toBe(false);
+      // Vẫn là model scoped → injectScope phải ép centerId IN [visible].
+      expect(SCOPED_MODELS.has(m)).toBe(true);
+      expect(injectScope(m, {}, center)).toEqual({ where: { centerId: { in: ["c1"] } } });
+    }
+  });
+
+  it("không vô tình whitelist model nhạy cảm (Lead/Order/Student/Payment)", () => {
+    const sensitive = ["Lead", "Order", "Student", "Payment"];
+    const leaked = sensitive.filter((m) => MAKEUP_EXCEPTION_MODELS.has(m));
+    expect(leaked).toEqual([]);
   });
 });

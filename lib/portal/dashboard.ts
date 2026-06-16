@@ -1,0 +1,134 @@
+import "server-only";
+import { db } from "@/lib/db";
+import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
+import { getParentNotificationCount } from "@/lib/portal/notifications";
+import { computeEnrollmentDebt } from "@/lib/finance/debt";
+import type { AttendanceSummary } from "@/lib/attendance/summary";
+
+// =============================================================================
+// PORTAL DASHBOARD DATA — R7-09 (PR1)
+// Data-fetching cho dashboard PH (công nợ + học bù mở + thông báo) và dashboard
+// HV (5 chỉ số điểm danh + bài tập x/y). Ownership do caller bảo đảm
+// (requireActiveStudent → studentId; parentUserId từ session). KHÔNG nhận
+// studentId qua URL — chống regression R4 (đổi profile không trộn data).
+// =============================================================================
+
+const ZERO_SUMMARY: AttendanceSummary = {
+  total: 0,
+  attended: 0,
+  absent: 0,
+  needMakeup: 0,
+  madeUp: 0,
+};
+
+export type ParentDashboard = {
+  /** Σ công nợ các con — CHỈ Payment kế toán CONFIRMED mới trừ vào "đã nộp" (AC1). */
+  totalDebt: number;
+  /** Ngày đến hạn gần nhất từ OrderInstallment PENDING (ISO) — null nếu không có. */
+  nearestDueDate: string | null;
+  /** Số yêu cầu học bù đang mở (ParentRequest type=MAKEUP, status=PENDING). */
+  openMakeupRequests: number;
+  /** Số thông báo gần đây (7 ngày) cho card thông báo. */
+  notificationCount: number;
+};
+
+/** Dashboard phụ huynh: gộp công nợ + học bù mở + thông báo của tất cả các con. */
+export async function getParentDashboard(parentUserId: string): Promise<ParentDashboard> {
+  const children = await db.student.findMany({
+    where: { parentUserId, deletedAt: null },
+    select: { id: true },
+  });
+  const childIds = children.map((c) => c.id);
+
+  if (childIds.length === 0) {
+    return { totalDebt: 0, nearestDueDate: null, openMakeupRequests: 0, notificationCount: 0 };
+  }
+
+  const [enrollments, nearestInstallment, openMakeupRequests, notificationCount] =
+    await Promise.all([
+      // Công nợ: chỉ ghi danh đã chốt giá (finalPrice/tuition) + Payment CONFIRMED (AC1).
+      db.enrollment.findMany({
+        where: { studentId: { in: childIds } },
+        select: {
+          finalPrice: true,
+          tuition: true,
+          payments: { where: { accountantStatus: "CONFIRMED" }, select: { amount: true } },
+        },
+      }),
+      // Ngày đến hạn gần nhất từ đợt thanh toán CHƯA trả của các đơn của con.
+      db.orderInstallment.findFirst({
+        where: {
+          status: "PENDING",
+          dueDate: { not: null },
+          order: { studentId: { in: childIds } },
+        },
+        orderBy: { dueDate: "asc" },
+        select: { dueDate: true },
+      }),
+      db.parentRequest.count({
+        where: { studentId: { in: childIds }, type: "MAKEUP", status: "PENDING" },
+      }),
+      getParentNotificationCount(parentUserId),
+    ]);
+
+  const totalDebt = enrollments.reduce((sum, e) => {
+    const finalPrice = e.finalPrice ?? e.tuition ?? null;
+    if (finalPrice == null) return sum; // ghi danh chưa chốt giá → bỏ qua
+    const debt = computeEnrollmentDebt(finalPrice, e.payments);
+    return debt > 0 ? sum + debt : sum; // chỉ cộng phần còn nợ (đóng thừa không trừ)
+  }, 0);
+
+  return {
+    totalDebt,
+    nearestDueDate: nearestInstallment?.dueDate?.toISOString() ?? null,
+    openMakeupRequests,
+    notificationCount,
+  };
+}
+
+export type StudentDashboard = {
+  /** 5 chỉ số điểm danh GỘP toàn bộ lớp đang học (helper R7-08, không trùng lặp). */
+  attendance: AttendanceSummary;
+  /** Số lớp đang học (để ẩn block nếu chưa xếp lớp). */
+  classCount: number;
+  /** Bài tập về nhà: đã hoàn thành / tổng được giao (read-only, không quản lý ở đây). */
+  homeworkDone: number;
+  homeworkTotal: number;
+};
+
+/**
+ * Dashboard học viên (con đang chọn). 5 chỉ số dùng lại
+ * getStudentAttendanceSummaries (R7-08 — KHÔNG nhân bản logic 5 chỉ số), bài tập
+ * x/y đọc HomeworkAssignment theo studentId (read-only).
+ */
+export async function getStudentDashboard(studentId: string): Promise<StudentDashboard> {
+  const [summaries, homework] = await Promise.all([
+    getStudentAttendanceSummaries(studentId),
+    db.homeworkAssignment.findMany({
+      where: { studentId },
+      select: { status: true },
+    }),
+  ]);
+
+  const attendance = summaries.reduce<AttendanceSummary>(
+    (acc, s) => ({
+      total: acc.total + s.total,
+      attended: acc.attended + s.attended,
+      absent: acc.absent + s.absent,
+      needMakeup: acc.needMakeup + s.needMakeup,
+      madeUp: acc.madeUp + s.madeUp,
+    }),
+    { ...ZERO_SUMMARY },
+  );
+
+  const homeworkDone = homework.filter(
+    (h) => h.status === "SUBMITTED" || h.status === "GRADED",
+  ).length;
+
+  return {
+    attendance,
+    classCount: summaries.length,
+    homeworkDone,
+    homeworkTotal: homework.length,
+  };
+}

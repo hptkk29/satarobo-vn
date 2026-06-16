@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { getSetting } from "@/lib/settings/service";
-import { effectiveReminderDays, isReminderDue } from "@/lib/finance/debt";
+import { effectiveReminderDays, isReminderDue, overdueBucket } from "@/lib/finance/debt";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +43,8 @@ export async function GET(req: NextRequest) {
           customerEmail: true,
           customerPhone: true,
           totalAmount: true,
+          studentId: true,
+          centerId: true,
           items: { select: { itemName: true }, take: 1 },
         },
       },
@@ -65,6 +67,32 @@ export async function GET(req: NextRequest) {
       stats.skippedNotDue++;
       continue;
     }
+
+    // R7-17 — thông báo in-app khi đợt đã QUÁ HẠN (dueDate < hôm nay). Độc lập kênh
+    // email/Zalo: chỉ THÊM Notification cho portal PH, không đổi logic gửi email cũ.
+    // Idempotent 1/ngày qua dedupeKey. Chỉ bắn khi có studentId (không broadcast nợ
+    // cá nhân ra ALL_PARENTS — tránh lộ PII công nợ).
+    if (overdueBucket(inst.dueDate, now) !== "none" && inst.order.studentId) {
+      const day = now.toISOString().slice(0, 10); // YYYY-MM-DD
+      const dedupeKey = `debt.overdue:${inst.id}:${day}`;
+      const overdueAmount = inst.amount.toLocaleString("vi-VN");
+      await db.notification
+        .upsert({
+          where: { dedupeKey },
+          create: {
+            title: "Công nợ quá hạn",
+            body: `Công nợ quá hạn: ${overdueAmount}đ (đơn ${inst.order.code}). Quý phụ huynh vui lòng hoàn tất thanh toán.`,
+            audience: "STUDENT",
+            studentId: inst.order.studentId,
+            centerId: inst.order.centerId ?? null,
+            createdByName: "Hệ thống",
+            dedupeKey,
+          },
+          update: { body: `Công nợ quá hạn: ${overdueAmount}đ (đơn ${inst.order.code}). Quý phụ huynh vui lòng hoàn tất thanh toán.` },
+        })
+        .catch(() => {});
+    }
+
     // Đã nhắc hôm nay rồi → bỏ qua.
     if (inst.lastReminderAt && inst.lastReminderAt >= startOfToday) {
       stats.skippedToday++;

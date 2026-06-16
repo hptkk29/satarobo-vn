@@ -5,6 +5,7 @@ import { hasStaffRole } from "@/lib/auth/permissions";
 import { getPortalContext } from "@/lib/portal/session";
 import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
+import { isEvalV2Enabled } from "@/lib/flags";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
 
@@ -69,7 +70,7 @@ export default async function PortalLayout({
       ) : (
         // Sidebar DỌC + nội dung: desktop 2 cột, mobile xếp dọc (nav thu gọn "Menu").
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6 lg:flex-row lg:gap-6">
-          <PortalNav notifCount={notifCount} />
+          <PortalNav notifCount={notifCount} evalV2Enabled={isEvalV2Enabled()} />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       )}

@@ -11,6 +11,7 @@ import { ClassApprovalActions } from "../_components/class-approval-actions";
 import { ClassReschedule } from "../_components/class-reschedule";
 import { ClassCurriculum } from "../_components/class-curriculum";
 import { ClassSessionsManage } from "../_components/class-sessions-manage";
+import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -165,12 +166,20 @@ export default async function EditClassPage({ params }: Props) {
         <h1 className="text-3xl font-black text-neutral-900">
           Sửa lớp: <span className="font-bold text-orange-600">{cls.name}</span>
         </h1>
-        <Link
-          href={`/classes/${cls.id}/progress`}
-          className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
-        >
-          📊 Tiến độ lớp
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/classes/${cls.id}/students`}
+            className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+          >
+            👥 Học sinh
+          </Link>
+          <Link
+            href={`/classes/${cls.id}/progress`}
+            className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+          >
+            📊 Tiến độ lớp
+          </Link>
+        </div>
       </div>
 
       <div className="mb-6">
@@ -206,6 +215,7 @@ export default async function EditClassPage({ params }: Props) {
           teachers={teacherOptions}
           rooms={roomOptions}
           canEdit={canEdit}
+          lifecycleV2={isSessionLifecycleV2Enabled()}
         />
       </div>
 

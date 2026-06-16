@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { can, getEffectiveRoles } from "@/lib/auth/permissions";
+import { writeAudit } from "@/lib/audit/audit-log";
 import { z } from "zod";
 import {
   examSchema,
@@ -20,8 +21,15 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+type SessionUser = {
+  id?: string | null;
+  name?: string | null;
+  role?: string | null;
+  roles?: string[] | null;
+};
+
 async function requireRole(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; user: SessionUser }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -29,7 +37,59 @@ async function requireRole(): Promise<
   if (!can(session.user, "exams:edit")) {
     return { ok: false, error: "Không có quyền quản lý đề thi" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  return { ok: true, userId: session.user.id ?? "", user: session.user };
+}
+
+// R7-13 AC1/AC4 — chỉ Đào tạo/Admin (CENTER_MANAGER/SUPER_ADMIN) được sửa đề đã PUBLISHED.
+// GV (TEACHER) soạn DRAFT bình thường nhưng KHÔNG sửa/đổi trạng thái đề đã publish (T4).
+function canEditPublished(user: SessionUser): boolean {
+  const roles = getEffectiveRoles(user);
+  return roles.includes("SUPER_ADMIN") || roles.includes("CENTER_MANAGER");
+}
+
+// R7-13 PR1 — cấu hình bổ sung của Exam. KHÔNG sửa lib/validators/exam.ts (ngoài
+// phạm vi sở hữu ticket) → parse riêng ở đây rồi merge vào data ghi DB.
+const SCORING_MODES = ["HIGHEST", "LATEST", "AVERAGE", "FIRST"] as const;
+const nullableInt = (min: number) =>
+  z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.coerce.number().int().min(min).nullable(),
+  );
+
+const examConfigExtraSchema = z.object({
+  maxAttempts: nullableInt(1).optional().transform((v) => v ?? null),
+  defaultDueDays: nullableInt(0).optional().transform((v) => v ?? null),
+  scoringMode: z
+    .preprocess(
+      (v) => (v === "" || v == null ? null : v),
+      z.enum(SCORING_MODES).nullable(),
+    )
+    .optional()
+    .transform((v) => v ?? null),
+  showResultAfterSubmit: z.coerce.boolean().optional(),
+});
+
+type ExamConfigExtra = {
+  maxAttempts: number | null;
+  defaultDueDays: number | null;
+  scoringMode: (typeof SCORING_MODES)[number] | null;
+  showResultAfterSubmit?: boolean;
+};
+
+function parseConfigExtra(input: unknown): ExamConfigExtra {
+  const r = examConfigExtraSchema.safeParse(input ?? {});
+  if (!r.success) {
+    return { maxAttempts: null, defaultDueDays: null, scoringMode: null };
+  }
+  const out: ExamConfigExtra = {
+    maxAttempts: r.data.maxAttempts,
+    defaultDueDays: r.data.defaultDueDays,
+    scoringMode: r.data.scoringMode,
+  };
+  if (r.data.showResultAfterSubmit !== undefined) {
+    out.showResultAfterSubmit = r.data.showResultAfterSubmit;
+  }
+  return out;
 }
 
 async function resolveEmployeeId(userId: string): Promise<string | null> {
@@ -70,11 +130,20 @@ export async function createExam(
   }
 
   const createdById = await resolveEmployeeId(gate.userId);
+  const config = parseConfigExtra(input);
 
   try {
     const e = await db.exam.create({
-      data: { ...data, createdById },
+      data: { ...data, ...config, createdById },
       select: { id: true },
+    });
+    await writeAudit({
+      actor: { id: gate.user.id ?? null, name: gate.user.name ?? "?" },
+      module: "exams",
+      entityType: "Exam",
+      entityId: e.id,
+      action: "CREATE",
+      newValues: { ...data, ...config },
     });
     revalidatePath("/exams");
     return { ok: true, data: { examId: e.id } };
@@ -107,9 +176,28 @@ export async function updateExam(
 
   const current = await db.exam.findUnique({
     where: { id },
-    select: { examCode: true },
+    select: { examCode: true, status: true },
   });
   if (!current) return { ok: false, error: "Đề thi không tồn tại" };
+
+  // Published-edit guard (AC1/T4): GV không sửa đề đã publish.
+  if (current.status === "PUBLISHED" && !canEditPublished(gate.user)) {
+    return {
+      ok: false,
+      error: "Đề đã publish — chỉ Đào tạo/Admin được sửa.",
+    };
+  }
+  // GV cũng không được tự publish (chỉ Đào tạo/Admin chuyển sang PUBLISHED).
+  if (
+    data.status === "PUBLISHED" &&
+    current.status !== "PUBLISHED" &&
+    !canEditPublished(gate.user)
+  ) {
+    return {
+      ok: false,
+      error: "Chỉ Đào tạo/Admin được publish đề.",
+    };
+  }
 
   if (data.examCode && data.examCode !== current.examCode) {
     const dup = await db.exam.findUnique({
@@ -121,8 +209,17 @@ export async function updateExam(
     }
   }
 
+  const config = parseConfigExtra(input);
   try {
-    await db.exam.update({ where: { id }, data });
+    await db.exam.update({ where: { id }, data: { ...data, ...config } });
+    await writeAudit({
+      actor: { id: gate.user.id ?? null, name: gate.user.name ?? "?" },
+      module: "exams",
+      entityType: "Exam",
+      entityId: id,
+      action: "UPDATE",
+      newValues: { ...data, ...config },
+    });
   } catch (err) {
     return {
       ok: false,
@@ -567,10 +664,30 @@ export async function changeExamStatus(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  // T4 — GV không publish / sửa trạng thái đề đã publish.
+  const cur = await db.exam.findUnique({
+    where: { id: parsed.data.examId },
+    select: { status: true },
+  });
+  if (!cur) return { ok: false, error: "Đề thi không tồn tại" };
+  const touchesPublished =
+    parsed.data.status === "PUBLISHED" || cur.status === "PUBLISHED";
+  if (touchesPublished && !canEditPublished(gate.user)) {
+    return { ok: false, error: "Chỉ Đào tạo/Admin được publish/đổi trạng thái đề đã publish." };
+  }
+
   try {
     await db.exam.update({
       where: { id: parsed.data.examId },
       data: { status: parsed.data.status },
+    });
+    await writeAudit({
+      actor: { id: gate.user.id ?? null, name: gate.user.name ?? "?" },
+      module: "exams",
+      entityType: "Exam",
+      entityId: parsed.data.examId,
+      action: "UPDATE",
+      newValues: { status: parsed.data.status },
     });
   } catch (err) {
     return {

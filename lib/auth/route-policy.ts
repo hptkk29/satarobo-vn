@@ -65,6 +65,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "chuyen-lop",
   "class-groups",
   "classes",
+  "convert-conflicts",
   "course-packages",
   "course-prerequisites",
   "courses",

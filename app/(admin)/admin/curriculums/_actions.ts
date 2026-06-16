@@ -2,9 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { Session } from "next-auth";
+import type { LessonChangeStatus, LessonStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
+import { getAuditActor } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
+import {
+  archiveLesson,
+  isLessonLocked,
+  planResize,
+  resizeCurriculum,
+  setLessonStatus,
+  unarchiveLesson,
+  type ResizePlan,
+} from "@/lib/lms/curriculum";
 import {
   curriculumSchema,
   lessonSchema,
@@ -16,8 +29,9 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+// Gate sửa giáo trình (curriculum:edit) — trả luôn session để ghi audit.
 async function requireRole(): Promise<
-  | { ok: true }
+  | { ok: true; session: Session }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -25,7 +39,21 @@ async function requireRole(): Promise<
   if (!can(session.user, "curriculum:edit")) {
     return { ok: false, error: "Không có quyền quản lý giáo trình" };
   }
-  return { ok: true };
+  return { ok: true, session };
+}
+
+// Gate Đào tạo (training:manage = SUPER_ADMIN/CENTER_MANAGER) — dùng cho
+// unlock buổi LOCKED + xử lý đề xuất chỉnh sửa.
+async function requireTraining(): Promise<
+  | { ok: true; session: Session }
+  | { ok: false; error: string }
+> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "training:manage")) {
+    return { ok: false, error: "Chỉ Đào tạo (quản lý cơ sở) mới có quyền này" };
+  }
+  return { ok: true, session };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -207,9 +235,17 @@ export async function updateLesson(
 
   const current = await db.lesson.findUnique({
     where: { id },
-    select: { curriculumId: true, order: true },
+    select: { curriculumId: true, order: true, status: true, archivedAt: true },
   });
   if (!current) return { ok: false, error: "Bài học không tồn tại" };
+
+  // R7-10 — buổi LOCKED chặn sửa nội dung (T4); buổi đã archive là đọc-only.
+  if (isLessonLocked(current.status)) {
+    return { ok: false, error: "Buổi đang KHÓA — yêu cầu Đào tạo mở khóa trước khi sửa" };
+  }
+  if (current.archivedAt) {
+    return { ok: false, error: "Buổi đã lưu trữ (đọc-only) — khôi phục trước khi sửa" };
+  }
 
   if (current.order !== data.order) {
     const dup = await db.lesson.findUnique({
@@ -227,7 +263,7 @@ export async function updateLesson(
   }
 
   try {
-    await db.lesson.update({ where: { id }, data });
+    await db.lesson.update({ where: { id }, data: { ...data, version: { increment: 1 } } });
   } catch (err) {
     return {
       ok: false,
@@ -309,5 +345,239 @@ export async function reorderLessons({
   }
 
   revalidatePath(`/curriculums/${curriculumId}/edit`);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// R7-10 — Resize N buổi (AC1/AC2/C5)
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Xem trước kế hoạch resize (cho modal liệt kê buổi sẽ loại). Read-only. */
+export async function previewResizeCurriculum(
+  curriculumId: string,
+  targetN: number,
+): Promise<Result<ResizePlan>> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+  const plan = await planResize(curriculumId, targetN);
+  return { ok: true, data: plan };
+}
+
+/**
+ * Áp dụng resize. Tăng → append; giảm → soft-archive (cần confirm nếu có link,
+ * chặn nếu IN_USE). expectedVersions để optimistic-lock (2 resize song song).
+ */
+export async function applyResizeCurriculum(input: {
+  curriculumId: string;
+  targetN: number;
+  confirm?: boolean;
+  expectedVersions?: Record<string, number>;
+}): Promise<Result<{ created: number; archived: number }>> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const res = await resizeCurriculum({
+    curriculumId: input.curriculumId,
+    targetN: input.targetN,
+    confirm: input.confirm,
+    expectedVersions: input.expectedVersions,
+  });
+  if (!res.ok) return { ok: false, error: res.message };
+
+  const { actorId, actorName } = getAuditActor(gate.session);
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "curriculum",
+    entityType: "Curriculum",
+    entityId: input.curriculumId,
+    action: "RESIZE",
+    newValues: {
+      target: res.plan.target,
+      previous: res.plan.current,
+      created: res.created,
+      archived: res.archived,
+    },
+  });
+
+  revalidatePath(`/curriculums/${input.curriculumId}/edit`);
+  return { ok: true, data: { created: res.created, archived: res.archived } };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// R7-10 — Trạng thái buổi + khóa/mở khóa (AC3)
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function setLessonStatusAction(input: {
+  lessonId: string;
+  status: LessonStatus;
+}): Promise<Result> {
+  const current = await db.lesson.findUnique({
+    where: { id: input.lessonId },
+    select: { curriculumId: true, status: true },
+  });
+  if (!current) return { ok: false, error: "Bài học không tồn tại" };
+
+  // Rời trạng thái LOCKED (mở khóa) chỉ Đào tạo. Các chuyển trạng thái khác:
+  // curriculum:edit là đủ. Đặt LOCKED cũng cho curriculum:edit.
+  const unlocking = isLessonLocked(current.status) && input.status !== "LOCKED";
+  const gate = unlocking ? await requireTraining() : await requireRole();
+  if (!gate.ok) return gate;
+
+  const { actorId, actorName } = getAuditActor(gate.session);
+  await setLessonStatus({ lessonId: input.lessonId, status: input.status, actorId });
+
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "curriculum",
+    entityType: "Lesson",
+    entityId: input.lessonId,
+    action: unlocking ? "UNLOCK" : "STATUS_CHANGE",
+    oldValues: { status: current.status },
+    newValues: { status: input.status },
+  });
+
+  revalidatePath(`/curriculums/${current.curriculumId}/edit`);
+  return { ok: true };
+}
+
+export async function archiveLessonAction(lessonId: string): Promise<Result> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const current = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: { curriculumId: true, status: true },
+  });
+  if (!current) return { ok: false, error: "Bài học không tồn tại" };
+
+  const res = await archiveLesson({ lessonId });
+  if (!res.ok) return { ok: false, error: res.message };
+
+  const { actorId, actorName } = getAuditActor(gate.session);
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "curriculum",
+    entityType: "Lesson",
+    entityId: lessonId,
+    action: "ARCHIVE",
+  });
+
+  revalidatePath(`/curriculums/${current.curriculumId}/edit`);
+  return { ok: true };
+}
+
+export async function unarchiveLessonAction(lessonId: string): Promise<Result> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const current = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: { curriculumId: true },
+  });
+  if (!current) return { ok: false, error: "Bài học không tồn tại" };
+
+  const res = await unarchiveLesson({ lessonId });
+  if (!res.ok) return { ok: false, error: res.message };
+
+  const { actorId, actorName } = getAuditActor(gate.session);
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "curriculum",
+    entityType: "Lesson",
+    entityId: lessonId,
+    action: "UNARCHIVE",
+  });
+
+  revalidatePath(`/curriculums/${current.curriculumId}/edit`);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// R7-10 — LessonChangeRequest: GV gửi đề xuất → Đào tạo xử lý (AC4)
+// ──────────────────────────────────────────────────────────────────────────
+
+/** GV gửi đề xuất chỉnh sửa buổi (gate questions:author). */
+export async function submitLessonChangeRequest(input: {
+  lessonId: string;
+  content: string;
+}): Promise<Result> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "questions:author")) {
+    return { ok: false, error: "Không có quyền gửi đề xuất" };
+  }
+
+  const content = input.content.trim();
+  if (content.length < 5) {
+    return { ok: false, error: "Nội dung đề xuất quá ngắn (≥ 5 ký tự)" };
+  }
+
+  const lesson = await db.lesson.findUnique({
+    where: { id: input.lessonId },
+    select: { id: true, curriculumId: true },
+  });
+  if (!lesson) return { ok: false, error: "Bài học không tồn tại" };
+
+  const cr = await db.lessonChangeRequest.create({
+    data: { lessonId: input.lessonId, requestedById: session.user.id, content },
+    select: { id: true },
+  });
+
+  const { actorId, actorName } = getAuditActor(session);
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "curriculum",
+    entityType: "LessonChangeRequest",
+    entityId: cr.id,
+    action: "CREATE",
+    newValues: { lessonId: input.lessonId, content },
+  });
+
+  revalidatePath(`/curriculums/${lesson.curriculumId}/edit`);
+  return { ok: true };
+}
+
+/** Đào tạo xử lý đề xuất: ACCEPTED/REJECTED + phản hồi (gate training:manage). */
+export async function handleLessonChangeRequest(input: {
+  requestId: string;
+  decision: Extract<LessonChangeStatus, "ACCEPTED" | "REJECTED">;
+  response?: string;
+}): Promise<Result> {
+  const gate = await requireTraining();
+  if (!gate.ok) return gate;
+
+  if (input.decision !== "ACCEPTED" && input.decision !== "REJECTED") {
+    return { ok: false, error: "Quyết định không hợp lệ" };
+  }
+
+  const cr = await db.lessonChangeRequest.findUnique({
+    where: { id: input.requestId },
+    select: { id: true, status: true, lesson: { select: { curriculumId: true } } },
+  });
+  if (!cr) return { ok: false, error: "Đề xuất không tồn tại" };
+  if (cr.status !== "OPEN") {
+    return { ok: false, error: "Đề xuất đã được xử lý" };
+  }
+
+  const { actorId, actorName } = getAuditActor(gate.session);
+  await db.lessonChangeRequest.update({
+    where: { id: input.requestId },
+    data: {
+      status: input.decision,
+      response: input.response?.trim() || null,
+      handledById: actorId,
+    },
+  });
+
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "curriculum",
+    entityType: "LessonChangeRequest",
+    entityId: input.requestId,
+    action: input.decision,
+    newValues: { response: input.response?.trim() || null },
+  });
+
+  revalidatePath(`/curriculums/${cr.lesson.curriculumId}/edit`);
   return { ok: true };
 }

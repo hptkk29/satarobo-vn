@@ -1,0 +1,120 @@
+import Link from "next/link";
+import { redirect, notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
+import {
+  buildAssignableWhere,
+  CAPACITY_COUNT_STATUSES,
+} from "@/lib/lms/assign";
+import { AssignStudents } from "./_components/assign-students";
+
+interface Props {
+  params: Promise<{ id: string }>;
+}
+
+export const dynamic = "force-dynamic";
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: "Chờ xác nhận",
+  CONFIRMED: "Đã xác nhận",
+  STUDYING: "Đã xếp lớp",
+  ACTIVE: "Đang học",
+  PAUSED: "Tạm dừng",
+};
+
+export default async function ClassStudentsPage({ params }: Props) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!can(session.user, "classes:edit")) {
+    redirect("/dashboard?error=unauthorized");
+  }
+
+  const { id } = await params;
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const cls = await sdb.class.findFirst({
+    where: { id, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      courseId: true,
+      centerId: true,
+      maxStudents: true,
+      status: true,
+    },
+  });
+  if (!cls || !passesScope("Class", { centerId: cls.centerId }, actor)) notFound();
+
+  const [current, assignable] = await Promise.all([
+    sdb.enrollment.findMany({
+      where: { classId: cls.id, status: { in: [...CAPACITY_COUNT_STATUSES, "PAUSED"] } },
+      orderBy: { enrolledAt: "asc" },
+      select: {
+        id: true,
+        status: true,
+        student: { select: { name: true, studentCode: true } },
+      },
+    }),
+    sdb.enrollment.findMany({
+      where: buildAssignableWhere(cls),
+      orderBy: { enrolledAt: "asc" },
+      select: {
+        id: true,
+        status: true,
+        student: { select: { name: true, studentCode: true } },
+      },
+    }),
+  ]);
+
+  const activeCount = current.filter((e) =>
+    (CAPACITY_COUNT_STATUSES as readonly string[]).includes(e.status),
+  ).length;
+
+  const currentRows = current.map((e) => ({
+    id: e.id,
+    status: e.status,
+    statusLabel: STATUS_LABEL[e.status] ?? e.status,
+    name: e.student?.name ?? "(không tên)",
+    studentCode: e.student?.studentCode ?? null,
+  }));
+  const assignableRows = assignable.map((e) => ({
+    id: e.id,
+    status: e.status,
+    statusLabel: STATUS_LABEL[e.status] ?? e.status,
+    name: e.student?.name ?? "(không tên)",
+    studentCode: e.student?.studentCode ?? null,
+  }));
+
+  // SUPER_ADMIN/CENTER_MANAGER mới được override sức chứa (classes:create).
+  const canOverride = can(session.user, "classes:create");
+
+  return (
+    <div>
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="text-3xl font-black text-neutral-900">
+          Học sinh lớp:{" "}
+          <span className="font-bold text-orange-600">{cls.name}</span>
+        </h1>
+        <Link
+          href={`/classes/${cls.id}/edit`}
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+        >
+          <ArrowLeft className="h-4 w-4" /> Về sửa lớp
+        </Link>
+      </div>
+
+      <AssignStudents
+        classId={cls.id}
+        maxStudents={cls.maxStudents}
+        activeCount={activeCount}
+        current={currentRows}
+        assignable={assignableRows}
+        canOverride={canOverride}
+      />
+    </div>
+  );
+}
