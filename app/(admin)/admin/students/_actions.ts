@@ -197,6 +197,9 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
     select: STUDENT_SNAPSHOT_SELECT,
   });
   if (!before) return { error: "Không thể xoá học viên này" };
+  if (before.status !== "INACTIVE") {
+    return { error: "Chỉ xóa được học viên đã nghỉ học" };
+  }
 
   const { actorId, actorName } = getAuditActor(session);
 
