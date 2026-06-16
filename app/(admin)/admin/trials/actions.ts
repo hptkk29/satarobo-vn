@@ -98,6 +98,35 @@ export async function updateTrialAction(
   return { ok: true };
 }
 
+/**
+ * Xoá cứng 1 buổi học thử (TrialFeedback cascade theo).
+ * Dùng để dọn dữ liệu test / buổi tạo nhầm. Chỉ user có quyền `trials:manage`.
+ */
+export async function deleteTrialAction(
+  trialId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "trials:manage")) {
+    return { ok: false, error: "Không có quyền xoá buổi học thử" };
+  }
+
+  const trial = await db.trialClass.findUnique({
+    where: { id: trialId },
+    select: { id: true, leadId: true },
+  });
+  if (!trial) return { ok: false, error: "Buổi học thử không tồn tại" };
+
+  // TrialFeedback có onDelete: Cascade theo trialClassId → xoá kèm.
+  await db.trialClass.delete({ where: { id: trialId } });
+
+  revalidatePath("/trials");
+  revalidatePath(`/leads/${trial.leadId}`);
+  revalidatePath("/leads");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function saveTrialFeedbackAction(
   trialId: string,
   input: unknown,

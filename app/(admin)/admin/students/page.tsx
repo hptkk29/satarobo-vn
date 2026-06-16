@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FileSpreadsheet, Plus } from "lucide-react";
+import { DeleteStudentButton } from "./_components/delete-student-button";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -107,6 +108,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
 
   const canCreate = can(session.user, "students:create");
   const canUpdate = can(session.user, "students:edit");
+  const canDelete = can(session.user, "students:delete");
+  const showActions = canUpdate || canDelete;
 
   const sp = await searchParams;
   const view: LifecycleView = isValidView(sp.view) ? sp.view : "all";
@@ -374,7 +377,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Ngày tạo
                 </th>
-                {canUpdate && (
+                {showActions && (
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Hành động
                   </th>
@@ -385,7 +388,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
               {students.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canUpdate ? 9 : 8}
+                    colSpan={showActions ? 9 : 8}
                     className="px-4 py-12 text-center text-sm text-gray-400"
                   >
                     Không có học viên trong view này
@@ -460,14 +463,24 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                       <td className="px-4 py-3 text-sm tabular-nums text-gray-500">
                         {formatDate(s.createdAt)}
                       </td>
-                      {canUpdate && (
+                      {showActions && (
                         <td className="px-4 py-3 text-right">
-                          <Link
-                            href={`/students/${s.id}/edit`}
-                            className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                          >
-                            Sửa
-                          </Link>
+                          <div className="flex justify-end gap-2">
+                            {canUpdate && (
+                              <Link
+                                href={`/students/${s.id}/edit`}
+                                className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Sửa
+                              </Link>
+                            )}
+                            {canDelete && s.status === "INACTIVE" && (
+                              <DeleteStudentButton
+                                studentId={s.id}
+                                studentName={s.name}
+                              />
+                            )}
+                          </div>
                         </td>
                       )}
                     </tr>

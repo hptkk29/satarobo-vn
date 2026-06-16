@@ -133,6 +133,7 @@ export type Action =
   | "enrollments:edit"
   | "enrollments:transfer"
   | "enrollments:cancel"
+  | "enrollments:delete"
 
   // --- Course completion (B4) ---
   | "completions:manage"
@@ -355,6 +356,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "completions:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "satacoin:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "enrollments:cancel": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "enrollments:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Sessions + Attendance ---
   "sessions:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "SALES_CSM"],

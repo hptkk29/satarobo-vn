@@ -2057,6 +2057,9 @@ model Question {
   lessonId String?
   lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
+  assignmentId String?
+  assignment   Assignment? @relation("AssignmentQuestions", fields: [assignmentId], references: [id], onDelete: Cascade)
+
   // For SHORT_ANSWER / CODE / ESSAY
   correctAnswer String? @db.Text
 
@@ -2075,6 +2078,7 @@ model Question {
   updatedAt DateTime @updatedAt
 
   @@index([lessonId])
+  @@index([assignmentId])
   @@index([type, difficulty])
   @@index([authorId])
 }
@@ -2305,6 +2309,7 @@ model Assignment {
 
   submissions AssignmentSubmission[]
   documents   AssignmentDocument[]
+  questions   Question[]             @relation("AssignmentQuestions")
 
   @@index([status, classId])
   @@index([dueAt])

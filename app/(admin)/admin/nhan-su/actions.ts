@@ -13,6 +13,7 @@ import {
   updateAssignment,
 } from "@/lib/org/assignment-service";
 import { ASSIGNABLE_ROLES } from "@/lib/labels";
+import { writeAudit } from "@/lib/audit/audit-log";
 import {
   employeeCreateSchema,
   employeeUpdateSchema,
@@ -21,6 +22,73 @@ import {
 type ActionResult<T = unknown> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
+
+// ─── Nhân viên HO (Hội sở) ──────────────────────────────────────────────
+// HO là OrgUnit type=HO (Doc 15 OI-1), KHÔNG phải Center. NV "thuộc HO" khi có
+// EmployeeOrgAssignment PRIMARY active tới OrgUnit HO. Bật cờ ⇒ upsert assignment;
+// tắt ⇒ EXPIRE assignment. assignment KHÔNG sinh quyền (quyền chỉ từ UserOrgRole).
+async function getHoUnitId(): Promise<string | null> {
+  const ho = await db.orgUnit.findFirst({
+    where: { type: "HO", deletedAt: null },
+    select: { id: true },
+  });
+  return ho?.id ?? null;
+}
+
+async function syncHoAssignment(
+  actor: { id: string | null; name: string },
+  employeeId: string,
+  isHO: boolean,
+): Promise<void> {
+  const hoUnitId = await getHoUnitId();
+  if (!hoUnitId) return; // không có OrgUnit HO → bỏ qua (pre-check đã chặn khi bật)
+
+  if (isHO) {
+    const existing = await db.employeeOrgAssignment.findFirst({
+      where: { employeeId, orgUnitId: hoUnitId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (existing) return; // idempotent
+    const created = await db.employeeOrgAssignment.create({
+      data: {
+        employeeId,
+        orgUnitId: hoUnitId,
+        assignmentType: "PRIMARY",
+        createdById: actor.id ?? "system",
+      },
+    });
+    await writeAudit({
+      actor,
+      module: "employees",
+      entityType: "EmployeeOrgAssignment",
+      entityId: created.id,
+      action: "CREATE",
+      newValues: { orgUnitId: hoUnitId, assignmentType: "PRIMARY" },
+      reason: "HR form: gán Nhân viên HO (Hội sở)",
+      orgUnitId: hoUnitId,
+    });
+  } else {
+    const actives = await db.employeeOrgAssignment.findMany({
+      where: { employeeId, orgUnitId: hoUnitId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (actives.length === 0) return;
+    await db.employeeOrgAssignment.updateMany({
+      where: { employeeId, orgUnitId: hoUnitId, status: "ACTIVE" },
+      data: { status: "EXPIRED", effectiveTo: new Date() },
+    });
+    await writeAudit({
+      actor,
+      module: "employees",
+      entityType: "EmployeeOrgAssignment",
+      entityId: actives[0]!.id,
+      action: "UPDATE",
+      newValues: { status: "EXPIRED" },
+      reason: "HR form: bỏ Nhân viên HO (Hội sở)",
+      orgUnitId: hoUnitId,
+    });
+  }
+}
 
 function revalidateAll() {
   revalidatePath("/nhan-su");
@@ -35,6 +103,7 @@ function revalidateAll() {
 
 export async function createEmployeeAction(
   input: unknown,
+  isHO = false,
 ): Promise<ActionResult<{ id: string }>> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -49,6 +118,15 @@ export async function createEmployeeAction(
     return {
       ok: false,
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
+  }
+
+  // Bật cờ HO nhưng chưa seed OrgUnit HO → chặn sớm, tránh tạo NV "mồ côi" cơ sở.
+  if (isHO && !(await getHoUnitId())) {
+    return {
+      ok: false,
+      error:
+        "Chưa có đơn vị Hội sở (HO) trong hệ thống. Liên hệ quản trị để seed OrgUnit trước.",
     };
   }
 
@@ -111,6 +189,7 @@ export async function createEmployeeAction(
 export async function updateEmployeeAction(
   id: string,
   input: unknown,
+  isHO?: boolean,
 ): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -128,12 +207,22 @@ export async function updateEmployeeAction(
     };
   }
 
+  if (isHO === true && !(await getHoUnitId())) {
+    return {
+      ok: false,
+      error:
+        "Chưa có đơn vị Hội sở (HO) trong hệ thống. Liên hệ quản trị để seed OrgUnit trước.",
+    };
+  }
+
   // CENTER_MANAGER role không được edit salary fields
   const data = { ...parsed.data };
   if (hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")) {
     delete data.salaryRank;
     delete data.salaryLevel;
   }
+  // NV HO → không gán Center.
+  if (isHO === true) data.centerId = null;
 
   if (data.isCEO) {
     await db.employee.updateMany({

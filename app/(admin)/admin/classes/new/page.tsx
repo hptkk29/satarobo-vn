@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm } from "../_components/class-form";
 
 export const dynamic = "force-dynamic";
@@ -33,16 +34,8 @@ export default async function NewClassPage() {
       orderBy: [{ centerId: "asc" }, { code: "asc" }],
       select: { id: true, code: true, name: true, centerId: true },
     }),
-    db.user.findMany({
-      where: {
-        deletedAt: null,
-        isActive: true,
-        // Đa vai trò (3B): gồm người có TEACHER/CENTER_MANAGER ở bất kỳ vị trí nào.
-        roles: { hasSome: ["TEACHER", "CENTER_MANAGER"] },
-      },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, role: true },
-    }),
+    // Fix #9 — nguồn DUY NHẤT cho GV có thể phân lớp (không lọt quản lý/sale thuần).
+    getAssignableTeachers(),
     db.curriculum.findMany({
       where: {
         isActive: true,

@@ -9,6 +9,12 @@ import { TRIAL_STATUS_LABEL, ALL_TRIAL_STATUSES } from "@/lib/trials/status";
 export const metadata = { title: "Học thử | Admin" };
 export const dynamic = "force-dynamic";
 
+// Trạng thái "kết thúc" — mặc định ẩn ở view "Đang xử lý" để bớt nhiễu.
+const TRIAL_TERMINAL_STATUSES = [
+  "ENROLLED",
+  "REJECTED",
+] as const satisfies readonly TrialClassStatus[];
+
 interface Props {
   searchParams: Promise<{ status?: string }>;
 }
@@ -22,9 +28,16 @@ export default async function TrialsPage({ searchParams }: Props) {
   const isTeacher = hasRole(session.user, "TEACHER");
   const canManage = can(session.user, "trials:manage");
 
-  const where: Prisma.TrialClassWhereInput = {};
-  if (status && (ALL_TRIAL_STATUSES as readonly string[]).includes(status)) {
+  // Luôn ẩn buổi học thử của lead đã xoá mềm (Lead.deletedAt != null).
+  // Lead xoá là soft-delete → cascade onDelete không chạy → trial cũ vẫn còn → lọc ở đây.
+  const where: Prisma.TrialClassWhereInput = { lead: { deletedAt: null } };
+  if (status === "all") {
+    // "Tất cả" — không lọc theo trạng thái (vẫn ẩn lead đã xoá mềm).
+  } else if (status && (ALL_TRIAL_STATUSES as readonly string[]).includes(status)) {
     where.status = status as TrialClassStatus;
+  } else {
+    // Mặc định "Đang xử lý" — ẩn các trạng thái kết thúc (đỡ nhiễu).
+    where.status = { notIn: [...TRIAL_TERMINAL_STATUSES] };
   }
   // Teacher chỉ thấy buổi được phân công cho mình.
   if (isTeacher) where.teacherId = session.user.id;
