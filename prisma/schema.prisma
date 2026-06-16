@@ -2057,6 +2057,9 @@ model Question {
   lessonId String?
   lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
+  assignmentId String?
+  assignment   Assignment? @relation("AssignmentQuestions", fields: [assignmentId], references: [id], onDelete: Cascade)
+
   // For SHORT_ANSWER / CODE / ESSAY
   correctAnswer String? @db.Text
 
@@ -2075,6 +2078,7 @@ model Question {
   updatedAt DateTime @updatedAt
 
   @@index([lessonId])
+  @@index([assignmentId])
   @@index([type, difficulty])
   @@index([authorId])
 }
@@ -2305,6 +2309,7 @@ model Assignment {
 
   submissions AssignmentSubmission[]
   documents   AssignmentDocument[]
+  questions   Question[]             @relation("AssignmentQuestions")
 
   @@index([status, classId])
   @@index([dueAt])
@@ -3542,8 +3547,12 @@ model ClassSessionMedia {
   classId        String
   fileUrl        String
   fileName       String?
-  caption        String?     @db.Text
-  status         MediaStatus @default(PENDING)
+  caption        String?           @db.Text
+  status         MediaStatus       @default(PENDING)
+  // Ảnh chung cả lớp (đánh dấu rõ ràng): mọi PH có con đang học lớp này đều xem
+  // được. KHÁC với "không gắn thẻ" — ảnh không tag & không phải class-wide vẫn
+  // ẩn với PH (giữ bất biến C6.2 trong lib/lms/media-consent.ts).
+  isClassWide    Boolean           @default(false)
   uploadedById   String?
   uploadedByName String?
   approvedById   String?

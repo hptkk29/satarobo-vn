@@ -13,7 +13,10 @@ export default async function HinhAnhPage() {
   // Privacy (C3.2/C6.4): chỉ hiện ảnh khi PH đã ĐỒNG Ý dùng hình ảnh. Thu hồi → ẩn ngay.
   const consentGranted = await hasMediaConsent(studentId);
 
-  // Lớp của con + ảnh APPROVED có tag con (chỉ ảnh được gắn thẻ con mới hiện).
+  // Lớp của con + ảnh APPROVED hiện cho PH khi: (a) ảnh được gắn thẻ con, HOẶC
+  // (b) ảnh được ĐÁNH DẤU "Ảnh chung cả lớp" (isClassWide) của lớp con đang học.
+  // Ảnh gắn thẻ HS khác → KHÔNG hiện. Ảnh không tag & KHÔNG class-wide cũng ẩn
+  // (bất biến C6.2). Vẫn yêu cầu consent của con.
   const enr = await db.enrollment.findMany({
     where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] } },
     select: { classId: true },
@@ -26,7 +29,10 @@ export default async function HinhAnhPage() {
           where: {
             classId: { in: classIds },
             status: "APPROVED",
-            tags: { some: { studentId } },
+            OR: [
+              { tags: { some: { studentId } } }, // (a) gắn thẻ con
+              { isClassWide: true }, // (b) ảnh chung cả lớp (đánh dấu rõ ràng)
+            ],
           },
           select: { id: true, fileUrl: true, caption: true, approvedAt: true, createdAt: true },
           orderBy: { createdAt: "desc" },

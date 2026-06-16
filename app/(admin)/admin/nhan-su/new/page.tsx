@@ -2,8 +2,6 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
-import { resolveActor } from "@/lib/auth/actor";
-import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { EmployeeForm } from "@/components/admin/nhan-su/employee-form";
 
 export const metadata = { title: "Thêm nhân sự | Admin" };
@@ -28,9 +26,12 @@ export default async function NewEmployeePage() {
     }
   }
 
-  const actor = await resolveActor(session.user.id);
-  const [orgUnits, managers, departments] = await Promise.all([
-    getSelectableOrgUnits(actor),
+  const [centers, managers, departments] = await Promise.all([
+    db.center.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
     db.employee.findMany({
       where: { isActive: true },
       orderBy: { fullName: "asc" },
@@ -55,7 +56,7 @@ export default async function NewEmployeePage() {
       <EmployeeForm
         mode="create"
         defaultCode={nextCode}
-        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+        centers={centers}
         managers={managers}
         departments={departments}
         userRole={session.user.role}

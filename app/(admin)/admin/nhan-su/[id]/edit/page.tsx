@@ -4,8 +4,6 @@ import { redirect, notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { db } from "@/lib/db";
 import { can, hasRole } from "@/lib/auth/permissions";
-import { resolveActor } from "@/lib/auth/actor";
-import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { EmployeeForm } from "@/components/admin/nhan-su/employee-form";
 import {
   ChangeRoleDialog,
@@ -49,9 +47,12 @@ export default async function EditEmployeePage({ params }: Props) {
 
   const canManageUsers = can(session.user, "users:manage");
 
-  const actor = await resolveActor(session.user.id);
-  const [orgUnits, managers, departments] = await Promise.all([
-    getSelectableOrgUnits(actor),
+  const [centers, managers, departments] = await Promise.all([
+    db.center.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
     db.employee.findMany({
       where: { isActive: true, NOT: { id } },
       orderBy: { fullName: "asc" },
@@ -63,6 +64,17 @@ export default async function EditEmployeePage({ params }: Props) {
       select: { code: true, name: true, isTeaching: true },
     }),
   ]);
+
+  // Cờ "Nhân viên HO": có EmployeeOrgAssignment active tới OrgUnit type=HO (Doc 15 OI-1).
+  const hoUnit = await db.orgUnit.findFirst({
+    where: { type: "HO", deletedAt: null },
+    select: { id: true },
+  });
+  const initialIsHO = hoUnit
+    ? (await db.employeeOrgAssignment.count({
+        where: { employeeId: id, orgUnitId: hoUnit.id, status: "ACTIVE" },
+      })) > 0
+    : false;
 
   const isSuperAdmin = hasRole(session.user, "SUPER_ADMIN");
   const canViewAudit = can(session.user, "audit-logs:view");
@@ -115,10 +127,11 @@ export default async function EditEmployeePage({ params }: Props) {
       <EmployeeForm
         mode="edit"
         initial={employee}
-        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+        centers={centers}
         managers={managers}
         departments={departments}
         userRole={session.user.role}
+        initialIsHO={initialIsHO}
       />
 
       {canManageUsers && (

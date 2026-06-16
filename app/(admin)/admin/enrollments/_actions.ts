@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, assertCan } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -246,6 +246,58 @@ export async function deleteEnrollment(id: string): Promise<ActionResult> {
   }
   revalidatePath("/enrollments");
   return {};
+}
+
+/**
+ * Xoá đăng ký — dùng cho nút "Xóa" trên bảng danh sách admin.
+ * Enrollment KHÔNG có `deletedAt` → hard delete, nhưng CHỈ khi chưa phát sinh
+ * dữ liệu nghiệp vụ (payments / orderItems / receipts / reserves). Nếu đã có →
+ * chặn và yêu cầu "hủy đăng ký" thay vì xóa.
+ */
+export async function deleteEnrollmentAction(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  try {
+    assertCan(session.user, "enrollments:delete");
+  } catch {
+    return { ok: false, error: "Không có quyền" };
+  }
+
+  const enrollment = await db.enrollment.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          payments: true,
+          orderItems: true,
+          receipts: true,
+          reserves: true,
+        },
+      },
+    },
+  });
+  if (!enrollment) return { ok: false, error: "Đăng ký không tồn tại" };
+
+  const c = enrollment._count;
+  if (c.payments + c.orderItems + c.receipts + c.reserves > 0) {
+    return {
+      ok: false,
+      error:
+        "Không thể xóa: đăng ký đã phát sinh dữ liệu nghiệp vụ (thanh toán/biên lai). Hãy hủy đăng ký thay vì xóa.",
+    };
+  }
+
+  try {
+    await db.enrollment.delete({ where: { id } });
+  } catch {
+    return { ok: false, error: "Không thể xoá đăng ký này" };
+  }
+
+  revalidatePath("/enrollments");
+  return { ok: true };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

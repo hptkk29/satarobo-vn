@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { CreateTrialClassForm } from "../_components/create-form";
 
 export const metadata = { title: "Tạo lớp trải nghiệm | Admin" };
@@ -19,6 +20,8 @@ export default async function NewTrialClassPage() {
   const sdb = scopedDb(actor);
 
   // Cơ sở actor được phép tạo lớp (cách ly cơ sở).
+  // GV dùng nguồn DUY NHẤT getAssignableTeachers (fix #9 — trước đây query strict
+  // `roles has TEACHER` chỉ thấy 2 người, lọt GV chỉ có TeacherProfile ACTIVE).
   const [centers, rooms, teachers, configs] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true, id: { in: actor.visibleCenterIds } },
@@ -30,11 +33,7 @@ export default async function NewTrialClassPage() {
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true, centerId: true },
     }),
-    sdb.user.findMany({
-      where: { roles: { has: "TEACHER" }, isActive: true, deletedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
+    getAssignableTeachers(),
     sdb.trialProgramConfig.findMany({
       where: { active: true },
       orderBy: { updatedAt: "desc" },

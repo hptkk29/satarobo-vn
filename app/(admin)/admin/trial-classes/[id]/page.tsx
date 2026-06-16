@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { TrialClassDetail } from "../_components/trial-class-detail";
 
 export const metadata = { title: "Chi tiết lớp trải nghiệm | Admin" };
@@ -82,13 +83,11 @@ export default async function TrialClassDetailPage({ params }: Props) {
     can(session.user, "trials:feedback") &&
     (isManager || cls.teacherId === session.user.id);
 
-  // Danh sách GV để gán (chỉ load khi có quyền gán).
+  // Danh sách GV để gán (chỉ load khi có quyền gán). Dùng nguồn DUY NHẤT
+  // getAssignableTeachers; includeIds giữ GV đang gán dù dữ liệu không còn match
+  // điều kiện → <Select> không tự rớt giá trị đang chọn.
   const teacherOptions = canAssignTeacher
-    ? await sdb.user.findMany({
-        where: { roles: { has: "TEACHER" }, isActive: true, deletedAt: null },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      })
+    ? await getAssignableTeachers({ includeIds: [cls.teacherId] })
     : [];
 
   const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;

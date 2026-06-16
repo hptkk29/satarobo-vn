@@ -359,6 +359,81 @@ export async function toggleUserActiveAction(id: string) {
   return { ok: true as const };
 }
 
+// ─── DELETE (soft) ───────────────────────────────────────────────────
+// Chỉ dọn dữ liệu test: soft-delete tài khoản ĐÃ vô hiệu hóa. KHÔNG hard
+// delete (User có nhiều quan hệ: leads, lớp dạy, audit logs, con cái).
+export async function deleteUserAction(id: string) {
+  const session = await requireUsersManage();
+  const me = session.user;
+
+  if (id === me.id) {
+    return { ok: false, error: "Không thể tự xóa chính mình" };
+  }
+
+  const user = await db.user.findUnique({
+    where: { id },
+    select: { isActive: true, email: true, role: true, roles: true },
+  });
+  if (!user) return { ok: false, error: "Không tìm thấy user" };
+
+  if (user.isActive) {
+    return { ok: false, error: "Chỉ xóa tài khoản đã vô hiệu hóa" };
+  }
+
+  // Last SUPER_ADMIN guard (mirror page.tsx / toggle): không xóa SUPER_ADMIN
+  // active duy nhất. Tài khoản ở đây đã isActive=false nên thường không vướng,
+  // nhưng giữ guard cho an toàn nếu có race.
+  if (
+    (user.role === "SUPER_ADMIN" || user.roles.includes("SUPER_ADMIN")) &&
+    user.isActive
+  ) {
+    const remaining = await db.user.count({
+      where: {
+        roles: { has: "SUPER_ADMIN" },
+        isActive: true,
+        deletedAt: null,
+        id: { not: id },
+      },
+    });
+    if (remaining === 0) {
+      return { ok: false, error: "Không thể xóa SUPER_ADMIN duy nhất" };
+    }
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          isActive: false,
+          tokenVersion: { increment: 1 }, // force logout
+        },
+      });
+
+      await logUserAudit({
+        userId: id,
+        action: "DISABLE",
+        actorId,
+        actorName,
+        reason: "Xóa tài khoản (soft delete — dọn dữ liệu test)",
+        oldValues: { deletedAt: null, isActive: user.isActive },
+        newValues: { deletedAt: new Date().toISOString(), isActive: false },
+        changedFields: ["deletedAt", "isActive"],
+        tx,
+      });
+    });
+  } catch (err) {
+    console.error("[deleteUser] error:", err);
+    return { ok: false, error: "Không xóa được tài khoản — thử lại" };
+  }
+
+  revalidatePath("/users");
+  return { ok: true as const };
+}
+
 // ─── RESET PASSWORD ──────────────────────────────────────────────────
 export async function resetUserPasswordAction(id: string, formData: FormData) {
   const session = await requireUsersManage();

@@ -120,12 +120,12 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
             <FolderOpen className="h-6 w-6 text-[#7C3AED]" />
-            Tài liệu
+            Tài liệu giảng dạy
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             {documents.length > 0
-              ? `${documents.length} tài liệu`
-              : "Chưa có tài liệu nào"}
+              ? `${documents.length} tài liệu giảng dạy`
+              : "Chưa có tài liệu giảng dạy nào"}
           </p>
         </div>
         <Link
@@ -133,7 +133,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
-          Tải lên tài liệu
+          Tải lên tài liệu giảng dạy
         </Link>
       </div>
 
