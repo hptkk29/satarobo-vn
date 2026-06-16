@@ -145,34 +145,49 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
         <tbody className="divide-y divide-gray-100">
           {employees.map((emp) => (
             <tr key={emp.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                {emp.employeeCode}
-                {emp.isCEO && (
-                  <span title="CEO" className="ml-1 inline-block align-middle">
-                    <Crown className="inline h-3.5 w-3.5 text-amber-500" />
-                  </span>
-                )}
-              </td>
+              {/* Họ tên */}
               <td className="px-4 py-3">
-                <p className="font-semibold text-gray-900">{emp.fullName}</p>
-                <p className="text-xs text-gray-500">{emp.jobTitle}</p>
+                <p className="font-semibold text-gray-900">
+                  {emp.fullName}
+                  {emp.isCEO && (
+                    <span title="CEO" className="ml-1 inline-block align-middle">
+                      <Crown className="inline h-3.5 w-3.5 text-amber-500" />
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {emp.jobTitle}
+                  <span className="ml-1 font-mono text-gray-400">· {emp.employeeCode}</span>
+                </p>
               </td>
-              <td className="px-4 py-3 text-gray-700">
-                {DEPARTMENT_LABELS[emp.department]}
-              </td>
+              {/* Email */}
+              <td className="px-4 py-3 text-xs text-gray-700">{emp.email || "—"}</td>
+              {/* SĐT */}
+              <td className="px-4 py-3 text-xs text-gray-700">{emp.phone || "—"}</td>
+              {/* Cơ sở (HO badge nếu là nhân viên Hội sở) */}
               <td className="px-4 py-3 text-xs text-gray-600">
-                {emp.center?.name || "—"}
+                {hoSet.has(emp.id) ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                    <Building2 className="h-3 w-3" /> HO (Hội sở)
+                  </span>
+                ) : (
+                  emp.center?.name || "—"
+                )}
                 {emp.manager && (
                   <p className="text-gray-400">↑ {emp.manager.fullName}</p>
                 )}
               </td>
+              {/* Bộ phận */}
+              <td className="px-4 py-3 text-gray-700">
+                {DEPARTMENT_LABELS[emp.department]}
+              </td>
+              {/* Vai trò (hiện đủ role, vai trò chính có viền nổi bật) */}
               <td className="px-4 py-3">
                 {emp.userAccount ? (
                   (() => {
                     const acc = emp.userAccount;
                     const effective =
                       acc.roles.length > 0 ? acc.roles : [acc.role];
-                    // Vai trò chính lên đầu, có viền nổi bật.
                     const ordered = [
                       ...effective.filter((r) => r === acc.role),
                       ...effective.filter((r) => r !== acc.role),
@@ -203,47 +218,6 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                   <span className="text-xs text-gray-400">Chưa có TK</span>
                 )}
               </td>
-              <td className="px-4 py-3 text-center">
-                {emp._count.honors > 0 ? (
-                  <span className="inline-flex items-center justify-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">
-                    🏆 {emp._count.honors}
-                  </span>
-                ) : (
-                  <span className="text-gray-300">—</span>
-                )}
-              </td>
-              <td className="px-4 py-3 text-center">
-                <button
-                  type="button"
-                  onClick={() => handleToggleActive(emp.id)}
-                  disabled={isPending}
-                  className="rounded p-1 hover:bg-gray-100 disabled:opacity-50"
-                >
-                  {emp.isActive ? (
-                    <UserCheck className="h-5 w-5 text-green-600" />
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-4 py-3 text-gray-700">
-                  {DEPARTMENT_LABELS[emp.department]}
-                </td>
-                <td className="px-4 py-3">
-                  {roles.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {roles.map((r) => (
-                        <span
-                          key={r}
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${ROLE_COLOR[r]}`}
-                        >
-                          {ROLE_LABEL[r]}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-gray-400">Chưa có TK</span>
-                  )}
-                </td>
                 <td className="px-4 py-3">
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLOR[emp.status]}`}
@@ -308,8 +282,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                   </div>
                 </td>
               </tr>
-            );
-          })}
+          ))}
         </tbody>
       </table>
     </div>

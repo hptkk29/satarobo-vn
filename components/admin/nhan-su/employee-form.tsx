@@ -117,9 +117,9 @@ export function EmployeeForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // NV không phải HO bắt buộc chọn cơ sở; NV HO không gán cơ sở (centerId null).
-    if (!isHO && !data.centerId) {
-      toast.error("Chọn cơ sở làm việc (hoặc bật 'Nhân viên HO').");
+    // NV không phải HO bắt buộc chọn đơn vị làm việc; NV HO gán vào OrgUnit HO (server xử lý).
+    if (!isHO && !data.orgUnitId) {
+      toast.error("Chọn đơn vị làm việc (hoặc bật 'Nhân viên HO').");
       return;
     }
 
@@ -136,8 +136,7 @@ export function EmployeeForm({
       contractType: data.contractType || null,
       salaryRank: data.salaryRank ? Number(data.salaryRank) : null,
       salaryLevel: data.salaryLevel ? Number(data.salaryLevel) : null,
-      orgUnitId: data.orgUnitId || null,
-      centerId: isHO ? null : data.centerId || null,
+      orgUnitId: isHO ? null : data.orgUnitId || null,
       managerId: data.managerId || null,
       // Phase 4.7 extension
       endDate: data.endDate || null,
@@ -340,7 +339,7 @@ export function EmployeeForm({
                 checked={isHO}
                 onCheckedChange={(v) => {
                   setIsHO(v);
-                  if (v) setData((d) => ({ ...d, centerId: "" }));
+                  if (v) setData((d) => ({ ...d, orgUnitId: "" }));
                 }}
               />
               <span className="text-sm font-medium text-indigo-900">
