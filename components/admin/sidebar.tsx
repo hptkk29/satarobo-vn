@@ -66,7 +66,7 @@ type NavItem = {
   /** Hiện mục nếu user có quyền với BẤT KỲ action nào trong đây. Bỏ trống = luôn hiện. */
   perm?: Action[];
   /** Mục gắn feature flag — chỉ hiện khi flag bật (R7-16: "eval"). */
-  flag?: "eval";
+  flag?: "eval" | "scorm";
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -126,6 +126,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tài liệu giảng dạy", href: "/documents", icon: FileText, perm: ["documents:view"] },
       { label: "Bài tập về nhà", href: "/assignments", icon: NotebookPen, perm: ["assignments:view"] },
       { label: "Khoá dạy", href: "/courses", icon: BookOpen, perm: ["courses:view"] },
+      { label: "SCORM / Bài giảng tương tác", href: "/scorm", icon: Package, perm: ["training:manage"], flag: "scorm" },
     ],
   },
   {
@@ -211,7 +212,15 @@ type SidebarUser = {
 
 const STORAGE_KEY = "satarobo:sidebar:collapsed";
 
-export function Sidebar({ user, evalV2Enabled = false }: { user: SidebarUser; evalV2Enabled?: boolean }) {
+export function Sidebar({
+  user,
+  evalV2Enabled = false,
+  scormEnabled = false,
+}: {
+  user: SidebarUser;
+  evalV2Enabled?: boolean;
+  scormEnabled?: boolean;
+}) {
   const pathname = usePathname();
 
   // Lọc menu theo quyền — chỉ giữ mục user được phép thấy. Mục không có `perm`
@@ -221,11 +230,13 @@ export function Sidebar({ user, evalV2Enabled = false }: { user: SidebarUser; ev
       label: g.label,
       items: g.items.filter(
         (it) =>
-          (!it.flag || (it.flag === "eval" && evalV2Enabled)) &&
+          (!it.flag ||
+            (it.flag === "eval" && evalV2Enabled) ||
+            (it.flag === "scorm" && scormEnabled)) &&
           (!it.perm || it.perm.some((p) => can(user, p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [user, evalV2Enabled]);
+  }, [user, evalV2Enabled, scormEnabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {

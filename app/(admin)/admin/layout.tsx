@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { hasStaffRole } from "@/lib/auth/permissions";
-import { isEvalV2Enabled } from "@/lib/flags";
+import { isEvalV2Enabled, isScormEnabled } from "@/lib/flags";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { Toaster } from "@/components/ui/sonner";
@@ -43,7 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="admin-scope flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex md:shrink-0">
-        <Sidebar user={{ role: session.user.role, roles: session.user.roles, grants: session.user.grants }} evalV2Enabled={isEvalV2Enabled()} />
+        <Sidebar user={{ role: session.user.role, roles: session.user.roles, grants: session.user.grants }} evalV2Enabled={isEvalV2Enabled()} scormEnabled={isScormEnabled()} />
       </div>
 
       {/* Main */}
