@@ -54,9 +54,6 @@ import {
   ChevronDown,
   Workflow,
   Wallet,
-  Library,
-  FileQuestion,
-  FileCheck2,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -112,21 +109,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view"] },
       { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: ["media:view"] },
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
-    ],
-  },
-  {
-    label: "Đào tạo (LMS)",
-    items: [
-      { label: "Giáo trình", href: "/curriculums", icon: Library, perm: ["curriculum:view"] },
-      { label: "Tài liệu", href: "/documents", icon: FileText, perm: ["documents:view"] },
-      { label: "Ngân hàng câu hỏi", href: "/questions", icon: FileQuestion, perm: ["questions:view"] },
-      { label: "Đề thi", href: "/exams", icon: FileCheck2, perm: ["exams:view"] },
-      { label: "Bài tập", href: "/assignments", icon: NotebookPen, perm: ["assignments:view"] },
-    ],
-  },
-  {
-    label: "Hệ thống cơ sở",
-    items: [
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
       { label: "Phòng học", href: "/rooms", icon: DoorOpen, perm: ["rooms:view"] },
       { label: "Lịch nghỉ", href: "/holidays", icon: CalendarOff, perm: ["holidays:view"] },

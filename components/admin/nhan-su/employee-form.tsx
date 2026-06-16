@@ -23,8 +23,8 @@ interface Props {
   mode: "create" | "edit";
   initial?: Employee;
   defaultCode?: string;
-  // Cơ sở làm việc (Center). NV HO bật toggle riêng (không gắn cơ sở).
-  centers: { id: string; name: string }[];
+  // PR-C: đơn vị làm việc đọc từ OrgUnit tree (gồm HO), lưu orgUnitId. centerId suy ra ở server.
+  orgUnits: { id: string; name: string }[];
   managers: { id: string; fullName: string; jobTitle: string }[];
   // Track Department: phòng ban đọc động từ DB (DepartmentDef), không hardcode enum.
   departments: { code: string; name: string; isTeaching: boolean }[];
@@ -63,7 +63,7 @@ export function EmployeeForm({
   mode,
   initial,
   defaultCode,
-  centers,
+  orgUnits,
   managers,
   departments,
   userRole,
@@ -97,7 +97,7 @@ export function EmployeeForm({
     contractType: (initial?.contractType ?? "") as ContractType | "",
     salaryRank: initial?.salaryRank ?? "",
     salaryLevel: initial?.salaryLevel ?? "",
-    centerId: initial?.centerId ?? "",
+    orgUnitId: initial?.orgUnitId ?? "",
     managerId: initial?.managerId ?? "",
     // Phase 4.7 extension
     endDate: dateInputValue(initial?.endDate),
@@ -117,9 +117,9 @@ export function EmployeeForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // NV không phải HO bắt buộc chọn cơ sở; NV HO không gán cơ sở (centerId null).
-    if (!isHO && !data.centerId) {
-      toast.error("Chọn cơ sở làm việc (hoặc bật 'Nhân viên HO').");
+    // NV không phải HO bắt buộc chọn đơn vị làm việc; NV HO gán vào OrgUnit HO (server xử lý).
+    if (!isHO && !data.orgUnitId) {
+      toast.error("Chọn đơn vị làm việc (hoặc bật 'Nhân viên HO').");
       return;
     }
 
@@ -136,7 +136,7 @@ export function EmployeeForm({
       contractType: data.contractType || null,
       salaryRank: data.salaryRank ? Number(data.salaryRank) : null,
       salaryLevel: data.salaryLevel ? Number(data.salaryLevel) : null,
-      centerId: isHO ? null : data.centerId || null,
+      orgUnitId: isHO ? null : data.orgUnitId || null,
       managerId: data.managerId || null,
       // Phase 4.7 extension
       endDate: data.endDate || null,
@@ -339,7 +339,7 @@ export function EmployeeForm({
                 checked={isHO}
                 onCheckedChange={(v) => {
                   setIsHO(v);
-                  if (v) setData((d) => ({ ...d, centerId: "" }));
+                  if (v) setData((d) => ({ ...d, orgUnitId: "" }));
                 }}
               />
               <span className="text-sm font-medium text-indigo-900">
@@ -354,21 +354,16 @@ export function EmployeeForm({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-semibold">
-              Cơ sở làm việc {!isHO && <span className="text-red-500">*</span>}
-            </label>
+            <label className="mb-1 block text-sm font-semibold">Đơn vị làm việc</label>
             <select
-              value={data.centerId}
-              disabled={isHO}
-              onChange={(e) => setData({ ...data, centerId: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              value={data.orgUnitId}
+              onChange={(e) => setData({ ...data, orgUnitId: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
             >
-              <option value="">
-                {isHO ? "— Hội sở (HO) —" : "— Chọn cơ sở —"}
-              </option>
-              {centers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              <option value="">— Không chỉ định —</option>
+              {orgUnits.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
                 </option>
               ))}
             </select>
