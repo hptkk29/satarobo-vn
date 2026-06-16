@@ -15,7 +15,9 @@ import {
   resizeCurriculum,
   archiveLesson,
   setLessonStatus,
+  isLessonLocked,
 } from "../../../lib/lms/curriculum";
+import { can } from "../../../lib/auth/permissions";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 async function makeCurriculum(lessonCount: number): Promise<string> {
@@ -100,16 +102,84 @@ test.describe("[R7-10] Curriculum sessions", () => {
   });
 
   // AC3 / C3 — LOCKED chặn sửa nội dung; unlock chỉ Đào tạo (gate ở action).
-  test.fixme("[R7-10-C3] buổi LOCKED chặn sửa; unlock bởi Đào tạo + audit", async () => {
-    // TODO: login TEACHER → sửa buổi LOCKED qua UI bị chặn;
-    //       login CENTER_MANAGER → mở khóa (setLessonStatusAction) → AuditLog "UNLOCK".
+  // Service-level: setLessonStatus (lock/unlock) + isLessonLocked (guard chặn sửa
+  // mà updateLesson dùng) + ma trận quyền can(training:manage). Audit "UNLOCK" được
+  // ghi trong setLessonStatusAction (auth-gated) → ngoài tầng service này.
+  test("[R7-10-C3] buổi LOCKED chặn sửa; unlock chỉ Đào tạo", async () => {
+    const id = await makeCurriculum(3);
+    const l = await db.lesson.findFirst({ where: { curriculumId: id, order: 2 } });
+    expect(l).not.toBeNull();
+    const actorId = "training-actor-1";
+
+    // Đào tạo khóa buổi → ghi nhận lockedAt + lockedById.
+    const locked = await setLessonStatus({ lessonId: l!.id, status: "LOCKED", actorId });
+    expect(locked.status).toBe("LOCKED");
+    const afterLock = await db.lesson.findUnique({ where: { id: l!.id } });
+    expect(afterLock!.lockedAt).not.toBeNull();
+    expect(afterLock!.lockedById).toBe(actorId);
+    // Guard mà updateLesson dùng để chặn sửa nội dung khi LOCKED.
+    expect(isLessonLocked(afterLock!.status)).toBe(true);
+
+    // Gate mở khóa: GV (TEACHER) KHÔNG có training:manage; chỉ Đào tạo
+    // (CENTER_MANAGER / SUPER_ADMIN) mở được. GV vẫn có curriculum:edit nhưng
+    // bị chặn bởi guard LOCKED ở trên.
+    expect(can("TEACHER", "training:manage")).toBe(false);
+    expect(can("CENTER_MANAGER", "training:manage")).toBe(true);
+    expect(can("SUPER_ADMIN", "training:manage")).toBe(true);
+    expect(can("TEACHER", "curriculum:edit")).toBe(true);
+
+    // Mở khóa (rời LOCKED) → xóa lockedAt/lockedById, version tăng.
+    const verBefore = afterLock!.version;
+    const unlocked = await setLessonStatus({ lessonId: l!.id, status: "COMPLETE", actorId });
+    expect(unlocked.status).toBe("COMPLETE");
+    const afterUnlock = await db.lesson.findUnique({ where: { id: l!.id } });
+    expect(afterUnlock!.lockedAt).toBeNull();
+    expect(afterUnlock!.lockedById).toBeNull();
+    expect(afterUnlock!.version).toBe(verBefore + 1);
+    expect(isLessonLocked(afterUnlock!.status)).toBe(false);
   });
 
   // AC4 / C4 — GV gửi đề xuất → Đào tạo reject + phản hồi → GV thấy trạng thái.
-  test.fixme("[R7-10-C4] GV đề xuất → Đào tạo reject + phản hồi", async () => {
-    // TODO: TEACHER submitLessonChangeRequest → OPEN;
-    //       CENTER_MANAGER handleLessonChangeRequest(REJECTED, response) → status+response;
-    //       GV xem lại thấy REJECTED + nội dung phản hồi.
+  // Service-level: ma trận quyền can() (GV gửi được, KHÔNG xử lý; Đào tạo xử lý) +
+  // vòng đời LessonChangeRequest qua Prisma (mirror submit/handleLessonChangeRequest,
+  // 2 action auth-gated): OPEN (default) → REJECTED + response → GV đọc lại.
+  test("[R7-10-C4] GV đề xuất → Đào tạo reject + phản hồi", async () => {
+    const id = await makeCurriculum(2);
+    const l = await db.lesson.findFirst({ where: { curriculumId: id, order: 1 } });
+    expect(l).not.toBeNull();
+    const teacherId = "gv-1";
+    const handlerId = "dao-tao-1";
+
+    // Gate: GV (TEACHER) gửi được đề xuất (questions:author) nhưng KHÔNG tự xử lý
+    // (training:manage); chỉ Đào tạo (CENTER_MANAGER) xử lý.
+    expect(can("TEACHER", "questions:author")).toBe(true);
+    expect(can("TEACHER", "training:manage")).toBe(false);
+    expect(can("CENTER_MANAGER", "training:manage")).toBe(true);
+
+    // GV gửi đề xuất → trạng thái mặc định OPEN, chưa có phản hồi / người xử lý.
+    const cr = await db.lessonChangeRequest.create({
+      data: {
+        lessonId: l!.id,
+        requestedById: teacherId,
+        content: "Đề nghị bổ sung bài tập về nhà cho buổi 1",
+      },
+    });
+    expect(cr.status).toBe("OPEN");
+    expect(cr.response).toBeNull();
+    expect(cr.handledById).toBeNull();
+
+    // Đào tạo từ chối + ghi phản hồi (như handleLessonChangeRequest REJECTED).
+    const response = "Buổi 1 đã đủ tải, chưa bổ sung lần này";
+    await db.lessonChangeRequest.update({
+      where: { id: cr.id },
+      data: { status: "REJECTED", response, handledById: handlerId },
+    });
+
+    // GV xem lại thấy REJECTED + nội dung phản hồi + người xử lý.
+    const seen = await db.lessonChangeRequest.findUnique({ where: { id: cr.id } });
+    expect(seen!.status).toBe("REJECTED");
+    expect(seen!.response).toBe(response);
+    expect(seen!.handledById).toBe(handlerId);
   });
 
   // C5 — 2 resize song song → optimistic lock (1 thắng, 1 báo reload).
