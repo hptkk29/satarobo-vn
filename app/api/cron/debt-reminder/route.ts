@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { getSetting } from "@/lib/settings/service";
-import { effectiveReminderDays, isReminderDue, overdueBucket } from "@/lib/finance/debt";
+import { effectiveReminderDays, isReminderDue, overdueBucket, remindOverdueInstallments } from "@/lib/finance/debt";
 
 export const dynamic = "force-dynamic";
 
@@ -123,6 +123,11 @@ export async function GET(req: NextRequest) {
     stats.sent++;
   }
 
-  console.log("[cron] debt-reminder:", stats);
-  return NextResponse.json({ ok: true, stats });
+  // R7 P2 — nhắc nợ qua emailQueue (enqueueDebtReminder) cho MỌI đợt trả góp đến hạn
+  // (đợt 1 + đợt 2), set lastReminderAt. Chạy SAU vòng Zalo ở trên: nếu đợt 2 vừa được
+  // nhắc + set lastReminderAt thì hàm này skip (chống gửi trùng cùng ngày).
+  const installmentReminders = await remindOverdueInstallments({ now, defaultReminderDays: defaultDays });
+
+  console.log("[cron] debt-reminder:", stats, "installments:", installmentReminders);
+  return NextResponse.json({ ok: true, stats, installmentReminders });
 }

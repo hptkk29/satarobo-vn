@@ -18,6 +18,7 @@ import {
   detectChangedFields,
   getAuditActor,
 } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
 
@@ -233,6 +234,18 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
         oldValues: before,
         tx,
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Student",
+        entityId: id,
+        action: "DELETE",
+        oldValues: before,
+        orgUnitId: before.centerId,
+        tx,
+      });
     });
   } catch {
     return { error: "Không thể xoá học viên này" };
@@ -339,7 +352,7 @@ export async function reserveStudentAction(input: {
 
   const student = await db.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
-    select: { id: true, status: true, name: true },
+    select: { id: true, status: true, name: true, centerId: true },
   });
   if (!student) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
@@ -409,6 +422,21 @@ export async function reserveStudentAction(input: {
         reason: `Bảo lưu: ${input.reason.trim()}`,
         tx,
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Student",
+        entityId: input.studentId,
+        action: "STATUS_CHANGE",
+        oldValues: { status: student.status },
+        newValues: { status: "PAUSED" },
+        changedFields: ["status"],
+        reason: `Bảo lưu: ${input.reason.trim()}`,
+        orgUnitId: student.centerId,
+        tx,
+      });
     }
 
     const enrollmentsToPause = input.enrollmentId
@@ -433,6 +461,21 @@ export async function reserveStudentAction(input: {
           changedByName: actorName,
           reason: input.reason.trim(),
         },
+      });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: enr.status },
+        newValues: { status: "PAUSED" },
+        changedFields: ["status"],
+        reason: input.reason.trim(),
+        orgUnitId: student.centerId,
+        tx,
       });
     }
   });
@@ -485,7 +528,7 @@ export async function resumeStudentReserveAction(input: {
       studentId: true,
       enrollmentId: true,
       isActive: true,
-      student: { select: { status: true } },
+      student: { select: { status: true, centerId: true } },
     },
   });
   if (!reserve) {
@@ -540,6 +583,21 @@ export async function resumeStudentReserveAction(input: {
         reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
         tx,
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Student",
+        entityId: reserve.studentId,
+        action: "STATUS_CHANGE",
+        oldValues: { status: "PAUSED" },
+        newValues: { status: "ACTIVE" },
+        changedFields: ["status"],
+        reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
+        orgUnitId: reserve.student.centerId,
+        tx,
+      });
     }
 
     const enrollmentsToResume = reserve.enrollmentId
@@ -565,6 +623,21 @@ export async function resumeStudentReserveAction(input: {
           reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
         },
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: "PAUSED" },
+        newValues: { status: "STUDYING" },
+        changedFields: ["status"],
+        reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
+        orgUnitId: reserve.student.centerId,
+        tx,
+      });
     }
   });
 
@@ -589,7 +662,7 @@ export async function withdrawStudentAction(input: {
 
   const student = await db.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
-    select: { id: true, status: true },
+    select: { id: true, status: true, centerId: true },
   });
   if (!student) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
@@ -629,6 +702,21 @@ export async function withdrawStudentAction(input: {
       tx,
     });
 
+    // P3 (additive): also write to unified AuditLog.
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "students",
+      entityType: "Student",
+      entityId: input.studentId,
+      action: "STATUS_CHANGE",
+      oldValues: { status: student.status },
+      newValues: { status: "INACTIVE" },
+      changedFields: ["status"],
+      reason: `Nghỉ học: ${input.reason.trim()}`,
+      orgUnitId: student.centerId,
+      tx,
+    });
+
     const activeEnrollments = await tx.enrollment.findMany({
       where: {
         studentId: input.studentId,
@@ -652,6 +740,21 @@ export async function withdrawStudentAction(input: {
           changedByName: actorName,
           reason: `Học viên nghỉ học: ${input.reason.trim()}`,
         },
+      });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: enr.status },
+        newValues: { status: "WITHDREW" },
+        changedFields: ["status"],
+        reason: `Học viên nghỉ học: ${input.reason.trim()}`,
+        orgUnitId: student.centerId,
+        tx,
       });
     }
   });
@@ -902,7 +1005,7 @@ export async function reactivateStudentAction(input: {
 
   const student = await db.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
-    select: { id: true, status: true },
+    select: { id: true, status: true, centerId: true },
   });
   if (!student) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
@@ -928,6 +1031,21 @@ export async function reactivateStudentAction(input: {
       newValues: { status: "ACTIVE" },
       changedFields: ["status"],
       reason: `Kích hoạt lại${input.note ? `: ${input.note.trim()}` : ""}`,
+      tx,
+    });
+
+    // P3 (additive): also write to unified AuditLog.
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "students",
+      entityType: "Student",
+      entityId: input.studentId,
+      action: "STATUS_CHANGE",
+      oldValues: { status: student.status },
+      newValues: { status: "ACTIVE" },
+      changedFields: ["status"],
+      reason: `Kích hoạt lại${input.note ? `: ${input.note.trim()}` : ""}`,
+      orgUnitId: student.centerId,
       tx,
     });
   });

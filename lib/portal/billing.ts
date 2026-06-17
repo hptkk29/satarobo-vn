@@ -138,3 +138,85 @@ export async function getParentConfirmedPayments(
     receiptCode: p.receipts[0]?.code ?? null,
   }));
 }
+
+// =============================================================================
+// R7-04 — TRANG HỌC PHÍ PORTAL (P0): nguồn sự thật = Payment 2 tầng, KHÔNG đọc Order cũ.
+// Học phí mỗi ghi danh = finalPrice (snapshot tại convert) − Σ Payment(CONFIRMED).
+// PARENT không có center-role → cổng sở hữu là studentId thuộc parentUserId (db trần).
+// =============================================================================
+
+export type EnrollmentBillingRow = {
+  enrollmentId: string;
+  status: string;
+  studentName: string | null;
+  className: string | null;
+  finalPrice: number;
+  confirmedPaid: number;
+  /** finalPrice − confirmedPaid; có thể âm (đóng thừa). */
+  outstanding: number;
+};
+
+export type ParentBilling = {
+  enrollments: EnrollmentBillingRow[];
+  /** Lịch sử biên lai đã được kế toán xác nhận. */
+  receipts: ConfirmedPaymentRow[];
+  totals: { tuition: number; paid: number; outstanding: number };
+};
+
+/**
+ * Tổng hợp học phí + công nợ + biên lai cho phụ huynh, từ Payment 2 tầng (R7-04).
+ * Chỉ tính ghi danh đã chốt giá (finalPrice != null tại convert R7-05). Chỉ tính
+ * Payment accountantStatus=CONFIRMED (AC1: khoản Sale mới ghi nhận chưa hiện).
+ */
+export async function getParentBilling(parentUserId: string): Promise<ParentBilling> {
+  const empty: ParentBilling = {
+    enrollments: [],
+    receipts: [],
+    totals: { tuition: 0, paid: 0, outstanding: 0 },
+  };
+  const childIds = await resolveChildIds(db, parentUserId);
+  if (childIds.length === 0) return empty;
+
+  const enrollments = await db.enrollment.findMany({
+    where: { studentId: { in: childIds }, finalPrice: { not: null } },
+    select: {
+      id: true,
+      status: true,
+      finalPrice: true,
+      tuition: true,
+      student: { select: { name: true } },
+      class: { select: { name: true } },
+      payments: { where: { accountantStatus: "CONFIRMED" }, select: { amount: true } },
+    },
+    orderBy: { enrolledAt: "desc" },
+    take: 100,
+  });
+
+  const rows: EnrollmentBillingRow[] = enrollments.map((e) => {
+    const finalPrice = e.finalPrice ?? e.tuition ?? 0;
+    const confirmedPaid = e.payments.reduce((s, p) => s + p.amount, 0);
+    return {
+      enrollmentId: e.id,
+      status: e.status,
+      studentName: e.student?.name ?? null,
+      className: e.class?.name ?? null,
+      finalPrice,
+      confirmedPaid,
+      outstanding: finalPrice - confirmedPaid,
+    };
+  });
+
+  const receipts = await getParentConfirmedPayments(db, childIds);
+
+  const totals = rows.reduce(
+    (acc, r) => {
+      acc.tuition += r.finalPrice;
+      acc.paid += r.confirmedPaid;
+      acc.outstanding += Math.max(0, r.outstanding);
+      return acc;
+    },
+    { tuition: 0, paid: 0, outstanding: 0 },
+  );
+
+  return { enrollments: rows, receipts, totals };
+}

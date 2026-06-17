@@ -232,6 +232,12 @@ export async function scheduleMakeup(params: {
   // chỗ cuối → người sau fail lịch sự). Sĩ số = enrollment active + makeup đã xếp.
   try {
     await db.$transaction(async (tx) => {
+      // R7-08-C8 — KHÓA theo buổi bù: advisory xact-lock serial-hoá mọi scheduler cùng
+      // makeupSessionId. READ COMMITTED + count→update KHÔNG atomic (phantom: 2 request
+      // cùng đếm N-1 → cùng PASS → quá chỗ). Lock này giải tuần tự → count phản ánh
+      // commit của request trước. Tự nhả khi tx kết thúc. Key bigint từ hashtext(sessionId).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.makeupSessionId})::bigint)`;
+
       const [enrolled, scheduled] = await Promise.all([
         tx.enrollment.count({
           where: { classId: sess.classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },

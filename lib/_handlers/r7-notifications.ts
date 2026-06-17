@@ -39,6 +39,39 @@ export async function onPaymentConfirmed(event: DomainEventLite): Promise<void> 
   });
 }
 
+// ─── payment.rejected → PH thấy khoản bị từ chối (AC3 R7-04) ──────────────────
+export async function onPaymentRejected(event: DomainEventLite): Promise<void> {
+  const paymentId = str(event.payload.paymentId);
+  const enrollmentId = str(event.payload.enrollmentId);
+  const amount = Number(event.payload.amount ?? 0);
+  const reason = str(event.payload.reason);
+  if (!paymentId || !enrollmentId) return;
+
+  const enr = await db.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { studentId: true, student: { select: { centerId: true } } },
+  });
+  if (!enr?.studentId) return;
+
+  const body =
+    `Khoản thanh toán ${amount.toLocaleString("vi-VN")}đ chưa được xác nhận.` +
+    (reason ? ` Lý do: ${reason}.` : "") +
+    " Vui lòng liên hệ trung tâm để được hỗ trợ.";
+  await db.notification.upsert({
+    where: { dedupeKey: `payment.rejected:${paymentId}` },
+    create: {
+      title: "Thanh toán cần xem lại",
+      body,
+      audience: "STUDENT",
+      studentId: enr.studentId,
+      centerId: enr.student?.centerId ?? null,
+      createdByName: "Hệ thống",
+      dedupeKey: `payment.rejected:${paymentId}`,
+    },
+    update: { body },
+  });
+}
+
 // ─── class.session_changed → PH lớp + GV (AC5/AC6 R7-06) ──────────────────────
 const CHANGE_LABEL: Record<string, string> = {
   CANCELLED: "có buổi bị huỷ (đã sắp buổi bù)",
@@ -117,6 +150,7 @@ export async function onLeadTrialAttended(event: DomainEventLite): Promise<void>
 
 export function registerR7NotificationHandlers(): void {
   on("payment.confirmed", onPaymentConfirmed);
+  on("payment.rejected", onPaymentRejected);
   on("class.session_changed", onClassSessionChanged);
   on("lead.trialAttended", onLeadTrialAttended);
 }

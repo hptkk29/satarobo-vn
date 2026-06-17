@@ -3,6 +3,8 @@
 import { auth } from "@/lib/auth";
 import { can, assertCan } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { getAuditActor } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -269,6 +271,10 @@ export async function deleteEnrollmentAction(
     where: { id },
     select: {
       id: true,
+      studentId: true,
+      classId: true,
+      status: true,
+      class: { select: { centerId: true } },
       _count: {
         select: {
           payments: true,
@@ -290,8 +296,27 @@ export async function deleteEnrollmentAction(
     };
   }
 
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    await db.enrollment.delete({ where: { id } });
+    await db.$transaction(async (tx) => {
+      await tx.enrollment.delete({ where: { id } });
+      // P3 (additive): ghi AuditLog hợp nhất cho viewer chung (atomic với delete).
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "enrollment",
+        entityType: "Enrollment",
+        entityId: id,
+        action: "DELETE",
+        oldValues: {
+          studentId: enrollment.studentId,
+          classId: enrollment.classId,
+          status: enrollment.status,
+        },
+        orgUnitId: enrollment.class?.centerId ?? null,
+        tx,
+      });
+    });
   } catch {
     return { ok: false, error: "Không thể xoá đăng ký này" };
   }
@@ -333,6 +358,7 @@ export async function enrollStudent(
   let cls: {
     id: string;
     courseId: string;
+    centerId: string | null;
     maxStudents: number;
     status: string;
     _count: { enrollments: number };
@@ -346,6 +372,7 @@ export async function enrollStudent(
         select: {
           id: true,
           courseId: true,
+          centerId: true,
           maxStudents: true,
           status: true,
           _count: {
@@ -399,16 +426,31 @@ export async function enrollStudent(
   const prereq = await checkPrerequisites(studentId, cls.courseId);
   if (!prereq.ok) return prereq;
 
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    const enrollment = await db.enrollment.create({
-      data: {
-        student: { connect: { id: studentId } },
-        class: { connect: { id: classId } },
-        course: { connect: { id: cls.courseId } },
-        status: "PENDING",
-        notes,
-      },
-      select: { id: true },
+    const enrollment = await db.$transaction(async (tx) => {
+      const enr = await tx.enrollment.create({
+        data: {
+          student: { connect: { id: studentId } },
+          class: { connect: { id: classId } },
+          course: { connect: { id: cls!.courseId } },
+          status: "PENDING",
+          notes,
+        },
+        select: { id: true },
+      });
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "enrollment",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "CREATE",
+        newValues: { studentId, classId, courseId: cls!.courseId, status: "PENDING" },
+        orgUnitId: cls!.centerId,
+        tx,
+      });
+      return enr;
     });
     revalidatePath("/enrollments");
     revalidatePath(`/classes/${classId}/edit`);
@@ -444,7 +486,12 @@ export async function changeEnrollmentStatus(
 
   const enrollment = await db.enrollment.findUnique({
     where: { id: data.enrollmentId },
-    select: { id: true, status: true, classId: true },
+    select: {
+      id: true,
+      status: true,
+      classId: true,
+      class: { select: { centerId: true } },
+    },
   });
   if (!enrollment) return { ok: false, error: "Không tìm thấy enrollment" };
   if (enrollment.status === data.newStatus) {
@@ -494,13 +541,15 @@ export async function changeEnrollmentStatus(
     timestamps.endedAt = new Date();
   }
 
+  const { actorId, actorName } = getAuditActor(session);
+
   try {
-    await db.$transaction([
-      db.enrollment.update({
+    await db.$transaction(async (tx) => {
+      await tx.enrollment.update({
         where: { id: data.enrollmentId },
         data: { status: data.newStatus, ...timestamps },
-      }),
-      db.enrollmentAuditLog.create({
+      });
+      await tx.enrollmentAuditLog.create({
         data: {
           enrollmentId: data.enrollmentId,
           fromStatus: enrollment.status,
@@ -510,8 +559,21 @@ export async function changeEnrollmentStatus(
             session.user.name ?? session.user.email ?? "Unknown",
           reason: data.reason,
         },
-      }),
-    ]);
+      });
+      // P3 (additive): cũng ghi vào AuditLog hợp nhất cho viewer chung.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "enrollment",
+        entityType: "Enrollment",
+        entityId: data.enrollmentId,
+        action: "STATUS_CHANGE",
+        oldValues: { status: enrollment.status },
+        newValues: { status: data.newStatus },
+        reason: data.reason,
+        orgUnitId: enrollment.class?.centerId ?? null,
+        tx,
+      });
+    });
   } catch (err) {
     return {
       ok: false,
@@ -548,7 +610,13 @@ export async function transferEnrollment(
 
   const oldEnrollment = await db.enrollment.findUnique({
     where: { id: data.enrollmentId },
-    select: { id: true, status: true, studentId: true, classId: true },
+    select: {
+      id: true,
+      status: true,
+      studentId: true,
+      classId: true,
+      class: { select: { centerId: true } },
+    },
   });
   if (!oldEnrollment) return { ok: false, error: "Không tìm thấy enrollment cũ" };
   if (oldEnrollment.classId === data.targetClassId) {
@@ -570,6 +638,7 @@ export async function transferEnrollment(
     select: {
       id: true,
       courseId: true,
+      centerId: true,
       maxStudents: true,
       status: true,
       _count: {
@@ -612,6 +681,7 @@ export async function transferEnrollment(
     userId: session.user.id ?? null,
     name: session.user.name ?? session.user.email ?? "Unknown",
   };
+  const { actorId, actorName } = getAuditActor(session);
 
   try {
     const newId = await db.$transaction(async (tx) => {
@@ -664,6 +734,37 @@ export async function transferEnrollment(
             sourceClassId: oldEnrollment.classId,
           },
         },
+      });
+
+      // P3 (additive): cũng ghi vào AuditLog hợp nhất cho viewer chung.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "enrollment",
+        entityType: "Enrollment",
+        entityId: oldEnrollment.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: oldEnrollment.status },
+        newValues: { status: "TRANSFERRED", transferredToId: newEnrollment.id },
+        reason: data.reason,
+        orgUnitId: oldEnrollment.class?.centerId ?? null,
+        tx,
+      });
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "enrollment",
+        entityType: "Enrollment",
+        entityId: newEnrollment.id,
+        action: "CREATE",
+        newValues: {
+          studentId: oldEnrollment.studentId,
+          classId: data.targetClassId,
+          courseId: targetClass.courseId,
+          status: "CONFIRMED",
+          transferredFromId: oldEnrollment.id,
+        },
+        reason: `Chuyển từ lớp cũ: ${data.reason}`,
+        orgUnitId: targetClass.centerId,
+        tx,
       });
 
       return newEnrollment.id;

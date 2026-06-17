@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
+import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
@@ -45,6 +46,11 @@ export async function completeSessionAction(
 ): Promise<CompleteSessionResult> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+  // Gác flag SERVER-SIDE (không chỉ ẩn UI): khi OFF, dùng checklist 9 mục cũ.
+  // Chặn cả POST trực tiếp vào action khi flag chưa bật.
+  if (!isSessionLifecycleV2Enabled()) {
+    return { ok: false, error: "Tính năng hoàn tất buổi (v2) chưa được bật" };
+  }
   // GV phụ trách hoặc quản lý đều có thể đóng buổi → dùng sessions:edit.
   if (!can(session.user, "sessions:edit")) {
     return { ok: false, error: "Không có quyền hoàn tất buổi" };

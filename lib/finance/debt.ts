@@ -191,3 +191,67 @@ export async function remindOverdueSingleOrders(
   }
   return { found: orders.length, sent, skipped };
 }
+
+/**
+ * Số ngày nhắc trước hạn MẶC ĐỊNH cho trả góp khi installment không override
+ * (`reminderDays = null`). Khớp default của SystemSetting `finance.debtReminderDaysBefore`
+ * (= 14). Caller (cron) có thể truyền `defaultReminderDays` từ getSetting để override.
+ */
+const DEFAULT_INSTALLMENT_REMINDER_DAYS = 14;
+
+/**
+ * R7 P2 — nhắc nợ cho ĐỢT TRẢ GÓP (OrderInstallment PENDING) qua email/Resend.
+ * Bổ sung cho remindOverdueSingleOrders (đơn lẻ) — phủ luôn cả đợt 1 lẫn đợt 2.
+ * Mỗi đợt đến hạn nhắc khi `dueDate − (reminderDays ?? default) ≤ now`, gửi qua
+ * enqueueDebtReminder rồi set `lastReminderAt = now`. Chống spam: tối đa 1 nhắc/ngày
+ * (lastReminderAt cùng ngày UTC với now → skip). Đợt không có email → skip.
+ */
+export async function remindOverdueInstallments(
+  opts: { now?: Date; defaultReminderDays?: number } = {},
+): Promise<{ found: number; sent: number; skipped: number }> {
+  const now = opts.now ?? new Date();
+  const defaultDays = opts.defaultReminderDays ?? DEFAULT_INSTALLMENT_REMINDER_DAYS;
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  const installments = await db.orderInstallment.findMany({
+    where: {
+      status: "PENDING",
+      dueDate: { not: null },
+      order: { status: { notIn: ["CANCELLED", "REFUNDED"] } },
+    },
+    select: {
+      id: true,
+      amount: true,
+      dueDate: true,
+      reminderDays: true,
+      lastReminderAt: true,
+      order: { select: { id: true, code: true, customerName: true, customerEmail: true } },
+    },
+  });
+
+  let found = 0;
+  let sent = 0;
+  let skipped = 0;
+  for (const inst of installments) {
+    const days = effectiveReminderDays(inst.reminderDays, defaultDays);
+    if (!isReminderDue(inst.dueDate, days, now)) continue; // chưa đến mốc nhắc
+    found++;
+
+    // Chống spam: đã nhắc trong ngày UTC hôm nay → skip.
+    if (inst.lastReminderAt && inst.lastReminderAt >= startOfToday) { skipped++; continue; }
+
+    const email = inst.order.customerEmail?.trim() || null;
+    if (!email) { skipped++; continue; } // không có email → skip
+
+    await enqueueDebtReminder({
+      to: email,
+      customerName: inst.order.customerName,
+      orderId: inst.order.id,
+      orderCode: inst.order.code,
+      amount: inst.amount,
+    });
+    await db.orderInstallment.update({ where: { id: inst.id }, data: { lastReminderAt: now } });
+    sent++;
+  }
+  return { found, sent, skipped };
+}

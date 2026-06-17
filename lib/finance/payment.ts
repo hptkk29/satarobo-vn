@@ -218,6 +218,18 @@ export async function rejectPayment(params: {
       orgUnitId: existing.centerId,
       tx,
     });
+    // R7-17 (P0 gap) — phát event để PH/Sale được thông báo khoản bị từ chối.
+    await publishEvent(
+      "payment.rejected",
+      {
+        paymentId: existing.id,
+        enrollmentId: existing.enrollmentId,
+        orderId: existing.orderId,
+        amount: existing.amount,
+        reason: params.reason.trim(),
+      },
+      { tx, dedupeKey: `payment.rejected:${existing.id}` },
+    );
     return voided;
   });
 

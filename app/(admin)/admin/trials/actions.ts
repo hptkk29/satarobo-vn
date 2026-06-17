@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { publishEvent } from "@/lib/events/publish";
 import { getAuditActor } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
 import {
   trialUpdateSchema,
   trialFeedbackSchema,
@@ -39,7 +41,7 @@ export async function updateTrialAction(
 
   const trial = await db.trialClass.findUnique({
     where: { id: trialId },
-    select: { id: true, leadId: true, status: true },
+    select: { id: true, leadId: true, status: true, scheduledAt: true },
   });
   if (!trial) return { ok: false, error: "Buổi học thử không tồn tại" };
 
@@ -48,11 +50,14 @@ export async function updateTrialAction(
     parsed.data.status === "ATTENDED" && trial.status !== "ATTENDED";
   const leadNextStatus = TRIAL_TO_LEAD[parsed.data.status];
 
+  const newAt = new Date(parsed.data.scheduledAt);
+  const scheduleChanged = trial.scheduledAt?.getTime() !== newAt.getTime();
+
   await db.$transaction(async (tx) => {
     await tx.trialClass.update({
       where: { id: trialId },
       data: {
-        scheduledAt: new Date(parsed.data.scheduledAt),
+        scheduledAt: newAt,
         status: parsed.data.status,
         teacherId: parsed.data.teacherId,
         roomId: parsed.data.roomId,
@@ -61,6 +66,21 @@ export async function updateTrialAction(
         ...(becameAttended && { attendedAt: new Date() }),
       },
     });
+
+    // Đổi giờ học thử → báo Sale phụ trách (R7-17). dedupeKey kèm giờ mới:
+    // reschedule thật re-fires, retry cùng thay đổi thì không.
+    if (scheduleChanged) {
+      await publishEvent(
+        "trial.schedule_changed",
+        {
+          trialId,
+          leadId: trial.leadId,
+          fromAt: trial.scheduledAt?.toISOString() ?? null,
+          toAt: newAt.toISOString(),
+        },
+        { tx, dedupeKey: `trial.schedule_changed:${trialId}:${newAt.getTime()}` },
+      );
+    }
 
     // Đồng bộ lead status nếu chuyển ATTENDED/REJECTED (không ghi đè nếu đã ENROLLED/xa hơn).
     if (leadNextStatus && parsed.data.status !== trial.status) {
@@ -101,6 +121,8 @@ export async function updateTrialAction(
 /**
  * Xoá cứng 1 buổi học thử (TrialFeedback cascade theo).
  * Dùng để dọn dữ liệu test / buổi tạo nhầm. Chỉ user có quyền `trials:manage`.
+ * Guard: KHÔNG hard-delete buổi đã phát sinh nghiệp vụ (ATTENDED/ENROLLED hoặc đã có
+ * nhận xét) — chỉ cho xoá khi còn ở giai đoạn chưa học. Audit lại thao tác xoá.
  */
 export async function deleteTrialAction(
   trialId: string,
@@ -113,12 +135,46 @@ export async function deleteTrialAction(
 
   const trial = await db.trialClass.findUnique({
     where: { id: trialId },
-    select: { id: true, leadId: true },
+    select: {
+      id: true,
+      leadId: true,
+      status: true,
+      scheduledAt: true,
+      centerId: true,
+      feedback: { select: { id: true } },
+    },
   });
   if (!trial) return { ok: false, error: "Buổi học thử không tồn tại" };
 
+  // Guard nghiệp vụ: buổi đã có kết quả thật → không cho xoá cứng (giữ vết).
+  if (trial.status === "ATTENDED" || trial.status === "ENROLLED" || trial.feedback) {
+    return {
+      ok: false,
+      error:
+        "Buổi học thử đã phát sinh kết quả (đã học/đã chốt/có nhận xét) — không thể xoá. Hãy đổi trạng thái thay vì xoá.",
+    };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+
   // TrialFeedback có onDelete: Cascade theo trialClassId → xoá kèm.
-  await db.trialClass.delete({ where: { id: trialId } });
+  await db.$transaction(async (tx) => {
+    await tx.trialClass.delete({ where: { id: trialId } });
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "trials",
+      entityType: "TrialClass",
+      entityId: trialId,
+      action: "DELETE",
+      oldValues: {
+        leadId: trial.leadId,
+        status: trial.status,
+        scheduledAt: trial.scheduledAt?.toISOString() ?? null,
+      },
+      orgUnitId: trial.centerId,
+      tx,
+    });
+  });
 
   revalidatePath("/trials");
   revalidatePath(`/leads/${trial.leadId}`);

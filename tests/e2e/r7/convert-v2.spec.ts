@@ -21,6 +21,7 @@ import {
   STUDENT_CODE_V2_CHARSET,
 } from "../../../lib/codegen";
 import { isConvertV2Enabled } from "../../../lib/flags";
+import { changeStudentCode } from "../../../lib/students/change-code";
 
 test.describe("[R7-05] Convert v2", () => {
   test.beforeEach(async () => {
@@ -314,9 +315,52 @@ test.describe("[R7-05] Convert v2", () => {
   });
 
   // ── AC6 / C10 — sửa mã HV (quyền + audit + reason) ────────────────────────
-  // BLOCKER: chưa có service sửa mã HV ở mức service. Đường sửa duy nhất là
-  // updateStudentAction (Server Action, cần auth() session, gate `students:edit`
-  // cho cả CENTER_MANAGER) — KHÔNG khớp hành vi "CENTER_MANAGER chặn / chỉ
-  // SUPER_ADMIN OK + reason bắt buộc + audit". Giữ fixme tới khi có service.
-  test.fixme("[R7-05-C10] sửa mã: CENTER_MANAGER chặn / SUPER_ADMIN OK+audit+reason", () => {});
+  test("[R7-05-C10] sửa mã: CENTER_MANAGER chặn / SUPER_ADMIN OK+audit+reason", async () => {
+    const student = await db.student.create({
+      data: { name: "HV C10", studentCode: "CS1-26-AAAAAA" },
+      select: { id: true },
+    });
+
+    // CENTER_MANAGER (isSuperAdmin=false) → chặn, mã không đổi.
+    const cm = await changeStudentCode({
+      actor: { id: "cm-1", name: "CM", isSuperAdmin: false },
+      studentId: student.id,
+      newCode: "CS1-26-BBBBBB",
+      reason: "đổi mã",
+    });
+    expect(cm.ok).toBe(false);
+
+    // SUPER_ADMIN nhưng thiếu reason → chặn.
+    const noReason = await changeStudentCode({
+      actor: { id: "sa-1", name: "SA", isSuperAdmin: true },
+      studentId: student.id,
+      newCode: "CS1-26-BBBBBB",
+      reason: "   ",
+    });
+    expect(noReason.ok).toBe(false);
+
+    // SUPER_ADMIN + reason → OK, mã đổi + audit ghi old→new + actor + reason.
+    const ok = await changeStudentCode({
+      actor: { id: "sa-1", name: "SA", isSuperAdmin: true },
+      studentId: student.id,
+      newCode: "CS1-26-BBBBBB",
+      reason: "Nhập sai mã lúc convert",
+    });
+    expect(ok.ok).toBe(true);
+
+    const updated = await db.student.findUnique({
+      where: { id: student.id },
+      select: { studentCode: true },
+    });
+    expect(updated?.studentCode).toBe("CS1-26-BBBBBB");
+
+    const audit = await db.auditLog.findFirst({
+      where: { entityType: "Student", entityId: student.id, action: "CHANGE_CODE" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.actorId).toBe("sa-1");
+    expect(audit?.reason).toBe("Nhập sai mã lúc convert");
+    expect((audit?.oldValues as { studentCode?: string } | null)?.studentCode).toBe("CS1-26-AAAAAA");
+    expect((audit?.newValues as { studentCode?: string } | null)?.studentCode).toBe("CS1-26-BBBBBB");
+  });
 });
