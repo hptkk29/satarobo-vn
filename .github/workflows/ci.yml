@@ -258,3 +258,69 @@ jobs:
           name: playwright-report-a0
           path: playwright-report/
           retention-days: 7
+
+  e2e-r7:
+    name: E2E Phase R7 (Playwright service-level + Postgres local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # assertTestDb chấp nhận host localhost + db ci_test (không phải Supabase prod).
+      # KHÔNG dùng ${{ env.* }} ở job-level env (GitHub Actions cấm) — ghi literal.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
+      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+      NEXTAUTH_URL: "http://localhost:3100"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3100"
+      BASE_URL: "http://localhost:3100"
+      # Mọi spec R7 test service/action trực tiếp (DB) → bỏ webServer ⇒ không cần
+      # `pnpm build`/`pnpm start`. 4 spec cần browser hiện đang fixme/skip.
+      R7_SKIP_WEBSERVER: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Phase R7 e2e
+        # playwright.r7.config.ts: globalSetup (tái dùng a0) chạy prisma migrate deploy
+        # lên Postgres local; .env.test vắng ở CI → giữ env CI ở trên (localhost ci_test).
+        run: pnpm test:e2e:r7
+
+      - name: Upload R7 Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-r7
+          path: playwright-report/
+          retention-days: 7
