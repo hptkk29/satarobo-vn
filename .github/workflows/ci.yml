@@ -211,8 +211,11 @@ jobs:
 
     env:
       # assertTestDb chấp nhận host localhost + db ci_test (không phải Supabase prod).
-      DATABASE_URL: ${{ env.CI_DATABASE_URL }}
-      DIRECT_URL: ${{ env.CI_DATABASE_URL }}
+      # ⚠️ KHÔNG dùng ${{ env.CI_DATABASE_URL }} ở job-level env: GitHub Actions không
+      # cho phép tham chiếu context `env` bên trong chính khối env của workflow/job
+      # (chỉ step-level mới được). Phải ghi literal — trùng giá trị env top-level dòng 17.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
       NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
       # A0 webServer chạy cổng 3100 (xem playwright.a0.config.ts).
       NEXTAUTH_URL: "http://localhost:3100"
