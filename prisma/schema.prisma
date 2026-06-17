@@ -1338,7 +1338,11 @@ model Enrollment {
   payments Payment[]        @relation("EnrollmentPayments") // R7-04
   receipts Receipt[]        @relation("EnrollmentReceipts") // R7-04
 
-  @@unique([studentId, classId])
+  // FIX-C3 (B2b) — KHÔNG @@unique đầy đủ: soft-delete cần cho ghi danh lại cùng
+  // (HS×lớp) sau khi xóa mềm. Ràng buộc duy nhất chỉ áp row CÒN SỐNG qua PARTIAL
+  // unique index `WHERE "deletedAt" IS NULL` (trong migration — Prisma không model
+  // được partial unique → sẽ báo drift khi `migrate dev`, GIỮ migration tay).
+  @@index([studentId, classId])
   @@index([studentId])
   @@index([classId])
   @@index([status])

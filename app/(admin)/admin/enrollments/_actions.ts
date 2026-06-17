@@ -398,8 +398,10 @@ export async function enrollStudent(
           },
         },
       }),
-      db.enrollment.findUnique({
-        where: { studentId_classId: { studentId, classId } },
+      // FIX-C3 (B2b) — không còn compound unique studentId_classId; findFirst +
+      // base soft-delete hook tự lọc deletedAt:null → chỉ thấy enrollment CÒN SỐNG.
+      db.enrollment.findFirst({
+        where: { studentId, classId },
         select: { status: true },
       }),
       db.student.findFirst({
@@ -651,12 +653,12 @@ export async function transferEnrollment(
     };
   }
 
-  const existing = await db.enrollment.findUnique({
+  // FIX-C3 (B2b) — findFirst thay findUnique (compound unique đã bỏ); base
+  // soft-delete hook tự lọc deletedAt:null → chỉ thấy enrollment CÒN SỐNG ở lớp đích.
+  const existing = await db.enrollment.findFirst({
     where: {
-      studentId_classId: {
-        studentId: oldEnrollment.studentId,
-        classId: data.targetClassId,
-      },
+      studentId: oldEnrollment.studentId,
+      classId: data.targetClassId,
     },
     select: { status: true },
   });

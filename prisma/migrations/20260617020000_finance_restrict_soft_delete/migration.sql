@@ -36,3 +36,13 @@ ALTER TABLE "OrderInstallment" ADD CONSTRAINT "OrderInstallment_orderId_fkey" FO
 -- OrderStatusHistory.order
 ALTER TABLE "OrderStatusHistory" DROP CONSTRAINT "OrderStatusHistory_orderId_fkey";
 ALTER TABLE "OrderStatusHistory" ADD CONSTRAINT "OrderStatusHistory_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- ── FIX-C3 (B2b) — Enrollment unique → PARTIAL unique (chỉ row CÒN SỐNG) ──────────
+-- Soft-delete cần cho phép ghi danh lại cùng (HS × lớp) sau khi xóa mềm. Bỏ unique
+-- đầy đủ, thay bằng unique chỉ áp khi "deletedAt" IS NULL.
+-- ⚠️ Prisma KHÔNG model được partial unique → schema dùng @@index([studentId,classId]);
+-- index partial dưới đây CHỈ có trong migration. Lần `migrate dev` sau Prisma sẽ coi
+-- là drift và muốn drop — PHẢI giữ lại (đừng để migrate dev xoá).
+DROP INDEX "Enrollment_studentId_classId_key";
+CREATE INDEX "Enrollment_studentId_classId_idx" ON "Enrollment"("studentId", "classId");
+CREATE UNIQUE INDEX "Enrollment_studentId_classId_active_key" ON "Enrollment"("studentId", "classId") WHERE "deletedAt" IS NULL;
