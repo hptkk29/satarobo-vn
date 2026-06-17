@@ -388,7 +388,11 @@ export async function enrollStudent(
           _count: {
             select: {
               enrollments: {
-                where: { status: { in: [...CAPACITY_COUNT_STATUSES] } },
+                // FIX-C3 (B2a) — nested _count KHÔNG được soft-delete hook → tự lọc.
+                where: {
+                  status: { in: [...CAPACITY_COUNT_STATUSES] },
+                  deletedAt: null,
+                },
               },
             },
           },
@@ -441,7 +445,11 @@ export async function enrollStudent(
   try {
     const enrollmentId = await runSerializable(async (tx) => {
       const activeCount = await tx.enrollment.count({
-        where: { classId, status: { in: [...CAPACITY_COUNT_STATUSES] } },
+        where: {
+          classId,
+          status: { in: [...CAPACITY_COUNT_STATUSES] },
+          deletedAt: null, // FIX-C3 (B2a) — không đếm enrollment đã xóa mềm
+        },
       });
       if (activeCount >= cls.maxStudents) {
         throw new EnrollmentWorkflowError("CLASS_FULL");
@@ -537,6 +545,7 @@ export async function changeEnrollmentStatus(
           where: {
             classId: enrollment.classId,
             status: { in: [...CAPACITY_COUNT_STATUSES] },
+            deletedAt: null, // FIX-C3 (B2a)
           },
         });
         if (cls && activeCount >= cls.maxStudents) {
@@ -670,6 +679,7 @@ export async function transferEnrollment(
         where: {
           classId: data.targetClassId,
           status: { in: [...CAPACITY_COUNT_STATUSES] },
+          deletedAt: null, // FIX-C3 (B2a)
         },
       });
       if (activeCount >= targetClass.maxStudents) {

@@ -19,17 +19,9 @@ export const SCOPED_MODELS = new Set<string>([
   "TrialClassV2", // R7-02 — lớp trải nghiệm theo cơ sở
 ]);
 
-/**
- * FIX-C3 — model tài chính dùng soft-delete: read mặc định ẩn row đã xóa (`deletedAt != null`).
- * Áp ĐỘC LẬP với SCOPED_MODELS (Enrollment/Receipt không center-scoped nhưng vẫn soft-delete).
- * Call-site cố ý đọc cả row đã xóa (vd "Thùng rác") tự truyền `deletedAt: ...` để OVERRIDE.
- */
-export const SOFT_DELETE_MODELS = new Set<string>([
-  "Order",
-  "Payment",
-  "Receipt",
-  "Enrollment",
-]);
+// FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
+// để bắt cả read `db` trần. Re-export để call-site/test import từ đây vẫn chạy.
+export { SOFT_DELETE_MODELS, injectSoftDelete } from "@/lib/soft-delete";
 
 /** Có centerId nhưng KHÔNG scope (lý do rõ) — để introspection không báo "miss model". */
 export const SCOPE_EXEMPT = new Set<string>([
@@ -150,24 +142,6 @@ export function injectScope<A>(model: string, args: A, actor: Actor): A {
   return { ...a, where: a.where ? { AND: [a.where, scopeWhere] } : scopeWhere } as A;
 }
 
-/**
- * FIX-C3 — Inject filter `deletedAt: null` cho model soft-delete (THUẦN — test được).
- * Idempotent + không ghi đè: nếu where đã nhắc tới `deletedAt` (call-site cố ý đọc trash) → giữ nguyên.
- * Không phải model soft-delete → trả nguyên args.
- */
-export function injectSoftDelete<A>(model: string, args: A): A {
-  if (!SOFT_DELETE_MODELS.has(model)) return args;
-
-  const a = (args ?? {}) as { where?: Record<string, unknown> };
-  const where = a.where;
-
-  // Call-site đã chủ động đề cập deletedAt (top-level) → tôn trọng, không override.
-  if (where && Object.prototype.hasOwnProperty.call(where, "deletedAt")) return args;
-
-  const softWhere = { deletedAt: null };
-  return { ...a, where: where ? { AND: [where, softWhere] } : softWhere } as A;
-}
-
 /** Record đọc được (findUnique) có nằm trong scope của actor không (chống IDOR). */
 export function passesScope(
   model: string,
@@ -189,42 +163,36 @@ export function passesScope(
  */
 export function scopedDb(actor: Actor, opts?: { bypass?: boolean }) {
   const bypass = opts?.bypass ?? false;
-  // Cả 2 nhánh đi qua $extends để type đồng nhất; bypass chỉ bỏ bước inject.
-  // FIX-C3 — soft-delete filter chạy CẢ bypass (correctness, không phải tenancy);
-  // scope filter chỉ chạy khi không bypass.
-  const prep = <A>(model: string, args: A): A =>
-    injectSoftDelete(model, bypass ? args : injectScope(model, args, actor));
-
+  // Chỉ lo SCOPE (cách ly cơ sở). Soft-delete đã được base `db` xử lý cho mọi model
+  // SOFT_DELETE_MODELS (kể cả qua $extends này), nên KHÔNG lặp lại ở đây.
   return db.$extends({
     query: {
       $allModels: {
         async findMany({ model, args, query }) {
-          return query(prep(model, args));
+          return query(bypass ? args : injectScope(model, args, actor));
         },
         async findFirst({ model, args, query }) {
-          return query(prep(model, args));
+          return query(bypass ? args : injectScope(model, args, actor));
         },
         async count({ model, args, query }) {
-          return query(prep(model, args));
+          return query(bypass ? args : injectScope(model, args, actor));
         },
         async aggregate({ model, args, query }) {
-          return query(prep(model, args));
+          return query(bypass ? args : injectScope(model, args, actor));
         },
         async groupBy({ model, args, query }) {
-          return query(prep(model, args));
+          return query(bypass ? args : injectScope(model, args, actor));
         },
         async findUnique({ model, args, query }) {
-          // findUnique chỉ nhận where unique → không thể AND deletedAt vào args.
-          // Lọc hậu kỳ: row soft-deleted → trả null (như IDOR).
-          const r = (await query(args)) as
-            | { centerId?: string | null; deletedAt?: Date | null }
-            | null;
-          if (r && SOFT_DELETE_MODELS.has(model) && r.deletedAt != null) return null;
+          // Soft-delete null-filter do base `db` lo; ở đây chỉ chống IDOR theo scope.
+          const r = await query(args);
           if (bypass) return r;
-          return passesScope(model, r, actor) ? r : null;
+          return passesScope(model, r as { centerId?: string | null } | null, actor)
+            ? r
+            : null;
         },
         async findFirstOrThrow({ model, args, query }) {
-          return query(prep(model, args));
+          return query(bypass ? args : injectScope(model, args, actor));
         },
       },
     },
