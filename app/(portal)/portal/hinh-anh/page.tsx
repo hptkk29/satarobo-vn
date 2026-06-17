@@ -18,7 +18,7 @@ export default async function HinhAnhPage() {
   // Ảnh gắn thẻ HS khác → KHÔNG hiện. Ảnh không tag & KHÔNG class-wide cũng ẩn
   // (bất biến C6.2). Vẫn yêu cầu consent của con.
   const enr = await db.enrollment.findMany({
-    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] } },
+    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
     select: { classId: true },
   });
   const classIds = enr.map((e) => e.classId);

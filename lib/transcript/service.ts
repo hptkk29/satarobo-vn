@@ -69,7 +69,7 @@ export async function getStudentTranscript(studentId: string): Promise<StudentTr
 
   const [enrollments, completions, skills, feedbackCount] = await Promise.all([
     db.enrollment.findMany({
-      where: { studentId },
+      where: { studentId, deletedAt: null }, // FIX-C3
       orderBy: { enrolledAt: "desc" },
       select: {
         classId: true,

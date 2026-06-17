@@ -41,6 +41,7 @@ export async function submitAssignment(input: {
       studentId,
       classId: assignment.classId,
       status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+      deletedAt: null, // FIX-C3
     },
     select: { id: true },
   });

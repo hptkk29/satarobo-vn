@@ -1319,8 +1319,9 @@ model Enrollment {
   // Other
   notes String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   class   Class   @relation(fields: [classId], references: [id])
@@ -2885,8 +2886,9 @@ model Order {
   customerNote String? @db.Text
   internalNote String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
   items   OrderItem[]
   history OrderStatusHistory[]
@@ -2931,7 +2933,7 @@ model OrderInstallment {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
 
   @@unique([orderId, soDot])
   @@index([status, dueDate])
@@ -2940,7 +2942,7 @@ model OrderInstallment {
 model OrderItem {
   id      String        @id @default(cuid())
   orderId String
-  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
   type    OrderItemType
 
   // Polymorphic refs (only one non-null per row, by type)
@@ -2982,7 +2984,7 @@ model OrderItem {
 model OrderStatusHistory {
   id      String @id @default(cuid())
   orderId String
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
 
   fromStatus OrderStatus
   toStatus   OrderStatus
@@ -4402,9 +4404,9 @@ enum ReceiptStatus {
 model Payment {
   id           String  @id @default(cuid())
   orderId      String
-  order        Order   @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Cascade)
+  order        Order   @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
   enrollmentId String?
-  enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull)
+  enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull) // FIX-C3: liên kết mềm, giữ SetNull
   amount       Int
   method       String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
   paidDate     DateTime
@@ -4424,8 +4426,9 @@ model Payment {
 
   centerId  String? // cách ly cơ sở (scopedDb)
   receipts  Receipt[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
   @@index([orderId])
   @@index([enrollmentId])
@@ -4438,12 +4441,15 @@ model Receipt {
   id           String        @id @default(cuid())
   code         String        @unique // RCP-{CENTER}-{YY}-{SEQ}
   enrollmentId String
-  enrollment   Enrollment    @relation("EnrollmentReceipts", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollment   Enrollment    @relation("EnrollmentReceipts", fields: [enrollmentId], references: [id], onDelete: Restrict) // FIX-C3
   paymentId    String
-  payment      Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment      Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict) // FIX-C3
   issuedById   String?
   issuedAt     DateTime      @default(now())
   status       ReceiptStatus @default(ACTIVE)
+
+  updatedAt DateTime  @updatedAt @default(now()) // FIX-C3 (FIX-M4)
+  deletedAt DateTime? // FIX-C3 — soft-delete tài chính
 
   @@index([enrollmentId])
   @@index([paymentId])

@@ -129,6 +129,7 @@ export async function getNearingEndEnrollments(opts?: {
   const enrollments = await db.enrollment.findMany({
     where: {
       status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+      deletedAt: null, // FIX-C3
       class: {
         deletedAt: null,
         ...(opts?.centerId ? { centerId: opts.centerId } : {}),

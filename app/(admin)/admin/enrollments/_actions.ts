@@ -238,6 +238,7 @@ export async function updateEnrollment(
         studentId: e.studentId,
         classId: e.classId,
         id: { not: id },
+        deletedAt: null, // FIX-C3
       },
       select: { id: true },
     });
@@ -274,7 +275,8 @@ export async function updateEnrollment(
 export async function deleteEnrollment(id: string): Promise<ActionResult> {
   await requireSalesOrAdmin();
   try {
-    await db.enrollment.delete({ where: { id } });
+    // FIX-C3 — soft-delete (giữ vết tài chính); read filter deletedAt: null sẽ ẩn.
+    await db.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
   } catch {
     return { error: "Không thể xoá đăng ký này" };
   }
@@ -284,7 +286,7 @@ export async function deleteEnrollment(id: string): Promise<ActionResult> {
 
 /**
  * Xoá đăng ký — dùng cho nút "Xóa" trên bảng danh sách admin.
- * Enrollment KHÔNG có `deletedAt` → hard delete, nhưng CHỈ khi chưa phát sinh
+ * FIX-C3 — soft-delete (set `deletedAt`), nhưng CHỈ khi chưa phát sinh
  * dữ liệu nghiệp vụ (payments / orderItems / receipts / reserves). Nếu đã có →
  * chặn và yêu cầu "hủy đăng ký" thay vì xóa.
  */
@@ -325,7 +327,8 @@ export async function deleteEnrollmentAction(
   }
 
   try {
-    await db.enrollment.delete({ where: { id } });
+    // FIX-C3 — soft-delete thay hard delete (guard _count ở trên vẫn giữ).
+    await db.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
   } catch {
     return { ok: false, error: "Không thể xoá đăng ký này" };
   }

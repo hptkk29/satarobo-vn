@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
       where: {
         classId: session.classId,
         status: { in: ["ACTIVE", "STUDYING"] },
+        deletedAt: null, // FIX-C3
       },
       include: {
         student: {

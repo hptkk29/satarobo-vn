@@ -3,9 +3,11 @@ import { describe, it, expect } from "vitest";
 import { Prisma } from "@prisma/client";
 import {
   injectScope,
+  injectSoftDelete,
   passesScope,
   SCOPED_MODELS,
   SCOPE_EXEMPT,
+  SOFT_DELETE_MODELS,
 } from "@/lib/db-scope";
 import { buildActor } from "@/lib/auth/actor";
 import type { OrgUnitNode } from "@/lib/org/types";
@@ -69,6 +71,44 @@ describe("[A0-04] injectScope", () => {
 
   it("[A0-04-T8-01] visibleCenterIds rỗng → centerId IN [] (list rỗng, không lộ)", () => {
     expect(injectScope("Lead", {}, noCenter)).toEqual({ where: { centerId: { in: [] } } });
+  });
+});
+
+describe("[FIX-C3] injectSoftDelete", () => {
+  it("model tài chính, where rỗng → thêm deletedAt: null (ẩn row đã xóa)", () => {
+    expect(injectSoftDelete("Order", {})).toEqual({ where: { deletedAt: null } });
+    expect(injectSoftDelete("Payment", {})).toEqual({ where: { deletedAt: null } });
+    expect(injectSoftDelete("Receipt", {})).toEqual({ where: { deletedAt: null } });
+    expect(injectSoftDelete("Enrollment", {})).toEqual({ where: { deletedAt: null } });
+  });
+
+  it("giữ where cũ qua AND", () => {
+    expect(injectSoftDelete("Order", { where: { status: "PAID" } })).toEqual({
+      where: { AND: [{ status: "PAID" }, { deletedAt: null }] },
+    });
+  });
+
+  it("call-site cố ý đọc trash (deletedAt đề cập) → KHÔNG override", () => {
+    expect(injectSoftDelete("Order", { where: { deletedAt: { not: null } } })).toEqual({
+      where: { deletedAt: { not: null } },
+    });
+    // include cả đã xóa
+    expect(injectSoftDelete("Order", { where: { deletedAt: undefined } })).toEqual({
+      where: { deletedAt: undefined },
+    });
+  });
+
+  it("model không soft-delete → không đụng", () => {
+    expect(injectSoftDelete("Lead", {})).toEqual({});
+    expect(injectSoftDelete("Student", { where: { status: "ACTIVE" } })).toEqual({
+      where: { status: "ACTIVE" },
+    });
+  });
+
+  it("SOFT_DELETE_MODELS đúng 4 model tài chính", () => {
+    expect([...SOFT_DELETE_MODELS].sort()).toEqual(
+      ["Enrollment", "Order", "Payment", "Receipt"].sort(),
+    );
   });
 });
 

@@ -22,7 +22,7 @@ export type StudentClass = {
 
 export async function getStudentClasses(studentId: string): Promise<StudentClass[]> {
   const enrollments = await db.enrollment.findMany({
-    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] } },
+    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
     select: {
       class: {
         select: {

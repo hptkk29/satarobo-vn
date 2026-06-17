@@ -70,7 +70,7 @@ export default async function ExamTakingPage({ params }: Props) {
   // Access: con phải đang học lớp được giao đề.
   const enrolled = exam.classId
     ? await db.enrollment.findFirst({
-        where: { studentId, classId: exam.classId, status: { in: [...ACTIVE_ENROLLMENT] } },
+        where: { studentId, classId: exam.classId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
         select: { id: true },
       })
     : null;

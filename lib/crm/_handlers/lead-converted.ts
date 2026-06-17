@@ -14,7 +14,7 @@ export async function onLeadConverted(event: DomainEventLite): Promise<void> {
     db.user.findUnique({ where: { id: parentUserId }, select: { email: true, name: true } }),
     db.student.findUnique({ where: { id: studentId }, select: { name: true, studentCode: true } }),
     db.enrollment.findFirst({
-      where: { studentId },
+      where: { studentId, deletedAt: null }, // FIX-C3
       orderBy: { createdAt: "desc" },
       select: { class: { select: { name: true } }, course: { select: { name: true } } },
     }),

@@ -38,6 +38,7 @@ async function studentOwnsExam(
       studentId,
       classId: examClassId,
       status: { in: [...ACTIVE_ENROLLMENT] },
+      deletedAt: null, // FIX-C3
     },
     select: { id: true },
   });
