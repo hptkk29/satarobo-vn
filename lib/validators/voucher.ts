@@ -15,7 +15,13 @@ const baseSchema = z.object({
   type: z.nativeEnum(VoucherType),
   discountKind: z.nativeEnum(VoucherDiscountKind),
 
-  discountPercent: z.number().int().min(1).max(100).nullable().optional(),
+  discountPercent: z
+    .number()
+    .int()
+    .min(1, "Phần trăm giảm phải từ 1 đến 100")
+    .max(100, "Phần trăm giảm phải từ 1 đến 100")
+    .nullable()
+    .optional(),
   discountAmount: z.number().int().min(1).nullable().optional(),
   maxDiscount: z.number().int().min(1).nullable().optional(),
   minOrderValue: z.number().int().min(0).default(0),
