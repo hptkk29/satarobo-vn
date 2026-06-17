@@ -26,6 +26,11 @@ const STATUS_LABEL: Record<string, string> = Object.fromEntries(
   STATUS_OPTIONS.map((s) => [s.value, s.label]),
 );
 
+// FIX-C4 — map mã lỗi nghiệp vụ từ server action sang thông báo VI.
+const ERROR_MESSAGE: Record<string, string> = {
+  CLASS_FULL: "Lớp đã đầy — không thể chuyển học viên vào trạng thái này.",
+};
+
 interface Props {
   enrollmentId: string;
   currentStatus: string;
@@ -72,7 +77,9 @@ export function ChangeStatusDialog({
         reason: reason.trim(),
       });
       if (!res.ok) {
-        setError(res.error);
+        setError(ERROR_MESSAGE[res.error] ?? res.error);
+        // FIX-C4 — refetch sĩ số mới nhất khi lớp đã đầy (race).
+        if (res.error === "CLASS_FULL") router.refresh();
         return;
       }
       setIsOpen(false);

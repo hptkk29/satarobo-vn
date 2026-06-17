@@ -5,13 +5,47 @@ import { can, assertCan } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 type ActionResult = { error?: string };
 type WorkflowResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
+
+/**
+ * FIX-C4 — Lỗi nghiệp vụ mang MÃ để FE map message (CLASS_FULL → "Lớp đã đầy").
+ * Throw bên trong transaction để rollback; catch ở ngoài trả `{ ok:false, error: code }`.
+ */
+class EnrollmentWorkflowError extends Error {
+  constructor(code: string) {
+    super(code);
+    this.name = "EnrollmentWorkflowError";
+  }
+}
+
+/**
+ * FIX-C4 — Chạy transaction mức Serializable + retry khi gặp xung đột ghi
+ * (Prisma P2034 / Postgres 40001). Dùng cho check-and-write sĩ số lớp: count +
+ * create/update trong CÙNG tx, re-check trong tx → chống TOCTOU bán vượt sĩ số.
+ */
+async function runSerializable<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await db.$transaction(fn, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (err) {
+      const isConflict =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2034";
+      if (isConflict && attempt < 2) continue;
+      throw err;
+    }
+  }
+}
 
 // Statuses that count toward a class's capacity.
 const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"] as const;
@@ -399,21 +433,35 @@ export async function enrollStudent(
   const prereq = await checkPrerequisites(studentId, cls.courseId);
   if (!prereq.ok) return prereq;
 
+  // FIX-C4 — re-check sĩ số + create trong CÙNG tx (Serializable) chống TOCTOU.
+  // (Pre-check phía trên chỉ để UX; tx này mới là chốt chặn quyết định.)
   try {
-    const enrollment = await db.enrollment.create({
-      data: {
-        student: { connect: { id: studentId } },
-        class: { connect: { id: classId } },
-        course: { connect: { id: cls.courseId } },
-        status: "PENDING",
-        notes,
-      },
-      select: { id: true },
+    const enrollmentId = await runSerializable(async (tx) => {
+      const activeCount = await tx.enrollment.count({
+        where: { classId, status: { in: [...CAPACITY_COUNT_STATUSES] } },
+      });
+      if (activeCount >= cls.maxStudents) {
+        throw new EnrollmentWorkflowError("CLASS_FULL");
+      }
+      const created = await tx.enrollment.create({
+        data: {
+          student: { connect: { id: studentId } },
+          class: { connect: { id: classId } },
+          course: { connect: { id: cls.courseId } },
+          status: "PENDING",
+          notes,
+        },
+        select: { id: true },
+      });
+      return created.id;
     });
     revalidatePath("/enrollments");
     revalidatePath(`/classes/${classId}/edit`);
-    return { ok: true, data: { enrollmentId: enrollment.id } };
+    return { ok: true, data: { enrollmentId } };
   } catch (err) {
+    if (err instanceof EnrollmentWorkflowError) {
+      return { ok: false, error: err.message };
+    }
     return {
       ok: false,
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
@@ -457,35 +505,15 @@ export async function changeEnrollmentStatus(
     };
   }
 
-  // Capacity check when moving INTO an active state (PENDING→CONFIRMED, etc.)
-  if (
+  // Capacity check needed only when moving INTO a capacity-counted state from a
+  // non-counted one (e.g. PAUSED/COMPLETED → CONFIRMED).
+  const needsCapacityCheck =
     CAPACITY_COUNT_STATUSES.includes(
       data.newStatus as (typeof CAPACITY_COUNT_STATUSES)[number],
     ) &&
     !CAPACITY_COUNT_STATUSES.includes(
       enrollment.status as (typeof CAPACITY_COUNT_STATUSES)[number],
-    )
-  ) {
-    const cls = await db.class.findUnique({
-      where: { id: enrollment.classId },
-      select: {
-        maxStudents: true,
-        _count: {
-          select: {
-            enrollments: {
-              where: { status: { in: [...CAPACITY_COUNT_STATUSES] } },
-            },
-          },
-        },
-      },
-    });
-    if (cls && cls._count.enrollments >= cls.maxStudents) {
-      return {
-        ok: false,
-        error: `Lớp đã đủ HS (${cls.maxStudents} chỗ). Không thể chuyển HS thành ${data.newStatus}.`,
-      };
-    }
-  }
+    );
 
   const timestamps: Prisma.EnrollmentUpdateInput = {};
   if (data.newStatus === "CONFIRMED") timestamps.confirmedAt = new Date();
@@ -494,13 +522,29 @@ export async function changeEnrollmentStatus(
     timestamps.endedAt = new Date();
   }
 
+  // FIX-C4 — re-check sĩ số + update + audit trong CÙNG tx (Serializable).
   try {
-    await db.$transaction([
-      db.enrollment.update({
+    await runSerializable(async (tx) => {
+      if (needsCapacityCheck) {
+        const cls = await tx.class.findUnique({
+          where: { id: enrollment.classId },
+          select: { maxStudents: true },
+        });
+        const activeCount = await tx.enrollment.count({
+          where: {
+            classId: enrollment.classId,
+            status: { in: [...CAPACITY_COUNT_STATUSES] },
+          },
+        });
+        if (cls && activeCount >= cls.maxStudents) {
+          throw new EnrollmentWorkflowError("CLASS_FULL");
+        }
+      }
+      await tx.enrollment.update({
         where: { id: data.enrollmentId },
         data: { status: data.newStatus, ...timestamps },
-      }),
-      db.enrollmentAuditLog.create({
+      });
+      await tx.enrollmentAuditLog.create({
         data: {
           enrollmentId: data.enrollmentId,
           fromStatus: enrollment.status,
@@ -510,9 +554,12 @@ export async function changeEnrollmentStatus(
             session.user.name ?? session.user.email ?? "Unknown",
           reason: data.reason,
         },
-      }),
-    ]);
+      });
+    });
   } catch (err) {
+    if (err instanceof EnrollmentWorkflowError) {
+      return { ok: false, error: err.message };
+    }
     return {
       ok: false,
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
@@ -614,7 +661,18 @@ export async function transferEnrollment(
   };
 
   try {
-    const newId = await db.$transaction(async (tx) => {
+    // FIX-C4 — re-check sĩ số lớp đích trong CÙNG tx (Serializable) chống TOCTOU.
+    const newId = await runSerializable(async (tx) => {
+      const activeCount = await tx.enrollment.count({
+        where: {
+          classId: data.targetClassId,
+          status: { in: [...CAPACITY_COUNT_STATUSES] },
+        },
+      });
+      if (activeCount >= targetClass.maxStudents) {
+        throw new EnrollmentWorkflowError("CLASS_FULL");
+      }
+
       const newEnrollment = await tx.enrollment.create({
         data: {
           student: { connect: { id: oldEnrollment.studentId } },
@@ -675,6 +733,9 @@ export async function transferEnrollment(
     revalidatePath(`/enrollments/${oldEnrollment.id}/edit`);
     return { ok: true, data: { newEnrollmentId: newId } };
   } catch (err) {
+    if (err instanceof EnrollmentWorkflowError) {
+      return { ok: false, error: err.message };
+    }
     return {
       ok: false,
       error: `Transfer thất bại: ${err instanceof Error ? err.message : "Unknown"}`,
