@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { Plus, CalendarDays } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
+import { can } from "@/lib/auth/can";
 import { SessionListRow } from "./_components/session-list-row";
 import { SessionFilters } from "./_components/session-filters";
 
@@ -11,6 +15,24 @@ interface SearchParams {
 }
 
 export default async function SessionsAdminPage({ searchParams }: SearchParams) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const actor = await resolveActor(session.user.id);
+  if (!can(actor, "sessions:view")) {
+    redirect("/dashboard");
+  }
+
+  const isManager = actor.isSuperAdmin || actor.orgRoles.some((r) => ["CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR"].includes(r.roleCode));
+  const teacherFilter = !isManager ? {
+    class: {
+      OR: [
+        { teacherId: session.user.id },
+        { assistantId: session.user.id },
+      ],
+    },
+  } : {};
+
   const sp = await searchParams;
   const scope = sp.scope === "past" ? "past" : sp.scope === "all" ? "all" : "upcoming";
   const classFilter = sp.classId?.trim();
@@ -20,10 +42,12 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
     ...(scope === "upcoming" ? { date: { gte: now } } : {}),
     ...(scope === "past" ? { date: { lt: now } } : {}),
     ...(classFilter ? { classId: classFilter } : {}),
+    ...teacherFilter,
   };
 
+  const sdb = scopedDb(actor);
   const [sessions, classes, holidays] = await Promise.all([
-    db.classSession.findMany({
+    sdb.classSession.findMany({
       where,
       orderBy: { date: scope === "past" ? "desc" : "asc" },
       take: 200,
@@ -36,14 +60,22 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
         _count: { select: { attendances: true } },
       },
     }),
-    db.class.findMany({
-      where: { deletedAt: null },
+    sdb.class.findMany({
+      where: {
+        deletedAt: null,
+        ...(!isManager ? {
+          OR: [
+            { teacherId: session.user.id },
+            { assistantId: session.user.id },
+          ],
+        } : {}),
+      },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
       take: 200,
     }),
     // P1-f — ngày nghỉ sắp tới (90 ngày) để hiển thị trên lịch buổi học.
-    db.holiday.findMany({
+    sdb.holiday.findMany({
       where: { date: { gte: now, lte: new Date(now.getTime() + 90 * 86400000) } },
       orderBy: { date: "asc" },
       take: 20,

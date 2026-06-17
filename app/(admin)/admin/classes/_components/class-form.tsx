@@ -93,6 +93,7 @@ export function ClassForm({
   rooms,
   teachers,
   curricula = [],
+  canEdit = true,
 }: {
   cls?: ClassFormValue;
   courses: CourseOption[];
@@ -102,6 +103,7 @@ export function ClassForm({
   teachers: TeacherOption[];
   /** R7-06 — giáo trình ACTIVE (sắp xếp version giảm dần) để chốt version lúc tạo lớp. */
   curricula?: CurriculumOption[];
+  canEdit?: boolean;
 }) {
   const router = useRouter();
   const isEdit = Boolean(cls);
@@ -207,270 +209,246 @@ export function ClassForm({
         </div>
       )}
 
-      {/* 1. Identity */}
-      <Section title="Thông tin lớp học">
-        <Grid cols={2}>
-          <Field
-            label="Tên lớp"
-            name="name"
-            defaultValue={cls?.name}
-            placeholder="Lập trình Robot K1 - Đà Nẵng"
-            required
-          />
-          <Field
-            label="Mã lớp"
-            name="classCode"
-            defaultValue={cls?.classCode ?? undefined}
-            placeholder="SR-LR-2026-01"
-            helper="Tuỳ chọn — duy nhất toàn hệ thống nếu có"
-          />
-        </Grid>
+      <fieldset disabled={!canEdit} className="space-y-6 border-0 p-0 m-0">
+        {/* 1. Identity */}
+        <Section title="Thông tin lớp học">
+          <Grid cols={2}>
+            <Field
+              label="Tên lớp"
+              name="name"
+              defaultValue={cls?.name}
+              placeholder="Lập trình Robot K1 - Đà Nẵng"
+              required
+            />
+            <Field
+              label="Mã lớp"
+              name="classCode"
+              defaultValue={cls?.classCode ?? undefined}
+              placeholder="SR-LR-2026-01"
+              helper="Tuỳ chọn — duy nhất toàn hệ thống nếu có"
+            />
+          </Grid>
 
-        <Grid cols={3}>
+          <Grid cols={3}>
+            <SelectField
+              label="Khoá học"
+              name="courseId"
+              value={courseId}
+              onChange={onCourseChange}
+              required
+              options={[{ value: "", label: "— Chọn khoá cụ thể —" }]}
+              groups={groupTeachableCourses(courses)}
+            />
+            <SelectField
+              label="Đơn vị"
+              name="orgUnitId"
+              value={orgUnitId}
+              onChange={onOrgUnitChange}
+              required
+              options={[
+                { value: "", label: "— Chọn đơn vị —" },
+                ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
+              ]}
+            />
+            <SelectField
+              label="Trạng thái"
+              name="status"
+              defaultValue={cls?.status ?? "PLANNED"}
+              required
+              options={
+                cls?.status === "PENDING_APPROVAL"
+                  ? [PENDING_OPTION, ...STATUS_OPTIONS]
+                  : [...STATUS_OPTIONS]
+              }
+            />
+          </Grid>
+
           <SelectField
-            label="Khoá học"
-            name="courseId"
-            value={courseId}
-            onChange={onCourseChange}
-            required
-            options={[{ value: "", label: "— Chọn khoá cụ thể —" }]}
-            groups={groupTeachableCourses(courses)}
-          />
-          <SelectField
-            label="Đơn vị"
-            name="orgUnitId"
-            value={orgUnitId}
-            onChange={onOrgUnitChange}
-            required
+            label="Nhóm lớp cố định (tuỳ chọn)"
+            name="classGroupId"
+            defaultValue={cls?.classGroupId ?? ""}
             options={[
-              { value: "", label: "— Chọn đơn vị —" },
-              ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
+              { value: "", label: "— Không gán nhóm —" },
+              ...classGroups.map((g) => ({
+                value: g.id,
+                label: `${g.displayCode}${g.name ? ` · ${g.name}` : ""}`,
+              })),
             ]}
+            helper="Nếu chọn, lớp sẽ kế thừa cơ sở của nhóm. Dùng cho lộ trình tăng khoá Sata3 → 4 → 5…"
           />
-          <SelectField
-            label="Trạng thái"
-            name="status"
-            defaultValue={cls?.status ?? "PLANNED"}
-            required
-            options={
-              cls?.status === "PENDING_APPROVAL"
-                ? [PENDING_OPTION, ...STATUS_OPTIONS]
-                : [...STATUS_OPTIONS]
-            }
+
+          <Field
+            label="Mô tả ngắn"
+            name="description"
+            type="textarea"
+            rows={2}
+            defaultValue={cls?.description ?? undefined}
+            placeholder="Mô tả lớp học (có thể hiển thị public)"
           />
-        </Grid>
 
-        <SelectField
-          label="Nhóm lớp cố định (tuỳ chọn)"
-          name="classGroupId"
-          defaultValue={cls?.classGroupId ?? ""}
-          options={[
-            { value: "", label: "— Không gán nhóm —" },
-            ...classGroups.map((g) => ({
-              value: g.id,
-              label: `${g.displayCode}${g.name ? ` · ${g.name}` : ""}`,
-            })),
-          ]}
-          helper="Nếu chọn, lớp sẽ kế thừa cơ sở của nhóm. Dùng cho lộ trình tăng khoá Sata3 → 4 → 5…"
-        />
+          {/* R7-06 — chốt version giáo trình lúc tạo lớp (chỉ khi tạo mới). */}
+          {!isEdit && (
+            <div>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-neutral-700">
+                  Giáo trình áp dụng
+                  <span className="ml-1 text-red-500">*</span>
+                </span>
+                <select
+                  name="curriculumId"
+                  value={curriculumId}
+                  onChange={(e) => setCurriculumId(e.target.value)}
+                  disabled={!courseId || courseCurricula.length === 0}
+                  className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-neutral-100"
+                >
+                  {courseCurricula.length === 0 ? (
+                    <option value="">— Khoá chưa có giáo trình ACTIVE —</option>
+                  ) : (
+                    courseCurricula.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        v{c.version} · {c.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              {courseId && courseCurricula.length === 0 ? (
+                <span className="mt-1 block text-xs text-red-600">
+                  Khoá học chưa có giáo trình đang áp dụng (ACTIVE) — không thể tạo
+                  lớp. Hãy kích hoạt giáo trình trước.
+                </span>
+              ) : (
+                <span className="mt-1 block text-xs text-neutral-500">
+                  Mặc định = version ACTIVE mới nhất. Version được chốt (snapshot)
+                  vào lớp và sinh kế hoạch buổi.
+                </span>
+              )}
+            </div>
+          )}
+        </Section>
 
-        <Field
-          label="Mô tả ngắn"
-          name="description"
-          type="textarea"
-          rows={2}
-          defaultValue={cls?.description ?? undefined}
-          placeholder="Mô tả lớp học (có thể hiển thị public)"
-        />
+        {/* 2. Assignment */}
+        <Section title="Phân công">
+          <Grid cols={3}>
+            <SelectField
+              label="Phòng học"
+              name="roomId"
+              value={roomId}
+              onChange={setRoomId}
+              options={[
+                { value: "", label: "— Chưa phân —" },
+                ...filteredRooms.map((r) => ({
+                  value: r.id,
+                  label: `${r.code} — ${r.name}`,
+                })),
+              ]}
+              helper={
+                orgUnitId
+                  ? "Chỉ hiển thị phòng của cơ sở thuộc đơn vị đã chọn"
+                  : "Chọn đơn vị để lọc phòng"
+              }
+            />
+            <SelectField
+              label="GV chính"
+              name="teacherId"
+              value={teacherId}
+              onChange={onTeacherChange}
+              options={[
+                { value: "", label: "— Chưa phân GV —" },
+                ...teachers.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+              helper="Lọc: Giáo viên có thể dạy"
+            />
+            <SelectField
+              label="Trợ giảng"
+              name="assistantId"
+              value={assistantId}
+              onChange={setAssistantId}
+              options={[
+                { value: "", label: "— Chưa phân TA —" },
+                ...filteredAssistants.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+              helper="Lọc: Trợ giảng (không trùng GV chính)"
+            />
+          </Grid>
 
-        {/* R7-06 — chốt version giáo trình lúc tạo lớp (chỉ khi tạo mới). */}
-        {!isEdit && (
-          <div>
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-neutral-700">
-                Giáo trình áp dụng
+          <Grid cols={3}>
+            <Field
+              label="Ngày khai giảng"
+              name="startDate"
+              type="date"
+              defaultValue={toDateInput(cls?.startDate ?? null)}
+              required
+            />
+            <Field
+              label="Ngày bế giảng (tuỳ chọn)"
+              name="endDate"
+              type="date"
+              defaultValue={toDateInput(cls?.endDate ?? null)}
+            />
+            <div>
+              <span className="mb-2 block text-sm font-semibold text-neutral-700">
+                Lịch học trong tuần
                 <span className="ml-1 text-red-500">*</span>
               </span>
-              <select
-                name="curriculumId"
-                value={curriculumId}
-                onChange={(e) => setCurriculumId(e.target.value)}
-                disabled={!courseId || courseCurricula.length === 0}
-                className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-neutral-100"
-              >
-                {courseCurricula.length === 0 ? (
-                  <option value="">— Khoá chưa có giáo trình ACTIVE —</option>
-                ) : (
-                  courseCurricula.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      v{c.version} · {c.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            {courseId && courseCurricula.length === 0 ? (
-              <span className="mt-1 block text-xs text-red-600">
-                Khoá học chưa có giáo trình đang áp dụng (ACTIVE) — không thể tạo
-                lớp. Hãy kích hoạt giáo trình trước.
-              </span>
-            ) : (
-              <span className="mt-1 block text-xs text-neutral-500">
-                Mặc định = version ACTIVE mới nhất. Version được chốt (snapshot)
-                vào lớp và sinh kế hoạch buổi.
-              </span>
-            )}
-          </div>
-        )}
-      </Section>
+              <div className="flex flex-wrap gap-x-3 gap-y-2 rounded-lg border border-neutral-200 bg-neutral-50/50 p-2.5">
+                {WEEKDAY_OPTIONS.map((opt) => {
+                  const checked = scheduleDays.includes(opt.value);
+                  return (
+                    <label key={opt.value} className="flex items-center gap-1.5 text-sm font-medium text-neutral-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!canEdit}
+                        onChange={(e) => toggleDay(opt.value, e.target.checked)}
+                        className="rounded border-neutral-300 text-[#7C3AED] focus:ring-[#7C3AED]"
+                      />
+                      {opt.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </Grid>
 
-      {/* 2. Assignment */}
-      <Section title="Phân công">
-        <Grid cols={3}>
-          <SelectField
-            label="Phòng học"
-            name="roomId"
-            value={roomId}
-            onChange={setRoomId}
-            options={[
-              { value: "", label: "— Chưa phân —" },
-              ...filteredRooms.map((r) => ({
-                value: r.id,
-                label: `${r.code} — ${r.name}`,
-              })),
-            ]}
-            helper={
-              orgUnitId
-                ? "Chỉ hiển thị phòng của cơ sở thuộc đơn vị đã chọn"
-                : "Chọn đơn vị để lọc phòng"
-            }
-          />
-          <SelectField
-            label="GV chính"
-            name="teacherId"
-            value={teacherId}
-            onChange={onTeacherChange}
-            options={[
-              { value: "", label: "— Chưa phân —" },
-              ...teachers.map((t) => ({
-                value: t.id,
-                label: `${t.name}${hasRole(t, "CENTER_MANAGER") ? " (QL)" : ""}`,
-              })),
-            ]}
-          />
-          <SelectField
-            label="GV phụ"
-            name="assistantId"
-            value={assistantId}
-            onChange={setAssistantId}
-            options={[
-              { value: "", label: "— Không có —" },
-              ...filteredAssistants.map((t) => ({
-                value: t.id,
-                label: t.name,
-              })),
-            ]}
-            helper="GV phụ không được trùng GV chính"
-          />
-        </Grid>
-      </Section>
+          <Grid cols={3}>
+            <Field
+              label="Giờ bắt đầu"
+              name="startTime"
+              type="time"
+              defaultValue={cls?.startTime ?? undefined}
+              required
+            />
+            <Field
+              label="Giờ kết thúc"
+              name="endTime"
+              type="time"
+              defaultValue={cls?.endTime ?? undefined}
+              required
+            />
+            <Field
+              label="Số HS tối đa"
+              name="maxStudents"
+              type="number"
+              min={1}
+              defaultValue={cls?.maxStudents ?? 20}
+              required
+            />
+          </Grid>
 
-      {/* 3. Schedule */}
-      <Section title="Lịch học">
-        <Grid cols={2}>
           <Field
-            label="Ngày khai giảng"
-            name="startDate"
-            type="date"
-            defaultValue={toDateInput(cls?.startDate ?? null)}
+            label="Ghi chú nội bộ"
+            name="notes"
+            type="textarea"
+            rows={3}
+            defaultValue={cls?.notes ?? undefined}
+            placeholder="Note cho admin (không hiển thị public)"
           />
-          <Field
-            label="Ngày kết thúc dự kiến"
-            name="endDate"
-            type="date"
-            defaultValue={toDateInput(cls?.endDate ?? null)}
-          />
-        </Grid>
-
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-neutral-700">
-            Các thứ học trong tuần
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {WEEKDAY_OPTIONS.map((day) => {
-              const active = scheduleDays.includes(day.value);
-              return (
-                <label
-                  key={day.value}
-                  className={
-                    "cursor-pointer select-none rounded-lg border px-3 py-2 text-sm font-medium transition-colors " +
-                    (active
-                      ? "border-orange-500 bg-orange-500 text-white"
-                      : "border-neutral-300 bg-white text-neutral-700 hover:border-orange-300")
-                  }
-                >
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={(e) => toggleDay(day.value, e.target.checked)}
-                    className="hidden"
-                  />
-                  {day.label}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-
-        <Grid cols={2}>
-          <Field
-            label="Giờ bắt đầu"
-            name="startTime"
-            type="time"
-            defaultValue={cls?.startTime ?? undefined}
-          />
-          <Field
-            label="Giờ kết thúc"
-            name="endTime"
-            type="time"
-            defaultValue={cls?.endTime ?? undefined}
-          />
-        </Grid>
-      </Section>
-
-      {/* 4. Capacity + Notes */}
-      <Section title="Sức chứa & Ghi chú">
-        <Grid cols={2}>
-          <Field
-            label="Số HS tối thiểu"
-            name="minStudents"
-            type="number"
-            min={1}
-            defaultValue={cls?.minStudents ?? 5}
-            required
-          />
-          <Field
-            label="Số HS tối đa"
-            name="maxStudents"
-            type="number"
-            min={1}
-            defaultValue={cls?.maxStudents ?? 20}
-            required
-          />
-        </Grid>
-
-        <Field
-          label="Ghi chú nội bộ"
-          name="notes"
-          type="textarea"
-          rows={3}
-          defaultValue={cls?.notes ?? undefined}
-          placeholder="Note cho admin (không hiển thị public)"
-        />
-      </Section>
+        </Section>
+      </fieldset>
 
       <div className="flex gap-3 border-t border-neutral-200 pt-6">
-        <SubmitButton isEdit={isEdit} pending={pending} />
+        {canEdit && <SubmitButton isEdit={isEdit} pending={pending} />}
         <button
           type="button"
           onClick={() => router.push("/classes")}

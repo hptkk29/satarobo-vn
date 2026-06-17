@@ -16,14 +16,29 @@ const ORG: OrgUnitNode[] = [
   { id: "cs1", code: "CS1", type: "CENTER", parentId: "root", centerId: "c1" },
   { id: "cs2", code: "CS2", type: "CENTER", parentId: "root", centerId: "c2" },
 ];
-const row = (orgUnitId: string, code: string) => ({
+const row = (
+  orgUnitId: string,
+  code: string,
+  permissions: { action: string; scopeType: "GLOBAL" | "CENTER" | "CLASS" | "OWN" | "CHILDREN" | "ASSIGNED" }[] = []
+) => ({
   orgUnitId, status: "ACTIVE", effectiveFrom: new Date("2000-01-01"), effectiveTo: null,
-  role: { code, isActive: true, permissions: [] },
+  role: { code, isActive: true, permissions },
 });
 const make = (rows: ReturnType<typeof row>[]) => buildActor({ userId: "u1", rows, orgNodes: ORG });
 
-const center = make([row("cs1", "CENTER_MANAGER")]); // visible [c1]
-const ho = make([row("ho", "HO_ACCOUNTANT")]); // isHoLevel
+const center = make([
+  row("cs1", "CENTER_MANAGER", [
+    { action: "leads:view-all", scopeType: "CENTER" },
+    { action: "orders:view", scopeType: "CENTER" },
+  ]),
+]); // visible [c1]
+const ho = make([
+  row("ho", "HO_ACCOUNTANT", [
+    { action: "payments:manage", scopeType: "CENTER" },
+    { action: "leads:view-all", scopeType: "CENTER" },
+    { action: "orders:view", scopeType: "CENTER" },
+  ]),
+]); // isHoLevel
 const sa = make([row("ho", "SUPER_ADMIN")]); // isSuperAdmin
 const noCenter = make([]); // visible []
 
