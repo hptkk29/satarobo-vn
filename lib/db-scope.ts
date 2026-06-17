@@ -124,8 +124,11 @@ export function getModelVisibleCenterIds(model: string, actor: Actor): "ALL" | s
 
   if (hasAll) return "ALL";
   if (!hasAnyPermissionForModel) {
-    // Nếu không có quyền nào với model này, trả về danh sách rỗng (không thấy gì)
-    return [];
+    // scopedDb là cổng CÁCH LY CƠ SỞ (data isolation), KHÔNG phải cổng phân quyền
+    // action — việc cho/cấm action do can() lo. Thiếu action model-specific KHÔNG đồng
+    // nghĩa "không thấy gì"; vẫn lọc theo tầm nhìn cơ sở từ cây OrgUnit:
+    // HO/ROOT → cross-center (ALL); center-level → visibleCenterIds.
+    return actor.isHoLevel ? "ALL" : actor.visibleCenterIds;
   }
   return Array.from(allowedCenters);
 }
