@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, X } from "lucide-react";
 import { changeEnrollmentStatus } from "../_actions";
+import { ENROLLMENT_TRANSITIONS } from "@/lib/enrollments/status";
 
 type Status =
   | "PENDING"
@@ -26,9 +27,10 @@ const STATUS_LABEL: Record<string, string> = Object.fromEntries(
   STATUS_OPTIONS.map((s) => [s.value, s.label]),
 );
 
-// FIX-C4 — map mã lỗi nghiệp vụ từ server action sang thông báo VI.
+// FIX-C4 / FIX-H4 — map mã lỗi nghiệp vụ từ server action sang thông báo VI.
 const ERROR_MESSAGE: Record<string, string> = {
   CLASS_FULL: "Lớp đã đầy — không thể chuyển học viên vào trạng thái này.",
+  INVALID_TRANSITION: "Không thể chuyển sang trạng thái này từ trạng thái hiện tại.",
 };
 
 interface Props {
@@ -47,7 +49,16 @@ export function ChangeStatusDialog({
   const validCurrent = STATUS_OPTIONS.find((s) => s.value === currentStatus)
     ? (currentStatus as Status)
     : "PENDING";
-  const [newStatus, setNewStatus] = useState<Status>(validCurrent);
+  // FIX-H4 — chỉ liệt kê trạng thái đích hợp lệ theo state machine (giao với các
+  // option dialog hỗ trợ — bỏ ACTIVE/TRANSFERRED không có trong dialog này).
+  const allowedTargets = (ENROLLMENT_TRANSITIONS[currentStatus as Status] ??
+    []) as readonly string[];
+  const targetOptions = STATUS_OPTIONS.filter((o) =>
+    allowedTargets.includes(o.value),
+  );
+  const [newStatus, setNewStatus] = useState<Status>(
+    targetOptions[0]?.value ?? validCurrent,
+  );
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -57,7 +68,7 @@ export function ChangeStatusDialog({
     setIsOpen(false);
     setError(null);
     setReason("");
-    setNewStatus(validCurrent);
+    setNewStatus(targetOptions[0]?.value ?? validCurrent);
   };
 
   const handleSubmit = () => {
@@ -157,10 +168,13 @@ export function ChangeStatusDialog({
                 <select
                   value={newStatus}
                   onChange={(e) => setNewStatus(e.target.value as Status)}
-                  disabled={pending}
+                  disabled={pending || targetOptions.length === 0}
                   className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
                 >
-                  {STATUS_OPTIONS.map((opt) => (
+                  {targetOptions.length === 0 && (
+                    <option value="">Không có chuyển trạng thái hợp lệ</option>
+                  )}
+                  {targetOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
@@ -199,7 +213,7 @@ export function ChangeStatusDialog({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={pending || newStatus === currentStatus}
+                disabled={pending || targetOptions.length === 0 || newStatus === currentStatus}
                 className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50"
               >
                 {pending ? "Đang lưu..." : "Xác nhận"}

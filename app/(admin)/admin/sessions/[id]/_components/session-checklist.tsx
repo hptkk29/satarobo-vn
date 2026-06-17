@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Circle, Play, Save } from "lucide-react";
 import type { SessionStatus } from "@prisma/client";
 import { updateSessionChecklist, startSession, completeSession } from "../_actions";
+import { canStartSession, canCompleteSession } from "@/lib/sessions/status";
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
   SCHEDULED: "Chưa bắt đầu",
@@ -98,7 +99,9 @@ export function SessionChecklist({
     });
   }
 
-  const canComplete = derived.ckAttendance && ckLessonConfirmed && derived.ckFeedback;
+  // FIX-H4 — chỉ hoàn tất khi đang IN_PROGRESS (state machine) VÀ đủ 3 bước bắt buộc.
+  const canComplete =
+    canCompleteSession(status) && derived.ckAttendance && ckLessonConfirmed && derived.ckFeedback;
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -178,7 +181,7 @@ export function SessionChecklist({
           >
             <Save className="h-4 w-4" /> Lưu tiến trình
           </button>
-          {status === "SCHEDULED" && (
+          {canStartSession(status) && (
             <button
               type="button"
               onClick={doStart}
@@ -188,7 +191,7 @@ export function SessionChecklist({
               <Play className="h-4 w-4" /> Bắt đầu buổi
             </button>
           )}
-          {status !== "COMPLETED" && (
+          {canCompleteSession(status) && (
             <button
               type="button"
               onClick={doComplete}

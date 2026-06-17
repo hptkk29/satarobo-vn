@@ -6,7 +6,9 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
+import type { EnrollmentStatus } from "@prisma/client";
 import { z } from "zod";
+import { canTransition } from "@/lib/enrollments/status";
 
 type ActionResult = { error?: string };
 type WorkflowResult<T = undefined> =
@@ -516,6 +518,17 @@ export async function changeEnrollmentStatus(
       ok: false,
       error: "Không thể đổi trạng thái cho enrollment đã chuyển lớp",
     };
+  }
+
+  // FIX-H4 — chặn nhảy trạng thái phi lý theo state machine (vd CANCELLED→ACTIVE,
+  // COMPLETED→PENDING). Mã lỗi INVALID_TRANSITION để FE map message.
+  if (
+    !canTransition(
+      enrollment.status as EnrollmentStatus,
+      data.newStatus as EnrollmentStatus,
+    )
+  ) {
+    return { ok: false, error: "INVALID_TRANSITION" };
   }
 
   // Capacity check needed only when moving INTO a capacity-counted state from a
