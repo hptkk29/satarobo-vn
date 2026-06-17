@@ -8,6 +8,8 @@ import {
   SCOPED_MODELS,
   SCOPE_EXEMPT,
   SOFT_DELETE_MODELS,
+  isMakeupExceptionModel,
+  MAKEUP_EXCEPTION_MODELS,
 } from "@/lib/db-scope";
 import { buildActor } from "@/lib/auth/actor";
 import type { OrgUnitNode } from "@/lib/org/types";

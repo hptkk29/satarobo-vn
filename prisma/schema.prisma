@@ -1402,6 +1402,14 @@ model ClassSession {
   ckIncident        Boolean       @default(false)
   incidentNote      String?       @db.Text
 
+  // R7-07 — "Hoàn tất buổi": dữ liệu thực tế + nhận xét lớp (khôi phục sau merge main→erd-fix-p0).
+  actualTeacherId String?
+  actualRoomId    String?
+  actualStartAt   DateTime? @db.Timestamptz(6)
+  actualEndAt     DateTime? @db.Timestamptz(6)
+  classComment    String?   @db.Text
+  completedById   String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -2180,6 +2188,12 @@ model Exam {
   passingScore     Float   @default(5)
   shuffleQuestions Boolean @default(false)
   shuffleChoices   Boolean @default(false)
+
+  // R7-13 — cấu hình bài kiểm tra bổ sung (khôi phục sau merge main→erd-fix-p0).
+  maxAttempts           Int?
+  defaultDueDays        Int?
+  scoringMode           String?
+  showResultAfterSubmit Boolean @default(true)
 
   openAt  DateTime? @db.Timestamptz(6)
   closeAt DateTime? @db.Timestamptz(6)
