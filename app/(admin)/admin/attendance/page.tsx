@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { ClipboardCheck, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { withMakeupException } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
@@ -64,11 +67,13 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     enrollmentStatus: string;
     existing: {
       id: string;
-      status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+      status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" | "ABSENT_EXCUSED" | "ABSENT_UNEXCUSED";
       note: string | null;
       makeupStatus: "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
       absenceReason: string | null;
     } | null;
+    // R7-08 — HS học bù LIÊN CƠ SỞ: chỉ hiện trong đúng buổi này, KHÔNG lộ hồ sơ.
+    makeupFromCenter?: string | null;
   }> = [];
 
   if (sessionId) {
@@ -128,6 +133,52 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
             : null,
         };
       });
+
+      // R7-08 (AC4) — HS được xếp HỌC BÙ vào buổi này (có thể từ cơ sở khác).
+      // GV lớp đích thấy HS bù trong ĐÚNG buổi này + badge "Học bù từ <CS>";
+      // KHÔNG truy cập hồ sơ đầy đủ. Đọc chéo cơ sở qua exception whitelist.
+      const authSession = await auth();
+      if (authSession?.user?.id) {
+        const actor = await resolveActor(authSession.user.id);
+        const xdb = withMakeupException(actor);
+        const guests = await xdb.makeupNeed.findMany({
+          where: { makeupSessionId: sessionId, status: "SCHEDULED" },
+          select: {
+            studentId: true,
+            centerId: true,
+            student: { select: { name: true } },
+          },
+        });
+        const enrolledIds = new Set(rows.map((r) => r.studentId));
+        const visitors = guests.filter((g) => !enrolledIds.has(g.studentId));
+        if (visitors.length > 0) {
+          const centerIds = [...new Set(visitors.map((g) => g.centerId).filter(Boolean))] as string[];
+          const centers = await db.center.findMany({
+            where: { id: { in: centerIds } },
+            select: { id: true, name: true, code: true },
+          });
+          const centerName = new Map(centers.map((c) => [c.id, c.code ?? c.name]));
+          for (const g of visitors) {
+            const existing = existingMap.get(g.studentId);
+            rows.push({
+              studentId: g.studentId,
+              studentName: g.student.name,
+              studentPhone: null, // T5 hẹp — không lộ hồ sơ HS cơ sở khác
+              enrollmentStatus: "MAKEUP",
+              existing: existing
+                ? {
+                    id: existing.id,
+                    status: existing.status,
+                    note: existing.note,
+                    makeupStatus: existing.makeupStatus,
+                    absenceReason: existing.absenceReason,
+                  }
+                : null,
+              makeupFromCenter: (g.centerId && centerName.get(g.centerId)) || "cơ sở khác",
+            });
+          }
+        }
+      }
     }
   }
 

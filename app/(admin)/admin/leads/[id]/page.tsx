@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
+import { isConvertV2Enabled } from "@/lib/flags";
 import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
@@ -272,21 +273,33 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Chốt deal (Phase T1.5) */}
-      {dealClosable && (
-        <div className="mb-6">
-          <CloseDealButton
-            leadId={lead.id}
-            defaultStudentName={lead.childName ?? `Con của ${lead.parentName}`}
-            defaultParentEmail={lead.email ?? null}
-            classes={classOptions.map((c) => ({
-              id: c.id,
-              label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
-              price: c.course?.price ?? null,
-            }))}
-          />
-        </div>
-      )}
+      {/* Chốt deal — R7-05: 2 đường theo flag CONVERT_V2_ENABLED.
+          ON → form Convert v2 (guard payment + multi-student + dedupe + consent).
+          OFF → giữ nguyên flow cũ (CloseDealButton). */}
+      {dealClosable &&
+        (isConvertV2Enabled() ? (
+          <div className="mb-6">
+            <Link
+              href={`/leads/${lead.id}/convert`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              Chuyển đổi → Ghi danh (v2)
+            </Link>
+          </div>
+        ) : (
+          <div className="mb-6">
+            <CloseDealButton
+              leadId={lead.id}
+              defaultStudentName={lead.childName ?? `Con của ${lead.parentName}`}
+              defaultParentEmail={lead.email ?? null}
+              classes={classOptions.map((c) => ({
+                id: c.id,
+                label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
+                price: c.course?.price ?? null,
+              }))}
+            />
+          </div>
+        ))}
 
       {/* Học thử (Phase T1.4) */}
       {lead.trialClasses.length > 0 && (

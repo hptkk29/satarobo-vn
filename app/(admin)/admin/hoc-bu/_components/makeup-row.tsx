@@ -27,6 +27,9 @@ type Sugg = {
   date: string;
   lessonOrder: number | null;
   lessonTitle: string | null;
+  // R7-08 — ưu tiên cơ sở nhà + còn chỗ.
+  isHomeCenter?: boolean;
+  capacityLeft?: number;
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -120,10 +123,18 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
           {suggs.map((s) => (
             <button key={s.sessionId} type="button" onClick={() => schedule(s.sessionId)} disabled={pending}
               className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm hover:bg-white">
-              <span>
+              <span className="flex items-center gap-1.5">
                 {s.className}{s.lessonTitle ? ` · Bài ${s.lessonOrder}: ${s.lessonTitle}` : ""}
+                {s.isHomeCenter === false && (
+                  <span className="rounded-full bg-[#7C3AED]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#7C3AED]">
+                    Cơ sở khác
+                  </span>
+                )}
               </span>
-              <span className="text-xs text-gray-500">{new Date(s.date).toLocaleDateString("vi-VN")}</span>
+              <span className="text-xs text-gray-500">
+                {new Date(s.date).toLocaleDateString("vi-VN")}
+                {typeof s.capacityLeft === "number" ? ` · còn ${s.capacityLeft} chỗ` : ""}
+              </span>
             </button>
           ))}
         </div>

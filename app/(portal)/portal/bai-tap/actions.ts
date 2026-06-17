@@ -1,9 +1,26 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireActiveStudent } from "@/lib/portal/session";
+import { PORTAL_VIEW_COOKIE, type PortalView } from "@/lib/portal/learning";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+
+/**
+ * R7-14 — chuyển profile hiển thị bài tập: "parent" (tổng quan) ↔ "student" (làm bài).
+ * Chỉ là cờ hiển thị trên cùng tài khoản PH (KHÔNG phải login HV riêng). Quyền riêng tư
+ * thực thi ở tầng query (lib/portal/learning.ts) bất kể giá trị cookie.
+ */
+export async function setPortalViewAction(view: PortalView): Promise<void> {
+  await requireActiveStudent();
+  (await cookies()).set(PORTAL_VIEW_COOKIE, view === "student" ? "student" : "parent", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/portal",
+  });
+  revalidatePath("/portal/bai-tap");
+}
 
 // =============================================================================
 // PORTAL ASSIGNMENT SUBMIT — Phase T2.4

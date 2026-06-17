@@ -86,13 +86,22 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
             {exams.length > 0 ? `${exams.length} đề thi` : "Chưa có đề thi nào"}
           </p>
         </div>
-        <Link
-          href="/exams/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" />
-          Tạo đề mới
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/exams/import-word"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#7C3AED] px-4 py-2 text-sm font-semibold text-[#7C3AED] hover:bg-[#7C3AED]/5"
+          >
+            <FileText className="h-4 w-4" />
+            Import Word
+          </Link>
+          <Link
+            href="/exams/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            Tạo đề mới
+          </Link>
+        </div>
       </div>
 
       <form

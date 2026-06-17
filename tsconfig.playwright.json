@@ -3,7 +3,8 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./*"],
-      "server-only": ["./tests/stubs/server-only.ts"]
+      "server-only": ["./tests/stubs/server-only.ts"],
+      "@/lib/auth": ["./tests/stubs/auth.ts"]
     }
   }
 }

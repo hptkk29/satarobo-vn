@@ -37,6 +37,7 @@ const ITEMS = [
   { label: "Yêu cầu", href: "/portal/yeu-cau", icon: MessageSquarePlus },
   { label: "Học phí", href: "/portal/hoc-phi", icon: CreditCard },
   { label: "Đánh giá", href: "/portal/danh-gia", icon: Star },
+  { label: "Đánh giá GV", href: "/portal/danh-gia-gv", icon: Star, flag: "eval" as const },
   { label: "Khảo sát", href: "/portal/khao-sat", icon: ClipboardList },
   { label: "Học bạ", href: "/portal/hoc-ba", icon: ScrollText },
   { label: "SataCoin", href: "/portal/satacoin", icon: Coins },
@@ -46,14 +47,23 @@ const ITEMS = [
 
 // Sidebar DỌC (commit 2): desktop hiển thị cố định bên trái; mobile thu gọn thành
 // nút "Menu" mở/đóng. Mọi mục truy cập được, không scroll ngang.
-export function PortalNav({ notifCount = 0 }: { notifCount?: number }) {
+export function PortalNav({
+  notifCount = 0,
+  evalV2Enabled = false,
+}: {
+  notifCount?: number;
+  evalV2Enabled?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // Mục gắn flag "eval" chỉ hiện khi EVAL_V2_ENABLED (R7-16).
+  const items = ITEMS.filter((it) => !("flag" in it) || (it.flag === "eval" && evalV2Enabled));
 
   function List({ onNavigate }: { onNavigate?: () => void }) {
     return (
       <nav className="flex flex-col gap-0.5">
-        {ITEMS.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active =
             item.href === "/portal"

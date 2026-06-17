@@ -1,0 +1,153 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import type { LessonChangeStatus } from "@prisma/client";
+import { handleLessonChangeRequest } from "../_actions";
+
+export type ChangeRequestRow = {
+  id: string;
+  lessonOrder: number;
+  lessonTitle: string;
+  requestedByName: string;
+  content: string;
+  status: LessonChangeStatus;
+  response: string | null;
+  createdAt: string;
+};
+
+const STATUS_LABEL: Record<LessonChangeStatus, string> = {
+  OPEN: "Chờ xử lý",
+  ACCEPTED: "Đã chấp nhận",
+  REJECTED: "Đã từ chối",
+};
+
+const STATUS_CLASS: Record<LessonChangeStatus, string> = {
+  OPEN: "bg-amber-100 text-amber-700",
+  ACCEPTED: "bg-emerald-100 text-emerald-700",
+  REJECTED: "bg-red-100 text-red-700",
+};
+
+export function LessonChangeRequests({
+  requests,
+  canHandle,
+}: {
+  requests: ChangeRequestRow[];
+  // Đào tạo (training:manage) — accept/reject + phản hồi.
+  canHandle: boolean;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [responses, setResponses] = useState<Record<string, string>>({});
+  const [pending, startTransition] = useTransition();
+
+  function handle(
+    requestId: string,
+    decision: Extract<LessonChangeStatus, "ACCEPTED" | "REJECTED">,
+  ) {
+    setError(null);
+    startTransition(async () => {
+      const res = await handleLessonChangeRequest({
+        requestId,
+        decision,
+        response: responses[requestId],
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  if (requests.length === 0) {
+    return (
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+          Đề xuất chỉnh sửa (GV)
+        </h2>
+        <p className="mt-2 text-sm text-neutral-400">Chưa có đề xuất nào.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border border-neutral-200 bg-white p-4">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+        Đề xuất chỉnh sửa (GV) ({requests.length})
+      </h2>
+
+      {error && (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <ul className="mt-3 space-y-3">
+        {requests.map((r) => (
+          <li
+            key={r.id}
+            className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold text-neutral-800">
+                Bài {r.lessonOrder}: {r.lessonTitle}
+              </span>
+              <span
+                className={`rounded px-1.5 py-0.5 text-xs font-semibold ${STATUS_CLASS[r.status]}`}
+              >
+                {STATUS_LABEL[r.status]}
+              </span>
+              <span className="ml-auto text-xs text-neutral-400">
+                {r.requestedByName} · {r.createdAt}
+              </span>
+            </div>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-700">
+              {r.content}
+            </p>
+
+            {r.response && (
+              <div className="mt-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-600">
+                <span className="font-semibold text-neutral-500">Phản hồi: </span>
+                {r.response}
+              </div>
+            )}
+
+            {canHandle && r.status === "OPEN" && (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={responses[r.id] ?? ""}
+                  onChange={(e) =>
+                    setResponses((s) => ({ ...s, [r.id]: e.target.value }))
+                  }
+                  placeholder="Phản hồi cho GV (tuỳ chọn)…"
+                  rows={2}
+                  disabled={pending}
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED]"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handle(r.id, "ACCEPTED")}
+                    disabled={pending}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    Chấp nhận
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handle(r.id, "REJECTED")}
+                    disabled={pending}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    Từ chối
+                  </button>
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

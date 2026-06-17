@@ -87,6 +87,9 @@ enum AttendanceStatus {
   ABSENT
   LATE
   EXCUSED
+  // R7-08 — 2-phase bước A: thêm giá trị mới, map dần, chưa drop ABSENT/EXCUSED cũ.
+  ABSENT_EXCUSED
+  ABSENT_UNEXCUSED
 }
 
 // Module QL học viên PHẦN 2 — trạng thái học bù của buổi vắng.
@@ -1992,6 +1995,16 @@ enum CurriculumStatus {
   DRAFT
   ACTIVE
   ARCHIVED
+  UNPUBLISHED
+}
+
+// R7-10 — trạng thái từng buổi (5 mức) + khóa sửa.
+enum LessonStatus {
+  INCOMPLETE
+  COMPLETE
+  IN_USE
+  NEEDS_UPDATE
+  LOCKED
 }
 
 model Lesson {
@@ -2011,6 +2024,13 @@ model Lesson {
 
   notes String? @db.Text
 
+  // R7-10 — trạng thái buổi + khóa sửa + archive (soft) + optimistic lock.
+  status     LessonStatus @default(INCOMPLETE)
+  lockedAt   DateTime?
+  lockedById String?
+  archivedAt DateTime?
+  version    Int          @default(0)
+
   // LMS-1 — giáo án chi tiết
   teacherGuide       String? @db.Text // hướng dẫn giảng dạy
   expectedOutput     String? @db.Text // kết quả mong đợi
@@ -2020,14 +2040,40 @@ model Lesson {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  questions     Question[]
-  exams         Exam[]
-  documents     Document[]
-  assignments   Assignment[]
-  classSessions ClassSession[]
+  questions      Question[]
+  exams          Exam[]
+  documents      Document[]
+  assignments    Assignment[]
+  classSessions  ClassSession[]
+  changeRequests LessonChangeRequest[]
+  scormPackages  ScormPackage[]
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
+  @@index([status])
+}
+
+// R7-10 — GV đề xuất chỉnh sửa buổi → Đào tạo xử lý.
+enum LessonChangeStatus {
+  OPEN
+  ACCEPTED
+  REJECTED
+}
+
+model LessonChangeRequest {
+  id            String             @id @default(cuid())
+  lessonId      String
+  lesson        Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  requestedById String
+  content       String             @db.Text
+  status        LessonChangeStatus @default(OPEN)
+  response      String?            @db.Text
+  handledById   String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([lessonId])
+  @@index([status])
 }
 
 // ─── Phase E2 ─────────────────────────────────────────────────────────────
@@ -2055,6 +2101,7 @@ model Question {
   type         QuestionType
   text         String       @db.Text
   explanation  String?      @db.Text
+  imageUrl     String? // R7-13 — ảnh đề bài (upload R2)
 
   difficulty QuestionDifficulty @default(MEDIUM)
   tags       String[]           @default([])
@@ -2096,6 +2143,7 @@ model Choice {
   order     Int
   text      String  @db.Text
   isCorrect Boolean @default(false)
+  imageUrl  String? // R7-13 — ảnh đáp án (upload R2)
 
   @@unique([questionId, order])
 }
@@ -3559,6 +3607,9 @@ model ClassSessionMedia {
   // được. KHÁC với "không gắn thẻ" — ảnh không tag & không phải class-wide vẫn
   // ẩn với PH (giữ bất biến C6.2 trong lib/lms/media-consent.ts).
   isClassWide    Boolean     @default(false)
+  // R7-09 — gắn ảnh vào BUỔI cụ thể + ngày chụp (scalar, fallback mức lớp nếu null).
+  classSessionId String?
+  takenAt        DateTime?
   uploadedById   String?
   uploadedByName String?
   approvedById   String?
@@ -3570,6 +3621,35 @@ model ClassSessionMedia {
 
   @@index([classId, status])
   @@index([status, createdAt])
+  @@index([classSessionId])
+}
+
+// R7-14 — auto-giao bài khi "Hoàn tất buổi". 1 bản ghi / (buổi × bài thi × HV);
+// unique đảm bảo idempotent khi event session.taught replay. ID phẳng (soft-ref).
+enum HomeworkAssignmentStatus {
+  ASSIGNED
+  SUBMITTED
+  GRADED
+  MISSED
+}
+
+model HomeworkAssignment {
+  id             String                   @id @default(cuid())
+  classSessionId String
+  examId         String
+  studentId      String
+  dueAt          DateTime?
+  status         HomeworkAssignmentStatus @default(ASSIGNED)
+  assignMode     String? // NOW / DEFER / CUSTOM_DUE
+  assignedById   String?
+  assignedAt     DateTime                 @default(now())
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@unique([classSessionId, examId, studentId])
+  @@index([studentId])
+  @@index([examId])
+  @@index([classSessionId])
 }
 
 model MediaStudentTag {
@@ -4190,6 +4270,91 @@ model SataCoinRule {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 }
 
+// R7-17 (PR3) — Cấu hình quy tắc Satacoin (PENDING — QĐ-O10/O20). SCHEMA-ONLY:
+// migrate được + seed rỗng, KHÔNG code đọc runtime, KHÔNG UI cho tới khi TGĐ ban
+// hành bảng quy đổi. behaviorKey = hành vi; points = điểm; cap ngày/tổng; source =
+// nguồn phát sinh; active mặc định false (trơ). Không centerId → không qua scopedDb.
+enum CoinRuleSource {
+  HOMEWORK_RESULT // kết quả bài tập
+  TEACHER_EVAL_DONE // hoàn tất đánh giá GV
+  CENTER_SURVEY_DONE // hoàn tất khảo sát trung tâm
+}
+
+model CoinRuleConfig {
+  id          String         @id @default(cuid())
+  behaviorKey String         @unique // khóa hành vi (vd HOMEWORK_PASSED)
+  points      Int // điểm cộng
+  dailyCap    Int? // trần điểm/ngày (null = không trần)
+  totalCap    Int? // trần điểm tổng (null = không trần)
+  source      CoinRuleSource
+  active      Boolean        @default(false) // trơ tới khi ban hành
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+// =============================================================================
+// R7-11/R7-12 — SCORM: gói bài giảng giải nén lên R2 private + player có bảo vệ.
+// Giải nén qua DB-backed job (DomainEvent outbox A0-07) vì Vercel serverless
+// không giữ tiến trình dài. Flag SCORM_ENABLED gate menu/route. Không centerId
+// (gắn buổi qua lessonId) → không qua scopedDb.
+// =============================================================================
+
+enum ScormVersion {
+  SCORM_12 // SCORM 1.2
+  SCORM_2004
+}
+
+enum ScormPackageStatus {
+  UPLOADING // đang upload zip lên R2 (presigned)
+  PROCESSING // job đang giải nén + đọc manifest
+  FAILED // job lỗi (xem error) — resume được
+  TESTING // giải nén xong, Đào tạo xem thử trước publish
+  PUBLISHED // đã phát hành, GV mở được
+  ARCHIVED // bản cũ (không xóa vật lý trong R7)
+}
+
+model ScormPackage {
+  id               String             @id @default(cuid())
+  lessonId         String // gắn buổi (FK)
+  name             String
+  scormVersion     ScormVersion?      // đọc từ manifest sau khi giải nén
+  storagePrefix    String // prefix R2 `scorm/{packageId}/`
+  uploadKey        String? // key R2 của zip gốc đã upload
+  launchUrl        String? // đường dẫn launch (tương đối trong prefix)
+  sizeBytes        Int? // tổng kích thước
+  fileCount        Int? // số entry đã giải nén
+  status           ScormPackageStatus @default(UPLOADING)
+  version          Int                @default(1) // version per lesson
+  isActiveForLesson Boolean           @default(false) // chỉ 1 active/buổi
+  entryCursor      Int                @default(0) // con trỏ entry để job resume (idempotent)
+  error            String? // lý do FAILED
+  uploadedById     String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  lesson     Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  accessLogs ScormAccessLog[]
+
+  // 1 active duy nhất mỗi buổi: PARTIAL unique `(lessonId) WHERE isActiveForLesson`
+  // tạo bằng raw SQL trong migration (Prisma không khai báo partial index native).
+  @@index([lessonId])
+  @@index([status])
+}
+
+model ScormAccessLog {
+  id             String   @id @default(cuid())
+  packageId      String
+  classSessionId String? // buổi GV mở (nếu mở theo lớp)
+  userId         String // ai mở
+  openedAt       DateTime @default(now())
+  ip             String?
+
+  package ScormPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId, openedAt])
+  @@index([userId])
+}
+
 // =============================================================================
 // Cụm C5 — Zalo OA/ZNS adapter (SKELETON). Tắt an toàn khi thiếu credential →
 // fallback email, không phá hệ thống. Log mọi lần gửi.
@@ -4610,4 +4775,165 @@ model IdempotencyKey {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([scope, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R7-15 — Học bạ ReportCard (nhập → duyệt → phát hành). 1 học bạ / Enrollment.
+// ═══════════════════════════════════════════════════════════════════════════
+enum ReportCardStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  RECALLED
+}
+
+model ReportCard {
+  id                String           @id @default(cuid())
+  enrollmentId      String           @unique // 1-1 với Enrollment (ref phẳng)
+  status            ReportCardStatus @default(DRAFT)
+  periodComments    Json? // nhận xét theo giai đoạn [{period, comment}]
+  finalComment      String?          @db.Text
+  completionStatus  String?
+  teacherId         String?
+  reviewedById      String?
+  publishedById     String?
+  publishedAt       DateTime?
+  publishedSnapshot Json? // đóng băng số liệu lúc phát hành
+  centerId          String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  scores ReportCardScore[]
+
+  @@index([status])
+  @@index([centerId])
+  @@index([teacherId])
+}
+
+model ReportCardCriterion {
+  id        String   @id @default(cuid())
+  courseId  String // Đào tạo cấu hình tiêu chí năng lực per khóa (ref phẳng)
+  name      String
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([courseId, active])
+}
+
+model ReportCardScore {
+  id           String     @id @default(cuid())
+  reportCardId String
+  reportCard   ReportCard @relation(fields: [reportCardId], references: [id], onDelete: Cascade)
+  criterionId  String // ref phẳng tới ReportCardCriterion
+  level        Int // thang 1..4
+  note         String?    @db.Text
+
+  @@unique([reportCardId, criterionId])
+  @@index([reportCardId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R7-16 — Form builder (4 loại câu hỏi) + Đánh giá GV + Khảo sát trung tâm.
+// Bảng Eval* MỚI — KHÔNG đụng Survey NPS cũ.
+// ═══════════════════════════════════════════════════════════════════════════
+enum EvalScope {
+  TEACHER_EVAL
+  CENTER_SURVEY
+}
+
+enum EvalFormStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum EvalQuestionType {
+  STAR_RATING
+  RADIO
+  CHECKBOX
+  TEXTBOX
+}
+
+enum EvaluationRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+model EvalForm {
+  id          String         @id @default(cuid())
+  title       String
+  scope       EvalScope
+  status      EvalFormStatus @default(DRAFT)
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  questions EvalQuestion[]
+  rounds    EvaluationRound[]
+
+  @@index([scope, status])
+}
+
+model EvalQuestion {
+  id       String           @id @default(cuid())
+  formId   String
+  form     EvalForm         @relation(fields: [formId], references: [id], onDelete: Cascade)
+  type     EvalQuestionType
+  label    String
+  options  Json? // cho RADIO/CHECKBOX
+  required Boolean          @default(false)
+  order    Int              @default(0)
+
+  @@index([formId])
+}
+
+model EvaluationRound {
+  id        String                @id @default(cuid())
+  formId    String
+  form      EvalForm              @relation(fields: [formId], references: [id], onDelete: Restrict)
+  scope     EvalScope
+  name      String
+  centerId  String?
+  courseId  String?
+  opensAt   DateTime?
+  closesAt  DateTime?
+  status    EvaluationRoundStatus @default(DRAFT)
+  createdAt DateTime              @default(now())
+
+  responses EvalResponse[]
+
+  @@index([scope, status])
+  @@index([centerId])
+}
+
+model EvalResponse {
+  id           String          @id @default(cuid())
+  roundId      String
+  round        EvaluationRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  enrollmentId String?
+  teacherId    String? // GV được đánh giá (TEACHER_EVAL)
+  parentUserId String? // PH làm khảo sát (CENTER_SURVEY)
+  studentId    String?
+  submittedAt  DateTime        @default(now())
+
+  answers EvalAnswer[]
+
+  // Chống trùng: TEACHER_EVAL theo (đợt×enrollment×GV); CENTER_SURVEY theo (đợt×PH).
+  @@unique([roundId, enrollmentId, teacherId])
+  @@unique([roundId, parentUserId])
+  @@index([roundId])
+}
+
+model EvalAnswer {
+  id           String       @id @default(cuid())
+  responseId   String
+  response     EvalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId   String // ref phẳng tới EvalQuestion
+  valueNumber  Int? // STAR_RATING
+  valueOptions Json? // RADIO/CHECKBOX
+  valueText    String?      @db.Text
+
+  @@index([responseId])
 }

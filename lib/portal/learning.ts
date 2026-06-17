@@ -1,8 +1,11 @@
 import "server-only";
+import { cookies } from "next/headers";
 import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings/service";
 import { getStudentClassProgress } from "@/lib/students/progress";
 import { getClassExpectedEndDate, NEAR_END_THRESHOLD } from "@/lib/students/renewal";
+import { attendanceSummary, type AttendanceSummary } from "@/lib/attendance/summary";
 
 // =============================================================================
 // PORTAL LEARNING DATA — Phase T2.2
@@ -85,6 +88,37 @@ export async function getStudentProgressSummaries(
         nearingEnd: p.remaining > 0 && p.remaining <= NEAR_END_THRESHOLD,
       };
     }),
+  );
+}
+
+export type ClassAttendanceSummary = AttendanceSummary & {
+  classId: string;
+  className: string;
+  courseName: string;
+};
+
+/**
+ * R7-08 — 5 chỉ số điểm danh theo từng lớp đang học của HS (cho portal).
+ * { total, attended (gồm đã-bù), absent, needMakeup, madeUp }.
+ */
+export async function getStudentAttendanceSummaries(
+  studentId: string,
+): Promise<ClassAttendanceSummary[]> {
+  const enrollments = await db.enrollment.findMany({
+    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] } },
+    select: {
+      id: true,
+      class: { select: { id: true, name: true, course: { select: { name: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return Promise.all(
+    enrollments.map(async (e) => ({
+      classId: e.class.id,
+      className: e.class.name,
+      courseName: e.class.course.name,
+      ...(await attendanceSummary(e.id)),
+    })),
   );
 }
 
@@ -460,5 +494,209 @@ export async function getLatestProgressReport(
     reportTitle: r.reportTitle,
     generatedAt: r.generatedAt.toISOString(),
     className: r.class?.name ?? null,
+  };
+}
+
+// =============================================================================
+// R7-14 — HOMEWORK (HomeworkAssignment) 2 TẦNG PHÂN QUYỀN
+//
+// Cùng 1 tài khoản PH (Phương án A) nhưng 2 "profile" hiển thị khác nhau, chọn
+// qua cookie portal_view (mặc định "parent"):
+//   • PARENT  → getParentHomeworkSummary: CHỈ tổng quan (đã giao / đã làm x/y /
+//     trạng thái / điểm tổng quan nếu setting bật). TUYỆT ĐỐI không câu hỏi/đáp án.
+//   • STUDENT → getStudentHomeworkDetail: nội dung để LÀM bài (đề + lựa chọn, KHÔNG
+//     cờ isCorrect). Chỉ bài của ĐÚNG HV đang chọn (AC4).
+//
+// Quyền riêng tư ép ở TẦNG QUERY bằng `select` tường minh (không trả model thô):
+//   - hàm PARENT không bao giờ select Question/Choice → PH gọi thẳng cũng không có data.
+//   - hàm STUDENT từ chối (null) nếu view hiện tại KHÔNG phải "student" (AC5) hoặc HV
+//     không sở hữu bài.
+// =============================================================================
+
+export const PORTAL_VIEW_COOKIE = "portal_view";
+export type PortalView = "parent" | "student";
+
+/** Profile hiển thị hiện tại (cookie). Mặc định "parent" (an toàn — chỉ tổng quan). */
+export async function getPortalView(): Promise<PortalView> {
+  const v = (await cookies()).get(PORTAL_VIEW_COOKIE)?.value;
+  return v === "student" ? "student" : "parent";
+}
+
+const HOMEWORK_DONE_STATUS = new Set(["SUBMITTED", "GRADED"]);
+
+export type ParentHomeworkItem = {
+  id: string;
+  examTitle: string;
+  className: string | null;
+  dueAt: string | null;
+  status: string; // ASSIGNED / SUBMITTED / GRADED / MISSED
+  done: boolean;
+  /** Điểm tổng quan — chỉ khi setting homework.showScoreToParent bật; null nếu tắt/chưa chấm. */
+  summaryScore: number | null;
+  totalPoints: number | null;
+};
+
+export type ParentHomeworkSummary = {
+  assigned: number;
+  done: number;
+  graded: number;
+  missed: number;
+  showScore: boolean;
+  items: ParentHomeworkItem[];
+};
+
+/**
+ * TẦNG PH — tổng quan bài của con. KHÔNG select Question/Choice ở bất kỳ truy vấn
+ * nào → không thể lộ nội dung. Điểm tổng quan gated theo setting.
+ */
+export async function getParentHomeworkSummary(
+  studentId: string,
+): Promise<ParentHomeworkSummary> {
+  const hws = await db.homeworkAssignment.findMany({
+    where: { studentId },
+    select: { id: true, examId: true, classSessionId: true, dueAt: true, status: true },
+    orderBy: { assignedAt: "desc" },
+  });
+
+  const showScore = await getSetting("homework.showScoreToParent");
+
+  if (hws.length === 0) {
+    return { assigned: 0, done: 0, graded: 0, missed: 0, showScore, items: [] };
+  }
+
+  const examIds = [...new Set(hws.map((h) => h.examId))];
+  const sessionIds = [...new Set(hws.map((h) => h.classSessionId))];
+
+  // Tên exam + tổng điểm (KHÔNG select câu hỏi). Tên lớp qua ClassSession→Class.
+  const [exams, sessions, attempts] = await Promise.all([
+    db.exam.findMany({
+      where: { id: { in: examIds } },
+      select: { id: true, title: true, totalPoints: true },
+    }),
+    db.classSession.findMany({
+      where: { id: { in: sessionIds } },
+      select: { id: true, class: { select: { name: true } } },
+    }),
+    showScore
+      ? db.examAttempt.findMany({
+          where: { studentId, examId: { in: examIds }, status: { in: ["SUBMITTED", "GRADED", "REVIEWED"] } },
+          select: { examId: true, totalScore: true },
+        })
+      : Promise.resolve([] as { examId: string; totalScore: number | null }[]),
+  ]);
+
+  const examMap = new Map(exams.map((e) => [e.id, e]));
+  const classMap = new Map(sessions.map((s) => [s.id, s.class?.name ?? null]));
+  const scoreMap = new Map(attempts.map((a) => [a.examId, a.totalScore]));
+
+  const items: ParentHomeworkItem[] = hws.map((h) => {
+    const exam = examMap.get(h.examId);
+    return {
+      id: h.id,
+      examTitle: exam?.title ?? "Bài kiểm tra",
+      className: classMap.get(h.classSessionId) ?? null,
+      dueAt: h.dueAt?.toISOString() ?? null,
+      status: h.status,
+      done: HOMEWORK_DONE_STATUS.has(h.status),
+      summaryScore: showScore ? scoreMap.get(h.examId) ?? null : null,
+      totalPoints: showScore ? exam?.totalPoints ?? null : null,
+    };
+  });
+
+  return {
+    assigned: items.length,
+    done: items.filter((i) => i.done).length,
+    graded: items.filter((i) => i.status === "GRADED").length,
+    missed: items.filter((i) => i.status === "MISSED").length,
+    showScore,
+    items,
+  };
+}
+
+export type StudentHomeworkQuestion = {
+  id: string;
+  text: string;
+  type: string;
+  imageUrl: string | null;
+  points: number;
+  choices: { id: string; text: string; imageUrl: string | null }[]; // KHÔNG có isCorrect
+};
+
+export type StudentHomeworkDetail = {
+  id: string;
+  examId: string;
+  examTitle: string;
+  dueAt: string | null;
+  status: string;
+  durationMinutes: number;
+  totalPoints: number;
+  questions: StudentHomeworkQuestion[];
+};
+
+/**
+ * TẦNG HV — nội dung để LÀM bài. Trả null nếu:
+ *   - profile hiện tại KHÔNG phải "student" (AC5: PH gọi thẳng endpoint HV → từ chối), hoặc
+ *   - bài không thuộc HV đang chọn (AC4: không xem bài lớp/khoá khác).
+ * `select` lấy text câu hỏi + lựa chọn NHƯNG bỏ cờ isCorrect (không lộ đáp án).
+ */
+export async function getStudentHomeworkDetail(
+  studentId: string,
+  homeworkAssignmentId: string,
+): Promise<StudentHomeworkDetail | null> {
+  if ((await getPortalView()) !== "student") return null;
+
+  const hw = await db.homeworkAssignment.findUnique({
+    where: { id: homeworkAssignmentId },
+    select: { id: true, examId: true, studentId: true, dueAt: true, status: true },
+  });
+  // Ownership: chỉ bài của ĐÚNG HV đang chọn.
+  if (!hw || hw.studentId !== studentId) return null;
+
+  const exam = await db.exam.findFirst({
+    where: { id: hw.examId, status: "PUBLISHED" },
+    select: {
+      id: true,
+      title: true,
+      durationMinutes: true,
+      totalPoints: true,
+      examQuestions: {
+        orderBy: { order: "asc" },
+        select: {
+          points: true,
+          question: {
+            select: {
+              id: true,
+              text: true,
+              type: true,
+              imageUrl: true,
+              choices: {
+                orderBy: { order: "asc" },
+                // CHỦ Ý: KHÔNG select isCorrect — HV làm bài không thấy đáp án đúng.
+                select: { id: true, text: true, imageUrl: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!exam) return null;
+
+  return {
+    id: hw.id,
+    examId: exam.id,
+    examTitle: exam.title,
+    dueAt: hw.dueAt?.toISOString() ?? null,
+    status: hw.status,
+    durationMinutes: exam.durationMinutes,
+    totalPoints: exam.totalPoints,
+    questions: exam.examQuestions.map((eq) => ({
+      id: eq.question.id,
+      text: eq.question.text,
+      type: eq.question.type,
+      imageUrl: eq.question.imageUrl,
+      points: eq.points,
+      choices: eq.question.choices,
+    })),
   };
 }

@@ -65,6 +65,8 @@ type NavItem = {
   icon: LucideIcon;
   /** Hiện mục nếu user có quyền với BẤT KỲ action nào trong đây. Bỏ trống = luôn hiện. */
   perm?: Action[];
+  /** Mục gắn feature flag — chỉ hiện khi flag bật (R7-16: "eval"). */
+  flag?: "eval" | "scorm";
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -97,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Sắp hết khoá", href: "/students/sap-het-khoa", icon: GraduationCap, perm: ["enrollments:view-all"] },
       { label: "Hoàn thành khoá & chứng chỉ", href: "/hoan-thanh-khoa", icon: Award, perm: ["completions:manage"] },
       { label: "Học bạ", href: "/hoc-ba", icon: ScrollText, perm: ["students:view-all", "students:view-own-class"] },
+      { label: "Học bạ năng lực", href: "/report-cards", icon: NotebookPen, perm: ["report-cards:manage", "report-cards:review"] },
       { label: "SataCoin", href: "/satacoin", icon: Coins, perm: ["satacoin:manage"] },
     ],
   },
@@ -123,6 +126,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tài liệu giảng dạy", href: "/documents", icon: FileText, perm: ["documents:view"] },
       { label: "Bài tập về nhà", href: "/assignments", icon: NotebookPen, perm: ["assignments:view"] },
       { label: "Khoá dạy", href: "/courses", icon: BookOpen, perm: ["courses:view"] },
+      { label: "SCORM / Bài giảng tương tác", href: "/scorm", icon: Package, perm: ["training:manage"], flag: "scorm" },
     ],
   },
   {
@@ -131,6 +135,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },
+      { label: "Đánh giá & Khảo sát", href: "/evaluations", icon: ClipboardList, perm: ["evaluations:manage"], flag: "eval" },
       { label: "Thông báo PH", href: "/notifications", icon: Bell, perm: ["notifications:manage"] },
       { label: "Cảnh báo rủi ro", href: "/canh-bao-rui-ro", icon: AlertTriangle, perm: ["students:view-all"] },
       { label: "Chăm sóc HV", href: "/cham-soc-hv", icon: HeartHandshake, perm: ["students:view-all", "students:view-own-class"] },
@@ -188,6 +193,15 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cài đặt", href: "/settings", icon: Settings, perm: ["settings:view"] },
     ],
   },
+  {
+    label: "Báo cáo",
+    items: [
+      { label: "Báo cáo Lead", href: "/bao-cao/lead", icon: BarChart3, perm: ["leads:view-all", "leads:view-own"] },
+      { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial", icon: FlaskConical, perm: ["trials:view"] },
+      { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: ["classes:view-all", "training:manage"] },
+      { label: "Báo cáo trung tâm", href: "/bao-cao/trung-tam", icon: Coins, perm: ["payments:manage"] },
+    ],
+  },
 ];
 
 type SidebarUser = {
@@ -198,19 +212,31 @@ type SidebarUser = {
 
 const STORAGE_KEY = "satarobo:sidebar:collapsed";
 
-export function Sidebar({ user }: { user: SidebarUser }) {
+export function Sidebar({
+  user,
+  evalV2Enabled = false,
+  scormEnabled = false,
+}: {
+  user: SidebarUser;
+  evalV2Enabled?: boolean;
+  scormEnabled?: boolean;
+}) {
   const pathname = usePathname();
 
   // Lọc menu theo quyền — chỉ giữ mục user được phép thấy. Mục không có `perm`
-  // (Dashboard) luôn hiện. Nhóm rỗng sau lọc → ẩn cả tiêu đề.
+  // (Dashboard) luôn hiện. Mục gắn flag chỉ hiện khi flag bật. Nhóm rỗng sau lọc → ẩn.
   const visibleGroups = useMemo(() => {
     return NAV_GROUPS.map((g) => ({
       label: g.label,
       items: g.items.filter(
-        (it) => !it.perm || it.perm.some((p) => can(user, p)),
+        (it) =>
+          (!it.flag ||
+            (it.flag === "eval" && evalV2Enabled) ||
+            (it.flag === "scorm" && scormEnabled)) &&
+          (!it.perm || it.perm.some((p) => can(user, p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [user]);
+  }, [user, evalV2Enabled, scormEnabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {

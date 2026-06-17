@@ -76,6 +76,10 @@ export default async function ExamBuilderPage({ params }: Props) {
     passingScore: exam.passingScore,
     shuffleQuestions: exam.shuffleQuestions,
     shuffleChoices: exam.shuffleChoices,
+    maxAttempts: exam.maxAttempts,
+    defaultDueDays: exam.defaultDueDays,
+    scoringMode: (exam.scoringMode as ExamFormValue["scoringMode"]) ?? null,
+    showResultAfterSubmit: exam.showResultAfterSubmit,
     openAt: exam.openAt,
     closeAt: exam.closeAt,
     status: exam.status,
@@ -115,12 +119,20 @@ export default async function ExamBuilderPage({ params }: Props) {
           <h1 className="text-2xl font-bold text-neutral-900">
             Builder: <span className="text-orange-600">{exam.title}</span>
           </h1>
-          <Link
-            href={`/exams/${id}/attempts`}
-            className="text-sm font-semibold text-[#7C3AED] hover:underline"
-          >
-            Xem bài làm →
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href={`/exams/${id}/preview`}
+              className="text-sm font-semibold text-[#7C3AED] hover:underline"
+            >
+              Xem trước →
+            </Link>
+            <Link
+              href={`/exams/${id}/attempts`}
+              className="text-sm font-semibold text-[#7C3AED] hover:underline"
+            >
+              Xem bài làm →
+            </Link>
+          </div>
         </div>
       </div>
 

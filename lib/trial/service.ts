@@ -255,6 +255,16 @@ export async function enrollLeadChild(params: {
         where: { id: params.leadChildId },
         data: { trialStatus: "SCHEDULED" },
       });
+      // R7-17 — báo Sale phụ trách lead đã xếp lớp trải nghiệm (atomic cùng tx).
+      await publishEvent(
+        "trial.assigned",
+        {
+          trialEnrollmentId: enrollment.id,
+          leadChildId: params.leadChildId,
+          trialClassId: params.trialClassId,
+        },
+        { tx, dedupeKey: `trial.assigned:${enrollment.id}` },
+      );
       // AC4 — ghi audit khi override sĩ số (xếp vượt capacity bằng quyền override).
       if (allowOverride && activeCount >= cls.capacity) {
         await writeAudit({

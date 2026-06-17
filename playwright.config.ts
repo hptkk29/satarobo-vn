@@ -6,9 +6,12 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests/e2e",
-  // A0 chạy trên Postgres LOCAL qua playwright.a0.config.ts — loại khỏi suite smoke
-  // (smoke chạy trên DB seed CI/Supabase, resetDb sẽ từ chối ở đó).
-  testIgnore: ["**/a0/**"],
+  // Suite smoke CHỈ chạy smoke.spec.ts (top-level). Mọi phase suite (a0, r1..r7) có
+  // config riêng (playwright.<phase>.config.ts): chạy trên Postgres LOCAL + dùng
+  // tsconfig.playwright.json (stub `server-only`/`@/lib/auth`) + resetDb. Nếu để smoke
+  // collect chúng → resetDb từ chối trên DB seed CI/Supabase + `server-only` không
+  // resolve (thiếu stub) → lỗi collect. Loại toàn bộ phase dir khỏi suite smoke.
+  testIgnore: ["**/a0/**", "**/r[0-9]*/**"],
   // Each test gets 30s timeout
   timeout: 30_000,
   expect: { timeout: 5_000 },
