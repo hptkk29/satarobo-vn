@@ -7,7 +7,8 @@ import { requireActiveStudent } from "@/lib/portal/session";
 // =============================================================================
 // PORTAL EXAM ACTIONS — Phase T2.3
 // Học sinh làm bài thi qua "site con". Mọi action verify attempt/exam thuộc
-// activeSite.studentId (con đang chọn). 1 attempt/exam/student (không retake).
+// activeSite.studentId (con đang chọn). LMS-12: cho thi lại tới exam.maxAttempts
+// (mỗi lần = 1 ExamAttempt với attemptNo tăng dần).
 // =============================================================================
 
 const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
@@ -58,6 +59,7 @@ export async function startAttempt(
       status: true,
       openAt: true,
       closeAt: true,
+      maxAttempts: true,
       _count: { select: { examQuestions: true } },
     },
   });
@@ -79,19 +81,28 @@ export async function startAttempt(
     return { ok: false, error: "Đề thi đã đóng" };
   }
 
-  const existing = await db.examAttempt.findUnique({
-    where: { examId_studentId: { examId, studentId } },
-    select: { id: true, status: true },
+  // LMS-12 (thi lại): nếu đang có bài DỞ → trả lại để làm tiếp (không tạo trùng).
+  const inProgress = await db.examAttempt.findFirst({
+    where: { examId, studentId, status: "IN_PROGRESS" },
+    select: { id: true },
   });
-  if (existing) {
-    if (existing.status === "IN_PROGRESS") {
-      return { ok: true, attemptId: existing.id };
-    }
-    return { ok: false, error: "Con đã làm bài thi này rồi" };
+  if (inProgress) {
+    return { ok: true, attemptId: inProgress.id };
+  }
+
+  // Hết IN_PROGRESS → đếm số lần đã làm; chặn khi đã đạt maxAttempts.
+  // maxAttempts null → mặc định 1 lần (đề cũ không cấu hình thi lại).
+  const maxAttempts = exam.maxAttempts ?? 1;
+  const count = await db.examAttempt.count({ where: { examId, studentId } });
+  if (count >= maxAttempts) {
+    return {
+      ok: false,
+      error: `Đã hết lượt làm bài (tối đa ${maxAttempts} lần)`,
+    };
   }
 
   const created = await db.examAttempt.create({
-    data: { examId, studentId, status: "IN_PROGRESS" },
+    data: { examId, studentId, status: "IN_PROGRESS", attemptNo: count + 1 },
     select: { id: true },
   });
   return { ok: true, attemptId: created.id };

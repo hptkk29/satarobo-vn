@@ -40,9 +40,24 @@ export async function computeReportCardMetrics(enrollmentId: string): Promise<Re
         exam: { classId: enr.classId },
         status: { in: [...EXAM_DONE_STATUSES] },
       },
-      select: { totalScore: true, passed: true, exam: { select: { totalPoints: true } } },
+      select: {
+        examId: true,
+        totalScore: true,
+        passed: true,
+        exam: { select: { totalPoints: true } },
+      },
     });
-    attempts = rows.map((r) => ({
+    // LMS-12 (thi lại): 1 đề có thể có NHIỀU lần thi → chỉ lấy lần điểm CAO NHẤT
+    // mỗi đề (best attempt) để computeExamAverage không double-count. Đề thi 1 lần
+    // vẫn đúng (mỗi examId chỉ 1 row). totalScore null xem như thấp nhất.
+    const bestByExam = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      const cur = bestByExam.get(r.examId);
+      if (!cur || (r.totalScore ?? -1) > (cur.totalScore ?? -1)) {
+        bestByExam.set(r.examId, r);
+      }
+    }
+    attempts = Array.from(bestByExam.values()).map((r) => ({
       totalScore: r.totalScore,
       totalPoints: r.exam.totalPoints,
       passed: r.passed,

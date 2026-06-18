@@ -122,9 +122,9 @@ export async function cancelSession(opts: {
 
 /**
  * CHỈNH 1 buổi: đổi ngày (+ giáo viên/phòng). Buổi COMPLETED → khoá.
- * ⚠️ Schema hiện tại: ClassSession KHÔNG có cột teacherId/roomId (chỉ Class có).
- * → date được ghi vào buổi; teacherId/roomId được GHI VÀO AuditLog làm yêu cầu
- *   thay-thế cấp buổi (substitute) cho tới khi có cột riêng (không thuộc scope R7-06).
+ * ⚠️ Schema: ClassSession có cột `roomId` (W2-4b) nhưng KHÔNG có cột teacherId.
+ * → date + roomId được ghi thẳng vào buổi; teacherId vẫn ghi AuditLog làm yêu cầu
+ *   thay-thế GV cấp buổi (substitute) cho tới khi có cột riêng (ngoài scope).
  */
 export async function adjustSession(opts: {
   sessionId: string;
@@ -138,7 +138,7 @@ export async function adjustSession(opts: {
 
   const session = await db.classSession.findUnique({
     where: { id: sessionId },
-    select: { id: true, classId: true, date: true, status: true },
+    select: { id: true, classId: true, date: true, status: true, roomId: true },
   });
   if (!session) return { ok: false, error: "Buổi học không tồn tại" };
   if (session.status === "COMPLETED") {
@@ -183,15 +183,22 @@ export async function adjustSession(opts: {
   const oldValues: Record<string, unknown> = { date: session.date };
   const newValues: Record<string, unknown> = {};
   if (hasDate) newValues.date = date;
-  // teacherId/roomId: chưa có cột cấp buổi → chỉ ghi audit (substitute request).
+  // teacherId: chưa có cột cấp buổi → chỉ ghi audit (substitute request).
   if (hasTeacher) newValues.substituteTeacherId = teacherId;
-  if (hasRoom) newValues.substituteRoomId = roomId;
+  // roomId (W2-4b): có cột cấp buổi → ghi thẳng vào ClassSession.roomId.
+  if (hasRoom) {
+    oldValues.roomId = session.roomId;
+    newValues.roomId = roomId ?? null;
+  }
 
   await db.$transaction(async (tx) => {
-    if (hasDate) {
+    if (hasDate || hasRoom) {
       await tx.classSession.update({
         where: { id: sessionId },
-        data: { date: date! },
+        data: {
+          ...(hasDate ? { date: date! } : {}),
+          ...(hasRoom ? { roomId: roomId ?? null } : {}),
+        },
       });
     }
 

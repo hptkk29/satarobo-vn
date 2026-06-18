@@ -9,13 +9,12 @@ import {
 
 // =============================================================================
 // W2-4 (LMS-6) — nối detectScheduleConflict (THUẦN) vào write-path bằng query DB.
-// Mức độ: CLASS-level GV/phòng (Class.teacherId/roomId + khung giờ lớp). Buổi của
-// LỚP KHÁC cùng GV hoặc cùng phòng có khung giờ giao nhau ⇒ trùng lịch.
+// GV xét ở cấp lớp (Class.teacherId). Phòng xét theo TỪNG BUỔI: ưu tiên
+// ClassSession.roomId thực của buổi, fallback Class.roomId nếu buổi chưa set
+// (W2-4b — cột ClassSession.roomId đã có). Buổi của LỚP KHÁC cùng GV hoặc cùng
+// phòng có khung giờ giao nhau ⇒ trùng lịch.
 // Default an toàn: thiếu dữ liệu (không GV & không phòng, hoặc lớp không có
 // startTime) ⇒ KHÔNG kết luận trùng (tránh chặn nhầm lớp hợp lệ).
-//
-// TODO(W2-4 deferred): conflict phòng theo TỪNG BUỔI cần cột ClassSession.roomId
-// (schema change — chờ ERD). Hiện chỉ xét phòng cấp Class.
 // =============================================================================
 
 export type ScheduleConflictResult = {
@@ -57,18 +56,19 @@ export async function findScheduleConflicts(opts: {
       classId: { not: classId }, // chỉ xét LỚP KHÁC (double-book giữa 2 lớp)
       status: { not: "CANCELLED" },
       date: { gte: dayStart, lt: dayEnd },
-      class: {
-        deletedAt: null,
-        // teacherId/roomId là id duy nhất ⇒ khớp đã đảm bảo cùng GV/cùng phòng.
-        OR: [
-          ...(teacherId ? [{ teacherId }] : []),
-          ...(roomId ? [{ roomId }] : []),
-        ],
-      },
+      class: { deletedAt: null },
+      // teacherId/roomId là id duy nhất ⇒ khớp đã đảm bảo cùng GV/cùng phòng.
+      // Phòng khớp ở cấp BUỔI (ClassSession.roomId) HOẶC cấp lớp (Class.roomId,
+      // cho buổi chưa set roomId riêng). Over-fetch vô hại: lọc lại bằng Slot bên dưới.
+      OR: [
+        ...(teacherId ? [{ class: { teacherId } }] : []),
+        ...(roomId ? [{ roomId }, { class: { roomId } }] : []),
+      ],
     },
     select: {
       id: true,
       date: true,
+      roomId: true, // W2-4b — phòng thực của buổi (ưu tiên hơn phòng cấp lớp)
       class: {
         select: {
           teacherId: true,
@@ -87,7 +87,8 @@ export async function findScheduleConflicts(opts: {
     .map((r) => ({
       id: r.id,
       teacherId: r.class?.teacherId ?? null,
-      roomId: r.class?.roomId ?? null,
+      // ưu tiên phòng của BUỔI, fallback phòng cấp lớp khi buổi chưa set.
+      roomId: r.roomId ?? r.class?.roomId ?? null,
       startAt: r.date,
       endAt: sessionEndAt(r.date, r.class?.startTime, r.class?.endTime),
     }));
@@ -188,6 +189,8 @@ export async function generateClassSessions(
       date: new Date(d.getFullYear(), d.getMonth(), d.getDate(), ph || 0, pm || 0),
       planId: plans[i]?.id ?? null,
       lessonId: plans[i]?.lessonId ?? null,
+      // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
+      roomId: cls.roomId ?? null,
     }));
 
     // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
@@ -228,6 +231,8 @@ export async function generateClassSessions(
     classId,
     date: new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh || 0, mm || 0),
     lessonId: lessonIds[i] ?? null,
+    // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
+    roomId: cls.roomId ?? null,
   }));
 
   // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).

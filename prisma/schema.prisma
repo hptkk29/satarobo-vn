@@ -666,6 +666,7 @@ model Room {
 
   classes      Class[]
   trialClasses TrialClass[]
+  classSessions ClassSession[] // W2-4b — phòng theo buổi
 
   @@unique([centerId, code])
   @@index([centerId, status])
@@ -1385,6 +1386,8 @@ model ClassSession {
   lessonNotes String? @db.Text
   // R7-06 — trỏ tới ClassSessionPlan (kế hoạch buổi của lớp); lessonId cũ giữ 2-phase.
   planId      String?
+  // W2-4b — phòng học theo TỪNG BUỔI (để soát trùng phòng per-session); khác actualRoomId (ghi sau-thực-tế).
+  roomId      String?
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
@@ -1416,13 +1419,16 @@ model ClassSession {
   class            Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
   lesson           Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   plan             ClassSessionPlan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
+  room             Room?                    @relation(fields: [roomId], references: [id], onDelete: SetNull)
   attendances      Attendance[]
   studentFeedbacks StudentSessionFeedback[] // LMS-2
+  skillAssessments StudentSkillAssessment[] // W4b — đánh giá kỹ năng gắn buổi
 
   @@index([classId])
   @@index([date])
   @@index([lessonId])
   @@index([planId])
+  @@index([roomId])
 }
 
 enum SessionStatus {
@@ -1469,9 +1475,15 @@ model StudentSkillAssessment {
   note         String?
   assessedById String
   assessedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  // W4b/LMS-17 — gắn đánh giá kỹ năng vào buổi/bài (tùy chọn; null = đánh giá tổng).
+  classSessionId String?
+  lessonId       String?
   student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSession ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+  lesson       Lesson?       @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
   @@index([studentId, skill])
+  @@index([classSessionId])
 }
 
 // LMS-2 — nhận xét RIÊNG từng học sinh mỗi buổi (GV viết, PH xem con mình).
@@ -2055,6 +2067,7 @@ model Lesson {
   classSessions  ClassSession[]
   changeRequests LessonChangeRequest[]
   scormPackages  ScormPackage[]
+  skillAssessments StudentSkillAssessment[] // W4b
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
@@ -2254,7 +2267,10 @@ model ExamAttempt {
   // Phase 5.6 — Order item link
   orderItems OrderItem[] @relation("ExamOrderItems")
 
-  @@unique([examId, studentId])
+  // LMS-12 — thi lại: số thứ tự lần thi (1-based). Row cũ = 1 (default).
+  attemptNo Int @default(1)
+
+  @@unique([examId, studentId, attemptNo])
   @@index([status, examId])
   @@index([studentId])
 }
