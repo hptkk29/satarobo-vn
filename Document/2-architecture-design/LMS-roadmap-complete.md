@@ -25,9 +25,15 @@
 | **RBAC v2** | `lib/auth/can.ts` **đã có** `can(actor, action, target?)` + flag `RBAC_V2_ENABLED`; bản cũ `permissions.ts:can()` vẫn song song | P1 = **bật + nối + mở rộng target**, KHÔNG xây mới |
 | **scopedDb** | `lib/db-scope.ts` + `SCOPED_MODELS` đã có; **thiếu** `ClassSession/Attendance/Enrollment` (chưa có centerId) | P1/LMS-18 = **thêm model vào scope** (cần FK/centerId từ ERD) |
 | **Feature flags** | Hệ flag đầy đủ (`RBAC_V2/SESSION_LIFECYCLE_V2/CONVERT_V2/EVAL_V2/SCORM`) | Rollout dần sẵn sàng |
-| **ERD fixes** | Mới ở dạng **tài liệu** (ERD-fix-plan), **chưa implement**; migration R7 chưa apply | P1 vẫn là khối lớn (schema + apply) |
+| **ERD fixes** | 🔄 **RE-SYNC 2026-06-18:** P0/một phần P1 **đã implement** — C1 RLS · C2 timestamptz · C3 finance restrict+soft-delete · C4 TOCTOU · C5 order-code · H7 check-constraint đều **có migration** (`prisma/migrations/20260617000000`→`040000`) + H4 state-machine. **Còn OPEN: Money type (H5/H6/COL2)** + compliance C6/C7. Apply lên prod vẫn chưa. | P1 nhẹ hơn nhiều; khối nặng còn lại = **Money type + apply migration** |
 
-**Điều chỉnh effort:** P1 từ *L → M-L* (RBAC v2 đỡ phần lớn), P2 từ *M → S-M* (4 lỗ hổng auth **tự giải khi bật RBAC v2 + truyền target**, chỉ còn nối dây). Phần nặng còn lại của P1 là **ERD/schema + apply migration** (nút bấm của bạn).
+> 🔄 **RE-SYNC 2026-06-18 (đối chiếu lại code `FixLMS`):** bảng §0b cũ **under-count**. Chỉnh đúng:
+> - **RBAC v2:** `can.ts` có đủ chữ ký `can(actor,action,target?)` (ALLOW-wins), NHƯNG flag `isRbacV2Enabled()` **default OFF**, chỉ chạy **shadow** song song; **240 file** vẫn import `lib/auth/permissions` cũ → "bật + nối" vẫn là việc thật, không chỉ enable. ⇒ vá L0 nên đi **owner-scope per-action** (mẫu LMS-3 đã có), KHÔNG flip global 240 file.
+> - **scopedDb:** ~30 model đã auto-scope; `Enrollment/ClassSession/Attendance` **chưa** (không có `centerId`, scope gián tiếp qua `class.centerId`).
+> - **Money type là lỗ hổng P1 lớn nhất còn lại:** 4 cột Float tiền (`totalQcCost`, `pricePerUnit`, `unitPrice`, `totalCost`) còn Float; tổng tiền còn `Int` (chưa BigInt); **chưa có lớp serialize BigInt/Decimal** (`formatVnd` chỉ nhận `number`). Kéo theo sửa FE (bẫy RSC→Client).
+> - **Compliance C6/C7 hoàn toàn chưa làm** (không cron retention/erasure NĐ13, không PITR runbook).
+
+**Điều chỉnh effort (re-sync):** P1 từ *M-L → M* (ERD P0 + state-machine **đã xong**; còn lại Money type + centerId/auto-scope + RBAC-wire). P2 từ *S-M → S* (LMS-3/7 **đã xong**; còn LMS-1/2/4 owner-scope + LMS-5 timer + LMS-6 conflict — đều nối dây inline, không phụ thuộc flip RBAC global).
 
 ---
 
@@ -69,24 +75,27 @@ G0 quyết định ─► P1 NỀN ─► P2 AN TOÀN ─► P3 LIFECYCLE/TIỀN
 Chốt 6 quyết định ở §3. Đặc biệt: **go-live status** (có user thật chưa) + **RBAC: hotfix vs v2** + **phạm vi: core (1–10) hay full (1–13)**.
 **Ra khỏi gate khi:** 6 quyết định có câu trả lời.
 
-### P1 — NỀN (blocker, mở khóa tất cả) — *Effort M-L* (↓ nhờ RBAC v2 có sẵn)
-| Việc | Nguồn | Ghi chú ground-truth |
+### P1 — NỀN (blocker, mở khóa tất cả) — *Effort M* (↓ nhiều: ERD P0 + state-machine đã xong)
+| Việc | Nguồn | Ghi chú ground-truth (re-sync 2026-06-18) |
 |---|---|---|
-| Chốt ERD + **apply migration R7** | ERD-fix-plan P0/P1 | **Khối nặng nhất**; apply Supabase = nút bấm của bạn |
-| RLS + timestamptz + onDelete tài chính + soft-delete | C1/C2/C3 | mới (doc → code) |
-| Money type đúng (BigInt/Decimal + serialization) | H5/H6/COL2 | mới |
-| **Bật + nối RBAC v2** (`can(actor,action,target)`) | RBAC_V2 | **đã có `can.ts`** → enable + truyền target, không xây mới |
-| **Auto-scope** `ClassSession/Attendance/Enrollment` | LMS-18 | thêm vào `SCOPED_MODELS` (cần centerId/FK từ ERD) |
-**Deliverable:** schema final trên Supabase; mọi read nghiệp vụ scoped tự động; tiền đúng kiểu; RBAC v2 ON.
-**Vì sao trước:** mọi fix sau cần schema ổn + scope nền. Làm sau = sửa 2 lần.
+| ~~RLS + timestamptz + onDelete tài chính + soft-delete~~ | C1/C2/C3 | ✅ **DONE** — có migration `2026061700*`–`02*` |
+| ~~TOCTOU + order-code race + check-constraint~~ | C4/C5/H7 | ✅ **DONE** — `runSerializable`, `nextSeq`, migration `04*` |
+| **Apply ~18 migration lên Supabase prod** | ERD/R7 | ⏳ **nút bấm của bạn** — chưa apply |
+| **Money type** đúng (Float→Decimal, Int→BigInt + serialization layer) | H5/H6/COL2 | ❌ **OPEN — khối nặng nhất còn lại của P1** |
+| **centerId** (denorm) cho `ClassSession/Attendance/Enrollment` → **auto-scope** | LMS-18 | ❌ OPEN — thêm FK rồi vào `SCOPED_MODELS` |
+| `ClassSession.roomId/teacherId` cấp buổi | LMS-6 (schema) | ❌ OPEN — cần cho conflict-per-buổi ở P2 |
+| **RBAC v2: giữ shadow, vá L0 bằng owner-scope per-action** | RBAC_V2 | ⚠️ flag OFF + 240 file cũ → KHÔNG flip global; dùng `resolveActor`/scope inline (mẫu LMS-3) |
+**Deliverable:** schema final (money + centerId) trên prod; 3 model nóng auto-scope; tiền đúng kiểu + serialize an toàn FE.
+**Vì sao trước:** Money + centerId là schema-level; mọi fix sau (P3 tiền, P2 auto-scope) cần chúng. Làm sau = sửa 2 lần.
 
-### P2 — AN TOÀN & TOÀN VẸN (phần lớn auto-giải nhờ P1) — *Effort S-M* (↓ nhờ RBAC v2 có sẵn)
-| Việc | Nguồn |
-|---|---|
-| 4 lỗ hổng phân quyền (điểm danh/chấm/completeSession/question) — **tự giải khi bật RBAC v2 + truyền target ở P1**, chỉ còn nối dây từng action | LMS-1..4 |
-| Exam timer enforced lúc submit | LMS-5 |
-| Conflict GV/phòng nối write-path + `ClassSession.roomId` | LMS-6 |
-| State machine guard Enrollment/Session + TOCTOU | LMS-7 / ERD-C4 |
+### P2 — AN TOÀN & TOÀN VẸN — *Effort S* (↓: LMS-3/7 đã xong)
+| Việc | Nguồn | Trạng thái (re-sync) |
+|---|---|---|
+| Owner-scope điểm danh / chấm bài tập+thi / sửa câu hỏi (inline `resolveActor`+predicate lớp) | LMS-1, 2, 4 | ❌ OPEN |
+| completeSession thêm check cấp-lớp `assignedClassIds.has` | LMS-3 | ⚠️ scope-cơ-sở DONE, cấp-lớp còn |
+| Exam timer enforced lúc submit | LMS-5 | ❌ OPEN |
+| Conflict GV/phòng nối write-path (cần `ClassSession.roomId/teacherId` ở P1) | LMS-6 | ❌ OPEN |
+| State machine guard Enrollment/Session + TOCTOU | LMS-7 / ERD-C4 | ✅ **DONE** |
 **Deliverable:** không thao tác chéo lớp/cơ sở; không lách giờ thi; không trùng lịch; không nhảy trạng thái phi lý.
 
 ### P3 — LIFECYCLE & TIỀN (cần schema P1 + policy G0) — *Effort L*

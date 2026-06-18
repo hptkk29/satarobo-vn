@@ -3,6 +3,15 @@
 > Các vấn đề LMS phát hiện khi soi code thật (đối chiếu `luong-LMS.md` + [`LMS-usecase-catalog.md`](./LMS-usecase-catalog.md)). Mỗi mục: **mã · vấn đề · nguyên nhân · hướng fix · file:line · verify**.
 > Ưu tiên: 🔴 Critical (bảo mật/toàn vẹn) · 🟠 High (đúng đắn/nghiệp vụ) · 🟡 Medium (đầy đủ tính năng). Snapshot 2026-06-18.
 
+> 🔄 **RE-SYNC 2026-06-18 (đối chiếu lại code nhánh `FixLMS`):** snapshot đầu under-count — nhiều mục đã vá. Trạng thái đúng hiện tại:
+> - ✅ **LMS-3 DONE** — `completeSessionAction` đã có `resolveActor`+`resolveSessionScope` (cách ly theo **cơ sở**). ⚠️ còn hở nhẹ: chưa chặn GV **cùng cơ sở lớp khác** ở cấp lớp (sibling `assignSessionHomeworkAction` có `assignedClassIds.has(classId)`, action này chưa) → gom vào L0.
+> - ✅ **LMS-7 DONE** — `lib/enrollments/status.ts` + `lib/sessions/status.ts` đã tồn tại & **nối write-path** (`enrollments/_actions.ts:526`, `sessions/[id]/_actions.ts:227,243`) + test.
+> - ⚠️ **LMS-8 PARTIAL** (đúng mô tả: field/state vẫn chết). **LMS-16 PARTIAL** (4 module report có, 4 chiều còn thiếu). **LMS-17 PARTIAL** — backend `canAssessStudent` ĐÃ mở cho GV; còn lại = UI gate (`edit/page.tsx:100`) + gắn-buổi (`classSessionId?`).
+> - **Nền ERD đã làm phần lớn:** C1 RLS · C2 timestamptz · C3 finance onDelete-restrict + soft-delete · C4 TOCTOU (`runSerializable`) · C5 order-code race · H7 check-constraints — **đã có migration** (`prisma/migrations/20260617000000`→`...040000`). LMS-7/H4 state-machine xong.
+> - **Nền còn OPEN:** **Money type (H5/H6/COL2)** (4 cột Float tiền + tổng tiền Int, chưa BigInt/Decimal, chưa serialize layer) · **RBAC v2** (`can.ts` có nhưng flag default **OFF**, chạy shadow, 240 file vẫn dùng `permissions.ts` cũ) · **auto-scope LMS-18** (thiếu `centerId` trên Enrollment/ClassSession/Attendance) · **compliance C6/C7** (retention/erasure NĐ13 + PITR — hoàn toàn thiếu).
+> - **OPEN đúng như mô tả ban đầu:** LMS-1, LMS-2, LMS-4, LMS-5, LMS-6, LMS-9, LMS-10, LMS-11, LMS-12, LMS-13, LMS-14, LMS-15, LMS-18.
+> - ⚠️ Sửa lệch nhỏ: LMS-15 — KHÔNG có handler `comment.added` nào trong `lib/events/` (claim cũ ghi "đã khai báo handler" là sai).
+
 ## Lộ trình
 
 | Đợt | Mục tiêu | Lỗi |
@@ -29,11 +38,12 @@
 **File:** `assignments/_actions.ts:385,695`, `exams/_actions.ts:510,604`.
 **Verify:** GV không chấm được submission ngoài lớp mình.
 
-## LMS-3 · `completeSession` R7 thiếu owner-check 🔴
-**Vấn đề:** GV cùng cơ sở hoàn tất buổi của lớp khác (action sibling đã có check, action này thiếu).
-**Fix:** thêm `actor.assignedClassIds.has(classId)` như `classes/[id]/session/_actions.ts:110-113` (homework action) vào `completeSessionAction`.
+## LMS-3 · `completeSession` R7 thiếu owner-check ✅ DONE (còn hở cấp-lớp)
+**Trạng thái (re-sync 2026-06-18):** ĐÃ vá phần lớn — `completeSessionAction` gọi `resolveActor` + `resolveSessionScope` (`classes/[id]/session/_actions.ts:53-55`); `resolveSessionScope:16-30` dùng `scopedDb(actor)` + `passesScope("Class", {centerId}, actor)` → chặn GV **cơ sở khác**.
+**Còn hở:** chưa chặn GV **cùng cơ sở nhưng lớp khác** (chỉ chặn bởi `can(user,"sessions:edit")`). Sibling `assignSessionHomeworkAction` (cùng file, `:105-113`) chặt hơn nhờ `assignedClassIds.has(sc.classId)`.
+**Fix còn lại:** thêm `assignedClassIds.has(sc.classId)` cho TEACHER vào `completeSessionAction` (gom vào L0 cùng LMS-1/2/4).
 **File:** `classes/[id]/session/_actions.ts:49`.
-**Verify:** chỉ GV phụ trách hoàn tất được buổi.
+**Verify:** GV cùng cơ sở không hoàn tất được buổi của lớp không phụ trách.
 
 ## LMS-4 · Sửa câu hỏi không check `authorId` 🔴
 **Vấn đề:** GV sửa/xóa câu hỏi của GV khác (comment `permissions.ts:408` hứa "enforced separately" nhưng không có).
@@ -59,8 +69,8 @@
 **File:** `lib/lms/scheduling.ts:16`, `lib/classes/{generate,adjust}.ts`, `sessions/_actions.ts:60`.
 **Verify:** tạo lớp trùng GV/phòng bị báo conflict.
 
-## LMS-7 · State machine Enrollment/Session không guard 🟠
-Trùng ERD **FIX-H4**. Tạo `lib/enrollments/status.ts` + `lib/sessions/status.ts`; chặn nhảy phi lý (CANCELLED→ACTIVE, mở lại buổi COMPLETED).
+## LMS-7 · State machine Enrollment/Session không guard ✅ DONE
+**Trạng thái (re-sync 2026-06-18):** ĐÃ làm. Trùng ERD **FIX-H4**. `lib/enrollments/status.ts` (`canTransition`) nối `enrollments/_actions.ts:526` (CANCELLED→ACTIVE block, COMPLETED terminal → `INVALID_TRANSITION`); `lib/sessions/status.ts` (`canStartSession`/`canCompleteSession`) nối `sessions/[id]/_actions.ts:227,243` (chặn mở lại buổi COMPLETED → `INVALID_SESSION_STATE`) + UI gating + test `status.test.ts`.
 
 ## LMS-8 · Field/state chết 🟡
 - `Exam.maxAttempts` không đọc ở đâu → hoặc **xài** (LMS-12) hoặc xóa.
@@ -133,9 +143,10 @@ Trùng ERD **FIX-H4**. Tạo `lib/enrollments/status.ts` + `lib/sessions/status.
 
 # Checklist
 
-- [ ] L0 LMS-1 điểm danh scope · LMS-2 chấm điểm scope · LMS-3 completeSession owner · LMS-4 question authorId
-- [ ] L1 LMS-5 exam timer · LMS-6 conflict wiring · LMS-7 state machine · LMS-8 field chết
+- [ ] L0 LMS-1 điểm danh scope · LMS-2 chấm điểm scope · [x] **LMS-3 completeSession owner (DONE, còn hở cấp-lớp)** · LMS-4 question authorId
+- [ ] L1 LMS-5 exam timer · LMS-6 conflict wiring · [x] **LMS-7 state machine (DONE)** · LMS-8 field chết
 - [ ] L2 LMS-9 refund lifecycle · LMS-10 cancel class cascade · LMS-11 reserve expiry
-- [ ] L3 LMS-12 retake · LMS-13 report-card aggregate · LMS-14 SCORM scoring · LMS-15 2-way comms · LMS-16 reports · LMS-17 skill-per-session · LMS-18 auto-scope
+- [ ] L3 LMS-12 retake · LMS-13 report-card aggregate · LMS-14 SCORM scoring · LMS-15 2-way comms · LMS-16 reports (PARTIAL) · LMS-17 skill-per-session (PARTIAL) · LMS-18 auto-scope
+- **NỀN (ERD):** [x] C1 RLS · [x] C2 timestamptz · [x] C3 finance restrict · [x] C4 TOCTOU · [x] C5 order-code · [x] H7 check-constraint — DONE (migration). [ ] **Money type H5/H6/COL2** · [ ] **RBAC v2 flip/wire** · [ ] **auto-scope centerId (LMS-18)** · [ ] **compliance C6/C7**.
 
 > Mỗi mục = 1 PR + test (unit guard/logic + e2e flow). L0 ưu tiên tuyệt đối (bảo mật). Verify chuẩn repo: `pnpm typecheck && lint && build` + e2e liên quan xanh.

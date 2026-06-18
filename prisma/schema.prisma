@@ -596,7 +596,7 @@ enum CostPeriodStatus {
 model MarketingCostPeriod {
   id            String           @id @default(cuid())
   period        String           @unique // "2026-06"
-  totalQcCost   Float            @default(0)
+  totalQcCost   Int              @default(0) // VND (số nguyên) — H5/COL2
   status        CostPeriodStatus @default(DRAFT)
   confirmedById String?
   confirmedAt   DateTime? @db.Timestamptz(6)
@@ -1861,7 +1861,7 @@ model Employee {
 
   // Phase 4.7 — additional Tier 2 HR fields
   endDate          DateTime? @db.Timestamptz(6) // Ngày kết thúc HĐ (cho hợp đồng có thời hạn)
-  bhxhBase         Float? // Mức lương đóng BHXH
+  bhxhBase         Int? // Mức lương đóng BHXH — VND (số nguyên), H5/COL2
   address          String?
   emergencyContact String? // Tên - Quan hệ - SĐT
   notes            String?   @db.Text
@@ -2472,7 +2472,7 @@ model InventoryItem {
   category InventoryCategory @default(OTHER)
   unit     String            @default("Cái")
 
-  pricePerUnit Float?
+  pricePerUnit Int? // VND (số nguyên) — H5/COL2
   supplier     String?
 
   defaultMinThreshold Int @default(5)
@@ -2547,9 +2547,9 @@ model StockMovement {
   referenceId   String?
   referenceNote String?
 
-  // Pricing snapshot (RECEIPT only)
-  unitPrice Float?
-  totalCost Float?
+  // Pricing snapshot (RECEIPT only) — VND (số nguyên), H5/COL2
+  unitPrice Int?
+  totalCost Int?
 
   performedById String?
   performedBy   Employee? @relation("MovementPerformer", fields: [performedById], references: [id], onDelete: SetNull)

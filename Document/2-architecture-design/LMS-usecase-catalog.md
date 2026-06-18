@@ -4,6 +4,8 @@
 > Verdict mỗi use-case (đối chiếu code thực, có `file:line`): ✅ EXISTS · ⚠️ PARTIAL · ❌ MISSING.
 > Vấn đề chi tiết + cách sửa: [`LMS-problems-fix-plan.md`](./LMS-problems-fix-plan.md). Snapshot 2026-06-18.
 
+> 🔄 **RE-SYNC 2026-06-18 (đối chiếu lại code `FixLMS`):** cập nhật verdict đã lệch — **T3** completeSession nay đã có scope-cơ-sở (⚠️🔴→⚠️, còn hở cấp-lớp); **state-machine guard** Enrollment/Session ĐÃ có (mục LMS-7 DONE); **T8/M12** vẫn ⚠️ (skill backend đã mở GV nhưng UI chưa, report thiếu 4 chiều). Các verdict ❌ MISSING khác (P5 thi lại, P11 2-way, A4 hoàn tiền, M4 conflict, M8 hủy lớp, T11 dạy thay, SCORM scoring) **vẫn đúng**.
+
 ## Actor trong hệ LMS
 
 | Actor | Vai trò LMS | Đăng nhập |
@@ -26,7 +28,7 @@
 |---|---|---|---|---|---|
 | T1 | Xem lớp/buổi hôm nay/việc cần chấm | Dashboard GV theo `teacherId` | alt: là **trợ giảng** (`assistantId`) → **không hiện** | ⚠️ | `dashboard/_components/teacher-dashboard.tsx:15` |
 | T2 | Điểm danh buổi | Mở session → 6 nhãn → lưu batch | exc: **GV lớp khác cũng sửa được** (role-only) | ⚠️🔴 | `attendance/_actions.ts:33-41` |
-| T3 | Hoàn tất buổi (lifecycle V2) | Gate trạng thái → ghi actuals → event `session.taught` | exc: action R7 **thiếu owner-check** | ⚠️🔴 | `classes/[id]/session/_actions.ts:49` |
+| T3 | Hoàn tất buổi (lifecycle V2) | Gate trạng thái → ghi actuals → event `session.taught` | ✅ owner-check theo cơ sở (`resolveSessionScope`); ⚠️ còn hở GV cùng cơ sở lớp khác | ⚠️ | `classes/[id]/session/_actions.ts:53-55` |
 | T4 | Chấm bài tập (scalar + rubric 6 tiêu chí) | Mở submission → chấm | exc: **chấm bài lớp bất kỳ**; không có hàng chờ | ⚠️🔴 | `assignments/_actions.ts:385,695` |
 | T5 | Chấm thi (auto MC/TF/short) | "Auto-chấm" | exc: **ESSAY/CODE không có UI chấm** (chỉ Prisma Studio) | ⚠️ | `exams/_actions.ts:510,604` |
 | T6 | Soạn bài giảng/curriculum/đề | CRUD lesson/question/curriculum | exc: **sửa câu hỏi GV khác** (không check `authorId`) | ⚠️ | `questions/_actions.ts:121,195` |
@@ -91,8 +93,8 @@
 
 ## State machine LMS (tham chiếu)
 
-- `EnrollmentStatus`: PENDING→CONFIRMED→STUDYING→{COMPLETED|WITHDREW|TRANSFERRED|PAUSED⇄STUDYING|CANCELLED} — ⚠️ **chưa có transition guard** (xem ERD-review H4).
-- `SessionStatus`: SCHEDULED→IN_PROGRESS→COMPLETED|CANCELLED — ⚠️ start không check status.
+- `EnrollmentStatus`: PENDING→CONFIRMED→STUDYING→{COMPLETED|WITHDREW|TRANSFERRED|PAUSED⇄STUDYING|CANCELLED} — ✅ **đã có transition guard** (`lib/enrollments/status.ts` nối `enrollments/_actions.ts:526`; ERD-H4 DONE).
+- `SessionStatus`: SCHEDULED→IN_PROGRESS→COMPLETED|CANCELLED — ✅ **guard** `canStartSession`/`canCompleteSession` (`lib/sessions/status.ts` nối `sessions/[id]/_actions.ts:227,243`).
 - `AssignmentSubmission`: NOT_SUBMITTED→SUBMITTED→LATE→GRADED.
 - `ExamAttempt`: IN_PROGRESS→SUBMITTED→GRADED→~~REVIEWED~~ (**state chết, không code nào set**).
 - `ReportCard`: DRAFT→PENDING_REVIEW→PUBLISHED→RECALLED→PENDING_REVIEW — ✅ guard đầy đủ.
@@ -100,7 +102,9 @@
 
 ## Lỗ hổng "looks done, isn't" (doc nói xong nhưng thực tế dở)
 
-1. Điểm danh/chấm điểm/completeSession/sửa câu hỏi — **không scope** (rủi ro bảo mật).
+> 🔄 Re-sync 2026-06-18: mục 1 đã thu hẹp — `completeSession` (LMS-3) nay scope theo cơ sở; còn lại **điểm danh/chấm điểm/sửa câu hỏi vẫn role-only** (LMS-1/2/4 OPEN).
+
+1. Điểm danh/chấm điểm/sửa câu hỏi — **không scope** (LMS-1/2/4, rủi ro bảo mật). ~~completeSession~~ đã vá (cơ sở; còn hở cấp-lớp).
 2. `ClassProgramSnapshot` — **model không tồn tại** (doc §0,§6 ghi sai).
 3. Thi lại — **chặn cứng**, `maxAttempts` field chết.
 4. SCORM — **không ghi điểm/hoàn thành** về HV.
