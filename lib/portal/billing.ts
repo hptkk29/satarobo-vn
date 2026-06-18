@@ -27,7 +27,7 @@ export async function getParentOrders(parentUserId: string): Promise<OrderRow[]>
   if (childIds.length === 0) return [];
 
   const orders = await db.order.findMany({
-    where: { studentId: { in: childIds } },
+    where: { studentId: { in: childIds }, deletedAt: null }, // FIX-C3
     select: {
       id: true,
       code: true,
@@ -102,7 +102,8 @@ export async function getParentConfirmedPayments(
   const payments = await client.payment.findMany({
     where: {
       accountantStatus: "CONFIRMED",
-      enrollment: { studentId: { in: childIds } },
+      deletedAt: null, // FIX-C3
+      enrollment: { studentId: { in: childIds }, deletedAt: null },
     },
     select: {
       id: true,
@@ -115,7 +116,8 @@ export async function getParentConfirmedPayments(
       order: { select: { code: true } },
       enrollment: { select: { student: { select: { name: true } } } },
       receipts: {
-        where: { status: "ACTIVE" },
+        where: { status: "ACTIVE", deletedAt: null }, // FIX-C3
+
         select: { code: true },
         orderBy: { issuedAt: "desc" },
         take: 1,

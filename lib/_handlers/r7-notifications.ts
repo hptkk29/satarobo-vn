@@ -15,8 +15,8 @@ export async function onPaymentConfirmed(event: DomainEventLite): Promise<void> 
   const receiptCode = str(event.payload.receiptCode);
   if (!paymentId || !enrollmentId) return;
 
-  const enr = await db.enrollment.findUnique({
-    where: { id: enrollmentId },
+  const enr = await db.enrollment.findFirst({
+    where: { id: enrollmentId, deletedAt: null }, // FIX-C3
     select: { studentId: true, student: { select: { centerId: true } } },
   });
   if (!enr?.studentId) return;

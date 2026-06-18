@@ -56,7 +56,7 @@ export async function getPreSessionInfo(sessionId: string): Promise<PreSessionIn
 
   const [enrollments, absenceGroups, lowFeedback, ungradedRows] = await Promise.all([
     db.enrollment.findMany({
-      where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+      where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST }, deletedAt: null }, // FIX-C3
       select: { student: { select: { id: true, name: true } } },
       orderBy: { student: { name: "asc" } },
     }),

@@ -117,6 +117,7 @@ export async function getDebtRows(
     where: {
       classId: { in: classIds },
       finalPrice: { not: null }, // chỉ ghi danh đã chốt giá (snapshot tại convert R7-05)
+      deletedAt: null, // FIX-C3
       ...(filters?.enrollmentId ? { id: filters.enrollmentId } : {}),
       ...(filters?.studentId ? { studentId: filters.studentId } : {}),
     },
@@ -127,7 +128,8 @@ export async function getDebtRows(
       studentId: true,
       student: { select: { name: true } },
       class: { select: { centerId: true } },
-      payments: { where: { accountantStatus: "CONFIRMED" }, select: { amount: true } },
+      // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa.
+      payments: { where: { accountantStatus: "CONFIRMED", deletedAt: null }, select: { amount: true } },
     },
   });
 
@@ -151,7 +153,7 @@ export async function getOverdueOrders(opts: { olderThanDays?: number; now?: Dat
   const now = opts.now ?? new Date();
   const cutoff = new Date(now.getTime() - (opts.olderThanDays ?? 7) * 86_400_000);
   return db.order.findMany({
-    where: { status: "PENDING_PAYMENT", createdAt: { lt: cutoff } },
+    where: { status: "PENDING_PAYMENT", createdAt: { lt: cutoff }, deletedAt: null }, // FIX-C3
     orderBy: { createdAt: "asc" },
   });
 }

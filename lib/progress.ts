@@ -182,6 +182,7 @@ export async function getClassProgress(
     where: {
       classId,
       status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+      deletedAt: null, // FIX-C3
     },
     select: {
       id: true,
@@ -316,7 +317,7 @@ export async function getClassGradebook(
       orderBy: { assignedAt: "asc" },
     }),
     db.enrollment.findMany({
-      where: { classId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+      where: { classId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] }, deletedAt: null }, // FIX-C3
       select: {
         student: { select: { id: true, name: true, studentCode: true } },
       },

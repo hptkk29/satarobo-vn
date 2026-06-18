@@ -29,6 +29,11 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Huỷ",
 };
 
+// FIX-C4 — map mã lỗi nghiệp vụ từ server action sang thông báo VI.
+const ERROR_MESSAGE: Record<string, string> = {
+  CLASS_FULL: "Lớp đã đầy — vui lòng chọn lớp khác.",
+};
+
 export function EnrollForm({
   students,
   classes,
@@ -67,7 +72,9 @@ export function EnrollForm({
         notes: notes.trim() || undefined,
       });
       if (!res.ok) {
-        setError(res.error);
+        setError(ERROR_MESSAGE[res.error] ?? res.error);
+        // FIX-C4 — refetch sĩ số mới nhất khi lớp đã đầy (race).
+        if (res.error === "CLASS_FULL") router.refresh();
         return;
       }
       router.push("/enrollments");

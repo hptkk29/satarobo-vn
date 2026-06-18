@@ -19,6 +19,10 @@ export const SCOPED_MODELS = new Set<string>([
   "TrialClassV2", // R7-02 — lớp trải nghiệm theo cơ sở
 ]);
 
+// FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
+// để bắt cả read `db` trần. Re-export để call-site/test import từ đây vẫn chạy.
+export { SOFT_DELETE_MODELS, injectSoftDelete } from "@/lib/soft-delete";
+
 /** Có centerId nhưng KHÔNG scope (lý do rõ) — để introspection không báo "miss model". */
 export const SCOPE_EXEMPT = new Set<string>([
   "OrgUnit", // centerId = link Center cũ (hạ tầng tổ chức)
@@ -37,14 +41,114 @@ export const SCOPE_EXEMPT = new Set<string>([
 ]);
 
 function bypassesScope(actor: Actor): boolean {
-  return actor.isSuperAdmin || actor.isHoLevel;
+  return actor.isSuperAdmin;
+}
+
+/** Trả về danh sách tiền tố action (prefix) liên quan đến model. */
+export function getModelPrefixes(model: string): string[] {
+  switch (model) {
+    case "Lead":
+    case "MessengerConversation":
+      return ["leads:"];
+    case "Order":
+      return ["orders:"];
+    case "Payment":
+      return ["payments:"];
+    case "Student":
+    case "StudentCareTask":
+    case "StudentCenterHistory":
+    case "StudentRiskAlert":
+      return ["students:"];
+    case "Class":
+    case "ClassGroup":
+      return ["classes:", "class_group:"];
+    case "TrialClass":
+    case "TrialClassV2":
+    case "MakeupNeed":
+      return ["trials:", "completions:", "classes:"];
+    case "Room":
+      return ["rooms:", "centers:"];
+    case "Holiday":
+      return ["holidays:", "centers:"];
+    case "InventoryAudit":
+    case "StockBalance":
+    case "StockMovement":
+      return ["inventory:"];
+    case "Employee":
+      return ["employees:"];
+    case "EmployeeCheckin":
+    case "ShiftRegistration":
+    case "TimesheetAdjustmentRequest":
+      return ["hr_attendance:"];
+    case "CenterDayChecklist":
+      return ["centers:", "hr_attendance:"];
+    case "Notification":
+      return ["notifications:"];
+    case "SataCoinTransaction":
+      return ["satacoin:"];
+    case "Survey":
+    case "SurveyResponse":
+      return ["parent-feedback:", "khao-sat:"];
+    default:
+      return [];
+  }
+}
+
+/** Trả về danh sách centerId được phép hoặc "ALL" cho model cụ thể của actor. */
+export function getModelVisibleCenterIds(model: string, actor: Actor): "ALL" | string[] {
+  if (actor.isSuperAdmin) return "ALL";
+
+  const prefixes = getModelPrefixes(model);
+  if (prefixes.length === 0) {
+    // Nếu model không được map prefix, fallback về cách xử lý cũ: HO-level xem tất cả, center-level theo visibleCenterIds.
+    return actor.isHoLevel ? "ALL" : actor.visibleCenterIds;
+  }
+
+  const allowedCenters = new Set<string>();
+  let hasAll = false;
+  let hasAnyPermissionForModel = false;
+
+  for (const p of actor.permissions) {
+    if (prefixes.some((prefix) => p.action.startsWith(prefix))) {
+      hasAnyPermissionForModel = true;
+      if (p.centerScope === "ALL") {
+        hasAll = true;
+        break;
+      } else if (Array.isArray(p.centerScope)) {
+        p.centerScope.forEach((c) => allowedCenters.add(c));
+      }
+    }
+  }
+
+  // Check grantsAllow (per-user overrides)
+  for (const action of actor.grantsAllow) {
+    if (prefixes.some((prefix) => action.startsWith(prefix))) {
+      hasAnyPermissionForModel = true;
+      hasAll = true; // per-user grants are global exceptions
+      break;
+    }
+  }
+
+  if (hasAll) return "ALL";
+  if (!hasAnyPermissionForModel) {
+    // scopedDb là cổng CÁCH LY CƠ SỞ (data isolation), KHÔNG phải cổng phân quyền
+    // action — việc cho/cấm action do can() lo. Thiếu action model-specific KHÔNG đồng
+    // nghĩa "không thấy gì"; vẫn lọc theo tầm nhìn cơ sở từ cây OrgUnit:
+    // HO/ROOT → cross-center (ALL); center-level → visibleCenterIds.
+    return actor.isHoLevel ? "ALL" : actor.visibleCenterIds;
+  }
+  return Array.from(allowedCenters);
 }
 
 /** Inject filter centerId vào args (THUẦN — test được). Không scope → trả nguyên args. */
 export function injectScope<A>(model: string, args: A, actor: Actor): A {
   if (!SCOPED_MODELS.has(model) || bypassesScope(actor)) return args;
+
+  const visibleCenters = getModelVisibleCenterIds(model, actor);
+  if (visibleCenters === "ALL") return args;
+
   const a = (args ?? {}) as { where?: unknown };
-  const scopeWhere = { centerId: { in: actor.visibleCenterIds } };
+  const scopeWhere = { centerId: { in: visibleCenters } };
   return { ...a, where: a.where ? { AND: [a.where, scopeWhere] } : scopeWhere } as A;
 }
 
@@ -56,7 +160,11 @@ export function passesScope(
 ): boolean {
   if (!record) return false;
   if (!SCOPED_MODELS.has(model) || bypassesScope(actor)) return true;
-  return record.centerId != null && actor.visibleCenterIds.includes(record.centerId);
+
+  const visibleCenters = getModelVisibleCenterIds(model, actor);
+  if (visibleCenters === "ALL") return true;
+
+  return record.centerId != null && visibleCenters.includes(record.centerId);
 }
 
 /**
@@ -65,7 +173,8 @@ export function passesScope(
  */
 export function scopedDb(actor: Actor, opts?: { bypass?: boolean }) {
   const bypass = opts?.bypass ?? false;
-  // Cả 2 nhánh đi qua $extends để type đồng nhất; bypass chỉ bỏ bước inject.
+  // Chỉ lo SCOPE (cách ly cơ sở). Soft-delete đã được base `db` xử lý cho mọi model
+  // SOFT_DELETE_MODELS (kể cả qua $extends này), nên KHÔNG lặp lại ở đây.
   return db.$extends({
     query: {
       $allModels: {
@@ -85,6 +194,7 @@ export function scopedDb(actor: Actor, opts?: { bypass?: boolean }) {
           return query(bypass ? args : injectScope(model, args, actor));
         },
         async findUnique({ model, args, query }) {
+          // Soft-delete null-filter do base `db` lo; ở đây chỉ chống IDOR theo scope.
           const r = await query(args);
           if (bypass) return r;
           return passesScope(model, r as { centerId?: string | null } | null, actor)

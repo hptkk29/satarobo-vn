@@ -12,7 +12,7 @@ import {
   orderCreateManualSchema,
   orderStatusChangeSchema,
 } from "@/lib/validators/order";
-import { generateOrderCode } from "@/lib/orders/code";
+import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { getRequestMetadata } from "@/lib/audit/headers";
@@ -280,11 +280,14 @@ export async function createOrderManualAction(input: unknown) {
     };
   }
 
-  const code = await generateOrderCode();
   const { actorId, actorName } = getAuditActor(session);
 
-  const created = await db.$transaction(async (tx) => {
-    const order = await tx.order.create({
+  // FIX-C5 — codegen atomic BÊN TRONG tx (`generateOrderCode(tx)`) + retry khi
+  // đụng unique-violation (P2002) như backstop. Cả tx re-run khi retry.
+  const created = await withUniqueRetry(() =>
+    db.$transaction(async (tx) => {
+      const code = await generateOrderCode(tx);
+      const order = await tx.order.create({
       data: {
         code,
         type: data.type,
@@ -380,8 +383,9 @@ export async function createOrderManualAction(input: unknown) {
       }
     }
 
-    return order;
-  });
+      return order;
+    }),
+  );
 
   revalidatePath("/orders");
   if (productSnapshot) {

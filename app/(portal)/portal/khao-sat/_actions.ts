@@ -32,7 +32,7 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
 
   // Gắn center/class/teacher/csm để làm cơ sở KPI.
   const enr = await db.enrollment.findFirst({
-    where: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } },
+    where: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null }, // FIX-C3
     orderBy: { createdAt: "desc" },
     select: { class: { select: { id: true, centerId: true, teacherId: true } } },
   });

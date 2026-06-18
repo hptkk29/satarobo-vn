@@ -19,6 +19,11 @@ import {
 
 type ModalType = "receipt" | "issue" | "transfer" | "adjustment" | null;
 
+// FIX-C4 — map mã lỗi nghiệp vụ từ server action sang thông báo VI.
+const ERROR_MESSAGE: Record<string, string> = {
+  STOCK_INSUFFICIENT: "Không đủ tồn — vui lòng tải lại số liệu và thử lại.",
+};
+
 interface CenterOption {
   id: string;
   name: string;
@@ -223,7 +228,9 @@ function MovementModal({
         }
 
         if (!res.ok) {
-          setError(res.error);
+          setError(ERROR_MESSAGE[res.error] ?? res.error);
+          // FIX-C4 — refetch tồn mới nhất khi không đủ tồn (race).
+          if (res.error === "STOCK_INSUFFICIENT") router.refresh();
           return;
         }
         onClose();

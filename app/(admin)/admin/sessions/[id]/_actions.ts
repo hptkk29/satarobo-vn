@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { enqueueNewFeedback } from "@/lib/email/triggers";
 import { hasRole } from "@/lib/auth/permissions";
+import { canStartSession, canCompleteSession } from "@/lib/sessions/status";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -139,6 +140,7 @@ async function loadSessionForGate(sessionId: string) {
     select: {
       id: true,
       lessonId: true,
+      status: true,
       class: { select: { id: true, teacherId: true, assistantId: true, centerId: true } },
     },
   });
@@ -221,6 +223,10 @@ export async function updateSessionChecklist(input: unknown): Promise<Result> {
 export async function startSession(sessionId: string): Promise<Result> {
   const gate = await loadSessionForGate(sessionId);
   if (!gate.ok) return gate;
+  // FIX-H4 — chỉ bắt đầu được khi đang SCHEDULED. Mã lỗi INVALID_SESSION_STATE.
+  if (!canStartSession(gate.sess.status)) {
+    return { ok: false, error: "INVALID_SESSION_STATE" };
+  }
   await db.classSession.update({
     where: { id: sessionId },
     data: { status: "IN_PROGRESS", startedAt: new Date() },
@@ -233,6 +239,10 @@ export async function startSession(sessionId: string): Promise<Result> {
 export async function completeSession(sessionId: string): Promise<Result> {
   const gate = await loadSessionForGate(sessionId);
   if (!gate.ok) return gate;
+  // FIX-H4 — chỉ hoàn tất được khi đang IN_PROGRESS (chặn re-complete buổi đã xong/hủy).
+  if (!canCompleteSession(gate.sess.status)) {
+    return { ok: false, error: "INVALID_SESSION_STATE" };
+  }
 
   const derived = await deriveSteps(sessionId);
   const sess = await db.classSession.findUnique({
