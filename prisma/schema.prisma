@@ -1144,6 +1144,9 @@ model Student {
   // Phase 5.9 — Reserve history
   reserves StudentReserve[] @relation("StudentReserves")
 
+  // LMS-15 — thread nhắn tin 2 chiều
+  messageThreads MessageThread[] @relation("StudentMessageThreads")
+
   // Phase NHÓM 3 — yêu cầu phụ huynh
   parentRequests    ParentRequest[]          @relation("StudentParentRequests")
   makeupNeeds       MakeupNeed[]
@@ -4958,4 +4961,37 @@ model EvalAnswer {
   valueText    String?      @db.Text
 
   @@index([responseId])
+}
+
+// LMS-15 — Nhắn tin 2 chiều PH ↔ GV/Trung tâm (thread theo học viên).
+model MessageThread {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       Student   @relation("StudentMessageThreads", fields: [studentId], references: [id], onDelete: Cascade)
+  classId       String? // tùy chọn — gắn lớp/GV cụ thể
+  subject       String?
+  createdByUserId String? // người mở thread
+  lastMessageAt DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  messages      Message[]
+
+  @@index([studentId, lastMessageAt])
+  @@index([classId])
+}
+
+model Message {
+  id           String        @id @default(cuid())
+  threadId     String
+  thread       MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderUserId String
+  senderRole   String // "PARENT" | "STAFF" (snapshot phía gửi)
+  senderName   String
+  body         String        @db.Text
+  // Đã đọc bởi phía CÒN LẠI (parentReadAt: PH đã đọc tin của staff; staffReadAt: ngược lại)
+  parentReadAt DateTime?     @db.Timestamptz(6)
+  staffReadAt  DateTime?     @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+
+  @@index([threadId, createdAt])
 }

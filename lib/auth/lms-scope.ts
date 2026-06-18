@@ -34,6 +34,21 @@ export function canManageClass(
 }
 
 /**
+ * LMS-15 — staff được truy cập dữ liệu/HV này không (cho nhắn tin):
+ * quản lý cùng cơ sở HV, HOẶC GV/trợ giảng dạy 1 trong các lớp của HV.
+ */
+export function canStaffAccessStudent(
+  actor: Actor,
+  opts: { studentCenterId: string | null; studentClassIds: string[] },
+): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  if (isManagerActor(actor)) {
+    return !!opts.studentCenterId && actor.visibleCenterIds.includes(opts.studentCenterId);
+  }
+  return opts.studentClassIds.some((c) => actor.assignedClassIds.has(c));
+}
+
+/**
  * LMS-2 — actor được chấm 1 bài làm/bài thi không?
  * - Có lớp (assignment.classId / exam.classId): theo canManageClass.
  * - Không có lớp (exam ngân hàng dùng chung): chỉ quản lý cùng cơ sở của HV.
