@@ -8,8 +8,11 @@ import { db } from "@/lib/db";
 import { attendanceSummary } from "@/lib/attendance/summary";
 import {
   computeAttendanceRate,
+  computeAssignmentSummary,
   computeExamAverage,
+  latestSkillLevels,
   parsePublishedSnapshot,
+  type AssignmentSubmissionLite,
   type ExamAttemptLite,
   type ReportCardMetrics,
   type PublishedReportCardView,
@@ -28,6 +31,8 @@ export async function computeReportCardMetrics(enrollmentId: string): Promise<Re
   const att = await attendanceSummary(enrollmentId);
 
   let attempts: ExamAttemptLite[] = [];
+  let submissions: AssignmentSubmissionLite[] = [];
+  let skills: { skill: string; level: string; assessedAt: string }[] = [];
   if (enr) {
     const rows = await db.examAttempt.findMany({
       where: {
@@ -42,11 +47,35 @@ export async function computeReportCardMetrics(enrollmentId: string): Promise<Re
       totalPoints: r.exam.totalPoints,
       passed: r.passed,
     }));
+
+    // LMS-13 (W4-a): bài tập của học viên trong lớp (qua Assignment.classId).
+    const subRows = await db.assignmentSubmission.findMany({
+      where: { studentId: enr.studentId, assignment: { classId: enr.classId } },
+      select: { status: true, score: true, assignment: { select: { totalPoints: true } } },
+    });
+    submissions = subRows.map((s) => ({
+      status: s.status,
+      score: s.score,
+      totalPoints: s.assignment.totalPoints,
+    }));
+
+    // LMS-13 (W4-a): kỹ năng robot — bản đánh giá mới nhất mỗi kỹ năng.
+    const skillRows = await db.studentSkillAssessment.findMany({
+      where: { studentId: enr.studentId },
+      select: { skill: true, level: true, assessedAt: true },
+    });
+    skills = skillRows.map((r) => ({
+      skill: r.skill,
+      level: r.level,
+      assessedAt: r.assessedAt.toISOString(),
+    }));
   }
 
   return {
     attendance: { ...att, rate: computeAttendanceRate(att) },
     exams: computeExamAverage(attempts),
+    assignments: computeAssignmentSummary(submissions),
+    skills: latestSkillLevels(skills),
     computedAt: new Date().toISOString(),
   };
 }
