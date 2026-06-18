@@ -114,9 +114,10 @@
 **Fix:** `lib/lms/report-card.ts` gộp thêm `AssignmentSubmission` (avg/đạt) + `StudentSkillAssessment` (level) vào metrics + snapshot.
 **File:** `lib/lms/report-card.ts:23`.
 
-## LMS-14 · SCORM ghi điểm/hoàn thành 🟡
+## LMS-14 · SCORM ghi điểm/hoàn thành 🟡 — ⏸️ DEFER (có lý do, 2026-06-18)
 **Vấn đề:** chỉ log mở (`ScormAccessLog`), **không runtime API** → không ghi điểm/completion về HV.
-**Fix:** thêm SCORM runtime (`LMSInitialize/SetValue cmi.core.score/LMSCommit/Finish`) + model `ScormAttempt(score, completion, suspendData)`; nối vào tiến độ/học bạ.
+**Quyết định DEFER (P4):** player SCORM hiện CHỈ ở `app/(admin)/admin/scorm/play/[id]` — admin/GV quản lý/xem, **KHÔNG có lối vào cho học viên**. Học online của HV → **SataWorld** (Doc 15 §0: "không build video LMS"). Vì vậy "ghi điểm về HV" chưa có flow để gắn; xây runtime per-student lúc này = xây cho luồng chưa tồn tại + nghịch scope. **Mở lại khi** quyết định cho HV làm SCORM tự host.
+**Fix (khi cần):** SCORM 1.2 runtime (`window.API`: `LMSInitialize/SetValue cmi.core.score/LMSCommit/Finish`) inject vào parent của iframe player + model `ScormAttempt(score, completion, suspendData)` + endpoint `/api/scorm/runtime` (xác thực qua launch ticket HMAC sẵn có) + lối vào portal HV.
 **File:** `lib/scorm/*`, `app/api/scorm/*`.
 
 ## LMS-15 · Nhắn 2 chiều PH↔GV 🟡
