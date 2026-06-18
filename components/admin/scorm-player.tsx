@@ -5,9 +5,10 @@
 //   • blur overlay khi rời tab / mất focus / nhấn PrintScreen (giảm chụp màn hình).
 //   • watermark canvas {employeeCode · name · HH:mm:ss} đổi vị trí 15-30s +
 //     MutationObserver tự khôi phục nếu bị xoá/sửa qua DevTools.
-//   • stub window.API / window.API_1484_11 no-op (SCORM không tracking — fail-open).
+//   • window.API = adapter SCORM 1.2 (delivery tracking GV) — seed resume + POST runtime.
 // Mọi hiệu ứng bảo vệ FAIL-OPEN: lỗi JS không được chặn việc dạy học.
 import { useEffect, useRef, useState } from "react";
+import { mountScorm12Api, type ScormSeed } from "@/components/admin/scorm-api";
 
 interface ScormPlayerProps {
   launchTicket: string;
@@ -16,6 +17,14 @@ interface ScormPlayerProps {
   packageName: string;
   name: string;
   employeeCode: string;
+  /** Gói + buổi để adapter POST /api/scorm/runtime (learner = GV, KHÔNG HV). */
+  packageId: string;
+  classSessionId: string | null;
+  /** Dữ liệu resume từ ScormAttempt của GV (bookmark + suspend + trạng thái). */
+  seed: ScormSeed;
+  /** Nhãn trạng thái giảng hiện tại (resume) + lần mở gần nhất — hiển thị cho GV. */
+  statusLabel?: string;
+  lastAccessedLabel?: string;
 }
 
 /** Build src iframe: mã hoá từng segment, đính vé vào query. */
@@ -44,45 +53,51 @@ export function ScormPlayer({
   packageName,
   name,
   employeeCode,
+  packageId,
+  classSessionId,
+  seed,
+  statusLabel,
+  lastAccessedLabel,
 }: ScormPlayerProps) {
   const [blurred, setBlurred] = useState(false);
   const wmRef = useRef<HTMLDivElement | null>(null);
   const src = buildAssetSrc(launchUrl, launchTicket);
   const label = `${employeeCode}${employeeCode ? " · " : ""}${name}`.trim();
 
-  // Stub SCORM API no-op (nội dung tìm window.parent.API/API_1484_11) — không tracking.
+  // SCORM 1.2 API adapter: set window.API TRƯỚC khi iframe content chạy LMSInitialize
+  // (iframe load qua mạng → chậm hơn effect này). Seed resume + POST runtime trên Commit/
+  // Finish/unload. learner = GV; KHÔNG ghi điểm/tiến độ HV.
   useEffect(() => {
+    const teardown = mountScorm12Api({
+      packageId,
+      classSessionId,
+      seed,
+      learnerId: employeeCode || "",
+      learnerName: name || "",
+    });
+    // Gói SCORM 2004 (API_1484_11): giữ stub no-op fail-open như trước — runtime tracking
+    // chỉ làm cho SCORM 1.2; 2004 không được để thiếu API kẻo content treo.
     try {
-      const noop = () => "true";
-      const empty = () => "";
-      const ok = () => "0";
-      const api12 = {
-        LMSInitialize: noop,
-        LMSFinish: noop,
-        LMSGetValue: empty,
-        LMSSetValue: noop,
-        LMSCommit: noop,
-        LMSGetLastError: ok,
-        LMSGetErrorString: empty,
-        LMSGetDiagnostic: empty,
-      };
-      const api2004 = {
-        Initialize: noop,
-        Terminate: noop,
-        GetValue: empty,
-        SetValue: noop,
-        Commit: noop,
-        GetLastError: ok,
-        GetErrorString: empty,
-        GetDiagnostic: empty,
-      };
       const w = window as unknown as Record<string, unknown>;
-      if (!w.API) w.API = api12;
-      if (!w.API_1484_11) w.API_1484_11 = api2004;
+      if (!w.API_1484_11) {
+        const noop = () => "true";
+        const empty = () => "";
+        w.API_1484_11 = {
+          Initialize: noop,
+          Terminate: noop,
+          GetValue: empty,
+          SetValue: noop,
+          Commit: noop,
+          GetLastError: () => "0",
+          GetErrorString: empty,
+          GetDiagnostic: empty,
+        };
+      }
     } catch {
       /* fail-open */
     }
-  }, []);
+    return teardown;
+  }, [packageId, classSessionId, seed, employeeCode, name]);
 
   // Blur overlay khi rời tab / mất focus / PrintScreen.
   useEffect(() => {
@@ -182,11 +197,19 @@ export function ScormPlayer({
 
   return (
     <div className="flex h-[calc(100vh-2rem)] flex-col gap-3 p-2">
-      <div className="flex items-center justify-between px-1">
+      <div className="flex items-center justify-between gap-2 px-1">
         <h1 className="truncate text-sm font-medium text-foreground">
           {packageName}
         </h1>
-        <span className="text-xs text-muted-foreground">SCORM</span>
+        <div className="flex shrink-0 items-center gap-2 text-xs">
+          {statusLabel ? (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+              Giảng: {statusLabel}
+              {lastAccessedLabel ? ` · ${lastAccessedLabel}` : ""}
+            </span>
+          ) : null}
+          <span className="text-muted-foreground">SCORM</span>
+        </div>
       </div>
 
       <div className="relative flex-1 overflow-hidden rounded-md border border-border bg-black">

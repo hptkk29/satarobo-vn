@@ -18,7 +18,7 @@ export default async function ScormPage() {
 
   // ScormPackage/Lesson không center-scoped → scopedDb pass-through (đúng rule R6-F1).
   const sdb = scopedDb(await resolveActor(session.user.id));
-  const [packages, lessons] = await Promise.all([
+  const [packages, lessons, attempts] = await Promise.all([
     sdb.scormPackage.findMany({
       orderBy: [{ lessonId: "asc" }, { version: "desc" }],
       select: {
@@ -41,21 +41,47 @@ export default async function ScormPage() {
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       select: { id: true, title: true, order: true, curriculum: { select: { name: true } } },
     }),
+    // Theo dõi GV đã giảng (delivery) — learner = GV, KHÔNG đụng HV. desc để lấy gần nhất.
+    sdb.scormAttempt.findMany({
+      select: { packageId: true, userId: true, completion: true, lastAccessedAt: true },
+      orderBy: { lastAccessedAt: "desc" },
+    }),
   ]);
 
-  const rows: PackageRow[] = packages.map((p) => ({
-    id: p.id,
-    name: p.name,
-    status: p.status,
-    version: p.version,
-    scormVersion: p.scormVersion,
-    isActiveForLesson: p.isActiveForLesson,
-    sizeBytes: p.sizeBytes,
-    fileCount: p.fileCount,
-    error: p.error,
-    lessonId: p.lessonId,
-    lessonLabel: `${p.lesson.curriculum.name} · Buổi ${p.lesson.order}: ${p.lesson.title}`,
-  }));
+  // Gộp delivery theo gói: số GV đã giảng (distinct) + completion gần nhất.
+  const COMPLETION_VI: Record<string, string> = {
+    NOT_ATTEMPTED: "Chưa mở",
+    INCOMPLETE: "Đang giảng dở",
+    COMPLETED: "Đã hoàn tất",
+    PASSED: "Đạt",
+    FAILED: "Chưa đạt",
+    BROWSED: "Đã xem qua",
+  };
+  const deliveryByPkg = new Map<string, { teachers: Set<string>; latest: string }>();
+  for (const a of attempts) {
+    const d = deliveryByPkg.get(a.packageId) ?? { teachers: new Set(), latest: a.completion };
+    d.teachers.add(a.userId); // attempts đã sort desc → latest là phần tử đầu gặp
+    deliveryByPkg.set(a.packageId, d);
+  }
+
+  const rows: PackageRow[] = packages.map((p) => {
+    const d = deliveryByPkg.get(p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      version: p.version,
+      scormVersion: p.scormVersion,
+      isActiveForLesson: p.isActiveForLesson,
+      sizeBytes: p.sizeBytes,
+      fileCount: p.fileCount,
+      error: p.error,
+      lessonId: p.lessonId,
+      lessonLabel: `${p.lesson.curriculum.name} · Buổi ${p.lesson.order}: ${p.lesson.title}`,
+      deliveredTeacherCount: d ? d.teachers.size : 0,
+      deliveryStatusLabel: d ? COMPLETION_VI[d.latest] ?? d.latest : null,
+    };
+  });
 
   const lessonOptions: LessonOption[] = lessons.map((l) => ({
     id: l.id,

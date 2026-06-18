@@ -4376,11 +4376,45 @@ model ScormPackage {
 
   lesson     Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   accessLogs ScormAccessLog[]
+  attempts   ScormAttempt[] // LMS-14 — theo dõi GV giảng (KHÔNG ghi điểm HV)
 
   // 1 active duy nhất mỗi buổi: PARTIAL unique `(lessonId) WHERE isActiveForLesson`
   // tạo bằng raw SQL trong migration (Prisma không khai báo partial index native).
   @@index([lessonId])
   @@index([status])
+}
+
+// LMS-14 — Theo dõi GIÁO VIÊN hoàn thành GIẢNG tài liệu SCORM (delivery tracking).
+// LEARNER = GV/staff đang xem để giảng, KHÔNG phải HV (HV không xem SCORM — yêu cầu chốt).
+// KHÔNG nối học bạ HV. Lưu cmi (SCORM 1.2 runtime) để resume + ghi nhận đã giảng.
+enum ScormCompletion {
+  NOT_ATTEMPTED
+  INCOMPLETE
+  COMPLETED
+  PASSED
+  FAILED
+  BROWSED
+}
+
+model ScormAttempt {
+  id             String          @id @default(cuid())
+  packageId      String
+  package        ScormPackage    @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  userId         String // GV/staff (người giảng) — KHÔNG phải studentId
+  classSessionId String? // buổi giảng (nếu mở từ buổi); null = xem ngoài buổi
+  completion     ScormCompletion @default(NOT_ATTEMPTED) // map từ cmi.core.lesson_status
+  scoreRaw       Float? // cmi.core.score.raw (self-check của GV, không phải điểm HV)
+  lessonLocation String?         @db.Text // cmi.core.lesson_location (bookmark)
+  suspendData    String?         @db.Text // cmi.suspend_data (resume)
+  totalTimeSec   Int             @default(0) // tổng thời gian tích lũy (giây)
+  sessionCount   Int             @default(0) // số lần mở
+  lastAccessedAt DateTime        @default(now()) @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+
+  @@index([packageId])
+  @@index([userId])
+  @@index([classSessionId])
 }
 
 model ScormAccessLog {
