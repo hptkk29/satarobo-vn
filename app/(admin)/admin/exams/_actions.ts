@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, getEffectiveRoles } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { canGradeForClass } from "@/lib/auth/lms-scope";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { z } from "zod";
 import {
@@ -523,10 +525,29 @@ export async function gradeAttempt(attemptId: string): Promise<Result> {
           },
         },
       },
-      exam: { select: { id: true, passingScore: true } },
+      exam: {
+        select: {
+          id: true,
+          passingScore: true,
+          classId: true,
+          class: { select: { centerId: true } },
+        },
+      },
+      student: { select: { centerId: true } },
     },
   });
   if (!attempt) return { ok: false, error: "Không tìm thấy bài làm" };
+  // LMS-2 — owner-scope: chỉ GV phụ trách / quản lý cùng cơ sở mới chấm.
+  const actor = await resolveActor(gate.userId);
+  if (
+    !canGradeForClass(actor, {
+      classId: attempt.exam.classId,
+      classCenterId: attempt.exam.class?.centerId ?? null,
+      studentCenterId: attempt.student?.centerId ?? null,
+    })
+  ) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài thi này" };
+  }
   if (attempt.status === "IN_PROGRESS") {
     return { ok: false, error: "Bài làm chưa được nộp (IN_PROGRESS)" };
   }
@@ -614,9 +635,29 @@ export async function manualGradeAnswer(
 
   const ans = await db.examAnswer.findUnique({
     where: { id: parsed.data.examAnswerId },
-    select: { examQuestion: { select: { points: true } }, attemptId: true },
+    select: {
+      examQuestion: { select: { points: true } },
+      attemptId: true,
+      attempt: {
+        select: {
+          exam: { select: { classId: true, class: { select: { centerId: true } } } },
+          student: { select: { centerId: true } },
+        },
+      },
+    },
   });
   if (!ans) return { ok: false, error: "Không tìm thấy bài trả lời" };
+  // LMS-2 — owner-scope: chỉ GV phụ trách / quản lý cùng cơ sở mới chấm.
+  const actor = await resolveActor(gate.userId);
+  if (
+    !canGradeForClass(actor, {
+      classId: ans.attempt?.exam?.classId ?? null,
+      classCenterId: ans.attempt?.exam?.class?.centerId ?? null,
+      studentCenterId: ans.attempt?.student?.centerId ?? null,
+    })
+  ) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài thi này" };
+  }
   if (parsed.data.score > ans.examQuestion.points) {
     return {
       ok: false,

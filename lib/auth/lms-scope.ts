@@ -32,3 +32,19 @@ export function canManageClass(
   if (!passesScope("Class", { centerId: classCenterId }, actor)) return false;
   return isManagerActor(actor) || actor.assignedClassIds.has(classId);
 }
+
+/**
+ * LMS-2 — actor được chấm 1 bài làm/bài thi không?
+ * - Có lớp (assignment.classId / exam.classId): theo canManageClass.
+ * - Không có lớp (exam ngân hàng dùng chung): chỉ quản lý cùng cơ sở của HV.
+ */
+export function canGradeForClass(
+  actor: Actor,
+  opts: { classId: string | null; classCenterId: string | null; studentCenterId?: string | null },
+): boolean {
+  if (opts.classId) return canManageClass(actor, opts.classId, opts.classCenterId);
+  return (
+    isManagerActor(actor) &&
+    passesScope("Student", { centerId: opts.studentCenterId ?? null }, actor)
+  );
+}

@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, assertCan } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { canManageClass } from "@/lib/auth/lms-scope";
 import { z } from "zod";
 import {
   assignmentSchema,
@@ -396,9 +398,24 @@ export async function gradeSubmission(
 
   const submission = await db.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
-    include: { assignment: { select: { totalPoints: true } } },
+    include: {
+      assignment: {
+        select: { totalPoints: true, classId: true, class: { select: { centerId: true } } },
+      },
+    },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  // LMS-2 — owner-scope: chỉ GV phụ trách / quản lý cùng cơ sở mới chấm.
+  const actor = await resolveActor(gate.userId);
+  if (
+    !canManageClass(
+      actor,
+      submission.assignment.classId,
+      submission.assignment.class?.centerId ?? null,
+    )
+  ) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
   if (submission.status === "NOT_SUBMITTED") {
     return { ok: false, error: "HS chưa nộp — không thể chấm" };
   }
@@ -713,11 +730,24 @@ export async function gradeSubmissionRubric(
   const submission = await db.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
     include: {
-      assignment: { select: { title: true } },
+      assignment: {
+        select: { title: true, classId: true, class: { select: { centerId: true } } },
+      },
       student: { select: { name: true, parentUser: { select: { email: true, name: true } } } },
     },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  // LMS-2 — owner-scope: chỉ GV phụ trách / quản lý cùng cơ sở mới chấm.
+  const actor = await resolveActor(gate.userId);
+  if (
+    !canManageClass(
+      actor,
+      submission.assignment.classId,
+      submission.assignment.class?.centerId ?? null,
+    )
+  ) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
   if (submission.status === "NOT_SUBMITTED") {
     return { ok: false, error: "HS chưa nộp — không thể chấm" };
   }
