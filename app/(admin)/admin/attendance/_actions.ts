@@ -7,6 +7,8 @@ import { z } from "zod";
 import { createMakeupNeed } from "@/lib/makeup/service";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
+import { resolveActor } from "@/lib/auth/actor";
+import { canManageClass } from "@/lib/auth/lms-scope";
 
 type ActionResult = { error?: string; saved?: number };
 
@@ -40,6 +42,26 @@ async function requireTeacherOrAdmin() {
   return session.user;
 }
 
+/**
+ * LMS-1 — owner-scope: actor được điểm danh/sửa điểm danh của lớp chứa `sessionId`?
+ * (cơ sở actor + quản lý HOẶC GV phụ trách). Trả classId để dùng lại.
+ */
+async function assertCanManageSession(
+  userId: string,
+  sessionId: string,
+): Promise<{ ok: true; classId: string } | { ok: false; error: string }> {
+  const sess = await db.classSession.findUnique({
+    where: { id: sessionId },
+    select: { classId: true, class: { select: { centerId: true } } },
+  });
+  if (!sess) return { ok: false, error: "Không tìm thấy buổi học" };
+  const actor = await resolveActor(userId);
+  if (!canManageClass(actor, sess.classId, sess.class?.centerId ?? null)) {
+    return { ok: false, error: "Bạn không phụ trách lớp của buổi học này" };
+  }
+  return { ok: true, classId: sess.classId };
+}
+
 export async function markAttendance(
   sessionId: string,
   records: Array<{
@@ -50,8 +72,9 @@ export async function markAttendance(
     absenceReason?: string | null;
   }>,
 ): Promise<ActionResult> {
+  let user;
   try {
-    await requireTeacherOrAdmin();
+    user = await requireTeacherOrAdmin();
   } catch {
     return { error: "Không có quyền điểm danh" };
   }
@@ -62,6 +85,10 @@ export async function markAttendance(
   }
 
   const data = parsed.data;
+
+  // LMS-1 — chỉ GV phụ trách / quản lý cùng cơ sở mới điểm danh buổi này.
+  const scope = await assertCanManageSession(user.id, data.sessionId);
+  if (!scope.ok) return { error: scope.error };
 
   // Upsert each — composite unique key sessionId_studentId.
   // Wrap in $transaction so a mid-batch failure rolls back the entire save
@@ -140,10 +167,21 @@ export async function markAttendance(
 }
 
 export async function deleteAttendance(id: string): Promise<ActionResult> {
+  let user;
   try {
-    await requireTeacherOrAdmin();
+    user = await requireTeacherOrAdmin();
   } catch {
     return { error: "Không có quyền" };
+  }
+  // LMS-1 — owner-scope: bản ghi điểm danh thuộc lớp actor phụ trách?
+  const att = await db.attendance.findUnique({
+    where: { id },
+    select: { session: { select: { classId: true, class: { select: { centerId: true } } } } },
+  });
+  if (!att?.session) return { error: "Không tìm thấy bản ghi" };
+  const actor = await resolveActor(user.id);
+  if (!canManageClass(actor, att.session.classId, att.session.class?.centerId ?? null)) {
+    return { error: "Bạn không phụ trách lớp của bản ghi này" };
   }
   try {
     await db.attendance.delete({ where: { id } });

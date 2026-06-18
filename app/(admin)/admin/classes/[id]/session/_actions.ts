@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { isManagerActor } from "@/lib/auth/lms-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { completeSession, type CompleteSessionResult } from "@/lib/lms/session-lifecycle";
@@ -53,6 +54,12 @@ export async function completeSessionAction(
   const actor = await resolveActor(session.user.id);
   const sc = await resolveSessionScope(actor, sessionId);
   if (!sc.ok) return { ok: false, error: sc.error };
+
+  // LMS-3 — ownership cấp-lớp: GV phụ trách đúng lớp này, hoặc quản lý/SUPER_ADMIN/HO
+  // (không chỉ cùng cơ sở). Khớp mẫu assignSessionHomeworkAction.
+  if (!isManagerActor(actor) && !actor.assignedClassIds.has(sc.classId)) {
+    return { ok: false, error: "Chỉ giáo viên phụ trách lớp này mới hoàn tất được buổi" };
+  }
 
   const { actorId, actorName } = getAuditActor(session);
 
