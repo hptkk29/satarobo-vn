@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, EnrollmentStatus } from "@prisma/client";
 import { can, hasAnyRole, type Action } from "@/lib/auth/permissions";
 import { centerIdForOrgUnit, orgUnitIdForCenter } from "@/lib/org/org-service";
 import { classCreateSchema } from "@/lib/validators/class";
@@ -13,6 +13,8 @@ import {
   detectChangedFields,
   getAuditActor,
 } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
+import { canTransition } from "@/lib/enrollments/status";
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { generateClassSessions } from "@/lib/classes/generate";
@@ -608,5 +610,168 @@ export async function applyClassReschedule(classId: string): Promise<WfResult> {
   }
   revalidatePath(`/classes/${classId}/edit`);
   revalidatePath("/sessions");
+  return { ok: true };
+}
+
+// ─── Module Quản lý lớp PHẦN 3 — HỦY LỚP đúng nghĩa (LMS-10 / W3-2) ───────────
+
+/** Trạng thái enrollment "còn sống" trong 1 lớp — sẽ bị rút về WITHDREW khi hủy lớp. */
+const LIVE_ENROLLMENT_STATUSES = [
+  "CONFIRMED",
+  "STUDYING",
+  "ACTIVE",
+  "PAUSED",
+] as const;
+
+/**
+ * LMS-10 / W3-2 — HỦY LỚP đúng nghĩa (khác `deleteClass` chỉ soft-delete và để lại
+ * enrollment/buổi học mồ côi). Trong 1 transaction:
+ *   a) Class.status = CANCELLED.
+ *   b) Mọi enrollment còn sống (CONFIRMED/STUDYING/ACTIVE/PAUSED) → WITHDREW
+ *      (transition HỢP LỆ theo state machine `lib/enrollments/status.ts`; guard
+ *      `canTransition` để chắc). Ghi `enrollmentAuditLog` + `writeAudit` hợp nhất
+ *      cho từng cái. KHÔNG hard-delete (FK RESTRICT).
+ *   c) Buổi học tương lai (date >= hôm nay, SCHEDULED/IN_PROGRESS) → CANCELLED.
+ *   d) Phát DomainEvent `class.cancelled` → handler thông báo PH/GV (idempotent,
+ *      không external call trực tiếp).
+ * `reason` BẮT BUỘC (≥5 ký tự).
+ */
+export async function cancelClassAction(
+  classId: string,
+  reason: string,
+): Promise<WfResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  // Tái dùng quyền `classes:edit` (giống reschedule / generate sessions).
+  if (!can(session.user, "classes:edit")) {
+    return { ok: false, error: "Không có quyền hủy lớp" };
+  }
+
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < 5) {
+    return { ok: false, error: "Nhập lý do hủy lớp (≥5 ký tự)" };
+  }
+
+  const cls = await db.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { id: true, name: true, status: true, centerId: true },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+  if (cls.status === "CANCELLED") {
+    return { ok: false, error: "Lớp đã ở trạng thái đã hủy" };
+  }
+  if (cls.status === "COMPLETED") {
+    return { ok: false, error: "Lớp đã hoàn thành — không thể hủy" };
+  }
+
+  const liveEnrollments = await db.enrollment.findMany({
+    where: {
+      classId,
+      deletedAt: null,
+      status: { in: [...LIVE_ENROLLMENT_STATUSES] },
+    },
+    select: { id: true, status: true },
+  });
+
+  const { actorId, actorName } = getAuditActor(session);
+  const changedByUserId = session.user.id ?? null;
+  const changedByName = session.user.name ?? session.user.email ?? "Unknown";
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const withdrawReason = `[Hủy lớp] ${trimmedReason}`;
+
+  try {
+    await db.$transaction(async (tx) => {
+      // a) Lớp → CANCELLED.
+      await tx.class.update({
+        where: { id: classId },
+        data: { status: "CANCELLED" },
+      });
+
+      // b) Rút mọi enrollment còn sống về WITHDREW (guard state machine).
+      for (const enr of liveEnrollments) {
+        // canTransition luôn true với 4 trạng thái LIVE ở trên → WITHDREW; giữ guard
+        // cho chắc nếu danh sách LIVE đổi về sau.
+        if (!canTransition(enr.status as EnrollmentStatus, "WITHDREW")) continue;
+
+        await tx.enrollment.update({
+          where: { id: enr.id },
+          data: { status: "WITHDREW", endedAt: now },
+        });
+
+        // TODO(W3-1 deferred): nối RefundRequest/refund khi có model (chờ ERD)
+
+        await tx.enrollmentAuditLog.create({
+          data: {
+            enrollmentId: enr.id,
+            fromStatus: enr.status,
+            toStatus: "WITHDREW",
+            changedByUserId,
+            changedByName,
+            reason: withdrawReason,
+          },
+        });
+        // AuditLog hợp nhất cho viewer chung (atomic).
+        await writeAudit({
+          actor: { id: actorId, name: actorName },
+          module: "enrollment",
+          entityType: "Enrollment",
+          entityId: enr.id,
+          action: "STATUS_CHANGE",
+          oldValues: { status: enr.status },
+          newValues: { status: "WITHDREW" },
+          reason: withdrawReason,
+          orgUnitId: cls.centerId,
+          tx,
+        });
+      }
+
+      // c) Buổi học tương lai (chưa diễn ra) → CANCELLED. Giữ nguyên buổi đã
+      //    COMPLETED/CANCELLED và buổi quá khứ.
+      await tx.classSession.updateMany({
+        where: {
+          classId,
+          date: { gte: todayStart },
+          status: { in: ["SCHEDULED", "IN_PROGRESS"] },
+        },
+        data: { status: "CANCELLED" },
+      });
+
+      // Audit cho chính lớp (logClassAudit chỉ có CREATE/UPDATE/DELETE → UPDATE).
+      await logClassAudit({
+        classId,
+        action: "UPDATE",
+        actorId,
+        actorName,
+        oldValues: { status: cls.status },
+        newValues: { status: "CANCELLED" },
+        changedFields: ["status"],
+        reason: trimmedReason,
+        tx,
+      });
+
+      // d) Thông báo PH/GV qua DomainEvent (handler idempotent ở r7-notifications).
+      await publishEvent(
+        "class.cancelled",
+        {
+          classId,
+          reason: trimmedReason,
+          withdrawnCount: liveEnrollments.length,
+        },
+        { tx },
+      );
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi hủy lớp: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/enrollments");
+  revalidatePath("/sessions");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

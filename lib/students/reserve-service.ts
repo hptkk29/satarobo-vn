@@ -44,6 +44,47 @@ export function validateReserveDuration(
   return { ok: true };
 }
 
+/** Một lượt bảo lưu quá hạn (đã quá `expectedEndAt` nhưng chưa kết thúc). */
+export type ExpiredReserve = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  centerId: string | null;
+  expectedEndAt: Date;
+  createdByUserId: string | null;
+};
+
+/**
+ * THUẦN-ish (read-only) — các lượt bảo lưu CÒN HIỆU LỰC nhưng đã quá hạn dự kiến:
+ *   isActive=true (chưa resume/chưa kết thúc, endedAt=null) + expectedEndAt < now.
+ * Dùng cho cron cảnh báo nhân sự phụ trách. KHÔNG tự resume — chỉ liệt kê.
+ */
+export async function findExpiredReserves(now: Date): Promise<ExpiredReserve[]> {
+  const rows = await db.studentReserve.findMany({
+    where: {
+      isActive: true,
+      endedAt: null,
+      expectedEndAt: { not: null, lt: now },
+    },
+    select: {
+      id: true,
+      studentId: true,
+      expectedEndAt: true,
+      createdByUserId: true,
+      student: { select: { name: true, centerId: true } },
+    },
+    take: 1000,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    studentId: r.studentId,
+    studentName: r.student.name,
+    centerId: r.student.centerId,
+    expectedEndAt: r.expectedEndAt!,
+    createdByUserId: r.createdByUserId,
+  }));
+}
+
 /**
  * Duyệt 1 ParentRequest type RESERVE → bảo lưu học viên (atomic).
  * - request phải PENDING + type RESERVE.
