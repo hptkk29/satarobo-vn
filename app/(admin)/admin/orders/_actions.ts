@@ -481,6 +481,8 @@ export async function previewVoucherAction(input: {
 export async function changeOrderStatusAction(
   orderId: string,
   input: unknown,
+  // FIX-H9 — optimistic lock: Order.updatedAt (ISO) client đã thấy. Lệch → STALE_WRITE.
+  expectedUpdatedAt?: string,
 ) {
   const session = await requireOrdersManage();
   const parsed = orderStatusChangeSchema.safeParse(input);
@@ -513,8 +515,9 @@ export async function changeOrderStatusAction(
 
   const { actorId, actorName } = getAuditActor(session);
   const metadata = await getRequestMetadata();
+  const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
 
-  await db.$transaction(async (tx) => {
+  const txResult = await db.$transaction(async (tx) => {
     const updateData: Prisma.OrderUpdateInput = {
       status: parsed.data.toStatus,
     };
@@ -528,7 +531,12 @@ export async function changeOrderStatusAction(
       updateData.paidAt = new Date();
     }
 
-    await tx.order.update({ where: { id: orderId }, data: updateData });
+    // FIX-H9 — ghi có điều kiện updatedAt; 0 row ⇒ người khác vừa sửa → STALE_WRITE.
+    const upd = await tx.order.updateMany({
+      where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
+      data: updateData as Prisma.OrderUpdateManyMutationInput,
+    });
+    if (upd.count === 0) return { stale: true as const };
 
     await tx.orderStatusHistory.create({
       data: {
@@ -541,7 +549,10 @@ export async function changeOrderStatusAction(
         metadata: metadata as unknown as Prisma.InputJsonValue,
       },
     });
+    return { stale: false as const };
   });
+
+  if (txResult.stale) return { ok: false as const, error: "STALE_WRITE" };
 
   revalidatePath("/orders");
   revalidatePath(`/orders/${orderId}`);
@@ -582,6 +593,8 @@ export async function changeOrderStatusAction(
 export async function updateOrderNoteAction(
   orderId: string,
   internalNote: string,
+  // FIX-H9 — optimistic lock: Order.updatedAt (ISO) client đã thấy. Lệch → STALE_WRITE.
+  expectedUpdatedAt?: string,
 ) {
   const session = await requireOrdersManage();
 
@@ -598,10 +611,13 @@ export async function updateOrderNoteAction(
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
 
-  await db.order.update({
-    where: { id: orderId },
+  const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
+  // FIX-H9 — ghi có điều kiện updatedAt; 0 row ⇒ người khác vừa sửa → STALE_WRITE.
+  const upd = await db.order.updateMany({
+    where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
     data: { internalNote: internalNote.trim() || null },
   });
+  if (upd.count === 0) return { ok: false as const, error: "STALE_WRITE" };
 
   revalidatePath(`/orders/${orderId}`);
   return { ok: true as const };

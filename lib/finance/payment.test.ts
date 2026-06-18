@@ -7,6 +7,7 @@ import {
   rejectPayment,
   adjustPayment,
   refundPayment,
+  STALE_WRITE,
 } from "@/lib/finance/payment";
 
 describe("[R7-04] recordPayment guard (AC1)", () => {
@@ -53,3 +54,38 @@ describe("[R7-04] reject/adjust/refund yêu cầu reason (AC3 / C3)", () => {
     if (!r.ok) expect(r.error).toMatch(/Lý do/);
   });
 });
+
+// FIX-H9 — guard reason vẫn fail-fast TRƯỚC khi chạm DB kể cả khi truyền expectedUpdatedAt
+// (param mới là additive, không phá guard cũ). STALE_WRITE export đúng cho FE map.
+describe("[FIX-H9] optimistic lock — additive param không phá guard", () => {
+  it("STALE_WRITE là 'STALE_WRITE' (FE map error.code)", () => {
+    expect(STALE_WRITE).toBe("STALE_WRITE");
+  });
+
+  it("rejectPayment vẫn fail reason rỗng dù có expectedUpdatedAt", async () => {
+    const r = await rejectPayment({
+      paymentId: "p1",
+      confirmedById: "u1",
+      reason: "",
+      expectedUpdatedAt: new Date().toISOString(),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/Lý do/);
+  });
+
+  it("adjustPayment vẫn fail reason rỗng dù có expectedUpdatedAt", async () => {
+    const r = await adjustPayment({
+      paymentId: "p1",
+      confirmedById: "u1",
+      reason: "",
+      expectedUpdatedAt: new Date(),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/Lý do/);
+  });
+});
+
+// NOTE — đường đi idempotency (FIX-H8 confirmPayment) và optimistic-lock thực sự
+// (updateMany count===0 → STALE_WRITE) đều CHẠM DB → phủ ở e2e (tests/e2e/r7), không
+// test thuần ở đây. Kịch bản e2e: (H8) confirm 2 lần cùng idempotencyKey → 1 Receipt;
+// (H9) 2 actor reject/adjust/refund/changeStatus trên cùng updatedAt cũ → request sau STALE_WRITE.
