@@ -43,7 +43,12 @@ export async function computeReportCardMetrics(enrollmentId: string): Promise<Re
           exam: { classId: enr.classId },
           status: { in: [...EXAM_DONE_STATUSES] },
         },
-        select: { totalScore: true, passed: true, exam: { select: { totalPoints: true } } },
+        select: {
+          examId: true,
+          totalScore: true,
+          passed: true,
+          exam: { select: { totalPoints: true } },
+        },
       }),
       // LMS-13 — bài tập của HV trong lớp này.
       db.assignmentSubmission.findMany({
@@ -57,7 +62,13 @@ export async function computeReportCardMetrics(enrollmentId: string): Promise<Re
         select: { skill: true, level: true },
       }),
     ]);
-    attempts = examRows.map((r) => ({
+    // LMS-12 — thi lại: mỗi đề lấy lượt điểm CAO NHẤT (policy mặc định).
+    const bestByExam = new Map<string, (typeof examRows)[number]>();
+    for (const r of examRows) {
+      const prev = bestByExam.get(r.examId);
+      if (!prev || (r.totalScore ?? 0) > (prev.totalScore ?? 0)) bestByExam.set(r.examId, r);
+    }
+    attempts = [...bestByExam.values()].map((r) => ({
       totalScore: r.totalScore,
       totalPoints: r.exam.totalPoints,
       passed: r.passed,

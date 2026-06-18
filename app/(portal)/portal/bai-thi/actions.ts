@@ -58,6 +58,7 @@ export async function startAttempt(
       status: true,
       openAt: true,
       closeAt: true,
+      maxAttempts: true,
       _count: { select: { examQuestions: true } },
     },
   });
@@ -79,19 +80,24 @@ export async function startAttempt(
     return { ok: false, error: "Đề thi đã đóng" };
   }
 
-  const existing = await db.examAttempt.findUnique({
-    where: { examId_studentId: { examId, studentId } },
-    select: { id: true, status: true },
+  // LMS-12 — thi lại tới maxAttempts (null/0 → 1 lần). Đang dở → tiếp tục;
+  // hết lượt → chặn; còn lượt → tạo attempt mới (attemptNo tăng dần).
+  const attempts = await db.examAttempt.findMany({
+    where: { examId, studentId },
+    select: { id: true, status: true, attemptNo: true },
+    orderBy: { attemptNo: "desc" },
   });
-  if (existing) {
-    if (existing.status === "IN_PROGRESS") {
-      return { ok: true, attemptId: existing.id };
-    }
-    return { ok: false, error: "Con đã làm bài thi này rồi" };
+  const inProgress = attempts.find((a) => a.status === "IN_PROGRESS");
+  if (inProgress) return { ok: true, attemptId: inProgress.id };
+
+  const maxAttempts = exam.maxAttempts && exam.maxAttempts > 0 ? exam.maxAttempts : 1;
+  if (attempts.length >= maxAttempts) {
+    return { ok: false, error: `Con đã dùng hết ${maxAttempts} lượt làm bài` };
   }
+  const nextNo = (attempts[0]?.attemptNo ?? 0) + 1;
 
   const created = await db.examAttempt.create({
-    data: { examId, studentId, status: "IN_PROGRESS" },
+    data: { examId, studentId, attemptNo: nextNo, status: "IN_PROGRESS" },
     select: { id: true },
   });
   return { ok: true, attemptId: created.id };

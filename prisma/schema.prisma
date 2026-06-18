@@ -2172,7 +2172,7 @@ enum AttemptStatus {
   IN_PROGRESS
   SUBMITTED
   GRADED
-  REVIEWED
+  REVIEWED // LMS-8: DỰ TRỮ — được đọc như trạng thái "đã xong" nhưng CHƯA flow nào set.
 }
 
 model Exam {
@@ -2241,6 +2241,8 @@ model ExamAttempt {
   studentId String
   student   Student @relation(fields: [studentId], references: [id])
 
+  // LMS-12 — thi lại: nhiều lần làm/HV/đề, đánh số attemptNo (1..maxAttempts).
+  attemptNo   Int       @default(1)
   startedAt   DateTime  @default(now()) @db.Timestamptz(6)
   submittedAt DateTime? @db.Timestamptz(6)
   gradedAt    DateTime? @db.Timestamptz(6)
@@ -2258,7 +2260,7 @@ model ExamAttempt {
   // Phase 5.6 — Order item link
   orderItems OrderItem[] @relation("ExamOrderItems")
 
-  @@unique([examId, studentId])
+  @@unique([examId, studentId, attemptNo])
   @@index([status, examId])
   @@index([studentId])
 }
@@ -2345,6 +2347,8 @@ enum SubmissionStatus {
 }
 
 enum AssignmentKind {
+  // LMS-8: NHÃN HIỂN THỊ thuần — KHÔNG drive logic. Tự-động-giao bài kèm buổi do
+  // model HomeworkAssignment + liên kết Exam↔Lesson lo (R7-14), không bởi kind này.
   CLASSWORK // bài trên lớp
   HOMEWORK // bài tập về nhà
 }
