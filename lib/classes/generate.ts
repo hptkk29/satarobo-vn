@@ -1,6 +1,124 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import {
+  detectScheduleConflict,
+  sessionEndAt,
+  type Slot,
+} from "@/lib/lms/scheduling";
+
+// =============================================================================
+// W2-4 (LMS-6) — nối detectScheduleConflict (THUẦN) vào write-path bằng query DB.
+// Mức độ: CLASS-level GV/phòng (Class.teacherId/roomId + khung giờ lớp). Buổi của
+// LỚP KHÁC cùng GV hoặc cùng phòng có khung giờ giao nhau ⇒ trùng lịch.
+// Default an toàn: thiếu dữ liệu (không GV & không phòng, hoặc lớp không có
+// startTime) ⇒ KHÔNG kết luận trùng (tránh chặn nhầm lớp hợp lệ).
+//
+// TODO(W2-4 deferred): conflict phòng theo TỪNG BUỔI cần cột ClassSession.roomId
+// (schema change — chờ ERD). Hiện chỉ xét phòng cấp Class.
+// =============================================================================
+
+export type ScheduleConflictResult = {
+  teacherConflict: boolean;
+  roomConflict: boolean;
+  conflictIds: string[];
+};
+
+/**
+ * DB-aware: với 1 lớp (teacherId/roomId) + danh sách buổi ứng viên (đã có
+ * startAt/endAt), tìm trùng GV/phòng so với buổi của LỚP KHÁC. Tái dùng
+ * detectScheduleConflict (THUẦN). KHÔNG xét buổi cùng lớp (loại theo classId)
+ * và KHÔNG xét buổi đã CANCELLED.
+ */
+export async function findScheduleConflicts(opts: {
+  classId: string;
+  teacherId: string | null;
+  roomId: string | null;
+  candidates: { id?: string; startAt: Date; endAt: Date }[];
+}): Promise<ScheduleConflictResult> {
+  const { classId, teacherId, roomId, candidates } = opts;
+  const empty: ScheduleConflictResult = {
+    teacherConflict: false,
+    roomConflict: false,
+    conflictIds: [],
+  };
+  // Không có GV lẫn phòng → không thể kết luận trùng → KHÔNG chặn.
+  if ((!teacherId && !roomId) || candidates.length === 0) return empty;
+
+  // Thu hẹp query theo khoảng ngày bao các buổi ứng viên (giờ địa phương).
+  const times = candidates.map((c) => c.startAt.getTime());
+  const lo = new Date(Math.min(...times));
+  const hi = new Date(Math.max(...times));
+  const dayStart = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate());
+  const dayEnd = new Date(hi.getFullYear(), hi.getMonth(), hi.getDate() + 1);
+
+  const rows = await db.classSession.findMany({
+    where: {
+      classId: { not: classId }, // chỉ xét LỚP KHÁC (double-book giữa 2 lớp)
+      status: { not: "CANCELLED" },
+      date: { gte: dayStart, lt: dayEnd },
+      class: {
+        deletedAt: null,
+        // teacherId/roomId là id duy nhất ⇒ khớp đã đảm bảo cùng GV/cùng phòng.
+        OR: [
+          ...(teacherId ? [{ teacherId }] : []),
+          ...(roomId ? [{ roomId }] : []),
+        ],
+      },
+    },
+    select: {
+      id: true,
+      date: true,
+      class: {
+        select: {
+          teacherId: true,
+          roomId: true,
+          startTime: true,
+          endTime: true,
+        },
+      },
+    },
+  });
+
+  // Bỏ qua buổi của lớp không có startTime (date = 00:00 placeholder) — tránh
+  // dương tính giả do trùng "nửa đêm".
+  const existing: Slot[] = rows
+    .filter((r) => r.class?.startTime)
+    .map((r) => ({
+      id: r.id,
+      teacherId: r.class?.teacherId ?? null,
+      roomId: r.class?.roomId ?? null,
+      startAt: r.date,
+      endAt: sessionEndAt(r.date, r.class?.startTime, r.class?.endTime),
+    }));
+  if (existing.length === 0) return empty;
+
+  let teacherConflict = false;
+  let roomConflict = false;
+  const ids = new Set<string>();
+  for (const c of candidates) {
+    const res = detectScheduleConflict(existing, {
+      id: c.id,
+      teacherId,
+      roomId,
+      startAt: c.startAt,
+      endAt: c.endAt,
+    });
+    if (res.teacherConflict) teacherConflict = true;
+    if (res.roomConflict) roomConflict = true;
+    for (const id of res.conflictIds) ids.add(id);
+  }
+  return { teacherConflict, roomConflict, conflictIds: [...ids] };
+}
+
+/** Câu cảnh báo VI từ kết quả conflict (null nếu không trùng). */
+export function scheduleConflictWarning(c: ScheduleConflictResult): string | null {
+  const parts: string[] = [];
+  if (c.teacherConflict) parts.push("trùng lịch giáo viên");
+  if (c.roomConflict) parts.push("trùng phòng");
+  if (parts.length === 0) return null;
+  return `Cảnh báo xếp lịch: ${parts.join(" và ")} với lớp khác ở một số buổi.`;
+}
 
 // =============================================================================
 // P2 — TỰ SINH buổi học cho 1 lớp theo lịch (scheduleDays) + số buổi chuẩn của
@@ -11,7 +129,7 @@ import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 export async function generateClassSessions(
   classId: string,
   opts: { onlyIfEmpty?: boolean } = {},
-): Promise<{ ok: boolean; generated: number; error?: string }> {
+): Promise<{ ok: boolean; generated: number; error?: string; warning?: string }> {
   const onlyIfEmpty = opts.onlyIfEmpty ?? true;
 
   const cls = await db.class.findFirst({
@@ -19,9 +137,12 @@ export async function generateClassSessions(
     select: {
       id: true,
       centerId: true,
+      teacherId: true,
+      roomId: true,
       scheduleDays: true,
       startDate: true,
       startTime: true,
+      endTime: true,
       curriculumId: true,
       course: { select: { id: true, totalSessions: true } },
       // R7-06 — kế hoạch buổi của RIÊNG lớp (nếu đã pin curriculum/snapshot).
@@ -69,8 +190,10 @@ export async function generateClassSessions(
       lessonId: plans[i]?.lessonId ?? null,
     }));
 
+    // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
+    const warning = await warnIfConflict(cls, data);
     await db.classSession.createMany({ data });
-    return { ok: true, generated: data.length };
+    return { ok: true, generated: data.length, ...(warning ? { warning } : {}) };
   }
 
   // ── FALLBACK (lớp cũ, chưa pin): GIỮ NGUYÊN hành vi cũ ─────────────────────
@@ -107,6 +230,34 @@ export async function generateClassSessions(
     lessonId: lessonIds[i] ?? null,
   }));
 
+  // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
+  const warning = await warnIfConflict(cls, data);
   await db.classSession.createMany({ data });
-  return { ok: true, generated: data.length };
+  return { ok: true, generated: data.length, ...(warning ? { warning } : {}) };
+}
+
+/**
+ * W2-4 — soát trùng GV/phòng cho lô buổi sắp sinh. KHÔNG chặn (chỉ cảnh báo) để
+ * không khoá vận hành lớp. Bỏ qua khi lớp chưa có startTime (date 00:00 → không
+ * đủ dữ liệu kết luận trùng).
+ */
+async function warnIfConflict(
+  cls: { id: string; teacherId: string | null; roomId: string | null; startTime: string | null; endTime: string | null },
+  data: { date: Date }[],
+): Promise<string | undefined> {
+  if (!cls.startTime || (!cls.teacherId && !cls.roomId)) return undefined;
+  try {
+    const conflict = await findScheduleConflicts({
+      classId: cls.id,
+      teacherId: cls.teacherId,
+      roomId: cls.roomId,
+      candidates: data.map((d) => ({
+        startAt: d.date,
+        endAt: sessionEndAt(d.date, cls.startTime, cls.endTime),
+      })),
+    });
+    return scheduleConflictWarning(conflict) ?? undefined;
+  } catch {
+    return undefined; // best-effort: lỗi soát trùng không chặn sinh buổi
+  }
 }

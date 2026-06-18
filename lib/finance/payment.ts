@@ -256,6 +256,7 @@ export async function adjustPayment(params: {
 
   const amount = params.amount ?? original.amount;
   if (!Number.isFinite(amount)) return fail("Số tiền điều chỉnh không hợp lệ");
+  if (amount <= 0) return fail("Số tiền điều chỉnh phải lớn hơn 0");
 
   const actor = await auditActor(params.confirmedById);
   const now = new Date();

@@ -10,12 +10,13 @@ describe("session state machine (FIX-H4)", () => {
   it("cho phép transition hợp lệ", () => {
     expect(canTransition("SCHEDULED", "IN_PROGRESS")).toBe(true);
     expect(canTransition("SCHEDULED", "CANCELLED")).toBe(true);
+    // W2-1: buổi offline được hoàn tất trực tiếp từ SCHEDULED (không cần IN_PROGRESS).
+    expect(canTransition("SCHEDULED", "COMPLETED")).toBe(true);
     expect(canTransition("IN_PROGRESS", "COMPLETED")).toBe(true);
     expect(canTransition("IN_PROGRESS", "CANCELLED")).toBe(true);
   });
 
   it("chặn transition phi lý", () => {
-    expect(canTransition("SCHEDULED", "COMPLETED")).toBe(false);
     expect(canTransition("COMPLETED", "IN_PROGRESS")).toBe(false);
     expect(canTransition("CANCELLED", "IN_PROGRESS")).toBe(false);
   });
@@ -32,10 +33,12 @@ describe("session state machine (FIX-H4)", () => {
     expect(canStartSession("CANCELLED")).toBe(false);
   });
 
-  it("canCompleteSession: chỉ IN_PROGRESS — re-start/complete buổi COMPLETED bị chặn", () => {
+  it("canCompleteSession: SCHEDULED (offline) hoặc IN_PROGRESS — buổi COMPLETED/CANCELLED bị chặn", () => {
     expect(canCompleteSession("IN_PROGRESS")).toBe(true);
-    expect(canCompleteSession("SCHEDULED")).toBe(false);
+    // W2-1: buổi offline hoàn tất trực tiếp từ SCHEDULED.
+    expect(canCompleteSession("SCHEDULED")).toBe(true);
     expect(canCompleteSession("COMPLETED")).toBe(false);
+    expect(canCompleteSession("CANCELLED")).toBe(false);
     // buổi đã COMPLETED không thể bắt đầu lại
     expect(canStartSession("COMPLETED")).toBe(false);
   });

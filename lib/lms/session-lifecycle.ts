@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
+import { canCompleteSession } from "@/lib/sessions/status";
 
 // =============================================================================
 // R7-07 (PR2) — State machine buổi học "Hoàn tất buổi".
@@ -77,6 +78,12 @@ export async function completeSession(opts: {
   if (verdict === "ALREADY_COMPLETED") {
     // Idempotent: không cập nhật lại, không phát lại event.
     return { ok: true, alreadyCompleted: true };
+  }
+
+  // Chốt single-source-of-truth: guard state machine chuẩn. Sau khi nới guard,
+  // SCHEDULED (offline, trực tiếp) & IN_PROGRESS đều pass.
+  if (!canCompleteSession(session.status)) {
+    return { ok: false, error: "Trạng thái buổi không cho phép hoàn tất" };
   }
 
   // Yêu cầu điểm danh đã lưu — thiếu thì cảnh báo bắt confirm (AC4/C5).

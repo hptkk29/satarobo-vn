@@ -21,8 +21,12 @@ import {
 import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
+import { canTransition } from "@/lib/enrollments/status";
 
 type ActionResult = { error?: string };
+
+/** Sentinel để huỷ $transaction phục học khi transition enrollment phi lý. */
+const INVALID_RESUME_TRANSITION = "__INVALID_RESUME_TRANSITION__";
 
 async function requireStudentWrite(action: "create" | "update" | "delete") {
   const session = await auth();
@@ -545,7 +549,8 @@ export async function resumeStudentReserveAction(input: {
   const { actorId, actorName } = getAuditActor(session);
   const now = new Date();
 
-  await db.$transaction(async (tx) => {
+  try {
+    await db.$transaction(async (tx) => {
     await tx.studentReserve.update({
       where: { id: input.reserveId },
       data: {
@@ -601,13 +606,22 @@ export async function resumeStudentReserveAction(input: {
     }
 
     const enrollmentsToResume = reserve.enrollmentId
-      ? [{ id: reserve.enrollmentId }]
+      ? await tx.enrollment.findMany({
+          where: { id: reserve.enrollmentId },
+          select: { id: true, status: true },
+        })
       : await tx.enrollment.findMany({
           where: { studentId: reserve.studentId, status: "PAUSED" },
-          select: { id: true },
+          select: { id: true, status: true },
         });
 
     for (const enr of enrollmentsToResume) {
+      // Guard state machine chuẩn: chỉ phục học khi enrollment được phép →STUDYING
+      // (PAUSED hợp lệ). Không hợp lệ → huỷ tx, trả lỗi VI.
+      if (!canTransition(enr.status, "STUDYING")) {
+        throw new Error(INVALID_RESUME_TRANSITION);
+      }
+
       await tx.enrollment.update({
         where: { id: enr.id },
         data: { status: "STUDYING" },
@@ -616,7 +630,7 @@ export async function resumeStudentReserveAction(input: {
       await tx.enrollmentAuditLog.create({
         data: {
           enrollmentId: enr.id,
-          fromStatus: "PAUSED",
+          fromStatus: enr.status,
           toStatus: "STUDYING",
           changedByUserId: actorId,
           changedByName: actorName,
@@ -639,7 +653,13 @@ export async function resumeStudentReserveAction(input: {
         tx,
       });
     }
-  });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === INVALID_RESUME_TRANSITION) {
+      return { ok: false as const, error: "Không thể chuyển trạng thái này" };
+    }
+    throw err;
+  }
 
   revalidatePath("/students");
   revalidatePath(`/students/${reserve.studentId}/edit`);

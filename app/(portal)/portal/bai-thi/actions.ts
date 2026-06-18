@@ -158,7 +158,7 @@ export async function saveAnswer(input: {
 
 export async function submitAttempt(
   attemptId: string,
-): Promise<ActionResult<{ graded: boolean }>> {
+): Promise<ActionResult<{ graded: boolean; late?: boolean; message?: string }>> {
   const { studentId } = await requireActiveStudent();
 
   const attempt = await db.examAttempt.findUnique({
@@ -175,6 +175,8 @@ export async function submitAttempt(
         select: {
           id: true,
           passingScore: true,
+          durationMinutes: true,
+          closeAt: true,
           examQuestions: {
             include: { question: { select: { type: true } } },
           },
@@ -188,6 +190,17 @@ export async function submitAttempt(
   if (attempt.status !== "IN_PROGRESS") {
     return { ok: false, error: "Bài làm đã nộp" };
   }
+
+  // LMS-5: nộp TRỄ vẫn được FINALIZE (chấm theo các câu ĐÃ LƯU qua saveAnswer).
+  // saveAnswer mới là cổng chặn deadline cho câu trả lời mới → submitAttempt
+  // không nhận answer kèm, chỉ chấm những gì đã persist trước hạn. Dùng đúng
+  // công thức deadline của saveAnswer để gắn cờ + thông báo VI khi quá hạn.
+  const deadline = attemptDeadline(
+    attempt.startedAt,
+    attempt.exam.durationMinutes,
+    attempt.exam.closeAt,
+  );
+  const lateSubmit = Date.now() > deadline.getTime();
 
   // Có câu tự luận (ESSAY/CODE) → chờ giáo viên chấm.
   const hasSubjective = attempt.exam.examQuestions.some(
@@ -252,5 +265,12 @@ export async function submitAttempt(
   revalidatePath("/portal/bai-thi");
   revalidatePath("/portal/ket-qua");
   revalidatePath(`/exams/${attempt.exam.id}/attempts`);
-  return { ok: true, graded: !hasSubjective };
+  return {
+    ok: true,
+    graded: !hasSubjective,
+    late: lateSubmit,
+    ...(lateSubmit
+      ? { message: "Đã hết giờ — bài được nộp với các câu đã lưu" }
+      : {}),
+  };
 }
