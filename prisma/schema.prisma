@@ -4998,3 +4998,17 @@ model Message {
 
   @@index([threadId, createdAt])
 }
+
+// LMS-16 — mục tiêu doanh thu (KPI) theo cơ sở × kỳ (so với thực thu).
+model RevenueTarget {
+  id        String   @id @default(cuid())
+  centerId  String? // null = mục tiêu toàn hệ thống
+  period    String // "YYYY-MM"
+  amount    Int // VND
+  note      String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([period])
+}
