@@ -144,10 +144,13 @@
 
 # Checklist
 
-- [ ] L0 LMS-1 điểm danh scope · LMS-2 chấm điểm scope · [x] **LMS-3 completeSession owner (DONE, còn hở cấp-lớp)** · LMS-4 question authorId
-- [ ] L1 LMS-5 exam timer · LMS-6 conflict wiring · [x] **LMS-7 state machine (DONE)** · LMS-8 field chết
-- [ ] L2 LMS-9 refund lifecycle · LMS-10 cancel class cascade · LMS-11 reserve expiry
-- [ ] L3 LMS-12 retake · LMS-13 report-card aggregate · LMS-14 SCORM scoring · LMS-15 2-way comms · LMS-16 reports (PARTIAL) · LMS-17 skill-per-session (PARTIAL) · LMS-18 auto-scope
-- **NỀN (ERD):** [x] C1 RLS · [x] C2 timestamptz · [x] C3 finance restrict · [x] C4 TOCTOU · [x] C5 order-code · [x] H7 check-constraint — DONE (migration). [ ] **Money type H5/H6/COL2** · [ ] **RBAC v2 flip/wire** · [ ] **auto-scope centerId (LMS-18)** · [ ] **compliance C6/C7**.
+> ✅ **HOÀN TẤT 2026-06-18 (nhánh `FixLMS`)** — toàn bộ kế hoạch L0–L3 + nền đã làm & verify (typecheck+lint+631 unit test+build PASS). Chi tiết migrate/rollout: [`lms-fix-rollout.md`](./lms-fix-rollout.md).
+
+- [x] L0 LMS-1 điểm danh scope · LMS-2 chấm điểm scope · LMS-3 completeSession owner (cấp-lớp) · LMS-4 question authorId
+- [x] L1 LMS-5 exam timer · LMS-6 conflict wiring · LMS-7 state machine · LMS-8 field chết (maxAttempts dùng; REVIEWED/Kind ghi rõ)
+- [x] L2 LMS-9 refund lifecycle (prorate) · LMS-10 cancel class cascade · LMS-11 reserve expiry cron
+- [x] L3 LMS-12 retake · LMS-13 report-card aggregate · ⏸️ LMS-14 SCORM (DEFER, có lý do) · LMS-15 2-way comms · LMS-16 reports + KPI · LMS-17 skill (UI GV + cột buổi) · ⏭️ LMS-18 auto-scope (defer — relation-scope đủ)
+- **NỀN (ERD):** [x] C1 RLS · [x] C2 timestamptz · [x] C3 finance restrict · [x] C4 TOCTOU · [x] C5 order-code · [x] H7 check-constraint · [x] **Money type (Float→Int VND)** · [x] **RBAC (owner-scope per-action, v2 giữ shadow)** · [x] **compliance C6 (erasure/portability/retention) + C7 (runbook PITR)**.
+- ⏳ **Việc của bạn:** apply các migration `2026061700*`→`2026061805*` lên Supabase prod (xem rollout doc).
 
 > Mỗi mục = 1 PR + test (unit guard/logic + e2e flow). L0 ưu tiên tuyệt đối (bảo mật). Verify chuẩn repo: `pnpm typecheck && lint && build` + e2e liên quan xanh.

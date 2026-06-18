@@ -188,6 +188,23 @@ Chốt 6 quyết định ở §3. Đặc biệt: **go-live status** (có user th
 
 ---
 
+## 5b. ✅ TRẠNG THÁI THỰC THI (2026-06-18, nhánh `FixLMS`)
+
+Đã thực thi **P1→P7** (Mốc A + B + phần lớn C). Mỗi phase = nhiều PR nhỏ + test, verify
+`typecheck+lint+631 unit test+build` PASS. Migrate prod = nút của bạn (xem
+[lms-fix-rollout.md](./lms-fix-rollout.md)).
+
+| Phase | Trạng thái |
+|---|---|
+| P1 Nền | ✅ money Float→Int; centerId/auto-scope dùng relation-scope (defer denorm); RBAC giữ shadow + vá owner-scope per-action |
+| P2 An toàn | ✅ LMS-1/2/3/4 owner-scope · LMS-5 exam timer · LMS-6 conflict wiring · LMS-7 sẵn có |
+| P3 Lifecycle/Tiền | ✅ LMS-9 refund prorate · LMS-10 cancel class cascade · LMS-11 reserve cron |
+| P4 Assessment | ✅ LMS-12 retake · LMS-13 học bạ gộp · LMS-17 skill UI/cột · LMS-8 ; ⏸️ LMS-14 SCORM DEFER |
+| P5 Comms/Flow | ✅ LMS-15 2-way · substitute persist+conflict; ⏭️ calendar defer (trình bày) |
+| P6 Analytics | ✅ 4 report mới + KPI RevenueTarget; dashboard page = follow-up |
+| P7 Compliance | ✅ C6 erasure/portability/retention · C7 runbook PITR |
+| P8 QA/Rollout | ✅ verify đủ; e2e Playwright + flip cờ = bước vận hành (rollout doc) |
+
 ## 6. Tóm tắt 1 dòng
 
 > **Chốt G0 → P1 nền (ERD+RBAC) → P2 an toàn → đạt Mốc A → P3/P4/P5 đạt Mốc B (LMS hoàn chỉnh) → P6/P7/P8 đạt Mốc C (production).** Tối ưu vì nền-trước tránh sửa 2 lần; trung thực vì có gate + rủi ro + 2 mốc rõ ràng.
