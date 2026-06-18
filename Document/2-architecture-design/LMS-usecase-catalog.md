@@ -36,7 +36,7 @@
 | T8 | Đánh giá kỹ năng robot | 10 skill × 4 level | exc: **per-student, không gắn buổi**; UI **disable cho GV** | ⚠️ | `students/[id]/_components/skill-editor.tsx`; `edit/page.tsx:100` |
 | T9 | Soạn học bạ (DRAFT→PENDING_REVIEW) | GV điền narrative + điểm năng lực | (publish do reviewer) | ✅ | `report-cards/_actions.ts:127` |
 | T10 | Lịch dạy / đăng ký ca | Overlay lịch dạy + đăng ký ca | alt: overlay **read-only**, không gắn `ClassSession`/payroll | ⚠️ | `cham-cong/lich-ca/page.tsx:41` |
-| T11 | Dạy thay (substitute) | — | exc: **chỉ ghi audit**, không cột/duyệt/thông báo | ❌ | `lib/classes/adjust.ts:122-158` |
+| T11 | Dạy thay (substitute) | adjustSession set `substituteTeacherId/RoomId` + event `session_changed` (thông báo) + conflict-aware | (duyệt riêng chưa có — đổi buổi đã là hành động của quản lý) | ✅ | `lib/classes/adjust.ts` (P5) |
 
 ## 2. 🧑‍🎓 HỌC VIÊN / 👪 PHỤ HUYNH (Portal)
 

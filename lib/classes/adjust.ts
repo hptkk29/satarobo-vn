@@ -146,6 +146,8 @@ export async function adjustSession(opts: {
       status: true,
       actualRoomId: true,
       actualTeacherId: true,
+      substituteRoomId: true,
+      substituteTeacherId: true,
       class: {
         select: {
           centerId: true,
@@ -173,10 +175,12 @@ export async function adjustSession(opts: {
   if (!opts.allowConflict) {
     const effDate = hasDate ? date! : session.date;
     const win = sessionWindow(effDate, session.class?.startTime, session.class?.endTime);
-    const effRoom = hasRoom ? roomId! : session.actualRoomId ?? session.class?.roomId ?? null;
+    const effRoom = hasRoom
+      ? roomId!
+      : session.substituteRoomId ?? session.actualRoomId ?? session.class?.roomId ?? null;
     const effTeacher = hasTeacher
       ? teacherId!
-      : session.actualTeacherId ?? session.class?.teacherId ?? null;
+      : session.substituteTeacherId ?? session.actualTeacherId ?? session.class?.teacherId ?? null;
     const conflict = await detectSessionConflicts({
       sessionId,
       centerId: session.class?.centerId ?? null,
@@ -193,15 +197,19 @@ export async function adjustSession(opts: {
   const oldValues: Record<string, unknown> = { date: session.date };
   const newValues: Record<string, unknown> = {};
   if (hasDate) newValues.date = date;
-  // teacherId/roomId: chưa có cột cấp buổi → chỉ ghi audit (substitute request).
+  // P5/T11 — dạy thay / đổi phòng cấp buổi nay PERSIST vào cột (không chỉ audit).
   if (hasTeacher) newValues.substituteTeacherId = teacherId;
   if (hasRoom) newValues.substituteRoomId = roomId;
 
   await db.$transaction(async (tx) => {
-    if (hasDate) {
+    if (hasDate || hasTeacher || hasRoom) {
       await tx.classSession.update({
         where: { id: sessionId },
-        data: { date: date! },
+        data: {
+          ...(hasDate ? { date: date! } : {}),
+          ...(hasTeacher ? { substituteTeacherId: teacherId } : {}),
+          ...(hasRoom ? { substituteRoomId: roomId } : {}),
+        },
       });
     }
 

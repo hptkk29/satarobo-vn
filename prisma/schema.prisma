@@ -1408,6 +1408,9 @@ model ClassSession {
   // R7-07 — "Hoàn tất buổi": dữ liệu thực tế + nhận xét lớp (khôi phục sau merge main→erd-fix-p0).
   actualTeacherId String?
   actualRoomId    String?
+  // P5/T11 — dạy thay/đổi phòng cấp buổi (kế hoạch trước buổi; persist thay vì chỉ audit).
+  substituteTeacherId String?
+  substituteRoomId    String?
   actualStartAt   DateTime? @db.Timestamptz(6)
   actualEndAt     DateTime? @db.Timestamptz(6)
   classComment    String?   @db.Text

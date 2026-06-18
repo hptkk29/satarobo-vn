@@ -35,6 +35,8 @@ type SessionRow = {
   date: Date;
   actualRoomId: string | null;
   actualTeacherId: string | null;
+  substituteRoomId?: string | null;
+  substituteTeacherId?: string | null;
   class: {
     roomId: string | null;
     teacherId: string | null;
@@ -43,19 +45,29 @@ type SessionRow = {
   } | null;
 };
 
-/** PURE — quy đổi các buổi (kèm lớp) thành Slot để dò trùng. */
+/** PURE — quy đổi các buổi (kèm lớp) thành Slot. Ưu tiên substitute ?? actual ?? lớp. */
 export function rowsToSlots(rows: SessionRow[]): Slot[] {
   return rows.map((o) => {
     const win = sessionWindow(o.date, o.class?.startTime, o.class?.endTime);
     return {
       id: o.id,
-      roomId: o.actualRoomId ?? o.class?.roomId ?? null,
-      teacherId: o.actualTeacherId ?? o.class?.teacherId ?? null,
+      roomId: o.substituteRoomId ?? o.actualRoomId ?? o.class?.roomId ?? null,
+      teacherId: o.substituteTeacherId ?? o.actualTeacherId ?? o.class?.teacherId ?? null,
       startAt: win.startAt,
       endAt: win.endAt,
     };
   });
 }
+
+const SESSION_SELECT = {
+  id: true,
+  date: true,
+  actualRoomId: true,
+  actualTeacherId: true,
+  substituteRoomId: true,
+  substituteTeacherId: true,
+  class: { select: { roomId: true, teacherId: true, startTime: true, endTime: true } },
+} as const;
 
 export type ConflictResult = {
   roomConflict: boolean;
@@ -103,13 +115,7 @@ export async function detectSessionConflicts(input: {
       ...(input.sessionId ? { id: { not: input.sessionId } } : {}),
       ...(input.centerId ? { class: { centerId: input.centerId } } : {}),
     },
-    select: {
-      id: true,
-      date: true,
-      actualRoomId: true,
-      actualTeacherId: true,
-      class: { select: { roomId: true, teacherId: true, startTime: true, endTime: true } },
-    },
+    select: SESSION_SELECT,
   });
 
   const res = detectScheduleConflict(rowsToSlots(others), {
@@ -152,13 +158,7 @@ export async function detectBatchConflicts(input: {
       date: { gte: rangeStart, lt: rangeEnd },
       ...(input.centerId ? { class: { centerId: input.centerId } } : {}),
     },
-    select: {
-      id: true,
-      date: true,
-      actualRoomId: true,
-      actualTeacherId: true,
-      class: { select: { roomId: true, teacherId: true, startTime: true, endTime: true } },
-    },
+    select: SESSION_SELECT,
   });
   const slots = rowsToSlots(others);
 
