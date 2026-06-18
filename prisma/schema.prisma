@@ -1469,9 +1469,13 @@ model StudentSkillAssessment {
   note         String?
   assessedById String
   assessedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  // LMS-17 — gắn đánh giá theo buổi/lesson (tùy chọn).
+  classSessionId String?
+  lessonId       String?
   student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId, skill])
+  @@index([classSessionId])
 }
 
 // LMS-2 — nhận xét RIÊNG từng học sinh mỗi buổi (GV viết, PH xem con mình).

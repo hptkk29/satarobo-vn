@@ -3,7 +3,8 @@ import { LineChart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { can } from "@/lib/auth/permissions";
+import { canAssessStudent } from "@/lib/lms/skill-access";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getStudentProgress } from "@/lib/progress";
@@ -97,9 +98,11 @@ export default async function EditStudentPage({ params }: Props) {
   for (const r of skillRows) {
     if (!latestSkills[r.skill]) latestSkills[r.skill] = { level: r.level, note: r.note ?? "" };
   }
-  const canAssessSkills =
-    hasRole(session.user, "SUPER_ADMIN") ||
-    (hasRole(session.user, "CENTER_MANAGER") && student.centerId === session.user.centerId);
+  // LMS-17 — mở cho GV phụ trách (dùng chung quy tắc với server action).
+  const canAssessSkills = await canAssessStudent(
+    { id: session.user.id, role: session.user.role, centerId: session.user.centerId },
+    id,
+  );
 
   const formValue: StudentFormValue = {
     id: student.id,

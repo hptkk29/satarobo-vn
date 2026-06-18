@@ -9,11 +9,16 @@ import { attendanceSummary } from "@/lib/attendance/summary";
 import {
   computeAttendanceRate,
   computeExamAverage,
+  computeAssignmentAverage,
+  computeSkillSummary,
   parsePublishedSnapshot,
   type ExamAttemptLite,
+  type AssignmentSubmissionLite,
+  type SkillAssessmentLite,
   type ReportCardMetrics,
   type PublishedReportCardView,
 } from "@/lib/lms/report-card-core";
+import { LEVEL_SCORE } from "@/lib/lms/skills";
 
 export * from "@/lib/lms/report-card-core";
 
@@ -28,25 +33,53 @@ export async function computeReportCardMetrics(enrollmentId: string): Promise<Re
   const att = await attendanceSummary(enrollmentId);
 
   let attempts: ExamAttemptLite[] = [];
+  let submissions: AssignmentSubmissionLite[] = [];
+  const skills: SkillAssessmentLite[] = [];
   if (enr) {
-    const rows = await db.examAttempt.findMany({
-      where: {
-        studentId: enr.studentId,
-        exam: { classId: enr.classId },
-        status: { in: [...EXAM_DONE_STATUSES] },
-      },
-      select: { totalScore: true, passed: true, exam: { select: { totalPoints: true } } },
-    });
-    attempts = rows.map((r) => ({
+    const [examRows, subRows, skillRows] = await Promise.all([
+      db.examAttempt.findMany({
+        where: {
+          studentId: enr.studentId,
+          exam: { classId: enr.classId },
+          status: { in: [...EXAM_DONE_STATUSES] },
+        },
+        select: { totalScore: true, passed: true, exam: { select: { totalPoints: true } } },
+      }),
+      // LMS-13 — bài tập của HV trong lớp này.
+      db.assignmentSubmission.findMany({
+        where: { studentId: enr.studentId, assignment: { classId: enr.classId } },
+        select: { score: true, status: true, assignment: { select: { totalPoints: true } } },
+      }),
+      // LMS-13 — kỹ năng robot (per-student, lấy bản mới nhất mỗi skill).
+      db.studentSkillAssessment.findMany({
+        where: { studentId: enr.studentId },
+        orderBy: { assessedAt: "desc" },
+        select: { skill: true, level: true },
+      }),
+    ]);
+    attempts = examRows.map((r) => ({
       totalScore: r.totalScore,
       totalPoints: r.exam.totalPoints,
       passed: r.passed,
     }));
+    submissions = subRows.map((r) => ({
+      score: r.score,
+      totalPoints: r.assignment.totalPoints,
+      status: r.status,
+    }));
+    const seen = new Set<string>();
+    for (const r of skillRows) {
+      if (seen.has(r.skill)) continue; // đã sắp xếp desc → lần đầu = mới nhất
+      seen.add(r.skill);
+      skills.push({ skill: r.skill, levelScore: LEVEL_SCORE[r.level] });
+    }
   }
 
   return {
     attendance: { ...att, rate: computeAttendanceRate(att) },
     exams: computeExamAverage(attempts),
+    assignments: computeAssignmentAverage(submissions),
+    skills: computeSkillSummary(skills),
     computedAt: new Date().toISOString(),
   };
 }

@@ -19,6 +19,10 @@ export const REPORT_CARD_STATUS_LABEL: Record<ReportCardStatusValue, string> = {
 export interface ReportCardMetrics {
   attendance: AttendanceSummary & { rate: number };
   exams: { count: number; passed: number; averageScore: number | null };
+  // LMS-13 — học bạ gộp THÊM điểm bài tập + kỹ năng robot. Optional để snapshot cũ
+  // (chưa có 2 trường này) vẫn parse được.
+  assignments?: { count: number; graded: number; averageScore: number | null };
+  skills?: { count: number; averageLevel: number | null; items: { skill: string; level: number }[] };
   computedAt: string; // ISO
 }
 
@@ -48,6 +52,50 @@ export function computeExamAverage(attempts: ExamAttemptLite[]): {
     return s + ((a.totalScore ?? 0) / pts) * 10;
   }, 0);
   return { count, passed, averageScore: Math.round((sum / count) * 10) / 10 };
+}
+
+// LMS-13 — điểm bài tập (AssignmentSubmission). THUẦN.
+export interface AssignmentSubmissionLite {
+  score: number | null;
+  totalPoints: number | null;
+  status: string;
+}
+
+/** Tổng hợp điểm bài tập GRADED (chuẩn hoá thang 10). count = số bài đã nộp. */
+export function computeAssignmentAverage(subs: AssignmentSubmissionLite[]): {
+  count: number;
+  graded: number;
+  averageScore: number | null;
+} {
+  const gradedSubs = subs.filter((s) => s.status === "GRADED" && s.score != null);
+  const graded = gradedSubs.length;
+  if (graded === 0) return { count: subs.length, graded: 0, averageScore: null };
+  const sum = gradedSubs.reduce((acc, s) => {
+    const pts = s.totalPoints && s.totalPoints > 0 ? s.totalPoints : 10;
+    return acc + ((s.score ?? 0) / pts) * 10;
+  }, 0);
+  return { count: subs.length, graded, averageScore: Math.round((sum / graded) * 10) / 10 };
+}
+
+// LMS-13 — kỹ năng robot (StudentSkillAssessment). THUẦN.
+// Nhận list ĐÃ dedupe latest-per-skill (DB layer lo), levelScore 1..4.
+export interface SkillAssessmentLite {
+  skill: string;
+  levelScore: number;
+}
+
+export function computeSkillSummary(items: SkillAssessmentLite[]): {
+  count: number;
+  averageLevel: number | null;
+  items: { skill: string; level: number }[];
+} {
+  if (items.length === 0) return { count: 0, averageLevel: null, items: [] };
+  const avg = items.reduce((s, i) => s + i.levelScore, 0) / items.length;
+  return {
+    count: items.length,
+    averageLevel: Math.round(avg * 10) / 10,
+    items: items.map((i) => ({ skill: i.skill, level: i.levelScore })),
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

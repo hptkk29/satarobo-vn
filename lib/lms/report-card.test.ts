@@ -7,12 +7,47 @@ import {
   checkEnrollmentScope,
   checkTransition,
   computeAttendanceRate,
+  computeAssignmentAverage,
+  computeSkillSummary,
   computeExamAverage,
   isReportCardEditable,
   normalizePeriodComments,
   parsePublishedSnapshot,
   type ReportCardMetrics,
 } from "@/lib/lms/report-card-core";
+
+describe("[LMS-13] gộp điểm bài tập", () => {
+  it("trung bình bài GRADED chuẩn hoá thang 10", () => {
+    const r = computeAssignmentAverage([
+      { score: 8, totalPoints: 10, status: "GRADED" },
+      { score: 5, totalPoints: 10, status: "GRADED" },
+      { score: null, totalPoints: 10, status: "SUBMITTED" },
+    ]);
+    expect(r.count).toBe(3);
+    expect(r.graded).toBe(2);
+    expect(r.averageScore).toBe(6.5);
+  });
+  it("không có bài chấm → null", () => {
+    expect(
+      computeAssignmentAverage([{ score: null, totalPoints: 10, status: "SUBMITTED" }]).averageScore,
+    ).toBeNull();
+  });
+});
+
+describe("[LMS-13] gộp kỹ năng robot", () => {
+  it("trung bình level + liệt kê", () => {
+    const r = computeSkillSummary([
+      { skill: "ALGORITHM", levelScore: 4 },
+      { skill: "PROGRAMMING", levelScore: 2 },
+    ]);
+    expect(r.count).toBe(2);
+    expect(r.averageLevel).toBe(3);
+    expect(r.items).toHaveLength(2);
+  });
+  it("rỗng → null", () => {
+    expect(computeSkillSummary([]).averageLevel).toBeNull();
+  });
+});
 
 describe("[R7-15] transition guard matrix", () => {
   it("[C4] GV (manage) nộp DRAFT→PENDING_REVIEW: OK", () => {

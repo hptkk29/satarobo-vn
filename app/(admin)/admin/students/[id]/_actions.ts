@@ -5,39 +5,15 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { RoboticsSkill, SkillLevel } from "@prisma/client";
-import { hasRole } from "@/lib/auth/permissions";
+import { canAssessStudent } from "@/lib/lms/skill-access";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-// Quyền chấm năng lực: SUPER_ADMIN, CM cùng cơ sở, hoặc GV dạy lớp HS đang học.
-async function canAssessStudent(
-  user: { id: string; role: string; centerId: string | null },
-  studentId: string,
-): Promise<boolean> {
-  if (hasRole(user, "SUPER_ADMIN")) return true;
-  const student = await db.student.findUnique({
-    where: { id: studentId },
-    select: { centerId: true },
-  });
-  if (!student) return false;
-  if (hasRole(user, "CENTER_MANAGER")) {
-    return !!student.centerId && student.centerId === user.centerId;
-  }
-  if (hasRole(user, "TEACHER")) {
-    const teaches = await db.enrollment.findFirst({
-      where: {
-        studentId,
-        class: { OR: [{ teacherId: user.id }, { assistantId: user.id }] },
-      },
-      select: { id: true },
-    });
-    return !!teaches;
-  }
-  return false;
-}
-
 const skillsSchema = z.object({
   studentId: z.string().min(1),
+  // LMS-17 — gắn buổi/lesson (tùy chọn) để đánh giá theo buổi.
+  classSessionId: z.string().min(1).optional().nullable(),
+  lessonId: z.string().min(1).optional().nullable(),
   items: z
     .array(
       z.object({
@@ -55,7 +31,7 @@ export async function saveStudentSkills(input: unknown): Promise<Result> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { studentId, items } = parsed.data;
+  const { studentId, items, classSessionId, lessonId } = parsed.data;
   if (items.length === 0) return { ok: true };
 
   const session = await auth();
@@ -74,6 +50,8 @@ export async function saveStudentSkills(input: unknown): Promise<Result> {
         level: it.level,
         note: it.note || null,
         assessedById: session.user.id,
+        classSessionId: classSessionId ?? null,
+        lessonId: lessonId ?? null,
       })),
     });
   } catch (err) {
