@@ -59,6 +59,11 @@ test("admin: hộp thư tin nhắn render + có thread; compliance render", asyn
 
   await page.goto("/admin/compliance");
   await expect(page.getByRole("heading", { name: /Tuân thủ dữ liệu/ })).toBeVisible();
+
+  // P6 — dashboard báo cáo LMS (Recharts) render.
+  await page.goto("/admin/bao-cao/lms");
+  await expect(page.getByRole("heading", { name: "Báo cáo LMS" })).toBeVisible();
+  await expect(page.getByText("Hiệu suất giáo viên")).toBeVisible();
 });
 
 test("portal: PH xem hộp thư + gửi tin mới", async ({ page, context }) => {
