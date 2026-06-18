@@ -64,6 +64,10 @@ test("admin: hộp thư tin nhắn render + có thread; compliance render", asyn
   await page.goto("/admin/bao-cao/lms");
   await expect(page.getByRole("heading", { name: "Báo cáo LMS" })).toBeVisible();
   await expect(page.getByText("Hiệu suất giáo viên")).toBeVisible();
+
+  // Calendar admin render.
+  await page.goto("/admin/lich");
+  await expect(page.getByRole("heading", { name: "Lịch dạy" })).toBeVisible();
 });
 
 test("portal: PH xem hộp thư + gửi tin mới", async ({ page, context }) => {
@@ -82,4 +86,8 @@ test("portal: PH xem hộp thư + gửi tin mới", async ({ page, context }) =>
   await page.getByPlaceholder(/Nhập tin nhắn/).fill("Cảm ơn thầy");
   await page.getByRole("button", { name: "Gửi" }).click();
   await expect(page.getByText("Hỏi thêm").first()).toBeVisible({ timeout: 15_000 });
+
+  // Calendar portal render.
+  await page.goto("/portal/lich");
+  await expect(page.getByRole("heading", { name: "Lịch học" })).toBeVisible();
 });
