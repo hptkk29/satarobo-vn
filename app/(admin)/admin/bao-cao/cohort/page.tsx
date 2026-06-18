@@ -1,0 +1,192 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
+import { BarChart } from "@/components/charts/bar-chart";
+import { LineChart } from "@/components/charts/line-chart";
+import {
+  buildCohortReport,
+  type CohortEnrollmentRecord,
+  type EnrollmentStatusValue,
+} from "@/lib/reports/cohort";
+
+export const metadata = { title: "Báo cáo cohort | Admin" };
+export const dynamic = "force-dynamic";
+
+const num = (n: number) => n.toLocaleString("vi-VN");
+
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-neutral-200 bg-white p-4">
+      <h2 className="mb-3 text-sm font-semibold text-neutral-800">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+export default async function CohortReportPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
+  if (!can(session.user, "classes:view-all") && !can(session.user, "training:manage")) {
+    redirect("/dashboard");
+  }
+
+  const actor = await resolveActor(session.user.id);
+  // Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass). ClassSession/Enrollment
+  // đi qua sdb pass-through nhưng LỌC THỦ CÔNG theo classIds đã scope (AC5).
+  const sdb = scopedDb(actor);
+
+  // 1. Lớp trong phạm vi cơ sở.
+  const classRows = await sdb.class.findMany({
+    where: { deletedAt: null },
+    take: 1000,
+    select: { id: true },
+  });
+  const classIds = classRows.map((c) => c.id);
+
+  // 2. Tiến độ buổi theo lớp (loại buổi hủy khỏi tổng).
+  const sessionRows = classIds.length
+    ? await sdb.classSession.findMany({
+        where: { classId: { in: classIds } },
+        select: { classId: true, status: true },
+      })
+    : [];
+  const classProgress = new Map<string, { total: number; completed: number }>();
+  for (const s of sessionRows) {
+    if (s.status === "CANCELLED") continue;
+    const cur = classProgress.get(s.classId) ?? { total: 0, completed: 0 };
+    cur.total++;
+    if (s.status === "COMPLETED") cur.completed++;
+    classProgress.set(s.classId, cur);
+  }
+
+  // 3. Ghi danh — nhóm theo kỳ bắt đầu (startedAt ?? enrolledAt).
+  const enrollmentRows = classIds.length
+    ? await sdb.enrollment.findMany({
+        where: { classId: { in: classIds }, deletedAt: null },
+        select: { classId: true, status: true, enrolledAt: true, startedAt: true },
+        take: 50_000,
+      })
+    : [];
+
+  const records: CohortEnrollmentRecord[] = enrollmentRows.map((e) => {
+    const prog = classProgress.get(e.classId) ?? { total: 0, completed: 0 };
+    return {
+      cohortDate: e.startedAt ?? e.enrolledAt,
+      status: e.status as EnrollmentStatusValue,
+      totalSessions: prog.total,
+      completedSessions: prog.completed,
+    };
+  });
+
+  const report = buildCohortReport(records);
+
+  const progressData = report.rows.map((r) => ({
+    name: r.cohort,
+    "Tiến độ TB (%)": r.avgProgress,
+  }));
+  const statusData = report.rows.map((r) => ({
+    name: r.cohort,
+    "Hoàn thành": r.completed,
+    "Đang học": r.studying,
+    "Rút": r.withdrew,
+  }));
+
+  return (
+    <div className="space-y-5 p-4">
+      <div>
+        <h1 className="text-xl font-bold text-neutral-900">Báo cáo cohort</h1>
+        <p className="text-sm text-neutral-500">
+          Nhóm ghi danh theo kỳ bắt đầu — tiến độ trung bình và tỷ lệ hoàn thành / đang học / rút, theo phạm vi cơ sở của bạn.
+        </p>
+      </div>
+
+      {report.totalEnrollments === 0 ? (
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+          Chưa có ghi danh trong phạm vi của bạn.
+        </p>
+      ) : null}
+
+      <Card title="Tiến độ trung bình theo cohort">
+        {progressData.length > 0 ? (
+          <LineChart
+            data={progressData}
+            xKey="name"
+            lines={[{ key: "Tiến độ TB (%)", name: "Tiến độ TB (%)", color: "#7C3AED" }]}
+            height={300}
+          />
+        ) : (
+          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu.</p>
+        )}
+      </Card>
+
+      <Card title="Trạng thái học viên theo cohort">
+        {statusData.length > 0 ? (
+          <BarChart
+            data={statusData}
+            xKey="name"
+            bars={[
+              { key: "Hoàn thành", name: "Hoàn thành", color: "#10B981" },
+              { key: "Đang học", name: "Đang học", color: "#F97316" },
+              { key: "Rút", name: "Rút", color: "#EF4444" },
+            ]}
+            height={300}
+          />
+        ) : (
+          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu.</p>
+        )}
+      </Card>
+
+      <section className="rounded-xl border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-100 px-4 py-3">
+          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo cohort</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs text-neutral-400">
+              <tr>
+                <th className="px-4 py-2">Kỳ bắt đầu</th>
+                <th className="px-4 py-2 text-right">Ghi danh</th>
+                <th className="px-4 py-2 text-right">Tiến độ TB</th>
+                <th className="px-4 py-2 text-right">Hoàn thành</th>
+                <th className="px-4 py-2 text-right">Đang học</th>
+                <th className="px-4 py-2 text-right">Rút</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-neutral-400">
+                    Không có ghi danh trong phạm vi cơ sở.
+                  </td>
+                </tr>
+              ) : (
+                report.rows.map((r) => (
+                  <tr key={r.cohort} className="border-t">
+                    <td className="px-4 py-2 font-medium">{r.cohort}</td>
+                    <td className="px-4 py-2 text-right">{num(r.total)}</td>
+                    <td className="px-4 py-2 text-right font-semibold">{r.avgProgress}%</td>
+                    <td className="px-4 py-2 text-right text-emerald-700">
+                      {num(r.completed)}{" "}
+                      <span className="text-xs text-neutral-400">({r.completionRate}%)</span>
+                    </td>
+                    <td className="px-4 py-2 text-right text-orange-600">
+                      {num(r.studying)}{" "}
+                      <span className="text-xs text-neutral-400">({r.studyingRate}%)</span>
+                    </td>
+                    <td className="px-4 py-2 text-right text-rose-600">
+                      {num(r.withdrew)}{" "}
+                      <span className="text-xs text-neutral-400">({r.withdrewRate}%)</span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}

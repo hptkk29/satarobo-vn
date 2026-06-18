@@ -41,6 +41,8 @@ export const SCOPE_EXEMPT = new Set<string>([
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
   // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
   "RefundRequest",
+  // LMS-16 — RevenueTarget là config mục tiêu; centerId null = toàn hệ thống.
+  "RevenueTarget",
 ]);
 
 function bypassesScope(actor: Actor): boolean {

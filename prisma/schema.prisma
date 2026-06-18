@@ -4719,6 +4719,22 @@ model ConversationMessage {
   @@index([enrollmentId, createdAt])
 }
 
+// LMS-16 — Mục tiêu doanh thu theo kỳ (cho báo cáo doanh-thu-vs-mục-tiêu).
+// centerId null = mục tiêu toàn hệ thống. period = "YYYY-MM".
+model RevenueTarget {
+  id           String   @id @default(cuid())
+  centerId     String?
+  period       String
+  targetAmount Int
+  note         String?
+  createdById  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([centerId])
+}
+
 // ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════
 enum TrialClassV2Status {
   OPEN

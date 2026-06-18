@@ -204,6 +204,10 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial", icon: FlaskConical, perm: ["trials:view"] },
       { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: ["classes:view-all", "training:manage"] },
       { label: "Báo cáo trung tâm", href: "/bao-cao/trung-tam", icon: Coins, perm: ["payments:manage"] },
+      { label: "Hiệu suất giáo viên", href: "/bao-cao/hieu-suat-gv", icon: GraduationCap, perm: ["classes:view-all", "training:manage"] },
+      { label: "Cohort tiến độ", href: "/bao-cao/cohort", icon: Users, perm: ["classes:view-all", "training:manage"] },
+      { label: "Churn / rời bỏ", href: "/bao-cao/churn", icon: BarChart3, perm: ["enrollments:view-all"] },
+      { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: ["payments:manage"] },
     ],
   },
 ];
