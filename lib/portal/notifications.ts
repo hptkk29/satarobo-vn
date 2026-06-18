@@ -41,7 +41,7 @@ export async function getParentNotifications(
   const classIds = new Set(
     (
       await db.enrollment.findMany({
-        where: { studentId: { in: studentIds }, status: { in: [...ACTIVE_ENROLLMENT] } },
+        where: { studentId: { in: studentIds }, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
         select: { classId: true },
       })
     ).map((e) => e.classId),

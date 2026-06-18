@@ -12,7 +12,7 @@ import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { genStudentCode } from '@/lib/codegen'
-import { generateOrderCode } from '@/lib/orders/code'
+import { generateOrderCode, withUniqueRetry } from '@/lib/orders/code'
 import { requestOtp } from '@/lib/otp/service'
 import { enqueueEnrollmentConfirmation } from '@/lib/email/triggers'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
@@ -511,7 +511,9 @@ export async function closeLeadAsEnrolled(
   }
 
   try {
-    const result = await db.$transaction(async (tx) => {
+    // FIX-C5 — retry khi đụng unique-violation (P2002) mã đơn; mã sinh atomic
+    // bên trong tx (generateOrderCode(tx)), cả tx re-run nếu phải retry.
+    const result = await withUniqueRetry(() => db.$transaction(async (tx) => {
       // studentCode tự sinh nếu cơ sở có mã.
       let studentCode: string | undefined
       if (centerId) {
@@ -618,7 +620,7 @@ export async function closeLeadAsEnrolled(
       if (tuition != null) {
         const discount = parsed.data.discountAmount ?? 0
         const total = Math.max(0, tuition - discount)
-        const code = await generateOrderCode()
+        const code = await generateOrderCode(tx)
         const order = await tx.order.create({
           data: {
             code,
@@ -714,7 +716,7 @@ export async function closeLeadAsEnrolled(
         orderId,
         orderCode,
       }
-    })
+    }))
 
     // A3/P0 — sau transaction: gửi OTP kích hoạt + email xác nhận đăng ký.
     // Bọc toàn bộ: lỗi gửi mail/OTP TUYỆT ĐỐI KHÔNG ảnh hưởng deal đã commit.

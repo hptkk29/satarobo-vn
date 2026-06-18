@@ -33,9 +33,14 @@ export function NewsForm({ news }: NewsFormProps) {
 
   const [content, setContent] = useState<string>(news?.content ?? "");
   const [coverImage, setCoverImage] = useState<string | null>(news?.coverImage ?? null);
+  const [isContentImageUploading, setIsContentImageUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function action(formData: FormData) {
+    if (isContentImageUploading) {
+      setError("Vui lòng chờ upload ảnh trong nội dung hoàn tất trước khi lưu.");
+      return;
+    }
     setError(null);
     formData.set("content", content);
     const res = isEdit
@@ -76,7 +81,11 @@ export function NewsForm({ news }: NewsFormProps) {
       </Section>
 
       <Section title="Nội dung Markdown">
-        <MarkdownEditor value={content} onChange={setContent} />
+        <MarkdownEditor
+          value={content}
+          onChange={setContent}
+          onUploadingChange={setIsContentImageUploading}
+        />
       </Section>
 
       <Section title="Phân loại & hiển thị">
@@ -146,7 +155,7 @@ export function NewsForm({ news }: NewsFormProps) {
       </Section>
 
       <div className="flex gap-3 border-t border-neutral-200 pt-6">
-        <SubmitButton isEdit={isEdit} />
+        <SubmitButton isEdit={isEdit} disabled={isContentImageUploading} />
         <button
           type="button"
           onClick={() => router.push("/news")}
@@ -159,15 +168,21 @@ export function NewsForm({ news }: NewsFormProps) {
   );
 }
 
-function SubmitButton({ isEdit }: { isEdit: boolean }) {
+function SubmitButton({
+  isEdit,
+  disabled,
+}: {
+  isEdit: boolean;
+  disabled?: boolean;
+}) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white shadow-md hover:bg-orange-600 disabled:opacity-60"
     >
-      {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo bài"}
+      {disabled ? "Đang tải ảnh..." : pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo bài"}
     </button>
   );
 }

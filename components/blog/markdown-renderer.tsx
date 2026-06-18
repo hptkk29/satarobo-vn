@@ -17,7 +17,8 @@ const mdComponents: Components = {
           alt={alt ?? ''}
           width={800}
           height={450}
-          className="rounded-xl w-full object-cover"
+          sizes="(max-width: 768px) 100vw, 768px"
+          className="h-auto w-full rounded-2xl object-contain"
         />
       </span>
     )
@@ -59,7 +60,7 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <article className="prose prose-lg max-w-none prose-headings:font-extrabold prose-headings:text-text-dark prose-p:text-text-muted prose-p:leading-relaxed prose-img:rounded-xl prose-a:no-underline prose-pre:bg-transparent prose-pre:p-0 prose-blockquote:not-italic">
+    <article className="prose prose-lg max-w-none prose-headings:font-extrabold prose-headings:text-text-dark prose-p:text-text-muted prose-p:leading-relaxed prose-img:mx-auto prose-img:my-5 prose-img:h-auto prose-img:max-w-full prose-img:rounded-2xl prose-a:no-underline prose-pre:bg-transparent prose-pre:p-0 prose-blockquote:not-italic">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, rehypeSanitize]}

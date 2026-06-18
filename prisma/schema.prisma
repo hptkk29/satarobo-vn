@@ -218,7 +218,7 @@ model Account {
 model VerificationToken {
   identifier String
   token      String   @unique
-  expires    DateTime
+  expires    DateTime @db.Timestamptz(6)
 
   @@unique([identifier, token])
 }
@@ -249,8 +249,8 @@ model Center {
   description         String?  @db.Text
   isActive            Boolean  @default(true)
   displayOrder        Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
   users             User[]
   leads             Lead[]
@@ -296,9 +296,9 @@ model OrgUnit {
   children  OrgUnit[]   @relation("OrgUnitTree")
   centerId  String?     @unique // Phase A: trỏ Center cũ (chỉ type=CENTER)
   isActive  Boolean     @default(true)
-  deletedAt DateTime?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime    @updatedAt @db.Timestamptz(6)
 
   @@index([type])
   @@index([parentId])
@@ -331,8 +331,8 @@ model RoleDef {
   isActive    Boolean          @default(true)
   permissions RolePermission[]
   userRoles   UserOrgRole[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
 }
 
 model RolePermission {
@@ -349,11 +349,11 @@ model UserOrgRole {
   userId        String
   orgUnitId     String
   roleId        String
-  effectiveFrom DateTime     @default(now())
-  effectiveTo   DateTime? // null = vô thời hạn
+  effectiveFrom DateTime     @default(now()) @db.Timestamptz(6)
+  effectiveTo   DateTime? @db.Timestamptz(6) // null = vô thời hạn
   status        AssignStatus @default(ACTIVE)
   grantedById   String // ai cấp (audit)
-  createdAt     DateTime     @default(now())
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
   role          RoleDef      @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
   @@id([userId, orgUnitId, roleId])
@@ -374,7 +374,7 @@ model RbacAuditLog {
   newValues       Json?
   reason          String
   metadata        Json?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([entity, entityId])
   @@index([changedByUserId])
@@ -399,7 +399,7 @@ model AuditLog {
   orgUnitId     String? // để scope viewer theo cơ sở
   ip            String?
   userAgent     String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([entityType, entityId, createdAt])
   @@index([orgUnitId, createdAt])
@@ -419,8 +419,8 @@ model DomainEvent {
   maxAttempts Int       @default(5)
   lastError   String?
   dedupeKey   String?   @unique // idempotency producer-side
-  createdAt   DateTime  @default(now())
-  processedAt DateTime?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  processedAt DateTime? @db.Timestamptz(6)
 
   @@index([status, createdAt])
   @@index([type])
@@ -442,12 +442,12 @@ model EmployeeOrgAssignment {
   orgUnitId         String
   roleInOrg         String? // mô tả vai trò nghiệp vụ (KHÔNG phải RoleDef)
   assignmentType    AssignmentType
-  effectiveFrom     DateTime       @default(now())
-  effectiveTo       DateTime?
+  effectiveFrom     DateTime       @default(now()) @db.Timestamptz(6)
+  effectiveTo       DateTime? @db.Timestamptz(6)
   status            AssignStatus   @default(ACTIVE)
   allocationPercent Int? // 0..100 — phân bổ chi phí/lương
   createdById       String
-  createdAt         DateTime       @default(now())
+  createdAt         DateTime       @default(now()) @db.Timestamptz(6)
 
   @@index([employeeId, status])
   @@index([orgUnitId, status])
@@ -462,7 +462,7 @@ model FacebookPageMapping {
   scopeType OrgUnitType // HO | CENTER (validate ở service)
   centerId  String? // chỉ khi scopeType=CENTER
   isActive  Boolean     @default(true)
-  createdAt DateTime    @default(now())
+  createdAt DateTime    @default(now()) @db.Timestamptz(6)
 
   @@index([scopeType])
 }
@@ -476,11 +476,11 @@ model MessengerConversation {
   status         String             @default("OPEN") // OPEN/QUALIFIED/CLOSED
   centerId       String? // suy từ page mapping → scopedDb
   orgUnitId      String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
-  firstMessageAt DateTime?
-  respondedAt    DateTime?
+  firstMessageAt DateTime? @db.Timestamptz(6)
+  respondedAt    DateTime? @db.Timestamptz(6)
   leadId         String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  createdAt      DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @db.Timestamptz(6)
   messages       MessengerMessage[]
 
   @@unique([pageId, psid])
@@ -497,8 +497,8 @@ model MessengerMessage {
   text            String?               @db.Text
   attachments     Json?
   externalEventId String?               @unique // idempotency webhook (R1-02 C2.4)
-  sentAt          DateTime
-  createdAt       DateTime              @default(now())
+  sentAt          DateTime @db.Timestamptz(6)
+  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
   conversation    MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, sentAt])
@@ -516,9 +516,9 @@ model CommissionStatement {
   period       String           @unique // "2026-06"
   status       CommissionStatus @default(DRAFT)
   approvedById String?
-  approvedAt   DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  approvedAt   DateTime? @db.Timestamptz(6)
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @db.Timestamptz(6)
   lines        CommissionLine[]
 }
 
@@ -545,7 +545,7 @@ model RbacShadowDiff {
   v1        Boolean
   v2        Boolean
   targetKey String? // mô tả target (centerId/classId...) để truy vết
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([createdAt])
   @@index([action])
@@ -558,12 +558,12 @@ model CommissionRateConfig {
   id            String    @id @default(cuid())
   tier          String // QC | SALE_ADMIN | SALE | QL_TT
   rate          Float // 0..1
-  effectiveFrom DateTime
-  effectiveTo   DateTime? // null = đang hiệu lực
+  effectiveFrom DateTime @db.Timestamptz(6)
+  effectiveTo   DateTime? @db.Timestamptz(6) // null = đang hiệu lực
   reason        String?
   createdById   String?
   createdByName String?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([tier, effectiveFrom])
 }
@@ -580,7 +580,7 @@ model MarketingReport {
   periodKey     String // "2026-W23" | "2026-06"
   submittedById String
   snapshot      Json
-  submittedAt   DateTime         @default(now())
+  submittedAt   DateTime         @default(now()) @db.Timestamptz(6)
 
   @@unique([periodType, periodKey, submittedById])
   @@index([periodType, periodKey])
@@ -599,9 +599,9 @@ model MarketingCostPeriod {
   totalQcCost   Float            @default(0)
   status        CostPeriodStatus @default(DRAFT)
   confirmedById String?
-  confirmedAt   DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  confirmedAt   DateTime? @db.Timestamptz(6)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(6)
 }
 
 // R1-07 — Ads Insights theo ngày/kênh (SR.QD.217, CPL/CPA/ROAS). unique (date,channel).
@@ -613,8 +613,8 @@ model AdsInsightDaily {
   impressions Int      @default(0)
   clicks      Int      @default(0)
   source      String   @default("META_API") // META_API | MANUAL
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([date, channel])
   @@index([date])
@@ -635,9 +635,9 @@ model StudentConsent {
   studentId String
   type      ConsentType
   status    ConsentStatus @default(GRANTED)
-  grantedAt DateTime      @default(now())
-  revokedAt DateTime?
-  updatedAt DateTime      @updatedAt
+  grantedAt DateTime      @default(now()) @db.Timestamptz(6)
+  revokedAt DateTime? @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @db.Timestamptz(6)
 
   @@unique([studentId, type])
   @@index([studentId])
@@ -661,8 +661,8 @@ model Room {
   status       RoomStatus @default(ACTIVE)
   notes        String?    @db.Text
   displayOrder Int        @default(0)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
 
   classes      Class[]
   trialClasses TrialClass[]
@@ -689,8 +689,8 @@ model Holiday {
   center    Center?     @relation(fields: [centerId], references: [id], onDelete: Cascade)
   type      HolidayType @default(HOLIDAY)
   note      String?     @db.Text
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime    @updatedAt @db.Timestamptz(6)
 
   @@index([date])
   @@index([centerId, date])
@@ -701,7 +701,7 @@ model User {
   id            String    @id @default(cuid())
   name          String?
   email         String    @unique
-  emailVerified DateTime?
+  emailVerified DateTime? @db.Timestamptz(6)
   password      String?
   image         String?
   role          Role      @default(SALES_CSM) // Đợt 3B — vai trò CHÍNH (primary)
@@ -709,13 +709,13 @@ model User {
   centerId      String?
   orgUnitId     String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   isActive      Boolean   @default(true)
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
 
   // ─── Per-user permission system (Phase 5.3.0) ───
   tokenVersion Int       @default(0)
-  lastLoginAt  DateTime?
+  lastLoginAt  DateTime? @db.Timestamptz(6)
 
   // Cụm A1 — trạng thái kích hoạt tài khoản (phụ huynh tạo qua chuyển lead).
   accountStatus AccountStatus @default(ACTIVE)
@@ -762,8 +762,8 @@ model UserPermissionGrant {
   grant     GrantType
   reason    String?   @db.Text
   grantedBy String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
   user    User @relation("UserPermissionGrants", fields: [userId], references: [id], onDelete: Cascade)
   grantor User @relation("UserPermissionGrantor", fields: [grantedBy], references: [id])
@@ -788,8 +788,8 @@ model CourseCategoryDef {
   slug         String?  @unique
   displayOrder Int      @default(0)
   isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
   courses Course[] @relation("CourseCategoryDef")
 }
@@ -827,8 +827,8 @@ model Course {
 
   thumbnail String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   leads              Lead[]
   classes            Class[]
@@ -860,7 +860,7 @@ model CoursePrerequisite {
   requiredCourseId String
   course           Course   @relation("CoursePrereqOwner", fields: [courseId], references: [id], onDelete: Cascade)
   requiredCourse   Course   @relation("CoursePrereqRequired", fields: [requiredCourseId], references: [id], onDelete: Cascade)
-  createdAt        DateTime @default(now())
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([courseId, requiredCourseId])
   @@index([courseId])
@@ -899,8 +899,8 @@ model TeacherProfile {
   teachableCourses TeacherCourse[]
   reviews          TeacherReview[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 }
 
 // Khoá GV dạy được (n-n TeacherProfile ↔ Course).
@@ -924,7 +924,7 @@ model TeacherReview {
   reviewerName     String
   score            Int // 1-5
   note             String?        @db.Text
-  createdAt        DateTime       @default(now())
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
 
   @@index([teacherProfileId, createdAt])
 }
@@ -961,20 +961,20 @@ model Lead {
   handoverNote     String?    @db.Text // Module CRM PHẦN 3 — note bàn giao gần nhất (nổi bật)
   // Cụm A3 — ai/khi nào chuyển lead sang ĐÃ ĐĂNG KÝ.
   convertedById    String?
-  convertedAt      DateTime?
+  convertedAt      DateTime? @db.Timestamptz(6)
 
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
-  qualifiedAt         DateTime? // L2 — có SĐT + note
-  handedAt            DateTime? // HO bàn giao về CS
-  receivedConfirmedAt DateTime? // CS xác nhận tiếp nhận
-  assignedAt          DateTime? // phân Sale
-  firstContactAt      DateTime? // Sale liên hệ lần đầu
+  qualifiedAt         DateTime? @db.Timestamptz(6) // L2 — có SĐT + note
+  handedAt            DateTime? @db.Timestamptz(6) // HO bàn giao về CS
+  receivedConfirmedAt DateTime? @db.Timestamptz(6) // CS xác nhận tiếp nhận
+  assignedAt          DateTime? @db.Timestamptz(6) // phân Sale
+  firstContactAt      DateTime? @db.Timestamptz(6) // Sale liên hệ lần đầu
   commissionSource    CommissionSource? // nguồn để chia hoa hồng
   adminId             String? // Sale Admin xử lý L1→L2
 
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
   center     Center? @relation(fields: [centerId], references: [id])
   course     Course? @relation(fields: [courseId], references: [id])
@@ -1000,7 +1000,7 @@ model Lead {
 
   // R7-01 — LeadChild (N con) + mốc hoạt động gần nhất cho SLA idle.
   children       LeadChild[]
-  lastActivityAt DateTime? // cập nhật khi có LeadActivity; SLA lead_idle_24h đọc field này
+  lastActivityAt DateTime? @db.Timestamptz(6) // cập nhật khi có LeadActivity; SLA lead_idle_24h đọc field này
 
   @@index([phone])
   @@index([status])
@@ -1028,8 +1028,8 @@ model LeadChild {
   interestedCenterId String? // tham chiếu Center
   note               String?              @db.Text
   trialStatus        LeadChildTrialStatus @default(NONE)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
 
   trialEnrollments TrialEnrollment[] // R7-02
 
@@ -1041,8 +1041,8 @@ model Note {
   content   String   @db.Text
   leadId    String
   authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id])
@@ -1073,7 +1073,7 @@ model Student {
   id          String    @id @default(cuid())
   name        String
   studentCode String?   @unique
-  dateOfBirth DateTime?
+  dateOfBirth DateTime? @db.Timestamptz(6)
   gender      Gender?
   phone       String?
   email       String?
@@ -1123,9 +1123,9 @@ model Student {
   parentUserId String?
   parentUser   User?   @relation("ParentChildren", fields: [parentUserId], references: [id], onDelete: SetNull)
 
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
   enrollments           Enrollment[]
   attendances           Attendance[]
@@ -1193,9 +1193,9 @@ model ClassGroup {
   orgUnitId   String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   status      ClassGroupStatus @default(ACTIVE)
   notes       String?          @db.Text
-  deletedAt   DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
 
   center   Center    @relation(fields: [centerId], references: [id])
   classes  Class[]
@@ -1226,8 +1226,8 @@ model Class {
 
   // Schedule
   schedule     String? // legacy free-text (e.g. "T2 T4 17:30")
-  startDate    DateTime?
-  endDate      DateTime?
+  startDate    DateTime? @db.Timestamptz(6)
+  endDate      DateTime? @db.Timestamptz(6)
   scheduleDays Int[]     @default([]) // 0=CN, 1=T2, ..., 6=T7
   startTime    String? // "HH:mm"
   endTime      String? // "HH:mm"
@@ -1241,16 +1241,16 @@ model Class {
   isActive Boolean     @default(true)
 
   // Module Quản lý lớp — workflow phê duyệt (approvedBy plain, không FK)
-  submittedForApprovalAt DateTime?
-  approvedAt             DateTime?
+  submittedForApprovalAt DateTime? @db.Timestamptz(6)
+  approvedAt             DateTime? @db.Timestamptz(6)
   approvedById           String?
   approvedByName         String?
 
   // Other
   notes     String?   @db.Text
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
   // R7-06 — pin curriculum version lúc tạo lớp (snapshot; null = lớp cũ, helper fallback).
   curriculumId      String?
@@ -1294,7 +1294,7 @@ model Enrollment {
 
   // Financial (legacy)
   tuition Int?
-  paidAt  DateTime?
+  paidAt  DateTime? @db.Timestamptz(6)
 
   // R7-03 — snapshot giá 4 thành phần (ghi tại convert/R7-05; bất biến khi đổi bảng giá).
   // `tuition` cũ giữ (2-phase); helper computeEnrollmentPrice fallback tuition khi null.
@@ -1304,14 +1304,14 @@ model Enrollment {
   finalPrice     Int? // phải thu sau giảm (clamp ≥ 0)
 
   // Legacy dates (kept for back-compat)
-  startDate DateTime?
-  endDate   DateTime?
+  startDate DateTime? @db.Timestamptz(6)
+  endDate   DateTime? @db.Timestamptz(6)
 
   // D5 workflow timestamps
-  enrolledAt  DateTime  @default(now())
-  confirmedAt DateTime?
-  startedAt   DateTime?
-  endedAt     DateTime?
+  enrolledAt  DateTime  @default(now()) @db.Timestamptz(6)
+  confirmedAt DateTime? @db.Timestamptz(6)
+  startedAt   DateTime? @db.Timestamptz(6)
+  endedAt     DateTime? @db.Timestamptz(6)
 
   // Transfer
   transferredToId String?
@@ -1322,8 +1322,9 @@ model Enrollment {
   // Other
   notes String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   class   Class   @relation(fields: [classId], references: [id])
@@ -1340,7 +1341,11 @@ model Enrollment {
   payments Payment[]        @relation("EnrollmentPayments") // R7-04
   receipts Receipt[]        @relation("EnrollmentReceipts") // R7-04
 
-  @@unique([studentId, classId])
+  // FIX-C3 (B2b) — KHÔNG @@unique đầy đủ: soft-delete cần cho ghi danh lại cùng
+  // (HS×lớp) sau khi xóa mềm. Ràng buộc duy nhất chỉ áp row CÒN SỐNG qua PARTIAL
+  // unique index `WHERE "deletedAt" IS NULL` (trong migration — Prisma không model
+  // được partial unique → sẽ báo drift khi `migrate dev`, GIỮ migration tay).
+  @@index([studentId, classId])
   @@index([studentId])
   @@index([classId])
   @@index([status])
@@ -1363,7 +1368,7 @@ model EnrollmentAuditLog {
   reason    String? @db.Text
   extraData Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([enrollmentId, createdAt])
 }
@@ -1371,7 +1376,7 @@ model EnrollmentAuditLog {
 model ClassSession {
   id      String   @id @default(cuid())
   classId String
-  date    DateTime
+  date    DateTime @db.Timestamptz(6)
   topic   String?
   notes   String?  @db.Text
 
@@ -1383,8 +1388,8 @@ model ClassSession {
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
-  startedAt         DateTime?
-  completedAt       DateTime?
+  startedAt         DateTime? @db.Timestamptz(6)
+  completedAt       DateTime? @db.Timestamptz(6)
   // Chuẩn bị phòng học (Module QL lớp phần 3)
   ckClean           Boolean       @default(false)
   ckEquipment       Boolean       @default(false)
@@ -1397,16 +1402,16 @@ model ClassSession {
   ckIncident        Boolean       @default(false)
   incidentNote      String?       @db.Text
 
-  // R7-07 — "Hoàn tất buổi": dữ liệu thực tế + nhận xét lớp (scalar soft-ref).
+  // R7-07 — "Hoàn tất buổi": dữ liệu thực tế + nhận xét lớp (khôi phục sau merge main→erd-fix-p0).
   actualTeacherId String?
   actualRoomId    String?
-  actualStartAt   DateTime?
-  actualEndAt     DateTime?
+  actualStartAt   DateTime? @db.Timestamptz(6)
+  actualEndAt     DateTime? @db.Timestamptz(6)
   classComment    String?   @db.Text
   completedById   String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   class            Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
   lesson           Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
@@ -1463,7 +1468,7 @@ model StudentSkillAssessment {
   level        SkillLevel
   note         String?
   assessedById String
-  assessedAt   DateTime      @default(now())
+  assessedAt   DateTime      @default(now()) @db.Timestamptz(6)
   student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId, skill])
@@ -1477,8 +1482,8 @@ model StudentSessionFeedback {
   comment        String       @db.Text
   rating         Int? // 1-5 tuỳ chọn
   createdById    String // GV
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
   classSession   ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
   student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -1499,9 +1504,9 @@ model Attendance {
   absenceReason   String?      @db.Text // lý do phụ huynh xin vắng
 
   // Commit 5 — mốc đã gửi thông báo điểm danh cho phụ huynh (chống gửi trùng).
-  notifiedAt DateTime?
+  notifiedAt DateTime? @db.Timestamptz(6)
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -1520,8 +1525,8 @@ model PageContent {
   title       String
   content     Json
   isPublished Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([slug])
 }
@@ -1556,9 +1561,9 @@ model JobPosting {
   authorId         String?
   contactEmail     String?
   contactPhone     String?
-  closesAt         DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  closesAt         DateTime? @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(6)
 
   author       User?            @relation(fields: [authorId], references: [id])
   applications JobApplication[]
@@ -1577,8 +1582,8 @@ model JobApplication {
   cvUrl       String?
   coverLetter String?           @db.Text
   status      ApplicationStatus @default(PENDING)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(6)
 
   job JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
@@ -1591,8 +1596,8 @@ model MarketingConfig {
   id        String   @id @default(cuid())
   key       String   @unique
   value     Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([key])
 }
@@ -1649,8 +1654,8 @@ model CoursePackage {
   heroImageUrl         String?
   galleryImageUrlsJson Json?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // Phase 5.6 — Order item link
   orderItems OrderItem[]
@@ -1674,12 +1679,12 @@ model News {
   tags           String[]
   isPublished    Boolean   @default(false)
   isFeatured     Boolean   @default(false)
-  publishedAt    DateTime?
+  publishedAt    DateTime? @db.Timestamptz(6)
   displayOrder   Int       @default(0)
   seoTitle       String?
   seoDescription String?   @db.Text
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
 
   @@index([slug])
   @@index([isPublished, publishedAt])
@@ -1718,7 +1723,7 @@ model Honor {
 
   category     HonorCategory
   awardName    String
-  awardedAt    DateTime
+  awardedAt    DateTime @db.Timestamptz(6)
   awardQuarter String?
 
   story        String  @db.Text
@@ -1730,8 +1735,8 @@ model Honor {
   isPublished  Boolean @default(true)
   displayOrder Int     @default(0)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
   createdById String?
   createdBy   User?    @relation("HonorCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
@@ -1743,15 +1748,15 @@ model Honor {
 
 model TimelineItem {
   id              String   @id @default(cuid())
-  occurredAt      DateTime
+  occurredAt      DateTime @db.Timestamptz(6)
   title           String
   description     String   @db.Text
   coverImageUrl   String?
   relatedHonorIds String?
   isPublished     Boolean  @default(true)
   displayOrder    Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([isPublished, occurredAt])
 }
@@ -1761,7 +1766,7 @@ model SitePageContent {
   pageKey      String
   contentKey   String
   contentValue String   @db.Text
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
   updatedById  String?
   updatedBy    User?    @relation("PageContentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
@@ -1783,8 +1788,8 @@ model DepartmentDef {
   displayOrder Int        @default(0)
   isTeaching   Boolean    @default(false) // GIANG_DAY/DAO_TAO → hiện UI giảng dạy
   isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
   employees    Employee[]
 
   @@index([isActive, displayOrder])
@@ -1840,7 +1845,7 @@ model Employee {
   departmentRef DepartmentDef? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   avatarUrl     String?
   email         String?        @unique
-  joinedAt      DateTime?
+  joinedAt      DateTime? @db.Timestamptz(6)
   bio           String?        @db.Text
   isActive      Boolean        @default(true)
   isPublic      Boolean        @default(false)
@@ -1848,14 +1853,14 @@ model Employee {
 
   // Tier 2: HR cơ bản
   phone        String?
-  dateOfBirth  DateTime?
+  dateOfBirth  DateTime? @db.Timestamptz(6)
   gender       Gender?
   contractType ContractType?
   salaryRank   Int?
   salaryLevel  Int?
 
   // Phase 4.7 — additional Tier 2 HR fields
-  endDate          DateTime? // Ngày kết thúc HĐ (cho hợp đồng có thời hạn)
+  endDate          DateTime? @db.Timestamptz(6) // Ngày kết thúc HĐ (cho hợp đồng có thời hạn)
   bhxhBase         Float? // Mức lương đóng BHXH
   address          String?
   emergencyContact String? // Tên - Quan hệ - SĐT
@@ -1881,8 +1886,8 @@ model Employee {
   isCEO Boolean @default(false)
 
   // Meta
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
   createdById String?
   createdBy   User?    @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
@@ -1924,7 +1929,7 @@ model RoleAuditLog {
 
   reason String? @db.Text
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([employeeId, createdAt])
   @@index([createdAt])
@@ -1960,8 +1965,8 @@ model ZMRoboKit {
   displayOrder Int     @default(0)
   isPublished  Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // Phase 5.10 — Product catalog link
   products Product[]
@@ -1985,8 +1990,8 @@ model Curriculum {
   isActive Boolean          @default(true)
   status   CurriculumStatus @default(ACTIVE) // LMS-1
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   lessons Lesson[]
 
@@ -2040,8 +2045,8 @@ model Lesson {
   homeworkDefault    String? @db.Text // bài tập mặc định
   assessmentCriteria String? @db.Text // tiêu chí đánh giá
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   questions      Question[]
   exams          Exam[]
@@ -2129,8 +2134,8 @@ model Question {
   isPublic Boolean @default(true)
   notes    String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([lessonId])
   @@index([assignmentId])
@@ -2184,21 +2189,21 @@ model Exam {
   shuffleQuestions Boolean @default(false)
   shuffleChoices   Boolean @default(false)
 
-  // R7-13 — cấu hình bài kiểm tra bổ sung.
+  // R7-13 — cấu hình bài kiểm tra bổ sung (khôi phục sau merge main→erd-fix-p0).
   maxAttempts           Int?
   defaultDueDays        Int?
   scoringMode           String?
   showResultAfterSubmit Boolean @default(true)
 
-  openAt  DateTime?
-  closeAt DateTime?
+  openAt  DateTime? @db.Timestamptz(6)
+  closeAt DateTime? @db.Timestamptz(6)
 
   status ExamStatus @default(DRAFT)
 
   createdById String?
   createdBy   Employee? @relation("ExamCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
   examQuestions ExamQuestion[]
   attempts      ExamAttempt[]
@@ -2232,9 +2237,9 @@ model ExamAttempt {
   studentId String
   student   Student @relation(fields: [studentId], references: [id])
 
-  startedAt   DateTime  @default(now())
-  submittedAt DateTime?
-  gradedAt    DateTime?
+  startedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  submittedAt DateTime? @db.Timestamptz(6)
+  gradedAt    DateTime? @db.Timestamptz(6)
 
   status     AttemptStatus @default(IN_PROGRESS)
   totalScore Float?
@@ -2268,8 +2273,8 @@ model ExamAnswer {
   score      Float?
   graderNote String?  @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([attemptId, examQuestionId])
 }
@@ -2309,8 +2314,8 @@ model Document {
   uploadedById String?
   uploadedBy   Employee? @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   assignmentDocs AssignmentDocument[]
 
@@ -2356,8 +2361,8 @@ model Assignment {
 
   totalPoints Float @default(10)
 
-  assignedAt DateTime  @default(now())
-  dueAt      DateTime?
+  assignedAt DateTime  @default(now()) @db.Timestamptz(6)
+  dueAt      DateTime? @db.Timestamptz(6)
 
   allowText Boolean @default(true)
   allowFile Boolean @default(true)
@@ -2366,8 +2371,8 @@ model Assignment {
 
   createdById String?
   createdBy   Employee? @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
   submissions AssignmentSubmission[]
   documents   AssignmentDocument[]
@@ -2385,7 +2390,7 @@ model AssignmentDocument {
   documentId   String
   document     Document   @relation(fields: [documentId], references: [id])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([assignmentId, documentId])
   @@index([documentId])
@@ -2404,17 +2409,17 @@ model AssignmentSubmission {
   fileSize   Int?
   mimeType   String?
 
-  submittedAt DateTime?
+  submittedAt DateTime? @db.Timestamptz(6)
   status      SubmissionStatus @default(NOT_SUBMITTED)
 
   score      Float?
   feedback   String?   @db.Text
-  gradedAt   DateTime?
+  gradedAt   DateTime? @db.Timestamptz(6)
   gradedById String?
   gradedBy   Employee? @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   rubricScores SubmissionRubricScore[]
 
@@ -2432,9 +2437,9 @@ model ProgressReportLog {
   class         Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
   generatedById String?
   generatedBy   Employee? @relation("ReportGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
-  generatedAt   DateTime  @default(now())
+  generatedAt   DateTime  @default(now()) @db.Timestamptz(6)
   sentToEmail   String?
-  sentAt        DateTime?
+  sentAt        DateTime? @db.Timestamptz(6)
   reportTitle   String
   metadata      Json?
 
@@ -2478,8 +2483,8 @@ model InventoryItem {
   isActive Boolean @default(true)
   notes    String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   balances   StockBalance[]
   movements  StockMovement[]
@@ -2500,10 +2505,10 @@ model StockBalance {
   reserved     Int  @default(0)
   minThreshold Int?
 
-  lastReceiptAt DateTime?
-  lastIssueAt   DateTime?
+  lastReceiptAt DateTime? @db.Timestamptz(6)
+  lastIssueAt   DateTime? @db.Timestamptz(6)
 
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([itemId, centerId])
   @@index([centerId, quantity])
@@ -2548,7 +2553,7 @@ model StockMovement {
 
   performedById String?
   performedBy   Employee? @relation("MovementPerformer", fields: [performedById], references: [id], onDelete: SetNull)
-  performedAt   DateTime  @default(now())
+  performedAt   DateTime  @default(now()) @db.Timestamptz(6)
   notes         String?   @db.Text
 
   auditItem InventoryAuditItem? @relation("AuditMovement")
@@ -2584,12 +2589,12 @@ model InventoryAudit {
 
   performedById String?
   performedBy   Employee? @relation("AuditPerformer", fields: [performedById], references: [id], onDelete: SetNull)
-  performedAt   DateTime?
+  performedAt   DateTime? @db.Timestamptz(6)
 
   notes String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   items InventoryAuditItem[]
 
@@ -2615,7 +2620,7 @@ model InventoryAuditItem {
   movementId String?        @unique
   movement   StockMovement? @relation("AuditMovement", fields: [movementId], references: [id], onDelete: SetNull)
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([auditId, itemId])
   @@index([itemId])
@@ -2647,7 +2652,7 @@ model UserAuditLog {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([userId, createdAt])
   @@index([createdAt])
@@ -2675,7 +2680,7 @@ model PermissionGrantAuditLog {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([userId, createdAt])
   @@index([createdAt])
@@ -2699,7 +2704,7 @@ model LeadAuditLog {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([leadId, createdAt])
   @@index([createdAt])
@@ -2728,8 +2733,8 @@ model LeadAssignmentConfig {
   id        String         @id @default(cuid())
   centerId  String         @unique
   mode      LeadAssignMode @default(ROUND_ROBIN)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  createdAt DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime       @updatedAt @db.Timestamptz(6)
 }
 
 // Module CRM & Lead PHẦN 3/4 — log chuyển lead (sale/cơ sở) + bàn giao.
@@ -2744,7 +2749,7 @@ model LeadTransfer {
   reason            String? // lý do chuyển (tuỳ chọn)
   transferredById   String?
   transferredByName String
-  createdAt         DateTime @default(now())
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([createdAt])
   @@index([leadId])
@@ -2766,7 +2771,7 @@ model LeadActivity {
   type      LeadActivityType
   content   String           @db.Text
   metadata  Json?
-  createdAt DateTime         @default(now())
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
 
   @@index([leadId, createdAt])
 }
@@ -2779,10 +2784,10 @@ model LeadTask {
   assignedToName String?
   title          String
   description    String?        @db.Text
-  dueAt          DateTime
-  completedAt    DateTime?
+  dueAt          DateTime @db.Timestamptz(6)
+  completedAt    DateTime? @db.Timestamptz(6)
   status         LeadTaskStatus @default(OPEN)
-  createdAt      DateTime       @default(now())
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
 
   @@index([leadId])
   @@index([assignedToId, status, dueAt])
@@ -2796,7 +2801,7 @@ model LeadDuplicate {
   primaryLead    Lead     @relation("LeadDuplicates", fields: [primaryLeadId], references: [id], onDelete: Cascade)
   duplicatePhone String
   source         String?
-  matchedAt      DateTime @default(now())
+  matchedAt      DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([primaryLeadId])
   @@index([duplicatePhone])
@@ -2819,7 +2824,7 @@ model ClassAuditLog {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([classId, createdAt])
   @@index([createdAt])
@@ -2843,7 +2848,7 @@ model StudentAuditLog {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([studentId, createdAt])
   @@index([createdAt])
@@ -2886,8 +2891,8 @@ model PaymentMethod {
   displayOrder Int     @default(0)
   isActive     Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   orders Order[]
 
@@ -2938,17 +2943,18 @@ model Order {
   // Payment proof / external refs
   bankReference String?
   gatewayTxnId  String?
-  paidAt        DateTime?
+  paidAt        DateTime? @db.Timestamptz(6)
 
   // Confirmation by staff
   confirmedByUserId String?
-  confirmedAt       DateTime?
+  confirmedAt       DateTime? @db.Timestamptz(6)
 
   customerNote String? @db.Text
   internalNote String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
   items   OrderItem[]
   history OrderStatusHistory[]
@@ -2983,17 +2989,17 @@ model OrderInstallment {
   soDot          Int // 1 hoặc 2
   amount         Int
   status         InstallmentStatus @default(PENDING)
-  dueDate        DateTime?
-  paidAt         DateTime?
+  dueDate        DateTime? @db.Timestamptz(6)
+  paidAt         DateTime? @db.Timestamptz(6)
   recordedById   String?
   // R7-04 — số ngày nhắc trước hạn (QĐ-O7); null → đọc SystemSetting default 14.
   reminderDays Int?
   // Mốc nhắc công nợ gần nhất (chống spam — 1 nhắc/ngày).
-  lastReminderAt DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  lastReminderAt DateTime? @db.Timestamptz(6)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @db.Timestamptz(6)
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
 
   @@unique([orderId, soDot])
   @@index([status, dueDate])
@@ -3002,7 +3008,7 @@ model OrderInstallment {
 model OrderItem {
   id      String        @id @default(cuid())
   orderId String
-  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
   type    OrderItemType
 
   // Polymorphic refs (only one non-null per row, by type)
@@ -3030,8 +3036,8 @@ model OrderItem {
 
   metadata Json?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([orderId])
   @@index([type])
@@ -3044,7 +3050,7 @@ model OrderItem {
 model OrderStatusHistory {
   id      String @id @default(cuid())
   orderId String
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
 
   fromStatus OrderStatus
   toStatus   OrderStatus
@@ -3055,7 +3061,7 @@ model OrderStatusHistory {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([orderId, createdAt])
   @@index([createdAt])
@@ -3080,7 +3086,7 @@ model PaymentMethodAuditLog {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([paymentMethodId, createdAt])
   @@index([createdAt])
@@ -3112,13 +3118,13 @@ model Voucher {
   usageLimitPerUser Int  @default(1)
 
   // Validity
-  validFrom  DateTime
-  validUntil DateTime
+  validFrom  DateTime @db.Timestamptz(6)
+  validUntil DateTime @db.Timestamptz(6)
   isActive   Boolean  @default(true)
 
   // Audit
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
   createdByUserId String?
 
   redemptions VoucherRedemption[]
@@ -3142,7 +3148,7 @@ model VoucherRedemption {
 
   discountApplied Int // VND actual discount snapshot
 
-  redeemedAt DateTime @default(now())
+  redeemedAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([voucherId, redeemedAt])
   @@index([customerPhone, voucherId])
@@ -3164,7 +3170,7 @@ model VoucherAuditLog {
   reason   String? @db.Text
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([voucherId, createdAt])
   @@index([createdAt])
@@ -3185,9 +3191,9 @@ model StudentReserve {
   enrollment   Enrollment? @relation("EnrollmentReserves", fields: [enrollmentId], references: [id], onDelete: SetNull)
 
   reason        String    @db.Text
-  startedAt     DateTime  @default(now())
-  expectedEndAt DateTime?
-  endedAt       DateTime?
+  startedAt     DateTime  @default(now()) @db.Timestamptz(6)
+  expectedEndAt DateTime? @db.Timestamptz(6)
+  endedAt       DateTime? @db.Timestamptz(6)
   endReason     String?   @db.Text
 
   // Actor snapshots — no FK (defensive)
@@ -3199,8 +3205,8 @@ model StudentReserve {
   // Denormalised flag (= endedAt is null) for fast queries.
   isActive Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([studentId, isActive])
   @@index([studentId, startedAt])
@@ -3242,8 +3248,8 @@ model Product {
   attributes Json?
   notes      String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   movements ProductMovement[]
   auditLogs ProductAuditLog[]
@@ -3276,7 +3282,7 @@ model ProductMovement {
   createdByUserId String?
   createdByName   String
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([productId, createdAt])
   @@index([type])
@@ -3299,7 +3305,7 @@ model ProductAuditLog {
 
   reason String? @db.Text
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([productId, createdAt])
 }
@@ -3342,10 +3348,10 @@ model EmailTemplate {
   replyTo  String?
 
   sentCount  Int       @default(0)
-  lastSentAt DateTime?
+  lastSentAt DateTime? @db.Timestamptz(6)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   logs EmailLog[]
 
@@ -3376,8 +3382,8 @@ model EmailLog {
   triggeredByName   String?
   triggerType       String
 
-  sentAt    DateTime?
-  createdAt DateTime  @default(now())
+  sentAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([templateId, createdAt])
   @@index([toEmail, createdAt])
@@ -3393,7 +3399,7 @@ model Counter {
   id        String   @id @default(cuid())
   key       String   @unique
   lastValue Int      @default(0)
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 }
 
 // ─── Trial Class + Webhook (Phase T1.4) ──────────────────────────────────────
@@ -3428,12 +3434,12 @@ model TrialClass {
   room        Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
   teacherId   String?
   teacher     User?            @relation("TrialTeacher", fields: [teacherId], references: [id])
-  scheduledAt DateTime
+  scheduledAt DateTime @db.Timestamptz(6)
   status      TrialClassStatus @default(SCHEDULED)
-  attendedAt  DateTime?
+  attendedAt  DateTime? @db.Timestamptz(6)
   notes       String?          @db.Text
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
 
   feedback TrialFeedback?
 
@@ -3453,7 +3459,7 @@ model TrialFeedback {
   parentFeedback      String?     @db.Text
   recommendedCourseId String?
   recommendedCourse   Course?     @relation("TrialRecommendedCourse", fields: [recommendedCourseId], references: [id], onDelete: SetNull)
-  createdAt           DateTime    @default(now())
+  createdAt           DateTime    @default(now()) @db.Timestamptz(6)
 }
 
 enum WebhookStatus {
@@ -3469,8 +3475,8 @@ model WebhookDelivery {
   externalId   String?
   payload      Json
   status       WebhookStatus @default(RECEIVED)
-  receivedAt   DateTime      @default(now())
-  processedAt  DateTime?
+  receivedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  processedAt  DateTime? @db.Timestamptz(6)
   errorMessage String?       @db.Text
   retryCount   Int           @default(0)
 
@@ -3498,9 +3504,9 @@ model StaffNotification {
   body      String    @db.Text
   href      String?
   dedupeKey String // duy nhất theo user → chống trùng
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  readAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
   @@unique([userId, dedupeKey])
   @@index([userId, readAt])
@@ -3517,13 +3523,13 @@ model Notification {
   classId       String?
   studentId     String? // Đợt 6 #7 — target 1 học viên (audience=STUDENT)
   isPublished   Boolean              @default(true)
-  publishedAt   DateTime?            @default(now())
+  publishedAt   DateTime?            @default(now()) @db.Timestamptz(6)
   createdById   String?
   createdByName String?
   // R7-17 — khoá chống trùng cho thông báo sinh từ DomainEvent (null = announcement thủ công).
   dedupeKey   String?              @unique
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  createdAt   DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime             @updatedAt @db.Timestamptz(6)
 
   @@index([audience, isPublished])
   @@index([centerId])
@@ -3559,16 +3565,16 @@ model ParentRequest {
   parentUserId  String?
   type          ParentRequestType
   content       String              @db.Text
-  preferredDate DateTime?
+  preferredDate DateTime? @db.Timestamptz(6)
   // Module QL học viên PHẦN 3 — buổi xin vắng (báo vắng ABSENCE); cột phẳng, không FK
   sessionId     String?
   status        ParentRequestStatus @default(PENDING)
   response      String?             @db.Text
   handledById   String?
   handledByName String?
-  handledAt     DateTime?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  handledAt     DateTime? @db.Timestamptz(6)
+  createdAt     DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime            @updatedAt @db.Timestamptz(6)
 
   @@index([studentId])
   @@index([status, createdAt])
@@ -3588,8 +3594,8 @@ model ParentFeedback {
   // P1-g — admin phản hồi lại đánh giá (tuỳ chọn).
   adminResponse String?   @db.Text
   respondedById String?
-  respondedAt   DateTime?
-  createdAt     DateTime  @default(now())
+  respondedAt   DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([createdAt])
   @@index([studentId])
@@ -3622,8 +3628,8 @@ model ClassSessionMedia {
   uploadedByName String?
   approvedById   String?
   approvedByName String?
-  approvedAt     DateTime?
-  createdAt      DateTime    @default(now())
+  approvedAt     DateTime? @db.Timestamptz(6)
+  createdAt      DateTime    @default(now()) @db.Timestamptz(6)
 
   tags MediaStudentTag[]
 
@@ -3696,8 +3702,8 @@ model WorkShiftConfig {
   endTime          String // "11:30"
   toleranceMinutes Int      @default(15)
   isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([centerId, code])
   @@index([centerId, isActive])
@@ -3718,8 +3724,8 @@ model ShiftRegistration {
   shifts    WorkShift[]
   status    ShiftRegStatus @default(REGISTERED)
   note      String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  createdAt DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime       @updatedAt @db.Timestamptz(6)
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
@@ -3746,10 +3752,10 @@ model TimesheetAdjustmentRequest {
   status         AdjustStatus @default(PENDING)
   reviewedById   String?
   reviewedByName String?
-  reviewedAt     DateTime?
+  reviewedAt     DateTime? @db.Timestamptz(6)
   reviewNote     String?      @db.Text
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
 
   @@index([status, createdAt])
   @@index([userId, date])
@@ -3769,7 +3775,7 @@ model TimesheetEditLog {
   editedById   String?
   editedByName String?
   requestId    String? // gắn yêu cầu chỉnh công (nếu duyệt từ yêu cầu)
-  createdAt    DateTime @default(now())
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([userId, date])
   @@index([createdAt])
@@ -3798,7 +3804,7 @@ model CenterDayChecklist {
 
   note      String?  @db.Text
   byUserId  String?
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([centerId, date])
   @@index([centerId, date])
@@ -3812,13 +3818,13 @@ model EmployeeCheckin {
   centerId       String?
   orgUnitId      String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   type           CheckinType
-  checkedAt      DateTime    @default(now())
+  checkedAt      DateTime    @default(now()) @db.Timestamptz(6)
   latitude       Float?
   longitude      Float?
   distanceMeters Int?
   withinGeofence Boolean     @default(true)
   qrToken        String?
-  createdAt      DateTime    @default(now())
+  createdAt      DateTime    @default(now()) @db.Timestamptz(6)
 
   @@unique([userId, type, qrToken])
   @@index([userId, checkedAt])
@@ -3852,14 +3858,14 @@ model OtpRequest {
   channel     OtpChannel @default(EMAIL)
   purpose     OtpPurpose
   codeHash    String // HMAC-SHA256(secret, code)
-  expiresAt   DateTime
+  expiresAt   DateTime @db.Timestamptz(6)
   attempts    Int        @default(0)
   maxAttempts Int        @default(5)
-  verifiedAt  DateTime?
-  consumedAt  DateTime? // đã dùng để hoàn tất nghiệp vụ (set mật khẩu…)
+  verifiedAt  DateTime? @db.Timestamptz(6)
+  consumedAt  DateTime? @db.Timestamptz(6) // đã dùng để hoàn tất nghiệp vụ (set mật khẩu…)
   userId      String? // tài khoản liên quan (nếu có)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(6)
 
   deliveries OtpDeliveryLog[]
 
@@ -3877,7 +3883,7 @@ model OtpDeliveryLog {
   provider     String // "resend" | "speedsms" | …
   status       String // "SENT" | "FAILED"
   error        String?    @db.Text
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
 
   @@index([otpRequestId])
   @@index([target, createdAt])
@@ -3909,11 +3915,11 @@ model EmailQueue {
   error       String?          @db.Text
   contextType String?
   contextId   String?
-  scheduledAt DateTime         @default(now())
-  sentAt      DateTime?
+  scheduledAt DateTime         @default(now()) @db.Timestamptz(6)
+  sentAt      DateTime? @db.Timestamptz(6)
   emailLogId  String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
 
   @@index([status, scheduledAt])
   @@index([contextType, contextId])
@@ -3942,9 +3948,9 @@ model MakeupNeed {
   note            String?          @db.Text
   createdById     String?
   scheduledById   String?
-  completedAt     DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  completedAt     DateTime? @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
@@ -3989,9 +3995,9 @@ model StudentRiskAlert {
   status       RiskStatus    @default(OPEN)
   detail       String?       @db.Text
   resolvedById String?
-  resolvedAt   DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  resolvedAt   DateTime? @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
 
   student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   careTasks StudentCareTask[]
@@ -4017,12 +4023,12 @@ model StudentCareTask {
   riskAlertId  String?
   title        String
   description  String?        @db.Text
-  dueAt        DateTime
+  dueAt        DateTime @db.Timestamptz(6)
   status       CareTaskStatus @default(OPEN)
-  completedAt  DateTime?
+  completedAt  DateTime? @db.Timestamptz(6)
   createdById  String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
 
   student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   riskAlert StudentRiskAlert? @relation(fields: [riskAlertId], references: [id], onDelete: SetNull)
@@ -4059,8 +4065,8 @@ model Survey {
   centerId    String? // null = mọi cơ sở
   orgUnitId   String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   createdById String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(6)
 
   questions SurveyQuestion[]
   responses SurveyResponse[]
@@ -4096,7 +4102,7 @@ model SurveyResponse {
   npsScore     Int? // 0-10
   comment      String?  @db.Text
   answers      Json? // {questionId: value}
-  createdAt    DateTime @default(now())
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([surveyId, createdAt])
   @@index([centerId, createdAt])
@@ -4112,14 +4118,14 @@ model CourseCompletion {
   studentId       String
   courseId        String
   classId         String?
-  completedAt     DateTime @default(now())
+  completedAt     DateTime @default(now()) @db.Timestamptz(6)
   finalAssessment String?  @db.Text // GV đánh giá cuối khoá
   finalGrade      String? // điểm/xếp loại cuối khoá
   certificateCode String   @unique // CERT-YYMMDD-XXXX
   nextCourseId    String? // gợi ý khoá tiếp theo
   createdById     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   course  Course  @relation("CourseCompletions", fields: [courseId], references: [id])
@@ -4153,9 +4159,9 @@ model StudentTransferRequest {
   note          String?               @db.Text // ghi chú khi duyệt/từ chối
   requestedById String?
   decidedById   String?
-  decidedAt     DateTime?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  decidedAt     DateTime? @db.Timestamptz(6)
+  createdAt     DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime              @updatedAt @db.Timestamptz(6)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -4169,10 +4175,10 @@ model StudentCenterHistory {
   studentId String
   centerId  String
   orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
-  fromDate  DateTime  @default(now())
-  toDate    DateTime? // null = đang ở cơ sở này
+  fromDate  DateTime  @default(now()) @db.Timestamptz(6)
+  toDate    DateTime? @db.Timestamptz(6) // null = đang ở cơ sở này
   reason    String?
-  createdAt DateTime  @default(now())
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -4192,7 +4198,7 @@ model LeadAssignmentHistory {
   toUserId     String? // sale mới
   assignedById String? // người thực hiện bàn giao
   reason       String?  @db.Text
-  createdAt    DateTime @default(now())
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
@@ -4226,7 +4232,7 @@ model SubmissionRubricScore {
   submissionId String
   criterion    RubricCriterion
   level        RubricLevel
-  createdAt    DateTime        @default(now())
+  createdAt    DateTime        @default(now()) @db.Timestamptz(6)
 
   submission AssignmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
@@ -4258,7 +4264,7 @@ model SataCoinTransaction {
   ruleCode     String? // rule áp dụng (nếu có)
   reversedTxId String?        @unique // trỏ tới giao dịch bị đảo (1-1)
   createdById  String?
-  createdAt    DateTime       @default(now())
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -4274,8 +4280,8 @@ model SataCoinRule {
   amount    Int // coin cộng khi áp rule
   isActive  Boolean  @default(true)
   centerId  String? // null = áp mọi cơ sở
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 }
 
 // R7-17 (PR3) — Cấu hình quy tắc Satacoin (PENDING — QĐ-O10/O20). SCHEMA-ONLY:
@@ -4384,8 +4390,8 @@ model ZaloMessageLog {
   providerMessageId String?
   errorMessage      String?           @db.Text
   fallbackEmailed   Boolean           @default(false)
-  createdAt         DateTime          @default(now())
-  sentAt            DateTime?
+  createdAt         DateTime          @default(now()) @db.Timestamptz(6)
+  sentAt            DateTime? @db.Timestamptz(6)
 
   @@index([status, createdAt])
 }
@@ -4412,8 +4418,8 @@ model IntegrationConfig {
   provider  String   @unique // "MISA"
   isEnabled Boolean  @default(false)
   settings  Json     @default("{}")
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 }
 
 model IntegrationLog {
@@ -4425,7 +4431,7 @@ model IntegrationLog {
   requestPayload  Json                 @default("{}")
   responsePayload Json?
   errorMessage    String?              @db.Text
-  createdAt       DateTime             @default(now())
+  createdAt       DateTime             @default(now()) @db.Timestamptz(6)
 
   @@index([provider, status, createdAt])
 }
@@ -4442,8 +4448,8 @@ model SystemSetting {
   valueJson     Json
   updatedById   String?
   updatedByName String?
-  updatedAt     DateTime @updatedAt
-  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
 }
 
 /// Override tham số theo cơ sở (OrgUnit). CENTER_MANAGER cơ sở đó / SUPER_ADMIN sửa.
@@ -4453,8 +4459,8 @@ model CenterSetting {
   valueJson     Json
   updatedById   String?
   updatedByName String?
-  updatedAt     DateTime @updatedAt
-  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
 
   @@id([orgUnitId, key])
   @@index([key])
@@ -4487,11 +4493,11 @@ model Promotion {
 
   displayOrder Int       @default(0)
   isActive     Boolean   @default(true)
-  startsAt     DateTime?
-  endsAt       DateTime?
+  startsAt     DateTime? @db.Timestamptz(6)
+  endsAt       DateTime? @db.Timestamptz(6)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([kind, isActive, displayOrder])
   @@index([courseSlug, isActive])
@@ -4513,8 +4519,8 @@ model Testimonial {
   displayOrder Int     @default(0)
   isPublished  Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([courseSlug, isPublished, displayOrder])
 }
@@ -4530,10 +4536,10 @@ model CourseDiscount {
   note       String?
   conditions String?            @db.Text
   active     Boolean            @default(true)
-  validFrom  DateTime?
-  validTo    DateTime?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
+  validFrom  DateTime? @db.Timestamptz(6)
+  validTo    DateTime? @db.Timestamptz(6)
+  createdAt  DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime           @updatedAt @db.Timestamptz(6)
 
   @@index([courseId, active])
 }
@@ -4550,8 +4556,8 @@ model ClassSessionPlan {
   customTitle String?
   note        String?  @db.Text
   order       Int      @default(0) // thứ tự hiển thị (cho phép reorder)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   sessions ClassSession[]
 
@@ -4581,12 +4587,12 @@ enum ReceiptStatus {
 model Payment {
   id           String  @id @default(cuid())
   orderId      String
-  order        Order   @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Cascade)
+  order        Order   @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
   enrollmentId String?
-  enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull)
+  enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull) // FIX-C3: liên kết mềm, giữ SetNull
   amount       Int
   method       String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
-  paidDate     DateTime
+  paidDate     DateTime @db.Timestamptz(6)
   evidenceUrl  String?
   note         String? @db.Text
 
@@ -4594,7 +4600,7 @@ model Payment {
   accountantStatus PaymentAccountantStatus @default(PENDING)
   recordedById     String?
   confirmedById    String?
-  confirmedAt      DateTime?
+  confirmedAt      DateTime? @db.Timestamptz(6)
   rejectReason     String? @db.Text
 
   adjustmentOfId String?
@@ -4603,8 +4609,9 @@ model Payment {
 
   centerId  String? // cách ly cơ sở (scopedDb)
   receipts  Receipt[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
   @@index([orderId])
   @@index([enrollmentId])
@@ -4617,12 +4624,15 @@ model Receipt {
   id           String        @id @default(cuid())
   code         String        @unique // RCP-{CENTER}-{YY}-{SEQ}
   enrollmentId String
-  enrollment   Enrollment    @relation("EnrollmentReceipts", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollment   Enrollment    @relation("EnrollmentReceipts", fields: [enrollmentId], references: [id], onDelete: Restrict) // FIX-C3
   paymentId    String
-  payment      Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment      Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict) // FIX-C3
   issuedById   String?
-  issuedAt     DateTime      @default(now())
+  issuedAt     DateTime      @default(now()) @db.Timestamptz(6)
   status       ReceiptStatus @default(ACTIVE)
+
+  updatedAt DateTime  @updatedAt @default(now()) @db.Timestamptz(6) // FIX-C3 (FIX-M4)
+  deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính
 
   @@index([enrollmentId])
   @@index([paymentId])
@@ -4660,8 +4670,8 @@ model TrialProgramConfig {
   sessionCount Int
   active       Boolean        @default(true)
   updatedById  String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
   trialClasses TrialClassV2[]
 }
 
@@ -4683,8 +4693,8 @@ model TrialClassV2 {
   configId     String?
   config       TrialProgramConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
   sessionCount Int // snapshot lúc tạo (lớp cũ giữ N cũ khi config đổi)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  createdAt    DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime           @updatedAt @db.Timestamptz(6)
 
   sessions    TrialClassSession[]
   enrollments TrialEnrollment[]
@@ -4704,8 +4714,8 @@ model TrialClassSession {
   roomId       String?
   teacherId    String?
   status       TrialSessionStatus @default(SCHEDULED)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  createdAt    DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime           @updatedAt @db.Timestamptz(6)
 
   attendances TrialAttendance[]
 
@@ -4722,8 +4732,8 @@ model TrialEnrollment {
   status       TrialEnrollmentStatus @default(ACTIVE)
   summaryNote  String?               @db.Text // nhận xét tổng kết học thử
   addedById    String?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  createdAt    DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime              @updatedAt @db.Timestamptz(6)
 
   attendances TrialAttendance[]
 
@@ -4740,8 +4750,8 @@ model TrialAttendance {
   trialEnrollment   TrialEnrollment       @relation(fields: [trialEnrollmentId], references: [id], onDelete: Cascade)
   status            TrialAttendanceStatus @default(PRESENT)
   note              String?               @db.Text
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
 
   @@unique([trialSessionId, trialEnrollmentId])
 }
@@ -4762,8 +4772,8 @@ model ConvertConflict {
   status       ConvertConflictStatus @default(OPEN)
   resolvedById String?
   note         String?               @db.Text
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  createdAt    DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime              @updatedAt @db.Timestamptz(6)
 
   @@index([leadId, status])
   @@index([status])
@@ -4776,7 +4786,7 @@ model IdempotencyKey {
   key       String   @unique
   scope     String? // "convert" | ...
   result    Json? // tham chiếu kết quả (vd enrollmentIds) để trả lại khi trùng
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([scope, createdAt])
 }

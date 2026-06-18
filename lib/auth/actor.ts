@@ -134,8 +134,7 @@ export function buildActor(input: {
         scopeType: p.scopeType,
         orgUnitId: r.orgUnitId,
         roleCode: r.role.code,
-        centerScope:
-          p.scopeType === "CENTER" ? (hoRoot ? "ALL" : rowCenters) : null,
+        centerScope: hoRoot ? "ALL" : rowCenters,
       });
     }
   }

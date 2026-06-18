@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { SOFT_DELETE_MODELS, injectSoftDelete } from "@/lib/soft-delete";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -39,7 +40,7 @@ if (
   globalForPrisma.prisma = undefined;
 }
 
-export const db =
+const basePrisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
@@ -53,6 +54,42 @@ export const db =
   });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = db;
+  globalForPrisma.prisma = basePrisma;
   globalForPrisma.prismaDatabaseUrl = databaseUrl;
 }
+
+// FIX-C3 (B1) — soft-delete filter ở TẦNG base: MỌI read (db trần + scopedDb, vì
+// scopedDb = db.$extends) đều ẩn row đã xóa của SOFT_DELETE_MODELS. Override bằng
+// cách truyền `deletedAt` trong where (vd đọc "Thùng rách"). Chỉ thêm query hook
+// (không đổi surface) → cast về PrismaClient để mọi call-site type cũ không vỡ.
+// ⚠️ Nested include/_count KHÔNG được hook → chỗ đọc lồng phải tự thêm deletedAt.
+export const db = basePrisma.$extends({
+  query: {
+    $allModels: {
+      findMany({ model, args, query }) {
+        return query(injectSoftDelete(model, args));
+      },
+      findFirst({ model, args, query }) {
+        return query(injectSoftDelete(model, args));
+      },
+      findFirstOrThrow({ model, args, query }) {
+        return query(injectSoftDelete(model, args));
+      },
+      count({ model, args, query }) {
+        return query(injectSoftDelete(model, args));
+      },
+      aggregate({ model, args, query }) {
+        return query(injectSoftDelete(model, args));
+      },
+      groupBy({ model, args, query }) {
+        return query(injectSoftDelete(model, args));
+      },
+      async findUnique({ model, args, query }) {
+        // findUnique chỉ nhận where unique → lọc hậu kỳ: row đã xóa → trả null.
+        const r = (await query(args)) as { deletedAt?: Date | null } | null;
+        if (r && SOFT_DELETE_MODELS.has(model) && r.deletedAt != null) return null;
+        return r;
+      },
+    },
+  },
+}) as unknown as PrismaClient;

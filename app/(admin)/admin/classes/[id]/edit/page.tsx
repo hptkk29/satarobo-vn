@@ -2,8 +2,9 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { can, hasAnyRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
+import { can } from "@/lib/auth/can";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
@@ -22,16 +23,22 @@ export const dynamic = "force-dynamic";
 export default async function EditClassPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "classes:edit")) {
+
+  const { id } = await params;
+  const actor = await resolveActor(session.user.id);
+
+  const hasEdit = can(actor, "classes:edit");
+  const hasViewAll = can(actor, "classes:view-all");
+  const hasViewOwn = can(actor, "classes:view-own");
+
+  if (!hasEdit && !hasViewAll && !hasViewOwn) {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const { id } = await params;
-
-  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const [cls, courses, orgUnits, classGroups, rooms] =
     await Promise.all([
-    db.class.findFirst({
+    sdb.class.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true,
@@ -58,18 +65,18 @@ export default async function EditClassPage({ params }: Props) {
         curriculumVersion: true,
       },
     }),
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true },
     }),
     getSelectableOrgUnits(actor),
-    db.classGroup.findMany({
+    sdb.classGroup.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
       orderBy: { displayCode: "asc" },
       select: { id: true, displayCode: true, name: true, centerId: true },
     }),
-    db.room.findMany({
+    sdb.room.findMany({
       where: { status: "ACTIVE" },
       orderBy: [{ centerId: "asc" }, { code: "asc" }],
       select: { id: true, code: true, name: true, centerId: true },
@@ -78,22 +85,29 @@ export default async function EditClassPage({ params }: Props) {
 
   if (!cls) notFound();
 
+  // IDOR check for view-own scope: must be assigned teacher or assistant
+  if (!hasEdit && !hasViewAll && hasViewOwn) {
+    if (cls.teacherId !== session.user.id && cls.assistantId !== session.user.id) {
+      redirect("/dashboard?error=unauthorized");
+    }
+  }
+
   // R7-06 — dữ liệu cho tab "Chương trình" + "Quản lý buổi học".
   // Fix #9 — `teachers` = GV có thể phân lớp + LUÔN kèm GV/trợ giảng đang gán cho lớp
   // này (kể cả khi họ được gán từ trang Giáo viên và không còn match điều kiện lọc)
   // để <Select> không tự rớt giá trị đang chọn → gốc của bug "Lớp học hiện trống".
   const [plans, sessions, curricula, teachers] = await Promise.all([
-    db.classSessionPlan.findMany({
+    sdb.classSessionPlan.findMany({
       where: { classId: cls.id },
       orderBy: { order: "asc" },
       select: { id: true, seq: true, order: true, customTitle: true, note: true, lessonId: true },
     }),
-    db.classSession.findMany({
+    sdb.classSession.findMany({
       where: { classId: cls.id },
       orderBy: { date: "asc" },
       select: { id: true, date: true, topic: true, status: true },
     }),
-    db.curriculum.findMany({
+    sdb.curriculum.findMany({
       where: { courseId: cls.courseId, isActive: true, status: "ACTIVE" },
       orderBy: { version: "desc" },
       select: { version: true, name: true },
@@ -105,7 +119,7 @@ export default async function EditClassPage({ params }: Props) {
     .map((p) => p.lessonId)
     .filter((id): id is string => Boolean(id));
   const lessons = lessonIds.length
-    ? await db.lesson.findMany({
+    ? await sdb.lesson.findMany({
         where: { id: { in: lessonIds } },
         select: { id: true, title: true },
       })
@@ -136,7 +150,7 @@ export default async function EditClassPage({ params }: Props) {
     .filter((r) => !cls.centerId || r.centerId === cls.centerId)
     .map((r) => ({ id: r.id, label: `${r.code} — ${r.name}` }));
 
-  const canEdit = can(session.user, "classes:edit");
+  const canEdit = can(actor, "classes:edit", { centerId: cls.centerId });
 
   const formValue: ClassFormValue = {
     id: cls.id,
@@ -186,10 +200,10 @@ export default async function EditClassPage({ params }: Props) {
         <ClassApprovalActions
           classId={cls.id}
           status={cls.status}
-          canSubmit={hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"])}
+          canSubmit={actor.orgRoles.some(r => ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"].includes(r.roleCode))}
           canApprove={
-            hasAnyRole(session.user, ["SUPER_ADMIN"]) ||
-            (hasAnyRole(session.user, ["CENTER_MANAGER"]) && cls.centerId === session.user.centerId)
+            actor.isSuperAdmin ||
+            (actor.orgRoles.some(r => r.roleCode === "CENTER_MANAGER") && can(actor, "classes:edit", { centerId: cls.centerId }))
           }
           approvedByName={cls.approvedByName}
         />
@@ -222,6 +236,7 @@ export default async function EditClassPage({ params }: Props) {
       <ClassForm
         cls={formValue}
         courses={courses}
+        canEdit={canEdit}
         orgUnits={orgUnits.map((o) => ({
           id: o.orgUnitId,
           name: o.name,

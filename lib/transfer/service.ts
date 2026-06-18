@@ -24,7 +24,7 @@ async function classCoveredLessons(classId: string): Promise<number> {
 /** Số chỗ trống của 1 lớp (maxStudents − số enrollment đang học). */
 async function classOpenSeats(classId: string, maxStudents: number): Promise<number> {
   const active = await db.enrollment.count({
-    where: { classId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+    where: { classId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] }, deletedAt: null },
   });
   return maxStudents - active;
 }

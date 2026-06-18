@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     where: {
       status: { in: ["ACTIVE", "STUDYING"] },
       endDate: { gte: minEnd, lte: maxEnd },
+      deletedAt: null, // FIX-C3
     },
     include: {
       student: {

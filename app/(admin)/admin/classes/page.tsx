@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { FileSpreadsheet, Plus } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { db } from '@/lib/db'
-import { can } from '@/lib/auth/permissions'
+import { scopedDb } from '@/lib/db-scope'
+import { resolveActor } from '@/lib/auth/actor'
+import { can } from '@/lib/auth/can'
 import { ClassStatus, type Prisma } from '@prisma/client'
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 import { getAssignableTeachers } from '@/lib/teachers/assignable'
@@ -68,11 +69,15 @@ interface SearchParams {
 export default async function ClassesPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user, 'classes:view-all')) redirect('/dashboard')
 
-  const canCreate = can(session.user, 'classes:create')
-  const canUpdate = can(session.user, 'classes:edit')
-  const canDelete = can(session.user, 'classes:delete')
+  const actor = await resolveActor(session.user.id)
+  if (!can(actor, 'classes:view-all') && !can(actor, 'classes:view-own')) {
+    redirect('/dashboard')
+  }
+
+  const canCreate = can(actor, 'classes:create')
+  const canUpdate = can(actor, 'classes:edit')
+  const canDelete = can(actor, 'classes:delete')
   const canManage = canUpdate || canDelete
 
   const params = await searchParams
@@ -85,6 +90,10 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
   const courseFilter = params.courseId?.trim() || undefined
   const teacherFilter = params.teacherId?.trim() || undefined
 
+  const hasViewAll = can(actor, 'classes:view-all')
+  const hasViewOwn = can(actor, 'classes:view-own')
+  const effectiveTeacherFilter = (!hasViewAll && hasViewOwn) ? session.user.id : teacherFilter
+
   const baseWhere: Prisma.ClassWhereInput = {
     deletedAt: null,
     ...(statusFilter ? { status: statusFilter } : {}),
@@ -92,9 +101,9 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
     ...(courseFilter ? { courseId: courseFilter } : {}),
   }
   const andClauses: Prisma.ClassWhereInput[] = []
-  if (teacherFilter) {
+  if (effectiveTeacherFilter) {
     andClauses.push({
-      OR: [{ teacherId: teacherFilter }, { assistantId: teacherFilter }],
+      OR: [{ teacherId: effectiveTeacherFilter }, { assistantId: effectiveTeacherFilter }],
     })
   }
   if (q) {
@@ -109,7 +118,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
     andClauses.length > 0 ? { ...baseWhere, AND: andClauses } : baseWhere
 
   const [classes, centers, courses, teachers] = await Promise.all([
-    db.class
+    scopedDb(actor).class
       .findMany({
         where,
         orderBy: [{ status: 'asc' }, { startDate: 'desc' }, { createdAt: 'desc' }],
@@ -135,14 +144,14 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
         },
       })
       .catch(() => []),
-    db.center
+    scopedDb(actor).center
       .findMany({
         where: { isActive: true },
         orderBy: { displayOrder: 'asc' },
         select: { id: true, name: true },
       })
       .catch(() => [] as Array<{ id: string; name: string }>),
-    db.course
+    scopedDb(actor).course
       .findMany({
         where: { isActive: true },
         orderBy: { name: 'asc' },

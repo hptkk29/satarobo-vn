@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
@@ -18,6 +19,39 @@ import {
 type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
+
+/**
+ * FIX-C4 — Lỗi nghiệp vụ mang MÃ/thông điệp để FE map (STOCK_INSUFFICIENT →
+ * "Không đủ tồn"). Throw trong tx để rollback; catch trả `{ ok:false, error }`.
+ */
+class MovementError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MovementError";
+  }
+}
+
+/**
+ * FIX-C4 — Transaction Serializable + retry khi xung đột ghi (Prisma P2034 /
+ * Postgres 40001). Dùng cho kiểm kê (đọc tồn → tính delta → ghi) phải nhất quán.
+ */
+async function runSerializable<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await db.$transaction(fn, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (err) {
+      const isConflict =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2034";
+      if (isConflict && attempt < 2) continue;
+      throw err;
+    }
+  }
+}
 
 async function requireRole(): Promise<
   | { ok: true; userId: string }
@@ -141,15 +175,11 @@ export async function recordIssue(input: IssueInput): Promise<Result> {
   if (!balance) {
     return { ok: false, error: "Chưa có bản ghi tồn kho cho cặp item × cơ sở" };
   }
-  if (balance.quantity < data.quantity) {
-    return {
-      ok: false,
-      error: `Không đủ tồn (hiện ${balance.quantity}). Cần xuất ${data.quantity}.`,
-    };
-  }
 
   const performedById = await resolveEmployeeId(gate.userId);
 
+  // FIX-C4 — decrement có điều kiện trong tx (guarded updateMany): chỉ trừ khi
+  // tồn hiện tại >= số cần xuất. Nếu count === 0 ⇒ không đủ tồn (chống TOCTOU).
   try {
     await db.$transaction(async (tx) => {
       await tx.stockMovement.create({
@@ -165,17 +195,25 @@ export async function recordIssue(input: IssueInput): Promise<Result> {
           performedById,
         },
       });
-      await tx.stockBalance.update({
+      const updated = await tx.stockBalance.updateMany({
         where: {
-          itemId_centerId: { itemId: data.itemId, centerId: data.centerId },
+          itemId: data.itemId,
+          centerId: data.centerId,
+          quantity: { gte: data.quantity },
         },
         data: {
           quantity: { decrement: data.quantity },
           lastIssueAt: new Date(),
         },
       });
+      if (updated.count === 0) {
+        throw new MovementError("STOCK_INSUFFICIENT");
+      }
     });
   } catch (err) {
+    if (err instanceof MovementError) {
+      return { ok: false, error: err.message };
+    }
     return {
       ok: false,
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
@@ -225,15 +263,9 @@ export async function recordTransfer(input: TransferInput): Promise<Result> {
         "Cơ sở đích chưa có bản ghi tồn kho — mở mặt hàng và Lưu (hoặc kích hoạt cơ sở) để tự khởi tạo trước khi chuyển.",
     };
   }
-  if (fromBalance.quantity < data.quantity) {
-    return {
-      ok: false,
-      error: `Cơ sở nguồn không đủ tồn (${fromBalance.quantity}). Cần chuyển ${data.quantity}.`,
-    };
-  }
-
   const performedById = await resolveEmployeeId(gate.userId);
 
+  // FIX-C4 — decrement có điều kiện ở cơ sở nguồn trong tx (chống TOCTOU âm kho).
   try {
     await db.$transaction(async (tx) => {
       const outMove = await tx.stockMovement.create({
@@ -270,18 +302,20 @@ export async function recordTransfer(input: TransferInput): Promise<Result> {
         data: { transferPairId: inMove.id },
       });
 
-      await tx.stockBalance.update({
+      const decremented = await tx.stockBalance.updateMany({
         where: {
-          itemId_centerId: {
-            itemId: data.itemId,
-            centerId: data.fromCenterId,
-          },
+          itemId: data.itemId,
+          centerId: data.fromCenterId,
+          quantity: { gte: data.quantity },
         },
         data: {
           quantity: { decrement: data.quantity },
           lastIssueAt: new Date(),
         },
       });
+      if (decremented.count === 0) {
+        throw new MovementError("STOCK_INSUFFICIENT");
+      }
       await tx.stockBalance.update({
         where: {
           itemId_centerId: {
@@ -296,6 +330,9 @@ export async function recordTransfer(input: TransferInput): Promise<Result> {
       });
     });
   } catch (err) {
+    if (err instanceof MovementError) {
+      return { ok: false, error: err.message };
+    }
     return {
       ok: false,
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
@@ -321,34 +358,38 @@ export async function recordAdjustment(input: AdjustmentInput): Promise<Result> 
   }
   const data = parsed.data;
 
-  const balance = await db.stockBalance.findUnique({
-    where: {
-      itemId_centerId: { itemId: data.itemId, centerId: data.centerId },
-    },
-    select: { quantity: true },
-  });
-  if (!balance) {
-    return { ok: false, error: "Chưa có bản ghi tồn kho cho cặp item × cơ sở" };
-  }
-
-  const delta = data.newQuantity - balance.quantity;
-  if (delta === 0) {
-    return { ok: false, error: "Số lượng không thay đổi" };
-  }
-
-  const type =
-    delta > 0 ? "ADJUSTMENT_INCREASE" as const : "ADJUSTMENT_DECREASE" as const;
-  const absDelta = Math.abs(delta);
   const performedById = await resolveEmployeeId(gate.userId);
 
+  // FIX-C4 — đọc tồn + tính delta + ghi trong CÙNG tx (Serializable) để delta
+  // nhất quán với tồn thực tại thời điểm ghi (chống lost-update giữa các phiếu).
   try {
-    await db.$transaction(async (tx) => {
+    await runSerializable(async (tx) => {
+      const balance = await tx.stockBalance.findUnique({
+        where: {
+          itemId_centerId: { itemId: data.itemId, centerId: data.centerId },
+        },
+        select: { quantity: true },
+      });
+      if (!balance) {
+        throw new MovementError("Chưa có bản ghi tồn kho cho cặp item × cơ sở");
+      }
+
+      const delta = data.newQuantity - balance.quantity;
+      if (delta === 0) {
+        throw new MovementError("Số lượng không thay đổi");
+      }
+
+      const type =
+        delta > 0
+          ? ("ADJUSTMENT_INCREASE" as const)
+          : ("ADJUSTMENT_DECREASE" as const);
+
       await tx.stockMovement.create({
         data: {
           itemId: data.itemId,
           centerId: data.centerId,
           type,
-          quantity: absDelta,
+          quantity: Math.abs(delta),
           referenceType: "Audit",
           referenceNote: `Trước: ${balance.quantity} → Sau: ${data.newQuantity}`,
           notes: data.reason,
@@ -363,6 +404,9 @@ export async function recordAdjustment(input: AdjustmentInput): Promise<Result> 
       });
     });
   } catch (err) {
+    if (err instanceof MovementError) {
+      return { ok: false, error: err.message };
+    }
     return {
       ok: false,
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,

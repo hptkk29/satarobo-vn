@@ -48,8 +48,8 @@ export default async function EditEmployeePage({ params }: Props) {
   if (!employee) notFound();
 
   const canManageUsers = can(session.user, "users:manage");
-
   const actor = await resolveActor(session.user.id);
+
   const [orgUnits, managers, departments] = await Promise.all([
     getSelectableOrgUnits(actor),
     db.employee.findMany({
