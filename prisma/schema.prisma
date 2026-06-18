@@ -4362,6 +4362,7 @@ model ScormPackage {
 
   lesson     Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   accessLogs ScormAccessLog[]
+  attempts   ScormAttempt[]
 
   // 1 active duy nhất mỗi buổi: PARTIAL unique `(lessonId) WHERE isActiveForLesson`
   // tạo bằng raw SQL trong migration (Prisma không khai báo partial index native).
@@ -4381,6 +4382,27 @@ model ScormAccessLog {
 
   @@index([packageId, openedAt])
   @@index([userId])
+}
+
+// LMS-14 — kết quả học SCORM (điểm + hoàn thành) ghi về từ runtime API.
+model ScormAttempt {
+  id             String   @id @default(cuid())
+  packageId      String
+  userId         String
+  classSessionId String?
+  scoreRaw       Int? // cmi.core.score.raw (làm tròn)
+  scoreMax       Int?
+  lessonStatus   String? // passed/completed/failed/incomplete/browsed
+  completion     String? // SCORM 2004 completion_status
+  suspendData    String?  @db.Text
+  rawCmi         Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  package ScormPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, userId])
+  @@index([packageId])
 }
 
 // =============================================================================

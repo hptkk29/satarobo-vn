@@ -5,7 +5,8 @@
 //   • blur overlay khi rời tab / mất focus / nhấn PrintScreen (giảm chụp màn hình).
 //   • watermark canvas {employeeCode · name · HH:mm:ss} đổi vị trí 15-30s +
 //     MutationObserver tự khôi phục nếu bị xoá/sửa qua DevTools.
-//   • stub window.API / window.API_1484_11 no-op (SCORM không tracking — fail-open).
+//   • window.API / window.API_1484_11 = SCORM runtime THẬT (LMS-14): ghi điểm/hoàn
+//     thành về /api/scorm/runtime qua launchTicket (fail-open nếu lỗi mạng).
 // Mọi hiệu ứng bảo vệ FAIL-OPEN: lỗi JS không được chặn việc dạy học.
 import { useEffect, useRef, useState } from "react";
 
@@ -50,39 +51,76 @@ export function ScormPlayer({
   const src = buildAssetSrc(launchUrl, launchTicket);
   const label = `${employeeCode}${employeeCode ? " · " : ""}${name}`.trim();
 
-  // Stub SCORM API no-op (nội dung tìm window.parent.API/API_1484_11) — không tracking.
+  // LMS-14 — SCORM runtime THẬT: buffer cmi + ghi điểm/hoàn thành về /api/scorm/runtime
+  // (auth = launchTicket). Hỗ trợ SCORM 1.2 (window.API) + 2004 (API_1484_11). Fail-open.
   useEffect(() => {
     try {
-      const noop = () => "true";
-      const empty = () => "";
-      const ok = () => "0";
+      const cmi: Record<string, string> = {};
+      const numOf = (...keys: string[]): number | null => {
+        for (const k of keys) {
+          if (cmi[k] != null) {
+            const n = Number(cmi[k]);
+            if (Number.isFinite(n)) return n;
+          }
+        }
+        return null;
+      };
+      const commit = () => {
+        const payload = {
+          ticket: launchTicket,
+          scoreRaw: numOf("cmi.core.score.raw", "cmi.score.raw"),
+          scoreMax: numOf("cmi.core.score.max", "cmi.score.max"),
+          lessonStatus: cmi["cmi.core.lesson_status"] ?? cmi["cmi.success_status"] ?? null,
+          completion: cmi["cmi.completion_status"] ?? null,
+          suspendData: cmi["cmi.suspend_data"] ?? null,
+          rawCmi: cmi,
+        };
+        try {
+          void fetch("/api/scorm/runtime", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            keepalive: true,
+          });
+        } catch {
+          /* fail-open: lỗi ghi điểm không chặn học */
+        }
+      };
+      const set = (k: string, v: unknown) => {
+        cmi[k] = String(v);
+        return "true";
+      };
+      const get = (k: string) => cmi[k] ?? "";
       const api12 = {
-        LMSInitialize: noop,
-        LMSFinish: noop,
-        LMSGetValue: empty,
-        LMSSetValue: noop,
-        LMSCommit: noop,
-        LMSGetLastError: ok,
-        LMSGetErrorString: empty,
-        LMSGetDiagnostic: empty,
+        LMSInitialize: () => "true",
+        LMSFinish: () => (commit(), "true"),
+        LMSGetValue: get,
+        LMSSetValue: set,
+        LMSCommit: () => (commit(), "true"),
+        LMSGetLastError: () => "0",
+        LMSGetErrorString: () => "",
+        LMSGetDiagnostic: () => "",
       };
       const api2004 = {
-        Initialize: noop,
-        Terminate: noop,
-        GetValue: empty,
-        SetValue: noop,
-        Commit: noop,
-        GetLastError: ok,
-        GetErrorString: empty,
-        GetDiagnostic: empty,
+        Initialize: () => "true",
+        Terminate: () => (commit(), "true"),
+        GetValue: get,
+        SetValue: set,
+        Commit: () => (commit(), "true"),
+        GetLastError: () => "0",
+        GetErrorString: () => "",
+        GetDiagnostic: () => "",
       };
       const w = window as unknown as Record<string, unknown>;
-      if (!w.API) w.API = api12;
-      if (!w.API_1484_11) w.API_1484_11 = api2004;
+      w.API = api12;
+      w.API_1484_11 = api2004;
+      const onLeave = () => commit();
+      window.addEventListener("pagehide", onLeave);
+      return () => window.removeEventListener("pagehide", onLeave);
     } catch {
-      /* fail-open */
+      return; /* fail-open */
     }
-  }, []);
+  }, [launchTicket]);
 
   // Blur overlay khi rời tab / mất focus / PrintScreen.
   useEffect(() => {
