@@ -1341,6 +1341,7 @@ model Enrollment {
   reserves StudentReserve[] @relation("EnrollmentReserves")
   payments Payment[]        @relation("EnrollmentPayments") // R7-04
   receipts Receipt[]        @relation("EnrollmentReceipts") // R7-04
+  refundRequests RefundRequest[] // W3-1
 
   // FIX-C3 (B2b) — KHÔNG @@unique đầy đủ: soft-delete cần cho ghi danh lại cùng
   // (HS×lớp) sau khi xóa mềm. Ràng buộc duy nhất chỉ áp row CÒN SỐNG qua PARTIAL
@@ -4652,6 +4653,48 @@ model Receipt {
 
   @@index([enrollmentId])
   @@index([paymentId])
+}
+
+// W3-1 — Yêu cầu hoàn tiền theo lifecycle (rút/chuyển/hủy lớp). Đề xuất → duyệt → ghi sổ.
+enum RefundTrigger {
+  WITHDRAW
+  TRANSFER
+  CLASS_CANCELLED
+  MANUAL
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model RefundRequest {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  centerId     String?
+  trigger      RefundTrigger
+  reason       String     @db.Text
+  // Số liệu snapshot tại thời điểm tạo (để tính minh bạch, không phụ thuộc thay đổi sau).
+  paidConfirmed   Int // Σ Payment CONFIRMED
+  sessionsTotal   Int
+  sessionsLearned Int
+  unitPrice       Int // finalPrice / sessionsTotal (làm tròn)
+  proposedAmount  Int // computeRefund (đề xuất, ≥0)
+  approvedAmount  Int?
+  status        RefundStatus @default(PENDING)
+  requestedById String?
+  approvedById  String?
+  approvedAt    DateTime?    @db.Timestamptz(6)
+  note          String?      @db.Text
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([enrollmentId])
+  @@index([status])
+  @@index([centerId])
 }
 
 // ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════

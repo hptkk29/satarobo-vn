@@ -22,6 +22,7 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
 import { canTransition } from "@/lib/enrollments/status";
+import { createRefundRequest } from "@/lib/finance/refund";
 
 type ActionResult = { error?: string };
 
@@ -774,6 +775,17 @@ export async function withdrawStudentAction(input: {
         changedFields: ["status"],
         reason: `Học viên nghỉ học: ${input.reason.trim()}`,
         orgUnitId: student.centerId,
+        tx,
+      });
+
+      // W3-1 / LMS-9 — HS nghỉ học → tạo yêu cầu hoàn tiền (PENDING) cho ghi danh
+      // còn sống, trong cùng transaction. Idempotent + chỉ tạo khi có khoản đã thu.
+      await createRefundRequest({
+        enrollmentId: enr.id,
+        trigger: "WITHDRAW",
+        reason: `Học viên nghỉ học: ${input.reason.trim()}`,
+        requestedById: actorId,
+        actorName,
         tx,
       });
     }

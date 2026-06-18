@@ -21,6 +21,7 @@ import { generateClassSessions } from "@/lib/classes/generate";
 import { courseHasActiveCurriculum } from "@/lib/courses/activation-guard";
 import { createSessionPlansForClass } from "@/lib/classes/snapshot";
 import { publishEvent } from "@/lib/events/publish";
+import { createRefundRequest } from "@/lib/finance/refund";
 
 type ActionResult = { error?: string };
 
@@ -699,7 +700,16 @@ export async function cancelClassAction(
           data: { status: "WITHDREW", endedAt: now },
         });
 
-        // TODO(W3-1 deferred): nối RefundRequest/refund khi có model (chờ ERD)
+        // W3-1 / LMS-9 — hủy lớp → tạo yêu cầu hoàn tiền (PENDING) cho mỗi HS bị rút,
+        // TRONG cùng transaction. Idempotent + chỉ tạo khi có khoản đã thu (service lo).
+        await createRefundRequest({
+          enrollmentId: enr.id,
+          trigger: "CLASS_CANCELLED",
+          reason: withdrawReason,
+          requestedById: actorId,
+          actorName,
+          tx,
+        });
 
         await tx.enrollmentAuditLog.create({
           data: {

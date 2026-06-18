@@ -38,6 +38,9 @@ export const SCOPE_EXEMPT = new Set<string>([
   // sang SCOPED_MODELS + scopedDb khi 2 model này center-scope hẳn.
   "ReportCard",
   "EvaluationRound",
+  // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
+  // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
+  "RefundRequest",
 ]);
 
 function bypassesScope(actor: Actor): boolean {
