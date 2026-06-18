@@ -20,6 +20,7 @@ import {
 } from "@/lib/audit/log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
+import { suggestEnrollmentRefund, type RefundSuggestion } from "@/lib/finance/refund";
 
 type ActionResult = { error?: string };
 
@@ -599,6 +600,7 @@ export async function withdrawStudentAction(input: {
   }
 
   const { actorId, actorName } = getAuditActor(session);
+  const withdrawnEnrollmentIds: string[] = [];
 
   await db.$transaction(async (tx) => {
     await tx.studentReserve.updateMany({
@@ -642,6 +644,7 @@ export async function withdrawStudentAction(input: {
         where: { id: enr.id },
         data: { status: "WITHDREW" },
       });
+      withdrawnEnrollmentIds.push(enr.id);
 
       await tx.enrollmentAuditLog.create({
         data: {
@@ -655,6 +658,18 @@ export async function withdrawStudentAction(input: {
       });
     }
   });
+
+  // LMS-9 — đề xuất hoàn tiền theo buổi đã học cho từng enrollment vừa rút (read-only;
+  // kế toán ghi sổ thật qua refundPayment). Best-effort, không chặn luồng nghỉ học.
+  const refundSuggestions: RefundSuggestion[] = [];
+  for (const id of withdrawnEnrollmentIds) {
+    try {
+      const s = await suggestEnrollmentRefund(id);
+      if (s && s.refundable > 0) refundSuggestions.push(s);
+    } catch (err) {
+      console.error("[withdraw] refund suggest error:", err);
+    }
+  }
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
@@ -684,7 +699,7 @@ export async function withdrawStudentAction(input: {
     });
   }
 
-  return { ok: true as const };
+  return { ok: true as const, refundSuggestions };
 }
 
 // ═══════════════════════════════════════════════════════════════════

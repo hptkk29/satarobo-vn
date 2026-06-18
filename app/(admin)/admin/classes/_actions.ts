@@ -19,8 +19,17 @@ import { generateClassSessions } from "@/lib/classes/generate";
 import { courseHasActiveCurriculum } from "@/lib/courses/activation-guard";
 import { createSessionPlansForClass } from "@/lib/classes/snapshot";
 import { publishEvent } from "@/lib/events/publish";
+import { suggestEnrollmentRefund, type RefundSuggestion } from "@/lib/finance/refund";
+import { sendEmailForTrigger } from "@/lib/email/trigger";
 
 type ActionResult = { error?: string };
+
+const ACTIVE_ENROLLMENT_FOR_CANCEL = [
+  "PENDING",
+  "CONFIRMED",
+  "STUDYING",
+  "PAUSED",
+] as const;
 
 async function requireClassWrite(action: "create" | "update" | "delete") {
   const session = await auth();
@@ -392,6 +401,110 @@ export async function deleteClass(id: string): Promise<ActionResult> {
   }
   revalidatePath("/classes");
   return {};
+}
+
+// ─── LMS-10 — HỦY CẢ LỚP (cascade) ──────────────────────────────────────────
+/**
+ * Hủy cả lớp: set ClassStatus.CANCELLED → mỗi enrollment đang hoạt động → WITHDREW
+ * (+ audit) + đề xuất hoàn tiền (LMS-9) + thông báo PH; hủy mọi buổi tương lai.
+ * Không còn enrollment/buổi "mồ côi" như deleteClass cũ. reason BẮT BUỘC.
+ */
+export async function cancelClassAction(
+  classId: string,
+  reason: string,
+): Promise<
+  | { ok: true; withdrawn: number; sessionsCancelled: number; refundSuggestions: RefundSuggestion[] }
+  | { ok: false; error: string }
+> {
+  const session = await requireClassWrite("delete");
+  if (!reason?.trim()) return { ok: false, error: "Lý do hủy lớp là bắt buộc" };
+
+  const cls = await db.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { id: true, name: true, status: true, centerId: true },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+  if (cls.status === "CANCELLED") return { ok: false, error: "Lớp đã bị hủy trước đó" };
+  if (cls.status === "COMPLETED") return { ok: false, error: "Lớp đã hoàn thành — không thể hủy" };
+
+  const { actorId, actorName } = getAuditActor(session);
+  const r = reason.trim();
+
+  const enrollments = await db.enrollment.findMany({
+    where: { classId, status: { in: [...ACTIVE_ENROLLMENT_FOR_CANCEL] } },
+    select: {
+      id: true,
+      status: true,
+      student: { select: { id: true, name: true, parentName: true, parentEmail: true } },
+    },
+  });
+
+  let sessionsCancelled = 0;
+  await db.$transaction(async (tx) => {
+    await tx.class.update({ where: { id: classId }, data: { status: "CANCELLED" } });
+
+    for (const enr of enrollments) {
+      await tx.enrollment.update({ where: { id: enr.id }, data: { status: "WITHDREW" } });
+      await tx.enrollmentAuditLog.create({
+        data: {
+          enrollmentId: enr.id,
+          fromStatus: enr.status,
+          toStatus: "WITHDREW",
+          changedByUserId: actorId,
+          changedByName: actorName,
+          reason: `Hủy lớp: ${r}`,
+        },
+      });
+    }
+
+    // Hủy mọi buổi tương lai chưa diễn ra (giữ buổi đã COMPLETED).
+    const cancelled = await tx.classSession.updateMany({
+      where: { classId, status: { in: ["SCHEDULED", "IN_PROGRESS"] } },
+      data: { status: "CANCELLED" },
+    });
+    sessionsCancelled = cancelled.count;
+
+    await logClassAudit({
+      classId,
+      action: "UPDATE",
+      actorId,
+      actorName,
+      oldValues: { status: cls.status },
+      newValues: { status: "CANCELLED", withdrawn: enrollments.length, sessionsCancelled },
+      reason: `Hủy lớp: ${r}`,
+      tx,
+    });
+  });
+
+  // Đề xuất hoàn tiền + thông báo PH (best-effort, ngoài transaction).
+  const refundSuggestions: RefundSuggestion[] = [];
+  for (const enr of enrollments) {
+    try {
+      const s = await suggestEnrollmentRefund(enr.id);
+      if (s && s.refundable > 0) refundSuggestions.push(s);
+    } catch (err) {
+      console.error("[cancelClass] refund suggest error:", err);
+    }
+    if (enr.student?.parentEmail) {
+      sendEmailForTrigger({
+        trigger: "WITHDRAWAL_NOTICE",
+        recipient: { email: enr.student.parentEmail, name: enr.student.parentName },
+        vars: {
+          student_name: enr.student.name,
+          parent_name: enr.student.parentName ?? "Quý phụ huynh",
+          withdrawn_at: new Date(),
+          reason: `Lớp "${cls.name}" đã bị hủy: ${r}`,
+        },
+        context: { type: "Student", id: enr.student.id },
+        triggerType: "SYSTEM",
+        actor: { userId: actorId, name: actorName },
+      }).catch((err) => console.error("[cancelClass] email error:", err));
+    }
+  }
+
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}`);
+  return { ok: true, withdrawn: enrollments.length, sessionsCancelled, refundSuggestions };
 }
 
 // ─── Module Quản lý lớp PHẦN 1 — workflow phê duyệt ─────────────────────────
