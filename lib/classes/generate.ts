@@ -1,6 +1,9 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
+
+type ConflictReport = { date: Date; messages: string[] }[];
 
 // =============================================================================
 // P2 — TỰ SINH buổi học cho 1 lớp theo lịch (scheduleDays) + số buổi chuẩn của
@@ -11,7 +14,7 @@ import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 export async function generateClassSessions(
   classId: string,
   opts: { onlyIfEmpty?: boolean } = {},
-): Promise<{ ok: boolean; generated: number; error?: string }> {
+): Promise<{ ok: boolean; generated: number; error?: string; conflicts?: ConflictReport }> {
   const onlyIfEmpty = opts.onlyIfEmpty ?? true;
 
   const cls = await db.class.findFirst({
@@ -22,6 +25,9 @@ export async function generateClassSessions(
       scheduleDays: true,
       startDate: true,
       startTime: true,
+      endTime: true,
+      roomId: true,
+      teacherId: true,
       curriculumId: true,
       course: { select: { id: true, totalSessions: true } },
       // R7-06 — kế hoạch buổi của RIÊNG lớp (nếu đã pin curriculum/snapshot).
@@ -70,7 +76,19 @@ export async function generateClassSessions(
     }));
 
     await db.classSession.createMany({ data });
-    return { ok: true, generated: data.length };
+    const conflicts = await detectBatchConflicts({
+      centerId: cls.centerId,
+      classStartTime: cls.startTime,
+      classEndTime: cls.endTime,
+      roomId: cls.roomId,
+      teacherId: cls.teacherId,
+      dates,
+    });
+    return {
+      ok: true,
+      generated: data.length,
+      conflicts: conflicts.length ? conflicts : undefined,
+    };
   }
 
   // ── FALLBACK (lớp cũ, chưa pin): GIỮ NGUYÊN hành vi cũ ─────────────────────
@@ -108,5 +126,17 @@ export async function generateClassSessions(
   }));
 
   await db.classSession.createMany({ data });
-  return { ok: true, generated: data.length };
+  const conflicts = await detectBatchConflicts({
+    centerId: cls.centerId,
+    classStartTime: cls.startTime,
+    classEndTime: cls.endTime,
+    roomId: cls.roomId,
+    teacherId: cls.teacherId,
+    dates,
+  });
+  return {
+    ok: true,
+    generated: data.length,
+    conflicts: conflicts.length ? conflicts : undefined,
+  };
 }

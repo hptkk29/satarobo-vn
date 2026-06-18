@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
+import { detectSessionConflicts, sessionWindow } from "@/lib/lms/schedule-conflict";
 
 // =============================================================================
 // R7-06 — Điều chỉnh buổi học: HỦY buổi (sinh buổi bù cuối lịch, giữ tổng số buổi)
@@ -131,12 +132,30 @@ export async function adjustSession(opts: {
   roomId?: string | null;
   actorId: string | null;
   actorName: string;
-}): Promise<{ ok: boolean; error?: string }> {
+  /** LMS-6 — bỏ qua chặn trùng lịch (quản lý xác nhận double-book). */
+  allowConflict?: boolean;
+}): Promise<{ ok: boolean; error?: string; conflict?: string[] }> {
   const { sessionId, date, teacherId, roomId, actorId, actorName } = opts;
 
   const session = await db.classSession.findUnique({
     where: { id: sessionId },
-    select: { id: true, classId: true, date: true, status: true },
+    select: {
+      id: true,
+      classId: true,
+      date: true,
+      status: true,
+      actualRoomId: true,
+      actualTeacherId: true,
+      class: {
+        select: {
+          centerId: true,
+          roomId: true,
+          teacherId: true,
+          startTime: true,
+          endTime: true,
+        },
+      },
+    },
   });
   if (!session) return { ok: false, error: "Buổi học không tồn tại" };
   if (session.status === "COMPLETED") {
@@ -148,6 +167,27 @@ export async function adjustSession(opts: {
   const hasRoom = roomId !== undefined;
   if (!hasDate && !hasTeacher && !hasRoom) {
     return { ok: false, error: "Không có thay đổi nào" };
+  }
+
+  // LMS-6 — dò trùng phòng/GV cho buổi sau khi chỉnh (phòng/GV/ngày hiệu lực).
+  if (!opts.allowConflict) {
+    const effDate = hasDate ? date! : session.date;
+    const win = sessionWindow(effDate, session.class?.startTime, session.class?.endTime);
+    const effRoom = hasRoom ? roomId! : session.actualRoomId ?? session.class?.roomId ?? null;
+    const effTeacher = hasTeacher
+      ? teacherId!
+      : session.actualTeacherId ?? session.class?.teacherId ?? null;
+    const conflict = await detectSessionConflicts({
+      sessionId,
+      centerId: session.class?.centerId ?? null,
+      roomId: effRoom,
+      teacherId: effTeacher,
+      startAt: win.startAt,
+      endAt: win.endAt,
+    });
+    if (conflict.roomConflict || conflict.teacherConflict) {
+      return { ok: false, error: conflict.messages.join("; "), conflict: conflict.messages };
+    }
   }
 
   const oldValues: Record<string, unknown> = { date: session.date };
