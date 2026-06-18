@@ -38,6 +38,17 @@ export const SCOPE_EXEMPT = new Set<string>([
   // sang SCOPED_MODELS + scopedDb khi 2 model này center-scope hẳn.
   "ReportCard",
   "EvaluationRound",
+  // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
+  // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
+  "RefundRequest",
+  // LMS-16 — RevenueTarget là config mục tiêu; centerId null = toàn hệ thống.
+  "RevenueTarget",
+  // LMS-18 (W5f phase A) — centerId ĐÃ thêm + backfill nhưng CHƯA flip sang SCOPED_MODELS.
+  // Cách ly hiện vẫn qua classId IN scopedClassIds (manual) — giữ EXEMPT để KHÔNG đổi hành vi
+  // đọc. Phase B (shadow-rollout + e2e cách ly) sẽ chuyển 3 model này sang SCOPED_MODELS.
+  "ClassSession",
+  "Attendance",
+  "Enrollment",
 ]);
 
 function bypassesScope(actor: Actor): boolean {

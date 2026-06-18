@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, getEffectiveRoles } from "@/lib/auth/permissions";
+import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { z } from "zod";
 import {
@@ -26,7 +27,34 @@ type SessionUser = {
   name?: string | null;
   role?: string | null;
   roles?: string[] | null;
+  centerId?: string | null;
+  grants?: { action: string; grant: "ALLOW" | "DENY" }[];
 };
+
+// LMS-2 / W1-2 — gate phân quyền CHẤM ĐIỂM: GV chỉ chấm bài thi của lớp mình
+// dạy/trợ giảng (tái dùng canManageSessionClass: teacherId|assistantId == me);
+// Đào tạo/Admin có quyền report-cards:review | training:manage chấm mọi lớp.
+// Đề không gắn lớp (exam bank, classId null) → chỉ Đào tạo/Admin.
+async function canGradeClassWork(
+  user: SessionUser,
+  cls: { teacherId: string | null; assistantId: string | null; centerId: string | null } | null,
+): Promise<boolean> {
+  if (
+    cls &&
+    (await canManageSessionClass(
+      { id: user.id ?? "", role: user.role ?? "", centerId: user.centerId ?? null },
+      cls,
+    ))
+  ) {
+    return true;
+  }
+  const actor = {
+    role: user.role ?? null,
+    roles: user.roles ?? undefined,
+    grants: user.grants,
+  };
+  return can(actor, "report-cards:review") || can(actor, "training:manage");
+}
 
 async function requireRole(): Promise<
   | { ok: true; userId: string; user: SessionUser }
@@ -523,10 +551,19 @@ export async function gradeAttempt(attemptId: string): Promise<Result> {
           },
         },
       },
-      exam: { select: { id: true, passingScore: true } },
+      exam: {
+        select: {
+          id: true,
+          passingScore: true,
+          class: { select: { teacherId: true, assistantId: true, centerId: true } },
+        },
+      },
     },
   });
   if (!attempt) return { ok: false, error: "Không tìm thấy bài làm" };
+  if (!(await canGradeClassWork(gate.user, attempt.exam.class))) {
+    return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
+  }
   if (attempt.status === "IN_PROGRESS") {
     return { ok: false, error: "Bài làm chưa được nộp (IN_PROGRESS)" };
   }
@@ -614,9 +651,22 @@ export async function manualGradeAnswer(
 
   const ans = await db.examAnswer.findUnique({
     where: { id: parsed.data.examAnswerId },
-    select: { examQuestion: { select: { points: true } }, attemptId: true },
+    select: {
+      examQuestion: { select: { points: true } },
+      attemptId: true,
+      attempt: {
+        select: {
+          exam: {
+            select: { class: { select: { teacherId: true, assistantId: true, centerId: true } } },
+          },
+        },
+      },
+    },
   });
   if (!ans) return { ok: false, error: "Không tìm thấy bài trả lời" };
+  if (!(await canGradeClassWork(gate.user, ans.attempt.exam.class))) {
+    return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
+  }
   if (parsed.data.score > ans.examQuestion.points) {
     return {
       ok: false,

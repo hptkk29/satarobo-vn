@@ -8,9 +8,11 @@ import { startAttempt } from "../actions";
 export function StartExamButton({
   examId,
   resume,
+  label,
 }: {
   examId: string;
   resume: boolean;
+  label?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -35,7 +37,7 @@ export function StartExamButton({
         resume ? "bg-amber-500 hover:bg-amber-600" : "bg-orange-500 hover:bg-orange-600"
       }`}
     >
-      {pending ? "Đang mở…" : resume ? "Tiếp tục làm" : "Vào làm"}
+      {pending ? "Đang mở…" : label ?? (resume ? "Tiếp tục làm" : "Vào làm")}
     </button>
   );
 }

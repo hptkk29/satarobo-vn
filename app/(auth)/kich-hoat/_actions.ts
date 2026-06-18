@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requestOtp, verifyOtp, consumeOtp } from "@/lib/otp/service";
 import { logUserAudit } from "@/lib/audit/log";
 import { enqueueAccountActivated } from "@/lib/email/triggers";
+import { publishEvent } from "@/lib/events/publish";
 
 // Cụm A1 — kích hoạt tài khoản phụ huynh qua OTP email. Public (chưa đăng nhập).
 
@@ -86,6 +87,15 @@ export async function activateAccount(input: unknown): Promise<Result> {
     parentName: user.name,
     childName: user.children[0]?.name ?? null,
   }).catch(() => {});
+
+  // R7-17 — DomainEvent: tài khoản phụ huynh đã usable (portal access). Handler
+  // (lib/_handlers/account-notif.ts) tạo Notification chào mừng vào feed học viên.
+  // Idempotent theo dedupeKey = account.activated:<userId> (PENDING→ACTIVE chỉ 1 lần).
+  await publishEvent(
+    "account.activated",
+    { userId: user.id },
+    { dedupeKey: `account.activated:${user.id}` },
+  ).catch(() => {});
 
   await logUserAudit({
     userId: user.id,

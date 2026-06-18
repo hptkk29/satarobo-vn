@@ -38,6 +38,9 @@ async function canAssessStudent(
 
 const skillsSchema = z.object({
   studentId: z.string().min(1),
+  // LMS-17 — gắn đánh giá vào buổi/bài (tuỳ chọn; null = đánh giá tổng).
+  classSessionId: z.string().min(1).optional().nullable(),
+  lessonId: z.string().min(1).optional().nullable(),
   items: z
     .array(
       z.object({
@@ -55,7 +58,7 @@ export async function saveStudentSkills(input: unknown): Promise<Result> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { studentId, items } = parsed.data;
+  const { studentId, items, classSessionId, lessonId } = parsed.data;
   if (items.length === 0) return { ok: true };
 
   const session = await auth();
@@ -74,6 +77,8 @@ export async function saveStudentSkills(input: unknown): Promise<Result> {
         level: it.level,
         note: it.note || null,
         assessedById: session.user.id,
+        classSessionId: classSessionId ?? null,
+        lessonId: lessonId ?? null,
       })),
     });
   } catch (err) {

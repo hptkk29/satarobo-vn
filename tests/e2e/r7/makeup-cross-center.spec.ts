@@ -312,16 +312,51 @@ test("[R7-08-C7] buổi CANCELLED → không tính vắng (chỉ số absent b�
 });
 
 // ─── C8 (race) — 2 confirm song song chỗ cuối ─────────────────────────────────
-// FIXME (giữ): scheduleMakeup re-check sức chứa trong interactive transaction
-// (READ COMMITTED, KHÔNG SELECT FOR UPDATE / SERIALIZABLE / unique constraint trên
-// (makeupSessionId,status)). Hai $transaction song song có thể cùng đọc sĩ số cũ →
-// cùng PASS → assert "đúng 1 thành công" sẽ FLAKY/FAIL. Cần khóa hàng/serializable
-// (hoặc partial-unique) ở service trước khi viết test xác định. Để fixme thay vì test giả.
-test.fixme("[R7-08-C8] 2 confirm song song chỗ cuối → 1 thành công, 1 fail rõ ràng", async () => {
-  // const [a, b] = await Promise.all([
-  //   scheduleMakeup({ makeupNeedId: n1, makeupSessionId: lastSeatSession, actor, scheduledById: u1 }),
-  //   scheduleMakeup({ makeupNeedId: n2, makeupSessionId: lastSeatSession, actor, scheduledById: u2 }),
-  // ]);
-  // expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
-  expect(db).toBeTruthy();
+// scheduleMakeup khóa pg_advisory_xact_lock theo makeupSessionId → serial-hoá
+// count→update (chống phantom của READ COMMITTED). 2 request giành chỗ cuối → đúng
+// 1 thành công, người sau "đầy chỗ".
+test("[R7-08-C8] 2 confirm song song chỗ cuối → 1 thành công, 1 fail rõ ràng", async () => {
+  const base = await seedBase();
+  const { actor, userId } = await makeActor("c8mgr", "CS1");
+
+  // Buổi bù CHỈ còn 1 chỗ (maxStudents=1, 0 enrollment) → 2 need không thể cùng vào.
+  const cand = await makeCandidate({
+    name: "Chỗ cuối",
+    courseId: base.courseId,
+    centerId: base.c1,
+    lessonId: base.lessons[5],
+    date: daysFromNow(3),
+    maxStudents: 1,
+  });
+
+  // need1 = base.needId. Tạo need2 cho HV thứ hai (buổi lỡ riêng) cùng lesson L5.
+  const student2 = await db.student.create({ data: { name: "HV bù 2", centerId: base.c1 }, select: { id: true } });
+  await db.enrollment.create({
+    data: { studentId: student2.id, classId: base.homeClassId, courseId: base.courseId, status: "STUDYING" },
+  });
+  const missed2 = await db.classSession.create({
+    data: { classId: base.homeClassId, date: daysFromNow(-1), status: "SCHEDULED", lessonId: base.lessons[5] },
+    select: { id: true },
+  });
+  await db.attendance.create({
+    data: { sessionId: missed2.id, studentId: student2.id, status: "ABSENT", makeupStatus: "NEEDS_MAKEUP" },
+  });
+  const need2 = await createMakeupNeed({ studentId: student2.id, missedSessionId: missed2.id });
+  expect(need2.ok).toBe(true);
+
+  const [a, b] = await Promise.all([
+    scheduleMakeup({ makeupNeedId: base.needId, makeupSessionId: cand.sessionId, actor, scheduledById: userId }),
+    scheduleMakeup({ makeupNeedId: need2.id!, makeupSessionId: cand.sessionId, actor, scheduledById: userId }),
+  ]);
+
+  // Đúng 1 thành công, 1 báo đầy chỗ.
+  expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
+  const loser = a.ok ? b : a;
+  expect(loser.error).toContain("đầy chỗ");
+
+  // DB nhất quán: đúng 1 MakeupNeed SCHEDULED vào buổi này.
+  const scheduledCount = await db.makeupNeed.count({
+    where: { makeupSessionId: cand.sessionId, status: "SCHEDULED" },
+  });
+  expect(scheduledCount).toBe(1);
 });

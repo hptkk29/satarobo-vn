@@ -97,9 +97,23 @@ export default async function EditStudentPage({ params }: Props) {
   for (const r of skillRows) {
     if (!latestSkills[r.skill]) latestSkills[r.skill] = { level: r.level, note: r.note ?? "" };
   }
-  const canAssessSkills =
+  // LMS-17 (W4-b) — mở editor năng lực cho GV PHỤ TRÁCH lớp HS.
+  // Mirror đúng logic backend canAssessStudent() trong ../_actions.ts (SUPER_ADMIN |
+  // CENTER_MANAGER cùng cơ sở | TEACHER dạy lớp HS đang học) để UI gate khớp server gate.
+  const isSuperOrManager =
     hasRole(session.user, "SUPER_ADMIN") ||
     (hasRole(session.user, "CENTER_MANAGER") && student.centerId === session.user.centerId);
+  const teachesStudent =
+    !isSuperOrManager &&
+    hasRole(session.user, "TEACHER") &&
+    !!(await db.enrollment.findFirst({
+      where: {
+        studentId: id,
+        class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
+      },
+      select: { id: true },
+    }));
+  const canAssessSkills = isSuperOrManager || teachesStudent;
 
   const formValue: StudentFormValue = {
     id: student.id,

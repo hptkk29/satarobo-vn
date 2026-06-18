@@ -40,6 +40,10 @@
     {
       "path": "/api/cron/assignment-due-soon",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/reserve-expiry",
+      "schedule": "0 6 * * *"
     }
   ]
 }

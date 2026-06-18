@@ -466,7 +466,7 @@ export async function closeLeadAsEnrolled(
       maxStudents: true,
       status: true,
       _count: {
-        select: { enrollments: { where: { status: { in: [...CAPACITY_STATUSES] } } } },
+        select: { enrollments: { where: { status: { in: [...CAPACITY_STATUSES] }, deletedAt: null } } },
       },
     },
   })

@@ -666,6 +666,7 @@ model Room {
 
   classes      Class[]
   trialClasses TrialClass[]
+  classSessions ClassSession[] // W2-4b — phòng theo buổi
 
   @@unique([centerId, code])
   @@index([centerId, status])
@@ -1291,6 +1292,8 @@ model Enrollment {
   classId   String
   courseId  String
   status    EnrollmentStatus @default(ACTIVE)
+  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ class). SCOPE_EXEMPT, chưa flip.
+  centerId  String?
 
   // Financial (legacy)
   tuition Int?
@@ -1340,6 +1343,8 @@ model Enrollment {
   reserves StudentReserve[] @relation("EnrollmentReserves")
   payments Payment[]        @relation("EnrollmentPayments") // R7-04
   receipts Receipt[]        @relation("EnrollmentReceipts") // R7-04
+  refundRequests RefundRequest[] // W3-1
+  messages ConversationMessage[] // LMS-15 — nhắn 2 chiều PH↔GV
 
   // FIX-C3 (B2b) — KHÔNG @@unique đầy đủ: soft-delete cần cho ghi danh lại cùng
   // (HS×lớp) sau khi xóa mềm. Ràng buộc duy nhất chỉ áp row CÒN SỐNG qua PARTIAL
@@ -1352,6 +1357,7 @@ model Enrollment {
   @@index([classId, status])
   @@index([studentId, status])
   @@index([status, enrolledAt])
+  @@index([centerId])
 }
 
 model EnrollmentAuditLog {
@@ -1385,6 +1391,10 @@ model ClassSession {
   lessonNotes String? @db.Text
   // R7-06 — trỏ tới ClassSessionPlan (kế hoạch buổi của lớp); lessonId cũ giữ 2-phase.
   planId      String?
+  // W2-4b — phòng học theo TỪNG BUỔI (để soát trùng phòng per-session); khác actualRoomId (ghi sau-thực-tế).
+  roomId      String?
+  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ class). SCOPE_EXEMPT, chưa flip.
+  centerId    String?
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
@@ -1416,13 +1426,17 @@ model ClassSession {
   class            Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
   lesson           Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   plan             ClassSessionPlan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
+  room             Room?                    @relation(fields: [roomId], references: [id], onDelete: SetNull)
   attendances      Attendance[]
   studentFeedbacks StudentSessionFeedback[] // LMS-2
+  skillAssessments StudentSkillAssessment[] // W4b — đánh giá kỹ năng gắn buổi
 
   @@index([classId])
   @@index([date])
   @@index([lessonId])
   @@index([planId])
+  @@index([roomId])
+  @@index([centerId])
 }
 
 enum SessionStatus {
@@ -1469,9 +1483,15 @@ model StudentSkillAssessment {
   note         String?
   assessedById String
   assessedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  // W4b/LMS-17 — gắn đánh giá kỹ năng vào buổi/bài (tùy chọn; null = đánh giá tổng).
+  classSessionId String?
+  lessonId       String?
   student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSession ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+  lesson       Lesson?       @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
   @@index([studentId, skill])
+  @@index([classSessionId])
 }
 
 // LMS-2 — nhận xét RIÊNG từng học sinh mỗi buổi (GV viết, PH xem con mình).
@@ -1497,6 +1517,9 @@ model Attendance {
   studentId String
   status    AttendanceStatus @default(PRESENT)
   note      String?
+  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ session→class). Phase A:
+  // SCOPE_EXEMPT (chưa flip), cách ly vẫn qua classId IN scopedClassIds như cũ.
+  centerId  String?
 
   // Module QL học viên PHẦN 2 — vắng có cấu trúc.
   makeupStatus    MakeupStatus @default(NONE)
@@ -1515,6 +1538,7 @@ model Attendance {
   @@index([sessionId])
   @@index([studentId])
   @@index([studentId, makeupStatus])
+  @@index([centerId])
 }
 
 // ─── Content & Marketing ─────────────────────────────────────────────────────
@@ -2055,6 +2079,7 @@ model Lesson {
   classSessions  ClassSession[]
   changeRequests LessonChangeRequest[]
   scormPackages  ScormPackage[]
+  skillAssessments StudentSkillAssessment[] // W4b
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
@@ -2254,7 +2279,10 @@ model ExamAttempt {
   // Phase 5.6 — Order item link
   orderItems OrderItem[] @relation("ExamOrderItems")
 
-  @@unique([examId, studentId])
+  // LMS-12 — thi lại: số thứ tự lần thi (1-based). Row cũ = 1 (default).
+  attemptNo Int @default(1)
+
+  @@unique([examId, studentId, attemptNo])
   @@index([status, examId])
   @@index([studentId])
 }
@@ -4348,11 +4376,45 @@ model ScormPackage {
 
   lesson     Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   accessLogs ScormAccessLog[]
+  attempts   ScormAttempt[] // LMS-14 — theo dõi GV giảng (KHÔNG ghi điểm HV)
 
   // 1 active duy nhất mỗi buổi: PARTIAL unique `(lessonId) WHERE isActiveForLesson`
   // tạo bằng raw SQL trong migration (Prisma không khai báo partial index native).
   @@index([lessonId])
   @@index([status])
+}
+
+// LMS-14 — Theo dõi GIÁO VIÊN hoàn thành GIẢNG tài liệu SCORM (delivery tracking).
+// LEARNER = GV/staff đang xem để giảng, KHÔNG phải HV (HV không xem SCORM — yêu cầu chốt).
+// KHÔNG nối học bạ HV. Lưu cmi (SCORM 1.2 runtime) để resume + ghi nhận đã giảng.
+enum ScormCompletion {
+  NOT_ATTEMPTED
+  INCOMPLETE
+  COMPLETED
+  PASSED
+  FAILED
+  BROWSED
+}
+
+model ScormAttempt {
+  id             String          @id @default(cuid())
+  packageId      String
+  package        ScormPackage    @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  userId         String // GV/staff (người giảng) — KHÔNG phải studentId
+  classSessionId String? // buổi giảng (nếu mở từ buổi); null = xem ngoài buổi
+  completion     ScormCompletion @default(NOT_ATTEMPTED) // map từ cmi.core.lesson_status
+  scoreRaw       Float? // cmi.core.score.raw (self-check của GV, không phải điểm HV)
+  lessonLocation String?         @db.Text // cmi.core.lesson_location (bookmark)
+  suspendData    String?         @db.Text // cmi.suspend_data (resume)
+  totalTimeSec   Int             @default(0) // tổng thời gian tích lũy (giây)
+  sessionCount   Int             @default(0) // số lần mở
+  lastAccessedAt DateTime        @default(now()) @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+
+  @@index([packageId])
+  @@index([userId])
+  @@index([classSessionId])
 }
 
 model ScormAccessLog {
@@ -4636,6 +4698,85 @@ model Receipt {
 
   @@index([enrollmentId])
   @@index([paymentId])
+}
+
+// W3-1 — Yêu cầu hoàn tiền theo lifecycle (rút/chuyển/hủy lớp). Đề xuất → duyệt → ghi sổ.
+enum RefundTrigger {
+  WITHDRAW
+  TRANSFER
+  CLASS_CANCELLED
+  MANUAL
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model RefundRequest {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  centerId     String?
+  trigger      RefundTrigger
+  reason       String     @db.Text
+  // Số liệu snapshot tại thời điểm tạo (để tính minh bạch, không phụ thuộc thay đổi sau).
+  paidConfirmed   Int // Σ Payment CONFIRMED
+  sessionsTotal   Int
+  sessionsLearned Int
+  unitPrice       Int // finalPrice / sessionsTotal (làm tròn)
+  proposedAmount  Int // computeRefund (đề xuất, ≥0)
+  approvedAmount  Int?
+  status        RefundStatus @default(PENDING)
+  requestedById String?
+  approvedById  String?
+  approvedAt    DateTime?    @db.Timestamptz(6)
+  note          String?      @db.Text
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([enrollmentId])
+  @@index([status])
+  @@index([centerId])
+}
+
+// LMS-15 — Nhắn 2 chiều PH↔GV theo từng enrollment (sổ liên lạc trao đổi).
+enum ConversationSide {
+  PARENT
+  STAFF
+}
+
+model ConversationMessage {
+  id           String           @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  authorUserId String
+  authorSide   ConversationSide
+  body         String           @db.Text
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  // Đánh dấu đã đọc theo từng phía (null = chưa đọc).
+  readByParentAt DateTime?      @db.Timestamptz(6)
+  readByStaffAt  DateTime?      @db.Timestamptz(6)
+
+  @@index([enrollmentId, createdAt])
+}
+
+// LMS-16 — Mục tiêu doanh thu theo kỳ (cho báo cáo doanh-thu-vs-mục-tiêu).
+// centerId null = mục tiêu toàn hệ thống. period = "YYYY-MM".
+model RevenueTarget {
+  id           String   @id @default(cuid())
+  centerId     String?
+  period       String
+  targetAmount Int
+  note         String?
+  createdById  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([centerId])
 }
 
 // ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════

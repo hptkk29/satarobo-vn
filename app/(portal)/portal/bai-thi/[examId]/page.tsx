@@ -76,10 +76,18 @@ export default async function ExamTakingPage({ params }: Props) {
     : null;
   if (!enrolled) redirect("/portal/bai-thi");
 
-  const attempt = await db.examAttempt.findUnique({
-    where: { examId_studentId: { examId, studentId } },
-    select: { id: true, status: true, startedAt: true },
-  });
+  // LMS-12 (thi lại): nhiều attempt/đề → ưu tiên bài ĐANG LÀM; nếu không có thì
+  // lấy lần mới nhất (attemptNo desc) để quyết định điều hướng.
+  const attempt =
+    (await db.examAttempt.findFirst({
+      where: { examId, studentId, status: "IN_PROGRESS" },
+      select: { id: true, status: true, startedAt: true },
+    })) ??
+    (await db.examAttempt.findFirst({
+      where: { examId, studentId },
+      orderBy: { attemptNo: "desc" },
+      select: { id: true, status: true, startedAt: true },
+    }));
   if (!attempt) redirect("/portal/bai-thi");
   if (attempt.status !== "IN_PROGRESS") redirect("/portal/ket-qua");
 

@@ -274,6 +274,8 @@ export type ExamRow = {
   isOpen: boolean;
   attemptStatus: string | null;
   totalScore: number | null;
+  maxAttempts: number;
+  attemptsUsed: number;
 };
 
 export async function getStudentExams(studentId: string): Promise<ExamRow[]> {
@@ -289,11 +291,14 @@ export async function getStudentExams(studentId: string): Promise<ExamRow[]> {
       durationMinutes: true,
       openAt: true,
       closeAt: true,
+      maxAttempts: true,
       class: { select: { name: true } },
       attempts: {
         where: { studentId },
         select: { status: true, totalScore: true },
-        take: 1,
+        // LMS-12 (thi lại): lấy TẤT CẢ lần thi (desc) → [0] = lần mới nhất phản ánh
+        // trạng thái hiện tại; length = số lần đã dùng (để hiện nút "Thi lại").
+        orderBy: { attemptNo: "desc" },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -312,6 +317,8 @@ export async function getStudentExams(studentId: string): Promise<ExamRow[]> {
       isOpen: openOk && closeOk,
       attemptStatus: e.attempts[0]?.status ?? null,
       totalScore: e.attempts[0]?.totalScore ?? null,
+      maxAttempts: e.maxAttempts ?? 1,
+      attemptsUsed: e.attempts.length,
     };
   });
 }
@@ -587,7 +594,14 @@ export async function getParentHomeworkSummary(
 
   const examMap = new Map(exams.map((e) => [e.id, e]));
   const classMap = new Map(sessions.map((s) => [s.id, s.class?.name ?? null]));
-  const scoreMap = new Map(attempts.map((a) => [a.examId, a.totalScore]));
+  // LMS-12 (thi lại): mỗi đề có thể nhiều lần thi → hiển thị điểm CAO NHẤT.
+  const scoreMap = new Map<string, number | null>();
+  for (const a of attempts) {
+    const cur = scoreMap.get(a.examId);
+    if (cur === undefined || (a.totalScore ?? -1) > (cur ?? -1)) {
+      scoreMap.set(a.examId, a.totalScore);
+    }
+  }
 
   const items: ParentHomeworkItem[] = hws.map((h) => {
     const exam = examMap.get(h.examId);

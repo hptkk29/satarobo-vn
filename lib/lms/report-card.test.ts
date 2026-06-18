@@ -6,9 +6,11 @@ import {
   buildPublishedSnapshot,
   checkEnrollmentScope,
   checkTransition,
+  computeAssignmentSummary,
   computeAttendanceRate,
   computeExamAverage,
   isReportCardEditable,
+  latestSkillLevels,
   normalizePeriodComments,
   parsePublishedSnapshot,
   type ReportCardMetrics,
@@ -86,6 +88,38 @@ describe("[R7-15] số liệu (C1)", () => {
   });
 });
 
+describe("[LMS-13] bài tập + kỹ năng (W4-a)", () => {
+  it("tổng hợp bài tập: đếm nộp/chấm + điểm TB chuẩn hoá thang 10 (chỉ bài đã chấm)", () => {
+    const r = computeAssignmentSummary([
+      { status: "GRADED", score: 8, totalPoints: 10 }, // 8
+      { status: "GRADED", score: 5, totalPoints: 20 }, // 2.5
+      { status: "SUBMITTED", score: null, totalPoints: 10 }, // đã nộp, chưa chấm
+      { status: "LATE", score: null, totalPoints: 10 }, // nộp trễ
+      { status: "NOT_SUBMITTED", score: null, totalPoints: 10 }, // chưa nộp
+    ]);
+    expect(r.total).toBe(5);
+    expect(r.submitted).toBe(4); // SUBMITTED+LATE+GRADED
+    expect(r.graded).toBe(2);
+    expect(r.averageScore).toBe(5.3); // (8 + 2.5)/2 = 5.25 → 5.3
+  });
+
+  it("chưa có bài tập chấm → averageScore null", () => {
+    expect(computeAssignmentSummary([]).averageScore).toBeNull();
+    expect(computeAssignmentSummary([{ status: "NOT_SUBMITTED", score: null, totalPoints: 10 }]).graded).toBe(0);
+  });
+
+  it("kỹ năng: lấy mức MỚI NHẤT mỗi kỹ năng (rows không sắp xếp)", () => {
+    const r = latestSkillLevels([
+      { skill: "PROGRAMMING", level: "BASIC", assessedAt: "2026-01-01T00:00:00.000Z" },
+      { skill: "PROGRAMMING", level: "GOOD", assessedAt: "2026-03-01T00:00:00.000Z" },
+      { skill: "TEAMWORK", level: "EXCELLENT", assessedAt: "2026-02-01T00:00:00.000Z" },
+    ]);
+    expect(r.find((x) => x.skill === "PROGRAMMING")?.level).toBe("GOOD");
+    expect(r.find((x) => x.skill === "TEAMWORK")?.level).toBe("EXCELLENT");
+    expect(r).toHaveLength(2);
+  });
+});
+
 describe("[R7-15] snapshot freeze (C5)", () => {
   const baseMetrics: ReportCardMetrics = {
     attendance: { total: 48, attended: 22, absent: 3, needMakeup: 1, madeUp: 2, rate: 46 },
@@ -129,6 +163,45 @@ describe("[R7-15] snapshot freeze (C5)", () => {
     expect(view).not.toBeNull();
     expect(view?.metrics.attendance.rate).toBe(46);
     expect(view?.id).toBe("rc1");
+  });
+
+  it("[LMS-13] backward-compat: snapshot CŨ (thiếu assignments/skills) vẫn parse OK", () => {
+    // baseMetrics KHÔNG có assignments/skills → mô phỏng học bạ PUBLISHED cũ.
+    const oldSnap = buildPublishedSnapshot({
+      metrics: baseMetrics,
+      reportCard: { finalComment: null, completionStatus: null, periodComments: [] },
+      scores: [],
+      criteria: [],
+      student: { name: "An", studentCode: null },
+      course: { name: "Sata 1" },
+      className: "Lớp A",
+      publishedAt: new Date("2026-06-16T10:00:00.000Z"),
+    });
+    const view = parsePublishedSnapshot("rc1", "enr1", oldSnap);
+    expect(view).not.toBeNull();
+    expect(view?.metrics.assignments).toBeUndefined();
+    expect(view?.metrics.skills).toBeUndefined();
+  });
+
+  it("[LMS-13] snapshot MỚI đóng băng cả assignments + skills", () => {
+    const metrics: ReportCardMetrics = {
+      ...baseMetrics,
+      assignments: { total: 4, submitted: 3, graded: 2, averageScore: 6.5 },
+      skills: [{ skill: "PROGRAMMING", level: "GOOD" }],
+    };
+    const snap = buildPublishedSnapshot({
+      metrics,
+      reportCard: { finalComment: null, completionStatus: null, periodComments: [] },
+      scores: [],
+      criteria: [],
+      student: { name: "An", studentCode: null },
+      course: { name: "Sata 1" },
+      className: "Lớp A",
+      publishedAt: new Date("2026-06-16T10:00:00.000Z"),
+    });
+    const view = parsePublishedSnapshot("rc1", "enr1", snap);
+    expect(view?.metrics.assignments?.averageScore).toBe(6.5);
+    expect(view?.metrics.skills?.[0]).toEqual({ skill: "PROGRAMMING", level: "GOOD" });
   });
 
   it("parsePublishedSnapshot trả null khi snapshot hỏng", () => {

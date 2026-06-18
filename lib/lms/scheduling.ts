@@ -35,6 +35,29 @@ export function detectScheduleConflict(
   return { roomConflict, teacherConflict, conflictIds: [...new Set(conflictIds)] };
 }
 
+/**
+ * Giờ kết thúc 1 buổi (THUẦN) = startAt + thời lượng suy từ khung giờ lớp
+ * ("HH:mm"). Nếu thiếu/không hợp lệ startTime+endTime → dùng `fallbackMinutes`.
+ * Dùng để dựng `Slot.endAt` cho detectScheduleConflict.
+ */
+export function sessionEndAt(
+  startAt: Date,
+  startTime?: string | null,
+  endTime?: string | null,
+  fallbackMinutes = 120,
+): Date {
+  const toMin = (t?: string | null): number | null => {
+    if (!t) return null;
+    const [h, m] = t.split(":").map((x) => parseInt(x, 10));
+    if (Number.isNaN(h)) return null;
+    return (h || 0) * 60 + (m || 0);
+  };
+  const s = toMin(startTime);
+  const e = toMin(endTime);
+  const dur = s != null && e != null && e > s ? e - s : fallbackMinutes;
+  return new Date(startAt.getTime() + dur * 60 * 1000);
+}
+
 /** C3.4 — còn chỗ ghi danh không (chặn cứng khi vượt maxStudents). THUẦN. */
 export function hasCapacity(currentCount: number, maxStudents: number | null | undefined): boolean {
   if (maxStudents == null) return true; // không giới hạn

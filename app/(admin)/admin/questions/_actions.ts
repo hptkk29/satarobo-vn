@@ -11,8 +11,11 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+// Lấy đúng kiểu actor mà can() nhận (tránh overload NextMiddleware của auth()).
+type SessionUser = Parameters<typeof can>[0];
+
 async function requireRole(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; user: SessionUser }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -20,7 +23,22 @@ async function requireRole(): Promise<
   if (!can(session.user, "questions:author")) {
     return { ok: false, error: "Không có quyền quản lý câu hỏi" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  return { ok: true, userId: session.user.id ?? "", user: session.user };
+}
+
+// LMS-4 / W1-4 — GV chỉ sửa/xóa câu hỏi của chính mình; người có
+// `training:manage` (SUPER_ADMIN / CENTER_MANAGER) thì sửa/xóa được mọi câu.
+// Lưu ý: Question.authorId trỏ tới Employee.id, nên so với employeeId của actor.
+async function assertAuthorOrManager(
+  questionAuthorId: string | null,
+  gate: { userId: string; user: SessionUser },
+): Promise<Result> {
+  if (can(gate.user, "training:manage")) return { ok: true };
+  const myEmployeeId = await resolveAuthorEmployeeId(gate.userId);
+  if (questionAuthorId && myEmployeeId && questionAuthorId === myEmployeeId) {
+    return { ok: true };
+  }
+  return { ok: false, error: "Chỉ tác giả mới sửa/xóa câu hỏi này" };
 }
 
 async function resolveAuthorEmployeeId(userId: string): Promise<string | null> {
@@ -133,9 +151,12 @@ export async function updateQuestion(
 
   const current = await db.question.findUnique({
     where: { id },
-    select: { questionCode: true },
+    select: { questionCode: true, authorId: true },
   });
   if (!current) return { ok: false, error: "Câu hỏi không tồn tại" };
+
+  const authz = await assertAuthorOrManager(current.authorId, gate);
+  if (!authz.ok) return authz;
 
   if (data.questionCode && data.questionCode !== current.questionCode) {
     const dup = await db.question.findUnique({
@@ -195,6 +216,15 @@ export async function updateQuestion(
 export async function deleteQuestion(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
+
+  const current = await db.question.findUnique({
+    where: { id },
+    select: { authorId: true },
+  });
+  if (!current) return { ok: false, error: "Câu hỏi không tồn tại" };
+
+  const authz = await assertAuthorOrManager(current.authorId, gate);
+  if (!authz.ok) return authz;
 
   try {
     await db.question.delete({ where: { id } });

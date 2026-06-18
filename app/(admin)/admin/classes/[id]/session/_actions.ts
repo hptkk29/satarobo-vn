@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
+import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
@@ -45,6 +46,11 @@ export async function completeSessionAction(
 ): Promise<CompleteSessionResult> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+  // Gác flag SERVER-SIDE (không chỉ ẩn UI): khi OFF, dùng checklist 9 mục cũ.
+  // Chặn cả POST trực tiếp vào action khi flag chưa bật.
+  if (!isSessionLifecycleV2Enabled()) {
+    return { ok: false, error: "Tính năng hoàn tất buổi (v2) chưa được bật" };
+  }
   // GV phụ trách hoặc quản lý đều có thể đóng buổi → dùng sessions:edit.
   if (!can(session.user, "sessions:edit")) {
     return { ok: false, error: "Không có quyền hoàn tất buổi" };
@@ -53,6 +59,18 @@ export async function completeSessionAction(
   const actor = await resolveActor(session.user.id);
   const sc = await resolveSessionScope(actor, sessionId);
   if (!sc.ok) return { ok: false, error: sc.error };
+
+  // Ownership: chỉ GV/trợ giảng của ĐÚNG lớp này, hoặc quản lý/SUPER_ADMIN/HO
+  // mới được hoàn tất buổi — GV lớp khác KHÔNG đóng được (nhất quán với
+  // assignSessionHomeworkAction).
+  const isManager =
+    actor.isSuperAdmin ||
+    actor.isHoLevel ||
+    actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER");
+  const ownsClass = actor.assignedClassIds.has(sc.classId);
+  if (!isManager && !ownsClass) {
+    return { ok: false, error: "Chỉ giáo viên phụ trách mới hoàn tất được buổi này" };
+  }
 
   const { actorId, actorName } = getAuditActor(session);
 

@@ -16,9 +16,27 @@ export const REPORT_CARD_STATUS_LABEL: Record<ReportCardStatusValue, string> = {
 };
 
 // ── Số liệu động (live) ──────────────────────────────────────────────────────
+
+/** Tổng hợp bài tập (AssignmentSubmission). */
+export interface AssignmentSummary {
+  total: number; // tổng bài tập được giao cho học viên (có record submission)
+  submitted: number; // đã nộp (SUBMITTED/LATE/GRADED)
+  graded: number; // đã chấm điểm
+  averageScore: number | null; // điểm TB (chuẩn hoá thang 10) trên các bài đã chấm
+}
+
+/** 1 kỹ năng robot ở mức đánh giá MỚI NHẤT. */
+export interface ReportCardSkill {
+  skill: string; // RoboticsSkill
+  level: string; // SkillLevel
+}
+
 export interface ReportCardMetrics {
   attendance: AttendanceSummary & { rate: number };
   exams: { count: number; passed: number; averageScore: number | null };
+  // LMS-13 (W4-a): field MỚI — OPTIONAL để snapshot CŨ (thiếu field) vẫn parse được.
+  assignments?: AssignmentSummary;
+  skills?: ReportCardSkill[];
   computedAt: string; // ISO
 }
 
@@ -48,6 +66,46 @@ export function computeExamAverage(attempts: ExamAttemptLite[]): {
     return s + ((a.totalScore ?? 0) / pts) * 10;
   }, 0);
   return { count, passed, averageScore: Math.round((sum / count) * 10) / 10 };
+}
+
+export interface AssignmentSubmissionLite {
+  status: "NOT_SUBMITTED" | "SUBMITTED" | "LATE" | "GRADED";
+  score: number | null;
+  totalPoints: number | null; // điểm tối đa của bài tập
+}
+
+/**
+ * Tổng hợp bài tập (chuẩn hoá điểm về thang 10). THUẦN — test bảng biên.
+ * Cùng công thức điểm với computeExamAverage; điểm TB chỉ tính trên bài ĐÃ CHẤM.
+ */
+export function computeAssignmentSummary(subs: AssignmentSubmissionLite[]): AssignmentSummary {
+  const total = subs.length;
+  const submitted = subs.filter(
+    (s) => s.status === "SUBMITTED" || s.status === "LATE" || s.status === "GRADED",
+  ).length;
+  const gradedRows = subs.filter((s) => s.status === "GRADED" && s.score != null);
+  const graded = gradedRows.length;
+  if (graded === 0) return { total, submitted, graded: 0, averageScore: null };
+  const sum = gradedRows.reduce((acc, s) => {
+    const pts = s.totalPoints && s.totalPoints > 0 ? s.totalPoints : 10;
+    return acc + ((s.score ?? 0) / pts) * 10;
+  }, 0);
+  return { total, submitted, graded, averageScore: Math.round((sum / graded) * 10) / 10 };
+}
+
+/**
+ * Lấy mức đánh giá MỚI NHẤT mỗi kỹ năng (rows KHÔNG cần sắp xếp trước). THUẦN — test.
+ * Giữ thứ tự xuất hiện đầu tiên của mỗi kỹ năng sau khi đã chọn bản mới nhất.
+ */
+export function latestSkillLevels(
+  rows: { skill: string; level: string; assessedAt: string }[],
+): ReportCardSkill[] {
+  const latest = new Map<string, { level: string; assessedAt: string }>();
+  for (const r of rows) {
+    const cur = latest.get(r.skill);
+    if (!cur || r.assessedAt > cur.assessedAt) latest.set(r.skill, { level: r.level, assessedAt: r.assessedAt });
+  }
+  return Array.from(latest.entries()).map(([skill, v]) => ({ skill, level: v.level }));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

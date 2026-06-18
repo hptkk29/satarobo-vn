@@ -7,6 +7,7 @@ import { z } from "zod";
 import { createMakeupNeed } from "@/lib/makeup/service";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
+import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 
 type ActionResult = { error?: string; saved?: number };
 
@@ -50,8 +51,9 @@ export async function markAttendance(
     absenceReason?: string | null;
   }>,
 ): Promise<ActionResult> {
+  let user: Awaited<ReturnType<typeof requireTeacherOrAdmin>>;
   try {
-    await requireTeacherOrAdmin();
+    user = await requireTeacherOrAdmin();
   } catch {
     return { error: "Không có quyền điểm danh" };
   }
@@ -62,6 +64,19 @@ export async function markAttendance(
   }
 
   const data = parsed.data;
+
+  // LMS-1 / W1-1 — owner-scope: GV chỉ điểm danh lớp mình dạy/trợ giảng;
+  // admin/CENTER_MANAGER theo cơ sở (tái dùng canManageSessionClass).
+  const gateSess = await db.classSession.findUnique({
+    where: { id: data.sessionId },
+    select: { class: { select: { teacherId: true, assistantId: true, centerId: true } } },
+  });
+  if (!gateSess) return { error: "Buổi học không tồn tại" };
+  const allowed = await canManageSessionClass(
+    { id: user.id, role: user.role, centerId: user.centerId },
+    gateSess.class,
+  );
+  if (!allowed) return { error: "Không có quyền với buổi của lớp này" };
 
   // Upsert each — composite unique key sessionId_studentId.
   // Wrap in $transaction so a mid-batch failure rolls back the entire save
@@ -140,11 +155,27 @@ export async function markAttendance(
 }
 
 export async function deleteAttendance(id: string): Promise<ActionResult> {
+  let user: Awaited<ReturnType<typeof requireTeacherOrAdmin>>;
   try {
-    await requireTeacherOrAdmin();
+    user = await requireTeacherOrAdmin();
   } catch {
     return { error: "Không có quyền" };
   }
+
+  // LMS-1 / W1-1 — owner-scope: chặn GV xoá điểm danh lớp không thuộc mình.
+  const att = await db.attendance.findUnique({
+    where: { id },
+    select: {
+      session: { select: { class: { select: { teacherId: true, assistantId: true, centerId: true } } } },
+    },
+  });
+  if (!att) return { error: "Không thể xoá bản ghi" };
+  const allowed = await canManageSessionClass(
+    { id: user.id, role: user.role, centerId: user.centerId },
+    att.session.class,
+  );
+  if (!allowed) return { error: "Không có quyền với buổi của lớp này" };
+
   try {
     await db.attendance.delete({ where: { id } });
   } catch {

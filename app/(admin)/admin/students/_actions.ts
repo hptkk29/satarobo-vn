@@ -18,10 +18,16 @@ import {
   detectChangedFields,
   getAuditActor,
 } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
+import { canTransition } from "@/lib/enrollments/status";
+import { createRefundRequest } from "@/lib/finance/refund";
 
 type ActionResult = { error?: string };
+
+/** Sentinel để huỷ $transaction phục học khi transition enrollment phi lý. */
+const INVALID_RESUME_TRANSITION = "__INVALID_RESUME_TRANSITION__";
 
 async function requireStudentWrite(action: "create" | "update" | "delete") {
   const session = await auth();
@@ -233,6 +239,18 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
         oldValues: before,
         tx,
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Student",
+        entityId: id,
+        action: "DELETE",
+        oldValues: before,
+        orgUnitId: before.centerId,
+        tx,
+      });
     });
   } catch {
     return { error: "Không thể xoá học viên này" };
@@ -339,7 +357,7 @@ export async function reserveStudentAction(input: {
 
   const student = await db.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
-    select: { id: true, status: true, name: true },
+    select: { id: true, status: true, name: true, centerId: true },
   });
   if (!student) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
@@ -409,6 +427,21 @@ export async function reserveStudentAction(input: {
         reason: `Bảo lưu: ${input.reason.trim()}`,
         tx,
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Student",
+        entityId: input.studentId,
+        action: "STATUS_CHANGE",
+        oldValues: { status: student.status },
+        newValues: { status: "PAUSED" },
+        changedFields: ["status"],
+        reason: `Bảo lưu: ${input.reason.trim()}`,
+        orgUnitId: student.centerId,
+        tx,
+      });
     }
 
     const enrollmentsToPause = input.enrollmentId
@@ -433,6 +466,21 @@ export async function reserveStudentAction(input: {
           changedByName: actorName,
           reason: input.reason.trim(),
         },
+      });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: enr.status },
+        newValues: { status: "PAUSED" },
+        changedFields: ["status"],
+        reason: input.reason.trim(),
+        orgUnitId: student.centerId,
+        tx,
       });
     }
   });
@@ -485,7 +533,7 @@ export async function resumeStudentReserveAction(input: {
       studentId: true,
       enrollmentId: true,
       isActive: true,
-      student: { select: { status: true } },
+      student: { select: { status: true, centerId: true } },
     },
   });
   if (!reserve) {
@@ -502,7 +550,8 @@ export async function resumeStudentReserveAction(input: {
   const { actorId, actorName } = getAuditActor(session);
   const now = new Date();
 
-  await db.$transaction(async (tx) => {
+  try {
+    await db.$transaction(async (tx) => {
     await tx.studentReserve.update({
       where: { id: input.reserveId },
       data: {
@@ -540,16 +589,40 @@ export async function resumeStudentReserveAction(input: {
         reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
         tx,
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Student",
+        entityId: reserve.studentId,
+        action: "STATUS_CHANGE",
+        oldValues: { status: "PAUSED" },
+        newValues: { status: "ACTIVE" },
+        changedFields: ["status"],
+        reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
+        orgUnitId: reserve.student.centerId,
+        tx,
+      });
     }
 
     const enrollmentsToResume = reserve.enrollmentId
-      ? [{ id: reserve.enrollmentId }]
+      ? await tx.enrollment.findMany({
+          where: { id: reserve.enrollmentId },
+          select: { id: true, status: true },
+        })
       : await tx.enrollment.findMany({
           where: { studentId: reserve.studentId, status: "PAUSED" },
-          select: { id: true },
+          select: { id: true, status: true },
         });
 
     for (const enr of enrollmentsToResume) {
+      // Guard state machine chuẩn: chỉ phục học khi enrollment được phép →STUDYING
+      // (PAUSED hợp lệ). Không hợp lệ → huỷ tx, trả lỗi VI.
+      if (!canTransition(enr.status, "STUDYING")) {
+        throw new Error(INVALID_RESUME_TRANSITION);
+      }
+
       await tx.enrollment.update({
         where: { id: enr.id },
         data: { status: "STUDYING" },
@@ -558,15 +631,36 @@ export async function resumeStudentReserveAction(input: {
       await tx.enrollmentAuditLog.create({
         data: {
           enrollmentId: enr.id,
-          fromStatus: "PAUSED",
+          fromStatus: enr.status,
           toStatus: "STUDYING",
           changedByUserId: actorId,
           changedByName: actorName,
           reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
         },
       });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: "PAUSED" },
+        newValues: { status: "STUDYING" },
+        changedFields: ["status"],
+        reason: `Kết thúc bảo lưu${input.endReason ? `: ${input.endReason.trim()}` : ""}`,
+        orgUnitId: reserve.student.centerId,
+        tx,
+      });
     }
-  });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === INVALID_RESUME_TRANSITION) {
+      return { ok: false as const, error: "Không thể chuyển trạng thái này" };
+    }
+    throw err;
+  }
 
   revalidatePath("/students");
   revalidatePath(`/students/${reserve.studentId}/edit`);
@@ -589,7 +683,7 @@ export async function withdrawStudentAction(input: {
 
   const student = await db.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
-    select: { id: true, status: true },
+    select: { id: true, status: true, centerId: true },
   });
   if (!student) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
@@ -629,6 +723,21 @@ export async function withdrawStudentAction(input: {
       tx,
     });
 
+    // P3 (additive): also write to unified AuditLog.
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "students",
+      entityType: "Student",
+      entityId: input.studentId,
+      action: "STATUS_CHANGE",
+      oldValues: { status: student.status },
+      newValues: { status: "INACTIVE" },
+      changedFields: ["status"],
+      reason: `Nghỉ học: ${input.reason.trim()}`,
+      orgUnitId: student.centerId,
+      tx,
+    });
+
     const activeEnrollments = await tx.enrollment.findMany({
       where: {
         studentId: input.studentId,
@@ -652,6 +761,32 @@ export async function withdrawStudentAction(input: {
           changedByName: actorName,
           reason: `Học viên nghỉ học: ${input.reason.trim()}`,
         },
+      });
+
+      // P3 (additive): also write to unified AuditLog.
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "students",
+        entityType: "Enrollment",
+        entityId: enr.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: enr.status },
+        newValues: { status: "WITHDREW" },
+        changedFields: ["status"],
+        reason: `Học viên nghỉ học: ${input.reason.trim()}`,
+        orgUnitId: student.centerId,
+        tx,
+      });
+
+      // W3-1 / LMS-9 — HS nghỉ học → tạo yêu cầu hoàn tiền (PENDING) cho ghi danh
+      // còn sống, trong cùng transaction. Idempotent + chỉ tạo khi có khoản đã thu.
+      await createRefundRequest({
+        enrollmentId: enr.id,
+        trigger: "WITHDRAW",
+        reason: `Học viên nghỉ học: ${input.reason.trim()}`,
+        requestedById: actorId,
+        actorName,
+        tx,
       });
     }
   });
@@ -902,7 +1037,7 @@ export async function reactivateStudentAction(input: {
 
   const student = await db.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
-    select: { id: true, status: true },
+    select: { id: true, status: true, centerId: true },
   });
   if (!student) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
@@ -928,6 +1063,21 @@ export async function reactivateStudentAction(input: {
       newValues: { status: "ACTIVE" },
       changedFields: ["status"],
       reason: `Kích hoạt lại${input.note ? `: ${input.note.trim()}` : ""}`,
+      tx,
+    });
+
+    // P3 (additive): also write to unified AuditLog.
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "students",
+      entityType: "Student",
+      entityId: input.studentId,
+      action: "STATUS_CHANGE",
+      oldValues: { status: student.status },
+      newValues: { status: "ACTIVE" },
+      changedFields: ["status"],
+      reason: `Kích hoạt lại${input.note ? `: ${input.note.trim()}` : ""}`,
+      orgUnitId: student.centerId,
       tx,
     });
   });

@@ -109,6 +109,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "students",
   "teachers",
   "tich-hop",
+  "tin-nhan",
   "trial-classes",
   "trials",
   "users",

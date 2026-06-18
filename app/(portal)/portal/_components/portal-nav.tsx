@@ -14,6 +14,7 @@ import {
   User,
   Bell,
   MessageSquarePlus,
+  MessageSquare,
   Star,
   ImageIcon,
   MessageCircle,
@@ -33,6 +34,7 @@ const ITEMS = [
   { label: "Bài thi", href: "/portal/bai-thi", icon: FileText },
   { label: "Kết quả", href: "/portal/ket-qua", icon: Award },
   { label: "Nhận xét", href: "/portal/nhan-xet", icon: MessageCircle },
+  { label: "Tin nhắn", href: "/portal/tin-nhan", icon: MessageSquare },
   { label: "Hình ảnh", href: "/portal/hinh-anh", icon: ImageIcon },
   { label: "Yêu cầu", href: "/portal/yeu-cau", icon: MessageSquarePlus },
   { label: "Học phí", href: "/portal/hoc-phi", icon: CreditCard },
@@ -49,9 +51,11 @@ const ITEMS = [
 // nút "Menu" mở/đóng. Mọi mục truy cập được, không scroll ngang.
 export function PortalNav({
   notifCount = 0,
+  msgCount = 0,
   evalV2Enabled = false,
 }: {
   notifCount?: number;
+  msgCount?: number;
   evalV2Enabled?: boolean;
 }) {
   const pathname = usePathname();
@@ -69,7 +73,12 @@ export function PortalNav({
             item.href === "/portal"
               ? pathname === "/portal"
               : pathname.startsWith(item.href);
-          const badge = item.href === "/portal/thong-bao" && notifCount > 0 ? notifCount : 0;
+          const badge =
+            item.href === "/portal/thong-bao" && notifCount > 0
+              ? notifCount
+              : item.href === "/portal/tin-nhan" && msgCount > 0
+                ? msgCount
+                : 0;
           return (
             <Link
               key={item.href}
@@ -109,9 +118,9 @@ export function PortalNav({
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             Menu
           </span>
-          {!open && notifCount > 0 && (
+          {!open && notifCount + msgCount > 0 && (
             <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-              {notifCount > 9 ? "9+" : notifCount}
+              {notifCount + msgCount > 9 ? "9+" : notifCount + msgCount}
             </span>
           )}
         </button>

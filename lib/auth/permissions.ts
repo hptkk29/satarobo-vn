@@ -110,6 +110,7 @@ export type Action =
   | "students:view-own-class"
   | "students:create"
   | "students:edit"
+  | "students:change-code"
   | "students:delete"
   | "students:import"
 
@@ -340,6 +341,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "students:view-own-class": ["TEACHER"],
   "students:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "students:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
+  "students:change-code": ["SUPER_ADMIN"], // R7-05 C10 — chỉ SUPER_ADMIN sửa mã HV (audit + reason)
   "students:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "students:import": ["SUPER_ADMIN", "CENTER_MANAGER"],
 

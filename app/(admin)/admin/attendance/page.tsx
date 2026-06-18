@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { ClipboardCheck, AlertCircle } from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { hasRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
@@ -29,10 +31,27 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   const sessionId = sp.sessionId?.trim();
   const classFilter = sp.classId?.trim();
 
+  // LMS-1 / W1-1 — owner-scope cho selector: GV chỉ thấy lớp mình dạy/trợ giảng;
+  // CENTER_MANAGER theo cơ sở; SUPER_ADMIN toàn bộ (cùng quy tắc canManageSessionClass).
+  const gateUser = (await auth())?.user;
+  const NONE: Prisma.ClassWhereInput = { id: "__none__" };
+  const classScope: Prisma.ClassWhereInput = !gateUser
+    ? NONE
+    : hasRole(gateUser, "SUPER_ADMIN")
+      ? {}
+      : hasRole(gateUser, "CENTER_MANAGER")
+        ? gateUser.centerId
+          ? { centerId: gateUser.centerId }
+          : NONE
+        : hasRole(gateUser, "TEACHER")
+          ? { OR: [{ teacherId: gateUser.id }, { assistantId: gateUser.id }] }
+          : NONE;
+
   // Load list of sessions for selector (upcoming or recent past)
   const sessions = await db.classSession.findMany({
     where: {
       ...(classFilter ? { classId: classFilter } : {}),
+      class: classScope,
     },
     orderBy: { date: "desc" },
     take: 100,
@@ -47,7 +66,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   });
 
   const classes = await db.class.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, ...classScope },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
     take: 200,
@@ -77,8 +96,9 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   }> = [];
 
   if (sessionId) {
-    const sess = await db.classSession.findUnique({
-      where: { id: sessionId },
+    // Scope theo selector: GV mở thẳng sessionId của lớp ngoài phạm vi → null (ẩn roster).
+    const sess = await db.classSession.findFirst({
+      where: { id: sessionId, class: classScope },
       include: {
         class: {
           select: {

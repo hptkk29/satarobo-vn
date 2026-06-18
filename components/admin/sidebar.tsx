@@ -42,6 +42,7 @@ import {
   FlaskConical,
   Bell,
   MessageSquarePlus,
+  MessageCircle,
   RefreshCw,
   FileText,
   BookMarked,
@@ -54,6 +55,7 @@ import {
   ChevronDown,
   Workflow,
   Wallet,
+  Undo2,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -132,6 +134,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "CSKH & Phụ huynh",
     items: [
+      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },
@@ -169,6 +172,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage"] },
       { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage"] },
+      { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
       { label: "Mã khuyến mãi", href: "/vouchers", icon: Ticket, perm: ["vouchers:view"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
     ],
@@ -200,6 +204,10 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial", icon: FlaskConical, perm: ["trials:view"] },
       { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: ["classes:view-all", "training:manage"] },
       { label: "Báo cáo trung tâm", href: "/bao-cao/trung-tam", icon: Coins, perm: ["payments:manage"] },
+      { label: "Hiệu suất giáo viên", href: "/bao-cao/hieu-suat-gv", icon: GraduationCap, perm: ["classes:view-all", "training:manage"] },
+      { label: "Cohort tiến độ", href: "/bao-cao/cohort", icon: Users, perm: ["classes:view-all", "training:manage"] },
+      { label: "Churn / rời bỏ", href: "/bao-cao/churn", icon: BarChart3, perm: ["enrollments:view-all"] },
+      { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: ["payments:manage"] },
     ],
   },
 ];

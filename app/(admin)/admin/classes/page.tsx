@@ -138,7 +138,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
           teacher: { select: { name: true } },
           _count: {
             select: {
-              enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+              enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST }, deletedAt: null } },
             },
           },
         },

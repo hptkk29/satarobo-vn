@@ -2,6 +2,8 @@ import React from "react";
 import path from "path";
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
 import type { PublishedReportCardView } from "@/lib/lms/report-card";
+import { SKILL_LABEL, LEVEL_LABEL as SKILL_LEVEL_LABEL } from "@/lib/lms/skills";
+import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
 const FONT_REGULAR = path.join(process.cwd(), "public/fonts/NotoSans-Regular.ttf");
 const FONT_BOLD = path.join(process.cwd(), "public/fonts/NotoSans-Bold.ttf");
@@ -33,6 +35,8 @@ const s = StyleSheet.create({
 
 export function ReportCardPdf({ card }: { card: PublishedReportCardView }) {
   const att = card.metrics.attendance;
+  const assignments = card.metrics.assignments;
+  const skills = card.metrics.skills;
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -51,10 +55,34 @@ export function ReportCardPdf({ card }: { card: PublishedReportCardView }) {
           </Text>
           <Text style={s.stat}>Đã học bù: {att.madeUp}</Text>
           <Text style={s.stat}>
-            Bài tập: {card.metrics.exams.passed}/{card.metrics.exams.count}
+            Bài kiểm tra: {card.metrics.exams.passed}/{card.metrics.exams.count}
           </Text>
-          <Text style={s.stat}>Điểm TB bài tập: {card.metrics.exams.averageScore ?? "—"}</Text>
+          <Text style={s.stat}>Điểm TB KT: {card.metrics.exams.averageScore ?? "—"}</Text>
+          {assignments ? (
+            <>
+              <Text style={s.stat}>
+                Bài tập: {assignments.submitted}/{assignments.total}
+              </Text>
+              <Text style={s.stat}>Điểm TB bài tập: {assignments.averageScore ?? "—"}</Text>
+            </>
+          ) : null}
         </View>
+
+        {skills && skills.length > 0 ? (
+          <>
+            <Text style={s.section}>Kỹ năng robot</Text>
+            <View style={s.hRow}>
+              <Text style={[s.cL, s.bold]}>Kỹ năng</Text>
+              <Text style={[s.cR, s.bold]}>Mức</Text>
+            </View>
+            {skills.map((sk) => (
+              <View style={s.row} key={sk.skill}>
+                <Text style={s.cL}>{SKILL_LABEL[sk.skill as RoboticsSkill] ?? sk.skill}</Text>
+                <Text style={s.cR}>{SKILL_LEVEL_LABEL[sk.level as SkillLevel] ?? sk.level}</Text>
+              </View>
+            ))}
+          </>
+        ) : null}
 
         {card.scores.length > 0 ? (
           <>

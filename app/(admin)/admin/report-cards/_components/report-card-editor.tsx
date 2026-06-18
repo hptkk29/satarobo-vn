@@ -7,6 +7,8 @@ import {
   type ReportCardMetrics,
   type ReportCardStatusValue,
 } from "@/lib/lms/report-card-core";
+import { SKILL_LABEL, LEVEL_LABEL as SKILL_LEVEL_LABEL } from "@/lib/lms/skills";
+import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { saveReportCardAction, transitionReportCardAction } from "../_actions";
 
 const LEVEL_LABEL: Record<number, string> = {
@@ -101,9 +103,19 @@ export function ReportCardEditor(props: {
             { label: "Vắng (chưa bù)", value: att.absent },
             { label: "Đã học bù", value: att.madeUp },
             { label: "Chờ bù", value: att.needMakeup },
-            { label: "Bài tập", value: metrics.exams.count },
-            { label: "Bài đạt", value: metrics.exams.passed },
-            { label: "Điểm TB bài tập", value: metrics.exams.averageScore ?? "—" },
+            { label: "Bài kiểm tra", value: metrics.exams.count },
+            { label: "KT đạt", value: metrics.exams.passed },
+            { label: "Điểm TB KT", value: metrics.exams.averageScore ?? "—" },
+            ...(metrics.assignments
+              ? [
+                  {
+                    label: "Bài tập (nộp/giao)",
+                    value: `${metrics.assignments.submitted}/${metrics.assignments.total}`,
+                  },
+                  { label: "Bài tập đã chấm", value: metrics.assignments.graded },
+                  { label: "Điểm TB bài tập", value: metrics.assignments.averageScore ?? "—" },
+                ]
+              : []),
           ].map((s) => (
             <div key={s.label} className="rounded-lg border border-neutral-200 p-3">
               <div className="text-xs text-neutral-400">{s.label}</div>
@@ -111,6 +123,24 @@ export function ReportCardEditor(props: {
             </div>
           ))}
         </div>
+        {metrics.skills && metrics.skills.length > 0 ? (
+          <div className="mt-3">
+            <h3 className="mb-1 text-xs font-semibold text-neutral-500">Kỹ năng robot (mới nhất)</h3>
+            <ul className="flex flex-wrap gap-2">
+              {metrics.skills.map((sk) => (
+                <li
+                  key={sk.skill}
+                  className="rounded-full border border-neutral-200 px-3 py-1 text-xs text-neutral-700"
+                >
+                  {SKILL_LABEL[sk.skill as RoboticsSkill] ?? sk.skill}:{" "}
+                  <span className="font-medium">
+                    {SKILL_LEVEL_LABEL[sk.level as SkillLevel] ?? sk.level}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <p className="mt-2 text-xs text-neutral-400">
           Số liệu được đóng băng vào bản phát hành tại thời điểm phát hành.
         </p>

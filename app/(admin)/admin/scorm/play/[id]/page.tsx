@@ -14,8 +14,29 @@ import {
 import { isScormEnabled } from "@/lib/flags";
 import { signScormTicket } from "@/lib/scorm/ticket";
 import { ScormPlayer } from "@/components/admin/scorm-player";
+import type { ScormSeed } from "@/components/admin/scorm-api";
 
 export const dynamic = "force-dynamic";
+
+/** Enum ScormCompletion → cmi.core.lesson_status (SCORM 1.2) cho seed resume. */
+const COMPLETION_TO_SCORM: Record<string, string> = {
+  NOT_ATTEMPTED: "not attempted",
+  INCOMPLETE: "incomplete",
+  COMPLETED: "completed",
+  PASSED: "passed",
+  FAILED: "failed",
+  BROWSED: "browsed",
+};
+
+/** Nhãn trạng thái giảng (VI) cho badge GV. */
+const COMPLETION_VI: Record<string, string> = {
+  NOT_ATTEMPTED: "Chưa mở",
+  INCOMPLETE: "Đang giảng dở",
+  COMPLETED: "Đã hoàn tất",
+  PASSED: "Đạt",
+  FAILED: "Chưa đạt",
+  BROWSED: "Đã xem qua",
+};
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -96,6 +117,36 @@ export default async function ScormPlayPage({ params, searchParams }: PageProps)
   const name = u?.employee?.fullName ?? u?.name ?? session.user.email ?? "";
   const employeeCode = u?.employee?.employeeCode ?? "";
 
+  // Tiến độ giảng của GV (resume) — theo (gói, GV, buổi). KHÔNG đụng HV/học bạ.
+  const attempt = await sdb.scormAttempt.findFirst({
+    where: { packageId: pkg.id, userId: session.user.id, classSessionId: sessionId },
+    select: {
+      completion: true,
+      lessonLocation: true,
+      suspendData: true,
+      scoreRaw: true,
+      lastAccessedAt: true,
+    },
+  });
+
+  const seed: ScormSeed = {
+    lessonStatus: attempt
+      ? COMPLETION_TO_SCORM[attempt.completion] ?? "not attempted"
+      : "not attempted",
+    lessonLocation: attempt?.lessonLocation ?? "",
+    suspendData: attempt?.suspendData ?? "",
+    scoreRaw: attempt?.scoreRaw != null ? String(attempt.scoreRaw) : "",
+  };
+  const statusLabel = attempt
+    ? COMPLETION_VI[attempt.completion] ?? attempt.completion
+    : undefined;
+  const lastAccessedLabel = attempt
+    ? new Intl.DateTimeFormat("vi-VN", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(attempt.lastAccessedAt)
+    : undefined;
+
   return (
     <ScormPlayer
       launchTicket={ticket}
@@ -103,6 +154,11 @@ export default async function ScormPlayPage({ params, searchParams }: PageProps)
       packageName={pkg.name}
       name={name}
       employeeCode={employeeCode}
+      packageId={pkg.id}
+      classSessionId={sessionId}
+      seed={seed}
+      statusLabel={statusLabel}
+      lastAccessedLabel={lastAccessedLabel}
     />
   );
 }

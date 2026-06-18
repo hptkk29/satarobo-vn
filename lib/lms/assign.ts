@@ -133,6 +133,10 @@ export async function assignEnrollments(opts: {
   let assigned = 0;
   let skipped = 0;
   for (const enr of candidates) {
+    // Lưu ý: KHÔNG áp canTransition ở đây. "Gán vào lớp" là thao tác GỘP
+    // (xác nhận + xếp lớp + bắt đầu học) — candidates đã lọc sẵn {CONFIRMED, PENDING}
+    // nên chính filter là guard. PENDING→STUDYING là hợp lệ cho thao tác gán
+    // (khác status-change đơn ở changeEnrollmentStatus, nơi guard mới áp dụng).
     try {
       await db.$transaction(async (tx) => {
         await tx.enrollment.update({
@@ -163,7 +167,8 @@ export async function assignEnrollments(opts: {
       });
       assigned += 1;
     } catch {
-      // Đụng độ unique(studentId, classId) hoặc lỗi đơn lẻ → bỏ qua enrollment này.
+      // Đụng độ partial unique (studentId, classId) WHERE deletedAt IS NULL
+      // hoặc lỗi đơn lẻ → bỏ qua enrollment này.
       skipped += 1;
     }
   }

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { enqueueNewFeedback } from "@/lib/email/triggers";
 import { hasRole } from "@/lib/auth/permissions";
+import { publishEvent } from "@/lib/events/publish";
 import { canStartSession, canCompleteSession } from "@/lib/sessions/status";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -66,8 +67,9 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
   );
   if (!allowed) return { ok: false, error: "Không có quyền nhận xét buổi học này" };
 
+  let txResults: Array<{ id: string } | { count: number }>;
   try {
-    await db.$transaction(
+    txResults = await db.$transaction(
       items.map((it) => {
         const comment = it.comment.trim();
         const rating = it.rating ?? null;
@@ -92,6 +94,28 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
     );
   } catch (err) {
     return { ok: false, error: `Lỗi lưu nhận xét: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+
+  // R7-17 — emit "comment.added" cho mỗi nhận xét per-HV vừa lưu → PH của HV đó
+  // nhận thông báo (lib/_handlers/comment-notif.ts). Phát SAU commit: transaction
+  // ở đây là dạng batch-array ($transaction([...])) — không nhận promise non-Prisma
+  // (publishEvent) vào mảng nên không gắn được tx. dedupeKey theo commentId
+  // (StudentSessionFeedback.id) → sửa nhận xét không tạo thông báo trùng.
+  try {
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.comment.trim().length === 0) continue; // dòng xoá → không phát event
+      const row = txResults[i];
+      const commentId = row && "id" in row ? row.id : null;
+      if (!commentId) continue;
+      await publishEvent(
+        "comment.added",
+        { studentId: it.studentId, sessionId, commentId, byUserId: session.user.id },
+        { dedupeKey: `comment.added:${commentId}` },
+      );
+    }
+  } catch (err) {
+    console.error("[saveSessionFeedback] publish comment.added error:", err);
   }
 
   // A2 — đẩy email "nhận xét mới" cho phụ huynh (chỉ con liên quan, không lộ con khác).

@@ -7,8 +7,40 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
+import { findScheduleConflicts } from "@/lib/classes/generate";
+import { sessionEndAt } from "@/lib/lms/scheduling";
 
 type ActionResult = { error?: string };
+
+/**
+ * W2-4 (LMS-6) — soát trùng GV/phòng cho 1 buổi (tạo/sửa). GV/phòng lấy ở cấp lớp
+ * chứa buổi. Trả message VI nếu trùng; null nếu không trùng / thiếu dữ liệu
+ * (lớp không tồn tại, không GV & không phòng, hoặc lớp chưa có startTime → default
+ * an toàn KHÔNG chặn). `excludeSessionId` không cần — query đã loại buổi cùng lớp.
+ */
+async function checkSessionScheduleConflict(
+  classId: string,
+  date: Date,
+): Promise<string | null> {
+  const cls = await db.class.findUnique({
+    where: { id: classId },
+    select: { teacherId: true, roomId: true, startTime: true, endTime: true },
+  });
+  if (!cls?.startTime || (!cls.teacherId && !cls.roomId)) return null;
+  const conflict = await findScheduleConflicts({
+    classId,
+    teacherId: cls.teacherId,
+    roomId: cls.roomId,
+    candidates: [{ startAt: date, endAt: sessionEndAt(date, cls.startTime, cls.endTime) }],
+  });
+  if (conflict.teacherConflict) {
+    return "Trùng lịch giáo viên: GV của lớp này đã có buổi dạy lớp khác vào khung giờ đó.";
+  }
+  if (conflict.roomConflict) {
+    return "Trùng phòng: phòng của lớp này đã được lớp khác sử dụng vào khung giờ đó.";
+  }
+  return null;
+}
 
 const sessionSchema = z.object({
   classId: z.string().trim().min(1, "Lớp học không được để trống"),
@@ -66,6 +98,11 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
   }
 
   const s = parsed.data;
+
+  // W2-4 — chặn tạo buổi gây trùng GV/phòng với lớp khác.
+  const conflictMsg = await checkSessionScheduleConflict(s.classId, s.date);
+  if (conflictMsg) return { error: conflictMsg };
+
   const data: Prisma.ClassSessionCreateInput = {
     class: { connect: { id: s.classId } },
     date: s.date,
@@ -95,6 +132,11 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
   }
 
   const s = parsed.data;
+
+  // W2-4 — chặn cập nhật buổi (đổi ngày/giờ) gây trùng GV/phòng với lớp khác.
+  const conflictMsg = await checkSessionScheduleConflict(s.classId, s.date);
+  if (conflictMsg) return { error: conflictMsg };
+
   const data: Prisma.ClassSessionUpdateInput = {
     class: { connect: { id: s.classId } },
     date: s.date,

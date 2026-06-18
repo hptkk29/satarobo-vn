@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UploadCloud, CheckCircle2, Archive, Star, Play } from "lucide-react";
+import { UploadCloud, CheckCircle2, Archive, Star, Play, GraduationCap } from "lucide-react";
 import {
   createScormPackage,
   confirmUpload,
@@ -26,6 +26,10 @@ export type PackageRow = {
   error: string | null;
   lessonId: string;
   lessonLabel: string;
+  /** Số GV đã mở/giảng gói (delivery tracking — KHÔNG liên quan HV). */
+  deliveredTeacherCount: number;
+  /** Nhãn trạng thái giảng gần nhất (VI) — null nếu chưa GV nào mở. */
+  deliveryStatusLabel: string | null;
 };
 
 const STATUS_STYLE: Record<PackageRow["status"], string> = {
@@ -241,6 +245,13 @@ export function ScormManager({
                           {p.scormVersion && <span>{p.scormVersion.replace("_", " ")}</span>}
                           <span>· {fmtSize(p.sizeBytes)}</span>
                           {p.fileCount != null && <span>· {p.fileCount} tệp</span>}
+                          {p.deliveredTeacherCount > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 font-medium text-violet-700">
+                              <GraduationCap className="h-3 w-3" /> Đã giảng:{" "}
+                              {p.deliveredTeacherCount} GV
+                              {p.deliveryStatusLabel ? ` · ${p.deliveryStatusLabel}` : ""}
+                            </span>
+                          )}
                           {p.status === "FAILED" && p.error && (
                             <span className="text-rose-600">· {p.error}</span>
                           )}

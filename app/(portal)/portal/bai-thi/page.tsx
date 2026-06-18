@@ -39,9 +39,18 @@ export default async function BaiThiPage() {
                   </p>
                 </div>
                 {done ? (
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                    {e.totalScore !== null ? `Điểm: ${e.totalScore}` : "Chờ chấm"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                      {e.totalScore !== null ? `Điểm: ${e.totalScore}` : "Chờ chấm"}
+                    </span>
+                    {e.isOpen && e.attemptsUsed < e.maxAttempts ? (
+                      <StartExamButton
+                        examId={e.id}
+                        resume={false}
+                        label={`Thi lại (${e.attemptsUsed}/${e.maxAttempts})`}
+                      />
+                    ) : null}
+                  </div>
                 ) : e.attemptStatus === "IN_PROGRESS" ? (
                   <StartExamButton examId={e.id} resume />
                 ) : e.isOpen ? (
