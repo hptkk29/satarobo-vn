@@ -175,6 +175,8 @@ export async function submitAttempt(
         select: {
           id: true,
           passingScore: true,
+          durationMinutes: true,
+          closeAt: true,
           examQuestions: {
             include: { question: { select: { type: true } } },
           },
@@ -188,6 +190,18 @@ export async function submitAttempt(
   if (attempt.status !== "IN_PROGRESS") {
     return { ok: false, error: "Bài làm đã nộp" };
   }
+
+  // LMS-5 — hạn nộp server-authoritative. KHÔNG chặn (sẽ kẹt IN_PROGRESS + mất bài
+  // + chặn auto-submit của UI khi hết giờ); nộp trễ vẫn finalize NHƯNG submittedAt
+  // bị clamp về deadline để không ghi nhận là nộp đúng giờ. Đáp án sau deadline đã
+  // bị saveAnswer chặn từ trước nên điểm chỉ tính trên đáp án trong giờ.
+  const deadline = attemptDeadline(
+    attempt.startedAt,
+    attempt.exam.durationMinutes,
+    attempt.exam.closeAt,
+  );
+  const now = new Date();
+  const submittedAt = now.getTime() > deadline.getTime() ? deadline : now;
 
   // Có câu tự luận (ESSAY/CODE) → chờ giáo viên chấm.
   const hasSubjective = attempt.exam.examQuestions.some(
@@ -232,10 +246,10 @@ export async function submitAttempt(
       await tx.examAttempt.update({
         where: { id: attemptId },
         data: hasSubjective
-          ? { status: "SUBMITTED", submittedAt: new Date() }
+          ? { status: "SUBMITTED", submittedAt }
           : {
               status: "GRADED",
-              submittedAt: new Date(),
+              submittedAt,
               totalScore,
               passed: totalScore >= attempt.exam.passingScore,
               gradedAt: new Date(),
