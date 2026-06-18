@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, assertCan } from "@/lib/auth/permissions";
+import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 import { z } from "zod";
 import {
   assignmentSchema,
@@ -20,8 +21,15 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+type GradeActor = {
+  id: string;
+  role: string;
+  centerId: string | null;
+  grants?: { action: string; grant: "ALLOW" | "DENY" }[];
+};
+
 async function requireRole(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; user: GradeActor }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -29,7 +37,19 @@ async function requireRole(): Promise<
   if (!can(session.user, "assignments:create")) {
     return { ok: false, error: "Không có quyền quản lý bài tập" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  return { ok: true, userId: session.user.id ?? "", user: session.user };
+}
+
+// LMS-2 / W1-2 — gate phân quyền CHẤM ĐIỂM: GV chỉ chấm bài của lớp mình
+// dạy/trợ giảng (tái dùng canManageSessionClass: teacherId|assistantId == me);
+// Đào tạo/Admin có quyền report-cards:review | training:manage chấm mọi lớp.
+// Bài không gắn lớp (null) → chỉ Đào tạo/Admin.
+async function canGradeClassWork(
+  user: GradeActor,
+  cls: { teacherId: string | null; assistantId: string | null; centerId: string | null } | null,
+): Promise<boolean> {
+  if (cls && (await canManageSessionClass(user, cls))) return true;
+  return can(user, "report-cards:review") || can(user, "training:manage");
 }
 
 async function resolveEmployeeId(userId: string): Promise<string | null> {
@@ -396,9 +416,19 @@ export async function gradeSubmission(
 
   const submission = await db.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
-    include: { assignment: { select: { totalPoints: true } } },
+    include: {
+      assignment: {
+        select: {
+          totalPoints: true,
+          class: { select: { teacherId: true, assistantId: true, centerId: true } },
+        },
+      },
+    },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  if (!(await canGradeClassWork(gate.user, submission.assignment.class))) {
+    return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
+  }
   if (submission.status === "NOT_SUBMITTED") {
     return { ok: false, error: "HS chưa nộp — không thể chấm" };
   }
@@ -713,11 +743,19 @@ export async function gradeSubmissionRubric(
   const submission = await db.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
     include: {
-      assignment: { select: { title: true } },
+      assignment: {
+        select: {
+          title: true,
+          class: { select: { teacherId: true, assistantId: true, centerId: true } },
+        },
+      },
       student: { select: { name: true, parentUser: { select: { email: true, name: true } } } },
     },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  if (!(await canGradeClassWork(gate.user, submission.assignment.class))) {
+    return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
+  }
   if (submission.status === "NOT_SUBMITTED") {
     return { ok: false, error: "HS chưa nộp — không thể chấm" };
   }

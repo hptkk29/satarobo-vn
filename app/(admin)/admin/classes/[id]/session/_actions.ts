@@ -60,6 +60,18 @@ export async function completeSessionAction(
   const sc = await resolveSessionScope(actor, sessionId);
   if (!sc.ok) return { ok: false, error: sc.error };
 
+  // Ownership: chỉ GV/trợ giảng của ĐÚNG lớp này, hoặc quản lý/SUPER_ADMIN/HO
+  // mới được hoàn tất buổi — GV lớp khác KHÔNG đóng được (nhất quán với
+  // assignSessionHomeworkAction).
+  const isManager =
+    actor.isSuperAdmin ||
+    actor.isHoLevel ||
+    actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER");
+  const ownsClass = actor.assignedClassIds.has(sc.classId);
+  if (!isManager && !ownsClass) {
+    return { ok: false, error: "Chỉ giáo viên phụ trách mới hoàn tất được buổi này" };
+  }
+
   const { actorId, actorName } = getAuditActor(session);
 
   const toDate = (v: string | null | undefined): Date | null => {

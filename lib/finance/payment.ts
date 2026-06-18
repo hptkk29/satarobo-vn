@@ -98,7 +98,7 @@ export async function confirmPayment(params: {
 }): Promise<Ok<{ alreadyConfirmed: boolean; receiptId?: string }> | Fail> {
   const existing = await db.payment.findUnique({
     where: { id: params.paymentId },
-    include: { receipts: true },
+    include: { receipts: { where: { deletedAt: null } } },
   });
   if (!existing) return fail("Không tìm thấy khoản thanh toán");
 
@@ -179,7 +179,7 @@ export async function rejectPayment(params: {
 
   const existing = await db.payment.findUnique({
     where: { id: params.paymentId },
-    include: { receipts: true },
+    include: { receipts: { where: { deletedAt: null } } },
   });
   if (!existing) return fail("Không tìm thấy khoản thanh toán");
   if (existing.accountantStatus === "REJECTED") {

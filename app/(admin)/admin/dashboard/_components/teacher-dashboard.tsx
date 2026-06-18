@@ -17,7 +17,7 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
     select: {
       id: true, name: true, classCode: true, scheduleDays: true, startTime: true, endTime: true,
       room: { select: { code: true } },
-      _count: { select: { enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } } } },
+      _count: { select: { enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST }, deletedAt: null } } } },
     },
   });
 
