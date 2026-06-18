@@ -42,6 +42,7 @@ import {
   FlaskConical,
   Bell,
   MessageSquarePlus,
+  MessageCircle,
   RefreshCw,
   FileText,
   BookMarked,
@@ -133,6 +134,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "CSKH & Phụ huynh",
     items: [
+      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },

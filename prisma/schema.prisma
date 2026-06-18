@@ -1342,6 +1342,7 @@ model Enrollment {
   payments Payment[]        @relation("EnrollmentPayments") // R7-04
   receipts Receipt[]        @relation("EnrollmentReceipts") // R7-04
   refundRequests RefundRequest[] // W3-1
+  messages ConversationMessage[] // LMS-15 — nhắn 2 chiều PH↔GV
 
   // FIX-C3 (B2b) — KHÔNG @@unique đầy đủ: soft-delete cần cho ghi danh lại cùng
   // (HS×lớp) sau khi xóa mềm. Ràng buộc duy nhất chỉ áp row CÒN SỐNG qua PARTIAL
@@ -4695,6 +4696,27 @@ model RefundRequest {
   @@index([enrollmentId])
   @@index([status])
   @@index([centerId])
+}
+
+// LMS-15 — Nhắn 2 chiều PH↔GV theo từng enrollment (sổ liên lạc trao đổi).
+enum ConversationSide {
+  PARENT
+  STAFF
+}
+
+model ConversationMessage {
+  id           String           @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  authorUserId String
+  authorSide   ConversationSide
+  body         String           @db.Text
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  // Đánh dấu đã đọc theo từng phía (null = chưa đọc).
+  readByParentAt DateTime?      @db.Timestamptz(6)
+  readByStaffAt  DateTime?      @db.Timestamptz(6)
+
+  @@index([enrollmentId, createdAt])
 }
 
 // ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════

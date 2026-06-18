@@ -14,6 +14,7 @@ import { registerScormIngestHandlers } from "@/lib/events/handlers/scorm-ingest"
 import { registerTrialScheduleNotifHandlers } from "@/lib/_handlers/trial-schedule-notif";
 import { registerAccountNotifHandlers } from "@/lib/_handlers/account-notif";
 import { registerCommentNotifHandlers } from "@/lib/_handlers/comment-notif";
+import { registerConversationNotifHandlers } from "@/lib/_handlers/conversation-notif";
 
 let registered = false;
 
@@ -34,4 +35,5 @@ export function ensureHandlersRegistered(): void {
   registerTrialScheduleNotifHandlers(); // R7-17 — trial.schedule_changed → báo Sale phụ trách
   registerAccountNotifHandlers(); // R7-17 — account.activated → chào mừng PH lên portal
   registerCommentNotifHandlers(); // R7-17 — comment.added → báo PH có nhận xét mới của GV
+  registerConversationNotifHandlers(); // LMS-15 — conversation.message_posted → báo GV (PH gửi) / PH (GV trả lời)
 }
