@@ -43,6 +43,12 @@ export const SCOPE_EXEMPT = new Set<string>([
   "RefundRequest",
   // LMS-16 — RevenueTarget là config mục tiêu; centerId null = toàn hệ thống.
   "RevenueTarget",
+  // LMS-18 (W5f phase A) — centerId ĐÃ thêm + backfill nhưng CHƯA flip sang SCOPED_MODELS.
+  // Cách ly hiện vẫn qua classId IN scopedClassIds (manual) — giữ EXEMPT để KHÔNG đổi hành vi
+  // đọc. Phase B (shadow-rollout + e2e cách ly) sẽ chuyển 3 model này sang SCOPED_MODELS.
+  "ClassSession",
+  "Attendance",
+  "Enrollment",
 ]);
 
 function bypassesScope(actor: Actor): boolean {

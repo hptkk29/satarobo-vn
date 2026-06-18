@@ -1292,6 +1292,8 @@ model Enrollment {
   classId   String
   courseId  String
   status    EnrollmentStatus @default(ACTIVE)
+  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ class). SCOPE_EXEMPT, chưa flip.
+  centerId  String?
 
   // Financial (legacy)
   tuition Int?
@@ -1355,6 +1357,7 @@ model Enrollment {
   @@index([classId, status])
   @@index([studentId, status])
   @@index([status, enrolledAt])
+  @@index([centerId])
 }
 
 model EnrollmentAuditLog {
@@ -1390,6 +1393,8 @@ model ClassSession {
   planId      String?
   // W2-4b — phòng học theo TỪNG BUỔI (để soát trùng phòng per-session); khác actualRoomId (ghi sau-thực-tế).
   roomId      String?
+  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ class). SCOPE_EXEMPT, chưa flip.
+  centerId    String?
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
@@ -1431,6 +1436,7 @@ model ClassSession {
   @@index([lessonId])
   @@index([planId])
   @@index([roomId])
+  @@index([centerId])
 }
 
 enum SessionStatus {
@@ -1511,6 +1517,9 @@ model Attendance {
   studentId String
   status    AttendanceStatus @default(PRESENT)
   note      String?
+  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ session→class). Phase A:
+  // SCOPE_EXEMPT (chưa flip), cách ly vẫn qua classId IN scopedClassIds như cũ.
+  centerId  String?
 
   // Module QL học viên PHẦN 2 — vắng có cấu trúc.
   makeupStatus    MakeupStatus @default(NONE)
@@ -1529,6 +1538,7 @@ model Attendance {
   @@index([sessionId])
   @@index([studentId])
   @@index([studentId, makeupStatus])
+  @@index([centerId])
 }
 
 // ─── Content & Marketing ─────────────────────────────────────────────────────
