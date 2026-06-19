@@ -1032,6 +1032,7 @@ model LeadChild {
   updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
 
   trialEnrollments TrialEnrollment[] // R7-02
+  enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
 
   @@index([leadId])
 }
@@ -1294,6 +1295,9 @@ model Enrollment {
   classId   String
   courseId  String
   status    EnrollmentStatus @default(ACTIVE)
+  // R7-06 — truy vết enrollment ⇽ LeadChild nguồn khi convert per-child (additive,
+  // nullable; SetNull để không chặn xoá lead). Enrollment tạo trực tiếp → null.
+  leadChildId String?
 
   // Financial (legacy)
   tuition Int?
@@ -1329,9 +1333,10 @@ model Enrollment {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class   Class   @relation(fields: [classId], references: [id])
-  course  Course  @relation(fields: [courseId], references: [id])
+  student   Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class      @relation(fields: [classId], references: [id])
+  course    Course     @relation(fields: [courseId], references: [id])
+  leadChild LeadChild? @relation(fields: [leadChildId], references: [id], onDelete: SetNull)
 
   auditLogs EnrollmentAuditLog[]
 
@@ -1355,6 +1360,7 @@ model Enrollment {
   @@index([classId, status])
   @@index([studentId, status])
   @@index([status, enrolledAt])
+  @@index([leadChildId])
 }
 
 model EnrollmentAuditLog {

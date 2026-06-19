@@ -28,18 +28,18 @@ test.describe("[R7-05] Convert v2", () => {
   });
 
   // ── AC1 / C1-C3 — guard PAYMENT_REQUIRED ──────────────────────────────────
-  test("[R7-05-C1] 0 khoản ghi nhận & tổng > 0 → guard FAIL (PAYMENT_REQUIRED)", () => {
-    expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 5_000_000 }))
+  test("[R7-05-C1] 0 khoản KT xác nhận & tổng > 0 → guard FAIL (PAYMENT_REQUIRED)", () => {
+    expect(evaluatePaymentGuard({ hasConfirmedPayment: false, totalFinalPrice: 5_000_000 }))
       .toEqual({ ok: false });
   });
 
-  test("[R7-05-C2] có khoản ghi nhận → guard PASS (kể cả KT chưa confirm)", () => {
-    expect(evaluatePaymentGuard({ hasRecordedPayment: true, totalFinalPrice: 5_000_000 }))
+  test("[R7-05-C2] có khoản KT XÁC NHẬN (CONFIRMED) → guard PASS (BUG-005)", () => {
+    expect(evaluatePaymentGuard({ hasConfirmedPayment: true, totalFinalPrice: 5_000_000 }))
       .toEqual({ ok: true, scholarshipFull: false });
   });
 
   test("[R7-05-C3] tổng phải-thu = 0 → guard PASS + cờ học bổng toàn phần", () => {
-    expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 0 }))
+    expect(evaluatePaymentGuard({ hasConfirmedPayment: false, totalFinalPrice: 0 }))
       .toEqual({ ok: true, scholarshipFull: true });
   });
 
@@ -77,13 +77,16 @@ test.describe("[R7-05] Convert v2", () => {
     expect(body).not.toMatch(/[ILO01]/); // bỏ ký tự dễ nhầm
   });
 
-  test("[R7-05-C11] flag CONVERT_V2_ENABLED đọc từ env (mặc định OFF)", () => {
+  test("[R7-05-C11] flag CONVERT_V2_ENABLED đọc từ env (mặc định ON — entry point duy nhất)", () => {
     const prev = process.env.CONVERT_V2_ENABLED;
+    delete process.env.CONVERT_V2_ENABLED;
+    expect(isConvertV2Enabled()).toBe(true); // mặc định ON
     process.env.CONVERT_V2_ENABLED = "true";
     expect(isConvertV2Enabled()).toBe(true);
-    process.env.CONVERT_V2_ENABLED = "false";
+    process.env.CONVERT_V2_ENABLED = "false"; // chỉ tắt khẩn cấp
     expect(isConvertV2Enabled()).toBe(false);
-    process.env.CONVERT_V2_ENABLED = prev;
+    if (prev === undefined) delete process.env.CONVERT_V2_ENABLED;
+    else process.env.CONVERT_V2_ENABLED = prev;
   });
 
   // ── End-to-end (seed Lead REGISTERED + payment RECORDED + course/class) ────
@@ -113,8 +116,9 @@ test.describe("[R7-05] Convert v2", () => {
     });
   }
 
-  /** Order + Payment RECORDED gắn lead → guard PAYMENT_REQUIRED pass. */
-  async function seedRecordedPayment(leadId: string, centerId: string) {
+  /** Order + Payment KẾ TOÁN XÁC NHẬN (accountantStatus=CONFIRMED) gắn lead →
+   *  guard PAYMENT_REQUIRED pass (BUG-005: chỉ CONFIRMED mới đủ điều kiện convert). */
+  async function seedConfirmedPayment(leadId: string, centerId: string) {
     const order = await db.order.create({
       data: {
         code: `ORD-${uniq()}`,
@@ -132,6 +136,8 @@ test.describe("[R7-05] Convert v2", () => {
         method: "cash",
         paidDate: new Date(),
         saleStatus: "RECORDED",
+        accountantStatus: "CONFIRMED",
+        confirmedAt: new Date(),
         centerId,
       },
     });
@@ -143,7 +149,7 @@ test.describe("[R7-05] Convert v2", () => {
     const center = await seedCenter();
     const { course, cls } = await seedCourseClass(center.id);
     const lead = await seedRegisteredLead(center.id, "0900000010");
-    await seedRecordedPayment(lead.id, center.id);
+    await seedConfirmedPayment(lead.id, center.id);
     const actorUser = await seedUser({ email: `sale-c4-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C4" });
     const actor = { id: actorUser.id, name: "Sale C4" };
 
@@ -177,7 +183,7 @@ test.describe("[R7-05] Convert v2", () => {
 
     // (a) double-submit cùng idempotencyKey → lần 2 trả kết quả cũ (deduped).
     const lead1 = await seedRegisteredLead(center.id, "0900000011");
-    await seedRecordedPayment(lead1.id, center.id);
+    await seedConfirmedPayment(lead1.id, center.id);
     const actorUser = await seedUser({ email: `sale-c5-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C5" });
     const actor = { id: actorUser.id, name: "Sale C5" };
     const input = {
@@ -204,7 +210,7 @@ test.describe("[R7-05] Convert v2", () => {
 
     // (b) 2 Sale song song (KEY khác nhau) trên 1 lead → CLAIM atomic: chỉ 1 thắng.
     const lead2 = await seedRegisteredLead(center.id, "0900000012");
-    await seedRecordedPayment(lead2.id, center.id);
+    await seedConfirmedPayment(lead2.id, center.id);
     const mk = (key: string) => ({
       leadId: lead2.id,
       parentEmail: "ph-par@test.com",
@@ -274,7 +280,7 @@ test.describe("[R7-05] Convert v2", () => {
     const center = await seedCenter();
     const { course, cls } = await seedCourseClass(center.id);
     const lead = await seedRegisteredLead(center.id, "0900000014");
-    await seedRecordedPayment(lead.id, center.id);
+    await seedConfirmedPayment(lead.id, center.id);
     const actorUser = await seedUser({ email: `sale-c8-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C8" });
     const actor = { id: actorUser.id, name: "Sale C8" };
 
@@ -311,6 +317,44 @@ test.describe("[R7-05] Convert v2", () => {
     expect(audit?.actorId).toBe(actor.id);
     expect(audit?.createdAt).toBeInstanceOf(Date);
     expect((audit?.newValues as { grantedBy?: string } | null)?.grantedBy).toBe(actor.id);
+  });
+
+  // ── BUG-006 / C12 — convert per-child: enrollment lưu đúng leadChildId ────
+  test("[R7-06-C12] convert 2 con → 2 enrollment có leadChildId đúng từng con", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const lead = await seedRegisteredLead(center.id, "0900000015");
+    await seedConfirmedPayment(lead.id, center.id);
+    const childA = await db.leadChild.create({ data: { leadId: lead.id, fullName: "Con A" }, select: { id: true } });
+    const childB = await db.leadChild.create({ data: { leadId: lead.id, fullName: "Con B" }, select: { id: true } });
+    const actorUser = await seedUser({ email: `sale-c12-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C12" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale C12" },
+      {
+        leadId: lead.id,
+        parentEmail: "ph-c12@test.com",
+        parentName: "PH C12",
+        parentPhone: "0909000333",
+        idempotencyKey: `c12-${uniq()}`,
+        students: [
+          { leadChildId: childA.id, name: "Con A", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+          { leadChildId: childB.id, name: "Con B", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    // Mỗi con có Student + Enrollment riêng; enrollment.leadChildId trỏ đúng con.
+    expect(await db.student.count()).toBe(2);
+    const enA = await db.enrollment.findFirst({ where: { leadChildId: childA.id }, select: { id: true } });
+    const enB = await db.enrollment.findFirst({ where: { leadChildId: childB.id }, select: { id: true } });
+    expect(enA).not.toBeNull();
+    expect(enB).not.toBeNull();
+    expect(enA!.id).not.toBe(enB!.id);
+    // Không enrollment nào thiếu truy vết.
+    expect(await db.enrollment.count({ where: { leadChildId: null } })).toBe(0);
   });
 
   // ── AC6 / C10 — sửa mã HV (quyền + audit + reason) ────────────────────────

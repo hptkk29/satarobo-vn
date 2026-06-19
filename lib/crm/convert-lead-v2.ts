@@ -14,14 +14,16 @@ export type ConvertV2Result =
   | { ok: false; error: { code: string; message: string } };
 
 /**
- * Guard điều kiện convert (THUẦN — AC1/C1/C3): cho convert khi đã có khoản Sale
- * ghi nhận, HOẶC tổng phải-thu = 0 (học bổng toàn phần → cần ghi audit lý do).
+ * Guard điều kiện convert (THUẦN — AC1/C1/C3 + quyết định R7 BUG-005): chỉ cho
+ * convert khi đã có ≥1 khoản KẾ TOÁN XÁC NHẬN (accountantStatus=CONFIRMED),
+ * HOẶC tổng phải-thu = 0 (học bổng toàn phần → cần ghi audit lý do).
+ * Khoản mới RECORDED/PENDING hay REJECTED đều KHÔNG đủ điều kiện.
  */
 export function evaluatePaymentGuard(input: {
-  hasRecordedPayment: boolean;
+  hasConfirmedPayment: boolean;
   totalFinalPrice: number;
 }): { ok: true; scholarshipFull: boolean } | { ok: false } {
-  if (input.hasRecordedPayment) return { ok: true, scholarshipFull: false };
+  if (input.hasConfirmedPayment) return { ok: true, scholarshipFull: false };
   if (input.totalFinalPrice === 0) return { ok: true, scholarshipFull: true };
   return { ok: false };
 }
@@ -70,15 +72,16 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     return { ok: false, error: { code: "NOT_REGISTERED", message: "Lead phải ở trạng thái 'Đã đăng ký'" } };
   }
 
-  // 2) Guard PAYMENT_REQUIRED: ≥1 Payment RECORDED trên order của lead, hoặc Σ finalPrice = 0.
+  // 2) Guard PAYMENT_REQUIRED (R7 BUG-005): ≥1 Payment kế toán XÁC NHẬN
+  //    (accountantStatus=CONFIRMED) trên order của lead, hoặc Σ finalPrice = 0.
   const prices = input.students.map((s) =>
     computeEnrollmentPrice({ listPrice: s.listPrice, discount: s.discount ?? null }),
   );
   const totalFinalPrice = prices.reduce((sum, p) => sum + p.finalPrice, 0);
-  const recordedCount = await db.payment.count({
-    where: { saleStatus: "RECORDED", order: { leadId: lead.id } },
+  const confirmedCount = await db.payment.count({
+    where: { accountantStatus: "CONFIRMED", order: { leadId: lead.id } },
   });
-  const guard = evaluatePaymentGuard({ hasRecordedPayment: recordedCount > 0, totalFinalPrice });
+  const guard = evaluatePaymentGuard({ hasConfirmedPayment: confirmedCount > 0, totalFinalPrice });
   if (!guard.ok) {
     return { ok: false, error: { code: "PAYMENT_REQUIRED", message: "Cần ghi nhận khoản thanh toán trước khi chốt" } };
   }
@@ -162,6 +165,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           studentId,
           classId: s.classId,
           courseId: s.courseId,
+          leadChildId: s.leadChildId ?? null, // R7-06 — truy vết về con nguồn
           listPrice: price.listPrice,
           discountType: price.discountType,
           discountAmount: price.discountAmount,

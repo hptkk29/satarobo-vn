@@ -9,21 +9,21 @@ import {
   STUDENT_CODE_V2_CHARSET,
 } from "@/lib/codegen";
 
-describe("[R7-05] evaluatePaymentGuard (AC1/C1/C3)", () => {
-  it("có khoản ghi nhận → pass (không scholarship)", () => {
-    expect(evaluatePaymentGuard({ hasRecordedPayment: true, totalFinalPrice: 9_000_000 })).toEqual({
+describe("[R7-05] evaluatePaymentGuard (AC1/C1/C3 + BUG-005)", () => {
+  it("có khoản KT XÁC NHẬN (CONFIRMED) → pass (không scholarship)", () => {
+    expect(evaluatePaymentGuard({ hasConfirmedPayment: true, totalFinalPrice: 9_000_000 })).toEqual({
       ok: true,
       scholarshipFull: false,
     });
   });
   it("0 khoản + finalPrice=0 → pass + scholarshipFull (audit)", () => {
-    expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 0 })).toEqual({
+    expect(evaluatePaymentGuard({ hasConfirmedPayment: false, totalFinalPrice: 0 })).toEqual({
       ok: true,
       scholarshipFull: true,
     });
   });
-  it("0 khoản + finalPrice>0 → PAYMENT_REQUIRED", () => {
-    expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 9_000_000 }).ok).toBe(false);
+  it("0 khoản CONFIRMED + finalPrice>0 → PAYMENT_REQUIRED", () => {
+    expect(evaluatePaymentGuard({ hasConfirmedPayment: false, totalFinalPrice: 9_000_000 }).ok).toBe(false);
   });
 });
 

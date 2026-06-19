@@ -7,14 +7,12 @@ import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
-import { isConvertV2Enabled } from "@/lib/flags";
 import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { ReassignButton } from "./_components/reassign-button";
 import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
-import { CloseDealButton } from "./_components/close-deal-button";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
 
@@ -128,25 +126,6 @@ export default async function LeadDetailPage({ params }: Props) {
           capacity: true,
           enrollments: { where: { status: "ACTIVE" }, select: { id: true } },
         },
-      })
-    : [];
-
-  // Lớp đang mở để chọn khi chốt deal (ưu tiên cùng cơ sở với lead).
-  const classOptions = dealClosable
-    ? await db.class.findMany({
-        where: {
-          deletedAt: null,
-          status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },
-          ...(lead.centerId ? { centerId: lead.centerId } : {}),
-        },
-        select: {
-          id: true,
-          name: true,
-          classCode: true,
-          course: { select: { price: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 100,
       })
     : [];
 
@@ -273,33 +252,18 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Chốt deal — R7-05: 2 đường theo flag CONVERT_V2_ENABLED.
-          ON → form Convert v2 (guard payment + multi-student + dedupe + consent).
-          OFF → giữ nguyên flow cũ (CloseDealButton). */}
-      {dealClosable &&
-        (isConvertV2Enabled() ? (
-          <div className="mb-6">
-            <Link
-              href={`/leads/${lead.id}/convert`}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-            >
-              Chuyển đổi → Ghi danh (v2)
-            </Link>
-          </div>
-        ) : (
-          <div className="mb-6">
-            <CloseDealButton
-              leadId={lead.id}
-              defaultStudentName={lead.childName ?? `Con của ${lead.parentName}`}
-              defaultParentEmail={lead.email ?? null}
-              classes={classOptions.map((c) => ({
-                id: c.id,
-                label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
-                price: c.course?.price ?? null,
-              }))}
-            />
-          </div>
-        ))}
+      {/* Chốt deal — R7 (quyết định): Convert v2 là entry point DUY NHẤT
+          (per-child, guard payment CONFIRMED, dedupe, consent). Bỏ flow gộp lead cũ. */}
+      {dealClosable && (
+        <div className="mb-6">
+          <Link
+            href={`/leads/${lead.id}/convert`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            Chuyển đổi → Ghi danh (theo từng con)
+          </Link>
+        </div>
+      )}
 
       {/* Học thử (Phase T1.4) */}
       {lead.trialClasses.length > 0 && (
