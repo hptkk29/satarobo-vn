@@ -28,18 +28,18 @@ test.describe("[R7-05] Convert v2", () => {
   });
 
   // ── AC1 / C1-C3 — guard PAYMENT_REQUIRED ──────────────────────────────────
-  test("[R7-05-C1] 0 khoản KT xác nhận & tổng > 0 → guard FAIL (PAYMENT_REQUIRED)", () => {
-    expect(evaluatePaymentGuard({ hasConfirmedPayment: false, totalFinalPrice: 5_000_000 }))
+  test("[R7-05-C1] 0 khoản ghi nhận & tổng > 0 → guard FAIL (PAYMENT_REQUIRED)", () => {
+    expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 5_000_000 }))
       .toEqual({ ok: false });
   });
 
-  test("[R7-05-C2] có khoản KT XÁC NHẬN (CONFIRMED) → guard PASS (BUG-005)", () => {
-    expect(evaluatePaymentGuard({ hasConfirmedPayment: true, totalFinalPrice: 5_000_000 }))
+  test("[R7-05-C2] có khoản Sale ghi nhận (RECORDED) → guard PASS (KT chưa confirm vẫn pass)", () => {
+    expect(evaluatePaymentGuard({ hasRecordedPayment: true, totalFinalPrice: 5_000_000 }))
       .toEqual({ ok: true, scholarshipFull: false });
   });
 
   test("[R7-05-C3] tổng phải-thu = 0 → guard PASS + cờ học bổng toàn phần", () => {
-    expect(evaluatePaymentGuard({ hasConfirmedPayment: false, totalFinalPrice: 0 }))
+    expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 0 }))
       .toEqual({ ok: true, scholarshipFull: true });
   });
 
@@ -116,9 +116,9 @@ test.describe("[R7-05] Convert v2", () => {
     });
   }
 
-  /** Order + Payment KẾ TOÁN XÁC NHẬN (accountantStatus=CONFIRMED) gắn lead →
-   *  guard PAYMENT_REQUIRED pass (BUG-005: chỉ CONFIRMED mới đủ điều kiện convert). */
-  async function seedConfirmedPayment(leadId: string, centerId: string) {
+  /** Order + Payment Sale GHI NHẬN (saleStatus=RECORDED, KT CHƯA xác nhận) gắn lead →
+   *  guard PAYMENT_REQUIRED pass (R7-05-C2: KT chưa confirm vẫn pass). */
+  async function seedRecordedPayment(leadId: string, centerId: string) {
     const order = await db.order.create({
       data: {
         code: `ORD-${uniq()}`,
@@ -136,8 +136,7 @@ test.describe("[R7-05] Convert v2", () => {
         method: "cash",
         paidDate: new Date(),
         saleStatus: "RECORDED",
-        accountantStatus: "CONFIRMED",
-        confirmedAt: new Date(),
+        accountantStatus: "PENDING",
         centerId,
       },
     });
@@ -149,7 +148,7 @@ test.describe("[R7-05] Convert v2", () => {
     const center = await seedCenter();
     const { course, cls } = await seedCourseClass(center.id);
     const lead = await seedRegisteredLead(center.id, "0900000010");
-    await seedConfirmedPayment(lead.id, center.id);
+    await seedRecordedPayment(lead.id, center.id);
     const actorUser = await seedUser({ email: `sale-c4-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C4" });
     const actor = { id: actorUser.id, name: "Sale C4" };
 
@@ -183,7 +182,7 @@ test.describe("[R7-05] Convert v2", () => {
 
     // (a) double-submit cùng idempotencyKey → lần 2 trả kết quả cũ (deduped).
     const lead1 = await seedRegisteredLead(center.id, "0900000011");
-    await seedConfirmedPayment(lead1.id, center.id);
+    await seedRecordedPayment(lead1.id, center.id);
     const actorUser = await seedUser({ email: `sale-c5-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C5" });
     const actor = { id: actorUser.id, name: "Sale C5" };
     const input = {
@@ -210,7 +209,7 @@ test.describe("[R7-05] Convert v2", () => {
 
     // (b) 2 Sale song song (KEY khác nhau) trên 1 lead → CLAIM atomic: chỉ 1 thắng.
     const lead2 = await seedRegisteredLead(center.id, "0900000012");
-    await seedConfirmedPayment(lead2.id, center.id);
+    await seedRecordedPayment(lead2.id, center.id);
     const mk = (key: string) => ({
       leadId: lead2.id,
       parentEmail: "ph-par@test.com",
@@ -280,7 +279,7 @@ test.describe("[R7-05] Convert v2", () => {
     const center = await seedCenter();
     const { course, cls } = await seedCourseClass(center.id);
     const lead = await seedRegisteredLead(center.id, "0900000014");
-    await seedConfirmedPayment(lead.id, center.id);
+    await seedRecordedPayment(lead.id, center.id);
     const actorUser = await seedUser({ email: `sale-c8-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C8" });
     const actor = { id: actorUser.id, name: "Sale C8" };
 
@@ -324,7 +323,7 @@ test.describe("[R7-05] Convert v2", () => {
     const center = await seedCenter();
     const { course, cls } = await seedCourseClass(center.id);
     const lead = await seedRegisteredLead(center.id, "0900000015");
-    await seedConfirmedPayment(lead.id, center.id);
+    await seedRecordedPayment(lead.id, center.id);
     const childA = await db.leadChild.create({ data: { leadId: lead.id, fullName: "Con A" }, select: { id: true } });
     const childB = await db.leadChild.create({ data: { leadId: lead.id, fullName: "Con B" }, select: { id: true } });
     const actorUser = await seedUser({ email: `sale-c12-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C12" });
