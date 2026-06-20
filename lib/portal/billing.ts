@@ -93,8 +93,8 @@ async function resolveChildIds(
  * nên KHÔNG center-scope (scopedDb sẽ lọc rỗng). `client` mặc định db.
  */
 export async function getParentConfirmedPayments(
-  client: typeof db,
   parentUserIdOrStudentIds: string | string[],
+  client: typeof db = db,
 ): Promise<ConfirmedPaymentRow[]> {
   const childIds = await resolveChildIds(client, parentUserIdOrStudentIds);
   if (childIds.length === 0) return [];
@@ -139,4 +139,38 @@ export async function getParentConfirmedPayments(
     confirmedAt: p.confirmedAt?.toISOString() ?? null,
     receiptCode: p.receipts[0]?.code ?? null,
   }));
+}
+
+// =============================================================================
+// G.6 — Tổng học phí (Σ finalPrice các enrollment của con PH) để tính số dư.
+// Số dư = tổng học phí − Σ khoản đã CONFIRMED. Dùng db trần (PARENT không center-scope).
+// =============================================================================
+
+export type ParentBalance = { tuitionTotal: number; paidTotal: number; balance: number };
+
+/** Σ finalPrice của mọi enrollment (chưa xoá) thuộc các con của PH. */
+export async function getParentTuitionTotal(
+  parentUserId: string,
+  client: typeof db = db,
+): Promise<number> {
+  const childIds = await resolveChildIds(client, parentUserId);
+  if (childIds.length === 0) return 0;
+  const enrollments = await client.enrollment.findMany({
+    where: { studentId: { in: childIds }, deletedAt: null },
+    select: { finalPrice: true },
+  });
+  return enrollments.reduce((s, e) => s + Number(e.finalPrice ?? 0), 0);
+}
+
+/** Số dư học phí: tổng học phí − tổng khoản đã CONFIRMED. */
+export async function getParentBalance(
+  parentUserId: string,
+  client: typeof db = db,
+): Promise<ParentBalance> {
+  const [tuitionTotal, confirmed] = await Promise.all([
+    getParentTuitionTotal(parentUserId, client),
+    getParentConfirmedPayments(parentUserId, client),
+  ]);
+  const paidTotal = confirmed.reduce((s, p) => s + Number(p.amount ?? 0), 0);
+  return { tuitionTotal, paidTotal, balance: tuitionTotal - paidTotal };
 }
