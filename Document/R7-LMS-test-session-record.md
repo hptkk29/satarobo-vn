@@ -188,6 +188,14 @@
 
 Audit `app/(admin)/**/page.tsx`: ~50 trang đọc model scoped qua `db` trần (cùng lớp lỗ hổng enrollments). Fix nhóm nghiệp vụ nhạy bằng Workflow 14 agent → **12 trang chuyển scopedDb**: leads, students, trials, cham-soc-hv, hoc-bu, satacoin, notifications, khao-sat, ban-giao-lead, chuyen-lop, sessions, attendance. (trial-classes + media: đã an toàn / không center-data → không sửa. Không có "skipped-risky".) Model ∈ SCOPED_MODELS → `sdb.X` auto-scope; model phụ thuộc/config (ClassSession/MakeupNeed/SataCoinRule) → scope thủ công theo `getModelVisibleCenterIds`. **Verify** (`i3-admin-isolation.spec.ts`): CS1 KHÔNG thấy CS2 (leads/students/sessions), SUPER_ADMIN VẪN thấy; typecheck+lint PASS. Commit `20ba4ae`.
 
-> ⚠️ **Còn lại ~38 trang admin dùng `db` trần** chưa audit kỹ (báo cáo/HO-level/config phần lớn vô hại, nhưng nên quét nốt trong 1 ticket bảo mật riêng — memory `enrollments-page-no-scopeddb`).
+### 9.3 Batch 2 — quét NỐT toàn bộ trang admin còn lại (đã commit)
 
-**Commit phiên này (`fixlms-r7bugs`, chưa push):** `72ebfcd` revert BUG-005 · `1a6791b` G.6 hoc-phi · `cb32e90` enrollments isolation · `2106679` manual specs+docs · `20ba4ae` 12 trang isolation.
+Workflow batch 2 (40 trang) → **31 trang fix scopedDb**, **0 skipped-risky**, 11 đã an toàn (gồm bao-cao/* — đánh giá HO/global). Mẫu: SCOPED_MODELS → `sdb.X` (gồm `findUnique` IDOR→null); model phụ thuộc (ClassSession/Assignment/Exam/CourseCompletion/ParentRequest/LeadTransfer/MakeupNeed) → scope tay qua `class/student.centerId`. **ReportCard/EvaluationRound giữ nguyên** (SCOPE_EXEMPT).
+
+**Verify:** typecheck + lint PASS · **render-smoke 37/37, BAD=0** (test-admin, không 500) · **CS1 mở record CS2 by id → 404** (IDOR chặn: leads/classes/sessions/students [id]) + hoc-ba không lộ · **SUPER_ADMIN vẫn truy cập đầy đủ**. Commit `f767e7b`.
+
+**Re-scan độ phủ:** 3 trang còn `db.<scoped>` không qua wrapper `scopedDb` — kiểm tay đều AN TOÀN: `parent-requests` (scope `student.centerId`), `sessions/[id]` view (guard `canManageSessionClass` → redirect), `cham-cong/lich-ca` (self-scope `userId`). ⇒ **Mọi trang admin đọc data nghiệp vụ scoped đã cách ly.**
+
+> Lưu ý theo dõi: trang **báo cáo `/admin/bao-cao/*`** được agent đánh giá "an toàn/HO-global" → nên 1 lần soi mắt người xác nhận CENTER_MANAGER không thấy số liệu cơ sở khác.
+
+**Commit phiên này (`fixlms-r7bugs`, chưa push):** `72ebfcd` revert BUG-005 · `1a6791b` G.6 hoc-phi · `cb32e90` enrollments isolation · `2106679` manual specs+docs · `20ba4ae` 12 trang isolation · `f767e7b` 31 trang isolation (batch 2) · `eff615e`+ docs.
