@@ -183,3 +183,11 @@
 **Data `__TEST__` MỚI (bổ sung §7 cleanup):** user `test-cs1@example.com` (id `cmqlu0mxo0001o3iz2nblg8op`) + UserOrgRole CENTER_MANAGER@CS1; **11 RoleDef** seed vào DB (trước chỉ có SUPER_ADMIN — additive, idempotent). Specs `tests/manual/{g6-hoc-phi,lms-r7-deep,i3-isolation}.spec.ts`.
 
 **DEFERRED còn lại:** C đã PASS lõi phiên trước; K SCORM (P3).
+
+### 9.2 Mở rộng fix cách ly cơ sở — 12 trang admin (multi-agent, đã commit)
+
+Audit `app/(admin)/**/page.tsx`: ~50 trang đọc model scoped qua `db` trần (cùng lớp lỗ hổng enrollments). Fix nhóm nghiệp vụ nhạy bằng Workflow 14 agent → **12 trang chuyển scopedDb**: leads, students, trials, cham-soc-hv, hoc-bu, satacoin, notifications, khao-sat, ban-giao-lead, chuyen-lop, sessions, attendance. (trial-classes + media: đã an toàn / không center-data → không sửa. Không có "skipped-risky".) Model ∈ SCOPED_MODELS → `sdb.X` auto-scope; model phụ thuộc/config (ClassSession/MakeupNeed/SataCoinRule) → scope thủ công theo `getModelVisibleCenterIds`. **Verify** (`i3-admin-isolation.spec.ts`): CS1 KHÔNG thấy CS2 (leads/students/sessions), SUPER_ADMIN VẪN thấy; typecheck+lint PASS. Commit `20ba4ae`.
+
+> ⚠️ **Còn lại ~38 trang admin dùng `db` trần** chưa audit kỹ (báo cáo/HO-level/config phần lớn vô hại, nhưng nên quét nốt trong 1 ticket bảo mật riêng — memory `enrollments-page-no-scopeddb`).
+
+**Commit phiên này (`fixlms-r7bugs`, chưa push):** `72ebfcd` revert BUG-005 · `1a6791b` G.6 hoc-phi · `cb32e90` enrollments isolation · `2106679` manual specs+docs · `20ba4ae` 12 trang isolation.
