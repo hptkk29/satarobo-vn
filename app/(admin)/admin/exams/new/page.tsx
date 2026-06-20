@@ -3,6 +3,8 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/permissions";
 import { ExamForm } from "../_components/exam-form";
 
@@ -15,8 +17,11 @@ export default async function NewExamPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [classes, lessons] = await Promise.all([
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, classCode: true },

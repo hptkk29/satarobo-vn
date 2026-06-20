@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, ArrowLeft, CalendarDays } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import {
   WeekCalendar,
   type ScheduleSession,
@@ -35,6 +37,14 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
   const { id } = await params;
   const { week } = await searchParams;
 
+  // Cách ly cơ sở: Employee ∈ SCOPED_MODELS (findUnique → null nếu ngoài tầm nhìn,
+  // chống IDOR). ClassSession KHÔNG scoped → scope thủ công qua class.centerId theo
+  // tầm nhìn cơ sở của model Class. SUPER_ADMIN/HO tự bypass (ALL).
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const refDate = safeParseWeek(week);
   const weekStart = startOfWeek(refDate, { weekStartsOn: 1 }); // Monday
   const weekEnd = endOfWeek(refDate, { weekStartsOn: 1 });    // Sunday 23:59:59
@@ -42,7 +52,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
   const prevWeek = subWeeks(weekStart, 1);
   const nextWeek = addWeeks(weekStart, 1);
 
-  const employee = await db.employee.findUnique({
+  const employee = await sdb.employee.findUnique({
     where: { id },
     select: {
       id: true,
@@ -89,11 +99,18 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
   // Bail out gracefully if the employee has no User account yet.
   const userId = employee.userAccount?.id ?? null;
 
+  // ClassSession không có centerId trực tiếp → scope thủ công qua class.centerId.
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+  const classWhere =
+    visibleClassCenters === "ALL"
+      ? { teacherId: userId, deletedAt: null }
+      : { teacherId: userId, deletedAt: null, centerId: { in: visibleClassCenters } };
+
   const rawSessions = userId
-    ? await db.classSession.findMany({
+    ? await sdb.classSession.findMany({
         where: {
           date: { gte: weekStart, lte: weekEnd },
-          class: { teacherId: userId, deletedAt: null },
+          class: classWhere,
         },
         include: {
           class: {

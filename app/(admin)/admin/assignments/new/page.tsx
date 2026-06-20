@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { AssignmentForm } from "../_components/assignment-form";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +17,14 @@ export default async function NewAssignmentPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Cách ly cơ sở: Class ∈ SCOPED_MODELS → dropdown lớp chỉ hiện lớp trong tầm nhìn
+  // cơ sở của actor (CS1 không thấy lớp CS2). Lesson theo chương trình (toàn hệ thống)
+  // → giữ db trần.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [classes, lessons] = await Promise.all([
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, classCode: true },

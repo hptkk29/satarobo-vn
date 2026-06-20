@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";

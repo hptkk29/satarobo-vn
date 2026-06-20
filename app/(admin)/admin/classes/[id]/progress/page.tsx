@@ -4,6 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, hasRole, canViewParentContact } from "@/lib/auth/permissions";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { getClassProgress, getClassGradebook } from "@/lib/progress";
 import { GenerateReportsButton } from "./_components/generate-reports-button";
 
@@ -34,7 +36,13 @@ export default async function ClassProgressPage({ params }: Props) {
   const { id } = await params;
   const now = new Date();
 
-  const cls = await db.class.findUnique({
+  // Cách ly cơ sở: Class ∈ SCOPED_MODELS → sdb.class.findUnique lọc IDOR (ngoài tầm
+  // nhìn cơ sở → null → notFound). Cổng này khoá luôn cả trang vì count/getClassProgress
+  // /getClassGradebook đều key theo `id` đã được xác thực tầm nhìn ở đây.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const cls = await sdb.class.findUnique({
     where: { id },
     include: {
       course: { select: { name: true } },

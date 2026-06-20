@@ -4,6 +4,8 @@ import { Users, CheckCircle2, Percent, Loader2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import type { LeadStatus } from "@prisma/client";
 import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin";
 import { FunnelChart } from "@/components/charts/funnel-chart";
@@ -35,27 +37,33 @@ export default async function CrmDashboardPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "leads:view-all")) redirect("/dashboard");
 
+  // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → đọc qua scopedDb để CENTER_MANAGER@CS1
+  // không thấy lead CS2. groupBy/count auto-inject centerId theo tầm nhìn của actor.
+  // User là SCOPE_EXEMPT (identity toàn cục) → giữ db trần.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const [byStatus, bySource, byAssigned, enrolledByAssigned, sales, monthTotal, monthEnrolled] =
     await Promise.all([
-      db.lead.groupBy({
+      sdb.lead.groupBy({
         by: ["status"],
         where: { deletedAt: null },
         _count: { _all: true },
       }),
-      db.lead.groupBy({
+      sdb.lead.groupBy({
         by: ["source"],
         where: { deletedAt: null },
         _count: { _all: true },
       }),
-      db.lead.groupBy({
+      sdb.lead.groupBy({
         by: ["assignedToId"],
         where: { deletedAt: null, assignedToId: { not: null } },
         _count: { _all: true },
       }),
-      db.lead.groupBy({
+      sdb.lead.groupBy({
         by: ["assignedToId"],
         where: { deletedAt: null, assignedToId: { not: null }, status: "ENROLLED" },
         _count: { _all: true },
@@ -65,8 +73,8 @@ export default async function CrmDashboardPage() {
         select: { id: true, name: true, email: true },
         orderBy: { name: "asc" },
       }),
-      db.lead.count({ where: { deletedAt: null, createdAt: { gte: monthStart } } }),
-      db.lead.count({
+      sdb.lead.count({ where: { deletedAt: null, createdAt: { gte: monthStart } } }),
+      sdb.lead.count({
         where: { deletedAt: null, status: "ENROLLED", updatedAt: { gte: monthStart } },
       }),
     ]);

@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, CalendarOff, FileSpreadsheet, Pencil } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma, HolidayType } from "@prisma/client";
 import { TypeBadge, ScopeBadge, DateRange, TYPE_LABELS } from "./_components/helpers";
 
@@ -13,6 +16,14 @@ interface SearchParams {
 const VALID_TYPES = new Set<HolidayType>(["HOLIDAY", "MAINTENANCE", "EVENT", "OTHER"]);
 
 export default async function HolidaysAdminPage({ searchParams }: SearchParams) {
+  // Cách ly cơ sở: Holiday ∈ SCOPED_MODELS → scopedDb auto-inject centerId IN <tầm
+  // nhìn>. CENTER_MANAGER@CS1 không thấy ngày nghỉ riêng của CS2 (ngày nghỉ toàn hệ
+  // thống centerId=null bị scope theo cùng cơ chế như trang /admin/sessions).
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const sp = await searchParams;
   const currentYear = new Date().getUTCFullYear();
   const year = (() => {
@@ -35,12 +46,12 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
   }
 
   const [holidays, centers] = await Promise.all([
-    db.holiday.findMany({
+    sdb.holiday.findMany({
       where,
       orderBy: { date: "asc" },
       include: { center: { select: { id: true, name: true } } },
     }),
-    db.center.findMany({
+    sdb.center.findMany({
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),

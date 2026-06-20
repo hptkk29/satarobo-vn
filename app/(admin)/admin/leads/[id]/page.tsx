@@ -31,8 +31,13 @@ export default async function LeadDetailPage({ params }: Props) {
   const canViewOwn = can(session.user, "leads:view-own");
   if (!canViewAll && !canViewOwn) redirect("/dashboard");
 
+  // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → sdb.lead.findFirst tự inject `centerId IN
+  // visible` (CENTER_MANAGER@CS1 không xem lead CS2 → notFound). SUPER_ADMIN/HO bypass.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const { id } = await params;
-  const lead = await db.lead.findFirst({
+  const lead = await sdb.lead.findFirst({
     where: { id, deletedAt: null },
     include: {
       center: { select: { name: true } },
@@ -112,7 +117,7 @@ export default async function LeadDetailPage({ params }: Props) {
   // GAP-5: dùng scopedDb (TrialClassV2 là SCOPED_MODEL) — tránh lộ lớp toàn hệ thống
   // khi lead.centerId null. Cách ly cơ sở theo visibleCenterIds của actor.
   const openTrialClasses = canTrialManage
-    ? await scopedDb(await resolveActor(session.user.id)).trialClassV2.findMany({
+    ? await sdb.trialClassV2.findMany({
         where: {
           status: "OPEN",
           ...(lead.centerId ? { centerId: lead.centerId } : {}),

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { ClassGroupForm } from "../../_components/class-group-form";
 
 export const metadata = { title: "Sửa nhóm lớp | Admin" };
@@ -25,8 +25,9 @@ export default async function EditClassGroupPage({ params }: Props) {
   const { id } = await params;
   // Nhóm lớp BẮT BUỘC thuộc 1 cơ sở → loại HO khỏi danh sách (types: ["CENTER"]).
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const [group, orgUnits] = await Promise.all([
-    db.classGroup.findFirst({
+    sdb.classGroup.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true,

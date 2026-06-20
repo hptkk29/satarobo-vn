@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
 import { canAssessStudent } from "@/lib/lms/skill-access";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getStudentProgress } from "@/lib/progress";
 import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
@@ -34,8 +35,12 @@ export default async function EditStudentPage({ params }: Props) {
   const { id } = await params;
 
   const actor = await resolveActor(session.user.id);
+  // Cách ly cơ sở: Student ∈ SCOPED_MODELS → sdb auto-inject centerId IN visible.
+  // CS1 mở học viên CS2 → findFirst trả null → notFound() (chống IDOR). Các truy vấn
+  // phụ (enrollment/skill) keyed theo studentId đã được scope-verify nên an toàn.
+  const sdb = scopedDb(actor);
   const [student, orgUnits] = await Promise.all([
-    db.student.findFirst({
+    sdb.student.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true,
@@ -81,7 +86,7 @@ export default async function EditStudentPage({ params }: Props) {
 
   // Commit 3 — đa con: các con đang gắn cùng phụ huynh này.
   const parentChildren = student.parentUserId
-    ? await db.student.findMany({
+    ? await sdb.student.findMany({
         where: { parentUserId: student.parentUserId, deletedAt: null },
         orderBy: { name: "asc" },
         select: { id: true, name: true, studentCode: true },

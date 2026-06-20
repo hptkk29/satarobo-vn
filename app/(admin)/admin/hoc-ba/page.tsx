@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { getStudentTranscript } from "@/lib/transcript/service";
 import { TranscriptView } from "@/components/transcript/transcript-view";
 
@@ -20,13 +21,14 @@ export default async function AdminTranscriptPage({
     redirect("/dashboard");
   }
 
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
+  // Cách ly cơ sở: Student ∈ SCOPED_MODELS → scopedDb auto-inject centerId theo
+  // tầm nhìn của actor. SUPER_ADMIN/HO → "ALL" (không lọc); center-level → chỉ cơ
+  // sở được phép. Thay manual centerScope (chỉ phủ CENTER_MANAGER → lọt role khác).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
-  const students = await db.student.findMany({
-    where: { deletedAt: null, ...(centerScope ? { centerId: centerScope } : {}) },
+  const students = await sdb.student.findMany({
+    where: { deletedAt: null },
     orderBy: { name: "asc" },
     take: 500,
     select: { id: true, name: true, studentCode: true },
@@ -34,20 +36,17 @@ export default async function AdminTranscriptPage({
 
   const { studentId } = await searchParams;
 
-  // Center scope guard cho transcript đang xem. SUPER_ADMIN: centerScope=null →
-  // KHÔNG lọc cơ sở. Bọc try/catch để lỗi tổng hợp không làm trắng trang.
+  // Center scope guard cho transcript đang xem: findFirst qua sdb (auto-scope) →
+  // null nếu HS ngoài tầm nhìn cơ sở (chống IDOR). SUPER_ADMIN/HO thấy mọi HS.
+  // Bọc try/catch để lỗi tổng hợp không làm trắng trang.
   let t = null;
   if (studentId) {
     try {
-      if (centerScope) {
-        const inScope = await db.student.findFirst({
-          where: { id: studentId, centerId: centerScope },
-          select: { id: true },
-        });
-        if (inScope) t = await getStudentTranscript(studentId);
-      } else {
-        t = await getStudentTranscript(studentId);
-      }
+      const inScope = await sdb.student.findFirst({
+        where: { id: studentId, deletedAt: null },
+        select: { id: true },
+      });
+      if (inScope) t = await getStudentTranscript(studentId);
     } catch (err) {
       console.error("[hoc-ba] transcript error:", err);
     }

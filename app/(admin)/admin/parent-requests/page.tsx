@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import type {
   Prisma,
   ParentRequestStatus,
@@ -81,6 +83,15 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
     ...(activeType.type ? { type: activeType.type } : {}),
     ...(activeStatus.status ? { status: activeStatus.status } : {}),
   };
+
+  // Cách ly cơ sở: ParentRequest KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
+  // tiếp) → phụ thuộc cơ sở qua student.centerId. Scope thủ công bằng tầm nhìn cơ sở của
+  // model Student (mẫu như /admin/enrollments scope qua class.centerId). SUPER_ADMIN/HO → ALL.
+  const actor = await resolveActor(session.user.id);
+  const visibleStudentCenters = getModelVisibleCenterIds("Student", actor);
+  if (visibleStudentCenters !== "ALL") {
+    where.student = { centerId: { in: visibleStudentCenters } };
+  }
 
   const rows = await db.parentRequest.findMany({
     where,

@@ -1,4 +1,8 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { SessionForm } from "../_components/session-form";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +12,16 @@ interface Props {
 }
 
 export default async function NewSessionPage({ searchParams }: Props) {
+  // Cách ly cơ sở: dropdown lớp phải theo tầm nhìn cơ sở của actor (Class ∈ SCOPED_MODELS
+  // → sdb.class auto inject centerId). Lesson không scope theo cơ sở → giữ db trần.
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const sp = await searchParams;
   const [classes, lessons] = await Promise.all([
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null, isActive: true },
       orderBy: { name: "asc" },
       select: {

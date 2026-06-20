@@ -1,7 +1,8 @@
-import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/permissions";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { EnrollForm } from "../_components/enroll-form";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +16,13 @@ export default async function NewEnrollmentPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Cách ly cơ sở: Student + Class ∈ SCOPED_MODELS → sdb auto inject centerId,
+  // CENTER_MANAGER@CS1 không thấy/đăng ký HS hay lớp của CS2.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [students, classes] = await Promise.all([
-    db.student.findMany({
+    sdb.student.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
       orderBy: { createdAt: "desc" },
       select: {
@@ -27,7 +33,7 @@ export default async function NewEnrollmentPage() {
       },
       take: 500,
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: {
         deletedAt: null,
         status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },

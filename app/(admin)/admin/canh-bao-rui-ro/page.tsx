@@ -2,8 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { ResolveButtons } from "./_components/alert-actions";
 
 export const metadata = { title: "Cảnh báo rủi ro HV | Admin" };
@@ -28,13 +29,13 @@ export default async function RiskAlertPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "students:view-all")) redirect("/dashboard");
 
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
+  // Cách ly cơ sở: StudentRiskAlert ∈ SCOPED_MODELS → scopedDb tự inject centerId IN
+  // tầm-nhìn-cơ-sở của actor (SUPER_ADMIN/HO bypass → ALL). Thay manual centerScope cũ.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
-  const alerts = await db.studentRiskAlert.findMany({
-    where: { status: { in: ["OPEN", "ESCALATED"] }, ...(centerScope ? { centerId: centerScope } : {}) },
+  const alerts = await sdb.studentRiskAlert.findMany({
+    where: { status: { in: ["OPEN", "ESCALATED"] } },
     orderBy: [{ severity: "desc" }, { createdAt: "asc" }],
     take: 200,
     select: {
