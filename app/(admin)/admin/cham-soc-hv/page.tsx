@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { HeartHandshake } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
 import { CompleteCareButton } from "../canh-bao-rui-ro/_components/alert-actions";
 
@@ -24,7 +25,12 @@ export default async function CareTaskPage() {
     ? { status: "OPEN", assignedToId: session.user.id }
     : { status: "OPEN", ...(centerScope ? { centerId: centerScope } : {}) };
 
-  const tasks = await db.studentCareTask.findMany({
+  // Cách ly cơ sở: StudentCareTask ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject
+  // `centerId IN visibleCenterIds`. Giữ nguyên filter UI (centerScope CM / assignedTo sale).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const tasks = await sdb.studentCareTask.findMany({
     where,
     orderBy: { dueAt: "asc" },
     take: 200,

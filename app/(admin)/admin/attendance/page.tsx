@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ClipboardCheck, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { withMakeupException } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds, withMakeupException } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
@@ -29,10 +30,24 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   const sessionId = sp.sessionId?.trim();
   const classFilter = sp.classId?.trim();
 
+  // Cách ly cơ sở: ClassSession/Attendance KHÔNG ∈ SCOPED_MODELS (không có centerId
+  // trực tiếp) → scope THỦ CÔNG qua quan hệ class.centerId, dùng tầm nhìn cơ sở của
+  // model Class. Class ∈ SCOPED_MODELS → đọc qua sdb.class (auto-scope).
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+  const classScopeWhere =
+    visibleClassCenters === "ALL"
+      ? {}
+      : { class: { centerId: { in: visibleClassCenters } } };
+
   // Load list of sessions for selector (upcoming or recent past)
   const sessions = await db.classSession.findMany({
     where: {
       ...(classFilter ? { classId: classFilter } : {}),
+      ...classScopeWhere,
     },
     orderBy: { date: "desc" },
     take: 100,
@@ -46,7 +61,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     },
   });
 
-  const classes = await db.class.findMany({
+  const classes = await sdb.class.findMany({
     where: { deletedAt: null },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
@@ -77,8 +92,13 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   }> = [];
 
   if (sessionId) {
-    const sess = await db.classSession.findUnique({
-      where: { id: sessionId },
+    // IDOR cross-center: ClassSession không scoped → findFirst + lọc class.centerId
+    // trong tầm nhìn (sessionId của cơ sở khác → null → không lộ roster).
+    const sess = await db.classSession.findFirst({
+      where: {
+        id: sessionId,
+        ...classScopeWhere,
+      },
       include: {
         class: {
           select: {
@@ -137,9 +157,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
       // R7-08 (AC4) — HS được xếp HỌC BÙ vào buổi này (có thể từ cơ sở khác).
       // GV lớp đích thấy HS bù trong ĐÚNG buổi này + badge "Học bù từ <CS>";
       // KHÔNG truy cập hồ sơ đầy đủ. Đọc chéo cơ sở qua exception whitelist.
-      const authSession = await auth();
-      if (authSession?.user?.id) {
-        const actor = await resolveActor(authSession.user.id);
+      {
         const xdb = withMakeupException(actor);
         const guests = await xdb.makeupNeed.findMany({
           where: { makeupSessionId: sessionId, status: "SCHEDULED" },

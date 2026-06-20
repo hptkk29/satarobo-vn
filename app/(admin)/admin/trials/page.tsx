@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma, TrialClassStatus } from "@prisma/client";
 import { TrialsList } from "./_components/trials-list";
 import { TRIAL_STATUS_LABEL, ALL_TRIAL_STATUSES } from "@/lib/trials/status";
@@ -42,8 +44,13 @@ export default async function TrialsPage({ searchParams }: Props) {
   // Teacher chỉ thấy buổi được phân công cho mình.
   if (isTeacher) where.teacherId = session.user.id;
 
+  // Cách ly cơ sở: TrialClass/Room/Class đều thuộc SCOPED_MODELS (có centerId) → scopedDb
+  // tự inject `centerId IN visible`. User/Course không scope (global) → giữ db trần.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [trials, teachers, rooms, classes, courses] = await Promise.all([
-    db.trialClass.findMany({
+    sdb.trialClass.findMany({
       where,
       orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
       take: 200,
@@ -59,12 +66,12 @@ export default async function TrialsPage({ searchParams }: Props) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    db.room.findMany({
+    sdb.room.findMany({
       where: { status: "ACTIVE" },
       select: { id: true, name: true, code: true },
       orderBy: { displayOrder: "asc" },
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null, isActive: true },
       select: { id: true, name: true, classCode: true },
       orderBy: { createdAt: "desc" },

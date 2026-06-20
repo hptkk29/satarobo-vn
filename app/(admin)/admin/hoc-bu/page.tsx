@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { MakeupRow, type MakeupItem } from "./_components/makeup-row";
 
 export const metadata = { title: "Học bù | Admin" };
@@ -13,15 +14,15 @@ export default async function MakeupPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "parent-requests:manage")) redirect("/dashboard");
 
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
+  // Cách ly cơ sở: MakeupNeed ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject
+  // `centerId IN <tầm nhìn>`. SUPER_ADMIN/HO bypass (ALL). Thay pattern auth cũ
+  // (hasRole CENTER_MANAGER → session.centerId) vốn không phủ multi-role/HO.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
-  const needs = await db.makeupNeed.findMany({
+  const needs = await sdb.makeupNeed.findMany({
     where: {
       status: { in: ["PENDING", "SCHEDULED"] },
-      ...(centerScope ? { centerId: centerScope } : {}),
     },
     orderBy: [{ status: "asc" }, { createdAt: "asc" }],
     take: 200,
@@ -42,8 +43,8 @@ export default async function MakeupPage() {
   ];
   const lessonIds = [...new Set(needs.map((n) => n.missedLessonId).filter((x): x is string => !!x))];
   const [sessions, lessons] = await Promise.all([
-    sessionIds.length ? db.classSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, date: true } }) : Promise.resolve([]),
-    lessonIds.length ? db.lesson.findMany({ where: { id: { in: lessonIds } }, select: { id: true, order: true, title: true } }) : Promise.resolve([]),
+    sessionIds.length ? sdb.classSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, date: true } }) : Promise.resolve([]),
+    lessonIds.length ? sdb.lesson.findMany({ where: { id: { in: lessonIds } }, select: { id: true, order: true, title: true } }) : Promise.resolve([]),
   ]);
   const sessDate = new Map(sessions.map((s) => [s.id, s.date]));
   const lessonMap = new Map(lessons.map((l) => [l.id, l]));

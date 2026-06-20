@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { Gauge } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { computeNps } from "@/lib/survey/nps";
 import { SurveyAdmin } from "./_components/survey-admin";
 
@@ -14,21 +16,27 @@ export default async function SurveyPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "parent-feedback:view")) redirect("/dashboard");
 
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
+  // Cách ly cơ sở: Survey/SurveyResponse ∈ SCOPED_MODELS. SurveyResponse → sdb auto-scope
+  // (centerId IN tầm nhìn). Survey CÓ THỂ centerId=null (khảo sát dùng chung toàn hệ thống)
+  // → KHÔNG dùng auto-scope (sẽ ẩn mất khảo sát chung); scope thủ công "null OR visible".
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleSurveyCenters = getModelVisibleCenterIds("Survey", actor);
+  const surveyWhere =
+    visibleSurveyCenters === "ALL"
+      ? {}
+      : { OR: [{ centerId: null }, { centerId: { in: visibleSurveyCenters } }] };
 
   const [centers, surveys, responses] = await Promise.all([
     db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
     db.survey.findMany({
-      where: centerScope ? { OR: [{ centerId: null }, { centerId: centerScope }] } : {},
+      where: surveyWhere,
       orderBy: { createdAt: "desc" },
       take: 50,
       select: { id: true, title: true, milestone: true, isActive: true, _count: { select: { responses: true } } },
     }),
-    db.surveyResponse.findMany({
-      where: { npsScore: { not: null }, ...(centerScope ? { centerId: centerScope } : {}) },
+    sdb.surveyResponse.findMany({
+      where: { npsScore: { not: null } },
       select: { npsScore: true, centerId: true, surveyId: true },
       take: 5000,
     }),

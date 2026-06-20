@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { NotificationsClient } from "./_components/notifications-client";
 
 export const metadata = { title: "Thông báo | Admin" };
@@ -19,21 +20,28 @@ export default async function AdminNotificationsPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "notifications:manage")) redirect("/dashboard");
 
+  // Cách ly cơ sở: Notification/Class/Student ∈ SCOPED_MODELS → sdb auto inject
+  // `centerId IN visibleCenterIds`. CENTER_MANAGER@CS1 chỉ thấy thông báo/lớp/HS
+  // của CS mình; SUPER_ADMIN/HO bypass (ALL). Center là model reference (không
+  // scoped) → sdb.center là no-op, giữ nguyên danh sách cơ sở cho dropdown.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [rows, centers, classes, students] = await Promise.all([
-    db.notification.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
-    db.center.findMany({
+    sdb.notification.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
+    sdb.center.findMany({
       where: { isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null, isActive: true },
       select: { id: true, name: true, classCode: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
     // #7 — học viên CÓ liên kết tài khoản phụ huynh (mới gửi riêng được).
-    db.student.findMany({
+    sdb.student.findMany({
       where: { deletedAt: null, parentUserId: { not: null } },
       select: { id: true, name: true, studentCode: true },
       orderBy: { name: "asc" },
