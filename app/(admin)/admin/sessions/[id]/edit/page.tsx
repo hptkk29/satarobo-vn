@@ -1,5 +1,7 @@
-import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { SessionForm } from "../../_components/session-form";
 
 interface Props {
@@ -9,14 +11,28 @@ interface Props {
 export const dynamic = "force-dynamic";
 
 export default async function EditSessionPage({ params }: Props) {
+  const auth_ = await auth();
+  if (!auth_?.user) redirect("/login");
+
   const { id } = await params;
 
+  // Cách ly cơ sở: ClassSession KHÔNG ∈ SCOPED_MODELS (không có centerId trực tiếp)
+  // → scopedDb không auto-scope findUnique. Scope THỦ CÔNG qua class.centerId theo
+  // tầm nhìn cơ sở của model Class. Class.findMany được sdb auto-scope.
+  const actor = await resolveActor(auth_.user.id);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+  const classScopeWhere =
+    visibleClassCenters === "ALL"
+      ? undefined
+      : { centerId: { in: visibleClassCenters } };
+
   const [session, classes, lessons] = await Promise.all([
-    db.classSession.findUnique({
-      where: { id },
+    sdb.classSession.findFirst({
+      where: { id, ...(classScopeWhere ? { class: classScopeWhere } : {}) },
       include: { class: { select: { name: true } } },
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: {
@@ -28,7 +44,7 @@ export default async function EditSessionPage({ params }: Props) {
       },
       take: 200,
     }),
-    db.lesson.findMany({
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       select: {

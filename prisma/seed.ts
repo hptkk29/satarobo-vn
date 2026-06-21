@@ -6,6 +6,8 @@ import { seedCoursePackageContent } from "./seed-coursepackage-content";
 import { seedMarketingContent } from "./seed-marketing-content";
 import { seedTestimonials } from "./seed-testimonials";
 import { seedDepartments } from "./seed-departments";
+import { seedOrgUnits } from "./seed-orgunit";
+import { seedRoles } from "./seed-roles";
 
 const db = new PrismaClient();
 
@@ -381,6 +383,40 @@ PHÙ HỢP CHO:
     },
   });
   console.log(`✅ Admin tạo xong: ${admin.email}`);
+
+  // ─── RBAC động (A0-01/A0-02): OrgUnit tree + RoleDef + gán quyền cho admin ───
+  // RC-A fix: không có UserOrgRole → resolveActor() ra scope rỗng → vỡ
+  // addLeadChild / dropdown cơ sở / /classes. Gán SUPER_ADMIN @ HO cho admin
+  // để actor là HO-level (thấy mọi center). Idempotent qua upsert.
+  await seedOrgUnits(db);
+  await seedRoles(db);
+  const hoOrg = await db.orgUnit.findUnique({ where: { code: "HO" }, select: { id: true } });
+  const superAdminRole = await db.roleDef.findUnique({
+    where: { code: "SUPER_ADMIN" },
+    select: { id: true },
+  });
+  if (hoOrg && superAdminRole) {
+    await db.userOrgRole.upsert({
+      where: {
+        userId_orgUnitId_roleId: {
+          userId: admin.id,
+          orgUnitId: hoOrg.id,
+          roleId: superAdminRole.id,
+        },
+      },
+      update: { status: "ACTIVE", effectiveTo: null },
+      create: {
+        userId: admin.id,
+        orgUnitId: hoOrg.id,
+        roleId: superAdminRole.id,
+        status: "ACTIVE",
+        grantedById: admin.id,
+      },
+    });
+    console.log("✅ Gán SUPER_ADMIN @ HO cho admin (RC-A)");
+  } else {
+    console.warn("⚠️  Thiếu OrgUnit HO hoặc RoleDef SUPER_ADMIN — bỏ qua gán UserOrgRole");
+  }
 
 
   // ─── Job Postings ─────────────────────────────────────────────────────────────

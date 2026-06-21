@@ -73,10 +73,11 @@ export function MarkdownEditor({
     });
   }
 
-  function getImageFromClipboard(event: ClipboardEvent<HTMLTextAreaElement>): File | null {
-    const items = Array.from(event.clipboardData?.items ?? []);
-    const imageItem = items.find((item) => item.type.startsWith("image/"));
-    return imageItem?.getAsFile() ?? null;
+  function getImagesFromClipboard(event: ClipboardEvent<HTMLTextAreaElement>): File[] {
+    return Array.from(event.clipboardData?.items ?? [])
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f != null);
   }
 
   function validateImage(file: File): string | null {
@@ -106,20 +107,33 @@ export function MarkdownEditor({
     return url;
   }
 
-  async function uploadAndInsert(
-    file: File,
+  /** Upload NHIỀU ảnh tuần tự rồi chèn 1 block markdown tại con trỏ. Ảnh lỗi được
+   *  bỏ qua (báo toast riêng) nhưng vẫn chèn các ảnh thành công (BUG-R7-007). */
+  async function uploadAndInsertMany(
+    files: File[],
     range?: { start: number; end: number },
   ) {
     if (isUploading) return;
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return;
 
     try {
       setUploading(true);
-      const url = await uploadNewsImage(file);
-      insertAtCursor(`![Ảnh tin tức](${url})`, range);
-      toast.success("Đã chèn ảnh vào nội dung");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Không thể upload ảnh. Vui lòng thử lại.";
-      toast.error(message);
+      const urls: string[] = [];
+      for (const file of images) {
+        try {
+          urls.push(await uploadNewsImage(file));
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : `Không thể upload "${file.name}".`;
+          toast.error(message);
+        }
+      }
+      if (urls.length > 0) {
+        const md = urls.map((url) => `![Ảnh tin tức](${url})`).join("\n\n");
+        insertAtCursor(md, range);
+        toast.success(`Đã chèn ${urls.length} ảnh vào nội dung`);
+      }
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -127,35 +141,35 @@ export function MarkdownEditor({
   }
 
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const file = getImageFromClipboard(event);
-    if (!file) return;
+    const files = getImagesFromClipboard(event);
+    if (files.length === 0) return;
 
     event.preventDefault();
     const textarea = event.currentTarget;
-    void uploadAndInsert(file, {
+    void uploadAndInsertMany(files, {
       start: textarea.selectionStart,
       end: textarea.selectionEnd,
     });
   }
 
   function handleDrop(event: DragEvent<HTMLTextAreaElement>) {
-    const file = Array.from(event.dataTransfer.files).find((item) =>
+    const files = Array.from(event.dataTransfer.files).filter((item) =>
       item.type.startsWith("image/"),
     );
-    if (!file) return;
+    if (files.length === 0) return;
 
     event.preventDefault();
     const textarea = event.currentTarget;
-    void uploadAndInsert(file, {
+    void uploadAndInsertMany(files, {
       start: textarea.selectionStart,
       end: textarea.selectionEnd,
     });
   }
 
   function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    void uploadAndInsert(file);
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    void uploadAndInsertMany(files);
   }
 
   return (
@@ -202,11 +216,12 @@ export function MarkdownEditor({
           ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp,image/gif"
+          multiple
           className="hidden"
           onChange={handleFileSelect}
         />
         <span className="ml-auto px-4 py-2 text-xs text-neutral-500">
-          Có thể nhập Markdown, paste ảnh trực tiếp hoặc bấm Chèn ảnh.
+          Có thể nhập Markdown, paste/kéo-thả hoặc bấm Chèn ảnh (chọn nhiều ảnh cùng lúc).
         </span>
       </div>
 

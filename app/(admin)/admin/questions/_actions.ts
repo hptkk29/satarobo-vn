@@ -54,6 +54,29 @@ async function resolveAuthorEmployeeId(userId: string): Promise<string | null> {
   }
 }
 
+/**
+ * LMS-4 — chỉ tác giả (authorId == employee của tôi) hoặc người có `training:manage`
+ * (SUPER_ADMIN/CENTER_MANAGER) mới sửa/xoá được câu hỏi.
+ */
+async function assertCanMutateQuestion(
+  userId: string,
+  questionId: string,
+): Promise<Result> {
+  const session = await auth();
+  if (session?.user && can(session.user, "training:manage")) return { ok: true };
+  const q = await db.question.findUnique({
+    where: { id: questionId },
+    select: { authorId: true },
+  });
+  if (!q) return { ok: false, error: "Câu hỏi không tồn tại" };
+  const myEmp = await resolveAuthorEmployeeId(userId);
+  if (q.authorId && myEmp && q.authorId === myEmp) return { ok: true };
+  return {
+    ok: false,
+    error: "Chỉ tác giả hoặc quản lý đào tạo mới sửa/xoá được câu hỏi này",
+  };
+}
+
 // Normalize choices so the order numbers are dense (1..N) regardless of UI gaps.
 function normalizeChoices(input: QuestionInput["choices"]) {
   return input.map((c, i) => ({
@@ -142,6 +165,8 @@ export async function updateQuestion(
 ): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
+  const own = await assertCanMutateQuestion(gate.userId, id);
+  if (!own.ok) return own;
 
   const parsed = questionSchema.safeParse(input);
   if (!parsed.success) {
@@ -216,6 +241,8 @@ export async function updateQuestion(
 export async function deleteQuestion(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
+  const own = await assertCanMutateQuestion(gate.userId, id);
+  if (!own.ok) return own;
 
   const current = await db.question.findUnique({
     where: { id },

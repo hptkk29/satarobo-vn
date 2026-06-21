@@ -4,6 +4,9 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
+import type { Prisma } from "@prisma/client";
 import { AssignmentForm, type AssignmentFormValue } from "../../_components/assignment-form";
 import { DocumentPicker } from "../../_components/document-picker";
 import {
@@ -30,9 +33,22 @@ export default async function EditAssignmentPage({ params }: Props) {
 
   const { id } = await params;
 
+  // Cách ly cơ sở: Assignment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
+  // tiếp) → scopedDb không auto-scope. Scope thủ công qua class.centerId, dùng cùng
+  // tầm nhìn cơ sở của model Class. findUnique → findFirst để lọc theo quan hệ;
+  // ngoài tầm nhìn → null → notFound() (trang đã xử lý null ở dưới).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+
+  const assignmentWhere: Prisma.AssignmentWhereInput = { id };
+  if (visibleClassCenters !== "ALL") {
+    assignmentWhere.class = { centerId: { in: visibleClassCenters } };
+  }
+
   const [assignment, classes, lessons, documentBank] = await Promise.all([
-    db.assignment.findUnique({
-      where: { id },
+    sdb.assignment.findFirst({
+      where: assignmentWhere,
       include: {
         documents: {
           include: {
@@ -71,7 +87,7 @@ export default async function EditAssignmentPage({ params }: Props) {
         },
       },
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, classCode: true },

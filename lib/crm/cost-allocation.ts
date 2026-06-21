@@ -45,14 +45,16 @@ export async function upsertDraftCost(
   if (existing && existing.status === "CONFIRMED") {
     throw new CostError("PERIOD_LOCKED", "Kỳ đã CONFIRMED — không sửa được (cần REOPEN).");
   }
+  // VND là số nguyên (H5/COL2) → cột totalQcCost nay là Int, làm tròn trước khi ghi.
+  const totalQcCost = Math.round(input.totalQcCost);
   const row = await db.marketingCostPeriod.upsert({
     where: { period: input.period },
-    update: { totalQcCost: input.totalQcCost },
-    create: { period: input.period, totalQcCost: input.totalQcCost },
+    update: { totalQcCost },
+    create: { period: input.period, totalQcCost },
   });
   await writeAudit({
     actor, module: "marketing", entityType: "MarketingCostPeriod", entityId: row.id,
-    action: "UPDATE", newValues: { totalQcCost: input.totalQcCost }, reason: input.reason,
+    action: "UPDATE", newValues: { totalQcCost }, reason: input.reason,
   });
   return row;
 }

@@ -2,8 +2,9 @@ import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { ExamStatus, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,12 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Cách ly cơ sở: Exam KHÔNG có centerId trực tiếp (không nằm trong SCOPED_MODELS).
+  // Đề gắn cơ sở qua class.centerId → scope thủ công theo tầm nhìn cơ sở của model Class.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
   const statusFilter =
@@ -53,8 +60,21 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
       : {}),
   };
 
+  // Đề có gắn lớp ở cơ sở ngoài tầm nhìn → ẩn. Đề KHÔNG gắn lớp (classId null) là đề
+  // dùng chung, không thuộc cơ sở nào → vẫn cho xem. SUPER_ADMIN/HO trả "ALL" → bỏ lọc.
+  if (visibleClassCenters !== "ALL") {
+    where.AND = [
+      {
+        OR: [
+          { classId: null },
+          { class: { centerId: { in: visibleClassCenters } } },
+        ],
+      },
+    ];
+  }
+
   const [exams, classes] = await Promise.all([
-    db.exam.findMany({
+    sdb.exam.findMany({
       where,
       include: {
         class: { select: { name: true, classCode: true } },
@@ -66,7 +86,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
       orderBy: { updatedAt: "desc" },
       take: 100,
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, classCode: true },

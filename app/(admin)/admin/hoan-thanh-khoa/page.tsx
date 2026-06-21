@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { CompletionForm } from "./_components/completion-form";
 import { BulkCompleteByClass } from "./_components/bulk-complete-by-class";
@@ -21,24 +23,31 @@ export default async function CompletionPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const selectedClassId = sp.classId?.trim() || "";
 
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
+  // Cách ly cơ sở: Student/Class ∈ SCOPED_MODELS → sdb auto-inject centerId.
+  // CourseCompletion KHÔNG scoped (không có centerId trực tiếp) → scope thủ công qua
+  // student.centerId, dùng tầm nhìn cơ sở của model Student. Course không có dữ liệu
+  // cơ sở → sdb pass-through (no-op).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleStudentCenters = getModelVisibleCenterIds("Student", actor);
+  const completionCenterWhere: Prisma.CourseCompletionWhereInput =
+    visibleStudentCenters === "ALL"
+      ? {}
+      : { student: { centerId: { in: visibleStudentCenters } } };
 
   const [students, courses, completions] = await Promise.all([
-    db.student.findMany({
-      where: { deletedAt: null, ...(centerScope ? { centerId: centerScope } : {}) },
+    sdb.student.findMany({
+      where: { deletedAt: null },
       orderBy: { name: "asc" },
       take: 500,
       select: { id: true, name: true, studentCode: true },
     }),
-    db.course.findMany({
+    sdb.course.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
-    db.courseCompletion.findMany({
-      where: centerScope ? { student: { centerId: centerScope } } : {},
+    sdb.courseCompletion.findMany({
+      where: completionCenterWhere,
       orderBy: { completedAt: "desc" },
       take: 50,
       select: {
@@ -56,9 +65,9 @@ export default async function CompletionPage({ searchParams }: PageProps) {
   // nextCourseId không có relation riêng → map tên từ danh sách khoá đã nạp.
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
 
-  // Danh sách lớp cho bộ chọn bulk (scope theo cơ sở của CENTER_MANAGER).
-  const classes = await db.class.findMany({
-    where: { deletedAt: null, ...(centerScope ? { centerId: centerScope } : {}) },
+  // Danh sách lớp cho bộ chọn bulk (Class ∈ SCOPED_MODELS → sdb auto-scope cơ sở).
+  const classes = await sdb.class.findMany({
+    where: { deletedAt: null },
     orderBy: [{ startDate: "desc" }, { name: "asc" }],
     take: 300,
     select: {
@@ -82,11 +91,10 @@ export default async function CompletionPage({ searchParams }: PageProps) {
     | null = null;
 
   if (selectedClassId) {
-    const klass = await db.class.findFirst({
+    const klass = await sdb.class.findFirst({
       where: {
         id: selectedClassId,
         deletedAt: null,
-        ...(centerScope ? { centerId: centerScope } : {}),
       },
       select: {
         id: true,
@@ -108,7 +116,7 @@ export default async function CompletionPage({ searchParams }: PageProps) {
       for (const e of klass.enrollments) byId.set(e.student.id, e.student);
       const studentList = Array.from(byId.values());
 
-      const done = await db.courseCompletion.findMany({
+      const done = await sdb.courseCompletion.findMany({
         where: {
           courseId: klass.courseId,
           studentId: { in: studentList.map((s) => s.id) },

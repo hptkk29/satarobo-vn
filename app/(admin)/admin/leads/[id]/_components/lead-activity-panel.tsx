@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Phone, MessageSquare, StickyNote, Mail, RefreshCw, Check, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -41,7 +41,10 @@ const ACTIVITY_LABEL: Record<string, string> = {
 };
 
 function fmtDateTime(iso: string): string {
+  // timeZone cố định → SSR (server UTC) và client (TZ trình duyệt) ra CÙNG chuỗi,
+  // tránh React #418 (text mismatch khi hydrate). BUG-R7-008.
   return new Date(iso).toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -64,6 +67,11 @@ export function LeadActivityPanel({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  // "Quá hạn" phụ thuộc Date.now() → chỉ tính sau khi mount (SSR + first render =
+  // false, khớp nhau) để tránh React #418. BUG-R7-008.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Quick activity form
   const [actType, setActType] = useState("CALL");
@@ -236,7 +244,7 @@ export function LeadActivityPanel({
               </p>
             )}
             {tasks.map((t) => {
-              const overdue = isOverdue(t);
+              const overdue = mounted && isOverdue(t);
               const doneState = t.status === "DONE";
               return (
                 <div

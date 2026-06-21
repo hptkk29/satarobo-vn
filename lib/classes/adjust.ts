@@ -183,7 +183,9 @@ export async function adjustSession(opts: {
   const oldValues: Record<string, unknown> = { date: session.date };
   const newValues: Record<string, unknown> = {};
   if (hasDate) newValues.date = date;
-  // teacherId: chưa có cột cấp buổi → chỉ ghi audit (substitute request).
+  // teacherId (P4b reconcile): GV dạy-thay cấp buổi nay PERSIST vào cột
+  // ClassSession.substituteTeacherId (cột đã có ở FixLMS lineage), không chỉ audit.
+  // GV hiệu lực cho conflict detection ở trên đã xét substitute. null = trả về GV lớp.
   if (hasTeacher) newValues.substituteTeacherId = teacherId;
   // roomId (W2-4b): có cột cấp buổi → ghi thẳng vào ClassSession.roomId.
   if (hasRoom) {
@@ -192,12 +194,13 @@ export async function adjustSession(opts: {
   }
 
   await db.$transaction(async (tx) => {
-    if (hasDate || hasRoom) {
+    if (hasDate || hasRoom || hasTeacher) {
       await tx.classSession.update({
         where: { id: sessionId },
         data: {
           ...(hasDate ? { date: date! } : {}),
           ...(hasRoom ? { roomId: roomId ?? null } : {}),
+          ...(hasTeacher ? { substituteTeacherId: teacherId ?? null } : {}),
         },
       });
     }

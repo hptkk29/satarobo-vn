@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -17,6 +18,7 @@ export default async function NewClassPage() {
   }
 
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const [courses, orgUnits, classGroups, rooms, teachers, curricula] = await Promise.all([
     db.course.findMany({
       where: { isActive: true, isTeachable: true },
@@ -24,12 +26,12 @@ export default async function NewClassPage() {
       select: { id: true, name: true, category: true },
     }),
     getSelectableOrgUnits(actor),
-    db.classGroup.findMany({
+    sdb.classGroup.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
       orderBy: { displayCode: "asc" },
       select: { id: true, displayCode: true, name: true, centerId: true },
     }),
-    db.room.findMany({
+    sdb.room.findMany({
       where: { status: "ACTIVE" },
       orderBy: [{ centerId: "asc" }, { code: "asc" }],
       select: { id: true, code: true, name: true, centerId: true },

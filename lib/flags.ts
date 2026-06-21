@@ -18,9 +18,13 @@ export function isDispatcherEnabled(): boolean {
   return process.env.DISPATCHER_ENABLED !== "false"; // mặc định ON
 }
 
-/** R7-05 — Convert v2 (guard payment + multi-student + dedupe). OFF → giữ flow convert cũ. */
+/**
+ * R7-05/R7-06 — Convert v2 (per-child, guard payment CONFIRMED, multi-student, dedupe).
+ * Quyết định R7: v2 là entry point DUY NHẤT → mặc định ON. Đặt
+ * `CONVERT_V2_ENABLED=false` chỉ để tắt khẩn cấp (không còn flow gộp lead cũ trên UI).
+ */
 export function isConvertV2Enabled(): boolean {
-  return process.env.CONVERT_V2_ENABLED === "true"; // mặc định OFF
+  return process.env.CONVERT_V2_ENABLED !== "false"; // mặc định ON
 }
 
 /**

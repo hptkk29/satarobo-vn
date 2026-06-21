@@ -3,6 +3,8 @@ import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import {
   ExamBuilder,
   type QuestionBankItem,
@@ -26,6 +28,12 @@ export default async function ExamBuilderPage({ params }: Props) {
 
   const { id } = await params;
 
+  // Cách ly cơ sở: dropdown chọn lớp cho đề thi PHẢI giới hạn theo tầm nhìn cơ sở
+  // của actor (Class ∈ SCOPED_MODELS) — CS1 không thấy lớp CS2. Exam/Lesson/Question
+  // không phải model center-isolated (đề/curriculum/ngân hàng câu hỏi dùng chung).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [exam, classes, lessons, bank] = await Promise.all([
     db.exam.findUnique({
       where: { id },
@@ -40,7 +48,7 @@ export default async function ExamBuilderPage({ params }: Props) {
         },
       },
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, classCode: true },

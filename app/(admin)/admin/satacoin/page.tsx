@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { SataCoinAdmin } from "./_components/satacoin-admin";
 
 export const metadata = { title: "SataCoin | Admin" };
@@ -12,25 +14,30 @@ export default async function SataCoinPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "satacoin:manage")) redirect("/dashboard");
 
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
+  // Cách ly cơ sở: Student + SataCoinTransaction ∈ SCOPED_MODELS → sdb tự inject
+  // centerId IN tầm-nhìn. SataCoinRule là config (SCOPE_EXEMPT, centerId null = áp mọi
+  // cơ sở) → scope thủ công: rule toàn hệ thống (null) + rule thuộc cơ sở trong tầm nhìn.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleCenters = getModelVisibleCenterIds("SataCoinTransaction", actor);
+  const ruleWhere: Prisma.SataCoinRuleWhereInput =
+    visibleCenters === "ALL"
+      ? {}
+      : { OR: [{ centerId: null }, { centerId: { in: visibleCenters } }] };
 
   const [rules, students, recentTxns] = await Promise.all([
-    db.sataCoinRule.findMany({
-      where: centerScope ? { OR: [{ centerId: null }, { centerId: centerScope }] } : {},
+    sdb.sataCoinRule.findMany({
+      where: ruleWhere,
       orderBy: { createdAt: "desc" },
       select: { id: true, code: true, label: true, amount: true, isActive: true },
     }),
-    db.student.findMany({
-      where: { deletedAt: null, ...(centerScope ? { centerId: centerScope } : {}) },
+    sdb.student.findMany({
+      where: { deletedAt: null },
       orderBy: { name: "asc" },
       take: 500,
       select: { id: true, name: true, studentCode: true },
     }),
-    db.sataCoinTransaction.findMany({
-      where: centerScope ? { centerId: centerScope } : {},
+    sdb.sataCoinTransaction.findMany({
       orderBy: { createdAt: "desc" },
       take: 50,
       select: {

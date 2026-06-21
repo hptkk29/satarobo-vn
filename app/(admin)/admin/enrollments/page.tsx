@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { Plus, ClipboardList, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
 
@@ -52,6 +53,13 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (!can(session.user, "enrollments:view-all")) redirect("/dashboard");
   const canDelete = can(session.user, "enrollments:delete");
 
+  // Cách ly cơ sở: Enrollment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
+  // tiếp) → scopedDb không auto-scope. Scope thủ công qua class.centerId, dùng cùng
+  // tầm nhìn cơ sở của model Class (đã isolate ở /admin/classes).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
   const statusParam = sp.status;
@@ -72,7 +80,22 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
     where.status = statusFilter;
   }
   if (classFilter) where.classId = classFilter;
-  if (centerFilter) where.class = { centerId: centerFilter };
+
+  // class.centerId: kết hợp bộ lọc cơ sở (UI) với tầm nhìn cơ sở của actor (cách ly).
+  const classCenterWhere: Prisma.ClassWhereInput = {};
+  if (centerFilter) classCenterWhere.centerId = centerFilter;
+  if (visibleClassCenters !== "ALL") {
+    if (centerFilter) {
+      // Lọc cơ sở ngoài tầm nhìn → ép rỗng (không lộ data cơ sở khác).
+      if (!visibleClassCenters.includes(centerFilter)) {
+        classCenterWhere.centerId = "__no_access__";
+      }
+    } else {
+      classCenterWhere.centerId = { in: visibleClassCenters };
+    }
+  }
+  if (Object.keys(classCenterWhere).length > 0) where.class = classCenterWhere;
+
   if (q) {
     where.OR = [
       { student: { name: { contains: q, mode: "insensitive" } } },
@@ -84,7 +107,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   }
 
   const [enrollments, classes, centers] = await Promise.all([
-    db.enrollment.findMany({
+    sdb.enrollment.findMany({
       where,
       orderBy: [{ status: "asc" }, { enrolledAt: "desc" }],
       take: 100,
@@ -112,13 +135,13 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         },
       },
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, classCode: true },
       take: 200,
     }),
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true },

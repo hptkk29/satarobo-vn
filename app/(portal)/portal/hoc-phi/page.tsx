@@ -31,7 +31,7 @@ export default async function HocPhiPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "PARENT") redirect("/login");
 
-  const { enrollments, receipts, totals } = await getParentBilling(session.user.id);
+  const { enrollments, receipts, totals, flags } = await getParentBilling(session.user.id);
 
   return (
     <div className="space-y-6">
@@ -71,6 +71,24 @@ export default async function HocPhiPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Vui lòng liên hệ trung tâm ({hotlinesInline()}) để được hướng dẫn thanh toán
           khoản còn lại.
+        </div>
+      )}
+
+      {/* D5/G.6 — chỉ dấu trạng thái (KHÔNG hiển thị số tiền khoản chưa xác nhận — giữ AC1) */}
+      {(flags.pendingCount > 0 || flags.rejectedCount > 0) && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+          {flags.pendingCount > 0 && (
+            <p>
+              Có <b>{flags.pendingCount}</b> khoản đang chờ kế toán xác nhận. Số tiền sẽ
+              được cập nhật vào mục “Đã thanh toán” sau khi được xác nhận.
+            </p>
+          )}
+          {flags.rejectedCount > 0 && (
+            <p className="mt-1">
+              Có <b>{flags.rejectedCount}</b> khoản bị từ chối — vui lòng liên hệ trung tâm
+              ({hotlinesInline()}) để được hỗ trợ.
+            </p>
+          )}
         </div>
       )}
 

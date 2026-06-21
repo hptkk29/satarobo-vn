@@ -34,7 +34,7 @@ test.describe("[R7-05] Convert v2", () => {
       .toEqual({ ok: false });
   });
 
-  test("[R7-05-C2] có khoản ghi nhận → guard PASS (kể cả KT chưa confirm)", () => {
+  test("[R7-05-C2] có khoản Sale ghi nhận (RECORDED) → guard PASS (KT chưa confirm vẫn pass)", () => {
     expect(evaluatePaymentGuard({ hasRecordedPayment: true, totalFinalPrice: 5_000_000 }))
       .toEqual({ ok: true, scholarshipFull: false });
   });
@@ -78,13 +78,16 @@ test.describe("[R7-05] Convert v2", () => {
     expect(body).not.toMatch(/[ILO01]/); // bỏ ký tự dễ nhầm
   });
 
-  test("[R7-05-C11] flag CONVERT_V2_ENABLED đọc từ env (mặc định OFF)", () => {
+  test("[R7-05-C11] flag CONVERT_V2_ENABLED đọc từ env (mặc định ON — entry point duy nhất)", () => {
     const prev = process.env.CONVERT_V2_ENABLED;
+    delete process.env.CONVERT_V2_ENABLED;
+    expect(isConvertV2Enabled()).toBe(true); // mặc định ON
     process.env.CONVERT_V2_ENABLED = "true";
     expect(isConvertV2Enabled()).toBe(true);
-    process.env.CONVERT_V2_ENABLED = "false";
+    process.env.CONVERT_V2_ENABLED = "false"; // chỉ tắt khẩn cấp
     expect(isConvertV2Enabled()).toBe(false);
-    process.env.CONVERT_V2_ENABLED = prev;
+    if (prev === undefined) delete process.env.CONVERT_V2_ENABLED;
+    else process.env.CONVERT_V2_ENABLED = prev;
   });
 
   // ── End-to-end (seed Lead REGISTERED + payment RECORDED + course/class) ────
@@ -114,7 +117,8 @@ test.describe("[R7-05] Convert v2", () => {
     });
   }
 
-  /** Order + Payment RECORDED gắn lead → guard PAYMENT_REQUIRED pass. */
+  /** Order + Payment Sale GHI NHẬN (saleStatus=RECORDED, KT CHƯA xác nhận) gắn lead →
+   *  guard PAYMENT_REQUIRED pass (R7-05-C2: KT chưa confirm vẫn pass). */
   async function seedRecordedPayment(leadId: string, centerId: string) {
     const order = await db.order.create({
       data: {
@@ -133,6 +137,7 @@ test.describe("[R7-05] Convert v2", () => {
         method: "cash",
         paidDate: new Date(),
         saleStatus: "RECORDED",
+        accountantStatus: "PENDING",
         centerId,
       },
     });
@@ -312,6 +317,44 @@ test.describe("[R7-05] Convert v2", () => {
     expect(audit?.actorId).toBe(actor.id);
     expect(audit?.createdAt).toBeInstanceOf(Date);
     expect((audit?.newValues as { grantedBy?: string } | null)?.grantedBy).toBe(actor.id);
+  });
+
+  // ── BUG-006 / C12 — convert per-child: enrollment lưu đúng leadChildId ────
+  test("[R7-06-C12] convert 2 con → 2 enrollment có leadChildId đúng từng con", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const lead = await seedRegisteredLead(center.id, "0900000015");
+    await seedRecordedPayment(lead.id, center.id);
+    const childA = await db.leadChild.create({ data: { leadId: lead.id, fullName: "Con A" }, select: { id: true } });
+    const childB = await db.leadChild.create({ data: { leadId: lead.id, fullName: "Con B" }, select: { id: true } });
+    const actorUser = await seedUser({ email: `sale-c12-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale C12" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale C12" },
+      {
+        leadId: lead.id,
+        parentEmail: "ph-c12@test.com",
+        parentName: "PH C12",
+        parentPhone: "0909000333",
+        idempotencyKey: `c12-${uniq()}`,
+        students: [
+          { leadChildId: childA.id, name: "Con A", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+          { leadChildId: childB.id, name: "Con B", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    // Mỗi con có Student + Enrollment riêng; enrollment.leadChildId trỏ đúng con.
+    expect(await db.student.count()).toBe(2);
+    const enA = await db.enrollment.findFirst({ where: { leadChildId: childA.id }, select: { id: true } });
+    const enB = await db.enrollment.findFirst({ where: { leadChildId: childB.id }, select: { id: true } });
+    expect(enA).not.toBeNull();
+    expect(enB).not.toBeNull();
+    expect(enA!.id).not.toBe(enB!.id);
+    // Không enrollment nào thiếu truy vết.
+    expect(await db.enrollment.count({ where: { leadChildId: null } })).toBe(0);
   });
 
   // ── AC6 / C10 — sửa mã HV (quyền + audit + reason) ────────────────────────

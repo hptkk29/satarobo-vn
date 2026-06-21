@@ -447,6 +447,13 @@ export async function closeLeadAsEnrolled(
     },
   })
   if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+  // Cách ly cơ sở (chống IDOR ghi): Lead phải thuộc tầm nhìn cơ sở actor — đồng bộ
+  // với updateLeadFields/updateLeadStatus. Guard assignedToId bên dưới CHƯA đủ vì
+  // leads:view-all (vd CENTER_MANAGER CS1) bỏ qua guard đó → có thể chốt lead CS2.
+  const actor = await resolveActor(session.user.id)
+  if (!passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
   if (lead.status === 'ENROLLED') {
     return { ok: false, error: 'Lead này đã được chốt (ENROLLED)' }
   }
@@ -968,7 +975,12 @@ export async function updateLeadFields(
       note: true,
     },
   })
-  if (!before) return { ok: false, error: 'Lead không tồn tại' }
+  // Cách ly cơ sở (chống IDOR ghi): Lead phải thuộc tầm nhìn cơ sở actor —
+  // đồng bộ với updateLeadStatus/updateLeadNote/deleteLead.
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
 
   // Đổi SĐT → kiểm tra trùng.
   if (d.phone && d.phone !== before.phone) {
@@ -1118,6 +1130,15 @@ export async function transferLead(
     select: { id: true, assignedToId: true, centerId: true, status: true },
   })
   if (!lead) return { ok: false, error: 'Lead không tồn tại' }
+
+  // Cách ly cơ sở (chống IDOR ghi): Lead nguồn phải thuộc tầm nhìn cơ sở actor —
+  // đồng bộ với updateLeadFields. Guard assignedToId bên dưới CHƯA đủ (leads:view-all
+  // bỏ qua guard → CENTER_MANAGER CS1 có thể chuyển lead CS2). Chuyển SANG cơ sở khác
+  // (toCenterId) vẫn cho phép — đó là nghiệp vụ bàn giao liên cơ sở.
+  const actor = await resolveActor(session.user.id)
+  if (!passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
 
   // SALE (chỉ view-own) chỉ tự chuyển lead của mình.
   if (!can(session.user, 'leads:view-all') && lead.assignedToId !== session.user.id) {

@@ -596,7 +596,7 @@ enum CostPeriodStatus {
 model MarketingCostPeriod {
   id            String           @id @default(cuid())
   period        String           @unique // "2026-06"
-  totalQcCost   Float            @default(0)
+  totalQcCost   Int              @default(0) // VND (số nguyên) — H5/COL2
   status        CostPeriodStatus @default(DRAFT)
   confirmedById String?
   confirmedAt   DateTime? @db.Timestamptz(6)
@@ -1033,6 +1033,7 @@ model LeadChild {
   updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
 
   trialEnrollments TrialEnrollment[] // R7-02
+  enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
 
   @@index([leadId])
 }
@@ -1144,6 +1145,8 @@ model Student {
 
   // Phase 5.9 — Reserve history
   reserves StudentReserve[] @relation("StudentReserves")
+
+  // LMS-15 — thread nhắn tin 2 chiều
 
   // Phase NHÓM 3 — yêu cầu phụ huynh
   parentRequests    ParentRequest[]          @relation("StudentParentRequests")
@@ -1294,6 +1297,9 @@ model Enrollment {
   status    EnrollmentStatus @default(ACTIVE)
   // LMS-18 (W5f phase A) — centerId denormalized (backfill từ class). SCOPE_EXEMPT, chưa flip.
   centerId  String?
+  // R7-06 — truy vết enrollment ⇽ LeadChild nguồn khi convert per-child (additive,
+  // nullable; SetNull để không chặn xoá lead). Enrollment tạo trực tiếp → null.
+  leadChildId String?
 
   // Financial (legacy)
   tuition Int?
@@ -1329,9 +1335,10 @@ model Enrollment {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính (read filter deletedAt: null)
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class   Class   @relation(fields: [classId], references: [id])
-  course  Course  @relation(fields: [courseId], references: [id])
+  student   Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class      @relation(fields: [classId], references: [id])
+  course    Course     @relation(fields: [courseId], references: [id])
+  leadChild LeadChild? @relation(fields: [leadChildId], references: [id], onDelete: SetNull)
 
   auditLogs EnrollmentAuditLog[]
 
@@ -1358,6 +1365,7 @@ model Enrollment {
   @@index([studentId, status])
   @@index([status, enrolledAt])
   @@index([centerId])
+  @@index([leadChildId])
 }
 
 model EnrollmentAuditLog {
@@ -1415,6 +1423,9 @@ model ClassSession {
   // R7-07 — "Hoàn tất buổi": dữ liệu thực tế + nhận xét lớp (khôi phục sau merge main→erd-fix-p0).
   actualTeacherId String?
   actualRoomId    String?
+  // P5/T11 — dạy thay/đổi phòng cấp buổi (kế hoạch trước buổi; persist thay vì chỉ audit).
+  substituteTeacherId String?
+  substituteRoomId    String?
   actualStartAt   DateTime? @db.Timestamptz(6)
   actualEndAt     DateTime? @db.Timestamptz(6)
   classComment    String?   @db.Text
@@ -1885,7 +1896,7 @@ model Employee {
 
   // Phase 4.7 — additional Tier 2 HR fields
   endDate          DateTime? @db.Timestamptz(6) // Ngày kết thúc HĐ (cho hợp đồng có thời hạn)
-  bhxhBase         Float? // Mức lương đóng BHXH
+  bhxhBase         Int? // Mức lương đóng BHXH — VND (số nguyên), H5/COL2
   address          String?
   emergencyContact String? // Tên - Quan hệ - SĐT
   notes            String?   @db.Text
@@ -2193,7 +2204,7 @@ enum AttemptStatus {
   IN_PROGRESS
   SUBMITTED
   GRADED
-  REVIEWED
+  REVIEWED // LMS-8: DỰ TRỮ — được đọc như trạng thái "đã xong" nhưng CHƯA flow nào set.
 }
 
 model Exam {
@@ -2262,6 +2273,8 @@ model ExamAttempt {
   studentId String
   student   Student @relation(fields: [studentId], references: [id])
 
+  // LMS-12 — thi lại: nhiều lần làm/HV/đề, đánh số attemptNo (1..maxAttempts).
+  attemptNo   Int       @default(1)
   startedAt   DateTime  @default(now()) @db.Timestamptz(6)
   submittedAt DateTime? @db.Timestamptz(6)
   gradedAt    DateTime? @db.Timestamptz(6)
@@ -2278,9 +2291,6 @@ model ExamAttempt {
 
   // Phase 5.6 — Order item link
   orderItems OrderItem[] @relation("ExamOrderItems")
-
-  // LMS-12 — thi lại: số thứ tự lần thi (1-based). Row cũ = 1 (default).
-  attemptNo Int @default(1)
 
   @@unique([examId, studentId, attemptNo])
   @@index([status, examId])
@@ -2369,6 +2379,8 @@ enum SubmissionStatus {
 }
 
 enum AssignmentKind {
+  // LMS-8: NHÃN HIỂN THỊ thuần — KHÔNG drive logic. Tự-động-giao bài kèm buổi do
+  // model HomeworkAssignment + liên kết Exam↔Lesson lo (R7-14), không bởi kind này.
   CLASSWORK // bài trên lớp
   HOMEWORK // bài tập về nhà
 }
@@ -2500,7 +2512,7 @@ model InventoryItem {
   category InventoryCategory @default(OTHER)
   unit     String            @default("Cái")
 
-  pricePerUnit Float?
+  pricePerUnit Int? // VND (số nguyên) — H5/COL2
   supplier     String?
 
   defaultMinThreshold Int @default(5)
@@ -2575,9 +2587,9 @@ model StockMovement {
   referenceId   String?
   referenceNote String?
 
-  // Pricing snapshot (RECEIPT only)
-  unitPrice Float?
-  totalCost Float?
+  // Pricing snapshot (RECEIPT only) — VND (số nguyên), H5/COL2
+  unitPrice Int?
+  totalCost Int?
 
   performedById String?
   performedBy   Employee? @relation("MovementPerformer", fields: [performedById], references: [id], onDelete: SetNull)
@@ -4431,6 +4443,9 @@ model ScormAccessLog {
   @@index([userId])
 }
 
+// NOTE(reconcile FixLMS→main): bản ScormAttempt ghi-điểm-HV của FixLMS (LMS-14)
+// đã GỠ — D4 theo MAIN (R7-12 tracking GV, KHÔNG ghi điểm HV). Xem model ScormAttempt ở trên.
+
 // =============================================================================
 // Cụm C5 — Zalo OA/ZNS adapter (SKELETON). Tắt an toàn khi thiếu credential →
 // fallback email, không phá hệ thống. Log mọi lần gửi.
@@ -5092,3 +5107,7 @@ model EvalAnswer {
 
   @@index([responseId])
 }
+
+// NOTE(reconcile FixLMS→main): messaging FixLMS (MessageThread/Message, LMS-15) đã GỠ
+// — D6 theo MAIN dùng ConversationMessage (per-enrollmentId). RevenueTarget bản FixLMS
+// (`amount`, LMS-16) đã GỠ — giữ bản MAIN (`targetAmount`) ở trên.

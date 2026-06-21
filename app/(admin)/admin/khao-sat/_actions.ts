@@ -5,8 +5,12 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 
 // B3 — quản lý khảo sát. Gate parent-feedback:view (CSKH/quản lý).
+// Cách ly cơ sở: Survey ∈ SCOPED_MODELS → đọc qua scopedDb (auto null-filter)
+// + passesScope trước khi ghi; create chỉ cho gán centerId trong tầm nhìn actor.
 
 const MILESTONES = ["AFTER_TRIAL", "AFTER_3_SESSIONS", "MID_COURSE", "END_COURSE", "AFTER_COMPLAINT", "GENERAL"] as const;
 
@@ -29,11 +33,20 @@ export async function createSurvey(input: unknown): Promise<{ ok: boolean; error
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   const d = parsed.data;
 
+  // Cách ly cơ sở: nếu gán Survey cho 1 cơ sở, cơ sở đó phải nằm trong tầm nhìn actor.
+  const centerId = d.centerId || null;
+  if (centerId) {
+    const actor = await resolveActor(session.user.id);
+    const canUse =
+      actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(centerId);
+    if (!canUse) return { ok: false, error: "Không có quyền với cơ sở này" };
+  }
+
   await db.survey.create({
     data: {
       title: d.title,
       milestone: d.milestone,
-      centerId: d.centerId || null,
+      centerId,
       createdById: session.user.id,
       questions: {
         create: {
@@ -51,8 +64,12 @@ export async function createSurvey(input: unknown): Promise<{ ok: boolean; error
 export async function toggleSurvey(id: string): Promise<{ ok: boolean }> {
   const session = await auth();
   if (!session?.user || !can(session.user, "parent-feedback:view")) return { ok: false };
-  const s = await db.survey.findUnique({ where: { id }, select: { isActive: true } });
-  if (s) await db.survey.update({ where: { id }, data: { isActive: !s.isActive } });
+  // Cách ly cơ sở: chỉ thấy/sửa Survey thuộc tầm nhìn cơ sở của actor.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const s = await sdb.survey.findUnique({ where: { id }, select: { isActive: true, centerId: true } });
+  if (!s || !passesScope("Survey", s, actor)) return { ok: false };
+  await db.survey.update({ where: { id }, data: { isActive: !s.isActive } });
   revalidatePath("/khao-sat");
   return { ok: true };
 }

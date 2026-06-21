@@ -177,7 +177,10 @@ export function PaymentsClient({
                   {canConfirm && (
                     <TableCell className="text-right">
                       {p.accountantStatus === "PENDING" ? (
-                        <RowActions paymentId={p.id} />
+                        <RowActions
+                          paymentId={p.id}
+                          updatedAt={new Date(p.updatedAt).toISOString()}
+                        />
                       ) : (
                         <span className="text-xs text-neutral-400">—</span>
                       )}
@@ -325,16 +328,33 @@ function RecordForm({
   );
 }
 
+// FIX-H9 — mã lỗi optimistic lock (đồng bộ với lib/finance/payment.ts STALE_WRITE).
+const STALE_WRITE = "STALE_WRITE";
+
+function handleStale(): void {
+  toast.error("Người khác vừa sửa khoản này. Đang tải lại…");
+  // reload để lấy updatedAt mới nhất; tránh tiếp tục ghi đè trên snapshot cũ.
+  setTimeout(() => window.location.reload(), 800);
+}
+
 // ─── PER-ROW ACCOUNTANT ACTIONS ──────────────────────────────────────
-function RowActions({ paymentId }: { paymentId: string }) {
+function RowActions({
+  paymentId,
+  updatedAt,
+}: {
+  paymentId: string;
+  updatedAt: string;
+}) {
   const [mode, setMode] = useState<null | "reject" | "adjust">(null);
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState("");
   const [pending, start] = useTransition();
 
   function confirm() {
+    // FIX-H8 — key ổn định cho lần bấm này → double-click/retry không sinh phiếu 2 lần.
+    const idempotencyKey = crypto.randomUUID();
     start(async () => {
-      const res = await confirmPaymentAction(paymentId);
+      const res = await confirmPaymentAction(paymentId, idempotencyKey);
       if (res.ok) {
         toast.success(
           res.receiptId ? "Đã xác nhận — đã sinh phiếu thu" : "Đã xác nhận",
@@ -345,10 +365,12 @@ function RowActions({ paymentId }: { paymentId: string }) {
 
   function doReject() {
     start(async () => {
-      const res = await rejectPaymentAction(paymentId, reason);
+      const res = await rejectPaymentAction(paymentId, reason, updatedAt);
       if (res.ok) {
         toast.success("Đã từ chối khoản");
         setMode(null);
+      } else if (res.error === STALE_WRITE) {
+        handleStale();
       } else toast.error(res.error ?? "Lỗi");
     });
   }
@@ -359,10 +381,13 @@ function RowActions({ paymentId }: { paymentId: string }) {
         paymentId,
         amount: Number(amount),
         reason,
+        expectedUpdatedAt: updatedAt,
       });
       if (res.ok) {
         toast.success("Đã điều chỉnh khoản");
         setMode(null);
+      } else if (res.error === STALE_WRITE) {
+        handleStale();
       } else toast.error(res.error ?? "Lỗi");
     });
   }

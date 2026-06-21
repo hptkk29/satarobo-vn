@@ -257,7 +257,7 @@ export function TrialClassDetail({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
                   <span>
                     Buổi {selectedSession.seq} ·{" "}
-                    {new Date(selectedSession.date).toLocaleDateString("vi-VN")} ·{" "}
+                    {new Date(selectedSession.date).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} ·{" "}
                     {selectedSession.startTime}–{selectedSession.endTime}
                   </span>
                   {canMark && selectedSession.status !== "COMPLETED" && (

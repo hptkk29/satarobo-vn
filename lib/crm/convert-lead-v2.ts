@@ -15,7 +15,10 @@ export type ConvertV2Result =
 
 /**
  * Guard điều kiện convert (THUẦN — AC1/C1/C3): cho convert khi đã có khoản Sale
- * ghi nhận, HOẶC tổng phải-thu = 0 (học bổng toàn phần → cần ghi audit lý do).
+ * ghi nhận (saleStatus=RECORDED), HOẶC tổng phải-thu = 0 (học bổng toàn phần →
+ * cần ghi audit lý do). Theo R7-05-C2: kế toán CHƯA xác nhận vẫn pass — phiếu thu
+ * (confirmPayment) sinh per Enrollment nên chỉ confirm được SAU khi convert tạo
+ * Enrollment; đòi CONFIRMED trước convert là deadlock.
  */
 export function evaluatePaymentGuard(input: {
   hasRecordedPayment: boolean;
@@ -70,7 +73,8 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     return { ok: false, error: { code: "NOT_REGISTERED", message: "Lead phải ở trạng thái 'Đã đăng ký'" } };
   }
 
-  // 2) Guard PAYMENT_REQUIRED: ≥1 Payment RECORDED trên order của lead, hoặc Σ finalPrice = 0.
+  // 2) Guard PAYMENT_REQUIRED (R7-05-C2): ≥1 Payment Sale ghi nhận
+  //    (saleStatus=RECORDED) trên order của lead, hoặc Σ finalPrice = 0.
   const prices = input.students.map((s) =>
     computeEnrollmentPrice({ listPrice: s.listPrice, discount: s.discount ?? null }),
   );
@@ -162,6 +166,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           studentId,
           classId: s.classId,
           courseId: s.courseId,
+          leadChildId: s.leadChildId ?? null, // R7-06 — truy vết về con nguồn
           listPrice: price.listPrice,
           discountType: price.discountType,
           discountAmount: price.discountAmount,

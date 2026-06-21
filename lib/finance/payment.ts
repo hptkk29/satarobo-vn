@@ -14,6 +14,12 @@ function fail(error: string): Fail {
   return { ok: false, error };
 }
 
+/**
+ * FIX-H9 — mã lỗi optimistic lock: record đã bị người khác sửa kể từ lúc client
+ * đọc `updatedAt`. FE map STALE_WRITE → toast "Người khác vừa sửa, tải lại" + reload.
+ */
+export const STALE_WRITE = "STALE_WRITE" as const;
+
 /** Resolve actor cho audit (chỉ có id → tra tên; null → Hệ thống). */
 async function auditActor(userId: string | null | undefined): Promise<AuditActor> {
   if (!userId) return { id: null, name: "Hệ thống" };
@@ -21,10 +27,15 @@ async function auditActor(userId: string | null | undefined): Promise<AuditActor
   return { id: userId, name: u?.name ?? userId };
 }
 
-/** Tra mã cơ sở (OrgUnit.code) cho mã phiếu thu. */
+/**
+ * Tra mã cơ sở (OrgUnit.code) cho mã phiếu thu.
+ * LƯU Ý: `centerId` ở đây là `Center.id` cũ (Payment.centerId ← Order.centerId, model Center).
+ * Phase A map Center↔OrgUnit qua field `OrgUnit.centerId` (@unique) — KHÔNG phải OrgUnit.id.
+ * → phải tra theo `where: { centerId }`, không phải `where: { id: centerId }` (id cuid không khớp).
+ */
 async function centerCodeOf(centerId: string | null | undefined): Promise<string> {
   if (!centerId) return "SR";
-  const ou = await db.orgUnit.findUnique({ where: { id: centerId }, select: { code: true } });
+  const ou = await db.orgUnit.findUnique({ where: { centerId }, select: { code: true } });
   return ou?.code ?? "SR";
 }
 
@@ -91,11 +102,26 @@ export async function recordPayment(input: {
  * Kế toán xác nhận khoản → accountantStatus=CONFIRMED + confirmedAt; sinh 1 Receipt;
  * publish "payment.confirmed". IDEMPOTENT: đã CONFIRMED → no-op success (1 Receipt duy nhất
  * kể cả double-click). Khoản chưa gắn enrollment → không sinh phiếu được, báo lỗi.
+ *
+ * FIX-H8 — idempotency cấp REQUEST: nếu truyền `idempotencyKey` (uuid client tạo mỗi
+ * lần bấm), trước khi xử lý sẽ thử đọc/ghi `IdempotencyKey` trong tx (mẫu convert-lead-v2).
+ * Cùng key gửi lại → trả kết quả cũ, KHÔNG xử lý lại. Đây là lớp bổ sung — state-guard
+ * `updateMany where accountantStatus=PENDING` (AC8) vẫn giữ và đã functionally idempotent.
  */
 export async function confirmPayment(params: {
   paymentId: string;
   confirmedById: string;
+  idempotencyKey?: string;
 }): Promise<Ok<{ alreadyConfirmed: boolean; receiptId?: string }> | Fail> {
+  // FIX-H8 — đã xử lý key này (request lặp) → trả kết quả cũ, không chạm lại nghiệp vụ.
+  if (params.idempotencyKey) {
+    const seen = await db.idempotencyKey.findUnique({ where: { key: params.idempotencyKey } });
+    if (seen?.result) {
+      const r = seen.result as { receiptId?: string | null };
+      return { ok: true, alreadyConfirmed: true, receiptId: r.receiptId ?? undefined };
+    }
+  }
+
   const existing = await db.payment.findUnique({
     where: { id: params.paymentId },
     include: { receipts: { where: { deletedAt: null } } },
@@ -126,6 +152,12 @@ export async function confirmPayment(params: {
     if (upd.count === 0) {
       // Một request khác đã xác nhận đồng thời → trả receipt hiện có, KHÔNG sinh thêm.
       const r = await tx.receipt.findFirst({ where: { paymentId: existing.id } });
+      // FIX-H8 — vẫn ghi key (nếu có) để request lặp sau trả đúng kết quả này.
+      if (params.idempotencyKey) {
+        await tx.idempotencyKey.create({
+          data: { key: params.idempotencyKey, scope: "payment.confirm", result: { receiptId: r?.id ?? null } },
+        });
+      }
       return { receiptId: r?.id, raced: true };
     }
     const receipt = await issueReceipt({
@@ -159,6 +191,12 @@ export async function confirmPayment(params: {
       },
       { tx, dedupeKey: `payment.confirmed:${existing.id}` },
     );
+    // FIX-H8 — ghi key trong CÙNG tx → double-submit sau trả kết quả này (không sinh Receipt thứ 2).
+    if (params.idempotencyKey) {
+      await tx.idempotencyKey.create({
+        data: { key: params.idempotencyKey, scope: "payment.confirm", result: { receiptId: receipt.id } },
+      });
+    }
     return { receiptId: receipt.id, raced: false };
   });
 
@@ -174,6 +212,8 @@ export async function rejectPayment(params: {
   paymentId: string;
   confirmedById: string;
   reason: string;
+  /** FIX-H9 — optimistic lock: Payment.updatedAt client đã thấy. Lệch → STALE_WRITE. */
+  expectedUpdatedAt?: Date | string;
 }): Promise<Ok<{ voidedReceiptIds: string[] }> | Fail> {
   if (!params.reason?.trim()) return fail("Lý do từ chối là bắt buộc");
 
@@ -187,10 +227,12 @@ export async function rejectPayment(params: {
   }
 
   const actor = await auditActor(params.confirmedById);
+  const expectedAt = params.expectedUpdatedAt ? new Date(params.expectedUpdatedAt) : null;
 
-  const voidedReceiptIds = await db.$transaction(async (tx) => {
-    await tx.payment.update({
-      where: { id: existing.id },
+  const result = await db.$transaction(async (tx) => {
+    // FIX-H9 — ghi có điều kiện updatedAt; 0 row ⇒ người khác vừa sửa → STALE_WRITE.
+    const upd = await tx.payment.updateMany({
+      where: { id: existing.id, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
       data: {
         accountantStatus: "REJECTED",
         confirmedById: params.confirmedById,
@@ -198,6 +240,7 @@ export async function rejectPayment(params: {
         rejectReason: params.reason.trim(),
       },
     });
+    if (upd.count === 0) return { stale: true as const };
 
     const activeReceipts = existing.receipts.filter((r) => r.status === "ACTIVE");
     const voided: string[] = [];
@@ -230,10 +273,11 @@ export async function rejectPayment(params: {
       },
       { tx, dedupeKey: `payment.rejected:${existing.id}` },
     );
-    return voided;
+    return { stale: false as const, voided };
   });
 
-  return { ok: true, voidedReceiptIds };
+  if (result.stale) return fail(STALE_WRITE);
+  return { ok: true, voidedReceiptIds: result.voided };
 }
 
 // ─── AC3 — Điều chỉnh (không sửa bản gốc CONFIRMED) ───────────────────────────
@@ -248,6 +292,8 @@ export async function adjustPayment(params: {
   amount?: number;
   method?: string;
   note?: string | null;
+  /** FIX-H9 — optimistic lock trên bản gốc: Payment.updatedAt client đã thấy. */
+  expectedUpdatedAt?: Date | string;
 }): Promise<Ok<{ adjustmentId: string }> | Fail> {
   if (!params.reason?.trim()) return fail("Lý do điều chỉnh là bắt buộc");
 
@@ -260,8 +306,18 @@ export async function adjustPayment(params: {
 
   const actor = await auditActor(params.confirmedById);
   const now = new Date();
+  const expectedAt = params.expectedUpdatedAt ? new Date(params.expectedUpdatedAt) : null;
 
-  const adjustmentId = await db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
+    // FIX-H9 — "touch" bản gốc có điều kiện updatedAt để chốt lock (bản gốc không đổi
+    // nội dung nhưng updatedAt bump → chặn 2 người điều chỉnh trên cùng snapshot cũ).
+    if (expectedAt) {
+      const lock = await tx.payment.updateMany({
+        where: { id: original.id, updatedAt: expectedAt },
+        data: { updatedAt: now },
+      });
+      if (lock.count === 0) return { stale: true as const };
+    }
     const adj = await tx.payment.create({
       data: {
         orderId: original.orderId,
@@ -294,10 +350,11 @@ export async function adjustPayment(params: {
       orgUnitId: original.centerId,
       tx,
     });
-    return adj.id;
+    return { stale: false as const, adjustmentId: adj.id };
   });
 
-  return { ok: true, adjustmentId };
+  if (result.stale) return fail(STALE_WRITE);
+  return { ok: true, adjustmentId: result.adjustmentId };
 }
 
 // ─── AC3 — Hoàn tiền (bút toán âm, không xóa gốc) ─────────────────────────────
@@ -310,6 +367,8 @@ export async function refundPayment(params: {
   confirmedById: string;
   reason: string;
   amount?: number;
+  /** FIX-H9 — optimistic lock trên bản gốc: Payment.updatedAt client đã thấy. */
+  expectedUpdatedAt?: Date | string;
 }): Promise<Ok<{ refundId: string }> | Fail> {
   if (!params.reason?.trim()) return fail("Lý do hoàn tiền là bắt buộc");
 
@@ -322,8 +381,18 @@ export async function refundPayment(params: {
 
   const actor = await auditActor(params.confirmedById);
   const now = new Date();
+  const expectedAt = params.expectedUpdatedAt ? new Date(params.expectedUpdatedAt) : null;
 
-  const refundId = await db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
+    // FIX-H9 — "touch" bản gốc có điều kiện updatedAt để chốt lock (chống hoàn 2 lần
+    // trên cùng snapshot cũ khi 2 người thao tác song song).
+    if (expectedAt) {
+      const lock = await tx.payment.updateMany({
+        where: { id: original.id, updatedAt: expectedAt },
+        data: { updatedAt: now },
+      });
+      if (lock.count === 0) return { stale: true as const };
+    }
     const ref = await tx.payment.create({
       data: {
         orderId: original.orderId,
@@ -356,8 +425,9 @@ export async function refundPayment(params: {
       orgUnitId: original.centerId,
       tx,
     });
-    return ref.id;
+    return { stale: false as const, refundId: ref.id };
   });
 
-  return { ok: true, refundId };
+  if (result.stale) return fail(STALE_WRITE);
+  return { ok: true, refundId: result.refundId };
 }

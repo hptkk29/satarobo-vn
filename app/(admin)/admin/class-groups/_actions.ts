@@ -8,8 +8,18 @@ import { redirect } from "next/navigation";
 import { classGroupCreateSchema } from "@/lib/validators/class-group";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import { genClassGroupCode } from "@/lib/codegen";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 
 type ActionResult = { error?: string };
+
+// Cách ly cơ sở (chống IDOR ghi): ClassGroup/Student/Class ∈ SCOPED_MODELS;
+// Enrollment relation-scoped qua class.centerId. Mutation theo id từ client phải
+// xác minh record thuộc tầm nhìn cơ sở của actor trước khi ghi.
+function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  return centerId != null && actor.visibleCenterIds.includes(centerId);
+}
 
 async function requireWrite(action: "create" | "edit" | "delete") {
   const session = await auth();
@@ -44,7 +54,7 @@ function readForm(formData: FormData) {
 export async function createClassGroup(
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireWrite("create");
+  const session = await requireWrite("create");
 
   const parsed = classGroupCreateSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -56,6 +66,14 @@ export async function createClassGroup(
   const orgUnitId = data.orgUnitId ?? null;
   const centerId = await centerIdForOrgUnit(orgUnitId);
   if (!centerId) return { error: "Nhóm lớp phải thuộc một cơ sở cụ thể" };
+
+  // Cách ly cơ sở: chỉ tạo nhóm lớp cho cơ sở trong tầm nhìn actor.
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, centerId)) {
+      return { error: "Không có quyền tạo nhóm lớp cho cơ sở này" };
+    }
+  }
 
   const center = await db.center.findUnique({
     where: { id: centerId },
@@ -92,7 +110,7 @@ export async function updateClassGroup(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireWrite("edit");
+  const session = await requireWrite("edit");
 
   const parsed = classGroupCreateSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -100,16 +118,28 @@ export async function updateClassGroup(
   }
   const data = parsed.data;
 
-  const existing = await db.classGroup.findUnique({
+  // Cách ly cơ sở: nhóm lớp hiện tại phải thuộc tầm nhìn actor (sdb null-filter).
+  const uid = session.user.id;
+  if (!uid) return { error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.classGroup.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, centerId: true },
   });
-  if (!existing) return { error: "Nhóm lớp không tồn tại" };
+  if (!existing || !passesScope("ClassGroup", existing, actor)) {
+    return { error: "Nhóm lớp không tồn tại" };
+  }
 
   // PR-C: orgUnitId là picker; centerId suy ra (HO loại khỏi list nên phải có center).
   const orgUnitId = data.orgUnitId ?? null;
   const centerId = await centerIdForOrgUnit(orgUnitId);
   if (!centerId) return { error: "Nhóm lớp phải thuộc một cơ sở cụ thể" };
+
+  // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
+  if (!actorCanUseCenter(actor, centerId)) {
+    return { error: "Không có quyền chuyển nhóm lớp sang cơ sở này" };
+  }
 
   await db.classGroup.update({
     where: { id },
@@ -130,7 +160,16 @@ export async function updateClassGroup(
 }
 
 export async function deleteClassGroup(id: string): Promise<ActionResult> {
-  await requireWrite("delete");
+  const session = await requireWrite("delete");
+  // Cách ly cơ sở: chỉ xoá nhóm lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    const sdb = scopedDb(actor);
+    const existing = await sdb.classGroup.findUnique({ where: { id }, select: { centerId: true } });
+    if (!existing || !passesScope("ClassGroup", existing, actor)) {
+      return { error: "Nhóm lớp không tồn tại" };
+    }
+  }
   await db.classGroup.update({
     where: { id },
     data: { deletedAt: new Date() },
@@ -152,6 +191,16 @@ export async function deleteClassGroupAction(
     assertCan(session.user, "class_group:delete");
   } catch {
     return { ok: false, error: "Không có quyền" };
+  }
+
+  // Cách ly cơ sở: chỉ xoá nhóm lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    const sdb = scopedDb(actor);
+    const existing = await sdb.classGroup.findUnique({ where: { id }, select: { centerId: true } });
+    if (!existing || !passesScope("ClassGroup", existing, actor)) {
+      return { ok: false, error: "Nhóm lớp không tồn tại" };
+    }
   }
 
   try {
@@ -205,11 +254,18 @@ export async function addStudentToGroup(input: { groupId: string; studentId: str
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
 
-  const student = await db.student.findFirst({
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const student = await sdb.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
-    select: { id: true, classGroupId: true },
+    select: { id: true, classGroupId: true, centerId: true },
   });
-  if (!student) return { ok: false, error: "Không tìm thấy học viên" };
+  // Cách ly cơ sở: HV phải thuộc tầm nhìn actor.
+  if (!student || !passesScope("Student", student, actor)) {
+    return { ok: false, error: "Không tìm thấy học viên" };
+  }
   if (student.classGroupId && student.classGroupId !== input.groupId) {
     return { ok: false, error: "Học viên đã thuộc nhóm khác — gỡ khỏi nhóm cũ trước" };
   }
@@ -223,6 +279,15 @@ export async function removeStudentFromGroup(input: { groupId: string; studentId
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
+  // Cách ly cơ sở: chỉ gỡ HV trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    const sdb = scopedDb(actor);
+    const student = await sdb.student.findUnique({ where: { id: input.studentId }, select: { centerId: true } });
+    if (!student || !passesScope("Student", student, actor)) {
+      return { ok: false, error: "Không tìm thấy học viên" };
+    }
+  }
   await db.student.update({ where: { id: input.studentId }, data: { classGroupId: null } });
   revalidatePath(`/class-groups/${input.groupId}`);
   return { ok: true };
@@ -238,17 +303,35 @@ export async function enrollGroupIntoClass(input: {
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "enrollments:create")) return { ok: false, error: "Không có quyền ghi danh" };
 
-  const cls = await db.class.findFirst({
+  // Cách ly cơ sở: lớp đích phải thuộc tầm nhìn actor (sdb null-filter + passesScope).
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const cls = await sdb.class.findFirst({
     where: { id: input.classId, deletedAt: null },
-    select: { id: true, courseId: true, classGroupId: true },
+    select: { id: true, courseId: true, classGroupId: true, centerId: true },
   });
-  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+  if (!cls || !passesScope("Class", cls, actor)) {
+    return { ok: false, error: "Lớp không tồn tại" };
+  }
   if (cls.classGroupId !== input.groupId) return { ok: false, error: "Lớp không thuộc nhóm này" };
   if (input.studentIds.length === 0) return { ok: false, error: "Chưa chọn học viên" };
+
+  // Chỉ ghi danh HV trong tầm nhìn cơ sở của actor (loại id ngoài scope).
+  const scopedStudents = await sdb.student.findMany({
+    where: { id: { in: input.studentIds }, deletedAt: null },
+    select: { id: true },
+  });
+  const allowedStudentIds = new Set(scopedStudents.map((s) => s.id));
 
   let created = 0;
   let skipped = 0;
   for (const studentId of input.studentIds) {
+    if (!allowedStudentIds.has(studentId)) {
+      skipped++;
+      continue;
+    }
     const existing = await db.enrollment.findFirst({
       where: { studentId, classId: cls.id, status: { in: [...ENROLL_ACTIVE] } },
       select: { id: true },

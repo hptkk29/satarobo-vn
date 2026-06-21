@@ -58,12 +58,20 @@ export function OrderCreateForm({
   packages,
   products,
   centers,
+  leadId = null,
+  defaultCustomer,
+  defaultCenterId,
 }: {
   paymentMethods: PM[];
   courses: Course[];
   packages: Pkg[];
   products: ProductOption[];
   centers: Center[];
+  // convert-v2 (R7-05/06): khi tạo đơn TỪ một lead, gắn leadId để convert sau tìm
+  // được Payment RECORDED qua order.leadId. null = đơn walk-in thông thường.
+  leadId?: string | null;
+  defaultCustomer?: { name?: string; phone?: string; email?: string };
+  defaultCenterId?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -73,14 +81,14 @@ export function OrderCreateForm({
   const [paymentMethodId, setPaymentMethodId] = useState<string>("");
 
   const [customer, setCustomer] = useState({
-    name: "",
-    phone: "",
-    email: "",
+    name: defaultCustomer?.name ?? "",
+    phone: defaultCustomer?.phone ?? "",
+    email: defaultCustomer?.email ?? "",
     address: "",
     ward: "",
     city: "",
   });
-  const [centerId, setCenterId] = useState<string>(NO_CENTER);
+  const [centerId, setCenterId] = useState<string>(defaultCenterId ?? NO_CENTER);
 
   // Single item
   const [itemRefId, setItemRefId] = useState("");
@@ -226,7 +234,7 @@ export function OrderCreateForm({
       customerWard: customer.ward || null,
       customerCity: customer.city || null,
       studentId: null,
-      leadId: null,
+      leadId: leadId ?? null,
       centerId: centerId === NO_CENTER ? null : centerId,
       paymentMethodId,
       items: [item],

@@ -4,6 +4,8 @@ import { ArrowRightLeft, ChevronLeft, ClipboardList, History } from "lucide-reac
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { ChangeStatusDialog } from "../../_components/change-status-dialog";
 import { TransferDialog } from "../../_components/transfer-dialog";
 
@@ -59,6 +61,13 @@ export default async function EditEnrollmentPage({ params }: Props) {
   const { id } = await params;
   const canViewAudit = can(session.user, "audit-logs:view");
 
+  // Cách ly cơ sở: Enrollment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
+  // tiếp) → scopedDb không auto-scope findUnique. Scope thủ công qua class.centerId,
+  // dùng cùng tầm nhìn cơ sở của model Class. targetClasses đọc qua sdb (auto-scope).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+
   const enrollment = await db.enrollment.findUnique({
     where: { id },
     select: {
@@ -85,6 +94,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
       class: {
         select: {
           id: true,
+          centerId: true,
           name: true,
           classCode: true,
           status: true,
@@ -102,6 +112,15 @@ export default async function EditEnrollmentPage({ params }: Props) {
   });
   if (!enrollment) notFound();
 
+  // Cách ly cơ sở (chống IDOR): enrollment của cơ sở ngoài tầm nhìn → 404.
+  if (
+    visibleClassCenters !== "ALL" &&
+    (enrollment.class.centerId == null ||
+      !visibleClassCenters.includes(enrollment.class.centerId))
+  ) {
+    notFound();
+  }
+
   const isTerminal = TERMINAL_STATUSES.has(enrollment.status);
   const statusInfo =
     STATUS_INFO[enrollment.status] ?? {
@@ -110,7 +129,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
     };
 
   const [targetClasses, auditLogs] = await Promise.all([
-    db.class.findMany({
+    sdb.class.findMany({
       where: {
         deletedAt: null,
         id: { not: enrollment.class.id },
