@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   decideRoute,
+  isAdminRoute,
   sanitizeCallbackUrl,
   type MaybeRole,
   type RouteDecision,
@@ -46,6 +47,28 @@ describe("A. admin host × role", () => {
       expect(
         decideRoute({ hostKind: "admin", pathname: "/leads", ...authed(role) }),
       ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+    }
+  });
+
+  // Regression: route folder tồn tại dưới app/(admin)/admin/* nhưng KHÔNG có
+  // trong ADMIN_ROUTE_SEGMENTS → isAdminRoute=false → admin host bounce về public
+  // = 404 (lỗi đã gặp với /payments, /cong-no, /report-cards, /cau-hinh-van-hanh).
+  // Thêm route admin mới PHẢI thêm segment vào set.
+  it("các route tài chính/báo cáo mới được nhận là admin route", () => {
+    for (const seg of [
+      "payments",
+      "cong-no",
+      "report-cards",
+      "cau-hinh-van-hanh",
+      "evaluations",
+      "roles",
+      "scorm",
+      "bao-cao",
+    ]) {
+      expect(isAdminRoute(`/${seg}`)).toBe(true);
+      expect(
+        decideRoute({ hostKind: "admin", pathname: `/${seg}`, ...authed("SUPER_ADMIN") }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: `/admin/${seg}` });
     }
   });
 

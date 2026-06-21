@@ -133,8 +133,9 @@ export async function ManagerDashboard({
           icon={<UserPlus className="w-4 h-4" />}
           iconColor="purple"
         />
-        <StatCardAdmin label="Học viên đăng ký" value={totalStudents} icon={<BookOpen className="w-4 h-4" />} iconColor="orange" />
-        <StatCardAdmin label="Conversion rate" value={`${conversionRate}%`} icon={<TrendingUp className="w-4 h-4" />} iconColor="purple" />
+        {/* BUG-009: nhãn rõ — đếm bảng Student (khác "Leads ENROLLED" đếm bảng Lead). */}
+        <StatCardAdmin label="Tổng học viên" value={totalStudents} icon={<BookOpen className="w-4 h-4" />} iconColor="orange" />
+        <StatCardAdmin label="Tỉ lệ chuyển đổi (lead)" value={`${conversionRate}%`} icon={<TrendingUp className="w-4 h-4" />} iconColor="purple" />
       </div>
 
       {/* (2) Biểu đồ */}

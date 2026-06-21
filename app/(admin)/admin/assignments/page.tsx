@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ClipboardList, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/permissions";
 import { AssignmentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
 
@@ -37,6 +38,13 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Cách ly cơ sở: Assignment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
+  // tiếp) → scopedDb không auto-scope. Scope thủ công qua class.centerId, dùng cùng
+  // tầm nhìn cơ sở của model Class (đã isolate ở /admin/classes).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
   const statusFilter =
@@ -53,8 +61,13 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
       : {}),
   };
 
+  // Scope thủ công qua class.centerId (Assignment phụ thuộc cơ sở qua lớp).
+  if (visibleClassCenters !== "ALL") {
+    where.class = { centerId: { in: visibleClassCenters } };
+  }
+
   const [assignments, classes] = await Promise.all([
-    db.assignment.findMany({
+    sdb.assignment.findMany({
       where,
       include: {
         class: { select: { name: true, classCode: true } },
@@ -64,7 +77,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
       orderBy: { updatedAt: "desc" },
       take: 100,
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, classCode: true },
@@ -73,9 +86,10 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
   ]);
 
   // Stats: how many SUBMITTED / GRADED per assignment
+  // (assignmentId đã giới hạn trong danh sách assignment đã được scope ở trên).
   const stats =
     assignments.length > 0
-      ? await db.assignmentSubmission.groupBy({
+      ? await sdb.assignmentSubmission.groupBy({
           by: ["assignmentId", "status"],
           where: { assignmentId: { in: assignments.map((a) => a.id) } },
           _count: { _all: true },

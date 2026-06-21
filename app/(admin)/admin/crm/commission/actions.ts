@@ -35,6 +35,8 @@ export async function approveStatementAction(period: string, reason: string): Pr
 export async function reopenStatementAction(period: string, reason: string): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  // RBAC gate (đồng bộ approveStatementAction): mở lại bảng hoa hồng cần payments:manage.
+  if (!can(session.user, "payments:manage")) return { ok: false, error: "Không có quyền" };
   try {
     await reopenStatement(actorFromSession(session.user), period, reason);
     revalidatePath("/admin/crm/commission");

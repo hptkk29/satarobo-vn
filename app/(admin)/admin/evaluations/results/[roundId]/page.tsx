@@ -4,6 +4,7 @@ import { ArrowLeft, Star, EyeOff } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { db } from "@/lib/db";
 import { getRound } from "@/lib/eval/rounds";
 import { aggregateRound, getRoundDetail, type RoundAggregate } from "@/lib/eval/aggregate";
@@ -25,9 +26,11 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
   const round = await getRound(roundId);
   if (!round) notFound();
 
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Cách ly cơ sở cho người xem CHI TIẾT (QL): đợt gắn CS ngoài scope → chặn.
   if (canDetail) {
-    const actor = await resolveActor(session.user.id);
     if (
       !actor.isSuperAdmin &&
       !actor.isHoLevel &&
@@ -53,7 +56,9 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
     const teacherIds = [...new Set(detail.map((d) => d.teacherId).filter((x): x is string => !!x))];
     const parentIds = [...new Set(detail.map((d) => d.parentUserId).filter((x): x is string => !!x))];
     const [students, users] = await Promise.all([
-      db.student.findMany({ where: { id: { in: studentIds } }, select: { id: true, name: true } }),
+      // Student ∈ SCOPED_MODELS → sdb tự inject centerId: tên HV cơ sở khác (đợt
+      // TEACHER_EVAL toàn hệ thống, centerId=null bỏ qua gate trên) sẽ không lộ.
+      sdb.student.findMany({ where: { id: { in: studentIds } }, select: { id: true, name: true } }),
       db.user.findMany({ where: { id: { in: [...teacherIds, ...parentIds] } }, select: { id: true, name: true } }),
     ]);
     nameMap = new Map([

@@ -4,6 +4,8 @@ import { DeleteStudentButton } from "./_components/delete-student-button";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/permissions";
 import { getSetting } from "@/lib/settings/service";
 import { StudentStatus, type Prisma } from "@prisma/client";
@@ -111,6 +113,11 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   const canDelete = can(session.user, "students:delete");
   const showActions = canUpdate || canDelete;
 
+  // Cách ly cơ sở: Student ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject
+  // `centerId IN visibleCenters`. Mọi đọc Student đi qua sdb. SUPER_ADMIN/HO bypass.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const sp = await searchParams;
   const view: LifecycleView = isValidView(sp.view) ? sp.view : "all";
   const q = sp.q?.trim() ?? "";
@@ -157,7 +164,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
 
   if (view === "frequent-absent") {
     // Post-filter approach: load base candidates, then JS-filter.
-    const baseStudents = await db.student.findMany({
+    const baseStudents = await sdb.student.findMany({
       where,
       select: { id: true },
       take: FREQUENT_ABSENT_FETCH_LIMIT,
@@ -172,7 +179,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     const pageIds = filteredArr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     if (pageIds.length > 0) {
-      const rows = await db.student.findMany({
+      const rows = await sdb.student.findMany({
         where: { id: { in: pageIds } },
         select: STUDENT_LIST_SELECT,
         orderBy: [{ name: "asc" }],
@@ -181,8 +188,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     }
   } else {
     const [count, rows] = await Promise.all([
-      db.student.count({ where }),
-      db.student.findMany({
+      sdb.student.count({ where }),
+      sdb.student.findMany({
         where,
         select: STUDENT_LIST_SELECT,
         orderBy: [{ createdAt: "desc" }],

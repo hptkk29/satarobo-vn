@@ -2,8 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeftRight } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
 
 export const metadata = { title: "Báo cáo chuyển lead liên cơ sở | Admin" };
@@ -20,9 +22,13 @@ export default async function TransferReportPage({ searchParams }: Props) {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "leads:assign")) redirect("/leads");
 
-  const isSuper = hasRole(session.user, "SUPER_ADMIN");
-  const isCM = hasRole(session.user, "CENTER_MANAGER") && !isSuper;
-  const myCenter = isCM ? session.user.centerId : null;
+  // Cách ly cơ sở: LeadTransfer KHÔNG ∈ SCOPED_MODELS (có from/toCenterId, không 1
+  // centerId trực tiếp) → scopedDb không auto-scope. Scope THỦ CÔNG theo tầm nhìn cơ
+  // sở của model Lead (đọc động từ actor/UserOrgRole, không phụ thuộc session.centerId
+  // cũ): CM@CS1 chỉ thấy transfer vào/ra CS1; SUPER_ADMIN/HO (ALL) thấy toàn hệ thống.
+  const actor = await resolveActor(session.user.id);
+  const visibleCenters = getModelVisibleCenterIds("Lead", actor);
+  const isAll = visibleCenters === "ALL";
 
   const sp = await searchParams;
   const now = new Date();
@@ -40,7 +46,14 @@ export default async function TransferReportPage({ searchParams }: Props) {
     createdAt: { gte: monthStart, lt: monthEnd },
     fromCenterId: { not: null },
     toCenterId: { not: null },
-    ...(myCenter ? { OR: [{ fromCenterId: myCenter }, { toCenterId: myCenter }] } : {}),
+    ...(visibleCenters === "ALL"
+      ? {}
+      : {
+          OR: [
+            { fromCenterId: { in: visibleCenters } },
+            { toCenterId: { in: visibleCenters } },
+          ],
+        }),
   };
 
   const transfersRaw = await db.leadTransfer.findMany({
@@ -108,7 +121,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
             <ArrowLeftRight className="h-6 w-6 text-[#7C3AED]" /> Chuyển lead liên cơ sở
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            {isCM ? "Lead vào/ra cơ sở của bạn" : "Toàn hệ thống"} · tháng {month}
+            {isAll ? "Toàn hệ thống" : "Lead vào/ra cơ sở của bạn"} · tháng {month}
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">

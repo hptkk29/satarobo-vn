@@ -9,8 +9,19 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { applyHolidayShift } from "@/lib/holidays/apply";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 
 type ActionResult = { error?: string };
+
+// Cách ly cơ sở: Holiday ∈ SCOPED_MODELS. centerId=null = ngày nghỉ TOÀN HỆ THỐNG
+// → chỉ SUPER_ADMIN/HO được tạo/sửa/xoá. CENTER_MANAGER chỉ thao tác ngày nghỉ
+// thuộc cơ sở mình (chống IDOR ghi liên cơ sở).
+function actorCanUseCenterTarget(actor: Actor, centerId: string | null): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  // Center-level: chỉ được nhắm tới 1 cơ sở trong tầm nhìn (không được nhắm toàn hệ thống).
+  return centerId != null && actor.visibleCenterIds.includes(centerId);
+}
 
 const HOLIDAY_TYPES = ["HOLIDAY", "MAINTENANCE", "EVENT", "OTHER"] as const;
 
@@ -131,7 +142,7 @@ function toUpdate(
 }
 
 export async function createHoliday(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
 
   const parsed = holidaySchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -140,6 +151,12 @@ export async function createHoliday(formData: FormData): Promise<ActionResult> {
 
   // PR-C: suy centerId từ orgUnitId (HO → null; "ALL" → null).
   const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
+
+  // Cách ly cơ sở: center-level không được tạo ngày nghỉ toàn hệ thống / cơ sở khác.
+  const actor = await resolveActor(user.id);
+  if (!actorCanUseCenterTarget(actor, centerId)) {
+    return { error: "Không có quyền tạo ngày nghỉ cho phạm vi cơ sở này" };
+  }
 
   let created: { date: Date; endDate: Date | null; centerId: string | null };
   try {
@@ -167,7 +184,7 @@ export async function updateHoliday(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
 
   const parsed = holidaySchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -176,6 +193,18 @@ export async function updateHoliday(
 
   // PR-C: suy centerId từ orgUnitId (HO → null; "ALL" → null).
   const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
+
+  // Cách ly cơ sở (chống IDOR ghi): ngày nghỉ HIỆN TẠI + phạm vi ĐÍCH đều phải
+  // thuộc tầm nhìn actor. sdb.findUnique tự null-filter record ngoài scope.
+  const actor = await resolveActor(user.id);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.holiday.findUnique({ where: { id }, select: { centerId: true } });
+  if (!existing || !passesScope("Holiday", existing, actor)) {
+    return { error: "Ngày nghỉ không tồn tại" };
+  }
+  if (!actorCanUseCenterTarget(actor, centerId)) {
+    return { error: "Không có quyền chuyển ngày nghỉ sang phạm vi cơ sở này" };
+  }
 
   let updated: { date: Date; endDate: Date | null; centerId: string | null };
   try {
@@ -202,7 +231,14 @@ export async function updateHoliday(
 }
 
 export async function deleteHoliday(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
+  // Cách ly cơ sở: chỉ xoá ngày nghỉ trong tầm nhìn cơ sở của actor (chống IDOR).
+  const actor = await resolveActor(user.id);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.holiday.findUnique({ where: { id }, select: { centerId: true } });
+  if (!existing || !passesScope("Holiday", existing, actor)) {
+    return { error: "Ngày nghỉ không tồn tại" };
+  }
   try {
     await db.holiday.delete({ where: { id } });
   } catch {

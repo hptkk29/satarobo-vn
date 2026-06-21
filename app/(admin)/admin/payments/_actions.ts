@@ -62,6 +62,8 @@ const adjustSchema = z.object({
   method: z.string().trim().optional().nullable(),
   note: z.string().max(1000).optional().nullable(),
   reason: z.string().trim().min(5, "Lý do tối thiểu 5 ký tự"),
+  // FIX-H9 — optimistic lock: Payment.updatedAt (ISO) client đã thấy.
+  expectedUpdatedAt: z.string().optional().nullable(),
 });
 
 function trimOrNull(v: string | null | undefined): string | null {
@@ -192,7 +194,8 @@ async function loadScopedPayment(
 }
 
 // ─── CONFIRM (Kế toán xác nhận → sinh Receipt) ──────────────────────────
-export async function confirmPaymentAction(paymentId: string) {
+// FIX-H8 — `idempotencyKey` (uuid client tạo mỗi lần bấm) làm double-click/retry an toàn.
+export async function confirmPaymentAction(paymentId: string, idempotencyKey?: string) {
   const session = await requireAccountant();
   const scope = await loadScopedPayment(session.user.id, paymentId);
   if (!scope.ok) return { ok: false as const, error: scope.error };
@@ -201,7 +204,7 @@ export async function confirmPaymentAction(paymentId: string) {
     return { ok: false as const, error: "Người ghi nhận không được tự xác nhận khoản của mình" };
   }
 
-  const res = await confirmPayment({ paymentId, confirmedById: scope.uid });
+  const res = await confirmPayment({ paymentId, confirmedById: scope.uid, idempotencyKey });
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");
   revalidatePath("/cong-no");
@@ -209,7 +212,11 @@ export async function confirmPaymentAction(paymentId: string) {
 }
 
 // ─── REJECT (Kế toán từ chối — bắt buộc reason ≥5) ──────────────────────
-export async function rejectPaymentAction(paymentId: string, reason: string) {
+export async function rejectPaymentAction(
+  paymentId: string,
+  reason: string,
+  expectedUpdatedAt?: string,
+) {
   const session = await requireAccountant();
   if (!reason || reason.trim().length < 5) {
     return { ok: false as const, error: "Lý do từ chối tối thiểu 5 ký tự" };
@@ -221,6 +228,7 @@ export async function rejectPaymentAction(paymentId: string, reason: string) {
     paymentId,
     confirmedById: scope.uid,
     reason: reason.trim(),
+    expectedUpdatedAt: expectedUpdatedAt || undefined,
   });
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");
@@ -249,6 +257,7 @@ export async function adjustPaymentAction(input: unknown) {
     method: trimOrNull(data.method) ?? undefined,
     note: trimOrNull(data.note),
     reason: data.reason.trim(),
+    expectedUpdatedAt: data.expectedUpdatedAt || undefined,
   });
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");
@@ -257,7 +266,11 @@ export async function adjustPaymentAction(input: unknown) {
 }
 
 // ─── REFUND (Kế toán hoàn — bút toán âm, không xoá gốc) ─────────────────
-export async function refundPaymentAction(paymentId: string, reason: string) {
+export async function refundPaymentAction(
+  paymentId: string,
+  reason: string,
+  expectedUpdatedAt?: string,
+) {
   const session = await requireAccountant();
   if (!reason || reason.trim().length < 5) {
     return { ok: false as const, error: "Lý do hoàn tiền tối thiểu 5 ký tự" };
@@ -269,6 +282,7 @@ export async function refundPaymentAction(paymentId: string, reason: string) {
     paymentId,
     confirmedById: scope.uid,
     reason: reason.trim(),
+    expectedUpdatedAt: expectedUpdatedAt || undefined,
   });
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");

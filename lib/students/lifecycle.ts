@@ -69,7 +69,7 @@ export function buildLifecycleWhere(
         AND: [
           base,
           { status: "ACTIVE" },
-          { enrollments: { some: { status: "STUDYING" } } },
+          { enrollments: { some: { status: "STUDYING", deletedAt: null } } },
         ],
       };
 
@@ -78,13 +78,13 @@ export function buildLifecycleWhere(
         AND: [
           base,
           { status: "ACTIVE" },
-          { enrollments: { none: { status: "STUDYING" } } },
+          { enrollments: { none: { status: "STUDYING", deletedAt: null } } },
           {
             OR: [
-              { enrollments: { none: {} } },
+              { enrollments: { none: { deletedAt: null } } },
               {
                 enrollments: {
-                  some: { status: { in: ["PENDING", "CONFIRMED"] } },
+                  some: { status: { in: ["PENDING", "CONFIRMED"] }, deletedAt: null },
                 },
               },
             ],
@@ -114,12 +114,13 @@ export function buildLifecycleWhere(
       return {
         AND: [
           base,
-          { enrollments: { some: { status: "COMPLETED" } } },
+          { enrollments: { some: { status: "COMPLETED", deletedAt: null } } },
           {
             enrollments: {
               some: {
                 enrolledAt: { gte: cutoff },
                 status: { in: ["PENDING", "CONFIRMED", "STUDYING"] },
+                deletedAt: null,
               },
             },
           },

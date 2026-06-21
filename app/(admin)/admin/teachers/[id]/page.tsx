@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { TeacherProfileForm } from "./_components/profile-form";
 import { ClassAssignmentSection } from "./_components/class-assignment";
@@ -64,6 +66,12 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   // Sửa: SUPER_ADMIN, hoặc CM cùng cơ sở.
   const canEdit = hasRole(me, "SUPER_ADMIN") || cmInScope;
 
+  // Cách ly cơ sở: lớp của GV (Class ∈ SCOPED_MODELS) đọc qua scopedDb → CM@CS1 không
+  // thấy lớp CS khác. ClassSession/Enrollment phía dưới lọc theo mainClassIds (đã isolate)
+  // nên an toàn theo. SUPER_ADMIN/HO tự bypass (ALL).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const p = teacher.teacherProfile;
   const teacherCourseIds = p?.teachableCourses.map((t) => t.courseId) ?? [];
 
@@ -84,17 +92,17 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true },
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { teacherId: id, deletedAt: null },
       orderBy: { name: "asc" },
       select: classSelect,
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: { assistantId: id, deletedAt: null },
       orderBy: { name: "asc" },
       select: classSelect,
     }),
-    db.class.findMany({
+    sdb.class.findMany({
       where: {
         deletedAt: null,
         status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },

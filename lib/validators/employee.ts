@@ -93,10 +93,13 @@ export const employeeCreateSchema = z.object({
 
   // Phase 4.7 extension — additional Tier 2 fields
   endDate: nullableDate,
+  // VND là số nguyên (H5/COL2) → làm tròn về Int.
   bhxhBase: z
     .union([z.coerce.number().nonnegative(), z.literal(""), z.null()])
     .optional()
-    .transform((v) => (v === "" || v === undefined ? null : (v as number))),
+    .transform((v) =>
+      v === "" || v === undefined || v === null ? null : Math.round(v as number),
+    ),
   address: nullableStr,
   emergencyContact: nullableStr,
   notes: nullableStr,

@@ -10,6 +10,22 @@ import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { getNonConsentStudents } from "@/lib/lms/media-consent";
+import { resolveActor } from "@/lib/auth/actor";
+import { canManageClass } from "@/lib/auth/lms-scope";
+
+// Cách ly cơ sở (chống IDOR ghi): ClassSessionMedia relation-scoped qua class.centerId.
+// Duyệt/xoá theo mediaId từ client phải xác minh lớp thuộc tầm nhìn actor.
+async function mediaClassInScope(userId: string | undefined, mediaId: string): Promise<boolean> {
+  if (!userId) return false;
+  const m = await db.classSessionMedia.findUnique({
+    where: { id: mediaId },
+    select: { classId: true },
+  });
+  if (!m) return false;
+  const cls = await db.class.findUnique({ where: { id: m.classId }, select: { centerId: true } });
+  const actor = await resolveActor(userId);
+  return canManageClass(actor, m.classId, cls?.centerId ?? null);
+}
 
 // =============================================================================
 // ADMIN MEDIA — Phase NHÓM 3 + R7-09
@@ -252,6 +268,10 @@ export async function reviewMedia(input: {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "media:approve")) return { ok: false, error: "Không có quyền duyệt" };
+  // Cách ly cơ sở: chỉ duyệt ảnh của lớp trong tầm nhìn actor (chống IDOR).
+  if (!(await mediaClassInScope(session.user.id, input.id))) {
+    return { ok: false, error: "Không tìm thấy ảnh" };
+  }
 
   const { actorId, actorName } = getAuditActor(session);
   await db.classSessionMedia.update({
@@ -280,6 +300,10 @@ export async function deleteMedia(id: string): Promise<{ ok: boolean; error?: st
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "media:approve")) return { ok: false, error: "Không có quyền" };
+  // Cách ly cơ sở: chỉ xoá ảnh của lớp trong tầm nhìn actor (chống IDOR).
+  if (!(await mediaClassInScope(session.user.id, id))) {
+    return { ok: false, error: "Không tìm thấy ảnh" };
+  }
   const { actorId, actorName } = getAuditActor(session);
   await db.classSessionMedia.delete({ where: { id } }).catch(() => null);
   await writeAudit({

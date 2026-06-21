@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { DeleteGroupButton } from "./_components/delete-group-button";
 
 export const metadata = { title: "Nhóm lớp | Admin" };
@@ -30,7 +31,12 @@ export default async function ClassGroupsPage() {
   const canManage = can(session.user, "class_group:create");
   const canDelete = can(session.user, "class_group:delete");
 
-  const groups = await db.classGroup.findMany({
+  // Cách ly cơ sở: ClassGroup ∈ SCOPED_MODELS (có centerId) → scopedDb auto inject
+  // centerId IN tầm-nhìn. CENTER_MANAGER@CS1 không thấy nhóm lớp CS2.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const groups = await sdb.classGroup.findMany({
     where: { deletedAt: null },
     include: {
       center: { select: { name: true, code: true } },

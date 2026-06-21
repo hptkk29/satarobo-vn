@@ -7,6 +7,19 @@ import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { createMakeupNeed } from "@/lib/makeup/service";
+import { resolveActor } from "@/lib/auth/actor";
+import { passesScope } from "@/lib/db-scope";
+
+// Cách ly cơ sở (chống IDOR ghi): ParentRequest relation-scoped qua student.centerId.
+// Duyệt/xử lý theo requestId từ client phải xác minh HV thuộc tầm nhìn actor.
+async function requestStudentInScope(
+  userId: string | undefined,
+  student: { centerId: string | null } | null,
+): Promise<boolean> {
+  if (!userId || !student) return false;
+  const actor = await resolveActor(userId);
+  return passesScope("Student", { centerId: student.centerId }, actor);
+}
 
 // =============================================================================
 // ADMIN PARENT REQUESTS — Phase NHÓM 3
@@ -38,9 +51,13 @@ export async function handleParentRequest(input: {
 
   const req = await db.parentRequest.findUnique({
     where: { id: parsed.data.id },
-    select: { status: true },
+    select: { status: true, student: { select: { centerId: true } } },
   });
   if (!req) return { ok: false, error: "Không tìm thấy yêu cầu" };
+  // Cách ly cơ sở: HV của yêu cầu phải thuộc tầm nhìn actor (chống IDOR).
+  if (!(await requestStudentInScope(session.user.id, req.student))) {
+    return { ok: false, error: "Không tìm thấy yêu cầu" };
+  }
   if (req.status !== "PENDING") {
     return { ok: false, error: "Yêu cầu đã được xử lý" };
   }
@@ -83,9 +100,16 @@ export async function resolveAbsence(input: {
 
   const req = await db.parentRequest.findUnique({
     where: { id: input.requestId },
-    select: { id: true, type: true, status: true, studentId: true, sessionId: true, content: true },
+    select: {
+      id: true, type: true, status: true, studentId: true, sessionId: true, content: true,
+      student: { select: { centerId: true } },
+    },
   });
   if (!req) return { ok: false, error: "Không tìm thấy yêu cầu" };
+  // Cách ly cơ sở: HV của yêu cầu phải thuộc tầm nhìn actor (chống IDOR ghi attendance liên cơ sở).
+  if (!(await requestStudentInScope(session.user.id, req.student))) {
+    return { ok: false, error: "Không tìm thấy yêu cầu" };
+  }
   if (req.type !== "ABSENCE") return { ok: false, error: "Không phải yêu cầu báo vắng" };
   if (req.status !== "PENDING") return { ok: false, error: "Yêu cầu đã được xử lý" };
   if (!req.sessionId) {

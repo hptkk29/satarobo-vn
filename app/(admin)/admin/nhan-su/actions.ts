@@ -12,10 +12,28 @@ import {
   employeeCreateSchema,
   employeeUpdateSchema,
 } from "@/lib/validators/employee";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 
 type ActionResult<T = unknown> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
+
+// Cách ly cơ sở (chống IDOR ghi): Employee ∈ SCOPED_MODELS. NV HO có centerId=null
+// (cross-center) → chỉ SUPER_ADMIN/HO thao tác. CENTER_MANAGER chỉ NV cơ sở mình.
+function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  return centerId != null && actor.visibleCenterIds.includes(centerId);
+}
+/** NV `id` có thuộc tầm nhìn cơ sở actor không (sdb null-filter + passesScope). */
+async function employeeInScope(userId: string | undefined, id: string): Promise<boolean> {
+  if (!userId) return false;
+  const actor = await resolveActor(userId);
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  const sdb = scopedDb(actor);
+  const e = await sdb.employee.findUnique({ where: { id }, select: { centerId: true } });
+  return !!e && passesScope("Employee", e, actor);
+}
 
 // ─── Nhân viên HO (Hội sở) ──────────────────────────────────────────────
 // HO là OrgUnit type=HO (Doc 15 OI-1), KHÔNG phải Center. NV "thuộc HO" khi có
@@ -152,6 +170,14 @@ export async function createEmployeeAction(
   const createData = { ...parsed.data };
   if (isHO) createData.centerId = null;
 
+  // Cách ly cơ sở: chỉ tạo NV cho cơ sở trong tầm nhìn actor (NV HO/centerId=null → super/HO).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, createData.centerId ?? null)) {
+      return { ok: false, error: "Không có quyền tạo nhân sự cho cơ sở này" };
+    }
+  }
+
   const created = await db.employee.create({
     data: {
       ...createData,
@@ -205,6 +231,11 @@ export async function updateEmployeeAction(
     };
   }
 
+  // Cách ly cơ sở: NV HIỆN TẠI + cơ sở ĐÍCH (nếu đổi) đều phải trong tầm nhìn actor.
+  if (!(await employeeInScope(session.user.id, id))) {
+    return { ok: false, error: "Không tìm thấy nhân sự" };
+  }
+
   // CENTER_MANAGER role không được edit salary fields
   const data = { ...parsed.data };
   if (hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")) {
@@ -213,6 +244,14 @@ export async function updateEmployeeAction(
   }
   // NV HO → không gán Center.
   if (isHO === true) data.centerId = null;
+
+  // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
+  if (data.centerId !== undefined && session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, data.centerId ?? null)) {
+      return { ok: false, error: "Không có quyền chuyển nhân sự sang cơ sở này" };
+    }
+  }
 
   if (data.isCEO) {
     await db.employee.updateMany({
@@ -253,6 +292,11 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
     return { ok: false, error: "Không có quyền" };
   }
 
+  // Cách ly cơ sở: chỉ xoá NV trong tầm nhìn actor (chống IDOR).
+  if (!(await employeeInScope(session.user.id, id))) {
+    return { ok: false, error: "Không tìm thấy nhân sự" };
+  }
+
   // Check xem có Honor đang link không
   const honorCount = await db.honor.count({ where: { employeeId: id } });
   if (honorCount > 0) {
@@ -276,6 +320,10 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
     return { ok: false, error: "Không có quyền" };
   }
 
+  // Cách ly cơ sở: chỉ bật/tắt NV trong tầm nhìn actor (chống IDOR).
+  if (!(await employeeInScope(session.user.id, id))) {
+    return { ok: false, error: "Không tìm thấy" };
+  }
   const emp = await db.employee.findUnique({ where: { id } });
   if (!emp) return { ok: false, error: "Không tìm thấy" };
   await db.employee.update({
@@ -295,6 +343,10 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
     return { ok: false, error: "Không có quyền" };
   }
 
+  // Cách ly cơ sở: chỉ bật/tắt hiển thị NV trong tầm nhìn actor (chống IDOR).
+  if (!(await employeeInScope(session.user.id, id))) {
+    return { ok: false, error: "Không tìm thấy" };
+  }
   const emp = await db.employee.findUnique({ where: { id } });
   if (!emp) return { ok: false, error: "Không tìm thấy" };
   await db.employee.update({

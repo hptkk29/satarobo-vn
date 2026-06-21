@@ -35,12 +35,13 @@ const tagsClean = z
     ),
   );
 
-const nullableFloat = z
+// VND là số nguyên (H5/COL2) → làm tròn về Int để khớp cột Int trong DB.
+const nullableIntVnd = z
   .union([z.coerce.number(), z.null(), z.literal("")])
   .optional()
   .transform((v) => {
     if (v === null || v === undefined || v === "") return null;
-    return Number.isFinite(v) ? (v as number) : null;
+    return Number.isFinite(v) ? Math.round(v as number) : null;
   });
 
 const nullableUrl = z
@@ -73,20 +74,20 @@ export const StockMovementTypeEnum = z.enum([
 
 const positiveInt = z.coerce.number().int().min(1, "Số lượng phải >= 1");
 
-const nullableFloatNonNeg = z
+const nullableIntVndNonNeg = z
   .union([z.coerce.number(), z.null(), z.literal("")])
   .optional()
   .transform((v) => {
     if (v === null || v === undefined || v === "") return null;
     const n = v as number;
-    return Number.isFinite(n) && n >= 0 ? n : null;
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
   });
 
 export const receiptSchema = z.object({
   itemId: z.string().trim().min(1, "Thiếu mặt hàng"),
   centerId: z.string().trim().min(1, "Thiếu cơ sở"),
   quantity: positiveInt,
-  unitPrice: nullableFloatNonNeg,
+  unitPrice: nullableIntVndNonNeg,
   referenceNote: nullableStr,
   notes: nullableStr,
 });
@@ -140,7 +141,7 @@ export const inventoryItemSchema = z.object({
   description: nullableStr,
   category: InventoryCategoryEnum.default("OTHER"),
   unit: z.string().trim().min(1).max(40).default("Cái"),
-  pricePerUnit: nullableFloat,
+  pricePerUnit: nullableIntVnd,
   supplier: nullableStr,
   defaultMinThreshold: z.coerce.number().int().min(0).default(5),
   imageUrl: nullableUrl,

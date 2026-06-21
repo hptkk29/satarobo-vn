@@ -11,6 +11,16 @@ import { Prisma } from "@prisma/client";
 import type { EnrollmentStatus } from "@prisma/client";
 import { z } from "zod";
 import { canTransition } from "@/lib/enrollments/status";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { passesScope } from "@/lib/db-scope";
+
+// Cách ly cơ sở (chống IDOR ghi): Enrollment KHÔNG có centerId trực tiếp (không
+// ∈ SCOPED_MODELS) → scope thủ công qua class.centerId. Mọi mutation theo
+// enrollmentId/classId từ client phải xác minh lớp thuộc tầm nhìn cơ sở của actor.
+async function classCenterInScope(actor: Actor, classId: string): Promise<boolean> {
+  const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
+  return !!cls && passesScope("Class", cls, actor);
+}
 
 type ActionResult = { error?: string };
 type WorkflowResult<T = undefined> =
@@ -172,7 +182,7 @@ function readForm(formData: FormData) {
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function createEnrollment(formData: FormData): Promise<ActionResult> {
-  await requireSalesOrAdmin();
+  const session = await requireSalesOrAdmin();
 
   const parsed = enrollmentSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -180,6 +190,14 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
   }
 
   const e = parsed.data;
+
+  // Cách ly cơ sở: lớp ghi danh phải thuộc tầm nhìn cơ sở của actor.
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!(await classCenterInScope(actor, e.classId))) {
+      return { error: "Lớp học không tồn tại" };
+    }
+  }
 
   let classRow: { courseId: string } | null;
   let existing: { id: string } | null;
@@ -222,7 +240,7 @@ export async function updateEnrollment(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireSalesOrAdmin();
+  const session = await requireSalesOrAdmin();
 
   const parsed = enrollmentSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -232,9 +250,20 @@ export async function updateEnrollment(
   const e = parsed.data;
   const existing = await db.enrollment.findUnique({
     where: { id },
-    select: { studentId: true, classId: true },
+    select: { studentId: true, classId: true, class: { select: { centerId: true } } },
   });
   if (!existing) return { error: "Đăng ký không tồn tại" };
+
+  // Cách ly cơ sở: lớp HIỆN TẠI + lớp ĐÍCH (nếu đổi) đều phải trong tầm nhìn actor.
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: existing.class?.centerId ?? null }, actor)) {
+      return { error: "Đăng ký không tồn tại" };
+    }
+    if (e.classId !== existing.classId && !(await classCenterInScope(actor, e.classId))) {
+      return { error: "Lớp học không tồn tại" };
+    }
+  }
 
   if (existing.studentId !== e.studentId || existing.classId !== e.classId) {
     const dup = await db.enrollment.findFirst({
@@ -277,7 +306,18 @@ export async function updateEnrollment(
 }
 
 export async function deleteEnrollment(id: string): Promise<ActionResult> {
-  await requireSalesOrAdmin();
+  const session = await requireSalesOrAdmin();
+  // Cách ly cơ sở: chỉ xoá đăng ký thuộc lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    const existing = await db.enrollment.findUnique({
+      where: { id },
+      select: { class: { select: { centerId: true } } },
+    });
+    if (!existing || !passesScope("Class", { centerId: existing.class?.centerId ?? null }, actor)) {
+      return { error: "Đăng ký không tồn tại" };
+    }
+  }
   try {
     // FIX-C3 — soft-delete (giữ vết tài chính); read filter deletedAt: null sẽ ẩn.
     await db.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
@@ -324,6 +364,14 @@ export async function deleteEnrollmentAction(
     },
   });
   if (!enrollment) return { ok: false, error: "Đăng ký không tồn tại" };
+
+  // Cách ly cơ sở: chỉ xoá đăng ký thuộc lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: enrollment.class?.centerId ?? null }, actor)) {
+      return { ok: false, error: "Đăng ký không tồn tại" };
+    }
+  }
 
   const c = enrollment._count;
   if (c.payments + c.orderItems + c.receipts + c.reserves > 0) {
@@ -390,6 +438,14 @@ export async function enrollStudent(
 
   const { studentId, classId } = parsed.data;
   const notes = parsed.data.notes && parsed.data.notes !== "" ? parsed.data.notes : null;
+
+  // Cách ly cơ sở: lớp ghi danh phải thuộc tầm nhìn cơ sở của actor.
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!(await classCenterInScope(actor, classId))) {
+      return { ok: false, error: "Không tìm thấy lớp" };
+    }
+  }
 
   // Pre-create validation queries — bọc try/catch để lỗi DB (vd Prisma Client
   // stale sau migration, mất kết nối) trả về thông báo thân thiện thay vì văng
@@ -555,6 +611,15 @@ export async function changeEnrollmentStatus(
     },
   });
   if (!enrollment) return { ok: false, error: "Không tìm thấy enrollment" };
+
+  // Cách ly cơ sở: enrollment phải thuộc lớp trong tầm nhìn actor (chống IDOR ghi).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: enrollment.class?.centerId ?? null }, actor)) {
+      return { ok: false, error: "Không tìm thấy enrollment" };
+    }
+  }
+
   if (enrollment.status === data.newStatus) {
     return { ok: false, error: "Trạng thái không thay đổi" };
   }
@@ -691,6 +756,18 @@ export async function transferEnrollment(
     },
   });
   if (!oldEnrollment) return { ok: false, error: "Không tìm thấy enrollment cũ" };
+
+  // Cách ly cơ sở: lớp NGUỒN + lớp ĐÍCH đều phải trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: oldEnrollment.class?.centerId ?? null }, actor)) {
+      return { ok: false, error: "Không tìm thấy enrollment cũ" };
+    }
+    if (!(await classCenterInScope(actor, data.targetClassId))) {
+      return { ok: false, error: "Không tìm thấy lớp đích" };
+    }
+  }
+
   if (oldEnrollment.classId === data.targetClassId) {
     return { ok: false, error: "Lớp đích trùng lớp hiện tại" };
   }

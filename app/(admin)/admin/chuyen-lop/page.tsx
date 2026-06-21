@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { TransferForm } from "./_components/transfer-form";
 import { RequestActions } from "./_components/request-actions";
 
@@ -17,16 +19,30 @@ export default async function TransferPage() {
   if (!can(session.user, "enrollments:create")) redirect("/dashboard");
   const canApprove = can(session.user, "enrollments:transfer");
 
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
-      ? session.user.centerId
-      : null;
+  // Cách ly cơ sở: Student ∈ SCOPED_MODELS → sdb.student auto-inject centerId IN visible.
+  // StudentTransferRequest KHÔNG ∈ SCOPED_MODELS (chỉ có fromCenterId/toCenterId, không
+  // có centerId trực tiếp) → scope THỦ CÔNG qua from/toCenterId theo tầm nhìn cơ sở của
+  // actor (cùng tầm nhìn model Student). Center = bảng tổ chức (không scoped) → giữ toàn
+  // bộ cơ sở active làm danh sách đích chuyển cơ sở.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleCenters = getModelVisibleCenterIds("Student", actor);
+
+  const requestWhere: Prisma.StudentTransferRequestWhereInput = {
+    status: { in: ["PENDING", "WAITLISTED"] },
+  };
+  if (visibleCenters !== "ALL") {
+    // Ngoài tầm nhìn (mảng rỗng) → `in: []` khớp 0 dòng = fail-safe, không lộ cơ sở khác.
+    requestWhere.OR = [
+      { fromCenterId: { in: visibleCenters } },
+      { toCenterId: { in: visibleCenters } },
+    ];
+  }
 
   const [students, centers, requests] = await Promise.all([
-    db.student.findMany({
+    sdb.student.findMany({
       where: {
         deletedAt: null,
-        ...(centerScope ? { centerId: centerScope } : {}),
         enrollments: { some: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } } },
       },
       orderBy: { name: "asc" },
@@ -41,12 +57,9 @@ export default async function TransferPage() {
         },
       },
     }),
-    db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
-    db.studentTransferRequest.findMany({
-      where: {
-        status: { in: ["PENDING", "WAITLISTED"] },
-        ...(centerScope ? { OR: [{ fromCenterId: centerScope }, { toCenterId: centerScope }] } : {}),
-      },
+    sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
+    sdb.studentTransferRequest.findMany({
+      where: requestWhere,
       orderBy: { createdAt: "desc" },
       take: 100,
       select: {

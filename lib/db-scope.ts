@@ -31,6 +31,7 @@ export const SCOPE_EXEMPT = new Set<string>([
   "SataCoinRule", // config, centerId null = áp mọi cơ sở
   "FacebookPageMapping", // mapping Page→center (cấu hình hạ tầng, không phải dữ liệu nghiệp vụ)
   "WorkShiftConfig", // R6-B2 — cấu hình ca per-center, centerId null = mặc định toàn hệ thống
+  "RevenueTarget", // LMS-16 — KPI doanh thu, centerId null = mục tiêu toàn hệ thống; scope tay qua getRevenueTargets
   // R7-15/R7-16 (tech-debt — xem db-import-allowlist): ReportCard/EvaluationRound dùng
   // bare db + manual scope-check (ownership/center) trong lib/lms/* + lib/eval/*. CHƯA
   // auto-scope: ReportCard.centerId nullable, EvaluationRound có round TEACHER_EVAL

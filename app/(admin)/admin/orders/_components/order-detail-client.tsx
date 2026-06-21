@@ -82,17 +82,29 @@ export function OrderDetailClient({
 
   const nextOptions = NEXT_STATUSES[order.status];
 
+  // FIX-H9 — updatedAt client đã thấy; gửi kèm mọi lần ghi để phát hiện sửa đồng thời.
+  const seenUpdatedAt = new Date(order.updatedAt).toISOString();
+
+  function handleStale() {
+    toast.error("Người khác vừa sửa đơn này. Đang tải lại…");
+    setStatusModalOpen(false);
+    setTimeout(() => window.location.reload(), 800);
+  }
+
   function handleStatusChange() {
     if (!newStatus) return;
     startTransition(async () => {
-      const result = await changeOrderStatusAction(order.id, {
-        toStatus: newStatus,
-        reason,
-      });
+      const result = await changeOrderStatusAction(
+        order.id,
+        { toStatus: newStatus, reason },
+        seenUpdatedAt,
+      );
       if (result.ok) {
         toast.success("Đã đổi trạng thái");
         setStatusModalOpen(false);
         window.location.reload();
+      } else if (result.error === "STALE_WRITE") {
+        handleStale();
       } else {
         toast.error(result.error);
       }
@@ -101,9 +113,17 @@ export function OrderDetailClient({
 
   function handleSaveNote() {
     startTransition(async () => {
-      const result = await updateOrderNoteAction(order.id, internalNote);
-      if (result.ok) toast.success("Đã lưu ghi chú");
-      else toast.error(result.error);
+      const result = await updateOrderNoteAction(
+        order.id,
+        internalNote,
+        seenUpdatedAt,
+      );
+      if (result.ok) {
+        toast.success("Đã lưu ghi chú");
+        window.location.reload();
+      } else if (result.error === "STALE_WRITE") {
+        handleStale();
+      } else toast.error(result.error);
     });
   }
 

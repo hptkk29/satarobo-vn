@@ -12,10 +12,21 @@ import {
   setFormStatus,
   cloneForm,
 } from "@/lib/eval/forms";
-import { roundInputSchema, createRound, setRoundStatus } from "@/lib/eval/rounds";
+import { roundInputSchema, createRound, setRoundStatus, getRound } from "@/lib/eval/rounds";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { z } from "zod";
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
+
+// Cách ly cơ sở cho EvaluationRound (SCOPE_EXEMPT — scopedDb pass-through, nên
+// scope THỦ CÔNG ở đây). Đợt gắn cơ sở (CENTER_SURVEY, hoặc TEACHER_EVAL có centerId)
+// → center-level chỉ thao tác trong tầm nhìn của mình. Đợt toàn hệ thống (centerId
+// null) → chỉ SUPER_ADMIN/HO. setRoundStatus/createRound trong lib KHÔNG ép center.
+function roundCenterInScope(actor: Actor, centerId: string | null): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  if (!centerId) return false;
+  return actor.visibleCenterIds.includes(centerId);
+}
 
 async function gate(): Promise<{ ok: true; userId: string; name: string } | { ok: false; error: string }> {
   const session = await auth();
@@ -111,6 +122,13 @@ export async function createRoundAction(input: unknown): Promise<Result<{ id: st
   const parsed = roundInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
 
+  // Cách ly cơ sở: center-level chỉ tạo đợt cho cơ sở trong tầm nhìn (đợt toàn hệ
+  // thống centerId=null → SUPER_ADMIN/HO).
+  const actor = await resolveActor(g.userId);
+  if (!roundCenterInScope(actor, parsed.data.centerId?.trim() || null)) {
+    return { ok: false, error: "Không có quyền tạo đợt cho cơ sở này" };
+  }
+
   const round = await createRound(parsed.data);
   await writeAudit({
     actor: { id: g.userId, name: g.name },
@@ -131,6 +149,14 @@ export async function setRoundStatusAction(
   const g = await gate();
   if (!g.ok) return g;
   if (!["DRAFT", "OPEN", "CLOSED"].includes(status)) return { ok: false, error: "Trạng thái không hợp lệ" };
+
+  // Cách ly cơ sở: đổi trạng thái đợt gắn cơ sở chỉ khi cơ sở thuộc tầm nhìn actor.
+  const round = await getRound(roundId);
+  if (!round) return { ok: false, error: "Không tìm thấy đợt đánh giá" };
+  const actor = await resolveActor(g.userId);
+  if (!roundCenterInScope(actor, round.centerId)) {
+    return { ok: false, error: "Không có quyền đổi trạng thái đợt của cơ sở này" };
+  }
 
   await setRoundStatus(roundId, status);
   await writeAudit({

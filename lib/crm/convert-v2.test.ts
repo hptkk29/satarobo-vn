@@ -9,8 +9,8 @@ import {
   STUDENT_CODE_V2_CHARSET,
 } from "@/lib/codegen";
 
-describe("[R7-05] evaluatePaymentGuard (AC1/C1/C3)", () => {
-  it("có khoản ghi nhận → pass (không scholarship)", () => {
+describe("[R7-05] evaluatePaymentGuard (AC1/C1/C3 — R7-05-C2)", () => {
+  it("có khoản Sale ghi nhận (RECORDED) → pass (không scholarship; KT chưa confirm vẫn pass)", () => {
     expect(evaluatePaymentGuard({ hasRecordedPayment: true, totalFinalPrice: 9_000_000 })).toEqual({
       ok: true,
       scholarshipFull: false,
@@ -22,7 +22,7 @@ describe("[R7-05] evaluatePaymentGuard (AC1/C1/C3)", () => {
       scholarshipFull: true,
     });
   });
-  it("0 khoản + finalPrice>0 → PAYMENT_REQUIRED", () => {
+  it("0 khoản RECORDED + finalPrice>0 → PAYMENT_REQUIRED", () => {
     expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 9_000_000 }).ok).toBe(false);
   });
 });

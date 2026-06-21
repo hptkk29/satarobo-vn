@@ -1,7 +1,8 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { db } from '@/lib/db'
 import { can } from '@/lib/auth/permissions'
+import { scopedDb } from '@/lib/db-scope'
+import { resolveActor } from '@/lib/auth/actor'
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Lead mới',
@@ -45,6 +46,11 @@ export default async function MarketingPage() {
   if (!session?.user) redirect('/login')
   if (!can(session.user, 'leads:view-all')) redirect('/dashboard')
 
+  // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → scopedDb auto-inject centerId IN visible
+  // cho count/groupBy. CENTER_MANAGER@CS1 chỉ thấy lead CS1; SUPER_ADMIN/HO = ALL.
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
+
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
@@ -53,28 +59,28 @@ export default async function MarketingPage() {
     leadsByStatus,
     recentTrend,
   ] = await Promise.all([
-    db.lead.count({ where: { deletedAt: null } }).catch(() => 0),
-    db.lead.groupBy({
+    sdb.lead.count({ where: { deletedAt: null } }).catch(() => 0),
+    sdb.lead.groupBy({
       by: ['status'],
       where: { deletedAt: null },
       _count: { _all: true },
     }).catch(() => []),
-    db.lead.count({ where: { deletedAt: null, createdAt: { gte: thirtyDaysAgo } } }).catch(() => 0),
+    sdb.lead.count({ where: { deletedAt: null, createdAt: { gte: thirtyDaysAgo } } }).catch(() => 0),
   ])
 
   // groupBy source — order client-side to avoid Prisma typing issue
   const [rawSource, rawUtmSource, rawUtmCampaign] = await Promise.all([
-    db.lead.groupBy({
+    sdb.lead.groupBy({
       by: ['source'],
       where: { deletedAt: null, source: { not: null } },
       _count: { _all: true },
     }).catch(() => []),
-    db.lead.groupBy({
+    sdb.lead.groupBy({
       by: ['utmSource'],
       where: { deletedAt: null, utmSource: { not: null } },
       _count: { _all: true },
     }).catch(() => []),
-    db.lead.groupBy({
+    sdb.lead.groupBy({
       by: ['utmCampaign'],
       where: { deletedAt: null, utmCampaign: { not: null } },
       _count: { _all: true },

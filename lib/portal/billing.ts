@@ -156,6 +156,12 @@ export type EnrollmentBillingRow = {
   confirmedPaid: number;
   /** finalPrice − confirmedPaid; có thể âm (đóng thừa). */
   outstanding: number;
+  /**
+   * D5/G.6 — chỉ dấu TRẠNG THÁI (KHÔNG lộ số tiền, giữ AC1): số khoản đang chờ kế
+   * toán xác nhận / số khoản bị từ chối, để PH biết có hoạt động đang xử lý.
+   */
+  pendingCount: number;
+  rejectedCount: number;
 };
 
 export type ParentBilling = {
@@ -163,6 +169,8 @@ export type ParentBilling = {
   /** Lịch sử biên lai đã được kế toán xác nhận. */
   receipts: ConfirmedPaymentRow[];
   totals: { tuition: number; paid: number; outstanding: number };
+  /** D5/G.6 — tổng chỉ dấu trạng thái (không kèm số tiền). */
+  flags: { pendingCount: number; rejectedCount: number };
 };
 
 /**
@@ -175,6 +183,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
     enrollments: [],
     receipts: [],
     totals: { tuition: 0, paid: 0, outstanding: 0 },
+    flags: { pendingCount: 0, rejectedCount: 0 },
   };
   const childIds = await resolveChildIds(db, parentUserId);
   if (childIds.length === 0) return empty;
@@ -188,7 +197,9 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
       tuition: true,
       student: { select: { name: true } },
       class: { select: { name: true } },
-      payments: { where: { accountantStatus: "CONFIRMED" }, select: { amount: true } },
+      // CHỈ lấy số tiền của khoản CONFIRMED; PENDING/REJECTED chỉ lấy trạng thái để
+      // ĐẾM (không kèm amount) — giữ AC1: không lộ số tiền khoản chưa xác nhận cho PH.
+      payments: { select: { accountantStatus: true, amount: true } },
     },
     orderBy: { enrolledAt: "desc" },
     take: 100,
@@ -196,7 +207,11 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
 
   const rows: EnrollmentBillingRow[] = enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const confirmedPaid = e.payments.reduce((s, p) => s + p.amount, 0);
+    const confirmedPaid = e.payments
+      .filter((p) => p.accountantStatus === "CONFIRMED")
+      .reduce((s, p) => s + p.amount, 0);
+    const pendingCount = e.payments.filter((p) => p.accountantStatus === "PENDING").length;
+    const rejectedCount = e.payments.filter((p) => p.accountantStatus === "REJECTED").length;
     return {
       enrollmentId: e.id,
       status: e.status,
@@ -205,6 +220,8 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
       finalPrice,
       confirmedPaid,
       outstanding: finalPrice - confirmedPaid,
+      pendingCount,
+      rejectedCount,
     };
   });
 
@@ -220,5 +237,14 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
     { tuition: 0, paid: 0, outstanding: 0 },
   );
 
-  return { enrollments: rows, receipts, totals };
+  const flags = rows.reduce(
+    (acc, r) => {
+      acc.pendingCount += r.pendingCount;
+      acc.rejectedCount += r.rejectedCount;
+      return acc;
+    },
+    { pendingCount: 0, rejectedCount: 0 },
+  );
+
+  return { enrollments: rows, receipts, totals, flags };
 }

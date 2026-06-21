@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, DoorOpen, FileSpreadsheet, Pencil } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma, RoomStatus } from "@prisma/client";
 import { StatusBadge } from "./_components/status-badge";
 
@@ -20,6 +23,14 @@ const STATUS_FILTERS: { value: string; label: string }[] = [
 const VALID_STATUSES = new Set<RoomStatus>(["ACTIVE", "MAINTENANCE", "INACTIVE"]);
 
 export default async function RoomsAdminPage({ searchParams }: SearchParams) {
+  // Cách ly cơ sở: Room ∈ SCOPED_MODELS → sdb.room tự inject `centerId IN visible`.
+  // CENTER_MANAGER@CS1 không thấy phòng CS2 (kể cả khi tự set centerId=CS2 → giao tập
+  // rỗng). SUPER_ADMIN/HO bypass (ALL). Center không scoped → sdb.center = db.center.
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const centerFilter = sp.centerId?.trim() ?? "";
@@ -38,7 +49,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
   }
 
   const [rooms, centers] = await Promise.all([
-    db.room.findMany({
+    sdb.room.findMany({
       where,
       orderBy: [
         { status: "asc" },
@@ -58,7 +69,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
         center: { select: { id: true, name: true } },
       },
     }),
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true },
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },

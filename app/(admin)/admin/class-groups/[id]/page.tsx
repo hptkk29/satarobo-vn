@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 import { GroupMembers } from "../_components/group-members";
 import { GroupEnrollPanel } from "../_components/group-enroll-panel";
 
@@ -41,8 +42,13 @@ export default async function ClassGroupDetailPage({ params }: Props) {
   }
   const canManage = can(session.user, "class_group:edit");
 
+  // Cách ly cơ sở: ClassGroup ∈ SCOPED_MODELS → sdb.classGroup.findFirst auto-inject
+  // centerId IN tầm-nhìn. Nhóm thuộc cơ sở khác → group = null → notFound (chống IDOR).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const { id } = await params;
-  const group = await db.classGroup.findFirst({
+  const group = await sdb.classGroup.findFirst({
     where: { id, deletedAt: null },
     include: {
       center: { select: { name: true, code: true } },

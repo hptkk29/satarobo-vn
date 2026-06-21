@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { LeadForm } from "../../_components/lead-form";
@@ -21,8 +22,12 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
 
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
+  // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → sdb.lead tự inject `centerId IN visible`.
+  // CENTER_MANAGER@CS1 sửa lead CS2 → findFirst trả null → notFound() (chống IDOR).
+  // SUPER_ADMIN/HO bypass (ALL). Course không scoped → giữ db.
+  const sdb = scopedDb(actor);
   const [lead, orgUnits, courses] = await Promise.all([
-    db.lead.findFirst({
+    sdb.lead.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true,

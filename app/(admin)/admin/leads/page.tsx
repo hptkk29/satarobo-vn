@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { db } from '@/lib/db'
+import { scopedDb } from '@/lib/db-scope'
+import { resolveActor } from '@/lib/auth/actor'
 import { can, hasRole } from '@/lib/auth/permissions'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
@@ -46,6 +47,12 @@ export default async function LeadsPage({
 
   // SALES_CSM (chỉ view-own) → scope về lead của chính mình.
   const scopeToSelf = !canViewAll && canViewOwn
+
+  // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → sdb.lead tự inject `centerId IN visible`.
+  // CENTER_MANAGER@CS1 không thấy lead CS2 (kể cả khi tự set filterCenter=CS2 → giao
+  // tập rỗng). SUPER_ADMIN/HO bypass (ALL). Center/User không scoped — sdb = db.
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
 
   const params = await searchParams
   const view = params.view === 'kanban' ? 'kanban' : 'table'
@@ -101,12 +108,12 @@ export default async function LeadsPage({
   // Filter dropdown data (chỉ cần cho role view-all).
   const [centers, sales] = canViewAll
     ? await Promise.all([
-        db.center.findMany({
+        sdb.center.findMany({
           where: { isActive: true },
           select: { id: true, name: true },
           orderBy: { displayOrder: 'asc' },
         }),
-        db.user.findMany({
+        sdb.user.findMany({
           where: { isActive: true, deletedAt: null, roles: { has: 'SALES_CSM' } },
           select: { id: true, name: true },
           orderBy: { name: 'asc' },
@@ -116,7 +123,7 @@ export default async function LeadsPage({
 
   if (view === 'kanban') {
     const nowTs = new Date()
-    const rawLeads = await db.lead.findMany({
+    const rawLeads = await sdb.lead.findMany({
       where,
       include: {
         course: { select: { name: true } },
@@ -168,7 +175,7 @@ export default async function LeadsPage({
 
   // ── Table view ──
   const [rawLeads, total] = await Promise.all([
-    db.lead.findMany({
+    sdb.lead.findMany({
       where,
       include: {
         center: { select: { name: true } },
@@ -179,7 +186,7 @@ export default async function LeadsPage({
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
-    db.lead.count({ where }),
+    sdb.lead.count({ where }),
   ])
 
   const canUpdate = can(session.user, 'leads:edit')
