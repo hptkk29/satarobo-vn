@@ -141,7 +141,54 @@ Push fast-forward `f479dae..97580bb`; local ↔ `origin/FixLMS` đồng bộ (0/
 
 ## 8. Việc còn lại / khuyến nghị (không chặn push)
 
-1. **Soi mắt người:** `/admin/bao-cao/*` (multi-agent đánh giá HO-global → xác nhận CENTER_MANAGER không thấy số liệu cơ sở khác); `room-form` submit; paste/drag ảnh news editor.
-2. **Audit `_actions.ts` (mutation)** cho cách ly cơ sở — phiên này mới audit `page.tsx` (đọc). Mutation nên kiểm `assertCan` + scope/ownership.
-3. **Gap #1 (chưa quyết):** convert-v2 chưa có UI tạo Order gắn `leadId` trước convert (`order-create-form` set cứng `leadId:null`).
-4. **DEFERRED:** K SCORM (P3); 2-phase 2-model center (Center cũ ↔ OrgUnit) gây receipt prefix `SR`.
+1. **Soi mắt người:** `/admin/bao-cao/*` (multi-agent đánh giá HO-global → xác nhận CENTER_MANAGER không thấy số liệu cơ sở khác); `room-form` submit; paste/drag ảnh news editor. *(còn TODO — chưa đụng phiên 2026-06-21)*
+2. ✅ **Audit `_actions.ts` (mutation)** cho cách ly cơ sở — **đã chẩn đoán + fix 21 file (chưa commit)** ở phiên follow-up. Phát hiện cốt lõi: `scopedDb` không scope `update/delete/create`. → xem **§9 (WS-A)**. Còn **10 mục NEEDS-HUMAN** (lib-service / by-design) → backlog mới §9.6.
+3. **Gap #1 (chưa quyết):** convert-v2 chưa có UI tạo Order gắn `leadId` trước convert (`order-create-form` set cứng `leadId:null`). *(còn TODO — phiên 2026-06-21 không xử lý)*
+4. ✅ **DEFERRED — đã chẩn đoán** ở phiên follow-up: **K SCORM** = 2 rào hạ tầng (R2 CORS + dispatcher local), không phải bug code → **§9 (WS-C)**; receipt prefix `SR` = **bug thật, đã fix (chưa commit)** → **§9 (WS-B)**.
+
+---
+
+## 9. Phiên follow-up 2026-06-21 — 5 workstream (CHƯA commit/push)
+
+> **Ngày:** 2026-06-21 · **Thực hiện:** Claude Code (5 agent song song WS-A…WS-E). Đào sâu các mục §8 còn lại sau khi batch isolation `page.tsx` đã push phiên trước.
+> 🔴 **Trạng thái chốt:** **TẤT CẢ thay đổi code phiên này CHƯA commit, CHƯA push, `pnpm build` đang verify.** Chưa GO — chờ verify build + user duyệt. Tip `97580bb` (§6) là của phiên TRƯỚC, KHÔNG bao gồm thay đổi phiên này. Bản ghi thao tác chi tiết: [`R7-LMS-test-session-record.md`](R7-LMS-test-session-record.md) §10.
+
+### 9.1 WS-A — Audit MUTATION (`_actions.ts`) cách ly cơ sở — ✅ đã fix (chưa commit)
+
+**Phát hiện cốt lõi:** `scopedDb(actor)` **chỉ auto-scope READ** (`findMany`/`findUnique`), **KHÔNG scope `update`/`delete`/`create`/`updateMany`**. Mọi `db.<scopedModel>.update/delete({ where:{ id } })` theo id client = ghi cross-center chưa chặn (CS1 sửa/xoá record CS2). §9 phiên trước chỉ audit READ (`page.tsx`); đây là tầng GHI.
+
+- **Quy mô:** quét **77 file** server-action `app/(admin)/**` → **fix 21 file**. Pattern: load `centerId` row qua scoped read + `passesScope("Model", row, actor)` (model SCOPED trực tiếp) hoặc `canManageClass`/`passesScope("Class"|"Student", { centerId }, actor)` (scope qua quan hệ) **trước khi ghi**. SUPER_ADMIN/HO giữ full access.
+- **21 file:** khao-sat, notifications, rooms, holidays, canh-bao-rui-ro, satacoin, leads, trials, students, class-groups, classes, enrollments, sessions, assignments, exams, media, parent-requests, parent-feedback, nhan-su + **2 RBAC gap**: `crm/messenger/actions.ts` (`replyAction` trước **không có gate** → thêm `can(…, "leads:edit")`), `crm/commission/actions.ts` (`reopenStatementAction` thiếu `can()` → thêm `can(…, "payments:manage")`).
+- **Verify:** typecheck PASS · lint PASS (1 warning pre-existing `class-form.tsx`). **Chưa build, chưa commit.**
+
+### 9.2 WS-B — Receipt prefix `SR` → ✅ BUG THẬT, đã fix (chưa commit)
+
+- **Root cause:** `lib/finance/payment.ts` `centerCodeOf` tra `orgUnit.findUnique({ where:{ id: centerId } })` nhưng `centerId` = `Payment.centerId` = `Center.id` (model cũ) **≠ `OrgUnit.id`** → null → fallback `"SR"`. (Gốc của FLAG "2 model center" §3.3 / receipt `RCP-SR-26-0001`.)
+- **Fix:** `findUnique({ where:{ centerId }, select:{ code:true } })` dùng `OrgUnit.centerId @unique` → `RCP-CS2-26-0001`. Không đổi schema/migration; chỉ ảnh hưởng receipt MỚI (counter key tách `receipt:CS2:YY`); giữ fallback SR. typecheck + lint PASS. **Chưa commit.**
+- **Khuyến nghị:** seed-check `OrgUnit.centerId` khi mở cơ sở mới.
+
+### 9.3 WS-C — SCORM upload: không phải bug code, 2 rào hạ tầng/vận hành
+
+- **Luồng:** client presigned PUT (`scorm/_actions.ts createScormPackage`) → browser XHR PUT trực tiếp R2 → `confirmUpload` publish DomainEvent `scorm.uploaded` → dispatcher `onScormUploaded` (`lib/events/handlers/scorm-ingest.ts`) JSZip giải nén → R2.
+- **Root cause xếp hạng:** **(b) R2 thiếu CORS cho browser PUT** — rào 1, khả dĩ nhất (đường browser→R2 trực tiếp DUY NHẤT; upload ảnh khác đi server-proxy nên bucket chưa từng có CORS; preflight fail → "Lỗi mạng khi upload"). **(c) Dispatcher không chạy local** — rào 2 (chỉ qua Vercel Cron `/api/cron/dispatch-events`; local phải curl thủ công Bearer `CRON_SECRET`; prod tự chạy mỗi phút). (a) thiếu file zip = tiền đề, không phải bug.
+- Đã tạo `scripts/r2-cors.json` (mẫu CORS, origins `localhost:3000` + `admin.satarobo.vn`) — **CHƯA apply** (thủ công qua `aws s3api put-bucket-cors` / CF dashboard). Dead code: `app/api/admin/scorm/{presign,confirm}/route.ts` (client không gọi + lệch field) → dọn sau.
+- **Kết luận:** SCORM **chạy được trên prod**; chỉ kẹt dev local.
+
+### 9.4 WS-D — C.4 / C.5: by-design, không phải bug
+
+- **C.5** (form buổi thiếu GV/phòng): by-design — GV/phòng kế thừa từ Class (override `actualTeacherId`/Room + `substitute*`); form buổi lẻ chỉ nhận `classId`/`date`/`topic`/`lesson`/`notes`. Conflict detection ở **luồng lớp**: `lib/classes/adjust.ts → detectSessionConflicts`; `lib/classes/generate.ts → detectBatchConflicts`. Tech-debt track: cột `ClassSession.roomId` (`LMS-problems-fix-plan.md:68`).
+- **C.4** (capacity học bù): logic ĐÃ đúng ở `lib/makeup/service.ts` (`suggest` lọc buổi đầy :170-171; `scheduleMakeup` re-check FULL trong transaction :247-249). Chỉ thiếu **dữ liệu seed** buổi đích đầy để chạm nhánh FULL.
+- **Đề xuất:** 2 e2e test (conflict luồng lớp; makeup FULL branch). **Không sửa code.**
+
+### 9.5 WS-E — Dọn data test — ✅ xong
+
+- DRY-RUN → XOÁ → VERIFY. Xoá: 4 User test + 2 UserOrgRole + Lead/2 LeadChild + 2 Student + 2 Enrollment + Class `CS2.SATA1.26.001` + Session/Attendance/MakeupNeed + Order `ORD-TEST`/5 Payment/Receipt `RCP-SR-26-0001` + ReportCard/3 Score/3 Criterion + 1 DomainEvent.
+- **Verify:** 10/10 nhóm marker = 0. **GIỮ 11 RoleDef** (RBAC v2). Đối chứng data thật: User 25→21, Student 8→6, Lead 37→36, Order 3→2, Class 9→8.
+- `.env.local SCORM_ENABLED="true"` **GIỮ NGUYÊN** (chờ user quyết). `scripts/cleanup-test-data.ts` untracked, **chưa `git add`**.
+
+### 9.6 Backlog mới phát sinh
+
+1. **Audit mutation NEEDS-HUMAN (10 mục)** — cần xác nhận nội bộ lib-service hoặc cross-center by-design: `ban-giao-lead`(lib/lead-handover), `chuyen-lop`(lib/transfer), `hoc-bu`(completeMakeup/cancelMakeup không truyền actor→lib/makeup), `hoan-thanh-khoa`(markCourseCompletion single chưa scope), `leads`(closeLeadAsEnrolled/transferLead chỉ guard assignedToId), `inventory`(audit/items/movements theo centerId client; recordTransfer cross-center by-design), `cham-cong`(checklist-co-so/duyet-ca chỉ giới hạn CENTER_MANAGER), 🔴 `centers/_actions.ts`(CENTER_MANAGER sửa/xoá Center bất kỳ qua id — governance gap, nên SUPER_ADMIN-only), `convert-conflicts`(student.updateMany theo parentId), `evaluations`(lib/eval/rounds, EvaluationRound SCOPE_EXEMPT).
+2. **Audit `_actions.ts` cho lib-service layer** — các action ủy thác xuống `lib/*` chưa truyền `actor`/chưa scope; cần kiểm tầng service (ngoài tầng action) để bịt cross-center.
+3. **Apply CORS R2** (`scripts/r2-cors.json`) cho SCORM dev local + dọn dead route `api/admin/scorm/{presign,confirm}`.
+4. **2 e2e test** WS-D (conflict luồng lớp; makeup FULL branch).
