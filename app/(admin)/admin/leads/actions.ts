@@ -968,7 +968,12 @@ export async function updateLeadFields(
       note: true,
     },
   })
-  if (!before) return { ok: false, error: 'Lead không tồn tại' }
+  // Cách ly cơ sở (chống IDOR ghi): Lead phải thuộc tầm nhìn cơ sở actor —
+  // đồng bộ với updateLeadStatus/updateLeadNote/deleteLead.
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
 
   // Đổi SĐT → kiểm tra trùng.
   if (d.phone && d.phone !== before.phone) {

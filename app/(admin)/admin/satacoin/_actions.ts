@@ -8,8 +8,12 @@ import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { logStudentAudit, getAuditActor } from "@/lib/audit/log";
 import { recordTransaction, reverseTransaction } from "@/lib/satacoin/service";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 
 // C4 — SataCoin admin. Gate satacoin:manage.
+// Cách ly cơ sở: SataCoinTransaction ∈ SCOPED_MODELS (theo HV); grant/reverse phải
+// xác minh HV/giao dịch thuộc tầm nhìn cơ sở của actor trước khi ghi (chống IDOR).
 
 function gate(session: Session | null) {
   if (!session?.user) return "Chưa đăng nhập";
@@ -68,6 +72,14 @@ export async function grantCoins(input: unknown): Promise<{ ok: boolean; error?:
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   const d = parsed.data;
 
+  // Cách ly cơ sở: HV phải thuộc tầm nhìn cơ sở của actor (chống cấp coin HV cơ sở khác).
+  const scopeActor = await resolveActor(session!.user.id);
+  const sdb = scopedDb(scopeActor);
+  const student = await sdb.student.findUnique({ where: { id: d.studentId }, select: { centerId: true } });
+  if (!student || !passesScope("Student", student, scopeActor)) {
+    return { ok: false, error: "Không tìm thấy học viên" };
+  }
+
   const res = await recordTransaction({
     studentId: d.studentId,
     amount: d.amount,
@@ -96,6 +108,14 @@ export async function reverseCoinTx(txId: string, studentId: string): Promise<{ 
   const session = await auth();
   const err = gate(session);
   if (err) return { ok: false, error: err };
+
+  // Cách ly cơ sở: giao dịch gốc phải thuộc tầm nhìn cơ sở của actor (chống IDOR đảo).
+  const scopeActor = await resolveActor(session!.user.id);
+  const sdb = scopedDb(scopeActor);
+  const tx = await sdb.sataCoinTransaction.findUnique({ where: { id: txId }, select: { centerId: true } });
+  if (!tx || !passesScope("SataCoinTransaction", tx, scopeActor)) {
+    return { ok: false, error: "Không tìm thấy giao dịch" };
+  }
 
   const res = await reverseTransaction(txId, session!.user.id, null);
   if (!res.ok) return { ok: false, error: res.error };

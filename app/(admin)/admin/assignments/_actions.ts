@@ -34,6 +34,28 @@ async function requireRole(): Promise<
   return { ok: true, userId: session.user.id ?? "" };
 }
 
+// Cách ly cơ sở (chống IDOR ghi): Assignment relation-scoped qua class.centerId.
+// Mutation theo assignmentId/classId từ client phải qua canManageClass (passesScope
+// "Class" + ownership GV/quản lý) trước khi ghi.
+async function classInScope(userId: string, classId: string): Promise<boolean> {
+  if (!userId) return false;
+  const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
+  if (!cls) return false;
+  const actor = await resolveActor(userId);
+  return canManageClass(actor, classId, cls.centerId);
+}
+/** Bài tập `assignmentId` có thuộc lớp actor được quản lý không. */
+async function assignmentInScope(userId: string, assignmentId: string): Promise<boolean> {
+  if (!userId) return false;
+  const a = await db.assignment.findUnique({
+    where: { id: assignmentId },
+    select: { classId: true, class: { select: { centerId: true } } },
+  });
+  if (!a) return false;
+  const actor = await resolveActor(userId);
+  return canManageClass(actor, a.classId, a.class?.centerId ?? null);
+}
+
 async function resolveEmployeeId(userId: string): Promise<string | null> {
   if (!userId) return null;
   try {
@@ -62,6 +84,11 @@ export async function createAssignment(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
   const data = parsed.data;
+
+  // Cách ly cơ sở: chỉ tạo bài tập cho lớp actor được quản lý.
+  if (!(await classInScope(gate.userId, data.classId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp này" };
+  }
 
   const createdById = await resolveEmployeeId(gate.userId);
 
@@ -98,6 +125,14 @@ export async function updateAssignment(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  // Cách ly cơ sở: bài tập HIỆN TẠI + lớp ĐÍCH (nếu đổi) đều phải actor quản lý.
+  if (!(await assignmentInScope(gate.userId, id))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
+  if (!(await classInScope(gate.userId, parsed.data.classId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp này" };
+  }
+
   try {
     await db.assignment.update({ where: { id }, data: parsed.data });
   } catch (err) {
@@ -114,6 +149,11 @@ export async function updateAssignment(
 export async function deleteAssignment(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
+
+  // Cách ly cơ sở: chỉ xoá bài tập của lớp actor được quản lý (chống IDOR).
+  if (!(await assignmentInScope(gate.userId, id))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
 
   const submitted = await db.assignmentSubmission.count({
     where: {
@@ -170,6 +210,11 @@ export async function attachDocument(
   if (!parsed.success) return { ok: false, error: "Tham số không hợp lệ" };
   const { assignmentId, documentId } = parsed.data;
 
+  // Cách ly cơ sở: chỉ đính kèm tài liệu cho bài tập của lớp actor quản lý.
+  if (!(await assignmentInScope(gate.userId, assignmentId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
+
   const existing = await db.assignmentDocument.findUnique({
     where: { assignmentId_documentId: { assignmentId, documentId } },
     select: { id: true },
@@ -199,6 +244,10 @@ export async function detachDocument(
     select: { assignmentId: true },
   });
   if (!ad) return { ok: false, error: "Không tìm thấy bản ghi" };
+  // Cách ly cơ sở: chỉ gỡ tài liệu khỏi bài tập của lớp actor quản lý.
+  if (!(await assignmentInScope(gate.userId, ad.assignmentId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
 
   try {
     await db.assignmentDocument.delete({ where: { id: assignmentDocumentId } });
@@ -227,6 +276,10 @@ export async function publishAssignment(
     select: { id: true, classId: true, status: true },
   });
   if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
+  // Cách ly cơ sở: chỉ publish bài tập của lớp actor được quản lý (chống IDOR).
+  if (!(await classInScope(gate.userId, assignment.classId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
   if (assignment.status !== "DRAFT") {
     return {
       ok: false,
@@ -294,6 +347,11 @@ export async function changeAssignmentStatus(
   const parsed = ChangeStatusSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Tham số không hợp lệ" };
 
+  // Cách ly cơ sở: chỉ đổi trạng thái bài tập của lớp actor được quản lý.
+  if (!(await assignmentInScope(gate.userId, parsed.data.assignmentId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
+
   try {
     await db.assignment.update({
       where: { id: parsed.data.assignmentId },
@@ -343,9 +401,24 @@ export async function recordSubmission(
 
   const submission = await db.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
-    include: { assignment: { select: { dueAt: true } } },
+    include: {
+      assignment: {
+        select: { dueAt: true, classId: true, class: { select: { centerId: true } } },
+      },
+    },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  // Cách ly cơ sở: chỉ ghi nhận bài nộp cho lớp actor được quản lý (chống IDOR).
+  const actor = await resolveActor(gate.userId);
+  if (
+    !canManageClass(
+      actor,
+      submission.assignment.classId,
+      submission.assignment.class?.centerId ?? null,
+    )
+  ) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
 
   const now = new Date();
   const isLate =
@@ -575,6 +648,10 @@ export async function addAssignmentQuestion(
     select: { id: true },
   });
   if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
+  // Cách ly cơ sở: chỉ thêm câu hỏi vào bài tập của lớp actor được quản lý.
+  if (!(await assignmentInScope(gate.userId, data.assignmentId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
 
   const authorEmployeeId = await resolveEmployeeId(gate.userId);
   const useChoices = data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE";
@@ -634,6 +711,10 @@ export async function updateAssignmentQuestion(
   if (!current.assignmentId) {
     return { ok: false, error: "Câu hỏi này không thuộc bài tập nào" };
   }
+  // Cách ly cơ sở: chỉ sửa câu hỏi của bài tập thuộc lớp actor được quản lý.
+  if (!(await assignmentInScope(gate.userId, current.assignmentId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
 
   const useChoices = data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE";
   const choices = buildChoices(data.type, data.choices);
@@ -675,6 +756,10 @@ export async function deleteAssignmentQuestion(id: string): Promise<Result> {
     select: { assignmentId: true },
   });
   if (!current) return { ok: false, error: "Không tìm thấy câu hỏi" };
+  // Cách ly cơ sở: câu hỏi thuộc bài tập → chỉ xoá nếu actor quản lý lớp đó.
+  if (current.assignmentId && !(await assignmentInScope(gate.userId, current.assignmentId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của bài tập này" };
+  }
 
   try {
     // Choice cascades via onDelete: Cascade.

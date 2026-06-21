@@ -21,8 +21,22 @@ import { createSessionPlansForClass } from "@/lib/classes/snapshot";
 import { publishEvent } from "@/lib/events/publish";
 import { suggestEnrollmentRefund, type RefundSuggestion } from "@/lib/finance/refund";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { passesScope } from "@/lib/db-scope";
 
 type ActionResult = { error?: string };
+
+// Cách ly cơ sở (chống IDOR ghi): Class ∈ SCOPED_MODELS. Mutation theo classId từ
+// client phải xác minh lớp thuộc tầm nhìn cơ sở của actor trước khi ghi.
+function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  return centerId != null && actor.visibleCenterIds.includes(centerId);
+}
+/** Lớp `classId` có thuộc tầm nhìn cơ sở actor không (đọc centerId rồi passesScope). */
+async function classInScope(actor: Actor, classId: string): Promise<boolean> {
+  const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
+  return !!cls && passesScope("Class", cls, actor);
+}
 
 const ACTIVE_ENROLLMENT_FOR_CANCEL = [
   "PENDING",
@@ -209,6 +223,14 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
   const { centerId, orgUnitId } = await resolveClassOrg(data);
 
+  // Cách ly cơ sở: chỉ tạo lớp cho cơ sở trong tầm nhìn actor.
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, centerId)) {
+      return { error: "Không có quyền tạo lớp cho cơ sở này" };
+    }
+  }
+
   // R7-06 — CHẶN tạo/kích hoạt lớp khi khoá chưa có giáo trình ACTIVE.
   if (!(await courseHasActiveCurriculum(data.courseId))) {
     return {
@@ -338,6 +360,17 @@ export async function updateClass(
   // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
   const { centerId, orgUnitId } = await resolveClassOrg(parsed.data);
 
+  // Cách ly cơ sở: lớp HIỆN TẠI + cơ sở ĐÍCH (nếu đổi) đều phải trong tầm nhìn actor.
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: before.centerId }, actor)) {
+      return { error: "Không tìm thấy lớp" };
+    }
+    if (!actorCanUseCenter(actor, centerId)) {
+      return { error: "Không có quyền chuyển lớp sang cơ sở này" };
+    }
+  }
+
   try {
     await db.$transaction(async (tx) => {
       const updated = await tx.class.update({
@@ -377,6 +410,14 @@ export async function deleteClass(id: string): Promise<ActionResult> {
     select: CLASS_SNAPSHOT_SELECT,
   });
   if (!before) return { error: "Không thể xoá lớp này" };
+
+  // Cách ly cơ sở: chỉ xoá lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: before.centerId }, actor)) {
+      return { error: "Không thể xoá lớp này" };
+    }
+  }
 
   const { actorId, actorName } = getAuditActor(session);
 
@@ -424,6 +465,15 @@ export async function cancelClassAction(
     select: { id: true, name: true, status: true, centerId: true },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+
+  // Cách ly cơ sở: chỉ hủy lớp trong tầm nhìn actor (chống IDOR cascade liên cơ sở).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
+      return { ok: false, error: "Lớp không tồn tại" };
+    }
+  }
+
   if (cls.status === "CANCELLED") return { ok: false, error: "Lớp đã bị hủy trước đó" };
   if (cls.status === "COMPLETED") return { ok: false, error: "Lớp đã hoàn thành — không thể hủy" };
 
@@ -526,6 +576,15 @@ export async function submitClassForApproval(classId: string): Promise<WfResult>
     select: { status: true, centerId: true, _count: { select: { enrollments: true } } },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+
+  // Cách ly cơ sở: chỉ gửi duyệt lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
+      return { ok: false, error: "Lớp không tồn tại" };
+    }
+  }
+
   if (cls.status !== "PLANNED" && cls.status !== "RECRUITING") {
     return { ok: false, error: `Lớp đang ${cls.status}, không thể gửi duyệt` };
   }
@@ -597,6 +656,11 @@ export async function generateSessionsAction(classId: string): Promise<WfResult 
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  // Cách ly cơ sở: chỉ sinh buổi cho lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  }
   const res = await generateClassSessions(classId, { onlyIfEmpty: true });
   if (!res.ok) return { ok: false, error: res.error ?? "Không sinh được buổi học" };
   revalidatePath(`/classes/${classId}/edit`);
@@ -701,6 +765,11 @@ export async function applyClassReschedule(classId: string): Promise<WfResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  // Cách ly cơ sở: chỉ dời buổi cho lớp trong tầm nhìn actor (chống IDOR).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  }
   const res = await computeFutureReschedule(classId);
   if (!res.ok) return res;
 

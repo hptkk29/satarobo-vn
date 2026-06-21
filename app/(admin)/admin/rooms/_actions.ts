@@ -8,6 +8,14 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
+
+// Cách ly cơ sở: Room ∈ SCOPED_MODELS. CENTER_MANAGER chỉ thao tác phòng thuộc
+// cơ sở mình; không re-home phòng sang cơ sở ngoài tầm nhìn (chống IDOR ghi).
+function actorCanUseCenter(actor: Actor, centerId: string): boolean {
+  return actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(centerId);
+}
 
 type ActionResult = { error?: string };
 
@@ -117,7 +125,7 @@ function toUpdate(
 }
 
 export async function createRoom(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
 
   const parsed = roomSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -128,6 +136,12 @@ export async function createRoom(formData: FormData): Promise<ActionResult> {
   const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
   if (!centerId) {
     return { error: "Đơn vị không hợp lệ — phòng học phải thuộc một cơ sở" };
+  }
+
+  // Cách ly cơ sở: chỉ tạo phòng cho cơ sở trong tầm nhìn actor.
+  const actor = await resolveActor(user.id);
+  if (!actorCanUseCenter(actor, centerId)) {
+    return { error: "Không có quyền tạo phòng cho cơ sở này" };
   }
 
   try {
@@ -144,7 +158,7 @@ export async function createRoom(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateRoom(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
 
   const parsed = roomSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -155,6 +169,18 @@ export async function updateRoom(id: string, formData: FormData): Promise<Action
   const centerId = await centerIdForOrgUnit(parsed.data.orgUnitId);
   if (!centerId) {
     return { error: "Đơn vị không hợp lệ — phòng học phải thuộc một cơ sở" };
+  }
+
+  // Cách ly cơ sở (chống IDOR ghi): phòng HIỆN TẠI phải trong tầm nhìn actor, và
+  // cơ sở ĐÍCH (sau khi đổi orgUnitId) cũng phải trong tầm nhìn actor.
+  const actor = await resolveActor(user.id);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.room.findUnique({ where: { id }, select: { centerId: true } });
+  if (!existing || !passesScope("Room", existing, actor)) {
+    return { error: "Phòng không tồn tại" };
+  }
+  if (!actorCanUseCenter(actor, centerId)) {
+    return { error: "Không có quyền chuyển phòng sang cơ sở này" };
   }
 
   try {
@@ -172,7 +198,14 @@ export async function updateRoom(id: string, formData: FormData): Promise<Action
 }
 
 export async function deleteRoom(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
+  // Cách ly cơ sở: chỉ xoá phòng trong tầm nhìn cơ sở của actor (chống IDOR).
+  const actor = await resolveActor(user.id);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.room.findUnique({ where: { id }, select: { centerId: true } });
+  if (!existing || !passesScope("Room", existing, actor)) {
+    return { error: "Phòng không tồn tại" };
+  }
   try {
     await db.room.delete({ where: { id } });
   } catch {

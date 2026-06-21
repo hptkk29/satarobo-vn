@@ -21,8 +21,30 @@ import {
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
 import { suggestEnrollmentRefund, type RefundSuggestion } from "@/lib/finance/refund";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 
 type ActionResult = { error?: string };
+
+// Cách ly cơ sở (chống IDOR ghi): Student ∈ SCOPED_MODELS. Mọi mutation theo
+// studentId từ client phải xác minh HV thuộc tầm nhìn cơ sở của actor.
+function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  return centerId != null && actor.visibleCenterIds.includes(centerId);
+}
+
+/** Trả về true nếu HV `studentId` nằm trong tầm nhìn cơ sở của user. */
+async function studentInScope(
+  userId: string | undefined,
+  studentId: string,
+): Promise<boolean> {
+  if (!userId) return false;
+  const actor = await resolveActor(userId);
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  const sdb = scopedDb(actor);
+  const s = await sdb.student.findUnique({ where: { id: studentId }, select: { centerId: true } });
+  return !!s && passesScope("Student", s, actor);
+}
 
 async function requireStudentWrite(action: "create" | "update" | "delete") {
   const session = await auth();
@@ -106,6 +128,14 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
   data.centerId = await centerIdForOrgUnit(data.orgUnitId ?? null);
   data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
 
+  // Cách ly cơ sở: center-level chỉ tạo HV cho cơ sở trong tầm nhìn.
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, data.centerId ?? null)) {
+      return { error: "Không có quyền tạo học viên cho cơ sở này" };
+    }
+  }
+
   try {
     await db.$transaction(async (tx) => {
       // Phase T0.2 — tự sinh studentCode nếu admin để trống (giữ mã cũ nếu có).
@@ -162,6 +192,14 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   });
   if (!before) return { error: "Không tìm thấy học viên" };
 
+  // Cách ly cơ sở: HV hiện tại phải thuộc tầm nhìn actor (chống sửa HV cơ sở khác).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, before.centerId)) {
+      return { error: "Không tìm thấy học viên" };
+    }
+  }
+
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
 
@@ -171,6 +209,13 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   }
   if (data.preferredOrgUnitId !== undefined) {
     data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
+  }
+  // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
+  if (data.centerId !== undefined && session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, data.centerId ?? null)) {
+      return { error: "Không có quyền chuyển học viên sang cơ sở này" };
+    }
   }
 
   try {
@@ -212,6 +257,13 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
     select: STUDENT_SNAPSHOT_SELECT,
   });
   if (!before) return { error: "Không thể xoá học viên này" };
+  // Cách ly cơ sở: chỉ xoá HV trong tầm nhìn actor (chống IDOR xoá liên cơ sở).
+  if (session.user.id) {
+    const actor = await resolveActor(session.user.id);
+    if (!actorCanUseCenter(actor, before.centerId)) {
+      return { error: "Không thể xoá học viên này" };
+    }
+  }
   if (before.status !== "INACTIVE") {
     return { error: "Chỉ xóa được học viên đã nghỉ học" };
   }
@@ -343,6 +395,10 @@ export async function reserveStudentAction(input: {
     select: { id: true, status: true, name: true },
   });
   if (!student) {
+    return { ok: false as const, error: "Không tìm thấy học viên" };
+  }
+  // Cách ly cơ sở: HV phải thuộc tầm nhìn actor.
+  if (!(await studentInScope(session.user.id, input.studentId))) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
   }
 
@@ -492,6 +548,10 @@ export async function resumeStudentReserveAction(input: {
   if (!reserve) {
     return { ok: false as const, error: "Không tìm thấy đợt bảo lưu" };
   }
+  // Cách ly cơ sở: HV của đợt bảo lưu phải thuộc tầm nhìn actor.
+  if (!(await studentInScope(session.user.id, reserve.studentId))) {
+    return { ok: false as const, error: "Không tìm thấy đợt bảo lưu" };
+  }
   if (!reserve.isActive) {
     return { ok: false as const, error: "Đợt bảo lưu đã kết thúc" };
   }
@@ -593,6 +653,10 @@ export async function withdrawStudentAction(input: {
     select: { id: true, status: true },
   });
   if (!student) {
+    return { ok: false as const, error: "Không tìm thấy học viên" };
+  }
+  // Cách ly cơ sở: HV phải thuộc tầm nhìn actor.
+  if (!(await studentInScope(session.user.id, input.studentId))) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
   }
   if (student.status === "INACTIVE") {
@@ -739,6 +803,10 @@ export async function createParentAccount(input: {
     select: { id: true, parentUserId: true, parentName: true, parentPhone: true },
   });
   if (!student) return { ok: false, error: "Không tìm thấy học viên" };
+  // Cách ly cơ sở: chỉ cấp tài khoản PH cho HV trong tầm nhìn actor.
+  if (!(await studentInScope(session.user.id, studentId))) {
+    return { ok: false, error: "Không tìm thấy học viên" };
+  }
   if (student.parentUserId) {
     return { ok: false, error: "Học viên đã có tài khoản phụ huynh" };
   }
@@ -884,6 +952,10 @@ export async function addChildToParent(input: {
   ]);
   if (!parent) return { ok: false, error: "Không tìm thấy tài khoản phụ huynh" };
   if (!child) return { ok: false, error: "Không tìm thấy học viên" };
+  // Cách ly cơ sở: chỉ gắn con là HV trong tầm nhìn actor.
+  if (!(await studentInScope(session.user.id, child.id))) {
+    return { ok: false, error: "Không tìm thấy học viên" };
+  }
   if (child.parentUserId && child.parentUserId !== input.parentUserId) {
     return { ok: false, error: "Học viên đã thuộc phụ huynh khác — gỡ liên kết cũ trước" };
   }
@@ -900,6 +972,11 @@ export async function unlinkChildFromParent(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+
+  // Cách ly cơ sở: chỉ gỡ liên kết HV trong tầm nhìn actor (chống IDOR ghi).
+  if (!(await studentInScope(session.user.id, childStudentId))) {
+    return { ok: false, error: "Không tìm thấy học viên" };
+  }
 
   await db.student.update({ where: { id: childStudentId }, data: { parentUserId: null } });
   revalidatePath(`/students/${childStudentId}/edit`);
@@ -920,6 +997,10 @@ export async function reactivateStudentAction(input: {
     select: { id: true, status: true },
   });
   if (!student) {
+    return { ok: false as const, error: "Không tìm thấy học viên" };
+  }
+  // Cách ly cơ sở: HV phải thuộc tầm nhìn actor.
+  if (!(await studentInScope(session.user.id, input.studentId))) {
     return { ok: false as const, error: "Không tìm thấy học viên" };
   }
   if (student.status === "ACTIVE") {

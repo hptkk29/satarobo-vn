@@ -7,8 +7,14 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { canManageClass } from "@/lib/auth/lms-scope";
 
 type ActionResult = { error?: string };
+
+// Cách ly cơ sở (chống IDOR ghi): ClassSession relation-scoped qua class.centerId.
+// Mutation theo sessionId/classId từ client phải qua canManageClass (passesScope
+// "Class" + ownership GV/quản lý) trước khi ghi.
 
 const sessionSchema = z.object({
   classId: z.string().trim().min(1, "Lớp học không được để trống"),
@@ -58,7 +64,7 @@ function readForm(formData: FormData) {
 }
 
 export async function createSession(formData: FormData): Promise<ActionResult> {
-  await requireTeacherOrAdmin();
+  const user = await requireTeacherOrAdmin();
 
   const parsed = sessionSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -66,6 +72,16 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
   }
 
   const s = parsed.data;
+
+  // Cách ly cơ sở: chỉ tạo buổi cho lớp actor được quản lý (cùng cơ sở / phụ trách).
+  if (user.id) {
+    const actor = await resolveActor(user.id);
+    const cls = await db.class.findUnique({ where: { id: s.classId }, select: { centerId: true } });
+    if (!cls || !canManageClass(actor, s.classId, cls.centerId)) {
+      return { error: "Lớp không tồn tại" };
+    }
+  }
+
   const data: Prisma.ClassSessionCreateInput = {
     class: { connect: { id: s.classId } },
     date: s.date,
@@ -87,7 +103,7 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateSession(id: string, formData: FormData): Promise<ActionResult> {
-  await requireTeacherOrAdmin();
+  const user = await requireTeacherOrAdmin();
 
   const parsed = sessionSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -95,6 +111,25 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
   }
 
   const s = parsed.data;
+
+  // Cách ly cơ sở: buổi HIỆN TẠI + lớp ĐÍCH (nếu đổi) đều phải actor được quản lý.
+  if (user.id) {
+    const actor = await resolveActor(user.id);
+    const existing = await db.classSession.findUnique({
+      where: { id },
+      select: { classId: true, class: { select: { centerId: true } } },
+    });
+    if (!existing || !canManageClass(actor, existing.classId, existing.class?.centerId ?? null)) {
+      return { error: "Không cập nhật được buổi học" };
+    }
+    if (s.classId !== existing.classId) {
+      const target = await db.class.findUnique({ where: { id: s.classId }, select: { centerId: true } });
+      if (!target || !canManageClass(actor, s.classId, target.centerId)) {
+        return { error: "Lớp không tồn tại" };
+      }
+    }
+  }
+
   const data: Prisma.ClassSessionUpdateInput = {
     class: { connect: { id: s.classId } },
     date: s.date,
@@ -119,7 +154,18 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
 }
 
 export async function deleteSession(id: string): Promise<ActionResult> {
-  await requireTeacherOrAdmin();
+  const user = await requireTeacherOrAdmin();
+  // Cách ly cơ sở: chỉ xoá buổi của lớp actor được quản lý (chống IDOR cascade).
+  if (user.id) {
+    const actor = await resolveActor(user.id);
+    const existing = await db.classSession.findUnique({
+      where: { id },
+      select: { classId: true, class: { select: { centerId: true } } },
+    });
+    if (!existing || !canManageClass(actor, existing.classId, existing.class?.centerId ?? null)) {
+      return { error: "Không thể xoá buổi học" };
+    }
+  }
   try {
     // ClassSession có onDelete: Cascade trên attendances — sẽ tự xoá luôn.
     await db.classSession.delete({ where: { id } });

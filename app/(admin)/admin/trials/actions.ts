@@ -5,11 +5,16 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import {
   trialUpdateSchema,
   trialFeedbackSchema,
 } from "@/lib/validators/trial";
 import type { LeadStatus, TrialClassStatus } from "@prisma/client";
+
+// Cách ly cơ sở (chống IDOR ghi): TrialClass (V1) ∈ SCOPED_MODELS → đọc qua scopedDb
+// (auto null-filter) + passesScope trước khi update/delete/upsert.
 
 // =============================================================================
 // TRIAL CLASS ACTIONS — Phase T1.4
@@ -37,11 +42,15 @@ export async function updateTrialAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const trial = await db.trialClass.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const trial = await sdb.trialClass.findUnique({
     where: { id: trialId },
-    select: { id: true, leadId: true, status: true },
+    select: { id: true, leadId: true, status: true, centerId: true },
   });
-  if (!trial) return { ok: false, error: "Buổi học thử không tồn tại" };
+  if (!trial || !passesScope("TrialClass", trial, actor)) {
+    return { ok: false, error: "Buổi học thử không tồn tại" };
+  }
 
   const { actorId, actorName } = getAuditActor(session);
   const becameAttended =
@@ -111,11 +120,15 @@ export async function deleteTrialAction(
     return { ok: false, error: "Không có quyền xoá buổi học thử" };
   }
 
-  const trial = await db.trialClass.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const trial = await sdb.trialClass.findUnique({
     where: { id: trialId },
-    select: { id: true, leadId: true },
+    select: { id: true, leadId: true, centerId: true },
   });
-  if (!trial) return { ok: false, error: "Buổi học thử không tồn tại" };
+  if (!trial || !passesScope("TrialClass", trial, actor)) {
+    return { ok: false, error: "Buổi học thử không tồn tại" };
+  }
 
   // TrialFeedback có onDelete: Cascade theo trialClassId → xoá kèm.
   await db.trialClass.delete({ where: { id: trialId } });
@@ -142,11 +155,15 @@ export async function saveTrialFeedbackAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const trial = await db.trialClass.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const trial = await sdb.trialClass.findUnique({
     where: { id: trialId },
-    select: { id: true, leadId: true },
+    select: { id: true, leadId: true, centerId: true },
   });
-  if (!trial) return { ok: false, error: "Buổi học thử không tồn tại" };
+  if (!trial || !passesScope("TrialClass", trial, actor)) {
+    return { ok: false, error: "Buổi học thử không tồn tại" };
+  }
 
   const data = {
     childEnjoyed: parsed.data.childEnjoyed ?? null,

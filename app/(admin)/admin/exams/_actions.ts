@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, getEffectiveRoles } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
-import { canGradeForClass } from "@/lib/auth/lms-scope";
+import { canGradeForClass, canManageClass } from "@/lib/auth/lms-scope";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { z } from "zod";
 import {
@@ -107,6 +107,30 @@ async function resolveEmployeeId(userId: string): Promise<string | null> {
   }
 }
 
+// Cách ly cơ sở (chống IDOR ghi): Exam relation-scoped qua class.centerId. Đề có
+// classId=null = ngân hàng đề DÙNG CHUNG (toàn hệ thống) → cho thao tác bình thường;
+// đề gắn lớp → chỉ GV phụ trách / quản lý cùng cơ sở (canManageClass).
+async function examInScope(userId: string, examId: string): Promise<boolean> {
+  if (!userId) return false;
+  const e = await db.exam.findUnique({
+    where: { id: examId },
+    select: { classId: true, class: { select: { centerId: true } } },
+  });
+  if (!e) return false;
+  if (!e.classId) return true; // ngân hàng đề dùng chung — không gắn cơ sở
+  const actor = await resolveActor(userId);
+  return canManageClass(actor, e.classId, e.class?.centerId ?? null);
+}
+/** ExamQuestion-by-id → suy examId rồi kiểm examInScope. */
+async function examQuestionInScope(userId: string, examQuestionId: string): Promise<string | null> {
+  const eq = await db.examQuestion.findUnique({
+    where: { id: examQuestionId },
+    select: { examId: true },
+  });
+  if (!eq) return null;
+  return (await examInScope(userId, eq.examId)) ? eq.examId : null;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Exam CRUD
 // ──────────────────────────────────────────────────────────────────────────
@@ -129,6 +153,15 @@ export async function createExam(
       select: { id: true },
     });
     if (dup) return { ok: false, error: `Mã đề "${data.examCode}" đã tồn tại` };
+  }
+
+  // Cách ly cơ sở: đề gắn lớp → lớp phải thuộc actor (đề ngân hàng classId=null: bỏ qua).
+  if (data.classId) {
+    const cls = await db.class.findUnique({ where: { id: data.classId }, select: { centerId: true } });
+    const actor = await resolveActor(gate.userId);
+    if (!cls || !canManageClass(actor, data.classId, cls.centerId)) {
+      return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+    }
   }
 
   const createdById = await resolveEmployeeId(gate.userId);
@@ -181,6 +214,18 @@ export async function updateExam(
     select: { examCode: true, status: true },
   });
   if (!current) return { ok: false, error: "Đề thi không tồn tại" };
+
+  // Cách ly cơ sở: đề HIỆN TẠI + lớp ĐÍCH (nếu gắn) đều phải thuộc actor.
+  if (!(await examInScope(gate.userId, id))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+  }
+  if (data.classId) {
+    const cls = await db.class.findUnique({ where: { id: data.classId }, select: { centerId: true } });
+    const actor = await resolveActor(gate.userId);
+    if (!cls || !canManageClass(actor, data.classId, cls.centerId)) {
+      return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+    }
+  }
 
   // Published-edit guard (AC1/T4): GV không sửa đề đã publish.
   if (current.status === "PUBLISHED" && !canEditPublished(gate.user)) {
@@ -238,6 +283,11 @@ export async function deleteExam(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
+  // Cách ly cơ sở: chỉ xoá đề thuộc lớp actor quản lý (đề ngân hàng: bỏ qua).
+  if (!(await examInScope(gate.userId, id))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+  }
+
   const attempts = await db.examAttempt.count({ where: { examId: id } });
   if (attempts > 0) {
     return {
@@ -286,6 +336,11 @@ export async function addQuestionToExam(
   }
   const { examId, questionId, points } = parsed.data;
 
+  // Cách ly cơ sở: chỉ thêm câu hỏi vào đề thuộc lớp actor quản lý.
+  if (!(await examInScope(gate.userId, examId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+  }
+
   const existing = await db.examQuestion.findUnique({
     where: { examId_questionId: { examId, questionId } },
     select: { id: true },
@@ -318,6 +373,10 @@ export async function removeQuestionFromExam(
     select: { examId: true, order: true },
   });
   if (!eq) return { ok: false, error: "Không tìm thấy bản ghi" };
+  // Cách ly cơ sở: chỉ gỡ câu hỏi khỏi đề thuộc lớp actor quản lý.
+  if (!(await examInScope(gate.userId, eq.examId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+  }
 
   try {
     await db.$transaction(async (tx) => {
@@ -363,6 +422,11 @@ export async function updateExamQuestionPoints(
     return { ok: false, error: "Điểm phải >= 0" };
   }
 
+  // Cách ly cơ sở: chỉ sửa điểm câu hỏi của đề thuộc lớp actor quản lý.
+  if (!(await examQuestionInScope(gate.userId, examQuestionId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+  }
+
   try {
     const eq = await db.examQuestion.update({
       where: { id: examQuestionId },
@@ -392,6 +456,11 @@ export async function reorderExamQuestions({
 
   if (!Array.isArray(examQuestionIds) || examQuestionIds.length === 0) {
     return { ok: false, error: "Danh sách rỗng" };
+  }
+
+  // Cách ly cơ sở: chỉ sắp xếp câu hỏi của đề thuộc lớp actor quản lý.
+  if (!(await examInScope(gate.userId, examId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
   }
 
   const found = await db.examQuestion.findMany({
@@ -452,6 +521,11 @@ export async function autoGenerateExamQuestions(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
   const { examId, count, defaultPoints } = parsed.data;
+
+  // Cách ly cơ sở: chỉ tự sinh câu hỏi cho đề thuộc lớp actor quản lý.
+  if (!(await examInScope(gate.userId, examId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+  }
 
   const existing = await db.examQuestion.findMany({
     where: { examId },
@@ -711,6 +785,10 @@ export async function changeExamStatus(
     select: { status: true },
   });
   if (!cur) return { ok: false, error: "Đề thi không tồn tại" };
+  // Cách ly cơ sở: chỉ đổi trạng thái đề thuộc lớp actor quản lý.
+  if (!(await examInScope(gate.userId, parsed.data.examId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp của đề thi này" };
+  }
   const touchesPublished =
     parsed.data.status === "PUBLISHED" || cur.status === "PUBLISHED";
   if (touchesPublished && !canEditPublished(gate.user)) {

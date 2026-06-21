@@ -6,6 +6,11 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
+
+// Cách ly cơ sở: Notification ∈ SCOPED_MODELS → đọc qua scopedDb (auto null-filter)
+// + passesScope trước khi publish/xoá; create chỉ gán centerId trong tầm nhìn actor.
 
 // =============================================================================
 // ADMIN NOTIFICATIONS — Phase NHÓM 3
@@ -51,6 +56,23 @@ export async function createNotification(
   const d = parsed.data;
   const { actorId, actorName } = getAuditActor(session);
 
+  // Cách ly cơ sở: không cho phát thông báo nhắm tới cơ sở/lớp/HV ngoài tầm nhìn actor.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  if (d.audience === "CENTER" && d.centerId) {
+    const canUse =
+      actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(d.centerId);
+    if (!canUse) return { ok: false, error: "Không có quyền với cơ sở này" };
+  }
+  if (d.audience === "CLASS" && d.classId) {
+    const cls = await sdb.class.findUnique({ where: { id: d.classId }, select: { centerId: true } });
+    if (!cls || !passesScope("Class", cls, actor)) return { ok: false, error: "Không có quyền với lớp này" };
+  }
+  if (d.audience === "STUDENT" && d.studentId) {
+    const st = await sdb.student.findUnique({ where: { id: d.studentId }, select: { centerId: true } });
+    if (!st || !passesScope("Student", st, actor)) return { ok: false, error: "Không có quyền với học viên này" };
+  }
+
   await db.notification.create({
     data: {
       title: d.title,
@@ -79,11 +101,14 @@ export async function toggleNotificationPublish(
     return { ok: false, error: "Không có quyền" };
   }
 
-  const n = await db.notification.findUnique({
+  // Cách ly cơ sở: chỉ publish/unpublish thông báo trong tầm nhìn cơ sở của actor.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const n = await sdb.notification.findUnique({
     where: { id },
-    select: { isPublished: true },
+    select: { isPublished: true, centerId: true },
   });
-  if (!n) return { ok: false, error: "Không tìm thấy" };
+  if (!n || !passesScope("Notification", n, actor)) return { ok: false, error: "Không tìm thấy" };
 
   const willPublish = !n.isPublished;
   await db.notification.update({
@@ -104,6 +129,13 @@ export async function deleteNotification(
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "notifications:manage")) {
     return { ok: false, error: "Không có quyền" };
+  }
+  // Cách ly cơ sở: chỉ xoá thông báo trong tầm nhìn cơ sở của actor (chống IDOR).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const n = await sdb.notification.findUnique({ where: { id }, select: { centerId: true } });
+  if (!n || !passesScope("Notification", n, actor)) {
+    return { ok: false, error: "Không tìm thấy" };
   }
   await db.notification.delete({ where: { id } }).catch(() => null);
   revalidatePath("/notifications");
