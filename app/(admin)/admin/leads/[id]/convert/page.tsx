@@ -168,6 +168,13 @@ export default async function ConvertV2Page({ params }: Props) {
             phần), nếu không sẽ báo <code>PAYMENT_REQUIRED</code>.
           </p>
         )}
+        {/* convert-v2 (Gap #1): tạo đơn hàng GẮN lead này → ghi nhận thanh toán → đủ điều kiện chốt. */}
+        <Link
+          href={`/orders/new?leadId=${lead.id}`}
+          className="mt-3 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          + Tạo đơn hàng cho lead này
+        </Link>
       </div>
 
       <ConvertForm
