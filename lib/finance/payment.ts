@@ -27,10 +27,15 @@ async function auditActor(userId: string | null | undefined): Promise<AuditActor
   return { id: userId, name: u?.name ?? userId };
 }
 
-/** Tra mã cơ sở (OrgUnit.code) cho mã phiếu thu. */
+/**
+ * Tra mã cơ sở (OrgUnit.code) cho mã phiếu thu.
+ * LƯU Ý: `centerId` ở đây là `Center.id` cũ (Payment.centerId ← Order.centerId, model Center).
+ * Phase A map Center↔OrgUnit qua field `OrgUnit.centerId` (@unique) — KHÔNG phải OrgUnit.id.
+ * → phải tra theo `where: { centerId }`, không phải `where: { id: centerId }` (id cuid không khớp).
+ */
 async function centerCodeOf(centerId: string | null | undefined): Promise<string> {
   if (!centerId) return "SR";
-  const ou = await db.orgUnit.findUnique({ where: { id: centerId }, select: { code: true } });
+  const ou = await db.orgUnit.findUnique({ where: { centerId }, select: { code: true } });
   return ou?.code ?? "SR";
 }
 
