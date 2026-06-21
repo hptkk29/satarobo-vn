@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import {
   suggestMakeupSessions,
@@ -24,6 +25,14 @@ async function gate() {
     return { ok: false as const, error: "Không có quyền", session: null };
   }
   return { ok: true as const, session };
+}
+
+// Cách ly cơ sở (chống IDOR ghi): MakeupNeed ∈ SCOPED_MODELS, scope theo centerId
+// (cơ sở nhà của HV). complete/cancel KHÔNG truyền actor xuống service → ép scope ở
+// action: scopedDb.makeupNeed trả null nếu nhu cầu bù ngoài tầm nhìn cơ sở actor.
+async function makeupNeedInScope(actor: Actor, makeupNeedId: string): Promise<boolean> {
+  const need = await scopedDb(actor).makeupNeed.findUnique({ where: { id: makeupNeedId }, select: { id: true } });
+  return !!need;
 }
 
 export async function getMakeupSuggestions(makeupNeedId: string): Promise<MakeupSuggestion[]> {
@@ -52,6 +61,8 @@ export async function scheduleMakeupAction(makeupNeedId: string, makeupSessionId
 export async function completeMakeupAction(makeupNeedId: string): Promise<Result> {
   const g = await gate();
   if (!g.ok) return g;
+  const actor = await resolveActor(g.session.user.id);
+  if (!(await makeupNeedInScope(actor, makeupNeedId))) return { ok: false, error: "Không tìm thấy nhu cầu bù" };
   const res = await completeMakeup(makeupNeedId);
   if (res.ok) {
     revalidatePath("/hoc-bu");
@@ -64,6 +75,8 @@ export async function completeMakeupAction(makeupNeedId: string): Promise<Result
 export async function cancelMakeupAction(makeupNeedId: string): Promise<Result> {
   const g = await gate();
   if (!g.ok) return g;
+  const actor = await resolveActor(g.session.user.id);
+  if (!(await makeupNeedInScope(actor, makeupNeedId))) return { ok: false, error: "Không tìm thấy nhu cầu bù" };
   await cancelMakeup(makeupNeedId);
   revalidatePath("/hoc-bu");
   return { ok: true };

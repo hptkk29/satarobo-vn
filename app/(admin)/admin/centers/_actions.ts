@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { hasAnyRole } from "@/lib/auth/permissions";
+import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -67,10 +67,14 @@ function parseIntOrNull(value: FormDataEntryValue | null): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-async function requireAdmin() {
+// Quản trị tổ chức (tạo/sửa/xoá/đổi trạng thái Center) là cấu trúc tổ chức →
+// SUPER_ADMIN-only (Doc 15: chỉ SUPER_ADMIN tạo/sửa cấu trúc tổ chức). `centers:edit`
+// trong ma trận quyền = ["SUPER_ADMIN"]. Trước đây gate cho cả CENTER_MANAGER ⇒
+// BẤT KỲ CM nào sửa/xoá Center BẤT KỲ qua id (Center ∉ SCOPED_MODELS, không cách ly).
+async function requireOrgAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER"])) {
+  if (!can(session.user, "centers:edit")) {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;
@@ -125,7 +129,7 @@ function toData(c: z.infer<typeof centerSchema>): Prisma.CenterCreateInput {
 }
 
 export async function createCenter(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requireOrgAdmin();
 
   const parsed = centerSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -147,7 +151,7 @@ export async function createCenter(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateCenter(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requireOrgAdmin();
 
   const parsed = centerSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -170,7 +174,7 @@ export async function updateCenter(id: string, formData: FormData): Promise<Acti
 }
 
 export async function deleteCenter(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requireOrgAdmin();
 
   // Check linked relations — Center có quan hệ với users, leads, classes, students, employees.
   // Prisma onDelete mặc định Restrict — sẽ throw nếu có liên kết.
@@ -214,7 +218,7 @@ export async function deleteCenter(id: string): Promise<ActionResult> {
 }
 
 export async function toggleCenterActive(id: string, newValue: boolean): Promise<ActionResult> {
-  await requireAdmin();
+  await requireOrgAdmin();
   try {
     await db.center.update({ where: { id }, data: { isActive: newValue } });
   } catch {

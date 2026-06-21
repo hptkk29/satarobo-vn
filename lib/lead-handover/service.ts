@@ -16,15 +16,27 @@ export interface HandoverFilters {
   onlyActive?: boolean; // chỉ lead chưa đóng
 }
 
+/**
+ * Cách ly cơ sở: tầm nhìn cơ sở của actor cho model Lead. "ALL" = không giới hạn
+ * (SUPER_ADMIN/HO); mảng = chỉ những cơ sở này. Action phải tính qua
+ * getModelVisibleCenterIds("Lead", actor) và TRUYỀN vào — service KHÔNG tự suy.
+ */
+export type VisibleCenterIds = "ALL" | string[];
+
 /** Đếm số lead sẽ bị ảnh hưởng (để preview trước khi chạy). */
 export async function previewHandover(
   fromUserId: string,
   filters: HandoverFilters,
+  visibleCenterIds: VisibleCenterIds = "ALL",
 ): Promise<number> {
-  return db.lead.count({ where: resolveWhere(fromUserId, filters) });
+  return db.lead.count({ where: resolveWhere(fromUserId, filters, visibleCenterIds) });
 }
 
-function resolveWhere(fromUserId: string, filters: HandoverFilters): Prisma.LeadWhereInput {
+function resolveWhere(
+  fromUserId: string,
+  filters: HandoverFilters,
+  visibleCenterIds: VisibleCenterIds = "ALL",
+): Prisma.LeadWhereInput {
   const where: Prisma.LeadWhereInput = { assignedToId: fromUserId, deletedAt: null };
   const and: Prisma.LeadWhereInput[] = [];
   if (filters.statuses && filters.statuses.length > 0) {
@@ -35,6 +47,11 @@ function resolveWhere(fromUserId: string, filters: HandoverFilters): Prisma.Lead
   }
   if (filters.onlyActive) {
     and.push({ status: { notIn: [...TERMINAL_STATUSES] as never } });
+  }
+  // Cách ly cơ sở (chống bàn giao chéo CS): chỉ những lead trong tầm nhìn cơ sở
+  // của actor. Mảng rỗng → không match lead nào (fail-safe). "ALL" → bỏ qua.
+  if (visibleCenterIds !== "ALL") {
+    and.push({ centerId: { in: visibleCenterIds } });
   }
   if (and.length) where.AND = and;
   return where;
@@ -47,6 +64,8 @@ export async function bulkReassignLeads(params: {
   actorId: string | null;
   actorName: string;
   reason?: string | null;
+  /** Cách ly cơ sở — chỉ bàn giao lead trong tầm nhìn cơ sở của actor. Mặc định "ALL". */
+  visibleCenterIds?: VisibleCenterIds;
 }): Promise<{ ok: boolean; error?: string; moved: number; tasksMoved: number }> {
   if (params.fromUserId === params.toUserId) {
     return { ok: false, error: "Sale nhận trùng sale bàn giao", moved: 0, tasksMoved: 0 };
@@ -57,7 +76,7 @@ export async function bulkReassignLeads(params: {
   });
   if (!toUser) return { ok: false, error: "Sale nhận không hợp lệ", moved: 0, tasksMoved: 0 };
 
-  const where = resolveWhere(params.fromUserId, params.filters);
+  const where = resolveWhere(params.fromUserId, params.filters, params.visibleCenterIds ?? "ALL");
   const leads = await db.lead.findMany({ where, select: { id: true } });
   if (leads.length === 0) return { ok: true, moved: 0, tasksMoved: 0 };
 

@@ -29,6 +29,16 @@ export async function markCourseCompletion(
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   const d = parsed.data;
 
+  // Cách ly cơ sở (chống IDOR ghi): HV (Student ∈ SCOPED_MODELS) + lớp nếu có phải
+  // thuộc tầm nhìn cơ sở actor — như bản BULK. scopedDb trả null nếu ngoài scope.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const stu = await sdb.student.findUnique({ where: { id: d.studentId }, select: { id: true } });
+  if (!stu) return { ok: false, error: "Học viên ngoài phạm vi cơ sở" };
+  if (d.classId) {
+    const cls = await sdb.class.findUnique({ where: { id: d.classId }, select: { id: true } });
+    if (!cls) return { ok: false, error: "Lớp ngoài phạm vi cơ sở" };
+  }
+
   const res = await completeCourse({
     studentId: d.studentId,
     courseId: d.courseId,
