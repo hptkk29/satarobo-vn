@@ -10,7 +10,13 @@ import {
   LessonChangeRequests,
   type ChangeRequestRow,
 } from "../../_components/lesson-change-requests";
+import {
+  LessonResources,
+  type LessonResourceRow,
+  type AssignmentRow,
+} from "../../_components/lesson-resources";
 import { can } from "@/lib/auth/permissions";
+import { isScormEnabled } from "@/lib/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -91,8 +97,74 @@ export default async function EditCurriculumPage({ params }: Props) {
     }
   }
 
-  const canManageTraining = can(session.user, "training:manage");
+  // FL W0-NAV-2 (QĐ-T3b): tách quyền — unlock buổi LOCKED vẫn dùng training:manage,
+  // còn DUYỆT đề xuất chỉnh bài dùng lesson-change:approve (CM cũng duyệt được).
+  const canUnlock = can(session.user, "training:manage");
+  const canApproveChange = can(session.user, "lesson-change:approve");
   const canAuthor = can(session.user, "questions:author");
+
+  // FL1-02 (US-LMS-1) — học liệu SCORM + bài tập theo buổi.
+  const scormEnabled = isScormEnabled();
+  const lessonIds = curriculum.lessons.map((l) => l.id);
+  const [scormPackages, lessonAssignments] = await Promise.all([
+    scormEnabled
+      ? db.scormPackage.findMany({
+          where: { lessonId: { in: lessonIds } },
+          orderBy: [{ lessonId: "asc" }, { version: "desc" }],
+          select: {
+            id: true,
+            lessonId: true,
+            name: true,
+            version: true,
+            status: true,
+            isActiveForLesson: true,
+          },
+        })
+      : Promise.resolve([]),
+    // Bài tập đã gắn buổi của giáo trình + bài tập trống (chưa gắn buổi) cùng khoá.
+    db.assignment.findMany({
+      where: {
+        OR: [
+          { lessonId: { in: lessonIds } },
+          { lessonId: null, class: { courseId: curriculum.courseId } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        kind: true,
+        status: true,
+        lessonId: true,
+        class: { select: { name: true } },
+      },
+    }),
+  ]);
+
+  const scormByLesson = new Map<string, typeof scormPackages>();
+  for (const p of scormPackages) {
+    const arr = scormByLesson.get(p.lessonId) ?? [];
+    arr.push(p);
+    scormByLesson.set(p.lessonId, arr);
+  }
+  const assignmentsByLesson = new Map<string, AssignmentRow[]>();
+  const availableAssignments: AssignmentRow[] = [];
+  for (const a of lessonAssignments) {
+    const row: AssignmentRow = {
+      id: a.id,
+      title: a.title,
+      kind: a.kind,
+      status: a.status,
+      className: a.class.name,
+    };
+    if (a.lessonId) {
+      const arr = assignmentsByLesson.get(a.lessonId) ?? [];
+      arr.push(row);
+      assignmentsByLesson.set(a.lessonId, arr);
+    } else {
+      availableAssignments.push(row);
+    }
+  }
 
   const lessons: LessonRow[] = curriculum.lessons.map((l) => ({
     id: l.id,
@@ -118,6 +190,20 @@ export default async function EditCurriculumPage({ params }: Props) {
   const activeLessons = lessons.filter((l) => !l.archivedAt);
   const expectedVersions: Record<string, number> = {};
   for (const l of activeLessons) expectedVersions[l.id] = l.version;
+
+  const lessonResourceRows: LessonResourceRow[] = activeLessons.map((l) => ({
+    lessonId: l.id,
+    order: l.order,
+    title: l.title,
+    scorm: (scormByLesson.get(l.id) ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      version: p.version,
+      status: p.status,
+      isActiveForLesson: p.isActiveForLesson,
+    })),
+    assignments: assignmentsByLesson.get(l.id) ?? [],
+  }));
 
   const changeRequestRows: ChangeRequestRow[] = changeRequests.map((r) => ({
     id: r.id,
@@ -170,13 +256,20 @@ export default async function EditCurriculumPage({ params }: Props) {
       <LessonList
         curriculumId={curriculum.id}
         initialLessons={lessons}
-        canManageTraining={canManageTraining}
+        canManageTraining={canUnlock}
         canAuthor={canAuthor}
+      />
+
+      <LessonResources
+        lessons={lessonResourceRows}
+        availableAssignments={availableAssignments}
+        scormEnabled={scormEnabled}
+        canActivateScorm={canUnlock}
       />
 
       <LessonChangeRequests
         requests={changeRequestRows}
-        canHandle={canManageTraining}
+        canHandle={canApproveChange}
       />
     </div>
   );
