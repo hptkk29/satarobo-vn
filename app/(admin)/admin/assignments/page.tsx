@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Plus } from "lucide-react";
+import { ClipboardList, FileStack, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
@@ -129,13 +129,24 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
               : "Chưa có bài tập nào"}
           </p>
         </div>
-        <Link
-          href="/assignments/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" />
-          Tạo bài tập mới
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {can(session.user, "assignments:create") && (
+            <Link
+              href="/assignments/templates"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-white px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+            >
+              <FileStack className="h-4 w-4" />
+              Mẫu bài tập
+            </Link>
+          )}
+          <Link
+            href="/assignments/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            Tạo bài tập mới
+          </Link>
+        </div>
       </div>
 
       <form
