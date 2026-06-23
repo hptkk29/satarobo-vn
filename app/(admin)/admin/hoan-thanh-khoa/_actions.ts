@@ -7,8 +7,37 @@ import { can } from "@/lib/auth/permissions";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { completeCourse } from "@/lib/completion/service";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { buildStudentCourseChain, type StudentCourseChain } from "@/lib/enrollment-flow";
 
 // B4 — đánh dấu hoàn thành khoá + đánh giá cuối khoá (GV/quản lý).
+
+// FL2-06 (LD-7) — dây chuyền HS → khoá đang học → lớp. Trả khoá HV đang theo + lớp
+// theo từng khoá để form hoàn thành chọn phụ thuộc (không bắt user tự nhớ khoá/lớp).
+export async function listStudentCoursesAction(
+  studentId: string,
+): Promise<{ ok: boolean; error?: string; chain?: StudentCourseChain[] }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "completions:manage")) return { ok: false, error: "Không có quyền" };
+  if (!studentId) return { ok: false, error: "Thiếu học viên" };
+
+  // Cách ly cơ sở: Student ∈ SCOPED_MODELS → ngoài scope trả null (chống IDOR đọc).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const stu = await sdb.student.findUnique({ where: { id: studentId }, select: { id: true } });
+  if (!stu) return { ok: false, error: "Học viên ngoài phạm vi cơ sở" };
+
+  const enrollments = await sdb.enrollment.findMany({
+    where: { studentId, deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+    select: {
+      courseId: true,
+      classId: true,
+      course: { select: { name: true } },
+      class: { select: { name: true, classCode: true } },
+    },
+  });
+  return { ok: true, chain: buildStudentCourseChain(enrollments) };
+}
 
 const schema = z.object({
   studentId: z.string().min(1, "Thiếu học viên"),
