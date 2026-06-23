@@ -80,8 +80,15 @@ Vá lỗi/khoảng trống test tay theo 4 epic BA #07: **E-LMS** (gắn học l
 
 > Mỗi làn rẽ worktree từ `fl-integration` (đã có spine). Các task trong cùng làn chạy TUẦN TỰ. Đề xuất chạy **2 mẻ ~5 làn** để reviewer theo kịp.
 
-**Mẻ 1 (5 làn song song):** LMS-A · LMS-B · LMS-D · LEAD-A · EVAL-A
-**Mẻ 2 (5 làn song song):** LMS-C · LMS-E · LEAD-B · LEAD-C · RBAC
+**Mẻ 1 ✅ DONE+merged (Gate-1 xanh: tsc+eslint+vitest 723/723+build):** W0-NAV-2 · LMS-B · LMS-D · LEAD-A · EVAL-A. (LMS-A dời sang Mẻ 2 để tránh tranh chấp `curriculums/` với handoff lesson-change.)
+**Mẻ 2a (4 làn rời nhau):** LMS-A · LMS-C · LMS-E · LEAD-B
+**Mẻ 2b (cần phối hợp `enrollments/`):** LEAD-C · RBAC (chạy sau 2a hoặc tách file kỹ)
+
+> **Handoff Mẻ 1→2 (BẮT BUỘC nhớ):**
+> - **LMS-A** swap gate `training:manage`→`lesson-change:approve` ở `curriculums/[id]/edit/page.tsx:94` + `_actions.ts` (CHỈ nhánh duyệt LessonChangeRequest; GIỮ `training:manage`/unlock buổi LOCKED cho TRAINING). FL1-02 lesson editor gắn SCORM (ScormPackage.lessonId) + bài tập (Assignment.lessonId) — KHÔNG đụng `lesson-change-requests.tsx` (W0-NAV-2 đã chạm comment).
+> - **LMS-E** dùng `buildQuestionWhere({curriculumId,publicOnly})` (LMS-B đã export) cho picker câu hỏi trong AssignmentTemplate; sở hữu `assignments/` (KHÔNG đụng lesson editor — đó là LMS-A).
+> - **LEAD-C vs RBAC**: RBAC sở hữu `lib/db-scope.ts` + `enrollments/page.tsx` + `sessions/`; LEAD-C sở hữu `enrollments/new` (unit picker bỏ HO) + `chuyen-lop/` + `hoan-thanh-khoa/`. Tách file rõ.
+> - **Dead code** (`closeLeadAsEnrolled`, `close-deal-button.tsx`, `getLeadCloseDealOptions`) + **Payroll menu** (chưa có route) → PR cleanup/backlog riêng.
 
 | Làn | Task | US (BA #07) | ƯL | Test bắt buộc |
 |---|---|---|---|---|
