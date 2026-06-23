@@ -21,6 +21,7 @@ enum Role {
   HR
   SALES_CSM // Phase T0.1 — đổi tên từ SALES (tư vấn & chăm sóc học viên)
   TEACHER
+  TRAINING // FL W0 (QĐ-T1) — Đào tạo: quản lý TOÀN BỘ LMS (curriculum/SCORM/câu hỏi/bài tập). KHÁC TEACHER (chỉ lớp được giao).
   MARKETING
   ACCOUNTANT
   PARENT // Phase T0.1 — phụ huynh (portal hocvien.satarobo.vn), KHÔNG vào /admin
@@ -845,6 +846,10 @@ model Course {
   // FIX 10 — khoá GV dạy được.
   teacherCourses TeacherCourse[]
   completions    CourseCompletion[] @relation("CourseCompletions")
+
+  // FL W0 — gộp gói bán (FL1-05) + kho câu hỏi theo khoá (FL1-03).
+  coursePackages CoursePackage[]
+  questions      Question[]
 
   @@index([slug])
   @@index([type])
@@ -1677,6 +1682,10 @@ model CoursePackage {
 
   parentCourseSlug String?
 
+  // FL W0 (FL1-05) — gắn gói bán với khoá dạy (gộp gói/khoá); `curriculum` JSON deprecate 2-phase.
+  courseId String?
+  course   Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
   // Phase TD-1 — Detail content cho /khoa-hoc/[slug]
   audienceTag          String?
   audienceDescription  String? @db.Text
@@ -1697,6 +1706,7 @@ model CoursePackage {
 
   @@index([slug])
   @@index([parentCourseSlug, isPublished, displayOrder])
+  @@index([courseId])
 }
 
 // ============================================
@@ -2030,6 +2040,10 @@ model Curriculum {
 
   lessons Lesson[]
 
+  // FL W0 — kho câu hỏi theo khung CT (FL1-03) + template bài tập theo khung (FL1-06).
+  questions           Question[]
+  assignmentTemplates AssignmentTemplate[]
+
   @@unique([courseId, version])
   @@index([courseId, isActive])
 }
@@ -2091,6 +2105,7 @@ model Lesson {
   changeRequests LessonChangeRequest[]
   scormPackages  ScormPackage[]
   skillAssessments StudentSkillAssessment[] // W4b
+  assignmentTemplates AssignmentTemplate[] // FL W0 (FL1-06) — template bài tập theo buổi
 
   @@unique([curriculumId, order])
   @@index([curriculumId])
@@ -2150,6 +2165,14 @@ model Question {
   difficulty QuestionDifficulty @default(MEDIUM)
   tags       String[]           @default([])
 
+  // FL W0 (FL1-03) — khung chương trình để lọc câu hỏi theo Sata x; điểm + thời gian/câu.
+  curriculumId String?
+  curriculum   Curriculum? @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
+  courseId     String?
+  course       Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  points       Float? // điểm cho câu hỏi (null = dùng mặc định của đề/bài)
+  timeLimitSec Int? // thời gian cho câu hỏi (giây)
+
   lessonId String?
   lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
@@ -2177,6 +2200,8 @@ model Question {
   @@index([assignmentId])
   @@index([type, difficulty])
   @@index([authorId])
+  @@index([curriculumId])
+  @@index([courseId])
 }
 
 model Choice {
@@ -2399,6 +2424,10 @@ model Assignment {
   lessonId String?
   lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
+  // FL W0 (FL1-06) — bài giao cho lớp sinh từ template (nguồn theo khung CT). Null = tạo trực tiếp.
+  templateId String?
+  template   AssignmentTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
   totalPoints Float @default(10)
 
   assignedAt DateTime  @default(now()) @db.Timestamptz(6)
@@ -2421,6 +2450,37 @@ model Assignment {
   @@index([status, classId])
   @@index([dueAt])
   @@index([createdById])
+  @@index([templateId])
+}
+
+// FL W0 (FL1-06, QĐ-T2) — TEMPLATE bài tập (nguồn/bank theo KHUNG CHƯƠNG TRÌNH / buổi),
+// TÁCH khỏi Assignment (bài GIAO cho lớp). Template KHÔNG gắn lớp; gán vào buổi rồi sinh
+// Assignment cho từng lớp. `createdById` là dấu vết audit (flat — không relation Employee).
+model AssignmentTemplate {
+  id String @id @default(cuid())
+
+  title        String
+  description  String         @db.Text
+  instructions String?        @db.Text
+  kind         AssignmentKind @default(HOMEWORK)
+
+  lessonId     String?
+  lesson       Lesson?     @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  curriculumId String?
+  curriculum   Curriculum? @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
+
+  totalPoints Float   @default(10)
+  allowText   Boolean @default(true)
+  allowFile   Boolean @default(true)
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  instances Assignment[]
+
+  @@index([lessonId])
+  @@index([curriculumId])
 }
 
 model AssignmentDocument {
@@ -5010,6 +5070,7 @@ model ReportCardScore {
 enum EvalScope {
   TEACHER_EVAL
   CENTER_SURVEY
+  SESSION_EVAL // FL W0 (FL4-01) — phiếu đánh giá buổi học (GV đánh giá HS theo buổi); cũng dùng cho lớp trải nghiệm
 }
 
 enum EvalFormStatus {
@@ -5086,14 +5147,17 @@ model EvalResponse {
   teacherId    String? // GV được đánh giá (TEACHER_EVAL)
   parentUserId String? // PH làm khảo sát (CENTER_SURVEY)
   studentId    String?
+  classSessionId String? // FL W0 (FL4-01) — phiếu SESSION_EVAL gắn buổi học (ref phẳng, theo style EvalResponse)
   submittedAt  DateTime        @default(now())
 
   answers EvalAnswer[]
 
   // Chống trùng: TEACHER_EVAL theo (đợt×enrollment×GV); CENTER_SURVEY theo (đợt×PH).
+  // SESSION_EVAL (đợt×buổi×HS): EVAL-A chốt chiến lược chống trùng (app-level idempotency hoặc unique riêng).
   @@unique([roundId, enrollmentId, teacherId])
   @@unique([roundId, parentUserId])
   @@index([roundId])
+  @@index([classSessionId])
 }
 
 model EvalAnswer {

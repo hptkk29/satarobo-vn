@@ -40,30 +40,36 @@ export default async function EvaluationsPage() {
         </p>
       </div>
 
+      {/* FL W0: trang này quản lý TEACHER_EVAL + CENTER_SURVEY. Phiếu SESSION_EVAL (FL4-01)
+          quản lý ở UI buổi học (EVAL-A Wave 1) → lọc khỏi đây cho tới khi EVAL-A bổ sung. */}
       <FormsManager
-        forms={forms.map((f) => ({
-          id: f.id,
-          title: f.title,
-          scope: f.scope,
-          status: f.status,
-          questions: f._count.questions,
-          rounds: f._count.rounds,
-        }))}
+        forms={forms
+          .filter((f) => f.scope !== "SESSION_EVAL")
+          .map((f) => ({
+            id: f.id,
+            title: f.title,
+            scope: f.scope as "TEACHER_EVAL" | "CENTER_SURVEY",
+            status: f.status,
+            questions: f._count.questions,
+            rounds: f._count.rounds,
+          }))}
       />
 
       <RoundsManager
-        rounds={rounds.map((r) => ({
-          id: r.id,
-          name: r.name,
-          scope: r.scope,
-          status: r.status,
-          formTitle: r.form.title,
-          centerName: r.centerId ? centerName.get(r.centerId) ?? null : null,
-          responses: r._count.responses,
-        }))}
+        rounds={rounds
+          .filter((r) => r.scope !== "SESSION_EVAL")
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            scope: r.scope as "TEACHER_EVAL" | "CENTER_SURVEY",
+            status: r.status,
+            formTitle: r.form.title,
+            centerName: r.centerId ? centerName.get(r.centerId) ?? null : null,
+            responses: r._count.responses,
+          }))}
         forms={forms
-          .filter((f) => f.status === "ACTIVE")
-          .map((f) => ({ id: f.id, title: f.title, scope: f.scope }))}
+          .filter((f) => f.status === "ACTIVE" && f.scope !== "SESSION_EVAL")
+          .map((f) => ({ id: f.id, title: f.title, scope: f.scope as "TEACHER_EVAL" | "CENTER_SURVEY" }))}
         centers={centers}
         courses={courses}
       />
