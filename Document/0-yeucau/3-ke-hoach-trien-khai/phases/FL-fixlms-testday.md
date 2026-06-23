@@ -4,7 +4,22 @@
 > **Quy trình:** [00-quy-trinh-thuc-hien.md](00-quy-trinh-thuc-hien.md) — vòng đời TODO→DOING→TEST_WRITTEN→TEST_PASS→REVIEW→DONE, DoD 10 mục, test T1–T12. Mỗi task sửa BE **bắt buộc kèm FE + DB** cùng PR (item 19).
 > **Cách chạy:** **đa agent song song theo LÀN (lane), CHẬM MÀ CHẮC** — mỗi agent 1 git worktree riêng (cách ly), mỗi làn sở hữu thư mục/ file RỜI NHAU (không đụng file của làn khác), có **cổng kiểm tra + merge tuần tự** sau mỗi đợt (wave). Ưu tiên ĐÚNG hơn NHANH.
 > **Ưu tiên TGĐ:** FL1 LMS → FL2 Lead → FL3 RBAC → FL4 Eval (3→2→1→4). **FL0 (leak P0) đã DONE** trước (bảo mật).
-> **Trạng thái:** 🟡 KẾ HOẠCH — chờ duyệt khởi động Wave 0. FL0 ✅ DONE & verified (typecheck+lint+build).
+> **Trạng thái:** 🟢 **CODE-COMPLETE (24/06/2026)** — toàn bộ FL0→FL4 đã code + verify (mọi Gate: tsc + eslint + **vitest 770/770** + build 105 trang xanh), commit nhánh `fl-integration` (21 commit). E2e spec đã viết (chưa chạy — cần test DB). **CHƯA deploy** — xem checklist §10.
+
+---
+
+## 10. CHECKLIST TRƯỚC KHI DEPLOY (việc còn lại, KHÔNG phải code feature)
+
+| # | Việc | Lý do | Ai |
+|---|---|---|---|
+| D1 | **Deploy migration** `20260624000000_fl_foundation` lên Supabase (`prisma migrate deploy`) | Mới ở file + client; DB thật chưa có cột/role mới | Owner xác nhận |
+| D2 | **FL3-02 deploy-gate:** verify `Enrollment.centerId`+`ClassSession.centerId` backfill 100% + e2e cách ly CS1≠CS2 trên test DB | centerId null sẽ bị scopedDb ẩn nhầm record (mất data UI) | Dev + test DB |
+| D3 | **Gán role `TRAINING`** cho user phụ trách Đào tạo (data) | Không gán → trang LMS authoring chỉ SUPER_ADMIN vào được | Owner |
+| D4 | **Chạy e2e `tests/e2e/fl/`** (12 spec) trên Postgres local + seed | Hiện skeleton/`fixme` — cần test DB | Dev |
+| D5 | Dọn dead-code: `closeLeadAsEnrolled`, `close-deal-button.tsx`, `getLeadCloseDealOptions` | Không còn import sau khi gỡ popup | PR cleanup |
+| D6 | Dựng trang **Payroll** rồi gắn menu `payroll:view` cho kế toán | Có quyền nhưng thiếu route | Backlog |
+| D7 | (tuỳ chọn) flip **Attendance** vào SCOPED_MODELS + gỡ allowlist page đã sạch | Hoàn tất cách ly 2-phase | Backlog |
+| D8 | **Đánh giá GV bởi học sinh (item 19) → FL5** khi có file front-end TGĐ | Hoãn theo yêu cầu | TGĐ |
 
 ---
 
