@@ -8,16 +8,22 @@ import { FilePlus2, Copy, Archive, CheckCircle2 } from "lucide-react";
 import { QuestionBuilder, emptyQuestion, type DraftQuestion } from "./question-builder";
 import { createFormAction, cloneFormAction, setFormStatusAction } from "../_actions";
 
+type Scope = "TEACHER_EVAL" | "CENTER_SURVEY" | "SESSION_EVAL";
+
 export type FormRow = {
   id: string;
   title: string;
-  scope: "TEACHER_EVAL" | "CENTER_SURVEY";
+  scope: Scope;
   status: "DRAFT" | "ACTIVE" | "ARCHIVED";
   questions: number;
   rounds: number;
 };
 
-const SCOPE_LABEL = { TEACHER_EVAL: "Đánh giá GV", CENTER_SURVEY: "Khảo sát cơ sở" } as const;
+const SCOPE_LABEL = {
+  TEACHER_EVAL: "Đánh giá GV",
+  CENTER_SURVEY: "Khảo sát cơ sở",
+  SESSION_EVAL: "Đánh giá buổi học",
+} as const;
 const STATUS_STYLE = {
   DRAFT: "bg-gray-100 text-gray-600",
   ACTIVE: "bg-emerald-100 text-emerald-700",
@@ -29,7 +35,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
   const [pending, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
-  const [scope, setScope] = useState<"TEACHER_EVAL" | "CENTER_SURVEY">("TEACHER_EVAL");
+  const [scope, setScope] = useState<Scope>("TEACHER_EVAL");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion()]);
 
   function submitNew() {
@@ -84,6 +90,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
             >
               <option value="TEACHER_EVAL">Đánh giá GV (học viên)</option>
               <option value="CENTER_SURVEY">Khảo sát cơ sở (phụ huynh)</option>
+              <option value="SESSION_EVAL">Đánh giá buổi học (GV chấm HS)</option>
             </select>
           </div>
           <QuestionBuilder questions={questions} onChange={setQuestions} />

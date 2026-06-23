@@ -3,12 +3,13 @@ import { z } from "zod";
 import type { EvaluationRoundStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events/publish";
+import { EVAL_SCOPES } from "@/lib/eval/schema";
 
 export const roundInputSchema = z
   .object({
     formId: z.string().min(1, "Chọn form"),
     name: z.string().trim().min(1, "Tên đợt không được trống").max(200),
-    scope: z.enum(["TEACHER_EVAL", "CENTER_SURVEY"]),
+    scope: z.enum(EVAL_SCOPES),
     centerId: z.string().trim().optional().nullable(),
     courseId: z.string().trim().optional().nullable(),
     opensAt: z.string().trim().optional().nullable(),

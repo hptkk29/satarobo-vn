@@ -7,10 +7,12 @@ import { toast } from "sonner";
 import { CalendarPlus, BarChart3, Lock, Unlock } from "lucide-react";
 import { createRoundAction, setRoundStatusAction } from "../_actions";
 
+type Scope = "TEACHER_EVAL" | "CENTER_SURVEY" | "SESSION_EVAL";
+
 export type RoundRow = {
   id: string;
   name: string;
-  scope: "TEACHER_EVAL" | "CENTER_SURVEY";
+  scope: Scope;
   status: "DRAFT" | "OPEN" | "CLOSED";
   formTitle: string;
   centerName: string | null;
@@ -18,6 +20,12 @@ export type RoundRow = {
 };
 
 type Opt = { id: string; name: string };
+
+const SCOPE_TAG: Record<Scope, string> = {
+  TEACHER_EVAL: "GV",
+  CENTER_SURVEY: "Cơ sở",
+  SESSION_EVAL: "Buổi học",
+};
 
 const STATUS_STYLE = {
   DRAFT: "bg-gray-100 text-gray-600",
@@ -32,7 +40,7 @@ export function RoundsManager({
   courses,
 }: {
   rounds: RoundRow[];
-  forms: { id: string; title: string; scope: "TEACHER_EVAL" | "CENTER_SURVEY" }[];
+  forms: { id: string; title: string; scope: Scope }[];
   centers: Opt[];
   courses: Opt[];
 }) {
@@ -106,7 +114,7 @@ export function RoundsManager({
             <option value="">— Chọn form (đang kích hoạt) —</option>
             {forms.map((f) => (
               <option key={f.id} value={f.id}>
-                {f.title} ({f.scope === "TEACHER_EVAL" ? "GV" : "Cơ sở"})
+                {f.title} ({SCOPE_TAG[f.scope]})
               </option>
             ))}
           </select>

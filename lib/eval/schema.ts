@@ -8,6 +8,13 @@ import { z } from "zod";
 export const QUESTION_TYPES = ["STAR_RATING", "RADIO", "CHECKBOX", "TEXTBOX"] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
+// ─── Phạm vi form: ENUM ĐÓNG (khớp Prisma enum EvalScope) ────────────────────
+// FL4-01 thêm SESSION_EVAL (phiếu đánh giá buổi — GV chấm HS theo từng buổi học,
+// dùng cho cả lớp chính + lớp trải nghiệm). RADIO = "5 mức mô tả"; TEXTBOX = nhận
+// xét tự luận. Nhóm tiêu chí giữ phẳng theo thứ tự câu hỏi (engine không nhóm cứng).
+export const EVAL_SCOPES = ["TEACHER_EVAL", "CENTER_SURVEY", "SESSION_EVAL"] as const;
+export type EvalScopeValue = (typeof EVAL_SCOPES)[number];
+
 export const TEXTBOX_MAX = 2000;
 
 // ─── Zod schema cho 1 câu hỏi khi DỰNG form ─────────────────────────────────
@@ -41,7 +48,7 @@ export type EvalQuestionInput = z.infer<typeof evalQuestionInputSchema>;
 
 export const evalFormInputSchema = z.object({
   title: z.string().trim().min(1, "Tiêu đề không được trống").max(200),
-  scope: z.enum(["TEACHER_EVAL", "CENTER_SURVEY"]),
+  scope: z.enum(EVAL_SCOPES),
   questions: z.array(evalQuestionInputSchema).min(1, "Form cần ít nhất 1 câu hỏi"),
 });
 

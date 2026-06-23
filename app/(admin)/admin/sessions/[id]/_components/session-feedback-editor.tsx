@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { saveSessionFeedback } from "../_actions";
+import { SessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/session-eval-fill";
 
 type StudentRow = {
   studentId: string;
@@ -105,6 +106,17 @@ export function SessionFeedbackEditor({
           {pending ? "Đang lưu…" : "Lưu nhận xét"}
         </button>
       )}
+
+      {/* FL4-01 — phiếu đánh giá buổi học (SESSION_EVAL) động theo từng HS.
+          Đường cũ comment+rating (StudentSessionFeedback) ở trên GIỮ NGUYÊN —
+          portal /portal/nhan-xet vẫn đọc đường cũ; phiếu cấu trúc lưu EvalResponse. */}
+      <div className="border-t border-gray-100 pt-4">
+        <SessionEvalFill
+          sessionId={sessionId}
+          students={rows.map((r) => ({ studentId: r.studentId, name: r.name, present: r.present }))}
+          canEdit={canEdit}
+        />
+      </div>
     </div>
   );
 }
