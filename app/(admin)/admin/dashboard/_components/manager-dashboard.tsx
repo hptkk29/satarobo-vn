@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Users, UserPlus, BookOpen, FileText, TrendingUp } from "lucide-react";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import type { Actor } from "@/lib/auth/actor";
 import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin";
 import { StatusBadge } from "@/components/design-system/admin/status-badge";
 import { DataTableShell } from "@/components/design-system/admin/data-table-shell";
@@ -45,10 +46,12 @@ function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
 export async function ManagerDashboard({
   userId,
   name,
+  actor,
   embedded = false,
 }: {
   userId: string;
   name: string;
+  actor: Actor;
   embedded?: boolean;
 }) {
   const now = new Date();
@@ -57,20 +60,23 @@ export async function ManagerDashboard({
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
+  // FL0 — cách ly cơ sở: Lead/Student ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn
+  // cơ sở. News/LeadTask không scoped → đi qua nguyên vẹn (LeadTask đã lọc assignedToId).
+  const sdb = scopedDb(actor);
   const [
     totalLeads, newLeadsThisMonth, newLeadsLastMonth, enrolledLeads, totalStudents,
     totalPosts, recentLeads, leadsLast14Days, leadsByStatus, myTasksToday,
   ] = await Promise.all([
-    db.lead.count({ where: ACTIVE_LEAD }),
-    db.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
-    db.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: lastMonth, lt: monthStart } } }),
-    db.lead.count({ where: { ...ACTIVE_LEAD, status: "ENROLLED" } }),
-    db.student.count({ where: { deletedAt: null } }),
-    db.news.count({ where: { isPublished: true } }),
-    db.lead.findMany({ where: ACTIVE_LEAD, take: 8, orderBy: { createdAt: "desc" }, select: { id: true, parentName: true, phone: true, status: true, createdAt: true } }),
-    db.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } }, select: { createdAt: true } }),
-    db.lead.groupBy({ by: ["status"], where: ACTIVE_LEAD, _count: { id: true } }),
-    db.leadTask.findMany({
+    sdb.lead.count({ where: ACTIVE_LEAD }),
+    sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
+    sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: lastMonth, lt: monthStart } } }),
+    sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "ENROLLED" } }),
+    sdb.student.count({ where: { deletedAt: null } }),
+    sdb.news.count({ where: { isPublished: true } }),
+    sdb.lead.findMany({ where: ACTIVE_LEAD, take: 8, orderBy: { createdAt: "desc" }, select: { id: true, parentName: true, phone: true, status: true, createdAt: true } }),
+    sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } }, select: { createdAt: true } }),
+    sdb.lead.groupBy({ by: ["status"], where: ACTIVE_LEAD, _count: { id: true } }),
+    sdb.leadTask.findMany({
       where: { assignedToId: userId, status: "OPEN", dueAt: { lte: endOfToday } },
       include: { lead: { select: { id: true, parentName: true, phone: true } } },
       orderBy: { dueAt: "asc" },

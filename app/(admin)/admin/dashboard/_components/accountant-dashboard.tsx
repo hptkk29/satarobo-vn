@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Wallet, AlertTriangle, TrendingUp } from "lucide-react";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import type { Actor } from "@/lib/auth/actor";
 
 const PAID_STATUSES = ["CONFIRMED", "COMPLETED"] as const;
 
@@ -9,24 +10,27 @@ function vnd(n: number): string {
 }
 
 // Đợt 3C — Dashboard KẾ TOÁN. Tài chính toàn hệ thống. KHÔNG pipeline/điểm danh/giáo trình.
-export async function AccountantDashboard({ name, embedded = false }: { name: string; embedded?: boolean }) {
+export async function AccountantDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const overdueBefore = new Date(now.getTime() - 7 * 86400000); // PENDING_PAYMENT > 7 ngày
 
+  // FL0 — cách ly cơ sở: Order ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn cơ sở.
+  // Center không scoped → đi qua nguyên vẹn (chỉ dùng để map tên cơ sở).
+  const sdb = scopedDb(actor);
   const [paidAgg, debtAgg, revenueMonth, debtByCenter, overdueOrders, centers] = await Promise.all([
-    db.order.aggregate({ where: { status: { in: [...PAID_STATUSES] } }, _sum: { totalAmount: true } }),
-    db.order.aggregate({ where: { status: "PENDING_PAYMENT" }, _sum: { totalAmount: true } }),
-    db.order.aggregate({
+    sdb.order.aggregate({ where: { status: { in: [...PAID_STATUSES] } }, _sum: { totalAmount: true } }),
+    sdb.order.aggregate({ where: { status: "PENDING_PAYMENT" }, _sum: { totalAmount: true } }),
+    sdb.order.aggregate({
       where: { status: { in: [...PAID_STATUSES] }, paidAt: { gte: monthStart } },
       _sum: { totalAmount: true },
     }),
-    db.order.groupBy({
+    sdb.order.groupBy({
       by: ["centerId"],
       where: { status: "PENDING_PAYMENT" },
       _sum: { totalAmount: true },
     }),
-    db.order.findMany({
+    sdb.order.findMany({
       where: { status: "PENDING_PAYMENT", createdAt: { lt: overdueBefore } },
       orderBy: { createdAt: "asc" },
       take: 12,
@@ -36,7 +40,7 @@ export async function AccountantDashboard({ name, embedded = false }: { name: st
         center: { select: { name: true } },
       },
     }),
-    db.center.findMany({ select: { id: true, name: true } }),
+    sdb.center.findMany({ select: { id: true, name: true } }),
   ]);
 
   const centerName = new Map(centers.map((c) => [c.id, c.name]));

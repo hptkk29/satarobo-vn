@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BarChart3, Briefcase, Users, CalendarClock } from "lucide-react";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
+import type { Actor } from "@/lib/auth/actor";
 
 function startOfWeek(now: Date): Date {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -9,21 +10,23 @@ function startOfWeek(now: Date): Date {
 }
 
 // Đợt 3C #5 — Dashboard MARKETING (nguồn lead, hiệu quả kênh tóm tắt).
-export async function MarketingDashboard({ name, embedded = false }: { name: string; embedded?: boolean }) {
+export async function MarketingDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
   const now = new Date();
   const weekStart = startOfWeek(now);
 
+  // FL0 — cách ly cơ sở: Lead ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn cơ sở.
+  const sdb = scopedDb(actor);
   const [bySource, newThisWeek, total, enrolledTotal] = await Promise.all([
-    db.lead.groupBy({
+    sdb.lead.groupBy({
       by: ["source"],
       where: { deletedAt: null },
       _count: { _all: true },
       orderBy: { _count: { source: "desc" } },
       take: 8,
     }),
-    db.lead.count({ where: { deletedAt: null, createdAt: { gte: weekStart } } }),
-    db.lead.count({ where: { deletedAt: null } }),
-    db.lead.count({ where: { deletedAt: null, status: "ENROLLED" } }),
+    sdb.lead.count({ where: { deletedAt: null, createdAt: { gte: weekStart } } }),
+    sdb.lead.count({ where: { deletedAt: null } }),
+    sdb.lead.count({ where: { deletedAt: null, status: "ENROLLED" } }),
   ]);
 
   const convRate = total > 0 ? Math.round((enrolledTotal / total) * 100) : 0;
@@ -64,17 +67,20 @@ export async function MarketingDashboard({ name, embedded = false }: { name: str
 }
 
 // Đợt 3C #5 — Dashboard HR (nhân sự, tuyển dụng, đăng ký ca).
-export async function HrDashboard({ name, embedded = false }: { name: string; embedded?: boolean }) {
+export async function HrDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
   const now = new Date();
   const weekStart = startOfWeek(now);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
+  // FL0 — cách ly cơ sở: Employee/ShiftRegistration ∈ SCOPED_MODELS → scopedDb lọc
+  // theo tầm nhìn cơ sở. JobPosting không scoped → đi qua nguyên vẹn.
+  const sdb = scopedDb(actor);
   const [activeStaff, openJobs, shiftRegsWeek, leaveReqs] = await Promise.all([
-    db.employee.count({ where: { status: "ACTIVE" } }),
-    db.jobPosting.count({ where: { status: "OPEN" } }),
-    db.shiftRegistration.count({ where: { date: { gte: weekStart, lt: weekEnd } } }),
-    db.shiftRegistration.count({ where: { status: "LEAVE_REQUESTED", date: { gte: weekStart } } }),
+    sdb.employee.count({ where: { status: "ACTIVE" } }),
+    sdb.jobPosting.count({ where: { status: "OPEN" } }),
+    sdb.shiftRegistration.count({ where: { date: { gte: weekStart, lt: weekEnd } } }),
+    sdb.shiftRegistration.count({ where: { status: "LEAVE_REQUESTED", date: { gte: weekStart } } }),
   ]);
 
   return (

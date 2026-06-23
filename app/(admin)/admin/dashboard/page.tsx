@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getEffectiveRoles, hasRole, hasAnyRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
 import { ManagerDashboard } from "./_components/manager-dashboard";
 import { TeacherDashboard } from "./_components/teacher-dashboard";
 import { SalesDashboard } from "./_components/sales-dashboard";
@@ -18,6 +19,10 @@ export default async function DashboardPage() {
   const name = session.user.name ?? "";
   const roles = getEffectiveRoles(session.user);
 
+  // FL0 — cách ly cơ sở cho dashboard: actor để scopedDb() lọc theo tầm nhìn cơ sở.
+  // Trước đây các panel KPI đọc `db` trần → leak số liệu mọi cơ sở (BA #07 mục 3.B).
+  const actor = await resolveActor(userId);
+
   // Manager panel cho SUPER_ADMIN/CENTER_MANAGER. Việc tồn đọng theo cơ sở đã
   // gom ở khu "Cần xử lý" (center-scoped); panel quản lý là KPI/biểu đồ tổng quan.
   const isManager = hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER"]);
@@ -27,7 +32,7 @@ export default async function DashboardPage() {
     panels.push({
       key: "manager",
       label: "Quản lý & Tổng quan",
-      node: <ManagerDashboard userId={userId} name={name} embedded />,
+      node: <ManagerDashboard userId={userId} name={name} actor={actor} embedded />,
     });
   }
   if (hasRole(session.user, "TEACHER")) {
@@ -37,20 +42,20 @@ export default async function DashboardPage() {
     panels.push({ key: "sales", label: "Tư vấn / Sale", node: <SalesDashboard userId={userId} name={name} embedded /> });
   }
   if (hasRole(session.user, "ACCOUNTANT")) {
-    panels.push({ key: "acc", label: "Kế toán", node: <AccountantDashboard name={name} embedded /> });
+    panels.push({ key: "acc", label: "Kế toán", node: <AccountantDashboard name={name} actor={actor} embedded /> });
   }
   if (hasRole(session.user, "MARKETING")) {
-    panels.push({ key: "mkt", label: "Marketing", node: <MarketingDashboard name={name} embedded /> });
+    panels.push({ key: "mkt", label: "Marketing", node: <MarketingDashboard name={name} actor={actor} embedded /> });
   }
   if (hasRole(session.user, "HR")) {
-    panels.push({ key: "hr", label: "Nhân sự", node: <HrDashboard name={name} embedded /> });
+    panels.push({ key: "hr", label: "Nhân sự", node: <HrDashboard name={name} actor={actor} embedded /> });
   }
   // Phòng vệ: không khớp vai trò nào (vd dữ liệu lạ) → tổng quan quản lý.
   if (panels.length === 0) {
     panels.push({
       key: "manager",
       label: "Tổng quan",
-      node: <ManagerDashboard userId={userId} name={name} embedded />,
+      node: <ManagerDashboard userId={userId} name={name} actor={actor} embedded />,
     });
   }
 
