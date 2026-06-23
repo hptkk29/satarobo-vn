@@ -76,6 +76,75 @@ describe("[A0-04] injectScope", () => {
   });
 });
 
+// FL3-02 — Enrollment + ClassSession flip SCOPE_EXEMPT → SCOPED_MODELS.
+const enrollClerk = make([
+  row("cs1", "SALES_CSM", [
+    { action: "enrollments:view-all", scopeType: "CENTER" },
+    { action: "sessions:view", scopeType: "CENTER" },
+  ]),
+]); // visible [c1], có perm enrollments: + sessions:
+
+describe("[FL3-02] Enrollment + ClassSession auto-scope (flip EXEMPT→SCOPED)", () => {
+  it("Enrollment + ClassSession nằm trong SCOPED_MODELS, không còn trong SCOPE_EXEMPT", () => {
+    expect(SCOPED_MODELS.has("Enrollment")).toBe(true);
+    expect(SCOPED_MODELS.has("ClassSession")).toBe(true);
+    expect(SCOPE_EXEMPT.has("Enrollment")).toBe(false);
+    expect(SCOPE_EXEMPT.has("ClassSession")).toBe(false);
+  });
+
+  it("Attendance VẪN exempt (ngoài scope FL3-02)", () => {
+    expect(SCOPE_EXEMPT.has("Attendance")).toBe(true);
+    expect(SCOPED_MODELS.has("Attendance")).toBe(false);
+  });
+
+  it("injectScope(Enrollment) — clerk có perm enrollments: → centerId IN [c1]", () => {
+    expect(injectScope("Enrollment", {}, enrollClerk)).toEqual({
+      where: { centerId: { in: ["c1"] } },
+    });
+  });
+
+  it("injectScope(ClassSession) — clerk có perm sessions: → centerId IN [c1]", () => {
+    expect(injectScope("ClassSession", {}, enrollClerk)).toEqual({
+      where: { centerId: { in: ["c1"] } },
+    });
+  });
+
+  it("injectScope giữ where cũ qua AND (Enrollment)", () => {
+    expect(
+      injectScope("Enrollment", { where: { status: "STUDYING" } }, enrollClerk),
+    ).toEqual({ where: { AND: [{ status: "STUDYING" }, { centerId: { in: ["c1"] } }] } });
+  });
+
+  it("actor center KHÔNG có perm enrollments: → fallback visibleCenterIds (vẫn cách ly)", () => {
+    // `center` chỉ có leads:/orders: → prefix enrollments: không khớp → fallback [c1].
+    expect(injectScope("Enrollment", {}, center)).toEqual({
+      where: { centerId: { in: ["c1"] } },
+    });
+  });
+
+  it("SUPER_ADMIN / HO → không inject (cross-center)", () => {
+    expect(injectScope("Enrollment", {}, sa)).toEqual({});
+    expect(injectScope("ClassSession", {}, sa)).toEqual({});
+    expect(injectScope("Enrollment", {}, ho)).toEqual({});
+    expect(injectScope("ClassSession", {}, ho)).toEqual({});
+  });
+
+  it("passesScope (IDOR) — record khác cơ sở → false, cùng cơ sở → true", () => {
+    expect(passesScope("Enrollment", { centerId: "c2" }, enrollClerk)).toBe(false);
+    expect(passesScope("Enrollment", { centerId: "c1" }, enrollClerk)).toBe(true);
+    expect(passesScope("ClassSession", { centerId: "c2" }, enrollClerk)).toBe(false);
+    expect(passesScope("ClassSession", { centerId: null }, enrollClerk)).toBe(false);
+    expect(passesScope("Enrollment", { centerId: "c2" }, sa)).toBe(true); // SA bypass
+  });
+
+  it("ClassSession SCOPED bình thường NHƯNG vẫn ∈ MAKEUP_EXCEPTION (đọc chéo khi học bù)", () => {
+    expect(SCOPED_MODELS.has("ClassSession")).toBe(true);
+    expect(isMakeupExceptionModel("ClassSession")).toBe(true);
+    // Enrollment KHÔNG trong makeup exception → luôn cách ly, kể cả luồng học bù.
+    expect(isMakeupExceptionModel("Enrollment")).toBe(false);
+  });
+});
+
 describe("[FIX-C3] injectSoftDelete", () => {
   it("model tài chính, where rỗng → thêm deletedAt: null (ẩn row đã xóa)", () => {
     expect(injectSoftDelete("Order", {})).toEqual({ where: { deletedAt: null } });

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Plus, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { type Prisma } from "@prisma/client";
@@ -26,12 +26,10 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
 
   const isManager = actor.isSuperAdmin || actor.orgRoles.some((r) => ["CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR"].includes(r.roleCode));
 
-  // Cách ly cơ sở: ClassSession KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
-  // tiếp) → scopedDb không auto-scope. Scope thủ công qua class.centerId, dùng cùng tầm
-  // nhìn cơ sở của model Class (đã isolate ở /admin/classes). Gộp chung với ràng buộc
-  // teacher (GV chỉ thấy buổi của lớp mình dạy/trợ giảng).
-  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
-
+  // Cách ly cơ sở (FL3-02): ClassSession giờ ∈ SCOPED_MODELS → scopedDb tự inject
+  // `ClassSession.centerId IN visibleCenters`. KHÔNG còn scope tay qua class.centerId.
+  // Vẫn giữ ràng buộc teacher (GV chỉ thấy buổi của lớp mình dạy/trợ giảng) — đây là
+  // narrowing theo phân công, KHÔNG phải cách ly cơ sở.
   const sp = await searchParams;
   const scope = sp.scope === "past" ? "past" : sp.scope === "all" ? "all" : "upcoming";
   const classFilter = sp.classId?.trim();
@@ -44,9 +42,6 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
       { teacherId: session.user.id },
       { assistantId: session.user.id },
     ];
-  }
-  if (visibleClassCenters !== "ALL") {
-    classWhere.centerId = { in: visibleClassCenters };
   }
 
   const where: Prisma.ClassSessionWhereInput = {
