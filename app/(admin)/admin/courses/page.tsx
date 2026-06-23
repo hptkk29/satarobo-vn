@@ -48,9 +48,10 @@ export default async function CoursesPage() {
           <BookOpen className="h-5 w-5 text-orange-600" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Khoá dạy</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Khoá dạy (chương trình giảng)</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Cấu hình độ tuổi, trình độ và ưu đãi (giảm giá / học bổng) theo từng khoá.
+            Khoá dạy = đơn vị GIẢNG (chương trình, độ tuổi, trình độ, ưu đãi). Để BÁN/định giá,
+            dùng <span className="font-medium">Gói khoá học</span> và liên kết gói tới khoá dạy tại đây.
           </p>
         </div>
       </div>

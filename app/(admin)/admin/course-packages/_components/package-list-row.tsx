@@ -15,6 +15,8 @@ export type CoursePackageListItem = {
   priceOriginal: number | null;
   isPublished: boolean;
   isFeatured: boolean;
+  // FL1-05 — khoá dạy liên kết (null = chưa gắn).
+  course: { id: string; name: string; code: string | null } | null;
 };
 
 function formatCurrency(value: number | null) {
@@ -55,6 +57,16 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
         {error ? <div className="mt-1 text-xs font-medium text-red-600">{error}</div> : null}
       </td>
       <td className="px-4 py-3 text-sm text-gray-600">{pkg.level ?? "--"}</td>
+      <td className="px-4 py-3 text-sm">
+        {pkg.course ? (
+          <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+            {pkg.course.name}
+            {pkg.course.code ? ` (${pkg.course.code})` : ""}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">Chưa gắn</span>
+        )}
+      </td>
       <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-700">
         {formatCurrency(pkg.priceOriginal)}
       </td>

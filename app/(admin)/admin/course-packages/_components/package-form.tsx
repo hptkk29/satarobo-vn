@@ -41,6 +41,8 @@ type PackageFormValue = {
   seoTitle: string | null;
   seoDescription: string | null;
   parentCourseSlug: string | null;
+  // FL1-05 — khoá dạy liên kết
+  courseId: string | null;
   // Phase TD-1 — Detail content
   audienceTag: string | null;
   audienceDescription: string | null;
@@ -73,8 +75,13 @@ function normalizeFaqArray(value: Prisma.JsonValue): FaqItem[] {
     .map((v) => ({ question: v.question, answer: v.answer }));
 }
 
+/** FL1-05 — khoá dạy có thể liên kết (đổ vào dropdown). */
+export type LinkableCourse = { id: string; name: string; code: string | null; slug: string };
+
 interface PackageFormProps {
   pkg?: PackageFormValue;
+  /** Danh sách khoá dạy để chọn liên kết (FL1-05). */
+  courses?: LinkableCourse[];
 }
 
 type FieldProps = {
@@ -132,10 +139,13 @@ function normalizeJsonArray(value: Prisma.JsonValue): JsonArrayItem[] {
   });
 }
 
-export function PackageForm({ pkg }: PackageFormProps) {
+export function PackageForm({ pkg, courses = [] }: PackageFormProps) {
   const router = useRouter();
   const isEdit = Boolean(pkg);
   const [error, setError] = useState<string | null>(null);
+  // FL1-05 — khoá dạy liên kết (điều khiển để hiện banner "giáo trình lấy từ khoá").
+  const [courseId, setCourseId] = useState<string>(pkg?.courseId ?? "");
+  const linkedCourse = courses.find((c) => c.id === courseId);
   const [features, setFeatures] = useState<JsonArrayItem[]>(
     normalizeJsonArray(pkg?.features ?? []),
   );
@@ -291,7 +301,15 @@ export function PackageForm({ pkg }: PackageFormProps) {
         />
       </Section>
 
-      <Section title="Giáo trình (JSON)">
+      <Section title="Giáo trình">
+        {linkedCourse ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            Giáo trình hiển thị lấy từ khoá dạy liên kết:{" "}
+            <strong>{linkedCourse.name}</strong>
+            {linkedCourse.code ? ` (${linkedCourse.code})` : ""}. JSON dưới đây giữ làm
+            dữ liệu cũ (fallback) — chưa xoá.
+          </div>
+        ) : null}
         <JsonArrayEditor
           value={curriculum}
           onChange={setCurriculum}
@@ -339,7 +357,35 @@ export function PackageForm({ pkg }: PackageFormProps) {
         />
       </Section>
 
-      <Section title="Khoá cha">
+      {/* FL1-05 — gắn gói BÁN với khoá DẠY (Course) để gỡ "trùng" gói/khoá. */}
+      <Section title="Khoá dạy liên kết (chương trình giảng)">
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-gray-700">
+            Khoá dạy (Course) cung cấp giáo trình cho gói này
+          </span>
+          <select
+            name="courseId"
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value)}
+            className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20"
+          >
+            <option value="">-- Không liên kết (dùng giáo trình JSON) --</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.code ? ` (${c.code})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs text-gray-500">
+          Gói = đơn vị BÁN (giá, marketing). Khoá dạy = đơn vị GIẢNG (chương trình).
+          Liên kết để mỗi gói trỏ đúng khoá dạy, tránh trùng lặp. Giá vẫn lấy từ gói —
+          không đổi.
+        </p>
+      </Section>
+
+      <Section title="Khoá cha (landing marketing)">
         <SelectField
           label="Slug khoá cha"
           name="parentCourseSlug"
