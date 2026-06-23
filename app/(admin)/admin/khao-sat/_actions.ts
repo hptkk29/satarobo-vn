@@ -11,6 +11,10 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 // B3 — quản lý khảo sát. Gate parent-feedback:view (CSKH/quản lý).
 // Cách ly cơ sở: Survey ∈ SCOPED_MODELS → đọc qua scopedDb (auto null-filter)
 // + passesScope trước khi ghi; create chỉ cho gán centerId trong tầm nhìn actor.
+//
+// @deprecated FL4-03 — Survey/NPS đang được hợp nhất về EvalForm scope CENTER_SURVEY
+// (engine 4 loại câu hỏi, quản lý ở /admin/evaluations). KHÔNG drop model/route (2-phase):
+// các action dưới vẫn chạy để đọc + tắt khảo sát NPS cũ; ưu tiên tạo khảo sát mới qua EvalForm.
 
 const MILESTONES = ["AFTER_TRIAL", "AFTER_3_SESSIONS", "MID_COURSE", "END_COURSE", "AFTER_COMPLAINT", "GENERAL"] as const;
 

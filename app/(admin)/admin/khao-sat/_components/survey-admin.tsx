@@ -45,7 +45,12 @@ export function SurveyAdmin({
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">Tạo khảo sát (NPS)</h2>
+        <h2 className="mb-1 text-sm font-bold uppercase tracking-wider text-gray-500">
+          Tạo khảo sát (NPS) <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">bản cũ</span>
+        </h2>
+        <p className="mb-3 text-xs text-gray-400">
+          Khảo sát NPS 1 câu (0–10). Khảo sát trung tâm nhiều loại câu hỏi: dùng Form builder ở “Đánh giá &amp; Khảo sát”.
+        </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Tiêu đề khảo sát" className={`${inputCls} sm:col-span-3`} />
           <label className="sm:col-span-3 block">

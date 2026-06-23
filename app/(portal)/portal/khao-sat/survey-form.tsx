@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { submitSurveyResponse } from "./_actions";
 
+// @deprecated FL4-03 — form NPS 1 câu (bản cũ). Khảo sát cơ sở nhiều loại câu hỏi
+// dùng <CenterSurveyForm> (CENTER_SURVEY). Giữ song song 2-phase, không xoá.
 export function SurveyForm({ surveyId, title }: { surveyId: string; title: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();

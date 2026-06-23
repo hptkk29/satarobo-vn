@@ -1,10 +1,7 @@
 import { requireActiveStudent } from "@/lib/portal/session";
 import { db } from "@/lib/db";
 import { isEvalV2Enabled } from "@/lib/flags";
-import { isRoundOpen } from "@/lib/eval/rounds";
-import { CURRENTLY_STUDYING_STATUSES } from "@/lib/eval/eligibility";
-import { parseOptions, type QuestionType } from "@/lib/eval/forms";
-import type { PortalQuestion } from "../danh-gia-gv/_fields";
+import { getEligibleCenterRounds } from "@/lib/eval/center-survey";
 import { SurveyForm } from "./survey-form";
 import { CenterSurveyForm } from "./center-survey";
 
@@ -14,12 +11,18 @@ export const metadata = { title: "Khảo sát | Sata Robo", robots: { index: fal
 export default async function KhaoSatPage() {
   const { ctx, studentId } = await requireActiveStudent();
 
+  // FL4-03 — Khảo sát cơ sở CENTER_SURVEY (engine EvalForm, 4 loại câu hỏi) là luồng
+  // chính. Survey/NPS dưới đây giữ song song (2-phase, sẽ deprecate — KHÔNG xoá).
+  const centerRounds = isEvalV2Enabled() ? await getEligibleCenterRounds(ctx.parentUserId) : [];
+
   const student = await db.student.findUnique({
     where: { id: studentId },
     select: { centerId: true, preferredCenterId: true },
   });
   const centerIds = [student?.centerId, student?.preferredCenterId].filter((x): x is string => !!x);
 
+  // @deprecated Survey/NPS cũ — thay dần bằng CENTER_SURVEY ở trên. Vẫn đọc để PH
+  // trả nốt khảo sát đang chạy; không tạo mới qua admin (xem _actions.ts createSurvey).
   const surveys = await db.survey.findMany({
     where: {
       isActive: true,
@@ -36,9 +39,6 @@ export default async function KhaoSatPage() {
       .map((r) => r.surveyId),
   );
   const pending = surveys.filter((s) => !answered.has(s.id));
-
-  // R7-16 — Khảo sát cơ sở round-based (sau flag). NPS ở trên giữ nguyên.
-  const centerRounds = await getEligibleCenterRounds(ctx.parentUserId);
 
   return (
     <div className="space-y-5">
@@ -65,56 +65,4 @@ export default async function KhaoSatPage() {
       )}
     </div>
   );
-}
-
-/** R7-16 — đợt CENTER_SURVEY đang mở mà PH đủ điều kiện + chưa làm. */
-async function getEligibleCenterRounds(parentUserId: string) {
-  if (!isEvalV2Enabled()) return [];
-
-  // Cơ sở mà PH đang có con theo học.
-  const enr = await db.enrollment.findMany({
-    where: { student: { parentUserId, deletedAt: null }, status: { in: CURRENTLY_STUDYING_STATUSES } },
-    select: { class: { select: { centerId: true } } },
-  });
-  const myCenters = new Set(enr.map((e) => e.class.centerId).filter((x): x is string => !!x));
-  if (myCenters.size === 0) return [];
-
-  const rounds = await db.evaluationRound.findMany({
-    where: {
-      scope: "CENTER_SURVEY",
-      status: "OPEN",
-      OR: [{ centerId: null }, { centerId: { in: [...myCenters] } }],
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      opensAt: true,
-      closesAt: true,
-      form: { select: { questions: { orderBy: { order: "asc" } } } },
-    },
-  });
-
-  const out: { roundId: string; title: string; questions: PortalQuestion[] }[] = [];
-  for (const r of rounds) {
-    if (!isRoundOpen(r)) continue;
-    const already = await db.evalResponse.findFirst({
-      where: { roundId: r.id, parentUserId },
-      select: { id: true },
-    });
-    if (already) continue;
-    out.push({
-      roundId: r.id,
-      title: r.name,
-      questions: r.form.questions.map((q) => ({
-        id: q.id,
-        type: q.type as QuestionType,
-        label: q.label,
-        options: parseOptions(q.options),
-        required: q.required,
-      })),
-    });
-  }
-  return out;
 }
