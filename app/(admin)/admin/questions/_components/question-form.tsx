@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
+import { ImageUploader } from "@/components/admin/ImageUploader";
 import {
   createQuestionAndRedirect,
   updateQuestion,
@@ -25,17 +26,37 @@ interface LessonOption {
   curriculumName: string;
 }
 
+interface CurriculumOption {
+  id: string;
+  /** Nhãn hiển thị: "Lập trình Robot Sata 4 — Khung v2". */
+  label: string;
+  /** Khoá dạy chứa khung CT — dùng để suy `courseId`. */
+  courseId: string;
+}
+
+type ChoiceValue = {
+  order: number;
+  text: string;
+  isCorrect: boolean;
+  imageUrl: string | null;
+};
+
 export type QuestionFormValue = {
   id: string;
   questionCode: string | null;
   type: QuestionType;
   text: string;
   explanation: string | null;
+  imageUrl: string | null;
   difficulty: Difficulty;
   tags: string[];
+  curriculumId: string | null;
+  courseId: string | null;
+  points: number | null;
+  timeLimitSec: number | null;
   lessonId: string | null;
   correctAnswer: string | null;
-  choices: { order: number; text: string; isCorrect: boolean }[];
+  choices: ChoiceValue[];
   isPublic: boolean;
   notes: string | null;
 };
@@ -55,21 +76,17 @@ const DIFFICULTY_OPTIONS: { value: Difficulty; label: string }[] = [
   { value: "EXPERT", label: "Chuyên gia" },
 ];
 
-function defaultChoices(type: QuestionType): {
-  order: number;
-  text: string;
-  isCorrect: boolean;
-}[] {
+function defaultChoices(type: QuestionType): ChoiceValue[] {
   if (type === "TRUE_FALSE") {
     return [
-      { order: 1, text: "Đúng", isCorrect: false },
-      { order: 2, text: "Sai", isCorrect: false },
+      { order: 1, text: "Đúng", isCorrect: false, imageUrl: null },
+      { order: 2, text: "Sai", isCorrect: false, imageUrl: null },
     ];
   }
   if (type === "MULTIPLE_CHOICE") {
     return [
-      { order: 1, text: "", isCorrect: false },
-      { order: 2, text: "", isCorrect: false },
+      { order: 1, text: "", isCorrect: false, imageUrl: null },
+      { order: 2, text: "", isCorrect: false, imageUrl: null },
     ];
   }
   return [];
@@ -78,9 +95,11 @@ function defaultChoices(type: QuestionType): {
 export function QuestionForm({
   question,
   lessons,
+  curriculums,
 }: {
   question?: QuestionFormValue;
   lessons: LessonOption[];
+  curriculums: CurriculumOption[];
 }) {
   const router = useRouter();
   const isEdit = Boolean(question);
@@ -91,13 +110,23 @@ export function QuestionForm({
   );
   const [text, setText] = useState(question?.text ?? "");
   const [explanation, setExplanation] = useState(question?.explanation ?? "");
+  const [imageUrl, setImageUrl] = useState<string | null>(
+    question?.imageUrl ?? null,
+  );
   const [difficulty, setDifficulty] = useState<Difficulty>(
     question?.difficulty ?? "MEDIUM",
   );
   const [tags, setTags] = useState<string[]>(question?.tags ?? []);
+  const [curriculumId, setCurriculumId] = useState(question?.curriculumId ?? "");
+  const [points, setPoints] = useState(
+    question?.points != null ? String(question.points) : "",
+  );
+  const [timeLimitSec, setTimeLimitSec] = useState(
+    question?.timeLimitSec != null ? String(question.timeLimitSec) : "",
+  );
   const [lessonId, setLessonId] = useState(question?.lessonId ?? "");
   const [correctAnswer, setCorrectAnswer] = useState(question?.correctAnswer ?? "");
-  const [choices, setChoices] = useState(
+  const [choices, setChoices] = useState<ChoiceValue[]>(
     question?.choices && question.choices.length > 0
       ? question.choices
       : defaultChoices(question?.type ?? "MULTIPLE_CHOICE"),
@@ -140,11 +169,17 @@ export function QuestionForm({
     );
   }
 
+  function updateChoiceImage(idx: number, url: string | null) {
+    setChoices((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, imageUrl: url } : c)),
+    );
+  }
+
   function addChoice() {
     if (choices.length >= 6) return;
     setChoices((prev) => [
       ...prev,
-      { order: prev.length + 1, text: "", isCorrect: false },
+      { order: prev.length + 1, text: "", isCorrect: false, imageUrl: null },
     ]);
   }
 
@@ -160,13 +195,20 @@ export function QuestionForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const selectedCurriculum = curriculums.find((c) => c.id === curriculumId);
     const payload = {
       questionCode: questionCode.trim() || null,
       type,
       text,
       explanation: explanation.trim() || null,
+      imageUrl: imageUrl || null,
       difficulty,
       tags,
+      curriculumId: curriculumId || null,
+      // Suy courseId từ khung CT đã chọn (server vẫn re-derive để chắc chắn).
+      courseId: selectedCurriculum?.courseId ?? null,
+      points: points.trim() === "" ? null : Number(points),
+      timeLimitSec: timeLimitSec.trim() === "" ? null : Number(timeLimitSec),
       lessonId: lessonId || null,
       correctAnswer: correctAnswer.trim() || null,
       choices,
@@ -260,6 +302,53 @@ export function QuestionForm({
           </Field>
         </div>
 
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Field label="Khung chương trình">
+            <select
+              value={curriculumId}
+              onChange={(e) => setCurriculumId(e.target.value)}
+              disabled={pending}
+              className={inputClass}
+            >
+              <option value="">— Không gắn khung —</option>
+              {curriculums.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <Hint>Lọc câu hỏi theo Sata x khi soạn bài</Hint>
+          </Field>
+
+          <Field label="Điểm/câu">
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+              placeholder="VD: 1"
+              disabled={pending}
+              className={inputClass}
+            />
+            <Hint>Trống = dùng mặc định của đề</Hint>
+          </Field>
+
+          <Field label="Thời gian/câu (giây)">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={timeLimitSec}
+              onChange={(e) => setTimeLimitSec(e.target.value)}
+              placeholder="VD: 60"
+              disabled={pending}
+              className={inputClass}
+            />
+            <Hint>Trống = không giới hạn riêng</Hint>
+          </Field>
+        </div>
+
         <Field label="Đề bài" required>
           <textarea
             value={text}
@@ -269,6 +358,17 @@ export function QuestionForm({
             required
             disabled={pending}
             className={`${inputClass} resize-y`}
+          />
+        </Field>
+
+        <Field label="Ảnh đề bài (tuỳ chọn)">
+          <ImageUploader
+            value={imageUrl}
+            onChange={setImageUrl}
+            prefix="questions"
+            aspect="video"
+            disabled={pending}
+            helperText="Ảnh minh hoạ hiển thị kèm đề bài."
           />
         </Field>
 
@@ -330,44 +430,58 @@ export function QuestionForm({
           {choices.map((c, idx) => (
             <div
               key={idx}
-              className="flex items-start gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3"
+              className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"
             >
-              <span className="w-8 pt-2 text-center font-bold text-neutral-500">
-                {String.fromCharCode(64 + c.order)}.
-              </span>
-              <textarea
-                value={c.text}
-                onChange={(e) => updateChoiceText(idx, e.target.value)}
-                rows={1}
-                disabled={pending || type === "TRUE_FALSE"}
-                placeholder={
-                  type === "TRUE_FALSE"
-                    ? "(cố định)"
-                    : `Nội dung lựa chọn ${String.fromCharCode(64 + c.order)}`
-                }
-                className="flex-1 resize-y rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-neutral-100"
-              />
-              <label className="flex items-center gap-1 self-center text-sm font-medium">
-                <input
-                  type="checkbox"
-                  checked={c.isCorrect}
-                  onChange={(e) => toggleChoiceCorrect(idx, e.target.checked)}
-                  disabled={pending}
-                  className="h-4 w-4 rounded border-neutral-300"
+              <div className="flex items-start gap-2">
+                <span className="w-8 pt-2 text-center font-bold text-neutral-500">
+                  {String.fromCharCode(64 + c.order)}.
+                </span>
+                <textarea
+                  value={c.text}
+                  onChange={(e) => updateChoiceText(idx, e.target.value)}
+                  rows={1}
+                  disabled={pending || type === "TRUE_FALSE"}
+                  placeholder={
+                    type === "TRUE_FALSE"
+                      ? "(cố định)"
+                      : `Nội dung lựa chọn ${String.fromCharCode(64 + c.order)}`
+                  }
+                  className="flex-1 resize-y rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-neutral-100"
                 />
-                <span className="text-neutral-700">Đúng</span>
-              </label>
-              {type === "MULTIPLE_CHOICE" && choices.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => removeChoice(idx)}
-                  disabled={pending}
-                  className="self-center rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-40"
-                  aria-label="Xoá lựa chọn"
-                  title="Xoá"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <label className="flex items-center gap-1 self-center text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={c.isCorrect}
+                    onChange={(e) => toggleChoiceCorrect(idx, e.target.checked)}
+                    disabled={pending}
+                    className="h-4 w-4 rounded border-neutral-300"
+                  />
+                  <span className="text-neutral-700">Đúng</span>
+                </label>
+                {type === "MULTIPLE_CHOICE" && choices.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeChoice(idx)}
+                    disabled={pending}
+                    className="self-center rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-40"
+                    aria-label="Xoá lựa chọn"
+                    title="Xoá"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {type === "MULTIPLE_CHOICE" && (
+                <div className="mt-2 pl-8">
+                  <ImageUploader
+                    value={c.imageUrl}
+                    onChange={(url) => updateChoiceImage(idx, url)}
+                    prefix="questions"
+                    aspect="video"
+                    disabled={pending}
+                    helperText="Ảnh đáp án (tuỳ chọn)."
+                  />
+                </div>
               )}
             </div>
           ))}

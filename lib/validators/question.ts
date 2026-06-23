@@ -24,6 +24,49 @@ const nullableStr = z
     return s.length > 0 ? s : null;
   });
 
+// FL1-03 — điểm/câu (>= 0) và thời gian/câu (giây, >= 1). Trống → null.
+const nullableNonNegFloat = z
+  .union([z.number(), z.string(), z.null()])
+  .optional()
+  .transform((v, ctx) => {
+    if (v === null || v === undefined || (typeof v === "string" && v.trim() === ""))
+      return null;
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Điểm phải là số" });
+      return z.NEVER;
+    }
+    if (n < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Điểm không được âm" });
+      return z.NEVER;
+    }
+    return n;
+  });
+
+const nullablePosInt = z
+  .union([z.number(), z.string(), z.null()])
+  .optional()
+  .transform((v, ctx) => {
+    if (v === null || v === undefined || (typeof v === "string" && v.trim() === ""))
+      return null;
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Thời gian phải là số nguyên (giây)",
+      });
+      return z.NEVER;
+    }
+    if (n < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Thời gian phải >= 1 giây",
+      });
+      return z.NEVER;
+    }
+    return n;
+  });
+
 const tagsClean = z
   .array(z.string())
   .default([])
@@ -37,11 +80,18 @@ const tagsClean = z
     ),
   );
 
-export const choiceSchema = z.object({
-  order: z.coerce.number().int().min(1).max(6),
-  text: z.string().trim().min(1, "Nội dung lựa chọn không được trống"),
-  isCorrect: z.coerce.boolean().default(false),
-});
+export const choiceSchema = z
+  .object({
+    order: z.coerce.number().int().min(1).max(6),
+    // FL1-03 — cho phép lựa chọn chỉ có ảnh (text trống) miễn là có ảnh.
+    text: z.string().trim().default(""),
+    isCorrect: z.coerce.boolean().default(false),
+    imageUrl: nullableStr,
+  })
+  .refine((c) => c.text.length > 0 || Boolean(c.imageUrl), {
+    message: "Lựa chọn cần nội dung chữ hoặc ảnh",
+    path: ["text"],
+  });
 
 export const questionSchema = z
   .object({
@@ -49,8 +99,15 @@ export const questionSchema = z
     type: QuestionTypeEnum,
     text: z.string().trim().min(1, "Đề bài bắt buộc"),
     explanation: nullableStr,
+    imageUrl: nullableStr, // ảnh đề bài
     difficulty: QuestionDifficultyEnum.default("MEDIUM"),
     tags: tagsClean,
+    // FL1-03 — gắn khung chương trình (lọc câu hỏi theo Sata x). courseId được
+    // suy từ curriculum ở tầng server; FE gửi kèm để giảm round-trip.
+    curriculumId: nullableStr,
+    courseId: nullableStr,
+    points: nullableNonNegFloat,
+    timeLimitSec: nullablePosInt,
     lessonId: nullableStr,
     correctAnswer: nullableStr,
     choices: z.array(choiceSchema).default([]),

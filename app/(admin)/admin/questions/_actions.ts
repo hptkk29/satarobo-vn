@@ -83,7 +83,22 @@ function normalizeChoices(input: QuestionInput["choices"]) {
     order: i + 1,
     text: c.text,
     isCorrect: c.isCorrect,
+    imageUrl: c.imageUrl,
   }));
+}
+
+// FL1-03 — courseId là field suy ra: ưu tiên khung CT đã chọn (authoritative).
+// Tránh lệch khi FE gửi courseId không khớp curriculum.
+async function resolveCourseId(
+  curriculumId: string | null,
+  fallbackCourseId: string | null,
+): Promise<string | null> {
+  if (!curriculumId) return fallbackCourseId;
+  const cur = await db.curriculum.findUnique({
+    where: { id: curriculumId },
+    select: { courseId: true },
+  });
+  return cur?.courseId ?? fallbackCourseId;
 }
 
 export async function createQuestion(
@@ -107,6 +122,7 @@ export async function createQuestion(
   }
 
   const authorEmployeeId = await resolveAuthorEmployeeId(gate.userId);
+  const courseId = await resolveCourseId(data.curriculumId, data.courseId);
   const choices =
     data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE"
       ? normalizeChoices(data.choices)
@@ -120,8 +136,13 @@ export async function createQuestion(
           type: data.type,
           text: data.text,
           explanation: data.explanation,
+          imageUrl: data.imageUrl,
           difficulty: data.difficulty,
           tags: data.tags,
+          curriculumId: data.curriculumId,
+          courseId,
+          points: data.points,
+          timeLimitSec: data.timeLimitSec,
           lessonId: data.lessonId,
           correctAnswer:
             data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE"
@@ -193,6 +214,7 @@ export async function updateQuestion(
     }
   }
 
+  const courseId = await resolveCourseId(data.curriculumId, data.courseId);
   const choices =
     data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE"
       ? normalizeChoices(data.choices)
@@ -209,8 +231,13 @@ export async function updateQuestion(
           type: data.type,
           text: data.text,
           explanation: data.explanation,
+          imageUrl: data.imageUrl,
           difficulty: data.difficulty,
           tags: data.tags,
+          curriculumId: data.curriculumId,
+          courseId,
+          points: data.points,
+          timeLimitSec: data.timeLimitSec,
           lessonId: data.lessonId,
           correctAnswer:
             data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE"
