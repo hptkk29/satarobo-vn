@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeftRight } from "lucide-react";
 import { transferLead } from "../../actions";
+import { validateTransferTarget } from "@/lib/crm/transfer-validate";
 
 type Center = { id: string; name: string };
 type Sale = { id: string; name: string | null; centerId: string | null };
@@ -39,6 +40,18 @@ export function TransferDialog({
   function submit() {
     if (handoverNote.trim().length < 5) {
       toast.error("Bắt buộc ghi đã tư vấn gì cho khách");
+      return;
+    }
+    // FL2-03 — chặn bàn giao "rỗng": cơ sở/sale đích trùng nguồn (kiểm tra trước khi
+    // gửi để báo lỗi nhanh; server cũng validate lại bằng cùng hàm).
+    const check = validateTransferTarget({
+      fromCenterId: currentCenterId,
+      fromSaleId: currentSaleId,
+      toCenterId: toCenterId || currentCenterId || null,
+      toSaleId: toSaleId || null,
+    });
+    if (!check.ok) {
+      toast.error(check.error.message);
       return;
     }
     startTransition(async () => {

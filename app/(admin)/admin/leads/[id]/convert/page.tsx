@@ -63,6 +63,14 @@ export default async function ConvertV2Page({ params }: Props) {
   const recordedCount = recorded._count._all
   const recordedTotal = recorded._sum.amount ?? 0
 
+  // FL2-01 — đơn hàng học phí gắn lead (tạo trước ở /orders/new?leadId=...) để chia
+  // 1/2 đợt khi convert. Lấy đơn COURSE mới nhất của lead.
+  const courseOrder = await sdb.order.findFirst({
+    where: { leadId: lead.id, type: 'COURSE' },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, totalAmount: true },
+  })
+
   // Lớp đang mở (ưu tiên cùng cơ sở lead) + giá khoá để snapshot.
   const classes = await sdb.class.findMany({
     where: {
@@ -185,6 +193,7 @@ export default async function ConvertV2Page({ params }: Props) {
         prefillStudents={prefillStudents}
         classes={classOptions}
         discountsByCourse={discountsByCourse}
+        order={courseOrder}
       />
     </div>
   )

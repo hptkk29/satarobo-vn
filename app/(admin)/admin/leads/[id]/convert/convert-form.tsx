@@ -39,6 +39,7 @@ export function ConvertForm({
   prefillStudents,
   classes,
   discountsByCourse,
+  order,
 }: {
   leadId: string
   defaultParentName: string
@@ -52,6 +53,8 @@ export function ConvertForm({
   }[]
   classes: ClassOpt[]
   discountsByCourse: Record<string, { id: string; label: string }[]>
+  /** FL2-01 — đơn hàng học phí gắn lead (để chia 1/2 đợt). null = chưa có đơn. */
+  order: { id: string; totalAmount: number } | null
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -60,6 +63,15 @@ export function ConvertForm({
   const [parentName, setParentName] = useState(defaultParentName)
   const [parentEmail, setParentEmail] = useState(defaultParentEmail)
   const [parentPhone, setParentPhone] = useState(defaultParentPhone)
+
+  // FL2-01 — kế hoạch học phí. Chỉ áp dụng khi có Order với tổng > 0.
+  const hasOrder = !!order && order.totalAmount > 0
+  const orderTotal = order?.totalAmount ?? 0
+  const [installPlan, setInstallPlan] = useState<'FULL' | 'TWO'>('FULL')
+  const [dot1Amount, setDot1Amount] = useState('')
+  const [dot2DueDate, setDot2DueDate] = useState('')
+  const dot1Num = Math.min(Math.max(0, Number.parseInt(dot1Amount || '0', 10) || 0), orderTotal)
+  const dot2Num = Math.max(0, orderTotal - dot1Num)
 
   const [students, setStudents] = useState<StudentRow[]>(() =>
     (prefillStudents.length ? prefillStudents : [{ leadChildId: null, name: '', dob: '', courseId: '' }]).map(
@@ -105,6 +117,10 @@ export function ConvertForm({
       toast.error('Mỗi học viên cần tên + lớp')
       return
     }
+    if (hasOrder && installPlan === 'TWO' && !dot2DueDate) {
+      toast.error('Chọn 2 đợt thì cần ngày hẹn đóng đợt 2')
+      return
+    }
     setConflict(null)
     startTransition(async () => {
       const res = await submitConvertV2(leadId, {
@@ -119,12 +135,18 @@ export function ConvertForm({
           discountId: s.discountId || '',
           consentMedia: s.consentMedia,
         })),
+        // FL2-01 — chỉ gửi khi có đơn để chia; server đọc lại tổng từ Order.
+        installment: hasOrder
+          ? { plan: installPlan, dot1Amount: dot1Num, dot2DueDate: installPlan === 'TWO' ? dot2DueDate : '' }
+          : null,
       })
       if (res.ok) {
         toast.success(
           `Đã chuyển đổi: ${res.studentIds.length} học viên · ${res.enrollmentIds.length} đăng ký` +
             (res.deduped ? ' (đã xử lý trùng / idempotent)' : ''),
         )
+        if (res.installmentWarning) toast.warning(res.installmentWarning)
+        else if (res.installmentApplied) toast.success('Đã ghi kế hoạch học phí 2 đợt')
         router.push(`/leads/${leadId}`)
         router.refresh()
         return
@@ -283,6 +305,72 @@ export function ConvertForm({
         <p className="text-xs text-amber-600">
           Chưa có lớp nào đang mở (cùng cơ sở lead). Tạo lớp ở mục Lớp học trước khi chốt.
         </p>
+      )}
+
+      {/* FL2-01 — Học phí: 1 đợt (full) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày). */}
+      {hasOrder && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="mb-1 text-sm font-semibold text-gray-700">Học phí</h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Tổng đơn hàng: <strong>{orderTotal.toLocaleString('vi-VN')}đ</strong>
+          </p>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="radio"
+                name="install-plan"
+                checked={installPlan === 'FULL'}
+                onChange={() => setInstallPlan('FULL')}
+                className="h-4 w-4"
+              />
+              Đóng đủ 1 đợt
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="radio"
+                name="install-plan"
+                checked={installPlan === 'TWO'}
+                onChange={() => setInstallPlan('TWO')}
+                className="h-4 w-4"
+              />
+              Chia 2 đợt
+            </label>
+          </div>
+
+          {installPlan === 'TWO' && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-500">Đợt 1 — đã thu (VNĐ)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={orderTotal}
+                  value={dot1Amount}
+                  onChange={(e) => setDot1Amount(e.target.value)}
+                  placeholder="0"
+                  className={inputCls}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-500">Đợt 2 — còn lại</span>
+                <input
+                  value={`${dot2Num.toLocaleString('vi-VN')}đ`}
+                  readOnly
+                  className={`${inputCls} bg-gray-50 text-gray-600`}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-500">Đợt 2 — ngày hẹn đóng *</span>
+                <input
+                  type="date"
+                  value={dot2DueDate}
+                  onChange={(e) => setDot2DueDate(e.target.value)}
+                  className={inputCls}
+                />
+              </label>
+            </div>
+          )}
+        </div>
       )}
 
       <div className="flex gap-2 border-t border-gray-200 pt-4">

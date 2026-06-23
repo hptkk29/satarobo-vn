@@ -9,6 +9,7 @@ import { logLeadAudit, logStudentAudit, getAuditActor } from '@/lib/audit/log'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope } from '@/lib/db-scope'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
+import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { genStudentCode } from '@/lib/codegen'
@@ -1114,7 +1115,7 @@ const transferSchema = z.object({
 
 export async function transferLead(
   input: unknown,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; code?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
@@ -1147,6 +1148,18 @@ export async function transferLead(
 
   const toCenterId = d.toCenterId || lead.centerId || null
   const centerChanged = !!toCenterId && toCenterId !== lead.centerId
+
+  // FL2-03 — chặn bàn giao "rỗng": cơ sở/sale đích trùng nguồn → báo lỗi rõ (code EN,
+  // message VI). Validator thuần (Vitest) — xem lib/crm/transfer-validate.ts.
+  const targetCheck = validateTransferTarget({
+    fromCenterId: lead.centerId,
+    fromSaleId: lead.assignedToId,
+    toCenterId,
+    toSaleId: d.toSaleId || null,
+  })
+  if (!targetCheck.ok) {
+    return { ok: false, code: targetCheck.error.code, error: targetCheck.error.message }
+  }
 
   // Xác định sale nhận.
   let toSaleId: string | null = null

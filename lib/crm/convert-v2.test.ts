@@ -1,7 +1,7 @@
 // R7-05 — unit cho phần THUẦN của convert v2 (guard, dedupe, codegen). DB-touching
 // (convertLeadV2 transaction) để cho e2e/integration.
 import { describe, it, expect } from "vitest";
-import { evaluatePaymentGuard } from "@/lib/crm/convert-lead-v2";
+import { evaluatePaymentGuard, computeInstallmentSplit } from "@/lib/crm/convert-lead-v2";
 import { normalizeName, classifyParentMatch, studentMatches } from "@/lib/crm/dedupe";
 import {
   randomStudentCodeBody,
@@ -24,6 +24,31 @@ describe("[R7-05] evaluatePaymentGuard (AC1/C1/C3 — R7-05-C2)", () => {
   });
   it("0 khoản RECORDED + finalPrice>0 → PAYMENT_REQUIRED", () => {
     expect(evaluatePaymentGuard({ hasRecordedPayment: false, totalFinalPrice: 9_000_000 }).ok).toBe(false);
+  });
+});
+
+describe("[FL2-01] computeInstallmentSplit — tổng 2 đợt LUÔN bằng order total", () => {
+  it("dot1 trong khoảng → dot2 = phần còn lại", () => {
+    expect(computeInstallmentSplit(10_000_000, 6_000_000)).toEqual({ dot1: 6_000_000, dot2: 4_000_000 });
+  });
+  it("dot1 = 0 → dot2 = toàn bộ", () => {
+    expect(computeInstallmentSplit(8_000_000, 0)).toEqual({ dot1: 0, dot2: 8_000_000 });
+  });
+  it("dot1 > total → clamp về total, dot2 = 0", () => {
+    expect(computeInstallmentSplit(5_000_000, 9_000_000)).toEqual({ dot1: 5_000_000, dot2: 0 });
+  });
+  it("dot1 âm → clamp về 0", () => {
+    expect(computeInstallmentSplit(5_000_000, -100)).toEqual({ dot1: 0, dot2: 5_000_000 });
+  });
+  it("bất biến: dot1 + dot2 === total (mọi input hợp lệ)", () => {
+    for (const [total, d1] of [
+      [10_000_000, 3_000_000],
+      [7_500_000, 7_500_000],
+      [1_000_000, 12_000_000],
+    ] as const) {
+      const { dot1, dot2 } = computeInstallmentSplit(total, d1);
+      expect(dot1 + dot2).toBe(total);
+    }
   });
 });
 
