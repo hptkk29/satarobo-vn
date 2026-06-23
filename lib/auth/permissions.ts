@@ -70,6 +70,9 @@ export type Action =
   | "trials:assign-teacher"
   | "trials:override-capacity"
   | "training:manage"
+  // FL W0-NAV-2 (QĐ-T3b) — 2 việc vận hành CM giữ qua action RIÊNG (KHÔNG trả training:manage):
+  | "trials:config" // cấu hình số buổi lớp trải nghiệm
+  | "lesson-change:approve" // duyệt LessonChangeRequest (chấp nhận/từ chối đề xuất chỉnh bài)
 
   // --- Notifications (Phase NHÓM 3) ---
   | "notifications:manage"
@@ -274,7 +277,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "honors:settings": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Jobs ---
-  "jobs:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "MARKETING"],
+  // FL W0-NAV-2 hygiene: SALES_CSM bỏ Tuyển dụng (HR/Marketing/quản lý mới cần).
+  "jobs:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "MARKETING"],
   "jobs:create": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
   "jobs:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
   "jobs:delete": ["SUPER_ADMIN", "HR"],
@@ -297,6 +301,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],
+  // FL W0-NAV-2 (QĐ-T3b): trả lại cho CM 2 việc vận hành qua action riêng — KHÔNG mở lại training:manage.
+  // CM cần cấu hình số buổi lớp trải nghiệm + duyệt đề xuất chỉnh bài của GV.
+  "trials:config": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "lesson-change:approve": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
 
   // --- Notifications (Phase NHÓM 3) ---
   "notifications:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
@@ -328,8 +336,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "blog:create": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   "blog:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   "blog:delete": ["SUPER_ADMIN"],
+  // FL W0-NAV-2 hygiene: SALES_CSM + ACCOUNTANT bỏ Tin tức (nội dung website = Marketing/quản lý/HR/GV).
   "news:view": [
-    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "TEACHER", "MARKETING",
   ],
   "news:create": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   "news:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
@@ -384,16 +393,18 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "enrollments:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Sessions + Attendance ---
-  "sessions:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "SALES_CSM"],
+  // FL W0-NAV-2 hygiene (BA #07 3.C): SALES_CSM bỏ Buổi học/Điểm danh (module dư — Sale lo lead/tuyển sinh).
+  "sessions:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "sessions:create": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "sessions:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
-  "attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "SALES_CSM"],
+  "attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "attendance:mark": ["TEACHER", "SUPER_ADMIN", "CENTER_MANAGER"],
   "attendance:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Courses + Packages ---
+  // FL W0-NAV-2 hygiene: SALES_CSM + ACCOUNTANT bỏ "Khoá dạy" (Sale bán qua Gói học = course-packages; KT không cần).
   "courses:view": [
-    "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "HR", "TEACHER", "MARKETING",
   ],
   "courses:create": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
   "courses:edit": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "MARKETING"],
@@ -441,7 +452,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
     "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
   "centers:edit": ["SUPER_ADMIN"],
-  "rooms:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "SALES_CSM"],
+  // FL W0-NAV-2 hygiene: SALES_CSM bỏ Phòng học (module dư).
+  "rooms:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "rooms:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "holidays:view": [
     "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",

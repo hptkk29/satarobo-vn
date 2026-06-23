@@ -61,11 +61,11 @@ const trialConfigSchema = z.object({
     .max(60, "Số buổi quá lớn"),
 });
 
-/** Cấu hình số buổi lớp trải nghiệm — gate `training:manage`. */
+/** Cấu hình số buổi lớp trải nghiệm — gate `trials:config` (QĐ-T3b: CM giữ qua action riêng, KHÔNG training:manage). */
 export async function saveTrialConfigAction(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "training:manage")) {
+  if (!can(session.user, "trials:config")) {
     return { ok: false, error: "Không có quyền cấu hình số buổi" };
   }
 

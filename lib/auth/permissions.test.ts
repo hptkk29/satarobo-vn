@@ -131,6 +131,70 @@ describe("permissions matrix — ACCOUNTANT (QĐ-T4)", () => {
   });
 });
 
+describe("permissions matrix — FL W0-NAV-2 QĐ-T3b (CM giữ trial-config + duyệt sửa bài qua action RIÊNG)", () => {
+  it("trials:config — Super/Training/CM = true; KHÔNG trả qua training:manage", () => {
+    expect(can("SUPER_ADMIN", "trials:config")).toBe(true);
+    expect(can("TRAINING", "trials:config")).toBe(true);
+    expect(can("CENTER_MANAGER", "trials:config")).toBe(true);
+    // CM vẫn KHÔNG có training:manage (W0 đã gỡ) — chỉ trả lại qua action riêng.
+    expect(can("CENTER_MANAGER", "training:manage")).toBe(false);
+    // vai khác không có
+    expect(can("SALES_CSM", "trials:config")).toBe(false);
+    expect(can("TEACHER", "trials:config")).toBe(false);
+    expect(can("ACCOUNTANT", "trials:config")).toBe(false);
+  });
+
+  it("lesson-change:approve — Super/Training/CM = true; Sale/GV = false", () => {
+    expect(can("SUPER_ADMIN", "lesson-change:approve")).toBe(true);
+    expect(can("TRAINING", "lesson-change:approve")).toBe(true);
+    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(true);
+    expect(can("SALES_CSM", "lesson-change:approve")).toBe(false);
+    expect(can("TEACHER", "lesson-change:approve")).toBe(false);
+  });
+});
+
+describe("permissions matrix — FL W0-NAV-2 role hygiene (BA #07 3.C)", () => {
+  it("SALES_CSM bỏ module dư (Buổi học/Điểm danh/Phòng học/Khoá dạy/Tuyển dụng/Tin tức)", () => {
+    expect(can("SALES_CSM", "sessions:view")).toBe(false);
+    expect(can("SALES_CSM", "attendance:view")).toBe(false);
+    expect(can("SALES_CSM", "rooms:view")).toBe(false);
+    expect(can("SALES_CSM", "courses:view")).toBe(false);
+    expect(can("SALES_CSM", "jobs:view")).toBe(false);
+    expect(can("SALES_CSM", "news:view")).toBe(false);
+  });
+
+  it("SALES_CSM GIỮ chức năng lõi (lead/tuyển sinh/HV/đăng ký/đơn/trial/gói học)", () => {
+    expect(can("SALES_CSM", "leads:view-own")).toBe(true);
+    expect(can("SALES_CSM", "students:view-all")).toBe(true);
+    expect(can("SALES_CSM", "students:edit")).toBe(true);
+    expect(can("SALES_CSM", "enrollments:create")).toBe(true);
+    expect(can("SALES_CSM", "orders:view")).toBe(true);
+    expect(can("SALES_CSM", "trials:manage")).toBe(true);
+    expect(can("SALES_CSM", "course-packages:view")).toBe(true);
+    expect(can("SALES_CSM", "parent-requests:manage")).toBe(true);
+  });
+
+  it("ACCOUNTANT bỏ Khoá dạy + Tin tức; GIỮ tài chính + kho", () => {
+    expect(can("ACCOUNTANT", "courses:view")).toBe(false);
+    expect(can("ACCOUNTANT", "news:view")).toBe(false);
+    // giữ tài chính + kiểm kê kho
+    expect(can("ACCOUNTANT", "payments:confirm")).toBe(true);
+    expect(can("ACCOUNTANT", "inventory:view")).toBe(true);
+    expect(can("ACCOUNTANT", "inventory:audit")).toBe(true);
+    expect(can("ACCOUNTANT", "payroll:view")).toBe(true);
+  });
+
+  it("Hygiene KHÔNG ảnh hưởng vai khác (GV/CM giữ sessions/attendance; HR/MKT giữ Tin tức)", () => {
+    expect(can("TEACHER", "sessions:view")).toBe(true);
+    expect(can("TEACHER", "attendance:view")).toBe(true);
+    expect(can("CENTER_MANAGER", "rooms:view")).toBe(true);
+    expect(can("CENTER_MANAGER", "courses:view")).toBe(true);
+    expect(can("HR", "news:view")).toBe(true);
+    expect(can("MARKETING", "news:view")).toBe(true);
+    expect(can("MARKETING", "courses:view")).toBe(true);
+  });
+});
+
 describe("permissions matrix — sanity", () => {
   it("teaching-materials:view-own-class tồn tại trong matrix", () => {
     expect(ALL_ACTIONS).toContain("teaching-materials:view-own-class");

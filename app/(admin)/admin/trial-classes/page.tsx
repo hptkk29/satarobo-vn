@@ -32,7 +32,7 @@ export default async function TrialClassesPage() {
   const sdb = scopedDb(actor);
 
   const canManage = can(session.user, "trials:manage");
-  const canConfig = can(session.user, "training:manage");
+  const canConfig = can(session.user, "trials:config");
 
   const [classes, activeConfig] = await Promise.all([
     sdb.trialClassV2.findMany({
@@ -72,7 +72,7 @@ export default async function TrialClassesPage() {
         )}
       </div>
 
-      {/* Cấu hình số buổi (training:manage) */}
+      {/* Cấu hình số buổi (trials:config — QĐ-T3b: CM giữ qua action riêng) */}
       <TrialConfigSection
         canConfig={canConfig}
         config={activeConfig ?? null}
