@@ -2,21 +2,43 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { FlaskConical } from "lucide-react";
 import type { ChildGrasp, TrialClassStatus } from "@prisma/client";
 import {
   TRIAL_STATUS_BADGE,
   ALL_TRIAL_STATUSES,
   CHILD_GRASP_LABEL,
 } from "@/lib/trials/status";
+import { filterOpenTrialClasses } from "@/lib/trials/assign";
 import {
   updateTrialAction,
   saveTrialFeedbackAction,
   deleteTrialAction,
 } from "../actions";
+// FL2-04 — tái dùng action ghi danh lớp trải nghiệm (auth + gate + scope + override
+// đã xử lý sẵn) thay vì viết lại. Tạo TrialEnrollment qua service enrollLeadChild.
+import { enrollLeadChildAction } from "../../trial-classes/_actions";
 
 type Opt = { id: string; name: string };
 type LabelOpt = { id: string; label: string };
+
+// Lớp trải nghiệm OPEN (cùng cơ sở) để xếp con trực tiếp tại tab Học thử.
+export type OpenTrialClass = {
+  id: string;
+  name: string;
+  code: string;
+  capacity: number;
+  centerId: string;
+  used: number;
+};
+
+type TrialChild = {
+  id: string;
+  fullName: string;
+  trialStatus: string;
+};
 
 type Feedback = {
   childEnjoyed: boolean | null;
@@ -37,6 +59,8 @@ export type TrialItem = {
   teacherName: string | null;
   roomId: string | null;
   classId: string | null;
+  effectiveCenterId: string | null;
+  children: TrialChild[];
   scheduledAt: string;
   status: TrialClassStatus;
   notes: string | null;
@@ -47,9 +71,10 @@ interface Props {
   items: TrialItem[];
   teachers: Opt[];
   rooms: LabelOpt[];
-  classes: LabelOpt[];
+  openTrialClasses: OpenTrialClass[];
   courses: Opt[];
   canManage: boolean;
+  canOverride: boolean;
   canFeedback: boolean;
   statusFilter: string;
   statusLabels: Record<TrialClassStatus, string>;
@@ -67,9 +92,10 @@ export function TrialsList({
   items,
   teachers,
   rooms,
-  classes,
+  openTrialClasses,
   courses,
   canManage,
+  canOverride,
   canFeedback,
   statusFilter,
   statusLabels,
@@ -106,9 +132,10 @@ export function TrialsList({
               item={item}
               teachers={teachers}
               rooms={rooms}
-              classes={classes}
+              openTrialClasses={openTrialClasses}
               courses={courses}
               canManage={canManage}
+              canOverride={canOverride}
               canFeedback={canFeedback}
               statusLabels={statusLabels}
             />
@@ -146,18 +173,20 @@ function TrialCard({
   item,
   teachers,
   rooms,
-  classes,
+  openTrialClasses,
   courses,
   canManage,
+  canOverride,
   canFeedback,
   statusLabels,
 }: {
   item: TrialItem;
   teachers: Opt[];
   rooms: LabelOpt[];
-  classes: LabelOpt[];
+  openTrialClasses: OpenTrialClass[];
   courses: Opt[];
   canManage: boolean;
+  canOverride: boolean;
   canFeedback: boolean;
   statusLabels: Record<TrialClassStatus, string>;
 }) {
@@ -170,7 +199,6 @@ function TrialCard({
   const [status, setStatus] = useState<TrialClassStatus>(item.status);
   const [teacherId, setTeacherId] = useState(item.teacherId ?? "");
   const [roomId, setRoomId] = useState(item.roomId ?? "");
-  const [classId, setClassId] = useState(item.classId ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
 
   // Feedback form state
@@ -194,7 +222,9 @@ function TrialCard({
         status,
         teacherId: teacherId || null,
         roomId: roomId || null,
-        classId: classId || null,
+        // FL2-04: KHÔNG còn picker lớp chính thức ở tab này (xếp lớp trải nghiệm
+        // đi qua TrialEnrollment). Giữ nguyên classId cũ nếu trước đó đã set.
+        classId: item.classId,
         notes: notes || null,
       });
       if (res.ok) toast.success("Đã cập nhật buổi học thử");
@@ -272,6 +302,18 @@ function TrialCard({
       </button>
 
       {open && (
+        <>
+        {canManage && (
+          <div className="border-t border-gray-100 p-4">
+            <TrialEnrollSection
+              leadId={item.leadId}
+              children={item.children}
+              openTrialClasses={openTrialClasses}
+              effectiveCenterId={item.effectiveCenterId}
+              canOverride={canOverride}
+            />
+          </div>
+        )}
         <div className="grid gap-6 border-t border-gray-100 p-4 md:grid-cols-2">
           {/* Manage */}
           <div className={canManage ? "" : "opacity-60"}>
@@ -328,21 +370,6 @@ function TrialCard({
                   {rooms.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Ghép vào lớp (tùy chọn)">
-                <select
-                  value={classId}
-                  onChange={(e) => setClassId(e.target.value)}
-                  disabled={!canManage}
-                  className={inputCls}
-                >
-                  <option value="">— Không —</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
                     </option>
                   ))}
                 </select>
@@ -463,6 +490,125 @@ function TrialCard({
             </div>
           </div>
         </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * FL2-04 / US-LEAD-4 — Xếp con (LeadChild) vào lớp TRẢI NGHIỆM (TrialClassV2 OPEN)
+ * ngay tại tab Học thử, không cần mở lead. Chỉ liệt kê lớp cùng cơ sở (AC3).
+ * Tạo TrialEnrollment qua action enrollLeadChildAction (tái dùng service enrollLeadChild).
+ */
+function TrialEnrollSection({
+  leadId,
+  children,
+  openTrialClasses,
+  effectiveCenterId,
+  canOverride,
+}: {
+  leadId: string;
+  children: TrialChild[];
+  openTrialClasses: OpenTrialClass[];
+  effectiveCenterId: string | null;
+  canOverride: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [picked, setPicked] = useState<Record<string, string>>({});
+
+  // AC3 — chỉ lớp trải nghiệm CÙNG cơ sở của buổi học thử/lead (helper thuần testable).
+  const classes = filterOpenTrialClasses(openTrialClasses, effectiveCenterId);
+
+  function enroll(childId: string, allowOverride: boolean) {
+    const trialClassId = picked[childId];
+    if (!trialClassId) {
+      toast.error("Chọn lớp trải nghiệm trước");
+      return;
+    }
+    startTransition(async () => {
+      const res = await enrollLeadChildAction({
+        trialClassId,
+        leadChildId: childId,
+        allowOverride,
+      });
+      if (res.ok) {
+        toast.success("Đã xếp con vào lớp trải nghiệm");
+        router.refresh();
+        return;
+      }
+      if (res.overCapacity && canOverride) {
+        if (window.confirm(`${res.error}. Bạn có quyền vượt sĩ số — vẫn xếp?`)) {
+          enroll(childId, true);
+        }
+        return;
+      }
+      toast.error(res.error ?? "Xếp chỗ thất bại");
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <FlaskConical className="h-4 w-4 text-orange-500" />
+        <h3 className="text-sm font-semibold text-gray-700">
+          Xếp vào lớp trải nghiệm
+        </h3>
+      </div>
+
+      {children.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          Lead chưa có hồ sơ con (LeadChild).{" "}
+          <Link
+            href={`/leads/${leadId}`}
+            className="font-medium text-orange-600 hover:underline"
+          >
+            Mở lead để thêm con
+          </Link>{" "}
+          rồi xếp vào lớp trải nghiệm.
+        </p>
+      ) : classes.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          Chưa có lớp trải nghiệm đang mở cùng cơ sở. Tạo lớp ở mục &quot;Lớp trải
+          nghiệm&quot;.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {children.map((c) => (
+            <li
+              key={c.id}
+              className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2"
+            >
+              <span className="min-w-[7rem] flex-1 text-sm font-medium text-gray-800">
+                {c.fullName}
+              </span>
+              <select
+                value={picked[c.id] ?? ""}
+                onChange={(e) =>
+                  setPicked((p) => ({ ...p, [c.id]: e.target.value }))
+                }
+                disabled={pending}
+                className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+              >
+                <option value="">— chọn lớp trải nghiệm —</option>
+                {classes.map((cl) => (
+                  <option key={cl.id} value={cl.id}>
+                    {cl.name} ({cl.used}/{cl.capacity})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => enroll(c.id, false)}
+                disabled={pending}
+                className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+              >
+                Xếp vào lớp
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
