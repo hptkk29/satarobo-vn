@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -70,6 +70,12 @@ type NavItem = {
   perm?: Action[];
   /** Mục gắn feature flag — chỉ hiện khi flag bật (R7-16: "eval"). */
   flag?: "eval" | "scorm";
+  /**
+   * R3: nhãn cụm con (sub-section) trong 1 NavGroup. Các item liền kề cùng `cluster`
+   * được gom dưới 1 nhãn nhỏ — render trước item ĐẦU TIÊN hiển thị của cụm (robust với
+   * filter quyền: bất kể package hay course là item đầu còn lại sau lọc).
+   */
+  cluster?: string;
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -125,12 +131,13 @@ const NAV_GROUPS: NavGroup[] = [
     label: "LMS / Học liệu",
     items: [
       { label: "Chương trình học", href: "/curriculums", icon: BookMarked, perm: ["curriculum:view"] },
-      { label: "Khoá học / Gói học", href: "/course-packages", icon: Boxes, perm: ["course-packages:view"] },
+      // FL-R2-W0: gộp "Gói bán" + "Khoá dạy" thành 1 "Khoá học" (TGĐ: 2 cái trùng nhau).
+      // href giữ /course-packages tạm; W5 gộp Course/Package ở DB rồi repoint sang /courses + xoá /course-packages.
+      { label: "Khoá học", href: "/course-packages", icon: Boxes, perm: ["course-packages:view"] },
       { label: "Khoá tiên quyết", href: "/course-prerequisites", icon: Workflow, perm: ["courses:create"] },
       { label: "Tài liệu giảng dạy", href: "/documents", icon: FileText, perm: ["documents:view"] },
       { label: "Bài tập về nhà", href: "/assignments", icon: NotebookPen, perm: ["assignments:view"] },
       { label: "Tài liệu lớp tôi", href: "/teaching-materials", icon: Presentation, perm: ["teaching-materials:view-own-class"] },
-      { label: "Khoá dạy", href: "/courses", icon: BookOpen, perm: ["courses:view"] },
       { label: "SCORM / Bài giảng tương tác", href: "/scorm", icon: Package, perm: ["training:manage"], flag: "scorm" },
     ],
   },
@@ -335,23 +342,32 @@ export function Sidebar({
                 />
               </button>
               {!isCollapsed &&
-                group.items.map((item) => {
+                group.items.map((item, idx) => {
                   const Icon = item.icon;
                   const active = pathname.startsWith(item.href);
+                  // R3: nhãn cụm con — chỉ render trước item ĐẦU TIÊN hiển thị của cụm.
+                  const showCluster =
+                    !!item.cluster && item.cluster !== group.items[idx - 1]?.cluster;
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
-                          : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                    <Fragment key={item.href}>
+                      {showCluster && (
+                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-neutral-300">
+                          {item.cluster}
+                        </div>
                       )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </Link>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
+                          active
+                            ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
+                            : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                        )}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    </Fragment>
                   );
                 })}
             </div>
