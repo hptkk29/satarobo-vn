@@ -57,7 +57,7 @@ export default async function TrialsPage({ searchParams }: Props) {
 
   // FL2-04 / US-LEAD-4: thay picker "lớp CHÍNH THỨC (Class)" SAI bằng lớp TRẢI NGHIỆM
   // (TrialClassV2 OPEN, cùng cơ sở). TrialClassV2 ∈ SCOPED_MODELS → sdb tự lọc cách ly cơ sở.
-  const [trials, teachers, rooms, openTrialClassesRaw, courses] = await Promise.all([
+  const [trials, teachers, rooms, openTrialClassesRaw] = await Promise.all([
     sdb.trialClass.findMany({
       where,
       orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
@@ -75,7 +75,6 @@ export default async function TrialsPage({ searchParams }: Props) {
         },
         center: { select: { name: true } },
         teacher: { select: { id: true, name: true } },
-        feedback: true,
       },
     }),
     db.user.findMany({
@@ -103,11 +102,6 @@ export default async function TrialsPage({ searchParams }: Props) {
           },
         })
       : Promise.resolve([]),
-    db.course.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
   ]);
 
   const openTrialClasses = openTrialClassesRaw.map((cl) => ({
@@ -141,15 +135,6 @@ export default async function TrialsPage({ searchParams }: Props) {
     scheduledAt: t.scheduledAt.toISOString(),
     status: t.status,
     notes: t.notes,
-    feedback: t.feedback
-      ? {
-          childEnjoyed: t.feedback.childEnjoyed,
-          childGrasp: t.feedback.childGrasp,
-          teacherSuggestion: t.feedback.teacherSuggestion,
-          parentFeedback: t.feedback.parentFeedback,
-          recommendedCourseId: t.feedback.recommendedCourseId,
-        }
-      : null,
   }));
 
   return (
@@ -167,10 +152,8 @@ export default async function TrialsPage({ searchParams }: Props) {
         teachers={teachers.map((u) => ({ id: u.id, name: u.name ?? "(chưa đặt tên)" }))}
         rooms={rooms.map((r) => ({ id: r.id, label: `${r.name} (${r.code})` }))}
         openTrialClasses={openTrialClasses}
-        courses={courses}
         canManage={canManage}
         canOverride={can(session.user, "trials:override-capacity")}
-        canFeedback={can(session.user, "trials:feedback")}
         statusFilter={status ?? ""}
         statusLabels={TRIAL_STATUS_LABEL}
       />
