@@ -15,6 +15,8 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
+import { LeadPaymentCard } from "../_components/lead-payment-card";
+import { getLeadPaymentSummary } from "@/lib/payments/summary";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -95,6 +97,9 @@ export default async function LeadDetailPage({ params }: Props) {
     : [[], []];
   const dealClosable =
     canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
+
+  // E2-LEAD (item 2) — tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu).
+  const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
   const [childCenters, childCourses] = await Promise.all([
@@ -254,6 +259,13 @@ export default async function LeadDetailPage({ params }: Props) {
             }))}
             canOverride={can(session.user, "trials:override-capacity")}
           />
+        </div>
+      )}
+
+      {/* E2-LEAD (item 2) — khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
+      {(paymentSummary.hasOrder || dealClosable) && (
+        <div className="mb-6">
+          <LeadPaymentCard leadId={lead.id} summary={paymentSummary} />
         </div>
       )}
 

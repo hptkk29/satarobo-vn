@@ -7,6 +7,8 @@ import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { LEAD_STATUS_LABEL } from '@/lib/leads/status'
+import { getLeadPaymentSummary } from '@/lib/payments/summary'
+import { LeadPaymentCard } from '../../_components/lead-payment-card'
 import { ConvertForm } from './convert-form'
 
 export const metadata = { title: 'Chuyển đổi (v2) | Admin' }
@@ -54,14 +56,8 @@ export default async function ConvertV2Page({ params }: Props) {
     redirect('/leads?view=kanban')
   }
 
-  // Khoản thanh toán đã ghi nhận (R7-04) → quyết định guard PAYMENT_REQUIRED.
-  const recorded = await sdb.payment.aggregate({
-    where: { saleStatus: 'RECORDED', order: { leadId: lead.id } },
-    _count: { _all: true },
-    _sum: { amount: true },
-  })
-  const recordedCount = recorded._count._all
-  const recordedTotal = recorded._sum.amount ?? 0
+  // Tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu) + điều kiện chốt.
+  const paymentSummary = await getLeadPaymentSummary(sdb, lead.id)
 
   // FL2-01 — đơn hàng học phí gắn lead (tạo trước ở /orders/new?leadId=...) để chia
   // 1/2 đợt khi convert. Lấy đơn COURSE mới nhất của lead.
@@ -156,33 +152,14 @@ export default async function ConvertV2Page({ params }: Props) {
 
       {lead.status !== 'REGISTERED' && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          Lead chưa ở trạng thái <strong>Đã đăng ký (REGISTERED)</strong>. Cần ghi nhận thanh toán
-          (R7-04) để chuyển sang REGISTERED trước khi chốt. Nút xác nhận sẽ bị chặn
-          (PAYMENT_REQUIRED / NOT_REGISTERED).
+          Lead cần ở trạng thái <strong>“Đã đăng ký”</strong> trước khi chốt ghi danh. Hãy ghi nhận
+          thanh toán để chuyển trạng thái.
         </div>
       )}
 
-      {/* Khối phản ánh thanh toán đã ghi nhận → điều kiện chốt. */}
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-gray-700">Thanh toán đã ghi nhận</h2>
-        {recordedCount > 0 ? (
-          <p className="mt-1 text-sm text-emerald-700">
-            {recordedCount} khoản · tổng {recordedTotal.toLocaleString('vi-VN')}đ (Sale ghi nhận).
-            Đủ điều kiện chốt.
-          </p>
-        ) : (
-          <p className="mt-1 text-sm text-amber-700">
-            Chưa có khoản nào được ghi nhận. Chỉ chốt được nếu tổng phải thu = 0 (học bổng toàn
-            phần), nếu không sẽ báo <code>PAYMENT_REQUIRED</code>.
-          </p>
-        )}
-        {/* convert-v2 (Gap #1): tạo đơn hàng GẮN lead này → ghi nhận thanh toán → đủ điều kiện chốt. */}
-        <Link
-          href={`/orders/new?leadId=${lead.id}`}
-          className="mt-3 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          + Tạo đơn hàng cho lead này
-        </Link>
+      {/* Khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
+      <div className="mb-6">
+        <LeadPaymentCard leadId={lead.id} summary={paymentSummary} />
       </div>
 
       <ConvertForm
