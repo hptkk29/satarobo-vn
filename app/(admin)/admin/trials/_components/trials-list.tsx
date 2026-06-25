@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Search } from "lucide-react";
 import type { ChildGrasp, TrialClassStatus } from "@prisma/client";
 import {
   TRIAL_STATUS_BADGE,
@@ -100,6 +100,20 @@ export function TrialsList({
   statusFilter,
   statusLabels,
 }: Props) {
+  // FL-R2 (item 6/TR-3) — search lead học thử (client) theo tên PH / SĐT / tên con.
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const s = query.trim().toLowerCase();
+    if (!s) return items;
+    return items.filter(
+      (it) =>
+        it.parentName?.toLowerCase().includes(s) ||
+        it.phone?.toLowerCase().includes(s) ||
+        it.childName?.toLowerCase().includes(s) ||
+        it.children.some((c) => c.fullName.toLowerCase().includes(s)),
+    );
+  }, [items, query]);
+
   return (
     <div>
       {/* Filter */}
@@ -120,13 +134,28 @@ export function TrialsList({
         ))}
       </div>
 
+      {/* Search */}
+      <div className="relative mb-4 max-w-sm">
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Tìm theo tên phụ huynh, SĐT hoặc tên con…"
+          className="w-full rounded-lg border border-gray-300 py-2 pl-8 pr-2 text-sm focus:border-orange-500 focus:outline-none"
+        />
+      </div>
+
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
           Chưa có buổi học thử nào.
         </p>
+      ) : filtered.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+          Không tìm thấy lead học thử khớp “{query.trim()}”.
+        </p>
       ) : (
         <div className="space-y-3">
-          {items.map((item) => (
+          {filtered.map((item) => (
             <TrialCard
               key={item.id}
               item={item}

@@ -40,6 +40,12 @@ export default async function TrialsPage({ searchParams }: Props) {
   } else {
     // Mặc định "Đang xử lý" — ẩn các trạng thái kết thúc (đỡ nhiễu).
     where.status = { notIn: [...TRIAL_TERMINAL_STATUSES] };
+    // FL-R2 (item 6/TR-3): ẩn lead đã RỜI pipeline (đã ghi danh/mất/đăng ký/trùng) khỏi
+    // danh sách học thử đang hoạt động — lịch sử vẫn giữ ở LeadTrialHistory (TR-4).
+    where.lead = {
+      deletedAt: null,
+      status: { notIn: ["ENROLLED", "LOST", "REGISTERED", "DUPLICATE"] },
+    };
   }
   // Teacher chỉ thấy buổi được phân công cho mình.
   if (isTeacher) where.teacherId = session.user.id;
