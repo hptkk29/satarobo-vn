@@ -134,24 +134,43 @@ export default async function LeadsPage({
           select: { id: true },
           take: 1,
         },
+        // FL-R2 (item 6/TR-4) — lần học thử gần nhất (giữ kể cả khi lead quay lại pipeline).
+        children: {
+          select: {
+            trialHistory: {
+              where: { attendedCount: { gt: 0 } },
+              select: { lastAttendedAt: true },
+              orderBy: { lastAttendedAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: KANBAN_LIMIT,
     })
 
     const canUpdate = can(session.user, 'leads:edit')
-    const kanbanLeads: KanbanLead[] = rawLeads.map((l) => ({
-      id: l.id,
-      parentName: l.parentName,
-      phone: isMarketing ? maskPhone(l.phone) : l.phone,
-      childName: l.childName,
-      status: l.status,
-      source: l.source,
-      courseName: l.course?.name ?? null,
-      assignedToName: l.assignedTo?.name ?? null,
-      createdAt: l.createdAt.toISOString(),
-      overdue: l.tasks.length > 0,
-    }))
+    const kanbanLeads: KanbanLead[] = rawLeads.map((l) => {
+      // ngày học thử gần nhất across mọi con.
+      const trialDates = l.children
+        .flatMap((c) => c.trialHistory.map((h) => h.lastAttendedAt))
+        .filter((d): d is Date => d != null)
+        .sort((a, b) => b.getTime() - a.getTime())
+      return {
+        id: l.id,
+        parentName: l.parentName,
+        phone: isMarketing ? maskPhone(l.phone) : l.phone,
+        childName: l.childName,
+        status: l.status,
+        source: l.source,
+        courseName: l.course?.name ?? null,
+        assignedToName: l.assignedTo?.name ?? null,
+        createdAt: l.createdAt.toISOString(),
+        overdue: l.tasks.length > 0,
+        lastTrialDate: trialDates[0]?.toISOString() ?? null,
+      }
+    })
 
     return (
       <div>

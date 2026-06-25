@@ -23,6 +23,7 @@ export type KanbanLead = {
   assignedToName: string | null;
   createdAt: string; // ISO
   overdue: boolean; // T1.2 — quá hạn follow-up (tạm false cho tới khi có LeadTask)
+  lastTrialDate: string | null; // FL-R2 (item 6) — lần học thử gần nhất (ISO) hoặc null
 };
 
 function fmtDate(iso: string): string {
@@ -196,6 +197,11 @@ export function LeadsKanban({
                         )}
                         <span>· {fmtDate(lead.createdAt)}</span>
                       </div>
+                      {lead.lastTrialDate && (
+                        <div className="font-medium text-violet-600">
+                          Đã học thử · {fmtDate(lead.lastTrialDate)}
+                        </div>
+                      )}
                     </div>
 
                     {canCloseDeal &&

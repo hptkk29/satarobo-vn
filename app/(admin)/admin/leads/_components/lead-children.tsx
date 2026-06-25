@@ -37,7 +37,24 @@ export type ChildView = {
   interestedCenterId: string | null;
   note: string | null;
   trialStatus: string;
+  // FL-R2 (item 6/TR-4) — lịch sử đã từng học thử (giữ kể cả khi lead quay lại pipeline).
+  trialHistory?: {
+    className: string;
+    attendedCount: number;
+    totalSessions: number;
+    lastAttendedAt: string | null; // ISO
+    outcome: string | null;
+  }[];
 };
+
+/** "Đã học thử (ngày…) · n/N buổi" cho 1 dòng lịch sử. */
+function formatTrialHistory(h: NonNullable<ChildView["trialHistory"]>[number]): string {
+  const date = h.lastAttendedAt
+    ? new Date(h.lastAttendedAt).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
+    : null;
+  const parts = [`Đã học thử${date ? ` (${date})` : ""}`, `${h.attendedCount}/${h.totalSessions} buổi`, h.className];
+  return parts.filter(Boolean).join(" · ");
+}
 
 export const emptyChild: ChildDraft = {
   fullName: "",
@@ -396,6 +413,15 @@ export function LeadChildrenManager({
                     .join(" · ") || "—"}
                 </div>
                 {c.note && <p className="mt-1 text-xs text-gray-600">{c.note}</p>}
+                {c.trialHistory && c.trialHistory.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {c.trialHistory.map((h, i) => (
+                      <p key={i} className="text-[11px] font-medium text-violet-600">
+                        {formatTrialHistory(h)}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
               {!readOnly && (
                 <div className="flex flex-shrink-0 items-center gap-1">

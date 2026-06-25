@@ -47,7 +47,16 @@ export default async function LeadDetailPage({ params }: Props) {
       assignedTo: { select: { id: true, name: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 100 },
       tasks: { orderBy: [{ status: "asc" }, { dueAt: "asc" }] },
-      children: { orderBy: { createdAt: "asc" } },
+      children: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          // FL-R2 (item 6/TR-4) — lịch sử "đã từng học thử" (giữ kể cả khi lead quay lại).
+          trialHistory: {
+            orderBy: { lastAttendedAt: "desc" },
+            include: { trialClass: { select: { name: true } } },
+          },
+        },
+      },
       trialClasses: {
         orderBy: { scheduledAt: "desc" },
         include: {
@@ -236,6 +245,15 @@ export default async function LeadDetailPage({ params }: Props) {
             interestedCenterId: c.interestedCenterId,
             note: c.note,
             trialStatus: c.trialStatus,
+            trialHistory: c.trialHistory
+              .filter((h) => h.attendedCount > 0)
+              .map((h) => ({
+              className: h.trialClass?.name ?? "(lớp đã xoá)",
+              attendedCount: h.attendedCount,
+              totalSessions: h.totalSessions,
+              lastAttendedAt: h.lastAttendedAt ? h.lastAttendedAt.toISOString() : null,
+              outcome: h.outcome,
+            })),
           }))}
           centers={childCenters}
           courses={childCourses}
