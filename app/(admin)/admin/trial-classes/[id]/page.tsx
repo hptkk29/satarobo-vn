@@ -96,6 +96,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
 
   const enrollments = cls.enrollments.map((e) => ({
     id: e.id,
+    leadChildId: e.leadChild?.id ?? null,
     childName: e.leadChild?.fullName ?? "(không rõ)",
     parentName: e.leadChild?.lead?.parentName ?? null,
     phone: e.leadChild?.lead?.phone ?? null,
@@ -179,6 +180,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
       <TrialClassDetail
         trialClassId={cls.id}
         currentTeacherId={cls.teacherId}
+        classSessionCount={cls.sessionCount}
         enrollments={enrollments}
         sessions={sessions}
         teacherOptions={teacherOptions.map((t) => ({
@@ -186,6 +188,8 @@ export default async function TrialClassDetailPage({ params }: Props) {
           name: t.name ?? "(chưa đặt tên)",
         }))}
         canAssignTeacher={canAssignTeacher}
+        canManage={isManager}
+        canOverride={can(session.user, "trials:override-capacity")}
         canMark={canMark}
       />
 

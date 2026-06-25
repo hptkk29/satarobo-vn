@@ -6,12 +6,14 @@ import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { leadStatusLabel } from "@/lib/leads/status";
 // CONTRACT (R7-02) — lib/trial/service.ts do agent song song tạo; import theo tên.
 // Typecheck gộp cuối sẽ resolve. Mỗi action chỉ "inspect {ok}" + revalidate.
 import {
   setTrialProgramConfig,
   createTrialClass,
   enrollLeadChild,
+  unenrollLeadChild,
   markAttendance,
   completeTrialSession,
   cancelTrialClass,
@@ -168,6 +170,8 @@ export async function enrollLeadChildAction(input: {
   trialClassId: string;
   leadChildId: string;
   allowOverride?: boolean;
+  // FL-R2 (QĐ-R2-W3): số buổi học thử cấu hình RIÊNG cho lead này (bỏ trống → mặc định lớp).
+  totalSessions?: number;
 }): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
@@ -182,6 +186,15 @@ export async function enrollLeadChildAction(input: {
   if (!input.trialClassId || !input.leadChildId) {
     return { ok: false, error: "Thiếu lớp hoặc học viên" };
   }
+  // số buổi per-lead (nếu nhập): nguyên 1..60.
+  let totalSessions: number | undefined;
+  if (input.totalSessions != null) {
+    const n = Number(input.totalSessions);
+    if (!Number.isInteger(n) || n < 1 || n > 60) {
+      return { ok: false, error: "Số buổi học thử phải là số nguyên từ 1 đến 60" };
+    }
+    totalSessions = n;
+  }
 
   const actor = await resolveActor(session.user.id);
   const cls = await loadScopedTrialClass(actor, input.trialClassId);
@@ -192,6 +205,7 @@ export async function enrollLeadChildAction(input: {
     leadChildId: input.leadChildId,
     allowOverride,
     addedById: session.user.id,
+    totalSessions,
   });
   if (!res?.ok) {
     // Surface cờ overCapacity để UI mời QL bấm override.
@@ -201,6 +215,110 @@ export async function enrollLeadChildAction(input: {
       overCapacity: res?.overCapacity === true,
     };
   }
+
+  revalidatePath(`/trial-classes/${input.trialClassId}`);
+  revalidatePath("/trial-classes");
+  return { ok: true };
+}
+
+/**
+ * FL-R2 (item 4/8) — tìm học viên (LeadChild) để gán vào lớp trải nghiệm.
+ * Cùng cơ sở lớp; loại lead đã rời pipeline (ENROLLED/LOST/DUPLICATE/REGISTERED) + con đang
+ * ở 1 lớp ACTIVE khác. Gate `trials:manage` + cách ly cơ sở (scopedDb).
+ */
+export async function searchTrialCandidatesAction(input: {
+  trialClassId: string;
+  query: string;
+}): Promise<
+  ActionResult<{
+    candidates: {
+      leadChildId: string;
+      childName: string;
+      parentName: string | null;
+      phone: string | null;
+      leadStatus: string;
+    }[];
+  }>
+> {
+  const session = await requireSession();
+  if (!session) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "trials:manage")) {
+    return { ok: false, error: "Không có quyền tìm học viên" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const cls = await loadScopedTrialClass(actor, input.trialClassId);
+  if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
+
+  const q = (input.query ?? "").trim();
+  const sdb = scopedDb(actor);
+  // con CHƯA ở lớp ACTIVE nào (giải phóng partial-unique 1 lớp ACTIVE/con).
+  const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
+  const leads = await sdb.lead.findMany({
+    where: {
+      centerId: cls.centerId,
+      status: { notIn: ["ENROLLED", "LOST", "DUPLICATE", "REGISTERED"] },
+      children: { some: childFree },
+      ...(q
+        ? {
+            OR: [
+              { parentName: { contains: q, mode: "insensitive" as const } },
+              { phone: { contains: q } },
+              { children: { some: { fullName: { contains: q, mode: "insensitive" as const } } } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      parentName: true,
+      phone: true,
+      status: true,
+      children: { where: childFree, select: { id: true, fullName: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 20,
+  });
+
+  const candidates = leads.flatMap((l) =>
+    l.children.map((c) => ({
+      leadChildId: c.id,
+      childName: c.fullName,
+      parentName: l.parentName,
+      phone: l.phone,
+      leadStatus: leadStatusLabel(l.status),
+    })),
+  );
+  return { ok: true, candidates };
+}
+
+/**
+ * FL-R2 (item 4) — gỡ học viên khỏi lớp trải nghiệm (soft-withdraw, giữ lịch sử).
+ * Gate `trials:manage` + cách ly cơ sở.
+ */
+export async function unenrollLeadChildAction(input: {
+  trialClassId: string;
+  leadChildId: string;
+}): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "trials:manage")) {
+    return { ok: false, error: "Không có quyền gỡ học viên" };
+  }
+  if (!input.trialClassId || !input.leadChildId) {
+    return { ok: false, error: "Thiếu lớp hoặc học viên" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const cls = await loadScopedTrialClass(actor, input.trialClassId);
+  if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
+
+  const res = await unenrollLeadChild({
+    trialClassId: input.trialClassId,
+    leadChildId: input.leadChildId,
+    actorId: session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Gỡ học viên thất bại" };
 
   revalidatePath(`/trial-classes/${input.trialClassId}`);
   revalidatePath("/trial-classes");
