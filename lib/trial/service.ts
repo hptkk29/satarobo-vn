@@ -141,29 +141,28 @@ export async function createTrialClass(params: {
   name: string;
   centerId: string;
   roomId?: string | null;
-  startDate: Date;
+  // FL-R2 (QĐ-R2-1): slot tái sử dụng — startDate tuỳ chọn (null = không gắn ngày cố định).
+  startDate?: Date | null;
   startTime: string;
   endTime: string;
   capacity: number;
   teacherId?: string | null;
-  configId: string;
+  // Số buổi nhập trực tiếp khi tạo (không phụ thuộc TrialProgramConfig ngoài).
+  sessionCount: number;
+  configId?: string | null;
   actorId: string;
 }): Promise<{ ok: boolean; error?: string; trialClassId?: string }> {
   if (!params.name?.trim()) return { ok: false, error: "Tên lớp là bắt buộc" };
   if (!Number.isInteger(params.capacity) || params.capacity < 1) {
     return { ok: false, error: "Sĩ số phải là số nguyên ≥ 1" };
   }
+  if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
+    return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
+  }
 
   try {
+    const sessionCount = params.sessionCount;
     const trialClassId = await db.$transaction(async (tx) => {
-      // snapshot sessionCount từ config.
-      const cfg = await tx.trialProgramConfig.findUnique({
-        where: { id: params.configId },
-        select: { id: true, sessionCount: true },
-      });
-      if (!cfg) throw new Error("Cấu hình lớp trải nghiệm không tồn tại");
-      const sessionCount = cfg.sessionCount;
-
       // mã cơ sở cho code.
       const center = await tx.center.findUnique({
         where: { id: params.centerId },
@@ -174,43 +173,45 @@ export async function createTrialClass(params: {
       const seq = await nextSeq(`TRIAL:${cc}:${y}`, tx);
       const code = `TRIAL-${cc}-${y}-${String(seq).padStart(3, "0")}`;
 
-      // né Holiday cơ sở + toàn hệ thống.
-      const holidayRows = await tx.holiday.findMany({
-        where: { OR: [{ centerId: params.centerId }, { centerId: null }] },
-        select: { date: true, endDate: true },
-      });
-      const holidays = expandHolidayDates(holidayRows);
-      const dates = buildTrialSessionDates(params.startDate, sessionCount, holidays);
-
       const trialClass = await tx.trialClassV2.create({
         data: {
           code,
           name: params.name.trim(),
           centerId: params.centerId,
           roomId: params.roomId ?? null,
-          startDate: params.startDate,
+          startDate: params.startDate ?? null,
           startTime: params.startTime,
           endTime: params.endTime,
           capacity: params.capacity,
           teacherId: params.teacherId ?? null,
-          configId: cfg.id,
+          configId: params.configId ?? null,
           sessionCount,
         },
         select: { id: true },
       });
 
-      if (dates.length > 0) {
-        await tx.trialClassSession.createMany({
-          data: dates.map((d, idx) => ({
-            trialClassId: trialClass.id,
-            seq: idx + 1,
-            date: d,
-            startTime: params.startTime,
-            endTime: params.endTime,
-            roomId: params.roomId ?? null,
-            teacherId: params.teacherId ?? null,
-          })),
+      // FL-R2 (QĐ-R2-1): slot tái sử dụng — KHÔNG auto-gen buổi cohort. Chỉ sinh buổi theo
+      // lịch khi CÓ ngày bắt đầu cố định (giữ tương thích đường gọi cũ/lớp có lịch).
+      if (params.startDate) {
+        const holidayRows = await tx.holiday.findMany({
+          where: { OR: [{ centerId: params.centerId }, { centerId: null }] },
+          select: { date: true, endDate: true },
         });
+        const holidays = expandHolidayDates(holidayRows);
+        const dates = buildTrialSessionDates(params.startDate, sessionCount, holidays);
+        if (dates.length > 0) {
+          await tx.trialClassSession.createMany({
+            data: dates.map((d, idx) => ({
+              trialClassId: trialClass.id,
+              seq: idx + 1,
+              date: d,
+              startTime: params.startTime,
+              endTime: params.endTime,
+              roomId: params.roomId ?? null,
+              teacherId: params.teacherId ?? null,
+            })),
+          });
+        }
       }
       return trialClass.id;
     });

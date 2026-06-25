@@ -8,28 +8,26 @@ import { createTrialClassAction } from "../_actions";
 type Center = { id: string; name: string };
 type Room = { id: string; label: string; centerId: string | null };
 type Teacher = { id: string; name: string };
-type Config = { id: string; name: string; sessionCount: number };
 
 export function CreateTrialClassForm({
   centers,
   rooms,
   teachers,
-  configs,
+  defaultSessionCount = 2,
 }: {
   centers: Center[];
   rooms: Room[];
   teachers: Teacher[];
-  configs: Config[];
+  defaultSessionCount?: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const [name, setName] = useState("");
   const [centerId, setCenterId] = useState(centers[0]?.id ?? "");
-  const [configId, setConfigId] = useState(configs[0]?.id ?? "");
+  const [sessionCount, setSessionCount] = useState(String(defaultSessionCount));
   const [roomId, setRoomId] = useState("");
   const [teacherId, setTeacherId] = useState("");
-  const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState("19:30");
   const [capacity, setCapacity] = useState("8");
@@ -46,10 +44,9 @@ export function CreateTrialClassForm({
       const res = await createTrialClassAction({
         name,
         centerId,
-        configId: configId || null,
         roomId: roomId || null,
         teacherId: teacherId || null,
-        startDate,
+        sessionCount,
         startTime,
         endTime,
         capacity,
@@ -107,20 +104,17 @@ export function CreateTrialClassForm({
       </label>
 
       <label className={labelCls}>
-        <span className={labelText}>Cấu hình số buổi</span>
-        <select
-          value={configId}
-          onChange={(e) => setConfigId(e.target.value)}
+        <span className={labelText}>Số buổi trải nghiệm *</span>
+        <input
+          type="number"
+          min={1}
+          max={20}
+          value={sessionCount}
+          onChange={(e) => setSessionCount(e.target.value)}
           disabled={pending}
           className={field}
-        >
-          <option value="">— (mặc định) —</option>
-          {configs.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} ({c.sessionCount} buổi)
-            </option>
-          ))}
-        </select>
+          required
+        />
       </label>
 
       <label className={labelCls}>
@@ -138,18 +132,6 @@ export function CreateTrialClassForm({
             </option>
           ))}
         </select>
-      </label>
-
-      <label className={labelCls}>
-        <span className={labelText}>Ngày bắt đầu *</span>
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          disabled={pending}
-          className={field}
-          required
-        />
       </label>
 
       <label className={labelCls}>

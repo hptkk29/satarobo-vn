@@ -22,7 +22,7 @@ export default async function NewTrialClassPage() {
   // Cơ sở actor được phép tạo lớp (cách ly cơ sở).
   // GV dùng nguồn DUY NHẤT getAssignableTeachers (fix #9 — trước đây query strict
   // `roles has TEACHER` chỉ thấy 2 người, lọt GV chỉ có TeacherProfile ACTIVE).
-  const [centers, rooms, teachers, configs] = await Promise.all([
+  const [centers, rooms, teachers, activeConfig] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true, id: { in: actor.visibleCenterIds } },
       orderBy: { displayOrder: "asc" },
@@ -34,10 +34,11 @@ export default async function NewTrialClassPage() {
       select: { id: true, name: true, code: true, centerId: true },
     }),
     getAssignableTeachers(),
-    sdb.trialProgramConfig.findMany({
+    // FL-R2: số buổi nhập trong form; chỉ lấy 1 config active làm gợi ý mặc định (nếu có).
+    sdb.trialProgramConfig.findFirst({
       where: { active: true },
       orderBy: { updatedAt: "desc" },
-      select: { id: true, name: true, sessionCount: true },
+      select: { sessionCount: true },
     }),
   ]);
 
@@ -59,7 +60,7 @@ export default async function NewTrialClassPage() {
           centerId: r.centerId,
         }))}
         teachers={teachers.map((t) => ({ id: t.id, name: t.name ?? "(chưa đặt tên)" }))}
-        configs={configs}
+        defaultSessionCount={activeConfig?.sessionCount ?? 2}
       />
     </div>
   );

@@ -9,7 +9,6 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 // CONTRACT (R7-02) — lib/trial/service.ts do agent song song tạo; import theo tên.
 // Typecheck gộp cuối sẽ resolve. Mỗi action chỉ "inspect {ok}" + revalidate.
 import {
-  getActiveTrialConfig,
   setTrialProgramConfig,
   createTrialClass,
   enrollLeadChild,
@@ -98,7 +97,12 @@ const createTrialClassSchema = z
     configId: z.string().trim().min(1).nullable().optional(),
     roomId: z.string().trim().min(1).nullable().optional(),
     teacherId: z.string().trim().min(1).nullable().optional(),
-    startDate: z.string().trim().min(1, "Chọn ngày bắt đầu"),
+    // FL-R2 (QĐ-R2-1): slot tái sử dụng — số buổi nhập trực tiếp, KHÔNG còn ngày bắt đầu.
+    sessionCount: z.coerce
+      .number()
+      .int("Số buổi phải là số nguyên")
+      .min(1, "Số buổi phải ≥ 1")
+      .max(20, "Số buổi quá lớn"),
     startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
     endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
     capacity: z.coerce
@@ -110,17 +114,7 @@ const createTrialClassSchema = z
   .refine((d) => d.endTime > d.startTime, {
     message: "Giờ kết thúc phải sau giờ bắt đầu",
     path: ["endTime"],
-  })
-  .refine(
-    (d) => {
-      // AC9 — chặn ngày quá khứ (so theo ngày, bỏ qua giờ).
-      const start = new Date(`${d.startDate}T00:00:00`);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return !Number.isNaN(start.getTime()) && start >= today;
-    },
-    { message: "Ngày bắt đầu không được ở quá khứ", path: ["startDate"] },
-  );
+  });
 
 /** Tạo lớp trải nghiệm — gate `trials:manage` + cách ly cơ sở. */
 export async function createTrialClassAction(input: unknown): Promise<ActionResult<{ id?: string }>> {
@@ -141,26 +135,15 @@ export async function createTrialClassAction(input: unknown): Promise<ActionResu
     return { ok: false, error: "Bạn không có quyền tạo lớp tại cơ sở này" };
   }
 
-  // configId bắt buộc cho service — fallback cấu hình active nếu UI để trống.
-  let configId = data.configId ?? null;
-  if (!configId) {
-    const active = await getActiveTrialConfig();
-    if (!active) {
-      return {
-        ok: false,
-        error: "Chưa có cấu hình số buổi. Vào mục Cấu hình số buổi trước khi tạo lớp.",
-      };
-    }
-    configId = active.id;
-  }
-
   const res = await createTrialClass({
     centerId: data.centerId,
     name: data.name,
-    configId,
+    configId: data.configId ?? null,
     roomId: data.roomId ?? null,
     teacherId: data.teacherId ?? null,
-    startDate: new Date(`${data.startDate}T00:00:00`),
+    // slot tái sử dụng: không gắn ngày bắt đầu; số buổi nhập trực tiếp.
+    startDate: null,
+    sessionCount: data.sessionCount,
     startTime: data.startTime,
     endTime: data.endTime,
     capacity: data.capacity,
