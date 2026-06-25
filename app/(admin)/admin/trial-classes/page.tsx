@@ -114,7 +114,7 @@ export default async function TrialClassesPage() {
                     <div className="text-xs text-gray-400">{c.code}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-700">
-                    {c.startDate.toLocaleDateString("vi-VN")}
+                    {c.startDate ? c.startDate.toLocaleDateString("vi-VN") : "Theo lịch hẹn"}
                   </td>
                   <td className="px-4 py-3 text-gray-700">
                     {c.startTime}–{c.endTime}

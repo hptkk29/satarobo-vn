@@ -17,6 +17,7 @@ export const SCOPED_MODELS = new Set<string>([
   "MessengerConversation", // R1-01 — hội thoại CRM theo cơ sở
   "Payment", // R7-04 — khoản thanh toán theo cơ sở
   "TrialClassV2", // R7-02 — lớp trải nghiệm theo cơ sở
+  "LeadTrialHistory", // FL-R2 — lịch sử học thử theo cơ sở
   // FL3-02 (W5f phase B) — centerId backfilled (denormalized từ class). Flip EXEMPT→SCOPED.
   // ⚠️ DEPLOY-GATE: chỉ an toàn sau khi backfill Enrollment/ClassSession.centerId = 100%
   // (centerId null sẽ bị inject `centerId IN [...]` → ẨN NHẦM record). Xem e2e cách ly.

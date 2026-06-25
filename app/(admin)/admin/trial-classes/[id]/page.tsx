@@ -7,6 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { TrialClassDetail } from "../_components/trial-class-detail";
+import { TrialSessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/trial-session-eval-fill";
 
 export const metadata = { title: "Chi tiết lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -117,6 +118,17 @@ export default async function TrialClassDetailPage({ params }: Props) {
     ),
   }));
 
+  // FL4 (R4) — phiếu đánh giá buổi học cho lớp trải nghiệm: HS = LeadChild đang/đã học.
+  // studentId lưu = leadChild.id (EvalResponse.studentId là ref phẳng — trial dùng trialClassSessionId).
+  const evalStudents = cls.enrollments
+    .filter((e) => e.status === "ACTIVE" || e.status === "COMPLETED")
+    .map((e) => ({
+      studentId: e.leadChild?.id ?? e.id,
+      name: e.leadChild?.fullName ?? "(không rõ)",
+      present: true,
+    }));
+  const evalSessions = cls.sessions.map((s) => ({ id: s.id, label: `Buổi ${s.seq}` }));
+
   return (
     <div className="max-w-5xl p-6">
       <Link
@@ -139,7 +151,8 @@ export default async function TrialClassDetailPage({ params }: Props) {
             </span>
           </div>
           <div className="mt-1 text-sm text-gray-600">
-            {cls.code} · {cls.startDate.toLocaleDateString("vi-VN")} ·{" "}
+            {cls.code}
+            {cls.startDate ? ` · ${cls.startDate.toLocaleDateString("vi-VN")}` : ""} ·{" "}
             {cls.startTime}–{cls.endTime} · {cls.sessionCount} buổi
           </div>
           <div className="mt-1 text-sm text-gray-500">
@@ -175,6 +188,17 @@ export default async function TrialClassDetailPage({ params }: Props) {
         canAssignTeacher={canAssignTeacher}
         canMark={canMark}
       />
+
+      {evalSessions.length > 0 && evalStudents.length > 0 && (
+        <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700">Phiếu đánh giá buổi học</h2>
+          <TrialSessionEvalFill
+            trialSessions={evalSessions}
+            students={evalStudents}
+            canEdit={canMark}
+          />
+        </section>
+      )}
     </div>
   );
 }

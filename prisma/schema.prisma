@@ -1039,6 +1039,7 @@ model LeadChild {
 
   trialEnrollments TrialEnrollment[] // R7-02
   enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
+  trialHistory     LeadTrialHistory[] // FL-R2 — lịch sử đã từng học thử
 
   @@index([leadId])
 }
@@ -1300,7 +1301,8 @@ model Enrollment {
   classId   String
   courseId  String
   status    EnrollmentStatus @default(ACTIVE)
-  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ class). SCOPE_EXEMPT, chưa flip.
+  // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
+  // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
   centerId  String?
   // R7-06 — truy vết enrollment ⇽ LeadChild nguồn khi convert per-child (additive,
   // nullable; SetNull để không chặn xoá lead). Enrollment tạo trực tiếp → null.
@@ -1406,7 +1408,8 @@ model ClassSession {
   planId      String?
   // W2-4b — phòng học theo TỪNG BUỔI (để soát trùng phòng per-session); khác actualRoomId (ghi sau-thực-tế).
   roomId      String?
-  // LMS-18 (W5f phase A) — centerId denormalized (backfill từ class). SCOPE_EXEMPT, chưa flip.
+  // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
+  // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
   centerId    String?
 
   // LMS-3 — quy trình sau buổi + checklist
@@ -2179,6 +2182,9 @@ model Question {
   assignmentId String?
   assignment   Assignment? @relation("AssignmentQuestions", fields: [assignmentId], references: [id], onDelete: Cascade)
 
+  // FL1-06 (R2) — link tới AssignmentTemplate (ngân hàng câu hỏi cho template).
+  templateLinks AssignmentTemplateQuestion[] @relation("QuestionTemplateLinks")
+
   // For SHORT_ANSWER / CODE / ESSAY
   correctAnswer String? @db.Text
 
@@ -2478,9 +2484,26 @@ model AssignmentTemplate {
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   instances Assignment[]
+  // FL1-06 (R2) — câu hỏi gắn vào template (từ ngân hàng) để khi sinh bài giao thì CLONE sang Assignment.
+  templateQuestions AssignmentTemplateQuestion[]
 
   @@index([lessonId])
   @@index([curriculumId])
+}
+
+// FL1-06 (R2) — nối Template ↔ Question (ngân hàng). Khi generate bài giao cho lớp,
+// mỗi link được CLONE thành Question mới gắn Assignment đích (Question.assignmentId).
+model AssignmentTemplateQuestion {
+  id         String             @id @default(cuid())
+  templateId String
+  template   AssignmentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question           @relation("QuestionTemplateLinks", fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int                @default(0)
+
+  @@unique([templateId, questionId])
+  @@index([templateId])
+  @@index([questionId])
 }
 
 model AssignmentDocument {
@@ -4899,7 +4922,9 @@ model TrialClassV2 {
   type         String             @default("TRIAL_ROBOSIM")
   centerId     String // cách ly cơ sở (scopedDb)
   roomId       String?
-  startDate    DateTime           @db.Date
+  // FL-R2 (QĐ-R2-1): slot tái sử dụng → startDate nullable (lớp không gắn ngày bắt đầu
+  // cố định; buổi tạo ad-hoc theo giờ/giảng viên). Lớp cũ giữ nguyên startDate.
+  startDate    DateTime?          @db.Date
   startTime    String
   endTime      String
   capacity     Int
@@ -4914,8 +4939,32 @@ model TrialClassV2 {
 
   sessions    TrialClassSession[]
   enrollments TrialEnrollment[]
+  trialHistory LeadTrialHistory[]
 
   @@index([centerId, status])
+}
+
+/// FL-R2 (E2-TRIAL / item 6) — lịch sử "đã từng học thử" của 1 con. Giữ lại kể cả khi
+/// lead rời pipeline (đăng ký/mất) để nếu quay lại không mất thông tin cũ. 1 dòng / con×lớp.
+model LeadTrialHistory {
+  id              String       @id @default(cuid())
+  leadChildId     String
+  leadChild       LeadChild    @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
+  trialClassId    String
+  trialClass      TrialClassV2 @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  centerId        String // cách ly cơ sở (scopedDb)
+  attendedCount   Int          @default(0)
+  totalSessions   Int
+  firstAttendedAt DateTime?    @db.Timestamptz(6)
+  lastAttendedAt  DateTime?    @db.Timestamptz(6)
+  outcome         String? // ENROLLED | LOST | PENDING
+  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@unique([leadChildId, trialClassId])
+  @@index([leadChildId])
+  @@index([trialClassId])
+  @@index([centerId])
 }
 
 /// R7-02 — buổi của lớp trải nghiệm (sinh tự động khi tạo lớp, né Holiday).
@@ -5084,6 +5133,7 @@ enum EvalQuestionType {
   RADIO
   CHECKBOX
   TEXTBOX
+  PHOTO // FL4 (R5) — ô tải ảnh (ảnh dự án/lớp trong phiếu đánh giá buổi); urls lưu EvalAnswer.valueOptions
 }
 
 enum EvaluationRoundStatus {
@@ -5113,9 +5163,13 @@ model EvalQuestion {
   form     EvalForm         @relation(fields: [formId], references: [id], onDelete: Cascade)
   type     EvalQuestionType
   label    String
-  options  Json? // cho RADIO/CHECKBOX
+  options  Json? // cho RADIO/CHECKBOX (mỗi option có thể là mức mô tả dài — phiếu đánh giá buổi)
   required Boolean          @default(false)
   order    Int              @default(0)
+  // FL4 (R5) — nhóm tiêu chí (header: "Kiến thức"/"Kỹ năng"/"Sản phẩm"/"Thái độ") để gom câu hỏi như phiếu mẫu.
+  groupLabel     String?
+  // FL4 (R6) — cho phép GV nhập tự do kèm lựa chọn (RADIO/CHECKBOX) → lưu EvalAnswer.valueText.
+  allowCustomText Boolean   @default(false)
 
   @@index([formId])
 }
@@ -5148,6 +5202,7 @@ model EvalResponse {
   parentUserId String? // PH làm khảo sát (CENTER_SURVEY)
   studentId    String?
   classSessionId String? // FL W0 (FL4-01) — phiếu SESSION_EVAL gắn buổi học (ref phẳng, theo style EvalResponse)
+  trialClassSessionId String? // FL4 (R4) — phiếu SESSION_EVAL gắn buổi LỚP TRẢI NGHIỆM (TrialClassSession, ref phẳng)
   submittedAt  DateTime        @default(now())
 
   answers EvalAnswer[]
@@ -5158,6 +5213,7 @@ model EvalResponse {
   @@unique([roundId, parentUserId])
   @@index([roundId])
   @@index([classSessionId])
+  @@index([trialClassSessionId])
 }
 
 model EvalAnswer {
