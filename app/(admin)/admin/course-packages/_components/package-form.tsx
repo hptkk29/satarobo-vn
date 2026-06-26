@@ -82,6 +82,8 @@ interface PackageFormProps {
   pkg?: PackageFormValue;
   /** Danh sách khoá dạy để chọn liên kết (FL1-05). */
   courses?: LinkableCourse[];
+  /** R2-LMS-1 — prefill khoá dạy khi tạo gói từ chi tiết khoá (?courseId=). */
+  defaultCourseId?: string | null;
 }
 
 type FieldProps = {
@@ -139,12 +141,13 @@ function normalizeJsonArray(value: Prisma.JsonValue): JsonArrayItem[] {
   });
 }
 
-export function PackageForm({ pkg, courses = [] }: PackageFormProps) {
+export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormProps) {
   const router = useRouter();
   const isEdit = Boolean(pkg);
   const [error, setError] = useState<string | null>(null);
   // FL1-05 — khoá dạy liên kết (điều khiển để hiện banner "giáo trình lấy từ khoá").
-  const [courseId, setCourseId] = useState<string>(pkg?.courseId ?? "");
+  // R2-LMS-1 — khi tạo từ chi tiết khoá: prefill courseId (chỉ khi tạo mới).
+  const [courseId, setCourseId] = useState<string>(pkg?.courseId ?? defaultCourseId ?? "");
   const linkedCourse = courses.find((c) => c.id === courseId);
   const [features, setFeatures] = useState<JsonArrayItem[]>(
     normalizeJsonArray(pkg?.features ?? []),

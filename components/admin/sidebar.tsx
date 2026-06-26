@@ -131,9 +131,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "LMS / Học liệu",
     items: [
       { label: "Chương trình học", href: "/curriculums", icon: BookMarked, perm: ["curriculum:view"] },
-      // FL-R2-W0: gộp "Gói bán" + "Khoá dạy" thành 1 "Khoá học" (TGĐ: 2 cái trùng nhau).
-      // href giữ /course-packages tạm; W5 gộp Course/Package ở DB rồi repoint sang /courses + xoá /course-packages.
-      { label: "Khoá học", href: "/course-packages", icon: Boxes, perm: ["course-packages:view"] },
+      // FL-R2-W5 (R2-LMS-1): 1 entry "Khoá học" → /courses (khoá dạy); gói bán quản lý
+      // ngay trong chi tiết khoá. Gộp DB Course/Package + xoá /course-packages = 2-phase
+      // deferred (Order đa hình, KHÔNG drop packageId giờ) — route /course-packages GIỮ tạm.
+      { label: "Khoá học", href: "/courses", icon: Boxes, perm: ["courses:view"] },
       { label: "Khoá tiên quyết", href: "/course-prerequisites", icon: Workflow, perm: ["courses:create"] },
       { label: "Tài liệu giảng dạy", href: "/documents", icon: FileText, perm: ["documents:view"] },
       { label: "Bài tập về nhà", href: "/assignments", icon: NotebookPen, perm: ["assignments:view"] },
