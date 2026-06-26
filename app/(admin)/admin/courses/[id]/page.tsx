@@ -60,6 +60,21 @@ export default async function CourseDetailPage({
 
   if (!course) notFound();
 
+  // R3: gói bán (CoursePackage) liên kết với khoá dạy này — reverse của CoursePackage.courseId.
+  // CoursePackage là catalog toàn hệ thống (không center-scoped); read thuần qua sdb pass-through.
+  const linkedPackages = await sdb.coursePackage.findMany({
+    where: { courseId: id },
+    orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      level: true,
+      priceOriginal: true,
+      isPublished: true,
+    },
+  });
+
   const discounts: DiscountRow[] = course.discounts.map((d) => ({
     id: d.id,
     type: d.type,
@@ -117,6 +132,40 @@ export default async function CourseDetailPage({
       )}
 
       <DiscountSection courseId={course.id} discounts={discounts} canEdit={canEdit} />
+
+      {/* R3: gói bán liên kết (read-only) — gói = đơn vị BÁN (giá), khoá dạy = đơn vị GIẢNG. */}
+      <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Gói bán liên kết</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Các gói bán (giá) trỏ về khoá dạy này. Gói = đơn vị BÁN, khoá dạy = đơn vị GIẢNG.
+          </p>
+        </div>
+        {linkedPackages.length === 0 ? (
+          <p className="text-sm text-gray-400">Chưa có gói bán nào liên kết khoá dạy này.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {linkedPackages.map((pkg) => (
+              <li key={pkg.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
+                <span className="font-mono text-xs text-gray-500">{pkg.code}</span>
+                <span className="font-medium text-gray-900">{pkg.name}</span>
+                {pkg.level ? <span className="text-gray-500">· {pkg.level}</span> : null}
+                <span className="text-gray-500">
+                  ·{" "}
+                  {pkg.priceOriginal != null
+                    ? `${pkg.priceOriginal.toLocaleString("vi-VN")}đ`
+                    : "—"}
+                </span>
+                {pkg.isPublished ? (
+                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Đã đăng</Badge>
+                ) : (
+                  <Badge className="bg-gray-200 text-gray-700 hover:bg-gray-200">Nháp</Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
