@@ -13,10 +13,12 @@ import {
   X,
 } from "lucide-react";
 import type { AssignmentKind, AssignmentStatus, ScormPackageStatus } from "@prisma/client";
-// SCORM gắn-buổi tái dùng action ở /admin/scorm (đặt 1 bản active/buổi) — KHÔNG
-// nhân bản pipeline upload. Upload gói vẫn ở trang /admin/scorm.
+// SCORM gắn-buổi tái dùng action ở /admin/scorm (đặt 1 bản active/buổi).
+// R2-LMS-3 — upload gói SCORM INLINE ngay trong editor buổi (LessonScormUpload tái
+// dùng createScormPackage/confirmUpload), không cần rời sang /admin/scorm.
 import { activateForLesson } from "@/app/(admin)/admin/scorm/_actions";
 import { attachAssignmentToLesson, detachAssignmentFromLesson } from "../_actions";
+import { LessonScormUpload } from "./lesson-scorm-upload";
 
 export type ScormPkgRow = {
   id: string;
@@ -215,6 +217,8 @@ export function LessonResources({
                           ))}
                         </ul>
                       )}
+                      {/* R2-LMS-3 — upload gói SCORM inline (chỉ Đào tạo: training:manage). */}
+                      {canActivateScorm && <LessonScormUpload lessonId={lesson.lessonId} />}
                       <Link
                         href="/admin/scorm"
                         className="mt-2 inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-[#7C3AED]"
