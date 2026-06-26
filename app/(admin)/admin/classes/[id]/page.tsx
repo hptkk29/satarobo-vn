@@ -15,6 +15,16 @@ import { ClassCurriculum } from "./_components/class-curriculum";
 import { ClassSessionsManage } from "./_components/class-sessions-manage";
 import { ClassAttendancePanel } from "./_components/class-attendance-panel";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
+import { MediaClient } from "../../media/_components/media-client";
+import { MakeupRow } from "../../hoc-bu/_components/makeup-row";
+import { ClassEvalPanel } from "./_components/class-eval-panel";
+import {
+  loadClassMediaItems,
+  loadClassMakeupItems,
+  loadClassScormSessions,
+} from "@/lib/classes/detail-tabs-data";
+import { isScormEnabled } from "@/lib/flags";
+import { canManageTraining } from "@/lib/scorm/access";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -191,6 +201,32 @@ export default async function ClassDetailPage({ params }: Props) {
   const canEdit = can(actor, "classes:edit", { centerId: cls.centerId });
   const lifecycleV2 = isSessionLifecycleV2Enabled();
 
+  // Tab Ảnh / Học bù — gate quyền (GV chỉ view-own không có parent-requests:manage).
+  const canViewMedia = can(actor, "media:view") || can(actor, "media:upload");
+  const canApproveMedia = can(actor, "media:approve");
+  const canManageMakeup = can(actor, "parent-requests:manage");
+
+  // Tab SCORM (R2-CLASS-5) — chỉ GV phân công lớp này hoặc QL đào tạo, và flag ON
+  // (route /scorm/play tự gate lại canOpenScorm). Tab Đánh giá (R2-CLASS-7) — GV của
+  // lớp hoặc người có quyền sửa lớp; gateFill server-side vẫn chốt cuối.
+  const isOwnerTeacher =
+    cls.teacherId === session.user.id || cls.assistantId === session.user.id;
+  const canViewScorm = isScormEnabled() && (canManageTraining(actor) || isOwnerTeacher);
+  const canEval = canEdit || isOwnerTeacher;
+
+  const [mediaItems, makeupItems, scormSessions] = await Promise.all([
+    canViewMedia ? loadClassMediaItems(cls.id, cls.name) : Promise.resolve([]),
+    canManageMakeup ? loadClassMakeupItems(cls.id) : Promise.resolve([]),
+    canViewScorm ? loadClassScormSessions(cls.id) : Promise.resolve([]),
+  ]);
+
+  // DS học viên buổi mặc định cho tab Đánh giá (present = đã điểm danh có mặt/muộn).
+  const initialEvalStudents = initialRoster.rows.map((r) => ({
+    studentId: r.studentId,
+    name: r.studentName,
+    present: r.existing?.status === "PRESENT" || r.existing?.status === "LATE",
+  }));
+
   const formValue: ClassFormValue = {
     id: cls.id,
     classCode: cls.classCode,
@@ -268,6 +304,10 @@ export default async function ClassDetailPage({ params }: Props) {
           <TabsTrigger value="info">Thông tin</TabsTrigger>
           <TabsTrigger value="curriculum">Chương trình</TabsTrigger>
           <TabsTrigger value="sessions">Buổi & Điểm danh</TabsTrigger>
+          {canViewMedia && <TabsTrigger value="media">Ảnh lớp</TabsTrigger>}
+          {canManageMakeup && <TabsTrigger value="makeup">Học bù</TabsTrigger>}
+          {canViewScorm && <TabsTrigger value="scorm">Tài liệu SCORM</TabsTrigger>}
+          {canEval && <TabsTrigger value="eval">Đánh giá</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="info" className="space-y-6 pt-4">
@@ -339,6 +379,85 @@ export default async function ClassDetailPage({ params }: Props) {
             />
           </section>
         </TabsContent>
+
+        {canViewMedia && (
+          <TabsContent value="media" className="pt-4">
+            <MediaClient
+              items={mediaItems}
+              classes={[{ id: cls.id, label: cls.classCode ? `${cls.classCode} · ${cls.name}` : cls.name }]}
+              canApprove={canApproveMedia}
+            />
+          </TabsContent>
+        )}
+
+        {canManageMakeup && (
+          <TabsContent value="makeup" className="pt-4">
+            {makeupItems.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-400">
+                Không có nhu cầu học bù nào đang chờ cho lớp này.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {makeupItems.map((item) => (
+                  <MakeupRow key={item.id} item={item} />
+                ))}
+              </ul>
+            )}
+          </TabsContent>
+        )}
+
+        {canViewScorm && (
+          <TabsContent value="scorm" className="pt-4">
+            <p className="mb-3 text-sm text-neutral-500">
+              Mở/present tài liệu SCORM của bài giảng theo từng buổi. Mỗi lần mở cấp vé
+              10 phút + watermark (truy vết).
+            </p>
+            {scormSessions.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-400">
+                Lớp chưa có buổi học gắn bài giảng.
+              </p>
+            ) : (
+              <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
+                {scormSessions.map((s) => (
+                  <li key={s.sessionId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                    <div className="text-sm">
+                      <span className="font-medium text-neutral-800">
+                        {new Date(s.date).toLocaleDateString("vi-VN", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        })}
+                      </span>
+                      {s.lessonTitle ? <span className="text-neutral-500"> · {s.lessonTitle}</span> : null}
+                      {s.topic ? <span className="text-neutral-400"> · {s.topic}</span> : null}
+                    </div>
+                    {s.scorm ? (
+                      <Link
+                        href={`/scorm/play/${s.scorm.id}?sessionId=${s.sessionId}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                      >
+                        ▶ Mở giảng
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-neutral-400">Chưa có SCORM</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </TabsContent>
+        )}
+
+        {canEval && (
+          <TabsContent value="eval" className="pt-4">
+            <ClassEvalPanel
+              sessions={sessionRows}
+              initialSessionId={defaultSession?.id ?? null}
+              initialStudents={initialEvalStudents}
+              canEdit={canEval}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
