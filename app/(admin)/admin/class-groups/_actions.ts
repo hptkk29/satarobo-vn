@@ -341,7 +341,7 @@ export async function enrollGroupIntoClass(input: {
       continue;
     }
     await db.enrollment.create({
-      data: { studentId, classId: cls.id, courseId: cls.courseId, status: "CONFIRMED", confirmedAt: new Date(), notes: `Ghi danh theo nhóm ${input.groupId}` },
+      data: { studentId, classId: cls.id, courseId: cls.courseId, centerId: cls.centerId, status: "CONFIRMED", confirmedAt: new Date(), notes: `Ghi danh theo nhóm ${input.groupId}` },
     });
     created++;
   }

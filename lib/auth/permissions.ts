@@ -502,7 +502,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "products:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
 
   // --- Phase 5.13 — Email System ---
-  "emails:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "ACCOUNTANT"],
+  // R7 hygiene (BA #07 3.C): ACCOUNTANT bỏ Email Templates/Logs — không phải chức năng kế toán.
+  "emails:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   "emails:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 };
 

@@ -181,6 +181,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           studentId,
           classId: s.classId,
           courseId: s.courseId,
+          centerId: lead.centerId, // FL3-02 — denormalize từ lead/class (cùng cơ sở) cho scopedDb
           leadChildId: s.leadChildId ?? null, // R7-06 — truy vết về con nguồn
           listPrice: price.listPrice,
           discountType: price.discountType,

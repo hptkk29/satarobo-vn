@@ -2,11 +2,17 @@
   "CORSRules": [
     {
       "AllowedOrigins": [
+        "https://admin.satarobo.vn",
+        "https://hocvien.satarobo.vn",
+        "https://satarobo.vn",
+        "https://www.satarobo.vn",
+        "https://satarobo-vn.vercel.app",
+        "https://*.vercel.app",
         "http://localhost:3000",
-        "https://admin.satarobo.vn"
+        "http://localhost:3001"
       ],
-      "AllowedMethods": ["PUT", "GET", "HEAD"],
-      "AllowedHeaders": ["content-type", "Content-Type"],
+      "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+      "AllowedHeaders": ["*"],
       "ExposeHeaders": ["ETag"],
       "MaxAgeSeconds": 3600
     }

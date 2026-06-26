@@ -196,6 +196,7 @@ export async function approveTransfer(
         studentId: req.studentId,
         classId: toClass.id,
         courseId: toClass.courseId,
+        centerId: toClass.centerId, // FL3-02 — denormalize từ lớp đích cho scopedDb
         status: "STUDYING",
         startedAt: new Date(),
       },
