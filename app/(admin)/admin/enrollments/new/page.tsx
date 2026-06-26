@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/permissions";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { getNonEnrollableCenterIds, notHeadOfficeWhere } from "@/lib/enrollment-flow";
 import { EnrollForm } from "../_components/enroll-form";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,10 @@ export default async function NewEnrollmentPage() {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
+  // FL2-05 — Hội sở (OrgUnit type ≠ CENTER) KHÔNG nhận học viên → loại lớp thuộc
+  // cơ sở Hội sở khỏi picker đăng ký. Nhận diện qua OrgUnit tree, không hardcode.
+  const hoCenterIds = await getNonEnrollableCenterIds();
+
   const [students, classes] = await Promise.all([
     sdb.student.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
@@ -37,6 +42,7 @@ export default async function NewEnrollmentPage() {
       where: {
         deletedAt: null,
         status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] },
+        ...notHeadOfficeWhere(hoCenterIds),
       },
       orderBy: [{ status: "asc" }, { name: "asc" }],
       select: {

@@ -11,14 +11,21 @@ export default defineConfig({
   // tsconfig.playwright.json (stub `server-only`/`@/lib/auth`) + resetDb. Nếu để smoke
   // collect chúng → resetDb từ chối trên DB seed CI/Supabase + `server-only` không
   // resolve (thiếu stub) → lỗi collect. Loại toàn bộ phase dir khỏi suite smoke.
-  testIgnore: ["**/a0/**", "**/r[0-9]*/**"],
+  // Phase suite (a0, r*, fl) có config riêng (playwright.<phase>.config.ts): Postgres
+  // LOCAL + tsconfig.playwright.json (stub server-only) + globalSetup + workers 1.
+  // Loại khỏi smoke (smoke không có setup/seed → fl service-spec sẽ fail; fl/* import
+  // lib server-only không resolve). FL chạy ở playwright.fl.config.ts + job CI riêng.
+  testIgnore: ["**/a0/**", "**/r[0-9]*/**", "**/fl/**"],
   // Each test gets 30s timeout
   timeout: 30_000,
   expect: { timeout: 5_000 },
 
   // CI gets retries, dev doesn't (faster iteration)
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // workers:1 — smoke-lms spec self-seed DB chung (resetDb + slug cố định) trong beforeAll;
+  // chạy song song 2 project (chromium+mobile) → 2 beforeAll đồng thời → đụng unique slug.
+  // Serial hoá để tránh (smoke nhỏ, không đáng song song).
+  workers: 1,
 
   // Reporter
   reporter: process.env.CI

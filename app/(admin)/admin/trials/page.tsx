@@ -40,6 +40,12 @@ export default async function TrialsPage({ searchParams }: Props) {
   } else {
     // Mặc định "Đang xử lý" — ẩn các trạng thái kết thúc (đỡ nhiễu).
     where.status = { notIn: [...TRIAL_TERMINAL_STATUSES] };
+    // FL-R2 (item 6/TR-3): ẩn lead đã RỜI pipeline (đã ghi danh/mất/đăng ký/trùng) khỏi
+    // danh sách học thử đang hoạt động — lịch sử vẫn giữ ở LeadTrialHistory (TR-4).
+    where.lead = {
+      deletedAt: null,
+      status: { notIn: ["ENROLLED", "LOST", "REGISTERED", "DUPLICATE"] },
+    };
   }
   // Teacher chỉ thấy buổi được phân công cho mình.
   if (isTeacher) where.teacherId = session.user.id;
@@ -49,16 +55,26 @@ export default async function TrialsPage({ searchParams }: Props) {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
-  const [trials, teachers, rooms, classes, courses] = await Promise.all([
+  // FL2-04 / US-LEAD-4: thay picker "lớp CHÍNH THỨC (Class)" SAI bằng lớp TRẢI NGHIỆM
+  // (TrialClassV2 OPEN, cùng cơ sở). TrialClassV2 ∈ SCOPED_MODELS → sdb tự lọc cách ly cơ sở.
+  const [trials, teachers, rooms, openTrialClassesRaw] = await Promise.all([
     sdb.trialClass.findMany({
       where,
       orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
       take: 200,
       include: {
-        lead: { select: { id: true, parentName: true, phone: true, childName: true } },
+        lead: {
+          select: {
+            id: true,
+            parentName: true,
+            phone: true,
+            childName: true,
+            centerId: true,
+            children: { select: { id: true, fullName: true, trialStatus: true } },
+          },
+        },
         center: { select: { name: true } },
         teacher: { select: { id: true, name: true } },
-        feedback: true,
       },
     }),
     db.user.findMany({
@@ -71,18 +87,31 @@ export default async function TrialsPage({ searchParams }: Props) {
       select: { id: true, name: true, code: true },
       orderBy: { displayOrder: "asc" },
     }),
-    sdb.class.findMany({
-      where: { deletedAt: null, isActive: true },
-      select: { id: true, name: true, classCode: true },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    }),
-    db.course.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+    can(session.user, "trials:manage")
+      ? sdb.trialClassV2.findMany({
+          where: { status: "OPEN" },
+          orderBy: { startDate: "asc" },
+          take: 100,
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            capacity: true,
+            centerId: true,
+            enrollments: { where: { status: "ACTIVE" }, select: { id: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
+
+  const openTrialClasses = openTrialClassesRaw.map((cl) => ({
+    id: cl.id,
+    name: cl.name,
+    code: cl.code,
+    capacity: cl.capacity,
+    centerId: cl.centerId,
+    used: cl.enrollments.length,
+  }));
 
   const items = trials.map((t) => ({
     id: t.id,
@@ -95,18 +124,17 @@ export default async function TrialsPage({ searchParams }: Props) {
     teacherName: t.teacher?.name ?? null,
     roomId: t.roomId,
     classId: t.classId,
+    // FL2-04 — cơ sở hiệu lực để lọc lớp trải nghiệm cùng cơ sở (AC3): ưu tiên cơ sở
+    // của buổi học thử, fallback cơ sở lead.
+    effectiveCenterId: t.centerId ?? t.lead.centerId ?? null,
+    children: t.lead.children.map((c) => ({
+      id: c.id,
+      fullName: c.fullName,
+      trialStatus: c.trialStatus,
+    })),
     scheduledAt: t.scheduledAt.toISOString(),
     status: t.status,
     notes: t.notes,
-    feedback: t.feedback
-      ? {
-          childEnjoyed: t.feedback.childEnjoyed,
-          childGrasp: t.feedback.childGrasp,
-          teacherSuggestion: t.feedback.teacherSuggestion,
-          parentFeedback: t.feedback.parentFeedback,
-          recommendedCourseId: t.feedback.recommendedCourseId,
-        }
-      : null,
   }));
 
   return (
@@ -123,13 +151,9 @@ export default async function TrialsPage({ searchParams }: Props) {
         items={items}
         teachers={teachers.map((u) => ({ id: u.id, name: u.name ?? "(chưa đặt tên)" }))}
         rooms={rooms.map((r) => ({ id: r.id, label: `${r.name} (${r.code})` }))}
-        classes={classes.map((c) => ({
-          id: c.id,
-          label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
-        }))}
-        courses={courses}
+        openTrialClasses={openTrialClasses}
         canManage={canManage}
-        canFeedback={can(session.user, "trials:feedback")}
+        canOverride={can(session.user, "trials:override-capacity")}
         statusFilter={status ?? ""}
         statusLabels={TRIAL_STATUS_LABEL}
       />

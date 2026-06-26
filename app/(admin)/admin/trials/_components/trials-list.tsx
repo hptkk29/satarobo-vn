@@ -1,29 +1,35 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import type { ChildGrasp, TrialClassStatus } from "@prisma/client";
-import {
-  TRIAL_STATUS_BADGE,
-  ALL_TRIAL_STATUSES,
-  CHILD_GRASP_LABEL,
-} from "@/lib/trials/status";
-import {
-  updateTrialAction,
-  saveTrialFeedbackAction,
-  deleteTrialAction,
-} from "../actions";
+import { FlaskConical, Search } from "lucide-react";
+import type { TrialClassStatus } from "@prisma/client";
+import { TRIAL_STATUS_BADGE, ALL_TRIAL_STATUSES } from "@/lib/trials/status";
+import { filterOpenTrialClasses } from "@/lib/trials/assign";
+import { updateTrialAction, deleteTrialAction } from "../actions";
+// FL2-04 — tái dùng action ghi danh lớp trải nghiệm (auth + gate + scope + override
+// đã xử lý sẵn) thay vì viết lại. Tạo TrialEnrollment qua service enrollLeadChild.
+import { enrollLeadChildAction } from "../../trial-classes/_actions";
 
 type Opt = { id: string; name: string };
 type LabelOpt = { id: string; label: string };
 
-type Feedback = {
-  childEnjoyed: boolean | null;
-  childGrasp: ChildGrasp | null;
-  teacherSuggestion: string | null;
-  parentFeedback: string | null;
-  recommendedCourseId: string | null;
+// Lớp trải nghiệm OPEN (cùng cơ sở) để xếp con trực tiếp tại tab Học thử.
+export type OpenTrialClass = {
+  id: string;
+  name: string;
+  code: string;
+  capacity: number;
+  centerId: string;
+  used: number;
+};
+
+type TrialChild = {
+  id: string;
+  fullName: string;
+  trialStatus: string;
 };
 
 export type TrialItem = {
@@ -37,20 +43,20 @@ export type TrialItem = {
   teacherName: string | null;
   roomId: string | null;
   classId: string | null;
+  effectiveCenterId: string | null;
+  children: TrialChild[];
   scheduledAt: string;
   status: TrialClassStatus;
   notes: string | null;
-  feedback: Feedback | null;
 };
 
 interface Props {
   items: TrialItem[];
   teachers: Opt[];
   rooms: LabelOpt[];
-  classes: LabelOpt[];
-  courses: Opt[];
+  openTrialClasses: OpenTrialClass[];
   canManage: boolean;
-  canFeedback: boolean;
+  canOverride: boolean;
   statusFilter: string;
   statusLabels: Record<TrialClassStatus, string>;
 }
@@ -67,13 +73,26 @@ export function TrialsList({
   items,
   teachers,
   rooms,
-  classes,
-  courses,
+  openTrialClasses,
   canManage,
-  canFeedback,
+  canOverride,
   statusFilter,
   statusLabels,
 }: Props) {
+  // FL-R2 (item 6/TR-3) — search lead học thử (client) theo tên PH / SĐT / tên con.
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const s = query.trim().toLowerCase();
+    if (!s) return items;
+    return items.filter(
+      (it) =>
+        it.parentName?.toLowerCase().includes(s) ||
+        it.phone?.toLowerCase().includes(s) ||
+        it.childName?.toLowerCase().includes(s) ||
+        it.children.some((c) => c.fullName.toLowerCase().includes(s)),
+    );
+  }, [items, query]);
+
   return (
     <div>
       {/* Filter */}
@@ -94,22 +113,36 @@ export function TrialsList({
         ))}
       </div>
 
+      {/* Search */}
+      <div className="relative mb-4 max-w-sm">
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Tìm theo tên phụ huynh, SĐT hoặc tên con…"
+          className="w-full rounded-lg border border-gray-300 py-2 pl-8 pr-2 text-sm focus:border-orange-500 focus:outline-none"
+        />
+      </div>
+
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
           Chưa có buổi học thử nào.
         </p>
+      ) : filtered.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+          Không tìm thấy lead học thử khớp “{query.trim()}”.
+        </p>
       ) : (
         <div className="space-y-3">
-          {items.map((item) => (
+          {filtered.map((item) => (
             <TrialCard
               key={item.id}
               item={item}
               teachers={teachers}
               rooms={rooms}
-              classes={classes}
-              courses={courses}
+              openTrialClasses={openTrialClasses}
               canManage={canManage}
-              canFeedback={canFeedback}
+              canOverride={canOverride}
               statusLabels={statusLabels}
             />
           ))}
@@ -146,19 +179,17 @@ function TrialCard({
   item,
   teachers,
   rooms,
-  classes,
-  courses,
+  openTrialClasses,
   canManage,
-  canFeedback,
+  canOverride,
   statusLabels,
 }: {
   item: TrialItem;
   teachers: Opt[];
   rooms: LabelOpt[];
-  classes: LabelOpt[];
-  courses: Opt[];
+  openTrialClasses: OpenTrialClass[];
   canManage: boolean;
-  canFeedback: boolean;
+  canOverride: boolean;
   statusLabels: Record<TrialClassStatus, string>;
 }) {
   const [open, setOpen] = useState(false);
@@ -170,22 +201,7 @@ function TrialCard({
   const [status, setStatus] = useState<TrialClassStatus>(item.status);
   const [teacherId, setTeacherId] = useState(item.teacherId ?? "");
   const [roomId, setRoomId] = useState(item.roomId ?? "");
-  const [classId, setClassId] = useState(item.classId ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
-
-  // Feedback form state
-  const fb = item.feedback;
-  const [childEnjoyed, setChildEnjoyed] = useState<string>(
-    fb?.childEnjoyed === true ? "yes" : fb?.childEnjoyed === false ? "no" : "",
-  );
-  const [childGrasp, setChildGrasp] = useState<string>(fb?.childGrasp ?? "");
-  const [teacherSuggestion, setTeacherSuggestion] = useState(
-    fb?.teacherSuggestion ?? "",
-  );
-  const [parentFeedback, setParentFeedback] = useState(fb?.parentFeedback ?? "");
-  const [recommendedCourseId, setRecommendedCourseId] = useState(
-    fb?.recommendedCourseId ?? "",
-  );
 
   function saveManage() {
     startTransition(async () => {
@@ -194,7 +210,9 @@ function TrialCard({
         status,
         teacherId: teacherId || null,
         roomId: roomId || null,
-        classId: classId || null,
+        // FL2-04: KHÔNG còn picker lớp chính thức ở tab này (xếp lớp trải nghiệm
+        // đi qua TrialEnrollment). Giữ nguyên classId cũ nếu trước đó đã set.
+        classId: item.classId,
         notes: notes || null,
       });
       if (res.ok) toast.success("Đã cập nhật buổi học thử");
@@ -217,21 +235,6 @@ function TrialCard({
     });
   }
 
-  function saveFeedback() {
-    startTransition(async () => {
-      const res = await saveTrialFeedbackAction(item.id, {
-        childEnjoyed:
-          childEnjoyed === "yes" ? true : childEnjoyed === "no" ? false : null,
-        childGrasp: (childGrasp || null) as ChildGrasp | null,
-        teacherSuggestion: teacherSuggestion || null,
-        parentFeedback: parentFeedback || null,
-        recommendedCourseId: recommendedCourseId || null,
-      });
-      if (res.ok) toast.success("Đã lưu nhận xét");
-      else toast.error(res.error ?? "Lỗi lưu nhận xét");
-    });
-  }
-
   return (
     <div className="rounded-xl border border-gray-200 bg-white">
       {/* Header row */}
@@ -248,11 +251,6 @@ function TrialCard({
             >
               {statusLabels[item.status]}
             </span>
-            {fb && (
-              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
-                Đã có nhận xét
-              </span>
-            )}
           </div>
           <div className="mt-1 text-xs text-gray-500">
             {item.childName ? `Con: ${item.childName} · ` : ""}
@@ -272,6 +270,18 @@ function TrialCard({
       </button>
 
       {open && (
+        <>
+        {canManage && (
+          <div className="border-t border-gray-100 p-4">
+            <TrialEnrollSection
+              leadId={item.leadId}
+              children={item.children}
+              openTrialClasses={openTrialClasses}
+              effectiveCenterId={item.effectiveCenterId}
+              canOverride={canOverride}
+            />
+          </div>
+        )}
         <div className="grid gap-6 border-t border-gray-100 p-4 md:grid-cols-2">
           {/* Manage */}
           <div className={canManage ? "" : "opacity-60"}>
@@ -332,21 +342,6 @@ function TrialCard({
                   ))}
                 </select>
               </Field>
-              <Field label="Ghép vào lớp (tùy chọn)">
-                <select
-                  value={classId}
-                  onChange={(e) => setClassId(e.target.value)}
-                  disabled={!canManage}
-                  className={inputCls}
-                >
-                  <option value="">— Không —</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
               <Field label="Ghi chú">
                 <textarea
                   value={notes}
@@ -384,85 +379,143 @@ function TrialCard({
             </div>
           </div>
 
-          {/* Feedback */}
-          <div className={canFeedback ? "" : "opacity-60"}>
+          {/* Nhận xét: chuyển sang Phiếu đánh giá buổi (SESSION_EVAL) ở Lớp trải nghiệm (TR-7) */}
+          <div>
             <h3 className="mb-3 text-sm font-semibold text-gray-700">
               Nhận xét sau buổi học thử
             </h3>
-            <div className="space-y-3">
-              <Field label="Bé có thích không?">
-                <select
-                  value={childEnjoyed}
-                  onChange={(e) => setChildEnjoyed(e.target.value)}
-                  disabled={!canFeedback}
-                  className={inputCls}
-                >
-                  <option value="">—</option>
-                  <option value="yes">Có, bé hứng thú</option>
-                  <option value="no">Chưa thực sự thích</option>
-                </select>
-              </Field>
-              <Field label="Khả năng tiếp thu">
-                <select
-                  value={childGrasp}
-                  onChange={(e) => setChildGrasp(e.target.value)}
-                  disabled={!canFeedback}
-                  className={inputCls}
-                >
-                  <option value="">—</option>
-                  {(Object.keys(CHILD_GRASP_LABEL) as ChildGrasp[]).map((g) => (
-                    <option key={g} value={g}>
-                      {CHILD_GRASP_LABEL[g]}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Khoá đề xuất">
-                <select
-                  value={recommendedCourseId}
-                  onChange={(e) => setRecommendedCourseId(e.target.value)}
-                  disabled={!canFeedback}
-                  className={inputCls}
-                >
-                  <option value="">—</option>
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Gợi ý của giáo viên">
-                <textarea
-                  value={teacherSuggestion}
-                  onChange={(e) => setTeacherSuggestion(e.target.value)}
-                  disabled={!canFeedback}
-                  rows={2}
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Phản hồi của phụ huynh">
-                <textarea
-                  value={parentFeedback}
-                  onChange={(e) => setParentFeedback(e.target.value)}
-                  disabled={!canFeedback}
-                  rows={2}
-                  className={inputCls}
-                />
-              </Field>
-              {canFeedback && (
-                <button
-                  type="button"
-                  onClick={saveFeedback}
-                  disabled={pending}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  Lưu nhận xét
-                </button>
-              )}
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-sm text-gray-600">
+              Nhận xét buổi học thử nay dùng{" "}
+              <strong>Phiếu đánh giá buổi học</strong> (theo từng buổi & học viên) tại{" "}
+              <Link
+                href="/trial-classes"
+                className="font-medium text-orange-600 hover:underline"
+              >
+                Lớp trải nghiệm
+              </Link>
+              . Xếp con vào lớp trải nghiệm rồi điểm danh + đánh giá tại đó.
             </div>
           </div>
         </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * FL2-04 / US-LEAD-4 — Xếp con (LeadChild) vào lớp TRẢI NGHIỆM (TrialClassV2 OPEN)
+ * ngay tại tab Học thử, không cần mở lead. Chỉ liệt kê lớp cùng cơ sở (AC3).
+ * Tạo TrialEnrollment qua action enrollLeadChildAction (tái dùng service enrollLeadChild).
+ */
+function TrialEnrollSection({
+  leadId,
+  children,
+  openTrialClasses,
+  effectiveCenterId,
+  canOverride,
+}: {
+  leadId: string;
+  children: TrialChild[];
+  openTrialClasses: OpenTrialClass[];
+  effectiveCenterId: string | null;
+  canOverride: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [picked, setPicked] = useState<Record<string, string>>({});
+
+  // AC3 — chỉ lớp trải nghiệm CÙNG cơ sở của buổi học thử/lead (helper thuần testable).
+  const classes = filterOpenTrialClasses(openTrialClasses, effectiveCenterId);
+
+  function enroll(childId: string, allowOverride: boolean) {
+    const trialClassId = picked[childId];
+    if (!trialClassId) {
+      toast.error("Chọn lớp trải nghiệm trước");
+      return;
+    }
+    startTransition(async () => {
+      const res = await enrollLeadChildAction({
+        trialClassId,
+        leadChildId: childId,
+        allowOverride,
+      });
+      if (res.ok) {
+        toast.success("Đã xếp con vào lớp trải nghiệm");
+        router.refresh();
+        return;
+      }
+      if (res.overCapacity && canOverride) {
+        if (window.confirm(`${res.error}. Bạn có quyền vượt sĩ số — vẫn xếp?`)) {
+          enroll(childId, true);
+        }
+        return;
+      }
+      toast.error(res.error ?? "Xếp chỗ thất bại");
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <FlaskConical className="h-4 w-4 text-orange-500" />
+        <h3 className="text-sm font-semibold text-gray-700">
+          Xếp vào lớp trải nghiệm
+        </h3>
+      </div>
+
+      {children.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          Lead chưa có hồ sơ con (LeadChild).{" "}
+          <Link
+            href={`/leads/${leadId}`}
+            className="font-medium text-orange-600 hover:underline"
+          >
+            Mở lead để thêm con
+          </Link>{" "}
+          rồi xếp vào lớp trải nghiệm.
+        </p>
+      ) : classes.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          Chưa có lớp trải nghiệm đang mở cùng cơ sở. Tạo lớp ở mục &quot;Lớp trải
+          nghiệm&quot;.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {children.map((c) => (
+            <li
+              key={c.id}
+              className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2"
+            >
+              <span className="min-w-[7rem] flex-1 text-sm font-medium text-gray-800">
+                {c.fullName}
+              </span>
+              <select
+                value={picked[c.id] ?? ""}
+                onChange={(e) =>
+                  setPicked((p) => ({ ...p, [c.id]: e.target.value }))
+                }
+                disabled={pending}
+                className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+              >
+                <option value="">— chọn lớp trải nghiệm —</option>
+                {classes.map((cl) => (
+                  <option key={cl.id} value={cl.id}>
+                    {cl.name} ({cl.used}/{cl.capacity})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => enroll(c.id, false)}
+                disabled={pending}
+                className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+              >
+                Xếp vào lớp
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

@@ -159,7 +159,8 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
       })
       .catch(() => [] as Array<{ id: string; name: string }>),
     // Fix #9 — bộ lọc GV dùng chung nguồn assignable (không lọt quản lý/sale thuần).
-    getAssignableTeachers().catch(
+    // R2-RBAC-3 — chỉ GV thuộc cơ sở actor nhìn thấy (CS1 không lọt GV CS2 vào filter).
+    getAssignableTeachers({ centerIds: actor.visibleCenterIds }).catch(
       () => [] as Array<{ id: string; name: string | null }>,
     ),
   ])
@@ -358,6 +359,12 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                       {canManage && (
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <Link
+                              href={`/classes/${cls.id}`}
+                              className="rounded-md border border-orange-200 px-2.5 py-1 text-xs font-semibold text-orange-700 hover:bg-orange-50"
+                            >
+                              Chi tiết
+                            </Link>
                             {canUpdate && (
                               <Link
                                 href={`/classes/${cls.id}/edit`}

@@ -47,12 +47,21 @@ export default async function CoursesPage() {
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
           <BookOpen className="h-5 w-5 text-orange-600" />
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Khoá dạy</h1>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">Khoá dạy (chương trình giảng)</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Cấu hình độ tuổi, trình độ và ưu đãi (giảm giá / học bổng) theo từng khoá.
+            Khoá dạy = đơn vị GIẢNG (chương trình, độ tuổi, trình độ, ưu đãi). Để BÁN/định giá,
+            mở chi tiết khoá để quản lý <span className="font-medium">gói bán liên kết</span>.
           </p>
         </div>
+        {can(session.user, "course-packages:edit") && (
+          <Link
+            href="/course-packages"
+            className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            Tất cả gói bán →
+          </Link>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">

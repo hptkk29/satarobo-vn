@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { LeadStatus } from "@prisma/client";
@@ -11,7 +11,6 @@ import {
   LEAD_STATUS_ACCENT,
 } from "@/lib/leads/status";
 import { updateLeadStatus, autoAssignLeadAction } from "../actions";
-import { CloseDealDialog } from "./close-deal-dialog";
 
 export type KanbanLead = {
   id: string;
@@ -24,6 +23,7 @@ export type KanbanLead = {
   assignedToName: string | null;
   createdAt: string; // ISO
   overdue: boolean; // T1.2 — quá hạn follow-up (tạm false cho tới khi có LeadTask)
+  lastTrialDate: string | null; // FL-R2 (item 6) — lần học thử gần nhất (ISO) hoặc null
 };
 
 function fmtDate(iso: string): string {
@@ -50,13 +50,18 @@ export function LeadsKanban({
   const [items, setItems] = useState<KanbanLead[]>(leads);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<LeadStatus | null>(null);
-  const [closeLead, setCloseLead] = useState<{ id: string; name: string } | null>(null);
 
-  /** Chuyển sang ENROLLED = chốt deal → mở dialog thay vì set status trơn. */
+  // FL2-02 — đồng bộ lại khi server trả data mới (router.refresh / revalidate) → UI tự
+  // cập nhật, không phải F5 tay. (useState chỉ init 1 lần nên cần sync prop→state.)
+  useEffect(() => {
+    setItems(leads);
+  }, [leads]);
+
+  /** FL2-01 — chuyển sang ENROLLED = chốt deal → ĐIỀU HƯỚNG vào trang chi tiết lead
+   *  (convert v2 đa con + học phí 1/2 đợt), KHÔNG mở popup close-deal cũ. */
   function requestMove(leadId: string, to: LeadStatus) {
     if (to === "ENROLLED" && canCloseDeal) {
-      const l = items.find((x) => x.id === leadId);
-      setCloseLead({ id: leadId, name: l?.parentName ?? "Lead" });
+      router.push(`/leads/${leadId}`);
       return;
     }
     move(leadId, to);
@@ -192,21 +197,23 @@ export function LeadsKanban({
                         )}
                         <span>· {fmtDate(lead.createdAt)}</span>
                       </div>
+                      {lead.lastTrialDate && (
+                        <div className="font-medium text-violet-600">
+                          Đã học thử · {fmtDate(lead.lastTrialDate)}
+                        </div>
+                      )}
                     </div>
 
                     {canCloseDeal &&
                       lead.status !== "ENROLLED" &&
                       lead.status !== "LOST" &&
                       lead.status !== "DUPLICATE" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCloseLead({ id: lead.id, name: lead.parentName })
-                          }
-                          className="mt-2 w-full rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                        <Link
+                          href={`/leads/${lead.id}`}
+                          className="mt-2 block w-full rounded-md bg-emerald-600 px-2 py-1 text-center text-xs font-semibold text-white hover:bg-emerald-700"
                         >
                           Chuyển Đã đăng ký
-                        </button>
+                        </Link>
                       )}
 
                     {/* Mobile / fallback: đổi status qua select (native DnD không
@@ -235,13 +242,6 @@ export function LeadsKanban({
           );
         })}
       </div>
-
-      <CloseDealDialog
-        leadId={closeLead?.id ?? null}
-        leadName={closeLead?.name ?? ""}
-        onClose={() => setCloseLead(null)}
-        onSuccess={() => router.refresh()}
-      />
     </div>
   );
 }

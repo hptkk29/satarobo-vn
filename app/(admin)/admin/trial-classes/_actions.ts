@@ -6,13 +6,15 @@ import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
+import { leadStatusLabel } from "@/lib/leads/status";
 // CONTRACT (R7-02) — lib/trial/service.ts do agent song song tạo; import theo tên.
 // Typecheck gộp cuối sẽ resolve. Mỗi action chỉ "inspect {ok}" + revalidate.
 import {
-  getActiveTrialConfig,
   setTrialProgramConfig,
   createTrialClass,
   enrollLeadChild,
+  unenrollLeadChild,
   markAttendance,
   completeTrialSession,
   cancelTrialClass,
@@ -61,11 +63,11 @@ const trialConfigSchema = z.object({
     .max(60, "Số buổi quá lớn"),
 });
 
-/** Cấu hình số buổi lớp trải nghiệm — gate `training:manage`. */
+/** Cấu hình số buổi lớp trải nghiệm — gate `trials:config` (QĐ-T3b: CM giữ qua action riêng, KHÔNG training:manage). */
 export async function saveTrialConfigAction(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "training:manage")) {
+  if (!can(session.user, "trials:config")) {
     return { ok: false, error: "Không có quyền cấu hình số buổi" };
   }
 
@@ -98,7 +100,12 @@ const createTrialClassSchema = z
     configId: z.string().trim().min(1).nullable().optional(),
     roomId: z.string().trim().min(1).nullable().optional(),
     teacherId: z.string().trim().min(1).nullable().optional(),
-    startDate: z.string().trim().min(1, "Chọn ngày bắt đầu"),
+    // FL-R2 (QĐ-R2-1): slot tái sử dụng — số buổi nhập trực tiếp, KHÔNG còn ngày bắt đầu.
+    sessionCount: z.coerce
+      .number()
+      .int("Số buổi phải là số nguyên")
+      .min(1, "Số buổi phải ≥ 1")
+      .max(20, "Số buổi quá lớn"),
     startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
     endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
     capacity: z.coerce
@@ -110,17 +117,7 @@ const createTrialClassSchema = z
   .refine((d) => d.endTime > d.startTime, {
     message: "Giờ kết thúc phải sau giờ bắt đầu",
     path: ["endTime"],
-  })
-  .refine(
-    (d) => {
-      // AC9 — chặn ngày quá khứ (so theo ngày, bỏ qua giờ).
-      const start = new Date(`${d.startDate}T00:00:00`);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return !Number.isNaN(start.getTime()) && start >= today;
-    },
-    { message: "Ngày bắt đầu không được ở quá khứ", path: ["startDate"] },
-  );
+  });
 
 /** Tạo lớp trải nghiệm — gate `trials:manage` + cách ly cơ sở. */
 export async function createTrialClassAction(input: unknown): Promise<ActionResult<{ id?: string }>> {
@@ -141,26 +138,15 @@ export async function createTrialClassAction(input: unknown): Promise<ActionResu
     return { ok: false, error: "Bạn không có quyền tạo lớp tại cơ sở này" };
   }
 
-  // configId bắt buộc cho service — fallback cấu hình active nếu UI để trống.
-  let configId = data.configId ?? null;
-  if (!configId) {
-    const active = await getActiveTrialConfig();
-    if (!active) {
-      return {
-        ok: false,
-        error: "Chưa có cấu hình số buổi. Vào mục Cấu hình số buổi trước khi tạo lớp.",
-      };
-    }
-    configId = active.id;
-  }
-
   const res = await createTrialClass({
     centerId: data.centerId,
     name: data.name,
-    configId,
+    configId: data.configId ?? null,
     roomId: data.roomId ?? null,
     teacherId: data.teacherId ?? null,
-    startDate: new Date(`${data.startDate}T00:00:00`),
+    // slot tái sử dụng: không gắn ngày bắt đầu; số buổi nhập trực tiếp.
+    startDate: null,
+    sessionCount: data.sessionCount,
     startTime: data.startTime,
     endTime: data.endTime,
     capacity: data.capacity,
@@ -185,6 +171,8 @@ export async function enrollLeadChildAction(input: {
   trialClassId: string;
   leadChildId: string;
   allowOverride?: boolean;
+  // FL-R2 (QĐ-R2-W3): số buổi học thử cấu hình RIÊNG cho lead này (bỏ trống → mặc định lớp).
+  totalSessions?: number;
 }): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
@@ -199,6 +187,15 @@ export async function enrollLeadChildAction(input: {
   if (!input.trialClassId || !input.leadChildId) {
     return { ok: false, error: "Thiếu lớp hoặc học viên" };
   }
+  // số buổi per-lead (nếu nhập): nguyên 1..60.
+  let totalSessions: number | undefined;
+  if (input.totalSessions != null) {
+    const n = Number(input.totalSessions);
+    if (!Number.isInteger(n) || n < 1 || n > 60) {
+      return { ok: false, error: "Số buổi học thử phải là số nguyên từ 1 đến 60" };
+    }
+    totalSessions = n;
+  }
 
   const actor = await resolveActor(session.user.id);
   const cls = await loadScopedTrialClass(actor, input.trialClassId);
@@ -209,6 +206,7 @@ export async function enrollLeadChildAction(input: {
     leadChildId: input.leadChildId,
     allowOverride,
     addedById: session.user.id,
+    totalSessions,
   });
   if (!res?.ok) {
     // Surface cờ overCapacity để UI mời QL bấm override.
@@ -218,6 +216,110 @@ export async function enrollLeadChildAction(input: {
       overCapacity: res?.overCapacity === true,
     };
   }
+
+  revalidatePath(`/trial-classes/${input.trialClassId}`);
+  revalidatePath("/trial-classes");
+  return { ok: true };
+}
+
+/**
+ * FL-R2 (item 4/8) — tìm học viên (LeadChild) để gán vào lớp trải nghiệm.
+ * Cùng cơ sở lớp; loại lead đã rời pipeline (ENROLLED/LOST/DUPLICATE/REGISTERED) + con đang
+ * ở 1 lớp ACTIVE khác. Gate `trials:manage` + cách ly cơ sở (scopedDb).
+ */
+export async function searchTrialCandidatesAction(input: {
+  trialClassId: string;
+  query: string;
+}): Promise<
+  ActionResult<{
+    candidates: {
+      leadChildId: string;
+      childName: string;
+      parentName: string | null;
+      phone: string | null;
+      leadStatus: string;
+    }[];
+  }>
+> {
+  const session = await requireSession();
+  if (!session) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "trials:manage")) {
+    return { ok: false, error: "Không có quyền tìm học viên" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const cls = await loadScopedTrialClass(actor, input.trialClassId);
+  if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
+
+  const q = (input.query ?? "").trim();
+  const sdb = scopedDb(actor);
+  // con CHƯA ở lớp ACTIVE nào (giải phóng partial-unique 1 lớp ACTIVE/con).
+  const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
+  const leads = await sdb.lead.findMany({
+    where: {
+      centerId: cls.centerId,
+      status: { notIn: ["ENROLLED", "LOST", "DUPLICATE", "REGISTERED"] },
+      children: { some: childFree },
+      ...(q
+        ? {
+            OR: [
+              { parentName: { contains: q, mode: "insensitive" as const } },
+              { phone: { contains: q } },
+              { children: { some: { fullName: { contains: q, mode: "insensitive" as const } } } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      parentName: true,
+      phone: true,
+      status: true,
+      children: { where: childFree, select: { id: true, fullName: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 20,
+  });
+
+  const candidates = leads.flatMap((l) =>
+    l.children.map((c) => ({
+      leadChildId: c.id,
+      childName: c.fullName,
+      parentName: l.parentName,
+      phone: l.phone,
+      leadStatus: leadStatusLabel(l.status),
+    })),
+  );
+  return { ok: true, candidates };
+}
+
+/**
+ * FL-R2 (item 4) — gỡ học viên khỏi lớp trải nghiệm (soft-withdraw, giữ lịch sử).
+ * Gate `trials:manage` + cách ly cơ sở.
+ */
+export async function unenrollLeadChildAction(input: {
+  trialClassId: string;
+  leadChildId: string;
+}): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session) return { ok: false, error: "Chưa đăng nhập" };
+  if (!can(session.user, "trials:manage")) {
+    return { ok: false, error: "Không có quyền gỡ học viên" };
+  }
+  if (!input.trialClassId || !input.leadChildId) {
+    return { ok: false, error: "Thiếu lớp hoặc học viên" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const cls = await loadScopedTrialClass(actor, input.trialClassId);
+  if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
+
+  const res = await unenrollLeadChild({
+    trialClassId: input.trialClassId,
+    leadChildId: input.leadChildId,
+    actorId: session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Gỡ học viên thất bại" };
 
   revalidatePath(`/trial-classes/${input.trialClassId}`);
   revalidatePath("/trial-classes");
@@ -243,6 +345,15 @@ export async function assignTrialTeacherAction(
 
   // Không có service fn riêng cho gán GV → cập nhật trực tiếp qua scopedDb.
   const sdb = scopedDb(actor);
+
+  // R2-RBAC-3 — GV gán phải CÙNG cơ sở lớp trải nghiệm (cách ly CS; chống gán chéo
+  // qua POST thẳng). User pass-through scopedDb (không center-scoped).
+  if (teacherId) {
+    const t = await sdb.user.findUnique({ where: { id: teacherId }, select: { centerId: true } });
+    const err = teacherCenterAssignmentError(cls.centerId, [{ id: teacherId, centerId: t?.centerId }]);
+    if (err) return { ok: false, error: err };
+  }
+
   await sdb.trialClassV2.update({
     where: { id: trialClassId },
     data: { teacherId: teacherId || null },

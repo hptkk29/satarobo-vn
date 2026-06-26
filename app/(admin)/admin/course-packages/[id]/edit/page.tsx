@@ -48,6 +48,7 @@ export default async function EditPackagePage({ params }: EditPackagePageProps) 
       seoTitle: true,
       seoDescription: true,
       parentCourseSlug: true,
+      courseId: true,
       // Phase TD-1 — Detail content
       audienceTag: true,
       audienceDescription: true,
@@ -62,6 +63,13 @@ export default async function EditPackagePage({ params }: EditPackagePageProps) 
 
   if (!pkg) notFound();
 
+  // FL1-05 — khoá dạy để liên kết (đổ dropdown).
+  const courses = await db.course.findMany({
+    where: { isActive: true },
+    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, code: true, slug: true },
+  });
+
   return (
     <div>
       <div className="mb-6">
@@ -75,7 +83,7 @@ export default async function EditPackagePage({ params }: EditPackagePageProps) 
         <h1 className="mt-2 text-2xl font-bold text-gray-900">Sửa: {pkg.name}</h1>
       </div>
 
-      <PackageForm pkg={pkg} />
+      <PackageForm pkg={pkg} courses={courses} />
     </div>
   );
 }

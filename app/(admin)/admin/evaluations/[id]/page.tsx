@@ -25,6 +25,8 @@ export default async function FormEditPage({ params }: { params: Promise<{ id: s
     label: q.label,
     options: parseOptions(q.options),
     required: q.required,
+    groupLabel: q.groupLabel ?? "",
+    allowCustomText: q.allowCustomText,
   }));
 
   return (
@@ -35,7 +37,12 @@ export default async function FormEditPage({ params }: { params: Promise<{ id: s
       <div>
         <h1 className="text-xl font-bold text-gray-900">{form.title}</h1>
         <p className="mt-0.5 text-sm text-gray-500">
-          {form.scope === "TEACHER_EVAL" ? "Đánh giá GV (học viên)" : "Khảo sát cơ sở (phụ huynh)"} · {form.status}
+          {form.scope === "TEACHER_EVAL"
+            ? "Đánh giá GV (học viên)"
+            : form.scope === "CENTER_SURVEY"
+              ? "Khảo sát cơ sở (phụ huynh)"
+              : "Đánh giá buổi học (GV chấm HS)"}{" "}
+          · {form.status}
         </p>
       </div>
       <FormEditor formId={id} initial={initial} locked={locked} />

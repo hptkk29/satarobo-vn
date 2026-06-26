@@ -20,6 +20,10 @@ interface QuestionRow {
   text: string;
   difficulty?: string;
   tags?: string;
+  courseSlug?: string;
+  curriculumVersion?: string;
+  points?: string;
+  timeLimitSec?: string;
   correctAnswer?: string;
   choice1?: string;
   choice1_correct?: string;
@@ -69,6 +73,10 @@ export default function ImportQuestionsPage() {
           { key: "text", label: "Đề bài", required: true },
           { key: "difficulty", label: "Độ khó (EASY/MEDIUM/HARD/EXPERT)" },
           { key: "tags", label: "Tags (cách ,)" },
+          { key: "courseSlug", label: "Khoá (slug) — khung CT" },
+          { key: "curriculumVersion", label: "Khung phiên bản (số)" },
+          { key: "points", label: "Điểm/câu" },
+          { key: "timeLimitSec", label: "Thời gian/câu (giây)" },
           { key: "correctAnswer", label: "Đáp án (SA/CODE/ESSAY)" },
           { key: "choice1", label: "Lựa chọn A" },
           { key: "choice1_correct", label: "A đúng? (TRUE/FALSE)" },
@@ -107,6 +115,10 @@ export default function ImportQuestionsPage() {
             text,
             difficulty,
             tags: asString(row.tags),
+            courseSlug: asString(row.courseSlug),
+            curriculumVersion: asString(row.curriculumVersion),
+            points: asString(row.points),
+            timeLimitSec: asString(row.timeLimitSec),
             correctAnswer: asString(row.correctAnswer),
             choice1: asString(row.choice1),
             choice1_correct: asString(row.choice1_correct),
@@ -171,6 +183,15 @@ export default function ImportQuestionsPage() {
           </li>
           <li>
             <code>isPublic</code> để trống → mặc định <code>TRUE</code>.
+          </li>
+          <li>
+            <strong>Khung chương trình</strong>: điền <code>courseSlug</code>{" "}
+            (slug khoá dạy) để gắn theo khoá; thêm <code>curriculumVersion</code>{" "}
+            (số) để gắn đúng khung CT. Bỏ trống nếu không gắn.
+          </li>
+          <li>
+            <code>points</code> (số ≥ 0) · <code>timeLimitSec</code> (số nguyên
+            giây ≥ 1) — tuỳ chọn.
           </li>
           <li>
             <strong>Lesson linking</strong>: defer — edit từng câu qua admin

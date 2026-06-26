@@ -126,9 +126,16 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
   const conflictMsg = await checkSessionScheduleConflict(s.classId, s.date);
   if (conflictMsg) return { error: conflictMsg };
 
+  // FL3-02 — centerId denormalized từ class cho scopedDb (buổi học cách ly cơ sở).
+  const clsCenter = await db.class.findUnique({
+    where: { id: s.classId },
+    select: { centerId: true },
+  });
+
   const data: Prisma.ClassSessionCreateInput = {
     class: { connect: { id: s.classId } },
     date: s.date,
+    centerId: clsCenter?.centerId ?? null,
     topic: emptyToNull(s.topic),
     notes: emptyToNull(s.notes),
     lessonNotes: emptyToNull(s.lessonNotes),

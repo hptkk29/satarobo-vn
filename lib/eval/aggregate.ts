@@ -18,12 +18,14 @@ export type QuestionMeta = {
   label: string;
   options: unknown; // Json — string[]
   order: number;
+  groupLabel?: string | null;
 };
 
 export type QuestionAggregate =
   | {
       questionId: string;
       label: string;
+      groupLabel: string | null;
       type: "STAR_RATING";
       count: number;
       avg: number | null;
@@ -32,6 +34,7 @@ export type QuestionAggregate =
   | {
       questionId: string;
       label: string;
+      groupLabel: string | null;
       type: "RADIO" | "CHECKBOX";
       count: number;
       optionCounts: { option: string; count: number }[];
@@ -39,9 +42,18 @@ export type QuestionAggregate =
   | {
       questionId: string;
       label: string;
+      groupLabel: string | null;
       type: "TEXTBOX";
       count: number;
       texts: string[];
+    }
+  | {
+      questionId: string;
+      label: string;
+      groupLabel: string | null;
+      type: "PHOTO";
+      count: number;
+      photos: string[];
     };
 
 export type RoundAggregate = {
@@ -68,6 +80,7 @@ export function aggregateAnswers(
   const ordered = [...questions].sort((x, y) => x.order - y.order);
   const out: QuestionAggregate[] = ordered.map((q) => {
     const rows = byQ.get(q.id) ?? [];
+    const groupLabel = q.groupLabel ?? null;
     if (q.type === "STAR_RATING") {
       const nums = rows.map((r) => r.valueNumber).filter((n): n is number => n != null);
       const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } as Record<1 | 2 | 3 | 4 | 5, number>;
@@ -78,6 +91,7 @@ export function aggregateAnswers(
       return {
         questionId: q.id,
         label: q.label,
+        groupLabel,
         type: "STAR_RATING",
         count: nums.length,
         avg: avg == null ? null : Math.round(avg * 100) / 100,
@@ -96,16 +110,22 @@ export function aggregateAnswers(
       return {
         questionId: q.id,
         label: q.label,
+        groupLabel,
         type: q.type,
         count: answered,
         optionCounts: [...counts.entries()].map(([option, count]) => ({ option, count })),
       };
     }
+    if (q.type === "PHOTO") {
+      // Gom mọi URL ảnh đã nộp (valueOptions) — hiển thị thumbnail tổng hợp.
+      const photos = rows.flatMap((r) => parseOptions(r.valueOptions));
+      return { questionId: q.id, label: q.label, groupLabel, type: "PHOTO", count: photos.length, photos };
+    }
     // TEXTBOX
     const texts = rows
       .map((r) => (r.valueText ?? "").trim())
       .filter((t) => t.length > 0);
-    return { questionId: q.id, label: q.label, type: "TEXTBOX", count: texts.length, texts };
+    return { questionId: q.id, label: q.label, groupLabel, type: "TEXTBOX", count: texts.length, texts };
   });
 
   return { responseCount, questions: out };
@@ -131,6 +151,7 @@ export async function aggregateRound(
     label: q.label,
     options: q.options,
     order: q.order,
+    groupLabel: q.groupLabel,
   }));
 
   const responses = await db.evalResponse.findMany({

@@ -1,6 +1,12 @@
 // lib/lms/assignment.ts — R3-08: bài tập/quiz (6 loại nội dung + nộp LATE).
 // R7-14: + auto-giao bài (HomeworkAssignment) khi buổi "Hoàn tất" theo exam gắn lesson.
-import type { AssignmentSubmission, SubmissionStatus } from "@prisma/client";
+// FL-R2 W5 (R2-LMS-4): + tự sinh Assignment từ AssignmentTemplate khi tạo lớp.
+import type {
+  AssignmentSubmission,
+  SubmissionStatus,
+  QuestionType,
+  QuestionDifficulty,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 
 /** C8.1 — 6 loại nội dung bài tập (registry; model dùng text/file + kind CLASSWORK/HOMEWORK). */
@@ -177,4 +183,173 @@ export async function assignHomeworkForSession(opts: {
   }
 
   return { created: res.count, examCount: exams.length, studentCount: enrollments.length, skipped: false };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FL-R2 W5 (R2-LMS-4) — Tự sinh Assignment (bài tập về nhà) từ AssignmentTemplate
+// khi TẠO LỚP. Template = "ngân hàng" gắn Lesson (khung CT). Khi lớp pin giáo trình
+// + sinh ClassSessionPlan, ta sinh 1 Assignment (DRAFT) cho mỗi template gắn các
+// Lesson của lớp, CLONE câu hỏi template → Question mới (KHÔNG đụng câu hỏi gốc).
+// Idempotent: 1 template → tối đa 1 Assignment/lớp (unique [classId,templateId] +
+// query-check + catch P2002). DRAFT để GV duyệt/publish trước khi giao HV.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Câu hỏi nguồn (từ template) — shape select dùng để CLONE. */
+export type TemplateSourceQuestion = {
+  type: QuestionType;
+  text: string;
+  explanation: string | null;
+  imageUrl: string | null;
+  difficulty: QuestionDifficulty;
+  tags: string[];
+  curriculumId: string | null;
+  courseId: string | null;
+  points: number | null;
+  timeLimitSec: number | null;
+  lessonId: string | null;
+  correctAnswer: string | null;
+  isPublic: boolean;
+  notes: string | null;
+  choices: { order: number; text: string; isCorrect: boolean; imageUrl: string | null }[];
+};
+
+/**
+ * THUẦN (test được) — dựng data Question CLONE để nest-create dưới Assignment.
+ * KHÔNG copy `questionCode` (unique toàn hệ thống → clone phải để null), KHÔNG copy
+ * id/authorId/assignmentId. Choices clone theo order/text/isCorrect/imageUrl.
+ */
+export function cloneQuestionForAssignment(q: TemplateSourceQuestion) {
+  return {
+    type: q.type,
+    text: q.text,
+    explanation: q.explanation,
+    imageUrl: q.imageUrl,
+    difficulty: q.difficulty,
+    tags: q.tags,
+    curriculumId: q.curriculumId,
+    courseId: q.courseId,
+    points: q.points,
+    timeLimitSec: q.timeLimitSec,
+    lessonId: q.lessonId,
+    correctAnswer: q.correctAnswer,
+    isPublic: q.isPublic,
+    notes: q.notes,
+    choices: {
+      create: q.choices.map((c) => ({
+        order: c.order,
+        text: c.text,
+        isCorrect: c.isCorrect,
+        imageUrl: c.imageUrl,
+      })),
+    },
+  };
+}
+
+export type GenerateAssignmentsResult = {
+  created: number;
+  templateCount: number;
+  skipped: number;
+};
+
+/**
+ * Sinh Assignment (DRAFT) cho 1 lớp từ template gắn các Lesson của lớp (qua
+ * ClassSessionPlan đã pin). Best-effort + idempotent. createdById=null (hệ thống).
+ */
+export async function generateAssignmentsFromTemplates(opts: {
+  classId: string;
+}): Promise<GenerateAssignmentsResult> {
+  const plans = await db.classSessionPlan.findMany({
+    where: { classId: opts.classId },
+    select: { lessonId: true },
+  });
+  const lessonIds = [...new Set(plans.map((p) => p.lessonId).filter((x): x is string => !!x))];
+  if (lessonIds.length === 0) return { created: 0, templateCount: 0, skipped: 0 };
+
+  const templates = await db.assignmentTemplate.findMany({
+    where: { lessonId: { in: lessonIds } },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      instructions: true,
+      kind: true,
+      lessonId: true,
+      totalPoints: true,
+      allowText: true,
+      allowFile: true,
+      templateQuestions: {
+        orderBy: { order: "asc" },
+        select: {
+          question: {
+            select: {
+              type: true,
+              text: true,
+              explanation: true,
+              imageUrl: true,
+              difficulty: true,
+              tags: true,
+              curriculumId: true,
+              courseId: true,
+              points: true,
+              timeLimitSec: true,
+              lessonId: true,
+              correctAnswer: true,
+              isPublic: true,
+              notes: true,
+              choices: {
+                orderBy: { order: "asc" },
+                select: { order: true, text: true, isCorrect: true, imageUrl: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (templates.length === 0) return { created: 0, templateCount: 0, skipped: 0 };
+
+  // Idempotent: bỏ template đã có Assignment cho lớp này.
+  const existing = await db.assignment.findMany({
+    where: { classId: opts.classId, templateId: { in: templates.map((t) => t.id) } },
+    select: { templateId: true },
+  });
+  const done = new Set(existing.map((e) => e.templateId));
+
+  let created = 0;
+  let skipped = 0;
+  for (const t of templates) {
+    if (done.has(t.id)) {
+      skipped++;
+      continue;
+    }
+    try {
+      await db.assignment.create({
+        data: {
+          class: { connect: { id: opts.classId } },
+          ...(t.lessonId ? { lesson: { connect: { id: t.lessonId } } } : {}),
+          template: { connect: { id: t.id } },
+          title: t.title,
+          description: t.description,
+          instructions: t.instructions,
+          kind: t.kind,
+          totalPoints: t.totalPoints,
+          allowText: t.allowText,
+          allowFile: t.allowFile,
+          status: "DRAFT",
+          questions: {
+            create: t.templateQuestions.map((tq) => cloneQuestionForAssignment(tq.question)),
+          },
+        },
+      });
+      created++;
+    } catch (err: unknown) {
+      // P2002 unique (classId, templateId) — đã sinh song song → coi như skip (idempotent).
+      if (typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "P2002") {
+        skipped++;
+        continue;
+      }
+      console.error("[generateAssignmentsFromTemplates] template", t.id, err);
+    }
+  }
+  return { created, templateCount: templates.length, skipped };
 }

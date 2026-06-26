@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { listEligibleClassesAction, createTransferRequestAction } from "../_actions";
 
@@ -22,10 +23,13 @@ type EligibleClass = {
 export function TransferForm({
   students,
   centers,
+  fromCenterId,
 }: {
   students: StudentOpt[];
   centers: { id: string; name: string }[];
+  fromCenterId: string;
 }) {
+  const router = useRouter();
   const [studentId, setStudentId] = useState("");
   const [fromClassId, setFromClassId] = useState("");
   const [toCenterId, setToCenterId] = useState("");
@@ -34,8 +38,20 @@ export function TransferForm({
   const [eligible, setEligible] = useState<EligibleClass[] | null>(null);
   const [studentCovered, setStudentCovered] = useState<number | null>(null);
   const [pending, start] = useTransition();
+  const [navPending, startNav] = useTransition();
 
   const student = students.find((s) => s.id === studentId);
+
+  // FL2-06 (LD-6) — chọn CƠ SỞ NGUỒN trước → server nạp HV thuộc cơ sở đó (qua URL
+  // param, RSC refetch). Đổi cơ sở thì reset các bước phụ thuộc phía dưới.
+  function onPickFromCenter(value: string) {
+    setStudentId("");
+    setFromClassId("");
+    setEligible(null);
+    startNav(() => {
+      router.push(value ? `/admin/chuyen-lop?fromCenterId=${encodeURIComponent(value)}` : "/admin/chuyen-lop");
+    });
+  }
 
   function search() {
     if (!studentId || !fromClassId) {
@@ -72,7 +88,24 @@ export function TransferForm({
   return (
     <div className="grid gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-2">
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Học viên</span>
+        <span className="mb-1 block text-neutral-600">Bước 1 — Cơ sở nguồn</span>
+        <select
+          value={fromCenterId}
+          onChange={(e) => onPickFromCenter(e.target.value)}
+          disabled={navPending}
+          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50"
+        >
+          <option value="">— Chọn cơ sở —</option>
+          {centers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="text-sm">
+        <span className="mb-1 block text-neutral-600">Bước 2 — Học viên</span>
         <select
           value={studentId}
           onChange={(e) => {
@@ -80,9 +113,18 @@ export function TransferForm({
             setFromClassId("");
             setEligible(null);
           }}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          disabled={!fromCenterId || navPending}
+          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50"
         >
-          <option value="">— Chọn —</option>
+          <option value="">
+            {!fromCenterId
+              ? "— Chọn cơ sở nguồn trước —"
+              : navPending
+                ? "Đang nạp học viên…"
+                : students.length === 0
+                  ? "— Cơ sở chưa có HV đang học —"
+                  : "— Chọn —"}
+          </option>
           {students.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -93,7 +135,7 @@ export function TransferForm({
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Lớp hiện tại</span>
+        <span className="mb-1 block text-neutral-600">Bước 3 — Lớp hiện tại</span>
         <select
           value={fromClassId}
           onChange={(e) => {
@@ -113,7 +155,7 @@ export function TransferForm({
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Cơ sở đích (tuỳ chọn)</span>
+        <span className="mb-1 block text-neutral-600">Bước 4 — Cơ sở đích (tuỳ chọn)</span>
         <select
           value={toCenterId}
           onChange={(e) => setToCenterId(e.target.value)}

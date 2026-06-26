@@ -52,16 +52,15 @@ test("admin: hộp thư tin nhắn render + có thread; compliance render", asyn
   await login(page, { email: ctx.sa });
 
   await page.goto("/admin/tin-nhan");
-  await expect(page.getByRole("heading", { name: "Tin nhắn phụ huynh" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tin nhắn" })).toBeVisible();
   await expect(page.getByText("HV Một")).toBeVisible();
 
   await page.goto("/admin/compliance");
   await expect(page.getByRole("heading", { name: /Tuân thủ dữ liệu/ })).toBeVisible();
 
-  // P6 — dashboard báo cáo LMS (Recharts) render.
-  await page.goto("/admin/bao-cao/lms");
-  await expect(page.getByRole("heading", { name: "Báo cáo LMS" })).toBeVisible();
-  await expect(page.getByText("Hiệu suất giáo viên")).toBeVisible();
+  // P6 — dashboard báo cáo (Recharts) render. bao-cao/lms cũ đã tách → hieu-suat-gv.
+  await page.goto("/admin/bao-cao/hieu-suat-gv");
+  await expect(page.getByRole("heading", { name: /Báo cáo hiệu suất giáo viên/ })).toBeVisible();
 
   // Calendar admin render.
   await page.goto("/admin/lich");
@@ -76,14 +75,15 @@ test("portal: PH xem hộp thư + gửi tin mới", async ({ page, context }) =>
 
   await page.goto("/portal/tin-nhan");
   await expect(page.getByRole("heading", { name: "Tin nhắn" })).toBeVisible();
-  // hội thoại seed sẵn hiển thị
-  await expect(page.getByText("Hỏi tiến độ")).toBeVisible();
+  // chọn hội thoại của con (link list, không phải badge active-site) → mở thread
+  // seed sẵn ("Chào thầy ạ").
+  await page.getByRole("link", { name: /HV Một/ }).click();
+  await expect(page.getByText("Chào thầy ạ")).toBeVisible();
 
-  // gửi tin mới
-  await page.getByPlaceholder(/Tiêu đề/).fill("Hỏi thêm");
+  // gửi tin mới — MessageForm chỉ có ô nội dung (không có "Tiêu đề").
   await page.getByPlaceholder(/Nhập tin nhắn/).fill("Cảm ơn thầy");
   await page.getByRole("button", { name: "Gửi" }).click();
-  await expect(page.getByText("Hỏi thêm").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Cảm ơn thầy").first()).toBeVisible({ timeout: 15_000 });
 
   // Calendar portal render.
   await page.goto("/portal/lich");

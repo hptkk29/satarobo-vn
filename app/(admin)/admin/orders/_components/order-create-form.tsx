@@ -122,6 +122,26 @@ export function OrderCreateForm({
     });
   }, [paymentMethods, orderType]);
 
+  // Base UI <Select.Value> hiển thị value THÔ (mã/ID) → phải truyền `items` (map
+  // value→nhãn) cho trigger hiện đúng tiếng Việt (item 3 — fix Radix→Base UI regression).
+  const ORDER_TYPE_ITEMS = { COURSE: "Khoá học", PACKAGE: "Gói combo", PRODUCT: "Sản phẩm" };
+  const ORDER_STATUS_ITEMS = { DRAFT: "Nháp", PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận TT" };
+  const pmItems = useMemo(
+    () => Object.fromEntries(availablePMs.map((pm) => [pm.id, pm.name])),
+    [availablePMs],
+  );
+  const centerItems = useMemo(
+    () => ({ [NO_CENTER]: "— Không gán —", ...Object.fromEntries(centers.map((c) => [c.id, c.name])) }),
+    [centers],
+  );
+  const itemItems = useMemo(() => {
+    if (orderType === "COURSE")
+      return Object.fromEntries(courses.map((c) => [c.id, c.code ? `${c.name} (${c.code})` : c.name]));
+    if (orderType === "PACKAGE")
+      return Object.fromEntries(packages.map((p) => [p.id, `${p.name} (${p.code})`]));
+    return Object.fromEntries(products.map((pd) => [pd.id, `${pd.sku} · ${pd.name}`]));
+  }, [orderType, courses, packages, products]);
+
   function handleItemSelect(refId: string) {
     setItemRefId(refId);
     if (orderType === "COURSE") {
@@ -268,6 +288,7 @@ export function OrderCreateForm({
           <div className="space-y-1.5">
             <Label>Loại đơn *</Label>
             <Select
+              items={ORDER_TYPE_ITEMS}
               value={orderType}
               onValueChange={(v) => {
                 setOrderType(v as OrderType);
@@ -290,6 +311,7 @@ export function OrderCreateForm({
           <div className="space-y-1.5">
             <Label>Trạng thái ban đầu</Label>
             <Select
+              items={ORDER_STATUS_ITEMS}
               value={orderStatus}
               onValueChange={(v) => setOrderStatus(v as OrderStatus)}
             >
@@ -306,6 +328,7 @@ export function OrderCreateForm({
           <div className="space-y-1.5">
             <Label>Phương thức TT *</Label>
             <Select
+              items={pmItems}
               value={paymentMethodId}
               onValueChange={(v) => setPaymentMethodId(v ?? "")}
             >
@@ -364,7 +387,7 @@ export function OrderCreateForm({
           </div>
           <div className="space-y-1.5">
             <Label>Trung tâm</Label>
-            <Select value={centerId} onValueChange={(v) => setCenterId(v ?? NO_CENTER)}>
+            <Select items={centerItems} value={centerId} onValueChange={(v) => setCenterId(v ?? NO_CENTER)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -422,6 +445,7 @@ export function OrderCreateForm({
                 : "Sản phẩm *"}
           </Label>
           <Select
+            items={itemItems}
             value={itemRefId}
             onValueChange={(v) => handleItemSelect(v ?? "")}
           >

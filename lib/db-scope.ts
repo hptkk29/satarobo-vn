@@ -17,6 +17,12 @@ export const SCOPED_MODELS = new Set<string>([
   "MessengerConversation", // R1-01 — hội thoại CRM theo cơ sở
   "Payment", // R7-04 — khoản thanh toán theo cơ sở
   "TrialClassV2", // R7-02 — lớp trải nghiệm theo cơ sở
+  "LeadTrialHistory", // FL-R2 — lịch sử học thử theo cơ sở
+  // FL3-02 (W5f phase B) — centerId backfilled (denormalized từ class). Flip EXEMPT→SCOPED.
+  // ⚠️ DEPLOY-GATE: chỉ an toàn sau khi backfill Enrollment/ClassSession.centerId = 100%
+  // (centerId null sẽ bị inject `centerId IN [...]` → ẨN NHẦM record). Xem e2e cách ly.
+  "Enrollment", // FL3-02 — đăng ký học theo cơ sở (trước scope tay qua class.centerId)
+  "ClassSession", // FL3-02 — buổi học theo cơ sở; vẫn ∈ MAKEUP_EXCEPTION_MODELS (đọc chéo khi học bù)
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -44,12 +50,11 @@ export const SCOPE_EXEMPT = new Set<string>([
   "RefundRequest",
   // LMS-16 — RevenueTarget là config mục tiêu; centerId null = toàn hệ thống.
   "RevenueTarget",
-  // LMS-18 (W5f phase A) — centerId ĐÃ thêm + backfill nhưng CHƯA flip sang SCOPED_MODELS.
-  // Cách ly hiện vẫn qua classId IN scopedClassIds (manual) — giữ EXEMPT để KHÔNG đổi hành vi
-  // đọc. Phase B (shadow-rollout + e2e cách ly) sẽ chuyển 3 model này sang SCOPED_MODELS.
-  "ClassSession",
+  // LMS-18 (W5f phase A) — centerId ĐÃ thêm + backfill. FL3-02 đã flip Enrollment +
+  // ClassSession sang SCOPED_MODELS. Attendance CHƯA flip (ngoài scope FL3-02): cách ly
+  // vẫn qua sessionId/classId IN scopedClassIds (manual) ở trang điểm danh. Flip Attendance
+  // ở ticket riêng sau khi backfill Attendance.centerId verify + e2e cách ly.
   "Attendance",
-  "Enrollment",
 ]);
 
 function bypassesScope(actor: Actor): boolean {
@@ -74,6 +79,12 @@ export function getModelPrefixes(model: string): string[] {
     case "Class":
     case "ClassGroup":
       return ["classes:", "class_group:"];
+    case "Enrollment":
+      return ["enrollments:"];
+    case "ClassSession":
+      // Buổi học gắn lớp → map cả action sessions: lẫn classes: (ai quản lý lớp ở cơ sở
+      // nào thì thấy buổi cơ sở đó). GV có classes:view-own/sessions:view → scope cơ sở mình.
+      return ["sessions:", "classes:"];
     case "TrialClass":
     case "TrialClassV2":
     case "MakeupNeed":
@@ -232,7 +243,7 @@ export function scopedDb(actor: Actor, opts?: { bypass?: boolean }) {
 /** Model được ĐỌC CHÉO cơ sở trong luồng makeup. KHÔNG gồm Lead/Order/Student. */
 export const MAKEUP_EXCEPTION_MODELS = new Set<string>([
   "Class", // lớp đích ở cơ sở khác (scoped → cần nới để xếp bù chéo)
-  "ClassSession", // buổi ứng viên (vốn không scoped, liệt kê để rõ ý định)
+  "ClassSession", // buổi ứng viên — FL3-02 đã SCOPED, exception nới để xếp bù chéo cơ sở
   "Lesson", // bài giảng (không scoped)
   "MakeupNeed", // nhu cầu bù: GV cơ sở đích đọc HS bù theo makeupSessionId
 ]);

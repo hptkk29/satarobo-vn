@@ -53,6 +53,7 @@ export async function cancelSession(opts: {
       topic: true,
       lessonId: true,
       planId: true,
+      centerId: true,
     },
   });
   if (!session) return { ok: false, error: "Buổi học không tồn tại" };
@@ -86,6 +87,7 @@ export async function cancelSession(opts: {
         topic: session.topic,
         lessonId: session.lessonId,
         planId: session.planId,
+        centerId: session.centerId, // FL3-02 — denormalize từ buổi gốc/lớp cho scopedDb
         status: "SCHEDULED",
       },
       select: { id: true },

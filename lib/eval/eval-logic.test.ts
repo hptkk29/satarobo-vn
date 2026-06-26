@@ -18,8 +18,8 @@ import { isRoundOpen } from "@/lib/eval/rounds";
 
 // ─── AC1/AC2 — ENUM ĐÓNG (không loại thứ 5) ─────────────────────────────────
 describe("[R7-16] question type enum đóng", () => {
-  it("đúng 4 loại", () => {
-    expect([...QUESTION_TYPES].sort()).toEqual(["CHECKBOX", "RADIO", "STAR_RATING", "TEXTBOX"]);
+  it("đúng 5 loại (gồm PHOTO — FL4 R5)", () => {
+    expect([...QUESTION_TYPES].sort()).toEqual(["CHECKBOX", "PHOTO", "RADIO", "STAR_RATING", "TEXTBOX"]);
   });
 
   it("reject loại thứ 5 (vd DROPDOWN/SLIDER)", () => {

@@ -644,7 +644,9 @@ export async function loadCreateOrderFormData() {
         },
       }),
       db.course.findMany({
-        where: { isActive: true, isPublished: true },
+        // E2-ORDER (item 3): chỉ khoá DẠY thật (Sata 1–8...), loại 2 "danh mục"
+        // Lập trình Robot / Luyện thi RoboSim (isTeachable=false). Combo đi qua loại đơn PACKAGE.
+        where: { isActive: true, isPublished: true, isTeachable: true },
         orderBy: { displayOrder: "asc" },
         select: { id: true, code: true, name: true, price: true, type: true },
       }),

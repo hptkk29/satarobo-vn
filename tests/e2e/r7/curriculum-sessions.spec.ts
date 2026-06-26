@@ -120,13 +120,15 @@ test.describe("[R7-10] Curriculum sessions", () => {
     // Guard mà updateLesson dùng để chặn sửa nội dung khi LOCKED.
     expect(isLessonLocked(afterLock!.status)).toBe(true);
 
-    // Gate mở khóa: GV (TEACHER) KHÔNG có training:manage; chỉ Đào tạo
-    // (CENTER_MANAGER / SUPER_ADMIN) mở được. GV vẫn có curriculum:edit nhưng
-    // bị chặn bởi guard LOCKED ở trên.
+    // Gate mở khóa (FL W0 QĐ-T1: biên soạn/cấu hình LMS = Đào tạo=TRAINING; CM chỉ XEM
+    // nội dung LMS + vận hành qua action riêng): chỉ TRAINING/SUPER_ADMIN có training:manage;
+    // GV + CM KHÔNG. GV cũng KHÔNG còn curriculum:edit (biên soạn chuyển TRAINING).
     expect(can("TEACHER", "training:manage")).toBe(false);
-    expect(can("CENTER_MANAGER", "training:manage")).toBe(true);
+    expect(can("CENTER_MANAGER", "training:manage")).toBe(false);
+    expect(can("TRAINING", "training:manage")).toBe(true);
     expect(can("SUPER_ADMIN", "training:manage")).toBe(true);
-    expect(can("TEACHER", "curriculum:edit")).toBe(true);
+    expect(can("TEACHER", "curriculum:edit")).toBe(false);
+    expect(can("TRAINING", "curriculum:edit")).toBe(true);
 
     // Mở khóa (rời LOCKED) → xóa lockedAt/lockedById, version tăng.
     const verBefore = afterLock!.version;
@@ -150,11 +152,12 @@ test.describe("[R7-10] Curriculum sessions", () => {
     const teacherId = "gv-1";
     const handlerId = "dao-tao-1";
 
-    // Gate: GV (TEACHER) gửi được đề xuất (questions:author) nhưng KHÔNG tự xử lý
-    // (training:manage); chỉ Đào tạo (CENTER_MANAGER) xử lý.
-    expect(can("TEACHER", "questions:author")).toBe(true);
-    expect(can("TEACHER", "training:manage")).toBe(false);
-    expect(can("CENTER_MANAGER", "training:manage")).toBe(true);
+    // Gate (FL W0 QĐ-T1/T3b): GV KHÔNG biên soạn (questions:author=TRAINING) và KHÔNG
+    // tự duyệt; GV gửi đề xuất chỉnh bài → Đào tạo/CM DUYỆT qua lesson-change:approve.
+    expect(can("TEACHER", "questions:author")).toBe(false);
+    expect(can("TRAINING", "questions:author")).toBe(true);
+    expect(can("TEACHER", "lesson-change:approve")).toBe(false);
+    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(true);
 
     // GV gửi đề xuất → trạng thái mặc định OPEN, chưa có phản hồi / người xử lý.
     const cr = await db.lessonChangeRequest.create({

@@ -6,6 +6,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { listForms } from "@/lib/eval/forms";
 import { listRounds } from "@/lib/eval/rounds";
+import type { EvalScopeValue } from "@/lib/eval/schema";
 import { FormsManager } from "./_components/forms-manager";
 import { RoundsManager } from "./_components/rounds-manager";
 
@@ -40,11 +41,13 @@ export default async function EvaluationsPage() {
         </p>
       </div>
 
+      {/* FL4-01: trang này quản lý cả 3 phạm vi — TEACHER_EVAL + CENTER_SURVEY + SESSION_EVAL
+          (phiếu đánh giá buổi học, GV điền ở UI buổi học). */}
       <FormsManager
         forms={forms.map((f) => ({
           id: f.id,
           title: f.title,
-          scope: f.scope,
+          scope: f.scope as EvalScopeValue,
           status: f.status,
           questions: f._count.questions,
           rounds: f._count.rounds,
@@ -55,7 +58,7 @@ export default async function EvaluationsPage() {
         rounds={rounds.map((r) => ({
           id: r.id,
           name: r.name,
-          scope: r.scope,
+          scope: r.scope as EvalScopeValue,
           status: r.status,
           formTitle: r.form.title,
           centerName: r.centerId ? centerName.get(r.centerId) ?? null : null,
@@ -63,7 +66,7 @@ export default async function EvaluationsPage() {
         }))}
         forms={forms
           .filter((f) => f.status === "ACTIVE")
-          .map((f) => ({ id: f.id, title: f.title, scope: f.scope }))}
+          .map((f) => ({ id: f.id, title: f.title, scope: f.scope as EvalScopeValue }))}
         centers={centers}
         courses={courses}
       />

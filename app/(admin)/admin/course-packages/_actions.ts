@@ -46,6 +46,8 @@ const packageSchema = z.object({
   seoTitle: z.string().trim().optional(),
   seoDescription: z.string().trim().optional(),
   parentCourseSlug: z.string().trim().optional(),
+  // FL1-05 — liên kết gói bán ↔ khoá dạy (Course). "" → bỏ liên kết.
+  courseId: z.string().trim().optional(),
   // Phase TD-1 — Detail content
   audienceTag: z.string().trim().max(100).optional(),
   audienceDescription: z.string().trim().max(500).optional(),
@@ -135,6 +137,7 @@ function readPackageForm(formData: FormData, includeCode: boolean) {
     seoTitle: emptyToUndefined(formData.get("seoTitle")),
     seoDescription: emptyToUndefined(formData.get("seoDescription")),
     parentCourseSlug: emptyToUndefined(formData.get("parentCourseSlug")),
+    courseId: emptyToUndefined(formData.get("courseId")),
     // Phase TD-1
     audienceTag: emptyToUndefined(formData.get("audienceTag")),
     audienceDescription: emptyToUndefined(formData.get("audienceDescription")),
@@ -185,6 +188,8 @@ export async function createPackage(formData: FormData): Promise<ActionResult> {
     seoTitle: emptyToNull(pkg.seoTitle),
     seoDescription: emptyToNull(pkg.seoDescription),
     parentCourseSlug: emptyToNull(pkg.parentCourseSlug),
+    // FL1-05 — liên kết khoá dạy (chỉ connect khi có chọn).
+    course: pkg.courseId ? { connect: { id: pkg.courseId } } : undefined,
     // Phase TD-1
     audienceTag: emptyToNull(pkg.audienceTag),
     audienceDescription: emptyToNull(pkg.audienceDescription),
@@ -264,6 +269,8 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
     seoTitle: emptyToNull(pkg.seoTitle),
     seoDescription: emptyToNull(pkg.seoDescription),
     parentCourseSlug: emptyToNull(pkg.parentCourseSlug),
+    // FL1-05 — connect khoá khi chọn, disconnect khi bỏ trống (không xoá JSON cũ).
+    course: pkg.courseId ? { connect: { id: pkg.courseId } } : { disconnect: true },
     // Phase TD-1
     audienceTag: emptyToNull(pkg.audienceTag),
     audienceDescription: emptyToNull(pkg.audienceDescription),

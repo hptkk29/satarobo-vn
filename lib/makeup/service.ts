@@ -135,11 +135,15 @@ export async function suggestMakeupSessions(
     take: 50,
   });
 
-  // (4) capacityOk — đếm sĩ số active của các lớp ứng viên (Enrollment không scoped).
+  // (4) capacityOk — đếm sĩ số active của các lớp ứng viên. Học bù LIÊN CƠ SỞ: lớp
+  // ứng viên có thể ở cơ sở KHÁC actor. Enrollment nay ∈ SCOPED_MODELS (FL3-02) và
+  // KHÔNG nằm trong MAKEUP_EXCEPTION (cố ý cách ly) → `xdb` sẽ lọc centerId IN [actor]
+  // → đếm sĩ số lớp chéo cơ sở = 0 → lớp đầy lọt qua (over-book). Dùng `db` trần (chỉ
+  // COUNT sĩ số, không lộ PII) — đồng nhất với scheduleMakeup (re-check qua tx trần).
   const candidateClassIds = [...new Set(sessions.map((s) => s.classId))];
   const enrollCounts = new Map<string, number>();
   if (candidateClassIds.length > 0) {
-    const grouped = await xdb.enrollment.groupBy({
+    const grouped = await db.enrollment.groupBy({
       by: ["classId"],
       where: { classId: { in: candidateClassIds }, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
       _count: { _all: true },
@@ -148,7 +152,9 @@ export async function suggestMakeupSessions(
   }
 
   // (5) notConflict — ngày HV đã có buổi học (lớp đang theo) → loại ứng viên trùng ngày.
-  const myEnroll = await xdb.enrollment.findMany({
+  // Lớp của HV có thể ở cơ sở khác → đọc enrollment qua `db` trần (lý do như (4));
+  // ClassSession ở dưới giữ `xdb` (ClassSession ∈ MAKEUP_EXCEPTION → đã nới cross-center).
+  const myEnroll = await db.enrollment.findMany({
     where: { studentId: need.studentId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
     select: { classId: true },
   });

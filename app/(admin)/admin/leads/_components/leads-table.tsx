@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useRef, useState, useEffect } from 'react'
 import { Search, ChevronLeft, ChevronRight, Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
-import { CloseDealDialog } from './close-deal-dialog'
 import {
   LEAD_STATUS_LABEL as STATUS_LABELS,
   LEAD_STATUS_BADGE as STATUS_COLORS,
@@ -306,7 +305,6 @@ export function LeadsTable({
   const searchParams = useSearchParams()
   const searchRef = useRef<HTMLInputElement>(null)
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null)
-  const [closeLead, setCloseLead] = useState<{ id: string; name: string } | null>(null)
   const totalPages = Math.ceil(total / pageSize)
   const showActions = canDelete || canCloseDeal
 
@@ -473,16 +471,16 @@ export function LeadsTable({
                             lead.status !== 'ENROLLED' &&
                             lead.status !== 'LOST' &&
                             lead.status !== 'DUPLICATE' && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setCloseLead({ id: lead.id, name: lead.parentName })
-                                }
+                              // FL2-01 — điều hướng vào trang chi tiết lead (convert v2),
+                              // KHÔNG mở popup close-deal cũ.
+                              <Link
+                                href={`/leads/${lead.id}`}
+                                onClick={(e) => e.stopPropagation()}
                                 className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 Chuyển Đã đăng ký
-                              </button>
+                              </Link>
                             )}
                           {canDelete && (
                             <DeleteCell
@@ -535,13 +533,6 @@ export function LeadsTable({
         lead={selectedLead}
         canUpdate={canUpdate}
         onClose={() => setSelectedLead(null)}
-      />
-
-      <CloseDealDialog
-        leadId={closeLead?.id ?? null}
-        leadName={closeLead?.name ?? ''}
-        onClose={() => setCloseLead(null)}
-        onSuccess={() => router.refresh()}
       />
     </div>
   )

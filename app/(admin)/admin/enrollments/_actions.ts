@@ -14,9 +14,10 @@ import { canTransition } from "@/lib/enrollments/status";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope } from "@/lib/db-scope";
 
-// Cách ly cơ sở (chống IDOR ghi): Enrollment KHÔNG có centerId trực tiếp (không
-// ∈ SCOPED_MODELS) → scope thủ công qua class.centerId. Mọi mutation theo
-// enrollmentId/classId từ client phải xác minh lớp thuộc tầm nhìn cơ sở của actor.
+// Cách ly cơ sở (chống IDOR ghi): Enrollment + ClassSession NAY ∈ SCOPED_MODELS
+// (FL3-02 — centerId đã denormalize + backfill 100%) nên READ tự lọc theo cơ sở.
+// WRITE vẫn không tự scope → mọi mutation theo enrollmentId/classId từ client phải
+// xác minh lớp thuộc tầm nhìn cơ sở của actor (helper class.centerId bên dưới).
 async function classCenterInScope(actor: Actor, classId: string): Promise<boolean> {
   const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
   return !!cls && passesScope("Class", cls, actor);
@@ -199,11 +200,11 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
     }
   }
 
-  let classRow: { courseId: string } | null;
+  let classRow: { courseId: string; centerId: string | null } | null;
   let existing: { id: string } | null;
   try {
     [classRow, existing] = await Promise.all([
-      db.class.findUnique({ where: { id: e.classId }, select: { courseId: true } }),
+      db.class.findUnique({ where: { id: e.classId }, select: { courseId: true, centerId: true } }),
       db.enrollment.findFirst({
         where: { studentId: e.studentId, classId: e.classId },
         select: { id: true },
@@ -219,6 +220,8 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
     student: { connect: { id: e.studentId } },
     class: { connect: { id: e.classId } },
     course: { connect: { id: classRow.courseId } },
+    // FL3-02 — centerId denormalized từ class (scopedDb cách ly cơ sở). Bắt buộc set khi create.
+    centerId: classRow.centerId,
     status: e.status,
     tuition: e.tuition,
     paidAt: e.paidAt,
@@ -279,7 +282,7 @@ export async function updateEnrollment(
   }
 
   const classRow = await db.class
-    .findUnique({ where: { id: e.classId }, select: { courseId: true } })
+    .findUnique({ where: { id: e.classId }, select: { courseId: true, centerId: true } })
     .catch(() => null);
   if (!classRow) return { error: "Lớp học không tồn tại" };
 
@@ -287,6 +290,8 @@ export async function updateEnrollment(
     student: { connect: { id: e.studentId } },
     class: { connect: { id: e.classId } },
     course: { connect: { id: classRow.courseId } },
+    // FL3-02 — đồng bộ centerId theo lớp mới khi đổi lớp.
+    centerId: classRow.centerId,
     status: e.status,
     tuition: e.tuition,
     paidAt: e.paidAt,
@@ -548,6 +553,7 @@ export async function enrollStudent(
           student: { connect: { id: studentId } },
           class: { connect: { id: classId } },
           course: { connect: { id: cls!.courseId } },
+          centerId: cls!.centerId, // FL3-02 — denormalize từ class cho scopedDb
           status: "PENDING",
           notes,
         },
@@ -851,6 +857,7 @@ export async function transferEnrollment(
           student: { connect: { id: oldEnrollment.studentId } },
           class: { connect: { id: data.targetClassId } },
           course: { connect: { id: targetClass.courseId } },
+          centerId: targetClass.centerId, // FL3-02 — denormalize từ lớp đích cho scopedDb
           status: "CONFIRMED",
           confirmedAt: new Date(),
           notes: `Chuyển từ enrollment ${oldEnrollment.id}`,

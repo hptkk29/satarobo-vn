@@ -97,7 +97,7 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
     });
 
     const enrollment = await tx.enrollment.create({
-      data: { studentId: student.id, classId: input.classId, courseId: input.courseId },
+      data: { studentId: student.id, classId: input.classId, courseId: input.courseId, centerId: lead.centerId },
     });
 
     const paid = (input.paidAmount ?? 0) > 0;

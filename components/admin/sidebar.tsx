@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -45,6 +45,7 @@ import {
   MessageCircle,
   RefreshCw,
   FileText,
+  Presentation,
   BookMarked,
   NotebookPen,
   AlertTriangle,
@@ -69,6 +70,12 @@ type NavItem = {
   perm?: Action[];
   /** Mục gắn feature flag — chỉ hiện khi flag bật (R7-16: "eval"). */
   flag?: "eval" | "scorm";
+  /**
+   * R3: nhãn cụm con (sub-section) trong 1 NavGroup. Các item liền kề cùng `cluster`
+   * được gom dưới 1 nhãn nhỏ — render trước item ĐẦU TIÊN hiển thị của cụm (robust với
+   * filter quyền: bất kể package hay course là item đầu còn lại sau lọc).
+   */
+  cluster?: string;
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -100,7 +107,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Chuyển lớp / cơ sở", href: "/chuyen-lop", icon: ArrowLeftRight, perm: ["enrollments:transfer"] },
       { label: "Sắp hết khoá", href: "/students/sap-het-khoa", icon: GraduationCap, perm: ["enrollments:view-all"] },
       { label: "Hoàn thành khoá & chứng chỉ", href: "/hoan-thanh-khoa", icon: Award, perm: ["completions:manage"] },
-      { label: "Học bạ", href: "/hoc-ba", icon: ScrollText, perm: ["students:view-all", "students:view-own-class"] },
+      // FL W0-NAV-2 hygiene: Học bạ (học thuật) gate `curriculum:view` (Super/Training/CM/GV) — ẩn khỏi Sale/KT/MKT/HR.
+      { label: "Học bạ", href: "/hoc-ba", icon: ScrollText, perm: ["curriculum:view"] },
       { label: "Học bạ năng lực", href: "/report-cards", icon: NotebookPen, perm: ["report-cards:manage", "report-cards:review"] },
       { label: "SataCoin", href: "/satacoin", icon: Coins, perm: ["satacoin:manage"] },
     ],
@@ -123,25 +131,31 @@ const NAV_GROUPS: NavGroup[] = [
     label: "LMS / Học liệu",
     items: [
       { label: "Chương trình học", href: "/curriculums", icon: BookMarked, perm: ["curriculum:view"] },
-      { label: "Khoá học / Gói học", href: "/course-packages", icon: Boxes, perm: ["course-packages:view"] },
+      // FL-R2-W5 (R2-LMS-1): 1 entry "Khoá học" → /courses (khoá dạy); gói bán quản lý
+      // ngay trong chi tiết khoá. Gộp DB Course/Package + xoá /course-packages = 2-phase
+      // deferred (Order đa hình, KHÔNG drop packageId giờ) — route /course-packages GIỮ tạm.
+      { label: "Khoá học", href: "/courses", icon: Boxes, perm: ["courses:view"] },
       { label: "Khoá tiên quyết", href: "/course-prerequisites", icon: Workflow, perm: ["courses:create"] },
       { label: "Tài liệu giảng dạy", href: "/documents", icon: FileText, perm: ["documents:view"] },
       { label: "Bài tập về nhà", href: "/assignments", icon: NotebookPen, perm: ["assignments:view"] },
-      { label: "Khoá dạy", href: "/courses", icon: BookOpen, perm: ["courses:view"] },
+      { label: "Tài liệu lớp tôi", href: "/teaching-materials", icon: Presentation, perm: ["teaching-materials:view-own-class"] },
       { label: "SCORM / Bài giảng tương tác", href: "/scorm", icon: Package, perm: ["training:manage"], flag: "scorm" },
     ],
   },
   {
     label: "CSKH & Phụ huynh",
     items: [
-      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: ["classes:view-all", "classes:view-own"] },
+      // FL W0-NAV-2 hygiene: Tin nhắn (CSKH) gate CSKH+GV — ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
+      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: ["parent-requests:manage", "classes:view-own"] },
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },
       { label: "Đánh giá & Khảo sát", href: "/evaluations", icon: ClipboardList, perm: ["evaluations:manage"], flag: "eval" },
       { label: "Thông báo PH", href: "/notifications", icon: Bell, perm: ["notifications:manage"] },
-      { label: "Cảnh báo rủi ro", href: "/canh-bao-rui-ro", icon: AlertTriangle, perm: ["students:view-all"] },
-      { label: "Chăm sóc HV", href: "/cham-soc-hv", icon: HeartHandshake, perm: ["students:view-all", "students:view-own-class"] },
+      // FL W0-NAV-2 hygiene: Cảnh báo rủi ro = CSKH/quản lý (giữ Sale), ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
+      { label: "Cảnh báo rủi ro", href: "/canh-bao-rui-ro", icon: AlertTriangle, perm: ["parent-requests:manage"] },
+      // FL W0-NAV-2 hygiene: Chăm sóc HV = CSKH/quản lý + GV (giữ Sale & GV), ẩn khỏi KT.
+      { label: "Chăm sóc HV", href: "/cham-soc-hv", icon: HeartHandshake, perm: ["parent-requests:manage", "students:view-own-class"] },
     ],
   },
   {
@@ -153,7 +167,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
       { label: "Duyệt chỉnh công", href: "/cham-cong/chinh-cong", icon: ClipboardEdit, perm: ["hr_attendance:adjust"] },
-      { label: "Tổng hợp công ca", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:checkin"] },
+      // FL W0-NAV-2 hygiene: Tổng hợp công ca = view tổng hợp (quản lý/HR), ẩn khỏi Sale/KT (BA #07 3.C).
+      { label: "Tổng hợp công ca", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:view"] },
       { label: "Duyệt ca (Excel)", href: "/cham-cong/duyet-ca", icon: CalendarCheck, perm: ["hr_attendance:view"] },
       { label: "Tuyển dụng", href: "/jobs", icon: Briefcase, perm: ["jobs:view"] },
       { label: "Vinh danh", href: "/honors", icon: Trophy, perm: ["honors:settings"] },
@@ -164,6 +179,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Học cụ (Kits)", href: "/kits", icon: Package, perm: ["kits:view"] },
       { label: "Sản phẩm bán/thuê", href: "/products", icon: Package2, perm: ["products:view"] },
+      // FL W0-NAV-2 (BA #07 3.C): kế toán có quyền inventory:view/audit nhưng thiếu menu kho → thêm.
+      { label: "Tồn kho", href: "/inventory/dashboard", icon: Boxes, perm: ["inventory:view"] },
+      { label: "Kiểm kê kho", href: "/inventory/audit", icon: ClipboardCheck, perm: ["inventory:audit"] },
     ],
   },
   {
@@ -202,10 +220,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Báo cáo Lead", href: "/bao-cao/lead", icon: BarChart3, perm: ["leads:view-all", "leads:view-own"] },
       { label: "Báo cáo trải nghiệm", href: "/bao-cao/trial", icon: FlaskConical, perm: ["trials:view"] },
-      { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: ["classes:view-all", "training:manage"] },
+      // FL W0-NAV-2 hygiene: 3 báo cáo đào tạo gate `courses:create` (Super/Training/CM) — ẩn khỏi Sale/KT
+      // (trước đây lọt qua classes:view-all). BA #07 3.C.
+      { label: "Báo cáo đào tạo", href: "/bao-cao/dao-tao", icon: BookOpen, perm: ["courses:create"] },
       { label: "Báo cáo trung tâm", href: "/bao-cao/trung-tam", icon: Coins, perm: ["payments:manage"] },
-      { label: "Hiệu suất giáo viên", href: "/bao-cao/hieu-suat-gv", icon: GraduationCap, perm: ["classes:view-all", "training:manage"] },
-      { label: "Cohort tiến độ", href: "/bao-cao/cohort", icon: Users, perm: ["classes:view-all", "training:manage"] },
+      { label: "Hiệu suất giáo viên", href: "/bao-cao/hieu-suat-gv", icon: GraduationCap, perm: ["courses:create"] },
+      { label: "Cohort tiến độ", href: "/bao-cao/cohort", icon: Users, perm: ["courses:create"] },
       { label: "Churn / rời bỏ", href: "/bao-cao/churn", icon: BarChart3, perm: ["enrollments:view-all"] },
       { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: ["payments:manage"] },
     ],
@@ -323,23 +343,32 @@ export function Sidebar({
                 />
               </button>
               {!isCollapsed &&
-                group.items.map((item) => {
+                group.items.map((item, idx) => {
                   const Icon = item.icon;
                   const active = pathname.startsWith(item.href);
+                  // R3: nhãn cụm con — chỉ render trước item ĐẦU TIÊN hiển thị của cụm.
+                  const showCluster =
+                    !!item.cluster && item.cluster !== group.items[idx - 1]?.cluster;
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
-                          : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                    <Fragment key={item.href}>
+                      {showCluster && (
+                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-neutral-300">
+                          {item.cluster}
+                        </div>
                       )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </Link>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
+                          active
+                            ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
+                            : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                        )}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    </Fragment>
                   );
                 })}
             </div>

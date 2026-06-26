@@ -70,13 +70,16 @@ test.describe("[R7-13] Import Word .docx", () => {
     }
   });
 
-  // C6 / AC4 — gate quyền: GV không publish; SALES không tạo đề.
-  test("[R7-13-C6] gate exams:create — TEACHER có quyền, SALES_CSM không", () => {
-    expect(can({ role: "TEACHER", roles: ["TEACHER"] }, "exams:create")).toBe(true);
+  // C6 / AC4 — gate quyền (FL W0 QĐ-T1: biên soạn đề = Đào tạo=TRAINING/Admin; GV chỉ
+  // XEM + chấm; SALES/CM không tạo/xoá đề).
+  test("[R7-13-C6] gate exams:create — chỉ TRAINING/Admin tạo đề; GV/SALES/CM không", () => {
+    expect(can({ role: "TRAINING", roles: ["TRAINING"] }, "exams:create")).toBe(true);
+    expect(can({ role: "TEACHER", roles: ["TEACHER"] }, "exams:create")).toBe(false);
     expect(can({ role: "SALES_CSM", roles: ["SALES_CSM"] }, "exams:create")).toBe(false);
-    // chỉ Đào tạo/Admin được "exams:delete" (proxy cho quyền sửa đề đã publish)
+    // sửa/xoá đề đã publish = TRAINING/Admin (GV + CM không)
     expect(can({ role: "TEACHER", roles: ["TEACHER"] }, "exams:delete")).toBe(false);
-    expect(can({ role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"] }, "exams:delete")).toBe(true);
+    expect(can({ role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"] }, "exams:delete")).toBe(false);
+    expect(can({ role: "TRAINING", roles: ["TRAINING"] }, "exams:delete")).toBe(true);
   });
 
   // C5 / AC4 — idempotent: validate đánh dấu dbExists (upsert không nhân đôi).

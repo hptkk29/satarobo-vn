@@ -191,6 +191,7 @@ export async function generateClassSessions(
       lessonId: plans[i]?.lessonId ?? null,
       // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
       roomId: cls.roomId ?? null,
+      centerId: cls.centerId, // FL3-02 — denormalize từ class cho scopedDb
     }));
 
     // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
@@ -233,6 +234,7 @@ export async function generateClassSessions(
     lessonId: lessonIds[i] ?? null,
     // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
     roomId: cls.roomId ?? null,
+    centerId: cls.centerId, // FL3-02 — denormalize từ class cho scopedDb
   }));
 
   // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).

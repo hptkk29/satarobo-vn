@@ -15,12 +15,20 @@ export default async function NewQuestionPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const lessons = await db.lesson.findMany({
-    where: { curriculum: { isActive: true } },
-    include: { curriculum: { select: { name: true } } },
-    orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
-    take: 500,
-  });
+  const [lessons, curriculums] = await Promise.all([
+    db.lesson.findMany({
+      where: { curriculum: { isActive: true } },
+      include: { curriculum: { select: { name: true } } },
+      orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
+      take: 500,
+    }),
+    db.curriculum.findMany({
+      where: { isActive: true },
+      include: { course: { select: { name: true } } },
+      orderBy: [{ courseId: "asc" }, { version: "desc" }],
+      take: 300,
+    }),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -40,6 +48,11 @@ export default async function NewQuestionPage() {
           order: l.order,
           title: l.title,
           curriculumName: l.curriculum.name,
+        }))}
+        curriculums={curriculums.map((c) => ({
+          id: c.id,
+          label: `${c.course.name} — ${c.name} (v${c.version})`,
+          courseId: c.courseId,
         }))}
       />
     </div>

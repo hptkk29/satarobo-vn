@@ -25,6 +25,8 @@ export default async function CoursePackagesPage() {
       priceOriginal: true,
       isPublished: true,
       isFeatured: true,
+      // FL1-05 — khoá dạy liên kết (đọc qua relation).
+      course: { select: { id: true, name: true, code: true } },
     },
   });
 
@@ -32,9 +34,10 @@ export default async function CoursePackagesPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gói khoá học</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Gói khoá học (để bán)</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Quản lý các gói khoá học Sata1-8 và Combo
+            Gói = đơn vị BÁN (giá, marketing) Sata1-8 và Combo. Mỗi gói liên kết một{" "}
+            <span className="font-medium">Khoá dạy</span> (chương trình giảng) để tránh trùng lặp.
           </p>
         </div>
         <Link
@@ -60,6 +63,9 @@ export default async function CoursePackagesPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Cấp độ
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Khoá dạy
+                </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Giá
                 </th>
@@ -77,7 +83,7 @@ export default async function CoursePackagesPage() {
             <tbody className="divide-y divide-gray-50">
               {packages.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
                     Chưa có gói khoá học nào
                   </td>
                 </tr>

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Plus, ClipboardList, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
-import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
@@ -53,12 +53,12 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (!can(session.user, "enrollments:view-all")) redirect("/dashboard");
   const canDelete = can(session.user, "enrollments:delete");
 
-  // Cách ly cơ sở: Enrollment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
-  // tiếp) → scopedDb không auto-scope. Scope thủ công qua class.centerId, dùng cùng
-  // tầm nhìn cơ sở của model Class (đã isolate ở /admin/classes).
+  // Cách ly cơ sở (FL3-02): Enrollment giờ ∈ SCOPED_MODELS → scopedDb tự inject
+  // `Enrollment.centerId IN visibleCenters`. KHÔNG còn scope tay qua class.centerId.
+  // Bộ lọc cơ sở của UI (centerFilter) áp thẳng lên Enrollment.centerId; nếu chọn cơ sở
+  // ngoài tầm nhìn → auto-scope AND nó về rỗng (không lộ data cơ sở khác).
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
 
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
@@ -81,20 +81,9 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   }
   if (classFilter) where.classId = classFilter;
 
-  // class.centerId: kết hợp bộ lọc cơ sở (UI) với tầm nhìn cơ sở của actor (cách ly).
-  const classCenterWhere: Prisma.ClassWhereInput = {};
-  if (centerFilter) classCenterWhere.centerId = centerFilter;
-  if (visibleClassCenters !== "ALL") {
-    if (centerFilter) {
-      // Lọc cơ sở ngoài tầm nhìn → ép rỗng (không lộ data cơ sở khác).
-      if (!visibleClassCenters.includes(centerFilter)) {
-        classCenterWhere.centerId = "__no_access__";
-      }
-    } else {
-      classCenterWhere.centerId = { in: visibleClassCenters };
-    }
-  }
-  if (Object.keys(classCenterWhere).length > 0) where.class = classCenterWhere;
+  // Bộ lọc cơ sở của UI áp thẳng lên Enrollment.centerId. Cách ly (visibleCenters) do
+  // scopedDb auto-inject; chọn cơ sở ngoài tầm nhìn → AND về rỗng, không lộ data.
+  if (centerFilter) where.centerId = centerFilter;
 
   if (q) {
     where.OR = [

@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Gauge } from "lucide-react";
+import { Gauge, ClipboardList, ArrowRight } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
@@ -68,6 +69,30 @@ export default async function SurveyPage() {
         </h1>
         <p className="mt-1 text-sm text-gray-500">Chỉ số NPS làm cơ sở KPI cho bộ phận CSKH.</p>
       </div>
+
+      {/* FL4-03 — Hợp nhất khảo sát trung tâm về engine EvalForm (CENTER_SURVEY, 4 loại
+          câu hỏi). Approach (a): KHÔNG xây form-builder mới ở đây — trỏ admin sang
+          /admin/evaluations (đã có Form builder + đợt + kết quả). NPS dưới đây là bản
+          cũ (deprecate 2-phase), vẫn xem được. */}
+      <Link
+        href="/evaluations"
+        className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4 transition-colors hover:bg-orange-100"
+      >
+        <div className="flex items-start gap-3">
+          <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" />
+          <div>
+            <p className="text-sm font-semibold text-gray-900">
+              Khảo sát trung tâm 4 loại câu hỏi (mới)
+            </p>
+            <p className="mt-0.5 text-xs text-gray-600">
+              Tạo khảo sát cơ sở bằng Form builder (chấm sao / chọn 1 / chọn nhiều / tự luận) và mở
+              đợt cho phụ huynh tại <span className="font-medium">Đánh giá &amp; Khảo sát</span>. NPS
+              bên dưới là bản cũ, đang được thay dần.
+            </p>
+          </div>
+        </div>
+        <ArrowRight className="h-5 w-5 shrink-0 text-orange-500" />
+      </Link>
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="NPS tổng" value={overall.nps} tone={overall.nps >= 50 ? "ok" : overall.nps >= 0 ? "warn" : "bad"} />

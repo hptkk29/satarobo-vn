@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { TransferForm } from "./_components/transfer-form";
 import { RequestActions } from "./_components/request-actions";
 
@@ -12,12 +13,19 @@ export const dynamic = "force-dynamic";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
-export default async function TransferPage() {
+interface PageProps {
+  searchParams: Promise<{ fromCenterId?: string }>;
+}
+
+export default async function TransferPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // P1-c: sale/quản lý TẠO yêu cầu (enrollments:create); chỉ quản lý (transfer) DUYỆT.
   if (!can(session.user, "enrollments:create")) redirect("/dashboard");
   const canApprove = can(session.user, "enrollments:transfer");
+
+  const sp = await searchParams;
+  const fromCenterId = sp.fromCenterId?.trim() || "";
 
   // Cách ly cơ sở: Student ∈ SCOPED_MODELS → sdb.student auto-inject centerId IN visible.
   // StudentTransferRequest KHÔNG ∈ SCOPED_MODELS (chỉ có fromCenterId/toCenterId, không
@@ -27,6 +35,10 @@ export default async function TransferPage() {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const visibleCenters = getModelVisibleCenterIds("Student", actor);
+
+  // FL2-05 — Hội sở không nhận học viên → loại khỏi cả picker cơ sở nguồn lẫn đích.
+  const hoCenterIds = await getNonEnrollableCenterIds();
+  const centerIdNotHo = hoCenterIds.length ? { id: { notIn: hoCenterIds } } : {};
 
   const requestWhere: Prisma.StudentTransferRequestWhereInput = {
     status: { in: ["PENDING", "WAITLISTED"] },
@@ -39,25 +51,12 @@ export default async function TransferPage() {
     ];
   }
 
-  const [students, centers, requests] = await Promise.all([
-    sdb.student.findMany({
-      where: {
-        deletedAt: null,
-        enrollments: { some: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } } },
-      },
-      orderBy: { name: "asc" },
-      take: 500,
-      select: {
-        id: true,
-        name: true,
-        studentCode: true,
-        enrollments: {
-          where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
-          select: { classId: true, class: { select: { name: true, classCode: true } } },
-        },
-      },
+  const [centers, requests] = await Promise.all([
+    sdb.center.findMany({
+      where: { isActive: true, ...centerIdNotHo },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true, name: true },
     }),
-    sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
     sdb.studentTransferRequest.findMany({
       where: requestWhere,
       orderBy: { createdAt: "desc" },
@@ -72,6 +71,30 @@ export default async function TransferPage() {
       },
     }),
   ]);
+
+  // FL2-06 (LD-6) — luồng "cơ sở → học sinh": chỉ nạp HV của cơ sở nguồn đã chọn
+  // (giảm truy vấn so với nạp toàn bộ HV). scopedDb auto-inject centerId IN visible
+  // → fromCenterId ngoài tầm nhìn actor (vd CS1 chọn CS2) khớp 0 dòng = fail-safe.
+  const students = fromCenterId
+    ? await sdb.student.findMany({
+        where: {
+          deletedAt: null,
+          centerId: fromCenterId,
+          enrollments: { some: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } } },
+        },
+        orderBy: { name: "asc" },
+        take: 500,
+        select: {
+          id: true,
+          name: true,
+          studentCode: true,
+          enrollments: {
+            where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+            select: { classId: true, class: { select: { name: true, classCode: true } } },
+          },
+        },
+      })
+    : [];
 
   const studentOptions = students.map((s) => ({
     id: s.id,
@@ -93,7 +116,7 @@ export default async function TransferPage() {
         </p>
       </div>
 
-      <TransferForm students={studentOptions} centers={centers} />
+      <TransferForm students={studentOptions} centers={centers} fromCenterId={fromCenterId} />
 
       <div className="rounded-xl border border-neutral-200 bg-white">
         <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">Yêu cầu đang chờ</div>

@@ -33,7 +33,7 @@ export function LessonChangeRequests({
   canHandle,
 }: {
   requests: ChangeRequestRow[];
-  // Đào tạo (training:manage) — accept/reject + phản hồi.
+  // Duyệt đề xuất (lesson-change:approve — QĐ-T3b: SUPER_ADMIN/TRAINING/CENTER_MANAGER) — accept/reject + phản hồi.
   canHandle: boolean;
 }) {
   const router = useRouter();

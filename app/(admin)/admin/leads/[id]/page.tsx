@@ -15,6 +15,8 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
+import { LeadPaymentCard } from "../_components/lead-payment-card";
+import { getLeadPaymentSummary } from "@/lib/payments/summary";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -45,7 +47,16 @@ export default async function LeadDetailPage({ params }: Props) {
       assignedTo: { select: { id: true, name: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 100 },
       tasks: { orderBy: [{ status: "asc" }, { dueAt: "asc" }] },
-      children: { orderBy: { createdAt: "asc" } },
+      children: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          // FL-R2 (item 6/TR-4) — lịch sử "đã từng học thử" (giữ kể cả khi lead quay lại).
+          trialHistory: {
+            orderBy: { lastAttendedAt: "desc" },
+            include: { trialClass: { select: { name: true } } },
+          },
+        },
+      },
       trialClasses: {
         orderBy: { scheduledAt: "desc" },
         include: {
@@ -95,6 +106,9 @@ export default async function LeadDetailPage({ params }: Props) {
     : [[], []];
   const dealClosable =
     canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
+
+  // E2-LEAD (item 2) — tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu).
+  const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
   const [childCenters, childCourses] = await Promise.all([
@@ -231,6 +245,15 @@ export default async function LeadDetailPage({ params }: Props) {
             interestedCenterId: c.interestedCenterId,
             note: c.note,
             trialStatus: c.trialStatus,
+            trialHistory: c.trialHistory
+              .filter((h) => h.attendedCount > 0)
+              .map((h) => ({
+              className: h.trialClass?.name ?? "(lớp đã xoá)",
+              attendedCount: h.attendedCount,
+              totalSessions: h.totalSessions,
+              lastAttendedAt: h.lastAttendedAt ? h.lastAttendedAt.toISOString() : null,
+              outcome: h.outcome,
+            })),
           }))}
           centers={childCenters}
           courses={childCourses}
@@ -254,6 +277,13 @@ export default async function LeadDetailPage({ params }: Props) {
             }))}
             canOverride={can(session.user, "trials:override-capacity")}
           />
+        </div>
+      )}
+
+      {/* E2-LEAD (item 2) — khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
+      {(paymentSummary.hasOrder || dealClosable) && (
+        <div className="mb-6">
+          <LeadPaymentCard leadId={lead.id} summary={paymentSummary} />
         </div>
       )}
 

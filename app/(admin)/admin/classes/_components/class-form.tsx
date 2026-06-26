@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClass, updateClass } from "../_actions";
 import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
-import { hasRole } from "@/lib/auth/permissions";
+import { filterTeachersByCenter } from "@/lib/teachers/center-filter";
 
 export type ClassFormValue = {
   id: string;
@@ -51,6 +51,7 @@ interface TeacherOption {
   id: string;
   name: string;
   role: string;
+  centerId: string | null; // R2-RBAC-3 — lọc GV theo cơ sở của đơn vị đang chọn
 }
 export interface CurriculumOption {
   id: string;
@@ -138,9 +139,21 @@ export function ClassForm({
           : rooms,
     [rooms, orgUnitId, selectedCenterId],
   );
+  // R2-RBAC-3 — GV chính chỉ liệt kê người CÙNG cơ sở với đơn vị đang chọn (cách ly
+  // CS1↔CS2). LUÔN giữ GV/TA đang chọn + GV đang gán sẵn của lớp để <Select> không
+  // tự rớt value (gốc bug "Lớp học hiện trống"). Dùng helper thuần đã unit-test.
+  const filteredTeachers = useMemo(() => {
+    if (!orgUnitId) return teachers; // chưa chọn đơn vị → hiện tất (sẽ lọc sau khi chọn)
+    return filterTeachersByCenter(teachers, selectedCenterId, [
+      teacherId,
+      assistantId,
+      cls?.teacherId,
+      cls?.assistantId,
+    ]);
+  }, [teachers, orgUnitId, selectedCenterId, teacherId, assistantId, cls]);
   const filteredAssistants = useMemo(
-    () => teachers.filter((t) => t.id !== teacherId),
-    [teachers, teacherId],
+    () => filteredTeachers.filter((t) => t.id !== teacherId),
+    [filteredTeachers, teacherId],
   );
   const courseCurricula = useMemo(
     () =>
@@ -194,6 +207,11 @@ export function ClassForm({
     if (roomId && !rooms.some((r) => r.id === roomId && r.centerId === newCenterId)) {
       setRoomId("");
     }
+    // R2-RBAC-3 — đổi cơ sở thì GV/TA cũ (khác cơ sở) không còn hợp lệ → reset.
+    const inNewCenter = (id: string) =>
+      newCenterId != null && teachers.some((t) => t.id === id && t.centerId === newCenterId);
+    if (teacherId && !inNewCenter(teacherId)) setTeacherId("");
+    if (assistantId && !inNewCenter(assistantId)) setAssistantId("");
   }
 
   function onTeacherChange(value: string) {
@@ -355,9 +373,13 @@ export function ClassForm({
               onChange={onTeacherChange}
               options={[
                 { value: "", label: "— Chưa phân GV —" },
-                ...teachers.map((t) => ({ value: t.id, label: t.name })),
+                ...filteredTeachers.map((t) => ({ value: t.id, label: t.name })),
               ]}
-              helper="Lọc: Giáo viên có thể dạy"
+              helper={
+                orgUnitId
+                  ? "Chỉ hiển thị GV của cơ sở thuộc đơn vị đã chọn"
+                  : "Chọn đơn vị để lọc GV theo cơ sở"
+              }
             />
             <SelectField
               label="Trợ giảng"

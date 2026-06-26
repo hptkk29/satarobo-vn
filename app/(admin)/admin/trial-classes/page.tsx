@@ -32,7 +32,7 @@ export default async function TrialClassesPage() {
   const sdb = scopedDb(actor);
 
   const canManage = can(session.user, "trials:manage");
-  const canConfig = can(session.user, "training:manage");
+  const canConfig = can(session.user, "trials:config");
 
   const [classes, activeConfig] = await Promise.all([
     sdb.trialClassV2.findMany({
@@ -72,7 +72,7 @@ export default async function TrialClassesPage() {
         )}
       </div>
 
-      {/* Cấu hình số buổi (training:manage) */}
+      {/* Cấu hình số buổi (trials:config — QĐ-T3b: CM giữ qua action riêng) */}
       <TrialConfigSection
         canConfig={canConfig}
         config={activeConfig ?? null}
@@ -114,7 +114,7 @@ export default async function TrialClassesPage() {
                     <div className="text-xs text-gray-400">{c.code}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-700">
-                    {c.startDate.toLocaleDateString("vi-VN")}
+                    {c.startDate ? c.startDate.toLocaleDateString("vi-VN") : "Theo lịch hẹn"}
                   </td>
                   <td className="px-4 py-3 text-gray-700">
                     {c.startTime}–{c.endTime}

@@ -24,7 +24,7 @@ export default async function EditQuestionPage({ params }: Props) {
 
   const { id } = await params;
 
-  const [question, lessons] = await Promise.all([
+  const [question, lessons, curriculums] = await Promise.all([
     db.question.findUnique({
       where: { id },
       include: {
@@ -37,6 +37,12 @@ export default async function EditQuestionPage({ params }: Props) {
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       take: 500,
     }),
+    db.curriculum.findMany({
+      where: { isActive: true },
+      include: { course: { select: { name: true } } },
+      orderBy: [{ courseId: "asc" }, { version: "desc" }],
+      take: 300,
+    }),
   ]);
 
   if (!question) notFound();
@@ -47,14 +53,20 @@ export default async function EditQuestionPage({ params }: Props) {
     type: question.type,
     text: question.text,
     explanation: question.explanation,
+    imageUrl: question.imageUrl,
     difficulty: question.difficulty,
     tags: question.tags,
+    curriculumId: question.curriculumId,
+    courseId: question.courseId,
+    points: question.points,
+    timeLimitSec: question.timeLimitSec,
     lessonId: question.lessonId,
     correctAnswer: question.correctAnswer,
     choices: question.choices.map((c) => ({
       order: c.order,
       text: c.text,
       isCorrect: c.isCorrect,
+      imageUrl: c.imageUrl,
     })),
     isPublic: question.isPublic,
     notes: question.notes,
@@ -85,6 +97,11 @@ export default async function EditQuestionPage({ params }: Props) {
           order: l.order,
           title: l.title,
           curriculumName: l.curriculum.name,
+        }))}
+        curriculums={curriculums.map((c) => ({
+          id: c.id,
+          label: `${c.course.name} — ${c.name} (v${c.version})`,
+          courseId: c.courseId,
         }))}
       />
     </div>

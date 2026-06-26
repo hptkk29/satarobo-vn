@@ -2,10 +2,12 @@
 //
 // Sinh buổi theo lịch TUẦN (mỗi 7 ngày) từ startDate, né Holiday (dời buổi +7).
 // Ghi danh 1 con / 1 lớp ACTIVE (partial-unique ở DB) — bắt P2002 thành lỗi VI.
-// Khi buổi CUỐI hoàn tất → con có điểm danh = ATTENDED; lead đủ con xong = TRIAL_ATTENDED
-// (qua publishEvent idempotent + cập nhật trực tiếp). KHÔNG tự nhảy AWAITING_DECISION (AC6).
+// FL-R2 (QĐ-R2-W3): tiến độ do markAttendance lo per-lead (idempotent): ≥1 buổi PRESENT →
+// con IN_PROGRESS + lead "Đang học thử"; đủ buổi (totalSessions per-lead) → con ATTENDED +
+// lead "Chờ quyết định" (AWAITING_DECISION) NGAY (TBD-2). TRIAL_ATTENDED để dành lead đã chốt.
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -141,29 +143,41 @@ export async function createTrialClass(params: {
   name: string;
   centerId: string;
   roomId?: string | null;
-  startDate: Date;
+  // FL-R2 (QĐ-R2-1): slot tái sử dụng — startDate tuỳ chọn (null = không gắn ngày cố định).
+  startDate?: Date | null;
   startTime: string;
   endTime: string;
   capacity: number;
   teacherId?: string | null;
-  configId: string;
+  // Số buổi nhập trực tiếp khi tạo (không phụ thuộc TrialProgramConfig ngoài).
+  sessionCount: number;
+  configId?: string | null;
   actorId: string;
 }): Promise<{ ok: boolean; error?: string; trialClassId?: string }> {
   if (!params.name?.trim()) return { ok: false, error: "Tên lớp là bắt buộc" };
   if (!Number.isInteger(params.capacity) || params.capacity < 1) {
     return { ok: false, error: "Sĩ số phải là số nguyên ≥ 1" };
   }
+  if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
+    return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
+  }
+
+  // R2-RBAC-3 — GV (nếu gán) phải CÙNG cơ sở lớp trải nghiệm (cách ly CS1↔CS2;
+  // backstop server cho lọc client ở form). teacher centerId NULL/khác → chặn.
+  if (params.teacherId) {
+    const t = await db.user.findUnique({
+      where: { id: params.teacherId },
+      select: { centerId: true },
+    });
+    const err = teacherCenterAssignmentError(params.centerId, [
+      { id: params.teacherId, centerId: t?.centerId },
+    ]);
+    if (err) return { ok: false, error: err };
+  }
 
   try {
+    const sessionCount = params.sessionCount;
     const trialClassId = await db.$transaction(async (tx) => {
-      // snapshot sessionCount từ config.
-      const cfg = await tx.trialProgramConfig.findUnique({
-        where: { id: params.configId },
-        select: { id: true, sessionCount: true },
-      });
-      if (!cfg) throw new Error("Cấu hình lớp trải nghiệm không tồn tại");
-      const sessionCount = cfg.sessionCount;
-
       // mã cơ sở cho code.
       const center = await tx.center.findUnique({
         where: { id: params.centerId },
@@ -174,43 +188,45 @@ export async function createTrialClass(params: {
       const seq = await nextSeq(`TRIAL:${cc}:${y}`, tx);
       const code = `TRIAL-${cc}-${y}-${String(seq).padStart(3, "0")}`;
 
-      // né Holiday cơ sở + toàn hệ thống.
-      const holidayRows = await tx.holiday.findMany({
-        where: { OR: [{ centerId: params.centerId }, { centerId: null }] },
-        select: { date: true, endDate: true },
-      });
-      const holidays = expandHolidayDates(holidayRows);
-      const dates = buildTrialSessionDates(params.startDate, sessionCount, holidays);
-
       const trialClass = await tx.trialClassV2.create({
         data: {
           code,
           name: params.name.trim(),
           centerId: params.centerId,
           roomId: params.roomId ?? null,
-          startDate: params.startDate,
+          startDate: params.startDate ?? null,
           startTime: params.startTime,
           endTime: params.endTime,
           capacity: params.capacity,
           teacherId: params.teacherId ?? null,
-          configId: cfg.id,
+          configId: params.configId ?? null,
           sessionCount,
         },
         select: { id: true },
       });
 
-      if (dates.length > 0) {
-        await tx.trialClassSession.createMany({
-          data: dates.map((d, idx) => ({
-            trialClassId: trialClass.id,
-            seq: idx + 1,
-            date: d,
-            startTime: params.startTime,
-            endTime: params.endTime,
-            roomId: params.roomId ?? null,
-            teacherId: params.teacherId ?? null,
-          })),
+      // FL-R2 (QĐ-R2-1): slot tái sử dụng — KHÔNG auto-gen buổi cohort. Chỉ sinh buổi theo
+      // lịch khi CÓ ngày bắt đầu cố định (giữ tương thích đường gọi cũ/lớp có lịch).
+      if (params.startDate) {
+        const holidayRows = await tx.holiday.findMany({
+          where: { OR: [{ centerId: params.centerId }, { centerId: null }] },
+          select: { date: true, endDate: true },
         });
+        const holidays = expandHolidayDates(holidayRows);
+        const dates = buildTrialSessionDates(params.startDate, sessionCount, holidays);
+        if (dates.length > 0) {
+          await tx.trialClassSession.createMany({
+            data: dates.map((d, idx) => ({
+              trialClassId: trialClass.id,
+              seq: idx + 1,
+              date: d,
+              startTime: params.startTime,
+              endTime: params.endTime,
+              roomId: params.roomId ?? null,
+              teacherId: params.teacherId ?? null,
+            })),
+          });
+        }
       }
       return trialClass.id;
     });
@@ -227,13 +243,16 @@ export async function enrollLeadChild(params: {
   leadChildId: string;
   addedById: string;
   allowOverride?: boolean;
+  // FL-R2 (QĐ-R2-W3): ngưỡng "đủ buổi" cấu hình RIÊNG từng lead (không lấy sessionCount lớp).
+  // Bỏ trống → fallback sessionCount của lớp.
+  totalSessions?: number;
 }): Promise<{ ok: boolean; error?: string; overCapacity?: boolean }> {
   const allowOverride = params.allowOverride ?? false;
   try {
     return await db.$transaction(async (tx) => {
       const cls = await tx.trialClassV2.findUnique({
         where: { id: params.trialClassId },
-        select: { id: true, capacity: true },
+        select: { id: true, capacity: true, centerId: true, sessionCount: true },
       });
       if (!cls) return { ok: false, error: "Lớp trải nghiệm không tồn tại" };
 
@@ -254,6 +273,29 @@ export async function enrollLeadChild(params: {
       await tx.leadChild.update({
         where: { id: params.leadChildId },
         data: { trialStatus: "SCHEDULED" },
+      });
+      // FL-R2 (item 6) — mở/ghi lịch sử học thử per-lead (giữ kể cả khi rời pipeline).
+      // totalSessions chốt tại lúc gán; nếu đã có history (lead quay lại) → giữ count cũ.
+      const totalSessions =
+        params.totalSessions && params.totalSessions > 0
+          ? params.totalSessions
+          : cls.sessionCount;
+      await tx.leadTrialHistory.upsert({
+        where: {
+          leadChildId_trialClassId: {
+            leadChildId: params.leadChildId,
+            trialClassId: params.trialClassId,
+          },
+        },
+        create: {
+          leadChildId: params.leadChildId,
+          trialClassId: params.trialClassId,
+          centerId: cls.centerId,
+          attendedCount: 0,
+          totalSessions,
+          outcome: "PENDING",
+        },
+        update: { totalSessions, outcome: "PENDING" },
       });
       // R7-17 — báo Sale phụ trách lead đã xếp lớp trải nghiệm (atomic cùng tx).
       await publishEvent(
@@ -331,6 +373,114 @@ export async function cancelTrialClass(params: {
 
 // ─── Điểm danh ──────────────────────────────────────────────────────────────────
 
+/**
+ * FL-R2 (QĐ-R2-W3 item 6,7) — đồng bộ tiến độ học thử của 1 ghi danh sau mỗi lần điểm danh.
+ * IDEMPOTENT: tính lại từ số buổi PRESENT thực tế (gọi lại bao nhiêu lần cũng cho cùng kết quả).
+ *  - Cập nhật LeadTrialHistory: attendedCount (chỉ đếm PRESENT) + first/lastAttendedAt.
+ *  - Auto-Kanban per-con: ≥1 buổi → IN_PROGRESS; đủ buổi (totalSessions per-lead) → ATTENDED.
+ *  - Auto-Kanban per-lead: có con đang học → "Đang học thử"; MỌI con đủ buổi & chưa chốt
+ *    → "Chờ quyết định" (AWAITING_DECISION) NGAY (TBD-2). KHÔNG đụng lead đã chốt/rời pipeline.
+ */
+async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId: string): Promise<void> {
+  const enr = await tx.trialEnrollment.findUnique({
+    where: { id: trialEnrollmentId },
+    select: {
+      id: true,
+      status: true,
+      trialClassId: true,
+      leadChildId: true,
+      trialClass: { select: { centerId: true, sessionCount: true } },
+      leadChild: { select: { id: true, leadId: true, trialStatus: true } },
+    },
+  });
+  if (!enr) return;
+
+  // buổi PRESENT của ghi danh này (kèm ngày buổi để tính first/last).
+  const presents = await tx.trialAttendance.findMany({
+    where: { trialEnrollmentId, status: "PRESENT" },
+    select: { trialSession: { select: { date: true } } },
+  });
+  const attendedCount = presents.length;
+  const dates = presents
+    .map((p) => p.trialSession.date)
+    .sort((a, b) => a.getTime() - b.getTime());
+  const firstAttendedAt = dates[0] ?? null;
+  const lastAttendedAt = dates[dates.length - 1] ?? null;
+
+  // totalSessions per-lead: giữ giá trị đã chốt khi gán; fallback sessionCount lớp.
+  const existing = await tx.leadTrialHistory.findUnique({
+    where: {
+      leadChildId_trialClassId: { leadChildId: enr.leadChildId, trialClassId: enr.trialClassId },
+    },
+    select: { totalSessions: true },
+  });
+  const totalSessions = existing?.totalSessions ?? enr.trialClass.sessionCount;
+
+  await tx.leadTrialHistory.upsert({
+    where: {
+      leadChildId_trialClassId: { leadChildId: enr.leadChildId, trialClassId: enr.trialClassId },
+    },
+    create: {
+      leadChildId: enr.leadChildId,
+      trialClassId: enr.trialClassId,
+      centerId: enr.trialClass.centerId,
+      attendedCount,
+      totalSessions,
+      firstAttendedAt,
+      lastAttendedAt,
+      outcome: "PENDING",
+    },
+    update: { attendedCount, firstAttendedAt, lastAttendedAt },
+  });
+
+  // ── Kanban per-con ──
+  const reachedThreshold = totalSessions > 0 && attendedCount >= totalSessions;
+  let childStatus = enr.leadChild.trialStatus;
+  if (reachedThreshold) childStatus = "ATTENDED";
+  else if (attendedCount >= 1 && childStatus !== "ATTENDED") childStatus = "IN_PROGRESS";
+  if (childStatus !== enr.leadChild.trialStatus) {
+    await tx.leadChild.update({ where: { id: enr.leadChildId }, data: { trialStatus: childStatus } });
+  }
+  // đủ buổi → đóng ghi danh (giải phóng partial-unique 1 lớp ACTIVE/con).
+  if (reachedThreshold && enr.status === "ACTIVE") {
+    await tx.trialEnrollment.update({ where: { id: enr.id }, data: { status: "COMPLETED" } });
+  }
+
+  // ── Kanban per-lead ──
+  const leadId = enr.leadChild.leadId;
+  const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { status: true } });
+  if (!lead) return;
+  // KHÔNG động vào lead đã chốt / rời pipeline (sale tự quản từ đây).
+  const TERMINAL = ["REGISTERED", "ENROLLED", "LOST", "DUPLICATE"];
+  if (TERMINAL.includes(lead.status)) return;
+
+  // mọi con (đang/đã học thử) của lead này đã đủ buổi?
+  const siblings = await tx.trialEnrollment.findMany({
+    where: { status: { in: ["ACTIVE", "COMPLETED"] }, leadChild: { leadId } },
+    select: { leadChild: { select: { trialStatus: true } } },
+  });
+  const allAttended =
+    siblings.length > 0 && siblings.every((s) => s.leadChild.trialStatus === "ATTENDED");
+
+  if (allAttended) {
+    if (lead.status !== "AWAITING_DECISION") {
+      await tx.lead.update({ where: { id: leadId }, data: { status: "AWAITING_DECISION" } });
+      await publishEvent(
+        "lead.awaitingDecision",
+        { leadId },
+        { tx, dedupeKey: `lead.awaitingDecision:${leadId}` },
+      );
+    }
+  } else if (attendedCount >= 1 && lead.status === "TRIAL_SCHEDULED") {
+    await tx.lead.update({ where: { id: leadId }, data: { status: "TRIAL_IN_PROGRESS" } });
+    await publishEvent(
+      "lead.trialInProgress",
+      { leadId },
+      { tx, dedupeKey: `lead.trialInProgress:${leadId}` },
+    );
+  }
+}
+
 export async function markAttendance(params: {
   trialSessionId: string;
   trialEnrollmentId: string;
@@ -339,23 +489,27 @@ export async function markAttendance(params: {
   actorId: string;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
-    await db.trialAttendance.upsert({
-      where: {
-        trialSessionId_trialEnrollmentId: {
+    await db.$transaction(async (tx) => {
+      await tx.trialAttendance.upsert({
+        where: {
+          trialSessionId_trialEnrollmentId: {
+            trialSessionId: params.trialSessionId,
+            trialEnrollmentId: params.trialEnrollmentId,
+          },
+        },
+        create: {
           trialSessionId: params.trialSessionId,
           trialEnrollmentId: params.trialEnrollmentId,
+          status: params.status,
+          note: params.note ?? null,
         },
-      },
-      create: {
-        trialSessionId: params.trialSessionId,
-        trialEnrollmentId: params.trialEnrollmentId,
-        status: params.status,
-        note: params.note ?? null,
-      },
-      update: {
-        status: params.status,
-        note: params.note ?? null,
-      },
+        update: {
+          status: params.status,
+          note: params.note ?? null,
+        },
+      });
+      // ghi lịch sử + auto-Kanban (idempotent — tính lại từ số buổi PRESENT).
+      await syncTrialProgress(tx, params.trialEnrollmentId);
     });
     return { ok: true };
   } catch (e) {
@@ -373,7 +527,7 @@ export async function completeTrialSession(params: {
     return await db.$transaction(async (tx) => {
       const session = await tx.trialClassSession.findUnique({
         where: { id: params.trialSessionId },
-        select: { id: true, seq: true, trialClassId: true },
+        select: { id: true, trialClassId: true },
       });
       if (!session) return { ok: false, error: "Buổi học không tồn tại" };
 
@@ -381,53 +535,64 @@ export async function completeTrialSession(params: {
         where: { id: session.id },
         data: { status: "COMPLETED" },
       });
-
-      // có phải buổi CUỐI (max seq) không?
-      const agg = await tx.trialClassSession.aggregate({
-        where: { trialClassId: session.trialClassId },
-        _max: { seq: true },
-      });
-      const isLast = session.seq === agg._max.seq;
-      if (!isLast) return { ok: true };
-
-      // con có điểm danh → ATTENDED + enrollment COMPLETED.
-      const enrollments = await tx.trialEnrollment.findMany({
-        where: { trialClassId: session.trialClassId, status: "ACTIVE" },
-        select: {
-          id: true,
-          leadChildId: true,
-          leadChild: { select: { leadId: true } },
-          _count: { select: { attendances: true } },
-        },
-      });
-      const affectedLeadIds = new Set<string>();
-      for (const e of enrollments) {
-        if (e._count.attendances > 0) {
-          await tx.trialEnrollment.update({ where: { id: e.id }, data: { status: "COMPLETED" } });
-          await tx.leadChild.update({ where: { id: e.leadChildId }, data: { trialStatus: "ATTENDED" } });
-          affectedLeadIds.add(e.leadChild.leadId);
-        }
-      }
-
-      // lead có TẤT CẢ con ATTENDED → TRIAL_ATTENDED (KHÔNG AWAITING_DECISION — AC6).
-      for (const leadId of affectedLeadIds) {
-        const remaining = await tx.leadChild.count({
-          where: { leadId, trialStatus: { not: "ATTENDED" } },
-        });
-        if (remaining > 0) continue;
-        const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { status: true } });
-        if (lead && lead.status !== "TRIAL_ATTENDED") {
-          await tx.lead.update({ where: { id: leadId }, data: { status: "TRIAL_ATTENDED" } });
-        }
-        await publishEvent(
-          "lead.trialAttended",
-          { leadId },
-          { tx, dedupeKey: `lead.trialAttended:${leadId}` },
-        );
-      }
+      // FL-R2 (QĐ-R2-W3): tiến độ lead/Kanban do markAttendance lo per-lead (đủ buổi →
+      // AWAITING_DECISION NGAY, không chờ buổi cuối). Hoàn tất buổi chỉ khoá lifecycle buổi.
       return { ok: true };
     });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Lỗi hoàn tất buổi học" };
+  }
+}
+
+// ─── Huỷ gán học viên ────────────────────────────────────────────────────────────
+
+/**
+ * FL-R2 (item 4) — gỡ 1 học viên khỏi lớp trải nghiệm: SOFT-withdraw (status=WITHDRAWN),
+ * GIỮ LeadTrialHistory (lead quay lại không mất dấu). Nếu CHƯA điểm danh buổi nào →
+ * revert trialStatus về NONE + xoá history rỗng (chưa từng học). Audit.
+ */
+export async function unenrollLeadChild(params: {
+  trialClassId: string;
+  leadChildId: string;
+  actorId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const enr = await tx.trialEnrollment.findFirst({
+        where: { trialClassId: params.trialClassId, leadChildId: params.leadChildId, status: "ACTIVE" },
+        select: {
+          id: true,
+          leadChildId: true,
+          _count: { select: { attendances: true } },
+          trialClass: { select: { centerId: true } },
+        },
+      });
+      if (!enr) return { ok: false, error: "Không tìm thấy ghi danh đang hoạt động" };
+
+      await tx.trialEnrollment.update({ where: { id: enr.id }, data: { status: "WITHDRAWN" } });
+
+      const neverAttended = enr._count.attendances === 0;
+      if (neverAttended) {
+        // chưa học buổi nào → coi như chưa từng học thử lớp này.
+        await tx.leadChild.update({ where: { id: enr.leadChildId }, data: { trialStatus: "NONE" } });
+        await tx.leadTrialHistory.deleteMany({
+          where: { leadChildId: enr.leadChildId, trialClassId: params.trialClassId, attendedCount: 0 },
+        });
+      }
+
+      await writeAudit({
+        actor: { id: params.actorId, name: await actorName(params.actorId, tx) },
+        module: "trial",
+        entityType: "TrialEnrollment",
+        entityId: enr.id,
+        action: "STATUS_CHANGE",
+        oldValues: { status: "ACTIVE" },
+        newValues: { status: "WITHDRAWN", neverAttended, leadChildId: enr.leadChildId, trialClassId: params.trialClassId },
+        tx,
+      });
+      return { ok: true };
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Lỗi gỡ học viên" };
   }
 }

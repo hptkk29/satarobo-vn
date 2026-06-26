@@ -46,6 +46,7 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
     !canDetail && round.scope === "TEACHER_EVAL" ? session.user.id : undefined;
 
   const aggregate = await aggregateRound(roundId, teacherFilter ? { teacherId: teacherFilter } : undefined);
+  const qTypeMap = new Map(aggregate.questions.map((q) => [q.questionId, q.type] as const));
 
   // Chi tiết (chỉ view-detail) — kèm danh tính.
   let detail: Awaited<ReturnType<typeof getRoundDetail>> = [];
@@ -101,13 +102,28 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
                   {d.parentUserId && ` · PH: ${nameMap.get(d.parentUserId) ?? "—"}`}
                 </p>
                 <ul className="mt-1 space-y-0.5 text-gray-700">
-                  {d.answers.map((a, i) => (
-                    <li key={i}>
-                      {a.valueNumber != null && `⭐ ${a.valueNumber}/5`}
-                      {parseOptions(a.valueOptions).length > 0 && parseOptions(a.valueOptions).join(", ")}
-                      {a.valueText && `“${a.valueText}”`}
-                    </li>
-                  ))}
+                  {d.answers.map((a, i) => {
+                    const isPhoto = qTypeMap.get(a.questionId) === "PHOTO";
+                    const opts = parseOptions(a.valueOptions);
+                    return (
+                      <li key={i}>
+                        {a.valueNumber != null && `⭐ ${a.valueNumber}/5`}
+                        {opts.length > 0 &&
+                          (isPhoto ? (
+                            <span className="mt-1 flex flex-wrap gap-1.5">
+                              {opts.map((u) => (
+                                <a key={u} href={u} target="_blank" rel="noopener noreferrer">
+                                  <img src={u} alt="Ảnh" className="h-14 w-14 rounded border border-gray-200 object-cover" />
+                                </a>
+                              ))}
+                            </span>
+                          ) : (
+                            opts.join(", ")
+                          ))}
+                        {a.valueText && `“${a.valueText}”`}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}
@@ -122,10 +138,36 @@ function AggregateView({ aggregate }: { aggregate: RoundAggregate }) {
   if (aggregate.responseCount === 0) {
     return <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-400">Chưa có phản hồi.</p>;
   }
+  // Gom câu hỏi theo nhóm tiêu chí (groupLabel) như phiếu mẫu; null = không nhóm.
+  const groupOrder: (string | null)[] = [];
+  const grouped = new Map<string | null, RoundAggregate["questions"]>();
+  for (const q of aggregate.questions) {
+    const key = q.groupLabel ?? null;
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
+      groupOrder.push(key);
+    }
+    grouped.get(key)!.push(q);
+  }
   return (
-    <div className="space-y-3">
-      {aggregate.questions.map((q) => (
-        <div key={q.questionId} className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="space-y-5">
+      {groupOrder.map((label, gi) => (
+        <div key={gi} className="space-y-3">
+          {label && (
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#7C3AED]">{label}</h3>
+          )}
+          {(grouped.get(label) ?? []).map((q) => (
+            <QuestionAggregateCard key={q.questionId} q={q} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QuestionAggregateCard({ q }: { q: RoundAggregate["questions"][number] }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
           <p className="font-medium text-gray-900">{q.label}</p>
           {q.type === "STAR_RATING" && (
             <div className="mt-2 text-sm text-gray-700">
@@ -162,8 +204,19 @@ function AggregateView({ aggregate }: { aggregate: RoundAggregate }) {
               )}
             </ul>
           )}
-        </div>
-      ))}
+          {q.type === "PHOTO" && (
+            q.photos.length === 0 ? (
+              <p className="mt-2 text-sm text-gray-400">Chưa có ảnh.</p>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {q.photos.map((u) => (
+                  <a key={u} href={u} target="_blank" rel="noopener noreferrer">
+                    <img src={u} alt="Ảnh" className="h-16 w-16 rounded border border-gray-200 object-cover" />
+                  </a>
+                ))}
+              </div>
+            )
+          )}
     </div>
   );
 }

@@ -7,6 +7,10 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 // B3 — phụ huynh trả lời khảo sát/NPS cho con đang chọn.
+//
+// @deprecated FL4-03 — luồng khảo sát trung tâm mới đi qua CENTER_SURVEY (EvalForm)
+// ở _eval-actions.ts (submitCenterSurvey). Giữ action này song song (2-phase) để PH
+// trả nốt các khảo sát NPS đang chạy; KHÔNG xoá Survey model/route.
 
 const schema = z.object({
   surveyId: z.string().min(1),

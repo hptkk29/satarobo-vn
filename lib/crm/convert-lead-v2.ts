@@ -29,6 +29,21 @@ export function evaluatePaymentGuard(input: {
   return { ok: false };
 }
 
+/**
+ * FL2-01 — Tính 2 đợt học phí cho convert. THUẦN (testable). Tổng 2 đợt LUÔN bằng
+ * `orderTotal` (clamp dot1 vào [0, orderTotal]; dot2 = phần còn lại) để không vi phạm
+ * ràng buộc của `recordInstallmentPlan` (dot1+dot2 === order.totalAmount). dot1 = số
+ * tiền đã thu ở đợt 1; dot2 = số còn lại hẹn đóng (dueDate).
+ */
+export function computeInstallmentSplit(
+  orderTotal: number,
+  dot1Amount: number,
+): { dot1: number; dot2: number } {
+  const safeTotal = Math.max(0, Math.round(orderTotal));
+  const dot1 = Math.min(Math.max(0, Math.round(dot1Amount)), safeTotal);
+  return { dot1, dot2: safeTotal - dot1 };
+}
+
 export type ConvertV2Student = {
   leadChildId?: string | null;
   name: string;
@@ -166,6 +181,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           studentId,
           classId: s.classId,
           courseId: s.courseId,
+          centerId: lead.centerId, // FL3-02 — denormalize từ lead/class (cùng cơ sở) cho scopedDb
           leadChildId: s.leadChildId ?? null, // R7-06 — truy vết về con nguồn
           listPrice: price.listPrice,
           discountType: price.discountType,

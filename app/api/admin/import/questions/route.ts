@@ -43,8 +43,45 @@ const tagsFromCsv = z
     );
   });
 
+// FL1-03 — điểm/câu (>= 0) và thời gian/câu (giây, >= 1). Trống → null.
+const optionalNonNegFloat = z
+  .union([z.string(), z.number(), z.null()])
+  .optional()
+  .transform((v, ctx) => {
+    if (v === null || v === undefined || (typeof v === "string" && v.trim() === ""))
+      return null;
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n) || n < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "points phải là số >= 0" });
+      return z.NEVER;
+    }
+    return n;
+  });
+
+const optionalPosInt = z
+  .union([z.string(), z.number(), z.null()])
+  .optional()
+  .transform((v, ctx) => {
+    if (v === null || v === undefined || (typeof v === "string" && v.trim() === ""))
+      return null;
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "giá trị phải là số nguyên >= 1",
+      });
+      return z.NEVER;
+    }
+    return n;
+  });
+
 const RowSchema = z.object({
   questionCode: optionalString,
+  // FL1-03 — khung chương trình: courseSlug (unique) + curriculumVersion (đi cùng).
+  courseSlug: optionalString,
+  curriculumVersion: optionalPosInt,
+  points: optionalNonNegFloat,
+  timeLimitSec: optionalPosInt,
   type: z
     .union([QuestionTypeEnum, z.literal(""), z.null()])
     .transform((v, ctx) => {
@@ -127,10 +164,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // FL1-03 — preload maps để gắn câu hỏi vào khung CT: Course.slug → id và
+  // (courseId, version) → curriculumId. Tránh N query trong vòng lặp.
+  const [courses, curricula] = await Promise.all([
+    db.course.findMany({ select: { id: true, slug: true } }),
+    db.curriculum.findMany({ select: { id: true, courseId: true, version: true } }),
+  ]);
+  const courseBySlug = new Map(courses.map((c) => [c.slug.toLowerCase(), c.id]));
+  const curriculumByKey = new Map(
+    curricula.map((c) => [`${c.courseId}::${c.version}`, c.id]),
+  );
+
   type Parsed = z.infer<typeof RowSchema>;
   type ValidRow = {
     data: Parsed;
     choices: { order: number; text: string; isCorrect: boolean }[];
+    curriculumId: string | null;
+    courseId: string | null;
   };
 
   const errors: ImportError[] = [];
@@ -204,7 +254,37 @@ export async function POST(req: NextRequest) {
     }
     // ESSAY / CODE: no extra validation
 
-    validRows.push({ data: d, choices });
+    // FL1-03 — gắn khung chương trình (tuỳ chọn). courseSlug → courseId;
+    // kèm curriculumVersion → curriculumId (yêu cầu courseSlug để định danh khung).
+    let curriculumId: string | null = null;
+    let courseId: string | null = null;
+    if (d.courseSlug) {
+      const cid = courseBySlug.get(d.courseSlug.toLowerCase());
+      if (!cid) {
+        errors.push({ row: rowNo, error: `courseSlug "${d.courseSlug}" không tồn tại` });
+        continue;
+      }
+      courseId = cid;
+      if (d.curriculumVersion != null) {
+        const curId = curriculumByKey.get(`${cid}::${d.curriculumVersion}`);
+        if (!curId) {
+          errors.push({
+            row: rowNo,
+            error: `Không tìm thấy khung CT v${d.curriculumVersion} cho courseSlug "${d.courseSlug}"`,
+          });
+          continue;
+        }
+        curriculumId = curId;
+      }
+    } else if (d.curriculumVersion != null) {
+      errors.push({
+        row: rowNo,
+        error: "curriculumVersion cần đi kèm courseSlug",
+      });
+      continue;
+    }
+
+    validRows.push({ data: d, choices, curriculumId, courseId });
   }
 
   if (validRows.length === 0) {
@@ -221,6 +301,10 @@ export async function POST(req: NextRequest) {
           text: r.data.text,
           difficulty: r.data.difficulty,
           tags: r.data.tags,
+          curriculumId: r.curriculumId,
+          courseId: r.courseId,
+          points: r.data.points,
+          timeLimitSec: r.data.timeLimitSec,
           correctAnswer:
             r.data.type === "MULTIPLE_CHOICE" || r.data.type === "TRUE_FALSE"
               ? null

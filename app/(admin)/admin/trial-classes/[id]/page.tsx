@@ -7,6 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { TrialClassDetail } from "../_components/trial-class-detail";
+import { TrialSessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/trial-session-eval-fill";
 
 export const metadata = { title: "Chi tiết lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -86,8 +87,13 @@ export default async function TrialClassDetailPage({ params }: Props) {
   // Danh sách GV để gán (chỉ load khi có quyền gán). Dùng nguồn DUY NHẤT
   // getAssignableTeachers; includeIds giữ GV đang gán dù dữ liệu không còn match
   // điều kiện → <Select> không tự rớt giá trị đang chọn.
+  // R2-RBAC-3 — lớp trải nghiệm có cơ sở cố định → chỉ GV cùng cơ sở (cls.centerId)
+  // + LUÔN kèm GV đang gán (includeIds) để <Select> không rớt value.
   const teacherOptions = canAssignTeacher
-    ? await getAssignableTeachers({ includeIds: [cls.teacherId] })
+    ? await getAssignableTeachers({
+        centerIds: cls.centerId ? [cls.centerId] : actor.visibleCenterIds,
+        includeIds: [cls.teacherId],
+      })
     : [];
 
   const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;
@@ -95,6 +101,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
 
   const enrollments = cls.enrollments.map((e) => ({
     id: e.id,
+    leadChildId: e.leadChild?.id ?? null,
     childName: e.leadChild?.fullName ?? "(không rõ)",
     parentName: e.leadChild?.lead?.parentName ?? null,
     phone: e.leadChild?.lead?.phone ?? null,
@@ -116,6 +123,17 @@ export default async function TrialClassDetailPage({ params }: Props) {
       ]),
     ),
   }));
+
+  // FL4 (R4) — phiếu đánh giá buổi học cho lớp trải nghiệm: HS = LeadChild đang/đã học.
+  // studentId lưu = leadChild.id (EvalResponse.studentId là ref phẳng — trial dùng trialClassSessionId).
+  const evalStudents = cls.enrollments
+    .filter((e) => e.status === "ACTIVE" || e.status === "COMPLETED")
+    .map((e) => ({
+      studentId: e.leadChild?.id ?? e.id,
+      name: e.leadChild?.fullName ?? "(không rõ)",
+      present: true,
+    }));
+  const evalSessions = cls.sessions.map((s) => ({ id: s.id, label: `Buổi ${s.seq}` }));
 
   return (
     <div className="max-w-5xl p-6">
@@ -139,7 +157,8 @@ export default async function TrialClassDetailPage({ params }: Props) {
             </span>
           </div>
           <div className="mt-1 text-sm text-gray-600">
-            {cls.code} · {cls.startDate.toLocaleDateString("vi-VN")} ·{" "}
+            {cls.code}
+            {cls.startDate ? ` · ${cls.startDate.toLocaleDateString("vi-VN")}` : ""} ·{" "}
             {cls.startTime}–{cls.endTime} · {cls.sessionCount} buổi
           </div>
           <div className="mt-1 text-sm text-gray-500">
@@ -166,6 +185,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
       <TrialClassDetail
         trialClassId={cls.id}
         currentTeacherId={cls.teacherId}
+        classSessionCount={cls.sessionCount}
         enrollments={enrollments}
         sessions={sessions}
         teacherOptions={teacherOptions.map((t) => ({
@@ -173,8 +193,21 @@ export default async function TrialClassDetailPage({ params }: Props) {
           name: t.name ?? "(chưa đặt tên)",
         }))}
         canAssignTeacher={canAssignTeacher}
+        canManage={isManager}
+        canOverride={can(session.user, "trials:override-capacity")}
         canMark={canMark}
       />
+
+      {evalSessions.length > 0 && evalStudents.length > 0 && (
+        <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gray-700">Phiếu đánh giá buổi học</h2>
+          <TrialSessionEvalFill
+            trialSessions={evalSessions}
+            students={evalStudents}
+            canEdit={canMark}
+          />
+        </section>
+      )}
     </div>
   );
 }

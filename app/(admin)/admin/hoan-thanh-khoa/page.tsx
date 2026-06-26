@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/permissions";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { getNonEnrollableCenterIds, notHeadOfficeWhere } from "@/lib/enrollment-flow";
 import { CompletionForm } from "./_components/completion-form";
 import { BulkCompleteByClass } from "./_components/bulk-complete-by-class";
 
@@ -35,9 +36,12 @@ export default async function CompletionPage({ searchParams }: PageProps) {
       ? {}
       : { student: { centerId: { in: visibleStudentCenters } } };
 
+  // FL2-05 — Hội sở không nhận học viên → loại HV/lớp thuộc cơ sở HO khỏi danh sách.
+  const hoCenterIds = await getNonEnrollableCenterIds();
+
   const [students, courses, completions] = await Promise.all([
     sdb.student.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...notHeadOfficeWhere(hoCenterIds) },
       orderBy: { name: "asc" },
       take: 500,
       select: { id: true, name: true, studentCode: true },
@@ -67,7 +71,7 @@ export default async function CompletionPage({ searchParams }: PageProps) {
 
   // Danh sách lớp cho bộ chọn bulk (Class ∈ SCOPED_MODELS → sdb auto-scope cơ sở).
   const classes = await sdb.class.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, ...notHeadOfficeWhere(hoCenterIds) },
     orderBy: [{ startDate: "desc" }, { name: "asc" }],
     take: 300,
     select: {
@@ -151,7 +155,7 @@ export default async function CompletionPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      <CompletionForm students={students} courses={courses} />
+      <CompletionForm students={students} />
 
       <BulkCompleteByClass
         classes={classes.map((c) => ({

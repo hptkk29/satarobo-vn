@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { can } from "@/lib/auth/permissions";
-import { QuestionType, QuestionDifficulty, type Prisma } from "@prisma/client";
+import { QuestionType, QuestionDifficulty } from "@prisma/client";
+import { buildQuestionWhere } from "@/lib/questions/filter";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ interface SearchParams {
     q?: string;
     type?: string;
     difficulty?: string;
+    curriculumId?: string;
     lessonId?: string;
     tag?: string;
   }>;
@@ -54,25 +56,20 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
     VALID_DIFFICULTIES.includes(sp.difficulty as QuestionDifficulty)
       ? (sp.difficulty as QuestionDifficulty)
       : undefined;
+  const curriculumFilter = sp.curriculumId?.trim() || undefined;
   const lessonFilter = sp.lessonId?.trim() || undefined;
   const tagFilter = sp.tag?.trim() || undefined;
 
-  const where: Prisma.QuestionWhereInput = {
-    ...(typeFilter ? { type: typeFilter } : {}),
-    ...(difficultyFilter ? { difficulty: difficultyFilter } : {}),
-    ...(lessonFilter ? { lessonId: lessonFilter } : {}),
-    ...(tagFilter ? { tags: { has: tagFilter } } : {}),
-    ...(q
-      ? {
-          OR: [
-            { text: { contains: q, mode: "insensitive" as const } },
-            { questionCode: { contains: q, mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-  };
+  const where = buildQuestionWhere({
+    q,
+    type: typeFilter,
+    difficulty: difficultyFilter,
+    curriculumId: curriculumFilter,
+    lessonId: lessonFilter,
+    tag: tagFilter,
+  });
 
-  const [questions, lessons] = await Promise.all([
+  const [questions, lessons, curriculums] = await Promise.all([
     db.question.findMany({
       where,
       include: {
@@ -83,6 +80,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
             curriculum: { select: { name: true } },
           },
         },
+        curriculum: { select: { name: true, course: { select: { name: true } } } },
         author: { select: { fullName: true } },
         _count: { select: { choices: true } },
       },
@@ -94,6 +92,12 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       take: 500,
+    }),
+    db.curriculum.findMany({
+      where: { isActive: true },
+      include: { course: { select: { name: true } } },
+      orderBy: [{ courseId: "asc" }, { version: "desc" }],
+      take: 300,
     }),
   ]);
 
@@ -124,14 +128,14 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Import Excel
+            Thêm bằng template
           </Link>
         </div>
       </div>
 
       <form
         method="GET"
-        className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         <input
           name="q"
@@ -164,6 +168,18 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           ))}
         </select>
         <select
+          name="curriculumId"
+          defaultValue={curriculumFilter ?? ""}
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+        >
+          <option value="">Mọi khung CT</option>
+          {curriculums.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.course.name} — {c.name} (v{c.version})
+            </option>
+          ))}
+        </select>
+        <select
           name="lessonId"
           defaultValue={lessonFilter ?? ""}
           className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
@@ -183,7 +199,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         />
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
+          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
         >
           Áp dụng bộ lọc
         </button>
@@ -271,6 +287,15 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                             </div>
                             <div className="text-gray-400">
                               Bài {q.lesson.order}: {q.lesson.title}
+                            </div>
+                          </>
+                        ) : q.curriculum ? (
+                          <>
+                            <div className="font-medium">
+                              {q.curriculum.course.name}
+                            </div>
+                            <div className="text-gray-400">
+                              {q.curriculum.name}
                             </div>
                           </>
                         ) : (
