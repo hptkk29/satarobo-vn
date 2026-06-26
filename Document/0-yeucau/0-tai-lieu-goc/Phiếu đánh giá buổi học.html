@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SATA ROBO — Hồ Sơ Học Tập Từng Buổi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700;900&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --purple:#4A2583;
+    --purple-deep:#37205f;
+    --orange:#F38B35;
+    --orange-deep:#df7416;
+    --lav:#b9b0ea;
+    --lav-tint:#efeafb;
+    --peach:#fcebd7;
+    --ink:#2a2233;
+    --muted:#6f6880;
+    --line:#e9e3f5;
+    --paper:#ffffff;
+    --page:#f2f0f9;
+    --display:'Roboto Slab', Georgia, 'Times New Roman', serif;
+    --body:'Be Vietnam Pro','Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ -webkit-text-size-adjust:100%; }
+  body{
+    font-family:var(--body);
+    margin:0; padding:28px 16px 64px;
+    background:
+      radial-gradient(60% 50% at 12% 0%, #f6efff 0%, rgba(246,239,255,0) 60%),
+      radial-gradient(60% 50% at 100% 8%, #fff3e6 0%, rgba(255,243,230,0) 55%),
+      var(--page);
+    color:var(--ink);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .page{
+    max-width:880px; margin:0 auto;
+    background:var(--paper);
+    border-radius:18px;
+    padding:42px 46px 40px;
+    box-shadow:0 24px 60px -28px rgba(55,32,95,.45), 0 2px 0 rgba(255,255,255,.6) inset;
+    border:1px solid #efeaf7;
+  }
+
+  /* ---------- Brand logo (rebuilt as crisp vector) ---------- */
+  .sata-logo{
+    --u:80px;
+    width:var(--u); height:var(--u); flex:none;
+    border-radius:50%;
+    background:#fff;
+    border:1.5px solid var(--lav);
+    box-shadow:0 3px 10px rgba(74,37,131,.14), 0 0 0 4px rgba(183,174,232,.16);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:calc(var(--u) * .012);
+    font-family:var(--display); font-weight:900;
+    line-height:.8; overflow:hidden;
+  }
+  .sata-logo__top{ color:var(--orange); font-size:calc(var(--u) * .245); letter-spacing:.01em; }
+  .sata-logo__bot{
+    display:flex; align-items:center; gap:calc(var(--u) * .01);
+    color:var(--purple); font-size:calc(var(--u) * .245); letter-spacing:-.01em;
+  }
+  .sata-logo__bot .ll{ line-height:1; }
+  .logo-robot,.logo-gear{ width:calc(var(--u) * .205); height:calc(var(--u) * .205); display:block; }
+
+  /* ---------- Header ---------- */
+  .report-header{
+    display:flex; justify-content:space-between; align-items:center; gap:24px;
+    padding-bottom:22px; margin-bottom:28px;
+    border-bottom:3px solid transparent;
+    border-image:linear-gradient(90deg,var(--purple),var(--orange)) 1;
+  }
+  .brand{ display:flex; align-items:center; gap:16px; }
+  .brand__text{ line-height:1.25; }
+  .brand__name{ margin:0; font-family:var(--display); font-weight:900; font-size:20px; color:var(--purple); letter-spacing:.5px; }
+  .brand__tag{ margin:3px 0 0; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--orange-deep); max-width:230px; }
+
+  .report-meta{ text-align:right; }
+  .report-meta__kicker{ margin:0; font-size:11px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--orange); }
+  .report-meta__title{ margin:2px 0 0; font-family:var(--display); font-weight:900; font-size:30px; color:var(--ink); line-height:1; }
+  .report-meta__sub{ margin:7px 0 0; font-size:13px; font-weight:600; color:var(--muted); }
+
+  /* ---------- Hero / student identity ---------- */
+  .hero{
+    position:relative; overflow:hidden;
+    display:flex; align-items:center; gap:26px;
+    padding:24px 26px;
+    border-radius:16px;
+    background:
+      radial-gradient(120% 140% at 100% -10%, #6b3eaf 0%, rgba(107,62,175,0) 55%),
+      linear-gradient(135deg, var(--purple) 0%, var(--purple-deep) 100%);
+    color:#fff;
+    box-shadow:0 14px 30px -16px rgba(55,32,95,.7);
+    margin-bottom:34px;
+  }
+  .hero__bg{ position:absolute; inset:0; pointer-events:none; }
+  .hero__bg svg{ position:absolute; fill:#fff; opacity:.06; }
+  .hero__bg .g1{ width:150px; height:150px; right:-26px; bottom:-44px; }
+  .hero__bg .g2{ width:78px; height:78px; right:120px; top:-30px; opacity:.05; }
+
+  /* Student photo box */
+  .photo-frame{
+    position:relative; flex:none;
+    width:120px; height:128px;
+    border-radius:16px; overflow:hidden;
+    border:3px solid rgba(255,255,255,.55);
+    background:linear-gradient(160deg,#efeafb,#d8ccf4);
+    box-shadow:0 10px 22px -10px rgba(0,0,0,.5);
+    cursor:pointer; display:block;
+    z-index:1;
+  }
+  .photo-frame input[type=file]{ position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:3; }
+  .photo-frame img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; }
+  .photo-frame__ph{
+    position:absolute; inset:0; z-index:1;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    color:var(--purple); text-align:center; padding:8px;
+  }
+  .photo-frame__ph svg{ width:46px; height:46px; opacity:.85; }
+  .photo-frame__hint{ font-size:10.5px; font-weight:700; letter-spacing:.02em; color:var(--purple-deep); line-height:1.2; }
+  .photo-frame:hover{ border-color:var(--orange); }
+
+  .hero__info{ flex:1 1 auto; min-width:0; }
+  .hero__eyebrow{ margin:0 0 4px; font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:#f5c79a; }
+  .hero__name{ margin:0 0 12px; font-family:var(--display); font-weight:900; font-size:26px; line-height:1.05; }
+  .hero__meta{ margin:0; display:flex; flex-wrap:wrap; gap:8px 30px; }
+  .hero__meta > div{ margin:0; }
+  .hero__meta dt{ font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.62); }
+  .hero__meta dd{ margin:1px 0 0; font-size:14px; font-weight:600; }
+  .hero__badge{ flex:none; align-self:stretch; display:flex; flex-direction:column; justify-content:center; gap:6px; text-align:center; max-width:170px; }
+  .hero__badge-label{ font-size:10px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:rgba(255,255,255,.7); }
+  .hero__badge span:last-child{
+    background:var(--orange); color:#fff; font-weight:700; font-size:13px; line-height:1.3;
+    padding:10px 16px; border-radius:14px;
+    box-shadow:0 8px 16px -8px rgba(223,116,22,.9);
+  }
+
+  /* ---------- Sections ---------- */
+  .block{ margin-bottom:30px; }
+  .section-head{ display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .section-num{
+    flex:none; width:32px; height:32px; border-radius:10px;
+    background:var(--purple); color:#fff;
+    font-family:var(--display); font-weight:900; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 3px var(--peach);
+  }
+  .section-head h3{
+    margin:0; font-family:var(--display); font-weight:700; font-size:17px;
+    color:var(--purple); text-transform:uppercase; letter-spacing:.01em;
+  }
+
+  /* Teacher overview panel */
+  .panel--note{
+    border:1px solid var(--line);
+    border-left:5px solid var(--orange);
+    border-radius:12px;
+    background:linear-gradient(180deg,#fffdf9,#fbf6ff);
+    padding:20px 22px;
+  }
+  .panel--note h4{ margin:0 0 12px; font-family:var(--display); font-weight:700; color:var(--purple); font-size:15px; }
+  .panel--note ul{ margin:0; padding:0; list-style:none; display:grid; gap:11px; }
+  .panel--note li{ position:relative; padding-left:20px; }
+  .panel--note li::before{
+    content:""; position:absolute; left:0; top:.55em; width:9px; height:9px;
+    border-radius:3px; background:var(--orange); transform:rotate(45deg);
+  }
+  .panel--note li b{ color:var(--purple); }
+  .panel--note .proposal{ margin:16px 0 0; padding-top:14px; border-top:1px dashed var(--line); }
+  .panel--note .tag{
+    display:inline-block; background:var(--purple); color:#fff;
+    font-size:11px; font-weight:700; letter-spacing:.04em; padding:3px 9px; border-radius:6px; margin-right:7px;
+  }
+
+  /* Evaluation table */
+  .table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:12px; }
+  .eval-grid{
+    width:100%; min-width:560px; border-collapse:separate; border-spacing:0;
+    background:#fff; border-radius:12px; overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .eval-grid thead th{
+    background:var(--purple); color:#fff; padding:13px 15px; text-align:left;
+    font-weight:600; font-size:12px; letter-spacing:.04em; text-transform:uppercase;
+  }
+  .eval-grid td{ padding:13px 15px; border-top:1px solid var(--line); vertical-align:top; font-size:13.5px; }
+  .col-group{
+    width:15%; font-family:var(--display); font-weight:700; font-size:13px;
+    color:var(--orange-deep); background:#fbf7ff; border-right:1px solid var(--line);
+  }
+  .col-criteria{ width:26%; font-weight:600; color:#3c3448; border-right:1px solid var(--line); }
+  .col-comment{ width:59%; line-height:1.55; color:var(--ink); }
+
+  select.eval-select{
+    width:100%; padding:10px 34px 10px 12px; border:1px solid #d8d2e6; border-radius:9px;
+    font-family:inherit; font-size:13px; line-height:1.45; color:var(--ink);
+    background-color:#fff; cursor:pointer; outline:none; appearance:none;
+    background-image:url('data:image/svg+xml;utf8,<svg fill="%234A2583" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+    background-repeat:no-repeat; background-position:right 8px center;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  select.eval-select:hover{ border-color:var(--lav); }
+  select.eval-select:focus{ border-color:var(--orange); box-shadow:0 0 0 3px rgba(243,139,53,.18); }
+
+  /* Gallery */
+  .gallery{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .gallery-item{
+    position:relative; height:188px; overflow:hidden;
+    border-radius:12px; border:2px dashed #cfc6e6;
+    background:#faf8ff;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .gallery-item:hover{ border-color:var(--orange); background:#fff7ee; }
+  .gallery-item img{ width:100%; height:100%; object-fit:cover; display:none; }
+  .gallery-item input[type=file]{ position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+  .gallery-item .placeholder-text{
+    display:flex; flex-direction:column; align-items:center; gap:9px;
+    color:var(--muted); font-size:12.5px; font-weight:600; text-align:center; padding:12px; line-height:1.35;
+  }
+  .gallery-item .placeholder-text svg{ width:30px; height:30px; opacity:.7; }
+
+  /* Footer / signature */
+  .report-foot{
+    display:flex; justify-content:center; align-items:center; gap:24px;
+    margin-top:36px; padding-top:22px; border-top:1px solid var(--line);
+  }
+  .sign{ width:260px; }
+  .sign__role{ margin:0 0 28px; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--purple); }
+  .sign__line{ border-top:1.5px dotted #b8afce; }
+  .sign__hint{ margin:7px 0 0; font-size:11px; color:var(--muted); }
+  .foot__mark{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; font-weight:600; }
+  .foot__mark svg{ width:18px; height:18px; }
+
+  /* Editable affordance */
+  [contenteditable="true"]{ outline:none; border-radius:5px; transition:background .15s, box-shadow .15s; }
+  [contenteditable="true"]:hover{ background:rgba(243,139,53,.1); }
+  .hero [contenteditable="true"]:hover{ background:rgba(255,255,255,.14); }
+  [contenteditable="true"]:focus{ background:rgba(243,139,53,.14); box-shadow:0 0 0 2px rgba(243,139,53,.35); }
+  .hero [contenteditable="true"]:focus{ background:rgba(255,255,255,.18); box-shadow:0 0 0 2px rgba(255,255,255,.45); }
+
+  /* Floating action */
+  .print-btn{
+    position:fixed; bottom:26px; right:26px; z-index:1000;
+    display:inline-flex; align-items:center; gap:9px;
+    background:var(--purple); color:#fff; border:none;
+    padding:14px 22px; font-family:var(--body); font-size:15px; font-weight:700;
+    border-radius:50px; cursor:pointer;
+    box-shadow:0 12px 26px -10px rgba(55,32,95,.8);
+    transition:transform .15s, background .15s, box-shadow .15s;
+  }
+  .print-btn svg{ width:18px; height:18px; }
+  .print-btn:hover{ background:var(--orange-deep); transform:translateY(-2px); }
+  .print-btn:focus-visible{ outline:3px solid var(--orange); outline-offset:3px; }
+
+  .print-select-text{ display:block; font-size:13px; color:#23202c; padding:2px 0; }
+  .print-select-text::before{ content:"▸ "; color:var(--orange-deep); }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width:720px){
+    .page{ padding:26px 20px 30px; border-radius:14px; }
+    .report-header{ flex-direction:column; align-items:flex-start; gap:18px; }
+    .report-meta{ text-align:left; }
+    .hero{ flex-wrap:wrap; }
+    .hero__info{ flex:1 1 200px; }
+    .hero__badge{ max-width:none; width:100%; align-items:flex-start; }
+    .hero__badge span:last-child{ align-self:flex-start; }
+    .gallery{ grid-template-columns:1fr 1fr; }
+  }
+  @media (max-width:480px){
+    body{ padding:14px 10px 60px; }
+    .hero{ gap:18px; }
+    .photo-frame{ width:96px; height:104px; }
+    .gallery{ grid-template-columns:1fr; }
+    .report-meta__title{ font-size:26px; }
+  }
+
+  /* ---------- Print ---------- */
+  @media print{
+    @page{ margin:14mm; }
+    body{ background:#fff; padding:0; }
+    .page{ box-shadow:none; border:none; border-radius:0; max-width:100%; padding:0; }
+    .no-print{ display:none !important; }
+    .print-btn{ display:none !important; }
+    [contenteditable="true"]:hover,[contenteditable="true"]:focus{ background:transparent !important; box-shadow:none !important; }
+    .hero, .section-num, .eval-grid thead th, .col-group, .hero__badge span:last-child, .panel--note .tag{
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    .hero{ box-shadow:none; }
+    select.eval-select{ display:none; }
+    .gallery-item:not(.has-image){ display:none !important; }
+    .gallery{ grid-template-columns:repeat(3,1fr); }
+    .block, .hero, .report-foot{ break-inside:avoid; }
+    .eval-grid tr{ break-inside:avoid; }
+  }
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()" aria-label="Xuất file PDF">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+  Xuất file PDF
+</button>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <header class="report-header">
+    <div class="brand">
+      <div class="sata-logo" role="img" aria-label="Logo SATA ROBO">
+        <span class="sata-logo__top">SATA</span>
+        <span class="sata-logo__bot">
+          <span class="ll">R</span>
+          <svg class="logo-robot" viewBox="0 0 100 100" aria-hidden="true">
+            <line x1="50" y1="30" x2="50" y2="14" stroke="#4A2583" stroke-width="5" stroke-linecap="round"/>
+            <circle cx="50" cy="9" r="6" fill="#F38B35"/>
+            <rect x="14" y="30" width="72" height="62" rx="23" ry="24" fill="#F38B35"/>
+            <circle cx="37" cy="56" r="7" fill="#4A2583"/>
+            <circle cx="63" cy="56" r="7" fill="#4A2583"/>
+            <path d="M34 70 Q50 84 66 70" fill="none" stroke="#4A2583" stroke-width="5.5" stroke-linecap="round"/>
+          </svg>
+          <span class="ll">B</span>
+          <svg class="logo-gear" viewBox="0 0 100 100" aria-hidden="true">
+            <path fill-rule="evenodd" fill="#4A2583" d="M 95.58 43.83 L 95.58 56.17 L 81.38 60.20 L 77.54 68.18 L 83.25 81.79 L 73.59 89.49 L 61.60 80.90 L 52.96 82.87 L 45.88 95.81 L 33.84 93.07 L 33.07 78.33 L 26.15 72.81 L 11.61 75.34 L 6.25 64.21 L 17.30 54.43 L 17.30 45.57 L 6.25 35.79 L 11.61 24.66 L 26.15 27.19 L 33.07 21.67 L 33.84 6.93 L 45.88 4.19 L 52.96 17.13 L 61.60 19.10 L 73.59 10.51 L 83.25 18.21 L 77.54 31.82 L 81.38 39.80 Z M 66.00 50.00 A 16 16 0 1 0 34.00 50.00 A 16 16 0 1 0 66.00 50.00 Z"/>
+          </svg>
+        </span>
+      </div>
+      <div class="brand__text">
+        <p class="brand__name">SATA ROBO</p>
+        <p class="brand__tag">Trung tâm đào tạo STEM · Lập trình Robotics &amp; AI</p>
+      </div>
+    </div>
+    <div class="report-meta">
+      <p class="report-meta__kicker">Hồ sơ học tập</p>
+      <h1 class="report-meta__title">Báo cáo buổi học</h1>
+      <p class="report-meta__sub" contenteditable="true">Học phần 1 — Buổi 1</p>
+    </div>
+  </header>
+
+  <!-- HERO / STUDENT IDENTITY -->
+  <section class="hero">
+    <div class="hero__bg" aria-hidden="true">
+      <svg class="g1" viewBox="0 0 100 100"><path fill-rule="evenodd" d="M 95.58 43.83 L 95.58 56.17 L 81.38 60.20 L 77.54 68.18 L 83.25 81.79 L 73.59 89.49 L 61.60 80.90 L 52.96 82.87 L 45.88 95.81 L 33.84 93.07 L 33.07 78.33 L 26.15 72.81 L 11.61 75.34 L 6.25 64.21 L 17.30 54.43 L 17.30 45.57 L 6.25 35.79 L 11.61 24.66 L 26.15 27.19 L 33.07 21.67 L 33.84 6.93 L 45.88 4.19 L 52.96 17.13 L 61.60 19.10 L 73.59 10.51 L 83.25 18.21 L 77.54 31.82 L 81.38 39.80 Z M 66.00 50.00 A 16 16 0 1 0 34.00 50.00 A 16 16 0 1 0 66.00 50.00 Z"/></svg>
+      <svg class="g2" viewBox="0 0 100 100"><path fill-rule="evenodd" d="M 95.58 43.83 L 95.58 56.17 L 81.38 60.20 L 77.54 68.18 L 83.25 81.79 L 73.59 89.49 L 61.60 80.90 L 52.96 82.87 L 45.88 95.81 L 33.84 93.07 L 33.07 78.33 L 26.15 72.81 L 11.61 75.34 L 6.25 64.21 L 17.30 54.43 L 17.30 45.57 L 6.25 35.79 L 11.61 24.66 L 26.15 27.19 L 33.07 21.67 L 33.84 6.93 L 45.88 4.19 L 52.96 17.13 L 61.60 19.10 L 73.59 10.51 L 83.25 18.21 L 77.54 31.82 L 81.38 39.80 Z M 66.00 50.00 A 16 16 0 1 0 34.00 50.00 A 16 16 0 1 0 66.00 50.00 Z"/></svg>
+    </div>
+
+    <!-- Ô ẢNH HỌC VIÊN -->
+    <label class="photo-frame" title="Bấm để tải ảnh học viên">
+      <input type="file" accept="image/*" class="no-print" onchange="loadImage(event, this)">
+      <img alt="Ảnh học viên">
+      <span class="photo-frame__ph">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="32" cy="23" r="11"/>
+          <path d="M12 54c2.5-11 10-17 20-17s17.5 6 20 17"/>
+        </svg>
+        <span class="photo-frame__hint no-print">Bấm để<br>tải ảnh</span>
+      </span>
+    </label>
+
+    <div class="hero__info">
+      <p class="hero__eyebrow">Học viên</p>
+      <h2 class="hero__name" contenteditable="true">Nguyễn Minh Đăng</h2>
+      <dl class="hero__meta">
+        <div><dt>Khóa học</dt><dd contenteditable="true">Sata 4 — Bứt phá giới hạn</dd></div>
+        <div><dt>Ngày học</dt><dd contenteditable="true">15 / 06 / 2026</dd></div>
+      </dl>
+    </div>
+
+    <div class="hero__badge">
+      <span class="hero__badge-label">Dự án</span>
+      <span contenteditable="true">Dự án 1: Làm quen hệ thống</span>
+    </div>
+  </section>
+
+  <!-- SECTION 1 -->
+  <section class="block">
+    <div class="section-head">
+      <span class="section-num">1</span>
+      <h3>Nhận xét của giáo viên</h3>
+    </div>
+    <div class="panel--note" contenteditable="true">
+      <h4>Đánh giá tổng quan quá trình học tập</h4>
+      <ul>
+        <li><b>Kiến thức:</b> Em tiếp thu nhanh các khái niệm kỹ thuật và hiểu rõ cấu trúc của chương trình. Cần chú ý ôn tập thêm phần thiết lập thông số.</li>
+        <li><b>Kỹ năng:</b> Giải quyết vấn đề rất tốt, biết tự phân tích nguyên nhân và tìm cách khắc phục khi robot hoạt động không như ý.</li>
+        <li><b>Thái độ:</b> Chững chạc, tập trung cao độ, chủ động làm chủ buổi học. Rất kiên trì khi đối mặt với thử thách khó.</li>
+      </ul>
+      <p class="proposal"><span class="tag">Đề xuất</span>Khuyến khích em tiếp tục thử nghiệm thay đổi thông số code để quan sát sự khác biệt của robot, rèn luyện tư duy phân tích sâu hơn.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 2 -->
+  <section class="block">
+    <div class="section-head">
+      <span class="section-num">2</span>
+      <h3>Đánh giá chi tiết năng lực</h3>
+    </div>
+    <div class="table-scroll">
+      <table class="eval-grid">
+        <thead>
+          <tr>
+            <th>Nhóm tiêu chí</th>
+            <th>Tiêu chí</th>
+            <th>Mức độ đánh giá (bấm để chọn)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="col-group" rowspan="2">Kiến thức</td>
+            <td class="col-criteria">Kiến thức cũ</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1">Bạn nhớ rõ toàn bộ kiến thức cũ và vận dụng linh hoạt, kết hợp kiến thức mới để giải quyết thử thách.</option>
+                <option value="2">Bạn nhớ tốt kiến thức cũ và biết cách áp dụng vào hầu hết các tình huống quen thuộc.</option>
+                <option value="3">Bạn nhớ được hầu hết kiến thức cũ, đôi khi còn quên một vài nội dung và cần giáo viên nhắc lại.</option>
+                <option value="4" selected>Bạn nhớ được kiến thức cũ nhưng còn bối rối khi áp dụng vào hoàn cảnh mới.</option>
+                <option value="5">Bạn còn quên nhiều kiến thức cũ, cần ôn tập lại và được hỗ trợ thường xuyên.</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-criteria">Kiến thức mới</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1" selected>Bạn tiếp thu kiến thức rất tốt, hoàn thành 100% nhiệm vụ bài học và còn mở rộng thêm.</option>
+                <option value="2">Bạn tiếp thu kiến thức tốt, hoàn thành đầy đủ các nhiệm vụ chính của bài học.</option>
+                <option value="3">Bạn tiếp thu khá tốt, hoàn thành khoảng 70% thử thách thuộc phần kiến thức mới.</option>
+                <option value="4">Bạn tiếp thu được kiến thức cơ bản, hoàn thành khoảng 50% nhiệm vụ.</option>
+                <option value="5">Bạn hoàn thiện dưới 50% các nhiệm vụ kiến thức. Cần cố gắng hơn!</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-group" rowspan="3">Kỹ năng</td>
+            <td class="col-criteria">Sáng tạo (Creativity)</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1" selected>Bạn tự tin phát triển ý tưởng cá nhân, dám thử nghiệm nhiều phương án khác nhau để giải quyết vấn đề.</option>
+                <option value="2">Bạn chủ động đề xuất ý tưởng mới và biết cách chọn lọc để triển khai.</option>
+                <option value="3">Bạn đưa ra được nhiều ý tưởng sáng tạo nhưng cần giáo viên gợi ý để lựa chọn và triển khai.</option>
+                <option value="4">Bạn có ý tưởng riêng nhưng còn dựa nhiều vào mẫu của giáo viên.</option>
+                <option value="5">Bạn hoàn thiện nhiệm vụ theo đúng mẫu của giáo viên.</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-criteria">Tư duy phản biện (Critical Thinking)</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1">Bạn chủ động lập luận, phân tích vấn đề đa chiều và đề xuất phương án giải quyết thuyết phục.</option>
+                <option value="2">Bạn chủ động lập luận, tìm hiểu vấn đề và đưa ra phương án giải quyết.</option>
+                <option value="3" selected>Bạn tích cực lắng nghe, đặt câu hỏi và trao đổi xây dựng bài học.</option>
+                <option value="4">Bạn có lắng nghe và trao đổi nhưng chưa chủ động đặt câu hỏi.</option>
+                <option value="5">Bạn còn rụt rè trong việc đưa ra quan điểm cá nhân.</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-criteria">Kỹ năng mềm</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1">Bạn trình bày ý tưởng tự tin và điều phối công việc nhóm xuất sắc.</option>
+                <option value="2">Bạn trình bày rõ ràng và phối hợp tốt với các bạn trong nhóm.</option>
+                <option value="3" selected>Bạn nỗ lực hoàn thành nhiệm vụ được giao, hướng tới mục tiêu chung của nhóm.</option>
+                <option value="4">Bạn trình bày được ý tưởng nhưng chưa trôi chảy, cần tích cực hơn khi làm việc nhóm.</option>
+                <option value="5">Bạn còn ngại trình bày và tham gia hoạt động nhóm, cần được khích lệ thêm.</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-group" rowspan="2">Sản phẩm</td>
+            <td class="col-criteria">Mức độ hoàn thiện</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1" selected>Sử dụng đầy đủ kiến thức bắt buộc; sản phẩm hoạt động tốt, tính thẩm mỹ cao.</option>
+                <option value="2">Sử dụng đầy đủ kiến thức bài học; sản phẩm hoạt động ổn định.</option>
+                <option value="3">Đạt khoảng 50–70% kiến thức bài học; các tính năng cơ bản hoạt động.</option>
+                <option value="4">Sản phẩm hoạt động được một phần, còn một số lỗi cần khắc phục.</option>
+                <option value="5">Dự án chưa hoàn thiện hoặc chưa chạy được tốt.</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-criteria">Ý tưởng dự án</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1" selected>Dự án mở rộng và sáng tạo trên chủ đề, hoàn toàn cá nhân hóa, không dùng mẫu.</option>
+                <option value="2">Dự án thể hiện rõ chủ đề với ý tưởng riêng của bản thân.</option>
+                <option value="3">Có sử dụng một số ý tưởng từ dự án khác nhưng được thay đổi phù hợp.</option>
+                <option value="4">Dự án thể hiện được một phần chủ đề và chủ yếu làm theo mẫu.</option>
+                <option value="5">Dự án làm hoàn toàn theo mẫu, chưa thể hiện ý tưởng cá nhân.</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-group" rowspan="2">Thái độ học tập</td>
+            <td class="col-criteria">Mức độ tập trung</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1" selected>Bạn rất tập trung và tương tác tốt với toàn bộ nội dung bài học.</option>
+                <option value="2">Bạn tập trung tốt trong phần lớn buổi học.</option>
+                <option value="3">Bạn tập trung ở mức ổn, đôi lúc cần được nhắc nhở.</option>
+                <option value="4">Bạn thỉnh thoảng bị mất tập trung tại một số thời điểm.</option>
+                <option value="5">Bạn còn dễ bị phân tâm, cần được hỗ trợ để duy trì sự tập trung.</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-criteria">Thái độ giao tiếp</td>
+            <td class="col-comment">
+              <select class="eval-select">
+                <option value="1" selected>Bạn trao đổi, giao tiếp rất chủ động với thầy cô và bạn bè.</option>
+                <option value="2">Bạn giao tiếp cởi mở và sẵn sàng chia sẻ trong lớp.</option>
+                <option value="3">Bạn giao tiếp ở mức ổn, chủ yếu trả lời khi được hỏi.</option>
+                <option value="4">Bạn còn khá ít trao đổi, cần được khuyến khích thêm.</option>
+                <option value="5">Bạn còn rụt rè khi giao tiếp với thầy cô và các bạn.</option>
+              </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SECTION 3 -->
+  <section class="block">
+    <div class="section-head">
+      <span class="section-num">3</span>
+      <h3>Hình ảnh dự án &amp; lớp học</h3>
+    </div>
+    <div class="gallery">
+      <!-- Bấm vào từng ô để tải ảnh. Ô trống sẽ tự ẩn khi in. -->
+      <div class="gallery-item no-print">
+        <input type="file" accept="image/*" onchange="loadImage(event, this)">
+        <img alt="Hình ảnh lớp học">
+        <span class="placeholder-text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          Bấm để tải ảnh 1
+        </span>
+      </div>
+      <div class="gallery-item no-print">
+        <input type="file" accept="image/*" onchange="loadImage(event, this)">
+        <img alt="Hình ảnh lớp học">
+        <span class="placeholder-text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          Bấm để tải ảnh 2
+        </span>
+      </div>
+      <div class="gallery-item no-print">
+        <input type="file" accept="image/*" onchange="loadImage(event, this)">
+        <img alt="Hình ảnh lớp học">
+        <span class="placeholder-text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          Bấm để tải ảnh 3
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="report-foot">
+    <div class="foot__mark">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><path fill-rule="evenodd" fill="#4A2583" d="M 95.58 43.83 L 95.58 56.17 L 81.38 60.20 L 77.54 68.18 L 83.25 81.79 L 73.59 89.49 L 61.60 80.90 L 52.96 82.87 L 45.88 95.81 L 33.84 93.07 L 33.07 78.33 L 26.15 72.81 L 11.61 75.34 L 6.25 64.21 L 17.30 54.43 L 17.30 45.57 L 6.25 35.79 L 11.61 24.66 L 26.15 27.19 L 33.07 21.67 L 33.84 6.93 L 45.88 4.19 L 52.96 17.13 L 61.60 19.10 L 73.59 10.51 L 83.25 18.21 L 77.54 31.82 L 81.38 39.80 Z M 66.00 50.00 A 16 16 0 1 0 34.00 50.00 A 16 16 0 1 0 66.00 50.00 Z"/></svg>
+      <span>satarobo.vn</span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  function loadImage(event, input){
+    var file = event.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var box = input.closest('.photo-frame, .gallery-item');
+      var img = box.querySelector('img');
+      var ph  = box.querySelector('.photo-frame__ph, .placeholder-text');
+      img.src = e.target.result;
+      img.style.display = 'block';
+      if(ph){ ph.style.display = 'none'; }
+      box.classList.add('has-image');
+      box.classList.remove('no-print');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Khi in: đổi ô chọn (select) thành dòng chữ để hiển thị đẹp trên PDF
+  window.onbeforeprint = function(){
+    document.querySelectorAll('.eval-select').forEach(function(sel){
+      var span = document.createElement('span');
+      span.className = 'print-select-text';
+      span.textContent = sel.options[sel.selectedIndex].text;
+      sel.style.display = 'none';
+      sel.parentNode.appendChild(span);
+    });
+  };
+  window.onafterprint = function(){
+    document.querySelectorAll('.eval-select').forEach(function(sel){
+      sel.style.display = '';
+      var span = sel.parentNode.querySelector('.print-select-text');
+      if(span){ span.remove(); }
+    });
+  };
+</script>
+
+</body>
+</html>
