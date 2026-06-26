@@ -33,7 +33,9 @@ export default async function NewTrialClassPage() {
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true, centerId: true },
     }),
-    getAssignableTeachers(),
+    // R2-RBAC-3 — chỉ GV thuộc cơ sở actor nhìn thấy (CS1 không lọt GV CS2); form lọc
+    // tiếp theo cơ sở đang chọn ở client.
+    getAssignableTeachers({ centerIds: actor.visibleCenterIds }),
     // FL-R2: số buổi nhập trong form; chỉ lấy 1 config active làm gợi ý mặc định (nếu có).
     sdb.trialProgramConfig.findFirst({
       where: { active: true },
@@ -59,7 +61,11 @@ export default async function NewTrialClassPage() {
           label: `${r.name} (${r.code})`,
           centerId: r.centerId,
         }))}
-        teachers={teachers.map((t) => ({ id: t.id, name: t.name ?? "(chưa đặt tên)" }))}
+        teachers={teachers.map((t) => ({
+          id: t.id,
+          name: t.name ?? "(chưa đặt tên)",
+          centerId: t.centerId,
+        }))}
         defaultSessionCount={activeConfig?.sessionCount ?? 2}
       />
     </div>

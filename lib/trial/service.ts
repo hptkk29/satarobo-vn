@@ -7,6 +7,7 @@
 // lead "Chờ quyết định" (AWAITING_DECISION) NGAY (TBD-2). TRIAL_ATTENDED để dành lead đã chốt.
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -159,6 +160,19 @@ export async function createTrialClass(params: {
   }
   if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
     return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
+  }
+
+  // R2-RBAC-3 — GV (nếu gán) phải CÙNG cơ sở lớp trải nghiệm (cách ly CS1↔CS2;
+  // backstop server cho lọc client ở form). teacher centerId NULL/khác → chặn.
+  if (params.teacherId) {
+    const t = await db.user.findUnique({
+      where: { id: params.teacherId },
+      select: { centerId: true },
+    });
+    const err = teacherCenterAssignmentError(params.centerId, [
+      { id: params.teacherId, centerId: t?.centerId },
+    ]);
+    if (err) return { ok: false, error: err };
   }
 
   try {

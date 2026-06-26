@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
 // CONTRACT (R7-02) — lib/trial/service.ts do agent song song tạo; import theo tên.
 // Typecheck gộp cuối sẽ resolve. Mỗi action chỉ "inspect {ok}" + revalidate.
@@ -344,6 +345,15 @@ export async function assignTrialTeacherAction(
 
   // Không có service fn riêng cho gán GV → cập nhật trực tiếp qua scopedDb.
   const sdb = scopedDb(actor);
+
+  // R2-RBAC-3 — GV gán phải CÙNG cơ sở lớp trải nghiệm (cách ly CS; chống gán chéo
+  // qua POST thẳng). User pass-through scopedDb (không center-scoped).
+  if (teacherId) {
+    const t = await sdb.user.findUnique({ where: { id: teacherId }, select: { centerId: true } });
+    const err = teacherCenterAssignmentError(cls.centerId, [{ id: teacherId, centerId: t?.centerId }]);
+    if (err) return { ok: false, error: err };
+  }
+
   await sdb.trialClassV2.update({
     where: { id: trialClassId },
     data: { teacherId: teacherId || null },

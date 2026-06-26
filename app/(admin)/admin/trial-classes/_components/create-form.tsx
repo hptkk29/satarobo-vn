@@ -4,10 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createTrialClassAction } from "../_actions";
+import { filterTeachersByCenter } from "@/lib/teachers/center-filter";
 
 type Center = { id: string; name: string };
 type Room = { id: string; label: string; centerId: string | null };
-type Teacher = { id: string; name: string };
+type Teacher = { id: string; name: string; centerId: string | null };
 
 export function CreateTrialClassForm({
   centers,
@@ -36,6 +37,11 @@ export function CreateTrialClassForm({
   const roomOptions = useMemo(
     () => rooms.filter((r) => !centerId || r.centerId === centerId),
     [rooms, centerId],
+  );
+  // R2-RBAC-3 — GV cũng lọc theo cơ sở đang chọn (giữ GV đang chọn). Helper thuần đã test.
+  const teacherOptions = useMemo(
+    () => filterTeachersByCenter(teachers, centerId || null, [teacherId]),
+    [teachers, centerId, teacherId],
   );
 
   function onSubmit(e: React.FormEvent) {
@@ -89,6 +95,7 @@ export function CreateTrialClassForm({
           onChange={(e) => {
             setCenterId(e.target.value);
             setRoomId("");
+            setTeacherId(""); // R2-RBAC-3 — đổi cơ sở → GV cũ khác cơ sở không còn hợp lệ.
           }}
           disabled={pending}
           className={field}
@@ -143,7 +150,7 @@ export function CreateTrialClassForm({
           className={field}
         >
           <option value="">— chưa phân công —</option>
-          {teachers.map((t) => (
+          {teacherOptions.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
             </option>

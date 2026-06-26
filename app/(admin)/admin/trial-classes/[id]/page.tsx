@@ -87,8 +87,13 @@ export default async function TrialClassDetailPage({ params }: Props) {
   // Danh sách GV để gán (chỉ load khi có quyền gán). Dùng nguồn DUY NHẤT
   // getAssignableTeachers; includeIds giữ GV đang gán dù dữ liệu không còn match
   // điều kiện → <Select> không tự rớt giá trị đang chọn.
+  // R2-RBAC-3 — lớp trải nghiệm có cơ sở cố định → chỉ GV cùng cơ sở (cls.centerId)
+  // + LUÔN kèm GV đang gán (includeIds) để <Select> không rớt value.
   const teacherOptions = canAssignTeacher
-    ? await getAssignableTeachers({ includeIds: [cls.teacherId] })
+    ? await getAssignableTeachers({
+        centerIds: cls.centerId ? [cls.centerId] : actor.visibleCenterIds,
+        includeIds: [cls.teacherId],
+      })
     : [];
 
   const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;
