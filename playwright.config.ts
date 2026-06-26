@@ -22,7 +22,10 @@ export default defineConfig({
 
   // CI gets retries, dev doesn't (faster iteration)
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // workers:1 — smoke-lms spec self-seed DB chung (resetDb + slug cố định) trong beforeAll;
+  // chạy song song 2 project (chromium+mobile) → 2 beforeAll đồng thời → đụng unique slug.
+  // Serial hoá để tránh (smoke nhỏ, không đáng song song).
+  workers: 1,
 
   // Reporter
   reporter: process.env.CI
