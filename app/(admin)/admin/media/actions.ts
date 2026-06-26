@@ -60,14 +60,20 @@ async function canUploadToClass(
   user: SessionUser,
   classId: string,
 ): Promise<boolean> {
-  // QL/Admin có quyền duyệt media → upload mọi lớp.
-  if (can(user, "media:approve")) return true;
-
   const cls = await db.class.findUnique({
     where: { id: classId },
-    select: { teacherId: true, assistantId: true },
+    select: { teacherId: true, assistantId: true, centerId: true },
   });
   if (!cls) return false;
+
+  // QL/Admin có quyền duyệt media → upload, NHƯNG vẫn phải TRONG cơ sở mình (chống
+  // IDOR chéo cơ sở: CS1 manager không upload/đọc context lớp CS2). canManageClass
+  // đã enforce passesScope + SUPER_ADMIN/HO bypass. Trùng pattern mediaClassInScope.
+  if (can(user, "media:approve")) {
+    const actor = await resolveActor(user.id);
+    return canManageClass(actor, classId, cls.centerId);
+  }
+
   if (cls.teacherId === user.id || cls.assistantId === user.id) return true;
 
   const saleIds = await deriveClassSaleIds(classId);
