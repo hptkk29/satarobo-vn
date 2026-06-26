@@ -21,6 +21,7 @@ import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { generateClassSessions } from "@/lib/classes/generate";
 import { courseHasActiveCurriculum } from "@/lib/courses/activation-guard";
 import { createSessionPlansForClass } from "@/lib/classes/snapshot";
+import { generateAssignmentsFromTemplates } from "@/lib/lms/assignment";
 import { publishEvent } from "@/lib/events/publish";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
@@ -361,6 +362,15 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
     });
   } catch (err) {
     console.error("[createClass] createSessionPlansForClass error:", err);
+  }
+
+  // R2-LMS-4 — sau khi có ClassSessionPlan (khung CT đã pin) → tự sinh bài tập DRAFT
+  // từ AssignmentTemplate gắn các buổi (clone câu hỏi). Best-effort + idempotent;
+  // lỗi KHÔNG chặn happy path tạo lớp (lớp đã tạo ở transaction trên).
+  try {
+    await generateAssignmentsFromTemplates({ classId: createdId });
+  } catch (err) {
+    console.error("[createClass] generateAssignmentsFromTemplates error:", err);
   }
 
   revalidatePath("/classes");

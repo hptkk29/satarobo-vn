@@ -2453,6 +2453,9 @@ model Assignment {
   documents   AssignmentDocument[]
   questions   Question[]             @relation("AssignmentQuestions")
 
+  // FL-R2 W5 (R2-LMS-4) — idempotent tự sinh từ template: 1 template → tối đa 1
+  // Assignment/lớp. templateId nullable → bài tạo tay (templateId NULL) KHÔNG bị ràng.
+  @@unique([classId, templateId])
   @@index([status, classId])
   @@index([dueAt])
   @@index([createdById])
