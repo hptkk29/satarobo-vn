@@ -8,6 +8,8 @@ export type DraftQuestion = {
   label: string;
   options: string[];
   required: boolean;
+  groupLabel: string;
+  allowCustomText: boolean;
 };
 
 const TYPE_LABEL: Record<QuestionType, string> = {
@@ -15,10 +17,11 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   RADIO: "Một lựa chọn",
   CHECKBOX: "Nhiều lựa chọn",
   TEXTBOX: "Nhập văn bản",
+  PHOTO: "Tải ảnh",
 };
 
 export function emptyQuestion(): DraftQuestion {
-  return { type: "STAR_RATING", label: "", options: [], required: true };
+  return { type: "STAR_RATING", label: "", options: [], required: true, groupLabel: "", allowCustomText: false };
 }
 
 export function QuestionBuilder({
@@ -48,10 +51,18 @@ export function QuestionBuilder({
     <div className="space-y-3">
       {questions.map((q, i) => {
         const needsOptions = q.type === "RADIO" || q.type === "CHECKBOX";
+        const canCustomText = q.type === "RADIO" || q.type === "CHECKBOX" || q.type === "STAR_RATING";
         return (
           <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
             <div className="flex items-start gap-2">
               <div className="flex-1 space-y-2">
+                <input
+                  value={q.groupLabel}
+                  disabled={disabled}
+                  onChange={(e) => update(i, { groupLabel: e.target.value })}
+                  placeholder="Nhóm tiêu chí (vd: Kiến thức) — để trống nếu không nhóm"
+                  className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 disabled:bg-gray-100"
+                />
                 <div className="flex gap-2">
                   <select
                     value={q.type}
@@ -122,15 +133,28 @@ export function QuestionBuilder({
                   </div>
                 )}
 
-                <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
-                  <input
-                    type="checkbox"
-                    checked={q.required}
-                    disabled={disabled}
-                    onChange={(e) => update(i, { required: e.target.checked })}
-                  />
-                  Bắt buộc trả lời
-                </label>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={q.required}
+                      disabled={disabled}
+                      onChange={(e) => update(i, { required: e.target.checked })}
+                    />
+                    Bắt buộc trả lời
+                  </label>
+                  {canCustomText && (
+                    <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={q.allowCustomText}
+                        disabled={disabled}
+                        onChange={(e) => update(i, { allowCustomText: e.target.checked })}
+                      />
+                      Cho phép nhập tự do
+                    </label>
+                  )}
+                </div>
               </div>
 
               {!disabled && (

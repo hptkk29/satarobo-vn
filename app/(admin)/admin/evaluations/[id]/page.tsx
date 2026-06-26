@@ -25,6 +25,8 @@ export default async function FormEditPage({ params }: { params: Promise<{ id: s
     label: q.label,
     options: parseOptions(q.options),
     required: q.required,
+    groupLabel: q.groupLabel ?? "",
+    allowCustomText: q.allowCustomText,
   }));
 
   return (

@@ -12,7 +12,9 @@ import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
 import {
   getSessionEvalState,
+  getTrialSessionEvalState,
   saveSessionEvalResponses,
+  saveTrialSessionEvalResponses,
   type SessionEvalState,
 } from "@/lib/eval/session-eval";
 
@@ -108,5 +110,104 @@ export async function saveSessionEvalAction(input: unknown): Promise<Result<{ sa
   if (!res.ok) return { ok: false, error: res.error };
 
   revalidatePath(`/sessions/${parsed.data.sessionId}`);
+  return { ok: true, data: { saved: res.saved } };
+}
+
+// ─── FL4 (R4) — phiếu SESSION_EVAL cho buổi LỚP TRẢI NGHIỆM (TrialClassSession) ──
+
+/**
+ * Gate ĐIỀN phiếu buổi trải nghiệm: GV phụ trách/trợ giảng lớp trải nghiệm,
+ * CENTER_MANAGER cùng cơ sở, hoặc SUPER_ADMIN/TRAINING. Mirror gateFill.
+ */
+async function gateTrialFill(
+  trialSessionId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const sess = await db.trialClassSession.findUnique({
+    where: { id: trialSessionId },
+    select: {
+      id: true,
+      teacherId: true,
+      trialClass: { select: { teacherId: true, assistantId: true, centerId: true } },
+    },
+  });
+  if (!sess) return { ok: false, error: "Buổi học trải nghiệm không tồn tại" };
+
+  const u = session.user;
+  const cls = sess.trialClass;
+  const allowed =
+    hasRole(u, "SUPER_ADMIN") ||
+    hasRole(u, "TRAINING") ||
+    (hasRole(u, "CENTER_MANAGER") && !!cls.centerId && cls.centerId === u.centerId) ||
+    (hasRole(u, "TEACHER") &&
+      (cls.teacherId === u.id || cls.assistantId === u.id || sess.teacherId === u.id));
+
+  if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học thử này" };
+  return { ok: true };
+}
+
+/** Nạp phiếu SESSION_EVAL đang áp cho buổi LỚP TRẢI NGHIỆM (kèm đáp án đã lưu). */
+export async function loadTrialSessionEvalAction(
+  trialSessionId: string,
+): Promise<Result<SessionEvalState>> {
+  const g = await gateTrialFill(trialSessionId);
+  if (!g.ok) return g;
+  const state = await getTrialSessionEvalState(trialSessionId);
+  return { ok: true, data: state };
+}
+
+const saveTrialSchema = z.object({
+  trialSessionId: z.string().min(1),
+  roundId: z.string().min(1),
+  submissions: z
+    .array(
+      z.object({
+        studentId: z.string().min(1),
+        answers: z.array(
+          z.object({
+            questionId: z.string().min(1),
+            valueNumber: z.number().int().nullable().optional(),
+            valueOptions: z.array(z.string()).nullable().optional(),
+            valueText: z.string().nullable().optional(),
+          }),
+        ),
+      }),
+    )
+    .max(100),
+});
+
+/** Lưu phiếu SESSION_EVAL theo từng HS cho 1 buổi LỚP TRẢI NGHIỆM. */
+export async function saveTrialSessionEvalAction(input: unknown): Promise<Result<{ saved: number }>> {
+  const parsed = saveTrialSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+
+  const g = await gateTrialFill(parsed.data.trialSessionId);
+  if (!g.ok) return g;
+
+  const state = await getTrialSessionEvalState(parsed.data.trialSessionId);
+  if (!state.active) return { ok: false, error: "Buổi học thử chưa có phiếu đánh giá đang mở" };
+  if (state.roundId !== parsed.data.roundId) {
+    return { ok: false, error: "Đợt đánh giá đã thay đổi — vui lòng tải lại phiếu" };
+  }
+
+  const res = await saveTrialSessionEvalResponses(
+    state.roundId,
+    parsed.data.trialSessionId,
+    state.questions,
+    parsed.data.submissions.map((s) => ({
+      studentId: s.studentId,
+      answers: s.answers.map((a) => ({
+        questionId: a.questionId,
+        valueNumber: a.valueNumber ?? null,
+        valueOptions: a.valueOptions ?? null,
+        valueText: a.valueText ?? null,
+      })),
+    })),
+  );
+  if (!res.ok) return { ok: false, error: res.error };
+
+  revalidatePath("/trial-classes");
   return { ok: true, data: { saved: res.saved } };
 }

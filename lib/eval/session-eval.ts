@@ -1,19 +1,16 @@
-// lib/eval/session-eval.ts — FL4-01: phiếu đánh giá BUỔI HỌC (SESSION_EVAL).
+// lib/eval/session-eval.ts — FL4-01 / FL4(R4): phiếu đánh giá BUỔI HỌC (SESSION_EVAL).
 //
 // GV điền phiếu động theo TỪNG HỌC SINH cho 1 buổi → lưu vào EvalResponse
-// (roundId + classSessionId + studentId) + EvalAnswer. Dùng chung cơ chế cho
-// lớp chính + lớp trải nghiệm (áp theo cơ sở/khóa của đợt, không phân biệt loại lớp).
+// (roundId + classSessionId|trialClassSessionId + studentId) + EvalAnswer. Dùng chung
+// cơ chế cho lớp chính (ClassSession) + lớp trải nghiệm (TrialClassSession — FL4 R4).
 //
 // PURE (test được, không cần DB): isSessionEvalRoundApplicable, dedupeKeyForResponse.
-// DB-backed: findApplicableSessionEvalRound, getSessionEvalState, saveSessionEvalResponses.
+// DB-backed: find*Round, get*State, save*Responses (class + trial).
 //
-// CHỐNG TRÙNG (W0 để ngỏ — FL4-01 CHỐT app-level idempotency theo
-// (roundId, classSessionId, studentId)): EvalResponse KHÔNG có unique DB cho bộ ba
-// này (3 cột unique cũ enrollmentId/teacherId/parentUserId đều NULL cho SESSION_EVAL,
-// nên Postgres coi mỗi dòng là khác nhau → không tự chặn). Vì vậy save chạy
-// find-or-replace trong $transaction: đã có response (round×buổi×HS) thì THAY answers,
-// chưa có thì tạo mới. Idempotent với lần lưu lặp; không sinh response trùng.
-import type { EvaluationRoundStatus, EvalScope } from "@prisma/client";
+// CHỐNG TRÙNG (app-level idempotency theo (roundId, sessionRef, studentId)): EvalResponse
+// KHÔNG có unique DB cho bộ ba này (3 cột unique cũ đều NULL cho SESSION_EVAL). Vì vậy save
+// chạy find-or-replace trong $transaction: đã có response thì THAY answers, chưa có thì tạo mới.
+import type { EvaluationRoundStatus, EvalScope, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isRoundOpen } from "@/lib/eval/rounds";
 import {
@@ -40,9 +37,9 @@ export type SessionClassScope = {
 
 /**
  * PURE — đợt SESSION_EVAL có áp cho buổi (lớp) này không?
- * Áp khi: scope SESSION_EVAL + đang MỞ (status OPEN trong cửa sổ thời gian) +
- * cơ sở/khóa của đợt khớp lớp (đợt để trống cơ sở/khóa = áp toàn hệ thống → cả
- * lớp chính lẫn lớp trải nghiệm). Tính tại thời điểm GV mở phiếu (AC như R7-16).
+ * Áp khi: scope SESSION_EVAL + đang MỞ + cơ sở/khóa của đợt khớp lớp (đợt để trống
+ * cơ sở/khóa = áp toàn hệ thống → cả lớp chính lẫn lớp trải nghiệm). Lớp trải nghiệm
+ * không có khóa (courseId=null) → chỉ khớp đợt không ràng buộc khóa.
  */
 export function isSessionEvalRoundApplicable(
   round: SessionEvalRoundScope,
@@ -57,8 +54,8 @@ export function isSessionEvalRoundApplicable(
 }
 
 /** PURE — khóa idempotency của 1 response SESSION_EVAL (round×buổi×HS). */
-export function dedupeKeyForResponse(roundId: string, classSessionId: string, studentId: string): string {
-  return `${roundId}|${classSessionId}|${studentId}`;
+export function dedupeKeyForResponse(roundId: string, sessionRefId: string, studentId: string): string {
+  return `${roundId}|${sessionRefId}|${studentId}`;
 }
 
 // ─── DB-backed ───────────────────────────────────────────────────────────────
@@ -76,24 +73,17 @@ export type SessionEvalFormState = {
 
 export type SessionEvalState = SessionEvalFormState | { active: false };
 
-/**
- * Tìm đợt SESSION_EVAL đang áp cho buổi. Chọn đợt MỞ khớp cơ sở/khóa, ưu tiên
- * đợt cụ thể hơn (có cơ sở/khóa) rồi tới đợt mới nhất. Trả null nếu không có.
- */
-export async function findApplicableSessionEvalRound(sessionId: string) {
-  const sess = await db.classSession.findUnique({
-    where: { id: sessionId },
-    select: { id: true, class: { select: { centerId: true, courseId: true } } },
-  });
-  if (!sess) return null;
+type RoundWithForm = Prisma.EvaluationRoundGetPayload<{
+  include: { form: { select: { id: true; title: true } } };
+}>;
 
+/** Chọn đợt MỞ khớp scope lớp (ưu tiên đợt cụ thể hơn rồi mới nhất). */
+async function pickApplicableRound(cls: SessionClassScope): Promise<RoundWithForm | null> {
   const rounds = await db.evaluationRound.findMany({
     where: { scope: "SESSION_EVAL", status: "OPEN" },
     orderBy: { createdAt: "desc" },
     include: { form: { select: { id: true, title: true } } },
   });
-
-  const cls: SessionClassScope = { centerId: sess.class.centerId, courseId: sess.class.courseId };
   const now = new Date();
   const matches = rounds.filter((r) =>
     isSessionEvalRoundApplicable(
@@ -103,21 +93,40 @@ export async function findApplicableSessionEvalRound(sessionId: string) {
     ),
   );
   if (matches.length === 0) return null;
-
   // Ưu tiên đợt cụ thể hơn (điểm = có centerId + có courseId), rồi mới nhất (đã sort desc).
-  const specificity = (r: (typeof matches)[number]) => (r.centerId ? 1 : 0) + (r.courseId ? 1 : 0);
+  const specificity = (r: RoundWithForm) => (r.centerId ? 1 : 0) + (r.courseId ? 1 : 0);
   matches.sort((a, b) => specificity(b) - specificity(a));
   return matches[0]!;
 }
 
-/**
- * Trạng thái phiếu SESSION_EVAL cho 1 buổi: câu hỏi của form + đáp án đã lưu theo HS.
- * KHÔNG gate — caller (server action) phải gate quyền GV/Admin trước.
- */
-export async function getSessionEvalState(sessionId: string): Promise<SessionEvalState> {
-  const round = await findApplicableSessionEvalRound(sessionId);
-  if (!round) return { active: false };
+/** Tìm đợt SESSION_EVAL đang áp cho buổi LỚP CHÍNH (ClassSession). */
+export async function findApplicableSessionEvalRound(sessionId: string): Promise<RoundWithForm | null> {
+  const sess = await db.classSession.findUnique({
+    where: { id: sessionId },
+    select: { id: true, class: { select: { centerId: true, courseId: true } } },
+  });
+  if (!sess) return null;
+  return pickApplicableRound({ centerId: sess.class.centerId, courseId: sess.class.courseId });
+}
 
+/** FL4 (R4) — đợt SESSION_EVAL đang áp cho buổi LỚP TRẢI NGHIỆM (TrialClassSession). */
+export async function findApplicableTrialSessionEvalRound(
+  trialSessionId: string,
+): Promise<RoundWithForm | null> {
+  const sess = await db.trialClassSession.findUnique({
+    where: { id: trialSessionId },
+    select: { id: true, trialClass: { select: { centerId: true } } },
+  });
+  if (!sess) return null;
+  // Lớp trải nghiệm không gắn khóa (courseId=null) → khớp đợt theo cơ sở/toàn hệ thống.
+  return pickApplicableRound({ centerId: sess.trialClass.centerId, courseId: null });
+}
+
+/** Dựng state từ 1 đợt + điều kiện tìm đáp án đã lưu (round×buổi×HS). */
+async function buildState(
+  round: RoundWithForm,
+  priorWhere: Prisma.EvalResponseWhereInput,
+): Promise<SessionEvalState> {
   const form = await db.evalForm.findUnique({
     where: { id: round.form.id },
     include: { questions: { orderBy: { order: "asc" } } },
@@ -130,11 +139,12 @@ export async function getSessionEvalState(sessionId: string): Promise<SessionEva
     label: q.label,
     options: q.type === "RADIO" || q.type === "CHECKBOX" ? parseOptions(q.options) : null,
     required: q.required,
+    groupLabel: q.groupLabel,
+    allowCustomText: q.allowCustomText,
   }));
 
-  // Đáp án đã lưu trước đó (round×buổi) theo HS — để mở lại sửa.
   const prior = await db.evalResponse.findMany({
-    where: { roundId: round.id, classSessionId: sessionId, studentId: { not: null } },
+    where: priorWhere,
     select: {
       studentId: true,
       answers: { select: { questionId: true, valueNumber: true, valueOptions: true, valueText: true } },
@@ -162,6 +172,26 @@ export async function getSessionEvalState(sessionId: string): Promise<SessionEva
   };
 }
 
+/**
+ * Trạng thái phiếu SESSION_EVAL cho 1 buổi LỚP CHÍNH. KHÔNG gate — caller phải gate trước.
+ */
+export async function getSessionEvalState(sessionId: string): Promise<SessionEvalState> {
+  const round = await findApplicableSessionEvalRound(sessionId);
+  if (!round) return { active: false };
+  return buildState(round, { roundId: round.id, classSessionId: sessionId, studentId: { not: null } });
+}
+
+/** FL4 (R4) — trạng thái phiếu SESSION_EVAL cho 1 buổi LỚP TRẢI NGHIỆM. KHÔNG gate. */
+export async function getTrialSessionEvalState(trialSessionId: string): Promise<SessionEvalState> {
+  const round = await findApplicableTrialSessionEvalRound(trialSessionId);
+  if (!round) return { active: false };
+  return buildState(round, {
+    roundId: round.id,
+    trialClassSessionId: trialSessionId,
+    studentId: { not: null },
+  });
+}
+
 export type StudentEvalSubmission = {
   studentId: string;
   answers: SubmittedAnswer[];
@@ -171,24 +201,28 @@ export type SaveSessionEvalResult =
   | { ok: true; saved: number }
   | { ok: false; error: string; studentId?: string; questionId?: string };
 
+/** Tham chiếu buổi: ĐÚNG 1 trong 2 (lớp chính | lớp trải nghiệm). */
+type SessionRefData = { classSessionId: string } | { trialClassSessionId: string };
+
 /**
- * Lưu phiếu SESSION_EVAL cho nhiều HS của 1 buổi. Validate từng HS qua validateAnswers
- * (dùng chung engine), rồi find-or-replace EvalResponse(round×buổi×HS) trong 1 transaction
- * → idempotent, không sinh response trùng. KHÔNG gate — caller phải gate trước.
+ * Lưu phiếu SESSION_EVAL cho nhiều HS của 1 buổi (lớp chính HOẶC lớp trải nghiệm).
+ * find-or-replace EvalResponse(round×buổi×HS) trong 1 transaction → idempotent.
  */
-export async function saveSessionEvalResponses(
+async function saveResponsesCore(
   roundId: string,
-  classSessionId: string,
+  ref: SessionRefData,
   questions: QuestionDef[],
   submissions: StudentEvalSubmission[],
 ): Promise<SaveSessionEvalResult> {
-  // Validate trước (ngoài transaction) để không mở tx khi dữ liệu sai.
   const normalizedByStudent = new Map<string, ReturnType<typeof validateAnswers>>();
   for (const sub of submissions) {
     const v = validateAnswers(questions, sub.answers);
     if (!v.ok) return { ok: false, error: v.error, studentId: sub.studentId, questionId: v.questionId };
     normalizedByStudent.set(sub.studentId, v);
   }
+
+  const classSessionId = "classSessionId" in ref ? ref.classSessionId : undefined;
+  const trialClassSessionId = "trialClassSessionId" in ref ? ref.trialClassSessionId : undefined;
 
   let saved = 0;
   await db.$transaction(async (tx) => {
@@ -202,9 +236,8 @@ export async function saveSessionEvalResponses(
         valueText: a.valueText,
       }));
 
-      // find-or-replace theo (round×buổi×HS) — app-level idempotency (không có unique DB).
       const existing = await tx.evalResponse.findFirst({
-        where: { roundId, classSessionId, studentId: sub.studentId },
+        where: { roundId, classSessionId, trialClassSessionId, studentId: sub.studentId },
         select: { id: true },
       });
       if (existing) {
@@ -215,7 +248,7 @@ export async function saveSessionEvalResponses(
         });
       } else {
         await tx.evalResponse.create({
-          data: { roundId, classSessionId, studentId: sub.studentId, answers: { create: answerData } },
+          data: { roundId, classSessionId, trialClassSessionId, studentId: sub.studentId, answers: { create: answerData } },
         });
       }
       saved += 1;
@@ -223,4 +256,24 @@ export async function saveSessionEvalResponses(
   });
 
   return { ok: true, saved };
+}
+
+/** Lưu phiếu SESSION_EVAL cho buổi LỚP CHÍNH. KHÔNG gate — caller phải gate trước. */
+export async function saveSessionEvalResponses(
+  roundId: string,
+  classSessionId: string,
+  questions: QuestionDef[],
+  submissions: StudentEvalSubmission[],
+): Promise<SaveSessionEvalResult> {
+  return saveResponsesCore(roundId, { classSessionId }, questions, submissions);
+}
+
+/** FL4 (R4) — lưu phiếu SESSION_EVAL cho buổi LỚP TRẢI NGHIỆM. KHÔNG gate. */
+export async function saveTrialSessionEvalResponses(
+  roundId: string,
+  trialClassSessionId: string,
+  questions: QuestionDef[],
+  submissions: StudentEvalSubmission[],
+): Promise<SaveSessionEvalResult> {
+  return saveResponsesCore(roundId, { trialClassSessionId }, questions, submissions);
 }

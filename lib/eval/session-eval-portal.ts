@@ -36,13 +36,20 @@ export type RenderedAnswer = {
   stars: number | null;
   /** RADIO/CHECKBOX — (các) đáp án đã chọn. */
   options: string[] | null;
-  /** TEXTBOX — nhận xét tự luận. */
+  /** TEXTBOX hoặc ghi chú tự do (allowCustomText) — nhận xét tự luận. */
   text: string | null;
+  /** PHOTO — URL ảnh (chỉ trả khi PH đã consent CLASS_MEDIA; ngược lại null). */
+  photos: string[] | null;
 };
 
 /** Đáp án đã trả lời thật sự (không phải câu để trống) → mới hiển thị. */
 function isAnswered(a: RenderedAnswer): boolean {
-  return a.stars != null || (a.options != null && a.options.length > 0) || (a.text != null && a.text.length > 0);
+  return (
+    a.stars != null ||
+    (a.options != null && a.options.length > 0) ||
+    (a.text != null && a.text.length > 0) ||
+    (a.photos != null && a.photos.length > 0)
+  );
 }
 
 /**
@@ -66,6 +73,7 @@ export function renderAnswers(
       stars: null,
       options: null,
       text: null,
+      photos: null,
     };
 
     if (meta.type === "STAR_RATING") {
@@ -73,10 +81,19 @@ export function renderAnswers(
     } else if (meta.type === "RADIO" || meta.type === "CHECKBOX") {
       const opts = parseOptions(a.valueOptions);
       rendered.options = opts.length > 0 ? opts : null;
+    } else if (meta.type === "PHOTO") {
+      const urls = parseOptions(a.valueOptions);
+      rendered.photos = urls.length > 0 ? urls : null;
     } else {
       // TEXTBOX
       const t = (a.valueText ?? "").trim();
       rendered.text = t.length > 0 ? t : null;
+    }
+
+    // Ghi chú tự do (allowCustomText) đi kèm STAR/RADIO/CHECKBOX → hiển thị cùng.
+    if (meta.type !== "TEXTBOX" && meta.type !== "PHOTO") {
+      const ct = (a.valueText ?? "").trim();
+      if (ct.length > 0) rendered.text = ct;
     }
 
     if (isAnswered(rendered)) out.push({ rendered, order: meta.order });
@@ -146,8 +163,31 @@ export async function getStudentSessionEvals(studentId: string): Promise<Session
     : [];
   const sessionMeta = new Map(sessions.map((s) => [s.id, s]));
 
+  // Ảnh PHOTO trong phiếu (urls ở valueOptions) gate theo StudentConsent CLASS_MEDIA:
+  // chưa consent → bỏ hẳn câu PHOTO; có consent → ký URL (presigned GET nếu bật flag).
+  const consentGranted = await hasMediaConsent(studentId);
+  const photoUrls = new Set<string>();
+  if (consentGranted) {
+    for (const r of responses) {
+      for (const a of r.answers) {
+        const meta = questionMeta.get(a.questionId);
+        if (meta?.type === "PHOTO") for (const u of parseOptions(a.valueOptions)) photoUrls.add(u);
+      }
+    }
+  }
+  const resolved = await Promise.all([...photoUrls].map(async (u) => [u, await resolveMediaUrl(u)] as const));
+  const urlMap = new Map(resolved);
+
   return responses.map((r) => {
     const sess = r.classSessionId ? sessionMeta.get(r.classSessionId) : undefined;
+    const answers = renderAnswers(questionMeta, r.answers)
+      // chưa consent → ẩn câu ảnh
+      .filter((a) => a.type !== "PHOTO" || consentGranted)
+      .map((a) =>
+        a.type === "PHOTO" && a.photos
+          ? { ...a, photos: a.photos.map((u) => urlMap.get(u) ?? u) }
+          : a,
+      );
     return {
       responseId: r.id,
       roundName: r.round.name,
@@ -158,7 +198,7 @@ export async function getStudentSessionEvals(studentId: string): Promise<Session
       classCode: sess?.class.classCode ?? null,
       teacherName: sess?.class.teacher?.name ?? null,
       submittedAt: r.submittedAt,
-      answers: renderAnswers(questionMeta, r.answers),
+      answers,
     };
   });
 }

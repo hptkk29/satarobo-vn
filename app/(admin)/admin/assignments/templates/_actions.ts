@@ -158,6 +158,64 @@ export async function deleteTemplateAndRedirect(id: string): Promise<Result> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// FL1-06 (R2) — gắn câu hỏi (ngân hàng) vào template
+//   AssignmentTemplateQuestion(templateId, questionId, order) là JOIN tham chiếu.
+//   Khi sinh bài giao cho lớp, mỗi link được CLONE thành Question sở hữu của bài.
+// ──────────────────────────────────────────────────────────────────────────
+
+const SetTemplateQuestionsSchema = z.object({
+  templateId: z.string().min(1, "Thiếu template"),
+  // Mảng id câu hỏi theo THỨ TỰ mong muốn (index = order khi clone sang bài giao).
+  questionIds: z.array(z.string().min(1)).max(200),
+});
+
+export async function setTemplateQuestions(
+  input: z.infer<typeof SetTemplateQuestionsSchema>,
+): Promise<Result> {
+  // Cùng cổng quyền với sửa mẫu (soạn nội dung mẫu = chỉnh sửa mẫu).
+  const gate = await requireEdit();
+  if (!gate.ok) return gate;
+
+  const parsed = SetTemplateQuestionsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { templateId, questionIds } = parsed.data;
+
+  const sdb = scopedDb(await resolveActor(gate.userId));
+
+  const template = await sdb.assignmentTemplate.findUnique({
+    where: { id: templateId },
+    select: { id: true },
+  });
+  if (!template) return { ok: false, error: "Không tìm thấy mẫu bài tập" };
+
+  // Khử trùng lặp nhưng giữ thứ tự xuất hiện đầu tiên (order = index sau khử trùng).
+  const uniqueIds = [...new Set(questionIds)];
+
+  try {
+    await sdb.$transaction(async (tx) => {
+      // Sync = xoá toàn bộ link cũ rồi tạo lại theo thứ tự mới (đơn giản, idempotent).
+      await tx.assignmentTemplateQuestion.deleteMany({ where: { templateId } });
+      if (uniqueIds.length > 0) {
+        await tx.assignmentTemplateQuestion.createMany({
+          data: uniqueIds.map((questionId, order) => ({ templateId, questionId, order })),
+          skipDuplicates: true,
+        });
+      }
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  revalidatePath(`/assignments/templates/${templateId}/edit`);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Sinh bài giao cho lớp từ template (copy field + giữ templateId truy vết)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -212,8 +270,74 @@ export async function generateAssignmentFromTemplate(
   const createdById = await resolveEmployeeId(sdb, gate.userId);
   const data = templateToAssignmentData(template, { classId, createdById, dueAt });
 
+  // Câu hỏi gắn template (ngân hàng) — CLONE sang Question SỞ HỮU của bài giao.
+  // Question.assignmentId (onDelete Cascade) ⇒ bài giao có câu hỏi riêng, đáp được.
+  const links = await sdb.assignmentTemplateQuestion.findMany({
+    where: { templateId },
+    orderBy: { order: "asc" },
+    select: {
+      question: {
+        select: {
+          type: true,
+          text: true,
+          explanation: true,
+          imageUrl: true,
+          difficulty: true,
+          points: true,
+          timeLimitSec: true,
+          correctAnswer: true,
+          tags: true,
+          curriculumId: true,
+          courseId: true,
+          lessonId: true,
+          choices: {
+            orderBy: { order: "asc" },
+            select: { order: true, text: true, isCorrect: true, imageUrl: true },
+          },
+        },
+      },
+    },
+  });
+
   try {
-    const a = await sdb.assignment.create({ data, select: { id: true } });
+    const a = await sdb.$transaction(async (tx) => {
+      const created = await tx.assignment.create({ data, select: { id: true } });
+
+      // Clone từng câu hỏi ngân hàng → Question mới gắn assignmentId, isPublic=false
+      // (bản sở hữu, không chia sẻ). KHÔNG copy questionCode (unique) → để null.
+      // Giữ thứ tự link.order bằng cách tạo tuần tự trong cùng transaction.
+      for (const { question: q } of links) {
+        await tx.question.create({
+          data: {
+            type: q.type,
+            text: q.text,
+            explanation: q.explanation,
+            imageUrl: q.imageUrl,
+            difficulty: q.difficulty,
+            points: q.points,
+            timeLimitSec: q.timeLimitSec,
+            correctAnswer: q.correctAnswer,
+            tags: q.tags,
+            curriculumId: q.curriculumId,
+            courseId: q.courseId,
+            lessonId: q.lessonId,
+            isPublic: false,
+            assignmentId: created.id,
+            choices: {
+              create: q.choices.map((c) => ({
+                order: c.order,
+                text: c.text,
+                isCorrect: c.isCorrect,
+                imageUrl: c.imageUrl,
+              })),
+            },
+          },
+        });
+      }
+
+      return created;
+    });
+
     revalidatePath("/assignments");
     revalidatePath(`/assignments/templates/${templateId}/edit`);
     return { ok: true, data: { assignmentId: a.id } };

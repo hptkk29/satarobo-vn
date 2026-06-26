@@ -180,7 +180,22 @@ function AnswerRow({ answer }: { answer: RenderedAnswer }) {
         {(answer.type === "RADIO" || answer.type === "CHECKBOX") && answer.options && (
           <span>{answer.options.join(", ")}</span>
         )}
-        {answer.type === "TEXTBOX" && answer.text && (
+        {answer.type === "PHOTO" && answer.photos && answer.photos.length > 0 && (
+          <div className="mt-1 grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {answer.photos.map((u) => (
+              <a
+                key={u}
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="overflow-hidden rounded-lg border border-neutral-200"
+              >
+                <img src={u} alt="Ảnh dự án" className="h-20 w-full object-cover sm:h-24" />
+              </a>
+            ))}
+          </div>
+        )}
+        {answer.type !== "PHOTO" && answer.text && (
           <span className="whitespace-pre-wrap">{answer.text}</span>
         )}
       </dd>

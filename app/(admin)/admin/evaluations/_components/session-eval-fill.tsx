@@ -1,16 +1,22 @@
 "use client";
 
-// FL4-01 — GV điền phiếu đánh giá BUỔI HỌC (SESSION_EVAL) động theo từng HS.
+// FL4 — GV điền phiếu đánh giá BUỔI HỌC (SESSION_EVAL) động theo từng HS.
 // Phiếu nạp LƯỜI (bấm nút) qua server action — không useEffect-fetch (rule admin).
-// RADIO = "5 mức mô tả"; TEXTBOX = nhận xét tự luận; STAR_RATING + CHECKBOX dùng được.
+// Hỗ trợ: nhóm tiêu chí (groupLabel, R5), ô tải ảnh (PHOTO, R5), nhập tự do kèm
+// lựa chọn (allowCustomText, R6). SessionEvalEditor dùng chung cho lớp chính + lớp
+// trải nghiệm (R4) qua callback load/save.
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ClipboardCheck, Save } from "lucide-react";
+import { ClipboardCheck, Save, X } from "lucide-react";
 import type { QuestionDef, SubmittedAnswer } from "@/lib/eval/schema";
+import type { StudentEvalSubmission, SessionEvalState } from "@/lib/eval/session-eval";
+import { FileUploader, type UploadResult } from "@/components/admin/file-uploader";
 import { loadSessionEvalAction, saveSessionEvalAction } from "@/lib/eval/session-eval-actions";
 
-type StudentLite = { studentId: string; name: string; present: boolean };
+type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export type StudentLite = { studentId: string; name: string; present: boolean };
 
 type AnswerState = { valueNumber: number | null; valueOptions: string[]; valueText: string };
 type StudentAnswers = Record<string, AnswerState>; // questionId → answer
@@ -38,31 +44,45 @@ function hasAnyAnswer(sa: StudentAnswers | undefined): boolean {
   );
 }
 
-export function SessionEvalFill({
-  sessionId,
+/** Gom câu hỏi theo groupLabel (giữ thứ tự xuất hiện đầu tiên của mỗi nhóm). */
+function groupQuestions(qs: QuestionDef[]): { label: string | null; questions: QuestionDef[] }[] {
+  const order: (string | null)[] = [];
+  const map = new Map<string | null, QuestionDef[]>();
+  for (const q of qs) {
+    const key = q.groupLabel ?? null;
+    if (!map.has(key)) {
+      map.set(key, []);
+      order.push(key);
+    }
+    map.get(key)!.push(q);
+  }
+  return order.map((label) => ({ label, questions: map.get(label)! }));
+}
+
+// ─── Editor dùng chung (lớp chính + lớp trải nghiệm) ─────────────────────────
+export function SessionEvalEditor({
   students,
   canEdit,
+  load,
+  save,
 }: {
-  sessionId: string;
   students: StudentLite[];
   canEdit: boolean;
+  load: () => Promise<ActionResult<SessionEvalState>>;
+  save: (roundId: string, submissions: StudentEvalSubmission[]) => Promise<ActionResult<{ saved: number }>>;
 }) {
   const router = useRouter();
   const [loading, startLoad] = useTransition();
   const [saving, startSave] = useTransition();
   const [opened, setOpened] = useState(false);
-  const [round, setRound] = useState<{
-    roundId: string;
-    title: string;
-    questions: QuestionDef[];
-  } | null>(null);
+  const [round, setRound] = useState<{ roundId: string; title: string; questions: QuestionDef[] } | null>(null);
   const [noForm, setNoForm] = useState(false);
   const [byStudent, setByStudent] = useState<Record<string, StudentAnswers>>({});
   const [sel, setSel] = useState(0);
 
   function open() {
     startLoad(async () => {
-      const res = await loadSessionEvalAction(sessionId);
+      const res = await load();
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -90,9 +110,9 @@ export function SessionEvalFill({
     });
   }
 
-  function save() {
+  function doSave() {
     if (!round) return;
-    const submissions = students
+    const submissions: StudentEvalSubmission[] = students
       .filter((s) => hasAnyAnswer(byStudent[s.studentId]))
       .map((s) => {
         const sa = byStudent[s.studentId] ?? {};
@@ -100,11 +120,13 @@ export function SessionEvalFill({
           studentId: s.studentId,
           answers: round.questions.map((q) => {
             const a = sa[q.id] ?? blankAnswer();
+            const usesOptions = q.type === "RADIO" || q.type === "CHECKBOX" || q.type === "PHOTO";
+            const usesText = q.type === "TEXTBOX" || (!!q.allowCustomText && q.type !== "PHOTO");
             return {
               questionId: q.id,
               valueNumber: q.type === "STAR_RATING" ? a.valueNumber : null,
-              valueOptions: q.type === "RADIO" || q.type === "CHECKBOX" ? a.valueOptions : null,
-              valueText: q.type === "TEXTBOX" ? a.valueText : null,
+              valueOptions: usesOptions ? a.valueOptions : null,
+              valueText: usesText ? a.valueText : null,
             };
           }),
         };
@@ -114,7 +136,7 @@ export function SessionEvalFill({
       return;
     }
     startSave(async () => {
-      const res = await saveSessionEvalAction({ sessionId, roundId: round.roundId, submissions });
+      const res = await save(round.roundId, submissions);
       if (res.ok) {
         toast.success(`Đã lưu phiếu cho ${res.data.saved} học sinh`);
         router.refresh();
@@ -146,7 +168,12 @@ export function SessionEvalFill({
     );
   }
 
+  if (students.length === 0) {
+    return <p className="text-sm text-gray-400">Buổi chưa có học sinh để đánh giá.</p>;
+  }
+
   const current = students[sel];
+  const groups = groupQuestions(round.questions);
 
   return (
     <div className="space-y-4">
@@ -180,102 +207,34 @@ export function SessionEvalFill({
       </div>
 
       {current && (
-        <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-sm font-semibold text-gray-900">{current.name}</p>
-          {round.questions.map((q) => {
-            const a = byStudent[current.studentId]?.[q.id] ?? blankAnswer();
-            return (
-              <div key={q.id} className="space-y-1.5">
-                <label className="block text-sm font-medium text-gray-700">
-                  {q.label}
-                  {q.required && <span className="ml-1 text-rose-500">*</span>}
-                </label>
-
-                {q.type === "STAR_RATING" && (
-                  <select
-                    value={a.valueNumber ?? ""}
-                    disabled={!canEdit || saving}
-                    onChange={(e) =>
-                      patch(current.studentId, q.id, {
-                        valueNumber: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
-                    className="h-9 rounded-lg border border-gray-300 px-2 text-sm disabled:bg-gray-50"
-                    aria-label={q.label}
-                  >
-                    <option value="">— sao —</option>
-                    {[5, 4, 3, 2, 1].map((n) => (
-                      <option key={n} value={n}>
-                        {n} ★
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {q.type === "RADIO" && (
-                  <div className="space-y-1">
-                    {(q.options ?? []).map((opt) => (
-                      <label key={opt} className="flex items-start gap-2 text-sm text-gray-700">
-                        <input
-                          type="radio"
-                          name={`${current.studentId}-${q.id}`}
-                          checked={a.valueOptions[0] === opt}
-                          disabled={!canEdit || saving}
-                          onChange={() => patch(current.studentId, q.id, { valueOptions: [opt] })}
-                          className="mt-1"
-                        />
-                        <span>{opt}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-
-                {q.type === "CHECKBOX" && (
-                  <div className="space-y-1">
-                    {(q.options ?? []).map((opt) => {
-                      const checked = a.valueOptions.includes(opt);
-                      return (
-                        <label key={opt} className="flex items-start gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={!canEdit || saving}
-                            onChange={() =>
-                              patch(current.studentId, q.id, {
-                                valueOptions: checked
-                                  ? a.valueOptions.filter((o) => o !== opt)
-                                  : [...a.valueOptions, opt],
-                              })
-                            }
-                            className="mt-1"
-                          />
-                          <span>{opt}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {q.type === "TEXTBOX" && (
-                  <textarea
-                    value={a.valueText}
-                    disabled={!canEdit || saving}
-                    rows={2}
-                    onChange={(e) => patch(current.studentId, q.id, { valueText: e.target.value })}
-                    placeholder="Nhận xét…"
-                    className="w-full resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
-                  />
-                )}
-              </div>
-            );
-          })}
+          {groups.map((g, gi) => (
+            <div key={gi} className="space-y-4">
+              {g.label && (
+                <h4 className="border-b border-gray-100 pb-1 text-xs font-bold uppercase tracking-wider text-[#7C3AED]">
+                  {g.label}
+                </h4>
+              )}
+              {g.questions.map((q) => (
+                <QuestionField
+                  key={q.id}
+                  q={q}
+                  a={byStudent[current.studentId]?.[q.id] ?? blankAnswer()}
+                  disabled={!canEdit || saving}
+                  studentId={current.studentId}
+                  onPatch={(p) => patch(current.studentId, q.id, p)}
+                />
+              ))}
+            </div>
+          ))}
         </div>
       )}
 
       {canEdit && (
         <button
           type="button"
-          onClick={save}
+          onClick={doSave}
           disabled={saving}
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
@@ -284,5 +243,178 @@ export function SessionEvalFill({
         </button>
       )}
     </div>
+  );
+}
+
+function QuestionField({
+  q,
+  a,
+  disabled,
+  studentId,
+  onPatch,
+}: {
+  q: QuestionDef;
+  a: AnswerState;
+  disabled: boolean;
+  studentId: string;
+  onPatch: (p: Partial<AnswerState>) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-gray-700">
+        {q.label}
+        {q.required && <span className="ml-1 text-rose-500">*</span>}
+      </label>
+
+      {q.type === "STAR_RATING" && (
+        <select
+          value={a.valueNumber ?? ""}
+          disabled={disabled}
+          onChange={(e) => onPatch({ valueNumber: e.target.value ? Number(e.target.value) : null })}
+          className="h-9 rounded-lg border border-gray-300 px-2 text-sm disabled:bg-gray-50"
+          aria-label={q.label}
+        >
+          <option value="">— sao —</option>
+          {[5, 4, 3, 2, 1].map((n) => (
+            <option key={n} value={n}>
+              {n} ★
+            </option>
+          ))}
+        </select>
+      )}
+
+      {q.type === "RADIO" && (
+        <div className="space-y-1">
+          {(q.options ?? []).map((opt) => (
+            <label key={opt} className="flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="radio"
+                name={`${studentId}-${q.id}`}
+                checked={a.valueOptions[0] === opt}
+                disabled={disabled}
+                onChange={() => onPatch({ valueOptions: [opt] })}
+                className="mt-1"
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {q.type === "CHECKBOX" && (
+        <div className="space-y-1">
+          {(q.options ?? []).map((opt) => {
+            const checked = a.valueOptions.includes(opt);
+            return (
+              <label key={opt} className="flex items-start gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() =>
+                    onPatch({
+                      valueOptions: checked
+                        ? a.valueOptions.filter((o) => o !== opt)
+                        : [...a.valueOptions, opt],
+                    })
+                  }
+                  className="mt-1"
+                />
+                <span>{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      {q.type === "PHOTO" && (
+        <PhotoField urls={a.valueOptions} disabled={disabled} onChange={(urls) => onPatch({ valueOptions: urls })} />
+      )}
+
+      {q.type === "TEXTBOX" && (
+        <textarea
+          value={a.valueText}
+          disabled={disabled}
+          rows={2}
+          onChange={(e) => onPatch({ valueText: e.target.value })}
+          placeholder="Nhận xét…"
+          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+        />
+      )}
+
+      {/* R6 — nhập tự do kèm lựa chọn (STAR/RADIO/CHECKBOX). */}
+      {q.allowCustomText && q.type !== "TEXTBOX" && q.type !== "PHOTO" && (
+        <input
+          value={a.valueText}
+          disabled={disabled}
+          onChange={(e) => onPatch({ valueText: e.target.value })}
+          placeholder="Ghi chú thêm (tuỳ chọn)…"
+          className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+        />
+      )}
+    </div>
+  );
+}
+
+function PhotoField({
+  urls,
+  disabled,
+  onChange,
+}: {
+  urls: string[];
+  disabled: boolean;
+  onChange: (urls: string[]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {urls.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {urls.map((u) => (
+            <div key={u} className="relative overflow-hidden rounded-lg border border-gray-200">
+              <img src={u} alt="Ảnh" className="h-20 w-full object-cover" />
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => onChange(urls.filter((x) => x !== u))}
+                  className="absolute right-1 top-1 rounded-full bg-black/50 p-0.5 text-white hover:bg-black/70"
+                  aria-label="Xoá ảnh"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {!disabled && (
+        <FileUploader
+          acceptedCategories={["image"]}
+          multiple
+          showPreview={false}
+          onUploaded={(r: UploadResult) => onChange([...urls, r.url])}
+          onError={(e) => toast.error(e)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Lớp chính (ClassSession) — wrapper mỏng dùng action lớp chính ───────────
+export function SessionEvalFill({
+  sessionId,
+  students,
+  canEdit,
+}: {
+  sessionId: string;
+  students: StudentLite[];
+  canEdit: boolean;
+}) {
+  return (
+    <SessionEvalEditor
+      students={students}
+      canEdit={canEdit}
+      load={() => loadSessionEvalAction(sessionId)}
+      save={(roundId, submissions) => saveSessionEvalAction({ sessionId, roundId, submissions })}
+    />
   );
 }

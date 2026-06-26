@@ -2,10 +2,11 @@
 // Loại câu hỏi ĐÓNG, Zod schema dựng form, validate đáp án. forms.ts (DB) re-export lại.
 import { z } from "zod";
 
-// ─── Loại câu hỏi: ENUM ĐÓNG (AC1/AC2 — không tồn tại loại thứ 5) ────────────
+// ─── Loại câu hỏi: ENUM ĐÓNG (AC1/AC2) ──────────────────────────────────────
 // Khớp 1-1 với Prisma enum EvalQuestionType. z.enum trên const literal là "cổng"
-// chặn mọi loại ngoài 4 giá trị này ở tầng validate (trước cả DB enum).
-export const QUESTION_TYPES = ["STAR_RATING", "RADIO", "CHECKBOX", "TEXTBOX"] as const;
+// chặn mọi loại ngoài các giá trị này ở tầng validate (trước cả DB enum).
+// FL4 (R5) thêm PHOTO — ô tải ảnh dự án/lớp (phiếu đánh giá buổi); urls lưu valueOptions.
+export const QUESTION_TYPES = ["STAR_RATING", "RADIO", "CHECKBOX", "TEXTBOX", "PHOTO"] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
 // ─── Phạm vi form: ENUM ĐÓNG (khớp Prisma enum EvalScope) ────────────────────
@@ -22,8 +23,17 @@ export const evalQuestionInputSchema = z
   .object({
     type: z.enum(QUESTION_TYPES),
     label: z.string().trim().min(1, "Nội dung câu hỏi không được trống").max(500),
-    options: z.array(z.string().trim().min(1).max(200)).optional(),
+    options: z.array(z.string().trim().min(1).max(2000)).optional(),
     required: z.boolean().default(false),
+    // FL4 (R5) — nhóm tiêu chí (header gom câu hỏi như phiếu mẫu). "" → null. Optional (additive).
+    groupLabel: z
+      .string()
+      .trim()
+      .max(120)
+      .transform((v) => (v.length > 0 ? v : null))
+      .optional(),
+    // FL4 (R6) — cho phép nhập tự do kèm lựa chọn (RADIO/CHECKBOX/STAR_RATING). Optional (additive).
+    allowCustomText: z.boolean().optional(),
   })
   .superRefine((q, ctx) => {
     const needsOptions = q.type === "RADIO" || q.type === "CHECKBOX";
@@ -38,7 +48,7 @@ export const evalQuestionInputSchema = z
     if (!needsOptions && opts.length > 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "STAR_RATING/TEXTBOX không có lựa chọn",
+        message: "Loại câu hỏi này không có lựa chọn dựng sẵn",
         path: ["options"],
       });
     }
@@ -62,6 +72,10 @@ export type QuestionDef = {
   label: string;
   options: string[] | null;
   required: boolean;
+  /** FL4 (R5) — nhóm tiêu chí (header gom câu hỏi). null = không nhóm. */
+  groupLabel?: string | null;
+  /** FL4 (R6) — cho phép nhập tự do kèm lựa chọn (lưu valueText song song valueOptions). */
+  allowCustomText?: boolean;
 };
 
 export type SubmittedAnswer = {
@@ -137,6 +151,14 @@ export function validateAnswers(
         }
         out.valueOptions = picked;
       }
+    } else if (q.type === "PHOTO") {
+      // FL4 (R5) — ô tải ảnh: valueOptions = mảng URL ảnh (string). required → ≥1 ảnh.
+      const urls = (a?.valueOptions ?? []).filter((u): u is string => typeof u === "string" && u.length > 0);
+      if (urls.length === 0) {
+        if (q.required) return fail(`Vui lòng tải ảnh cho "${q.label}"`, q.id);
+      } else {
+        out.valueOptions = urls;
+      }
     } else {
       // TEXTBOX
       const text = (a?.valueText ?? "").trim();
@@ -148,6 +170,15 @@ export function validateAnswers(
         }
         out.valueText = text;
       }
+    }
+
+    // FL4 (R6) — free-text kèm lựa chọn (STAR/RADIO/CHECKBOX). Lưu valueText song song.
+    if (q.allowCustomText && q.type !== "TEXTBOX" && q.type !== "PHOTO") {
+      const ct = (a?.valueText ?? "").trim();
+      if (ct.length > TEXTBOX_MAX) {
+        return fail(`Ghi chú của "${q.label}" tối đa ${TEXTBOX_MAX} ký tự`, q.id);
+      }
+      if (ct.length > 0) out.valueText = ct;
     }
 
     normalized.push(out);

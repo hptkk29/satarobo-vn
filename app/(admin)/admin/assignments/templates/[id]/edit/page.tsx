@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ListChecks } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
@@ -8,20 +8,16 @@ import { resolveActor } from "@/lib/auth/actor";
 import { buildQuestionWhere } from "@/lib/questions/filter";
 import { TemplateForm, type TemplateFormValue } from "../../_components/template-form";
 import { GenerateToClass } from "../../_components/generate-to-class";
+import {
+  TemplateQuestionPicker,
+  type QSummary,
+} from "../../_components/template-question-picker";
 
 export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
-
-const TYPE_LABEL: Record<string, string> = {
-  MULTIPLE_CHOICE: "Trắc nghiệm",
-  TRUE_FALSE: "Đúng / Sai",
-  SHORT_ANSWER: "Trả lời ngắn",
-  ESSAY: "Tự luận",
-  CODE: "Lập trình",
-};
 
 export default async function EditTemplatePage({ params }: Props) {
   const session = await auth();
@@ -64,18 +60,29 @@ export default async function EditTemplatePage({ params }: Props) {
 
   // Picker câu hỏi cho template: lọc ngân hàng câu hỏi theo KHUNG CT của template,
   // chỉ câu hỏi public (chia sẻ giữa GV) — dùng helper chung buildQuestionWhere (FL1-03).
-  // Hiển thị tham chiếu các câu hỏi thuộc khung CT này để soạn mẫu.
-  const bankQuestions = template.curriculumId
-    ? await sdb.question.findMany({
-        where: buildQuestionWhere({
-          curriculumId: template.curriculumId,
-          publicOnly: true,
-        }),
-        select: { id: true, questionCode: true, type: true, text: true },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      })
-    : [];
+  // Câu được chọn LƯU thành AssignmentTemplateQuestion; khi sinh bài giao sẽ CLONE.
+  const [bankQuestions, attachedLinks] = await Promise.all([
+    template.curriculumId
+      ? sdb.question.findMany({
+          where: buildQuestionWhere({
+            curriculumId: template.curriculumId,
+            publicOnly: true,
+          }),
+          select: { id: true, questionCode: true, type: true, text: true },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        })
+      : Promise.resolve([] as QSummary[]),
+    sdb.assignmentTemplateQuestion.findMany({
+      where: { templateId: id },
+      orderBy: { order: "asc" },
+      select: {
+        question: { select: { id: true, questionCode: true, type: true, text: true } },
+      },
+    }),
+  ]);
+
+  const attachedQuestions: QSummary[] = attachedLinks.map((l) => l.question);
 
   const formValue: TemplateFormValue = {
     id: template.id,
@@ -117,48 +124,14 @@ export default async function EditTemplatePage({ params }: Props) {
         }))}
       />
 
-      <GenerateToClass templateId={template.id} classes={classes} />
+      <TemplateQuestionPicker
+        templateId={template.id}
+        hasCurriculum={Boolean(template.curriculumId)}
+        bank={bankQuestions}
+        attached={attachedQuestions}
+      />
 
-      <section className="rounded-xl border border-neutral-200 bg-white">
-        <header className="border-b border-neutral-100 p-4">
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
-            <ListChecks className="h-4 w-4 text-[#7C3AED]" />
-            Câu hỏi thuộc khung chương trình ({bankQuestions.length})
-          </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
-            {template.curriculumId
-              ? "Câu hỏi public trong ngân hàng khớp khung CT của mẫu này (tham chiếu khi soạn)."
-              : "Gắn khung chương trình cho mẫu để xem các câu hỏi liên quan trong ngân hàng."}
-          </p>
-        </header>
-        {bankQuestions.length === 0 ? (
-          <div className="p-6 text-center text-sm text-neutral-400">
-            {template.curriculumId
-              ? "Chưa có câu hỏi public nào trong khung chương trình này."
-              : "—"}
-          </div>
-        ) : (
-          <ul className="divide-y divide-neutral-50">
-            {bankQuestions.map((q) => (
-              <li key={q.id} className="flex items-start gap-3 px-4 py-3">
-                <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
-                  {TYPE_LABEL[q.type] ?? q.type}
-                </span>
-                <div className="min-w-0">
-                  <div className="line-clamp-2 text-sm text-neutral-800">
-                    {q.text}
-                  </div>
-                  {q.questionCode && (
-                    <div className="text-xs text-neutral-400 tabular-nums">
-                      {q.questionCode}
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <GenerateToClass templateId={template.id} classes={classes} />
     </div>
   );
 }
