@@ -359,6 +359,12 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                       {canManage && (
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <Link
+                              href={`/classes/${cls.id}`}
+                              className="rounded-md border border-orange-200 px-2.5 py-1 text-xs font-semibold text-orange-700 hover:bg-orange-50"
+                            >
+                              Chi tiết
+                            </Link>
                             {canUpdate && (
                               <Link
                                 href={`/classes/${cls.id}/edit`}
