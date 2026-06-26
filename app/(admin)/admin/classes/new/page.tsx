@@ -37,7 +37,9 @@ export default async function NewClassPage() {
       select: { id: true, code: true, name: true, centerId: true },
     }),
     // Fix #9 — nguồn DUY NHẤT cho GV có thể phân lớp (không lọt quản lý/sale thuần).
-    getAssignableTeachers(),
+    // R2-RBAC-3 — chỉ GV thuộc cơ sở actor nhìn thấy (CS1 không thấy GV CS2); form
+    // còn lọc tiếp theo đơn vị đang chọn ở client.
+    getAssignableTeachers({ centerIds: actor.visibleCenterIds }),
     db.curriculum.findMany({
       where: {
         isActive: true,
@@ -65,6 +67,7 @@ export default async function NewClassPage() {
           id: t.id,
           name: t.name ?? "(chưa đặt tên)",
           role: t.role,
+          centerId: t.centerId,
         }))}
         curricula={curricula}
       />

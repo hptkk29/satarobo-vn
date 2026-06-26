@@ -8,6 +8,7 @@ import type { Prisma, EnrollmentStatus } from "@prisma/client";
 import { can, hasAnyRole, type Action } from "@/lib/auth/permissions";
 import { centerIdForOrgUnit, orgUnitIdForCenter } from "@/lib/org/org-service";
 import { classCreateSchema } from "@/lib/validators/class";
+import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import {
   logClassAudit,
   detectChangedFields,
@@ -37,6 +38,33 @@ function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
 async function classInScope(actor: Actor, classId: string): Promise<boolean> {
   const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
   return !!cls && passesScope("Class", cls, actor);
+}
+/**
+ * R2-RBAC-3 — GV chính/trợ giảng phải thuộc CÙNG cơ sở với lớp (cách ly CS1↔CS2).
+ * Guard server-side (defense-in-depth) chống IDOR: lọc client ở form là chưa đủ vì
+ * client có thể POST thẳng teacherId của cơ sở khác. Lớp HO/không cơ sở (centerId
+ * null) → không ràng buộc. Backfill User.centerId GV = 100% (R2-RBAC-1) nên GV null
+ * center = không hợp lệ cho lớp có cơ sở. Trả message lỗi hoặc null nếu OK.
+ */
+async function assertTeachersInCenter(
+  centerId: string | null,
+  teacherId?: string | null,
+  assistantId?: string | null,
+): Promise<string | null> {
+  if (!centerId) return null;
+  const ids = [teacherId, assistantId].filter(Boolean) as string[];
+  if (!ids.length) return null;
+  const users = await db.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, centerId: true },
+  });
+  const byId = new Map(users.map((u) => [u.id, u.centerId]));
+  // teacherCenterAssignmentError so từng id với centerId lớp (undefined nếu GV không
+  // tồn tại → cũng bị chặn). Logic thuần, test ở lib/teachers/center-filter.test.ts.
+  return teacherCenterAssignmentError(
+    centerId,
+    ids.map((id) => ({ id, centerId: byId.get(id) })),
+  );
 }
 
 async function requireClassWrite(action: "create" | "update" | "delete") {
@@ -225,6 +253,14 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
     }
   }
 
+  // R2-RBAC-3 — GV/TA phải cùng cơ sở lớp (chống gán chéo CS).
+  const teacherCenterErr = await assertTeachersInCenter(
+    centerId,
+    data.teacherId,
+    data.assistantId,
+  );
+  if (teacherCenterErr) return { error: teacherCenterErr };
+
   // R7-06 — CHẶN tạo/kích hoạt lớp khi khoá chưa có giáo trình ACTIVE.
   if (!(await courseHasActiveCurriculum(data.courseId))) {
     return {
@@ -364,6 +400,14 @@ export async function updateClass(
       return { error: "Không có quyền chuyển lớp sang cơ sở này" };
     }
   }
+
+  // R2-RBAC-3 — GV/TA phải cùng cơ sở lớp (chống gán chéo CS).
+  const teacherCenterErr = await assertTeachersInCenter(
+    centerId,
+    parsed.data.teacherId,
+    parsed.data.assistantId,
+  );
+  if (teacherCenterErr) return { error: teacherCenterErr };
 
   try {
     await db.$transaction(async (tx) => {

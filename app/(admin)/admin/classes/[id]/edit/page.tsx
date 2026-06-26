@@ -111,7 +111,12 @@ export default async function EditClassPage({ params }: Props) {
       orderBy: { version: "desc" },
       select: { version: true, name: true },
     }),
-    getAssignableTeachers({ includeIds: [cls.teacherId, cls.assistantId] }),
+    // R2-RBAC-3 — GV cùng cơ sở actor nhìn thấy + LUÔN kèm GV/TA đang gán (includeIds)
+    // để <Select> không rớt value; form lọc tiếp theo đơn vị đang chọn ở client.
+    getAssignableTeachers({
+      centerIds: actor.visibleCenterIds,
+      includeIds: [cls.teacherId, cls.assistantId],
+    }),
   ]);
 
   const lessonIds = plans
@@ -247,6 +252,7 @@ export default async function EditClassPage({ params }: Props) {
           id: t.id,
           name: t.name ?? "(chưa đặt tên)",
           role: t.role,
+          centerId: t.centerId,
         }))}
       />
     </div>
