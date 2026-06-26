@@ -11,11 +11,11 @@ export default defineConfig({
   // tsconfig.playwright.json (stub `server-only`/`@/lib/auth`) + resetDb. Nếu để smoke
   // collect chúng → resetDb từ chối trên DB seed CI/Supabase + `server-only` không
   // resolve (thiếu stub) → lỗi collect. Loại toàn bộ phase dir khỏi suite smoke.
-  testIgnore: ["**/a0/**", "**/r[0-9]*/**"],
-  // FL-R2 — stub `server-only`/`@/lib/auth` cho spec import lib server-side (vd
-  // tests/e2e/fl/convert-installment.spec → lib/orders/installments.ts có `server-only`,
-  // không resolve được trong runner). Cùng cơ chế phase config (playwright.r*.config.ts).
-  tsconfig: "./tsconfig.playwright.json",
+  // Phase suite (a0, r*, fl) có config riêng (playwright.<phase>.config.ts): Postgres
+  // LOCAL + tsconfig.playwright.json (stub server-only) + globalSetup + workers 1.
+  // Loại khỏi smoke (smoke không có setup/seed → fl service-spec sẽ fail; fl/* import
+  // lib server-only không resolve). FL chạy ở playwright.fl.config.ts + job CI riêng.
+  testIgnore: ["**/a0/**", "**/r[0-9]*/**", "**/fl/**"],
   // Each test gets 30s timeout
   timeout: 30_000,
   expect: { timeout: 5_000 },

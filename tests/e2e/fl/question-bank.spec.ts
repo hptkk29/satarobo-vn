@@ -80,7 +80,8 @@ test.describe("[FL1-03] Question bank", () => {
     expect(onlySata4[0]?.text).toBe("Q Sata4");
   });
 
-  test("[FL1-03-03] AC3 — link tải template + nút 'Thêm bằng template'", async ({ page }) => {
+  // fixme: cần auth fixture (login TRAINING/SUPER_ADMIN) + webserver — chưa dựng.
+  test.fixme("[FL1-03-03] AC3 — link tải template + nút 'Thêm bằng template'", async ({ page }) => {
     // Login as TRAINING/SUPER_ADMIN qua helper auth (tuỳ harness).
     await page.goto("/admin/questions");
     await expect(page.getByRole("link", { name: /Thêm bằng template/i })).toBeVisible();
@@ -88,7 +89,8 @@ test.describe("[FL1-03] Question bank", () => {
     await expect(page.getByRole("link", { name: /Tải Template/i })).toBeVisible();
   });
 
-  test("[FL1-03-04] AC4 — TEACHER bị redirect khỏi /questions/new (chỉ xem)", async ({
+  // fixme: cần auth fixture (login TEACHER) + webserver — chưa dựng.
+  test.fixme("[FL1-03-04] AC4 — TEACHER bị redirect khỏi /questions/new (chỉ xem)", async ({
     page,
   }) => {
     // Đăng nhập TEACHER rồi mở trang tạo → redirect mềm về dashboard.
