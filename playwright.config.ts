@@ -12,6 +12,10 @@ export default defineConfig({
   // collect chúng → resetDb từ chối trên DB seed CI/Supabase + `server-only` không
   // resolve (thiếu stub) → lỗi collect. Loại toàn bộ phase dir khỏi suite smoke.
   testIgnore: ["**/a0/**", "**/r[0-9]*/**"],
+  // FL-R2 — stub `server-only`/`@/lib/auth` cho spec import lib server-side (vd
+  // tests/e2e/fl/convert-installment.spec → lib/orders/installments.ts có `server-only`,
+  // không resolve được trong runner). Cùng cơ chế phase config (playwright.r*.config.ts).
+  tsconfig: "./tsconfig.playwright.json",
   // Each test gets 30s timeout
   timeout: 30_000,
   expect: { timeout: 5_000 },
