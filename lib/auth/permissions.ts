@@ -412,7 +412,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "course-packages:view": [
     "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "SALES_CSM", "MARKETING",
   ],
-  "course-packages:edit": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "MARKETING"],
+  // FL-R2 W5 — course-packages = GIÁ/BÁN (tiền) → siết về [SUPER_ADMIN, CENTER_MANAGER]
+  // cho khớp action requireAdmin (course-packages/_actions.ts). Trước đây matrix nới
+  // TRAINING/MARKETING nhưng action chặn → mở form được mà submit fail (mất công nhập).
+  "course-packages:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Curriculum + Lessons ---
   // FL W0 (QĐ-T1): biên soạn nội dung LMS = TRAINING (Đào tạo). TEACHER + CENTER_MANAGER chỉ XEM.

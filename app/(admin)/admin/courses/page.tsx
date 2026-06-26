@@ -54,7 +54,7 @@ export default async function CoursesPage() {
             mở chi tiết khoá để quản lý <span className="font-medium">gói bán liên kết</span>.
           </p>
         </div>
-        {can(session.user, "course-packages:view") && (
+        {can(session.user, "course-packages:edit") && (
           <Link
             href="/course-packages"
             className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"

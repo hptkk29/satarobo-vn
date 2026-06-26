@@ -24,7 +24,6 @@ describe("permissions matrix — FL W0 TRAINING role", () => {
     expect(can("TRAINING", "exams:edit")).toBe(true);
     expect(can("TRAINING", "exams:delete")).toBe(true);
     expect(can("TRAINING", "exams:grade")).toBe(true);
-    expect(can("TRAINING", "course-packages:edit")).toBe(true);
     expect(can("TRAINING", "courses:create")).toBe(true);
     expect(can("TRAINING", "courses:edit")).toBe(true);
     expect(can("TRAINING", "courses:delete")).toBe(true);
@@ -41,6 +40,8 @@ describe("permissions matrix — FL W0 TRAINING role", () => {
     expect(can("TRAINING", "employees:create")).toBe(false);
     expect(can("TRAINING", "leads:view-all")).toBe(false);
     expect(can("TRAINING", "students:edit")).toBe(false);
+    // FL-R2 W5 — course-packages = giá/bán (tiền) → KHÔNG cho TRAINING sửa (chỉ SUPER_ADMIN/CENTER_MANAGER).
+    expect(can("TRAINING", "course-packages:edit")).toBe(false);
   });
 });
 
