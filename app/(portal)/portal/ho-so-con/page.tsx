@@ -1,6 +1,9 @@
 import { requireActiveStudent } from "@/lib/portal/session";
 import { db } from "@/lib/db";
 import { getStudentClasses } from "@/lib/portal/learning";
+import { getParentChildrenOverview } from "@/lib/portal/dashboard";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { ChildrenPageV2 } from "@/components/portal/children-page";
 import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { GraduationCap, Cake, School, HeartPulse, BookOpen } from "lucide-react";
@@ -9,7 +12,13 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Hồ sơ con | Sata Robo", robots: { index: false } };
 
 export default async function HoSoConPage() {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+
+  // Portal v2 — trang "Các con" (danh sách) giống SataUI.
+  if (isPortalV2Enabled()) {
+    const kids = await getParentChildrenOverview(ctx.parentUserId);
+    return <ChildrenPageV2 kids={kids} />;
+  }
 
   const [student, classes, skillRows] = await Promise.all([
     db.student.findUnique({

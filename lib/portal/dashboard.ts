@@ -150,6 +150,8 @@ export type ParentChildOverview = {
   pendingHomework: number;
   /** Công nợ còn lại của con (cùng quy ước getParentDashboard — chỉ Payment CONFIRMED). */
   debt: number;
+  /** Buổi học kế tiếp (ISO) — null nếu chưa có lịch. */
+  nextSessionDate: string | null;
 };
 
 /**
@@ -169,7 +171,7 @@ export async function getParentChildrenOverview(
 
   return Promise.all(
     children.map(async (c) => {
-      const [summaries, homework, enrollments, activeEnr] = await Promise.all([
+      const [summaries, homework, enrollments, activeEnr, nextSession] = await Promise.all([
         getStudentAttendanceSummaries(c.id),
         db.homeworkAssignment.findMany({
           where: { studentId: c.id },
@@ -193,6 +195,15 @@ export async function getParentChildrenOverview(
             class: { select: { classCode: true } },
             course: { select: { name: true } },
           },
+        }),
+        db.classSession.findFirst({
+          where: {
+            class: { enrollments: { some: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } } } },
+            date: { gte: new Date() },
+            status: { not: "CANCELLED" },
+          },
+          orderBy: { date: "asc" },
+          select: { date: true },
         }),
       ]);
 
@@ -230,6 +241,7 @@ export async function getParentChildrenOverview(
         needMakeup: att.needMakeup,
         pendingHomework,
         debt,
+        nextSessionDate: nextSession?.date?.toISOString() ?? null,
       };
     }),
   );
