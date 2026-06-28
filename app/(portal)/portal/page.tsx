@@ -12,7 +12,13 @@ import {
 } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentClasses } from "@/lib/portal/learning";
-import { getParentDashboard, getStudentDashboard } from "@/lib/portal/dashboard";
+import {
+  getParentDashboard,
+  getStudentDashboard,
+  getParentChildrenOverview,
+} from "@/lib/portal/dashboard";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { ParentDashboardV2 } from "@/components/portal/parent-dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +28,14 @@ function vnd(n: number): string {
 
 export default async function PortalHome() {
   const { ctx, studentId } = await requireActiveStudent();
+
+  // Portal v2 (merge SataUI) — bật qua flag PORTAL_V2_ENABLED, chạy SONG SONG
+  // dashboard cũ. Dữ liệu thật theo từng con (ownership: parentUserId từ session).
+  if (isPortalV2Enabled()) {
+    const overview = await getParentChildrenOverview(ctx.parentUserId);
+    return <ParentDashboardV2 parentName={ctx.parentName} children={overview} />;
+  }
+
   // PH-level data theo parentUserId (gộp các con); HV-level theo studentId con
   // đang chọn — không trộn (regression R4).
   const [parent, student, classes] = await Promise.all([

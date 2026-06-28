@@ -31,6 +31,12 @@
   --color-soft-purple: #F3E8FF;
   --color-urgent: #DC2626;
   --color-success: #10B981;
+  --color-success-foreground: #ffffff;
+  /* Portal v2 (merge SataUI) — tone cảnh báo nhẹ / học bù */
+  --color-caution: #D97706;
+  --color-caution-foreground: #ffffff;
+  --color-quiz: #6366F1;
+  --color-quiz-foreground: #ffffff;
   --color-text-dark: #1F2937;
   --color-text-muted: #6B7280;
   --shadow-card: 0 4px 12px rgba(0,0,0,0.08);
