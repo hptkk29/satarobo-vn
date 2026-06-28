@@ -132,3 +132,92 @@ export async function getStudentDashboard(studentId: string): Promise<StudentDas
     homeworkTotal: homework.length,
   };
 }
+
+// ── Portal v2 (merge SataUI) — tổng quan TỪNG con cho dashboard PH mới ──────────
+export type ParentChildOverview = {
+  id: string;
+  name: string;
+  studentCode: string | null;
+  /** % chuyên cần (attended / total), 0 nếu chưa có buổi. */
+  attendanceRate: number;
+  attended: number;
+  totalSessions: number;
+  needMakeup: number;
+  /** Bài tập/bài kiểm tra chưa nộp (ASSIGNED/MISSED). */
+  pendingHomework: number;
+  /** Công nợ còn lại của con (cùng quy ước getParentDashboard — chỉ Payment CONFIRMED). */
+  debt: number;
+};
+
+/**
+ * Dashboard PH v2 cần dữ liệu THEO TỪNG CON (tiến độ/chuyên cần/bài chờ/công nợ) —
+ * getParentDashboard chỉ gộp tổng. Hàm này compose lại từ helper sẵn có
+ * (getStudentAttendanceSummaries + computeEnrollmentDebt). Ownership: caller truyền
+ * parentUserId từ session (KHÔNG qua URL).
+ */
+export async function getParentChildrenOverview(
+  parentUserId: string,
+): Promise<ParentChildOverview[]> {
+  const children = await db.student.findMany({
+    where: { parentUserId, deletedAt: null },
+    select: { id: true, name: true, studentCode: true },
+    orderBy: { name: "asc" },
+  });
+
+  return Promise.all(
+    children.map(async (c) => {
+      const [summaries, homework, enrollments] = await Promise.all([
+        getStudentAttendanceSummaries(c.id),
+        db.homeworkAssignment.findMany({
+          where: { studentId: c.id },
+          select: { status: true },
+        }),
+        db.enrollment.findMany({
+          where: { studentId: c.id },
+          select: {
+            finalPrice: true,
+            tuition: true,
+            payments: {
+              where: { accountantStatus: "CONFIRMED" },
+              select: { amount: true },
+            },
+          },
+        }),
+      ]);
+
+      const att = summaries.reduce<AttendanceSummary>(
+        (acc, s) => ({
+          total: acc.total + s.total,
+          attended: acc.attended + s.attended,
+          absent: acc.absent + s.absent,
+          needMakeup: acc.needMakeup + s.needMakeup,
+          madeUp: acc.madeUp + s.madeUp,
+        }),
+        { ...ZERO_SUMMARY },
+      );
+
+      const pendingHomework = homework.filter(
+        (h) => h.status !== "SUBMITTED" && h.status !== "GRADED",
+      ).length;
+
+      const debt = enrollments.reduce((sum, e) => {
+        const finalPrice = e.finalPrice ?? e.tuition ?? null;
+        if (finalPrice == null) return sum;
+        const d = computeEnrollmentDebt(finalPrice, e.payments);
+        return d > 0 ? sum + d : sum;
+      }, 0);
+
+      return {
+        id: c.id,
+        name: c.name,
+        studentCode: c.studentCode,
+        attendanceRate: att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0,
+        attended: att.attended,
+        totalSessions: att.total,
+        needMakeup: att.needMakeup,
+        pendingHomework,
+        debt,
+      };
+    }),
+  );
+}

@@ -59,3 +59,11 @@ export function isEvalV2Enabled(): boolean {
 export function isScormEnabled(): boolean {
   return process.env.SCORM_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * Portal v2 — giao diện Cổng phụ huynh mới (merge SataUI). Bật dần, chạy SONG SONG
+ * portal hiện tại; OFF → giữ portal cũ. Gỡ portal cũ sau khi v2 ổn (2-phase).
+ */
+export function isPortalV2Enabled(): boolean {
+  return process.env.PORTAL_V2_ENABLED === "true"; // mặc định OFF
+}
