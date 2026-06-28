@@ -131,12 +131,12 @@ export function ParentDashboardV2({
                   <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-sm font-bold text-white">{initials(c.name)}</span>
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-bold text-foreground">{c.name}</h3>
-                    <p className="truncate text-xs font-medium text-muted-foreground">{c.studentCode ?? "Chưa có mã HV"}</p>
+                    <p className="truncate text-xs font-medium text-muted-foreground">{[c.courseName, c.className].filter(Boolean).join(" · ") || c.studentCode || "Chưa xếp lớp"}</p>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between gap-2 text-xs font-semibold">
-                    <span className="text-muted-foreground">Chuyên cần</span>
+                    <span className="text-muted-foreground">Tiến độ khóa học</span>
                     <span className="shrink-0 tabular-nums text-accent">{c.attendanceRate}% · {c.attended}/{c.totalSessions}</span>
                   </div>
                   <Progress value={c.attendanceRate} className="h-1.5" />
@@ -148,8 +148,8 @@ export function ParentDashboardV2({
                 </div>
                 <div className="mt-auto flex items-center gap-2 pt-1">
                   <Link href="/portal/ho-so-con" className="min-w-0 flex-1 truncate rounded-xl border border-border bg-card py-2 text-center text-sm font-bold text-foreground transition-colors hover:bg-muted">Hồ sơ</Link>
-                  <Link href="/portal/hoc-ba" className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent py-2 text-sm font-bold text-white transition-opacity hover:opacity-90">
-                    <span className="truncate">Học bạ</span> <ArrowRight className="size-4 shrink-0" />
+                  <Link href="/portal/ho-so-con" className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent py-2 text-sm font-bold text-white transition-opacity hover:opacity-90">
+                    <span className="truncate">Cổng học sinh</span> <ArrowRight className="size-4 shrink-0" />
                   </Link>
                 </div>
               </div>

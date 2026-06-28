@@ -138,6 +138,9 @@ export type ParentChildOverview = {
   id: string;
   name: string;
   studentCode: string | null;
+  /** Khoá + lớp đang học (hiển thị dưới tên con, giống SataUI). */
+  courseName: string | null;
+  className: string | null;
   /** % chuyên cần (attended / total), 0 nếu chưa có buổi. */
   attendanceRate: number;
   attended: number;
@@ -166,7 +169,7 @@ export async function getParentChildrenOverview(
 
   return Promise.all(
     children.map(async (c) => {
-      const [summaries, homework, enrollments] = await Promise.all([
+      const [summaries, homework, enrollments, activeEnr] = await Promise.all([
         getStudentAttendanceSummaries(c.id),
         db.homeworkAssignment.findMany({
           where: { studentId: c.id },
@@ -181,6 +184,14 @@ export async function getParentChildrenOverview(
               where: { accountantStatus: "CONFIRMED" },
               select: { amount: true },
             },
+          },
+        }),
+        db.enrollment.findFirst({
+          where: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } },
+          orderBy: { createdAt: "desc" },
+          select: {
+            class: { select: { classCode: true } },
+            course: { select: { name: true } },
           },
         }),
       ]);
@@ -211,6 +222,8 @@ export async function getParentChildrenOverview(
         id: c.id,
         name: c.name,
         studentCode: c.studentCode,
+        courseName: activeEnr?.course?.name ?? null,
+        className: activeEnr?.class?.classCode ?? null,
         attendanceRate: att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0,
         attended: att.attended,
         totalSessions: att.total,
