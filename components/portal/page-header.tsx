@@ -20,7 +20,7 @@ export function PageHero({
   return (
     <div
       className={cn(
-        "relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-primary/80 p-5 text-white sm:p-6",
+        "relative mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-accent to-accent/80 p-5 text-white sm:p-6",
       )}
     >
       {Icon && (

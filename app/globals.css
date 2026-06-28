@@ -32,11 +32,15 @@
   --color-urgent: #DC2626;
   --color-success: #10B981;
   --color-success-foreground: #ffffff;
-  /* Portal v2 (merge SataUI) — tone cảnh báo nhẹ / học bù */
+  /* Portal v2 (merge SataUI) — tone cảnh báo nhẹ / học bù / accent coral phụ huynh */
   --color-caution: #D97706;
   --color-caution-foreground: #ffffff;
   --color-quiz: #6366F1;
   --color-quiz-foreground: #ffffff;
+  --color-info: #3B82F6;
+  --color-parent: var(--parent);
+  --color-parent-soft: var(--parent-soft);
+  --color-accent-soft: var(--accent-soft);
   --color-text-dark: #1F2937;
   --color-text-muted: #6B7280;
   --shadow-card: 0 4px 12px rgba(0,0,0,0.08);
@@ -140,6 +144,10 @@
   --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
+  /* Portal v2 (SataUI) — accent coral phụ huynh; chỉ kích hoạt trong .portal-v2 */
+  --parent: #F5788B;
+  --parent-soft: #FFF4F0;
+  --accent-soft: oklch(0.97 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
@@ -508,4 +516,10 @@
   background: var(--mc-accent, #F97316);
   opacity: 1;
   box-shadow: 0 1px 6px rgba(0,0,0,0.20);
+}
+/* Portal v2 (merge SataUI) — accent coral phụ huynh, CHỈ trong cây .portal-v2.
+   Không đụng admin/public (vốn dùng --accent neutral của main). */
+.portal-v2 {
+  --accent: var(--parent);
+  --accent-soft: var(--parent-soft);
 }

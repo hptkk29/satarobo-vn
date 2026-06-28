@@ -17,6 +17,7 @@ import {
   getStudentDashboard,
   getParentChildrenOverview,
 } from "@/lib/portal/dashboard";
+import { getParentNotifications } from "@/lib/portal/notifications";
 import { isPortalV2Enabled } from "@/lib/flags";
 import { ParentDashboardV2 } from "@/components/portal/parent-dashboard";
 
@@ -32,8 +33,17 @@ export default async function PortalHome() {
   // Portal v2 (merge SataUI) — bật qua flag PORTAL_V2_ENABLED, chạy SONG SONG
   // dashboard cũ. Dữ liệu thật theo từng con (ownership: parentUserId từ session).
   if (isPortalV2Enabled()) {
-    const overview = await getParentChildrenOverview(ctx.parentUserId);
-    return <ParentDashboardV2 parentName={ctx.parentName} children={overview} />;
+    const [overview, notifications] = await Promise.all([
+      getParentChildrenOverview(ctx.parentUserId),
+      getParentNotifications(ctx.parentUserId),
+    ]);
+    return (
+      <ParentDashboardV2
+        parentName={ctx.parentName}
+        children={overview}
+        notifications={notifications}
+      />
+    );
   }
 
   // PH-level data theo parentUserId (gộp các con); HV-level theo studentId con
