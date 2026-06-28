@@ -28,8 +28,17 @@ function vnd(n: number): string {
   return n.toLocaleString("vi-VN") + "đ";
 }
 function initials(name: string): string {
-  return name.trim().split(/\s+/).slice(-1)[0]?.[0]?.toUpperCase() ?? "?";
+  const w = name.trim().split(/\s+/);
+  return (w.slice(-2).map((x) => x[0]).join("") || w[0]?.[0] || "?").toUpperCase();
 }
+// Màu avatar per-con (giống SataUI: cam, xanh dương, xanh lá, tím...).
+const AVATAR_COLORS = [
+  "oklch(0.748 0.169 56.8)",
+  "oklch(0.62 0.18 250)",
+  "oklch(0.62 0.17 150)",
+  "oklch(0.6 0.2 300)",
+  "oklch(0.62 0.2 20)",
+];
 function toneBadge(t: Tone): string {
   return t === "caution"
     ? "bg-caution/10 text-caution"
@@ -74,7 +83,7 @@ export function ParentDashboardV2({
         icon={Users}
         overline="Cổng phụ huynh"
         title={`Chào ${parentName} 👋`}
-        subtitle={`Đồng hành cùng ${kids.length} con tại Sata Robo.`}
+        subtitle={`Đồng hành cùng ${kids.length} con tại SataRobo.`}
         metric={
           <HeroMetric
             label={actions.length > 0 ? "Việc cần xử lý" : "Số con"}
@@ -109,7 +118,7 @@ export function ParentDashboardV2({
                   <p className="truncate text-sm font-bold text-foreground">{a.title}</p>
                   <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">{a.desc}</p>
                 </div>
-                <span className="hidden shrink-0 items-center gap-0.5 text-xs font-bold text-accent sm:inline-flex">{a.cta} <ChevronRight className="size-3.5" /></span>
+                <span className="hidden shrink-0 items-center gap-0.5 text-xs font-bold text-primary sm:inline-flex">{a.cta} <ChevronRight className="size-3.5" /></span>
               </Link>
             ))}
           </div>
@@ -125,10 +134,10 @@ export function ParentDashboardV2({
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {kids.map((c) => (
+            {kids.map((c, i) => (
               <div key={c.id} className="flex h-full flex-col gap-3 rounded-2xl border border-border bg-card p-4">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-sm font-bold text-white">{initials(c.name)}</span>
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold text-white" style={{ backgroundColor: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>{initials(c.name)}</span>
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-bold text-foreground">{c.name}</h3>
                     <p className="truncate text-xs font-medium text-muted-foreground">{[c.courseName, c.className].filter(Boolean).join(" · ") || c.studentCode || "Chưa xếp lớp"}</p>
@@ -137,7 +146,7 @@ export function ParentDashboardV2({
                 <div className="space-y-1">
                   <div className="flex items-center justify-between gap-2 text-xs font-semibold">
                     <span className="text-muted-foreground">Tiến độ khóa học</span>
-                    <span className="shrink-0 tabular-nums text-accent">{c.attendanceRate}% · {c.attended}/{c.totalSessions}</span>
+                    <span className="shrink-0 tabular-nums text-primary">{c.attendanceRate}% · {c.attended}/{c.totalSessions}</span>
                   </div>
                   <Progress value={c.attendanceRate} className="h-1.5" />
                 </div>
@@ -148,7 +157,7 @@ export function ParentDashboardV2({
                 </div>
                 <div className="mt-auto flex items-center gap-2 pt-1">
                   <Link href="/portal/ho-so-con" className="min-w-0 flex-1 truncate rounded-xl border border-border bg-card py-2 text-center text-sm font-bold text-foreground transition-colors hover:bg-muted">Hồ sơ</Link>
-                  <Link href="/portal/ho-so-con" className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent py-2 text-sm font-bold text-white transition-opacity hover:opacity-90">
+                  <Link href="/portal/ho-so-con" className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90">
                     <span className="truncate">Cổng học sinh</span> <ArrowRight className="size-4 shrink-0" />
                   </Link>
                 </div>
@@ -163,7 +172,7 @@ export function ParentDashboardV2({
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Lịch học</h2>
-            <Link href="/portal/lich" className="inline-flex items-center gap-0.5 text-sm font-bold text-accent hover:underline">Xem lịch <ArrowRight className="size-3.5" /></Link>
+            <Link href="/portal/lich" className="inline-flex items-center gap-0.5 text-sm font-bold text-primary hover:underline">Xem lịch <ArrowRight className="size-3.5" /></Link>
           </div>
           <Link href="/portal/lich" className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"><CalendarDays className="size-5" /></span>
@@ -178,7 +187,7 @@ export function ParentDashboardV2({
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Thông báo</h2>
-            <Link href="/portal/thong-bao" className="inline-flex items-center gap-0.5 text-sm font-bold text-accent hover:underline">Tất cả <ArrowRight className="size-3.5" /></Link>
+            <Link href="/portal/thong-bao" className="inline-flex items-center gap-0.5 text-sm font-bold text-primary hover:underline">Tất cả <ArrowRight className="size-3.5" /></Link>
           </div>
           <div className="rounded-2xl border border-border bg-card p-2">
             {recentNotis.length === 0 ? (

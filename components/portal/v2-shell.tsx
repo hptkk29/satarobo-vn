@@ -50,10 +50,20 @@ const parentNav: NavItem[] = [
 
 function Logo() {
   return (
-    <Link href="/portal" className="text-lg font-bold">
-      <span className="bg-gradient-to-r from-orange-500 to-rose-500 bg-clip-text text-transparent">Sata</span>
-      <span className="bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent">Robo</span>
-      <span className="ml-1 text-xs font-normal text-muted-foreground">Phụ huynh</span>
+    <Link href="/portal" className="flex items-center gap-2.5">
+      <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4" y="7" width="16" height="13" rx="4" fill="currentColor" />
+          <circle cx="9" cy="13" r="1.6" fill="oklch(0.748 0.169 56.8)" />
+          <circle cx="15" cy="13" r="1.6" fill="oklch(0.748 0.169 56.8)" />
+          <path d="M9 16.5h6" stroke="oklch(0.748 0.169 56.8)" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M12 3v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="12" cy="3" r="1.4" fill="currentColor" />
+        </svg>
+      </span>
+      <span className="text-lg font-extrabold tracking-tight text-foreground">
+        Sata<span className="text-primary">Robo</span>
+      </span>
     </Link>
   );
 }
@@ -91,10 +101,10 @@ export function PortalV2Shell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-r-xl py-2.5 text-sm transition-all",
+                  "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all",
                   active
-                    ? "border-l-4 border-accent bg-accent-soft pl-2 font-bold text-accent"
-                    : "pl-3 font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
+                    ? "bg-primary/10 font-bold text-primary"
+                    : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Icon className="size-[18px] shrink-0" />
@@ -103,8 +113,8 @@ export function PortalV2Shell({
             );
           })}
         </nav>
-        <div className="m-4 shrink-0 space-y-1 rounded-xl border border-accent/20 bg-accent-soft p-3.5">
-          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-accent">
+        <div className="m-4 shrink-0 space-y-1 rounded-xl border border-primary/20 bg-primary/5 p-3.5">
+          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
             <UserRound className="size-3.5" /> Cổng Phụ Huynh
           </p>
           <p className="text-xs font-medium leading-relaxed text-muted-foreground">
