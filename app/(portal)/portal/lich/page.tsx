@@ -3,6 +3,9 @@ import { requireActiveStudent } from "@/lib/portal/session";
 import { monthGridRange, shiftMonth } from "@/lib/lms/calendar";
 import { getStudentCalendarEvents } from "@/lib/lms/calendar-data";
 import { MonthCalendar } from "@/components/lms/month-calendar";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { getStudentSchedule } from "@/lib/portal/schedule";
+import { SchedulePageV2 } from "@/components/portal/schedule-page";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +29,26 @@ export default async function PortalCalendarPage({
 
   const prev = shiftMonth(year, month0, -1);
   const next = shiftMonth(year, month0, 1);
+
+  // Portal v2 — trang Lịch học giống SataUI.
+  if (isPortalV2Enabled()) {
+    const schedule = await getStudentSchedule(studentId);
+    const calendar = (
+      <div className="space-y-2">
+        <div className="flex justify-end gap-1">
+          <Link href={`/portal/lich?y=${prev.year}&m=${prev.month0}`} className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted">‹</Link>
+          <Link href={`/portal/lich?y=${next.year}&m=${next.month0}`} className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted">›</Link>
+        </div>
+        <MonthCalendar year={year} month0={month0} events={events} />
+      </div>
+    );
+    return schedule ? (
+      <SchedulePageV2 schedule={schedule} calendar={calendar} />
+    ) : (
+      <div className="p-6 text-sm text-muted-foreground">Chưa có lịch học.</div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-3 p-4">
       <div className="flex items-center justify-between">
