@@ -6,9 +6,10 @@ import { getPortalContext } from "@/lib/portal/session";
 import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { countUnreadForParent } from "@/lib/conversation/service";
-import { isEvalV2Enabled } from "@/lib/flags";
+import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
+import { PortalV2Shell } from "@/components/portal/v2-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,19 @@ export default async function PortalLayout({
     getParentNotificationCount(session.user.id).catch(() => 0),
     countUnreadForParent(session.user.id).catch(() => 0),
   ]);
+
+  // Portal v2 (merge SataUI) — shell phụ huynh mới (sidebar coral + topbar profile),
+  // chạy SONG SONG shell cũ qua flag PORTAL_V2_ENABLED.
+  if (isPortalV2Enabled()) {
+    return (
+      <PortalV2Shell
+        parentName={ctx?.parentName ?? session.user.name ?? "Phụ huynh"}
+        notifCount={notifCount}
+      >
+        {children}
+      </PortalV2Shell>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50">
