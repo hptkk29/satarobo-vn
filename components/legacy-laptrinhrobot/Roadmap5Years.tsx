@@ -18,8 +18,6 @@ import {
   type CourseGroup,
 } from "./_data/courses-pricing";
 
-const fmt = (n?: number) => (n ? `${n.toLocaleString("vi-VN")}đ` : "-");
-
 // Map Course.id -> slug cho URL
 const ID_TO_SLUG: Record<string, string> = {
   Sata1: "sata1",
@@ -84,11 +82,6 @@ function ExamCard({ course }: { course?: Course }) {
   const isSata8 = courseId === "Sata8";
   const Icon = isCombo ? Trophy : isSata8 ? ShieldCheck : CheckCircle2;
 
-  const finalPrice =
-    course.fixedPrice ??
-    course.comboPrice ??
-    course.earlyBirdPrice ??
-    course.listPrice;
   const showDiscount =
     !course.fixedPrice &&
     course.earlyBirdPrice !== undefined &&
@@ -149,38 +142,18 @@ function ExamCard({ course }: { course?: Course }) {
 
       <p className="mb-4 flex-1 text-sm text-gray-700">{course.note}</p>
 
-      {/* Price block */}
+      {/* Price block — học phí hiển thị "Liên hệ"; giữ % ưu đãi, ẩn số tiền */}
       <div className="mb-4 rounded-xl bg-gray-50 p-4">
-        {showDiscount ? (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400 line-through">
-                {fmt(course.listPrice)}
-              </span>
-              <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
-                −{discountPct}%
-              </span>
-            </div>
-            <div className="text-2xl font-extrabold text-orange-600">
-              {fmt(finalPrice)}
-            </div>
-            {course.savedAmount && (
-              <div className="text-xs font-semibold text-green-600">
-                Tiết kiệm {fmt(course.savedAmount)}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="text-2xl font-extrabold text-orange-600">
-              {fmt(finalPrice)}
-            </div>
-            {course.fixedPrice && (
-              <div className="text-xs font-semibold text-gray-600">
-                Giá cố định
-              </div>
-            )}
-          </>
+        {showDiscount && discountPct > 0 && (
+          <div className="mb-1">
+            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+              Ưu đãi −{discountPct}%
+            </span>
+          </div>
+        )}
+        <div className="text-2xl font-extrabold text-orange-600">Liên hệ</div>
+        {course.fixedPrice && (
+          <div className="text-xs font-semibold text-gray-600">Giá cố định</div>
         )}
       </div>
 
@@ -203,7 +176,6 @@ function LongtermCard({ course }: { course?: Course }) {
   const meta = LONGTERM_META[courseId] ?? LONGTERM_META.Sata3;
   const { Icon, gradient, accent, year } = meta;
 
-  const finalPrice = course.earlyBirdPrice ?? course.listPrice;
   const discountPct = course.earlyBirdPrice
     ? Math.round(
         ((course.listPrice - course.earlyBirdPrice) / course.listPrice) * 100,
@@ -261,31 +233,22 @@ function LongtermCard({ course }: { course?: Course }) {
           <span>{course.totalDuration}</span>
         </div>
 
-        {/* Price block */}
+        {/* Price block — học phí hiển thị "Liên hệ"; giữ % ưu đãi, ẩn số tiền */}
         <div className="mb-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/70 to-amber-50/40 p-4">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs text-gray-400 line-through">
-              {fmt(course.listPrice)}
-            </span>
-            {discountPct > 0 && (
+          {discountPct > 0 && (
+            <div className="mb-1 flex justify-end">
               <span className="rounded-md bg-red-500 px-2 py-0.5 text-[10px] font-black text-white">
                 −{discountPct}%
               </span>
-            )}
-          </div>
+            </div>
+          )}
           <div className="text-2xl font-extrabold tracking-tight text-orange-600">
-            {fmt(finalPrice)}
+            Liên hệ
           </div>
           {course.installmentOutside && (
             <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-600">
               <span className="text-green-600">●</span>
-              <span>
-                Trả góp{" "}
-                <strong className="text-gray-800">
-                  {fmt(course.installmentOutside)}/tháng
-                </strong>{" "}
-                × 12 tháng
-              </span>
+              <span>Hỗ trợ trả góp 0% × 12 tháng</span>
             </div>
           )}
         </div>

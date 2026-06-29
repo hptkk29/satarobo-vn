@@ -33,14 +33,14 @@ export const faqs: FAQ[] = [
       {
         type: "list",
         items: [
-          "Sata1 Robosim Master: giá ưu đãi 1.485.000đ.",
-          "Sata2 Đấu trường Robot: giá ưu đãi 2.736.000đ.",
-          "Combo Sata1 + Sata2: 3.986.000đ (tiết kiệm 704.000đ).",
-          "Sata8 Vé Vàng Chung Kết: 2.500.000đ cố định, không áp dụng giảm giá.",
-          "Sata3-Sata7: giá ưu đãi theo từng khóa và có trả góp 0%.",
+          "Sata1 Robosim Master: học phí ưu đãi — vui lòng liên hệ.",
+          "Sata2 Đấu trường Robot: học phí ưu đãi — vui lòng liên hệ.",
+          "Combo Sata1 + Sata2: học phí combo tiết kiệm — vui lòng liên hệ.",
+          "Sata8 Vé Vàng Chung Kết: giá cố định, cam kết hoàn tiền 100% — vui lòng liên hệ.",
+          "Sata3-Sata7: học phí ưu đãi theo từng khóa, hỗ trợ trả góp 0%.",
         ],
       },
-      "Phụ huynh có thể chọn khóa trong form đăng ký để xem giá, số buổi, thiết bị và thời lượng chi tiết.",
+      "Phụ huynh để lại thông tin trong form đăng ký hoặc liên hệ Zalo để được tư vấn học phí, số buổi, thiết bị và thời lượng chi tiết.",
     ],
   },
   {
