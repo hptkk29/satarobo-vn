@@ -147,10 +147,10 @@ export async function recordPaymentAction(input: unknown) {
   const actor = await resolveActor(uid);
   const sdb = scopedDb(actor);
 
-  // Lấy order để (a) chống IDOR liên cơ sở, (b) suy centerId cho Payment.
+  // Lấy order để (a) chống IDOR liên cơ sở, (b) suy centerId cho Payment, (c) auto-advance lead.
   const order = await sdb.order.findUnique({
     where: { id: data.orderId },
-    select: { id: true, centerId: true },
+    select: { id: true, centerId: true, leadId: true },
   });
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
@@ -166,11 +166,18 @@ export async function recordPaymentAction(input: unknown) {
     note: trimOrNull(data.note),
     centerId: order.centerId,
     recordedById: uid,
+    // S3 — auto-advance lead AWAITING_DECISION→REGISTERED (xử lý trong recordPayment, cùng tx).
+    leadId: order.leadId,
   });
 
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");
   revalidatePath("/cong-no");
+  // S6 — đồng bộ trang lead/convert.
+  if (order.leadId) {
+    revalidatePath(`/admin/leads/${order.leadId}`);
+    revalidatePath(`/admin/leads/${order.leadId}/convert`);
+  }
   return { ok: true as const, paymentId: res.paymentId };
 }
 
@@ -208,6 +215,17 @@ export async function confirmPaymentAction(paymentId: string, idempotencyKey?: s
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath("/payments");
   revalidatePath("/cong-no");
+  // S6 — đồng bộ trang lead/convert (lấy leadId qua order của khoản, scopedDb cách ly cơ sở).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const p = await sdb.payment.findUnique({
+    where: { id: paymentId },
+    select: { order: { select: { leadId: true } } },
+  });
+  const leadId = p?.order?.leadId;
+  if (leadId) {
+    revalidatePath(`/admin/leads/${leadId}`);
+    revalidatePath(`/admin/leads/${leadId}/convert`);
+  }
   return { ok: true as const, receiptId: res.receiptId };
 }
 

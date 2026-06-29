@@ -23,28 +23,41 @@ export type LeadPaymentSummary = {
 /**
  * Đọc tóm tắt thanh toán qua scopedDb (cách ly cơ sở). KHÔNG coi "lead chưa có đơn"
  * là miễn phí — `scholarshipFull` chỉ true khi đã có đơn mà tổng = 0.
+ *
+ * S2 — cách ly đi qua quan hệ ĐƠN (Order là SCOPED_MODEL) thay vì scope thẳng trên
+ * Payment.centerId. Lý do: Payment.centerId có thể null (đơn thủ công không gắn cơ sở)
+ * → nếu scope thẳng trên Payment, non-SUPER_ADMIN sẽ MẤT khoản hợp lệ (card hiển thị 0
+ * dù guard convert đếm được — lệch nhau, gốc rễ "bonus null-center"). Đếm Payment NESTED
+ * dưới Order đã-trong-scope ⇒ bao gồm cả khoản centerId=null thuộc đơn của lead, và vẫn
+ * cách ly cơ sở vì Order top-level đã bị inject `centerId IN visibleCenters`.
  */
 export async function getLeadPaymentSummary(
   sdb: ReturnType<typeof scopedDb>,
   leadId: string,
 ): Promise<LeadPaymentSummary> {
-  const [recorded, orders] = await Promise.all([
-    sdb.payment.aggregate({
-      where: { saleStatus: "RECORDED", order: { leadId } },
-      _count: { _all: true },
-      _sum: { amount: true },
-    }),
-    sdb.order.aggregate({
-      where: { leadId, deletedAt: null },
-      _count: { _all: true },
-      _sum: { totalAmount: true },
-    }),
-  ]);
+  const orders = await sdb.order.findMany({
+    where: { leadId, deletedAt: null },
+    select: {
+      totalAmount: true,
+      payments: {
+        where: { saleStatus: "RECORDED", deletedAt: null },
+        select: { amount: true },
+      },
+    },
+  });
 
-  const paid = recorded._sum.amount ?? 0;
-  const recordedCount = recorded._count._all;
-  const total = orders._sum.totalAmount ?? 0;
-  const hasOrder = orders._count._all > 0;
+  let total = 0;
+  let paid = 0;
+  let recordedCount = 0;
+  for (const o of orders) {
+    total += o.totalAmount;
+    for (const p of o.payments) {
+      paid += p.amount;
+      recordedCount += 1;
+    }
+  }
+
+  const hasOrder = orders.length > 0;
   const remaining = Math.max(0, total - paid);
   const scholarshipFull = hasOrder && total === 0;
   const eligible = recordedCount > 0 || scholarshipFull;
