@@ -60,6 +60,11 @@ export type ConvertV2Input = {
   parentEmail: string;
   parentName: string;
   parentPhone: string;
+  // C5 — CCCD + địa chỉ phụ huynh (lưu trên User, KHÔNG lưu trên Student). Optional/additive.
+  parentCccd?: string | null;
+  parentAddress?: string | null;
+  parentWard?: string | null; // phường/xã (2 cấp 2025)
+  parentCity?: string | null; // tỉnh/thành
   students: ConvertV2Student[];
   /** Khoá idempotency ổn định theo submit (chống double-submit / 2 Sale song song). */
   idempotencyKey: string;
@@ -83,10 +88,9 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
   });
   if (!lead) return { ok: false, error: { code: "LEAD_NOT_FOUND", message: "Không tìm thấy lead" } };
   if (!lead.centerId) return { ok: false, error: { code: "LEAD_NO_CENTER", message: "Lead chưa thuộc cơ sở" } };
-  // 1) Guard trạng thái: phải REGISTERED (đã có tiền ghi nhận ở R7-04).
-  if (lead.status !== "REGISTERED") {
-    return { ok: false, error: { code: "NOT_REGISTERED", message: "Lead phải ở trạng thái 'Đã đăng ký'" } };
-  }
+  // 1) C2 — BỎ chặn status (REGISTERED không phải cổng nghiệp vụ thật; xem PH-2). Cho convert
+  //    từ MỌI status chưa kết thúc — cổng tiền (PAYMENT_REQUIRED) bên dưới mới là điều kiện chốt.
+  //    Atomic-claim bên dưới (status notIn terminal) vẫn chống race double-submit.
 
   // 2) Guard PAYMENT_REQUIRED (R7-05-C2): ≥1 Payment Sale ghi nhận
   //    (saleStatus=RECORDED) trên order của lead, hoặc Σ finalPrice = 0.
@@ -120,9 +124,11 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
   }
 
   const result = await db.$transaction(async (tx) => {
-    // CLAIM atomic chống race (2 Sale song song): chỉ 1 lượt chuyển khỏi REGISTERED.
+    // CLAIM atomic chống race (2 Sale song song): chỉ 1 lượt chuyển khỏi status chưa-kết-thúc.
+    // C2 — điều kiện claim đổi từ status=REGISTERED sang status NOT IN (terminal): vẫn chỉ 1
+    // lượt thắng (lượt sau thấy status=ENROLLED ∈ terminal → count 0 → ALREADY_CONVERTED).
     const claim = await tx.lead.updateMany({
-      where: { id: lead.id, status: "REGISTERED", deletedAt: null },
+      where: { id: lead.id, status: { notIn: ["ENROLLED", "LOST", "DUPLICATE"] }, deletedAt: null },
       data: { status: "ENROLLED", convertedById: actor.id, convertedAt: new Date() },
     });
     if (claim.count === 0) throw new Error("ALREADY_CONVERTED");
@@ -130,13 +136,21 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     const center = await tx.center.findUnique({ where: { id: lead.centerId! }, select: { code: true } });
     const centerCode = center?.code ?? "CS";
 
+    // C5 — CCCD + địa chỉ phụ huynh (chỉ ghi field có giá trị, không ghi đè bằng null).
+    const parentExtra = {
+      ...(input.parentCccd?.trim() ? { cccd: input.parentCccd.trim() } : {}),
+      ...(input.parentAddress?.trim() ? { address: input.parentAddress.trim() } : {}),
+      ...(input.parentWard?.trim() ? { ward: input.parentWard.trim() } : {}),
+      ...(input.parentCity?.trim() ? { city: input.parentCity.trim() } : {}),
+    };
+
     // Parent: reuse hồ sơ cũ hoặc tạo mới (PENDING_ACTIVATION).
     const parent =
       parentMatch.kind === "reuse"
-        ? await tx.user.update({ where: { id: parentMatch.userId }, data: { centerId: lead.centerId } })
+        ? await tx.user.update({ where: { id: parentMatch.userId }, data: { centerId: lead.centerId, ...parentExtra } })
         : await tx.user.upsert({
             where: { email: input.parentEmail.trim().toLowerCase() },
-            update: { centerId: lead.centerId },
+            update: { centerId: lead.centerId, ...parentExtra },
             create: {
               email: input.parentEmail.trim().toLowerCase(),
               name: input.parentName,
@@ -144,6 +158,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
               roles: ["PARENT"],
               accountStatus: "PENDING_ACTIVATION",
               centerId: lead.centerId,
+              ...parentExtra,
             },
           });
 

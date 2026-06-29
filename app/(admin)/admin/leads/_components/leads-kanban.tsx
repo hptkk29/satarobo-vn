@@ -212,7 +212,7 @@ export function LeadsKanban({
                           href={`/leads/${lead.id}`}
                           className="mt-2 block w-full rounded-md bg-emerald-600 px-2 py-1 text-center text-xs font-semibold text-white hover:bg-emerald-700"
                         >
-                          Chuyển Đã đăng ký
+                          Xem chi tiết lead
                         </Link>
                       )}
 

@@ -11,7 +11,7 @@ import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { LeadPaymentCard } from '../../_components/lead-payment-card'
 import { ConvertForm } from './convert-form'
 
-export const metadata = { title: 'Chuyển đổi (v2) | Admin' }
+export const metadata = { title: 'Chuyển đổi | Admin' }
 export const dynamic = 'force-dynamic'
 
 interface Props {
@@ -85,28 +85,6 @@ export default async function ConvertV2Page({ params }: Props) {
     },
   })
 
-  // Ưu đãi (CourseDiscount) đang hiệu lực cho các khoá của lớp.
-  const courseIds = [...new Set(classes.map((c) => c.courseId))]
-  const discounts = courseIds.length
-    ? await sdb.courseDiscount.findMany({
-        where: { courseId: { in: courseIds }, active: true },
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, courseId: true, type: true, value: true, note: true },
-      })
-    : []
-
-  const discountsByCourse: Record<
-    string,
-    { id: string; label: string }[]
-  > = {}
-  for (const x of discounts) {
-    const label =
-      (x.type === 'PERCENT' || x.type === 'SCHOLARSHIP'
-        ? `${x.value}%`
-        : `${x.value.toLocaleString('vi-VN')}đ`) + (x.note ? ` · ${x.note}` : ` (${x.type})`)
-    ;(discountsByCourse[x.courseId] ??= []).push({ id: x.id, label })
-  }
-
   const classOptions = classes.map((c) => ({
     id: c.id,
     label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
@@ -142,20 +120,13 @@ export default async function ConvertV2Page({ params }: Props) {
       </Link>
 
       <div className="mb-6 border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Chuyển đổi → Ghi danh (v2)</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Chuyển đổi</h1>
         <p className="mt-1 text-sm text-gray-600">
           {lead.parentName} · {lead.phone}
           {lead.email ? ` · ${lead.email}` : ''} · Trạng thái:{' '}
           <span className="font-medium">{LEAD_STATUS_LABEL[lead.status] ?? lead.status}</span>
         </p>
       </div>
-
-      {lead.status !== 'REGISTERED' && (
-        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          Lead cần ở trạng thái <strong>“Đã đăng ký”</strong> trước khi chốt ghi danh. Hãy ghi nhận
-          thanh toán để chuyển trạng thái.
-        </div>
-      )}
 
       {/* Khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
       <div className="mb-6">
@@ -169,7 +140,6 @@ export default async function ConvertV2Page({ params }: Props) {
         defaultParentPhone={lead.phone}
         prefillStudents={prefillStudents}
         classes={classOptions}
-        discountsByCourse={discountsByCourse}
         order={courseOrder}
       />
     </div>

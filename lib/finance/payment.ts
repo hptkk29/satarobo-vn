@@ -1,10 +1,13 @@
 // lib/finance/payment.ts — R7-04: khoản thanh toán 2 tầng (Sale ghi nhận ↔ Kế toán xác nhận).
 // MỌI mutation tiền chạy trong db.$transaction. Audit before/after; reject/adjust/refund
 // BẮT BUỘC reason. Hàm THUẦN role-logic (can() do tầng action lo) — chỉ xử lý nghiệp vụ.
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
+
+type Tx = Prisma.TransactionClient;
 
 /** Kết quả chung — { ok } + field phụ; lỗi → { ok:false, error }. */
 type Ok<T> = { ok: true } & T;
@@ -39,6 +42,130 @@ async function centerCodeOf(centerId: string | null | undefined): Promise<string
   return ou?.code ?? "SR";
 }
 
+// ─── S1 — Hợp nhất sổ thanh toán (Ledger-B → Payment) ─────────────────────────
+// Actor tối thiểu cho ghi nhận tự động: id (+name cho audit) + centerId fallback.
+export type EnsurePaymentActor = { id: string | null; name?: string | null; centerId?: string | null };
+
+const AUTO_PAYMENT_METHOD = "auto";
+
+/** Khoá idempotency lưu trong Payment.note (Payment KHÔNG có cột soDot). */
+function autoPaymentMarker(soDot?: number | null): string {
+  return soDot != null ? `[auto:order-installment:dot${soDot}]` : `[auto:order-confirm]`;
+}
+
+/**
+ * S1 — Đảm bảo tồn tại 1 Payment(saleStatus=RECORDED) cho phần tiền của đơn:
+ *  - đợt1 (recordInstallmentPlan), đợt2 (markInstallmentPaid), xác nhận đơn offline
+ *    (changeOrderStatusAction →CONFIRMED) đều đi qua đây để Ledger-A (Payment) khớp Ledger-B.
+ * IDEMPOTENT theo (orderId, soDot) — gọi lại KHÔNG tạo trùng (key = marker trong note).
+ * Payment.centerId LUÔN suy ra (order.centerId → lead.centerId → actor.centerId), không để null.
+ * Sau khi tạo, tự đẩy lead AWAITING_DECISION → REGISTERED (mở khoá PH-2 / S3).
+ * CHẠY TRONG tx do call-site cung cấp (money-sensitive).
+ */
+export async function ensureOrderPaymentRecorded(
+  tx: Tx,
+  params: {
+    orderId: string;
+    soDot?: number | null;
+    amount: number;
+    leadId?: string | null;
+    centerId?: string | null;
+    actor: EnsurePaymentActor;
+  },
+): Promise<{ ok: true; created: boolean; paymentId: string | null } | Fail> {
+  const { orderId, soDot, amount, leadId } = params;
+  const marker = autoPaymentMarker(soDot);
+
+  // Idempotency: đã có Payment auto cho (orderId, soDot) → trả lại, không tạo lại.
+  const existing = await tx.payment.findFirst({
+    where: { orderId, deletedAt: null, note: { contains: marker } },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, created: false, paymentId: existing.id };
+
+  // Không có tiền để ghi (vd đợt2 = 0) → no-op thành công.
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: true, created: false, paymentId: null };
+  }
+
+  // Suy centerId: order → lead → actor; KHÔNG để null nếu còn nguồn khác.
+  let centerId: string | null = params.centerId ?? null;
+  if (!centerId && leadId) {
+    const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { centerId: true } });
+    centerId = lead?.centerId ?? null;
+  }
+  if (!centerId) centerId = params.actor.centerId ?? null;
+
+  const now = new Date();
+  const payment = await tx.payment.create({
+    data: {
+      orderId,
+      amount: Math.round(amount),
+      method: AUTO_PAYMENT_METHOD,
+      paidDate: now,
+      note:
+        soDot != null
+          ? `Ghi nhận tự động đợt ${soDot} ${marker}`
+          : `Ghi nhận tự động (xác nhận đơn) ${marker}`,
+      saleStatus: "RECORDED",
+      accountantStatus: "PENDING",
+      recordedById: params.actor.id,
+      centerId,
+    },
+    select: { id: true },
+  });
+
+  await writeAudit({
+    actor: { id: params.actor.id, name: params.actor.name ?? "Hệ thống" },
+    module: "finance",
+    entityType: "Payment",
+    entityId: payment.id,
+    action: "CREATE",
+    newValues: {
+      amount: Math.round(amount),
+      saleStatus: "RECORDED",
+      source: "order-ledger",
+      soDot: soDot ?? null,
+    },
+    orgUnitId: centerId,
+    tx,
+  });
+
+  // S3 / PH-2 — ghi nhận tiền → lead tự lên 'Đã đăng ký' (mở khoá convert).
+  if (leadId) {
+    await maybeAdvanceLeadToRegistered(tx, { leadId, actor: params.actor });
+  }
+
+  return { ok: true, created: true, paymentId: payment.id };
+}
+
+/**
+ * S3 — auto-advance lead AWAITING_DECISION → REGISTERED khi đã ghi nhận thanh toán.
+ * updateMany có guard (status=AWAITING_DECISION) → idempotent, không lùi/đụng status khác.
+ * Trả true nếu vừa nâng cấp (để call-site biết có đổi).
+ */
+export async function maybeAdvanceLeadToRegistered(
+  tx: Tx,
+  params: { leadId: string; actor: EnsurePaymentActor },
+): Promise<boolean> {
+  const upd = await tx.lead.updateMany({
+    where: { id: params.leadId, status: "AWAITING_DECISION", deletedAt: null },
+    data: { status: "REGISTERED" },
+  });
+  if (upd.count === 0) return false;
+  await tx.leadActivity.create({
+    data: {
+      leadId: params.leadId,
+      actorId: params.actor.id,
+      actorName: params.actor.name ?? "Hệ thống",
+      type: "STATUS_CHANGE",
+      content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
+      metadata: { from: "AWAITING_DECISION", to: "REGISTERED", auto: true },
+    },
+  });
+  return true;
+}
+
 // ─── AC1 — Sale ghi nhận khoản ────────────────────────────────────────────────
 /**
  * Sale ghi nhận 1 khoản đã thu → saleStatus=RECORDED, accountantStatus=PENDING.
@@ -54,6 +181,8 @@ export async function recordPayment(input: {
   note?: string | null;
   recordedById: string;
   centerId: string | null;
+  // S3 — leadId của order (nếu có) → auto-advance lead AWAITING_DECISION→REGISTERED trong cùng tx.
+  leadId?: string | null;
 }): Promise<Ok<{ paymentId: string }> | Fail> {
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     return fail("Số tiền phải lớn hơn 0");
@@ -91,6 +220,13 @@ export async function recordPayment(input: {
       orgUnitId: input.centerId,
       tx,
     });
+    // S3 — ghi nhận tiền → lead tự lên 'Đã đăng ký' (idempotent guard trong helper).
+    if (input.leadId) {
+      await maybeAdvanceLeadToRegistered(tx, {
+        leadId: input.leadId,
+        actor: { id: input.recordedById, name: actor.name, centerId: input.centerId },
+      });
+    }
     return p;
   });
 

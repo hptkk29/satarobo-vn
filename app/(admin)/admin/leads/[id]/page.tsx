@@ -15,6 +15,7 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
+import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
 
@@ -46,7 +47,7 @@ export default async function LeadDetailPage({ params }: Props) {
       course: { select: { name: true } },
       assignedTo: { select: { id: true, name: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 100 },
-      tasks: { orderBy: [{ status: "asc" }, { dueAt: "asc" }] },
+      // LD6 — KHÔNG fetch `tasks` nữa (UI "Việc cần làm" đã gỡ; model LeadTask giữ nguyên).
       children: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -54,6 +55,13 @@ export default async function LeadDetailPage({ params }: Props) {
           trialHistory: {
             orderBy: { lastAttendedAt: "desc" },
             include: { trialClass: { select: { name: true } } },
+          },
+          // LD3(a) — lớp trải nghiệm ĐANG học (ACTIVE) của con → banner "đang học thử lớp Y".
+          trialEnrollments: {
+            where: { status: "ACTIVE" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            include: { trialClass: { select: { id: true, name: true } } },
           },
         },
       },
@@ -144,9 +152,28 @@ export default async function LeadDetailPage({ params }: Props) {
           code: true,
           capacity: true,
           enrollments: { where: { status: "ACTIVE" }, select: { id: true } },
+          // LD3(b) — buổi chưa diễn ra để chọn ngày/giờ khi xếp con.
+          sessions: {
+            where: { status: "SCHEDULED" },
+            orderBy: { seq: "asc" },
+            select: { id: true, seq: true, date: true, startTime: true, endTime: true },
+          },
         },
       })
     : [];
+
+  // LD3 (display) — buổi đã chọn (scheduledSessionId) là scalar, không có relation
+  // Prisma → resolve thủ công ra ngày/giờ để hiện trong banner "đang học thử".
+  const scheduledSessionIds = lead.children
+    .map((c) => c.trialEnrollments[0]?.scheduledSessionId)
+    .filter((v): v is string => Boolean(v));
+  const scheduledSessions = scheduledSessionIds.length
+    ? await db.trialClassSession.findMany({
+        where: { id: { in: scheduledSessionIds } },
+        select: { id: true, seq: true, date: true, startTime: true, endTime: true },
+      })
+    : [];
+  const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
 
   return (
     <div className="max-w-6xl p-6">
@@ -229,6 +256,15 @@ export default async function LeadDetailPage({ params }: Props) {
         <Info label="Ghi chú" value={lead.note} />
       </dl>
 
+      {/* LD1 — loại đơn dự kiến (Khoá học / Sản phẩm) */}
+      <div className="mb-6">
+        <OrderKindSelect
+          leadId={lead.id}
+          current={lead.orderKind}
+          readOnly={!canTransfer}
+        />
+      </div>
+
       {/* R7-01 — danh sách con (LeadChild) + field phẳng cũ read-only */}
       <div className="mb-6">
         <LeadChildrenManager
@@ -267,13 +303,42 @@ export default async function LeadDetailPage({ params }: Props) {
       {canTrialManage && lead.children.length > 0 && (
         <div className="mb-6">
           <TrialEnrollWidget
-            children={lead.children.map((c) => ({ id: c.id, fullName: c.fullName }))}
+            children={lead.children.map((c) => {
+              const enr = c.trialEnrollments[0];
+              const sess = enr?.scheduledSessionId
+                ? sessionById.get(enr.scheduledSessionId)
+                : null;
+              return {
+                id: c.id,
+                fullName: c.fullName,
+                currentTrial: enr?.trialClass
+                  ? {
+                      className: enr.trialClass.name,
+                      session: sess
+                        ? {
+                            seq: sess.seq,
+                            date: sess.date.toISOString(),
+                            startTime: sess.startTime,
+                            endTime: sess.endTime,
+                          }
+                        : null,
+                    }
+                  : null,
+              };
+            })}
             openClasses={openTrialClasses.map((cl) => ({
               id: cl.id,
               name: cl.name,
               code: cl.code,
               capacity: cl.capacity,
               used: cl.enrollments.length,
+              sessions: cl.sessions.map((s) => ({
+                id: s.id,
+                seq: s.seq,
+                date: s.date.toISOString(),
+                startTime: s.startTime,
+                endTime: s.endTime,
+              })),
             }))}
             canOverride={can(session.user, "trials:override-capacity")}
           />
@@ -295,7 +360,7 @@ export default async function LeadDetailPage({ params }: Props) {
             href={`/leads/${lead.id}/convert`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
           >
-            Chuyển đổi → Ghi danh (theo từng con)
+            Chuyển đổi
           </Link>
         </div>
       )}
@@ -352,17 +417,9 @@ export default async function LeadDetailPage({ params }: Props) {
           id: a.id,
           type: a.type,
           content: a.content,
+          metadata: a.metadata,
           actorName: a.actorName,
           createdAt: a.createdAt.toISOString(),
-        }))}
-        tasks={lead.tasks.map((t) => ({
-          id: t.id,
-          title: t.title,
-          description: t.description,
-          dueAt: t.dueAt.toISOString(),
-          status: t.status,
-          assignedToName: t.assignedToName,
-          completedAt: t.completedAt?.toISOString() ?? null,
         }))}
       />
     </div>

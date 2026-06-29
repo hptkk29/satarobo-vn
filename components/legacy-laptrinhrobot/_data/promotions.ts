@@ -32,8 +32,8 @@ export const promotions: Promotions = {
       title: "Ưu đãi khai giảng",
       highlight: "Giảm 15%",
       description:
-        "Dành cho phụ huynh đăng ký sớm trong tháng khai trương. Áp dụng cho các khóa Sata1-Sata7, giúp gia đình giữ mức học phí tốt trước khi giá trở về niêm yết.",
-      details: ["Thời hạn: 01/05 - 31/05/2026", "Áp dụng cho Sata1-Sata7", "Không áp dụng cho Sata8"],
+        "Dành cho phụ huynh đăng ký sớm cho lớp mới khai giảng. Áp dụng cho các khóa Sata1-Sata7, giúp gia đình giữ mức học phí tốt trước khi giá trở về niêm yết.",
+      details: ["Áp dụng theo từng đợt khai giảng lớp mới", "Áp dụng cho Sata1-Sata7", "Không áp dụng cho Sata8"],
       cta: "Đăng ký giữ ưu đãi",
       target: "registration-form",
       icon: "Sparkles",
@@ -42,10 +42,10 @@ export const promotions: Promotions = {
     {
       id: "combo",
       title: "Combo luyện thi",
-      highlight: "3.986.000đ",
+      highlight: "Giá ưu đãi",
       description:
         "Học trọn Robosim Master + Đấu trường Robot, từ mô phỏng RoboSim đến robot Beta thật, phù hợp khi bố mẹ muốn con đi đủ lộ trình luyện thi.",
-      details: ["27 buổi tính phí - 90 phút/buổi", "Tổng 40,5 giờ luyện thi", "Tiết kiệm 704.000đ"],
+      details: ["27 buổi tính phí - 90 phút/buổi", "Tổng 40,5 giờ luyện thi", "Tiết kiệm vượt trội"],
       cta: "Chọn gói Combo",
       target: "roadmap",
       icon: "Trophy",
@@ -56,7 +56,7 @@ export const promotions: Promotions = {
       highlight: "Sata3-Sata7",
       description:
         "Áp dụng cho nhóm khóa chuyên sâu 48 buổi từ Sata3 đến Sata7. Phụ huynh có thể chia nhỏ học phí theo tháng để dễ đầu tư dài hạn cho con.",
-      details: ["Áp dụng: Sata3 đến Sata7", "Ví dụ Sata3: 660.000đ/tháng", "Chỉ cần CCCD theo chính sách trả góp"],
+      details: ["Áp dụng: Sata3 đến Sata7", "Chia nhỏ học phí theo từng tháng", "Chỉ cần CCCD theo chính sách trả góp"],
       cta: "Tư vấn trả góp",
       target: "registration-form",
       icon: "CreditCard",
@@ -79,7 +79,7 @@ export const promotions: Promotions = {
       description:
         "Gia đình có 2 con đăng ký, con thứ 2 được giảm thêm 15%. Gia đình có 3 con trở lên, con thứ 3 trở đi giảm 15% và được tặng thêm khóa RoboSim Online.",
       condition: "Phù hợp cho gia đình muốn cho các con học cùng hệ sinh thái Robotics.",
-      note: "Gia đình 3 con có thể tiết kiệm từ 4.000.000đ trở lên tùy khóa học.",
+      note: "Gia đình 3 con có thể tiết kiệm thêm đáng kể tùy khóa học.",
       icon: "Users",
     },
     {
