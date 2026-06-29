@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { provinces } from "vietnam-address-data";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
@@ -58,9 +59,9 @@ export default async function NewOrderPage({
       <OrderCreateForm
         paymentMethods={data.paymentMethods}
         courses={data.courses}
-        packages={data.packages}
         products={data.products}
         centers={data.centers}
+        provinces={provinces.map((p) => ({ value: p.id, label: p.name }))}
         leadId={lead?.id ?? null}
         defaultCustomer={
           lead

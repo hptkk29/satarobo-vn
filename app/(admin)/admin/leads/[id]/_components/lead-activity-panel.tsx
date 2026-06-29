@@ -1,19 +1,34 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Phone, MessageSquare, StickyNote, Mail, RefreshCw, Check, Plus } from "lucide-react";
+import {
+  Phone,
+  MessageSquare,
+  StickyNote,
+  Mail,
+  RefreshCw,
+  ArrowLeftRight,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
-import { addLeadActivity, addLeadTask, completeLeadTask } from "../../actions";
+import type { Prisma } from "@prisma/client";
+import { addLeadActivity } from "../../actions";
 
 type Activity = {
   id: string;
   type: string;
   content: string;
+  // LD4 — metadata JSON structured theo loại (CALL/MESSAGE/EMAIL/NOTE). Có thể null
+  // với hoạt động cũ hoặc auto-gen (STATUS_CHANGE/HANDOVER) → fallback render `content`.
+  metadata?: unknown;
   actorName: string;
   createdAt: string; // ISO
 };
 
+// LD6 — prop `tasks` GIỮ optional để AGENT-LEAD-DETAIL gỡ dần ở page.tsx (Wave 2).
+// KHÔNG xoá model/dữ liệu LeadTask — chỉ ẩn UI ở panel này.
 type Task = {
   id: string;
   title: string;
@@ -30,6 +45,7 @@ const ACTIVITY_ICON: Record<string, typeof Phone> = {
   NOTE: StickyNote,
   EMAIL: Mail,
   STATUS_CHANGE: RefreshCw,
+  HANDOVER: ArrowLeftRight,
 };
 
 const ACTIVITY_LABEL: Record<string, string> = {
@@ -38,7 +54,87 @@ const ACTIVITY_LABEL: Record<string, string> = {
   NOTE: "Ghi chú",
   EMAIL: "Email",
   STATUS_CHANGE: "Đổi trạng thái",
+  HANDOVER: "Bàn giao",
 };
+
+// LD4 — chỉ 4 loại ghi tay. STATUS_CHANGE/HANDOVER là auto-gen (đổi trạng thái /
+// bàn giao) nên KHÔNG cho tạo tay ở form; vẫn hiển thị trong lịch sử.
+const QUICK_TYPES = ["CALL", "MESSAGE", "NOTE", "EMAIL"] as const;
+type QuickType = (typeof QUICK_TYPES)[number];
+
+const MESSAGE_PLATFORMS = ["SMS", "Zalo", "Messenger"] as const;
+type MessagePlatform = (typeof MESSAGE_PLATFORMS)[number];
+
+const inputCls =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200";
+
+// LD4 — narrow JSON metadata an toàn (object thuần, không phải array/primitive).
+function asMetaObj(m: unknown): Record<string, unknown> | null {
+  return m && typeof m === "object" && !Array.isArray(m)
+    ? (m as Record<string, unknown>)
+    : null;
+}
+function metaStr(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
+}
+
+// LD4 — render chi tiết theo metadata structured; null → để caller fallback `content`.
+function ActivityBody({ activity }: { activity: Activity }) {
+  const meta = asMetaObj(activity.metadata);
+  if (meta) {
+    if (activity.type === "CALL") {
+      const caller = metaStr(meta.caller);
+      const dur = meta.durationMin;
+      const head = [
+        caller && `Người gọi: ${caller}`,
+        dur != null && dur !== "" && `Thời lượng: ${metaStr(dur)} phút`,
+      ].filter(Boolean);
+      return (
+        <div className="mt-0.5 text-sm text-gray-800">
+          {head.length > 0 && <p className="text-xs text-gray-500">{head.join(" · ")}</p>}
+          <p className="whitespace-pre-line">{metaStr(meta.notes)}</p>
+        </div>
+      );
+    }
+    if (activity.type === "MESSAGE") {
+      return (
+        <p className="mt-0.5 text-sm text-gray-800">
+          {metaStr(meta.platform) && (
+            <span className="mr-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+              {metaStr(meta.platform)}
+            </span>
+          )}
+          <span className="whitespace-pre-line">{metaStr(meta.content)}</span>
+        </p>
+      );
+    }
+    if (activity.type === "EMAIL") {
+      const recipient = metaStr(meta.recipient);
+      const subject = metaStr(meta.subject);
+      return (
+        <div className="mt-0.5 text-sm text-gray-800">
+          {(recipient || subject) && (
+            <p className="text-xs text-gray-500">
+              {recipient && <>Đến: {recipient}</>}
+              {recipient && subject && " · "}
+              {subject && <>Tiêu đề: {subject}</>}
+            </p>
+          )}
+          <p className="whitespace-pre-line">{metaStr(meta.body)}</p>
+        </div>
+      );
+    }
+    if (activity.type === "NOTE" && metaStr(meta.text)) {
+      return (
+        <p className="mt-0.5 whitespace-pre-line text-sm text-gray-800">{metaStr(meta.text)}</p>
+      );
+    }
+  }
+  // Fallback: hoạt động cũ / auto-gen → render chuỗi content.
+  return (
+    <p className="mt-0.5 whitespace-pre-line text-sm text-gray-800">{activity.content}</p>
+  );
+}
 
 function fmtDateTime(iso: string): string {
   // timeZone cố định → SSR (server UTC) và client (TZ trình duyệt) ra CÙNG chuỗi,
@@ -52,48 +148,120 @@ function fmtDateTime(iso: string): string {
   });
 }
 
-function isOverdue(t: Task): boolean {
-  return t.status === "OPEN" && new Date(t.dueAt).getTime() < Date.now();
-}
-
 export function LeadActivityPanel({
   leadId,
   activities,
-  tasks,
 }: {
   leadId: string;
   activities: Activity[];
-  tasks: Task[];
+  // LD6 — nhận nhưng KHÔNG dùng (optional). Để page.tsx ngừng truyền ở Wave 2.
+  tasks?: Task[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // "Quá hạn" phụ thuộc Date.now() → chỉ tính sau khi mount (SSR + first render =
-  // false, khớp nhau) để tránh React #418. BUG-R7-008.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // LD4 — loại hoạt động đang chọn + state riêng từng loại.
+  const [actType, setActType] = useState<QuickType>("CALL");
 
-  // Quick activity form
-  const [actType, setActType] = useState("CALL");
-  const [actContent, setActContent] = useState("");
+  // CALL: người gọi + thời lượng + ghi chú
+  const [callCaller, setCallCaller] = useState("");
+  const [callDuration, setCallDuration] = useState("");
+  const [callNotes, setCallNotes] = useState("");
+  // MESSAGE: nền tảng + nội dung
+  const [msgPlatform, setMsgPlatform] = useState<MessagePlatform>("Zalo");
+  const [msgContent, setMsgContent] = useState("");
+  // EMAIL: người nhận + tiêu đề + nội dung
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  // NOTE: textarea
+  const [noteContent, setNoteContent] = useState("");
 
-  // Task form
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDue, setTaskDue] = useState("");
+  // LD5 — lịch sử mặc định đóng (chỉ render khi mở).
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  function resetForm() {
+    setCallCaller("");
+    setCallDuration("");
+    setCallNotes("");
+    setMsgContent("");
+    setEmailTo("");
+    setEmailSubject("");
+    setEmailBody("");
+    setNoteContent("");
+  }
+
+  // LD4 — gộp các trường riêng từng loại thành `content` để lưu.
+  // Phối hợp SPINE: addLeadActivity hiện chỉ nhận { leadId, type, content }; khi
+  // SPINE mở thêm tham số `metadata` (JSON) thì truyền object structured xuống đây.
+  function buildContent(): string | null {
+    if (actType === "CALL") {
+      const notes = callNotes.trim();
+      if (!notes) return null;
+      const head: string[] = [];
+      if (callCaller.trim()) head.push(`Người gọi: ${callCaller.trim()}`);
+      if (callDuration.trim()) head.push(`Thời lượng: ${callDuration.trim()} phút`);
+      return head.length ? `${head.join(" · ")}\n${notes}` : notes;
+    }
+    if (actType === "MESSAGE") {
+      const c = msgContent.trim();
+      if (!c) return null;
+      return `[${msgPlatform}] ${c}`;
+    }
+    if (actType === "EMAIL") {
+      const body = emailBody.trim();
+      if (!body) return null;
+      const head: string[] = [];
+      if (emailTo.trim()) head.push(`Đến: ${emailTo.trim()}`);
+      if (emailSubject.trim()) head.push(`Tiêu đề: ${emailSubject.trim()}`);
+      return head.length ? `${head.join("\n")}\n${body}` : body;
+    }
+    // NOTE
+    return noteContent.trim() || null;
+  }
+
+  // LD4 — metadata structured theo từng loại, lưu vào LeadActivity.metadata (JSON)
+  // song song với `content` (chuỗi đọc cho timeline). Trả null khi thiếu nội dung
+  // bắt buộc — đồng bộ với buildContent() để không ghi metadata "rỗng".
+  function buildMetadata(): Prisma.InputJsonValue | null {
+    if (actType === "CALL") {
+      const notes = callNotes.trim();
+      if (!notes) return null;
+      const dur = callDuration.trim();
+      const durationMin = dur && Number.isFinite(Number(dur)) ? Number(dur) : null;
+      return { caller: callCaller.trim() || null, durationMin, notes };
+    }
+    if (actType === "MESSAGE") {
+      const content = msgContent.trim();
+      if (!content) return null;
+      return { platform: msgPlatform, content };
+    }
+    if (actType === "EMAIL") {
+      const body = emailBody.trim();
+      if (!body) return null;
+      return {
+        recipient: emailTo.trim() || null,
+        subject: emailSubject.trim() || null,
+        body,
+      };
+    }
+    // NOTE
+    const text = noteContent.trim();
+    if (!text) return null;
+    return { text };
+  }
 
   function submitActivity() {
-    if (!actContent.trim()) {
+    const content = buildContent();
+    if (!content) {
       toast.error("Nhập nội dung hoạt động");
       return;
     }
+    const metadata = buildMetadata();
     startTransition(async () => {
-      const res = await addLeadActivity({
-        leadId,
-        type: actType,
-        content: actContent,
-      });
+      const res = await addLeadActivity({ leadId, type: actType, content, metadata });
       if (res.ok) {
-        setActContent("");
+        resetForm();
         toast.success("Đã ghi hoạt động");
         router.refresh();
       } else {
@@ -102,86 +270,153 @@ export function LeadActivityPanel({
     });
   }
 
-  function submitTask() {
-    if (!taskTitle.trim() || !taskDue) {
-      toast.error("Nhập tiêu đề + hạn");
-      return;
-    }
-    startTransition(async () => {
-      const res = await addLeadTask({ leadId, title: taskTitle, dueAt: taskDue });
-      if (res.ok) {
-        setTaskTitle("");
-        setTaskDue("");
-        toast.success("Đã thêm việc");
-        router.refresh();
-      } else {
-        toast.error(res.error ?? "Lỗi");
-      }
-    });
-  }
-
-  function toggleTask(id: string, done: boolean) {
-    startTransition(async () => {
-      const res = await completeLeadTask(id, done);
-      if (res.ok) router.refresh();
-      else toast.error(res.error ?? "Lỗi");
-    });
-  }
-
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      {/* Timeline (2 cột) */}
-      <div className="lg:col-span-2 space-y-4">
-        {/* Quick activity */}
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-bold text-gray-900">Ghi nhanh hoạt động</h3>
-          <div className="flex flex-wrap gap-2">
-            {(["CALL", "MESSAGE", "NOTE", "EMAIL"] as const).map((t) => {
-              const Icon = ACTIVITY_ICON[t];
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setActType(t)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${
-                    actType === t
-                      ? "border-orange-400 bg-orange-50 text-orange-700"
-                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <Icon size={14} /> {ACTIVITY_LABEL[t]}
-                </button>
-              );
-            })}
-          </div>
-          <textarea
-            value={actContent}
-            onChange={(e) => setActContent(e.target.value)}
-            rows={2}
-            placeholder="Nội dung cuộc gọi / tin nhắn / ghi chú..."
-            className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-          />
-          <button
-            type="button"
-            onClick={submitActivity}
-            disabled={isPending}
-            className="mt-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
-          >
-            Ghi hoạt động
-          </button>
+    // LD6 — bỏ cột "Việc cần làm" → bố cục 1 cột (trước đây lg:grid-cols-3).
+    <div className="space-y-4">
+      {/* LD4 — Ghi nhanh hoạt động theo từng loại */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <h3 className="mb-3 text-sm font-bold text-gray-900">Ghi nhanh hoạt động</h3>
+        <div className="flex flex-wrap gap-2">
+          {QUICK_TYPES.map((t) => {
+            const Icon = ACTIVITY_ICON[t];
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setActType(t)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${
+                  actType === t
+                    ? "border-orange-400 bg-orange-50 text-orange-700"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <Icon size={14} /> {ACTIVITY_LABEL[t]}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Timeline */}
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-bold text-gray-900">
-            Lịch sử hoạt động ({activities.length})
-          </h3>
-          {activities.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-400">
-              Chưa có hoạt động nào.
-            </p>
+        {/* Trường nhập khác nhau theo loại */}
+        <div className="mt-3 space-y-2">
+          {actType === "CALL" && (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  value={callCaller}
+                  onChange={(e) => setCallCaller(e.target.value)}
+                  placeholder="Người gọi"
+                  className={inputCls}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={callDuration}
+                  onChange={(e) => setCallDuration(e.target.value)}
+                  placeholder="Thời lượng (phút)"
+                  className={inputCls}
+                />
+              </div>
+              <textarea
+                value={callNotes}
+                onChange={(e) => setCallNotes(e.target.value)}
+                rows={2}
+                placeholder="Nội dung trao đổi..."
+                className={inputCls}
+              />
+            </>
+          )}
+
+          {actType === "MESSAGE" && (
+            <>
+              <select
+                value={msgPlatform}
+                onChange={(e) => setMsgPlatform(e.target.value as MessagePlatform)}
+                className={inputCls}
+                aria-label="Nền tảng nhắn tin"
+              >
+                {MESSAGE_PLATFORMS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={msgContent}
+                onChange={(e) => setMsgContent(e.target.value)}
+                rows={2}
+                placeholder="Nội dung tin nhắn..."
+                className={inputCls}
+              />
+            </>
+          )}
+
+          {actType === "EMAIL" && (
+            <>
+              <input
+                type="email"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="Người nhận (email)"
+                className={inputCls}
+              />
+              <input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="Tiêu đề"
+                className={inputCls}
+              />
+              <textarea
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                rows={3}
+                placeholder="Nội dung email..."
+                className={inputCls}
+              />
+            </>
+          )}
+
+          {actType === "NOTE" && (
+            <textarea
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+              rows={2}
+              placeholder="Ghi chú..."
+              className={inputCls}
+            />
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={submitActivity}
+          disabled={isPending}
+          className="mt-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
+        >
+          Ghi hoạt động
+        </button>
+      </div>
+
+      {/* LD5 — Lịch sử thành nút bấm mở/đóng (mặc định đóng) */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((v) => !v)}
+          aria-expanded={historyOpen}
+          className="flex w-full items-center justify-between gap-2 text-left text-sm font-bold text-gray-900"
+        >
+          <span>Lịch sử tương tác của Lead ({activities.length})</span>
+          {historyOpen ? (
+            <ChevronDown size={16} className="flex-shrink-0 text-gray-500" />
           ) : (
-            <ol className="space-y-3">
+            <ChevronRight size={16} className="flex-shrink-0 text-gray-500" />
+          )}
+        </button>
+
+        {historyOpen &&
+          (activities.length === 0 ? (
+            <p className="py-6 text-center text-sm text-gray-400">Chưa có hoạt động nào.</p>
+          ) : (
+            <ol className="mt-3 space-y-3">
               {activities.map((a) => {
                 const Icon = ACTIVITY_ICON[a.type] ?? StickyNote;
                 return (
@@ -198,102 +433,13 @@ export function LeadActivityPanel({
                           {a.actorName} · {fmtDateTime(a.createdAt)}
                         </span>
                       </div>
-                      <p className="mt-0.5 whitespace-pre-line text-sm text-gray-800">
-                        {a.content}
-                      </p>
+                      <ActivityBody activity={a} />
                     </div>
                   </li>
                 );
               })}
             </ol>
-          )}
-        </div>
-      </div>
-
-      {/* Tasks panel (1 cột) */}
-      <div className="space-y-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-bold text-gray-900">Việc cần làm</h3>
-          <div className="space-y-2">
-            <input
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              placeholder="VD: Gọi lại tư vấn"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-            />
-            <input
-              type="datetime-local"
-              value={taskDue}
-              onChange={(e) => setTaskDue(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-            />
-            <button
-              type="button"
-              onClick={submitTask}
-              disabled={isPending}
-              className="inline-flex w-full items-center justify-center gap-1 rounded-lg border-2 border-orange-300 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-60"
-            >
-              <Plus size={14} /> Thêm việc
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-2">
-            {tasks.length === 0 && (
-              <p className="py-3 text-center text-xs text-gray-400">
-                Chưa có việc nào.
-              </p>
-            )}
-            {tasks.map((t) => {
-              const overdue = mounted && isOverdue(t);
-              const doneState = t.status === "DONE";
-              return (
-                <div
-                  key={t.id}
-                  className={`rounded-lg border p-3 ${
-                    overdue
-                      ? "border-red-300 bg-red-50"
-                      : doneState
-                        ? "border-gray-200 bg-gray-50"
-                        : "border-gray-200 bg-white"
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleTask(t.id, !doneState)}
-                      disabled={isPending}
-                      className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border ${
-                        doneState
-                          ? "border-green-500 bg-green-500 text-white"
-                          : "border-gray-300 bg-white"
-                      }`}
-                      aria-label={doneState ? "Bỏ hoàn thành" : "Hoàn thành"}
-                    >
-                      {doneState && <Check size={12} />}
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className={`text-sm font-medium ${
-                          doneState ? "text-gray-400 line-through" : "text-gray-900"
-                        }`}
-                      >
-                        {t.title}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Hạn: {fmtDateTime(t.dueAt)}
-                        {overdue && (
-                          <span className="ml-1 font-bold text-red-600">
-                            · Quá hạn
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+          ))}
       </div>
     </div>
   );

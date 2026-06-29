@@ -5,9 +5,11 @@ import { db } from '@/lib/db'
 import { can, hasRole } from '@/lib/auth/permissions'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { resolveActor } from '@/lib/auth/actor'
-import { passesScope } from '@/lib/db-scope'
+import { passesScope, scopedDb } from '@/lib/db-scope'
+import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
@@ -54,9 +56,11 @@ export async function updateLeadStatus(
   }
 
   // R7-01 — chỉ cho phép chuyển trạng thái hợp lệ theo pipeline.
-  // TODO(R7-04): đọc khoản Sale ghi nhận → hasRecordedPayment thực
-  // (tạm false ⇒ AWAITING_DECISION→REGISTERED bị chặn tới R7-04).
-  const hasRecordedPayment = false
+  // S3 — đọc khoản Sale ghi nhận THỰC qua getLeadPaymentSummary (cùng reader với card +
+  //      guard convert) → AWAITING_DECISION→REGISTERED mở khoá khi đã có Payment(RECORDED).
+  //      (Bình thường lead tự lên REGISTERED khi ghi Payment; đây là đường chuyển TAY.)
+  const summary = await getLeadPaymentSummary(scopedDb(actor), leadId)
+  const hasRecordedPayment = summary.recordedCount > 0
   const transition = canTransitionLeadStatus(before.status, parsed.data, {
     hasRecordedPayment,
   })
@@ -131,6 +135,37 @@ export async function updateLeadStatus(
   return { ok: true }
 }
 
+// ─── LD1 — Loại đơn dự kiến (OrderKind) trên lead detail ─────────────────────
+
+const orderKindSchema = z.enum(['COURSE', 'PRODUCT'])
+
+/** Đặt loại đơn dự kiến (Khoá học / Sản phẩm) cho lead — gợi ý nguồn item khi tạo đơn. */
+export async function updateLeadOrderKind(
+  leadId: string,
+  kind: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+
+  const parsed = orderKindSchema.safeParse(kind)
+  if (!parsed.success) return { ok: false, error: 'Loại đơn không hợp lệ' }
+
+  const before = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { centerId: true },
+  })
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
+
+  await db.lead.update({ where: { id: leadId }, data: { orderKind: parsed.data } })
+
+  revalidatePath(`/leads/${leadId}`)
+  return { ok: true }
+}
+
 // ─── Phase T1.2 — Activity + Task ────────────────────────────────────────────
 
 const activityTypeSchema = z.enum(['CALL', 'MESSAGE', 'NOTE', 'EMAIL'])
@@ -139,6 +174,9 @@ export async function addLeadActivity(input: {
   leadId: string
   type: string
   content: string
+  // LD4 — metadata JSON tuỳ theo loại (CALL/MESSAGE/EMAIL/NOTE). Optional →
+  // backward compatible: caller cũ chỉ truyền { leadId, type, content } vẫn chạy.
+  metadata?: Prisma.InputJsonValue | null
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
@@ -168,6 +206,8 @@ export async function addLeadActivity(input: {
         actorName,
         type: parsedType.data,
         content,
+        // Chỉ set khi caller có truyền metadata → tránh ghi đè null không cần.
+        ...(input.metadata != null ? { metadata: input.metadata } : {}),
       },
     })
     await tx.lead.update({

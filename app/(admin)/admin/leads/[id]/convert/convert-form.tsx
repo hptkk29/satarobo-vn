@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -20,7 +20,6 @@ type StudentRow = {
   name: string
   dob: string
   classId: string
-  discountId: string
   consentMedia: boolean
 }
 
@@ -38,7 +37,6 @@ export function ConvertForm({
   defaultParentPhone,
   prefillStudents,
   classes,
-  discountsByCourse,
   order,
 }: {
   leadId: string
@@ -52,7 +50,6 @@ export function ConvertForm({
     courseId: string
   }[]
   classes: ClassOpt[]
-  discountsByCourse: Record<string, { id: string; label: string }[]>
   /** FL2-01 — đơn hàng học phí gắn lead (để chia 1/2 đợt). null = chưa có đơn. */
   order: { id: string; totalAmount: number } | null
 }) {
@@ -63,6 +60,11 @@ export function ConvertForm({
   const [parentName, setParentName] = useState(defaultParentName)
   const [parentEmail, setParentEmail] = useState(defaultParentEmail)
   const [parentPhone, setParentPhone] = useState(defaultParentPhone)
+  // C5 — CCCD + địa chỉ phụ huynh (lưu trên tài khoản phụ huynh, KHÔNG lưu trên học viên).
+  const [parentCccd, setParentCccd] = useState('')
+  const [parentAddress, setParentAddress] = useState('')
+  const [parentWard, setParentWard] = useState('')
+  const [parentCity, setParentCity] = useState('')
 
   // FL2-01 — kế hoạch học phí. Chỉ áp dụng khi có Order với tổng > 0.
   const hasOrder = !!order && order.totalAmount > 0
@@ -84,14 +86,11 @@ export function ConvertForm({
           name: s.name,
           dob: s.dob,
           classId: cls?.id ?? '',
-          discountId: '',
           consentMedia: false,
         }
       },
     ),
   )
-
-  const classById = useMemo(() => new Map(classes.map((c) => [c.id, c])), [classes])
 
   function patch(key: string, p: Partial<StudentRow>) {
     setStudents((rows) => rows.map((r) => (r.key === key ? { ...r, ...p } : r)))
@@ -100,7 +99,7 @@ export function ConvertForm({
   function addStudent() {
     setStudents((rows) => [
       ...rows,
-      { key: newKey(), leadChildId: null, name: '', dob: '', classId: '', discountId: '', consentMedia: false },
+      { key: newKey(), leadChildId: null, name: '', dob: '', classId: '', consentMedia: false },
     ])
   }
 
@@ -127,12 +126,15 @@ export function ConvertForm({
         parentName: parentName.trim(),
         parentEmail: parentEmail.trim(),
         parentPhone: parentPhone.trim(),
+        parentCccd: parentCccd.trim(),
+        parentAddress: parentAddress.trim(),
+        parentWard: parentWard.trim(),
+        parentCity: parentCity.trim(),
         students: students.map((s) => ({
           leadChildId: s.leadChildId,
           name: s.name.trim(),
           dob: s.dob || '',
           classId: s.classId,
-          discountId: s.discountId || '',
           consentMedia: s.consentMedia,
         })),
         // FL2-01 — chỉ gửi khi có đơn để chia; server đọc lại tổng từ Order.
@@ -146,6 +148,8 @@ export function ConvertForm({
             (res.deduped ? ' (đã xử lý trùng / idempotent)' : ''),
         )
         if (res.installmentWarning) toast.warning(res.installmentWarning)
+        else if (res.installmentPendingApproval)
+          toast.info('Kế hoạch 2 đợt đã gửi — chờ quản lý cơ sở duyệt')
         else if (res.installmentApplied) toast.success('Đã ghi kế hoạch học phí 2 đợt')
         router.push(`/leads/${leadId}`)
         router.refresh()
@@ -201,14 +205,38 @@ export function ConvertForm({
             <span className="mb-1 block text-xs font-medium text-gray-500">SĐT *</span>
             <input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} className={inputCls} />
           </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">CCCD / CMND</span>
+            <input
+              value={parentCccd}
+              onChange={(e) => setParentCccd(e.target.value)}
+              placeholder="9 hoặc 12 chữ số"
+              className={inputCls}
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Địa chỉ</span>
+            <input
+              value={parentAddress}
+              onChange={(e) => setParentAddress(e.target.value)}
+              placeholder="Số nhà, đường…"
+              className={inputCls}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Tỉnh / Thành</span>
+            <input value={parentCity} onChange={(e) => setParentCity(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Phường / Xã</span>
+            <input value={parentWard} onChange={(e) => setParentWard(e.target.value)} className={inputCls} />
+          </label>
         </div>
       </div>
 
       {/* Học viên (multi) */}
       <div className="space-y-4">
         {students.map((s, idx) => {
-          const cls = classById.get(s.classId)
-          const courseDiscounts = cls ? discountsByCourse[cls.courseId] ?? [] : []
           return (
             <div key={s.key} className="rounded-xl border border-gray-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -248,29 +276,13 @@ export function ConvertForm({
                   <span className="mb-1 block text-xs font-medium text-gray-500">Lớp đăng ký *</span>
                   <select
                     value={s.classId}
-                    onChange={(e) => patch(s.key, { classId: e.target.value, discountId: '' })}
+                    onChange={(e) => patch(s.key, { classId: e.target.value })}
                     className={inputCls}
                   >
                     <option value="">— Chọn lớp —</option>
                     {classes.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label} · {c.courseName} ({c.listPrice.toLocaleString('vi-VN')}đ)
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-gray-500">Ưu đãi (tuỳ chọn)</span>
-                  <select
-                    value={s.discountId}
-                    onChange={(e) => patch(s.key, { discountId: e.target.value })}
-                    className={inputCls}
-                    disabled={!cls || courseDiscounts.length === 0}
-                  >
-                    <option value="">— Không ưu đãi —</option>
-                    {courseDiscounts.map((dc) => (
-                      <option key={dc.id} value={dc.id}>
-                        {dc.label}
                       </option>
                     ))}
                   </select>
@@ -369,6 +381,13 @@ export function ConvertForm({
                 />
               </label>
             </div>
+          )}
+
+          {/* C4 — kế hoạch 2 đợt cần quản lý cơ sở duyệt trước khi đợt 2 được tính tiền. */}
+          {installPlan === 'TWO' && (
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800">
+              <AlertTriangle className="h-3.5 w-3.5" /> Chờ quản lý cơ sở duyệt
+            </p>
           )}
         </div>
       )}

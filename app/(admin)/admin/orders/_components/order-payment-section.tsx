@@ -13,6 +13,8 @@ type Installment = {
   status: string;
   dueDate: string | null;
   paidAt: string | null;
+  // OD1 — số ngày nhắc trước hạn đợt 2 đã lưu (null → chưa đặt, dùng default).
+  reminderDays: number | null;
 };
 
 function vnd(n: number) {
@@ -42,6 +44,10 @@ export function OrderPaymentSection({
   const [dot2Due, setDot2Due] = useState(
     installments.find((i) => i.soDot === 2)?.dueDate?.slice(0, 10) ?? "",
   );
+  // OD1 — số ngày nhắc công nợ trước hạn đợt 2: pre-fill từ giá trị đã lưu (fallback 14, khớp SystemSetting).
+  const [reminderDays, setReminderDays] = useState(
+    installments.find((i) => i.soDot === 2)?.reminderDays ?? 14,
+  );
 
   function save() {
     if (dot1 + dot2 !== totalAmount) {
@@ -58,6 +64,8 @@ export function OrderPaymentSection({
         dot1Amount: dot1,
         dot2Amount: dot2,
         dot2DueDate: dot2 > 0 ? dot2Due : null,
+        // OD1 — chỉ gửi reminderDays khi có đợt 2; null → cron fallback default.
+        reminderDays: dot2 > 0 ? reminderDays : null,
       });
       if (res.ok) {
         toast.success("Đã lưu kế hoạch thanh toán");
@@ -146,10 +154,18 @@ export function OrderPaymentSection({
                   <input type="date" value={dot2Due} onChange={(e) => setDot2Due(e.target.value)} disabled={dot2 <= 0} className="mt-0.5 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm disabled:bg-neutral-50" />
                 </label>
               </div>
+              <label className="block text-sm">
+                <span className="text-xs text-neutral-500">Nhắc công nợ trước (ngày)</span>
+                <input type="number" min={0} value={reminderDays} onChange={(e) => setReminderDays(Math.max(0, Number(e.target.value) || 0))} disabled={dot2 <= 0} className="mt-0.5 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm disabled:bg-neutral-50" />
+              </label>
               <button onClick={save} disabled={pending} className="w-full rounded-md bg-purple-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {pending ? "Đang lưu…" : "Lưu kế hoạch thanh toán"}
               </button>
-              <p className="text-[11px] text-neutral-400">Nhắc công nợ đợt 2 tự động từ ≤14 ngày trước hạn (email).</p>
+              <p className="text-[11px] text-neutral-400">
+                {dot2 > 0
+                  ? `Email nhắc công nợ đợt 2 gửi từ ${reminderDays} ngày trước hạn.`
+                  : "Nhắc công nợ đợt 2 tự động khi có đợt 2 (email)."}
+              </p>
             </div>
           )}
         </div>

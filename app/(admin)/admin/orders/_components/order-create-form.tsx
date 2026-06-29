@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { createOrderManualAction, previewVoucherAction } from "../_actions";
 
 type Course = {
@@ -23,13 +24,6 @@ type Course = {
   code: string | null;
   name: string;
   price: number | null;
-};
-type Pkg = {
-  id: string;
-  code: string;
-  name: string;
-  priceMember: number | null;
-  priceEarlyBird: number | null;
 };
 type ProductOption = {
   id: string;
@@ -50,23 +44,27 @@ type PM = {
 };
 type Center = { id: string; name: string };
 
+// O1 — selector loại đơn chỉ 2 lựa chọn (combo là course teachable → nằm trong "Khoá học").
+type UiOrderType = Extract<OrderType, "COURSE" | "PRODUCT">;
+
 const NO_CENTER = "NONE";
 
 export function OrderCreateForm({
   paymentMethods,
   courses,
-  packages,
   products,
   centers,
+  provinces,
   leadId = null,
   defaultCustomer,
   defaultCenterId,
 }: {
   paymentMethods: PM[];
   courses: Course[];
-  packages: Pkg[];
   products: ProductOption[];
   centers: Center[];
+  // O2 — danh sách tỉnh/thành (2 cấp 2025) load từ server (vietnam-address-data).
+  provinces: ComboboxOption[];
   // convert-v2 (R7-05/06): khi tạo đơn TỪ một lead, gắn leadId để convert sau tìm
   // được Payment RECORDED qua order.leadId. null = đơn walk-in thông thường.
   leadId?: string | null;
@@ -76,7 +74,7 @@ export function OrderCreateForm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [orderType, setOrderType] = useState<OrderType>("COURSE");
+  const [orderType, setOrderType] = useState<UiOrderType>("COURSE");
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("PENDING_PAYMENT");
   const [paymentMethodId, setPaymentMethodId] = useState<string>("");
 
@@ -84,10 +82,14 @@ export function OrderCreateForm({
     name: defaultCustomer?.name ?? "",
     phone: defaultCustomer?.phone ?? "",
     email: defaultCustomer?.email ?? "",
+    cccd: "",
     address: "",
-    ward: "",
-    city: "",
   });
+  // O2 — tỉnh/phường qua combobox; lưu id, map sang tên khi submit.
+  const [provinceId, setProvinceId] = useState<string | null>(null);
+  const [wardId, setWardId] = useState<string | null>(null);
+  const [wardOptions, setWardOptions] = useState<ComboboxOption[]>([]);
+  const [wardLoading, setWardLoading] = useState(false);
   const [centerId, setCenterId] = useState<string>(defaultCenterId ?? NO_CENTER);
 
   // Single item
@@ -98,7 +100,6 @@ export function OrderCreateForm({
 
   // Pricing
   const [discountAmount, setDiscountAmount] = useState(0);
-  const [shippingFee, setShippingFee] = useState(0);
   const [voucherCode, setVoucherCode] = useState("");
   const [voucherStatus, setVoucherStatus] = useState<
     | { kind: "idle" }
@@ -115,8 +116,6 @@ export function OrderCreateForm({
   const availablePMs = useMemo(() => {
     return paymentMethods.filter((pm) => {
       if (orderType === "COURSE") return pm.canBuyCourse;
-      if (orderType === "PACKAGE") return pm.canBuyPackage;
-      if (orderType === "EXAM") return pm.canBuyExam;
       if (orderType === "PRODUCT") return pm.canBuyProduct;
       return false;
     });
@@ -124,7 +123,10 @@ export function OrderCreateForm({
 
   // Base UI <Select.Value> hiển thị value THÔ (mã/ID) → phải truyền `items` (map
   // value→nhãn) cho trigger hiện đúng tiếng Việt (item 3 — fix Radix→Base UI regression).
-  const ORDER_TYPE_ITEMS = { COURSE: "Khoá học", PACKAGE: "Gói combo", PRODUCT: "Sản phẩm" };
+  const ORDER_TYPE_ITEMS: Record<UiOrderType, string> = {
+    COURSE: "Khoá học",
+    PRODUCT: "Sản phẩm",
+  };
   const ORDER_STATUS_ITEMS = { DRAFT: "Nháp", PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận TT" };
   const pmItems = useMemo(
     () => Object.fromEntries(availablePMs.map((pm) => [pm.id, pm.name])),
@@ -137,10 +139,15 @@ export function OrderCreateForm({
   const itemItems = useMemo(() => {
     if (orderType === "COURSE")
       return Object.fromEntries(courses.map((c) => [c.id, c.code ? `${c.name} (${c.code})` : c.name]));
-    if (orderType === "PACKAGE")
-      return Object.fromEntries(packages.map((p) => [p.id, `${p.name} (${p.code})`]));
     return Object.fromEntries(products.map((pd) => [pd.id, `${pd.sku} · ${pd.name}`]));
-  }, [orderType, courses, packages, products]);
+  }, [orderType, courses, products]);
+
+  // O4 hardening — khoá học có giá null/0 (vd Sata5 chưa nạp giá) → cảnh báo nhập tay.
+  const coursePriceMissing = useMemo(() => {
+    if (orderType !== "COURSE" || !itemRefId) return false;
+    const c = courses.find((x) => x.id === itemRefId);
+    return c ? c.price == null || c.price <= 0 : false;
+  }, [orderType, itemRefId, courses]);
 
   function handleItemSelect(refId: string) {
     setItemRefId(refId);
@@ -150,13 +157,7 @@ export function OrderCreateForm({
         setItemName(c.name);
         setUnitPrice(c.price ?? 0);
       }
-    } else if (orderType === "PACKAGE") {
-      const p = packages.find((x) => x.id === refId);
-      if (p) {
-        setItemName(p.name);
-        setUnitPrice(p.priceMember ?? p.priceEarlyBird ?? 0);
-      }
-    } else if (orderType === "PRODUCT") {
+    } else {
       const pd = products.find((x) => x.id === refId);
       if (pd) {
         setItemName(`${pd.name} (${pd.sku})`);
@@ -165,8 +166,28 @@ export function OrderCreateForm({
     }
   }
 
+  // O2 — đổi tỉnh: reset phường + lazy-load danh sách phường theo tỉnh.
+  function handleProvinceChange(nextProvinceId: string | null) {
+    setProvinceId(nextProvinceId);
+    setWardId(null);
+    setWardOptions([]);
+    if (!nextProvinceId) return;
+    setWardLoading(true);
+    void import("vietnam-address-data")
+      .then(({ getWardsByProvince }) => {
+        setWardOptions(
+          getWardsByProvince(nextProvinceId).map((w) => ({
+            value: w.id,
+            label: w.name,
+          })),
+        );
+      })
+      .finally(() => setWardLoading(false));
+  }
+
   const subtotal = unitPrice * quantity;
-  const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
+  // O5 — bỏ phí vận chuyển: tổng = max(0, tạm tính − giảm giá).
+  const totalAmount = Math.max(0, subtotal - discountAmount);
 
   function handlePreviewVoucher() {
     if (!voucherCode.trim()) {
@@ -217,18 +238,17 @@ export function OrderCreateForm({
       toast.error("Vui lòng chọn sản phẩm và nhập đơn giá > 0");
       return;
     }
+    if (!customer.email.trim()) {
+      toast.error("Vui lòng nhập email khách hàng");
+      return;
+    }
     if (!paymentMethodId) {
       toast.error("Vui lòng chọn phương thức thanh toán");
       return;
     }
-    if (!["COURSE", "PACKAGE", "PRODUCT"].includes(orderType)) {
-      toast.error(`v1 chỉ hỗ trợ COURSE, PACKAGE, PRODUCT (không hỗ trợ ${orderType})`);
-      return;
-    }
 
-    const itemTypeMap: Record<string, OrderItemType> = {
+    const itemTypeMap: Record<UiOrderType, OrderItemType> = {
       COURSE: "COURSE_ENROLLMENT",
-      PACKAGE: "COURSE_PACKAGE",
       PRODUCT: "PRODUCT",
     };
     const itemType: OrderItemType = itemTypeMap[orderType];
@@ -238,28 +258,35 @@ export function OrderCreateForm({
       itemName,
       quantity,
       unitPrice,
-      packageId: orderType === "PACKAGE" ? itemRefId : null,
+      packageId: null,
       examAttemptId: null,
       productId: orderType === "PRODUCT" ? itemRefId : null,
       metadata: orderType === "COURSE" ? { courseId: itemRefId } : null,
     };
 
+    const cityName = provinceId
+      ? (provinces.find((p) => p.value === provinceId)?.label ?? null)
+      : null;
+    const wardName = wardId
+      ? (wardOptions.find((w) => w.value === wardId)?.label ?? null)
+      : null;
+
     const input = {
-      type: orderType,
+      type: orderType as OrderType,
       status: orderStatus,
       customerName: customer.name,
       customerPhone: customer.phone,
-      customerEmail: customer.email || null,
+      customerEmail: customer.email,
+      customerCccd: customer.cccd || null,
       customerAddress: customer.address || null,
-      customerWard: customer.ward || null,
-      customerCity: customer.city || null,
+      customerWard: wardName,
+      customerCity: cityName,
       studentId: null,
       leadId: leadId ?? null,
       centerId: centerId === NO_CENTER ? null : centerId,
       paymentMethodId,
       items: [item],
       discountAmount,
-      shippingFee,
       voucherCode: voucherCode || null,
       customerNote: customerNote || null,
       internalNote: internalNote || null,
@@ -291,7 +318,7 @@ export function OrderCreateForm({
               items={ORDER_TYPE_ITEMS}
               value={orderType}
               onValueChange={(v) => {
-                setOrderType(v as OrderType);
+                setOrderType(v as UiOrderType);
                 setItemRefId("");
                 setItemName("");
                 setUnitPrice(0);
@@ -303,7 +330,6 @@ export function OrderCreateForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="COURSE">Khoá học</SelectItem>
-                <SelectItem value="PACKAGE">Gói combo</SelectItem>
                 <SelectItem value="PRODUCT">Sản phẩm</SelectItem>
               </SelectContent>
             </Select>
@@ -376,13 +402,26 @@ export function OrderCreateForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Email</Label>
+            <Label>Email *</Label>
             <Input
               type="email"
               value={customer.email}
               onChange={(e) =>
                 setCustomer({ ...customer, email: e.target.value })
               }
+              required
+              placeholder="email@vidu.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>CCCD/CMND</Label>
+            <Input
+              value={customer.cccd}
+              onChange={(e) =>
+                setCustomer({ ...customer, cccd: e.target.value })
+              }
+              inputMode="numeric"
+              placeholder="9 hoặc 12 chữ số"
             />
           </div>
           <div className="space-y-1.5">
@@ -402,7 +441,7 @@ export function OrderCreateForm({
             </Select>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label>Địa chỉ</Label>
+            <Label>Địa chỉ (số nhà, đường)</Label>
             <Input
               value={customer.address}
               onChange={(e) =>
@@ -410,22 +449,32 @@ export function OrderCreateForm({
               }
             />
           </div>
+          {/* O2 — Tỉnh/Thành TRƯỚC (searchable), Phường/Xã SAU (phụ thuộc tỉnh) */}
           <div className="space-y-1.5">
-            <Label>Phường/Xã</Label>
-            <Input
-              value={customer.ward}
-              onChange={(e) =>
-                setCustomer({ ...customer, ward: e.target.value })
-              }
+            <Label>Tỉnh/Thành</Label>
+            <Combobox
+              options={provinces}
+              value={provinceId}
+              onValueChange={handleProvinceChange}
+              placeholder="Tìm tỉnh/thành..."
+              emptyText="Không tìm thấy tỉnh/thành"
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Tỉnh/Thành</Label>
-            <Input
-              value={customer.city}
-              onChange={(e) =>
-                setCustomer({ ...customer, city: e.target.value })
+            <Label>Phường/Xã</Label>
+            <Combobox
+              options={wardOptions}
+              value={wardId}
+              onValueChange={setWardId}
+              disabled={!provinceId || wardLoading}
+              placeholder={
+                !provinceId
+                  ? "Chọn tỉnh/thành trước"
+                  : wardLoading
+                    ? "Đang tải..."
+                    : "Tìm phường/xã..."
               }
+              emptyText="Không tìm thấy phường/xã"
             />
           </div>
         </div>
@@ -437,13 +486,7 @@ export function OrderCreateForm({
           Sản phẩm
         </h2>
         <div className="space-y-1.5">
-          <Label>
-            {orderType === "COURSE"
-              ? "Khoá học *"
-              : orderType === "PACKAGE"
-                ? "Gói combo *"
-                : "Sản phẩm *"}
-          </Label>
+          <Label>{orderType === "COURSE" ? "Khoá học *" : "Sản phẩm *"}</Label>
           <Select
             items={itemItems}
             value={itemRefId}
@@ -458,12 +501,6 @@ export function OrderCreateForm({
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}
                     {c.code ? ` (${c.code})` : ""}
-                  </SelectItem>
-                ))}
-              {orderType === "PACKAGE" &&
-                packages.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} ({p.code})
                   </SelectItem>
                 ))}
               {orderType === "PRODUCT" && products.length === 0 && (
@@ -485,6 +522,13 @@ export function OrderCreateForm({
                 ))}
             </SelectContent>
           </Select>
+          {/* O4 hardening — cảnh báo giá khoá học rỗng → nhập đơn giá tay */}
+          {coursePriceMissing && (
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+              ⚠️ Khoá học này chưa có giá niêm yết. Vui lòng nhập đơn giá thủ
+              công bên dưới.
+            </div>
+          )}
           {orderType === "PRODUCT" &&
             itemRefId &&
             (() => {
@@ -574,27 +618,14 @@ export function OrderCreateForm({
               </div>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label>Giảm giá (VND)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={discountAmount}
-                onChange={(e) =>
-                  setDiscountAmount(Number(e.target.value) || 0)
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Phí vận chuyển (VND)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={shippingFee}
-                onChange={(e) => setShippingFee(Number(e.target.value) || 0)}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label>Giảm giá (VND)</Label>
+            <Input
+              type="number"
+              min={0}
+              value={discountAmount}
+              onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
+            />
           </div>
         </div>
         <div className="text-right">

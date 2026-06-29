@@ -9,7 +9,6 @@ import { OrderDetailClient } from "../_components/order-detail-client";
 import { OrderPaymentSection } from "../_components/order-payment-section";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL } from "@/lib/orders/status";
-import { getOrderInstallments } from "@/lib/orders/installments";
 import { getPaymentConfig, buildTransferContent, buildVietQrImageUrl } from "@/lib/payments/vietqr";
 import type { OrderStatus } from "@prisma/client";
 
@@ -58,17 +57,29 @@ export default async function OrderDetailPage({ params }: Props) {
           },
         },
       },
+      // OD1 — kế hoạch 2 đợt kèm reminderDays (số ngày nhắc trước hạn đợt 2) để pre-fill.
+      installments: {
+        orderBy: { soDot: "asc" },
+        select: {
+          id: true,
+          soDot: true,
+          amount: true,
+          status: true,
+          dueDate: true,
+          paidAt: true,
+          reminderDays: true,
+        },
+      },
     },
   });
   if (!order) notFound();
 
   const canManage = can(session.user, "orders:manage");
+  // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
+  const canApprove = can(session.user, "installments:approve");
 
   // Commit 4 — thanh toán 2 đợt + QR (nội dung CK: tên HV + SĐT PH + tên khoá).
-  const [installments, payCfg] = await Promise.all([
-    getOrderInstallments(order.id),
-    getPaymentConfig(),
-  ]);
+  const payCfg = await getPaymentConfig();
   const transferContent = buildTransferContent(
     order.student?.name ?? order.customerName,
     order.customerPhone,
@@ -134,7 +145,11 @@ export default async function OrderDetailPage({ params }: Props) {
         </div>
       </div>
 
-      <OrderDetailClient order={order} canManage={canManage} />
+      <OrderDetailClient
+        order={order}
+        canManage={canManage}
+        canApprove={canApprove}
+      />
 
       <OrderPaymentSection
         orderId={order.id}
@@ -142,13 +157,14 @@ export default async function OrderDetailPage({ params }: Props) {
         canManage={canManage}
         qrUrl={qrUrl}
         transferContent={transferContent}
-        installments={installments.map((i) => ({
+        installments={order.installments.map((i) => ({
           id: i.id,
           soDot: i.soDot,
           amount: i.amount,
           status: i.status,
           dueDate: i.dueDate ? i.dueDate.toISOString() : null,
           paidAt: i.paidAt ? i.paidAt.toISOString() : null,
+          reminderDays: i.reminderDays,
         }))}
       />
     </div>

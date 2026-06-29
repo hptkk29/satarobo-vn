@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Prisma, OrderStatus } from "@prisma/client";
+import type { Prisma, OrderStatus, InstallmentApprovalStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +27,11 @@ import {
   changeOrderStatusAction,
   updateOrderNoteAction,
 } from "../_actions";
+import {
+  requestInstallmentApprovalAction,
+  approveInstallmentPlanAction,
+  rejectInstallmentPlanAction,
+} from "./_installment-approval-actions";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
 
 type OrderWithIncludes = Prisma.OrderGetPayload<{
@@ -57,6 +63,18 @@ const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
   REFUNDED: [],
 };
 
+// OD1b — duyệt kế hoạch trả góp 2 đợt (C4).
+const APPROVAL_LABEL: Record<InstallmentApprovalStatus, string> = {
+  PENDING_APPROVAL: "Chờ quản lý cơ sở duyệt",
+  APPROVED: "Đã duyệt",
+  REJECTED: "Bị từ chối",
+};
+const APPROVAL_BADGE_CLASS: Record<InstallmentApprovalStatus, string> = {
+  PENDING_APPROVAL: "bg-amber-100 text-amber-800 hover:bg-amber-100",
+  APPROVED: "bg-green-100 text-green-800 hover:bg-green-100",
+  REJECTED: "bg-red-100 text-red-800 hover:bg-red-100",
+};
+
 function formatDateTime(date: Date): string {
   return new Intl.DateTimeFormat("vi-VN", {
     day: "2-digit",
@@ -70,15 +88,23 @@ function formatDateTime(date: Date): string {
 export function OrderDetailClient({
   order,
   canManage,
+  canApprove,
 }: {
   order: OrderWithIncludes;
   canManage: boolean;
+  // OD1b — quyền duyệt kế hoạch trả góp (installments:approve) tách khỏi orders:manage.
+  canApprove: boolean;
 }) {
+  const router = useRouter();
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<OrderStatus | "">("");
   const [reason, setReason] = useState("");
   const [internalNote, setInternalNote] = useState(order.internalNote ?? "");
   const [isPending, startTransition] = useTransition();
+  // OD1b — duyệt kế hoạch trả góp 2 đợt.
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const approvalStatus = order.installmentApprovalStatus;
 
   const nextOptions = NEXT_STATUSES[order.status];
 
@@ -124,6 +150,43 @@ export function OrderDetailClient({
       } else if (result.error === "STALE_WRITE") {
         handleStale();
       } else toast.error(result.error);
+    });
+  }
+
+  // OD1b — duyệt / từ chối / yêu cầu duyệt kế hoạch trả góp 2 đợt.
+  function handleApprove() {
+    startTransition(async () => {
+      const res = await approveInstallmentPlanAction(order.id);
+      if (res.ok) {
+        toast.success("Đã duyệt kế hoạch trả góp 2 đợt");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
+
+  function handleReject() {
+    if (!rejectReason.trim()) {
+      toast.error("Vui lòng nhập lý do từ chối");
+      return;
+    }
+    startTransition(async () => {
+      const res = await rejectInstallmentPlanAction(order.id, rejectReason.trim());
+      if (res.ok) {
+        toast.success("Đã từ chối kế hoạch trả góp 2 đợt");
+        setRejectModalOpen(false);
+        setRejectReason("");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
+
+  function handleRequestApproval() {
+    startTransition(async () => {
+      const res = await requestInstallmentApprovalAction(order.id);
+      if (res.ok) {
+        toast.success("Đã gửi yêu cầu duyệt kế hoạch trả góp");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
     });
   }
 
@@ -313,6 +376,72 @@ export function OrderDetailClient({
         </div>
       </section>
 
+      {/* OD1b — Duyệt kế hoạch trả góp 2 đợt (chỉ hiện khi có kế hoạch cần duyệt) */}
+      {approvalStatus && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+            Duyệt kế hoạch trả góp 2 đợt
+          </h2>
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-gray-500">Trạng thái:</span>
+              <Badge className={APPROVAL_BADGE_CLASS[approvalStatus]}>
+                {APPROVAL_LABEL[approvalStatus]}
+              </Badge>
+            </div>
+            {approvalStatus === "APPROVED" && order.installmentApprovedAt && (
+              <p className="text-xs text-gray-500">
+                Duyệt lúc {formatDateTime(order.installmentApprovedAt)}
+              </p>
+            )}
+            {approvalStatus === "REJECTED" && order.installmentRejectReason && (
+              <div className="rounded-lg bg-red-50 p-3 text-red-700">
+                Lý do từ chối: {order.installmentRejectReason}
+              </div>
+            )}
+            {canApprove && (
+              <div className="flex flex-wrap gap-2">
+                {approvalStatus === "PENDING_APPROVAL" && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={handleApprove}
+                      disabled={isPending}
+                    >
+                      {isPending && (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      )}
+                      Duyệt
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setRejectModalOpen(true)}
+                      disabled={isPending}
+                    >
+                      Từ chối
+                    </Button>
+                  </>
+                )}
+                {approvalStatus === "REJECTED" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRequestApproval}
+                    disabled={isPending}
+                  >
+                    {isPending && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    )}
+                    Yêu cầu duyệt lại
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Notes */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
@@ -447,6 +576,44 @@ export function OrderDetailClient({
             >
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Xác nhận
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* OD1b — Reject installment plan modal (reason bắt buộc) */}
+      <Dialog
+        open={rejectModalOpen}
+        onOpenChange={(o) => !isPending && setRejectModalOpen(o)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Từ chối kế hoạch trả góp 2 đợt</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <label className="text-sm font-medium">Lý do từ chối (bắt buộc):</label>
+            <Textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRejectModalOpen(false)}
+              disabled={isPending}
+            >
+              Huỷ
+            </Button>
+            <Button
+              type="button"
+              onClick={handleReject}
+              disabled={isPending || !rejectReason.trim()}
+            >
+              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Xác nhận từ chối
             </Button>
           </DialogFooter>
         </DialogContent>

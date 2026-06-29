@@ -24,7 +24,15 @@ export const orderCreateManualSchema = z.object({
   // Customer snapshot
   customerName: z.string().min(2).max(200),
   customerPhone: z.string().regex(PHONE_VN, "SĐT không hợp lệ"),
-  customerEmail: z.string().email().optional().or(z.literal("")).nullable(),
+  // O2 — email bắt buộc cho đơn thủ công (dùng gửi xác nhận/biên nhận).
+  customerEmail: z.string().email("Email không hợp lệ"),
+  // O2 — CCCD/CMND người mua (snapshot trên đơn): 9 hoặc 12 chữ số, optional.
+  customerCccd: z
+    .string()
+    .regex(/^\d{9}$|^\d{12}$/, "CCCD phải gồm 9 hoặc 12 chữ số")
+    .optional()
+    .or(z.literal(""))
+    .nullable(),
   customerAddress: z.string().max(500).optional().nullable(),
   customerWard: z.string().max(100).optional().nullable(),
   customerCity: z.string().max(100).optional().nullable(),

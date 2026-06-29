@@ -9,6 +9,7 @@ import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb, seedUser } from "../_helpers/seed";
 import { evaluatePaymentGuard, convertLeadV2 } from "../../../lib/crm/convert-lead-v2";
+import { ensureOrderPaymentRecorded } from "../../../lib/finance/payment";
 import {
   classifyParentMatch,
   normalizeName,
@@ -143,6 +144,100 @@ test.describe("[R7-05] Convert v2", () => {
     });
     return order;
   }
+
+  /** Lead ở AWAITING_DECISION (chưa REGISTERED) — chứng minh S4 bỏ chặn status. */
+  async function seedAwaitingLead(centerId: string, phone: string) {
+    return db.lead.create({
+      data: { parentName: "PH Lead", phone, status: "AWAITING_DECISION", centerId },
+    });
+  }
+
+  // ── S1 — ensureOrderPaymentRecorded idempotent + auto REGISTERED ──────────
+  test("[SPINE-S1] ghi Payment idempotent (orderId+soDot) + auto AWAITING_DECISION→REGISTERED", async () => {
+    const center = await seedCenter();
+    const lead = await seedAwaitingLead(center.id, "0900000020");
+    const order = await db.order.create({
+      data: {
+        code: `ORD-S1-${uniq()}`,
+        type: "COURSE",
+        customerName: "PH S1",
+        customerPhone: "0900000020",
+        totalAmount: 5_000_000,
+        leadId: lead.id,
+        centerId: center.id,
+        status: "PENDING_PAYMENT",
+      },
+    });
+
+    const first = await db.$transaction((tx) =>
+      ensureOrderPaymentRecorded(tx, {
+        orderId: order.id,
+        soDot: 1,
+        amount: 5_000_000,
+        leadId: lead.id,
+        centerId: center.id,
+        actor: { id: null, name: "Hệ thống" },
+      }),
+    );
+    expect(first.ok).toBe(true);
+    if (first.ok) expect(first.created).toBe(true);
+
+    // Gọi lại cùng (orderId, soDot) → KHÔNG tạo trùng.
+    const second = await db.$transaction((tx) =>
+      ensureOrderPaymentRecorded(tx, {
+        orderId: order.id,
+        soDot: 1,
+        amount: 5_000_000,
+        leadId: lead.id,
+        centerId: center.id,
+        actor: { id: null, name: "Hệ thống" },
+      }),
+    );
+    expect(second.ok).toBe(true);
+    if (second.ok) expect(second.created).toBe(false);
+
+    expect(await db.payment.count({ where: { orderId: order.id, saleStatus: "RECORDED" } })).toBe(1);
+    // Payment.centerId không null (suy từ order).
+    const pay = await db.payment.findFirst({ where: { orderId: order.id }, select: { centerId: true } });
+    expect(pay?.centerId).toBe(center.id);
+    // Lead tự lên REGISTERED.
+    const after = await db.lead.findUnique({ where: { id: lead.id }, select: { status: true } });
+    expect(after?.status).toBe("REGISTERED");
+  });
+
+  // ── S4 — convert từ status chưa-kết-thúc (KHÔNG cần REGISTERED), giữ cổng tiền ──
+  test("[SPINE-S4] convert từ AWAITING_DECISION có Payment RECORDED → OK (bỏ chặn status)", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const lead = await seedAwaitingLead(center.id, "0900000021");
+    await seedRecordedPayment(lead.id, center.id); // ≥1 RECORDED → cổng tiền pass
+    const actorUser = await seedUser({ email: `sale-s4-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale S4" });
+
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale S4" },
+      {
+        leadId: lead.id,
+        parentEmail: "ph-s4@test.com",
+        parentName: "PH S4",
+        parentPhone: "0905222333",
+        parentCccd: "012345678901",
+        parentAddress: "123 Đường ABC",
+        parentCity: "Đà Nẵng",
+        parentWard: "Phường Hòa Cường",
+        idempotencyKey: `s4-${uniq()}`,
+        students: [{ name: "Bé S4", courseId: course.id, listPrice: 5_000_000, classId: cls.id, consentMedia: false }],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(await db.enrollment.count()).toBe(1);
+    const after = await db.lead.findUnique({ where: { id: lead.id }, select: { status: true } });
+    expect(after?.status).toBe("ENROLLED");
+    // C5 — CCCD + địa chỉ ghi vào tài khoản phụ huynh.
+    const parent = await db.user.findUnique({ where: { email: "ph-s4@test.com" }, select: { cccd: true, city: true } });
+    expect(parent?.cccd).toBe("012345678901");
+    expect(parent?.city).toBe("Đà Nẵng");
+  });
 
   // ── AC2 / C4 — đa học viên ATOMIC: lỗi giữa chừng rollback CẢ 2 ───────────
   test("[R7-05-C4] convert 2 con — lỗi giữa chừng rollback cả 2 (tx)", async () => {
