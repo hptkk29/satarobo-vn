@@ -168,7 +168,6 @@ export default function RegistrationForm({
   const allCoursesList = courseGroups.flatMap((g) => g.courses);
   const selectedCourseObj = allCoursesList.find((c) => c.value === formData.course) ?? null;
   const isConsult = formData.course === CONSULT_OPTION.value;
-  const fmt = (n?: number) => (n ? `${n.toLocaleString("vi-VN")}đ` : "-");
   const getDurationSummary = (course: Course) =>
     `${course.sessions} buổi - ${course.durationPerSession ?? "90 phút"}/buổi - Tổng ${course.totalDuration}`;
 
@@ -342,12 +341,12 @@ export default function RegistrationForm({
                 <option value={CONSULT_OPTION.value}>{CONSULT_OPTION.name}</option>
               </select>
               <p className="mt-1.5 text-[11px] text-text-muted">
-                Early Bird áp dụng đến hết 31/05/2026 cho Sata1-Sata7. Sata8 là gói giá cố định, không giảm giá.
+                Ưu đãi đăng ký sớm áp dụng cho Sata1-Sata7 theo từng đợt khai giảng lớp mới. Sata8 là gói giá cố định, không giảm giá.
               </p>
               {errors.course && <ErrorText>{errors.course}</ErrorText>}
 
               {selectedCourseObj && (
-                <CourseDetailBox course={selectedCourseObj} fmt={fmt} getDurationSummary={getDurationSummary} />
+                <CourseDetailBox course={selectedCourseObj} getDurationSummary={getDurationSummary} />
               )}
 
               {isConsult && (
@@ -435,11 +434,10 @@ function ErrorText({ children }: { children: ReactNode }) {
 
 interface CourseDetailBoxProps {
   course: Course;
-  fmt: (n?: number) => string;
   getDurationSummary: (course: Course) => string;
 }
 
-function CourseDetailBox({ course, fmt, getDurationSummary }: CourseDetailBoxProps) {
+function CourseDetailBox({ course, getDurationSummary }: CourseDetailBoxProps) {
   return (
     <div className="mt-3 animate-fade-in space-y-2 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -458,33 +456,28 @@ function CourseDetailBox({ course, fmt, getDurationSummary }: CourseDetailBoxPro
 
       {course.comboPrice ? (
         <div className="space-y-1.5 border-t border-orange-200 pt-2">
-          <div className="text-xs text-text-muted line-through">Giá niêm yết: {fmt(course.listPrice)}</div>
           <div className="rounded-lg bg-white/80 px-2.5 py-1.5 text-xs font-extrabold text-primary-orange">
-            Giá combo: {fmt(course.comboPrice)}
-          </div>
-          <div className="rounded-lg bg-green-50 px-2.5 py-1.5 text-xs font-bold text-success">
-            Tiết kiệm: {fmt(course.savedAmount)}
+            Giá combo: Liên hệ
           </div>
           <p className="text-xs leading-relaxed text-text-muted">Bao gồm Robosim Master + Đấu trường Robot.</p>
         </div>
       ) : course.fixedPrice ? (
         <div className="space-y-1.5 border-t border-orange-200 pt-2">
           <div className="rounded-lg bg-white/80 px-2.5 py-1.5 text-xs font-extrabold text-primary-purple">
-            Giá cố định: {fmt(course.fixedPrice)}
+            Giá cố định: Liên hệ
           </div>
           <div className="rounded-lg bg-green-50 px-2.5 py-1.5 text-xs font-bold text-success">
-            Không giảm giá - Cam kết hoàn tiền 100%
+            Cam kết hoàn tiền 100%
           </div>
         </div>
       ) : (
         <div className="space-y-1.5 border-t border-orange-200 pt-2">
-          <div className="text-xs text-text-muted line-through">Giá niêm yết: {fmt(course.listPrice)}</div>
           <div className="rounded-lg bg-white/80 px-2.5 py-1.5 text-xs font-extrabold text-primary-orange">
-            Giá ưu đãi: {fmt(course.earlyBirdPrice)}
+            Học phí: Liên hệ
           </div>
           {course.installmentOutside && (
             <div className="rounded-lg bg-green-50 px-2.5 py-1.5 text-xs font-semibold text-success">
-              Trả góp 0%: {fmt(course.installmentOutside)}/tháng
+              Hỗ trợ trả góp 0% theo tháng
             </div>
           )}
         </div>
