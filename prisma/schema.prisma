@@ -135,6 +135,12 @@ enum OrderType {
   COMBO // bundle, defer
 }
 
+// FIX lead→payment→enroll (M0/LD1/O1) — loại đơn dự kiến của lead (2 lựa chọn nghiệp vụ).
+enum OrderKind {
+  COURSE // Khoá học (gồm combo)
+  PRODUCT // Sản phẩm
+}
+
 enum OrderStatus {
   DRAFT
   PENDING_PAYMENT
@@ -722,6 +728,12 @@ model User {
   // Cụm A1 — trạng thái kích hoạt tài khoản (phụ huynh tạo qua chuyển lead).
   accountStatus AccountStatus @default(ACTIVE)
 
+  // FIX lead→payment→enroll (M0) — CCCD + địa chỉ phụ huynh (lưu trên User, KHÔNG trên Student).
+  cccd    String? // CCCD/CMND phụ huynh
+  address String?
+  ward    String? // phường/xã (cơ cấu 2 cấp 2025)
+  city    String? // tỉnh/thành
+
   // Link 1-1 với Employee (1 user account ↔ 1 employee record)
   employeeId String?   @unique
   employee   Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
@@ -977,6 +989,9 @@ model Lead {
   firstContactAt      DateTime? @db.Timestamptz(6) // Sale liên hệ lần đầu
   commissionSource    CommissionSource? // nguồn để chia hoa hồng
   adminId             String? // Sale Admin xử lý L1→L2
+
+  // FIX lead→payment→enroll (M0/LD1) — loại đơn dự kiến (gợi ý nguồn item khi tạo đơn).
+  orderKind OrderKind?
 
   deletedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
@@ -3042,6 +3057,7 @@ model Order {
   customerAddress String? @db.Text
   customerWard    String?
   customerCity    String?
+  customerCccd    String? // FIX lead→payment→enroll (M0) — CCCD người mua (snapshot đơn)
 
   // Optional links
   studentId String?
@@ -3075,6 +3091,14 @@ model Order {
   confirmedByUserId String?
   confirmedAt       DateTime? @db.Timestamptz(6)
 
+  // FIX lead→payment→enroll (M0/C4) — duyệt kế hoạch thanh toán 2 đợt.
+  // null = không có kế hoạch 2 đợt cần duyệt.
+  installmentApprovalStatus InstallmentApprovalStatus?
+  installmentRequestedById   String?
+  installmentApprovedById    String?
+  installmentApprovedAt      DateTime? @db.Timestamptz(6)
+  installmentRejectReason    String?   @db.Text
+
   customerNote String? @db.Text
   internalNote String? @db.Text
 
@@ -3107,6 +3131,13 @@ model Order {
 enum InstallmentStatus {
   PENDING
   PAID
+}
+
+// FIX lead→payment→enroll (M0/C4) — trạng thái duyệt kế hoạch thanh toán 2 đợt.
+enum InstallmentApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
 }
 
 model OrderInstallment {
@@ -4999,6 +5030,9 @@ model TrialEnrollment {
   leadChild    LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
   status       TrialEnrollmentStatus @default(ACTIVE)
   summaryNote  String?               @db.Text // nhận xét tổng kết học thử
+  // LD3(b) — buổi (TrialClassSession) cụ thể được chọn khi xếp con vào lớp. Scalar nullable
+  // (validation "buổi thuộc lớp" đã làm ở action boundary — không cần relation, giữ blast radius nhỏ).
+  scheduledSessionId String?
   addedById    String?
   createdAt    DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime              @updatedAt @db.Timestamptz(6)
@@ -5007,6 +5041,7 @@ model TrialEnrollment {
 
   @@index([trialClassId])
   @@index([leadChildId])
+  @@index([scheduledSessionId])
 }
 
 /// R7-02 — điểm danh + nhận xét per buổi per LeadChild.

@@ -152,6 +152,9 @@ importers:
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
+      vietnam-address-data:
+        specifier: 1.0.0
+        version: 1.0.0
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
@@ -5906,6 +5909,9 @@ packages:
 
   victory-vendor@37.3.6:
     resolution: {integrity: sha512-SbPDPdDBYp+5MJHhBCAyI7wKM3d5ivekigc2Dk2s7pgbZ9wIgIBYGVw4zGHBml/qTFbexrofXW6Gu4noGxrOwQ==}
+
+  vietnam-address-data@1.0.0:
+    resolution: {integrity: sha512-5zU0TbqQ9KjowcPwBifj5YMlM5XMdsCdVgZn0G5azWmJwnmI5AkrojTQulA0MFxE4UVDY6AyJMjiY0V/qOTtdg==}
 
   vite-compatible-readable-stream@3.6.1:
     resolution: {integrity: sha512-t20zYkrSf868+j/p31cRIGN28Phrjm3nRSLR2fyc2tiWi4cZGVdv68yNlwnIINTkMTmPoMiSlc0OadaO7DXZaQ==}
@@ -12670,6 +12676,8 @@ snapshots:
       d3-shape: 3.2.0
       d3-time: 3.1.0
       d3-timer: 3.0.1
+
+  vietnam-address-data@1.0.0: {}
 
   vite-compatible-readable-stream@3.6.1:
     dependencies:
