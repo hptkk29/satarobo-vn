@@ -15,6 +15,7 @@ import {
 import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
+import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { validateAndComputeDiscount } from "@/lib/vouchers/compute";
@@ -294,7 +295,8 @@ export async function createOrderManualAction(input: unknown) {
         status: data.status,
         customerName: data.customerName.trim(),
         customerPhone: data.customerPhone.trim(),
-        customerEmail: data.customerEmail?.trim() || null,
+        customerEmail: data.customerEmail.trim(),
+        customerCccd: data.customerCccd?.trim() || null,
         customerAddress: data.customerAddress?.trim() || null,
         customerWard: data.customerWard?.trim() || null,
         customerCity: data.customerCity?.trim() || null,
@@ -492,7 +494,7 @@ export async function changeOrderStatusAction(
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { id: true, status: true, centerId: true },
+    select: { id: true, status: true, centerId: true, leadId: true, totalAmount: true },
   });
   const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
@@ -549,6 +551,25 @@ export async function changeOrderStatusAction(
         metadata: metadata as unknown as Prisma.InputJsonValue,
       },
     });
+
+    // S1 — xác nhận đơn (thu offline): nếu CHƯA có khoản RECORDED nào (đơn không đi qua
+    // installments) → ghi 1 Payment(RECORDED) cho phần đã thu (idempotent theo marker
+    // [auto:order-confirm]). Tránh double-count khi installments đã ghi sổ.
+    if (parsed.data.toStatus === "CONFIRMED" && order.status === "PENDING_PAYMENT") {
+      const recorded = await tx.payment.aggregate({
+        where: { orderId, saleStatus: "RECORDED", deletedAt: null },
+        _count: { _all: true },
+      });
+      if (recorded._count._all === 0) {
+        await ensureOrderPaymentRecorded(tx, {
+          orderId,
+          amount: order.totalAmount,
+          leadId: order.leadId,
+          centerId: order.centerId,
+          actor: { id: actorId, name: actorName },
+        });
+      }
+    }
     return { stale: false as const };
   });
 
@@ -556,6 +577,11 @@ export async function changeOrderStatusAction(
 
   revalidatePath("/orders");
   revalidatePath(`/orders/${orderId}`);
+  // S6 — đồng bộ trang lead/convert (đổi trạng thái đơn ảnh hưởng "đủ điều kiện chốt").
+  if (order.leadId) {
+    revalidatePath(`/admin/leads/${order.leadId}`);
+    revalidatePath(`/admin/leads/${order.leadId}/convert`);
+  }
 
   // Fire PAYMENT_RECEIPT when order transitions to CONFIRMED (paidAt set).
   if (parsed.data.toStatus === "CONFIRMED") {
@@ -627,61 +653,53 @@ export async function updateOrderNoteAction(
 export async function loadCreateOrderFormData() {
   await requireOrdersManage();
 
-  const [paymentMethods, courses, packages, products, centers] =
-    await Promise.all([
-      db.paymentMethod.findMany({
-        where: { isActive: true },
-        orderBy: { displayOrder: "asc" },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          type: true,
-          canBuyCourse: true,
-          canBuyPackage: true,
-          canBuyExam: true,
-          canBuyProduct: true,
-        },
-      }),
-      db.course.findMany({
-        // E2-ORDER (item 3): chỉ khoá DẠY thật (Sata 1–8...), loại 2 "danh mục"
-        // Lập trình Robot / Luyện thi RoboSim (isTeachable=false). Combo đi qua loại đơn PACKAGE.
-        where: { isActive: true, isPublished: true, isTeachable: true },
-        orderBy: { displayOrder: "asc" },
-        select: { id: true, code: true, name: true, price: true, type: true },
-      }),
-      db.coursePackage.findMany({
-        where: { isPublished: true },
-        orderBy: { displayOrder: "asc" },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          priceMember: true,
-          priceEarlyBird: true,
-        },
-      }),
-      db.product.findMany({
-        where: { status: "ACTIVE" },
-        orderBy: { name: "asc" },
-        take: 200,
-        select: {
-          id: true,
-          sku: true,
-          name: true,
-          salePrice: true,
-          stockOnHand: true,
-          category: true,
-        },
-      }),
-      db.center.findMany({
-        where: { isActive: true },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      }),
-    ]);
+  const [paymentMethods, courses, products, centers] = await Promise.all([
+    db.paymentMethod.findMany({
+      where: { isActive: true },
+      orderBy: { displayOrder: "asc" },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        canBuyCourse: true,
+        canBuyPackage: true,
+        canBuyExam: true,
+        canBuyProduct: true,
+      },
+    }),
+    db.course.findMany({
+      // O1/O3: chỉ khoá DẠY thật (Sata 1–8 + combo teachable), loại 2 "danh mục"
+      // Lập trình Robot / Luyện thi RoboSim (isTeachable=false). Combo 1&2 là course
+      // teachable nên tự nằm trong danh sách "Khoá học".
+      // O4: KHÔNG lọc isPublished — khoá Sata teachable bị seed để isPublished=false
+      // (publish chỉ dùng cho trang marketing công khai). Đơn hàng gate theo isTeachable.
+      where: { isActive: true, isTeachable: true },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true, code: true, name: true, price: true, type: true },
+    }),
+    db.product.findMany({
+      // O3: đơn "Sản phẩm" chỉ gồm KIT_ROBOT + SENSOR.
+      where: { status: "ACTIVE", category: { in: ["KIT_ROBOT", "SENSOR"] } },
+      orderBy: { name: "asc" },
+      take: 200,
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        salePrice: true,
+        stockOnHand: true,
+        category: true,
+      },
+    }),
+    db.center.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
-  return { paymentMethods, courses, packages, products, centers };
+  return { paymentMethods, courses, products, centers };
 }
 
 // ─── MANUAL SEND EMAIL từ template (Phase 5.13.1) ───────────────────
@@ -772,6 +790,8 @@ export async function recordOrderInstallmentsAction(input: {
   dot1Amount: number;
   dot2Amount: number;
   dot2DueDate: string | null;
+  // OD1 — số ngày nhắc trước hạn đợt 2; null → cron dùng SystemSetting default 14.
+  reminderDays?: number | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -779,7 +799,7 @@ export async function recordOrderInstallmentsAction(input: {
 
   const order = await db.order.findUnique({
     where: { id: input.orderId },
-    select: { id: true, centerId: true },
+    select: { id: true, centerId: true, leadId: true },
   });
   const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
@@ -792,8 +812,17 @@ export async function recordOrderInstallmentsAction(input: {
     dot2Amount: Math.round(input.dot2Amount),
     dot2DueDate: input.dot2DueDate ? new Date(input.dot2DueDate) : null,
     actorId: session.user.id ?? null,
+    reminderDays:
+      input.reminderDays == null ? null : Math.max(0, Math.round(input.reminderDays)),
   });
-  if (res.ok) revalidatePath(`/orders/${input.orderId}`);
+  if (res.ok) {
+    revalidatePath(`/orders/${input.orderId}`);
+    // S6 — ghi sổ đợt 1 sinh Payment(RECORDED) → đồng bộ trang lead/convert.
+    if (order.leadId) {
+      revalidatePath(`/admin/leads/${order.leadId}`);
+      revalidatePath(`/admin/leads/${order.leadId}/convert`);
+    }
+  }
   return res;
 }
 
@@ -808,7 +837,7 @@ export async function markOrderInstallmentPaidAction(
   // R7-00 AC4 — chặn IDOR chéo cơ sở: xác nhận đơn nằm trong scope trước khi mutate.
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { id: true, centerId: true },
+    select: { id: true, centerId: true, leadId: true },
   });
   const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
@@ -816,7 +845,14 @@ export async function markOrderInstallmentPaidAction(
   }
 
   const res = await markInstallmentPaid(installmentId, session.user.id ?? null);
-  if (res.ok) revalidatePath(`/orders/${orderId}`);
+  if (res.ok) {
+    revalidatePath(`/orders/${orderId}`);
+    // S6 — đóng đợt sinh Payment(RECORDED, nếu đã duyệt) → đồng bộ trang lead/convert.
+    if (order.leadId) {
+      revalidatePath(`/admin/leads/${order.leadId}`);
+      revalidatePath(`/admin/leads/${order.leadId}/convert`);
+    }
+  }
   return res;
 }
 
