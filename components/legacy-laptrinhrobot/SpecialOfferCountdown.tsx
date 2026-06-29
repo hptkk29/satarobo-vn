@@ -191,10 +191,10 @@ export default function SpecialOfferCountdown({
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary-orange/25 bg-white px-4 py-2 text-primary-orange shadow-card">
             <Flame className="h-4 w-4 animate-pulse" />
             <span className="text-xs font-black uppercase tracking-wider sm:text-sm">
-              Áp dụng từ 01/05 đến {formatDeadline(deadline)}
+              Ưu đãi lớp mới — áp dụng đến hết {formatDeadline(deadline)}
             </span>
           </div>
-          <h2 className="heading-2 mb-4 text-text-dark">Ưu đãi khai trương tháng 5</h2>
+          <h2 className="heading-2 mb-4 text-text-dark">Ưu đãi khai giảng lớp mới</h2>
           <p className="mx-auto max-w-2xl text-sm leading-relaxed text-text-muted sm:text-base">
             Đăng ký sớm để giữ học phí tốt cho Sata1–Sata7. Sata8 là gói riêng, giá cố định.
           </p>
@@ -229,7 +229,7 @@ export default function SpecialOfferCountdown({
             </div>
             <p className="text-sm leading-relaxed text-text-dark">
               <strong>Lưu ý:</strong> Các ưu đãi trên không áp dụng cho Sata8 — Vé Vàng Chung Kết.
-              Sata8 là gói cam kết độc lập, giá cố định <strong>2.500.000đ</strong> và có chính sách
+              Sata8 là gói cam kết độc lập, giá cố định và có chính sách
               hoàn tiền 100% theo điều kiện cam kết.
             </p>
           </div>
