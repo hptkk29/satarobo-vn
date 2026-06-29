@@ -173,6 +173,8 @@ export async function enrollLeadChildAction(input: {
   allowOverride?: boolean;
   // FL-R2 (QĐ-R2-W3): số buổi học thử cấu hình RIÊNG cho lead này (bỏ trống → mặc định lớp).
   totalSessions?: number;
+  // LD3(b): buổi (ngày/giờ) cụ thể được chọn khi xếp (tuỳ chọn). Validate thuộc lớp.
+  sessionId?: string;
 }): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
@@ -201,6 +203,17 @@ export async function enrollLeadChildAction(input: {
   const cls = await loadScopedTrialClass(actor, input.trialClassId);
   if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
 
+  // LD3(b) — nếu chọn buổi cụ thể: phải thuộc đúng lớp đang xếp (chống chọn buổi lớp khác).
+  if (input.sessionId) {
+    const ses = await scopedDb(actor).trialClassSession.findUnique({
+      where: { id: input.sessionId },
+      select: { trialClassId: true },
+    });
+    if (!ses || ses.trialClassId !== input.trialClassId) {
+      return { ok: false, error: "Buổi học không thuộc lớp đã chọn" };
+    }
+  }
+
   const res = await enrollLeadChild({
     trialClassId: input.trialClassId,
     leadChildId: input.leadChildId,
@@ -215,6 +228,20 @@ export async function enrollLeadChildAction(input: {
       error: res?.error ?? "Xếp chỗ thất bại",
       overCapacity: res?.overCapacity === true,
     };
+  }
+
+  // LD3(b) — lưu buổi đã chọn lên ghi danh vừa tạo (service create không nhận field này;
+  // ghi sau khi enroll OK). Scope đã được xác thực qua loadScopedTrialClass + buổi-thuộc-lớp ở trên.
+  // Partial-unique 1 lớp ACTIVE/con → updateMany trúng đúng ghi danh ACTIVE vừa tạo (kể cả re-enroll).
+  if (input.sessionId) {
+    await scopedDb(actor).trialEnrollment.updateMany({
+      where: {
+        trialClassId: input.trialClassId,
+        leadChildId: input.leadChildId,
+        status: "ACTIVE",
+      },
+      data: { scheduledSessionId: input.sessionId },
+    });
   }
 
   revalidatePath(`/trial-classes/${input.trialClassId}`);
