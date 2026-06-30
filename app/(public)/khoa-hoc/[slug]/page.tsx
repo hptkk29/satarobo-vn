@@ -61,8 +61,6 @@ export async function generateMetadata({
   };
 }
 
-const formatVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
-
 export default async function CoursePage({
   params,
 }: {
@@ -117,28 +115,6 @@ export default async function CoursePage({
       dbPkg?.noteForParents ?? hardcodedDetail.noteForParents,
   };
 
-  // Pricing display logic
-  const isFixedPrice = !!course.fixedPrice;
-  const finalPrice =
-    course.fixedPrice ??
-    course.comboPrice ??
-    course.earlyBirdPrice ??
-    course.listPrice;
-  const showDiscount =
-    !isFixedPrice &&
-    course.earlyBirdPrice !== undefined &&
-    course.earlyBirdPrice < course.listPrice;
-  const discountPct = showDiscount
-    ? Math.round(
-        ((course.listPrice - (course.earlyBirdPrice ?? 0)) /
-          course.listPrice) *
-          100,
-      )
-    : 0;
-  const savedAmount =
-    course.savedAmount ??
-    course.listPrice - (course.earlyBirdPrice ?? course.listPrice);
-
   return (
     <main className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-purple-50">
       {/* Breadcrumb */}
@@ -179,52 +155,14 @@ export default async function CoursePage({
               {detail.audienceDescription}
             </p>
 
-            {/* Price block */}
+            {/* Price block → "Liên hệ" (học phí hiển thị qua tư vấn) */}
             <div className="mb-6 rounded-2xl border border-orange-200 bg-white p-6 shadow-sm">
-              {showDiscount ? (
-                <>
-                  <div className="mb-1 flex items-center gap-3">
-                    <span className="text-gray-400 line-through">
-                      {formatVnd(course.listPrice)}
-                    </span>
-                    <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
-                      −{discountPct}%
-                    </span>
-                  </div>
-                  <div className="mb-1 text-4xl font-extrabold text-orange-600">
-                    {formatVnd(finalPrice)}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    Tiết kiệm{" "}
-                    <strong className="text-green-600">
-                      {formatVnd(savedAmount)}
-                    </strong>
-                    {course.installmentOutside && (
-                      <>
-                        {" "}
-                        · hoặc{" "}
-                        <strong>
-                          {formatVnd(course.installmentOutside)}/tháng × 12
-                          tháng
-                        </strong>
-                      </>
-                    )}
-                  </div>
-                </>
-              ) : isFixedPrice ? (
-                <>
-                  <div className="mb-1 text-4xl font-extrabold text-orange-600">
-                    {formatVnd(finalPrice)}
-                  </div>
-                  <div className="text-sm font-semibold text-gray-700">
-                    Giá CỐ ĐỊNH · không áp dụng giảm giá thêm
-                  </div>
-                </>
-              ) : (
-                <div className="text-4xl font-extrabold text-orange-600">
-                  {formatVnd(finalPrice)}
-                </div>
-              )}
+              <div className="mb-1 text-4xl font-extrabold text-orange-600">
+                Liên hệ
+              </div>
+              <div className="text-sm text-gray-600">
+                Đăng ký tư vấn để nhận học phí và ưu đãi mới nhất cho khóa này
+              </div>
             </div>
 
             {/* CTAs */}

@@ -67,7 +67,7 @@ export const promotions: Promotions = {
       id: "referral",
       title: "Referral",
       highlight: "Giới thiệu bạn bè",
-      description: "Người giới thiệu nhận 300.000đ tiền mặt. Người được giới thiệu giảm thêm 300.000đ học phí.",
+      description: "Người giới thiệu nhận thưởng tiền mặt. Người được giới thiệu được giảm thêm học phí.",
       condition: "Bạn được giới thiệu đóng tiền lần đầu. Không giới hạn số lượng bạn giới thiệu.",
       note: "Không cộng dồn với gói đội thi 2 học viên nếu chính sách yêu cầu.",
       icon: "Gift",
