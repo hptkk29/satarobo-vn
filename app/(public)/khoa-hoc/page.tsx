@@ -265,11 +265,9 @@ export default async function CoursesPage() {
                       </div>
 
                       <div className="flex items-center justify-between">
-                        {c.priceDisplay && (
-                          <span className="text-xl font-bold text-orange-600">
-                            {c.priceDisplay}
-                          </span>
-                        )}
+                        <span className="text-xl font-bold text-orange-600">
+                          Liên hệ
+                        </span>
                         <span className="ml-auto inline-flex items-center gap-1.5 text-sm font-bold text-purple-700 group-hover:gap-2.5 transition-all">
                           Xem chi tiết
                           <ArrowRight className="w-4 h-4" />

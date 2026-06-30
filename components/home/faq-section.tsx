@@ -37,16 +37,16 @@ const FAQS: FAQItem[] = [
   {
     q: "Học phí các khoá học bao nhiêu?",
     a: [
-      "Học phí từ 1.485.000đ đến 14.400.000đ tuỳ khoá.",
+      "Học phí khác nhau theo từng khoá và lộ trình. Vui lòng liên hệ Sata Robo để nhận bảng giá và ưu đãi mới nhất cho khoá phù hợp với con.",
       {
         type: "list",
         items: [
-          "Sata1 — Robosim Master: 1.485.000đ (khoá luyện thi, ưu đãi tháng 5).",
-          "Sata7 — Kiến Tạo Tương Lai (AI + Computer Vision): 10.800.000đ (ưu đãi 25%).",
-          "Combo Sata1 + Sata2: 3.986.000đ (tiết kiệm 704.000đ).",
+          "Sata1 — Sata2: khoá luyện thi Robotics 2026 ngắn hạn.",
+          "Sata3 — Sata7: lộ trình chuyên sâu 48 buổi (12 tháng).",
+          "Combo Sata1 + Sata2: trọn lộ trình luyện thi, ưu đãi hơn so với học riêng.",
         ],
       },
-      "Trong tháng 5/2026 có ưu đãi Early Bird khai trương giảm 10-25% tuỳ khoá. Trả góp 0% qua VPBank / Sacombank / Home Credit cho khoá 48 buổi.",
+      "Đang có ưu đãi Early Bird khai trương và hỗ trợ trả góp 0% qua VPBank / Sacombank / Home Credit cho khoá 48 buổi — liên hệ để được tư vấn chi tiết.",
     ],
   },
   {
