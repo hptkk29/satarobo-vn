@@ -32,7 +32,7 @@ Trường hợp phụ huynh chủ động rút học:
 | Đã học 25% – 50% tổng số buổi | **50%** học phí còn lại |
 | Đã học > 50% tổng số buổi | **Không hoàn trả** |
 
-> **Ví dụ:** Khoá học 20 buổi, học phí 4.000.000 VND. Rút sau buổi 4 (20%) → hoàn 70% × 4.000.000 = **2.800.000 VND**.
+> **Ví dụ:** Phụ huynh rút học sau khi đã học 4/20 buổi (20% lộ trình) → được hoàn **70%** học phí còn lại theo bảng trên.
 
 ### 2.3 Trường hợp không được hoàn trả
 

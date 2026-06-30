@@ -100,8 +100,7 @@ export const examRoadmap: ExamRoadmapItem[] = [
     highlights: [
       "Bao gồm Robosim Master + Đấu trường Robot",
       "27 buổi tính phí - 90 phút/buổi - Tổng 40,5 giờ",
-      "Giá niêm yết 4.690.000đ",
-      "Giá combo 3.986.000đ, tiết kiệm 704.000đ",
+      "Học trọn lộ trình luyện thi với chi phí ưu đãi hơn so với học riêng từng khoá",
     ],
     ...examDuration,
   },
