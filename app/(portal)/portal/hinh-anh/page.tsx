@@ -2,6 +2,9 @@ import { requireActiveStudent } from "@/lib/portal/session";
 import { db } from "@/lib/db";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { getStudentPhotos } from "@/lib/portal/photos";
+import { HinhAnhPageV2 } from "@/components/portal/hinh-anh-page";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Hình ảnh | Sata Robo", robots: { index: false } };
@@ -9,7 +12,20 @@ export const metadata = { title: "Hình ảnh | Sata Robo", robots: { index: fal
 const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 export default async function HinhAnhPage() {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+
+  // Portal v2 — trang Hình ảnh lớp giống SataUI.
+  if (isPortalV2Enabled()) {
+    const data = await getStudentPhotos(studentId);
+    return (
+      <HinhAnhPageV2
+        kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
+        activeId={ctx.activeStudent?.id ?? null}
+        studentName={ctx.activeStudent?.name ?? "con"}
+        data={data}
+      />
+    );
+  }
 
   // Privacy (C3.2/C6.4): chỉ hiện ảnh khi PH đã ĐỒNG Ý dùng hình ảnh. Thu hồi → ẩn ngay.
   const consentGranted = await hasMediaConsent(studentId);
