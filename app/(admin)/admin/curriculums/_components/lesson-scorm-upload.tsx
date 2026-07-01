@@ -4,7 +4,11 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { UploadCloud } from "lucide-react";
-import { createScormPackage, confirmUpload } from "@/app/(admin)/admin/scorm/_actions";
+import {
+  createScormPackage,
+  confirmUpload,
+  processScormNow,
+} from "@/app/(admin)/admin/scorm/_actions";
 
 /** Upload zip qua presigned PUT với progress (XHR). Reject khi lỗi mạng/HTTP. */
 function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
@@ -25,10 +29,10 @@ function putWithProgress(url: string, file: File, onProgress: (pct: number) => v
 }
 
 /**
- * R2-LMS-3 — Upload gói SCORM INLINE ngay trong editor buổi giáo trình (không cần
+ * R2-LMS-3 — Upload giáo án SCORM INLINE ngay trong editor buổi giáo trình (không cần
  * rời sang /admin/scorm). Tái dùng pipeline createScormPackage → PUT presigned →
- * confirmUpload (giống ScormManager). Gói mới ở trạng thái PROCESSING; sau khi giải
- * nén + phát hành mới đặt "đang dùng" được. Gate ngoài: training:manage + flag SCORM.
+ * confirmUpload → processScormNow (giống ScormManager). Giải nén xong tự PHÁT HÀNH +
+ * ĐẶT ĐANG DÙNG + thay giáo án cũ của buổi. Gate ngoài: training:manage + flag SCORM.
  */
 export function LessonScormUpload({ lessonId }: { lessonId: string }) {
   const router = useRouter();
@@ -62,7 +66,9 @@ export function LessonScormUpload({ lessonId }: { lessonId: string }) {
         toast.error(confirmed.error);
         return;
       }
-      toast.success("Đã tải lên — đang giải nén & đọc manifest");
+      // Giải nén ngay → tự phát hành + thay giáo án cũ của buổi (cron là fallback).
+      await processScormNow(created.data!.id);
+      toast.success("Đã đẩy giáo án — đang xử lý & thay bản cũ (nếu có)");
       setName("");
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";

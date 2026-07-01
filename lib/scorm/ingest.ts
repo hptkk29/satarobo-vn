@@ -45,7 +45,15 @@ export const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
   "woff",
   "woff2",
   "ttf",
+  "otf",
   "eot",
+  // Tệp đóng gói SCORM hợp lệ (schema/icon/cursor/text) — tĩnh, vô hại.
+  "xsd",
+  "dtd",
+  "ico",
+  "cur",
+  "txt",
+  "vtt",
 ]);
 
 /** Entry thư mục (kết thúc bằng "/") — bỏ qua kiểm tra extension. */

@@ -118,6 +118,64 @@ test.describe("[FL1-02] Lesson SCORM + Assignment", () => {
     expect(active[0]?.id).not.toBe(v1.id);
   });
 
+  test("[FL1-02-07] thay giáo án = xoá bản cũ; bản mới PUBLISHED+active; attempt/log cũ cascade", async () => {
+    const { lesson } = await seedLessonWithClass();
+    // Giáo án cũ đang dùng + 1 lượt giảng (attempt) + 1 access log.
+    const old = await db.scormPackage.create({
+      data: {
+        lessonId: lesson.id,
+        name: "Giáo án cũ",
+        version: 1,
+        status: "PUBLISHED",
+        storagePrefix: "scorm/old/",
+        isActiveForLesson: true,
+      },
+    });
+    await db.scormAttempt.create({
+      data: { packageId: old.id, userId: "teacher-1", completion: "COMPLETED" },
+    });
+    await db.scormAccessLog.create({ data: { packageId: old.id, userId: "teacher-1" } });
+    // Bản mới vừa giải nén xong (PROCESSING → sắp tự phát hành).
+    const fresh = await db.scormPackage.create({
+      data: {
+        lessonId: lesson.id,
+        name: "Giáo án mới",
+        version: 2,
+        status: "PROCESSING",
+        storagePrefix: "scorm/fresh/",
+      },
+    });
+
+    // Logic safe-swap của ingest: xoá bản cũ (id khác, KHÔNG còn đang xử lý) rồi
+    // publish + active bản mới (1 tx). status filter khớp handler — bảo vệ bản in-flight.
+    const olds = await db.scormPackage.findMany({
+      where: {
+        lessonId: lesson.id,
+        NOT: { id: fresh.id },
+        status: { notIn: ["UPLOADING", "PROCESSING"] },
+      },
+      select: { id: true },
+    });
+    await db.$transaction([
+      db.scormPackage.deleteMany({ where: { id: { in: olds.map((o) => o.id) } } }),
+      db.scormPackage.update({
+        where: { id: fresh.id },
+        data: { status: "PUBLISHED", isActiveForLesson: true },
+      }),
+    ]);
+
+    // Mỗi buổi đúng 1 giáo án — là bản mới, PUBLISHED + đang dùng.
+    const remaining = await db.scormPackage.findMany({ where: { lessonId: lesson.id } });
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.id).toBe(fresh.id);
+    expect(remaining[0]?.status).toBe("PUBLISHED");
+    expect(remaining[0]?.isActiveForLesson).toBe(true);
+
+    // Lịch sử giảng + access của bản cũ cascade theo (onDelete: Cascade).
+    expect(await db.scormAttempt.count({ where: { packageId: old.id } })).toBe(0);
+    expect(await db.scormAccessLog.count({ where: { packageId: old.id } })).toBe(0);
+  });
+
   test("[FL1-02-05] Handoff — gate duyệt đề xuất = lesson-change:approve (CM có; unlock vẫn training:manage)", () => {
     // Duyệt đề xuất: SUPER_ADMIN/TRAINING/CENTER_MANAGER.
     expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(true);

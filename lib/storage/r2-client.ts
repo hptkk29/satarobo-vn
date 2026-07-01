@@ -1,4 +1,8 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} from "@aws-sdk/client-s3";
 
 // Cloudflare R2 — S3-compatible API.
 // Endpoint: https://<account-id>.r2.cloudflarestorage.com · region "auto".
@@ -28,12 +32,18 @@ function readEnv() {
     );
   }
 
+  // Tự thêm scheme nếu thiếu (vd R2_PUBLIC_URL="cdn.satarobo.vn" → "https://cdn.satarobo.vn")
+  // để getPublicUrl luôn ra URL tuyệt đối hợp lệ.
+  const normalizedPublicUrl = (
+    /^https?:\/\//i.test(publicUrl!) ? publicUrl! : `https://${publicUrl!}`
+  ).replace(/\/$/, "");
+
   return {
     accountId: accountId!,
     accessKeyId: accessKeyId!,
     secretAccessKey: secretAccessKey!,
     bucket: bucket!,
-    publicUrl: publicUrl!.replace(/\/$/, ""),
+    publicUrl: normalizedPublicUrl,
   };
 }
 
@@ -65,4 +75,32 @@ export function getR2PublicUrl(): string {
 export function getPublicUrl(key: string): string {
   const cleanKey = key.startsWith("/") ? key.slice(1) : key;
   return `${getR2PublicUrl()}/${cleanKey}`;
+}
+
+/**
+ * Xoá toàn bộ object dưới `prefix` (vd `scorm/<id>/`) — dùng khi gỡ/thay gói SCORM.
+ * List phân trang (≤1000/lần) rồi DeleteObjects theo từng trang (giới hạn 1000 key/lần).
+ * Best-effort: caller nên bọc try/catch — R2 lỗi chỉ để lại rác, KHÔNG chặn nghiệp vụ.
+ * No-op khi prefix rỗng/"pending" (gói chưa kịp gán prefix thật).
+ */
+export async function deleteR2Prefix(prefix: string): Promise<void> {
+  if (!prefix || prefix === "pending") return;
+  const client = getR2Client();
+  const bucket = getR2Bucket();
+  let token: string | undefined;
+  do {
+    const listed = await client.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+    );
+    const objects = (listed.Contents ?? [])
+      .map((o) => o.Key)
+      .filter((k): k is string => Boolean(k))
+      .map((Key) => ({ Key }));
+    if (objects.length > 0) {
+      await client.send(
+        new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects, Quiet: true } }),
+      );
+    }
+    token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (token);
 }
