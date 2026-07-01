@@ -4476,19 +4476,28 @@ enum ScormVersion {
 }
 
 enum ScormPackageStatus {
-  UPLOADING // đang upload zip lên R2 (presigned)
-  PROCESSING // job đang giải nén + đọc manifest
+  UPLOADING // đang upload (zip/pdf) lên R2 (presigned)
+  PROCESSING // job đang giải nén + đọc manifest (chỉ SCORM)
   FAILED // job lỗi (xem error) — resume được
   TESTING // giải nén xong, Đào tạo xem thử trước publish
   PUBLISHED // đã phát hành, GV mở được
   ARCHIVED // bản cũ (không xóa vật lý trong R7)
 }
 
+// Loại giáo án/học liệu mỗi buổi: gói SCORM (.zip giải nén) hoặc 1 file PDF (slide).
+// Cả 2 hiển thị chung 1 khung trình chiếu (slider) ở "Tài liệu lớp tôi".
+enum LessonMaterialKind {
+  SCORM
+  PDF
+}
+
 model ScormPackage {
   id               String             @id @default(cuid())
   lessonId         String // gắn buổi (FK)
   name             String
-  scormVersion     ScormVersion?      // đọc từ manifest sau khi giải nén
+  // Loại học liệu: SCORM (giải nén + manifest) hoặc PDF (slide render bằng pdf.js).
+  kind             LessonMaterialKind @default(SCORM)
+  scormVersion     ScormVersion?      // đọc từ manifest sau khi giải nén (chỉ SCORM)
   storagePrefix    String // prefix R2 `scorm/{packageId}/`
   uploadKey        String? // key R2 của zip gốc đã upload
   launchUrl        String? // đường dẫn launch (tương đối trong prefix)

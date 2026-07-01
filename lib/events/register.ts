@@ -31,7 +31,7 @@ export function ensureHandlersRegistered(): void {
   registerMakeupNotifHandlers(); // R7-17 — makeup.requested / makeup.confirmed → thông báo HV
   registerEvalNotifHandlers(); // R7-17 — eval.opened → thông báo HV/PH đợt đánh giá/khảo sát
   registerHomeworkNotifHandlers(); // R7-17 — session.taught → thông báo "Bài tập mới" cho HV
-  registerScormIngestHandlers(); // R7-11 — scorm.uploaded → giải nén + upload R2 + parse manifest → TESTING
+  registerScormIngestHandlers(); // R7-11 — scorm.uploaded → giải nén + upload R2 + parse manifest → tự phát hành + thay giáo án cũ
   registerTrialScheduleNotifHandlers(); // R7-17 — trial.schedule_changed → báo Sale phụ trách
   registerAccountNotifHandlers(); // R7-17 — account.activated → chào mừng PH lên portal
   registerCommentNotifHandlers(); // R7-17 — comment.added → báo PH có nhận xét mới của GV

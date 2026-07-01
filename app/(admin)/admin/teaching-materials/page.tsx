@@ -74,7 +74,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
     order: number;
     title: string;
     objectives: string[];
-    scorm: { id: string; name: string } | null;
+    scorm: { id: string; name: string; kind: "SCORM" | "PDF" } | null;
     sessionId: string | null;
     canPresent: boolean;
     assignments: Array<{
@@ -133,9 +133,11 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                 isActiveForLesson: true,
                 status: "PUBLISHED",
               },
-              select: { id: true, name: true, lessonId: true },
+              select: { id: true, name: true, lessonId: true, kind: true },
             })
-          : Promise.resolve([] as { id: string; name: string; lessonId: string }[]),
+          : Promise.resolve(
+              [] as { id: string; name: string; lessonId: string; kind: "SCORM" | "PDF" }[],
+            ),
         // Buổi lớp gắn lesson → cấp sessionId cho player (gate canOpenScorm theo GV lớp).
         sdb.classSession.findMany({
           where: { classId: selectedClass.id, lessonId: { in: lessonIds } },
@@ -197,15 +199,15 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
       lessonViews = lessons.map((l) => {
         const pkg = scormByLesson.get(l.id) ?? null;
         const sessionId = sessionByLesson.get(l.id) ?? null;
-        // Present mở được khi: có gói + (Đào tạo/Admin) HOẶC (GV phân công VÀ có buổi gắn).
-        const canPresent =
-          !!pkg && (canManage || (teacherAssigned && !!sessionId));
+        // Present mở được khi: có giáo án + (Đào tạo/Admin) HOẶC (GV được phân công lớp này).
+        // Không bắt buộc có ClassSession riêng cho buổi — GV xem được slide mọi buổi lớp mình.
+        const canPresent = !!pkg && (canManage || teacherAssigned);
         return {
           id: l.id,
           order: l.order,
           title: l.title,
           objectives: l.objectives,
-          scorm: pkg ? { id: pkg.id, name: pkg.name } : null,
+          scorm: pkg ? { id: pkg.id, name: pkg.name, kind: pkg.kind } : null,
           sessionId,
           canPresent,
           assignments: (assignByLesson.get(l.id) ?? []).map((a) => ({
@@ -232,8 +234,8 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
           <Presentation className="h-6 w-6 text-orange-500" /> Tài liệu lớp tôi
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Xem khung chương trình của lớp bạn dạy, tài liệu giảng dạy (SCORM) và bài tập từng
-          buổi, kèm thống kê học viên đã nộp bài. Chỉ xem &amp; trình chiếu — không chỉnh sửa.
+          Chọn lớp bạn dạy → xem từng buổi: slide bài học (PDF hoặc SCORM) trình chiếu dạng slider,
+          bài tập và thống kê học viên đã nộp. Chỉ xem &amp; trình chiếu — không chỉnh sửa.
         </p>
       </div>
 
@@ -326,12 +328,12 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                         <Link
                           href={
                             l.sessionId
-                              ? `/scorm/play/${l.scorm.id}?sessionId=${l.sessionId}`
-                              : `/scorm/play/${l.scorm.id}`
+                              ? `/admin/scorm/play/${l.scorm.id}?sessionId=${l.sessionId}`
+                              : `/admin/scorm/play/${l.scorm.id}`
                           }
                           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-200 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
                         >
-                          <Play className="h-3.5 w-3.5" /> Trình chiếu
+                          <Play className="h-3.5 w-3.5" /> Xem slide
                         </Link>
                       ) : (
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-400">
@@ -339,9 +341,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                         </span>
                       )
                     ) : scormOn ? (
-                      <span className="shrink-0 text-xs text-gray-400">
-                        Chưa có tài liệu SCORM
-                      </span>
+                      <span className="shrink-0 text-xs text-gray-400">Chưa có slide bài học</span>
                     ) : null}
                   </div>
 

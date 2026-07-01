@@ -4,19 +4,21 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  AlertCircle,
   BookOpen,
   CheckCircle2,
   ExternalLink,
   FileBox,
+  Loader2,
+  Play,
   Plus,
-  Star,
+  Trash2,
   X,
 } from "lucide-react";
 import type { AssignmentKind, AssignmentStatus, ScormPackageStatus } from "@prisma/client";
-// SCORM gắn-buổi tái dùng action ở /admin/scorm (đặt 1 bản active/buổi).
-// R2-LMS-3 — upload gói SCORM INLINE ngay trong editor buổi (LessonScormUpload tái
-// dùng createScormPackage/confirmUpload), không cần rời sang /admin/scorm.
-import { activateForLesson } from "@/app/(admin)/admin/scorm/_actions";
+// 1 giáo án/buổi — đẩy bản mới (LessonScormUpload) tự phát hành + thay bản cũ; gỡ hẳn
+// bằng deleteScormPackage. Quản lý đầy đủ ở /admin/scorm (Khoá học → Buổi → giáo án).
+import { deleteScormPackage } from "@/app/(admin)/admin/scorm/_actions";
 import { attachAssignmentToLesson, detachAssignmentFromLesson } from "../_actions";
 import { LessonScormUpload } from "./lesson-scorm-upload";
 
@@ -26,6 +28,7 @@ export type ScormPkgRow = {
   version: number;
   status: ScormPackageStatus;
   isActiveForLesson: boolean;
+  error: string | null;
 };
 
 export type AssignmentRow = {
@@ -42,15 +45,6 @@ export type LessonResourceRow = {
   title: string;
   scorm: ScormPkgRow[];
   assignments: AssignmentRow[];
-};
-
-const SCORM_STATUS_LABEL: Record<ScormPackageStatus, string> = {
-  UPLOADING: "Đang tải lên",
-  PROCESSING: "Đang xử lý",
-  FAILED: "Lỗi",
-  TESTING: "Đang xem thử",
-  PUBLISHED: "Đã phát hành",
-  ARCHIVED: "Đã lưu trữ",
 };
 
 const KIND_LABEL: Record<AssignmentKind, string> = {
@@ -76,6 +70,8 @@ export function LessonResources({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [picks, setPicks] = useState<Record<string, string>>({});
+  // 2-click confirm để gỡ giáo án (tránh xoá nhầm).
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -85,24 +81,9 @@ export function LessonResources({
         setError(res.error ?? "Có lỗi xảy ra");
         return;
       }
+      setConfirmDelete(null);
       router.refresh();
     });
-  }
-
-  function handleActivate(pkg: ScormPkgRow, hasOtherActive: boolean) {
-    let reason: string | undefined;
-    if (hasOtherActive) {
-      const r = window.prompt(
-        "Đổi bản SCORM đang dùng của buổi — nhập lý do (bắt buộc):",
-      );
-      if (r === null) return; // huỷ
-      reason = r.trim();
-      if (!reason) {
-        setError("Đổi bản đang dùng cần nêu lý do");
-        return;
-      }
-    }
-    run(() => activateForLesson(pkg.id, reason));
   }
 
   if (lessons.length === 0) {
@@ -131,7 +112,11 @@ export function LessonResources({
 
       <ul className="divide-y divide-neutral-100">
         {lessons.map((lesson) => {
-          const activePkg = lesson.scorm.find((p) => p.isActiveForLesson);
+          const giaoAn =
+            lesson.scorm.find((p) => p.isActiveForLesson && p.status === "PUBLISHED") ?? null;
+          const scormPending =
+            lesson.scorm.find((p) => p.status === "UPLOADING" || p.status === "PROCESSING") ?? null;
+          const scormFailed = lesson.scorm.find((p) => p.status === "FAILED") ?? null;
           const pick = picks[lesson.lessonId] ?? "";
           return (
             <li key={lesson.lessonId} className="p-4">
@@ -145,7 +130,7 @@ export function LessonResources({
                     {scormEnabled && (
                       <span className="inline-flex items-center gap-1">
                         <FileBox className="h-3.5 w-3.5" />
-                        {activePkg ? "SCORM ✓" : `${lesson.scorm.length} gói`}
+                        {giaoAn ? "Giáo án ✓" : scormPending ? "Đang xử lý" : "Chưa có"}
                       </span>
                     )}
                     <span className="inline-flex items-center gap-1">
@@ -160,62 +145,72 @@ export function LessonResources({
                   {scormEnabled && (
                     <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
                       <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-neutral-600">
-                        <FileBox className="h-3.5 w-3.5" /> Tài liệu giảng dạy (SCORM)
+                        <FileBox className="h-3.5 w-3.5" /> Giáo án giảng dạy (SCORM)
                       </h3>
-                      {lesson.scorm.length === 0 ? (
+                      {giaoAn ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-sm">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                          <span className="font-medium text-neutral-800">{giaoAn.name}</span>
+                          <Link
+                            href={`/admin/scorm/play/${giaoAn.id}`}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:underline"
+                          >
+                            <Play className="h-3.5 w-3.5" /> Xem thử
+                          </Link>
+                          {canActivateScorm &&
+                            (confirmDelete === giaoAn.id ? (
+                              <button
+                                type="button"
+                                disabled={pending}
+                                onClick={() => run(() => deleteScormPackage(giaoAn.id))}
+                                className="ml-auto inline-flex items-center gap-1 rounded-md bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-40"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Xác nhận
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={pending}
+                                onClick={() => setConfirmDelete(giaoAn.id)}
+                                className="ml-auto inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Gỡ
+                              </button>
+                            ))}
+                        </div>
+                      ) : scormPending ? (
+                        <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-sky-700">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang xử lý{" "}
+                          <span className="font-medium">{scormPending.name}</span> — giáo án sẽ hiện
+                          sau giây lát.
+                        </p>
+                      ) : (
                         <p className="mt-2 text-xs text-neutral-500">
-                          Chưa có gói SCORM cho buổi.{" "}
+                          Chưa có giáo án cho buổi. Đẩy tệp .zip bên dưới hoặc{" "}
                           <Link
                             href="/admin/scorm"
                             className="inline-flex items-center gap-0.5 font-semibold text-[#7C3AED] hover:underline"
                           >
-                            Tải gói lên <ExternalLink className="h-3 w-3" />
+                            quản lý ở trang SCORM <ExternalLink className="h-3 w-3" />
                           </Link>
+                          .
                         </p>
-                      ) : (
-                        <ul className="mt-2 space-y-1.5">
-                          {lesson.scorm.map((pkg) => (
-                            <li
-                              key={pkg.id}
-                              className="flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-sm"
+                      )}
+                      {scormFailed && (
+                        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-rose-600">
+                          <AlertCircle className="h-3.5 w-3.5" /> Bản {scormFailed.name} lỗi
+                          {scormFailed.error ? `: ${scormFailed.error}` : ""}.
+                          {canActivateScorm && (
+                            <button
+                              type="button"
+                              disabled={pending}
+                              onClick={() => run(() => deleteScormPackage(scormFailed.id))}
+                              className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-0.5 font-semibold hover:bg-rose-50 disabled:opacity-40"
                             >
-                              <span className="font-medium text-neutral-800">
-                                {pkg.name}{" "}
-                                <span className="text-neutral-400">v{pkg.version}</span>
-                              </span>
-                              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">
-                                {SCORM_STATUS_LABEL[pkg.status]}
-                              </span>
-                              {pkg.isActiveForLesson ? (
-                                <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-700">
-                                  <CheckCircle2 className="h-3.5 w-3.5" /> Đang dùng
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleActivate(pkg, Boolean(activePkg))
-                                  }
-                                  disabled={
-                                    pending ||
-                                    !canActivateScorm ||
-                                    pkg.status !== "PUBLISHED"
-                                  }
-                                  title={
-                                    !canActivateScorm
-                                      ? "Chỉ Đào tạo mới đặt bản dùng"
-                                      : pkg.status !== "PUBLISHED"
-                                        ? "Chỉ gói đã phát hành mới đặt được"
-                                        : "Đặt làm bản đang dùng của buổi"
-                                  }
-                                  className="ml-auto inline-flex items-center gap-1 rounded-md border border-neutral-200 px-2 py-0.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
-                                >
-                                  <Star className="h-3.5 w-3.5" /> Đặt bản dùng
-                                </button>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
+                              <Trash2 className="h-3 w-3" /> Dọn
+                            </button>
+                          )}
+                        </p>
                       )}
                       {/* R2-LMS-3 — upload gói SCORM inline (chỉ Đào tạo: training:manage). */}
                       {canActivateScorm && <LessonScormUpload lessonId={lesson.lessonId} />}

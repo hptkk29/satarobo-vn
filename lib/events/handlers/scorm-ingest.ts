@@ -9,7 +9,10 @@
 //   4. normalizeRootPrefix → strip thư mục gốc đơn; upload từng entry lên
 //      `${storagePrefix}<relpath>` (PutObject).
 //   5. entryCursor flush định kỳ → replay/resume bỏ qua entry đã xong (idempotent:
-//      ghi đè cùng key vô hại). Xong = status TESTING (Đào tạo xem thử).
+//      ghi đè cùng key vô hại). Xong = TỰ ĐỘNG PHÁT HÀNH: set PUBLISHED + đang dùng,
+//      đồng thời XOÁ giáo án cũ của buổi (DB cascade attempts/log + xoá asset R2).
+//      "Safe swap" — chỉ xoá bản cũ SAU KHI bản mới giải nén xong, nên nếu file mới
+//      hỏng thì buổi vẫn giữ giáo án cũ (mỗi buổi đúng 1 giáo án).
 //
 // Lock/heartbeat: status PROCESSING. Lỗi hạ tầng (tải zip/PutObject) → THROW để
 // dispatcher retry (resume từ cursor). Lỗi nội dung (zip hỏng/validate/manifest)
@@ -18,6 +21,7 @@ import JSZip from "jszip";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { getR2Client, getR2Bucket } from "@/lib/storage/r2-client";
+import { publishAndSwapLessonMaterial } from "@/lib/scorm/publish";
 import { on, type DomainEventLite } from "@/lib/events/registry";
 import {
   validateZipEntries,
@@ -30,8 +34,8 @@ import { parseManifest } from "@/lib/scorm/manifest";
 const str = (v: unknown): string => (v == null ? "" : String(v));
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
-/** Flush con trỏ entry mỗi N tệp (giảm số lần ghi DB, vẫn đủ để resume). */
-const CURSOR_FLUSH = 25;
+/** Số tệp upload R2 SONG SONG mỗi đợt — giải nén nhanh hơn ~15x (trước: tuần tự). */
+const UPLOAD_CONCURRENCY = 16;
 /** Trần dung lượng khi giải nén (đồng bộ DEFAULT_MAX_BYTES của lib/scorm/ingest). */
 const MAX_BYTES = 200 * 1024 * 1024;
 
@@ -56,7 +60,14 @@ const MIME: Record<string, string> = {
   woff: "font/woff",
   woff2: "font/woff2",
   ttf: "font/ttf",
+  otf: "font/otf",
   eot: "application/vnd.ms-fontobject",
+  xsd: "application/xml",
+  dtd: "application/xml-dtd",
+  ico: "image/x-icon",
+  cur: "image/x-icon",
+  txt: "text/plain",
+  vtt: "text/vtt",
 };
 
 function contentTypeFor(path: string): string {
@@ -82,6 +93,8 @@ export async function onScormUploaded(event: DomainEventLite): Promise<void> {
     where: { id: packageId },
     select: {
       id: true,
+      kind: true,
+      lessonId: true,
       status: true,
       uploadKey: true,
       storagePrefix: true,
@@ -90,6 +103,8 @@ export async function onScormUploaded(event: DomainEventLite): Promise<void> {
     },
   });
   if (!pkg) return;
+  // Chỉ giải nén gói SCORM. PDF được phát hành thẳng ở confirmUpload (không qua đây).
+  if (pkg.kind !== "SCORM") return;
 
   // Idempotent: đã giải nén/phát hành/lưu trữ → không xử lý lại.
   if (
@@ -168,21 +183,32 @@ export async function onScormUploaded(event: DomainEventLite): Promise<void> {
   let totalBytes = pkg.sizeBytes ?? 0;
   let cursor = pkg.entryCursor;
 
-  for (let i = 0; i < fileObjs.length; i++) {
-    if (i < cursor) continue; // đã upload ở lần chạy trước.
-    const f = fileObjs[i];
-    const rel0 = f.name.replace(/\\/g, "/");
-    const rel =
-      rootPrefix && rel0.startsWith(rootPrefix)
-        ? rel0.slice(rootPrefix.length)
-        : rel0;
-    if (!rel) {
-      cursor = i + 1;
-      continue;
-    }
-
-    const content = await f.async("uint8array");
-    totalBytes += content.length;
+  // Upload theo ĐỢT SONG SONG (resume từ entryCursor). Mỗi đợt giải nén + PutObject
+  // đồng thời UPLOAD_CONCURRENCY tệp → nhanh hơn nhiều lần so với tuần tự. Lỗi PutObject
+  // → throw để dispatcher retry (resume từ cursor đợt trước). Idempotent: ghi đè vô hại.
+  for (let i = cursor; i < fileObjs.length; i += UPLOAD_CONCURRENCY) {
+    const batch = fileObjs.slice(i, i + UPLOAD_CONCURRENCY);
+    const sizes = await Promise.all(
+      batch.map(async (f) => {
+        const rel0 = f.name.replace(/\\/g, "/");
+        const rel =
+          rootPrefix && rel0.startsWith(rootPrefix)
+            ? rel0.slice(rootPrefix.length)
+            : rel0;
+        if (!rel) return 0;
+        const content = await f.async("uint8array");
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: `${storagePrefix}${rel}`,
+            Body: content,
+            ContentType: contentTypeFor(rel),
+          }),
+        );
+        return content.length;
+      }),
+    );
+    totalBytes += sizes.reduce((a, b) => a + b, 0);
     if (totalBytes > MAX_BYTES) {
       await fail(
         packageId,
@@ -190,37 +216,21 @@ export async function onScormUploaded(event: DomainEventLite): Promise<void> {
       );
       return;
     }
-
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: `${storagePrefix}${rel}`,
-        Body: content,
-        ContentType: contentTypeFor(rel),
-      }),
-    );
-
-    cursor = i + 1;
-    if (cursor % CURSOR_FLUSH === 0) {
-      await db.scormPackage.update({
-        where: { id: packageId },
-        data: { entryCursor: cursor, sizeBytes: totalBytes },
-      });
-    }
+    cursor = Math.min(i + UPLOAD_CONCURRENCY, fileObjs.length);
+    await db.scormPackage.update({
+      where: { id: packageId },
+      data: { entryCursor: cursor, sizeBytes: totalBytes },
+    });
   }
 
-  // Hoàn tất → TESTING (Đào tạo xem thử trước publish).
-  await db.scormPackage.update({
-    where: { id: packageId },
-    data: {
-      status: "TESTING",
-      scormVersion: parsed.version,
-      launchUrl: launchPath,
-      sizeBytes: totalBytes,
-      fileCount: fileObjs.length,
-      entryCursor: cursor,
-      error: null,
-    },
+  // Cập nhật con trỏ entry trước khi phát hành (đề phòng đọc lại). Sau đó TỰ ĐỘNG
+  // PHÁT HÀNH + ĐẶT ĐANG DÙNG + XOÁ giáo án cũ của buổi qua helper dùng chung (PDF/SCORM).
+  await db.scormPackage.update({ where: { id: packageId }, data: { entryCursor: cursor } });
+  await publishAndSwapLessonMaterial(packageId, pkg.lessonId, {
+    launchUrl: launchPath,
+    scormVersion: parsed.version,
+    sizeBytes: totalBytes,
+    fileCount: fileObjs.length,
   });
 }
 

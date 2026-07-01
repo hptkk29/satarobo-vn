@@ -14,6 +14,7 @@ import {
 import { isScormEnabled } from "@/lib/flags";
 import { signScormTicket } from "@/lib/scorm/ticket";
 import { ScormPlayer } from "@/components/admin/scorm-player";
+import { PdfSlidePlayer } from "@/components/admin/pdf-slide-player";
 import type { ScormSeed } from "@/components/admin/scorm-api";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,9 @@ export default async function ScormPlayPage({ params, searchParams }: PageProps)
     where: { id },
     select: {
       id: true,
+      kind: true,
       name: true,
+      lessonId: true,
       launchUrl: true,
       status: true,
       storagePrefix: true,
@@ -81,7 +84,34 @@ export default async function ScormPlayPage({ params, searchParams }: PageProps)
     if (cs) classSession = cs;
   }
 
-  if (!canOpenScorm(actor, classSession)) notFound();
+  // Quyền mở: (a) qua buổi cụ thể (canOpenScorm), HOẶC (b) GV được phân công 1 lớp DÙNG
+  // buổi này (xem slide mọi buổi lớp mình, không cần ClassSession riêng), HOẶC (c) Đào tạo.
+  let canView = canOpenScorm(actor, classSession);
+  if (!canView) {
+    const lessonInfo = await sdb.lesson.findUnique({
+      where: { id: pkg.lessonId },
+      select: { curriculumId: true, curriculum: { select: { courseId: true } } },
+    });
+    if (lessonInfo) {
+      const teaches = await sdb.class.findFirst({
+        where: {
+          deletedAt: null,
+          AND: [
+            { OR: [{ teacherId: actor.userId }, { assistantId: actor.userId }] },
+            {
+              OR: [
+                { curriculumId: lessonInfo.curriculumId },
+                { curriculumId: null, courseId: lessonInfo.curriculum.courseId },
+              ],
+            },
+          ],
+        },
+        select: { id: true },
+      });
+      canView = Boolean(teaches);
+    }
+  }
+  if (!canView) notFound();
 
   // GV chỉ mở gói đã PUBLISHED; người quản lý đào tạo xem thử TESTING/PUBLISHED.
   const canManage = canManageTraining(actor);
@@ -116,6 +146,19 @@ export default async function ScormPlayPage({ params, searchParams }: PageProps)
   });
   const name = u?.employee?.fullName ?? u?.name ?? session.user.email ?? "";
   const employeeCode = u?.employee?.employeeCode ?? "";
+
+  // Giáo án PDF: render slider pdf.js (không có runtime/tiến độ SCORM). Chung khung SlideStage.
+  if (pkg.kind === "PDF") {
+    return (
+      <PdfSlidePlayer
+        launchTicket={ticket}
+        launchUrl={pkg.launchUrl}
+        packageName={pkg.name}
+        name={name}
+        employeeCode={employeeCode}
+      />
+    );
+  }
 
   // Tiến độ giảng của GV (resume) — theo (gói, GV, buổi). KHÔNG đụng HV/học bạ.
   const attempt = await sdb.scormAttempt.findFirst({

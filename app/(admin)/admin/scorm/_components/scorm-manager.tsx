@@ -1,44 +1,46 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
-import { UploadCloud, CheckCircle2, Archive, Star, Play, GraduationCap } from "lucide-react";
 import {
-  createScormPackage,
-  confirmUpload,
-  publishScorm,
-  activateForLesson,
-  archiveScorm,
-} from "../_actions";
+  UploadCloud,
+  Play,
+  Trash2,
+  Loader2,
+  RefreshCw,
+  FileBox,
+  AlertCircle,
+  BookOpen,
+} from "lucide-react";
+import { createScormPackage, confirmUpload, processScormNow, deleteScormPackage } from "../_actions";
 
-export type LessonOption = { id: string; label: string };
-
-export type PackageRow = {
+export type GiaoAn = {
   id: string;
   name: string;
-  status: "UPLOADING" | "PROCESSING" | "FAILED" | "TESTING" | "PUBLISHED" | "ARCHIVED";
+  kind: "SCORM" | "PDF";
   version: number;
-  scormVersion: "SCORM_12" | "SCORM_2004" | null;
-  isActiveForLesson: boolean;
   sizeBytes: number | null;
   fileCount: number | null;
-  error: string | null;
-  lessonId: string;
-  lessonLabel: string;
-  /** Số GV đã mở/giảng gói (delivery tracking — KHÔNG liên quan HV). */
-  deliveredTeacherCount: number;
-  /** Nhãn trạng thái giảng gần nhất (VI) — null nếu chưa GV nào mở. */
-  deliveryStatusLabel: string | null;
+  scormVersion: "SCORM_12" | "SCORM_2004" | null;
 };
-
-const STATUS_STYLE: Record<PackageRow["status"], string> = {
-  UPLOADING: "bg-sky-100 text-sky-700",
-  PROCESSING: "bg-indigo-100 text-indigo-700",
-  FAILED: "bg-rose-100 text-rose-700",
-  TESTING: "bg-amber-100 text-amber-700",
-  PUBLISHED: "bg-emerald-100 text-emerald-700",
-  ARCHIVED: "bg-gray-100 text-gray-500",
+export type PendingPkg = { id: string; name: string; status: string };
+export type FailedPkg = { id: string; name: string; error: string | null };
+export type LessonNode = {
+  lessonId: string;
+  order: number;
+  title: string;
+  giaoAn: GiaoAn | null;
+  pending: PendingPkg | null;
+  failed: FailedPkg | null;
+};
+export type CourseNode = {
+  id: string;
+  name: string;
+  code: string | null;
+  curriculumName: string | null;
+  lessons: LessonNode[];
 };
 
 function fmtSize(bytes: number | null): string {
@@ -48,11 +50,7 @@ function fmtSize(bytes: number | null): string {
 }
 
 /** Upload zip qua presigned PUT với progress (XHR). Reject khi lỗi mạng/HTTP. */
-function putWithProgress(
-  url: string,
-  file: File,
-  onProgress: (pct: number) => void,
-): Promise<void> {
+function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
@@ -69,47 +67,73 @@ function putWithProgress(
   });
 }
 
-export function ScormManager({
-  packages,
-  lessons,
-}: {
-  packages: PackageRow[];
-  lessons: LessonOption[];
-}) {
+export function ScormManager({ courses }: { courses: CourseNode[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [courseId, setCourseId] = useState("");
   const [lessonId, setLessonId] = useState("");
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const groups = useMemo(() => {
-    const m = new Map<string, { label: string; rows: PackageRow[] }>();
-    for (const p of packages) {
-      const g = m.get(p.lessonId) ?? { label: p.lessonLabel, rows: [] };
-      g.rows.push(p);
-      m.set(p.lessonId, g);
-    }
-    return Array.from(m.values());
-  }, [packages]);
+  const course = useMemo(() => courses.find((c) => c.id === courseId) ?? null, [courses, courseId]);
+  const lessons = useMemo(() => course?.lessons ?? [], [course]);
+  const lesson = useMemo(
+    () => lessons.find((l) => l.lessonId === lessonId) ?? null,
+    [lessons, lessonId],
+  );
+
+  // Tự làm mới khi buổi đang có bản XỬ LÝ → giáo án hiện ra ngay khi giải nén xong
+  // (hoặc cron xử lý ở môi trường serverless). Dừng sau ~2 phút để khỏi poll vô hạn.
+  const pendingId = lesson?.pending?.id ?? null;
+  const pollCount = useRef(0);
+  useEffect(() => {
+    pollCount.current = 0;
+    if (!pendingId) return;
+    const t = setInterval(() => {
+      pollCount.current += 1;
+      if (pollCount.current > 30) {
+        clearInterval(t);
+        return;
+      }
+      router.refresh();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [pendingId, router]);
+
+  function resetUploadForm() {
+    setName("");
+    setFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   async function handleUpload() {
     if (!lessonId) return toast.error("Chọn buổi học");
-    if (!name.trim()) return toast.error("Nhập tên gói");
-    if (!file) return toast.error("Chọn tệp .zip");
+    if (!name.trim()) return toast.error("Nhập tên giáo án");
+    if (!file) return toast.error("Chọn tệp .pdf hoặc .zip");
+    const lower = file.name.toLowerCase();
+    const isPdf = lower.endsWith(".pdf");
+    const isZip = lower.endsWith(".zip");
+    if (!isPdf && !isZip) return toast.error("Chỉ nhận .pdf (slide) hoặc .zip (gói SCORM)");
+    const kind = isPdf ? "PDF" : "SCORM";
 
     setUploading(true);
     setProgress(0);
+    // Đã confirmUpload xong → tệp đã nhận, gói ở PROCESSING. Sau mốc này LUÔN refresh
+    // ở finally để hiện thẻ "đang xử lý" + bật polling, kể cả khi processScormNow treo.
+    let confirmedUpload = false;
     try {
       const created = await createScormPackage({
         lessonId,
         name: name.trim(),
         fileName: file.name,
-        mimeType: file.type || "application/zip",
+        mimeType: file.type || (isPdf ? "application/pdf" : "application/zip"),
         sizeBytes: file.size,
+        kind,
       });
       if (!created.ok) {
         toast.error(created.error);
@@ -121,181 +145,289 @@ export function ScormManager({
         toast.error(confirmed.error);
         return;
       }
-      toast.success("Đã tải lên — đang giải nén & đọc manifest");
-      setName("");
-      setFile(null);
-      if (fileRef.current) fileRef.current.value = "";
-      router.refresh();
+      confirmedUpload = true;
+      // Giải nén ngay để giáo án hiện liền. Nếu zip lớn → request có thể hết giờ:
+      // KHÔNG coi là lỗi — cron sẽ hoàn tất & polling sẽ tự cập nhật.
+      try {
+        await processScormNow(created.data!.id);
+      } catch {
+        /* timeout/zip lớn → cron fallback */
+      }
+      toast.success(
+        lesson?.giaoAn
+          ? "Đã đẩy giáo án mới — đang xử lý & thay bản cũ"
+          : "Đã đẩy giáo án — đang xử lý",
+      );
+      resetUploadForm();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Lỗi upload");
     } finally {
       setUploading(false);
       setProgress(0);
+      // Chỉ refresh khi đã confirm (tránh hiện thẻ "đang xử lý" cho row UPLOADING mồ
+      // côi khi PUT lỗi); sau confirm thì luôn refresh dù processScormNow treo.
+      if (confirmedUpload) router.refresh();
     }
   }
 
-  function act(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string) {
+  function handleDelete(id: string) {
     startTransition(async () => {
-      const res = await fn();
+      const res = await deleteScormPackage(id);
       if (res.ok) {
-        toast.success(okMsg);
+        toast.success("Đã gỡ giáo án");
+        setConfirmDelete(null);
         router.refresh();
-      } else toast.error(res.error ?? "Lỗi");
+      } else {
+        toast.error(res.error ?? "Lỗi");
+      }
     });
   }
 
-  function onActivate(p: PackageRow, hasActiveOther: boolean) {
-    let reason: string | undefined;
-    if (hasActiveOther) {
-      const r = window.prompt("Đổi bản đang dùng của buổi — nhập lý do:");
-      if (r === null) return; // huỷ
-      if (!r.trim()) return toast.error("Cần nêu lý do");
-      reason = r.trim();
-    }
-    act(() => activateForLesson(p.id, reason), "Đã đặt làm bản đang dùng");
+  if (courses.length === 0) {
+    return (
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-700">
+        <AlertCircle className="mr-1 inline h-4 w-4" />
+        Chưa có khoá học nào bật chế độ dạy (isTeachable). Tạo/cấu hình khoá ở Quản lý khoá học
+        trước.
+      </p>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Upload */}
-      <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">Tải gói SCORM</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
+    <div className="space-y-5">
+      {/* Bước 1+2: chọn khoá học → buổi học */}
+      <section className="grid gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2">
+        <label className="space-y-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            Khoá học
+          </span>
           <select
-            value={lessonId}
-            onChange={(e) => setLessonId(e.target.value)}
-            disabled={uploading}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={courseId}
+            onChange={(e) => {
+              setCourseId(e.target.value);
+              setLessonId("");
+              setConfirmDelete(null);
+            }}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
           >
-            <option value="">— Chọn buổi học —</option>
-            {lessons.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
+            <option value="">— Chọn khoá học —</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.code ? ` (${c.code})` : ""}
               </option>
             ))}
           </select>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Tên gói (vd: Bài 1 — Robot cơ bản)"
-            disabled={uploading}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".zip,application/zip,application/x-zip-compressed"
-          disabled={uploading}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-orange-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-orange-600"
-        />
+        </label>
 
-        {uploading && (
-          <div>
-            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-              <div
-                className="h-full rounded-full bg-orange-500 transition-all"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="mt-1 text-xs text-gray-500">Đang tải lên… {progress}%</p>
-          </div>
+        <label className="space-y-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            Buổi học
+          </span>
+          <select
+            value={lessonId}
+            onChange={(e) => {
+              setLessonId(e.target.value);
+              setConfirmDelete(null);
+            }}
+            disabled={!course}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            <option value="">
+              {!course
+                ? "— Chọn khoá học trước —"
+                : lessons.length === 0
+                  ? "— Khoá chưa có buổi học —"
+                  : "— Chọn buổi học —"}
+            </option>
+            {lessons.map((l) => (
+              <option key={l.lessonId} value={l.lessonId}>
+                Buổi {l.order}: {l.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {course && !course.curriculumName && (
+          <p className="sm:col-span-2 text-xs text-amber-600">
+            <AlertCircle className="mr-1 inline h-3.5 w-3.5" />
+            Khoá này chưa có khung chương trình đang dùng (ACTIVE) — chưa có buổi để gắn giáo án.
+          </p>
         )}
-
-        <button
-          type="button"
-          onClick={handleUpload}
-          disabled={uploading}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
-        >
-          <UploadCloud className="h-4 w-4" /> {uploading ? "Đang xử lý…" : "Tải lên"}
-        </button>
+        {course?.curriculumName && (
+          <p className="sm:col-span-2 inline-flex items-center gap-1 text-xs text-gray-400">
+            <BookOpen className="h-3.5 w-3.5" /> Khung chương trình: {course.curriculumName}
+          </p>
+        )}
       </section>
 
-      {/* Danh sách theo buổi */}
-      {groups.length === 0 ? (
-        <p className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
-          Chưa có gói SCORM nào.
+      {/* Bước 3: giáo án của buổi */}
+      {!lesson ? (
+        <p className="rounded-xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+          Chọn khoá học và buổi học để xem giáo án.
         </p>
       ) : (
-        groups.map((g) => {
-          const hasActive = g.rows.some((r) => r.isActiveForLesson);
-          return (
-            <section key={g.label} className="space-y-2">
-              <h3 className="text-sm font-semibold text-gray-700">{g.label}</h3>
-              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-                <ul className="divide-y divide-gray-100">
-                  {g.rows.map((p) => (
-                    <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{p.name}</span>
-                          <span className="text-xs text-gray-400">v{p.version}</span>
-                          {p.isActiveForLesson && (
-                            <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-700">
-                              <Star className="h-3 w-3" /> Đang dùng
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                          <span className={`rounded px-1.5 py-0.5 ${STATUS_STYLE[p.status]}`}>
-                            {p.status}
-                          </span>
-                          {p.scormVersion && <span>{p.scormVersion.replace("_", " ")}</span>}
-                          <span>· {fmtSize(p.sizeBytes)}</span>
-                          {p.fileCount != null && <span>· {p.fileCount} tệp</span>}
-                          {p.deliveredTeacherCount > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 font-medium text-violet-700">
-                              <GraduationCap className="h-3 w-3" /> Đã giảng:{" "}
-                              {p.deliveredTeacherCount} GV
-                              {p.deliveryStatusLabel ? ` · ${p.deliveryStatusLabel}` : ""}
-                            </span>
-                          )}
-                          {p.status === "FAILED" && p.error && (
-                            <span className="text-rose-600">· {p.error}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {p.status === "TESTING" && (
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() => act(() => publishScorm(p.id), "Đã phát hành")}
-                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Phát hành
-                          </button>
-                        )}
-                        {p.status === "PUBLISHED" && !p.isActiveForLesson && (
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() => onActivate(p, hasActive)}
-                            className="inline-flex items-center gap-1 rounded-md border border-orange-200 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-50 disabled:opacity-60"
-                          >
-                            <Play className="h-3.5 w-3.5" /> Đặt đang dùng
-                          </button>
-                        )}
-                        {p.status !== "ARCHIVED" && (
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() => act(() => archiveScorm(p.id), "Đã lưu trữ")}
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                          >
-                            <Archive className="h-3.5 w-3.5" /> Lưu trữ
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+        <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-gray-800">
+              Giáo án — Buổi {lesson.order}: {lesson.title}
+            </h2>
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Làm mới
+            </button>
+          </div>
+
+          {/* Giáo án đang dùng */}
+          {lesson.giaoAn ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <FileBox className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span className="truncate font-semibold text-gray-900">{lesson.giaoAn.name}</span>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+                      lesson.giaoAn.kind === "PDF"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-indigo-100 text-indigo-700"
+                    }`}
+                  >
+                    {lesson.giaoAn.kind}
+                  </span>
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                    Đang dùng
+                  </span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 pl-6 text-xs text-gray-500">
+                  {lesson.giaoAn.kind === "SCORM" && lesson.giaoAn.scormVersion && (
+                    <span>{lesson.giaoAn.scormVersion.replace("_", " ")}</span>
+                  )}
+                  <span>· {fmtSize(lesson.giaoAn.sizeBytes)}</span>
+                  {lesson.giaoAn.kind === "SCORM" && lesson.giaoAn.fileCount != null && (
+                    <span>· {lesson.giaoAn.fileCount} tệp</span>
+                  )}
+                  <span>· v{lesson.giaoAn.version}</span>
+                </div>
               </div>
-            </section>
-          );
-        })
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href={`/admin/scorm/play/${lesson.giaoAn.id}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-orange-200 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                >
+                  <Play className="h-3.5 w-3.5" /> Xem thử
+                </Link>
+                {confirmDelete === lesson.giaoAn.id ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => handleDelete(lesson.giaoAn!.id)}
+                    className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Xác nhận gỡ
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => setConfirmDelete(lesson.giaoAn!.id)}
+                    className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Gỡ
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : lesson.pending ? null : (
+            <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-400">
+              Chưa có giáo án cho buổi này. Đẩy tệp .zip SCORM bên dưới.
+            </p>
+          )}
+
+          {/* Bản đang xử lý */}
+          {lesson.pending && (
+            <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm text-sky-700">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>
+                Đang xử lý <span className="font-medium">{lesson.pending.name}</span> — giáo án sẽ
+                hiện sau giây lát…
+              </span>
+            </div>
+          )}
+
+          {/* Bản lỗi cần dọn */}
+          {lesson.failed && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50/60 p-3 text-sm">
+              <span className="min-w-0 text-rose-700">
+                <AlertCircle className="mr-1 inline h-4 w-4" />
+                Bản <span className="font-medium">{lesson.failed.name}</span> xử lý lỗi
+                {lesson.failed.error ? `: ${lesson.failed.error}` : ""}.
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => handleDelete(lesson.failed!.id)}
+                className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-60"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Dọn bản lỗi
+              </button>
+            </div>
+          )}
+
+          {/* Đẩy / thay giáo án */}
+          <div className="space-y-2 rounded-lg border border-dashed border-gray-300 bg-white p-3">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
+              {lesson.giaoAn ? "Thay giáo án (đẩy bản mới)" : "Đẩy giáo án lên"}
+            </h3>
+            <p className="text-xs text-gray-500">
+              Nhận <span className="font-medium">.pdf</span> (slide) hoặc{" "}
+              <span className="font-medium">.zip</span> (gói SCORM) — cả hai trình chiếu cùng một
+              khung slider.
+            </p>
+            {lesson.giaoAn && (
+              <p className="text-xs text-amber-600">
+                Đẩy bản mới sẽ tự thay &amp; xoá giáo án hiện tại sau khi xử lý xong.
+              </p>
+            )}
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Tên giáo án (vd: Bài 1 — Robot cơ bản)"
+              disabled={uploading}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+            />
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".zip,.pdf,application/zip,application/x-zip-compressed,application/pdf"
+              disabled={uploading}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-orange-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-orange-600"
+            />
+            {uploading && (
+              <div>
+                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-orange-500 transition-all"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">Đang tải lên… {progress}%</p>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={uploading}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+            >
+              <UploadCloud className="h-4 w-4" />
+              {uploading ? "Đang xử lý…" : lesson.giaoAn ? "Đẩy & thay giáo án" : "Đẩy giáo án"}
+            </button>
+          </div>
+        </section>
       )}
     </div>
   );

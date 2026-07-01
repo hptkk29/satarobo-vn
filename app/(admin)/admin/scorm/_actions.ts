@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
@@ -10,17 +10,19 @@ import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
-import { getR2Client, getR2Bucket } from "@/lib/storage/r2-client";
+import { getR2Client, getR2Bucket, deleteR2Prefix } from "@/lib/storage/r2-client";
+import { onScormUploaded } from "@/lib/events/handlers/scorm-ingest";
+import { publishAndSwapLessonMaterial } from "@/lib/scorm/publish";
 import { isScormEnabled } from "@/lib/flags";
 
 // =============================================================================
-// R7-11/R7-12 — Server Actions cho pipeline SCORM (admin/Đào tạo).
+// Pipeline SCORM/giáo án (admin/Đào tạo) — 1 giáo án/buổi, đẩy mới = thay cũ.
 //   createScormPackage  → tạo row UPLOADING + presign PUT zip lên R2.
 //   confirmUpload       → PROCESSING + emit scorm.uploaded (job giải nén consume).
-//   publishScorm        → TESTING → PUBLISHED.
-//   activateForLesson   → bật 1 bản active/buổi (tắt bản khác trong 1 tx); đổi bản
-//                         đang dùng cần reason + AuditLog. Bản cũ KHÔNG bị xoá.
-//   archiveScorm        → ARCHIVED + tắt active.
+//   processScormNow     → chạy giải nén NGAY (best-effort) để giáo án hiện liền,
+//                         không phải chờ cron; cron vẫn là fallback (handler idempotent).
+//                         Khi xong: tự PHÁT HÀNH + ĐẶT ĐANG DÙNG + XOÁ giáo án cũ của buổi.
+//   deleteScormPackage  → gỡ hẳn 1 giáo án (DB cascade attempts/log + xoá asset R2).
 // Mọi action: auth + can(training:manage) + isScormEnabled (gate kép).
 // =============================================================================
 
@@ -53,11 +55,14 @@ const createInputSchema = z.object({
   fileName: z.string().trim().min(1, "Thiếu tên tệp"),
   mimeType: z.string().trim().min(1, "Thiếu kiểu tệp"),
   sizeBytes: z.number().int().positive("Kích thước tệp không hợp lệ"),
+  // Loại giáo án: SCORM (.zip) hoặc PDF (.pdf). Mặc định SCORM (tương thích ngược).
+  kind: z.enum(["SCORM", "PDF"]).default("SCORM"),
 });
 
 /**
  * Tạo bản ghi ScormPackage trạng thái UPLOADING + presign PUT để browser upload
- * trực tiếp zip lên R2. Version tăng dần theo buổi (bản mới không động bản cũ).
+ * trực tiếp file lên R2. kind=SCORM → source.zip (giải nén sau); kind=PDF → source.pdf
+ * (phát hành thẳng ở confirmUpload). Version tăng dần theo buổi (bản mới không động bản cũ).
  */
 export async function createScormPackage(
   input: unknown,
@@ -69,7 +74,16 @@ export async function createScormPackage(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { lessonId, name, mimeType, sizeBytes } = parsed.data;
+  const { lessonId, name, fileName, mimeType, sizeBytes, kind } = parsed.data;
+
+  // Khớp loại file với kind (chặn nhầm .zip vào PDF & ngược lại).
+  const lower = fileName.toLowerCase();
+  if (kind === "PDF" && !(lower.endsWith(".pdf") || mimeType.includes("pdf"))) {
+    return { ok: false, error: "Giáo án PDF cần tệp .pdf" };
+  }
+  if (kind === "SCORM" && !(lower.endsWith(".zip") || mimeType.includes("zip"))) {
+    return { ok: false, error: "Gói SCORM cần tệp .zip" };
+  }
 
   const lesson = await g.sdb.lesson.findUnique({ where: { id: lessonId }, select: { id: true } });
   if (!lesson) return { ok: false, error: "Không tìm thấy buổi học" };
@@ -86,6 +100,7 @@ export async function createScormPackage(
     data: {
       lessonId,
       name,
+      kind,
       version,
       sizeBytes,
       status: "UPLOADING",
@@ -95,7 +110,7 @@ export async function createScormPackage(
     select: { id: true },
   });
   const storagePrefix = `scorm/${created.id}/`;
-  const uploadKey = `${storagePrefix}source.zip`;
+  const uploadKey = `${storagePrefix}${kind === "PDF" ? "source.pdf" : "source.zip"}`;
   await g.sdb.scormPackage.update({
     where: { id: created.id },
     data: { storagePrefix, uploadKey },
@@ -121,15 +136,17 @@ export async function createScormPackage(
     entityType: "ScormPackage",
     entityId: created.id,
     action: "CREATE",
-    newValues: { name, lessonId, version, sizeBytes },
+    newValues: { name, lessonId, version, sizeBytes, kind },
   });
   revalidatePath("/admin/scorm");
   return { ok: true, data: { id: created.id, uploadUrl, uploadKey, expiresIn: PRESIGN_TTL_SEC } };
 }
 
 /**
- * Xác nhận browser đã PUT xong zip → chuyển PROCESSING + phát scorm.uploaded để
- * job giải nén (đọc manifest, đẩy asset, set TESTING) xử lý. Idempotent qua dedupeKey.
+ * Xác nhận browser đã PUT xong file.
+ *   • PDF → phát hành THẲNG (không giải nén): set launchUrl="source.pdf" + publish + thay
+ *     bản cũ. Giáo án hiện ngay, không chờ cron.
+ *   • SCORM → PROCESSING + phát scorm.uploaded để job giải nén xử lý (idempotent dedupeKey).
  */
 export async function confirmUpload(packageId: string): Promise<Result> {
   const g = await gate();
@@ -138,13 +155,39 @@ export async function confirmUpload(packageId: string): Promise<Result> {
 
   const pkg = await g.sdb.scormPackage.findUnique({
     where: { id: packageId },
-    select: { id: true, status: true, uploadKey: true, storagePrefix: true },
+    select: { id: true, kind: true, lessonId: true, status: true, uploadKey: true, storagePrefix: true },
   });
   if (!pkg) return { ok: false, error: "Không tìm thấy gói" };
   if (pkg.status !== "UPLOADING" && pkg.status !== "FAILED") {
     return { ok: false, error: "Gói không ở trạng thái chờ upload" };
   }
   if (!pkg.uploadKey) return { ok: false, error: "Gói chưa có tệp upload" };
+
+  if (pkg.kind === "PDF") {
+    // PDF không có bước giải nén để bắt lỗi như SCORM → PHẢI xác nhận file thật sự đã
+    // lên R2 trước khi phát hành. publishAndSwap sẽ XOÁ giáo án cũ; nếu PUT lỗi/thiếu
+    // mà vẫn publish → mất bản cũ + giáo án mới 404. Thiếu/rỗng → FAILED, giữ bản cũ.
+    try {
+      const head = await getR2Client().send(
+        new HeadObjectCommand({ Bucket: getR2Bucket(), Key: pkg.uploadKey }),
+      );
+      if (!head.ContentLength || head.ContentLength <= 0) throw new Error("empty");
+    } catch {
+      await g.sdb.scormPackage.update({
+        where: { id: packageId },
+        data: { status: "FAILED", error: "Tệp PDF chưa upload xong" },
+      });
+      revalidatePath("/admin/scorm");
+      return { ok: false, error: "Tệp PDF chưa upload xong — thử đẩy lại" };
+    }
+    // PDF: launch chính là file PDF; phát hành + thay bản cũ ngay.
+    await publishAndSwapLessonMaterial(packageId, pkg.lessonId, {
+      launchUrl: "source.pdf",
+      scormVersion: null,
+    });
+    revalidatePath("/admin/scorm");
+    return { ok: true };
+  }
 
   await g.sdb.scormPackage.update({
     where: { id: packageId },
@@ -159,121 +202,67 @@ export async function confirmUpload(packageId: string): Promise<Result> {
   return { ok: true };
 }
 
-/** TESTING → PUBLISHED (Đào tạo phát hành sau khi xem thử). */
-export async function publishScorm(packageId: string): Promise<Result> {
+/**
+ * Chạy giải nén NGAY cho 1 gói (gọi ngay sau confirmUpload) để giáo án hiện liền,
+ * khỏi chờ cron. Handler idempotent + resume-safe → cron vẫn là fallback nếu request
+ * hết giờ. Khi xong, handler tự PHÁT HÀNH + ĐẶT ĐANG DÙNG + XOÁ giáo án cũ của buổi.
+ * Trả ok kể cả khi giải nén lỗi/treo — UI đọc trạng thái gói thực tế qua refresh/poll.
+ */
+export async function processScormNow(packageId: string): Promise<Result> {
   const g = await gate();
   if (!g.ok) return g;
   if (!packageId) return { ok: false, error: "Thiếu mã gói" };
 
   const pkg = await g.sdb.scormPackage.findUnique({
     where: { id: packageId },
-    select: { id: true, status: true, lessonId: true, name: true },
+    select: { id: true, kind: true },
   });
   if (!pkg) return { ok: false, error: "Không tìm thấy gói" };
-  if (pkg.status !== "TESTING") {
-    return { ok: false, error: "Chỉ phát hành được gói đang ở trạng thái TESTING" };
-  }
+  // PDF đã phát hành ở confirmUpload — không có gì để giải nén.
+  if (pkg.kind !== "SCORM") return { ok: true };
 
-  await g.sdb.scormPackage.update({ where: { id: packageId }, data: { status: "PUBLISHED" } });
-  await writeAudit({
-    actor: { id: g.userId, name: g.name },
-    module: "scorm",
-    entityType: "ScormPackage",
-    entityId: packageId,
-    action: "UPDATE",
-    oldValues: { status: "TESTING" },
-    newValues: { status: "PUBLISHED" },
-  });
+  try {
+    await onScormUploaded({
+      id: `inline:${packageId}`,
+      type: "scorm.uploaded",
+      payload: { packageId },
+    });
+  } catch {
+    // Lỗi hạ tầng (R2/timeout) — bỏ qua: event vẫn PENDING, cron sẽ giải nén lại.
+  }
   revalidatePath("/admin/scorm");
   return { ok: true };
 }
 
 /**
- * Đặt 1 gói làm bản active của buổi: tắt bản active khác CÙNG buổi trong 1
- * transaction (partial unique 1 active/lesson). Bản cũ KHÔNG bị xoá (vẫn PUBLISHED).
- * Nếu đang thay bản khác đang dùng → BẮT BUỘC reason + ghi AuditLog (truy vết).
+ * Gỡ hẳn 1 giáo án khỏi buổi: xoá row (DB cascade ScormAttempt/AccessLog) + xoá asset
+ * R2. Dùng cho: dọn bản FAILED, hoặc bỏ giáo án mà không thay bản mới. Không cần reason
+ * (mỗi buổi chỉ 1 giáo án — không có khái niệm "bản đang dùng" để truy vết đổi bản).
  */
-export async function activateForLesson(
-  packageId: string,
-  reason?: string,
-): Promise<Result> {
+export async function deleteScormPackage(packageId: string): Promise<Result> {
   const g = await gate();
   if (!g.ok) return g;
   if (!packageId) return { ok: false, error: "Thiếu mã gói" };
 
   const pkg = await g.sdb.scormPackage.findUnique({
     where: { id: packageId },
-    select: { id: true, status: true, lessonId: true, isActiveForLesson: true },
+    select: { id: true, name: true, lessonId: true, storagePrefix: true, status: true },
   });
   if (!pkg) return { ok: false, error: "Không tìm thấy gói" };
-  if (pkg.status !== "PUBLISHED") {
-    return { ok: false, error: "Chỉ kích hoạt được gói đã PUBLISHED" };
+
+  await g.sdb.scormPackage.delete({ where: { id: packageId } });
+  try {
+    await deleteR2Prefix(pkg.storagePrefix);
+  } catch {
+    // R2 lỗi → chỉ để lại rác, không chặn xoá DB.
   }
-  if (pkg.isActiveForLesson) return { ok: true }; // đã active — không làm gì.
-
-  const current = await g.sdb.scormPackage.findFirst({
-    where: { lessonId: pkg.lessonId, isActiveForLesson: true, NOT: { id: packageId } },
-    select: { id: true, name: true, version: true },
-  });
-  const cleanReason = reason?.trim();
-  if (current && !cleanReason) {
-    return { ok: false, error: "Đổi bản đang dùng của buổi cần nêu lý do" };
-  }
-
-  await g.sdb.$transaction(async (tx) => {
-    if (current) {
-      await tx.scormPackage.updateMany({
-        where: { lessonId: pkg.lessonId, isActiveForLesson: true, NOT: { id: packageId } },
-        data: { isActiveForLesson: false },
-      });
-    }
-    await tx.scormPackage.update({
-      where: { id: packageId },
-      data: { isActiveForLesson: true },
-    });
-  });
-
   await writeAudit({
     actor: { id: g.userId, name: g.name },
     module: "scorm",
     entityType: "ScormPackage",
     entityId: packageId,
-    action: "UPDATE",
-    reason: cleanReason,
-    oldValues: current
-      ? { activePackageId: current.id, activeName: current.name, activeVersion: current.version }
-      : null,
-    newValues: { isActiveForLesson: true, lessonId: pkg.lessonId },
-  });
-  revalidatePath("/admin/scorm");
-  return { ok: true };
-}
-
-/** Lưu trữ gói (ARCHIVED) + tắt active. Bản cũ giữ nguyên dữ liệu (không xoá vật lý). */
-export async function archiveScorm(packageId: string): Promise<Result> {
-  const g = await gate();
-  if (!g.ok) return g;
-  if (!packageId) return { ok: false, error: "Thiếu mã gói" };
-
-  const pkg = await g.sdb.scormPackage.findUnique({
-    where: { id: packageId },
-    select: { id: true, status: true },
-  });
-  if (!pkg) return { ok: false, error: "Không tìm thấy gói" };
-  if (pkg.status === "ARCHIVED") return { ok: true };
-
-  await g.sdb.scormPackage.update({
-    where: { id: packageId },
-    data: { status: "ARCHIVED", isActiveForLesson: false },
-  });
-  await writeAudit({
-    actor: { id: g.userId, name: g.name },
-    module: "scorm",
-    entityType: "ScormPackage",
-    entityId: packageId,
-    action: "UPDATE",
-    oldValues: { status: pkg.status },
-    newValues: { status: "ARCHIVED", isActiveForLesson: false },
+    action: "DELETE",
+    oldValues: { name: pkg.name, lessonId: pkg.lessonId, status: pkg.status },
   });
   revalidatePath("/admin/scorm");
   return { ok: true };

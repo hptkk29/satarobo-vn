@@ -118,6 +118,7 @@ export default async function EditCurriculumPage({ params }: Props) {
             version: true,
             status: true,
             isActiveForLesson: true,
+            error: true,
           },
         })
       : Promise.resolve([]),
@@ -201,6 +202,7 @@ export default async function EditCurriculumPage({ params }: Props) {
       version: p.version,
       status: p.status,
       isActiveForLesson: p.isActiveForLesson,
+      error: p.error,
     })),
     assignments: assignmentsByLesson.get(l.id) ?? [],
   }));
