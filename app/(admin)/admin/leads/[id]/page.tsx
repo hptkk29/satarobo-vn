@@ -119,7 +119,7 @@ export default async function LeadDetailPage({ params }: Props) {
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
-  const [childCenters, childCourses] = await Promise.all([
+  const [childCenters, childCourses, expectedProducts] = await Promise.all([
     db.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -128,7 +128,14 @@ export default async function LeadDetailPage({ params }: Props) {
     db.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, category: true },
+      select: { id: true, name: true, category: true, code: true },
+    }),
+    // G2 — sản phẩm dự kiến (loại đơn = Sản phẩm): chỉ KIT_ROBOT/SENSOR đang bán.
+    db.product.findMany({
+      where: { status: "ACTIVE", category: { in: ["KIT_ROBOT", "SENSOR"] } },
+      orderBy: { name: "asc" },
+      take: 200,
+      select: { id: true, sku: true, name: true },
     }),
   ]);
   // Lead LOST (hoặc không có quyền sửa) → con hiển thị read-only.
@@ -256,11 +263,15 @@ export default async function LeadDetailPage({ params }: Props) {
         <Info label="Ghi chú" value={lead.note} />
       </dl>
 
-      {/* LD1 — loại đơn dự kiến (Khoá học / Sản phẩm) */}
+      {/* LD1/G2 — loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể theo loại */}
       <div className="mb-6">
         <OrderKindSelect
           leadId={lead.id}
           current={lead.orderKind}
+          currentCourseId={lead.expectedCourseId}
+          currentProductId={lead.expectedProductId}
+          courses={childCourses.map((c) => ({ id: c.id, name: c.name, code: c.code }))}
+          products={expectedProducts}
           readOnly={!canTransfer}
         />
       </div>

@@ -175,8 +175,8 @@ export async function recordPaymentAction(input: unknown) {
   revalidatePath("/cong-no");
   // S6 — đồng bộ trang lead/convert.
   if (order.leadId) {
-    revalidatePath(`/admin/leads/${order.leadId}`);
-    revalidatePath(`/admin/leads/${order.leadId}/convert`);
+    revalidatePath(`/leads/${order.leadId}`);
+    revalidatePath(`/leads/${order.leadId}/convert`);
   }
   return { ok: true as const, paymentId: res.paymentId };
 }
@@ -223,8 +223,8 @@ export async function confirmPaymentAction(paymentId: string, idempotencyKey?: s
   });
   const leadId = p?.order?.leadId;
   if (leadId) {
-    revalidatePath(`/admin/leads/${leadId}`);
-    revalidatePath(`/admin/leads/${leadId}/convert`);
+    revalidatePath(`/leads/${leadId}`);
+    revalidatePath(`/leads/${leadId}/convert`);
   }
   return { ok: true as const, receiptId: res.receiptId };
 }

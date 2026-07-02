@@ -6,9 +6,8 @@ import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
-import { OrderPaymentSection } from "../_components/order-payment-section";
 import { SendEmailModal } from "../_components/send-email-modal";
-import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL } from "@/lib/orders/status";
+import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import { getPaymentConfig, buildTransferContent, buildVietQrImageUrl } from "@/lib/payments/vietqr";
 import type { OrderStatus } from "@prisma/client";
 
@@ -98,6 +97,22 @@ export default async function OrderDetailPage({ params }: Props) {
       })
     : [];
 
+  // G4 (3c) — danh sách phương thức để đổi PTTT (chỉ cần khi có quyền sửa).
+  const paymentMethods = canManage
+    ? await db.paymentMethod.findMany({
+        where: { isActive: true },
+        orderBy: { displayOrder: "asc" },
+        select: {
+          id: true,
+          name: true,
+          canBuyCourse: true,
+          canBuyPackage: true,
+          canBuyExam: true,
+          canBuyProduct: true,
+        },
+      })
+    : [];
+
   return (
     <div className="max-w-5xl">
       <Link
@@ -118,6 +133,22 @@ export default async function OrderDetailPage({ params }: Props) {
             <Badge className={STATUS_BADGE_CLASS[order.status]}>
               {ORDER_STATUS_LABEL[order.status]}
             </Badge>
+            {(() => {
+              // G5 — badge suy diễn tiến độ trả góp 2 đợt (vd "Đã đóng đợt 1").
+              const b = deriveInstallmentBadge(order.installments);
+              if (!b) return null;
+              return (
+                <Badge
+                  className={
+                    b.color === "emerald"
+                      ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                      : "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                  }
+                >
+                  {b.label}
+                </Badge>
+              );
+            })()}
           </div>
           <p className="mt-1 text-sm text-gray-600">
             Tạo:{" "}
@@ -149,14 +180,9 @@ export default async function OrderDetailPage({ params }: Props) {
         order={order}
         canManage={canManage}
         canApprove={canApprove}
-      />
-
-      <OrderPaymentSection
-        orderId={order.id}
-        totalAmount={order.totalAmount}
-        canManage={canManage}
         qrUrl={qrUrl}
         transferContent={transferContent}
+        paymentMethods={paymentMethods}
         installments={order.installments.map((i) => ({
           id: i.id,
           soDot: i.soDot,

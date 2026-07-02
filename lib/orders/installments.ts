@@ -68,6 +68,17 @@ export async function recordInstallmentPlan(params: {
   const now = new Date();
   await db.$transaction(async (tx) => {
     await tx.orderInstallment.deleteMany({ where: { orderId } });
+    // S1-fix (double-write) — kế hoạch 2 đợt là NGUỒN SỰ THẬT về tiền của đơn:
+    // xoá mềm MỌI Payment auto cũ ([auto:order-confirm] khi đơn đã xác nhận tổng,
+    // và [auto:order-installment:dotN] của lần lưu trước) TRƯỚC khi dựng lại. Nếu không:
+    //  (a) đơn CONFIRMED trước rồi mới lưu kế hoạch → confirm(full) + đợt1 = cộng đôi "đã nộp";
+    //  (b) sửa lại số tiền đợt 1 → marker cũ khiến ensureOrderPaymentRecorded no-op, lệch số.
+    // Chỉ set deletedAt (không DELETE) nên không vướng FK Receipt (Restrict); khoản auto vốn
+    // chưa gắn enrollment nên không có Receipt.
+    await tx.payment.updateMany({
+      where: { orderId, deletedAt: null, note: { contains: "[auto:" } },
+      data: { deletedAt: now },
+    });
     await tx.orderInstallment.create({
       data: { orderId, soDot: 1, amount: dot1Amount, status: dot1Amount > 0 ? "PAID" : "PENDING", paidAt: dot1Amount > 0 ? now : null, recordedById: actorId },
     });

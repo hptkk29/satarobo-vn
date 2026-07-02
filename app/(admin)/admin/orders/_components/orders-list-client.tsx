@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { queryOrders, type OrderFilters, type OrderRow } from "../_actions";
-import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL } from "@/lib/orders/status";
+import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import type { OrderStatus, OrderType } from "@prisma/client";
 
 const ALL_STATUSES: OrderStatus[] = [
@@ -238,9 +238,26 @@ export function OrdersListClient() {
                     {o.paymentMethod?.name ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge className={STATUS_BADGE_CLASS[o.status]}>
-                      {ORDER_STATUS_LABEL[o.status]}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge className={STATUS_BADGE_CLASS[o.status]}>
+                        {ORDER_STATUS_LABEL[o.status]}
+                      </Badge>
+                      {(() => {
+                        const b = deriveInstallmentBadge(o.installments);
+                        if (!b) return null;
+                        return (
+                          <Badge
+                            className={
+                              b.color === "emerald"
+                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                                : "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                            }
+                          >
+                            {b.label}
+                          </Badge>
+                        );
+                      })()}
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs tabular-nums text-gray-600">
                     {formatDateTime(o.createdAt)}

@@ -253,7 +253,6 @@ export default async function LeadsPage({
         pageSize={PAGE_SIZE}
         canUpdate={canUpdate}
         canDelete={canDelete}
-        canCloseDeal={canCloseDeal}
         currentStatus={statusFilter}
         currentQ={q}
       />

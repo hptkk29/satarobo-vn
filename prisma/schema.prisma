@@ -845,6 +845,7 @@ model Course {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   leads              Lead[]
+  expectedByLeads    Lead[]          @relation("LeadExpectedCourse") // G2 — khoá dự kiến của lead
   classes            Class[]
   enrollments        Enrollment[]
   curriculums        Curriculum[]
@@ -993,14 +994,21 @@ model Lead {
   // FIX lead→payment→enroll (M0/LD1) — loại đơn dự kiến (gợi ý nguồn item khi tạo đơn).
   orderKind OrderKind?
 
+  // G2 — sản phẩm/khoá học DỰ KIẾN theo loại đơn (tách khỏi courseId="Khoá quan tâm").
+  // optional: chỉ là gợi ý khi tạo đơn; orderKind=COURSE → expectedCourseId, =PRODUCT → expectedProductId.
+  expectedCourseId  String?
+  expectedProductId String?
+
   deletedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
-  center     Center? @relation(fields: [centerId], references: [id])
-  course     Course? @relation(fields: [courseId], references: [id])
-  assignedTo User?   @relation("AssignedLeads", fields: [assignedToId], references: [id])
-  notes      Note[]
+  center          Center?  @relation(fields: [centerId], references: [id])
+  course          Course?  @relation(fields: [courseId], references: [id])
+  expectedCourse  Course?  @relation("LeadExpectedCourse", fields: [expectedCourseId], references: [id])
+  expectedProduct Product? @relation("LeadExpectedProduct", fields: [expectedProductId], references: [id])
+  assignedTo      User?    @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  notes           Note[]
 
   // Phase T1.2 — Activity timeline + follow-up tasks
   activities LeadActivity[]
@@ -1031,6 +1039,8 @@ model Lead {
   @@index([deletedAt])
   @@index([eventId])
   @@index([orgUnitId])
+  @@index([expectedCourseId])
+  @@index([expectedProductId])
 }
 
 /// R7-01 — 1 Lead có N con. Nền cho lớp trải nghiệm (R7-02). Field phẳng cũ
@@ -3413,6 +3423,9 @@ model Product {
 
   // Phase 5.10.1 — order item references
   orderItems OrderItem[]
+
+  // G2 — sản phẩm dự kiến của lead (loại đơn = Sản phẩm).
+  expectedByLeads Lead[] @relation("LeadExpectedProduct")
 
   @@index([category, status])
   @@index([status])

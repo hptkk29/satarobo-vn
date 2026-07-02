@@ -115,6 +115,8 @@ export async function queryOrders(
     include: {
       paymentMethod: { select: { code: true, name: true } },
       _count: { select: { items: true } },
+      // G5 — badge suy diễn "Đã đóng đợt 1" cho danh sách (chỉ cần soDot + status).
+      installments: { select: { soDot: true, status: true } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: PAGE_SIZE + 1,
@@ -579,8 +581,8 @@ export async function changeOrderStatusAction(
   revalidatePath(`/orders/${orderId}`);
   // S6 — đồng bộ trang lead/convert (đổi trạng thái đơn ảnh hưởng "đủ điều kiện chốt").
   if (order.leadId) {
-    revalidatePath(`/admin/leads/${order.leadId}`);
-    revalidatePath(`/admin/leads/${order.leadId}/convert`);
+    revalidatePath(`/leads/${order.leadId}`);
+    revalidatePath(`/leads/${order.leadId}/convert`);
   }
 
   // Fire PAYMENT_RECEIPT when order transitions to CONFIRMED (paidAt set).
@@ -642,6 +644,73 @@ export async function updateOrderNoteAction(
   const upd = await db.order.updateMany({
     where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
     data: { internalNote: internalNote.trim() || null },
+  });
+  if (upd.count === 0) return { ok: false as const, error: "STALE_WRITE" };
+
+  revalidatePath(`/orders/${orderId}`);
+  return { ok: true as const };
+}
+
+// ─── UPDATE PAYMENT METHOD (G4 — chỉ khi đơn CHƯA xác nhận thanh toán) ─
+export async function updateOrderPaymentMethodAction(
+  orderId: string,
+  paymentMethodId: string,
+  // FIX-H9 — optimistic lock: Order.updatedAt (ISO) client đã thấy. Lệch → STALE_WRITE.
+  expectedUpdatedAt?: string,
+) {
+  const session = await requireOrdersManage();
+
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, centerId: true, status: true, type: true },
+  });
+  const actor = await resolveActor(session.user.id);
+  if (!order || !passesScope("Order", order, actor)) {
+    return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+  // G4 (chốt): chỉ cho sửa phương thức khi đơn còn DRAFT/PENDING_PAYMENT (chưa chốt tiền).
+  if (order.status !== "DRAFT" && order.status !== "PENDING_PAYMENT") {
+    return {
+      ok: false as const,
+      error: "Chỉ sửa phương thức khi đơn chưa xác nhận thanh toán",
+    };
+  }
+
+  const pm = await db.paymentMethod.findUnique({
+    where: { id: paymentMethodId },
+    select: {
+      id: true,
+      isActive: true,
+      canBuyCourse: true,
+      canBuyPackage: true,
+      canBuyExam: true,
+      canBuyProduct: true,
+    },
+  });
+  if (!pm) {
+    return { ok: false as const, error: "Phương thức thanh toán không tồn tại" };
+  }
+  if (!pm.isActive) {
+    return { ok: false as const, error: "Phương thức thanh toán đã bị vô hiệu hoá" };
+  }
+  const allowedMap: Record<OrderType, boolean> = {
+    COURSE: pm.canBuyCourse,
+    PACKAGE: pm.canBuyPackage,
+    EXAM: pm.canBuyExam,
+    PRODUCT: pm.canBuyProduct,
+    COMBO: false,
+  };
+  if (!allowedMap[order.type]) {
+    return {
+      ok: false as const,
+      error: `Phương thức này không hỗ trợ loại đơn "${order.type}"`,
+    };
+  }
+
+  const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
+  const upd = await db.order.updateMany({
+    where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
+    data: { paymentMethodId },
   });
   if (upd.count === 0) return { ok: false as const, error: "STALE_WRITE" };
 
@@ -819,8 +888,8 @@ export async function recordOrderInstallmentsAction(input: {
     revalidatePath(`/orders/${input.orderId}`);
     // S6 — ghi sổ đợt 1 sinh Payment(RECORDED) → đồng bộ trang lead/convert.
     if (order.leadId) {
-      revalidatePath(`/admin/leads/${order.leadId}`);
-      revalidatePath(`/admin/leads/${order.leadId}/convert`);
+      revalidatePath(`/leads/${order.leadId}`);
+      revalidatePath(`/leads/${order.leadId}/convert`);
     }
   }
   return res;
@@ -849,8 +918,8 @@ export async function markOrderInstallmentPaidAction(
     revalidatePath(`/orders/${orderId}`);
     // S6 — đóng đợt sinh Payment(RECORDED, nếu đã duyệt) → đồng bộ trang lead/convert.
     if (order.leadId) {
-      revalidatePath(`/admin/leads/${order.leadId}`);
-      revalidatePath(`/admin/leads/${order.leadId}/convert`);
+      revalidatePath(`/leads/${order.leadId}`);
+      revalidatePath(`/leads/${order.leadId}/convert`);
     }
   }
   return res;

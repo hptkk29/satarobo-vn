@@ -204,17 +204,13 @@ export function LeadsKanban({
                       )}
                     </div>
 
-                    {canCloseDeal &&
-                      lead.status !== "ENROLLED" &&
-                      lead.status !== "LOST" &&
-                      lead.status !== "DUPLICATE" && (
-                        <Link
-                          href={`/leads/${lead.id}`}
-                          className="mt-2 block w-full rounded-md bg-emerald-600 px-2 py-1 text-center text-xs font-semibold text-white hover:bg-emerald-700"
-                        >
-                          Xem chi tiết lead
-                        </Link>
-                      )}
+                    {/* Hiện cho MỌI trạng thái (kể cả đã ghi danh) và mọi role xem được lead. */}
+                    <Link
+                      href={`/leads/${lead.id}`}
+                      className="mt-2 block w-full rounded-md bg-emerald-600 px-2 py-1 text-center text-xs font-semibold text-white hover:bg-emerald-700"
+                    >
+                      Xem chi tiết lead
+                    </Link>
 
                     {/* Mobile / fallback: đổi status qua select (native DnD không
                         chạy tốt trên touch). */}
