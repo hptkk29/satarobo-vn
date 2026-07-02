@@ -46,6 +46,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Kiểm tra secrets prod (fail sớm, message rõ ràng)
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL (Supabase transaction pooler :6543) — khai ở Settings → Secrets and variables → Actions"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL (Supabase session pooler :5432) — khai ở Settings → Secrets and variables → Actions"; missing=1; }
+          exit $missing
+
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v3
