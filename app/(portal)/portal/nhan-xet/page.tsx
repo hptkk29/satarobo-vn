@@ -5,6 +5,9 @@ import {
   getSessionMediaForStudent,
   type RenderedAnswer,
 } from "@/lib/eval/session-eval-portal";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { getStudentFeedback } from "@/lib/portal/feedback";
+import { NhanXetPageV2 } from "@/components/portal/nhan-xet-page";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Nhận xét | Sata Robo", robots: { index: false } };
@@ -22,7 +25,20 @@ function fmtDate(d: Date | string): string {
 // Hiển thị song song: (1) nhận xét cũ StudentSessionFeedback (comment+rating) và
 // (2) phiếu đánh giá buổi học mới (SESSION_EVAL) kèm ảnh buổi (gate theo consent).
 export default async function NhanXetPage() {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+
+  // Portal v2 — trang Nhận xét giống SataUI (master-detail).
+  if (isPortalV2Enabled()) {
+    const items = await getStudentFeedback(studentId);
+    return (
+      <NhanXetPageV2
+        kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
+        activeId={ctx.activeStudent?.id ?? null}
+        studentName={ctx.activeStudent?.name ?? "con"}
+        items={items}
+      />
+    );
+  }
 
   const [feedbacks, evals] = await Promise.all([
     db.studentSessionFeedback.findMany({

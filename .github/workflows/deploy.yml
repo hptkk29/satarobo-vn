@@ -1,0 +1,131 @@
+name: Deploy Production (Vercel)
+
+# =============================================================================
+# Mục tiêu: deploy bản Production CHẠY GIỐNG LOCALHOST.
+# Khác biệt "deploy ≠ local" đến từ (1) feature flag/env thiếu, (2) DB prod chưa
+# migrate. Workflow này xử lý cả hai: migrate prod TRƯỚC, rồi build+deploy Vercel
+# với ĐẦY ĐỦ feature flag inject từ GitHub Variables/Secrets.
+#
+# ── SECRETS cần khai (GitHub → Settings → Secrets and variables → Actions › Secrets):
+#     PROD_DATABASE_URL   → Supabase transaction pooler :6543 (runtime)
+#     PROD_DIRECT_URL     → Supabase session pooler     :5432 (migrate)
+#     VERCEL_TOKEN        → Vercel → Account Settings → Tokens
+#     VERCEL_ORG_ID       → chạy `vercel link` rồi xem .vercel/project.json
+#     VERCEL_PROJECT_ID   → .vercel/project.json
+#   (Các secret tích hợp R2/Zalo/Meta/Resend/MISA/Sentry/CRON_SECRET… set trong
+#    VERCEL PROJECT ENV — xem .env.example. Chúng là bí mật, không đưa vào repo.)
+#
+# ── VARIABLES cần khai (…› Variables) — feature flag để KHỚP localhost:
+#     PORTAL_V2_ENABLED=true · SCORM_ENABLED=true · EVAL_V2_ENABLED=false ·
+#     SESSION_LIFECYCLE_V2=false · MEDIA_SIGNED_URL=false · RBAC_V2_ENABLED=false ·
+#     CONVERT_V2_ENABLED=true · COMMON_LOGIN_ENABLED=true · DISPATCHER_ENABLED=true
+#
+# ⚠️ Nếu bạn đang dùng Vercel Git-integration tự deploy khi push main → sẽ deploy
+#    TRÙNG. Chọn 1 trong 2: (a) TẮT auto-deploy nhánh main ở Vercel (Settings → Git),
+#    dùng workflow này làm nguồn deploy duy nhất; hoặc (b) bỏ job `deploy`, chỉ giữ
+#    job `migrate` (Vercel vẫn tự build+deploy, workflow chỉ lo migrate prod).
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # cho phép bấm "Run workflow" deploy tay
+
+# Không hủy deploy đang chạy giữa chừng (tránh bỏ dở migrate/deploy)
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1) Migrate schema lên Supabase PROD trước khi deploy code mới.
+  #    (Nếu bỏ bước này → code mới gọi field/table chưa có → Prisma lỗi runtime.)
+  # ───────────────────────────────────────────────────────────────────────────
+  migrate:
+    name: Prisma migrate deploy (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Migrate prod DB
+        run: pnpm exec prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2) Build + deploy Production lên Vercel, INJECT feature flag để deploy = local.
+  #    Bí mật tích hợp (R2/Zalo/Meta/Resend/DB…) lấy từ Vercel Project Env (vercel pull).
+  #    Feature flag (không bí mật) inject thêm qua --build-env/--env từ GitHub Variables.
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Vercel production deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: migrate
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      # Feature flags (khớp localhost). Dùng Variables; fallback literal nếu chưa khai.
+      FLAG_PORTAL_V2: ${{ vars.PORTAL_V2_ENABLED || 'true' }}
+      FLAG_SCORM: ${{ vars.SCORM_ENABLED || 'true' }}
+      FLAG_EVAL_V2: ${{ vars.EVAL_V2_ENABLED || 'false' }}
+      FLAG_SESSION_V2: ${{ vars.SESSION_LIFECYCLE_V2 || 'false' }}
+      FLAG_MEDIA_SIGNED: ${{ vars.MEDIA_SIGNED_URL || 'false' }}
+      FLAG_RBAC_V2: ${{ vars.RBAC_V2_ENABLED || 'false' }}
+      FLAG_CONVERT_V2: ${{ vars.CONVERT_V2_ENABLED || 'true' }}
+      FLAG_COMMON_LOGIN: ${{ vars.COMMON_LOGIN_ENABLED || 'true' }}
+      FLAG_DISPATCHER: ${{ vars.DISPATCHER_ENABLED || 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel env (Production)
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build (Vercel, prod) — inject feature flags
+        run: |
+          vercel build --prod --token="$VERCEL_TOKEN" \
+            --build-env PORTAL_V2_ENABLED="$FLAG_PORTAL_V2" \
+            --build-env SCORM_ENABLED="$FLAG_SCORM" \
+            --build-env EVAL_V2_ENABLED="$FLAG_EVAL_V2" \
+            --build-env SESSION_LIFECYCLE_V2="$FLAG_SESSION_V2" \
+            --build-env MEDIA_SIGNED_URL="$FLAG_MEDIA_SIGNED" \
+            --build-env RBAC_V2_ENABLED="$FLAG_RBAC_V2" \
+            --build-env CONVERT_V2_ENABLED="$FLAG_CONVERT_V2" \
+            --build-env COMMON_LOGIN_ENABLED="$FLAG_COMMON_LOGIN" \
+            --build-env DISPATCHER_ENABLED="$FLAG_DISPATCHER"
+
+      - name: Deploy prebuilt to Production — inject runtime flags
+        run: |
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" \
+            --env PORTAL_V2_ENABLED="$FLAG_PORTAL_V2" \
+            --env SCORM_ENABLED="$FLAG_SCORM" \
+            --env EVAL_V2_ENABLED="$FLAG_EVAL_V2" \
+            --env SESSION_LIFECYCLE_V2="$FLAG_SESSION_V2" \
+            --env MEDIA_SIGNED_URL="$FLAG_MEDIA_SIGNED" \
+            --env RBAC_V2_ENABLED="$FLAG_RBAC_V2" \
+            --env CONVERT_V2_ENABLED="$FLAG_CONVERT_V2" \
+            --env COMMON_LOGIN_ENABLED="$FLAG_COMMON_LOGIN" \
+            --env DISPATCHER_ENABLED="$FLAG_DISPATCHER"
