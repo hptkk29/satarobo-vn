@@ -93,7 +93,8 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
               <option value="SESSION_EVAL">Đánh giá buổi học (GV chấm HS)</option>
             </select>
           </div>
-          <QuestionBuilder questions={questions} onChange={setQuestions} />
+          {/* PHOTO chỉ cho SESSION_EVAL — portal PH không có input tải ảnh. */}
+          <QuestionBuilder questions={questions} onChange={setQuestions} allowPhoto={scope === "SESSION_EVAL"} />
           <div className="flex gap-2">
             <button
               type="button"

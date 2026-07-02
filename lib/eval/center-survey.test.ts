@@ -44,9 +44,17 @@ describe("[FL4-03] pickEligibleCenterRounds", () => {
     expect(out).toHaveLength(0);
   });
 
-  it("đợt toàn hệ thống (centerId=null) hiện cho mọi PH", () => {
-    const out = pickEligibleCenterRounds([round({ centerId: null })], new Set(), new Set(), NOW);
-    expect(out).toHaveLength(1);
+  it("đợt toàn hệ thống (centerId=null): chỉ hiện khi PH có con đang học (khớp submit)", () => {
+    // Không có con đang học (default hasStudyingChild = myCenterIds.size > 0) → ẩn,
+    // vì isParentEligibleForCenter(null) sẽ từ chối lúc submit.
+    const hidden = pickEligibleCenterRounds([round({ centerId: null })], new Set(), new Set(), NOW);
+    expect(hidden).toHaveLength(0);
+    // Có con đang học cơ sở bất kỳ → hiện.
+    const shown = pickEligibleCenterRounds([round({ centerId: null })], new Set(["cs2"]), new Set(), NOW);
+    expect(shown).toHaveLength(1);
+    // Con học lớp chưa gắn cơ sở (myCenterIds rỗng) nhưng vẫn đang học → hiện.
+    const noCenterClass = pickEligibleCenterRounds([round({ centerId: null })], new Set(), new Set(), NOW, true);
+    expect(noCenterClass).toHaveLength(1);
   });
 
   it("đã trả lời → ẩn (chống trùng)", () => {

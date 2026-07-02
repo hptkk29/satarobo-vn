@@ -53,13 +53,17 @@ export async function submitCenterSurvey(input: unknown): Promise<Res> {
   const eligible = await isParentEligibleForCenterDb(parentUserId, round.centerId);
   if (!eligible) return { ok: false, error: "Bạn không thuộc diện khảo sát của cơ sở này" };
 
-  const questions: QuestionDef[] = round.form.questions.map((q) => ({
-    id: q.id,
-    type: q.type as QuestionType,
-    label: q.label,
-    options: parseOptions(q.options),
-    required: q.required,
-  }));
+  // Loại câu PHOTO (form legacy) — khớp getEligibleCenterRounds: portal PH không
+  // render input ảnh, giữ lại sẽ làm câu required chặn nộp (dead-end).
+  const questions: QuestionDef[] = round.form.questions
+    .filter((q) => q.type !== "PHOTO")
+    .map((q) => ({
+      id: q.id,
+      type: q.type as QuestionType,
+      label: q.label,
+      options: parseOptions(q.options),
+      required: q.required,
+    }));
   const v = validateAnswers(questions, d.answers);
   if (!v.ok) return { ok: false, error: v.error };
 

@@ -74,7 +74,8 @@ export async function handleParentRequest(input: {
     },
   });
 
-  revalidatePath("/parent-requests");
+  // Route group (admin) không xuất hiện trong URL — path thật là /admin/parent-requests.
+  revalidatePath("/admin/parent-requests");
   revalidatePath("/portal/yeu-cau");
   return { ok: true };
 }
@@ -162,10 +163,11 @@ export async function resolveAbsence(input: {
     }).catch(() => {});
   }
 
-  revalidatePath("/parent-requests/bao-vang");
-  revalidatePath("/parent-requests");
-  revalidatePath("/attendance");
-  revalidatePath("/hoc-bu");
+  // Route group (admin) không xuất hiện trong URL — path thật có prefix /admin.
+  revalidatePath("/admin/parent-requests/bao-vang");
+  revalidatePath("/admin/parent-requests");
+  revalidatePath("/admin/attendance");
+  revalidatePath("/admin/hoc-bu");
   revalidatePath("/portal/yeu-cau");
   return { ok: true };
 }

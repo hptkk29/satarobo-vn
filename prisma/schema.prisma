@@ -4274,6 +4274,9 @@ model SurveyResponse {
   answers      Json? // {questionId: value}
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
 
+  // Chống trả lời trùng 1 survey cho 1 con (double-submit TOCTOU ở portal).
+  // studentId NULL không bị ràng buộc (Postgres coi NULL là distinct).
+  @@unique([surveyId, studentId])
   @@index([surveyId, createdAt])
   @@index([centerId, createdAt])
   @@index([csmId])

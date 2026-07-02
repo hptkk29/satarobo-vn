@@ -4,7 +4,7 @@
 import type { EvalScope } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
-  evalFormInputSchema,
+  evalQuestionsSchema,
   parseOptions,
   type EvalFormInput,
   type EvalQuestionInput,
@@ -14,6 +14,7 @@ export {
   QUESTION_TYPES,
   TEXTBOX_MAX,
   evalQuestionInputSchema,
+  evalQuestionsSchema,
   evalFormInputSchema,
   parseOptions,
   validateAnswers,
@@ -87,9 +88,16 @@ export async function replaceQuestions(
     return { ok: false, error: "Form đã có phản hồi — không thể sửa câu hỏi. Hãy lưu trữ + nhân bản." };
   }
   // Validate lại ở server (phòng client gửi loại ngoài enum).
-  const parsed = evalFormInputSchema.shape.questions.safeParse(questions);
+  const parsed = evalQuestionsSchema.safeParse(questions);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Câu hỏi không hợp lệ" };
+  }
+  // PHOTO chỉ cho SESSION_EVAL — portal PH (TEACHER_EVAL/CENTER_SURVEY) không có
+  // input tải ảnh, câu PHOTO required làm PH không nộp được (khớp evalFormInputSchema).
+  const form = await db.evalForm.findUnique({ where: { id: formId }, select: { scope: true } });
+  if (!form) return { ok: false, error: "Form không tồn tại" };
+  if (form.scope !== "SESSION_EVAL" && parsed.data.some((q) => q.type === "PHOTO")) {
+    return { ok: false, error: "Câu hỏi 'Tải ảnh' chỉ dùng cho phiếu Đánh giá buổi học (SESSION_EVAL)" };
   }
   await db.$transaction([
     db.evalQuestion.deleteMany({ where: { formId } }),

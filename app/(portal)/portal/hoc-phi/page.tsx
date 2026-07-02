@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getParentBilling } from "@/lib/portal/billing";
+import { getParentBilling, PAYMENT_METHOD_LABEL } from "@/lib/portal/billing";
 import { hotlinesInline } from "@/lib/locations";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { requireActiveStudent } from "@/lib/portal/session";
+import { getStudentBilling } from "@/lib/portal/billing-student";
+import { HocPhiPageV2 } from "@/components/portal/hoc-phi-page";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Học phí | Sata Robo", robots: { index: false } };
@@ -24,12 +28,27 @@ function vnd(n: number): string {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("vi-VN");
+  // Server Vercel chạy UTC → phải ép timezone VN, tránh lùi 1 ngày khung 00:00–07:00 giờ VN.
+  return new Date(iso).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 
 export default async function HocPhiPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "PARENT") redirect("/login");
+
+  // Portal v2 — trang Học phí & công nợ giống SataUI (per-child).
+  if (isPortalV2Enabled()) {
+    const { ctx, studentId } = await requireActiveStudent();
+    const data = await getStudentBilling(studentId);
+    return (
+      <HocPhiPageV2
+        kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
+        activeId={ctx.activeStudent?.id ?? null}
+        studentName={ctx.activeStudent?.name ?? "con"}
+        data={data}
+      />
+    );
+  }
 
   const { enrollments, receipts, totals, flags } = await getParentBilling(session.user.id);
 
@@ -164,7 +183,7 @@ export default async function HocPhiPage() {
                   </p>
                   <p className="text-xs text-neutral-500">
                     {r.studentName ? `${r.studentName} · ` : ""}
-                    {r.method} ·{" "}
+                    {PAYMENT_METHOD_LABEL[r.method] ?? r.method} ·{" "}
                     {r.confirmedAt ? fmtDate(r.confirmedAt) : fmtDate(r.paidDate)}
                   </p>
                 </div>

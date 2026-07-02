@@ -11,13 +11,18 @@ const inputCls =
 
 export function RequestForm({
   upcomingSessions = [],
+  initialType,
+  initialContent,
 }: {
   upcomingSessions?: { id: string; label: string }[];
+  /** Giá trị khởi tạo (CTA "Gửi yêu cầu học bù" prefill type=MAKEUP + nội dung buổi vắng). */
+  initialType?: string;
+  initialContent?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [type, setType] = useState("ABSENCE");
-  const [content, setContent] = useState("");
+  const [type, setType] = useState(initialType ?? "ABSENCE");
+  const [content, setContent] = useState(initialContent ?? "");
   const [date, setDate] = useState("");
   const [sessionId, setSessionId] = useState("");
 

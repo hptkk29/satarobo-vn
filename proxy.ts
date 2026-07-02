@@ -142,12 +142,23 @@ export default auth((req: NextAuthRequest) => {
   // Áp role gate tối thiểu để dev không bypass được (PARENT ↛ /admin/*).
   // ═══════════════════════════════════════════════════════════════════
   const role = (session?.user?.role as Role | undefined) ?? null;
+  // Đợt 3B — multi-role: xét UNION roles như decideRoute (route-policy.ts), KHÔNG
+  // chỉ role chính. User PARENT kiêm TEACHER mà chỉ check role==='PARENT' sẽ bị
+  // đá /portal trong khi portal layout đá /dashboard → ERR_TOO_MANY_REDIRECTS.
+  const effectiveRoles: Role[] =
+    session?.user?.roles && (session.user.roles as Role[]).length > 0
+      ? (session.user.roles as Role[])
+      : role !== null
+        ? [role]
+        : [];
+  const isStaff = effectiveRoles.some((r) => r !== "PARENT");
+  const isParentOnly = !isStaff && effectiveRoles.includes("PARENT");
 
   if (isLegacyAdminPrefixed(pathname)) {
     if (!session?.user) {
       return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
     }
-    if (role === "PARENT") {
+    if (isParentOnly) {
       return redirectTo(req, "/portal");
     }
     if (pathname === "/admin" || pathname === "/admin/") {
@@ -161,14 +172,14 @@ export default auth((req: NextAuthRequest) => {
     if (!session?.user) {
       return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
     }
-    if (role === "PARENT") {
+    if (isParentOnly) {
       return redirectTo(req, "/portal");
     }
     return rewriteTo(req, "/admin" + pathname);
   }
 
   if (pathname === "/login" && session?.user) {
-    return redirectTo(req, role === "PARENT" ? "/portal" : "/dashboard");
+    return redirectTo(req, isParentOnly ? "/portal" : "/dashboard");
   }
 
   return NextResponse.next();

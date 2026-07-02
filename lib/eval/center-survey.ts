@@ -50,23 +50,35 @@ export function pickEligibleCenterRounds(
   myCenterIds: ReadonlySet<string>,
   answeredRoundIds: ReadonlySet<string>,
   now: Date = new Date(),
+  // Đồng bộ với isParentEligibleForCenter(roundCenterId=null): đợt toàn hệ thống chỉ
+  // hiện khi PH có ≥1 con ĐANG học — tránh PH điền form xong bị từ chối lúc submit.
+  // (Con học lớp chưa gắn centerId không vào myCenterIds nhưng vẫn tính là "đang học".)
+  hasStudyingChild: boolean = myCenterIds.size > 0,
 ): CenterSurveyRoundView[] {
   const out: CenterSurveyRoundView[] = [];
   for (const r of rounds) {
     if (!isRoundOpen(r, now)) continue;
-    // Cách ly cơ sở: null = dùng chung; ngược lại cơ sở phải nằm trong tầm của PH.
-    if (r.centerId !== null && !myCenterIds.has(r.centerId)) continue;
+    // Cách ly cơ sở: null = dùng chung (cần có con đang học); ngược lại cơ sở phải
+    // nằm trong tầm của PH.
+    if (r.centerId === null) {
+      if (!hasStudyingChild) continue;
+    } else if (!myCenterIds.has(r.centerId)) continue;
     if (answeredRoundIds.has(r.id)) continue;
     out.push({
       roundId: r.id,
       title: r.name,
-      questions: r.form.questions.map((q) => ({
-        id: q.id,
-        type: q.type as QuestionType,
-        label: q.label,
-        options: parseOptions(q.options),
-        required: q.required,
-      })),
+      // Form legacy có thể chứa câu PHOTO (trước khi chặn PHOTO ngoài SESSION_EVAL):
+      // portal PH không có input tải ảnh → loại khỏi form, tránh câu required
+      // làm PH kẹt không nộp được (submitCenterSurvey lọc cùng quy tắc).
+      questions: r.form.questions
+        .filter((q) => q.type !== "PHOTO")
+        .map((q) => ({
+          id: q.id,
+          type: q.type as QuestionType,
+          label: q.label,
+          options: parseOptions(q.options),
+          required: q.required,
+        })),
     });
   }
   return out;
@@ -83,7 +95,8 @@ export async function getEligibleCenterRounds(parentUserId: string): Promise<Cen
     select: { class: { select: { centerId: true } } },
   });
   const myCenters = new Set(enr.map((e) => e.class.centerId).filter((x): x is string => !!x));
-  // PH không có con đang học → chỉ còn đợt toàn hệ thống (centerId=null) là khả dĩ.
+  // PH không có con đang học → không đủ điều kiện đợt nào (kể cả centerId=null),
+  // khớp isParentEligibleForCenterDb lúc submit (_eval-actions.ts).
 
   const rounds = await db.evaluationRound.findMany({
     where: {
@@ -111,5 +124,5 @@ export async function getEligibleCenterRounds(parentUserId: string): Promise<Cen
   });
   const answeredIds = new Set(answered.map((a) => a.roundId));
 
-  return pickEligibleCenterRounds(rounds, myCenters, answeredIds);
+  return pickEligibleCenterRounds(rounds, myCenters, answeredIds, new Date(), enr.length > 0);
 }

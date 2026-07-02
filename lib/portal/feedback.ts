@@ -14,10 +14,16 @@ export type FeedbackItem = {
   rating: number | null;
 };
 
-export async function getStudentFeedback(studentId: string): Promise<FeedbackItem[]> {
+/**
+ * @param limit LIMIT đẩy xuống DB (mặc định 20 — đủ cho trang Nhận xét, học viên
+ * >50 feedback không phình payload). Feed thông báo chỉ cần 3 card/con →
+ * truyền 3, KHÔNG kéo toàn bộ nhận xét về rồi slice.
+ */
+export async function getStudentFeedback(studentId: string, limit = 20): Promise<FeedbackItem[]> {
   const rows = await db.studentSessionFeedback.findMany({
     where: { studentId },
     orderBy: { createdAt: "desc" },
+    take: limit,
     select: {
       id: true,
       comment: true,
