@@ -56,11 +56,29 @@ export const evalQuestionInputSchema = z
 
 export type EvalQuestionInput = z.infer<typeof evalQuestionInputSchema>;
 
-export const evalFormInputSchema = z.object({
-  title: z.string().trim().min(1, "Tiêu đề không được trống").max(200),
-  scope: z.enum(EVAL_SCOPES),
-  questions: z.array(evalQuestionInputSchema).min(1, "Form cần ít nhất 1 câu hỏi"),
-});
+/** Danh sách câu hỏi của form (dùng riêng khi replaceQuestions — không có scope). */
+export const evalQuestionsSchema = z
+  .array(evalQuestionInputSchema)
+  .min(1, "Form cần ít nhất 1 câu hỏi");
+
+export const evalFormInputSchema = z
+  .object({
+    title: z.string().trim().min(1, "Tiêu đề không được trống").max(200),
+    scope: z.enum(EVAL_SCOPES),
+    questions: evalQuestionsSchema,
+  })
+  .superRefine((f, ctx) => {
+    // PHOTO chỉ dành cho SESSION_EVAL (GV tải ảnh dự án/lớp). Portal PH
+    // (TEACHER_EVAL/CENTER_SURVEY) KHÔNG có input tải ảnh → câu PHOTO required
+    // làm PH kẹt không nộp được (dead-end) — chặn ngay từ khi dựng form.
+    if (f.scope !== "SESSION_EVAL" && f.questions.some((q) => q.type === "PHOTO")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Câu hỏi 'Tải ảnh' chỉ dùng cho phiếu Đánh giá buổi học (SESSION_EVAL)",
+        path: ["questions"],
+      });
+    }
+  });
 
 export type EvalFormInput = z.infer<typeof evalFormInputSchema>;
 

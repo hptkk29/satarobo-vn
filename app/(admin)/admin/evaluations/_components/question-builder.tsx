@@ -28,11 +28,19 @@ export function QuestionBuilder({
   questions,
   onChange,
   disabled = false,
+  allowPhoto = true,
 }: {
   questions: DraftQuestion[];
   onChange: (next: DraftQuestion[]) => void;
   disabled?: boolean;
+  /**
+   * PHOTO chỉ dành cho SESSION_EVAL (GV tải ảnh). Portal PH (TEACHER_EVAL /
+   * CENTER_SURVEY) không render input ảnh → ẩn lựa chọn để khỏi tạo form dead-end
+   * (server cũng chặn ở evalFormInputSchema/replaceQuestions).
+   */
+  allowPhoto?: boolean;
 }) {
+  const typeOptions = QUESTION_TYPES.filter((t) => allowPhoto || t !== "PHOTO");
   function update(i: number, patch: Partial<DraftQuestion>) {
     onChange(questions.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
   }
@@ -80,7 +88,7 @@ export function QuestionBuilder({
                     }
                     className="rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:bg-gray-100"
                   >
-                    {QUESTION_TYPES.map((t) => (
+                    {typeOptions.map((t) => (
                       <option key={t} value={t}>
                         {TYPE_LABEL[t]}
                       </option>

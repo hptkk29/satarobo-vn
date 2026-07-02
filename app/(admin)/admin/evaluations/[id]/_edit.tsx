@@ -11,10 +11,13 @@ export function FormEditor({
   formId,
   initial,
   locked,
+  allowPhoto = true,
 }: {
   formId: string;
   initial: DraftQuestion[];
   locked: boolean;
+  /** PHOTO chỉ cho SESSION_EVAL (page truyền theo form.scope). */
+  allowPhoto?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -52,7 +55,7 @@ export function FormEditor({
         </div>
       )}
 
-      <QuestionBuilder questions={questions} onChange={setQuestions} disabled={locked} />
+      <QuestionBuilder questions={questions} onChange={setQuestions} disabled={locked} allowPhoto={allowPhoto} />
 
       <div className="flex gap-2">
         {!locked && (

@@ -74,3 +74,50 @@ export async function changeParentPassword(input: {
   await db.user.update({ where: { id: user.id }, data: { password: hashed } });
   return { ok: true };
 }
+
+// Portal v2 — lưu hồ sơ gia đình: tên + địa chỉ (User) + SĐT/PH thứ hai (denormalized
+// trên tất cả Student của phụ huynh này). Email = định danh đăng nhập, KHÔNG sửa ở đây.
+const profileSchema = z.object({
+  name: z.string().trim().min(2, "Tên quá ngắn").max(120),
+  phone: z.string().trim().max(20).optional().default(""),
+  address: z.string().trim().max(255).optional().default(""),
+  parent2Name: z.string().trim().max(120).optional().default(""),
+  parent2Phone: z.string().trim().max(20).optional().default(""),
+});
+
+export async function updateParentProfile(input: {
+  name: string;
+  phone?: string;
+  address?: string;
+  parent2Name?: string;
+  parent2Phone?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireParent();
+  if (!user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = profileSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const d = parsed.data;
+  const nz = (s: string) => (s.length ? s : null);
+
+  await db.user.update({
+    where: { id: user.id },
+    data: { name: d.name, address: nz(d.address) },
+  });
+  // Cập nhật SĐT PH + PH thứ hai cho toàn bộ con (denormalized theo hồ sơ hộ).
+  await db.student.updateMany({
+    where: { parentUserId: user.id, deletedAt: null },
+    data: {
+      parentName: d.name,
+      parentPhone: nz(d.phone),
+      parent2Name: nz(d.parent2Name),
+      parent2Phone: nz(d.parent2Phone),
+    },
+  });
+
+  revalidatePath("/portal/ho-so");
+  revalidatePath("/portal");
+  return { ok: true };
+}

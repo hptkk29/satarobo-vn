@@ -154,10 +154,19 @@ export async function getCourseCriteria(courseId: string): Promise<CriterionView
 
 // ── Đọc học bạ ĐÃ PHÁT HÀNH (portal — chỉ PUBLISHED, đọc từ snapshot) ─────────
 
-/** Tất cả học bạ ĐÃ PHÁT HÀNH của 1 học viên (đọc snapshot — KHÔNG tính lại live). */
-export async function getPublishedReportCards(studentId: string): Promise<PublishedReportCardView[]> {
+/**
+ * Học bạ ĐÃ PHÁT HÀNH của 1 học viên (đọc snapshot — KHÔNG tính lại live),
+ * mới nhất trước. `limit` áp vào `take` — call-site chỉ cần bản mới nhất
+ * (vd notification-feed) truyền 1 để khỏi kéo toàn bộ snapshot JSON.
+ */
+export async function getPublishedReportCards(
+  studentId: string,
+  limit?: number,
+): Promise<PublishedReportCardView[]> {
   const enrollments = await db.enrollment.findMany({
-    where: { studentId },
+    // FIX-C3: ghi danh đã xóa mềm (ghi danh nhầm) KHÔNG được lộ học bạ ra portal
+    // — nếu không, ReportCard PUBLISHED của nó che dữ liệu lớp đang học thật.
+    where: { studentId, deletedAt: null },
     select: { id: true },
   });
   const ids = enrollments.map((e) => e.id);
@@ -166,6 +175,7 @@ export async function getPublishedReportCards(studentId: string): Promise<Publis
   const cards = await db.reportCard.findMany({
     where: { enrollmentId: { in: ids }, status: "PUBLISHED" },
     orderBy: { publishedAt: "desc" },
+    ...(limit != null ? { take: limit } : {}),
     select: { id: true, enrollmentId: true, publishedSnapshot: true },
   });
   return cards

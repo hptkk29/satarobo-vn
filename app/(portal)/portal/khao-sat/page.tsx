@@ -1,7 +1,9 @@
 import { requireActiveStudent } from "@/lib/portal/session";
 import { db } from "@/lib/db";
-import { isEvalV2Enabled } from "@/lib/flags";
+import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { getEligibleCenterRounds } from "@/lib/eval/center-survey";
+import { getCenterSurveys } from "@/lib/portal/surveys";
+import { KhaoSatPageV2 } from "@/components/portal/khao-sat-page";
 import { SurveyForm } from "./survey-form";
 import { CenterSurveyForm } from "./center-survey";
 
@@ -10,6 +12,26 @@ export const metadata = { title: "Khảo sát | Sata Robo", robots: { index: fal
 
 export default async function KhaoSatPage() {
   const { ctx, studentId } = await requireActiveStudent();
+
+  // Portal v2 — trang Khảo sát trung tâm giống SataUI (thẻ danh mục).
+  // Vẫn nạp đợt CENTER_SURVEY (FL4-03 — luồng chính) để PH không mất form khi bật v2.
+  if (isPortalV2Enabled()) {
+    const [{ cards, todoCount }, centerRounds] = await Promise.all([
+      getCenterSurveys(studentId),
+      isEvalV2Enabled() ? getEligibleCenterRounds(ctx.parentUserId) : Promise.resolve([]),
+    ]);
+    return (
+      <KhaoSatPageV2
+        kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
+        activeId={ctx.activeStudent?.id ?? null}
+        // Survey ĐÃ làm: form không bao giờ render → rỗng hoá questions để text câu
+        // hỏi không bị serialize thừa vào RSC payload (KhaoSatPageV2 là client component).
+        cards={cards.map((c) => (c.done ? { ...c, questions: [] } : c))}
+        todoCount={todoCount}
+        centerRounds={centerRounds}
+      />
+    );
+  }
 
   // FL4-03 — Khảo sát cơ sở CENTER_SURVEY (engine EvalForm, 4 loại câu hỏi) là luồng
   // chính. Survey/NPS dưới đây giữ song song (2-phase, sẽ deprecate — KHÔNG xoá).

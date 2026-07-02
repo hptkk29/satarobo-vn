@@ -5,6 +5,7 @@ import { hasStaffRole } from "@/lib/auth/permissions";
 import { getPortalContext } from "@/lib/portal/session";
 import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
+import { getParentNotificationBadge } from "@/lib/portal/notification-feed";
 import { countUnreadForParent } from "@/lib/conversation/service";
 import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { SiteSwitcher } from "./_components/site-switcher";
@@ -32,23 +33,45 @@ export default async function PortalLayout({
   const ctx = await getPortalContext();
   // ctx luôn khác null vì role PARENT, nhưng guard cho chắc.
   const children_ = ctx?.children ?? [];
-  const [notifCount, msgCount] = await Promise.all([
-    getParentNotificationCount(session.user.id).catch(() => 0),
-    countUnreadForParent(session.user.id).catch(() => 0),
-  ]);
 
   // Portal v2 (merge SataUI) — shell phụ huynh mới (sidebar coral + topbar profile),
   // chạy SONG SONG shell cũ qua flag PORTAL_V2_ENABLED.
   if (isPortalV2Enabled()) {
+    // Badge chuông v2 = unreadTotal của feed tổng hợp — CÙNG nguồn với badge
+    // "Tất cả" trên trang Thông báo (tránh 2 con số lệch nhau). Bản badge có
+    // cache 60s: layout KHÔNG fan-out full feed trên mọi page view.
+    const [notifCount, msgCount] = await Promise.all([
+      getParentNotificationBadge(session.user.id).catch(() => 0),
+      countUnreadForParent(session.user.id).catch(() => 0),
+    ]);
     return (
       <PortalV2Shell
         parentName={ctx?.parentName ?? session.user.name ?? "Phụ huynh"}
+        parentEmail={session.user.email}
         notifCount={notifCount}
+        msgCount={msgCount}
       >
-        {children}
+        {children_.length === 0 ? (
+          // Chưa liên kết học viên: KHÔNG render page (page gọi
+          // requireActiveStudent → redirect "/" → rewrite /portal = vòng lặp
+          // vô hạn trên host portal). Giữ empty-state như shell cũ.
+          <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
+            <p className="text-sm text-muted-foreground">
+              Tài khoản chưa được liên kết với học viên nào. Vui lòng liên hệ
+              trung tâm Sata Robo ({hotlinesInline()}) để được hỗ trợ.
+            </p>
+          </div>
+        ) : (
+          children
+        )}
       </PortalV2Shell>
     );
   }
+
+  const [notifCount, msgCount] = await Promise.all([
+    getParentNotificationCount(session.user.id).catch(() => 0),
+    countUnreadForParent(session.user.id).catch(() => 0),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50">

@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getPortalContext } from "@/lib/portal/session";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { getParentProfile } from "@/lib/portal/parent-profile";
+import { HoSoPageV2 } from "@/components/portal/ho-so-page";
 import { ProfileForm } from "./_components/profile-form";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +13,12 @@ export default async function HoSoPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "PARENT") redirect("/login");
   const ctx = await getPortalContext();
+
+  // Portal v2 — trang Hồ sơ gia đình giống SataUI.
+  if (isPortalV2Enabled()) {
+    const profile = await getParentProfile(session.user.id, ctx?.activeStudent?.id ?? null);
+    return <HoSoPageV2 profile={profile} />;
+  }
 
   return (
     <div className="space-y-5">

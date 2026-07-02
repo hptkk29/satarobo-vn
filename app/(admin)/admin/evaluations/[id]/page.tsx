@@ -45,7 +45,7 @@ export default async function FormEditPage({ params }: { params: Promise<{ id: s
           · {form.status}
         </p>
       </div>
-      <FormEditor formId={id} initial={initial} locked={locked} />
+      <FormEditor formId={id} initial={initial} locked={locked} allowPhoto={form.scope === "SESSION_EVAL"} />
     </div>
   );
 }

@@ -5,22 +5,94 @@ import {
   REQUEST_STATUS_LABEL,
   REQUEST_STATUS_BADGE,
 } from "@/lib/portal/request-labels";
-import { getStudentSessions } from "@/lib/portal/learning";
+import {
+  getStudentUpcomingSessions,
+  type UpcomingSessionRow,
+} from "@/lib/portal/learning";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { getStudentMakeup } from "@/lib/portal/makeup";
+import { YeuCauPageV2 } from "@/components/portal/yeu-cau-page";
 import { RequestForm } from "./_components/request-form";
 import { CancelButton } from "./_components/cancel-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Yêu cầu | Sata Robo", robots: { index: false } };
 
-export default async function YeuCauPage() {
-  const { studentId } = await requireActiveStudent();
+// Báo vắng: chỉ chọn buổi SẮP TỚI (chưa diễn ra) và CHƯA bị huỷ (R7-06) —
+// đã lọc + LIMIT ngay ở query (getStudentUpcomingSessions).
+function toUpcomingOptions(sessions: UpcomingSessionRow[]) {
+  return sessions.map((s) => ({
+    id: s.id,
+    label: `${new Date(s.date).toLocaleDateString("vi-VN", {
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+    })} · ${s.className}${s.lessonTitle ? ` — ${s.lessonTitle}` : ""}`,
+  }));
+}
+
+// Chỉ select cột portal dùng đến (list "Yêu cầu đã gửi") — không kéo mọi cột.
+const REQUEST_SELECT = {
+  id: true,
+  type: true,
+  status: true,
+  content: true,
+  preferredDate: true,
+  response: true,
+  createdAt: true,
+} as const;
+
+export default async function YeuCauPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bu?: string }>;
+}) {
+  const { ctx, studentId } = await requireActiveStudent();
+
+  // Portal v2 — trang Yêu cầu học bù giống SataUI (per-child) + form gửi/huỷ yêu cầu.
+  if (isPortalV2Enabled()) {
+    const [data, requests, sessions, sp] = await Promise.all([
+      getStudentMakeup(studentId),
+      db.parentRequest.findMany({
+        where: { studentId },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        select: REQUEST_SELECT,
+      }),
+      getStudentUpcomingSessions(studentId),
+      searchParams,
+    ]);
+    return (
+      <YeuCauPageV2
+        kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
+        activeId={ctx.activeStudent?.id ?? null}
+        studentName={ctx.activeStudent?.name ?? "con"}
+        data={data}
+        // ?bu=<makeupNeedId> — CTA "Gửi yêu cầu học bù" prefill form (đối chiếu
+        // needList đã ownership-scoped, KHÔNG lộ studentId trên URL).
+        prefillNeedId={sp.bu ?? null}
+        upcomingSessions={toUpcomingOptions(sessions)}
+        requests={requests.map((r) => ({
+          id: r.id,
+          type: r.type,
+          status: r.status,
+          content: r.content,
+          preferredDate: r.preferredDate?.toISOString() ?? null,
+          response: r.response,
+          createdAt: r.createdAt.toISOString(),
+        }))}
+      />
+    );
+  }
+
   const [requests, sessions, makeups] = await Promise.all([
     db.parentRequest.findMany({
       where: { studentId },
       orderBy: { createdAt: "desc" },
       take: 100,
+      select: REQUEST_SELECT,
     }),
-    getStudentSessions(studentId),
+    getStudentUpcomingSessions(studentId),
     // B1 — trạng thái học bù của con.
     db.makeupNeed.findMany({
       where: { studentId },
@@ -37,17 +109,7 @@ export default async function YeuCauPage() {
     CANCELLED: "Đã huỷ",
   };
 
-  // Báo vắng: chỉ chọn buổi SẮP TỚI (chưa diễn ra).
-  const upcomingSessions = sessions
-    .filter((s) => !s.past)
-    .map((s) => ({
-      id: s.id,
-      label: `${new Date(s.date).toLocaleDateString("vi-VN", {
-        weekday: "short",
-        day: "2-digit",
-        month: "2-digit",
-      })} · ${s.className}${s.lessonTitle ? ` — ${s.lessonTitle}` : ""}`,
-    }));
+  const upcomingSessions = toUpcomingOptions(sessions);
 
   return (
     <div className="space-y-5">
@@ -111,6 +173,7 @@ export default async function YeuCauPage() {
                 </p>
                 {r.preferredDate && (
                   <p className="mt-1 text-xs text-neutral-400">
+                    {/* preferredDate = wall-clock TZ server (sessionDate) → KHÔNG ép VN. */}
                     Ngày: {r.preferredDate.toLocaleDateString("vi-VN")}
                   </p>
                 )}
@@ -121,7 +184,8 @@ export default async function YeuCauPage() {
                 )}
                 <div className="mt-2 flex items-center justify-between">
                   <span className="text-xs text-neutral-400">
-                    {r.createdAt.toLocaleDateString("vi-VN")}
+                    {/* createdAt là instant thật → ép giờ VN (Vercel = UTC, tránh lùi 1 ngày). */}
+                    {r.createdAt.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
                   </span>
                   {r.status === "PENDING" && <CancelButton id={r.id} />}
                 </div>

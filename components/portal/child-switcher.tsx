@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { setActiveSite } from "@/app/(portal)/portal/actions";
 
@@ -33,7 +34,13 @@ export function ChildSwitcher({ kids, activeId }: { kids: { id: string; name: st
           <button
             key={k.id}
             disabled={pending}
-            onClick={() => start(async () => { await setActiveSite(k.id); router.refresh(); })}
+            onClick={() =>
+              start(async () => {
+                const res = await setActiveSite(k.id);
+                if (res.ok) router.refresh();
+                else toast.error(res.error ?? "Không đổi được học viên");
+              })
+            }
             className={cn(
               "flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition-colors disabled:opacity-60",
               active ? "bg-accent text-white" : "border border-border bg-card text-foreground hover:bg-muted",

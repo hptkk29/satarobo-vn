@@ -129,6 +129,8 @@ export type SessionRow = {
   className: string;
   lessonTitle: string | null;
   past: boolean;
+  // R7-06 — buổi CANCELLED không được chọn để báo vắng (portal yeu-cau).
+  status: string;
   // #10 — giờ học THẬT lấy từ lịch lớp (HH:mm), KHÔNG dùng giờ tạo record.
   startTime: string | null;
   endTime: string | null;
@@ -144,6 +146,7 @@ export async function getStudentSessions(studentId: string): Promise<SessionRow[
       id: true,
       date: true,
       topic: true,
+      status: true,
       class: { select: { name: true, startTime: true, endTime: true } },
       lesson: { select: { title: true } },
     },
@@ -156,8 +159,52 @@ export async function getStudentSessions(studentId: string): Promise<SessionRow[
     className: s.class.name,
     lessonTitle: s.lesson?.title ?? null,
     past: s.date.getTime() < now,
+    status: s.status,
     startTime: s.class.startTime ?? null,
     endTime: s.class.endTime ?? null,
+  }));
+}
+
+export type UpcomingSessionRow = {
+  id: string;
+  date: string;
+  topic: string | null;
+  className: string;
+  lessonTitle: string | null;
+};
+
+/**
+ * Buổi SẮP TỚI chưa bị huỷ — cho dropdown "Buổi xin vắng" (portal yeu-cau).
+ * Lọc ngay ở query (date >= now, status != CANCELLED, LIMIT) thay vì kéo toàn bộ
+ * lịch sử buổi học về rồi lọc bằng JS như getStudentSessions.
+ */
+export async function getStudentUpcomingSessions(
+  studentId: string,
+): Promise<UpcomingSessionRow[]> {
+  const classIds = await classIdsFor(studentId);
+  if (classIds.length === 0) return [];
+  const sessions = await db.classSession.findMany({
+    where: {
+      classId: { in: classIds },
+      date: { gte: new Date() },
+      status: { not: "CANCELLED" },
+    },
+    select: {
+      id: true,
+      date: true,
+      topic: true,
+      class: { select: { name: true } },
+      lesson: { select: { title: true } },
+    },
+    orderBy: { date: "asc" },
+    take: 30,
+  });
+  return sessions.map((s) => ({
+    id: s.id,
+    date: s.date.toISOString(),
+    topic: s.topic,
+    className: s.class.name,
+    lessonTitle: s.lesson?.title ?? null,
   }));
 }
 

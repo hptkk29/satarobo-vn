@@ -4,7 +4,12 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { rateLimit } from "@/lib/rate-limit";
 import { requireActiveStudent, assertOwnsStudent } from "@/lib/portal/session";
+
+// Chống spam: trần số yêu cầu ĐANG PENDING / tài khoản phụ huynh (CANCELLED/
+// APPROVED/REJECTED không tính) — tránh ngập hàng đợi /admin/parent-requests.
+const MAX_PENDING_REQUESTS = 10;
 
 // =============================================================================
 // PORTAL PARENT REQUESTS — Phase NHÓM 3
@@ -32,16 +37,48 @@ export async function createParentRequest(input: {
   }
   const d = parsed.data;
 
+  // Chốt server-side chống spam (không tin client):
+  // 1) Trần yêu cầu PENDING — chỉ đếm PENDING, yêu cầu đã huỷ/duyệt không tính.
+  const pendingCount = await db.parentRequest.count({
+    where: { parentUserId: ctx.parentUserId, status: "PENDING" },
+  });
+  if (pendingCount >= MAX_PENDING_REQUESTS) {
+    return {
+      ok: false,
+      error:
+        "Bạn đang có quá nhiều yêu cầu chờ xử lý. Vui lòng đợi trung tâm phản hồi hoặc huỷ bớt yêu cầu cũ trước khi gửi thêm.",
+    };
+  }
+  // 2) Rate limit theo userId (Upstash, fallback memory) — chặn tạo dồn dập.
+  const rl = await rateLimit({
+    key: `parent-request:${ctx.parentUserId}`,
+    max: 5,
+    windowMs: 10 * 60_000,
+  });
+  if (!rl.success) {
+    return {
+      ok: false,
+      error: "Bạn gửi yêu cầu quá nhanh. Vui lòng thử lại sau ít phút.",
+    };
+  }
+
   // Báo vắng: buổi phải thuộc lớp con đang học → lấy luôn ngày buổi làm preferredDate.
+  // Server-side gate (không tin client): buổi SẮP TỚI, chưa bị huỷ, enrollment còn sống (FIX-C3).
   let sessionId: string | null = null;
   let sessionDate: Date | null = null;
   if (d.type === "ABSENCE" && d.sessionId) {
     const sess = await db.classSession.findFirst({
       where: {
         id: d.sessionId,
+        date: { gte: new Date() },
+        status: { not: "CANCELLED" },
         class: {
           enrollments: {
-            some: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } },
+            some: {
+              studentId,
+              status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] },
+              deletedAt: null,
+            },
           },
         },
       },
@@ -71,35 +108,46 @@ export async function createParentRequest(input: {
   });
 
   revalidatePath("/portal/yeu-cau");
-  revalidatePath("/parent-requests");
+  // Route group (admin) không xuất hiện trong URL — path thật là /admin/parent-requests.
+  revalidatePath("/admin/parent-requests");
+  revalidatePath("/admin/parent-requests/bao-vang");
   return { ok: true };
 }
 
 export async function cancelParentRequest(
-  id: string,
+  id: unknown,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user || session.user.role !== "PARENT") {
     return { ok: false, error: "Chưa đăng nhập" };
   }
 
+  // Payload Server Action do client deserialize → validate runtime, không tin annotation.
+  const parsedId = z.string().min(1).safeParse(id);
+  if (!parsedId.success) return { ok: false, error: "Dữ liệu không hợp lệ" };
+  const requestId = parsedId.data;
+
   const req = await db.parentRequest.findUnique({
-    where: { id },
-    select: { studentId: true, status: true },
+    where: { id: requestId },
+    select: { studentId: true },
   });
   if (!req) return { ok: false, error: "Không tìm thấy yêu cầu" };
   if (!(await assertOwnsStudent(req.studentId))) {
     return { ok: false, error: "Không có quyền" };
   }
-  if (req.status !== "PENDING") {
+
+  // Atomic check-and-update: chỉ huỷ khi CÒN PENDING — tránh race ghi đè
+  // APPROVED/REJECTED (admin xử lý giữa lúc đọc và ghi) thành CANCELLED.
+  const updated = await db.parentRequest.updateMany({
+    where: { id: requestId, status: "PENDING" },
+    data: { status: "CANCELLED" },
+  });
+  if (updated.count === 0) {
     return { ok: false, error: "Chỉ huỷ được yêu cầu đang chờ xử lý" };
   }
 
-  await db.parentRequest.update({
-    where: { id },
-    data: { status: "CANCELLED" },
-  });
   revalidatePath("/portal/yeu-cau");
-  revalidatePath("/parent-requests");
+  revalidatePath("/admin/parent-requests");
+  revalidatePath("/admin/parent-requests/bao-vang");
   return { ok: true };
 }

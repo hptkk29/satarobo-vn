@@ -61,6 +61,20 @@ export async function getParentOrders(parentUserId: string): Promise<OrderRow[]>
 // Khoản Sale mới ghi nhận (PENDING) KHÔNG hiện cho phụ huynh (AC1).
 // =============================================================================
 
+/**
+ * Nhãn tiếng Việt cho Payment.method (DB lưu mã thô: METHOD_OPTIONS admin +
+ * "auto" từ lib/finance/payment.ts). UI portal B2C dùng
+ * `PAYMENT_METHOD_LABEL[method] ?? method` — method lạ fallback nguyên văn.
+ */
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  CASH: "Tiền mặt",
+  BANK_TRANSFER: "Chuyển khoản",
+  VNPAY: "VNPAY",
+  TINGEE: "Tingee",
+  COD: "COD",
+  auto: "Tự động",
+};
+
 export type ConfirmedPaymentRow = {
   id: string;
   orderId: string;
@@ -189,7 +203,7 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
   if (childIds.length === 0) return empty;
 
   const enrollments = await db.enrollment.findMany({
-    where: { studentId: { in: childIds }, finalPrice: { not: null } },
+    where: { studentId: { in: childIds }, finalPrice: { not: null }, deletedAt: null }, // FIX-C3
     select: {
       id: true,
       status: true,
@@ -199,7 +213,8 @@ export async function getParentBilling(parentUserId: string): Promise<ParentBill
       class: { select: { name: true } },
       // CHỈ lấy số tiền của khoản CONFIRMED; PENDING/REJECTED chỉ lấy trạng thái để
       // ĐẾM (không kèm amount) — giữ AC1: không lộ số tiền khoản chưa xác nhận cho PH.
-      payments: { select: { accountantStatus: true, amount: true } },
+      // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa mềm.
+      payments: { where: { deletedAt: null }, select: { accountantStatus: true, amount: true } },
     },
     orderBy: { enrolledAt: "desc" },
     take: 100,

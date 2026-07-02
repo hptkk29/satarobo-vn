@@ -3,12 +3,27 @@ import { getPublishedReportCards } from "@/lib/lms/report-card";
 import { getStudentTranscript } from "@/lib/transcript/service";
 import { ReportCardView } from "@/components/report-card/report-card-view";
 import { TranscriptView } from "@/components/transcript/transcript-view";
+import { isPortalV2Enabled } from "@/lib/flags";
+import { getStudentReportCard } from "@/lib/portal/report-card-v2";
+import { HocBaPageV2 } from "@/components/portal/hoc-ba-page";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Học bạ | Sata Robo", robots: { index: false } };
 
 export default async function PortalTranscriptPage() {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+
+  // Portal v2 — trang Học bạ giống SataUI (per-child, tổng hợp chuyên cần + thông tin chung).
+  if (isPortalV2Enabled()) {
+    const data = await getStudentReportCard(studentId);
+    return (
+      <HocBaPageV2
+        kids={ctx.children.map((c) => ({ id: c.id, name: c.name }))}
+        activeId={ctx.activeStudent?.id ?? null}
+        data={data}
+      />
+    );
+  }
 
   // R7-15: nguồn chính = học bạ ĐÃ PHÁT HÀNH (ReportCard PUBLISHED, đọc snapshot).
   // DRAFT/PENDING/RECALLED → PH KHÔNG thấy. Chưa có bản phát hành → fallback transcript cũ.

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -19,6 +20,10 @@ export type PortalChild = {
   name: string;
   studentCode: string | null;
   avatarUrl: string | null;
+  /** Cơ sở của con — notifications.ts tái dùng để resolve audience CENTER
+   * (1 query Student duy nhất/request nhờ React cache, không query lại). */
+  centerId: string | null;
+  preferredCenterId: string | null;
 };
 
 export type PortalContext = {
@@ -45,20 +50,32 @@ export function makeActiveSiteToken(studentId: string): string {
 
 export const ACTIVE_SITE_COOKIE = COOKIE_NAME;
 
-/** Danh sách con của 1 PARENT (chưa xoá). */
-export async function getChildren(parentUserId: string): Promise<PortalChild[]> {
+/**
+ * Danh sách con của 1 PARENT (chưa xoá). Bọc React cache() — layout + page +
+ * notification helpers gọi trong CÙNG request chỉ chạy 1 query Student.
+ */
+export const getChildren = cache(async (parentUserId: string): Promise<PortalChild[]> => {
   return db.student.findMany({
     where: { parentUserId, deletedAt: null },
-    select: { id: true, name: true, studentCode: true, avatarUrl: true },
+    select: {
+      id: true,
+      name: true,
+      studentCode: true,
+      avatarUrl: true,
+      centerId: true,
+      preferredCenterId: true,
+    },
     orderBy: { name: "asc" },
   });
-}
+});
 
 /**
  * Context portal cho request hiện tại. Trả null nếu không phải PARENT đăng nhập.
  * activeStudent: con đang chọn (verify ownership) — fallback con đầu tiên.
+ * Bọc React cache(): layout gọi + page gọi (qua requireActiveStudent) trong
+ * cùng request chỉ tính 1 lần (auth/cookies/query con không lặp).
  */
-export async function getPortalContext(): Promise<PortalContext | null> {
+export const getPortalContext = cache(async (): Promise<PortalContext | null> => {
   const session = await auth();
   if (!session?.user || session.user.role !== "PARENT") return null;
 
@@ -80,7 +97,7 @@ export async function getPortalContext(): Promise<PortalContext | null> {
     children,
     activeStudent,
   };
-}
+});
 
 /**
  * Lấy con đang chọn cho 1 trang portal — redirect nếu không hợp lệ.
@@ -92,7 +109,11 @@ export async function requireActiveStudent(): Promise<{
 }> {
   const ctx = await getPortalContext();
   if (!ctx) redirect("/login");
-  if (!ctx.activeStudent) redirect("/");
+  // PARENT không còn con nào (chưa liên kết / con bị xóa mềm): KHÔNG redirect("/")
+  // — trên host portal "/" rewrite về /portal, PortalHome lại gọi hàm này →
+  // ERR_TOO_MANY_REDIRECTS. Đẩy về /portal/ho-so (không cần activeStudent);
+  // layout đã render empty-state "chưa liên kết học viên".
+  if (!ctx.activeStudent) redirect("/portal/ho-so");
   return { ctx, studentId: ctx.activeStudent.id };
 }
 
