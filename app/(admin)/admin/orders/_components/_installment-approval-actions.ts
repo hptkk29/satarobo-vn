@@ -52,8 +52,8 @@ function revalidate(orderId: string, leadId: string | null) {
   revalidatePath(`/orders/${orderId}`);
   // S6 — duyệt/từ chối đợt 2 ảnh hưởng "đủ điều kiện chốt" ở trang lead/convert.
   if (leadId) {
-    revalidatePath(`/admin/leads/${leadId}`);
-    revalidatePath(`/admin/leads/${leadId}/convert`);
+    revalidatePath(`/leads/${leadId}`);
+    revalidatePath(`/leads/${leadId}/convert`);
   }
 }
 

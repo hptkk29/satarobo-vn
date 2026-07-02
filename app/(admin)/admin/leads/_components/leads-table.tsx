@@ -287,7 +287,6 @@ export function LeadsTable({
   pageSize,
   canUpdate,
   canDelete,
-  canCloseDeal = false,
   currentStatus,
   currentQ,
 }: {
@@ -297,7 +296,6 @@ export function LeadsTable({
   pageSize: number
   canUpdate: boolean
   canDelete: boolean
-  canCloseDeal?: boolean
   currentStatus?: string
   currentQ?: string
 }) {
@@ -306,7 +304,8 @@ export function LeadsTable({
   const searchRef = useRef<HTMLInputElement>(null)
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null)
   const totalPages = Math.ceil(total / pageSize)
-  const showActions = canDelete || canCloseDeal
+  // Nút "Xem chi tiết lead" hiện cho mọi role xem được lead → luôn render cột thao tác.
+  const showActions = true
 
   const navigate = (updates: Record<string, string | undefined>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -467,21 +466,16 @@ export function LeadsTable({
                         onClick={e => e.stopPropagation()}
                       >
                         <div className="flex items-center justify-end gap-2">
-                          {canCloseDeal &&
-                            lead.status !== 'ENROLLED' &&
-                            lead.status !== 'LOST' &&
-                            lead.status !== 'DUPLICATE' && (
-                              // FL2-01 — điều hướng vào trang chi tiết lead (convert v2),
-                              // KHÔNG mở popup close-deal cũ.
-                              <Link
-                                href={`/leads/${lead.id}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
-                              >
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Xem chi tiết lead
-                              </Link>
-                            )}
+                          {/* FL2-01 — điều hướng vào trang chi tiết lead; hiện cho MỌI
+                              trạng thái (kể cả đã ghi danh) và mọi role xem được lead. */}
+                          <Link
+                            href={`/leads/${lead.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Xem chi tiết lead
+                          </Link>
                           {canDelete && (
                             <DeleteCell
                               lead={lead}

@@ -135,21 +135,33 @@ export async function updateLeadStatus(
   return { ok: true }
 }
 
-// ─── LD1 — Loại đơn dự kiến (OrderKind) trên lead detail ─────────────────────
+// ─── LD1/G2 — Loại đơn dự kiến (OrderKind) + sản phẩm/khoá dự kiến trên lead detail ──
 
-const orderKindSchema = z.enum(['COURSE', 'PRODUCT'])
+const expectedOrderSchema = z.object({
+  kind: z.enum(['COURSE', 'PRODUCT']),
+  // null/undefined = chỉ chọn loại đơn, chưa chọn item cụ thể (hoặc reset khi đổi loại).
+  itemId: z.string().min(1).nullish(),
+})
 
-/** Đặt loại đơn dự kiến (Khoá học / Sản phẩm) cho lead — gợi ý nguồn item khi tạo đơn. */
+/**
+ * Đặt loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể (khoá/sản phẩm) cho lead.
+ * - kind=COURSE → expectedCourseId = item (course teachable+active), expectedProductId=null.
+ * - kind=PRODUCT → expectedProductId = item (product ACTIVE KIT_ROBOT/SENSOR), expectedCourseId=null.
+ * - itemId rỗng (đổi loại đơn) → xoá cả 2 expected id.
+ * Dùng để gợi ý nguồn item khi tạo đơn. Giữ tên cũ để tương thích component.
+ */
 export async function updateLeadOrderKind(
   leadId: string,
   kind: string,
+  itemId?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
 
-  const parsed = orderKindSchema.safeParse(kind)
-  if (!parsed.success) return { ok: false, error: 'Loại đơn không hợp lệ' }
+  const parsed = expectedOrderSchema.safeParse({ kind, itemId: itemId ?? null })
+  if (!parsed.success) return { ok: false, error: 'Dữ liệu loại đơn không hợp lệ' }
+  const { kind: k, itemId: id } = parsed.data
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
@@ -160,7 +172,31 @@ export async function updateLeadOrderKind(
     return { ok: false, error: 'Lead không tồn tại' }
   }
 
-  await db.lead.update({ where: { id: leadId }, data: { orderKind: parsed.data } })
+  // Validate item khớp loại đơn (nếu có chọn item).
+  let expectedCourseId: string | null = null
+  let expectedProductId: string | null = null
+  if (id) {
+    if (k === 'COURSE') {
+      const c = await db.course.findFirst({
+        where: { id, isActive: true, isTeachable: true },
+        select: { id: true },
+      })
+      if (!c) return { ok: false, error: 'Khoá học không hợp lệ' }
+      expectedCourseId = id
+    } else {
+      const p = await db.product.findFirst({
+        where: { id, status: 'ACTIVE', category: { in: ['KIT_ROBOT', 'SENSOR'] } },
+        select: { id: true },
+      })
+      if (!p) return { ok: false, error: 'Sản phẩm không hợp lệ' }
+      expectedProductId = id
+    }
+  }
+
+  await db.lead.update({
+    where: { id: leadId },
+    data: { orderKind: k, expectedCourseId, expectedProductId },
+  })
 
   revalidatePath(`/leads/${leadId}`)
   return { ok: true }

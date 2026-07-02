@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronDown, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { Prisma, OrderStatus, InstallmentApprovalStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
@@ -26,13 +26,35 @@ import {
 import {
   changeOrderStatusAction,
   updateOrderNoteAction,
+  updateOrderPaymentMethodAction,
 } from "../_actions";
 import {
   requestInstallmentApprovalAction,
   approveInstallmentPlanAction,
   rejectInstallmentPlanAction,
 } from "./_installment-approval-actions";
+import { OrderInstallmentPlan, OrderQrSection } from "./order-payment-section";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
+
+// G4 — phương thức thanh toán có thể sửa (chỉ khi đơn chưa xác nhận); cần khả năng theo loại đơn.
+type PaymentMethodOption = {
+  id: string;
+  name: string;
+  canBuyCourse: boolean;
+  canBuyPackage: boolean;
+  canBuyExam: boolean;
+  canBuyProduct: boolean;
+};
+
+type InstallmentView = {
+  id: string;
+  soDot: number;
+  amount: number;
+  status: string;
+  dueDate: string | null;
+  paidAt: string | null;
+  reminderDays: number | null;
+};
 
 type OrderWithIncludes = Prisma.OrderGetPayload<{
   include: {
@@ -89,11 +111,20 @@ export function OrderDetailClient({
   order,
   canManage,
   canApprove,
+  qrUrl,
+  transferContent,
+  installments,
+  paymentMethods,
 }: {
   order: OrderWithIncludes;
   canManage: boolean;
   // OD1b — quyền duyệt kế hoạch trả góp (installments:approve) tách khỏi orders:manage.
   canApprove: boolean;
+  // G4 — QR + kế hoạch 2 đợt render trong cùng component để kiểm soát thứ tự section.
+  qrUrl: string | null;
+  transferContent: string;
+  installments: InstallmentView[];
+  paymentMethods: PaymentMethodOption[];
 }) {
   const router = useRouter();
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -105,8 +136,30 @@ export function OrderDetailClient({
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const approvalStatus = order.installmentApprovalStatus;
+  // G4 — lịch sử trạng thái dạng dropdown (mặc định đóng).
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // G4 — sửa phương thức thanh toán (chỉ khi đơn chưa xác nhận).
+  const [pmEditing, setPmEditing] = useState(false);
+  const [pmValue, setPmValue] = useState(order.paymentMethodId ?? "");
 
   const nextOptions = NEXT_STATUSES[order.status];
+  // G4 — chỉ cho sửa phương thức khi đơn còn DRAFT/PENDING_PAYMENT (khớp guard server).
+  const canEditPaymentMethod =
+    canManage && (order.status === "DRAFT" || order.status === "PENDING_PAYMENT");
+  const pmAllowedForType = (pm: PaymentMethodOption): boolean => {
+    switch (order.type) {
+      case "COURSE":
+        return pm.canBuyCourse;
+      case "PACKAGE":
+        return pm.canBuyPackage;
+      case "EXAM":
+        return pm.canBuyExam;
+      case "PRODUCT":
+        return pm.canBuyProduct;
+      default:
+        return false;
+    }
+  };
 
   // FIX-H9 — updatedAt client đã thấy; gửi kèm mọi lần ghi để phát hiện sửa đồng thời.
   const seenUpdatedAt = new Date(order.updatedAt).toISOString();
@@ -153,6 +206,28 @@ export function OrderDetailClient({
     });
   }
 
+  // G4 — đổi phương thức thanh toán (huỷ → giữ phương thức cũ).
+  function handleSavePaymentMethod() {
+    if (!pmValue) {
+      toast.error("Chọn phương thức thanh toán");
+      return;
+    }
+    startTransition(async () => {
+      const result = await updateOrderPaymentMethodAction(
+        order.id,
+        pmValue,
+        seenUpdatedAt,
+      );
+      if (result.ok) {
+        toast.success("Đã đổi phương thức thanh toán");
+        setPmEditing(false);
+        window.location.reload();
+      } else if (result.error === "STALE_WRITE") {
+        handleStale();
+      } else toast.error(result.error);
+    });
+  }
+
   // OD1b — duyệt / từ chối / yêu cầu duyệt kế hoạch trả góp 2 đợt.
   function handleApprove() {
     startTransition(async () => {
@@ -192,14 +267,6 @@ export function OrderDetailClient({
 
   return (
     <div className="space-y-6">
-      {canManage && nextOptions.length > 0 && (
-        <div>
-          <Button onClick={() => setStatusModalOpen(true)}>
-            Đổi trạng thái
-          </Button>
-        </div>
-      )}
-
       {/* Customer info */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
@@ -347,17 +414,65 @@ export function OrderDetailClient({
         </table>
       </section>
 
-      {/* Payment */}
+      {/* Payment method (G4 — có nút "Sửa" khi đơn chưa xác nhận thanh toán) */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
-          Thanh toán
-        </h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+            Phương thức thanh toán
+          </h2>
+          {canEditPaymentMethod && !pmEditing && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPmValue(order.paymentMethodId ?? "");
+                setPmEditing(true);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Thay đổi phương thức
+            </Button>
+          )}
+        </div>
         <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <div>
+          <div className="sm:col-span-2">
             <span className="text-gray-500">Phương thức: </span>
-            <span className="text-gray-900">
-              {order.paymentMethod?.name ?? "—"}
-            </span>
+            {pmEditing ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Select value={pmValue} onValueChange={(v) => setPmValue(v ?? "")}>
+                  <SelectTrigger className="w-full sm:w-72">
+                    <SelectValue placeholder="Chọn phương thức" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethods.filter(pmAllowedForType).map((pm) => (
+                      <SelectItem key={pm.id} value={pm.id}>
+                        {pm.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={handleSavePaymentMethod}
+                  disabled={isPending || !pmValue}
+                >
+                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Lưu
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPmEditing(false)}
+                  disabled={isPending}
+                >
+                  Huỷ
+                </Button>
+              </div>
+            ) : (
+              <span className="text-gray-900">
+                {order.paymentMethod?.name ?? "—"}
+              </span>
+            )}
           </div>
           <div>
             <span className="text-gray-500">Mã GD ngân hàng: </span>
@@ -375,6 +490,14 @@ export function OrderDetailClient({
           </div>
         </div>
       </section>
+
+      {/* G4 (3b) — Kế hoạch thanh toán 2 đợt: NGAY SAU phương thức thanh toán */}
+      <OrderInstallmentPlan
+        orderId={order.id}
+        totalAmount={order.totalAmount}
+        canManage={canManage}
+        installments={installments}
+      />
 
       {/* OD1b — Duyệt kế hoạch trả góp 2 đợt (chỉ hiện khi có kế hoạch cần duyệt) */}
       {approvalStatus && (
@@ -457,7 +580,7 @@ export function OrderDetailClient({
             </div>
           )}
           <div className="space-y-2">
-            <div className="text-sm text-gray-500">Ghi chú nội bộ (admin):</div>
+            <div className="text-sm text-gray-500">Ghi chú nội bộ:</div>
             <Textarea
               value={internalNote}
               onChange={(e) => setInternalNote(e.target.value)}
@@ -481,13 +604,24 @@ export function OrderDetailClient({
 
       {/* Status history */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
-          Lịch sử trạng thái ({order.history.length})
-        </h2>
-        {order.history.length === 0 ? (
-          <p className="text-sm text-gray-500">Chưa có thay đổi trạng thái</p>
-        ) : (
-          <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 text-left"
+          aria-expanded={historyOpen}
+        >
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+            Lịch sử trạng thái ({order.history.length})
+          </h2>
+          <ChevronDown
+            className={`h-4 w-4 text-gray-400 transition-transform ${historyOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {historyOpen &&
+          (order.history.length === 0 ? (
+            <p className="mt-3 text-sm text-gray-500">Chưa có thay đổi trạng thái</p>
+          ) : (
+            <div className="mt-3 space-y-2">
             {order.history.map((h) => (
               <div
                 key={h.id}
@@ -513,9 +647,19 @@ export function OrderDetailClient({
                 </div>
               </div>
             ))}
-          </div>
-        )}
+            </div>
+          ))}
       </section>
+
+      {/* G4 — "Thanh toán & QR" gần cuối trang (chỉ còn QR sau khi tách kế hoạch 2 đợt). */}
+      <OrderQrSection qrUrl={qrUrl} transferContent={transferContent} />
+
+      {/* G4 (3f) — nút "Đổi trạng thái" ở DƯỚI CÙNG, ngay sau "Thanh toán & QR". */}
+      {canManage && nextOptions.length > 0 && (
+        <div>
+          <Button onClick={() => setStatusModalOpen(true)}>Đổi trạng thái</Button>
+        </div>
+      )}
 
       {/* Status change modal */}
       <Dialog
