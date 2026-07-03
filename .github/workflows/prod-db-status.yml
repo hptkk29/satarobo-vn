@@ -1,0 +1,55 @@
+name: Prod DB migrate status (read-only)
+
+# =============================================================================
+# Kiểm tra trạng thái migration của Supabase PROD mà KHÔNG apply gì cả.
+# Dùng trước khi chạy "Deploy Production" lần đầu / sau thời gian dài không migrate,
+# để phát hiện drift (bảng tạo tay / db push không có history) trước khi
+# `prisma migrate deploy` chết giữa chừng.
+#
+# Chạy tay: Actions → "Prod DB migrate status (read-only)" → Run workflow.
+# Job luôn XANH nếu kết nối được — kết quả (đã apply / còn thiếu / drift) nằm
+# trong log step "Migrate status". Chỉ đỏ khi thiếu secret hoặc không kết nối được.
+# =============================================================================
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  status:
+    name: prisma migrate status (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secrets prod
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Migrate status
+        # `prisma migrate status` exit non-zero khi còn migration chưa apply —
+        # đó là THÔNG TIN, không phải lỗi → không fail job, in warning để dễ thấy.
+        run: |
+          set +e
+          pnpm exec prisma migrate status
+          code=$?
+          if [ $code -ne 0 ]; then
+            echo "::warning::migrate status exit $code — còn migration chưa apply hoặc có drift, xem output ở trên"
+          fi
+          exit 0
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
