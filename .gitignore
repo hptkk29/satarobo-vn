@@ -40,6 +40,7 @@ appdev.log
 .env.production
 .env.staging
 .env.test
+.env.r2test
 
 # vercel
 .vercel
