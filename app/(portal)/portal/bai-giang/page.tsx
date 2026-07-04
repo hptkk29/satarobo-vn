@@ -1,13 +1,25 @@
 import { FileText, Download } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentLessons } from "@/lib/portal/learning";
+import { resolveMediaUrl } from "@/lib/storage/signed-url";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Bài giảng | Sata Robo" };
 
 export default async function BaiGiangPage() {
   const { studentId } = await requireActiveStudent();
-  const lessons = await getStudentLessons(studentId);
+  const rawLessons = await getStudentLessons(studentId);
+
+  // L8.3 — tài liệu đính kèm đi qua signed URL TTL ngắn (flag MEDIA_SIGNED_URL;
+  // OFF → resolveMediaUrl trả nguyên fileUrl cũ).
+  const lessons = await Promise.all(
+    rawLessons.map(async (l) => ({
+      ...l,
+      documents: await Promise.all(
+        l.documents.map(async (d) => ({ ...d, fileUrl: await resolveMediaUrl(d.fileUrl) })),
+      ),
+    })),
+  );
 
   return (
     <div className="space-y-6">
