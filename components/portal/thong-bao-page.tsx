@@ -45,7 +45,15 @@ function timeAgo(iso: string): string {
   return `${d} ngày trước`;
 }
 
-export function ThongBaoPageV2({ feed }: { feed: NotificationFeed }) {
+export function ThongBaoPageV2({
+  feed,
+  overline = "Cổng phụ huynh",
+  subtitle = "Cập nhật về học tập, lịch học, học phí, học bù và khảo sát của các con.",
+}: {
+  feed: NotificationFeed;
+  overline?: string;
+  subtitle?: string;
+}) {
   const [sel, setSel] = useState<FeedCategory | "ALL">("ALL");
   const shown = sel === "ALL" ? feed.items : feed.items.filter((i) => i.category === sel);
   const unread = shown.filter((i) => !i.read);
@@ -55,12 +63,7 @@ export function ThongBaoPageV2({ feed }: { feed: NotificationFeed }) {
     <div className="portal-v2 mx-auto w-full max-w-6xl space-y-6">
       {/* Chưa có bảng lưu trạng thái đã-đọc per-parent → chưa render nút "Đọc tất cả"
           (thêm lại kèm Server Action khi có bảng NotificationRead). */}
-      <PageHero
-        icon={Bell}
-        overline="Cổng phụ huynh"
-        title="Thông báo"
-        subtitle="Cập nhật về học tập, lịch học, học phí, học bù và khảo sát của các con."
-      />
+      <PageHero icon={Bell} overline={overline} title="Thông báo" subtitle={subtitle} />
 
       {/* Mobile (<lg): bộ lọc = dải chip cuộn ngang 1 dòng — aside dọc 8 dòng chiếm
           nguyên màn hình 375px, đẩy thông báo mới xuống dưới fold. */}

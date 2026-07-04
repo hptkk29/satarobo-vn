@@ -6,6 +6,7 @@ import { getPortalContext } from "@/lib/portal/session";
 import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { getParentNotificationBadge } from "@/lib/portal/notification-feed";
+import { getSwitcherChildren } from "@/lib/portal/child-switcher-data";
 import { countUnreadForParent } from "@/lib/conversation/service";
 import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { SiteSwitcher } from "./_components/site-switcher";
@@ -40,16 +41,19 @@ export default async function PortalLayout({
     // Badge chuông v2 = unreadTotal của feed tổng hợp — CÙNG nguồn với badge
     // "Tất cả" trên trang Thông báo (tránh 2 con số lệch nhau). Bản badge có
     // cache 60s: layout KHÔNG fan-out full feed trên mọi page view.
-    const [notifCount, msgCount] = await Promise.all([
+    const [notifCount, msgCount, switcherChildren] = await Promise.all([
       getParentNotificationBadge(session.user.id).catch(() => 0),
       countUnreadForParent(session.user.id).catch(() => 0),
+      getSwitcherChildren(session.user.id, ctx?.activeStudent?.id ?? null).catch(() => []),
     ]);
     return (
       <PortalV2Shell
         parentName={ctx?.parentName ?? session.user.name ?? "Phụ huynh"}
         parentEmail={session.user.email}
+        activeStudentName={ctx?.activeStudent?.name ?? null}
         notifCount={notifCount}
         msgCount={msgCount}
+        switcherChildren={switcherChildren}
       >
         {children_.length === 0 ? (
           // Chưa liên kết học viên: KHÔNG render page (page gọi

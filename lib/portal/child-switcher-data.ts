@@ -1,0 +1,49 @@
+import "server-only";
+import { db } from "@/lib/db";
+
+// Portal v2 — dữ liệu switcher "Chế độ Phụ huynh / các con" ở topbar.
+// Nhẹ: chỉ id + name + tên khóa học đang học (để hiện subtitle) — KHÔNG kéo
+// attendance/debt như getParentChildrenOverview (chạy ở mọi page qua layout).
+
+const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] as const;
+
+export type SwitcherChild = {
+  id: string;
+  name: string;
+  initials: string;
+  courseName: string | null;
+  active: boolean;
+};
+
+function initialsOf(name: string): string {
+  const w = name.trim().split(/\s+/).filter((x) => /\p{L}/u.test(x[0] ?? ""));
+  return (w.slice(-2).map((x) => x[0]).join("") || "HS").toUpperCase();
+}
+
+export async function getSwitcherChildren(
+  parentUserId: string,
+  activeStudentId: string | null,
+): Promise<SwitcherChild[]> {
+  const students = await db.student.findMany({
+    where: { parentUserId, deletedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      name: true,
+      enrollments: {
+        where: { status: { in: [...ACTIVE] }, deletedAt: null },
+        orderBy: { enrolledAt: "desc" },
+        take: 1,
+        select: { course: { select: { name: true } } },
+      },
+    },
+  });
+
+  return students.map((s) => ({
+    id: s.id,
+    name: s.name,
+    initials: initialsOf(s.name),
+    courseName: s.enrollments[0]?.course?.name ?? null,
+    active: s.id === activeStudentId,
+  }));
+}
