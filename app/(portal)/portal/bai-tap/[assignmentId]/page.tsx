@@ -4,6 +4,7 @@ import { ChevronLeft, FileText } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getAssignmentDetail } from "@/lib/portal/learning";
 import { RUBRIC_CRITERIA, RUBRIC_LEVELS, criterionLabel } from "@/lib/rubric/criteria";
+import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { SubmitForm } from "./_components/submit-form";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,13 @@ export default async function AssignmentDetailPage({ params }: Props) {
   const sub = a.submission;
   const st = STATUS[sub?.status ?? "NOT_SUBMITTED"] ?? STATUS.NOT_SUBMITTED;
   const graded = sub?.status === "GRADED";
+
+  // L8.3 — tài liệu đính kèm + file bài nộp (GV/PH xem lại) đi qua signed URL TTL
+  // ngắn (flag MEDIA_SIGNED_URL; OFF → resolveMediaUrl trả nguyên fileUrl cũ).
+  const documents = await Promise.all(
+    a.documents.map(async (d) => ({ ...d, fileUrl: await resolveMediaUrl(d.fileUrl) })),
+  );
+  const initialFileUrl = sub?.fileUrl ? await resolveMediaUrl(sub.fileUrl) : null;
 
   return (
     <div className="space-y-5">
@@ -62,9 +70,9 @@ export default async function AssignmentDetailPage({ params }: Props) {
             <p className="whitespace-pre-wrap">{a.instructions}</p>
           </div>
         )}
-        {a.documents.length > 0 && (
+        {documents.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {a.documents.map((d) => (
+            {documents.map((d) => (
               <a
                 key={d.id}
                 href={d.fileUrl}
@@ -124,7 +132,7 @@ export default async function AssignmentDetailPage({ params }: Props) {
           allowText={a.allowText}
           allowFile={a.allowFile}
           initialText={sub?.textAnswer ?? null}
-          initialFileUrl={sub?.fileUrl ?? null}
+          initialFileUrl={initialFileUrl}
           initialFileName={sub?.fileName ?? null}
           graded={graded}
         />

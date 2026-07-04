@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { Star } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { FeedbackReply } from "./_components/feedback-reply";
 
 export const metadata = { title: "Đánh giá phụ huynh | Admin" };
@@ -13,9 +16,25 @@ export default async function AdminParentFeedbackPage() {
   if (!session?.user) redirect("/login");
   if (!can(session.user, "parent-feedback:view")) redirect("/dashboard");
 
+  // L8.1 — ParentFeedback.studentId là cột phẳng (KHÔNG có relation `student` trong
+  // schema) → không thể lọc `where: { student: { centerId: ... } }`. Cách ly 2 bước:
+  // lấy id HV trong tầm nhìn actor (qua scopedDb, tái dùng cổng cách ly chuẩn), rồi
+  // lọc feedback theo studentId IN [...]. Feedback studentId=null (góp ý chung) chỉ
+  // actor global (SUPER_ADMIN/HO) mới thấy — tự rớt khỏi kết quả non-global.
+  const actor = await resolveActor(session.user.id);
+  const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
+
+  let where: Prisma.ParentFeedbackWhereInput = {};
+  if (!isGlobal) {
+    const visibleStudents = await scopedDb(actor).student.findMany({
+      select: { id: true },
+    });
+    where = { studentId: { in: visibleStudents.map((s) => s.id) } };
+  }
+
   const [rows, agg] = await Promise.all([
-    db.parentFeedback.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
-    db.parentFeedback.aggregate({ _avg: { rating: true }, _count: true }),
+    db.parentFeedback.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 }),
+    db.parentFeedback.aggregate({ where, _avg: { rating: true }, _count: true }),
   ]);
 
   const avg = agg._avg.rating ? agg._avg.rating.toFixed(1) : "—";
@@ -28,6 +47,12 @@ export default async function AdminParentFeedbackPage() {
           <p className="mt-1 text-sm text-gray-500">
             Phản hồi gửi từ portal hocvien.satarobo.vn.
           </p>
+          {!isGlobal && (
+            <p className="mt-1 text-xs text-gray-400">
+              Chỉ hiển thị đánh giá của học viên thuộc cơ sở bạn quản lý. Góp ý chung
+              (không gắn học viên) chỉ hiển thị cho Hội sở.
+            </p>
+          )}
         </div>
         <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center">
           <p className="flex items-center gap-1 text-2xl font-bold text-gray-900">
@@ -67,7 +92,11 @@ export default async function AdminParentFeedbackPage() {
               </p>
               <p className="mt-1 text-xs text-gray-400">
                 {f.parentName ?? "Phụ huynh"}
-                {f.studentName ? ` · HV: ${f.studentName}` : ""}
+                {f.studentName
+                  ? ` · HV: ${f.studentName}`
+                  : isGlobal
+                    ? " · Góp ý chung (chỉ Hội sở thấy)"
+                    : ""}
               </p>
               <FeedbackReply
                 id={f.id}
