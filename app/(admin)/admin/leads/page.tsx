@@ -78,7 +78,9 @@ export default async function LeadsPage({
         }
       : undefined
 
-  const where: Prisma.LeadWhereInput = {
+  // Base filter (không kèm status) — dùng cho query chính (thêm status tuỳ view)
+  // + đếm badge tab "Đã đăng ký" (luôn đếm trên scope hiện tại, bất kể view/status filter).
+  const baseWhere: Prisma.LeadWhereInput = {
     deletedAt: null,
     ...(scopeToSelf ? { assignedToId: session.user.id } : {}),
     ...(filterAssignedTo && canViewAll
@@ -87,8 +89,6 @@ export default async function LeadsPage({
     ...(filterCenter ? { centerId: filterCenter } : {}),
     ...(filterSource ? { source: { contains: filterSource, mode: 'insensitive' } } : {}),
     ...(createdAt ? { createdAt } : {}),
-    // Kanban hiển thị mọi cột → bỏ qua status filter ở view kanban.
-    ...(statusFilter && view === 'table' ? { status: statusFilter } : {}),
     ...(q
       ? {
           OR: [
@@ -99,6 +99,17 @@ export default async function LeadsPage({
         }
       : {}),
   }
+
+  const where: Prisma.LeadWhereInput = {
+    ...baseWhere,
+    // Kanban hiển thị mọi cột → bỏ qua status filter ở view kanban.
+    ...(statusFilter && view === 'table' ? { status: statusFilter } : {}),
+  }
+
+  // NHÓM 03 — Việc 2: đếm lead REGISTERED (đã đăng ký, chưa convert) cho tab preset.
+  const registeredCount = await sdb.lead.count({
+    where: { ...baseWhere, status: 'REGISTERED' },
+  })
 
   const isMarketing = hasRole(session.user, 'MARKETING')
   const canCloseDeal =
@@ -175,6 +186,7 @@ export default async function LeadsPage({
     return (
       <div>
         <Header total={rawLeads.length} view={view} params={params} canCreate={canCreate} />
+        <StatusTabs params={params} view={view} registeredCount={registeredCount} />
         <FilterBar
           params={params}
           centers={centers}
@@ -239,6 +251,7 @@ export default async function LeadsPage({
   return (
     <div>
       <Header total={total} view={view} params={params} canCreate={canCreate} />
+      <StatusTabs params={params} view={view} registeredCount={registeredCount} />
       <FilterBar
         params={params}
         centers={centers}
@@ -338,6 +351,54 @@ function Header({
           </Link>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── NHÓM 03 (Việc 2) — tab preset "Đã đăng ký" (?status=REGISTERED) ──────────
+function StatusTabs({
+  params,
+  view,
+  registeredCount,
+}: {
+  params: SP
+  view: string
+  registeredCount: number
+}) {
+  const qs = (status?: string) => {
+    const u = new URLSearchParams()
+    if (params.q) u.set('q', params.q)
+    if (params.centerId) u.set('centerId', params.centerId)
+    if (params.assignedToId) u.set('assignedToId', params.assignedToId)
+    if (params.source) u.set('source', params.source)
+    if (params.dateFrom) u.set('dateFrom', params.dateFrom)
+    if (params.dateTo) u.set('dateTo', params.dateTo)
+    // Tab preset chỉ có ý nghĩa ở view bảng (kanban hiện mọi cột, bỏ qua status filter).
+    u.set('view', 'table')
+    if (status) u.set('status', status)
+    return `/leads?${u.toString()}`
+  }
+  const isRegistered = view === 'table' && params.status === 'REGISTERED'
+  const tabCls = (active: boolean) =>
+    `rounded-lg px-3 py-1.5 text-sm font-medium ${
+      active ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+    } border border-gray-200`
+
+  return (
+    <div className="mb-3 flex flex-wrap gap-2">
+      <Link href={qs(undefined)} className={tabCls(view === 'table' && !params.status)}>
+        Tất cả
+      </Link>
+      <Link href={qs('REGISTERED')} className={tabCls(isRegistered)}>
+        Đã đăng ký{' '}
+        <span
+          className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+            isRegistered ? 'bg-white/20' : 'bg-emerald-100 text-emerald-700'
+          }`}
+        >
+          {registeredCount}
+        </span>
+      </Link>
     </div>
   )
 }
