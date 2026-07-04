@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { getStudentProgress } from "@/lib/progress";
 import { sendProgressReportEmail } from "@/lib/email/progress-report";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { can, hasRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 
 // =============================================================================
 // CLASS LMS ACTIONS — Phase T2.1
@@ -22,7 +23,10 @@ export async function generateClassProgressReports(
     return { ok: false, error: "Không có quyền tạo báo cáo" };
   }
 
-  const cls = await db.class.findFirst({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
     select: { id: true, name: true, teacherId: true },
   });
@@ -33,7 +37,7 @@ export async function generateClassProgressReports(
     return { ok: false, error: "Chỉ giáo viên phụ trách lớp mới tạo được báo cáo" };
   }
 
-  const enrollments = await db.enrollment.findMany({
+  const enrollments = await sdb.enrollment.findMany({
     where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
     select: {
       student: {
@@ -83,7 +87,7 @@ export async function generateClassProgressReports(
       if (sent) emailed++;
     }
 
-    await db.progressReportLog.create({
+    await sdb.progressReportLog.create({
       data: {
         studentId: st.id,
         classId,
