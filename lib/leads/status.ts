@@ -60,6 +60,10 @@ export const LEAD_STATUS_ACCENT: Record<LeadStatus, string> = {
 };
 
 // Cột Kanban hiển thị (theo thứ tự vận hành). KHÔNG show DEMO_SCHEDULED (deprecated).
+// NHÓM 03 — Việc 1: thêm REGISTERED (đã đăng ký — đã có khoản Sale ghi nhận, chưa
+// convert) sau AWAITING_DECISION, trước ENROLLED (= "đã chốt/convert" trong pipeline
+// này — schema KHÔNG có status CONVERTED riêng, ENROLLED đóng vai trò đó). Vị trí theo
+// phễu SR.QD.217; đổi vị trí = đổi thứ tự mảng (final chờ câu 38 phiếu xác nhận).
 export const KANBAN_COLUMNS: LeadStatus[] = [
   "NEW",
   "ASSIGNED",
@@ -70,6 +74,7 @@ export const KANBAN_COLUMNS: LeadStatus[] = [
   "TRIAL_IN_PROGRESS",
   "TRIAL_ATTENDED",
   "AWAITING_DECISION",
+  "REGISTERED",
   "ENROLLED",
   "NURTURING",
   "LOST",
