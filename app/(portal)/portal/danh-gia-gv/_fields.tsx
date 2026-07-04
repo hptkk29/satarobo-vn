@@ -63,7 +63,28 @@ export function QuestionField({
         </div>
       )}
 
-      {q.type === "RADIO" && (
+      {q.type === "RADIO" && (kidFriendly ? (
+        // Kid-friendly: thẻ to (emoji đầu option nếu có) — giống SataUI Q1.
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {q.options.map((opt) => {
+            const active = value.options?.[0] === opt;
+            const m = opt.match(/^(\p{Extended_Pictographic}+)\s*(.*)$/u);
+            const emoji = m?.[1] ?? null;
+            const label = (m?.[2] || opt).trim();
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => onChange({ options: [opt] })}
+                className={`flex flex-col items-center gap-1 rounded-xl border-2 px-2 py-3 text-center transition-colors ${active ? "border-orange-400 bg-orange-50" : "border-neutral-200 bg-white hover:bg-neutral-50"}`}
+              >
+                {emoji && <span className="text-3xl leading-none">{emoji}</span>}
+                <span className={`text-xs font-semibold ${active ? "text-orange-600" : "text-neutral-600"}`}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
         <div className="space-y-1.5">
           {q.options.map((opt) => (
             <label key={opt} className="flex items-center gap-2 text-sm text-neutral-700">
@@ -78,7 +99,7 @@ export function QuestionField({
             </label>
           ))}
         </div>
-      )}
+      ))}
 
       {q.type === "CHECKBOX" && (
         <div className="space-y-1.5">

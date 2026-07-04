@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { setActiveSite } from "@/app/(portal)/portal/actions";
+import type { SwitcherChild } from "@/lib/portal/child-switcher-data";
 import {
   Home,
   Users,
@@ -18,6 +21,8 @@ import {
   MessagesSquare,
   Menu,
   Settings,
+  BookOpen,
+  Star,
   UserRound,
   ChevronDown,
   LogOut,
@@ -25,6 +30,7 @@ import {
   KeyRound,
   Sun,
   Moon,
+  Check,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,7 +38,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -56,20 +61,24 @@ const parentNav: NavItem[] = [
   { label: "Hồ sơ", href: "/portal/ho-so", icon: Settings },
 ];
 
-// Mobile (<lg): bottom nav KHÔNG lấy theo thứ tự sidebar — chọn 4 mục phụ huynh
-// cần nhất bấm 1 chạm (Học phí & Thông báo là mối quan tâm số 1), phần còn lại
-// gom vào menu "Thêm" (không có sidebar → mọi trang vẫn truy cập được ở 375px).
-// Thứ tự sidebar desktop (parentNav) giữ nguyên.
-const BOTTOM_NAV_HREFS = ["/portal", "/portal/lich", "/portal/hoc-phi", "/portal/thong-bao"];
-const bottomNav = BOTTOM_NAV_HREFS.flatMap((href) => {
-  const item = parentNav.find((i) => i.href === href);
-  return item ? [item] : [];
-});
-const moreNav = parentNav.filter((i) => !BOTTOM_NAV_HREFS.includes(i.href));
+// Cổng học sinh (student-mode) — 6 mục, sidebar cam. Nav gọn quanh việc học của con.
+const STUDENT_ROOT = "/portal/hoc-sinh";
+const studentNav: NavItem[] = [
+  { label: "Tổng quan", href: "/portal/hoc-sinh", icon: Home },
+  { label: "Lịch học", href: "/portal/hoc-sinh/lich", icon: CalendarDays },
+  { label: "Bài tập", href: "/portal/hoc-sinh/bai-tap", icon: ClipboardList },
+  { label: "Buổi học", href: "/portal/hoc-sinh/buoi-hoc", icon: BookOpen },
+  { label: "Đánh giá giáo viên", href: "/portal/hoc-sinh/danh-gia-gv", icon: Star, shortLabel: "Đánh giá" },
+  { label: "Thông báo", href: "/portal/hoc-sinh/thong-bao", icon: Bell },
+];
 
-function Logo() {
+// Mobile (<lg): bottom nav = 4 mục hay dùng nhất; phần còn lại gom menu "Thêm".
+const PARENT_BOTTOM = ["/portal", "/portal/lich", "/portal/hoc-phi", "/portal/thong-bao"];
+const STUDENT_BOTTOM = ["/portal/hoc-sinh", "/portal/hoc-sinh/lich", "/portal/hoc-sinh/bai-tap", "/portal/hoc-sinh/thong-bao"];
+
+function Logo({ href }: { href: string }) {
   return (
-    <Link href="/portal" className="flex items-center gap-2.5">
+    <Link href={href} className="flex items-center gap-2.5">
       <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="4" y="7" width="16" height="13" rx="4" fill="currentColor" />
@@ -93,27 +102,48 @@ function isActive(pathname: string, href: string): boolean {
   // /portal) → chuẩn hoá trước khi so, nếu không không mục nav nào được tô sáng.
   const p =
     pathname === "/" ? "/portal" : pathname.startsWith("/portal") ? pathname : `/portal${pathname}`;
-  return href === "/portal" ? p === "/portal" : p === href || p.startsWith(`${href}/`);
+  // Mục "Tổng quan" (parent /portal, student /portal/hoc-sinh) khớp CHÍNH XÁC —
+  // nếu không sẽ sáng ở mọi trang con.
+  if (href === "/portal" || href === STUDENT_ROOT) return p === href;
+  return p === href || p.startsWith(`${href}/`);
 }
 
 export function PortalV2Shell({
   parentName,
   parentEmail,
+  activeStudentName,
   notifCount,
   msgCount = 0,
+  switcherChildren = [],
   children,
 }: {
   parentName: string;
   parentEmail?: string | null;
+  activeStudentName?: string | null;
   notifCount: number;
   msgCount?: number;
+  switcherChildren?: SwitcherChild[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Mode = phụ huynh (coral, nav đầy đủ) hoặc học sinh (cam, 6 mục quanh việc học).
+  // Suy từ URL (/portal/hoc-sinh/*) — stateless, sống qua điều hướng.
+  const norm = pathname === "/" ? "/portal" : pathname.startsWith("/portal") ? pathname : `/portal${pathname}`;
+  const isStudent = norm === STUDENT_ROOT || norm.startsWith(`${STUDENT_ROOT}/`);
+  const nav = isStudent ? studentNav : parentNav;
+  const rootHref = isStudent ? STUDENT_ROOT : "/portal";
+  const bottomHrefs = isStudent ? STUDENT_BOTTOM : PARENT_BOTTOM;
+  const bottomNav = bottomHrefs.flatMap((href) => {
+    const item = nav.find((i) => i.href === href);
+    return item ? [item] : [];
+  });
+  const moreNav = nav.filter((i) => !bottomHrefs.includes(i.href));
+
   // Badge số chưa đọc theo mục nav (Thông báo = chuông, Tin nhắn = hội thoại).
   const badgeFor = (href: string): number =>
-    href === "/portal/thong-bao" ? notifCount : href === "/portal/tin-nhan" ? msgCount : 0;
+    href.endsWith("/thong-bao") ? notifCount : href === "/portal/tin-nhan" ? msgCount : 0;
   const nameWords = parentName.trim().split(/\s+/).filter((w) => /\p{L}/u.test(w[0] ?? ""));
   const initials = nameWords.slice(-1)[0]?.[0]?.toUpperCase() ?? "P";
 
@@ -135,10 +165,10 @@ export function PortalV2Shell({
       {/* Sidebar (desktop) */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border/60 bg-card lg:flex">
         <div className="flex h-16 shrink-0 items-center border-b border-border/40 px-5">
-          <Logo />
+          <Logo href={rootHref} />
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {parentNav.map((item) => {
+          {nav.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
             const badge = badgeFor(item.href);
@@ -166,10 +196,12 @@ export function PortalV2Shell({
         </nav>
         <div className="m-4 shrink-0 space-y-1 rounded-xl border border-primary/20 bg-primary/5 p-3.5">
           <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
-            <UserRound className="size-3.5" /> Cổng Phụ Huynh
+            <UserRound className="size-3.5" /> {isStudent ? "Cổng Học Sinh" : "Cổng Phụ Huynh"}
           </p>
           <p className="text-xs font-medium leading-relaxed text-muted-foreground">
-            Quản lý lịch trình, học phí và tiến độ học tập của các con.
+            {isStudent
+              ? `Đang xem dữ liệu học tập của ${(activeStudentName ?? "con").split(/\s+/).slice(-2).join(" ")}. Đổi con ở góc trên phải.`
+              : "Quản lý lịch trình, học phí và tiến độ học tập của các con."}
           </p>
         </div>
       </aside>
@@ -178,16 +210,14 @@ export function PortalV2Shell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
         <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-card/75 px-4 backdrop-blur-md lg:px-6">
-          {/* Profile chip */}
-          <span className="flex items-center gap-2.5 rounded-xl border border-accent/30 bg-accent-soft px-3 py-1.5 text-accent">
-            <span className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-white">
-              <UserRound className="size-3.5" />
-            </span>
-            <span className="flex flex-col items-start leading-tight">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">Phụ huynh</span>
-              <span className="max-w-[12rem] truncate text-sm font-bold">{parentName}</span>
-            </span>
-          </span>
+          {/* Switcher: Chế độ Phụ huynh / các con */}
+          <ProfileSwitcher
+            parentName={parentName}
+            childrenList={switcherChildren}
+            mode={isStudent ? "student" : "parent"}
+            activeStudentName={activeStudentName ?? null}
+          />
+
 
           <div className="ml-auto flex items-center gap-2">
             <Link
@@ -215,10 +245,10 @@ export function PortalV2Shell({
                 <ChevronDown className="size-3.5 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60 rounded-2xl">
-                <DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
+                <div className="flex flex-col gap-0.5 px-1.5 py-2">
                   <span className="text-sm font-bold text-foreground">{parentName}</span>
                   {parentEmail && <span className="truncate text-xs font-medium text-muted-foreground">{parentEmail}</span>}
-                </DropdownMenuLabel>
+                </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => router.push("/portal/ho-so")} className="cursor-pointer gap-2.5">
                   <Settings className="size-4 text-muted-foreground" /> Hồ sơ liên lạc
@@ -323,5 +353,111 @@ export function PortalV2Shell({
         </nav>
       </div>
     </div>
+  );
+}
+
+// Switcher topbar: "Chế độ Phụ huynh" (về Tổng quan) + đổi con đang xem (setActiveSite).
+const SWITCH_COLORS = [
+  "oklch(0.748 0.169 56.8)",
+  "oklch(0.62 0.18 250)",
+  "oklch(0.62 0.17 150)",
+  "oklch(0.6 0.2 300)",
+  "oklch(0.62 0.2 20)",
+];
+
+function ProfileSwitcher({
+  parentName,
+  childrenList,
+  mode,
+  activeStudentName,
+}: {
+  parentName: string;
+  childrenList: SwitcherChild[];
+  mode: "parent" | "student";
+  activeStudentName: string | null;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const isStudent = mode === "student";
+
+  // Đổi con → vào Cổng học sinh của con đó (setActiveSite + điều hướng student mode).
+  const enterStudent = (id: string) =>
+    start(async () => {
+      const res = await setActiveSite(id);
+      if (res.ok) {
+        router.push(STUDENT_ROOT);
+        router.refresh();
+      } else toast.error(res.error ?? "Không đổi được học viên");
+    });
+  const goParent = () => router.push("/portal");
+
+  // Chip: cam khi ở Cổng học sinh, coral khi Cổng phụ huynh.
+  const chipCls = isStudent
+    ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+    : "border-accent/30 bg-accent-soft text-accent hover:bg-accent/15";
+  const chipAvatar = isStudent ? "bg-primary" : "bg-accent";
+  const chipOverline = isStudent ? "Học sinh" : "Phụ huynh";
+  const chipName = isStudent ? (activeStudentName ?? "Học sinh").split(/\s+/).slice(-2).join(" ") : parentName;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={pending}
+        className={cn(
+          "flex items-center gap-2.5 rounded-xl border px-3 py-1.5 transition-colors focus:outline-none disabled:opacity-60",
+          chipCls,
+        )}
+      >
+        <span className={cn("grid size-6 shrink-0 place-items-center rounded-md text-white", chipAvatar)}>
+          <UserRound className="size-3.5" />
+        </span>
+        <span className="flex flex-col items-start leading-tight">
+          <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">{chipOverline}</span>
+          <span className="max-w-[12rem] truncate text-sm font-bold">{chipName}</span>
+        </span>
+        <ChevronDown className="size-3.5 shrink-0 opacity-70" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72 rounded-2xl">
+        <DropdownMenuItem onClick={goParent} className="cursor-pointer gap-2.5 py-2">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+            <UserRound className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className={cn("block text-sm font-bold", isStudent ? "text-foreground" : "text-accent")}>Chế độ Phụ huynh</span>
+            <span className="block truncate text-xs text-muted-foreground">{parentName}</span>
+          </span>
+          {!isStudent && <Check className="size-4 shrink-0 text-accent" />}
+        </DropdownMenuItem>
+
+        {childrenList.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-1.5 py-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">Các con</div>
+            {childrenList.map((c, i) => (
+              <DropdownMenuItem
+                key={c.id}
+                disabled={pending}
+                onClick={() => enterStudent(c.id)}
+                className="cursor-pointer gap-2.5 py-2"
+              >
+                <span
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-xs font-bold text-white"
+                  style={{ backgroundColor: SWITCH_COLORS[i % SWITCH_COLORS.length] }}
+                >
+                  {c.initials}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block truncate text-sm font-bold", isStudent && c.active ? "text-primary" : "text-foreground")}>
+                    {c.name.split(/\s+/).slice(-2).join(" ")}
+                  </span>
+                  {c.courseName && <span className="block truncate text-xs text-muted-foreground">{c.courseName}</span>}
+                </span>
+                {isStudent && c.active && <Check className="size-4 shrink-0 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
