@@ -124,6 +124,13 @@ export async function checkPrerequisites(
   studentId: string,
   courseId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  try {
+    assertCan(session.user, "enrollments:edit");
+  } catch {
+    return { ok: false, error: "Không có quyền" };
+  }
   try {
     const prereqs = await db.coursePrerequisite.findMany({
       where: { courseId },
