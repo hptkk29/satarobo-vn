@@ -1,6 +1,5 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { can } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
@@ -20,7 +19,7 @@ export default async function NewClassPage() {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const [courses, orgUnits, classGroups, rooms, teachers, curricula] = await Promise.all([
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true },
@@ -40,7 +39,7 @@ export default async function NewClassPage() {
     // R2-RBAC-3 — chỉ GV thuộc cơ sở actor nhìn thấy (CS1 không thấy GV CS2); form
     // còn lọc tiếp theo đơn vị đang chọn ở client.
     getAssignableTeachers({ centerIds: actor.visibleCenterIds }),
-    db.curriculum.findMany({
+    sdb.curriculum.findMany({
       where: {
         isActive: true,
         status: "ACTIVE",

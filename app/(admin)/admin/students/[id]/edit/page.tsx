@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LineChart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { can, hasRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -33,8 +33,9 @@ export default async function EditStudentPage({ params }: Props) {
   const { id } = await params;
 
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const [student, orgUnits] = await Promise.all([
-    db.student.findFirst({
+    sdb.student.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true,
@@ -80,7 +81,7 @@ export default async function EditStudentPage({ params }: Props) {
 
   // Commit 3 — đa con: các con đang gắn cùng phụ huynh này.
   const parentChildren = student.parentUserId
-    ? await db.student.findMany({
+    ? await sdb.student.findMany({
         where: { parentUserId: student.parentUserId, deletedAt: null },
         orderBy: { name: "asc" },
         select: { id: true, name: true, studentCode: true },
@@ -88,7 +89,7 @@ export default async function EditStudentPage({ params }: Props) {
     : [];
 
   // LMS-5 — năng lực: lấy bản đánh giá mới nhất mỗi kỹ năng.
-  const skillRows = await db.studentSkillAssessment.findMany({
+  const skillRows = await sdb.studentSkillAssessment.findMany({
     where: { studentId: id },
     orderBy: { assessedAt: "desc" },
     select: { skill: true, level: true, note: true, assessedAt: true },
@@ -106,7 +107,7 @@ export default async function EditStudentPage({ params }: Props) {
   const teachesStudent =
     !isSuperOrManager &&
     hasRole(session.user, "TEACHER") &&
-    !!(await db.enrollment.findFirst({
+    !!(await sdb.enrollment.findFirst({
       where: {
         studentId: id,
         class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
@@ -149,7 +150,7 @@ export default async function EditStudentPage({ params }: Props) {
     orgUnitId: student.orgUnitId,
   };
 
-  const activeEnrollments = await db.enrollment.findMany({
+  const activeEnrollments = await sdb.enrollment.findMany({
     where: {
       studentId: id,
       status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] },
@@ -169,7 +170,7 @@ export default async function EditStudentPage({ params }: Props) {
   });
 
   const [activeReserve, lifecycleEnrollments] = await Promise.all([
-    db.studentReserve.findFirst({
+    sdb.studentReserve.findFirst({
       where: { studentId: id, isActive: true },
       orderBy: { startedAt: "desc" },
       select: {
@@ -179,7 +180,7 @@ export default async function EditStudentPage({ params }: Props) {
         reason: true,
       },
     }),
-    db.enrollment.findMany({
+    sdb.enrollment.findMany({
       where: { studentId: id },
       select: {
         id: true,
@@ -201,7 +202,7 @@ export default async function EditStudentPage({ params }: Props) {
   const absences = await getStudentAbsences(id);
 
   // #14 — Lịch sử học tập: TẤT CẢ lớp/khoá đã & đang học + tiến độ buổi.
-  const historyRaw = await db.enrollment.findMany({
+  const historyRaw = await sdb.enrollment.findMany({
     where: { studentId: id },
     select: {
       id: true,

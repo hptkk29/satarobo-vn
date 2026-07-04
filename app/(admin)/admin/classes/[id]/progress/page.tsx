@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ChevronLeft, LineChart } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { can, hasRole, canViewParentContact } from "@/lib/auth/permissions";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -69,7 +68,7 @@ export default async function ClassProgressPage({ params }: Props) {
 
   const [progresses, heldSessionsCount, gradebook] = await Promise.all([
     getClassProgress(id, showParentContact),
-    db.classSession.count({ where: { classId: id, date: { lte: now } } }),
+    sdb.classSession.count({ where: { classId: id, date: { lte: now } } }),
     getClassGradebook(id),
   ]);
 

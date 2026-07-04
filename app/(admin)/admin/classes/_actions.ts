@@ -1,7 +1,6 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma, EnrollmentStatus } from "@prisma/client";
@@ -25,7 +24,7 @@ import { generateAssignmentsFromTemplates } from "@/lib/lms/assignment";
 import { publishEvent } from "@/lib/events/publish";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { passesScope } from "@/lib/db-scope";
+import { passesScope, scopedDb } from "@/lib/db-scope";
 
 type ActionResult = { error?: string };
 
@@ -37,7 +36,8 @@ function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
 }
 /** Lớp `classId` có thuộc tầm nhìn cơ sở actor không (đọc centerId rồi passesScope). */
 async function classInScope(actor: Actor, classId: string): Promise<boolean> {
-  const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
+  const sdb = scopedDb(actor);
+  const cls = await sdb.class.findUnique({ where: { id: classId }, select: { centerId: true } });
   return !!cls && passesScope("Class", cls, actor);
 }
 /**
@@ -48,6 +48,7 @@ async function classInScope(actor: Actor, classId: string): Promise<boolean> {
  * center = không hợp lệ cho lớp có cơ sở. Trả message lỗi hoặc null nếu OK.
  */
 async function assertTeachersInCenter(
+  sdb: ReturnType<typeof scopedDb>,
   centerId: string | null,
   teacherId?: string | null,
   assistantId?: string | null,
@@ -55,7 +56,7 @@ async function assertTeachersInCenter(
   if (!centerId) return null;
   const ids = [teacherId, assistantId].filter(Boolean) as string[];
   if (!ids.length) return null;
-  const users = await db.user.findMany({
+  const users = await sdb.user.findMany({
     where: { id: { in: ids } },
     select: { id: true, centerId: true },
   });
@@ -160,12 +161,13 @@ function toUpdateData(
  */
 async function resolveClassOrg(
   data: ReturnType<typeof classCreateSchema.parse>,
+  sdb: ReturnType<typeof scopedDb>,
 ): Promise<{ centerId: string | null; orgUnitId: string | null }> {
   let orgUnitId = data.orgUnitId ?? null;
   let centerId = await centerIdForOrgUnit(orgUnitId);
 
   if (data.classGroupId) {
-    const group = await db.classGroup.findUnique({
+    const group = await sdb.classGroup.findUnique({
       where: { id: data.classGroupId },
       select: { centerId: true, orgUnitId: true },
     });
@@ -242,20 +244,20 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
 
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
   // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
-  const { centerId, orgUnitId } = await resolveClassOrg(data);
+  const { centerId, orgUnitId } = await resolveClassOrg(data, sdb);
 
   // Cách ly cơ sở: chỉ tạo lớp cho cơ sở trong tầm nhìn actor.
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!actorCanUseCenter(actor, centerId)) {
-      return { error: "Không có quyền tạo lớp cho cơ sở này" };
-    }
+  if (!actorCanUseCenter(actor, centerId)) {
+    return { error: "Không có quyền tạo lớp cho cơ sở này" };
   }
 
   // R2-RBAC-3 — GV/TA phải cùng cơ sở lớp (chống gán chéo CS).
   const teacherCenterErr = await assertTeachersInCenter(
+    sdb,
     centerId,
     data.teacherId,
     data.assistantId,
@@ -280,7 +282,7 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
 
   let curriculum =
     pickedCurriculumId &&
-    (await db.curriculum.findFirst({
+    (await sdb.curriculum.findFirst({
       where: {
         id: pickedCurriculumId,
         courseId: data.courseId,
@@ -290,7 +292,7 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
       select: { id: true, version: true },
     }));
   if (!curriculum) {
-    curriculum = await db.curriculum.findFirst({
+    curriculum = await sdb.curriculum.findFirst({
       where: { courseId: data.courseId, isActive: true, status: "ACTIVE" },
       orderBy: { version: "desc" },
       select: { id: true, version: true },
@@ -302,7 +304,8 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
 
   let createdId = "";
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       // Phase T0.2 — tự sinh classCode nếu admin để trống (giữ mã cũ nếu có).
       // HO (centerId=null) không tự sinh mã — admin nhập tay nếu cần.
       let classCode = data.classCode;
@@ -389,7 +392,10 @@ export async function updateClass(
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const before = await db.class.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const before = await sdb.class.findUnique({
     where: { id },
     select: CLASS_SNAPSHOT_SELECT,
   });
@@ -398,21 +404,19 @@ export async function updateClass(
   const { actorId, actorName } = getAuditActor(session);
 
   // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
-  const { centerId, orgUnitId } = await resolveClassOrg(parsed.data);
+  const { centerId, orgUnitId } = await resolveClassOrg(parsed.data, sdb);
 
   // Cách ly cơ sở: lớp HIỆN TẠI + cơ sở ĐÍCH (nếu đổi) đều phải trong tầm nhìn actor.
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: before.centerId }, actor)) {
-      return { error: "Không tìm thấy lớp" };
-    }
-    if (!actorCanUseCenter(actor, centerId)) {
-      return { error: "Không có quyền chuyển lớp sang cơ sở này" };
-    }
+  if (!passesScope("Class", { centerId: before.centerId }, actor)) {
+    return { error: "Không tìm thấy lớp" };
+  }
+  if (!actorCanUseCenter(actor, centerId)) {
+    return { error: "Không có quyền chuyển lớp sang cơ sở này" };
   }
 
   // R2-RBAC-3 — GV/TA phải cùng cơ sở lớp (chống gán chéo CS).
   const teacherCenterErr = await assertTeachersInCenter(
+    sdb,
     centerId,
     parsed.data.teacherId,
     parsed.data.assistantId,
@@ -420,7 +424,8 @@ export async function updateClass(
   if (teacherCenterErr) return { error: teacherCenterErr };
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       const updated = await tx.class.update({
         where: { id },
         data: toUpdateData(parsed.data, centerId, orgUnitId),
@@ -452,25 +457,25 @@ export async function updateClass(
 
 export async function deleteClass(id: string): Promise<ActionResult> {
   const session = await requireClassWrite("delete");
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
-  const before = await db.class.findUnique({
+  const before = await sdb.class.findUnique({
     where: { id },
     select: CLASS_SNAPSHOT_SELECT,
   });
   if (!before) return { error: "Không thể xoá lớp này" };
 
   // Cách ly cơ sở: chỉ xoá lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: before.centerId }, actor)) {
-      return { error: "Không thể xoá lớp này" };
-    }
+  if (!passesScope("Class", { centerId: before.centerId }, actor)) {
+    return { error: "Không thể xoá lớp này" };
   }
 
   const { actorId, actorName } = getAuditActor(session);
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       await tx.class.update({
         where: { id },
         data: { deletedAt: new Date() },
@@ -506,18 +511,18 @@ export async function submitClassForApproval(classId: string): Promise<WfResult>
   if (!hasAnyRole(session.user, [...SUBMIT_ROLES])) {
     return { ok: false, error: "Không có quyền gửi duyệt lớp" };
   }
-  const cls = await db.class.findFirst({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
     select: { status: true, centerId: true, _count: { select: { enrollments: true } } },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
 
   // Cách ly cơ sở: chỉ gửi duyệt lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
-      return { ok: false, error: "Lớp không tồn tại" };
-    }
+  if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
+    return { ok: false, error: "Lớp không tồn tại" };
   }
 
   if (cls.status !== "PLANNED" && cls.status !== "RECRUITING") {
@@ -526,7 +531,7 @@ export async function submitClassForApproval(classId: string): Promise<WfResult>
   if (cls._count.enrollments === 0) {
     return { ok: false, error: "Lớp chưa có học sinh nào — gán HS trước khi gửi duyệt" };
   }
-  await db.class.update({
+  await sdb.class.update({
     where: { id: classId },
     data: { status: "PENDING_APPROVAL", submittedForApprovalAt: new Date() },
   });
@@ -542,7 +547,9 @@ async function requireApprover(classId: string) {
   if (!hasAnyRole(session.user, [...APPROVE_ROLES])) {
     return { ok: false as const, error: "Chỉ quản lý cơ sở / SUPER_ADMIN được duyệt" };
   }
-  const cls = await db.class.findFirst({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
     select: { status: true, centerId: true },
   });
@@ -552,7 +559,7 @@ async function requireApprover(classId: string) {
   if (!isSuper && cls.centerId !== session.user.centerId) {
     return { ok: false as const, error: "Lớp không thuộc cơ sở của bạn" };
   }
-  return { ok: true as const, session, cls };
+  return { ok: true as const, session, cls, sdb };
 }
 
 /** Quản lý duyệt lớp (PENDING_APPROVAL → ACTIVE). */
@@ -562,7 +569,7 @@ export async function approveClass(classId: string): Promise<WfResult> {
   if (gate.cls.status !== "PENDING_APPROVAL") {
     return { ok: false, error: "Lớp không ở trạng thái chờ duyệt" };
   }
-  await db.class.update({
+  await gate.sdb.class.update({
     where: { id: classId },
     data: {
       status: "ACTIVE",
@@ -592,10 +599,8 @@ export async function generateSessionsAction(classId: string): Promise<WfResult 
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ sinh buổi cho lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
-  }
+  const actor = await resolveActor(session.user.id);
+  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
   const res = await generateClassSessions(classId, { onlyIfEmpty: true });
   if (!res.ok) return { ok: false, error: res.error ?? "Không sinh được buổi học" };
   revalidatePath(`/classes/${classId}/edit`);
@@ -613,7 +618,7 @@ export async function rejectClass(classId: string, reason: string): Promise<WfRe
   const trimmed = reason.trim();
   if (trimmed.length < 5) return { ok: false, error: "Nhập lý do trả lại (≥5 ký tự)" };
   const stamp = new Date().toLocaleDateString("vi-VN");
-  await db.class.update({
+  await gate.sdb.class.update({
     where: { id: classId },
     data: {
       status: "RECRUITING",
@@ -629,8 +634,9 @@ export async function rejectClass(classId: string, reason: string): Promise<WfRe
 
 // ─── Module Quản lý lớp PHẦN 2 — dời buổi tương lai theo lịch mới ────────────
 
-async function computeFutureReschedule(classId: string) {
-  const cls = await db.class.findFirst({
+async function computeFutureReschedule(classId: string, actor: Actor) {
+  const sdb = scopedDb(actor);
+  const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
     select: { id: true, centerId: true, scheduleDays: true, startTime: true },
   });
@@ -641,7 +647,7 @@ async function computeFutureReschedule(classId: string) {
 
   const now = new Date();
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  const future = await db.classSession.findMany({
+  const future = await sdb.classSession.findMany({
     // R7-06 AC6: chỉ dời buổi SCHEDULED tương lai — KHÔNG đụng buổi đã COMPLETED/
     // đang IN_PROGRESS hay đã CANCELLED (giữ tổng buổi + không hồi sinh buổi huỷ).
     where: { classId, date: { gt: todayEnd }, status: { notIn: ["COMPLETED", "CANCELLED", "IN_PROGRESS"] } },
@@ -650,7 +656,7 @@ async function computeFutureReschedule(classId: string) {
   });
   if (future.length === 0) return { ok: false as const, error: "Không có buổi tương lai để dời" };
 
-  const holidayRows = await db.holiday.findMany({
+  const holidayRows = await sdb.holiday.findMany({
     where: { OR: [{ centerId: cls.centerId }, { centerId: null }] },
     select: { date: true, endDate: true },
   });
@@ -682,7 +688,8 @@ export async function previewClassReschedule(classId: string): Promise<
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
-  const res = await computeFutureReschedule(classId);
+  const actor = await resolveActor(session.user.id);
+  const res = await computeFutureReschedule(classId, actor);
   if (!res.ok) return res;
   return {
     ok: true,
@@ -701,15 +708,15 @@ export async function applyClassReschedule(classId: string): Promise<WfResult> {
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ dời buổi cho lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
-  }
-  const res = await computeFutureReschedule(classId);
+  const actor = await resolveActor(session.user.id);
+  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  const sdb = scopedDb(actor);
+  const res = await computeFutureReschedule(classId, actor);
   if (!res.ok) return res;
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       for (const it of res.items) {
         await tx.classSession.update({ where: { id: it.id }, data: { date: it.newDate } });
       }
@@ -767,18 +774,18 @@ export async function cancelClassAction(
     return { ok: false, error: "Nhập lý do hủy lớp (≥5 ký tự)" };
   }
 
-  const cls = await db.class.findFirst({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
     select: { id: true, name: true, status: true, centerId: true },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
 
   // Cách ly cơ sở: chỉ hủy lớp trong tầm nhìn actor (chống IDOR cascade liên cơ sở).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
-      return { ok: false, error: "Lớp không tồn tại" };
-    }
+  if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
+    return { ok: false, error: "Lớp không tồn tại" };
   }
 
   if (cls.status === "CANCELLED") {
@@ -788,7 +795,7 @@ export async function cancelClassAction(
     return { ok: false, error: "Lớp đã hoàn thành — không thể hủy" };
   }
 
-  const liveEnrollments = await db.enrollment.findMany({
+  const liveEnrollments = await sdb.enrollment.findMany({
     where: {
       classId,
       deletedAt: null,
@@ -805,7 +812,8 @@ export async function cancelClassAction(
   const withdrawReason = `[Hủy lớp] ${trimmedReason}`;
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       // a) Lớp → CANCELLED.
       await tx.class.update({
         where: { id: classId },
