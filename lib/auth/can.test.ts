@@ -96,6 +96,17 @@ describe("[A0-03] can() v2 — ma trận", () => {
     expect(can(a, "attendance:mark", { classId: "cl2" })).toBe(false);
   });
 
+  it("[NHÓM02-T2c] ASSISTANT_TEACHER scope ASSIGNED: lớp được phân công true, lớp khác + thiếu target false", () => {
+    const a = actor(
+      [row("cs1", "ASSISTANT_TEACHER", [{ action: "attendance:view", scopeType: "ASSIGNED" }])],
+      { classes: ["cl1"] },
+    );
+    expect(can(a, "attendance:view", { classId: "cl1" })).toBe(true);
+    expect(can(a, "attendance:view", { classId: "cl2" })).toBe(false);
+    // Target thiếu classId → an toàn = false (giống CLASS, không suy diễn ngầm).
+    expect(can(a, "attendance:view")).toBe(false);
+  });
+
   it("[A0-03-T4-15/16] PARENT scope CHILDREN: con mình true, con người khác false (AC10)", () => {
     const a = actor([row("cs1", "PARENT", [{ action: "students:view-all", scopeType: "CHILDREN" }])]);
     expect(can(a, "students:view-all", { parentUserId: "u1" })).toBe(true);
