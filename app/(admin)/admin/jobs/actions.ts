@@ -1,17 +1,19 @@
 'use server'
 
 import { auth } from '@/lib/auth'
-import { hasRole } from '@/lib/auth/permissions'
+import { assertCan } from '@/lib/auth/permissions'
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { jobCreateSchema } from '@/lib/validators/job'
 
-const CAN_EDIT = ['SUPER_ADMIN', 'CENTER_MANAGER']
-
 export async function createJobAction(input: unknown) {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!CAN_EDIT.includes(session.user.role)) return { ok: false, error: 'Khong co quyen' }
+  try {
+    assertCan(session.user, 'jobs:create')
+  } catch {
+    return { ok: false, error: 'Khong co quyen' }
+  }
 
   const parsed = jobCreateSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Du lieu khong hop le' }
@@ -36,7 +38,11 @@ export async function createJobAction(input: unknown) {
 export async function updateJobAction(id: string, input: unknown) {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!CAN_EDIT.includes(session.user.role)) return { ok: false, error: 'Khong co quyen' }
+  try {
+    assertCan(session.user, 'jobs:edit')
+  } catch {
+    return { ok: false, error: 'Khong co quyen' }
+  }
 
   const parsed = jobCreateSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Du lieu khong hop le' }
@@ -59,7 +65,11 @@ export async function updateJobAction(id: string, input: unknown) {
 export async function deleteJobAction(id: string) {
   const session = await auth()
   if (!session?.user) return { ok: false }
-  if (!hasRole(session.user, 'SUPER_ADMIN')) return { ok: false, error: 'Chi SUPER_ADMIN duoc xoa JD' }
+  try {
+    assertCan(session.user, 'jobs:delete')
+  } catch {
+    return { ok: false, error: 'Khong co quyen xoa JD' }
+  }
 
   const job = await db.jobPosting.delete({ where: { id } })
 
@@ -73,7 +83,11 @@ export async function deleteJobAction(id: string) {
 export async function duplicateJobAction(id: string) {
   const session = await auth()
   if (!session?.user) return { ok: false }
-  if (!CAN_EDIT.includes(session.user.role)) return { ok: false, error: 'Khong co quyen' }
+  try {
+    assertCan(session.user, 'jobs:create')
+  } catch {
+    return { ok: false, error: 'Khong co quyen' }
+  }
 
   const original = await db.jobPosting.findUnique({ where: { id } })
   if (!original) return { ok: false, error: 'Khong tim thay JD' }
@@ -112,7 +126,11 @@ export async function duplicateJobAction(id: string) {
 export async function changeJobStatusAction(id: string, status: string) {
   const session = await auth()
   if (!session?.user) return { ok: false }
-  if (!CAN_EDIT.includes(session.user.role)) return { ok: false }
+  try {
+    assertCan(session.user, 'jobs:edit')
+  } catch {
+    return { ok: false }
+  }
 
   const job = await db.jobPosting.update({
     where: { id },
