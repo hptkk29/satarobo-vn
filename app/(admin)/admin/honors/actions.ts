@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { hasRole } from "@/lib/auth/permissions";
+import { assertCan } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import {
@@ -9,8 +9,6 @@ import {
   timelineCreateSchema,
   sitePageContentUpdateSchema,
 } from "@/lib/validators/honor";
-
-const CAN_EDIT = ["SUPER_ADMIN", "CENTER_MANAGER"];
 
 function revalidatePublic(slug?: string) {
   revalidatePath("/honors");
@@ -27,8 +25,11 @@ function revalidatePublic(slug?: string) {
 export async function createHonorAction(input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!CAN_EDIT.includes(session.user.role))
+  try {
+    assertCan(session.user, "honors:create");
+  } catch {
     return { ok: false, error: "Không có quyền" };
+  }
 
   const parsed = honorCreateSchema.safeParse(input);
   if (!parsed.success)
@@ -73,8 +74,11 @@ export async function createHonorAction(input: unknown) {
 export async function updateHonorAction(id: string, input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!CAN_EDIT.includes(session.user.role))
+  try {
+    assertCan(session.user, "honors:edit");
+  } catch {
     return { ok: false, error: "Không có quyền" };
+  }
 
   const parsed = honorCreateSchema.safeParse(input);
   if (!parsed.success)
@@ -113,8 +117,11 @@ export async function updateHonorAction(id: string, input: unknown) {
 export async function deleteHonorAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
-  if (!hasRole(session.user, "SUPER_ADMIN"))
+  try {
+    assertCan(session.user, "honors:delete");
+  } catch {
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
+  }
 
   const honor = await db.honor.delete({ where: { id } });
   revalidatePublic(honor.slug);
@@ -124,7 +131,11 @@ export async function deleteHonorAction(id: string) {
 export async function toggleFeaturedAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
-  if (!CAN_EDIT.includes(session.user.role)) return { ok: false };
+  try {
+    assertCan(session.user, "honors:edit");
+  } catch {
+    return { ok: false };
+  }
 
   const honor = await db.honor.findUnique({ where: { id } });
   if (!honor) return { ok: false, error: "Không tìm thấy honor" };
@@ -152,7 +163,11 @@ export async function toggleFeaturedAction(id: string) {
 export async function togglePublishedAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
-  if (!CAN_EDIT.includes(session.user.role)) return { ok: false };
+  try {
+    assertCan(session.user, "honors:edit");
+  } catch {
+    return { ok: false };
+  }
 
   const honor = await db.honor.findUnique({ where: { id } });
   if (!honor) return { ok: false };
@@ -170,8 +185,11 @@ export async function togglePublishedAction(id: string) {
 export async function createTimelineAction(input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!CAN_EDIT.includes(session.user.role))
+  try {
+    assertCan(session.user, "honors:create");
+  } catch {
     return { ok: false, error: "Không có quyền" };
+  }
 
   const parsed = timelineCreateSchema.safeParse(input);
   if (!parsed.success)
@@ -195,8 +213,11 @@ export async function createTimelineAction(input: unknown) {
 export async function updateTimelineAction(id: string, input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!CAN_EDIT.includes(session.user.role))
+  try {
+    assertCan(session.user, "honors:edit");
+  } catch {
     return { ok: false, error: "Không có quyền" };
+  }
 
   const parsed = timelineCreateSchema.safeParse(input);
   if (!parsed.success)
@@ -221,8 +242,11 @@ export async function updateTimelineAction(id: string, input: unknown) {
 export async function deleteTimelineAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
-  if (!hasRole(session.user, "SUPER_ADMIN"))
+  try {
+    assertCan(session.user, "honors:delete");
+  } catch {
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
+  }
 
   await db.timelineItem.delete({ where: { id } });
   revalidatePath("/honors/timeline");
@@ -234,8 +258,11 @@ export async function deleteTimelineAction(id: string) {
 export async function updatePageContentAction(input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!CAN_EDIT.includes(session.user.role))
+  try {
+    assertCan(session.user, "honors:settings");
+  } catch {
     return { ok: false, error: "Không có quyền" };
+  }
 
   const parsed = sitePageContentUpdateSchema.safeParse(input);
   if (!parsed.success)
