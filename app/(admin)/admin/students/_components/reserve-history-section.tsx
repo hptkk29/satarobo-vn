@@ -1,4 +1,6 @@
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { scopedDb } from "@/lib/db-scope";
+import { resolveActor } from "@/lib/auth/actor";
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString("vi-VN", {
@@ -13,7 +15,12 @@ export async function ReserveHistorySection({
 }: {
   studentId: string;
 }) {
-  const reserves = await db.studentReserve.findMany({
+  const session = await auth();
+  if (!session?.user) return null;
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const reserves = await sdb.studentReserve.findMany({
     where: { studentId },
     include: {
       enrollment: { select: { class: { select: { name: true } } } },

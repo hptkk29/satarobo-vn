@@ -3,7 +3,6 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { requestOtp } from "@/lib/otp/service";
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -128,21 +127,21 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
 
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
   // PR-C dual-write: OrgUnit là nguồn chính; suy centerId/preferredCenterId (HO→null).
   data.centerId = await centerIdForOrgUnit(data.orgUnitId ?? null);
   data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
 
   // Cách ly cơ sở: center-level chỉ tạo HV cho cơ sở trong tầm nhìn.
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!actorCanUseCenter(actor, data.centerId ?? null)) {
-      return { error: "Không có quyền tạo học viên cho cơ sở này" };
-    }
+  if (!actorCanUseCenter(actor, data.centerId ?? null)) {
+    return { error: "Không có quyền tạo học viên cho cơ sở này" };
   }
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       // Phase T0.2 — tự sinh studentCode nếu admin để trống (giữ mã cũ nếu có).
       if (!data.studentCode && data.centerId) {
         const center = await tx.center.findUnique({
@@ -191,18 +190,18 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const before = await db.student.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const before = await sdb.student.findUnique({
     where: { id },
     select: STUDENT_SNAPSHOT_SELECT,
   });
   if (!before) return { error: "Không tìm thấy học viên" };
 
   // Cách ly cơ sở: HV hiện tại phải thuộc tầm nhìn actor (chống sửa HV cơ sở khác).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!actorCanUseCenter(actor, before.centerId)) {
-      return { error: "Không tìm thấy học viên" };
-    }
+  if (!actorCanUseCenter(actor, before.centerId)) {
+    return { error: "Không tìm thấy học viên" };
   }
 
   const { actorId, actorName } = getAuditActor(session);
@@ -216,15 +215,15 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
     data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
   }
   // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
-  if (data.centerId !== undefined && session.user.id) {
-    const actor = await resolveActor(session.user.id);
+  if (data.centerId !== undefined) {
     if (!actorCanUseCenter(actor, data.centerId ?? null)) {
       return { error: "Không có quyền chuyển học viên sang cơ sở này" };
     }
   }
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       const updated = await tx.student.update({
         where: { id },
         data: toUpdateData(data),
@@ -257,17 +256,17 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
 export async function deleteStudent(id: string): Promise<ActionResult> {
   const session = await requireStudentWrite("delete");
 
-  const before = await db.student.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const before = await sdb.student.findUnique({
     where: { id },
     select: STUDENT_SNAPSHOT_SELECT,
   });
   if (!before) return { error: "Không thể xoá học viên này" };
   // Cách ly cơ sở: chỉ xoá HV trong tầm nhìn actor (chống IDOR xoá liên cơ sở).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!actorCanUseCenter(actor, before.centerId)) {
-      return { error: "Không thể xoá học viên này" };
-    }
+  if (!actorCanUseCenter(actor, before.centerId)) {
+    return { error: "Không thể xoá học viên này" };
   }
   if (before.status !== "INACTIVE") {
     return { error: "Chỉ xóa được học viên đã nghỉ học" };
@@ -276,7 +275,8 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
   const { actorId, actorName } = getAuditActor(session);
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       // Soft delete — Student has deletedAt
       await tx.student.update({
         where: { id },
@@ -407,7 +407,10 @@ export async function reserveStudentAction(input: {
     return { ok: false as const, error: "Lý do quá dài (max 1000 ký tự)" };
   }
 
-  const student = await db.student.findFirst({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const student = await sdb.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
     select: { id: true, status: true, name: true, centerId: true },
   });
@@ -419,7 +422,7 @@ export async function reserveStudentAction(input: {
     return { ok: false as const, error: "Không tìm thấy học viên" };
   }
 
-  const existing = await db.studentReserve.findFirst({
+  const existing = await sdb.studentReserve.findFirst({
     where: { studentId: input.studentId, isActive: true },
     select: { id: true, startedAt: true },
   });
@@ -431,7 +434,7 @@ export async function reserveStudentAction(input: {
   }
 
   if (input.enrollmentId) {
-    const enr = await db.enrollment.findFirst({
+    const enr = await sdb.enrollment.findFirst({
       where: { id: input.enrollmentId, studentId: input.studentId },
       select: { id: true, status: true },
     });
@@ -451,7 +454,8 @@ export async function reserveStudentAction(input: {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.studentReserve.create({
       data: {
         studentId: input.studentId,
@@ -544,7 +548,7 @@ export async function reserveStudentAction(input: {
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
 
-  const studentForEmail = await db.student.findUnique({
+  const studentForEmail = await sdb.student.findUnique({
     where: { id: input.studentId },
     select: { name: true, parentName: true, parentEmail: true },
   });
@@ -581,8 +585,10 @@ export async function resumeStudentReserveAction(input: {
   endReason?: string | null;
 }) {
   const session = await requireStudentLifecycle();
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
-  const reserve = await db.studentReserve.findUnique({
+  const reserve = await sdb.studentReserve.findUnique({
     where: { id: input.reserveId },
     select: {
       id: true,
@@ -611,7 +617,8 @@ export async function resumeStudentReserveAction(input: {
   const now = new Date();
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.studentReserve.update({
       where: { id: input.reserveId },
       data: {
@@ -741,7 +748,10 @@ export async function withdrawStudentAction(input: {
     return { ok: false as const, error: "Lý do quá dài" };
   }
 
-  const student = await db.student.findFirst({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const student = await sdb.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
     select: { id: true, status: true, centerId: true },
   });
@@ -758,7 +768,8 @@ export async function withdrawStudentAction(input: {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.studentReserve.updateMany({
       where: { studentId: input.studentId, isActive: true },
       data: {
@@ -858,7 +869,7 @@ export async function withdrawStudentAction(input: {
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
 
-  const studentForEmail = await db.student.findUnique({
+  const studentForEmail = await sdb.student.findUnique({
     where: { id: input.studentId },
     select: { name: true, parentName: true, parentEmail: true },
   });
@@ -917,8 +928,10 @@ export async function createParentAccount(input: {
   }
   const { studentId } = parsed.data;
   const email = parsed.data.email.trim().toLowerCase();
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
-  const student = await db.student.findFirst({
+  const student = await sdb.student.findFirst({
     where: { id: studentId, deletedAt: null },
     select: { id: true, parentUserId: true, parentName: true, parentPhone: true },
   });
@@ -932,7 +945,7 @@ export async function createParentAccount(input: {
   }
 
   // Email đã dùng?
-  const existingUser = await db.user.findUnique({
+  const existingUser = await sdb.user.findUnique({
     where: { email },
     select: { id: true, role: true },
   });
@@ -943,7 +956,8 @@ export async function createParentAccount(input: {
   const parentName = parsed.data.name?.trim() || student.parentName || "Phụ huynh";
 
   try {
-    const result = await db.$transaction(async (tx) => {
+    const result = await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       let parentUserId = existingUser?.id;
       let isNewPending = false;
       if (!parentUserId) {
@@ -999,7 +1013,9 @@ export async function resendParentActivationOtp(
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
 
-  const student = await db.student.findFirst({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const student = await sdb.student.findFirst({
     where: { id: studentId, deletedAt: null },
     select: { parentUser: { select: { email: true, accountStatus: true } } },
   });
@@ -1030,13 +1046,16 @@ export async function searchLinkableStudents(
   const q = query.trim();
   if (q.length < 1) return { ok: true, items: [] };
 
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // CENTER_MANAGER (không super) chỉ thấy HV cơ sở mình.
   const centerScope =
     hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
       ? session.user.centerId
       : null;
 
-  const items = await db.student.findMany({
+  const items = await sdb.student.findMany({
     where: {
       deletedAt: null,
       parentUserId: null,
@@ -1063,9 +1082,12 @@ export async function addChildToParent(input: {
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
 
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [parent, child] = await Promise.all([
-    db.user.findFirst({ where: { id: input.parentUserId, role: "PARENT", deletedAt: null }, select: { id: true } }),
-    db.student.findFirst({
+    sdb.user.findFirst({ where: { id: input.parentUserId, role: "PARENT", deletedAt: null }, select: { id: true } }),
+    sdb.student.findFirst({
       where: { id: input.childStudentId, deletedAt: null },
       select: { id: true, parentUserId: true },
     }),
@@ -1080,7 +1102,7 @@ export async function addChildToParent(input: {
     return { ok: false, error: "Học viên đã thuộc phụ huynh khác — gỡ liên kết cũ trước" };
   }
 
-  await db.student.update({ where: { id: child.id }, data: { parentUserId: input.parentUserId } });
+  await sdb.student.update({ where: { id: child.id }, data: { parentUserId: input.parentUserId } });
   revalidatePath(`/students/${child.id}/edit`);
   return { ok: true };
 }
@@ -1093,12 +1115,15 @@ export async function unlinkChildFromParent(
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
 
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Cách ly cơ sở: chỉ gỡ liên kết HV trong tầm nhìn actor (chống IDOR ghi).
   if (!(await studentInScope(session.user.id, childStudentId))) {
     return { ok: false, error: "Không tìm thấy học viên" };
   }
 
-  await db.student.update({ where: { id: childStudentId }, data: { parentUserId: null } });
+  await sdb.student.update({ where: { id: childStudentId }, data: { parentUserId: null } });
   revalidatePath(`/students/${childStudentId}/edit`);
   return { ok: true };
 }
@@ -1111,8 +1136,10 @@ export async function reactivateStudentAction(input: {
   note?: string | null;
 }) {
   const session = await requireStudentLifecycle();
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
-  const student = await db.student.findFirst({
+  const student = await sdb.student.findFirst({
     where: { id: input.studentId, deletedAt: null },
     select: { id: true, status: true, centerId: true },
   });
@@ -1129,7 +1156,8 @@ export async function reactivateStudentAction(input: {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.student.update({
       where: { id: input.studentId },
       data: { status: "ACTIVE" },

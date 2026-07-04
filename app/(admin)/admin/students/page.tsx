@@ -3,7 +3,6 @@ import { FileSpreadsheet, Plus } from "lucide-react";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/permissions";
@@ -203,7 +202,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  const centers = await db.center.findMany({
+  const centers = await sdb.center.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true },

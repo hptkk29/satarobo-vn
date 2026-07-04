@@ -1,11 +1,12 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { hasRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -15,7 +16,9 @@ async function canAssessStudent(
   studentId: string,
 ): Promise<boolean> {
   if (hasRole(user, "SUPER_ADMIN")) return true;
-  const student = await db.student.findUnique({
+  const actor = await resolveActor(user.id);
+  const sdb = scopedDb(actor);
+  const student = await sdb.student.findUnique({
     where: { id: studentId },
     select: { centerId: true },
   });
@@ -24,7 +27,7 @@ async function canAssessStudent(
     return !!student.centerId && student.centerId === user.centerId;
   }
   if (hasRole(user, "TEACHER")) {
-    const teaches = await db.enrollment.findFirst({
+    const teaches = await sdb.enrollment.findFirst({
       where: {
         studentId,
         class: { OR: [{ teacherId: user.id }, { assistantId: user.id }] },
@@ -69,8 +72,11 @@ export async function saveStudentSkills(input: unknown): Promise<Result> {
   );
   if (!allowed) return { ok: false, error: "Không có quyền chấm năng lực học sinh này" };
 
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   try {
-    await db.studentSkillAssessment.createMany({
+    await sdb.studentSkillAssessment.createMany({
       data: items.map((it) => ({
         studentId,
         skill: it.skill,
