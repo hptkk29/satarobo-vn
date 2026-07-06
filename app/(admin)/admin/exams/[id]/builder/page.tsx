@@ -11,7 +11,7 @@ import {
   type SelectedExamQuestion,
 } from "../../_components/exam-builder";
 import { ExamForm, type ExamFormValue } from "../../_components/exam-form";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ interface Props {
 export default async function ExamBuilderPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "exams:edit")) {
+  if (!(await checkPermission("exams:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

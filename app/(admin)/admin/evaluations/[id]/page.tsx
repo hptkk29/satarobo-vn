@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getFormWithQuestions, formHasResponses, parseOptions, type QuestionType } from "@/lib/eval/forms";
 import { FormEditor } from "./_edit";
 
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function FormEditPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "evaluations:manage")) redirect("/dashboard");
+  if (!(await checkPermission("evaluations:manage"))) redirect("/dashboard");
 
   const { id } = await params;
   const form = await getFormWithQuestions(id);

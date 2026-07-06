@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { ImportWordClient } from "./_components/import-word-client";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ interface Props {
 export default async function ImportWordPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "exams:create")) {
+  if (!(await checkPermission("exams:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

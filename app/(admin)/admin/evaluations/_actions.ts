@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { writeAudit } from "@/lib/audit/audit-log";
 import {
   evalFormInputSchema,
@@ -31,7 +31,7 @@ function roundCenterInScope(actor: Actor, centerId: string | null): boolean {
 async function gate(): Promise<{ ok: true; userId: string; name: string } | { ok: false; error: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "evaluations:manage")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("evaluations:manage"))) return { ok: false, error: "Không có quyền" };
   return { ok: true, userId: session.user.id, name: session.user.name ?? session.user.email ?? "—" };
 }
 

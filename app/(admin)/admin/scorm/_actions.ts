@@ -7,7 +7,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { getR2Client, getR2Bucket, deleteR2Prefix } from "@/lib/storage/r2-client";
@@ -37,7 +37,7 @@ async function gate(): Promise<
   if (!isScormEnabled()) return { ok: false, error: "Tính năng SCORM đang tắt" };
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "training:manage")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("training:manage"))) return { ok: false, error: "Không có quyền" };
   // ScormPackage/Lesson không center-scoped → scopedDb pass-through (đúng rule R6-F1,
   // không import @/lib/db trần). Quyền đã chặn ở training:manage.
   const sdb = scopedDb(await resolveActor(session.user.id));

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { AttemptStatus } from "@prisma/client";
 import { GradeButton } from "../../_components/grade-button";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +37,7 @@ interface Props {
 export default async function ExamAttemptsPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "exams:view")) {
+  if (!(await checkPermission("exams:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import {
   assertDocx,
   parseDocx,
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ ok: false, error: "Chưa đăng nhập" }, { status: 401 });
   }
-  if (!can(session.user, "exams:create")) {
+  if (!(await checkPermission("exams:create"))) {
     return NextResponse.json({ ok: false, error: "Không có quyền" }, { status: 403 });
   }
   if (!session.user.id) {

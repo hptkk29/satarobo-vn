@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, getEffectiveRoles } from "@/lib/auth/permissions";
+import { getEffectiveRoles } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { z } from "zod";
@@ -48,12 +49,10 @@ async function canGradeClassWork(
   ) {
     return true;
   }
-  const actor = {
-    role: user.role ?? null,
-    roles: user.roles ?? undefined,
-    grants: user.grants,
-  };
-  return can(actor, "report-cards:review") || can(actor, "training:manage");
+  return (
+    (await checkPermission("report-cards:review")) ||
+    (await checkPermission("training:manage"))
+  );
 }
 
 async function requireRole(): Promise<
@@ -62,7 +61,7 @@ async function requireRole(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "exams:edit")) {
+  if (!(await checkPermission("exams:edit"))) {
     return { ok: false, error: "Không có quyền quản lý đề thi" };
   }
   return { ok: true, userId: session.user.id ?? "", user: session.user };

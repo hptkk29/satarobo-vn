@@ -8,7 +8,8 @@ import { Presentation, Play, NotebookPen, BookOpen, AlertCircle } from "lucide-r
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can, getEffectiveRoles } from "@/lib/auth/permissions";
+import { getEffectiveRoles } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
 import { canManageTraining, isAssignedTeacher } from "@/lib/scorm/access";
 import {
@@ -29,7 +30,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate quyền (layout admin đã chặn PARENT; check action ở page như quy ước).
-  if (!can(session.user, "teaching-materials:view-own-class")) redirect("/dashboard");
+  if (!(await checkPermission("teaching-materials:view-own-class"))) redirect("/dashboard");
 
   const sp = await searchParams;
   const selectedClassId = sp.classId?.trim() || null;

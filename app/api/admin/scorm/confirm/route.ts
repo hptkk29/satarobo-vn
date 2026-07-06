@@ -6,8 +6,7 @@
 // Gate: SCORM_ENABLED + can(training:manage).
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events/publish";
 import { isScormEnabled } from "@/lib/flags";
@@ -23,8 +22,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const actor = await resolveActor(session.user.id);
-  if (!can(actor, TRAINING_MANAGE)) {
+  if (!(await checkPermission(TRAINING_MANAGE))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
