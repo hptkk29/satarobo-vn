@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, ClipboardCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { OPEN_FIELDS, CLOSE_FIELDS, type ChecklistKey } from "@/lib/center-checklist";
 
@@ -19,11 +20,14 @@ function ymd(d: Date): string {
 export default async function ChecklistOverviewPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:view")) redirect("/dashboard");
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");
   const centerScope = isCM && !isSuper ? session.user.centerId : null;
+
+  if (!(await checkPermission("hr_attendance:view", { centerId: centerScope ?? session.user.centerId ?? null }))) {
+    redirect("/dashboard");
+  }
 
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (DAYS - 1));

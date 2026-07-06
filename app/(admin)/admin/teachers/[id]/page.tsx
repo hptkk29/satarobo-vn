@@ -5,7 +5,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { TeacherProfileForm } from "./_components/profile-form";
 import { ClassAssignmentSection } from "./_components/class-assignment";
 import { WeeklySchedule } from "./_components/weekly-schedule";
@@ -59,7 +60,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   const cmInScope = hasRole(me, "CENTER_MANAGER") && teacher.centerId === me.centerId;
   // Xem: SUPER_ADMIN/HR (employees:view-all & không phải CM), CM cùng cơ sở, hoặc GV xem chính mình.
   const canViewByRole =
-    can(me, "employees:view-all") &&
+    (await checkPermission("employees:view-all", { centerId: teacher.centerId })) &&
     (!hasRole(me, "CENTER_MANAGER") || cmInScope);
   const canView = isOwn || canViewByRole;
   if (!canView) redirect("/dashboard");

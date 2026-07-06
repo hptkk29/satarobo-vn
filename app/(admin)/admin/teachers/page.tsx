@@ -2,7 +2,8 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import type { Prisma } from "@prisma/client";
 import {
   RANK_LABEL,
@@ -23,13 +24,20 @@ interface SearchParams {
 export default async function TeachersPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "employees:view-all")) redirect("/dashboard");
 
-  const params = await searchParams;
-  const q = params.q?.trim();
   // CENTER_MANAGER chỉ xem GV trong cơ sở mình.
   const centerScope =
     hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
+  if (
+    !(await checkPermission("employees:view-all", {
+      centerId: centerScope ?? session.user.centerId ?? null,
+    }))
+  ) {
+    redirect("/dashboard");
+  }
+
+  const params = await searchParams;
+  const q = params.q?.trim();
 
   const where: Prisma.UserWhereInput = {
     isActive: true,

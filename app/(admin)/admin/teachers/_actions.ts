@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { TeacherRank, EmploymentType, TeacherStatus } from "@prisma/client";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -13,14 +14,17 @@ type Result = { ok: true } | { ok: false; error: string };
 async function requireTeacherManager(targetUserId: string) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
-  if (!can(session.user, "employees:edit")) {
+
+  // employees:edit có cả tầng GLOBAL (HO_HR) và CENTER (CENTER_HR) — truyền
+  // centerId của GV đích để v2 đánh giá đúng nhánh CENTER.
+  const target = await db.user.findUnique({
+    where: { id: targetUserId },
+    select: { centerId: true },
+  });
+  if (!(await checkPermission("employees:edit", { centerId: target?.centerId ?? null }))) {
     return { ok: false as const, error: "Không có quyền quản lý giáo viên" };
   }
   if (hasRole(session.user, "CENTER_MANAGER")) {
-    const target = await db.user.findUnique({
-      where: { id: targetUserId },
-      select: { centerId: true },
-    });
     if (!target || target.centerId !== session.user.centerId) {
       return { ok: false as const, error: "Giáo viên không thuộc cơ sở của bạn" };
     }

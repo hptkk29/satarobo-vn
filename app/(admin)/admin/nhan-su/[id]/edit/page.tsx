@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { db } from "@/lib/db";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { EmployeeForm } from "@/components/admin/nhan-su/employee-form";
@@ -25,7 +26,6 @@ interface Props {
 export default async function EditEmployeePage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "employees:edit")) redirect("/dashboard");
 
   const { id } = await params;
   const employee = await db.employee.findUnique({
@@ -47,7 +47,13 @@ export default async function EditEmployeePage({ params }: Props) {
   });
   if (!employee) notFound();
 
-  const canManageUsers = can(session.user, "users:manage");
+  // Target gate: employees:edit có cả tầng GLOBAL (HO_HR) và CENTER (CENTER_HR) —
+  // truyền centerId của NV đang xem để v2 đánh giá đúng nhánh CENTER.
+  if (!(await checkPermission("employees:edit", { centerId: employee.centerId }))) {
+    redirect("/dashboard");
+  }
+
+  const canManageUsers = await checkPermission("users:manage");
   const actor = await resolveActor(session.user.id);
 
   const [orgUnits, managers, departments] = await Promise.all([
@@ -76,7 +82,7 @@ export default async function EditEmployeePage({ params }: Props) {
     : false;
 
   const isSuperAdmin = hasRole(session.user, "SUPER_ADMIN");
-  const canViewAudit = can(session.user, "audit-logs:view");
+  const canViewAudit = await checkPermission("audit-logs:view");
   const showScheduleLink = TEACHING_DEPARTMENTS.has(employee.department);
 
   const auditLogs = canViewAudit

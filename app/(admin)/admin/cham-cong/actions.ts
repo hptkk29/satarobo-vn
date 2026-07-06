@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { verifyQrToken, distanceMeters } from "@/lib/attendance/qr";
 import { getSetting } from "@/lib/settings/service";
@@ -32,7 +32,7 @@ export async function recordCheckin(input: {
 }): Promise<{ ok: boolean; error?: string; withinGeofence?: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "hr_attendance:checkin")) {
+  if (!(await checkPermission("hr_attendance:checkin", { centerId: input.centerId }))) {
     return { ok: false, error: "Không có quyền chấm công" };
   }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import QRCode from "qrcode";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { generateQrToken } from "@/lib/attendance/qr";
 
 export const runtime = "nodejs";
@@ -14,11 +14,11 @@ export async function GET(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "hr_attendance:view")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const centerId = new URL(req.url).searchParams.get("centerId");
+  if (!(await checkPermission("hr_attendance:view", { centerId }))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   if (!centerId) {
     return NextResponse.json({ error: "Thiếu centerId" }, { status: 400 });
   }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { QrScreen } from "./_components/qr-screen";
 
@@ -15,9 +15,11 @@ interface Props {
 export default async function ManHinhPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:view")) redirect("/dashboard");
 
   const { centerId } = await searchParams;
+  if (!(await checkPermission("hr_attendance:view", { centerId: centerId ?? session.user.centerId ?? null }))) {
+    redirect("/dashboard");
+  }
   const centers = await db.center.findMany({
     where: { isActive: true },
     select: { id: true, name: true },

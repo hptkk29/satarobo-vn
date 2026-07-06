@@ -5,7 +5,8 @@ import type { Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { assertCan, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { assertPermission } from "@/lib/auth/check-permission";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ASSIGNABLE_ROLES } from "@/lib/labels";
 import {
@@ -120,7 +121,7 @@ export async function createEmployeeAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "employees:create");
+    await assertPermission("employees:create");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -209,8 +210,13 @@ export async function updateEmployeeAction(
 ): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  // Target gate: employees:edit có cả tầng GLOBAL (HO_HR) và CENTER (CENTER_HR) —
+  // truyền centerId của NV HIỆN TẠI để v2 đánh giá đúng nhánh CENTER.
+  const targetEmployee = await db.employee.findUnique({ where: { id }, select: { centerId: true } });
+  if (!targetEmployee) return { ok: false, error: "Không tìm thấy nhân sự" };
   try {
-    assertCan(session.user, "employees:edit");
+    await assertPermission("employees:edit", { centerId: targetEmployee.centerId });
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -287,7 +293,8 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "employees:delete");
+    // employees:delete chỉ SUPER_ADMIN (không có tầng CENTER) — không cần target.
+    await assertPermission("employees:delete");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -314,8 +321,11 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
 export async function toggleEmployeeActiveAction(id: string): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const emp = await db.employee.findUnique({ where: { id } });
+  if (!emp) return { ok: false, error: "Không tìm thấy" };
   try {
-    assertCan(session.user, "employees:edit");
+    await assertPermission("employees:edit", { centerId: emp.centerId });
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -324,8 +334,6 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
   if (!(await employeeInScope(session.user.id, id))) {
     return { ok: false, error: "Không tìm thấy" };
   }
-  const emp = await db.employee.findUnique({ where: { id } });
-  if (!emp) return { ok: false, error: "Không tìm thấy" };
   await db.employee.update({
     where: { id },
     data: { isActive: !emp.isActive },
@@ -337,8 +345,11 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
 export async function toggleEmployeePublicAction(id: string): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const emp = await db.employee.findUnique({ where: { id } });
+  if (!emp) return { ok: false, error: "Không tìm thấy" };
   try {
-    assertCan(session.user, "employees:edit");
+    await assertPermission("employees:edit", { centerId: emp.centerId });
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -347,8 +358,6 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
   if (!(await employeeInScope(session.user.id, id))) {
     return { ok: false, error: "Không tìm thấy" };
   }
-  const emp = await db.employee.findUnique({ where: { id } });
-  if (!emp) return { ok: false, error: "Không tìm thấy" };
   await db.employee.update({
     where: { id },
     data: { isPublic: !emp.isPublic },

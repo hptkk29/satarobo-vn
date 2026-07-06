@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import type { WorkShift } from "@prisma/client";
 import {
@@ -30,7 +31,12 @@ const TAG_TONE: Record<AttendanceTag["tone"], string> = {
 export default async function ChamCongPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:view")) redirect("/dashboard");
+
+  // Phạm vi cơ sở: CENTER_MANAGER chỉ xem cơ sở mình.
+  const centerScope = hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
+  if (!(await checkPermission("hr_attendance:view", { centerId: centerScope ?? session.user.centerId ?? null }))) {
+    redirect("/dashboard");
+  }
 
   const { date } = await searchParams;
   const base = date ? new Date(date) : new Date();
@@ -39,9 +45,6 @@ export default async function ChamCongPage({ searchParams }: Props) {
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
   const dateStr = start.toISOString().slice(0, 10);
-
-  // Phạm vi cơ sở: CENTER_MANAGER chỉ xem cơ sở mình.
-  const centerScope = hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
 
   const [rows, regs] = await Promise.all([
     db.employeeCheckin.findMany({
