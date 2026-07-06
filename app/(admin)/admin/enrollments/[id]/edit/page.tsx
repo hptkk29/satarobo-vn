@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRightLeft, ChevronLeft, ClipboardList, History } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -54,12 +54,12 @@ interface Props {
 export default async function EditEnrollmentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "enrollments:edit")) {
+  if (!(await checkPermission("enrollments:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
-  const canViewAudit = can(session.user, "audit-logs:view");
+  const canViewAudit = await checkPermission("audit-logs:view");
 
   // Cách ly cơ sở: Enrollment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
   // tiếp) → scopedDb không auto-scope findUnique. Scope thủ công qua class.centerId,

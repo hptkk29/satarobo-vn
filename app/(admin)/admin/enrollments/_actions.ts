@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can, assertCan } from "@/lib/auth/permissions";
+import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -127,7 +127,7 @@ export async function checkPrerequisites(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "enrollments:edit");
+    await assertPermission("enrollments:edit");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -165,7 +165,7 @@ export async function checkPrerequisites(
 async function requireSalesOrAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "enrollments:edit")) {
+  if (!(await checkPermission("enrollments:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -352,7 +352,7 @@ export async function deleteEnrollmentAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "enrollments:delete");
+    await assertPermission("enrollments:delete");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -439,7 +439,7 @@ export async function enrollStudent(
 ): Promise<WorkflowResult<{ enrollmentId: string }>> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:create")) {
+  if (!(await checkPermission("enrollments:create"))) {
     return { ok: false, error: "Không có quyền đăng ký HS" };
   }
 
@@ -604,7 +604,7 @@ export async function changeEnrollmentStatus(
 ): Promise<WorkflowResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:edit")) {
+  if (!(await checkPermission("enrollments:edit"))) {
     return { ok: false, error: "Không có quyền đổi trạng thái" };
   }
 
@@ -748,7 +748,7 @@ export async function transferEnrollment(
 ): Promise<WorkflowResult<{ newEnrollmentId: string }>> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:transfer")) {
+  if (!(await checkPermission("enrollments:transfer"))) {
     return { ok: false, error: "Không có quyền chuyển lớp" };
   }
 
