@@ -1,121 +1,141 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
-import { Loader2, AlertTriangle, Ban } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { loginSchema, type LoginInput } from "@/lib/validators/auth";
+import { AtSign, Lock, Eye, EyeOff, Loader2, AlertTriangle, Ban, ArrowLeft } from "lucide-react";
+import { loginSchema } from "@/lib/validators/auth";
 import { sanitizeCallbackUrl } from "@/lib/auth/route-policy";
 
+// Form "Waves" (port AuthenUI) — ĐÃ BỎ đăng ký. Giữ nguyên luồng Auth.js signIn +
+// callbackUrl + cảnh báo phiên + link kích hoạt tài khoản (phụ huynh mới).
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Chống open-redirect cross-host: chỉ chấp nhận path nội bộ thuần.
   const callbackUrl = sanitizeCallbackUrl(searchParams.get("callbackUrl") ?? "/dashboard");
   const reason = searchParams.get("reason");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const form = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
-  });
-
-  async function onSubmit(data: LoginInput) {
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const parsed = loginSchema.safeParse({ email, password });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "Thông tin đăng nhập chưa hợp lệ.");
+      return;
+    }
+    setError("");
     setLoading(true);
     const result = await signIn("credentials", {
-      email: data.email,
-      password: data.password,
+      email: parsed.data.email,
+      password: parsed.data.password,
       redirect: false,
     });
     setLoading(false);
-
     if (result?.error) {
       toast.error("Email hoặc mật khẩu không đúng");
+      setError("Email hoặc mật khẩu không đúng.");
       return;
     }
-
     router.push(callbackUrl);
     router.refresh();
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-        {reason === "session-invalidated" && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div>
-              <p className="font-semibold">Phiên đăng nhập đã hết hạn</p>
-              <p>
-                Tài khoản của bạn vừa được cập nhật bởi admin (vai trò, mật
-                khẩu, hoặc quyền). Vui lòng đăng nhập lại.
-              </p>
-            </div>
-          </div>
-        )}
-        {reason === "session-disabled" && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            <Ban className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-            <div>
-              <p className="font-semibold">Tài khoản đã bị vô hiệu hoá</p>
-              <p>Liên hệ admin nếu cần hỗ trợ.</p>
-            </div>
-          </div>
-        )}
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input type="email" placeholder="phuc@satarobo.vn" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+    <form className="my-form" onSubmit={submit} aria-labelledby="login-title" noValidate>
+      <Link href="/" className="my-form__back" aria-label="Về trang chủ" title="Về trang chủ">
+        <ArrowLeft />
+      </Link>
+      <div className="login-welcome-row">
+        <Image
+          src="/brand/logo-satarobo.png"
+          alt="Sata Robo"
+          width={484}
+          height={280}
+          priority
+          className="mx-auto mb-4 block h-16 w-auto object-contain"
         />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Mật khẩu</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+        <h1 id="login-title">Chào mừng trở lại</h1>
+        <p>Đăng nhập vào hệ thống Sata Robo.</p>
+      </div>
+
+      {reason === "session-invalidated" && (
+        <div className="auth-alert auth-alert--warn">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <b>Phiên đăng nhập đã hết hạn.</b> Tài khoản vừa được cập nhật (vai trò, mật khẩu hoặc quyền). Vui lòng đăng nhập lại.
+          </div>
+        </div>
+      )}
+      {reason === "session-disabled" && (
+        <div className="auth-alert auth-alert--danger">
+          <Ban className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <b>Tài khoản đã bị vô hiệu hoá.</b> Liên hệ admin nếu cần hỗ trợ.
+          </div>
+        </div>
+      )}
+
+      <div className="input__wrapper">
+        <AtSign className="input__icon" />
+        <input
+          type="email"
+          id="email"
+          className="input__field"
+          placeholder=" "
+          required
+          autoComplete="username"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
-        <Button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-[#F97316] hover:bg-[#ea6c0a] text-white"
+        <label htmlFor="email" className="input__label">Email</label>
+      </div>
+
+      <div className="input__wrapper">
+        <Lock className="input__icon" />
+        <input
+          id="password"
+          type={show ? "text" : "password"}
+          className="input__field"
+          placeholder=" "
+          required
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <label htmlFor="password" className="input__label">Mật khẩu</label>
+        <button
+          type="button"
+          className="password-toggle"
+          onClick={() => setShow((v) => !v)}
+          aria-label={show ? "Ẩn ký tự" : "Hiện ký tự"}
         >
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Đăng nhập
-        </Button>
-      </form>
-      <p className="mt-4 text-center text-xs text-gray-400">
-        Phụ huynh mới?{" "}
-        <a href="/kich-hoat" className="text-orange-600 hover:underline">
-          Kích hoạt tài khoản
-        </a>
-      </p>
-    </Form>
+          {show ? <EyeOff /> : <Eye />}
+        </button>
+      </div>
+
+      {error && <span className="password-error visible">{error}</span>}
+
+      <button type="submit" className="my-form__button" disabled={loading}>
+        {loading && <Loader2 className="size-4 animate-spin" />}
+        Đăng nhập
+      </button>
+
+      <div className="my-form__actions">
+        <div className="my-form__row">
+          <span>
+            <span>Phụ huynh mới? </span>
+            <a href="/kich-hoat" title="Kích hoạt tài khoản">Kích hoạt tài khoản</a>
+          </span>
+        </div>
+      </div>
+    </form>
   );
 }
