@@ -94,13 +94,26 @@ Khác 3 role trên, **không có phiếu riêng cho bộ phận Nhân sự** tro
 
 > *"Tuỳ theo cấp độ mỗi TT nào thì làm cho TT đó. Tuy nhiên, có chức năng phân quyền cho mục này. Vì đôi khi việc chấm công tính lương trên hội sở làm tự động."*
 
-Câu trả lời này gợi ý cấu trúc **2 tầng giống ACCOUNTANT** (HO tự động hoá chấm công/lương toàn hệ thống + mỗi cơ sở tự quản hồ sơ nhân viên của mình) — nhưng:
-1. Không rõ hiện có nhân sự HR làm việc *tại* CS1/CS2 hay toàn bộ HR đều ở hội sở (câu 9 chỉ nói "không ai làm việc 2 cơ sở cùng lúc", không xác nhận có HR ở từng cơ sở).
-2. Cụm *"có chức năng phân quyền cho mục này"* không rõ nghĩa — không chắc TGĐ đang mô tả tính năng đã có hay đang đề xuất tính năng mới.
+Câu trả lời này gợi ý cấu trúc **2 tầng giống ACCOUNTANT** (HO tự động hoá chấm công/lương toàn hệ thống + mỗi cơ sở tự quản hồ sơ nhân viên của mình).
 
-**Đề xuất tạm** (chỉ để tham khảo, KHÔNG phải khuyến nghị chính thức do thiếu dữ liệu): nếu xác nhận có HR tại cơ sở → tạo `CENTER_HR` (CENTER) bổ sung bên cạnh `HO_HR` (đã có, GLOBAL) — cùng pattern với ACCOUNTANT. Nếu xác nhận toàn bộ HR chỉ ở hội sở → map thẳng 23 action vào `HO_HR` sẵn có, không cần role mới.
+### Cập nhật 06/07/2026 — điều tra thêm (workflow đa hướng: DB thật + rà lại 9 phiếu + phân tích code)
 
-**Câu hỏi cần Kiệt/BGĐ trả lời trước khi seed role này:** Hiện có nhân sự nào giữ vai trò HR làm việc tại CS1 hoặc CS2 (không phải hội sở) không?
+**1. Rà lại 9 phiếu (lần 2) tìm thấy bằng chứng bị bỏ sót ở lần đọc đầu:** phiếu Hành chính (`phieu-hanh-chinh`, câu 62 — bảng nhân sự toàn trung tâm) liệt kê rõ **2 người chức danh "Thực Tập Sinh Nhân sự"**, mỗi cơ sở 1 người:
+- Lê Thị Tuyết Mai (`lethituyetmai.tts@satarobo.vn`) — **CS1**
+- Trần Thị Thúy Liên (`tranthithuylien.tts@satarobo.vn`) — **CS2**
+
+→ Đây là bằng chứng trực tiếp: **có tồn tại vai trò Nhân sự cấp cơ sở** (dù chỉ cấp thực tập sinh), không phải chỉ ở hội sở như câu 10 phiếu BGĐ có thể gợi ý.
+
+**2. Kiểm tra DB thật (DEV Supabase, read-only):** cả 2 người trên **CHƯA có tài khoản User/Employee** nào trong hệ thống. Toàn DB hiện có **0 user** mang role legacy `HR`, **0 bản ghi** `UserOrgRole(HO_HR)` — rủi ro dưới đây **chưa xảy ra trên dữ liệu thật**, nhưng sẽ xảy ra ngay khi 2 người này được tạo tài khoản theo logic hiện tại.
+
+**3. Phân tích `prisma/patch-rbac-staff.ts` (đã chạy PROD 02/07):** phát hiện bất đối xứng thật trong code — `HR: { roleCode: "HO_HR", org: "HO" }` **hard-code mọi user có legacy role HR → `HO_HR @ HO` (GLOBAL), không đọc `centerId`**. Khác với `ACCOUNTANT` đã có nhánh riêng (`legacy === "ACCOUNTANT" && centerOrg ? "CENTER_ACCOUNTANT" : ...`) để tách theo cơ sở. Nếu seed tài khoản cho 2 thực tập sinh trên theo logic hiện tại, **cả hai sẽ nghiễm nhiên có toàn bộ 23 quyền HR** — bao gồm cả quyền nhạy cảm toàn hệ thống (`payroll:view`, `employees:view-salary`, `employees:view-personal`, `jobs:create/edit/delete`) — dù chỉ là thực tập sinh tại 1 cơ sở.
+
+**Trạng thái: đã gửi addendum riêng cho Kiệt xác nhận** (`phieu-kiet-hr-addendum.docx`) — 3 lựa chọn:
+- (A) Tạo `CENTER_HR` (CENTER) + sửa `patch-rbac-staff.ts` thêm nhánh theo `centerId` (giống ACCOUNTANT); gán 2 TTS vào `CENTER_HR` tại đúng cơ sở.
+- (B) Giữ nguyên mọi HR = `HO_HR` (GLOBAL) — kể cả TTS tại cơ sở — vì HR là chức năng cross-center theo chủ đích.
+- (C) Tách theo độ nhạy cảm: TTS tại cơ sở chỉ xem/chấm công trong phạm vi cơ sở mình (không xem lương/hồ sơ cá nhân toàn hệ thống); quyền nhạy cảm (`payroll:*`, `employees:view-salary/personal`, `jobs:*`) giữ riêng ở `HO_HR`.
+
+**Chưa seed HR** — chờ Kiệt chọn 1 trong 3 phương án trên.
 
 ---
 
