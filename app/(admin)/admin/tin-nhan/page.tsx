@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { getThread, markThreadRead } from "@/lib/conversation/service";
 import { ReplyForm } from "./_components/reply-form";
@@ -28,13 +28,14 @@ export default async function AdminMessagesPage({
   if (!session?.user) redirect("/login");
 
   const actor = await resolveActor(session.user.id);
-  if (!can(actor, "classes:view-all") && !can(actor, "classes:view-own")) {
+  const canViewAllClasses = await checkPermission("classes:view-all");
+  if (!canViewAllClasses && !(await checkPermission("classes:view-own"))) {
     redirect("/dashboard");
   }
 
   // Lớp actor phụ trách: Manager/Super → scopedDb (cách ly cơ sở); GV → lớp phân công.
   let allowedClassIds: string[];
-  if (can(actor, "classes:view-all")) {
+  if (canViewAllClasses) {
     const classes = await scopedDb(actor)
       .class.findMany({ where: { deletedAt: null }, select: { id: true } })
       .catch(() => [] as { id: string }[]);

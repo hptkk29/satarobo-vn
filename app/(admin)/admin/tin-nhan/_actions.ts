@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { postMessage } from "@/lib/conversation/service";
 
@@ -36,7 +36,7 @@ export async function staffOwnsEnrollment(
   if (actor.assignedClassIds.has(enr.classId)) return true;
 
   // Manager/Super: lớp phải nằm trong cơ sở actor thấy (scopedDb → null nếu ngoài scope).
-  if (can(actor, "classes:view-all")) {
+  if (await checkPermission("classes:view-all")) {
     const cls = await scopedDb(actor).class.findUnique({
       where: { id: enr.classId },
       select: { id: true },
@@ -54,7 +54,10 @@ export async function sendStaffMessage(input: {
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
   const actor = await resolveActor(session.user.id);
-  if (!can(actor, "classes:view-all") && !can(actor, "classes:view-own")) {
+  if (
+    !(await checkPermission("classes:view-all")) &&
+    !(await checkPermission("classes:view-own"))
+  ) {
     return { ok: false, error: "Không có quyền" };
   }
 
