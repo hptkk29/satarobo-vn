@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope } from "@/lib/db-scope";
 import { findScheduleConflicts } from "@/lib/classes/generate";
@@ -90,7 +90,7 @@ function parseDateTimeLocal(value: FormDataEntryValue | null): Date | null {
 async function requireTeacherOrAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "sessions:edit")) {
+  if (!(await checkPermission("sessions:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;

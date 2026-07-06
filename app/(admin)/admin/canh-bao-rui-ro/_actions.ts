@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
@@ -16,7 +16,7 @@ type Result = { ok: boolean; error?: string };
 async function gate() {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập", uid: null, actor: null };
-  if (!can(session.user, "students:view-all")) return { ok: false as const, error: "Không có quyền", uid: null, actor: null };
+  if (!(await checkPermission("students:view-all"))) return { ok: false as const, error: "Không có quyền", uid: null, actor: null };
   const actor = await resolveActor(session.user.id);
   return { ok: true as const, uid: session.user.id, actor };
 }

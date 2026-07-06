@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { CriteriaManager } from "../_components/criteria-manager";
 
@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
 export default async function ReportCardCriteriaPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // Cấu hình tiêu chí = quyền duyệt (Đào tạo/Quản lý).
-  if (!can(session.user, "report-cards:review")) redirect("/report-cards");
+  // Cấu hình tiêu chí = quyền duyệt (Đào tạo/Quản lý). report-cards:* CHƯA có trong
+  // seed RBAC v2 — không truyền target (chưa chắc scope, không đoán mò).
+  if (!(await checkPermission("report-cards:review"))) redirect("/report-cards");
 
   const courses = await db.course.findMany({
     where: { isActive: true },

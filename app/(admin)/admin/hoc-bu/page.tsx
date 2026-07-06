@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { MakeupRow, type MakeupItem } from "./_components/makeup-row";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function MakeupPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "parent-requests:manage")) redirect("/dashboard");
+  if (!(await checkPermission("parent-requests:manage"))) redirect("/dashboard");
 
   // Cách ly cơ sở: MakeupNeed ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject
   // `centerId IN <tầm nhìn>`. SUPER_ADMIN/HO bypass (ALL). Thay pattern auth cũ

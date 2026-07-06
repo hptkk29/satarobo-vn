@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { HeartHandshake } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function CareTaskPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "students:view-all") && !hasRole(session.user, "SALES_CSM")) redirect("/dashboard");
+  if (!(await checkPermission("students:view-all")) && !hasRole(session.user, "SALES_CSM")) redirect("/dashboard");
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");

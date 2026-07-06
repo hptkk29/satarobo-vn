@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -35,7 +35,11 @@ export default async function ReportCardsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "report-cards:manage") && !can(session.user, "report-cards:review")) {
+  // report-cards:* CHƯA có trong seed RBAC v2 (ReportCard vẫn SCOPE_EXEMPT) — không
+  // truyền target (chưa chắc scope, không đoán mò).
+  const canManageReportCards = await checkPermission("report-cards:manage");
+  const canReviewReportCards = await checkPermission("report-cards:review");
+  if (!canManageReportCards && !canReviewReportCards) {
     redirect("/dashboard");
   }
 
@@ -88,7 +92,7 @@ export default async function ReportCardsPage({
             Chọn lớp → nhập học bạ từng học viên → nộp duyệt → phát hành.
           </p>
         </div>
-        {can(session.user, "report-cards:review") ? (
+        {canReviewReportCards ? (
           <Link
             href="/report-cards/criteria"
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
