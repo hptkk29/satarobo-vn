@@ -3,7 +3,8 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
-import { can, hasRole } from '@/lib/auth/permissions'
+import { hasRole } from '@/lib/auth/permissions'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
@@ -40,9 +41,9 @@ export default async function LeadsPage({
   const session = await auth()
   if (!session?.user) redirect('/login')
 
-  const canViewAll = can(session.user, 'leads:view-all')
-  const canCreate = can(session.user, 'leads:create')
-  const canViewOwn = can(session.user, 'leads:view-own')
+  const canViewAll = (await checkPermission('leads:view-all'))
+  const canCreate = (await checkPermission('leads:create'))
+  const canViewOwn = (await checkPermission('leads:view-own'))
   if (!canViewAll && !canViewOwn) redirect('/dashboard')
 
   // SALES_CSM (chỉ view-own) → scope về lead của chính mình.
@@ -113,8 +114,8 @@ export default async function LeadsPage({
 
   const isMarketing = hasRole(session.user, 'MARKETING')
   const canCloseDeal =
-    can(session.user, 'students:create') && can(session.user, 'enrollments:create')
-  const canAssign = can(session.user, 'leads:assign')
+    (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
+  const canAssign = (await checkPermission('leads:assign'))
 
   // Filter dropdown data (chỉ cần cho role view-all).
   const [centers, sales] = canViewAll
@@ -161,7 +162,7 @@ export default async function LeadsPage({
       take: KANBAN_LIMIT,
     })
 
-    const canUpdate = can(session.user, 'leads:edit')
+    const canUpdate = (await checkPermission('leads:edit'))
     const kanbanLeads: KanbanLead[] = rawLeads.map((l) => {
       // ngày học thử gần nhất across mọi con.
       const trialDates = l.children
@@ -220,8 +221,8 @@ export default async function LeadsPage({
     sdb.lead.count({ where }),
   ])
 
-  const canUpdate = can(session.user, 'leads:edit')
-  const canDelete = can(session.user, 'leads:delete')
+  const canUpdate = (await checkPermission('leads:edit'))
+  const canDelete = (await checkPermission('leads:delete'))
 
   const leads: LeadRow[] = rawLeads.map((lead) => ({
     id: lead.id,

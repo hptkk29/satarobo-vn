@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -30,8 +30,8 @@ export default async function LeadDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const canViewAll = can(session.user, "leads:view-all");
-  const canViewOwn = can(session.user, "leads:view-own");
+  const canViewAll = (await checkPermission("leads:view-all"));
+  const canViewOwn = (await checkPermission("leads:view-own"));
   if (!canViewAll && !canViewOwn) redirect("/dashboard");
 
   // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → sdb.lead.findFirst tự inject `centerId IN
@@ -81,9 +81,10 @@ export default async function LeadDetailPage({ params }: Props) {
     redirect("/leads?view=kanban");
   }
 
-  const canAssign = can(session.user, "leads:assign");
+  const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
   const canCloseDeal =
-    can(session.user, "students:create") && can(session.user, "enrollments:create");
+    (await checkPermission("students:create", { centerId: lead.centerId })) &&
+    (await checkPermission("enrollments:create", { centerId: lead.centerId }));
   const status = lead.status as LeadStatus;
 
   // PHẦN 2 — danh sách sale để gán tay (ưu tiên sale cùng cơ sở lead).
@@ -101,7 +102,7 @@ export default async function LeadDetailPage({ params }: Props) {
     : [];
 
   // PHẦN 3 — chuyển lead: sale tự chuyển (cần leads:edit). Mọi cơ sở + mọi sale.
-  const canTransfer = can(session.user, "leads:edit");
+  const canTransfer = (await checkPermission("leads:edit", { centerId: lead.centerId }));
   const [transferCenters, transferSales] = canTransfer
     ? await Promise.all([
         db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
@@ -142,7 +143,7 @@ export default async function LeadDetailPage({ params }: Props) {
   const childrenReadOnly = !canTransfer || status === "LOST";
 
   // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
-  const canTrialManage = can(session.user, "trials:manage");
+  const canTrialManage = (await checkPermission("trials:manage", { centerId: lead.centerId }));
   // GAP-5: dùng scopedDb (TrialClassV2 là SCOPED_MODEL) — tránh lộ lớp toàn hệ thống
   // khi lead.centerId null. Cách ly cơ sở theo visibleCenterIds của actor.
   const openTrialClasses = canTrialManage
@@ -351,7 +352,7 @@ export default async function LeadDetailPage({ params }: Props) {
                 endTime: s.endTime,
               })),
             }))}
-            canOverride={can(session.user, "trials:override-capacity")}
+            canOverride={(await checkPermission("trials:override-capacity", { centerId: lead.centerId }))}
           />
         </div>
       )}

@@ -2,7 +2,8 @@
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { can, hasRole } from '@/lib/auth/permissions'
+import { hasRole } from '@/lib/auth/permissions'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
@@ -41,7 +42,7 @@ export async function updateLeadStatus(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Khong co quyen' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Khong co quyen' }
 
   const parsed = statusSchema.safeParse(rawStatus)
   if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
@@ -157,7 +158,7 @@ export async function updateLeadOrderKind(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const parsed = expectedOrderSchema.safeParse({ kind, itemId: itemId ?? null })
   if (!parsed.success) return { ok: false, error: 'Dữ liệu loại đơn không hợp lệ' }
@@ -216,7 +217,7 @@ export async function addLeadActivity(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const parsedType = activityTypeSchema.safeParse(input.type)
   if (!parsedType.success) return { ok: false, error: 'Loại hoạt động không hợp lệ' }
@@ -264,7 +265,7 @@ export async function addLeadTask(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const title = input.title?.trim()
   if (!title) return { ok: false, error: 'Vui lòng nhập tiêu đề việc' }
@@ -308,7 +309,7 @@ export async function completeLeadTask(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const task = await db.leadTask.findUnique({
     where: { id: taskId },
@@ -341,7 +342,7 @@ export async function updateLeadNote(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Khong co quyen' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Khong co quyen' }
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
@@ -383,7 +384,7 @@ export async function deleteLead(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!can(session.user, 'leads:delete')) {
+  if (!(await checkPermission('leads:delete'))) {
     return { ok: false, error: 'Khong co quyen xoa lead' }
   }
 
@@ -430,7 +431,7 @@ export async function autoAssignLeadAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
   const res = await autoAssignLead(leadId, { actorId, actorName })
@@ -446,7 +447,7 @@ export async function reassignLeadsFromAction(
 ): Promise<{ ok: boolean; reassigned?: number; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
   const res = await reassignOpenLeads(userId, { actorId, actorName })
@@ -480,7 +481,7 @@ export async function createLeadManual(
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:create')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:create'))) return { ok: false, error: 'Không có quyền' }
 
   const parsed = manualLeadSchema.safeParse(input)
   if (!parsed.success) {
@@ -501,7 +502,7 @@ export async function createLeadManual(
   })
   if (dup) {
     const canSeeDetail =
-      can(session.user, 'leads:view-all') ||
+      (await checkPermission('leads:view-all', { centerId: dup.centerId })) ||
       (!!dup.centerId && dup.centerId === session.user.centerId)
     if (canSeeDetail) {
       const who = dup.assignedTo?.name ? `, phụ trách: ${dup.assignedTo.name}` : ''
@@ -580,7 +581,7 @@ export async function updateLeadFields(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const parsed = updateLeadFieldsSchema.safeParse(input)
   if (!parsed.success) {
@@ -671,7 +672,7 @@ export async function autoAssignNewLeadAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
   const res = await autoAssignNewLead(leadId, { actorId, actorName })
@@ -689,7 +690,7 @@ export async function assignLeadToSaleAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
   const res = await manualAssignLead(leadId, saleId, { actorId, actorName })
@@ -709,7 +710,7 @@ export async function setCenterAssignModeAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:assign')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:assign', { centerId }))) return { ok: false, error: 'Không có quyền' }
 
   if (!ASSIGN_MODES.includes(mode as (typeof ASSIGN_MODES)[number])) {
     return { ok: false, error: 'Chế độ không hợp lệ' }
@@ -746,7 +747,7 @@ export async function transferLead(
 ): Promise<{ ok: boolean; error?: string; code?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const parsed = transferSchema.safeParse(input)
   if (!parsed.success) {
@@ -770,7 +771,7 @@ export async function transferLead(
   }
 
   // SALE (chỉ view-own) chỉ tự chuyển lead của mình.
-  if (!can(session.user, 'leads:view-all') && lead.assignedToId !== session.user.id) {
+  if (!(await checkPermission('leads:view-all', { centerId: lead.centerId })) && lead.assignedToId !== session.user.id) {
     return { ok: false, error: 'Chỉ chuyển được lead của bạn' }
   }
 
@@ -908,7 +909,7 @@ export async function addLeadChild(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const leadId = (input as { leadId?: unknown })?.leadId
   if (typeof leadId !== 'string' || !leadId) {
@@ -958,7 +959,7 @@ export async function updateLeadChild(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const child = await db.leadChild.findUnique({
     where: { id: childId },
@@ -999,7 +1000,7 @@ export async function deleteLeadChild(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!can(session.user, 'leads:edit')) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const child = await db.leadChild.findUnique({
     where: { id: childId },

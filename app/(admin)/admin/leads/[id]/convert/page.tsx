@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
 import { auth } from '@/lib/auth'
-import { can } from '@/lib/auth/permissions'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { isConvertV2Enabled } from '@/lib/flags'
@@ -28,7 +28,7 @@ export default async function ConvertV2Page({ params }: Props) {
   if (!isConvertV2Enabled()) redirect(`/leads/${id}`)
 
   const canConvert =
-    can(session.user, 'students:create') && can(session.user, 'enrollments:create')
+    (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
   if (!canConvert) redirect(`/leads/${id}`)
 
   const sdb = scopedDb(await resolveActor(session.user.id))
@@ -52,7 +52,7 @@ export default async function ConvertV2Page({ params }: Props) {
   if (!lead) notFound()
 
   // Scope: SALE (chỉ view-own) chỉ thao tác lead của mình.
-  if (!can(session.user, 'leads:view-all') && lead.assignedToId !== session.user.id) {
+  if (!(await checkPermission('leads:view-all', { centerId: lead.centerId })) && lead.assignedToId !== session.user.id) {
     redirect('/leads?view=kanban')
   }
 

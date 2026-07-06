@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { Settings2 } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { ModeSelector } from "./_components/mode-selector";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function AssignConfigPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "leads:assign")) redirect("/leads");
+  if (!(await checkPermission("leads:assign"))) redirect("/leads");
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER") && !isSuper;

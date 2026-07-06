@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeftRight } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -20,7 +20,7 @@ interface Props {
 export default async function TransferReportPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "leads:assign")) redirect("/leads");
+  if (!(await checkPermission("leads:assign"))) redirect("/leads");
 
   // Cách ly cơ sở: LeadTransfer KHÔNG ∈ SCOPED_MODELS (có from/toCenterId, không 1
   // centerId trực tiếp) → scopedDb không auto-scope. Scope THỦ CÔNG theo tầm nhìn cơ
