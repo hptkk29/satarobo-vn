@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
-import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { listRoles } from "@/lib/auth/rbac-service";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,9 +16,8 @@ import { CreateRoleForm } from "./_components/create-role-form";
 export const dynamic = "force-dynamic";
 
 export default async function RolesAdminPage() {
-  const session = await auth();
   // AC2 — chỉ SUPER_ADMIN (roles:manage). Defense-in-depth: action cũng tự chặn.
-  if (!can(session?.user ?? null, "roles:manage")) {
+  if (!(await checkPermission("roles:manage"))) {
     redirect("/admin/dashboard");
   }
 

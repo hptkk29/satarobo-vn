@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ScrollText } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { AuditLogClient } from "./_components/audit-log-client";
 
@@ -14,7 +14,7 @@ export default async function AuditLogPage() {
   if (!session?.user) redirect("/login");
   // Khớp với quyền hiển thị menu (audit-logs:view) — trước đây gate users:manage
   // khiến CENTER_MANAGER thấy menu nhưng bị redirect về dashboard.
-  if (!can(session.user, "audit-logs:view")) {
+  if (!(await checkPermission("audit-logs:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
