@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 // ─── lib/finance/* — parallel agent owns these. Combined typecheck resolves. ──
@@ -30,7 +30,9 @@ const PAGE_SIZE = 30;
 async function requireRecord() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:record")) {
+  // Gate trước khi fetch order/payment cụ thể → chưa có centerId, không truyền target
+  // được ở đây (xem báo cáo). Cách ly cơ sở thật sự nằm ở scopedDb/passesScope bên dưới.
+  if (!(await checkPermission("payments:record"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -39,7 +41,9 @@ async function requireRecord() {
 async function requireAccountant() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:confirm")) {
+  // Gate trước khi fetch payment cụ thể → chưa có centerId, không truyền target được ở
+  // đây (xem báo cáo). Cách ly cơ sở thật sự nằm ở scopedDb/passesScope bên dưới.
+  if (!(await checkPermission("payments:confirm"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { PaymentMethodForm } from "../_components/payment-method-form";
 
 export const metadata = { title: "Thêm phương thức thanh toán | Admin" };
@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function NewPaymentMethodPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:manage")) {
+  // PaymentMethod là entity toàn cục (không có centerId) — không có target để truyền.
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

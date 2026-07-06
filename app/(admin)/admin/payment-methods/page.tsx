@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, CreditCard } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { PaymentMethodsTable } from "./_components/payment-methods-table";
@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 export default async function PaymentMethodsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:manage")) {
+  // PaymentMethod là entity toàn cục (không có centerId) — không có target để truyền.
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

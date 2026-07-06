@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import {
   paymentMethodCreateSchema,
@@ -19,7 +19,8 @@ import {
 async function requirePaymentsManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:manage")) {
+  // PaymentMethod là entity toàn cục (không có centerId) — không có target để truyền.
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;

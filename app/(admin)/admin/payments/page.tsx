@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { CreditCard } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { queryPayments, loadOrderOptions } from "./_actions";
 import { PaymentsClient } from "./_components/payments-client";
 
@@ -11,13 +12,14 @@ export const dynamic = "force-dynamic";
 export default async function PaymentsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:manage")) {
+  // Gate list-level (nhiều khoản) — không có 1 centerId cụ thể, không truyền target.
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
   // Kế toán/quản lý mới thấy nút xác nhận/từ chối/điều chỉnh.
   const canConfirm =
-    can(session.user, "payments:manage") &&
+    (await checkPermission("payments:manage")) &&
     (hasRole(session.user, "ACCOUNTANT") ||
       hasRole(session.user, "SUPER_ADMIN") ||
       hasRole(session.user, "CENTER_MANAGER"));
@@ -45,7 +47,7 @@ export default async function PaymentsPage() {
         initialRows={rows}
         orders={orders}
         canConfirm={canConfirm}
-        canRecord={can(session.user, "payments:manage")}
+        canRecord={await checkPermission("payments:manage")}
       />
     </div>
   );
