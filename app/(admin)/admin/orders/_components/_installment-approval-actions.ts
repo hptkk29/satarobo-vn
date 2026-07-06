@@ -9,7 +9,7 @@
 import { revalidatePath } from "next/cache";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
@@ -63,7 +63,8 @@ export async function requestInstallmentApprovalAction(
 ): Promise<ActionResult> {
   const ctx = await loadScopedOrder(orderId);
   if ("error" in ctx) return { ok: false, error: ctx.error };
-  if (!can(ctx.session.user, "orders:manage")) {
+  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("orders:manage"))) {
     return { ok: false, error: "Không có quyền" };
   }
   const res = await requestInstallmentApproval({

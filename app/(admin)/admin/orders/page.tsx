@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, ShoppingBag } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { Button } from "@/components/ui/button";
 import { OrdersListClient } from "./_components/orders-list-client";
 
@@ -12,11 +12,13 @@ export const dynamic = "force-dynamic";
 export default async function OrdersPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "orders:view")) {
+  // Gate list-level (nhiều đơn) — không có 1 centerId cụ thể, không truyền target.
+  if (!(await checkPermission("orders:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const canCreate = can(session.user, "orders:manage");
+  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  const canCreate = await checkPermission("orders:manage");
 
   return (
     <div>

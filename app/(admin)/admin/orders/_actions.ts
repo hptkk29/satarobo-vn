@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Prisma, type OrderStatus, type OrderType } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { passesScope } from "@/lib/db-scope";
 import { db } from "@/lib/db";
@@ -28,7 +28,8 @@ const PAGE_SIZE = 20;
 async function requireOrdersView() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "orders:view")) {
+  // Gate list-level (nhiều đơn, không có 1 centerId cụ thể) — không truyền target.
+  if (!(await checkPermission("orders:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -37,7 +38,8 @@ async function requireOrdersView() {
 async function requireOrdersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "orders:manage")) {
+  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("orders:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -864,7 +866,8 @@ export async function recordOrderInstallmentsAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "orders:manage")) return { ok: false, error: "Không có quyền" };
+  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("orders:manage"))) return { ok: false, error: "Không có quyền" };
 
   const order = await db.order.findUnique({
     where: { id: input.orderId },
@@ -901,7 +904,8 @@ export async function markOrderInstallmentPaidAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "orders:manage")) return { ok: false, error: "Không có quyền" };
+  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("orders:manage"))) return { ok: false, error: "Không có quyền" };
 
   // R7-00 AC4 — chặn IDOR chéo cơ sở: xác nhận đơn nằm trong scope trước khi mutate.
   const order = await db.order.findUnique({

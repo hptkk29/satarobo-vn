@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { provinces } from "vietnam-address-data";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { loadCreateOrderFormData } from "../_actions";
@@ -19,7 +19,8 @@ export default async function NewOrderPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "orders:manage")) {
+  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("orders:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

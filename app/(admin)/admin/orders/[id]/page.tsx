@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
@@ -30,7 +30,8 @@ interface Props {
 export default async function OrderDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "orders:view")) {
+  // Gate trước khi fetch order → chưa có centerId, không truyền target được (xem báo cáo).
+  if (!(await checkPermission("orders:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
@@ -73,9 +74,11 @@ export default async function OrderDetailPage({ params }: Props) {
   });
   if (!order) notFound();
 
-  const canManage = can(session.user, "orders:manage");
+  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  const canManage = await checkPermission("orders:manage");
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
-  const canApprove = can(session.user, "installments:approve");
+  // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
+  const canApprove = await checkPermission("installments:approve", { centerId: order.centerId });
 
   // Commit 4 — thanh toán 2 đợt + QR (nội dung CK: tên HV + SĐT PH + tên khoá).
   const payCfg = await getPaymentConfig();

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,11 +33,13 @@ function formatDateTime(date: Date): string {
 export default async function ProductDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "products:view")) {
+  // Gate trước khi fetch — products:view/manage không có centerId để scope theo (GLOBAL).
+  if (!(await checkPermission("products:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const canManage = can(session.user, "products:manage");
+  // products:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  const canManage = await checkPermission("products:manage");
   const { id } = await params;
 
   const product = await db.product.findUnique({

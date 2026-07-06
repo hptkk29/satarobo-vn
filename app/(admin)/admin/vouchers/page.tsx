@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, Ticket } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { VouchersTable } from "./_components/vouchers-table";
@@ -13,11 +13,13 @@ export const dynamic = "force-dynamic";
 export default async function VouchersPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "vouchers:view")) {
+  // Gate list-level (nhiều voucher) — không có 1 centerId cụ thể, không truyền target.
+  if (!(await checkPermission("vouchers:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const canManage = can(session.user, "vouchers:manage");
+  // vouchers:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  const canManage = await checkPermission("vouchers:manage");
 
   const vouchers = await db.voucher.findMany({
     orderBy: [{ createdAt: "desc" }],
