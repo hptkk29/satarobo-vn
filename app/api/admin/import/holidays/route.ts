@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Parse a date from Excel: Date object, ISO string YYYY-MM-DD, DD/MM/YYYY,
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "holidays:edit")) {
+  if (!(await checkPermission("holidays:edit"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -9,7 +9,7 @@ import {
   ContractTypeEnum,
   EmploymentStatusEnum,
 } from "@/lib/validators/employee";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Excel date parser — reused pattern from B3 holidays / B2 rooms.
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "employees:create")) {
+  if (!(await checkPermission("employees:create"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

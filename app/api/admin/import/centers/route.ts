@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 const optionalString = z
   .union([z.string(), z.number(), z.null()])
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "centers:edit")) {
+  if (!(await checkPermission("centers:edit"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
