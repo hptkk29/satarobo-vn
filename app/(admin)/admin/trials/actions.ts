@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events/publish";
 import { getAuditActor } from "@/lib/audit/log";
@@ -35,7 +35,7 @@ export async function updateTrialAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:manage")) {
+  if (!(await checkPermission("trials:manage"))) {
     return { ok: false, error: "Không có quyền xếp lịch học thử" };
   }
 
@@ -138,7 +138,7 @@ export async function deleteTrialAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:manage")) {
+  if (!(await checkPermission("trials:manage"))) {
     return { ok: false, error: "Không có quyền xoá buổi học thử" };
   }
 
@@ -202,7 +202,7 @@ export async function saveTrialFeedbackAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:feedback")) {
+  if (!(await checkPermission("trials:feedback"))) {
     return { ok: false, error: "Không có quyền nhập nhận xét" };
   }
 

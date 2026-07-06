@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, AlertTriangle } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
@@ -32,7 +32,7 @@ interface Props {
 export default async function TrialClassDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "trials:view")) redirect("/dashboard");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
 
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
@@ -77,11 +77,11 @@ export default async function TrialClassDetailPage({ params }: Props) {
     : [];
   const teacherName = teacherUsers.find((u) => u.id === cls.teacherId)?.name ?? null;
 
-  const canAssignTeacher = can(session.user, "trials:assign-teacher");
-  const isManager = can(session.user, "trials:manage");
+  const canAssignTeacher = await checkPermission("trials:assign-teacher", { centerId: cls.centerId });
+  const isManager = await checkPermission("trials:manage", { centerId: cls.centerId });
   // GV thuần chỉ điểm danh lớp của mình; QL điểm danh mọi lớp trong scope.
   const canMark =
-    can(session.user, "trials:feedback") &&
+    (await checkPermission("trials:feedback", { centerId: cls.centerId })) &&
     (isManager || cls.teacherId === session.user.id);
 
   // Danh sách GV để gán (chỉ load khi có quyền gán). Dùng nguồn DUY NHẤT
@@ -194,7 +194,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
         }))}
         canAssignTeacher={canAssignTeacher}
         canManage={isManager}
-        canOverride={can(session.user, "trials:override-capacity")}
+        canOverride={await checkPermission("trials:override-capacity", { centerId: cls.centerId })}
         canMark={canMark}
       />
 
