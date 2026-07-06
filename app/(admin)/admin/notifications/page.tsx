@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { NotificationsClient } from "./_components/notifications-client";
@@ -18,7 +18,7 @@ const SCOPE: Record<string, string> = {
 export default async function AdminNotificationsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "notifications:manage")) redirect("/dashboard");
+  if (!(await checkPermission("notifications:manage"))) redirect("/dashboard");
 
   // Cách ly cơ sở: Notification/Class/Student ∈ SCOPED_MODELS → sdb auto inject
   // `centerId IN visibleCenterIds`. CENTER_MANAGER@CS1 chỉ thấy thông báo/lớp/HS
