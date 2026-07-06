@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,8 @@ function formatDateTime(date: Date): string {
 export default async function VoucherDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "vouchers:view")) {
+  // Gate trước khi fetch — vouchers:view/manage không có centerId để scope theo (GLOBAL).
+  if (!(await checkPermission("vouchers:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
@@ -83,7 +84,8 @@ export default async function VoucherDetailPage({ params }: Props) {
   });
   if (!voucher) notFound();
 
-  const canManage = can(session.user, "vouchers:manage");
+  // vouchers:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  const canManage = await checkPermission("vouchers:manage");
 
   const totalDiscount = voucher.redemptions.reduce(
     (s, r) => s + r.discountApplied,

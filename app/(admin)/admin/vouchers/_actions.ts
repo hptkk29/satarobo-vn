@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import {
   voucherCreateSchema,
@@ -18,7 +18,8 @@ import {
 async function requireVouchersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "vouchers:manage")) {
+  // vouchers:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("vouchers:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
