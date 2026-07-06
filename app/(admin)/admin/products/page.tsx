@@ -3,7 +3,7 @@ import { Plus, Package2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import {
   ProductCategory,
   ProductStatus,
@@ -36,11 +36,13 @@ const STATUSES = Object.values(ProductStatus) as ProductStatus[];
 export default async function ProductsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "products:view")) {
+  // Gate list-level (nhiều sản phẩm) — không có 1 centerId cụ thể, không truyền target.
+  if (!(await checkPermission("products:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const canManage = can(session.user, "products:manage");
+  // products:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  const canManage = await checkPermission("products:manage");
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const categoryParam = CATEGORIES.includes(sp.category as ProductCategory)

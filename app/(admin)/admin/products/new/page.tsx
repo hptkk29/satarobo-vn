@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { ProductForm } from "../_components/product-form";
 
@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function NewProductPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "products:manage")) {
+  // products:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("products:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

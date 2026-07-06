@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { logProductAudit, getAuditActor } from "@/lib/audit/log";
 import {
@@ -15,7 +15,8 @@ import {
 async function requireProductsManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "products:manage")) {
+  // products:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
+  if (!(await checkPermission("products:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
