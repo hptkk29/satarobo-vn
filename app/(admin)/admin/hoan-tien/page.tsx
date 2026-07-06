@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Undo2 } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { listRefundRequests } from "@/lib/finance/refund";
@@ -28,7 +28,7 @@ export default async function HoanTienPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Xem danh sách: quyền tài chính (payments:manage). Duyệt/từ chối: payments:confirm (action gate).
-  if (!can(session.user, "payments:manage")) {
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
   const uid = session.user.id;
@@ -51,7 +51,7 @@ export default async function HoanTienPage({
     status === "ALL" ? undefined : { status },
   );
 
-  const canApprove = can(session.user, "payments:confirm");
+  const canApprove = await checkPermission("payments:confirm");
 
   return (
     <div>

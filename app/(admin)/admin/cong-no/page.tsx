@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Wallet } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +48,7 @@ export default async function CongNoPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "payments:manage")) {
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
   const uid = session.user.id;
