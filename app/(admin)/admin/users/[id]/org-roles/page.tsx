@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { KeyRound } from "lucide-react";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { listRoles, listUserOrgRoles } from "@/lib/auth/rbac-service";
 import { OrgRolesManager } from "./_components/org-roles-manager";
 
@@ -13,8 +12,7 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function UserOrgRolesPage({ params }: Props) {
   const { id } = await params;
-  const session = await auth();
-  if (!can(session?.user ?? null, "roles:assign")) {
+  if (!(await checkPermission("roles:assign"))) {
     redirect("/admin/dashboard");
   }
 
