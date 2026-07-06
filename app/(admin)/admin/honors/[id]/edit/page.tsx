@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { HonorForm } from "@/components/admin/honors/honor-form";
 
 export const metadata = { title: "Sửa vinh danh | Hall of Fame" };
@@ -13,7 +13,7 @@ interface Props {
 export default async function EditHonorPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "honors:edit")) redirect("/dashboard");
+  if (!(await checkPermission("honors:edit"))) redirect("/dashboard");
 
   const { id } = await params;
   const [honor, employees] = await Promise.all([

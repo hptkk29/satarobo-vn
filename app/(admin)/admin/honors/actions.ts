@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { assertCan } from "@/lib/auth/permissions";
+import { assertPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import {
@@ -26,7 +26,7 @@ export async function createHonorAction(input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "honors:create");
+    await assertPermission("honors:create");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -75,7 +75,7 @@ export async function updateHonorAction(id: string, input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "honors:edit");
+    await assertPermission("honors:edit");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -118,7 +118,7 @@ export async function deleteHonorAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
   try {
-    assertCan(session.user, "honors:delete");
+    await assertPermission("honors:delete");
   } catch {
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
   }
@@ -132,7 +132,7 @@ export async function toggleFeaturedAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
   try {
-    assertCan(session.user, "honors:edit");
+    await assertPermission("honors:edit");
   } catch {
     return { ok: false };
   }
@@ -164,7 +164,7 @@ export async function togglePublishedAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
   try {
-    assertCan(session.user, "honors:edit");
+    await assertPermission("honors:edit");
   } catch {
     return { ok: false };
   }
@@ -186,7 +186,7 @@ export async function createTimelineAction(input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "honors:create");
+    await assertPermission("honors:create");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -214,7 +214,7 @@ export async function updateTimelineAction(id: string, input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "honors:edit");
+    await assertPermission("honors:edit");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -243,7 +243,7 @@ export async function deleteTimelineAction(id: string) {
   const session = await auth();
   if (!session?.user) return { ok: false };
   try {
-    assertCan(session.user, "honors:delete");
+    await assertPermission("honors:delete");
   } catch {
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
   }
@@ -259,7 +259,7 @@ export async function updatePageContentAction(input: unknown) {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "honors:settings");
+    await assertPermission("honors:settings");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
