@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { ExamForm } from "../_components/exam-form";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function NewExamPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "exams:create")) {
+  if (!(await checkPermission("exams:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

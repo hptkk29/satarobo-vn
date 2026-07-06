@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ExamStatus, type Prisma } from "@prisma/client";
@@ -29,7 +29,7 @@ interface SearchParams {
 export default async function ExamsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "exams:view")) {
+  if (!(await checkPermission("exams:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

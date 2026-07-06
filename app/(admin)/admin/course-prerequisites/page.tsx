@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Workflow } from "lucide-react";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { PrerequisitesManager } from "./_components/prerequisites-manager";
 
 export const metadata = { title: "Khoá tiên quyết | Admin" };
@@ -15,7 +15,7 @@ function label(c: { name: string; code: string | null }): string {
 export default async function CoursePrerequisitesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "courses:create")) redirect("/dashboard");
+  if (!(await checkPermission("courses:create"))) redirect("/dashboard");
 
   const [allCourses, withPrereqs] = await Promise.all([
     db.course.findMany({

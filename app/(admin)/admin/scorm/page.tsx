@@ -3,7 +3,7 @@ import { Package } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
 import { ScormManager, type CourseNode } from "./_components/scorm-manager";
 
@@ -14,7 +14,7 @@ export default async function ScormPage() {
   if (!isScormEnabled()) notFound();
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "training:manage")) redirect("/dashboard");
+  if (!(await checkPermission("training:manage"))) redirect("/dashboard");
 
   // Course/Curriculum/Lesson/ScormPackage không center-scoped → scopedDb pass-through
   // (đúng rule R6-F1). Quyền đã chặn ở training:manage.

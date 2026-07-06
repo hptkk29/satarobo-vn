@@ -9,8 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { auth } from "@/lib/auth";
-import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { getR2Client, getR2Bucket } from "@/lib/storage/r2-client";
 import { isScormEnabled } from "@/lib/flags";
@@ -29,8 +28,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const actor = await resolveActor(session.user.id);
-  if (!can(actor, TRAINING_MANAGE)) {
+  if (!(await checkPermission(TRAINING_MANAGE))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

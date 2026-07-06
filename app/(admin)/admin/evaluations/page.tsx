@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { listForms } from "@/lib/eval/forms";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function EvaluationsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "evaluations:manage")) redirect("/dashboard");
+  if (!(await checkPermission("evaluations:manage"))) redirect("/dashboard");
 
   const actor = await resolveActor(session.user.id);
   const centerScope = actor.isSuperAdmin || actor.isHoLevel ? null : actor.visibleCenterIds;

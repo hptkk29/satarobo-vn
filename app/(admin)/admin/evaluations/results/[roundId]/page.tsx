@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Star, EyeOff } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { db } from "@/lib/db";
@@ -17,8 +17,8 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const canDetail = can(session.user, "evaluations:view-detail");
-  const canAggregate = can(session.user, "evaluations:view-aggregate");
+  const canDetail = await checkPermission("evaluations:view-detail");
+  const canAggregate = await checkPermission("evaluations:view-aggregate");
   // AC4 — không quyền → không thấy gì.
   if (!canDetail && !canAggregate) redirect("/dashboard");
 

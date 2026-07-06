@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { assertCan } from "@/lib/auth/permissions";
+import { assertPermission } from "@/lib/auth/check-permission";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -12,7 +12,7 @@ async function requireManager(): Promise<Result & { ok: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "courses:create");
+    await assertPermission("courses:create");
   } catch {
     return { ok: false, error: "Không có quyền cấu hình khoá học" };
   }
