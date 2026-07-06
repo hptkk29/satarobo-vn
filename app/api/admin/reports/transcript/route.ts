@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getStudentTranscript } from "@/lib/transcript/service";
 import { TranscriptPdf } from "@/lib/pdf/transcript";
 
@@ -21,7 +22,7 @@ function safeFilename(s: string): string {
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user, "students:view-all")) {
+  if (!(await checkPermission("students:view-all"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { InventoryCategoryEnum } from "@/lib/validators/inventory";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 function parseBoolean(v: unknown): boolean {
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "inventory:edit")) {
+  if (!(await checkPermission("inventory:edit"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

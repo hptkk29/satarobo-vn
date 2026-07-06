@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { znsProvider } from "@/lib/zalo/provider";
 import { isMisaConfigured, isMisaLive, getMisaConfig } from "@/lib/misa/service";
@@ -22,9 +22,9 @@ const STATUS_CLS: Record<string, string> = {
 export default async function IntegrationsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "settings:view")) redirect("/dashboard");
+  if (!(await checkPermission("settings:view"))) redirect("/dashboard");
 
-  const canEdit = can(session.user, "settings:edit");
+  const canEdit = await checkPermission("settings:edit");
   const zaloConfigured = znsProvider.isConfigured();
   const zaloLive = znsProvider.isLive();
 

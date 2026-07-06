@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -74,7 +74,7 @@ function parseIntOrNull(value: FormDataEntryValue | null): number | null {
 async function requireOrgAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "centers:edit")) {
+  if (!(await checkPermission("centers:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;

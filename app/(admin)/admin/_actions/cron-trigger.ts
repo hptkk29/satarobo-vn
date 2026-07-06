@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { wasReminderSent } from "@/lib/email/reminder-helpers";
@@ -14,7 +14,7 @@ import { revalidatePath } from "next/cache";
 export async function triggerClassReminderAction(input: { sessionId: string }) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
-  if (!can(session.user, "emails:manage")) {
+  if (!(await checkPermission("emails:manage"))) {
     return { ok: false as const, error: "Không có quyền" };
   }
 

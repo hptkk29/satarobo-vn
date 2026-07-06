@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { parseLeadImportRow } from "@/lib/lead/import";
 import { autoAssignNewLead } from "@/lib/lead/auto-assign";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 type ImportError = { row: number; error: string };
 
@@ -13,7 +13,7 @@ type ImportError = { row: number; error: string };
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user, "leads:create")) {
+  if (!(await checkPermission("leads:create"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

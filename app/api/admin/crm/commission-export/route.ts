@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { buildCommissionExportRows } from "@/lib/crm/commission-export";
 
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ ok: false, error: "Chưa đăng nhập" }, { status: 401 });
-  if (!can(session.user, "payments:manage")) {
+  if (!(await checkPermission("payments:manage"))) {
     return NextResponse.json({ ok: false, error: "Không có quyền" }, { status: 403 });
   }
   const period = new URL(req.url).searchParams.get("period");

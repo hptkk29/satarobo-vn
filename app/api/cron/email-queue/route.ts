@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { processEmailQueue } from "@/lib/email/queue";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ async function authorize(req: NextRequest): Promise<boolean> {
     if (header === `Bearer ${secret}`) return true;
   }
   const session = await auth();
-  return !!session?.user && can(session.user, "emails:view");
+  return !!session?.user && (await checkPermission("emails:view"));
 }
 
 export async function GET(req: NextRequest) {
