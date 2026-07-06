@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { DeleteGroupButton } from "./_components/delete-group-button";
@@ -25,11 +25,11 @@ const STATUS_CLASS: Record<string, string> = {
 export default async function ClassGroupsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "class_group:view-all")) {
+  if (!(await checkPermission("class_group:view-all"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  const canManage = can(session.user, "class_group:create");
-  const canDelete = can(session.user, "class_group:delete");
+  const canManage = await checkPermission("class_group:create");
+  const canDelete = await checkPermission("class_group:delete");
 
   // Cách ly cơ sở: ClassGroup ∈ SCOPED_MODELS (có centerId) → scopedDb auto inject
   // centerId IN tầm-nhìn. CENTER_MANAGER@CS1 không thấy nhóm lớp CS2.

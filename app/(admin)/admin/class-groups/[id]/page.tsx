@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { GroupMembers } from "../_components/group-members";
@@ -37,10 +37,10 @@ function fmtDate(d: Date | null): string {
 export default async function ClassGroupDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "class_group:view-all")) {
+  if (!(await checkPermission("class_group:view-all"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  const canManage = can(session.user, "class_group:edit");
+  const canManage = await checkPermission("class_group:edit");
 
   // Cách ly cơ sở: ClassGroup ∈ SCOPED_MODELS → sdb.classGroup.findFirst auto-inject
   // centerId IN tầm-nhìn. Nhóm thuộc cơ sở khác → group = null → notFound (chống IDOR).

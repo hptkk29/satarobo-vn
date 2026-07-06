@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can, assertCan } from "@/lib/auth/permissions";
+import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -29,7 +29,7 @@ async function requireWrite(action: "create" | "edit" | "delete") {
     edit: "class_group:edit",
     delete: "class_group:delete",
   } as const;
-  if (!can(session.user, map[action])) {
+  if (!(await checkPermission(map[action]))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -188,7 +188,7 @@ export async function deleteClassGroupAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "class_group:delete");
+    await assertPermission("class_group:delete");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
@@ -226,7 +226,7 @@ export async function searchStudentsForGroup(
 ): Promise<{ ok: boolean; items?: { id: string; name: string; studentCode: string | null }[]; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("class_group:edit"))) return { ok: false, error: "Không có quyền" };
 
   const group = await db.classGroup.findUnique({ where: { id: groupId }, select: { centerId: true } });
   if (!group) return { ok: false, error: "Không tìm thấy nhóm" };
@@ -252,7 +252,7 @@ export async function searchStudentsForGroup(
 export async function addStudentToGroup(input: { groupId: string; studentId: string }): Promise<ActionResult & { ok?: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("class_group:edit"))) return { ok: false, error: "Không có quyền" };
 
   const uid = session.user.id;
   if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
@@ -278,7 +278,7 @@ export async function addStudentToGroup(input: { groupId: string; studentId: str
 export async function removeStudentFromGroup(input: { groupId: string; studentId: string }): Promise<ActionResult & { ok?: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "class_group:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("class_group:edit"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ gỡ HV trong tầm nhìn actor (chống IDOR).
   if (session.user.id) {
     const actor = await resolveActor(session.user.id);
@@ -301,7 +301,7 @@ export async function enrollGroupIntoClass(input: {
 }): Promise<{ ok: boolean; created?: number; skipped?: number; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:create")) return { ok: false, error: "Không có quyền ghi danh" };
+  if (!(await checkPermission("enrollments:create"))) return { ok: false, error: "Không có quyền ghi danh" };
 
   // Cách ly cơ sở: lớp đích phải thuộc tầm nhìn actor (sdb null-filter + passesScope).
   const uid = session.user.id;
