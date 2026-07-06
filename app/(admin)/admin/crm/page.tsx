@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Users, CheckCircle2, Percent, Loader2 } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -35,7 +35,7 @@ const FUNNEL_STAGES: { name: string; statuses: LeadStatus[] }[] = [
 export default async function CrmDashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "leads:view-all")) redirect("/dashboard");
+  if (!(await checkPermission("leads:view-all"))) redirect("/dashboard");
 
   // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → đọc qua scopedDb để CENTER_MANAGER@CS1
   // không thấy lead CS2. groupBy/count auto-inject centerId theo tầm nhìn của actor.

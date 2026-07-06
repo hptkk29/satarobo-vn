@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import {
   approveStatement,
   reopenStatement,
@@ -22,7 +23,7 @@ function actorFromSession(s: { id: string; name?: string | null; email?: string 
 export async function approveStatementAction(period: string, reason: string): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "payments:manage")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("payments:manage"))) return { ok: false, error: "Không có quyền" };
   try {
     await approveStatement(actorFromSession(session.user), period, reason);
     revalidatePath("/admin/crm/commission");
@@ -36,7 +37,7 @@ export async function reopenStatementAction(period: string, reason: string): Pro
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   // RBAC gate (đồng bộ approveStatementAction): mở lại bảng hoa hồng cần payments:manage.
-  if (!can(session.user, "payments:manage")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("payments:manage"))) return { ok: false, error: "Không có quyền" };
   try {
     await reopenStatement(actorFromSession(session.user), period, reason);
     revalidatePath("/admin/crm/commission");

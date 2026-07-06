@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Coins } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,8 +18,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Hoa hồng | Admin" };
 
 export default async function CommissionPage() {
-  const session = await auth();
-  if (!can(session?.user ?? null, "payments:manage")) redirect("/admin/dashboard");
+  await auth();
+  if (!(await checkPermission("payments:manage"))) redirect("/admin/dashboard");
 
   const statements = await db.commissionStatement.findMany({
     orderBy: { period: "desc" },

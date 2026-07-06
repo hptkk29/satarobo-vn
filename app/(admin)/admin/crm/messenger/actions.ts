@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { recordOutgoingMessage } from "@/lib/crm/messenger-service";
@@ -14,7 +14,7 @@ export async function replyAction(conversationId: string, text: string): Promise
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   // RBAC gate: gửi tin = tương tác lead → cần quyền sửa lead (không chỉ đăng nhập).
-  if (!can(session.user, "leads:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("leads:edit"))) return { ok: false, error: "Không có quyền" };
   if (!text?.trim()) return { ok: false, error: "Nội dung trống" };
 
   const actor = await resolveActor(session.user.id);
