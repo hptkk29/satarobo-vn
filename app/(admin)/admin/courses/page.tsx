@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BookOpen } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { Badge } from "@/components/ui/badge";
@@ -21,9 +21,10 @@ export const dynamic = "force-dynamic";
 export default async function CoursesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "courses:view")) {
+  if (!(await checkPermission("courses:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
+  const canEditPackages = await checkPermission("course-packages:edit");
 
   // Course là catalog toàn hệ thống (không center-scoped); scopedDb pass-through.
   const sdb = scopedDb(await resolveActor(session.user.id));
@@ -54,7 +55,7 @@ export default async function CoursesPage() {
             mở chi tiết khoá để quản lý <span className="font-medium">gói bán liên kết</span>.
           </p>
         </div>
-        {can(session.user, "course-packages:edit") && (
+        {canEditPackages && (
           <Link
             href="/course-packages"
             className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"

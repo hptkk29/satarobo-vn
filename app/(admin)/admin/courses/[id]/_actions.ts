@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getAuditActor } from "@/lib/audit/log";
@@ -12,12 +12,12 @@ import { courseDiscountSchema } from "@/lib/validators/course-discount";
 
 type ActionResult = { ok: boolean; error?: string };
 
-// CourseDiscount + Course là GLOBAL (QĐ-9) → chỉ cần auth + can("courses:edit").
+// CourseDiscount + Course là GLOBAL (QĐ-9) → chỉ cần auth + checkPermission("courses:edit").
 // scopedDb(actor) pass-through cho model global (không center-scoped) — tuân R6-F1.
 async function gate() {
   const session = await auth();
   if (!session?.user) return { error: "Chưa đăng nhập" as const };
-  if (!can(session.user, "courses:edit")) return { error: "Không có quyền" as const };
+  if (!(await checkPermission("courses:edit"))) return { error: "Không có quyền" as const };
   const sdb = scopedDb(await resolveActor(session.user.id));
   return { session, sdb };
 }

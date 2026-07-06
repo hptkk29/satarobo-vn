@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, assertCan } from "@/lib/auth/permissions";
+import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 import { z } from "zod";
 import {
@@ -34,7 +34,7 @@ async function requireRole(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "assignments:create")) {
+  if (!(await checkPermission("assignments:create"))) {
     return { ok: false, error: "Không có quyền quản lý bài tập" };
   }
   return { ok: true, userId: session.user.id ?? "", user: session.user };
@@ -49,7 +49,10 @@ async function canGradeClassWork(
   cls: { teacherId: string | null; assistantId: string | null; centerId: string | null } | null,
 ): Promise<boolean> {
   if (cls && (await canManageSessionClass(user, cls))) return true;
-  return can(user, "report-cards:review") || can(user, "training:manage");
+  return (
+    (await checkPermission("report-cards:review")) ||
+    (await checkPermission("training:manage"))
+  );
 }
 
 async function resolveEmployeeId(userId: string): Promise<string | null> {
@@ -475,7 +478,7 @@ async function requireAssignmentEdit(): Promise<
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "assignments:edit");
+    await assertPermission("assignments:edit");
   } catch {
     return { ok: false, error: "Không có quyền chỉnh sửa bài tập" };
   }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PackageForm } from "../../_components/package-form";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 interface EditPackagePageProps {
   params: Promise<{ id: string }>;
@@ -13,7 +13,7 @@ interface EditPackagePageProps {
 export default async function EditPackagePage({ params }: EditPackagePageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "course-packages:edit")) {
+  if (!(await checkPermission("course-packages:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

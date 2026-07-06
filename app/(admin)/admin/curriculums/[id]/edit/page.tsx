@@ -15,7 +15,7 @@ import {
   type LessonResourceRow,
   type AssignmentRow,
 } from "../../_components/lesson-resources";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ interface Props {
 export default async function EditCurriculumPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "curriculum:edit")) {
+  if (!(await checkPermission("curriculum:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
@@ -99,9 +99,9 @@ export default async function EditCurriculumPage({ params }: Props) {
 
   // FL W0-NAV-2 (QĐ-T3b): tách quyền — unlock buổi LOCKED vẫn dùng training:manage,
   // còn DUYỆT đề xuất chỉnh bài dùng lesson-change:approve (CM cũng duyệt được).
-  const canUnlock = can(session.user, "training:manage");
-  const canApproveChange = can(session.user, "lesson-change:approve");
-  const canAuthor = can(session.user, "questions:author");
+  const canUnlock = await checkPermission("training:manage");
+  const canApproveChange = await checkPermission("lesson-change:approve");
+  const canAuthor = await checkPermission("questions:author");
 
   // FL1-02 (US-LMS-1) — học liệu SCORM + bài tập theo buổi.
   const scormEnabled = isScormEnabled();

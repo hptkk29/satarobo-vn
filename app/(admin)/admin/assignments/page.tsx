@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { AssignmentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -34,9 +34,10 @@ interface SearchParams {
 export default async function AssignmentsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "assignments:view")) {
+  if (!(await checkPermission("assignments:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
+  const canCreateAssignment = await checkPermission("assignments:create");
 
   // Cách ly cơ sở: Assignment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
   // tiếp) → scopedDb không auto-scope. Scope thủ công qua class.centerId, dùng cùng
@@ -130,7 +131,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {can(session.user, "assignments:create") && (
+          {canCreateAssignment && (
             <Link
               href="/assignments/templates"
               className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-white px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"

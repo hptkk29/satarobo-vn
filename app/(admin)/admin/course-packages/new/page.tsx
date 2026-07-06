@@ -5,7 +5,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PackageForm } from "../_components/package-form";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export default async function NewPackagePage({
   searchParams,
@@ -14,7 +14,7 @@ export default async function NewPackagePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "course-packages:edit")) {
+  if (!(await checkPermission("course-packages:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
   // R2-LMS-1 — prefill khoá dạy khi tạo gói từ chi tiết khoá.

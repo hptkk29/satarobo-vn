@@ -6,7 +6,7 @@ import type { Session } from "next-auth";
 import type { LessonChangeStatus, LessonStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import {
@@ -36,7 +36,7 @@ async function requireRole(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "curriculum:edit")) {
+  if (!(await checkPermission("curriculum:edit"))) {
     return { ok: false, error: "Không có quyền quản lý giáo trình" };
   }
   return { ok: true, session };
@@ -50,7 +50,7 @@ async function requireTraining(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "training:manage")) {
+  if (!(await checkPermission("training:manage"))) {
     return { ok: false, error: "Chỉ Đào tạo (quản lý cơ sở) mới có quyền này" };
   }
   return { ok: true, session };
@@ -65,7 +65,7 @@ async function requireLessonChangeApprove(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "lesson-change:approve")) {
+  if (!(await checkPermission("lesson-change:approve"))) {
     return { ok: false, error: "Không có quyền duyệt đề xuất chỉnh bài" };
   }
   return { ok: true, session };
@@ -518,7 +518,7 @@ export async function submitLessonChangeRequest(input: {
 }): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "questions:author")) {
+  if (!(await checkPermission("questions:author"))) {
     return { ok: false, error: "Không có quyền gửi đề xuất" };
   }
 

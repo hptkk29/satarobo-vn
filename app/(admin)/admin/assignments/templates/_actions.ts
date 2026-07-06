@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import {
@@ -26,7 +26,7 @@ async function requireCreate(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "assignments:create")) {
+  if (!(await checkPermission("assignments:create"))) {
     return { ok: false, error: "Không có quyền quản lý mẫu bài tập" };
   }
   return { ok: true, userId: session.user.id ?? "" };
@@ -37,7 +37,7 @@ async function requireEdit(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "assignments:edit")) {
+  if (!(await checkPermission("assignments:edit"))) {
     return { ok: false, error: "Không có quyền chỉnh sửa mẫu bài tập" };
   }
   return { ok: true, userId: session.user.id ?? "" };
@@ -48,7 +48,7 @@ async function requireDelete(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "assignments:delete")) {
+  if (!(await checkPermission("assignments:delete"))) {
     return { ok: false, error: "Không có quyền xoá mẫu bài tập" };
   }
   return { ok: true, userId: session.user.id ?? "" };

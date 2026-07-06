@@ -3,7 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { CurriculumForm } from "../_components/curriculum-form";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function NewCurriculumPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "curriculum:create")) {
+  if (!(await checkPermission("curriculum:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

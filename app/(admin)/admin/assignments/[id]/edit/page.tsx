@@ -3,7 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
@@ -27,7 +27,7 @@ interface Props {
 export default async function EditAssignmentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "assignments:edit")) {
+  if (!(await checkPermission("assignments:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

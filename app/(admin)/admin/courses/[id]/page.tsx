@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { Badge } from "@/components/ui/badge";
@@ -25,12 +25,12 @@ export default async function CourseDetailPage({
 
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "courses:view")) {
+  if (!(await checkPermission("courses:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  const canEdit = can(session.user, "courses:edit");
+  const canEdit = await checkPermission("courses:edit");
   // R2-LMS-1 — quản lý gói bán ngay trong chi tiết khoá dạy (gộp UI "Khoá học").
-  const canEditPackages = can(session.user, "course-packages:edit");
+  const canEditPackages = await checkPermission("course-packages:edit");
 
   // Course là catalog toàn hệ thống (không center-scoped); scopedDb pass-through.
   const sdb = scopedDb(await resolveActor(session.user.id));
