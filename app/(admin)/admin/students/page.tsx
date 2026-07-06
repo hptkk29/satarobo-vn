@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getSetting } from "@/lib/settings/service";
 import { StudentStatus, type Prisma } from "@prisma/client";
 import {
@@ -105,11 +105,11 @@ const STUDENT_LIST_SELECT = {
 export default async function StudentsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "students:view-all")) redirect("/dashboard");
+  if (!(await checkPermission("students:view-all"))) redirect("/dashboard");
 
-  const canCreate = can(session.user, "students:create");
-  const canUpdate = can(session.user, "students:edit");
-  const canDelete = can(session.user, "students:delete");
+  const canCreate = await checkPermission("students:create");
+  const canUpdate = await checkPermission("students:edit");
+  const canDelete = await checkPermission("students:delete");
   const showActions = canUpdate || canDelete;
 
   // Cách ly cơ sở: Student ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject

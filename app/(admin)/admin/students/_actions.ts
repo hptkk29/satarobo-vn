@@ -6,7 +6,8 @@ import { requestOtp } from "@/lib/otp/service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
-import { can, hasRole, type Action } from "@/lib/auth/permissions";
+import { hasRole, type Action } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import {
   studentCreateSchema,
@@ -60,7 +61,7 @@ async function requireStudentWrite(action: "create" | "update" | "delete") {
     delete: "students:delete",
   };
 
-  if (!can(session.user, actionMap[action])) {
+  if (!(await checkPermission(actionMap[action]))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -385,7 +386,7 @@ function readForm(formData: FormData) {
 async function requireStudentLifecycle() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "students:edit")) {
+  if (!(await checkPermission("students:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -918,7 +919,7 @@ export async function createParentAccount(input: {
 }): Promise<{ ok: boolean; linkedCount?: number; pendingActivation?: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "students:edit")) {
+  if (!(await checkPermission("students:edit"))) {
     return { ok: false, error: "Không có quyền cấp tài khoản phụ huynh" };
   }
 
@@ -1011,7 +1012,7 @@ export async function resendParentActivationOtp(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("students:edit"))) return { ok: false, error: "Không có quyền" };
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
@@ -1041,7 +1042,7 @@ export async function searchLinkableStudents(
 ): Promise<{ ok: boolean; items?: { id: string; name: string; studentCode: string | null }[]; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("students:edit"))) return { ok: false, error: "Không có quyền" };
 
   const q = query.trim();
   if (q.length < 1) return { ok: true, items: [] };
@@ -1080,7 +1081,7 @@ export async function addChildToParent(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("students:edit"))) return { ok: false, error: "Không có quyền" };
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
@@ -1113,7 +1114,7 @@ export async function unlinkChildFromParent(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "students:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("students:edit"))) return { ok: false, error: "Không có quyền" };
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);

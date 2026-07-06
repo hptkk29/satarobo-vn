@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ClassStatusEnum } from "@/lib/validators/class";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Excel date parser — reused from D2 / B3.
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "classes:create")) {
+  if (!(await checkPermission("classes:create"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
