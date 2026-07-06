@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -19,7 +19,7 @@ interface PageProps {
 export default async function CompletionPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "completions:manage")) redirect("/dashboard");
+  if (!(await checkPermission("completions:manage"))) redirect("/dashboard");
 
   const sp = await searchParams;
   const selectedClassId = sp.classId?.trim() || "";

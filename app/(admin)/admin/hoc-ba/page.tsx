@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getStudentTranscript } from "@/lib/transcript/service";
@@ -17,7 +17,10 @@ export default async function AdminTranscriptPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   // GV/quản lý/CSKH/HR đều xem được học bạ.
-  if (!can(session.user, "students:view-all") && !can(session.user, "students:view-own-class")) {
+  if (
+    !(await checkPermission("students:view-all")) &&
+    !(await checkPermission("students:view-own-class"))
+  ) {
     redirect("/dashboard");
   }
 

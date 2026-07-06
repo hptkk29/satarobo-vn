@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
@@ -21,8 +21,8 @@ export default async function TransferPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // P1-c: sale/quản lý TẠO yêu cầu (enrollments:create); chỉ quản lý (transfer) DUYỆT.
-  if (!can(session.user, "enrollments:create")) redirect("/dashboard");
-  const canApprove = can(session.user, "enrollments:transfer");
+  if (!(await checkPermission("enrollments:create"))) redirect("/dashboard");
+  const canApprove = await checkPermission("enrollments:transfer");
 
   const sp = await searchParams;
   const fromCenterId = sp.fromCenterId?.trim() || "";

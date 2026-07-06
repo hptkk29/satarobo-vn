@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { logStudentAudit, getAuditActor } from "@/lib/audit/log";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -41,7 +41,7 @@ export async function listEligibleClassesAction(input: {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   // P1-c: TẠO yêu cầu = enrollments:create (gồm SALES_CSM). Duyệt mới cần transfer.
-  if (!can(session.user, "enrollments:create")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("enrollments:create"))) return { ok: false, error: "Không có quyền" };
   return findEligibleTargetClasses(input.studentId, input.fromClassId, input.toCenterId || null);
 }
 
@@ -49,7 +49,7 @@ export async function createTransferRequestAction(input: unknown): Promise<{ ok:
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   // P1-c: sale/quản lý TẠO yêu cầu (chờ duyệt). KHÔNG tự thực hiện.
-  if (!can(session.user, "enrollments:create")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("enrollments:create"))) return { ok: false, error: "Không có quyền" };
 
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -76,7 +76,7 @@ export async function createTransferRequestAction(input: unknown): Promise<{ ok:
 export async function approveTransferAction(requestId: string, note?: string): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:transfer")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("enrollments:transfer"))) return { ok: false, error: "Không có quyền" };
 
   // Cách ly cơ sở: lớp nguồn + lớp đích của yêu cầu đều phải thuộc tầm nhìn actor
   // (CS1 không duyệt chuyển liên quan lớp CS2 — chỉ SUPER_ADMIN/HO chuyển chéo CS).
@@ -119,7 +119,7 @@ export async function approveTransferAction(requestId: string, note?: string): P
 export async function rejectTransferAction(requestId: string, note?: string): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "enrollments:transfer")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("enrollments:transfer"))) return { ok: false, error: "Không có quyền" };
 
   // Cách ly cơ sở: chỉ từ chối yêu cầu mà lớp nguồn thuộc tầm nhìn actor.
   const actor = await resolveActor(session.user.id);

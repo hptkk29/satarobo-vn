@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { completeCourse } from "@/lib/completion/service";
@@ -19,7 +19,7 @@ export async function listStudentCoursesAction(
 ): Promise<{ ok: boolean; error?: string; chain?: StudentCourseChain[] }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "completions:manage")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("completions:manage"))) return { ok: false, error: "Không có quyền" };
   if (!studentId) return { ok: false, error: "Thiếu học viên" };
 
   // Cách ly cơ sở: Student ∈ SCOPED_MODELS → ngoài scope trả null (chống IDOR đọc).
@@ -52,7 +52,7 @@ export async function markCourseCompletion(
 ): Promise<{ ok: boolean; error?: string; certificateCode?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "completions:manage")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("completions:manage"))) return { ok: false, error: "Không có quyền" };
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -108,7 +108,7 @@ export async function bulkCompleteByClass(input: unknown): Promise<BulkCompleteR
   const empty = { created: 0, skipped: 0, errors: [] as { studentId: string; error: string }[] };
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập", ...empty };
-  if (!can(session.user, "completions:manage")) return { ok: false, error: "Không có quyền", ...empty };
+  if (!(await checkPermission("completions:manage"))) return { ok: false, error: "Không có quyền", ...empty };
 
   const parsed = bulkSchema.safeParse(input);
   if (!parsed.success)
