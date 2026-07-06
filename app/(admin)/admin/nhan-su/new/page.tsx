@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { EmployeeForm } from "@/components/admin/nhan-su/employee-form";
@@ -11,7 +11,7 @@ export const metadata = { title: "Thêm nhân sự | Admin" };
 export default async function NewEmployeePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "employees:create")) redirect("/dashboard");
+  if (!(await checkPermission("employees:create"))) redirect("/dashboard");
 
   // Tính next employee code (SR.NV.001, SR.NV.002, ...)
   const lastEmployee = await db.employee.findFirst({

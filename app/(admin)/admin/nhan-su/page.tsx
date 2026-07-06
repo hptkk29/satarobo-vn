@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, Search, FileSpreadsheet } from "lucide-react";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { EmployeesAdminTable } from "@/components/admin/nhan-su/employees-admin-table";
 import type { Department, EmploymentStatus, Prisma } from "@prisma/client";
 
@@ -59,17 +59,23 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  if (!can(session.user, "employees:view-all")) {
+  const params = await searchParams;
+  const centerIdParam = params.centerId?.trim() ?? "";
+  // Target gate: cơ sở đang lọc, hoặc cơ sở actor (fallback cho CENTER_HR — tránh
+  // v2 luôn false vì thiếu target khi action có cả tầng GLOBAL/CENTER).
+  if (
+    !(await checkPermission("employees:view-all", {
+      centerId: centerIdParam || session.user.centerId || null,
+    }))
+  ) {
     redirect("/dashboard");
   }
 
-  const params = await searchParams;
   const q = params.q?.trim() ?? "";
   const departmentParam =
     params.department && DEPARTMENTS.includes(params.department as Department)
       ? (params.department as Department)
       : undefined;
-  const centerIdParam = params.centerId?.trim() ?? "";
   const rawStatus = params.status;
   const statusParam: EmploymentStatus | undefined =
     rawStatus === "ALL"
@@ -129,8 +135,8 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
 
   const hoEmployeeIds = hoAssignments.map((a) => a.employeeId);
 
-  const canCreate = can(session.user, "employees:create");
-  const canDelete = can(session.user, "employees:delete");
+  const canCreate = await checkPermission("employees:create");
+  const canDelete = await checkPermission("employees:delete");
 
   return (
     <div>
