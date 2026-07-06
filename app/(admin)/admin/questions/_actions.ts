@@ -4,26 +4,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { questionSchema, type QuestionInput } from "@/lib/validators/question";
 
 type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
-// Lấy đúng kiểu actor mà can() nhận (tránh overload NextMiddleware của auth()).
-type SessionUser = Parameters<typeof can>[0];
-
 async function requireRole(): Promise<
-  | { ok: true; userId: string; user: SessionUser }
+  | { ok: true; userId: string }
   | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "questions:author")) {
+  if (!(await checkPermission("questions:author"))) {
     return { ok: false, error: "Không có quyền quản lý câu hỏi" };
   }
-  return { ok: true, userId: session.user.id ?? "", user: session.user };
+  return { ok: true, userId: session.user.id ?? "" };
 }
 
 // LMS-4 / W1-4 — GV chỉ sửa/xóa câu hỏi của chính mình; người có
@@ -31,10 +28,10 @@ async function requireRole(): Promise<
 // Lưu ý: Question.authorId trỏ tới Employee.id, nên so với employeeId của actor.
 async function assertAuthorOrManager(
   questionAuthorId: string | null,
-  gate: { userId: string; user: SessionUser },
+  userId: string,
 ): Promise<Result> {
-  if (can(gate.user, "training:manage")) return { ok: true };
-  const myEmployeeId = await resolveAuthorEmployeeId(gate.userId);
+  if (await checkPermission("training:manage")) return { ok: true };
+  const myEmployeeId = await resolveAuthorEmployeeId(userId);
   if (questionAuthorId && myEmployeeId && questionAuthorId === myEmployeeId) {
     return { ok: true };
   }
@@ -62,8 +59,7 @@ async function assertCanMutateQuestion(
   userId: string,
   questionId: string,
 ): Promise<Result> {
-  const session = await auth();
-  if (session?.user && can(session.user, "training:manage")) return { ok: true };
+  if (await checkPermission("training:manage")) return { ok: true };
   const q = await db.question.findUnique({
     where: { id: questionId },
     select: { authorId: true },
@@ -201,7 +197,7 @@ export async function updateQuestion(
   });
   if (!current) return { ok: false, error: "Câu hỏi không tồn tại" };
 
-  const authz = await assertAuthorOrManager(current.authorId, gate);
+  const authz = await assertAuthorOrManager(current.authorId, gate.userId);
   if (!authz.ok) return authz;
 
   if (data.questionCode && data.questionCode !== current.questionCode) {
@@ -277,7 +273,7 @@ export async function deleteQuestion(id: string): Promise<Result> {
   });
   if (!current) return { ok: false, error: "Câu hỏi không tồn tại" };
 
-  const authz = await assertAuthorOrManager(current.authorId, gate);
+  const authz = await assertAuthorOrManager(current.authorId, gate.userId);
   if (!authz.ok) return authz;
 
   try {

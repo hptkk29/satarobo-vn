@@ -7,7 +7,7 @@ import {
   DocumentForm,
   type DocumentFormValue,
 } from "../../_components/document-form";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ interface Props {
 export default async function EditDocumentPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "documents:upload")) {
+  if (!(await checkPermission("documents:upload"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

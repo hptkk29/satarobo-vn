@@ -4,12 +4,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 import { PackageListRow } from "./_components/package-list-row";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export default async function CoursePackagesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "course-packages:edit")) {
+  if (!(await checkPermission("course-packages:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

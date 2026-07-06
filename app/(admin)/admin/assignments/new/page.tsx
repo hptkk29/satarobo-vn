@@ -3,7 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { AssignmentForm } from "../_components/assignment-form";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function NewAssignmentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "assignments:create")) {
+  if (!(await checkPermission("assignments:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

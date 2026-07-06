@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { TemplateForm } from "../_components/template-form";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function NewTemplatePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "assignments:create")) {
+  if (!(await checkPermission("assignments:create"))) {
     redirect("/assignments?error=unauthorized");
   }
 

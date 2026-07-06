@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { buildQuestionWhere } from "@/lib/questions/filter";
@@ -22,7 +22,7 @@ interface Props {
 export default async function EditTemplatePage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "assignments:edit")) {
+  if (!(await checkPermission("assignments:edit"))) {
     redirect("/assignments?error=unauthorized");
   }
 

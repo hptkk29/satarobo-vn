@@ -3,7 +3,7 @@ import { BookOpen, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ interface SearchParams {
 export default async function CurriculumsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "curriculum:view")) {
+  if (!(await checkPermission("curriculum:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

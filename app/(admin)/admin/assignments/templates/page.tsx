@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ export default async function AssignmentTemplatesPage() {
   if (!session?.user) redirect("/login");
   // Gate xem: ai quản lý bài tập mới vào được. TEACHER/CM chỉ view bài giao →
   // redirect mềm về danh sách bài tập (không vào khu quản lý mẫu).
-  if (!can(session.user, "assignments:create")) {
+  if (!(await checkPermission("assignments:create"))) {
     redirect("/assignments?error=unauthorized");
   }
 
