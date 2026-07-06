@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useEffect, useState, useTransition } from "react";
@@ -78,20 +79,15 @@ const STUDENT_BOTTOM = ["/portal/hoc-sinh", "/portal/hoc-sinh/lich", "/portal/ho
 
 function Logo({ href }: { href: string }) {
   return (
-    <Link href={href} className="flex items-center gap-2.5">
-      <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="4" y="7" width="16" height="13" rx="4" fill="currentColor" />
-          <circle cx="9" cy="13" r="1.6" fill="oklch(0.748 0.169 56.8)" />
-          <circle cx="15" cy="13" r="1.6" fill="oklch(0.748 0.169 56.8)" />
-          <path d="M9 16.5h6" stroke="oklch(0.748 0.169 56.8)" strokeWidth="1.6" strokeLinecap="round" />
-          <path d="M12 3v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          <circle cx="12" cy="3" r="1.4" fill="currentColor" />
-        </svg>
-      </span>
-      <span className="text-lg font-extrabold tracking-tight text-foreground">
-        Sata<span className="text-primary">Robo</span>
-      </span>
+    <Link href={href} aria-label="Sata Robo — Trang chủ" className="flex items-center">
+      <Image
+        src="/brand/logo-satarobo.png"
+        alt="Sata Robo"
+        width={484}
+        height={280}
+        priority
+        className="h-10 w-auto object-contain"
+      />
     </Link>
   );
 }
@@ -164,7 +160,7 @@ export function PortalV2Shell({
     <div className={cn("portal-v2 flex min-h-screen bg-muted/50", dark && "dark")} data-mode="parent">
       {/* Sidebar (desktop) */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border/60 bg-card lg:flex">
-        <div className="flex h-16 shrink-0 items-center border-b border-border/40 px-5">
+        <div className="flex h-16 shrink-0 items-center justify-center border-b border-border/40 px-5">
           <Logo href={rootHref} />
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -194,14 +190,9 @@ export function PortalV2Shell({
             );
           })}
         </nav>
-        <div className="m-4 shrink-0 space-y-1 rounded-xl border border-primary/20 bg-primary/5 p-3.5">
+        <div className="m-4 shrink-0 rounded-xl border border-primary/20 bg-primary/5 p-3.5">
           <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
             <UserRound className="size-3.5" /> {isStudent ? "Cổng Học Sinh" : "Cổng Phụ Huynh"}
-          </p>
-          <p className="text-xs font-medium leading-relaxed text-muted-foreground">
-            {isStudent
-              ? `Đang xem dữ liệu học tập của ${(activeStudentName ?? "con").split(/\s+/).slice(-2).join(" ")}. Đổi con ở góc trên phải.`
-              : "Quản lý lịch trình, học phí và tiến độ học tập của các con."}
           </p>
         </div>
       </aside>

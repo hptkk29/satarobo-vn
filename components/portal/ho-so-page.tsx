@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { ParentProfile, ProfileChild } from "@/lib/portal/parent-profile";
 import { updateParentProfile, changeParentPassword } from "@/app/(portal)/portal/ho-so/actions";
+import { ChildDetailLink } from "@/components/portal/child-detail-link";
 
 const AVATAR = ["bg-accent", "bg-sky-500", "bg-violet-500", "bg-emerald-500"];
 
@@ -182,9 +183,9 @@ function ChildCard({ child, color }: { child: ProfileChild; color: string }) {
         </div>
       )}
 
-      <Link href="/portal/ho-so-con" className="mt-3 flex items-center justify-between border-t border-border pt-3 text-sm font-bold text-foreground hover:text-primary">
+      <ChildDetailLink studentId={child.id} className="mt-3 flex w-full items-center justify-between border-t border-border pt-3 text-sm font-bold text-foreground hover:text-primary disabled:opacity-60">
         Xem hồ sơ chi tiết <ChevronRight className="size-4" />
-      </Link>
+      </ChildDetailLink>
     </div>
   );
 }

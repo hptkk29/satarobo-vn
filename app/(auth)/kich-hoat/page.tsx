@@ -1,35 +1,39 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { ActivateForm } from "./activate-form";
 
 export const metadata: Metadata = { title: "Kích hoạt tài khoản" };
 
+// Card "Waves" (đồng bộ login) — nền sóng + căn giữa do (auth)/layout.tsx dựng;
+// KHÔNG bọc min-h-screen/bg riêng (gây khối xám kéo dài toàn màn hình).
 export default function ActivatePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <Link href="/" aria-label="Sata Robo — Trang chủ" className="inline-flex items-center justify-center">
-            <Image
-              src="/brand/logo-satarobo.jpg"
-              alt="Sata Robo"
-              width={200}
-              height={60}
-              priority
-              className="h-14 w-auto object-contain"
-            />
-          </Link>
-          <p className="mt-3 text-sm text-gray-500">Kích hoạt tài khoản phụ huynh</p>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-          <ActivateForm />
-          <p className="mt-4 text-center text-xs text-gray-400">
-            Đã có mật khẩu?{" "}
-            <Link href="/login" className="text-orange-600 hover:underline">
-              Đăng nhập
-            </Link>
-          </p>
+    <div className="my-form">
+      <Link href="/login" className="my-form__back" aria-label="Về trang đăng nhập" title="Về trang đăng nhập">
+        <ArrowLeft />
+      </Link>
+      <div className="login-welcome-row">
+        <Image
+          src="/brand/logo-satarobo.png"
+          alt="Sata Robo"
+          width={484}
+          height={280}
+          priority
+          className="mx-auto mb-4 block h-16 w-auto object-contain"
+        />
+        <h1>Kích hoạt tài khoản</h1>
+        <p>Dành cho phụ huynh mới nhận tài khoản từ trung tâm.</p>
+      </div>
+
+      <ActivateForm />
+
+      <div className="my-form__actions">
+        <div className="my-form__row">
+          <span>
+            Đã có mật khẩu? <a href="/login" title="Đăng nhập">Đăng nhập</a>
+          </span>
         </div>
       </div>
     </div>
