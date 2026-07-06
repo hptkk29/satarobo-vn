@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import type { ParentChildOverview } from "@/lib/portal/dashboard";
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
+import { ChildDetailLink } from "@/components/portal/child-detail-link";
 
 // Portal v2 (merge SataUI) — trang "Các con". RSC, data thật getParentChildrenOverview.
 
@@ -81,9 +82,9 @@ export function ChildrenPageV2({ kids }: { kids: ParentChildOverview[] }) {
               </div>
 
               <div className="mt-auto flex items-center gap-2 pt-1">
-                <Link href="/portal/ho-so-con" className="min-w-0 flex-1 truncate rounded-xl border border-border bg-card py-2 text-center text-sm font-bold text-foreground transition-colors hover:bg-muted">
+                <ChildDetailLink studentId={c.id} className="min-w-0 flex-1 truncate rounded-xl border border-border bg-card py-2 text-center text-sm font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-60">
                   Xem hồ sơ
-                </Link>
+                </ChildDetailLink>
                 <Link href="/portal/hoc-ba" className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90">
                   <span className="truncate">Cổng học sinh</span> <ArrowRight className="size-4 shrink-0" />
                 </Link>

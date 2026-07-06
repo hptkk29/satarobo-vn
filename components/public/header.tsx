@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { Phone, ArrowRight } from "lucide-react";
+import { Phone, ArrowRight, LogIn } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import { MobileNavDrawer } from "@/components/sections/mobile-nav-drawer";
@@ -111,6 +111,14 @@ export function Header() {
           >
             Đăng ký tư vấn
             <ArrowRight className="h-4 w-4" />
+          </Link>
+          {/* Đăng nhập — tím thương hiệu nhạt hơn (violet-500), cỡ chữ = nút tư vấn */}
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-1.5 bg-violet-500 hover:bg-violet-600 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg shadow-violet-500/30 hover:shadow-xl hover:shadow-violet-500/40 hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
+          >
+            <LogIn className="h-4 w-4" />
+            Đăng nhập
           </Link>
         </div>
 
