@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClipboardCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 import { CenterChecklistForm } from "./_components/checklist-form";
@@ -17,17 +18,20 @@ interface Props {
 export default async function CenterChecklistPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:view")) redirect("/dashboard");
 
   const sp = await searchParams;
+  const isSuper = hasRole(session.user, "SUPER_ADMIN");
+  const isCM = hasRole(session.user, "CENTER_MANAGER");
+  // Target gate: cơ sở CM cố định, hoặc cơ sở đang lọc, hoặc cơ sở của actor (fallback
+  // cho CENTER_HR — tránh v2 luôn false vì thiếu target khi action có cả tầng CENTER).
+  const gateCenterId = (isCM && session.user.centerId) || sp.centerId || session.user.centerId || null;
+  if (!(await checkPermission("hr_attendance:view", { centerId: gateCenterId }))) redirect("/dashboard");
+
   const now = new Date();
   const dateStr =
     sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date)
       ? sp.date
       : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-  const isSuper = hasRole(session.user, "SUPER_ADMIN");
-  const isCM = hasRole(session.user, "CENTER_MANAGER");
 
   const centers = isSuper
     ? await db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
@@ -37,7 +41,10 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
 
   // CM cố định cơ sở mình; còn lại chọn (mặc định cơ sở đầu).
   const centerId = isCM && session.user.centerId ? session.user.centerId : (sp.centerId || centers[0]?.id || "");
-  const canEdit = isSuper || (isCM && centerId === session.user.centerId) || can(session.user, "hr_attendance:view");
+  const canEdit =
+    isSuper ||
+    (isCM && centerId === session.user.centerId) ||
+    (await checkPermission("hr_attendance:view", { centerId: centerId || null }));
 
   const date = new Date(`${dateStr}T00:00:00`);
   const existing = centerId

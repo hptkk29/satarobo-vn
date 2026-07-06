@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getAuditActor } from "@/lib/audit/log";
 import { db } from "@/lib/db";
 import { canAdjustTimesheet, combineVNDateTime } from "@/lib/attendance/adjust";
@@ -24,7 +25,9 @@ const requestSchema = z.object({
 export async function createAdjustmentRequest(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "hr_attendance:checkin")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("hr_attendance:checkin", { centerId: session.user.centerId }))) {
+    return { ok: false, error: "Không có quyền" };
+  }
 
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -124,7 +127,6 @@ const reviewSchema = z.object({
 export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "hr_attendance:adjust")) return { ok: false, error: "Không có quyền" };
 
   const parsed = reviewSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -132,6 +134,9 @@ export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
 
   const req = await db.timesheetAdjustmentRequest.findUnique({ where: { id: p.id } });
   if (!req) return { ok: false, error: "Không tìm thấy yêu cầu" };
+  if (!(await checkPermission("hr_attendance:adjust", { centerId: req.centerId }))) {
+    return { ok: false, error: "Không có quyền" };
+  }
   if (req.status !== "PENDING") return { ok: false, error: "Yêu cầu đã xử lý" };
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
@@ -200,7 +205,6 @@ const directSchema = z.object({
 export async function adjustTimesheetDirect(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "hr_attendance:adjust")) return { ok: false, error: "Không có quyền" };
 
   const parsed = directSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -209,6 +213,10 @@ export async function adjustTimesheetDirect(input: unknown): Promise<Result> {
 
   const target = await db.user.findUnique({ where: { id: p.userId }, select: { centerId: true } });
   if (!target) return { ok: false, error: "Nhân viên không tồn tại" };
+
+  if (!(await checkPermission("hr_attendance:adjust", { centerId: target.centerId }))) {
+    return { ok: false, error: "Không có quyền" };
+  }
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");

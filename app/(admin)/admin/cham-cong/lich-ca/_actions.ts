@@ -7,7 +7,7 @@ import { z } from "zod";
 import { WorkShift } from "@prisma/client";
 import { needsLeaveRequest, emergencyLimitReached } from "@/lib/shifts";
 import { getSetting } from "@/lib/settings/service";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 type Result = { ok: true; status?: string } | { ok: false; error: string };
 
@@ -22,7 +22,9 @@ export async function saveMyShifts(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   // Mọi nhân viên (trừ PARENT) được đăng ký ca.
-  if (!can(session.user, "hr_attendance:checkin")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("hr_attendance:checkin", { centerId: session.user.centerId }))) {
+    return { ok: false, error: "Không có quyền" };
+  }
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {

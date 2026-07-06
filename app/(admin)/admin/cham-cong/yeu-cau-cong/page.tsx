@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { ClipboardEdit } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { isWeekendEditWindow } from "@/lib/shifts";
 import { AdjustRequestForm } from "./_components/request-form";
@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function YeuCauCongPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:checkin")) redirect("/dashboard");
+  if (!(await checkPermission("hr_attendance:checkin", { centerId: session.user.centerId }))) redirect("/dashboard");
 
   const requests = await db.timesheetAdjustmentRequest.findMany({
     where: { userId: session.user.id },

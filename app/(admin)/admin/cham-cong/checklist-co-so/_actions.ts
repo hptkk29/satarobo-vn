@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -20,15 +21,16 @@ const schema = z.object({
 export async function saveCenterChecklist(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "hr_attendance:view")) {
-    return { ok: false, error: "Không có quyền" };
-  }
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
   const { centerId, note } = parsed.data;
+
+  if (!(await checkPermission("hr_attendance:view", { centerId }))) {
+    return { ok: false, error: "Không có quyền" };
+  }
 
   // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ cơ sở mình.
   const isSuper = hasRole(session.user, "SUPER_ADMIN");

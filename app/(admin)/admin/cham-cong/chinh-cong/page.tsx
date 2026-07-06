@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { ClipboardEdit } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { canAdjustTimesheet } from "@/lib/attendance/adjust";
 import { getSetting } from "@/lib/settings/service";
@@ -13,11 +14,14 @@ export const dynamic = "force-dynamic";
 export default async function ChinhCongPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:adjust")) redirect("/dashboard");
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");
   const centerScope = isCM && !isSuper ? session.user.centerId : null;
+
+  if (!(await checkPermission("hr_attendance:adjust", { centerId: centerScope ?? session.user.centerId ?? null }))) {
+    redirect("/dashboard");
+  }
 
   const rows = await db.timesheetAdjustmentRequest.findMany({
     where: { status: "PENDING", ...(centerScope ? { centerId: centerScope } : {}) },

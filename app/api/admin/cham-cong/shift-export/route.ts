@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { SHIFT_EXCEL_COLUMNS, shiftsToCell } from "@/lib/attendance/shift-excel";
 
@@ -13,9 +14,6 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user, "hr_attendance:view")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const sp = new URL(req.url).searchParams;
   let centerId = sp.get("centerId") ?? "";
@@ -29,6 +27,10 @@ export async function GET(req: NextRequest) {
     centerId = session.user.centerId ?? "";
   }
   if (!centerId) return NextResponse.json({ error: "Thiếu centerId" }, { status: 400 });
+
+  if (!(await checkPermission("hr_attendance:view", { centerId }))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const year = Number(month.slice(0, 4));
   const monthIdx = Number(month.slice(5, 7)) - 1;

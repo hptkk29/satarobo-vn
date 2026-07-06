@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, Users, AlertTriangle, MessageSquareWarning } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import type { Prisma, WorkShift } from "@prisma/client";
 import {
@@ -41,11 +42,22 @@ interface Props {
 export default async function ManagerShiftsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // Quản lý/HR xem theo phạm vi; nhân viên thường chỉ xem CHÍNH MÌNH.
-  const canViewAll = can(session.user, "hr_attendance:view");
-  if (!canViewAll && !can(session.user, "hr_attendance:checkin")) redirect("/dashboard");
 
   const { date, centerId } = await searchParams;
+  // Phạm vi: CM (không super) → cơ sở mình; super/HR → tất cả (lọc tuỳ chọn);
+  // nhân viên thường → chỉ chính mình.
+  const isSuper = hasRole(session.user, "SUPER_ADMIN");
+  const isCM = hasRole(session.user, "CENTER_MANAGER");
+  const forcedCenter = isCM && !isSuper ? session.user.centerId : null;
+  // Target gate: cơ sở CM cố định, hoặc cơ sở đang lọc, hoặc cơ sở actor (fallback
+  // CENTER_HR — tránh v2 luôn false vì thiếu target khi action có cả tầng CENTER).
+  const viewTargetCenter = forcedCenter ?? centerId ?? session.user.centerId ?? null;
+  // Quản lý/HR xem theo phạm vi; nhân viên thường chỉ xem CHÍNH MÌNH.
+  const canViewAll = await checkPermission("hr_attendance:view", { centerId: viewTargetCenter });
+  if (!canViewAll && !(await checkPermission("hr_attendance:checkin", { centerId: session.user.centerId }))) {
+    redirect("/dashboard");
+  }
+
   const anchor = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : new Date();
   const weekStart = mondayOf(anchor);
   const weekEnd = new Date(weekStart);
@@ -56,11 +68,6 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
     return ymd(d);
   });
 
-  // Phạm vi: CM (không super) → cơ sở mình; super/HR → tất cả (lọc tuỳ chọn);
-  // nhân viên thường → chỉ chính mình.
-  const isSuper = hasRole(session.user, "SUPER_ADMIN");
-  const isCM = hasRole(session.user, "CENTER_MANAGER");
-  const forcedCenter = isCM && !isSuper ? session.user.centerId : null;
   const filterCenter = forcedCenter ?? (canViewAll ? centerId ?? null : null);
   const selfOnly = !canViewAll;
 

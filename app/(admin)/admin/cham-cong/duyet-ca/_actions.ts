@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import type { WorkShift } from "@prisma/client";
 
@@ -35,9 +36,6 @@ type Result = { success: number; errors: { row: number; error: string }[] };
 export async function importApprovedShifts(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { success: 0, errors: [{ row: 0, error: "Chưa đăng nhập" }] };
-  if (!can(session.user, "hr_attendance:view")) {
-    return { success: 0, errors: [{ row: 0, error: "Không có quyền duyệt ca" }] };
-  }
 
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) {
@@ -51,6 +49,10 @@ export async function importApprovedShifts(input: unknown): Promise<Result> {
     centerId = session.user.centerId ?? "";
   }
   if (!centerId) return { success: 0, errors: [{ row: 0, error: "Thiếu cơ sở" }] };
+
+  if (!(await checkPermission("hr_attendance:view", { centerId }))) {
+    return { success: 0, errors: [{ row: 0, error: "Không có quyền duyệt ca" }] };
+  }
 
   const year = Number(month.slice(0, 4));
   const monthIdx = Number(month.slice(5, 7)) - 1;

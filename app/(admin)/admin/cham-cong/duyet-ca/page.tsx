@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { CalendarCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { isManagerImportWindowOpen, lastDayOfMonth } from "@/lib/shifts";
 import { ShiftApproval } from "./_components/shift-approval";
@@ -12,10 +13,13 @@ export const dynamic = "force-dynamic";
 export default async function DuyetCaPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "hr_attendance:view")) redirect("/dashboard");
 
   const isCM = hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN");
   const fixedCenterId = isCM ? session.user.centerId ?? null : null;
+
+  if (!(await checkPermission("hr_attendance:view", { centerId: fixedCenterId ?? session.user.centerId ?? null }))) {
+    redirect("/dashboard");
+  }
 
   const centers = await db.center.findMany({
     where: { isActive: true, ...(fixedCenterId ? { id: fixedCenterId } : {}) },

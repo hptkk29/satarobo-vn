@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { CheckinClient } from "./_components/checkin-client";
 
 export const metadata = { title: "Chấm công | Admin", robots: { index: false } };
@@ -16,7 +16,7 @@ export default async function CheckinPage({ searchParams }: Props) {
   if (!session?.user) {
     redirect(`/login?callbackUrl=${encodeURIComponent(`/cham-cong/checkin?c=${c ?? ""}&t=${t ?? ""}`)}`);
   }
-  if (!can(session.user, "hr_attendance:checkin")) redirect("/dashboard");
+  if (!(await checkPermission("hr_attendance:checkin", { centerId: c ?? null }))) redirect("/dashboard");
 
   return (
     <div className="min-h-screen bg-neutral-100 p-4">
