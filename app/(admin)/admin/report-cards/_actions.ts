@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -56,8 +56,10 @@ const transitionSchema = z.object({
 async function authContext() {
   const session = await auth();
   if (!session?.user) return { error: "Chưa đăng nhập" as const };
-  const canManage = can(session.user, "report-cards:manage");
-  const canReview = can(session.user, "report-cards:review");
+  // report-cards:* CHƯA có trong seed RBAC v2 (ReportCard vẫn SCOPE_EXEMPT) — không
+  // truyền target (chưa chắc scope, không đoán mò).
+  const canManage = await checkPermission("report-cards:manage");
+  const canReview = await checkPermission("report-cards:review");
   if (!canManage && !canReview) return { error: "Không có quyền" as const };
   const actor = await resolveActor(session.user.id);
   const capabilities = actorCapabilities({ manage: canManage, review: canReview });

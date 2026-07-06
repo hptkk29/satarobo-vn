@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import {
@@ -26,8 +26,10 @@ export default async function ReportCardEditorPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const canManage = can(session.user, "report-cards:manage");
-  const canReview = can(session.user, "report-cards:review");
+  // report-cards:* CHƯA có trong seed RBAC v2 (ReportCard vẫn SCOPE_EXEMPT) — không
+  // truyền target (chưa chắc scope, không đoán mò).
+  const canManage = await checkPermission("report-cards:manage");
+  const canReview = await checkPermission("report-cards:review");
   if (!canManage && !canReview) redirect("/dashboard");
 
   const { enrollmentId } = await params;

@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { type Prisma } from "@prisma/client";
 import { SessionListRow } from "./_components/session-list-row";
 import { SessionFilters } from "./_components/session-filters";
@@ -20,7 +20,9 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
   if (!session?.user) redirect("/login");
 
   const actor = await resolveActor(session.user.id);
-  if (!can(actor, "sessions:view")) {
+  // Trước đây gọi thẳng can() v2 (bỏ qua shadow-compare + cờ RBAC_V2_ENABLED) — sửa
+  // lại đi qua checkPermission() để hành vi khi flag OFF khớp v1 (matrix cũ).
+  if (!(await checkPermission("sessions:view"))) {
     redirect("/dashboard");
   }
 
