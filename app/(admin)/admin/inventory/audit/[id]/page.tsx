@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { InventoryAuditStatus } from "@prisma/client";
 
@@ -35,7 +35,7 @@ interface Props {
 export default async function AuditDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "inventory:audit")) {
+  if (!(await checkPermission("inventory:audit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

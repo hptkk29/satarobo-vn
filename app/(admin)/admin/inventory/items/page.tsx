@@ -8,7 +8,7 @@ import {
   Plus,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { InventoryCategory, type Prisma } from "@prisma/client";
@@ -41,7 +41,7 @@ interface SearchParams {
 export default async function InventoryItemsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "inventory:view")) {
+  if (!(await checkPermission("inventory:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

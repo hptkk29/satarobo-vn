@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
 import { ItemForm } from "../_components/item-form";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function NewInventoryItemPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "inventory:edit")) {
+  if (!(await checkPermission("inventory:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

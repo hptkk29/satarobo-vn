@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function NewAuditPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "inventory:audit")) {
+  if (!(await checkPermission("inventory:audit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

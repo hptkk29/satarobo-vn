@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { approveRefund, rejectRefund, RefundError } from "@/lib/finance/refund";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -14,7 +14,7 @@ export async function approveRefundAction(
 ): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "payments:confirm")) {
+  if (!(await checkPermission("payments:confirm"))) {
     return { ok: false, error: "Không có quyền duyệt hoàn tiền" };
   }
   const uid = session.user.id;
@@ -38,7 +38,7 @@ export async function rejectRefundAction(
 ): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "payments:confirm")) {
+  if (!(await checkPermission("payments:confirm"))) {
     return { ok: false, error: "Không có quyền từ chối hoàn tiền" };
   }
   const uid = session.user.id;

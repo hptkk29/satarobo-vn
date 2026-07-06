@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ClipboardCheck, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { InventoryAuditStatus, type Prisma } from "@prisma/client";
@@ -40,7 +40,7 @@ interface SearchParams {
 export default async function AuditListPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "inventory:audit")) {
+  if (!(await checkPermission("inventory:audit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
