@@ -3,7 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Shield, AlertTriangle, BadgeCheck } from "lucide-react";
 import { db } from "@/lib/db";
-import { can, PERMISSIONS, isSuperAdmin as checkSuperAdmin } from "@/lib/auth/permissions";
+import { PERMISSIONS, isSuperAdmin as checkSuperAdmin } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { RoleBadge } from "../../_components/role-badge";
 import { GrantsTable } from "./_components/grants-table";
 import { AddGrantForm } from "./_components/add-grant-form";
@@ -19,7 +20,7 @@ interface Props {
 export default async function UserPermissionsPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "users:manage")) {
+  if (!(await checkPermission("users:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

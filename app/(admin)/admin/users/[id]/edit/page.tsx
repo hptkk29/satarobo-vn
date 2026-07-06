@@ -3,7 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, KeyRound, Power, Shield, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { UserForm } from "../../_components/user-form";
@@ -30,7 +31,7 @@ function formatDate(date: Date | null): string {
 export default async function EditUserPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "users:manage")) {
+  if (!(await checkPermission("users:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

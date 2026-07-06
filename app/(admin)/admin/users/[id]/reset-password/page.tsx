@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, KeyRound } from "lucide-react";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { ResetPasswordForm } from "../../_components/reset-password-form";
 
 export const metadata = { title: "Đổi mật khẩu | Admin" };
@@ -16,7 +16,7 @@ interface Props {
 export default async function ResetPasswordPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "users:manage")) {
+  if (!(await checkPermission("users:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

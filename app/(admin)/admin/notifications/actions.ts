@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { resolveActor } from "@/lib/auth/actor";
@@ -45,7 +45,7 @@ export async function createNotification(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "notifications:manage")) {
+  if (!(await checkPermission("notifications:manage"))) {
     return { ok: false, error: "Không có quyền" };
   }
 
@@ -97,7 +97,7 @@ export async function toggleNotificationPublish(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "notifications:manage")) {
+  if (!(await checkPermission("notifications:manage"))) {
     return { ok: false, error: "Không có quyền" };
   }
 
@@ -127,7 +127,7 @@ export async function deleteNotification(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "notifications:manage")) {
+  if (!(await checkPermission("notifications:manage"))) {
     return { ok: false, error: "Không có quyền" };
   }
   // Cách ly cơ sở: chỉ xoá thông báo trong tầm nhìn cơ sở của actor (chống IDOR).

@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can, isSuperAdmin } from "@/lib/auth/permissions";
+import { isSuperAdmin } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import {
   grantCreateSchema,
@@ -14,7 +15,7 @@ import { logGrantAudit, getAuditActor } from "@/lib/audit/log";
 async function requireUsersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "users:manage")) {
+  if (!(await checkPermission("users:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;

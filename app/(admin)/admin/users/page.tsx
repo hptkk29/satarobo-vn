@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, KeyRound, Shield, AlertCircle } from "lucide-react";
 import { db } from "@/lib/db";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { RoleBadges } from "./_components/role-badge";
 import {
   UserStatusToggle,
@@ -49,7 +50,7 @@ function formatRelative(date: Date | null): {
 export default async function UsersAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "users:manage")) {
+  if (!(await checkPermission("users:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

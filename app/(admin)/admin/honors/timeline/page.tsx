@@ -2,14 +2,14 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { TimelineAdminClient } from "@/components/admin/honors/timeline-admin-client";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export const metadata = { title: "Timeline | Hall of Fame" };
 
 export default async function TimelineAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "honors:settings")) {
+  if (!(await checkPermission("honors:settings"))) {
     redirect("/dashboard");
   }
 
@@ -17,7 +17,7 @@ export default async function TimelineAdminPage() {
     orderBy: { occurredAt: "asc" },
   });
 
-  const canDelete = can(session.user, "honors:delete");
+  const canDelete = await checkPermission("honors:delete");
 
   return (
     <div className="max-w-4xl">

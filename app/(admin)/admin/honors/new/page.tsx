@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { HonorForm } from "@/components/admin/honors/honor-form";
 
 export const metadata = { title: "Thêm vinh danh | Hall of Fame" };
@@ -10,7 +10,7 @@ export const metadata = { title: "Thêm vinh danh | Hall of Fame" };
 export default async function NewHonorPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "honors:create")) redirect("/dashboard");
+  if (!(await checkPermission("honors:create"))) redirect("/dashboard");
 
   const employees = await db.employee.findMany({
     where: { isActive: true },

@@ -1,7 +1,7 @@
 'use server'
 
 import { auth } from '@/lib/auth'
-import { assertCan } from '@/lib/auth/permissions'
+import { assertPermission } from '@/lib/auth/check-permission'
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { jobCreateSchema } from '@/lib/validators/job'
@@ -10,7 +10,7 @@ export async function createJobAction(input: unknown) {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
   try {
-    assertCan(session.user, 'jobs:create')
+    await assertPermission('jobs:create')
   } catch {
     return { ok: false, error: 'Khong co quyen' }
   }
@@ -39,7 +39,7 @@ export async function updateJobAction(id: string, input: unknown) {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
   try {
-    assertCan(session.user, 'jobs:edit')
+    await assertPermission('jobs:edit')
   } catch {
     return { ok: false, error: 'Khong co quyen' }
   }
@@ -66,7 +66,7 @@ export async function deleteJobAction(id: string) {
   const session = await auth()
   if (!session?.user) return { ok: false }
   try {
-    assertCan(session.user, 'jobs:delete')
+    await assertPermission('jobs:delete')
   } catch {
     return { ok: false, error: 'Khong co quyen xoa JD' }
   }
@@ -84,7 +84,7 @@ export async function duplicateJobAction(id: string) {
   const session = await auth()
   if (!session?.user) return { ok: false }
   try {
-    assertCan(session.user, 'jobs:create')
+    await assertPermission('jobs:create')
   } catch {
     return { ok: false, error: 'Khong co quyen' }
   }
@@ -127,7 +127,7 @@ export async function changeJobStatusAction(id: string, status: string) {
   const session = await auth()
   if (!session?.user) return { ok: false }
   try {
-    assertCan(session.user, 'jobs:edit')
+    await assertPermission('jobs:edit')
   } catch {
     return { ok: false }
   }
