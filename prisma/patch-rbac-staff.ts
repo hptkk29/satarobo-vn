@@ -32,7 +32,11 @@ const LEGACY_TO_ROLEDEF: Record<string, Mapping> = {
   TEACHER: { roleCode: "TEACHER", org: "CENTER" },
   ACCOUNTANT: { roleCode: "HO_ACCOUNTANT", org: "CENTER_OR_HO" },
   MARKETING: { roleCode: "HO_MARKETING", org: "HO" },
-  HR: { roleCode: "HO_HR", org: "HO" },
+  // Sửa 06/07/2026 (Kiệt duyệt Phương án A, addendum HR): trước đây hard-code "HO"
+  // — mọi user role HR (kể cả thực tập sinh tại 1 cơ sở) đều bị gán HO_HR@HO toàn
+  // hệ thống. Đổi sang CENTER_OR_HO giống ACCOUNTANT: có centerId → CENTER_HR tại
+  // cơ sở đó; không suy được cơ sở → HO_HR@HO (fallback an toàn).
+  HR: { roleCode: "HO_HR", org: "CENTER_OR_HO" },
   TRAINING: { roleCode: "TRAINING", org: "HO" },
 };
 
@@ -86,8 +90,12 @@ async function main() {
       else if (m.org === "CENTER") target = centerOrg ?? null;
       else target = centerOrg ?? hoOrg; // CENTER_OR_HO: kế toán không gắn cơ sở → Hội sở
 
-      // Kế toán gắn cơ sở → CENTER_ACCOUNTANT thay vì HO_ACCOUNTANT.
-      const roleCode = legacy === "ACCOUNTANT" && centerOrg ? "CENTER_ACCOUNTANT" : m.roleCode;
+      // Kế toán/Nhân sự gắn cơ sở → role CENTER_* thay vì HO_* (Phương án A, addendum HR 06/07/2026).
+      const CENTER_OVERRIDE: Record<string, string> = {
+        ACCOUNTANT: "CENTER_ACCOUNTANT",
+        HR: "CENTER_HR",
+      };
+      const roleCode = centerOrg && CENTER_OVERRIDE[legacy] ? CENTER_OVERRIDE[legacy] : m.roleCode;
       const roleId = roleByCode.get(roleCode);
       if (!target) { skipped.push(`${u.email}: ${legacy} cần cơ sở nhưng không suy được`); continue; }
       if (!roleId) { skipped.push(`${u.email}: thiếu RoleDef ${roleCode}`); continue; }

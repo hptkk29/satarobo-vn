@@ -49,10 +49,60 @@ export const ROLE_SEED: RoleSeed[] = [
     ],
   },
   {
+    // Mapping HR (v1) đã duyệt — Kiệt chọn Phương án A (addendum
+    // phieu-kiet-hr-addendum.docx) — tạo CENTER_HR bên cạnh HO_HR, giống pattern
+    // ACCOUNTANT (HO_ACCOUNTANT full oversight GLOBAL, CENTER_ACCOUNTANT subset
+    // CENTER). HO_HR nhận ĐỦ 23 action — khớp "Hồ sơ nhân viên toàn hệ thống"
+    // (BGĐ câu 10).
     code: "HO_HR", name: "Nhân sự Hội sở",
     perms: [
       { action: "employees:view-all", scopeType: "GLOBAL" },
       { action: "employees:edit", scopeType: "GLOBAL" },
+      { action: "employees:view-public", scopeType: "GLOBAL" },
+      { action: "employees:create", scopeType: "GLOBAL" },
+      { action: "employees:view-salary", scopeType: "GLOBAL" },
+      { action: "employees:view-personal", scopeType: "GLOBAL" },
+      { action: "honors:view", scopeType: "GLOBAL" },
+      { action: "honors:create", scopeType: "GLOBAL" },
+      { action: "honors:edit", scopeType: "GLOBAL" },
+      { action: "jobs:view", scopeType: "GLOBAL" },
+      { action: "jobs:create", scopeType: "GLOBAL" },
+      { action: "jobs:edit", scopeType: "GLOBAL" },
+      { action: "jobs:delete", scopeType: "GLOBAL" },
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
+      { action: "hr_attendance:view", scopeType: "GLOBAL" },
+      { action: "blog:view", scopeType: "GLOBAL" },
+      { action: "news:view", scopeType: "GLOBAL" },
+      { action: "payroll:view", scopeType: "GLOBAL" },
+      { action: "students:view-all", scopeType: "GLOBAL" },
+      { action: "classes:view-all", scopeType: "GLOBAL" },
+      { action: "courses:view", scopeType: "GLOBAL" },
+      { action: "centers:view", scopeType: "GLOBAL" },
+      { action: "holidays:view", scopeType: "GLOBAL" },
+    ],
+  },
+  {
+    // Role MỚI — Kiệt duyệt Phương án A (06/07/2026, addendum HR). CENTER_HR nhận
+    // subset "vận hành hằng ngày tại cơ sở" (khớp "Hồ sơ, chấm công" — SỬA gì của
+    // câu 10 BGĐ) — giống cách CENTER_ACCOUNTANT chỉ có subset của HO_ACCOUNTANT.
+    // KHÔNG có: employees:create/view-salary/view-personal, honors:create/edit,
+    // jobs:*, payroll:view (giữ tập trung ở HO_HR, tránh 1 thực tập sinh cấp cơ sở
+    // có quyền xem lương/hồ sơ cá nhân toàn công ty).
+    // Đối tượng ban đầu: 2 "Thực Tập Sinh Nhân sự" CS1 (Lê Thị Tuyết Mai) + CS2
+    // (Trần Thị Thúy Liên) — xem phieu-hanh-chinh câu 62. Cả 2 CHƯA có tài khoản
+    // User trong hệ thống — gán UserOrgRole là bước SAU, khi tài khoản được tạo
+    // (patch-rbac-staff.ts đã sửa để tự route đúng theo centerId).
+    code: "CENTER_HR", name: "Nhân sự cơ sở",
+    perms: [
+      { action: "employees:view-all", scopeType: "CENTER" },
+      { action: "employees:view-public", scopeType: "CENTER" },
+      { action: "employees:edit", scopeType: "CENTER" },
+      { action: "hr_attendance:checkin", scopeType: "CENTER" },
+      { action: "hr_attendance:view", scopeType: "CENTER" },
+      { action: "students:view-all", scopeType: "CENTER" },
+      { action: "classes:view-all", scopeType: "CENTER" },
+      { action: "centers:view", scopeType: "CENTER" },
+      { action: "holidays:view", scopeType: "CENTER" },
     ],
   },
   {
