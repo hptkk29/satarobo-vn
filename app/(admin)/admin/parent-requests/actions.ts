@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { createMakeupNeed } from "@/lib/makeup/service";
@@ -40,7 +40,7 @@ export async function handleParentRequest(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "parent-requests:manage")) {
+  if (!(await checkPermission("parent-requests:manage"))) {
     return { ok: false, error: "Không có quyền" };
   }
 
@@ -95,7 +95,7 @@ export async function resolveAbsence(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "parent-requests:manage")) {
+  if (!(await checkPermission("parent-requests:manage"))) {
     return { ok: false, error: "Không có quyền" };
   }
 

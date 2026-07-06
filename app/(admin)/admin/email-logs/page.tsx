@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { EmailLogStatus, type Prisma } from "@prisma/client";
 import {
   EMAIL_LOG_STATUS_LABEL,
@@ -27,7 +27,7 @@ const STATUS_VALUES = Object.values(EmailLogStatus) as EmailLogStatus[];
 export default async function EmailLogsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "emails:view"))
+  if (!(await checkPermission("emails:view")))
     redirect("/dashboard?error=unauthorized");
 
   const sp = await searchParams;

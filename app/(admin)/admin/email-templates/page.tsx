@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { EmailTemplateTrigger } from "@prisma/client";
 import { EMAIL_TRIGGER_LABEL } from "@/lib/validators/email-template";
 
@@ -13,10 +13,10 @@ export const dynamic = "force-dynamic";
 export default async function EmailTemplatesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "emails:view"))
+  if (!(await checkPermission("emails:view")))
     redirect("/dashboard?error=unauthorized");
 
-  const canManage = can(session.user, "emails:manage");
+  const canManage = await checkPermission("emails:manage");
 
   const templates = await db.emailTemplate.findMany({
     orderBy: [{ trigger: "asc" }, { name: "asc" }],

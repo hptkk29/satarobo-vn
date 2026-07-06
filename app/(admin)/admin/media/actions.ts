@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -69,7 +69,7 @@ async function canUploadToClass(
   // QL/Admin có quyền duyệt media → upload, NHƯNG vẫn phải TRONG cơ sở mình (chống
   // IDOR chéo cơ sở: CS1 manager không upload/đọc context lớp CS2). canManageClass
   // đã enforce passesScope + SUPER_ADMIN/HO bypass. Trùng pattern mediaClassInScope.
-  if (can(user, "media:approve")) {
+  if (await checkPermission("media:approve")) {
     const actor = await resolveActor(user.id);
     return canManageClass(actor, classId, cls.centerId);
   }
@@ -219,7 +219,7 @@ export async function uploadClassMedia(input: {
 
   const { actorId, actorName } = getAuditActor(session);
   // GV/Sale upload → PENDING; người có quyền duyệt upload → APPROVED luôn.
-  const autoApprove = can(session.user, "media:approve");
+  const autoApprove = await checkPermission("media:approve");
 
   const created = await db.classSessionMedia.create({
     data: {
@@ -273,7 +273,7 @@ export async function reviewMedia(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "media:approve")) return { ok: false, error: "Không có quyền duyệt" };
+  if (!(await checkPermission("media:approve"))) return { ok: false, error: "Không có quyền duyệt" };
   // Cách ly cơ sở: chỉ duyệt ảnh của lớp trong tầm nhìn actor (chống IDOR).
   if (!(await mediaClassInScope(session.user.id, input.id))) {
     return { ok: false, error: "Không tìm thấy ảnh" };
@@ -305,7 +305,7 @@ export async function reviewMedia(input: {
 export async function deleteMedia(id: string): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "media:approve")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("media:approve"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ xoá ảnh của lớp trong tầm nhìn actor (chống IDOR).
   if (!(await mediaClassInScope(session.user.id, id))) {
     return { ok: false, error: "Không tìm thấy ảnh" };

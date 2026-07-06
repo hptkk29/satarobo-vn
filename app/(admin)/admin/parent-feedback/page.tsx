@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { Star } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminParentFeedbackPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "parent-feedback:view")) redirect("/dashboard");
+  if (!(await checkPermission("parent-feedback:view"))) redirect("/dashboard");
 
   // L8.1 — ParentFeedback.studentId là cột phẳng (KHÔNG có relation `student` trong
   // schema) → không thể lọc `where: { student: { centerId: ... } }`. Cách ly 2 bước:

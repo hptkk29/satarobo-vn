@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import {
   emailTemplateSchema,
@@ -17,7 +17,7 @@ import { getAuditActor } from "@/lib/audit/log";
 async function requireEmailsManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "emails:manage"))
+  if (!(await checkPermission("emails:manage")))
     redirect("/dashboard?error=unauthorized");
   return session;
 }

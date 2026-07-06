@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { TemplateForm } from "../../_components/template-form";
 import { TestSendButton } from "../../_components/test-send-button";
@@ -15,7 +15,7 @@ interface Props {
 export default async function EditTemplatePage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "emails:manage"))
+  if (!(await checkPermission("emails:manage")))
     redirect("/dashboard?error=unauthorized");
 
   const { id } = await params;

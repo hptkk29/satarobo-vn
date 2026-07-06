@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { SETTINGS, SETTING_KEYS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
 import { SettingsEditor, type SettingRowView } from "./_components/settings-editor";
@@ -12,9 +12,9 @@ export const metadata = { title: "Cấu hình vận hành | Admin Sata Robo" };
 export default async function OperationalSettingsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "settings:view")) redirect("/admin/dashboard");
+  if (!(await checkPermission("settings:view"))) redirect("/admin/dashboard");
 
-  const canEditGlobal = can(session.user, "settings:edit"); // settings:edit = SUPER_ADMIN
+  const canEditGlobal = await checkPermission("settings:edit"); // settings:edit = SUPER_ADMIN
   const resolved = await getResolvedSettings([...SETTING_KEYS]);
 
   const rows: SettingRowView[] = SETTING_KEYS.map((key) => {

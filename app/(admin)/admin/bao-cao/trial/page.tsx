@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { buildTrialReport, type TrialEnrollmentRec } from "@/lib/reports/trial";
@@ -31,7 +31,7 @@ function Stat({
 export default async function TrialReportPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "trials:view")) redirect("/dashboard");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor); // TrialClassV2 auto-scope theo cơ sở (HO/SUPER_ADMIN bypass)

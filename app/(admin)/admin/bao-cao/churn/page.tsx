@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { buildChurnReport, type ChurnEnrollmentRecord } from "@/lib/reports/churn";
@@ -35,7 +35,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 export default async function ChurnReportPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "enrollments:view-all")) {
+  if (!(await checkPermission("enrollments:view-all"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
