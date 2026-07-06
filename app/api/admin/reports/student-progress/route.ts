@@ -8,7 +8,7 @@ import {
   ProgressReportPdf,
   type ProgressReportData,
 } from "@/lib/pdf/progress-report";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export const dynamic = "force-dynamic";
 // PDF generation needs Node APIs (fs for font loading); pin runtime.
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "students:view-all")) {
+  if (!(await checkPermission("students:view-all"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

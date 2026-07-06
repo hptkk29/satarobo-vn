@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { can, hasRole } from '@/lib/auth/permissions'
+import { hasRole } from '@/lib/auth/permissions'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { LeadStatus } from '@prisma/client'
@@ -26,7 +27,7 @@ function maskPhone(phone: string): string {
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!can(session.user, 'leads:view-all')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await checkPermission('leads:view-all'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = req.nextUrl
   const statusParam = searchParams.get('status') as LeadStatus | null

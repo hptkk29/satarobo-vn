@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuid } from "uuid";
 import { auth } from "@/lib/auth";
-import { assertCan } from "@/lib/auth/permissions";
+import { assertPermission } from "@/lib/auth/check-permission";
 import { getPublicUrl, getR2Bucket, getR2Client } from "@/lib/storage/r2-client";
 
 export const runtime = "nodejs";
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    assertCan(session.user, "news:create");
+    await assertPermission("news:create");
   } catch {
     return NextResponse.json(
       { success: false, error: "Forbidden" },
