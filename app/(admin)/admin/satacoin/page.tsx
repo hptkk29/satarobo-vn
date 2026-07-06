@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { SataCoinAdmin } from "./_components/satacoin-admin";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function SataCoinPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "satacoin:manage")) redirect("/dashboard");
+  if (!(await checkPermission("satacoin:manage"))) redirect("/dashboard");
 
   // Cách ly cơ sở: Student + SataCoinTransaction ∈ SCOPED_MODELS → sdb tự inject
   // centerId IN tầm-nhìn. SataCoinRule là config (SCOPE_EXEMPT, centerId null = áp mọi

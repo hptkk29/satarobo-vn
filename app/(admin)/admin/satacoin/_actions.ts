@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { logStudentAudit, getAuditActor } from "@/lib/audit/log";
 import { recordTransaction, reverseTransaction } from "@/lib/satacoin/service";
@@ -15,9 +15,9 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 // Cách ly cơ sở: SataCoinTransaction ∈ SCOPED_MODELS (theo HV); grant/reverse phải
 // xác minh HV/giao dịch thuộc tầm nhìn cơ sở của actor trước khi ghi (chống IDOR).
 
-function gate(session: Session | null) {
+async function gate(session: Session | null): Promise<string | null> {
   if (!session?.user) return "Chưa đăng nhập";
-  if (!can(session.user, "satacoin:manage")) return "Không có quyền";
+  if (!(await checkPermission("satacoin:manage"))) return "Không có quyền";
   return null;
 }
 
@@ -30,7 +30,7 @@ const ruleSchema = z.object({
 
 export async function createRule(input: unknown): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
-  const err = gate(session);
+  const err = await gate(session);
   if (err) return { ok: false, error: err };
 
   const parsed = ruleSchema.safeParse(input);
@@ -49,7 +49,7 @@ export async function createRule(input: unknown): Promise<{ ok: boolean; error?:
 
 export async function toggleRule(id: string): Promise<{ ok: boolean }> {
   const session = await auth();
-  if (gate(session)) return { ok: false };
+  if (await gate(session)) return { ok: false };
   const r = await db.sataCoinRule.findUnique({ where: { id }, select: { isActive: true } });
   if (r) await db.sataCoinRule.update({ where: { id }, data: { isActive: !r.isActive } });
   revalidatePath("/admin/satacoin");
@@ -65,7 +65,7 @@ const grantSchema = z.object({
 
 export async function grantCoins(input: unknown): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
-  const err = gate(session);
+  const err = await gate(session);
   if (err) return { ok: false, error: err };
 
   const parsed = grantSchema.safeParse(input);
@@ -106,7 +106,7 @@ export async function grantCoins(input: unknown): Promise<{ ok: boolean; error?:
 
 export async function reverseCoinTx(txId: string, studentId: string): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
-  const err = gate(session);
+  const err = await gate(session);
   if (err) return { ok: false, error: err };
 
   // Cách ly cơ sở: giao dịch gốc phải thuộc tầm nhìn cơ sở của actor (chống IDOR đảo).

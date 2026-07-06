@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, History } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { StockMovementType, type Prisma } from "@prisma/client";
@@ -66,7 +66,7 @@ interface SearchParams {
 export default async function MovementsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "inventory:movement")) {
+  if (!(await checkPermission("inventory:movement"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

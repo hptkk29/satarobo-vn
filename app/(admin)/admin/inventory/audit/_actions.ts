@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import {
@@ -23,7 +23,7 @@ async function requireRole(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "inventory:audit")) {
+  if (!(await checkPermission("inventory:audit"))) {
     return { ok: false, error: "Không có quyền kiểm kê" };
   }
   return { ok: true, userId: session.user.id ?? "" };

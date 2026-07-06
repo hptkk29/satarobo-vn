@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -100,7 +100,7 @@ function slugify(text: string): string {
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "kits:edit")) {
+  if (!(await checkPermission("kits:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;

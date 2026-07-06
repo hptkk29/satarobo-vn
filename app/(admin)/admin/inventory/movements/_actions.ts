@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import {
   receiptSchema,
@@ -59,7 +59,7 @@ async function requireRole(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "inventory:movement")) {
+  if (!(await checkPermission("inventory:movement"))) {
     return { ok: false, error: "Không có quyền ghi nhận giao dịch kho" };
   }
   return { ok: true, userId: session.user.id ?? "" };
