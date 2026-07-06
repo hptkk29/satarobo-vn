@@ -16,9 +16,10 @@ import type { Role } from "@prisma/client";
 // - Enforce in Server Action: `assertCan(role, action)` throws on deny.
 // - Field-level for Employee: `getEmployeeFieldVisibility(role)` returns object.
 //
-// ALL 8 ROLES (Phase T0.1 — rename MANAGER->CENTER_MANAGER, SALES->SALES_CSM,
-// thêm PARENT):
-// SUPER_ADMIN, CENTER_MANAGER, HR, SALES_CSM, TEACHER, MARKETING, ACCOUNTANT, PARENT
+// ALL 9 ROLES (Phase T0.1 — rename MANAGER->CENTER_MANAGER, SALES->SALES_CSM,
+// thêm PARENT; TRAINING thêm sau ở migration 20260624000000_fl_foundation — comment
+// này trước đó bị bỏ sót, sửa 06/07/2026):
+// SUPER_ADMIN, CENTER_MANAGER, HR, SALES_CSM, TEACHER, TRAINING, MARKETING, ACCOUNTANT, PARENT
 //
 // PARENT = phụ huynh (portal hocvien.satarobo.vn). KHÔNG có quyền admin nào —
 // không xuất hiện trong bất kỳ array PERMISSIONS nào → can(PARENT, adminAction)
