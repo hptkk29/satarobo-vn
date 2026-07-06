@@ -115,7 +115,7 @@ export function LoginForm() {
           type="button"
           className="password-toggle"
           onClick={() => setShow((v) => !v)}
-          aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          aria-label={show ? "Ẩn ký tự" : "Hiện ký tự"}
         >
           {show ? <EyeOff /> : <Eye />}
         </button>
