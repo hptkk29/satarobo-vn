@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ export default async function MessengerInboxPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // C3.3 — không có quyền lead/CRM → không vào inbox.
-  if (!can(session.user, "leads:view-all") && !can(session.user, "leads:view-own")) {
+  if (!(await checkPermission("leads:view-all")) && !(await checkPermission("leads:view-own"))) {
     redirect("/admin/dashboard");
   }
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, FlaskConical } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { TrialConfigSection } from "./_components/config-section";
@@ -26,13 +26,13 @@ const STATUS_BADGE: Record<string, string> = {
 export default async function TrialClassesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "trials:view")) redirect("/dashboard");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
-  const canManage = can(session.user, "trials:manage");
-  const canConfig = can(session.user, "trials:config");
+  const canManage = (await checkPermission("trials:manage"));
+  const canConfig = (await checkPermission("trials:config"));
 
   const [classes, activeConfig] = await Promise.all([
     sdb.trialClassV2.findMany({

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
@@ -67,7 +68,7 @@ const trialConfigSchema = z.object({
 export async function saveTrialConfigAction(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:config")) {
+  if (!(await checkPermission("trials:config"))) {
     return { ok: false, error: "Không có quyền cấu hình số buổi" };
   }
 
@@ -123,7 +124,7 @@ const createTrialClassSchema = z
 export async function createTrialClassAction(input: unknown): Promise<ActionResult<{ id?: string }>> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:manage")) {
+  if (!(await checkPermission("trials:manage"))) {
     return { ok: false, error: "Không có quyền tạo lớp trải nghiệm" };
   }
 
@@ -178,12 +179,12 @@ export async function enrollLeadChildAction(input: {
 }): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:manage")) {
+  if (!(await checkPermission("trials:manage"))) {
     return { ok: false, error: "Không có quyền xếp chỗ học trải nghiệm" };
   }
 
   const allowOverride = input.allowOverride === true;
-  if (allowOverride && !can(session.user, "trials:override-capacity")) {
+  if (allowOverride && !(await checkPermission("trials:override-capacity"))) {
     return { ok: false, error: "Không có quyền vượt sĩ số" };
   }
   if (!input.trialClassId || !input.leadChildId) {
@@ -270,7 +271,7 @@ export async function searchTrialCandidatesAction(input: {
 > {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:manage")) {
+  if (!(await checkPermission("trials:manage"))) {
     return { ok: false, error: "Không có quyền tìm học viên" };
   }
 
@@ -330,7 +331,7 @@ export async function unenrollLeadChildAction(input: {
 }): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:manage")) {
+  if (!(await checkPermission("trials:manage"))) {
     return { ok: false, error: "Không có quyền gỡ học viên" };
   }
   if (!input.trialClassId || !input.leadChildId) {
@@ -362,7 +363,7 @@ export async function assignTrialTeacherAction(
 ): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:assign-teacher")) {
+  if (!(await checkPermission("trials:assign-teacher"))) {
     return { ok: false, error: "Không có quyền gán giáo viên" };
   }
 
@@ -402,7 +403,7 @@ export async function assignTrialTeacherAction(
 export async function cancelTrialClassAction(trialClassId: string): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:manage")) {
+  if (!(await checkPermission("trials:manage"))) {
     return { ok: false, error: "Không có quyền huỷ lớp" };
   }
   const actor = await resolveActor(session.user.id);
@@ -439,7 +440,7 @@ const attendanceSchema = z.object({
 export async function markTrialAttendanceAction(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:feedback")) {
+  if (!(await checkPermission("trials:feedback"))) {
     return { ok: false, error: "Không có quyền điểm danh" };
   }
 
@@ -463,7 +464,7 @@ export async function markTrialAttendanceAction(input: unknown): Promise<ActionR
     return { ok: false, error: "Không tìm thấy buổi học" };
   }
   // GV thuần (không quyền quản lý) chỉ điểm danh lớp của mình.
-  const isManager = can(session.user, "trials:manage");
+  const isManager = (await checkPermission("trials:manage", { centerId: ses.trialClass.centerId }));
   if (!isManager && hasRole(session.user, "TEACHER") && ses.trialClass.teacherId !== session.user.id) {
     return { ok: false, error: "Bạn chỉ được điểm danh lớp được phân công" };
   }
@@ -497,7 +498,7 @@ export async function completeTrialSessionAction(
 ): Promise<ActionResult> {
   const session = await requireSession();
   if (!session) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "trials:feedback")) {
+  if (!(await checkPermission("trials:feedback"))) {
     return { ok: false, error: "Không có quyền hoàn tất buổi" };
   }
   if (!trialSessionId) return { ok: false, error: "Thiếu buổi học" };
@@ -515,7 +516,7 @@ export async function completeTrialSessionAction(
   if (!ses || !passesScope("TrialClassV2", ses.trialClass, actor)) {
     return { ok: false, error: "Không tìm thấy buổi học" };
   }
-  const isManager = can(session.user, "trials:manage");
+  const isManager = (await checkPermission("trials:manage", { centerId: ses.trialClass.centerId }));
   if (!isManager && hasRole(session.user, "TEACHER") && ses.trialClass.teacherId !== session.user.id) {
     return { ok: false, error: "Bạn chỉ được thao tác lớp được phân công" };
   }

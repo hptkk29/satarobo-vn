@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { replayDelivery, ReplayError } from "@/lib/crm/webhook-replay";
 
 type Result = { ok: true; created: number } | { ok: false; error: string };
@@ -11,7 +11,7 @@ type Result = { ok: true; created: number } | { ok: false; error: string };
 export async function replayAction(deliveryId: string): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "settings:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("settings:edit"))) return { ok: false, error: "Không có quyền" };
   try {
     const r = await replayDelivery(deliveryId);
     revalidatePath("/admin/crm/webhook-replay");

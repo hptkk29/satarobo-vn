@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getFailedDeliveries } from "@/lib/crm/webhook-replay";
 import {
   Table,
@@ -17,8 +17,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Webhook replay | Admin" };
 
 export default async function WebhookReplayPage() {
-  const session = await auth();
-  if (!can(session?.user ?? null, "settings:edit")) redirect("/admin/dashboard");
+  await auth();
+  if (!(await checkPermission("settings:edit"))) redirect("/admin/dashboard");
 
   const failed = await getFailedDeliveries(100);
 

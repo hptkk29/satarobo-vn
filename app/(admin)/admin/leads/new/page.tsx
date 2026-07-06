@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function NewLeadPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "leads:create")) redirect("/leads");
+  if (!(await checkPermission("leads:create"))) redirect("/leads");
 
   const actor = await resolveActor(session.user.id);
   const [orgUnits, courses] = await Promise.all([

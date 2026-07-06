@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function EditLeadPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "leads:edit")) redirect("/leads");
+  if (!(await checkPermission("leads:edit"))) redirect("/leads");
 
   const { id } = await params;
   const actor = await resolveActor(session.user.id);

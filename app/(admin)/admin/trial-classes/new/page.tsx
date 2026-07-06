@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function NewTrialClassPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "trials:manage")) redirect("/trial-classes");
+  if (!(await checkPermission("trials:manage"))) redirect("/trial-classes");
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);

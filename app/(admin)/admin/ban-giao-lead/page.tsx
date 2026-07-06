@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -17,7 +18,7 @@ const LEAD_STATUSES = [
 export default async function HandoverPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "leads:assign")) redirect("/dashboard");
+  if (!(await checkPermission("leads:assign"))) redirect("/dashboard");
 
   const centerScope =
     hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")

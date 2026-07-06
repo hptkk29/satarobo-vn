@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
-import { can } from '@/lib/auth/permissions'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { getAuditActor } from '@/lib/audit/log'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { convertLeadV2, computeInstallmentSplit, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
@@ -78,7 +78,7 @@ export async function submitConvertV2(
     return { ok: false, error: 'Convert v2 chưa được bật (CONVERT_V2_ENABLED)' }
   }
   // Convert = tạo học viên + đăng ký → cần cả 2 quyền (loại MARKETING ra).
-  if (!can(session.user, 'students:create') || !can(session.user, 'enrollments:create')) {
+  if (!(await checkPermission('students:create')) || !(await checkPermission('enrollments:create'))) {
     return { ok: false, error: 'Không có quyền chuyển đổi (tạo học viên + đăng ký)' }
   }
 
@@ -96,7 +96,7 @@ export async function submitConvertV2(
     select: { id: true, assignedToId: true },
   })
   if (!lead) return { ok: false, error: 'Lead không tồn tại' }
-  if (!can(session.user, 'leads:view-all') && lead.assignedToId !== session.user.id) {
+  if (!(await checkPermission('leads:view-all')) && lead.assignedToId !== session.user.id) {
     return { ok: false, error: 'Chỉ chuyển được lead của bạn' }
   }
 

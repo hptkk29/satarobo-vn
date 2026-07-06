@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -24,11 +25,11 @@ interface Props {
 export default async function TrialsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "trials:view")) redirect("/dashboard");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
 
   const { status } = await searchParams;
   const isTeacher = hasRole(session.user, "TEACHER");
-  const canManage = can(session.user, "trials:manage");
+  const canManage = (await checkPermission("trials:manage"));
 
   // Luôn ẩn buổi học thử của lead đã xoá mềm (Lead.deletedAt != null).
   // Lead xoá là soft-delete → cascade onDelete không chạy → trial cũ vẫn còn → lọc ở đây.
@@ -87,7 +88,7 @@ export default async function TrialsPage({ searchParams }: Props) {
       select: { id: true, name: true, code: true },
       orderBy: { displayOrder: "asc" },
     }),
-    can(session.user, "trials:manage")
+    (await checkPermission("trials:manage"))
       ? sdb.trialClassV2.findMany({
           where: { status: "OPEN" },
           orderBy: { startDate: "asc" },
@@ -153,7 +154,7 @@ export default async function TrialsPage({ searchParams }: Props) {
         rooms={rooms.map((r) => ({ id: r.id, label: `${r.name} (${r.code})` }))}
         openTrialClasses={openTrialClasses}
         canManage={canManage}
-        canOverride={can(session.user, "trials:override-capacity")}
+        canOverride={(await checkPermission("trials:override-capacity"))}
         statusFilter={status ?? ""}
         statusLabels={TRIAL_STATUS_LABEL}
       />
