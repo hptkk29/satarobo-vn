@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -29,7 +29,10 @@ export default async function CohortReportPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
-  if (!can(session.user, "classes:view-all") && !can(session.user, "training:manage")) {
+  if (
+    !(await checkPermission("classes:view-all")) &&
+    !(await checkPermission("training:manage"))
+  ) {
     redirect("/dashboard");
   }
 

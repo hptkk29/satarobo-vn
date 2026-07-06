@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { buildLeadReport, type LeadReportRecord } from "@/lib/reports/lead";
@@ -36,7 +36,10 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 export default async function LeadReportPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "leads:view-all") && !can(session.user, "leads:view-own")) {
+  if (
+    !(await checkPermission("leads:view-all")) &&
+    !(await checkPermission("leads:view-own"))
+  ) {
     redirect("/dashboard");
   }
 

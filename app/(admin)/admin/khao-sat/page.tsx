@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Gauge, ClipboardList, ArrowRight } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function SurveyPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "parent-feedback:view")) redirect("/dashboard");
+  if (!(await checkPermission("parent-feedback:view"))) redirect("/dashboard");
 
   // Cách ly cơ sở: Survey/SurveyResponse ∈ SCOPED_MODELS. SurveyResponse → sdb auto-scope
   // (centerId IN tầm nhìn). Survey CÓ THỂ centerId=null (khảo sát dùng chung toàn hệ thống)

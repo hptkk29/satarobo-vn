@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -13,10 +13,13 @@ export const dynamic = "force-dynamic";
 export default async function AdminMediaPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "media:view") && !can(session.user, "media:upload")) {
+  if (
+    !(await checkPermission("media:view")) &&
+    !(await checkPermission("media:upload"))
+  ) {
     redirect("/dashboard");
   }
-  const canApprove = can(session.user, "media:approve");
+  const canApprove = await checkPermission("media:approve");
 
   // Cách ly cơ sở: chỉ thấy lớp + ảnh thuộc cơ sở trong scope (SUPER_ADMIN/HO bypass).
   const actor = await resolveActor(session.user.id);

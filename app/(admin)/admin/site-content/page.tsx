@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { SiteContentClient } from "./client";
 
 export const metadata = { title: "Hình ảnh & nội dung trang | Admin" };
@@ -28,7 +28,7 @@ const FIELDS = [
 export default async function SiteContentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "honors:settings")) {
+  if (!(await checkPermission("honors:settings"))) {
     redirect("/dashboard");
   }
 

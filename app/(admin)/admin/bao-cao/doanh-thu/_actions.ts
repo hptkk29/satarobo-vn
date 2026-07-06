@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
@@ -40,7 +40,7 @@ const targetSchema = z.object({
 export async function setRevenueTargetAction(formData: FormData): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "payments:manage")) {
+  if (!(await checkPermission("payments:manage"))) {
     return { ok: false, error: "Không có quyền đặt mục tiêu doanh thu" };
   }
 

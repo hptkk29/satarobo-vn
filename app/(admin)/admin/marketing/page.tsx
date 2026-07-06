@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { can } from '@/lib/auth/permissions'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 
@@ -44,7 +44,7 @@ function pct(part: number, total: number) {
 export default async function MarketingPage() {
   const session = await auth()
   if (!session?.user) redirect('/login')
-  if (!can(session.user, 'leads:view-all')) redirect('/dashboard')
+  if (!(await checkPermission('leads:view-all'))) redirect('/dashboard')
 
   // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → scopedDb auto-inject centerId IN visible
   // cho count/groupBy. CENTER_MANAGER@CS1 chỉ thấy lead CS1; SUPER_ADMIN/HO = ALL.

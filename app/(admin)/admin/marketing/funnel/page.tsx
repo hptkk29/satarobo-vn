@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { TrendingUp } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getFunnelCounts } from "@/lib/crm/funnel-query";
 import { computeFunnelMetrics } from "@/lib/crm/marketing-metrics";
@@ -14,7 +14,7 @@ const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
 
 export default async function MarketingFunnelPage() {
   const session = await auth();
-  if (!can(session?.user ?? null, "leads:view-all")) redirect("/admin/dashboard");
+  if (!(await checkPermission("leads:view-all"))) redirect("/admin/dashboard");
 
   // C8.3 — SUPER_ADMIN/HO xem toàn hệ thống; role cơ sở chỉ thấy cơ sở mình.
   const actor = await resolveActor(session!.user.id);

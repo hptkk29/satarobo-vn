@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { passesScope } from "@/lib/db-scope";
@@ -17,7 +17,7 @@ const schema = z.object({
 export async function respondToFeedback(input: unknown): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "parent-feedback:view")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("parent-feedback:view"))) return { ok: false, error: "Không có quyền" };
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };

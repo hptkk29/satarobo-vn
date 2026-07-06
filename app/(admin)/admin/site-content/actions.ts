@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { assertCan } from "@/lib/auth/permissions";
+import { assertPermission } from "@/lib/auth/check-permission";
 
 interface SaveInput {
   pageKey: string;
@@ -18,7 +18,7 @@ export async function saveSiteContentAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    assertCan(session.user, "honors:settings");
+    await assertPermission("honors:settings");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { LineChart } from "@/components/charts/line-chart";
@@ -54,7 +54,7 @@ export default async function CenterReportPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: báo cáo tài chính trung tâm → quản lý tài chính (Admin + quản lý cơ sở + Kế toán).
-  if (!can(session.user, "payments:manage")) {
+  if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard");
   }
 

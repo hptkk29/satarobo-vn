@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { db } from "@/lib/db";
 import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -71,7 +71,7 @@ function buildHref(type: string, status: string): string {
 export default async function ParentRequestsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "parent-requests:manage")) redirect("/dashboard");
+  if (!(await checkPermission("parent-requests:manage"))) redirect("/dashboard");
 
   const { type, status } = await searchParams;
   const activeType =
