@@ -37,7 +37,9 @@ export const SCOPE_EXEMPT = new Set<string>([
   "SataCoinRule", // config, centerId null = áp mọi cơ sở
   "FacebookPageMapping", // mapping Page→center (cấu hình hạ tầng, không phải dữ liệu nghiệp vụ)
   "WorkShiftConfig", // R6-B2 — cấu hình ca per-center, centerId null = mặc định toàn hệ thống
-  "RevenueTarget", // LMS-16 — KPI doanh thu, centerId null = mục tiêu toàn hệ thống; scope tay qua getRevenueTargets
+  // LMS-16 — RevenueTarget là config mục tiêu KPI; centerId null = mục tiêu toàn hệ
+  // thống; scope tay qua getRevenueTargets. (Trước đây khai báo lặp 2 lần — đã dọn.)
+  "RevenueTarget",
   // R7-15/R7-16 (tech-debt — xem db-import-allowlist): ReportCard/EvaluationRound dùng
   // bare db + manual scope-check (ownership/center) trong lib/lms/* + lib/eval/*. CHƯA
   // auto-scope: ReportCard.centerId nullable, EvaluationRound có round TEACHER_EVAL
@@ -48,13 +50,20 @@ export const SCOPE_EXEMPT = new Set<string>([
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
   // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
   "RefundRequest",
-  // LMS-16 — RevenueTarget là config mục tiêu; centerId null = toàn hệ thống.
-  "RevenueTarget",
-  // LMS-18 (W5f phase A) — centerId ĐÃ thêm + backfill. FL3-02 đã flip Enrollment +
-  // ClassSession sang SCOPED_MODELS. Attendance CHƯA flip (ngoài scope FL3-02): cách ly
-  // vẫn qua sessionId/classId IN scopedClassIds (manual) ở trang điểm danh. Flip Attendance
-  // ở ticket riêng sau khi backfill Attendance.centerId verify + e2e cách ly.
+  // LMS-18 (W5f phase A) — centerId ĐÃ thêm. FL3-02 đã flip Enrollment + ClassSession
+  // sang SCOPED_MODELS. Attendance CHƯA flip: backfill DEV đã chạy + verify sạch
+  // (06/07, script sửa lỗi join sessionId→ClassSession→Class, xem
+  // Document/.../backfill_attendance_centerid.sql) — PROD CHƯA verify/backfill, đây là
+  // điều kiện bắt buộc trước khi flip (RBAC flip go/no-go #2). Cách ly hiện vẫn qua
+  // sessionId/classId IN scopedClassIds (manual) ở trang điểm danh.
   "Attendance",
+  // RBAC-DECISION #5 (06/07) — Center LÀ ranh giới tenant, không tự scope theo chính
+  // nó (self-referential, sẽ vỡ mọi thao tác cross-center hợp lệ: HO xem toàn bộ
+  // center, branch switcher, super-admin list center). Lớp bảo vệ PHẢI là permission
+  // tường minh ở call-site (assertCan/can theo actor.visibleCenterIds), KHÔNG phải
+  // auto-filter tầng query. TODO: audit các nơi `db.center.findMany` để đảm bảo
+  // non-HO/non-SUPER_ADMIN actor không list được center ngoài visibleCenterIds.
+  "Center",
 ]);
 
 function bypassesScope(actor: Actor): boolean {
