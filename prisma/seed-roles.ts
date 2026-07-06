@@ -100,11 +100,16 @@ export const ROLE_SEED: RoleSeed[] = [
     ],
   },
   {
-    // Role MỚI — Kiệt duyệt 06/07/2026 (mapping-proposal.md §2). Map TRAINING (v1,
-    // 33 action LMS) — role thật đang dùng bởi Phan Thành Toại (Lead Đào tạo).
+    // Mapping TRAINING (v1, 33 action LMS) đã duyệt — Kiệt 06/07/2026 (mapping-
+    // proposal.md §2) — role thật đang dùng bởi Phan Thành Toại (Lead Đào tạo).
     // Toàn bộ GLOBAL: nội dung/giáo trình dùng chung cả 2 cơ sở, không tách theo
     // trung tâm (Phòng Đào tạo, câu 74a: "quản lý đào tạo chỉ quản lý nội dung").
-    code: "HO_TRAINING", name: "Đào tạo (nội dung LMS)",
+    // ⚠️ SỬA 06/07/2026: RoleDef code ĐÚNG là "TRAINING" (không phải "HO_TRAINING")
+    // — `prisma/patch-rbac-staff.ts` (K1, đã chạy PROD 02/07 + DEV trước đó) đã tạo
+    // RoleDef "TRAINING" @ HO cho user có legacy role TRAINING (vd Phan Thành Toại
+    // đã có UserOrgRole(TRAINING@HO) từ trước, chỉ thiếu permission — đây là phần bổ
+    // sung permission cho role đã gán, KHÔNG cần gán UserOrgRole mới).
+    code: "TRAINING", name: "Đào tạo (toàn LMS)",
     perms: [
       { action: "training:manage", scopeType: "GLOBAL" },
       { action: "trials:config", scopeType: "GLOBAL" },

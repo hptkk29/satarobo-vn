@@ -2,7 +2,9 @@
 
 > **Trạng thái: Kiệt đã ký duyệt** `phieu-kiet-duyet-rbac-mapping (1).docx` ngày 06/07/2026 — tick "Đồng ý" cho cả 5 mục (ACCOUNTANT, TRAINING, SALES_CSM, MARKETING, HR).
 >
-> **Đã seed vào `prisma/seed-roles.ts` + chạy trên DB test local** (4/5 role): ACCOUNTANT (23 action → HO_ACCOUNTANT GLOBAL toàn bộ + subset 7 action → CENTER_ACCOUNTANT theo nghiệp vụ "thu tiền/hóa đơn/công nợ"), TRAINING (33 action → role mới `HO_TRAINING` GLOBAL), SALES_CSM (25 action → CENTER_SALES_CSM, OWN cho phần lead cá nhân/CENTER cho phần vận hành), MARKETING (35 action → HO_MARKETING GLOBAL). Verify: `pnpm typecheck && lint` PASS, 90 action tham chiếu đối chiếu registry khớp 100%, `vitest run lib/auth` 115/115 PASS, seed chạy thật trên Postgres test local ra đúng số lượng permission mong đợi (23/33/25/35).
+> **Đã seed vào `prisma/seed-roles.ts` + ÁP DỤNG THẬT lên DEV Supabase** (4/5 role): ACCOUNTANT (23 action → HO_ACCOUNTANT GLOBAL toàn bộ + subset 7 action → CENTER_ACCOUNTANT theo nghiệp vụ "thu tiền/hóa đơn/công nợ"), TRAINING (33 action → role `TRAINING` GLOBAL), SALES_CSM (25 action → CENTER_SALES_CSM, OWN cho phần lead cá nhân/CENTER cho phần vận hành), MARKETING (35 action → HO_MARKETING GLOBAL). Verify: `pnpm typecheck && lint` PASS, 90 action tham chiếu đối chiếu registry khớp 100%, `vitest run lib/auth` 115/115 PASS, seed chạy trên Postgres test local + DEV Supabase thật ra đúng số lượng permission mong đợi (23/33/25/35).
+>
+> ⚠️ **Sửa quan trọng (06/07/2026, sau khi seed lần đầu):** ban đầu định tạo role mới `HO_TRAINING` — phát hiện `prisma/patch-rbac-staff.ts` (K1, đã chạy PROD 02/07 + DEV trước đó) **đã tạo sẵn RoleDef code `TRAINING`** (không có tiền tố `HO_`) và **Phan Thành Toại đã có `UserOrgRole(TRAINING@HO)` từ trước** — chỉ role đó chưa có permission nào (0). Đã sửa seed dùng đúng code `TRAINING` hiện có thay vì tạo role trùng lặp `HO_TRAINING`. Không cần gán UserOrgRole mới cho Phan Thành Toại — anh ấy tự động có quyền ngay khi seed permission chạy.
 >
 > ⚠️ **HR CHƯA SEED** — dù Kiệt tick "Đồng ý", mục này chỉ có phân tích "chưa đủ dữ liệu" (không phải khuyến nghị cụ thể) và câu hỏi mở (có nhân sự HR làm tại CS1/CS2 không?) **chưa được trả lời** trong file trả về. Để tránh suy đoán trên câu hỏi thật sự chưa có câu trả lời, HR bị loại khỏi đợt seed này — cần hỏi lại Kiệt/BGĐ câu hỏi cụ thể đó trước khi seed.
 >
@@ -33,7 +35,7 @@ Tất cả đóng dấu: *"Chúng tôi xác nhận các trả lời trên là qu
 | Role v1 | Khuyến nghị mapping v2 | scopeType | Độ tin cậy | Kiệt duyệt |
 |---|---|---|---|---|
 | `ACCOUNTANT` | Tách 2 role **đã có sẵn**: `HO_ACCOUNTANT` + `CENTER_ACCOUNTANT` | HO_ACCOUNTANT=GLOBAL, CENTER_ACCOUNTANT=CENTER | **Cao** (2 nguồn độc lập xác nhận) | ☐ Đồng ý &nbsp;☐ Cần sửa: __________ |
-| `TRAINING` | Tạo role mới **`HO_TRAINING`** | GLOBAL | **Cao** (2 nguồn độc lập xác nhận) | ☐ Đồng ý &nbsp;☐ Cần sửa: __________ |
+| `TRAINING` | Role **`TRAINING`** đã có sẵn (chỉ thêm permission) | GLOBAL | **Cao** (2 nguồn độc lập xác nhận) | ☐ Đồng ý &nbsp;☐ Cần sửa: __________ |
 | `SALES_CSM` | Map vào role **đã có sẵn**: `CENTER_SALES_CSM` | OWN (phần cá nhân) / CENTER (phần QL xem chung) | **Cao** | ☐ Đồng ý &nbsp;☐ Cần sửa: __________ |
 | `MARKETING` | Map vào role **đã có sẵn**: `HO_MARKETING` | GLOBAL | Trung bình (chỉ có "Ok", không phiếu riêng) | ☐ Đồng ý &nbsp;☐ Cần sửa: __________ |
 | `HR` | **Chưa đủ dữ liệu** — xem mục 4 | Chưa xác định | Thấp — cần hỏi lại | ☐ Đồng ý &nbsp;☐ Cần sửa: __________ |
@@ -59,7 +61,7 @@ Danh sách 23 action cụ thể → xem [`rolepermission-seed-gap.md`](./roleper
 
 ---
 
-## 2. `TRAINING` → tạo mới `HO_TRAINING` (GLOBAL) — độ tin cậy CAO
+## 2. `TRAINING` → role `TRAINING` đã có sẵn (GLOBAL) — độ tin cậy CAO
 
 **2 nguồn độc lập:**
 
@@ -70,7 +72,7 @@ Danh sách 23 action cụ thể → xem [`rolepermission-seed-gap.md`](./roleper
 
 → Không có `RoleDef` v2 nào hiện tại đủ khớp nghĩa "quản lý học liệu LMS toàn hệ thống, không dạy lớp" (`TEACHER`/`ASSISTANT_TEACHER` chỉ có quyền CLASS/ASSIGNED; ép vào `SUPER_ADMIN` là cấp thừa quyền, vi phạm least-privilege).
 
-**Khuyến nghị:** Tạo `RoleDef` mới, code **`HO_TRAINING`** (đúng convention `HO_*` đã dùng cho role cross-center-theo-chức-năng), scope **GLOBAL**, gán cho 33 action LMS (`curriculum:*`, `questions:*`, `exams:*`, `assignments:*`, `documents:*`, `training:manage`, `teaching-materials:*` — danh sách đầy đủ trong `rolepermission-seed-gap.md`). Gán role này cho Phan Thành Toại trước tiên.
+**Khuyến nghị:** Ban đầu định tạo `RoleDef` mới — sau đó phát hiện `prisma/patch-rbac-staff.ts` đã tạo sẵn RoleDef code **`TRAINING`** (0 permission) và đã gán `UserOrgRole(TRAINING@HO)` cho Phan Thành Toại từ trước. Chỉ cần seed permission (33 action LMS: `curriculum:*`, `questions:*`, `exams:*`, `assignments:*`, `documents:*`, `training:manage`, `teaching-materials:*`) vào role `TRAINING` đã có — KHÔNG tạo role mới, KHÔNG cần gán UserOrgRole (đã có sẵn).
 
 **Còn hở (comment code lỗi thời):** `lib/auth/permissions.ts` dòng 19-21 ghi "ALL 8 ROLES" nhưng thực tế enum có 9 role (thiếu `TRAINING` trong comment, role được thêm ở migration `20260624000000_fl_foundation`). Đề xuất Kiệt xác nhận: chỉ cần sửa comment cho đúng, hay có lý do lịch sử khác cần biết trước.
 
@@ -116,12 +118,12 @@ BGĐ (câu 10) chỉ ghi *"Ok"*, không có phiếu riêng bộ phận Marketing
 
 | RoleDef code mới | scopeType | Lý do | Trạng thái |
 |---|---|---|---|
-| `HO_TRAINING` | GLOBAL | Không có role v2 nào khớp nghĩa "quản lý học liệu LMS toàn hệ thống" | Khuyến nghị tạo — độ tin cậy cao |
+| ~~`HO_TRAINING`~~ | — | KHÔNG tạo — role `TRAINING` đã có sẵn từ patch-rbac-staff.ts, chỉ cần seed permission | Đã sửa, đã seed permission vào `TRAINING` |
 | `CENTER_HR` | CENTER | Chỉ tạo NẾU xác nhận có HR làm việc tại cơ sở (chưa chắc) | Tạm hoãn — chờ trả lời câu hỏi mục 4 |
 
 ## Việc cần làm SAU KHI Kiệt duyệt (không nằm trong phạm vi tài liệu này)
 
 1. Seed action-grant chi tiết cho từng role theo bảng đã duyệt (dùng `rolepermission-seed-gap.md` làm checklist 283 dòng) — **KHÔNG để agent tự suy luận scopeType**, seed theo đúng mapping đã duyệt ở đây.
-2. Nếu tạo `HO_TRAINING`: gán `UserOrgRole` cho Phan Thành Toại tại OrgUnit ROOT/HO.
+2. ~~Nếu tạo HO_TRAINING: gán UserOrgRole cho Phan Thành Toại~~ — KHÔNG cần, Phan Thành Toại đã có `UserOrgRole(TRAINING@HO)` từ trước (patch-rbac-staff.ts), đã tự động có quyền khi seed permission chạy.
 3. Thiết kế riêng: cờ chia sẻ lead theo team (mục 3) + field-level PII cho `leads:*` (mục 5) — 2 việc này KHÔNG phải seed RolePermission đơn thuần, cần ticket riêng.
 4. Sửa comment lỗi thời "ALL 8 ROLES" → "9 ROLES" trong `lib/auth/permissions.ts` (việc dọn nhỏ, làm cùng lúc).
