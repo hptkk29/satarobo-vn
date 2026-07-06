@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getNonEnrollableCenterIds, notHeadOfficeWhere } from "@/lib/enrollment-flow";
@@ -13,7 +13,7 @@ const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"];
 export default async function NewEnrollmentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "enrollments:create")) {
+  if (!(await checkPermission("enrollments:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

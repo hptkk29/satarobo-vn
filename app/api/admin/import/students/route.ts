@@ -8,7 +8,7 @@ import {
   BloodTypeEnum,
   GenderEnum,
 } from "@/lib/validators/student";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 // Excel date parser — reused pattern from B3 / C2.
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "students:import")) {
+  if (!(await checkPermission("students:import"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import {
@@ -28,7 +28,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function ClassStudentsPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "classes:edit")) {
+  if (!(await checkPermission("classes:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
@@ -90,7 +90,7 @@ export default async function ClassStudentsPage({ params }: Props) {
   }));
 
   // SUPER_ADMIN/CENTER_MANAGER mới được override sức chứa (classes:create).
-  const canOverride = can(session.user, "classes:create");
+  const canOverride = await checkPermission("classes:create", { centerId: cls.centerId });
 
   return (
     <div>

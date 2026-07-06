@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { ClassGroupForm } from "../_components/class-group-form";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function NewClassGroupPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "class_group:create")) {
+  if (!(await checkPermission("class_group:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

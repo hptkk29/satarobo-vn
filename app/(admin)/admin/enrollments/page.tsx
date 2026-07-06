@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, ClipboardList, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
@@ -50,8 +50,8 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   // P1-a: trang Đăng ký học KHÔNG dành cho GV — chỉ quản lý/sale/kế toán (view-all).
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "enrollments:view-all")) redirect("/dashboard");
-  const canDelete = can(session.user, "enrollments:delete");
+  if (!(await checkPermission("enrollments:view-all"))) redirect("/dashboard");
+  const canDelete = await checkPermission("enrollments:delete");
 
   // Cách ly cơ sở (FL3-02): Enrollment giờ ∈ SCOPED_MODELS → scopedDb tự inject
   // `Enrollment.centerId IN visibleCenters`. KHÔNG còn scope tay qua class.centerId.

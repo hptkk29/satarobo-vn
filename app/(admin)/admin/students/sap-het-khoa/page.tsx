@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { GraduationCap } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 
 export const metadata = { title: "Sắp hết khoá | Admin" };
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function NearingEndPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "enrollments:view-all")) redirect("/dashboard");
+  if (!(await checkPermission("enrollments:view-all"))) redirect("/dashboard");
 
   // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ thấy cơ sở mình.
   const centerScope =

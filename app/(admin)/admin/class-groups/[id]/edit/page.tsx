@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { scopedDb } from "@/lib/db-scope";
@@ -18,7 +18,7 @@ interface Props {
 export default async function EditClassGroupPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "class_group:edit")) {
+  if (!(await checkPermission("class_group:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { buildSessionAttendanceRows, type AttendanceRosterRow } from "@/lib/attendance/roster";
 
@@ -26,12 +26,15 @@ export async function loadClassSessionRoster(sessionId: string): Promise<RosterR
   const sdb = scopedDb(actor);
   const sess = await sdb.classSession.findFirst({
     where: { id },
-    select: { id: true, class: { select: { teacherId: true, assistantId: true } } },
+    select: {
+      id: true,
+      class: { select: { teacherId: true, assistantId: true, centerId: true } },
+    },
   });
   if (!sess) return { ok: false, error: "Buổi học không tồn tại" };
 
   // Owner-scope: GV (chỉ view-own) phải là GV/TA của lớp; QL/SUPER_ADMIN bỏ qua.
-  if (!can(actor, "classes:view-all")) {
+  if (!(await checkPermission("classes:view-all", { centerId: sess.class.centerId }))) {
     const isOwner =
       sess.class.teacherId === session.user.id || sess.class.assistantId === session.user.id;
     if (!isOwner) return { ok: false, error: "Buổi học không tồn tại" };

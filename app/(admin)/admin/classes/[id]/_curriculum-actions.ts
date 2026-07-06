@@ -1,13 +1,13 @@
 "use server";
 
-// R7-06 — server-action wrappers (mỏng): auth + can("classes:edit") + scope cơ sở.
+// R7-06 — server-action wrappers (mỏng): auth + checkPermission("classes:edit") + scope cơ sở.
 // Class LÀ center-scoped → một QL@CS2 KHÔNG được điều chỉnh buổi của lớp CS1
 // (scopedDb tự inject centerId; passesScope giữ thêm cho rõ ý — R7-06-C7).
 // Logic nghiệp vụ nằm ở lib/classes/* (snapshot, adjust); file này chỉ gác cổng.
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { scopedDb, passesScope } from "@/lib/db-scope";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { getAuditActor } from "@/lib/audit/log";
 import { adoptCurriculumVersion } from "@/lib/classes/snapshot";
@@ -26,7 +26,7 @@ type Gate = {
 async function gate(): Promise<{ ok: true; gate: Gate } | { ok: false; error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "classes:edit")) {
+  if (!(await checkPermission("classes:edit"))) {
     return { ok: false, error: "Không có quyền chỉnh sửa lớp" };
   }
   const actor = await resolveActor(session.user.id);

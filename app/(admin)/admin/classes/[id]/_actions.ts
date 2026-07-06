@@ -5,7 +5,8 @@ import { auth } from "@/lib/auth";
 import { getStudentProgress } from "@/lib/progress";
 import { sendProgressReportEmail } from "@/lib/email/progress-report";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
-import { can, hasRole } from "@/lib/auth/permissions";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 
@@ -19,7 +20,7 @@ export async function generateClassProgressReports(
 ): Promise<{ ok: boolean; created?: number; emailed?: number; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "completions:manage")) {
+  if (!(await checkPermission("completions:manage"))) {
     return { ok: false, error: "Không có quyền tạo báo cáo" };
   }
 

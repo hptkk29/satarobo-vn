@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma, EnrollmentStatus } from "@prisma/client";
-import { can, hasAnyRole, type Action } from "@/lib/auth/permissions";
+import { hasAnyRole, type Action } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit, orgUnitIdForCenter } from "@/lib/org/org-service";
 import { classCreateSchema } from "@/lib/validators/class";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
@@ -79,7 +80,7 @@ async function requireClassWrite(action: "create" | "update" | "delete") {
     delete: "classes:delete",
   };
 
-  if (!can(session.user, actionMap[action])) {
+  if (!(await checkPermission(actionMap[action]))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -597,7 +598,7 @@ export async function approveClass(classId: string): Promise<WfResult> {
 export async function generateSessionsAction(classId: string): Promise<WfResult & { generated?: number }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ sinh buổi cho lớp trong tầm nhìn actor (chống IDOR).
   const actor = await resolveActor(session.user.id);
   if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
@@ -687,7 +688,7 @@ export async function previewClassReschedule(classId: string): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
   const actor = await resolveActor(session.user.id);
   const res = await computeFutureReschedule(classId, actor);
   if (!res.ok) return res;
@@ -706,7 +707,7 @@ export async function previewClassReschedule(classId: string): Promise<
 export async function applyClassReschedule(classId: string): Promise<WfResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "classes:edit")) return { ok: false, error: "Không có quyền" };
+  if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ dời buổi cho lớp trong tầm nhìn actor (chống IDOR).
   const actor = await resolveActor(session.user.id);
   if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
@@ -765,7 +766,7 @@ export async function cancelClassAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   // Tái dùng quyền `classes:edit` (giống reschedule / generate sessions).
-  if (!can(session.user, "classes:edit")) {
+  if (!(await checkPermission("classes:edit"))) {
     return { ok: false, error: "Không có quyền hủy lớp" };
   }
 
