@@ -3,7 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { QuestionForm } from "../_components/question-form";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function NewQuestionPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "questions:author")) {
+  if (!(await checkPermission("questions:author"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

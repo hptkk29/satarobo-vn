@@ -3,7 +3,7 @@ import { FileSpreadsheet, HelpCircle, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { QuestionType, QuestionDifficulty } from "@prisma/client";
 import { buildQuestionWhere } from "@/lib/questions/filter";
 
@@ -41,7 +41,7 @@ interface SearchParams {
 export default async function QuestionsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "questions:view")) {
+  if (!(await checkPermission("questions:view"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

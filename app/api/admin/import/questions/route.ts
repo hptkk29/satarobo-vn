@@ -7,7 +7,7 @@ import {
   QuestionTypeEnum,
   QuestionDifficultyEnum,
 } from "@/lib/validators/question";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 function parseBoolean(v: unknown): boolean {
   if (typeof v === "boolean") return v;
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(session.user, "questions:author")) {
+  if (!(await checkPermission("questions:author"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

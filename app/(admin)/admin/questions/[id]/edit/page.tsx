@@ -7,7 +7,7 @@ import {
   QuestionForm,
   type QuestionFormValue,
 } from "../../_components/question-form";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ interface Props {
 export default async function EditQuestionPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!can(session.user, "questions:edit")) {
+  if (!(await checkPermission("questions:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 

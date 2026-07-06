@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import {
   detectDocumentType,
   documentSchema,
@@ -21,7 +21,7 @@ async function requireRole(): Promise<
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "documents:upload")) {
+  if (!(await checkPermission("documents:upload"))) {
     return { ok: false, error: "Không có quyền quản lý tài liệu" };
   }
   return { ok: true, userId: session.user.id ?? "" };
