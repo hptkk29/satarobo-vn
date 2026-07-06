@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
-import { can } from '@/lib/auth/can'
+import { checkPermission } from '@/lib/auth/check-permission'
 import { ClassStatus, type Prisma } from '@prisma/client'
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 import { getAssignableTeachers } from '@/lib/teachers/assignable'
@@ -71,13 +71,13 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
   if (!session?.user) redirect('/login')
 
   const actor = await resolveActor(session.user.id)
-  if (!can(actor, 'classes:view-all') && !can(actor, 'classes:view-own')) {
+  if (!(await checkPermission('classes:view-all')) && !(await checkPermission('classes:view-own'))) {
     redirect('/dashboard')
   }
 
-  const canCreate = can(actor, 'classes:create')
-  const canUpdate = can(actor, 'classes:edit')
-  const canDelete = can(actor, 'classes:delete')
+  const canCreate = await checkPermission('classes:create')
+  const canUpdate = await checkPermission('classes:edit')
+  const canDelete = await checkPermission('classes:delete')
   const canManage = canUpdate || canDelete
 
   const params = await searchParams
@@ -90,8 +90,8 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
   const courseFilter = params.courseId?.trim() || undefined
   const teacherFilter = params.teacherId?.trim() || undefined
 
-  const hasViewAll = can(actor, 'classes:view-all')
-  const hasViewOwn = can(actor, 'classes:view-own')
+  const hasViewAll = await checkPermission('classes:view-all')
+  const hasViewOwn = await checkPermission('classes:view-own')
   const effectiveTeacherFilter = (!hasViewAll && hasViewOwn) ? session.user.id : teacherFilter
 
   const baseWhere: Prisma.ClassWhereInput = {

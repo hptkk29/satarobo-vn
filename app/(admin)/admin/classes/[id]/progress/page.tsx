@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft, LineChart } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can, hasRole, canViewParentContact } from "@/lib/auth/permissions";
+import { hasRole, canViewParentContact } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getClassProgress, getClassGradebook } from "@/lib/progress";
@@ -52,9 +53,10 @@ export default async function ClassProgressPage({ params }: Props) {
   if (!cls) notFound();
 
   // Gate: view-all (quản lý) hoặc giáo viên phụ trách lớp (view-own).
-  const canViewAll = can(session.user, "classes:view-all");
+  const canViewAll = await checkPermission("classes:view-all", { centerId: cls.centerId });
   const isOwnTeacher =
-    can(session.user, "classes:view-own") && cls.teacherId === session.user.id;
+    (await checkPermission("classes:view-own", { centerId: cls.centerId, classId: cls.id })) &&
+    cls.teacherId === session.user.id;
   if (!canViewAll && !isOwnTeacher) {
     redirect("/dashboard?error=unauthorized");
   }

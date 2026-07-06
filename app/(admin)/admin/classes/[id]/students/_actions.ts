@@ -5,7 +5,7 @@
 // (classes:create — SUPER_ADMIN/CENTER_MANAGER) + audit (ghi trong lib).
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
@@ -22,7 +22,7 @@ async function gate(): Promise<
 > {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
-  if (!can(session.user, "classes:edit")) {
+  if (!(await checkPermission("classes:edit"))) {
     return { ok: false, error: "Không có quyền gán học viên" };
   }
   const actor = await resolveActor(session.user.id);
@@ -46,7 +46,7 @@ async function assertClassInScope(
 async function canOverrideCapacity(): Promise<boolean> {
   const session = await auth();
   if (!session?.user) return false;
-  return can(session.user, "classes:create");
+  return checkPermission("classes:create");
 }
 
 /** Gán danh sách enrollment đã chọn vào lớp. */

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
@@ -64,9 +64,9 @@ export default async function ClassDetailPage({ params }: Props) {
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
 
-  const hasEdit = can(actor, "classes:edit");
-  const hasViewAll = can(actor, "classes:view-all");
-  const hasViewOwn = can(actor, "classes:view-own");
+  const hasEdit = await checkPermission("classes:edit");
+  const hasViewAll = await checkPermission("classes:view-all");
+  const hasViewOwn = await checkPermission("classes:view-own");
   if (!hasEdit && !hasViewAll && !hasViewOwn) {
     redirect("/dashboard?error=unauthorized");
   }
@@ -198,13 +198,18 @@ export default async function ClassDetailPage({ params }: Props) {
     .filter((r) => !cls.centerId || r.centerId === cls.centerId)
     .map((r) => ({ id: r.id, label: `${r.code} — ${r.name}` }));
 
-  const canEdit = can(actor, "classes:edit", { centerId: cls.centerId });
+  const canEdit = await checkPermission("classes:edit", { centerId: cls.centerId });
+  const canApproveClass =
+    actor.isSuperAdmin ||
+    (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
+      (await checkPermission("classes:edit", { centerId: cls.centerId })));
   const lifecycleV2 = isSessionLifecycleV2Enabled();
 
   // Tab Ảnh / Học bù — gate quyền (GV chỉ view-own không có parent-requests:manage).
-  const canViewMedia = can(actor, "media:view") || can(actor, "media:upload");
-  const canApproveMedia = can(actor, "media:approve");
-  const canManageMakeup = can(actor, "parent-requests:manage");
+  const canViewMedia =
+    (await checkPermission("media:view")) || (await checkPermission("media:upload"));
+  const canApproveMedia = await checkPermission("media:approve");
+  const canManageMakeup = await checkPermission("parent-requests:manage");
 
   // Tab SCORM (R2-CLASS-5) — chỉ GV phân công lớp này hoặc QL đào tạo, và flag ON
   // (route /scorm/play tự gate lại canOpenScorm). Tab Đánh giá (R2-CLASS-7) — GV của
@@ -317,11 +322,7 @@ export default async function ClassDetailPage({ params }: Props) {
             canSubmit={actor.orgRoles.some((r) =>
               ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"].includes(r.roleCode),
             )}
-            canApprove={
-              actor.isSuperAdmin ||
-              (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
-                can(actor, "classes:edit", { centerId: cls.centerId }))
-            }
+            canApprove={canApproveClass}
             approvedByName={cls.approvedByName}
           />
           <ClassReschedule classId={cls.id} canEdit={canEdit} />

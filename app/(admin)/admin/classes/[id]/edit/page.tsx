@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
@@ -26,9 +26,9 @@ export default async function EditClassPage({ params }: Props) {
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
 
-  const hasEdit = can(actor, "classes:edit");
-  const hasViewAll = can(actor, "classes:view-all");
-  const hasViewOwn = can(actor, "classes:view-own");
+  const hasEdit = await checkPermission("classes:edit");
+  const hasViewAll = await checkPermission("classes:view-all");
+  const hasViewOwn = await checkPermission("classes:view-own");
 
   if (!hasEdit && !hasViewAll && !hasViewOwn) {
     redirect("/dashboard?error=unauthorized");
@@ -154,7 +154,11 @@ export default async function EditClassPage({ params }: Props) {
     .filter((r) => !cls.centerId || r.centerId === cls.centerId)
     .map((r) => ({ id: r.id, label: `${r.code} — ${r.name}` }));
 
-  const canEdit = can(actor, "classes:edit", { centerId: cls.centerId });
+  const canEdit = await checkPermission("classes:edit", { centerId: cls.centerId });
+  const canApproveClass =
+    actor.isSuperAdmin ||
+    (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
+      (await checkPermission("classes:edit", { centerId: cls.centerId })));
 
   const formValue: ClassFormValue = {
     id: cls.id,
@@ -205,10 +209,7 @@ export default async function EditClassPage({ params }: Props) {
           classId={cls.id}
           status={cls.status}
           canSubmit={actor.orgRoles.some(r => ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"].includes(r.roleCode))}
-          canApprove={
-            actor.isSuperAdmin ||
-            (actor.orgRoles.some(r => r.roleCode === "CENTER_MANAGER") && can(actor, "classes:edit", { centerId: cls.centerId }))
-          }
+          canApprove={canApproveClass}
           approvedByName={cls.approvedByName}
         />
       </div>
