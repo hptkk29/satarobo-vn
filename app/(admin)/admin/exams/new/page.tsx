@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -27,7 +26,8 @@ export default async function NewExamPage() {
       select: { id: true, name: true, classCode: true },
       take: 200,
     }),
-    db.lesson.findMany({
+    // Lesson = giáo trình toàn cục (không center-scope) → sdb pass-through.
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],

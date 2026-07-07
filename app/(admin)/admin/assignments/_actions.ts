@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 import { z } from "zod";
@@ -21,6 +22,8 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+type Sdb = ReturnType<typeof scopedDb>;
+
 type GradeActor = {
   id: string;
   role: string;
@@ -28,8 +31,19 @@ type GradeActor = {
   grants?: { action: string; grant: "ALLOW" | "DENY" }[];
 };
 
+// Loại B (Nhóm 01 L1) — Assignment/AssignmentSubmission/AssignmentDocument KHÔNG
+// ∈ SCOPED_MODELS (không centerId) → scopedDb pass-through. Cách ly tay qua
+// class.centerId ∈ actor.visibleCenterIds (HO/SUPER bypass, pattern parent-feedback).
+function classCenterVisible(
+  actor: Actor,
+  cls: { centerId: string | null } | null | undefined,
+): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  return !!cls && cls.centerId != null && actor.visibleCenterIds.includes(cls.centerId);
+}
+
 async function requireRole(): Promise<
-  | { ok: true; userId: string; user: GradeActor }
+  | { ok: true; userId: string; user: GradeActor; actor: Actor; sdb: Sdb }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -37,7 +51,14 @@ async function requireRole(): Promise<
   if (!(await checkPermission("assignments:create"))) {
     return { ok: false, error: "Không có quyền quản lý bài tập" };
   }
-  return { ok: true, userId: session.user.id ?? "", user: session.user };
+  const actor = await resolveActor(session.user.id);
+  return {
+    ok: true,
+    userId: session.user.id ?? "",
+    user: session.user,
+    actor,
+    sdb: scopedDb(actor),
+  };
 }
 
 // LMS-2 / W1-2 — gate phân quyền CHẤM ĐIỂM: GV chỉ chấm bài của lớp mình
@@ -55,10 +76,10 @@ async function canGradeClassWork(
   );
 }
 
-async function resolveEmployeeId(userId: string): Promise<string | null> {
+async function resolveEmployeeId(sdb: Sdb, userId: string): Promise<string | null> {
   if (!userId) return null;
   try {
-    const u = await db.user.findUnique({
+    const u = await sdb.user.findUnique({
       where: { id: userId },
       select: { employeeId: true },
     });
@@ -66,6 +87,19 @@ async function resolveEmployeeId(userId: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Loại B — bài tập theo id từ client: xác minh lớp của bài thuộc tầm nhìn actor. */
+async function assignmentClassVisible(
+  sdb: Sdb,
+  actor: Actor,
+  assignmentId: string,
+): Promise<boolean> {
+  const a = await sdb.assignment.findUnique({
+    where: { id: assignmentId },
+    select: { class: { select: { centerId: true } } },
+  });
+  return !!a && classCenterVisible(actor, a.class);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -84,10 +118,20 @@ export async function createAssignment(
   }
   const data = parsed.data;
 
-  const createdById = await resolveEmployeeId(gate.userId);
+  // Loại B — lớp của bài tập mới phải thuộc tầm nhìn actor (sdb.class auto-scope
+  // → lớp ngoài cơ sở trả null).
+  const cls = await gate.sdb.class.findUnique({
+    where: { id: data.classId },
+    select: { centerId: true },
+  });
+  if (!cls || !classCenterVisible(gate.actor, cls)) {
+    return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
+  }
+
+  const createdById = await resolveEmployeeId(gate.sdb, gate.userId);
 
   try {
-    const a = await db.assignment.create({
+    const a = await gate.sdb.assignment.create({
       data: { ...data, createdById },
       select: { id: true },
     });
@@ -119,8 +163,20 @@ export async function updateAssignment(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  // Loại B — bài hiện tại + lớp đích (nếu đổi) đều phải trong tầm nhìn actor.
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, id))) {
+    return { ok: false, error: "Không tìm thấy bài tập" };
+  }
+  const targetCls = await gate.sdb.class.findUnique({
+    where: { id: parsed.data.classId },
+    select: { centerId: true },
+  });
+  if (!targetCls || !classCenterVisible(gate.actor, targetCls)) {
+    return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
+  }
+
   try {
-    await db.assignment.update({ where: { id }, data: parsed.data });
+    await gate.sdb.assignment.update({ where: { id }, data: parsed.data });
   } catch (err) {
     return {
       ok: false,
@@ -136,7 +192,12 @@ export async function deleteAssignment(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const submitted = await db.assignmentSubmission.count({
+  // Loại B — chống IDOR xoá bài tập của lớp cơ sở khác.
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, id))) {
+    return { ok: false, error: "Không tìm thấy bài tập" };
+  }
+
+  const submitted = await gate.sdb.assignmentSubmission.count({
     where: {
       assignmentId: id,
       status: { in: ["SUBMITTED", "LATE", "GRADED"] },
@@ -152,9 +213,9 @@ export async function deleteAssignment(id: string): Promise<Result> {
   try {
     // AssignmentDocument auto-cascades; AssignmentSubmission needs manual cleanup
     // (it's RESTRICT-on-delete to protect graded history; here we cleared above).
-    await db.$transaction([
-      db.assignmentSubmission.deleteMany({ where: { assignmentId: id } }),
-      db.assignment.delete({ where: { id } }),
+    await gate.sdb.$transaction([
+      gate.sdb.assignmentSubmission.deleteMany({ where: { assignmentId: id } }),
+      gate.sdb.assignment.delete({ where: { id } }),
     ]);
   } catch (err) {
     return {
@@ -191,14 +252,19 @@ export async function attachDocument(
   if (!parsed.success) return { ok: false, error: "Tham số không hợp lệ" };
   const { assignmentId, documentId } = parsed.data;
 
-  const existing = await db.assignmentDocument.findUnique({
+  // Loại B — chống IDOR đính tài liệu vào bài tập của lớp cơ sở khác.
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, assignmentId))) {
+    return { ok: false, error: "Không tìm thấy bài tập" };
+  }
+
+  const existing = await gate.sdb.assignmentDocument.findUnique({
     where: { assignmentId_documentId: { assignmentId, documentId } },
     select: { id: true },
   });
   if (existing) return { ok: false, error: "Tài liệu đã đính kèm" };
 
   try {
-    await db.assignmentDocument.create({ data: { assignmentId, documentId } });
+    await gate.sdb.assignmentDocument.create({ data: { assignmentId, documentId } });
   } catch (err) {
     return {
       ok: false,
@@ -215,14 +281,19 @@ export async function detachDocument(
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const ad = await db.assignmentDocument.findUnique({
+  const ad = await gate.sdb.assignmentDocument.findUnique({
     where: { id: assignmentDocumentId },
     select: { assignmentId: true },
   });
   if (!ad) return { ok: false, error: "Không tìm thấy bản ghi" };
 
+  // Loại B — chống IDOR gỡ tài liệu của bài tập lớp cơ sở khác.
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, ad.assignmentId))) {
+    return { ok: false, error: "Không tìm thấy bản ghi" };
+  }
+
   try {
-    await db.assignmentDocument.delete({ where: { id: assignmentDocumentId } });
+    await gate.sdb.assignmentDocument.delete({ where: { id: assignmentDocumentId } });
   } catch (err) {
     return {
       ok: false,
@@ -243,11 +314,15 @@ export async function publishAssignment(
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const assignment = await db.assignment.findUnique({
+  const assignment = await gate.sdb.assignment.findUnique({
     where: { id: assignmentId },
-    select: { id: true, classId: true, status: true },
+    select: { id: true, classId: true, status: true, class: { select: { centerId: true } } },
   });
   if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
+  // Loại B — chống IDOR publish bài tập của lớp cơ sở khác.
+  if (!classCenterVisible(gate.actor, assignment.class)) {
+    return { ok: false, error: "Không tìm thấy bài tập" };
+  }
   if (assignment.status !== "DRAFT") {
     return {
       ok: false,
@@ -255,7 +330,7 @@ export async function publishAssignment(
     };
   }
 
-  const enrollments = await db.enrollment.findMany({
+  const enrollments = await gate.sdb.enrollment.findMany({
     where: {
       classId: assignment.classId,
       status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
@@ -271,8 +346,8 @@ export async function publishAssignment(
   }
 
   try {
-    await db.$transaction([
-      db.assignmentSubmission.createMany({
+    await gate.sdb.$transaction([
+      gate.sdb.assignmentSubmission.createMany({
         data: enrollments.map((e) => ({
           assignmentId,
           studentId: e.studentId,
@@ -280,7 +355,7 @@ export async function publishAssignment(
         })),
         skipDuplicates: true,
       }),
-      db.assignment.update({
+      gate.sdb.assignment.update({
         where: { id: assignmentId },
         data: { status: "PUBLISHED" },
       }),
@@ -315,8 +390,13 @@ export async function changeAssignmentStatus(
   const parsed = ChangeStatusSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Tham số không hợp lệ" };
 
+  // Loại B — chống IDOR đổi trạng thái bài tập của lớp cơ sở khác.
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, parsed.data.assignmentId))) {
+    return { ok: false, error: "Không tìm thấy bài tập" };
+  }
+
   try {
-    await db.assignment.update({
+    await gate.sdb.assignment.update({
       where: { id: parsed.data.assignmentId },
       data: { status: parsed.data.status },
     });
@@ -362,18 +442,24 @@ export async function recordSubmission(
     return { ok: false, error: "Cần ít nhất 1 trong textAnswer hoặc file" };
   }
 
-  const submission = await db.assignmentSubmission.findUnique({
+  const submission = await gate.sdb.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
-    include: { assignment: { select: { dueAt: true } } },
+    include: {
+      assignment: { select: { dueAt: true, class: { select: { centerId: true } } } },
+    },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  // Loại B — chống IDOR ghi bài nộp cho lớp cơ sở khác.
+  if (!classCenterVisible(gate.actor, submission.assignment.class)) {
+    return { ok: false, error: "Không tìm thấy submission" };
+  }
 
   const now = new Date();
   const isLate =
     submission.assignment.dueAt && now > submission.assignment.dueAt;
 
   try {
-    await db.assignmentSubmission.update({
+    await gate.sdb.assignmentSubmission.update({
       where: { id: data.submissionId },
       data: {
         textAnswer,
@@ -417,7 +503,7 @@ export async function gradeSubmission(
   }
   const data = parsed.data;
 
-  const submission = await db.assignmentSubmission.findUnique({
+  const submission = await gate.sdb.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
     include: {
       assignment: {
@@ -429,6 +515,11 @@ export async function gradeSubmission(
     },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  // Loại B — lớp của bài phải trong tầm nhìn cơ sở actor (chặn review/training
+  // cross-center của actor center-scope), sau đó mới xét quyền chấm.
+  if (!classCenterVisible(gate.actor, submission.assignment.class)) {
+    return { ok: false, error: "Không tìm thấy submission" };
+  }
   if (!(await canGradeClassWork(gate.user, submission.assignment.class))) {
     return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
   }
@@ -442,10 +533,10 @@ export async function gradeSubmission(
     };
   }
 
-  const graderEmployeeId = await resolveEmployeeId(gate.userId);
+  const graderEmployeeId = await resolveEmployeeId(gate.sdb, gate.userId);
 
   try {
-    await db.assignmentSubmission.update({
+    await gate.sdb.assignmentSubmission.update({
       where: { id: data.submissionId },
       data: {
         score: data.score,
@@ -473,7 +564,8 @@ export async function gradeSubmission(
 // ──────────────────────────────────────────────────────────────────────────
 
 async function requireAssignmentEdit(): Promise<
-  { ok: true; userId: string } | { ok: false; error: string }
+  | { ok: true; userId: string; actor: Actor; sdb: Sdb }
+  | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -482,17 +574,18 @@ async function requireAssignmentEdit(): Promise<
   } catch {
     return { ok: false, error: "Không có quyền chỉnh sửa bài tập" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, userId: session.user.id ?? "", actor, sdb: scopedDb(actor) };
 }
 
 // questionCode là @unique (nullable) — sinh mã riêng cho câu hỏi trong bài tập.
-async function generateAssignmentQuestionCode(): Promise<string> {
+async function generateAssignmentQuestionCode(sdb: Sdb): Promise<string> {
   for (let i = 0; i < 6; i++) {
     const code = `AQ-${Date.now().toString(36).toUpperCase()}${Math.random()
       .toString(36)
       .slice(2, 6)
       .toUpperCase()}`;
-    const dup = await db.question.findUnique({
+    const dup = await sdb.question.findUnique({
       where: { questionCode: code },
       select: { id: true },
     });
@@ -586,20 +679,24 @@ export async function addAssignmentQuestion(
   }
   const data = parsed.data;
 
-  const assignment = await db.assignment.findUnique({
+  const assignment = await gate.sdb.assignment.findUnique({
     where: { id: data.assignmentId },
-    select: { id: true },
+    select: { id: true, class: { select: { centerId: true } } },
   });
   if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
+  // Loại B — chống IDOR thêm câu hỏi vào bài tập của lớp cơ sở khác.
+  if (!classCenterVisible(gate.actor, assignment.class)) {
+    return { ok: false, error: "Không tìm thấy bài tập" };
+  }
 
-  const authorEmployeeId = await resolveEmployeeId(gate.userId);
+  const authorEmployeeId = await resolveEmployeeId(gate.sdb, gate.userId);
   const useChoices = data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE";
   const choices = buildChoices(data.type, data.choices);
   const correctAnswer = useChoices ? null : data.correctAnswer?.trim() || null;
 
   try {
-    const code = await generateAssignmentQuestionCode();
-    const q = await db.$transaction(async (tx) => {
+    const code = await generateAssignmentQuestionCode(gate.sdb);
+    const q = await gate.sdb.$transaction(async (tx) => {
       const created = await tx.question.create({
         data: {
           questionCode: code,
@@ -642,13 +739,20 @@ export async function updateAssignmentQuestion(
   }
   const data = parsed.data;
 
-  const current = await db.question.findUnique({
+  const current = await gate.sdb.question.findUnique({
     where: { id },
-    select: { assignmentId: true },
+    select: {
+      assignmentId: true,
+      assignment: { select: { class: { select: { centerId: true } } } },
+    },
   });
   if (!current) return { ok: false, error: "Không tìm thấy câu hỏi" };
   if (!current.assignmentId) {
     return { ok: false, error: "Câu hỏi này không thuộc bài tập nào" };
+  }
+  // Loại B — chống IDOR sửa câu hỏi thuộc bài tập của lớp cơ sở khác.
+  if (!classCenterVisible(gate.actor, current.assignment?.class ?? null)) {
+    return { ok: false, error: "Không tìm thấy câu hỏi" };
   }
 
   const useChoices = data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE";
@@ -656,7 +760,7 @@ export async function updateAssignmentQuestion(
   const correctAnswer = useChoices ? null : data.correctAnswer?.trim() || null;
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       await tx.choice.deleteMany({ where: { questionId: id } });
       await tx.question.update({
         where: { id },
@@ -686,15 +790,25 @@ export async function deleteAssignmentQuestion(id: string): Promise<Result> {
   const gate = await requireAssignmentEdit();
   if (!gate.ok) return gate;
 
-  const current = await db.question.findUnique({
+  const current = await gate.sdb.question.findUnique({
     where: { id },
-    select: { assignmentId: true },
+    select: {
+      assignmentId: true,
+      assignment: { select: { class: { select: { centerId: true } } } },
+    },
   });
   if (!current) return { ok: false, error: "Không tìm thấy câu hỏi" };
+  // Loại B — câu hỏi gắn bài tập: lớp của bài phải trong tầm nhìn actor.
+  if (
+    current.assignmentId &&
+    !classCenterVisible(gate.actor, current.assignment?.class ?? null)
+  ) {
+    return { ok: false, error: "Không tìm thấy câu hỏi" };
+  }
 
   try {
     // Choice cascades via onDelete: Cascade.
-    await db.question.delete({ where: { id } });
+    await gate.sdb.question.delete({ where: { id } });
   } catch (err) {
     return {
       ok: false,
@@ -743,7 +857,7 @@ export async function gradeSubmissionRubric(
     return { ok: false, error: "Tiêu chí bị trùng hoặc thiếu" };
   }
 
-  const submission = await db.assignmentSubmission.findUnique({
+  const submission = await gate.sdb.assignmentSubmission.findUnique({
     where: { id: data.submissionId },
     include: {
       assignment: {
@@ -756,6 +870,10 @@ export async function gradeSubmissionRubric(
     },
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
+  // Loại B — lớp của bài phải trong tầm nhìn cơ sở actor trước khi xét quyền chấm.
+  if (!classCenterVisible(gate.actor, submission.assignment.class)) {
+    return { ok: false, error: "Không tìm thấy submission" };
+  }
   if (!(await canGradeClassWork(gate.user, submission.assignment.class))) {
     return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
   }
@@ -766,10 +884,10 @@ export async function gradeSubmissionRubric(
   const score = rubricToScore(
     data.scores.map((s) => ({ criterion: s.criterion as RubricCriterion, level: s.level as RubricLevel })),
   );
-  const graderEmployeeId = await resolveEmployeeId(gate.userId);
+  const graderEmployeeId = await resolveEmployeeId(gate.sdb, gate.userId);
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       await tx.submissionRubricScore.deleteMany({ where: { submissionId: data.submissionId } });
       await tx.submissionRubricScore.createMany({
         data: data.scores.map((s) => ({

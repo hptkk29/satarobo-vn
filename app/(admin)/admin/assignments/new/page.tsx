@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -19,7 +18,7 @@ export default async function NewAssignmentPage() {
 
   // Cách ly cơ sở: Class ∈ SCOPED_MODELS → dropdown lớp chỉ hiện lớp trong tầm nhìn
   // cơ sở của actor (CS1 không thấy lớp CS2). Lesson theo chương trình (toàn hệ thống)
-  // → giữ db trần.
+  // → sdb pass-through.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
@@ -30,7 +29,7 @@ export default async function NewAssignmentPage() {
       select: { id: true, name: true, classCode: true },
       take: 200,
     }),
-    db.lesson.findMany({
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],

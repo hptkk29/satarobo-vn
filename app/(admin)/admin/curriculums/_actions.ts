@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 import type { LessonChangeStatus, LessonStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -29,46 +30,51 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+// Nhóm 01 L1 — Curriculum/Lesson/LessonChangeRequest = giáo trình dùng chung toàn hệ
+// thống (câu 74a) → scopedDb pass-through. Assignment (gắn/gỡ buổi) đi qua Class
+// (scoped) → check tay class.centerId ∈ visibleCenterIds (Loại B), HO/SUPER bypass.
+type GateOk = {
+  ok: true;
+  session: Session;
+  actor: Actor;
+  sdb: ReturnType<typeof scopedDb>;
+};
+type Gate = GateOk | { ok: false; error: string };
+
 // Gate sửa giáo trình (curriculum:edit) — trả luôn session để ghi audit.
-async function requireRole(): Promise<
-  | { ok: true; session: Session }
-  | { ok: false; error: string }
-> {
+async function requireRole(): Promise<Gate> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("curriculum:edit"))) {
     return { ok: false, error: "Không có quyền quản lý giáo trình" };
   }
-  return { ok: true, session };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, session, actor, sdb: scopedDb(actor) };
 }
 
 // Gate Đào tạo (training:manage = SUPER_ADMIN/TRAINING) — dùng cho UNLOCK buổi
 // LOCKED. ⚠️ GIỮ NGUYÊN cho nhánh mở khóa (KHÔNG đổi sang lesson-change:approve).
-async function requireTraining(): Promise<
-  | { ok: true; session: Session }
-  | { ok: false; error: string }
-> {
+async function requireTraining(): Promise<Gate> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("training:manage"))) {
     return { ok: false, error: "Chỉ Đào tạo (quản lý cơ sở) mới có quyền này" };
   }
-  return { ok: true, session };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, session, actor, sdb: scopedDb(actor) };
 }
 
 // FL W0-NAV-2 (QĐ-T3b) — Gate DUYỆT đề xuất chỉnh bài (lesson-change:approve =
 // SUPER_ADMIN/TRAINING/CENTER_MANAGER). TÁCH khỏi training:manage để CM duyệt
 // được đề xuất nhưng KHÔNG mở khóa buổi/sửa giáo trình.
-async function requireLessonChangeApprove(): Promise<
-  | { ok: true; session: Session }
-  | { ok: false; error: string }
-> {
+async function requireLessonChangeApprove(): Promise<Gate> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("lesson-change:approve"))) {
     return { ok: false, error: "Không có quyền duyệt đề xuất chỉnh bài" };
   }
-  return { ok: true, session };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, session, actor, sdb: scopedDb(actor) };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -87,7 +93,7 @@ export async function createCurriculum(
   }
   const data = parsed.data;
 
-  const dup = await db.curriculum.findUnique({
+  const dup = await gate.sdb.curriculum.findUnique({
     where: { courseId_version: { courseId: data.courseId, version: data.version } },
     select: { id: true },
   });
@@ -99,7 +105,7 @@ export async function createCurriculum(
   }
 
   try {
-    const c = await db.curriculum.create({ data, select: { id: true } });
+    const c = await gate.sdb.curriculum.create({ data, select: { id: true } });
     revalidatePath("/curriculums");
     return { ok: true, data: { curriculumId: c.id } };
   } catch (err) {
@@ -129,14 +135,14 @@ export async function updateCurriculum(
   }
   const data = parsed.data;
 
-  const current = await db.curriculum.findUnique({
+  const current = await gate.sdb.curriculum.findUnique({
     where: { id },
     select: { courseId: true, version: true },
   });
   if (!current) return { ok: false, error: "Giáo trình không tồn tại" };
 
   if (current.courseId !== data.courseId || current.version !== data.version) {
-    const dup = await db.curriculum.findUnique({
+    const dup = await gate.sdb.curriculum.findUnique({
       where: {
         courseId_version: { courseId: data.courseId, version: data.version },
       },
@@ -151,7 +157,7 @@ export async function updateCurriculum(
   }
 
   try {
-    await db.curriculum.update({ where: { id }, data });
+    await gate.sdb.curriculum.update({ where: { id }, data });
   } catch (err) {
     return {
       ok: false,
@@ -168,7 +174,7 @@ export async function deleteCurriculum(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const count = await db.lesson.count({ where: { curriculumId: id } });
+  const count = await gate.sdb.lesson.count({ where: { curriculumId: id } });
   if (count > 0) {
     return {
       ok: false,
@@ -177,7 +183,7 @@ export async function deleteCurriculum(id: string): Promise<Result> {
   }
 
   try {
-    await db.curriculum.delete({ where: { id } });
+    await gate.sdb.curriculum.delete({ where: { id } });
   } catch (err) {
     return {
       ok: false,
@@ -208,13 +214,13 @@ export async function createLesson(input: LessonInput): Promise<Result> {
   }
   const data = parsed.data;
 
-  const curriculum = await db.curriculum.findUnique({
+  const curriculum = await gate.sdb.curriculum.findUnique({
     where: { id: data.curriculumId },
     select: { id: true },
   });
   if (!curriculum) return { ok: false, error: "Giáo trình không tồn tại" };
 
-  const dup = await db.lesson.findUnique({
+  const dup = await gate.sdb.lesson.findUnique({
     where: {
       curriculumId_order: { curriculumId: data.curriculumId, order: data.order },
     },
@@ -223,7 +229,7 @@ export async function createLesson(input: LessonInput): Promise<Result> {
   if (dup) return { ok: false, error: `Bài ${data.order} đã tồn tại` };
 
   try {
-    await db.lesson.create({ data });
+    await gate.sdb.lesson.create({ data });
   } catch (err) {
     return {
       ok: false,
@@ -248,7 +254,7 @@ export async function updateLesson(
   }
   const data = parsed.data;
 
-  const current = await db.lesson.findUnique({
+  const current = await gate.sdb.lesson.findUnique({
     where: { id },
     select: { curriculumId: true, order: true, status: true, archivedAt: true },
   });
@@ -263,7 +269,7 @@ export async function updateLesson(
   }
 
   if (current.order !== data.order) {
-    const dup = await db.lesson.findUnique({
+    const dup = await gate.sdb.lesson.findUnique({
       where: {
         curriculumId_order: {
           curriculumId: data.curriculumId,
@@ -278,7 +284,7 @@ export async function updateLesson(
   }
 
   try {
-    await db.lesson.update({ where: { id }, data: { ...data, version: { increment: 1 } } });
+    await gate.sdb.lesson.update({ where: { id }, data: { ...data, version: { increment: 1 } } });
   } catch (err) {
     return {
       ok: false,
@@ -294,14 +300,14 @@ export async function deleteLesson(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const lesson = await db.lesson.findUnique({
+  const lesson = await gate.sdb.lesson.findUnique({
     where: { id },
     select: { curriculumId: true },
   });
   if (!lesson) return { ok: false, error: "Bài học không tồn tại" };
 
   try {
-    await db.lesson.delete({ where: { id } });
+    await gate.sdb.lesson.delete({ where: { id } });
   } catch (err) {
     return {
       ok: false,
@@ -329,7 +335,7 @@ export async function reorderLessons({
   }
 
   // Verify all lessons belong to the curriculum to avoid foreign-curriculum tampering.
-  const found = await db.lesson.findMany({
+  const found = await gate.sdb.lesson.findMany({
     where: { id: { in: lessonIds }, curriculumId },
     select: { id: true },
   });
@@ -338,7 +344,7 @@ export async function reorderLessons({
   }
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       for (let i = 0; i < lessonIds.length; i++) {
         await tx.lesson.update({
           where: { id: lessonIds[i] },
@@ -426,7 +432,11 @@ export async function setLessonStatusAction(input: {
   lessonId: string;
   status: LessonStatus;
 }): Promise<Result> {
-  const current = await db.lesson.findUnique({
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
+  const current = await sdb.lesson.findUnique({
     where: { id: input.lessonId },
     select: { curriculumId: true, status: true },
   });
@@ -459,7 +469,7 @@ export async function archiveLessonAction(lessonId: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const current = await db.lesson.findUnique({
+  const current = await gate.sdb.lesson.findUnique({
     where: { id: lessonId },
     select: { curriculumId: true, status: true },
   });
@@ -485,7 +495,7 @@ export async function unarchiveLessonAction(lessonId: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const current = await db.lesson.findUnique({
+  const current = await gate.sdb.lesson.findUnique({
     where: { id: lessonId },
     select: { curriculumId: true },
   });
@@ -527,13 +537,14 @@ export async function submitLessonChangeRequest(input: {
     return { ok: false, error: "Nội dung đề xuất quá ngắn (≥ 5 ký tự)" };
   }
 
-  const lesson = await db.lesson.findUnique({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const lesson = await sdb.lesson.findUnique({
     where: { id: input.lessonId },
     select: { id: true, curriculumId: true },
   });
   if (!lesson) return { ok: false, error: "Bài học không tồn tại" };
 
-  const cr = await db.lessonChangeRequest.create({
+  const cr = await sdb.lessonChangeRequest.create({
     data: { lessonId: input.lessonId, requestedById: session.user.id, content },
     select: { id: true },
   });
@@ -569,7 +580,7 @@ export async function handleLessonChangeRequest(input: {
     return { ok: false, error: "Quyết định không hợp lệ" };
   }
 
-  const cr = await db.lessonChangeRequest.findUnique({
+  const cr = await gate.sdb.lessonChangeRequest.findUnique({
     where: { id: input.requestId },
     select: { id: true, status: true, lesson: { select: { curriculumId: true } } },
   });
@@ -579,7 +590,7 @@ export async function handleLessonChangeRequest(input: {
   }
 
   const { actorId, actorName } = getAuditActor(gate.session);
-  await db.lessonChangeRequest.update({
+  await gate.sdb.lessonChangeRequest.update({
     where: { id: input.requestId },
     data: {
       status: input.decision,
@@ -618,17 +629,31 @@ export async function attachAssignmentToLesson(input: {
   const { lessonId, assignmentId } = input;
   if (!lessonId || !assignmentId) return { ok: false, error: "Thiếu tham số" };
 
-  const lesson = await db.lesson.findUnique({
+  const lesson = await gate.sdb.lesson.findUnique({
     where: { id: lessonId },
     select: { id: true, curriculumId: true, curriculum: { select: { courseId: true } } },
   });
   if (!lesson) return { ok: false, error: "Bài học không tồn tại" };
 
-  const assignment = await db.assignment.findUnique({
+  const assignment = await gate.sdb.assignment.findUnique({
     where: { id: assignmentId },
-    select: { id: true, lessonId: true, class: { select: { courseId: true } } },
+    select: {
+      id: true,
+      lessonId: true,
+      class: { select: { courseId: true, centerId: true } },
+    },
   });
   if (!assignment) return { ok: false, error: "Bài tập không tồn tại" };
+  // Loại B — Assignment không auto-scope; cách ly tay qua class.centerId
+  // (HO/SUPER bypass). Chống IDOR gắn bài tập của lớp cơ sở khác.
+  const isGlobal = gate.actor.isSuperAdmin || gate.actor.isHoLevel;
+  if (
+    !isGlobal &&
+    (assignment.class.centerId == null ||
+      !gate.actor.visibleCenterIds.includes(assignment.class.centerId))
+  ) {
+    return { ok: false, error: "Bài tập không tồn tại" };
+  }
   if (assignment.lessonId && assignment.lessonId !== lessonId) {
     return { ok: false, error: "Bài tập đang gắn buổi khác — gỡ trước khi gắn lại" };
   }
@@ -638,7 +663,7 @@ export async function attachAssignmentToLesson(input: {
   }
 
   try {
-    await db.assignment.update({ where: { id: assignmentId }, data: { lessonId } });
+    await gate.sdb.assignment.update({ where: { id: assignmentId }, data: { lessonId } });
   } catch (err) {
     return {
       ok: false,
@@ -669,15 +694,29 @@ export async function detachAssignmentFromLesson(input: {
 
   if (!input.assignmentId) return { ok: false, error: "Thiếu tham số" };
 
-  const assignment = await db.assignment.findUnique({
+  const assignment = await gate.sdb.assignment.findUnique({
     where: { id: input.assignmentId },
-    select: { id: true, lessonId: true, lesson: { select: { curriculumId: true } } },
+    select: {
+      id: true,
+      lessonId: true,
+      lesson: { select: { curriculumId: true } },
+      class: { select: { centerId: true } },
+    },
   });
   if (!assignment) return { ok: false, error: "Bài tập không tồn tại" };
+  // Loại B — Assignment không auto-scope; cách ly tay qua class.centerId (HO/SUPER bypass).
+  const isGlobal = gate.actor.isSuperAdmin || gate.actor.isHoLevel;
+  if (
+    !isGlobal &&
+    (assignment.class.centerId == null ||
+      !gate.actor.visibleCenterIds.includes(assignment.class.centerId))
+  ) {
+    return { ok: false, error: "Bài tập không tồn tại" };
+  }
   if (!assignment.lessonId) return { ok: true }; // đã rời buổi — không làm gì.
 
   try {
-    await db.assignment.update({
+    await gate.sdb.assignment.update({
       where: { id: input.assignmentId },
       data: { lessonId: null },
     });

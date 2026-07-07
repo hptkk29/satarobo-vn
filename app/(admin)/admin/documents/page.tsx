@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { DocumentType, type Prisma } from "@prisma/client";
 
@@ -94,8 +95,12 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
       : {}),
   };
 
+  // Nhóm 01 L1 — Document/Lesson = học liệu toàn cục, scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [documents, lessons] = await Promise.all([
-    db.document.findMany({
+    sdb.document.findMany({
       where,
       include: {
         lesson: {
@@ -106,7 +111,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
       orderBy: { updatedAt: "desc" },
       take: 100,
     }),
-    db.lesson.findMany({
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import {
   DocumentForm,
   type DocumentFormValue,
@@ -24,9 +25,13 @@ export default async function EditDocumentPage({ params }: Props) {
 
   const { id } = await params;
 
+  // Nhóm 01 L1 — Document/Lesson = học liệu toàn cục, scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [document, lessons] = await Promise.all([
-    db.document.findUnique({ where: { id } }),
-    db.lesson.findMany({
+    sdb.document.findUnique({ where: { id } }),
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],

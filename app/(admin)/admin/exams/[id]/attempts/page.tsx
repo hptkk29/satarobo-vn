@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft, ClipboardList } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { AttemptStatus } from "@prisma/client";
 import { GradeButton } from "../../_components/grade-button";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -43,10 +44,31 @@ export default async function ExamAttemptsPage({ params }: Props) {
 
   const { id } = await params;
 
-  const exam = await db.exam.findUnique({
-    where: { id },
+  // Loại B (Nhóm 01 L1) — Exam/ExamAttempt KHÔNG ∈ SCOPED_MODELS → lọc tay:
+  // đề gắn lớp cơ sở khác → 404; đề ngân hàng (classId null) xem được nhưng
+  // attempts lọc theo student.centerId (nested include KHÔNG auto-scope, AC7).
+  // HO/SUPER bypass (pattern parent-feedback).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
+
+  const exam = await sdb.exam.findFirst({
+    where: {
+      id,
+      ...(isGlobal
+        ? {}
+        : {
+            OR: [
+              { classId: null },
+              { class: { centerId: { in: actor.visibleCenterIds } } },
+            ],
+          }),
+    },
     include: {
       attempts: {
+        ...(isGlobal
+          ? {}
+          : { where: { student: { centerId: { in: actor.visibleCenterIds } } } }),
         orderBy: [{ status: "asc" }, { submittedAt: "desc" }],
         include: {
           student: {

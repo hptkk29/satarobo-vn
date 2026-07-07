@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import {
   QuestionForm,
   type QuestionFormValue,
@@ -24,20 +25,25 @@ export default async function EditQuestionPage({ params }: Props) {
 
   const { id } = await params;
 
+  // Nhóm 01 L1 — Question/Lesson/Curriculum = ngân hàng câu hỏi + giáo trình
+  // toàn cục, scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [question, lessons, curriculums] = await Promise.all([
-    db.question.findUnique({
+    sdb.question.findUnique({
       where: { id },
       include: {
         choices: { orderBy: { order: "asc" } },
       },
     }),
-    db.lesson.findMany({
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       take: 500,
     }),
-    db.curriculum.findMany({
+    sdb.curriculum.findMany({
       where: { isActive: true },
       include: { course: { select: { name: true } } },
       orderBy: [{ courseId: "asc" }, { version: "desc" }],

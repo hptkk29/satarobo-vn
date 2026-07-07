@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { CurriculumForm } from "../../_components/curriculum-form";
 import { LessonList, type LessonRow } from "../../_components/lesson-list";
 import { CurriculumSessionsForm } from "../../_components/curriculum-sessions-form";
@@ -33,8 +34,13 @@ export default async function EditCurriculumPage({ params }: Props) {
 
   const { id } = await params;
 
+  // Nhóm 01 L1 — Curriculum/Lesson/Course = giáo trình dùng chung toàn hệ thống
+  // (câu 74a), scopedDb pass-through. Assignment (qua Class scoped) lọc tay bên dưới.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [curriculum, courses, changeRequests] = await Promise.all([
-    db.curriculum.findUnique({
+    sdb.curriculum.findUnique({
       where: { id },
       include: {
         course: { select: { name: true } },
@@ -62,12 +68,12 @@ export default async function EditCurriculumPage({ params }: Props) {
         },
       },
     }),
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
-    db.lessonChangeRequest.findMany({
+    sdb.lessonChangeRequest.findMany({
       where: { lesson: { curriculumId: id } },
       orderBy: { createdAt: "desc" },
       include: { lesson: { select: { order: true, title: true } } },
@@ -79,7 +85,7 @@ export default async function EditCurriculumPage({ params }: Props) {
   // Tên người gửi đề xuất (requestedById = User.id, không có relation trực tiếp).
   const requesterIds = [...new Set(changeRequests.map((r) => r.requestedById))];
   const requesters = requesterIds.length
-    ? await db.user.findMany({
+    ? await sdb.user.findMany({
         where: { id: { in: requesterIds } },
         select: { id: true, name: true, email: true },
       })
@@ -106,9 +112,12 @@ export default async function EditCurriculumPage({ params }: Props) {
   // FL1-02 (US-LMS-1) — học liệu SCORM + bài tập theo buổi.
   const scormEnabled = isScormEnabled();
   const lessonIds = curriculum.lessons.map((l) => l.id);
+  // Loại B — Assignment không auto-scope (không ∈ SCOPED_MODELS); cách ly tay qua
+  // class.centerId ∈ visibleCenterIds, HO/SUPER bypass (pattern parent-feedback).
+  const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
   const [scormPackages, lessonAssignments] = await Promise.all([
     scormEnabled
-      ? db.scormPackage.findMany({
+      ? sdb.scormPackage.findMany({
           where: { lessonId: { in: lessonIds } },
           orderBy: [{ lessonId: "asc" }, { version: "desc" }],
           select: {
@@ -123,12 +132,15 @@ export default async function EditCurriculumPage({ params }: Props) {
         })
       : Promise.resolve([]),
     // Bài tập đã gắn buổi của giáo trình + bài tập trống (chưa gắn buổi) cùng khoá.
-    db.assignment.findMany({
+    sdb.assignment.findMany({
       where: {
         OR: [
           { lessonId: { in: lessonIds } },
           { lessonId: null, class: { courseId: curriculum.courseId } },
         ],
+        ...(isGlobal
+          ? {}
+          : { class: { centerId: { in: actor.visibleCenterIds } } }),
       },
       orderBy: { createdAt: "desc" },
       select: {

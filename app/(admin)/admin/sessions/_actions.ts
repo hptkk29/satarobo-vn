@@ -1,32 +1,39 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { passesScope } from "@/lib/db-scope";
+import { passesScope, scopedDb } from "@/lib/db-scope";
 import { findScheduleConflicts } from "@/lib/classes/generate";
 import { sessionEndAt } from "@/lib/lms/scheduling";
 
 type ActionResult = { error?: string };
+type Sdb = ReturnType<typeof scopedDb>;
 
 // Cách ly cơ sở (chống IDOR ghi): buổi học thuộc lớp `classId` — lớp phải nằm trong
 // tầm nhìn cơ sở actor (CS1 không tạo/sửa/xoá buổi của lớp CS2). passesScope("Class")
 // tự cho SUPER_ADMIN/HO qua. Reconcile: main `sessions:edit` trước CHỈ gate quyền,
-// không scope cơ sở → port guard từ FixLMS.
-async function classInScope(actor: Actor, classId: string): Promise<boolean> {
-  const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
+// không scope cơ sở → port guard từ FixLMS. Học bù liên cơ sở KHÔNG đi qua các
+// action này (MAKEUP_EXCEPTION xử lý trong lib/makeup) — không nới thêm ở đây.
+async function classInScope(sdb: Sdb, actor: Actor, classId: string): Promise<boolean> {
+  const cls = await sdb.class.findUnique({ where: { id: classId }, select: { centerId: true } });
   return !!cls && passesScope("Class", { centerId: cls.centerId }, actor);
 }
 
-async function sessionClassInScope(actor: Actor, sessionId: string): Promise<boolean> {
-  const s = await db.classSession.findUnique({
+async function sessionClassInScope(
+  sdb: Sdb,
+  actor: Actor,
+  sessionId: string,
+): Promise<boolean> {
+  // ⚠️ ClassSession ∈ SCOPED_MODELS: findUnique lọc hậu kỳ theo record.centerId →
+  // select PHẢI kèm centerId (thiếu → ẩn nhầm buổi hợp lệ với actor center-scope).
+  const s = await sdb.classSession.findUnique({
     where: { id: sessionId },
-    select: { class: { select: { centerId: true } } },
+    select: { centerId: true, class: { select: { centerId: true } } },
   });
   return !!s && passesScope("Class", { centerId: s.class?.centerId ?? null }, actor);
 }
@@ -38,12 +45,14 @@ async function sessionClassInScope(actor: Actor, sessionId: string): Promise<boo
  * an toàn KHÔNG chặn). `excludeSessionId` không cần — query đã loại buổi cùng lớp.
  */
 async function checkSessionScheduleConflict(
+  sdb: Sdb,
   classId: string,
   date: Date,
 ): Promise<string | null> {
-  const cls = await db.class.findUnique({
+  // ⚠️ Class ∈ SCOPED_MODELS: findUnique lọc hậu kỳ theo centerId → select kèm centerId.
+  const cls = await sdb.class.findUnique({
     where: { id: classId },
-    select: { teacherId: true, roomId: true, startTime: true, endTime: true },
+    select: { centerId: true, teacherId: true, roomId: true, startTime: true, endTime: true },
   });
   if (!cls?.startTime || (!cls.teacherId && !cls.roomId)) return null;
   const conflict = await findScheduleConflicts({
@@ -120,14 +129,15 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
 
   // Cách ly cơ sở: chỉ tạo buổi cho lớp trong tầm nhìn cơ sở actor.
   const actor = await resolveActor(user.id);
-  if (!(await classInScope(actor, s.classId))) return { error: "Lớp ngoài phạm vi cơ sở" };
+  const sdb = scopedDb(actor);
+  if (!(await classInScope(sdb, actor, s.classId))) return { error: "Lớp ngoài phạm vi cơ sở" };
 
   // W2-4 — chặn tạo buổi gây trùng GV/phòng với lớp khác.
-  const conflictMsg = await checkSessionScheduleConflict(s.classId, s.date);
+  const conflictMsg = await checkSessionScheduleConflict(sdb, s.classId, s.date);
   if (conflictMsg) return { error: conflictMsg };
 
   // FL3-02 — centerId denormalized từ class cho scopedDb (buổi học cách ly cơ sở).
-  const clsCenter = await db.class.findUnique({
+  const clsCenter = await sdb.class.findUnique({
     where: { id: s.classId },
     select: { centerId: true },
   });
@@ -143,7 +153,7 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
   };
 
   try {
-    await db.classSession.create({ data });
+    await sdb.classSession.create({ data });
   } catch {
     return { error: "Không tạo được buổi học. Lớp có tồn tại không?" };
   }
@@ -165,11 +175,12 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
 
   // Cách ly cơ sở: buổi hiện tại + lớp đích đều phải trong tầm nhìn cơ sở actor.
   const actor = await resolveActor(user.id);
-  if (!(await sessionClassInScope(actor, id))) return { error: "Buổi học ngoài phạm vi cơ sở" };
-  if (!(await classInScope(actor, s.classId))) return { error: "Lớp đích ngoài phạm vi cơ sở" };
+  const sdb = scopedDb(actor);
+  if (!(await sessionClassInScope(sdb, actor, id))) return { error: "Buổi học ngoài phạm vi cơ sở" };
+  if (!(await classInScope(sdb, actor, s.classId))) return { error: "Lớp đích ngoài phạm vi cơ sở" };
 
   // W2-4 — chặn cập nhật buổi (đổi ngày/giờ) gây trùng GV/phòng với lớp khác.
-  const conflictMsg = await checkSessionScheduleConflict(s.classId, s.date);
+  const conflictMsg = await checkSessionScheduleConflict(sdb, s.classId, s.date);
   if (conflictMsg) return { error: conflictMsg };
 
   const data: Prisma.ClassSessionUpdateInput = {
@@ -184,7 +195,7 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
   };
 
   try {
-    await db.classSession.update({ where: { id }, data });
+    await sdb.classSession.update({ where: { id }, data });
   } catch {
     return { error: "Không cập nhật được buổi học" };
   }
@@ -199,10 +210,11 @@ export async function deleteSession(id: string): Promise<ActionResult> {
   const user = await requireTeacherOrAdmin();
   // Cách ly cơ sở: chỉ xoá buổi của lớp trong tầm nhìn cơ sở actor.
   const actor = await resolveActor(user.id);
-  if (!(await sessionClassInScope(actor, id))) return { error: "Buổi học ngoài phạm vi cơ sở" };
+  const sdb = scopedDb(actor);
+  if (!(await sessionClassInScope(sdb, actor, id))) return { error: "Buổi học ngoài phạm vi cơ sở" };
   try {
     // ClassSession có onDelete: Cascade trên attendances — sẽ tự xoá luôn.
-    await db.classSession.delete({ where: { id } });
+    await sdb.classSession.delete({ where: { id } });
   } catch {
     return { error: "Không thể xoá buổi học" };
   }

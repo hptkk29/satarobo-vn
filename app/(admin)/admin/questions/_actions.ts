@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { questionSchema, type QuestionInput } from "@/lib/validators/question";
 
@@ -11,8 +12,12 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+type Sdb = ReturnType<typeof scopedDb>;
+
+// Nhóm 01 L1 — Question/Choice/Curriculum = ngân hàng câu hỏi + giáo trình toàn
+// cục (không center-scope), scopedDb pass-through; ownership theo authorId giữ nguyên.
 async function requireRole(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; sdb: Sdb }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -20,28 +25,30 @@ async function requireRole(): Promise<
   if (!(await checkPermission("questions:author"))) {
     return { ok: false, error: "Không có quyền quản lý câu hỏi" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, userId: session.user.id ?? "", sdb: scopedDb(actor) };
 }
 
 // LMS-4 / W1-4 — GV chỉ sửa/xóa câu hỏi của chính mình; người có
 // `training:manage` (SUPER_ADMIN / CENTER_MANAGER) thì sửa/xóa được mọi câu.
 // Lưu ý: Question.authorId trỏ tới Employee.id, nên so với employeeId của actor.
 async function assertAuthorOrManager(
+  sdb: Sdb,
   questionAuthorId: string | null,
   userId: string,
 ): Promise<Result> {
   if (await checkPermission("training:manage")) return { ok: true };
-  const myEmployeeId = await resolveAuthorEmployeeId(userId);
+  const myEmployeeId = await resolveAuthorEmployeeId(sdb, userId);
   if (questionAuthorId && myEmployeeId && questionAuthorId === myEmployeeId) {
     return { ok: true };
   }
   return { ok: false, error: "Chỉ tác giả mới sửa/xóa câu hỏi này" };
 }
 
-async function resolveAuthorEmployeeId(userId: string): Promise<string | null> {
+async function resolveAuthorEmployeeId(sdb: Sdb, userId: string): Promise<string | null> {
   if (!userId) return null;
   try {
-    const user = await db.user.findUnique({
+    const user = await sdb.user.findUnique({
       where: { id: userId },
       select: { employeeId: true },
     });
@@ -56,16 +63,17 @@ async function resolveAuthorEmployeeId(userId: string): Promise<string | null> {
  * (SUPER_ADMIN/CENTER_MANAGER) mới sửa/xoá được câu hỏi.
  */
 async function assertCanMutateQuestion(
+  sdb: Sdb,
   userId: string,
   questionId: string,
 ): Promise<Result> {
   if (await checkPermission("training:manage")) return { ok: true };
-  const q = await db.question.findUnique({
+  const q = await sdb.question.findUnique({
     where: { id: questionId },
     select: { authorId: true },
   });
   if (!q) return { ok: false, error: "Câu hỏi không tồn tại" };
-  const myEmp = await resolveAuthorEmployeeId(userId);
+  const myEmp = await resolveAuthorEmployeeId(sdb, userId);
   if (q.authorId && myEmp && q.authorId === myEmp) return { ok: true };
   return {
     ok: false,
@@ -86,11 +94,12 @@ function normalizeChoices(input: QuestionInput["choices"]) {
 // FL1-03 — courseId là field suy ra: ưu tiên khung CT đã chọn (authoritative).
 // Tránh lệch khi FE gửi courseId không khớp curriculum.
 async function resolveCourseId(
+  sdb: Sdb,
   curriculumId: string | null,
   fallbackCourseId: string | null,
 ): Promise<string | null> {
   if (!curriculumId) return fallbackCourseId;
-  const cur = await db.curriculum.findUnique({
+  const cur = await sdb.curriculum.findUnique({
     where: { id: curriculumId },
     select: { courseId: true },
   });
@@ -110,22 +119,22 @@ export async function createQuestion(
   const data = parsed.data;
 
   if (data.questionCode) {
-    const dup = await db.question.findUnique({
+    const dup = await gate.sdb.question.findUnique({
       where: { questionCode: data.questionCode },
       select: { id: true },
     });
     if (dup) return { ok: false, error: `Mã câu hỏi "${data.questionCode}" đã tồn tại` };
   }
 
-  const authorEmployeeId = await resolveAuthorEmployeeId(gate.userId);
-  const courseId = await resolveCourseId(data.curriculumId, data.courseId);
+  const authorEmployeeId = await resolveAuthorEmployeeId(gate.sdb, gate.userId);
+  const courseId = await resolveCourseId(gate.sdb, data.curriculumId, data.courseId);
   const choices =
     data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE"
       ? normalizeChoices(data.choices)
       : [];
 
   try {
-    const q = await db.$transaction(async (tx) => {
+    const q = await gate.sdb.$transaction(async (tx) => {
       const created = await tx.question.create({
         data: {
           questionCode: data.questionCode,
@@ -182,7 +191,7 @@ export async function updateQuestion(
 ): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
-  const own = await assertCanMutateQuestion(gate.userId, id);
+  const own = await assertCanMutateQuestion(gate.sdb, gate.userId, id);
   if (!own.ok) return own;
 
   const parsed = questionSchema.safeParse(input);
@@ -191,17 +200,17 @@ export async function updateQuestion(
   }
   const data = parsed.data;
 
-  const current = await db.question.findUnique({
+  const current = await gate.sdb.question.findUnique({
     where: { id },
     select: { questionCode: true, authorId: true },
   });
   if (!current) return { ok: false, error: "Câu hỏi không tồn tại" };
 
-  const authz = await assertAuthorOrManager(current.authorId, gate.userId);
+  const authz = await assertAuthorOrManager(gate.sdb, current.authorId, gate.userId);
   if (!authz.ok) return authz;
 
   if (data.questionCode && data.questionCode !== current.questionCode) {
-    const dup = await db.question.findUnique({
+    const dup = await gate.sdb.question.findUnique({
       where: { questionCode: data.questionCode },
       select: { id: true },
     });
@@ -210,14 +219,14 @@ export async function updateQuestion(
     }
   }
 
-  const courseId = await resolveCourseId(data.curriculumId, data.courseId);
+  const courseId = await resolveCourseId(gate.sdb, data.curriculumId, data.courseId);
   const choices =
     data.type === "MULTIPLE_CHOICE" || data.type === "TRUE_FALSE"
       ? normalizeChoices(data.choices)
       : [];
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       // Replace choices: delete-then-recreate is simpler than diffing.
       await tx.choice.deleteMany({ where: { questionId: id } });
       await tx.question.update({
@@ -264,20 +273,20 @@ export async function updateQuestion(
 export async function deleteQuestion(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
-  const own = await assertCanMutateQuestion(gate.userId, id);
+  const own = await assertCanMutateQuestion(gate.sdb, gate.userId, id);
   if (!own.ok) return own;
 
-  const current = await db.question.findUnique({
+  const current = await gate.sdb.question.findUnique({
     where: { id },
     select: { authorId: true },
   });
   if (!current) return { ok: false, error: "Câu hỏi không tồn tại" };
 
-  const authz = await assertAuthorOrManager(current.authorId, gate.userId);
+  const authz = await assertAuthorOrManager(gate.sdb, current.authorId, gate.userId);
   if (!authz.ok) return authz;
 
   try {
-    await db.question.delete({ where: { id } });
+    await gate.sdb.question.delete({ where: { id } });
   } catch (err) {
     return {
       ok: false,

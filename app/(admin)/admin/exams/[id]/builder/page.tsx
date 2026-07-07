@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import {
@@ -29,14 +28,27 @@ export default async function ExamBuilderPage({ params }: Props) {
   const { id } = await params;
 
   // Cách ly cơ sở: dropdown chọn lớp cho đề thi PHẢI giới hạn theo tầm nhìn cơ sở
-  // của actor (Class ∈ SCOPED_MODELS) — CS1 không thấy lớp CS2. Exam/Lesson/Question
-  // không phải model center-isolated (đề/curriculum/ngân hàng câu hỏi dùng chung).
+  // của actor (Class ∈ SCOPED_MODELS) — CS1 không thấy lớp CS2. Lesson/Question
+  // không phải model center-isolated (curriculum/ngân hàng câu hỏi dùng chung).
+  // Loại B — Exam KHÔNG auto-scope: đề gắn lớp cơ sở khác → 404 (findFirst lọc
+  // qua class.centerId); đề ngân hàng (classId null) dùng chung. HO/SUPER bypass.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+  const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
 
   const [exam, classes, lessons, bank] = await Promise.all([
-    db.exam.findUnique({
-      where: { id },
+    sdb.exam.findFirst({
+      where: {
+        id,
+        ...(isGlobal
+          ? {}
+          : {
+              OR: [
+                { classId: null },
+                { class: { centerId: { in: actor.visibleCenterIds } } },
+              ],
+            }),
+      },
       include: {
         examQuestions: {
           orderBy: { order: "asc" },
@@ -54,13 +66,13 @@ export default async function ExamBuilderPage({ params }: Props) {
       select: { id: true, name: true, classCode: true },
       take: 200,
     }),
-    db.lesson.findMany({
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       take: 500,
     }),
-    db.question.findMany({
+    sdb.question.findMany({
       where: { isPublic: true },
       orderBy: { updatedAt: "desc" },
       include: {

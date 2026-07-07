@@ -2,7 +2,6 @@
 
 import { auth } from "@/lib/auth";
 import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { revalidatePath } from "next/cache";
@@ -12,14 +11,20 @@ import type { EnrollmentStatus } from "@prisma/client";
 import { z } from "zod";
 import { canTransition } from "@/lib/enrollments/status";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { passesScope } from "@/lib/db-scope";
+import { passesScope, scopedDb } from "@/lib/db-scope";
+
+type Sdb = ReturnType<typeof scopedDb>;
 
 // Cách ly cơ sở (chống IDOR ghi): Enrollment + ClassSession NAY ∈ SCOPED_MODELS
 // (FL3-02 — centerId đã denormalize + backfill 100%) nên READ tự lọc theo cơ sở.
 // WRITE vẫn không tự scope → mọi mutation theo enrollmentId/classId từ client phải
 // xác minh lớp thuộc tầm nhìn cơ sở của actor (helper class.centerId bên dưới).
-async function classCenterInScope(actor: Actor, classId: string): Promise<boolean> {
-  const cls = await db.class.findUnique({ where: { id: classId }, select: { centerId: true } });
+async function classCenterInScope(
+  sdb: Sdb,
+  actor: Actor,
+  classId: string,
+): Promise<boolean> {
+  const cls = await sdb.class.findUnique({ where: { id: classId }, select: { centerId: true } });
   return !!cls && passesScope("Class", cls, actor);
 }
 
@@ -45,13 +50,17 @@ class EnrollmentWorkflowError extends Error {
  * create/update trong CÙNG tx, re-check trong tx → chống TOCTOU bán vượt sĩ số.
  */
 async function runSerializable<T>(
+  sdb: Sdb,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await db.$transaction(fn, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      });
+      // Cast tx: client extension không structurally-assignable vào
+      // Prisma.TransactionClient (tiền lệ students/classes) — runtime không đổi.
+      return await sdb.$transaction(
+        async (tx) => fn(tx as unknown as Prisma.TransactionClient),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
     } catch (err) {
       const isConflict =
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -131,15 +140,18 @@ export async function checkPrerequisites(
   } catch {
     return { ok: false, error: "Không có quyền" };
   }
+  const sdb = scopedDb(await resolveActor(session.user.id));
   try {
-    const prereqs = await db.coursePrerequisite.findMany({
+    const prereqs = await sdb.coursePrerequisite.findMany({
       where: { courseId },
       select: { requiredCourse: { select: { id: true, name: true } } },
     });
     if (prereqs.length === 0) return { ok: true };
 
     const requiredIds = prereqs.map((p) => p.requiredCourse.id);
-    const completed = await db.enrollment.findMany({
+    // Enrollment ∈ SCOPED_MODELS: lịch sử hoàn thành ở cơ sở NGOÀI tầm nhìn actor
+    // không được tính (HO/SUPER không ảnh hưởng). Scope query-level = task #04 §3.
+    const completed = await sdb.enrollment.findMany({
       where: { studentId, courseId: { in: requiredIds }, status: "COMPLETED" },
       select: { courseId: true },
     });
@@ -200,19 +212,20 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
   const e = parsed.data;
 
   // Cách ly cơ sở: lớp ghi danh phải thuộc tầm nhìn cơ sở của actor.
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!(await classCenterInScope(actor, e.classId))) {
-      return { error: "Lớp học không tồn tại" };
-    }
+  const uid = session.user.id;
+  if (!uid) return { error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  if (!(await classCenterInScope(sdb, actor, e.classId))) {
+    return { error: "Lớp học không tồn tại" };
   }
 
   let classRow: { courseId: string; centerId: string | null } | null;
   let existing: { id: string } | null;
   try {
     [classRow, existing] = await Promise.all([
-      db.class.findUnique({ where: { id: e.classId }, select: { courseId: true, centerId: true } }),
-      db.enrollment.findFirst({
+      sdb.class.findUnique({ where: { id: e.classId }, select: { courseId: true, centerId: true } }),
+      sdb.enrollment.findFirst({
         where: { studentId: e.studentId, classId: e.classId },
         select: { id: true },
       }),
@@ -237,7 +250,7 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
   };
 
   try {
-    await db.enrollment.create({ data });
+    await sdb.enrollment.create({ data });
   } catch {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được đăng ký" };
   }
@@ -258,25 +271,34 @@ export async function updateEnrollment(
   }
 
   const e = parsed.data;
-  const existing = await db.enrollment.findUnique({
+  const uid = session.user.id;
+  if (!uid) return { error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+
+  const existing = await sdb.enrollment.findUnique({
     where: { id },
-    select: { studentId: true, classId: true, class: { select: { centerId: true } } },
+    // ⚠️ Enrollment ∈ SCOPED_MODELS: findUnique lọc hậu kỳ theo record.centerId
+    // → select PHẢI kèm centerId (thiếu → passesScope fail → ẩn nhầm record hợp lệ).
+    select: {
+      centerId: true,
+      studentId: true,
+      classId: true,
+      class: { select: { centerId: true } },
+    },
   });
   if (!existing) return { error: "Đăng ký không tồn tại" };
 
   // Cách ly cơ sở: lớp HIỆN TẠI + lớp ĐÍCH (nếu đổi) đều phải trong tầm nhìn actor.
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: existing.class?.centerId ?? null }, actor)) {
-      return { error: "Đăng ký không tồn tại" };
-    }
-    if (e.classId !== existing.classId && !(await classCenterInScope(actor, e.classId))) {
-      return { error: "Lớp học không tồn tại" };
-    }
+  if (!passesScope("Class", { centerId: existing.class?.centerId ?? null }, actor)) {
+    return { error: "Đăng ký không tồn tại" };
+  }
+  if (e.classId !== existing.classId && !(await classCenterInScope(sdb, actor, e.classId))) {
+    return { error: "Lớp học không tồn tại" };
   }
 
   if (existing.studentId !== e.studentId || existing.classId !== e.classId) {
-    const dup = await db.enrollment.findFirst({
+    const dup = await sdb.enrollment.findFirst({
       where: {
         studentId: e.studentId,
         classId: e.classId,
@@ -288,7 +310,7 @@ export async function updateEnrollment(
     if (dup) return { error: "Học viên này đã đăng ký lớp này rồi" };
   }
 
-  const classRow = await db.class
+  const classRow = await sdb.class
     .findUnique({ where: { id: e.classId }, select: { courseId: true, centerId: true } })
     .catch(() => null);
   if (!classRow) return { error: "Lớp học không tồn tại" };
@@ -307,7 +329,7 @@ export async function updateEnrollment(
   };
 
   try {
-    await db.enrollment.update({ where: { id }, data });
+    await sdb.enrollment.update({ where: { id }, data });
   } catch {
     return { error: "Lỗi cơ sở dữ liệu — không cập nhật được" };
   }
@@ -320,19 +342,21 @@ export async function updateEnrollment(
 export async function deleteEnrollment(id: string): Promise<ActionResult> {
   const session = await requireSalesOrAdmin();
   // Cách ly cơ sở: chỉ xoá đăng ký thuộc lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    const existing = await db.enrollment.findUnique({
-      where: { id },
-      select: { class: { select: { centerId: true } } },
-    });
-    if (!existing || !passesScope("Class", { centerId: existing.class?.centerId ?? null }, actor)) {
-      return { error: "Đăng ký không tồn tại" };
-    }
+  const uid = session.user.id;
+  if (!uid) return { error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.enrollment.findUnique({
+    where: { id },
+    // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này.
+    select: { centerId: true, class: { select: { centerId: true } } },
+  });
+  if (!existing || !passesScope("Class", { centerId: existing.class?.centerId ?? null }, actor)) {
+    return { error: "Đăng ký không tồn tại" };
   }
   try {
     // FIX-C3 — soft-delete (giữ vết tài chính); read filter deletedAt: null sẽ ẩn.
-    await db.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
+    await sdb.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
   } catch {
     return { error: "Không thể xoá đăng ký này" };
   }
@@ -357,10 +381,17 @@ export async function deleteEnrollmentAction(
     return { ok: false, error: "Không có quyền" };
   }
 
-  const enrollment = await db.enrollment.findUnique({
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+
+  const enrollment = await sdb.enrollment.findUnique({
     where: { id },
+    // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này.
     select: {
       id: true,
+      centerId: true,
       studentId: true,
       classId: true,
       status: true,
@@ -378,11 +409,8 @@ export async function deleteEnrollmentAction(
   if (!enrollment) return { ok: false, error: "Đăng ký không tồn tại" };
 
   // Cách ly cơ sở: chỉ xoá đăng ký thuộc lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: enrollment.class?.centerId ?? null }, actor)) {
-      return { ok: false, error: "Đăng ký không tồn tại" };
-    }
+  if (!passesScope("Class", { centerId: enrollment.class?.centerId ?? null }, actor)) {
+    return { ok: false, error: "Đăng ký không tồn tại" };
   }
 
   const c = enrollment._count;
@@ -397,7 +425,8 @@ export async function deleteEnrollmentAction(
   const { actorId, actorName } = getAuditActor(session);
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       // FIX-C3 — soft-delete thay hard delete (guard _count ở trên vẫn giữ).
       await tx.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
       // P3 (additive): ghi AuditLog hợp nhất cho viewer chung (atomic với soft-delete).
@@ -452,11 +481,12 @@ export async function enrollStudent(
   const notes = parsed.data.notes && parsed.data.notes !== "" ? parsed.data.notes : null;
 
   // Cách ly cơ sở: lớp ghi danh phải thuộc tầm nhìn cơ sở của actor.
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!(await classCenterInScope(actor, classId))) {
-      return { ok: false, error: "Không tìm thấy lớp" };
-    }
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  if (!(await classCenterInScope(sdb, actor, classId))) {
+    return { ok: false, error: "Không tìm thấy lớp" };
   }
 
   // Pre-create validation queries — bọc try/catch để lỗi DB (vd Prisma Client
@@ -474,7 +504,7 @@ export async function enrollStudent(
   let student: { id: string } | null;
   try {
     [cls, existing, student] = await Promise.all([
-      db.class.findFirst({
+      sdb.class.findFirst({
         where: { id: classId, deletedAt: null },
         select: {
           id: true,
@@ -497,11 +527,11 @@ export async function enrollStudent(
       }),
       // FIX-C3 (B2b) — không còn compound unique studentId_classId; findFirst +
       // base soft-delete hook tự lọc deletedAt:null → chỉ thấy enrollment CÒN SỐNG.
-      db.enrollment.findFirst({
+      sdb.enrollment.findFirst({
         where: { studentId, classId },
         select: { status: true },
       }),
-      db.student.findFirst({
+      sdb.student.findFirst({
         where: { id: studentId, deletedAt: null },
         select: { id: true },
       }),
@@ -544,7 +574,7 @@ export async function enrollStudent(
   // FIX-C4 — re-check sĩ số + create trong CÙNG tx (Serializable) chống TOCTOU.
   // (Pre-check phía trên chỉ để UX; tx này mới là chốt chặn quyết định.)
   try {
-    const enrollmentId = await runSerializable(async (tx) => {
+    const enrollmentId = await runSerializable(sdb, async (tx) => {
       const activeCount = await tx.enrollment.count({
         where: {
           classId,
@@ -614,10 +644,17 @@ export async function changeEnrollmentStatus(
   }
   const data = parsed.data;
 
-  const enrollment = await db.enrollment.findUnique({
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+
+  const enrollment = await sdb.enrollment.findUnique({
     where: { id: data.enrollmentId },
+    // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này.
     select: {
       id: true,
+      centerId: true,
       status: true,
       classId: true,
       class: { select: { centerId: true } },
@@ -626,11 +663,8 @@ export async function changeEnrollmentStatus(
   if (!enrollment) return { ok: false, error: "Không tìm thấy enrollment" };
 
   // Cách ly cơ sở: enrollment phải thuộc lớp trong tầm nhìn actor (chống IDOR ghi).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: enrollment.class?.centerId ?? null }, actor)) {
-      return { ok: false, error: "Không tìm thấy enrollment" };
-    }
+  if (!passesScope("Class", { centerId: enrollment.class?.centerId ?? null }, actor)) {
+    return { ok: false, error: "Không tìm thấy enrollment" };
   }
 
   if (enrollment.status === data.newStatus) {
@@ -675,7 +709,7 @@ export async function changeEnrollmentStatus(
 
   // FIX-C4 — re-check sĩ số + update + audit trong CÙNG tx (Serializable).
   try {
-    await runSerializable(async (tx) => {
+    await runSerializable(sdb, async (tx) => {
       if (needsCapacityCheck) {
         const cls = await tx.class.findUnique({
           where: { id: enrollment.classId },
@@ -758,10 +792,17 @@ export async function transferEnrollment(
   }
   const data = parsed.data;
 
-  const oldEnrollment = await db.enrollment.findUnique({
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+
+  const oldEnrollment = await sdb.enrollment.findUnique({
     where: { id: data.enrollmentId },
+    // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này.
     select: {
       id: true,
+      centerId: true,
       status: true,
       studentId: true,
       classId: true,
@@ -771,14 +812,11 @@ export async function transferEnrollment(
   if (!oldEnrollment) return { ok: false, error: "Không tìm thấy enrollment cũ" };
 
   // Cách ly cơ sở: lớp NGUỒN + lớp ĐÍCH đều phải trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!passesScope("Class", { centerId: oldEnrollment.class?.centerId ?? null }, actor)) {
-      return { ok: false, error: "Không tìm thấy enrollment cũ" };
-    }
-    if (!(await classCenterInScope(actor, data.targetClassId))) {
-      return { ok: false, error: "Không tìm thấy lớp đích" };
-    }
+  if (!passesScope("Class", { centerId: oldEnrollment.class?.centerId ?? null }, actor)) {
+    return { ok: false, error: "Không tìm thấy enrollment cũ" };
+  }
+  if (!(await classCenterInScope(sdb, actor, data.targetClassId))) {
+    return { ok: false, error: "Không tìm thấy lớp đích" };
   }
 
   if (oldEnrollment.classId === data.targetClassId) {
@@ -795,7 +833,7 @@ export async function transferEnrollment(
     };
   }
 
-  const targetClass = await db.class.findFirst({
+  const targetClass = await sdb.class.findFirst({
     where: { id: data.targetClassId, deletedAt: null },
     select: {
       id: true,
@@ -825,7 +863,7 @@ export async function transferEnrollment(
 
   // FIX-C3 (B2b) — findFirst thay findUnique (compound unique đã bỏ); base
   // soft-delete hook tự lọc deletedAt:null → chỉ thấy enrollment CÒN SỐNG ở lớp đích.
-  const existing = await db.enrollment.findFirst({
+  const existing = await sdb.enrollment.findFirst({
     where: {
       studentId: oldEnrollment.studentId,
       classId: data.targetClassId,
@@ -847,7 +885,7 @@ export async function transferEnrollment(
 
   try {
     // FIX-C4 — re-check sĩ số lớp đích trong CÙNG tx (Serializable) chống TOCTOU.
-    const newId = await runSerializable(async (tx) => {
+    const newId = await runSerializable(sdb, async (tx) => {
       const activeCount = await tx.enrollment.count({
         where: {
           classId: data.targetClassId,

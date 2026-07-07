@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getEffectiveRoles } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
@@ -22,6 +23,8 @@ import {
 type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
+
+type Sdb = ReturnType<typeof scopedDb>;
 
 type SessionUser = {
   id?: string | null;
@@ -56,7 +59,7 @@ async function canGradeClassWork(
 }
 
 async function requireRole(): Promise<
-  | { ok: true; userId: string; user: SessionUser }
+  | { ok: true; userId: string; user: SessionUser; actor: Actor; sdb: Sdb }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -64,7 +67,36 @@ async function requireRole(): Promise<
   if (!(await checkPermission("exams:edit"))) {
     return { ok: false, error: "Không có quyền quản lý đề thi" };
   }
-  return { ok: true, userId: session.user.id ?? "", user: session.user };
+  const actor = await resolveActor(session.user.id);
+  return {
+    ok: true,
+    userId: session.user.id ?? "",
+    user: session.user,
+    actor,
+    sdb: scopedDb(actor),
+  };
+}
+
+// Loại B (Nhóm 01 L1) — Exam/ExamQuestion/ExamAttempt/ExamAnswer KHÔNG ∈
+// SCOPED_MODELS → scopedDb pass-through. Cách ly tay qua class.centerId ∈
+// actor.visibleCenterIds (HO/SUPER bypass). Đề NGÂN HÀNG (classId null) là nội
+// dung dùng chung 2 cơ sở (câu 74a) → không chặn theo cơ sở, gate quyền riêng lo.
+function classCenterVisible(
+  actor: Actor,
+  cls: { centerId: string | null } | null | undefined,
+): boolean {
+  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  if (!cls) return true; // đề không gắn lớp — exam bank toàn cục
+  return cls.centerId != null && actor.visibleCenterIds.includes(cls.centerId);
+}
+
+/** Loại B — đề thi theo id từ client: lớp gắn đề (nếu có) phải trong tầm nhìn actor. */
+async function examClassVisible(sdb: Sdb, actor: Actor, examId: string): Promise<boolean> {
+  const e = await sdb.exam.findUnique({
+    where: { id: examId },
+    select: { class: { select: { centerId: true } } },
+  });
+  return !!e && classCenterVisible(actor, e.class);
 }
 
 // R7-13 AC1/AC4 — chỉ Đào tạo/Admin (CENTER_MANAGER/SUPER_ADMIN) được sửa đề đã PUBLISHED.
@@ -119,10 +151,10 @@ function parseConfigExtra(input: unknown): ExamConfigExtra {
   return out;
 }
 
-async function resolveEmployeeId(userId: string): Promise<string | null> {
+async function resolveEmployeeId(sdb: Sdb, userId: string): Promise<string | null> {
   if (!userId) return null;
   try {
-    const u = await db.user.findUnique({
+    const u = await sdb.user.findUnique({
       where: { id: userId },
       select: { employeeId: true },
     });
@@ -149,18 +181,29 @@ export async function createExam(
   const data = parsed.data;
 
   if (data.examCode) {
-    const dup = await db.exam.findUnique({
+    const dup = await gate.sdb.exam.findUnique({
       where: { examCode: data.examCode },
       select: { id: true },
     });
     if (dup) return { ok: false, error: `Mã đề "${data.examCode}" đã tồn tại` };
   }
 
-  const createdById = await resolveEmployeeId(gate.userId);
+  // Loại B — nếu đề gắn lớp: lớp phải trong tầm nhìn actor (sdb.class auto-scope).
+  if (data.classId) {
+    const cls = await gate.sdb.class.findUnique({
+      where: { id: data.classId },
+      select: { centerId: true },
+    });
+    if (!cls || !classCenterVisible(gate.actor, cls)) {
+      return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
+    }
+  }
+
+  const createdById = await resolveEmployeeId(gate.sdb, gate.userId);
   const config = parseConfigExtra(input);
 
   try {
-    const e = await db.exam.create({
+    const e = await gate.sdb.exam.create({
       data: { ...data, ...config, createdById },
       select: { id: true },
     });
@@ -201,11 +244,26 @@ export async function updateExam(
   }
   const data = parsed.data;
 
-  const current = await db.exam.findUnique({
+  const current = await gate.sdb.exam.findUnique({
     where: { id },
-    select: { examCode: true, status: true },
+    select: { examCode: true, status: true, class: { select: { centerId: true } } },
   });
   if (!current) return { ok: false, error: "Đề thi không tồn tại" };
+
+  // Loại B — đề gắn lớp cơ sở khác → chặn (chống IDOR sửa chéo cơ sở).
+  if (!classCenterVisible(gate.actor, current.class)) {
+    return { ok: false, error: "Đề thi không tồn tại" };
+  }
+  // Đổi lớp gắn đề → lớp đích cũng phải trong tầm nhìn actor.
+  if (data.classId) {
+    const targetCls = await gate.sdb.class.findUnique({
+      where: { id: data.classId },
+      select: { centerId: true },
+    });
+    if (!targetCls || !classCenterVisible(gate.actor, targetCls)) {
+      return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
+    }
+  }
 
   // Published-edit guard (AC1/T4): GV không sửa đề đã publish.
   if (current.status === "PUBLISHED" && !canEditPublished(gate.user)) {
@@ -227,7 +285,7 @@ export async function updateExam(
   }
 
   if (data.examCode && data.examCode !== current.examCode) {
-    const dup = await db.exam.findUnique({
+    const dup = await gate.sdb.exam.findUnique({
       where: { examCode: data.examCode },
       select: { id: true },
     });
@@ -238,7 +296,7 @@ export async function updateExam(
 
   const config = parseConfigExtra(input);
   try {
-    await db.exam.update({ where: { id }, data: { ...data, ...config } });
+    await gate.sdb.exam.update({ where: { id }, data: { ...data, ...config } });
     await writeAudit({
       actor: { id: gate.user.id ?? null, name: gate.user.name ?? "?" },
       module: "exams",
@@ -263,7 +321,12 @@ export async function deleteExam(id: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const attempts = await db.examAttempt.count({ where: { examId: id } });
+  // Loại B — chống IDOR xoá đề của lớp cơ sở khác.
+  if (!(await examClassVisible(gate.sdb, gate.actor, id))) {
+    return { ok: false, error: "Đề thi không tồn tại" };
+  }
+
+  const attempts = await gate.sdb.examAttempt.count({ where: { examId: id } });
   if (attempts > 0) {
     return {
       ok: false,
@@ -272,7 +335,7 @@ export async function deleteExam(id: string): Promise<Result> {
   }
 
   try {
-    await db.exam.delete({ where: { id } });
+    await gate.sdb.exam.delete({ where: { id } });
   } catch (err) {
     return {
       ok: false,
@@ -311,15 +374,20 @@ export async function addQuestionToExam(
   }
   const { examId, questionId, points } = parsed.data;
 
-  const existing = await db.examQuestion.findUnique({
+  // Loại B — chống IDOR thêm câu hỏi vào đề của lớp cơ sở khác.
+  if (!(await examClassVisible(gate.sdb, gate.actor, examId))) {
+    return { ok: false, error: "Đề thi không tồn tại" };
+  }
+
+  const existing = await gate.sdb.examQuestion.findUnique({
     where: { examId_questionId: { examId, questionId } },
     select: { id: true },
   });
   if (existing) return { ok: false, error: "Câu hỏi đã có trong đề" };
 
   try {
-    const count = await db.examQuestion.count({ where: { examId } });
-    await db.examQuestion.create({
+    const count = await gate.sdb.examQuestion.count({ where: { examId } });
+    await gate.sdb.examQuestion.create({
       data: { examId, questionId, order: count + 1, points },
     });
   } catch (err) {
@@ -338,14 +406,19 @@ export async function removeQuestionFromExam(
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const eq = await db.examQuestion.findUnique({
+  const eq = await gate.sdb.examQuestion.findUnique({
     where: { id: examQuestionId },
     select: { examId: true, order: true },
   });
   if (!eq) return { ok: false, error: "Không tìm thấy bản ghi" };
 
+  // Loại B — chống IDOR gỡ câu hỏi khỏi đề của lớp cơ sở khác.
+  if (!(await examClassVisible(gate.sdb, gate.actor, eq.examId))) {
+    return { ok: false, error: "Không tìm thấy bản ghi" };
+  }
+
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       await tx.examQuestion.delete({ where: { id: examQuestionId } });
       // Renumber: bring higher orders down by 1 to keep dense sequence
       const higher = await tx.examQuestion.findMany({
@@ -388,8 +461,17 @@ export async function updateExamQuestionPoints(
     return { ok: false, error: "Điểm phải >= 0" };
   }
 
+  // Loại B — chống IDOR sửa điểm câu hỏi của đề lớp cơ sở khác.
+  const cur = await gate.sdb.examQuestion.findUnique({
+    where: { id: examQuestionId },
+    select: { examId: true },
+  });
+  if (!cur || !(await examClassVisible(gate.sdb, gate.actor, cur.examId))) {
+    return { ok: false, error: "Không tìm thấy bản ghi" };
+  }
+
   try {
-    const eq = await db.examQuestion.update({
+    const eq = await gate.sdb.examQuestion.update({
       where: { id: examQuestionId },
       data: { points },
       select: { examId: true },
@@ -419,7 +501,12 @@ export async function reorderExamQuestions({
     return { ok: false, error: "Danh sách rỗng" };
   }
 
-  const found = await db.examQuestion.findMany({
+  // Loại B — chống IDOR sắp xếp câu hỏi của đề lớp cơ sở khác.
+  if (!(await examClassVisible(gate.sdb, gate.actor, examId))) {
+    return { ok: false, error: "Đề thi không tồn tại" };
+  }
+
+  const found = await gate.sdb.examQuestion.findMany({
     where: { id: { in: examQuestionIds }, examId },
     select: { id: true },
   });
@@ -428,7 +515,7 @@ export async function reorderExamQuestions({
   }
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       for (let i = 0; i < examQuestionIds.length; i++) {
         await tx.examQuestion.update({
           where: { id: examQuestionIds[i] },
@@ -478,7 +565,12 @@ export async function autoGenerateExamQuestions(
   }
   const { examId, count, defaultPoints } = parsed.data;
 
-  const existing = await db.examQuestion.findMany({
+  // Loại B — chống IDOR sinh câu hỏi cho đề của lớp cơ sở khác.
+  if (!(await examClassVisible(gate.sdb, gate.actor, examId))) {
+    return { ok: false, error: "Đề thi không tồn tại" };
+  }
+
+  const existing = await gate.sdb.examQuestion.findMany({
     where: { examId },
     select: { questionId: true },
   });
@@ -491,7 +583,7 @@ export async function autoGenerateExamQuestions(
   if (parsed.data.tags.length > 0) where.tags = { hasSome: parsed.data.tags };
   if (existingIds.length > 0) where.id = { notIn: existingIds };
 
-  const candidates = await db.question.findMany({
+  const candidates = await gate.sdb.question.findMany({
     where,
     select: { id: true },
     take: count * 3,
@@ -511,7 +603,7 @@ export async function autoGenerateExamQuestions(
 
   const startOrder = existing.length;
   try {
-    await db.examQuestion.createMany({
+    await gate.sdb.examQuestion.createMany({
       data: picked.map((q, idx) => ({
         examId,
         questionId: q.id,
@@ -538,7 +630,7 @@ export async function gradeAttempt(attemptId: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const attempt = await db.examAttempt.findUnique({
+  const attempt = await gate.sdb.examAttempt.findUnique({
     where: { id: attemptId },
     include: {
       answers: {
@@ -560,6 +652,10 @@ export async function gradeAttempt(attemptId: string): Promise<Result> {
     },
   });
   if (!attempt) return { ok: false, error: "Không tìm thấy bài làm" };
+  // Loại B — lớp gắn đề phải trong tầm nhìn cơ sở actor trước khi xét quyền chấm.
+  if (!classCenterVisible(gate.actor, attempt.exam.class)) {
+    return { ok: false, error: "Không tìm thấy bài làm" };
+  }
   if (!(await canGradeClassWork(gate.user, attempt.exam.class))) {
     return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
   }
@@ -567,11 +663,11 @@ export async function gradeAttempt(attemptId: string): Promise<Result> {
     return { ok: false, error: "Bài làm chưa được nộp (IN_PROGRESS)" };
   }
 
-  const graderEmployeeId = await resolveEmployeeId(gate.userId);
+  const graderEmployeeId = await resolveEmployeeId(gate.sdb, gate.userId);
 
   let totalScore = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       for (const ans of attempt.answers) {
         const q = ans.examQuestion.question;
         let isCorrect: boolean | null = ans.isCorrect;
@@ -648,7 +744,7 @@ export async function manualGradeAnswer(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const ans = await db.examAnswer.findUnique({
+  const ans = await gate.sdb.examAnswer.findUnique({
     where: { id: parsed.data.examAnswerId },
     select: {
       examQuestion: { select: { points: true } },
@@ -663,6 +759,10 @@ export async function manualGradeAnswer(
     },
   });
   if (!ans) return { ok: false, error: "Không tìm thấy bài trả lời" };
+  // Loại B — lớp gắn đề phải trong tầm nhìn cơ sở actor trước khi xét quyền chấm.
+  if (!classCenterVisible(gate.actor, ans.attempt.exam.class)) {
+    return { ok: false, error: "Không tìm thấy bài trả lời" };
+  }
   if (!(await canGradeClassWork(gate.user, ans.attempt.exam.class))) {
     return { ok: false, error: "Không có quyền chấm bài ngoài lớp phụ trách" };
   }
@@ -674,7 +774,7 @@ export async function manualGradeAnswer(
   }
 
   try {
-    await db.examAnswer.update({
+    await gate.sdb.examAnswer.update({
       where: { id: parsed.data.examAnswerId },
       data: {
         isCorrect: parsed.data.isCorrect,
@@ -714,11 +814,15 @@ export async function changeExamStatus(
   }
 
   // T4 — GV không publish / sửa trạng thái đề đã publish.
-  const cur = await db.exam.findUnique({
+  const cur = await gate.sdb.exam.findUnique({
     where: { id: parsed.data.examId },
-    select: { status: true },
+    select: { status: true, class: { select: { centerId: true } } },
   });
   if (!cur) return { ok: false, error: "Đề thi không tồn tại" };
+  // Loại B — chống IDOR đổi trạng thái đề của lớp cơ sở khác.
+  if (!classCenterVisible(gate.actor, cur.class)) {
+    return { ok: false, error: "Đề thi không tồn tại" };
+  }
   const touchesPublished =
     parsed.data.status === "PUBLISHED" || cur.status === "PUBLISHED";
   if (touchesPublished && !canEditPublished(gate.user)) {
@@ -726,7 +830,7 @@ export async function changeExamStatus(
   }
 
   try {
-    await db.exam.update({
+    await gate.sdb.exam.update({
       where: { id: parsed.data.examId },
       data: { status: parsed.data.status },
     });

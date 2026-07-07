@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { CurriculumForm } from "../_components/curriculum-form";
 
@@ -15,7 +16,11 @@ export default async function NewCurriculumPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const courses = await db.course.findMany({
+  // Nhóm 01 L1 — Course = catalog toàn cục, scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const courses = await sdb.course.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true },

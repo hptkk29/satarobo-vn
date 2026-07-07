@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { DocumentForm } from "../_components/document-form";
 
@@ -15,7 +16,11 @@ export default async function NewDocumentPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const lessons = await db.lesson.findMany({
+  // Nhóm 01 L1 — Lesson = học liệu toàn cục, scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const lessons = await sdb.lesson.findMany({
     where: { curriculum: { isActive: true } },
     include: { curriculum: { select: { name: true } } },
     orderBy: [{ curriculumId: "asc" }, { order: "asc" }],

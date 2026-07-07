@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { enqueueNewFeedback } from "@/lib/email/triggers";
@@ -10,6 +11,7 @@ import { publishEvent } from "@/lib/events/publish";
 import { canStartSession, canCompleteSession } from "@/lib/sessions/status";
 
 type Result = { ok: true } | { ok: false; error: string };
+type Sdb = ReturnType<typeof scopedDb>;
 
 type ClassGate = {
   teacherId: string | null;
@@ -55,9 +57,17 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
-  const sess = await db.classSession.findUnique({
+  // Loại B (Nhóm 01 L1) — ClassSession scoped auto; StudentSessionFeedback/Attendance
+  // chưa scoped → cách ly qua buổi (sdb.findUnique IDOR-filter) + gate GV/CM bên dưới.
+  // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const sess = await sdb.classSession.findUnique({
     where: { id: sessionId },
-    select: { id: true, class: { select: { teacherId: true, assistantId: true, centerId: true } } },
+    select: {
+      id: true,
+      centerId: true,
+      class: { select: { teacherId: true, assistantId: true, centerId: true } },
+    },
   });
   if (!sess) return { ok: false, error: "Buổi học không tồn tại" };
 
@@ -69,17 +79,17 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
 
   let txResults: Array<{ id: string } | { count: number }>;
   try {
-    txResults = await db.$transaction(
+    txResults = await sdb.$transaction(
       items.map((it) => {
         const comment = it.comment.trim();
         const rating = it.rating ?? null;
         if (comment.length === 0) {
           // Xoá nhận xét nếu để trống.
-          return db.studentSessionFeedback.deleteMany({
+          return sdb.studentSessionFeedback.deleteMany({
             where: { classSessionId: sessionId, studentId: it.studentId },
           });
         }
-        return db.studentSessionFeedback.upsert({
+        return sdb.studentSessionFeedback.upsert({
           where: { classSessionId_studentId: { classSessionId: sessionId, studentId: it.studentId } },
           update: { comment, rating, createdById: session.user.id },
           create: {
@@ -119,15 +129,21 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
   }
 
   // A2 — đẩy email "nhận xét mới" cho phụ huynh (chỉ con liên quan, không lộ con khác).
+  // Lưu ý: Student scoped → HV học bù đến từ CƠ SỞ KHÁC bị lọc khỏi email này với
+  // actor center-scope (in-app notification qua event comment.added không ảnh hưởng).
   try {
     const withComment = items.filter((it) => it.comment.trim().length > 0);
     if (withComment.length > 0) {
       const [students, cls] = await Promise.all([
-        db.student.findMany({
+        sdb.student.findMany({
           where: { id: { in: withComment.map((i) => i.studentId) }, parentUserId: { not: null } },
           select: { id: true, name: true, parentName: true, parentUser: { select: { email: true, name: true } } },
         }),
-        db.classSession.findUnique({ where: { id: sessionId }, select: { class: { select: { name: true } } } }),
+        sdb.classSession.findUnique({
+          where: { id: sessionId },
+          // ⚠️ kèm centerId — findUnique model scoped lọc hậu kỳ theo field này.
+          select: { centerId: true, class: { select: { name: true } } },
+        }),
       ]);
       const byId = new Map(withComment.map((i) => [i.studentId, i]));
       for (const s of students) {
@@ -159,10 +175,13 @@ const PRESENT_STATUSES = ["PRESENT", "LATE"] as const;
 async function loadSessionForGate(sessionId: string) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
-  const sess = await db.classSession.findUnique({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này.
+  const sess = await sdb.classSession.findUnique({
     where: { id: sessionId },
     select: {
       id: true,
+      centerId: true,
       lessonId: true,
       status: true,
       class: { select: { id: true, teacherId: true, assistantId: true, centerId: true } },
@@ -174,18 +193,23 @@ async function loadSessionForGate(sessionId: string) {
     sess.class,
   );
   if (!allowed) return { ok: false as const, error: "Không có quyền thao tác buổi học này" };
-  return { ok: true as const, sess };
+  return { ok: true as const, sess, sdb };
 }
 
 /** Tính 2 bước suy ra: điểm danh xong + đã nhận xét HS có mặt. */
-async function deriveSteps(sessionId: string): Promise<{ ckAttendance: boolean; ckFeedback: boolean }> {
+// Attendance ∈ SCOPE_EXEMPT (chờ backfill PROD) + StudentSessionFeedback không scoped
+// → sdb pass-through; cách ly đã chốt ở loadSessionForGate (buổi trong tầm nhìn).
+async function deriveSteps(
+  sdb: Sdb,
+  sessionId: string,
+): Promise<{ ckAttendance: boolean; ckFeedback: boolean }> {
   const [attCount, presentRows, feedbackRows] = await Promise.all([
-    db.attendance.count({ where: { sessionId } }),
-    db.attendance.findMany({
+    sdb.attendance.count({ where: { sessionId } }),
+    sdb.attendance.findMany({
       where: { sessionId, status: { in: [...PRESENT_STATUSES] } },
       select: { studentId: true },
     }),
-    db.studentSessionFeedback.findMany({
+    sdb.studentSessionFeedback.findMany({
       where: { classSessionId: sessionId },
       select: { studentId: true },
     }),
@@ -218,9 +242,9 @@ export async function updateSessionChecklist(input: unknown): Promise<Result> {
   const gate = await loadSessionForGate(parsed.data.sessionId);
   if (!gate.ok) return gate;
 
-  const derived = await deriveSteps(parsed.data.sessionId);
+  const derived = await deriveSteps(gate.sdb, parsed.data.sessionId);
   try {
-    await db.classSession.update({
+    await gate.sdb.classSession.update({
       where: { id: parsed.data.sessionId },
       data: {
         ckClean: parsed.data.ckClean,
@@ -251,7 +275,7 @@ export async function startSession(sessionId: string): Promise<Result> {
   if (!canStartSession(gate.sess.status)) {
     return { ok: false, error: "INVALID_SESSION_STATE" };
   }
-  await db.classSession.update({
+  await gate.sdb.classSession.update({
     where: { id: sessionId },
     data: { status: "IN_PROGRESS", startedAt: new Date() },
   });
@@ -268,10 +292,11 @@ export async function completeSession(sessionId: string): Promise<Result> {
     return { ok: false, error: "INVALID_SESSION_STATE" };
   }
 
-  const derived = await deriveSteps(sessionId);
-  const sess = await db.classSession.findUnique({
+  const derived = await deriveSteps(gate.sdb, sessionId);
+  const sess = await gate.sdb.classSession.findUnique({
     where: { id: sessionId },
-    select: { ckLessonConfirmed: true },
+    // ⚠️ kèm centerId — findUnique model scoped lọc hậu kỳ theo field này.
+    select: { centerId: true, ckLessonConfirmed: true },
   });
   if (!derived.ckAttendance) return { ok: false, error: "Chưa điểm danh — không thể hoàn tất" };
   if (!sess?.ckLessonConfirmed) return { ok: false, error: "Chưa xác nhận bài đã dạy" };
@@ -279,7 +304,7 @@ export async function completeSession(sessionId: string): Promise<Result> {
     return { ok: false, error: "Chưa nhận xét đủ học sinh có mặt" };
   }
 
-  await db.classSession.update({
+  await gate.sdb.classSession.update({
     where: { id: sessionId },
     data: {
       status: "COMPLETED",

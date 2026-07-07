@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
@@ -17,8 +18,12 @@ export default async function EditPackagePage({ params }: EditPackagePageProps) 
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Nhóm 01 L1 — CoursePackage/Course = catalog LMS toàn cục, scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const { id } = await params;
-  const pkg = await db.coursePackage.findUnique({
+  const pkg = await sdb.coursePackage.findUnique({
     where: { id },
     select: {
       id: true,
@@ -64,7 +69,7 @@ export default async function EditPackagePage({ params }: EditPackagePageProps) 
   if (!pkg) notFound();
 
   // FL1-05 — khoá dạy để liên kết (đổ dropdown).
-  const courses = await db.course.findMany({
+  const courses = await sdb.course.findMany({
     where: { isActive: true },
     orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, code: true, slug: true },

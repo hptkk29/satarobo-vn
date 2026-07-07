@@ -7,7 +7,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { publishEvent } from "@/lib/events/publish";
 import { isScormEnabled } from "@/lib/flags";
 
@@ -37,7 +38,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Thiếu packageId" }, { status: 400 });
   }
 
-  const pkg = await db.scormPackage.findUnique({
+  // Nhóm 01 L1 — ScormPackage = học liệu toàn cục (không center-scope),
+  // scopedDb pass-through; dùng để sạch whitelist db trần.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const pkg = await sdb.scormPackage.findUnique({
     where: { id: packageId },
     select: { id: true, status: true, uploadKey: true },
   });

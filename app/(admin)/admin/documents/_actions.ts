@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import {
   detectDocumentType,
@@ -15,8 +16,10 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+// Nhóm 01 L1 — Document/Lesson = học liệu toàn cục (không center-scope),
+// scopedDb pass-through; dùng để sạch whitelist db trần.
 async function requireRole(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; sdb: ReturnType<typeof scopedDb> }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -24,13 +27,17 @@ async function requireRole(): Promise<
   if (!(await checkPermission("documents:upload"))) {
     return { ok: false, error: "Không có quyền quản lý tài liệu" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, userId: session.user.id ?? "", sdb: scopedDb(actor) };
 }
 
-async function resolveEmployeeId(userId: string): Promise<string | null> {
+async function resolveEmployeeId(
+  sdb: ReturnType<typeof scopedDb>,
+  userId: string,
+): Promise<string | null> {
   if (!userId) return null;
   try {
-    const u = await db.user.findUnique({
+    const u = await sdb.user.findUnique({
       where: { id: userId },
       select: { employeeId: true },
     });
@@ -53,17 +60,17 @@ export async function createDocument(
   const data = parsed.data;
 
   if (data.documentCode) {
-    const dup = await db.document.findUnique({
+    const dup = await gate.sdb.document.findUnique({
       where: { documentCode: data.documentCode },
       select: { id: true },
     });
     if (dup) return { ok: false, error: `Mã tài liệu "${data.documentCode}" đã tồn tại` };
   }
 
-  const uploadedById = await resolveEmployeeId(gate.userId);
+  const uploadedById = await resolveEmployeeId(gate.sdb, gate.userId);
 
   try {
-    const doc = await db.document.create({
+    const doc = await gate.sdb.document.create({
       data: {
         ...data,
         type: detectDocumentType(data.mimeType),
@@ -100,14 +107,14 @@ export async function updateDocument(
   }
   const data = parsed.data;
 
-  const current = await db.document.findUnique({
+  const current = await gate.sdb.document.findUnique({
     where: { id },
     select: { documentCode: true },
   });
   if (!current) return { ok: false, error: "Tài liệu không tồn tại" };
 
   if (data.documentCode && data.documentCode !== current.documentCode) {
-    const dup = await db.document.findUnique({
+    const dup = await gate.sdb.document.findUnique({
       where: { documentCode: data.documentCode },
       select: { id: true },
     });
@@ -117,7 +124,7 @@ export async function updateDocument(
   }
 
   try {
-    await db.document.update({
+    await gate.sdb.document.update({
       where: { id },
       data: { ...data, type: detectDocumentType(data.mimeType) },
     });
@@ -140,7 +147,7 @@ export async function deleteDocument(id: string): Promise<Result> {
   if (!gate.ok) return gate;
 
   try {
-    await db.document.delete({ where: { id } });
+    await gate.sdb.document.delete({ where: { id } });
   } catch (err) {
     return {
       ok: false,
