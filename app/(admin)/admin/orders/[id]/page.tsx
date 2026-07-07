@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
@@ -36,7 +37,10 @@ export default async function OrderDetailPage({ params }: Props) {
   }
 
   const { id } = await params;
-  const order = await db.order.findUnique({
+  // Cách ly cơ sở: Order ∈ SCOPED_MODELS — findUnique qua scopedDb chống IDOR
+  // (đơn cơ sở ngoài tầm nhìn → null → notFound).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const order = await sdb.order.findUnique({
     where: { id },
     include: {
       items: {
@@ -90,7 +94,7 @@ export default async function OrderDetailPage({ params }: Props) {
   const qrUrl = buildVietQrImageUrl(payCfg, order.totalAmount, transferContent);
 
   const emailTemplates = canManage
-    ? await db.emailTemplate.findMany({
+    ? await sdb.emailTemplate.findMany({
         where: {
           isActive: true,
           trigger: { in: ["ORDER_CONFIRMATION", "PAYMENT_RECEIPT", "MANUAL"] },
@@ -102,7 +106,7 @@ export default async function OrderDetailPage({ params }: Props) {
 
   // G4 (3c) — danh sách phương thức để đổi PTTT (chỉ cần khi có quyền sửa).
   const paymentMethods = canManage
-    ? await db.paymentMethod.findMany({
+    ? await sdb.paymentMethod.findMany({
         where: { isActive: true },
         orderBy: { displayOrder: "asc" },
         select: {

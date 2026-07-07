@@ -6,8 +6,7 @@ import { Prisma, type OrderStatus, type OrderType } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { passesScope } from "@/lib/db-scope";
-import { db } from "@/lib/db";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import {
   orderCreateManualSchema,
   orderStatusChangeSchema,
@@ -75,7 +74,9 @@ export async function queryOrders(
   filters: OrderFilters,
   cursor: string | null,
 ) {
-  await requireOrdersView();
+  const session = await requireOrdersView();
+  // Cách ly cơ sở: Order ∈ SCOPED_MODELS → findMany tự inject `centerId IN visibleCenterIds`.
+  const sdb = scopedDb(await resolveActor(session.user.id));
 
   const AND: Array<Record<string, unknown>> = [];
   if (filters.dateFrom)
@@ -112,7 +113,7 @@ export async function queryOrders(
     }
   }
 
-  const rows = await db.order.findMany({
+  const rows = await sdb.order.findMany({
     where: AND.length ? { AND } : undefined,
     include: {
       paymentMethod: { select: { code: true, name: true } },
@@ -136,6 +137,8 @@ export async function queryOrders(
 // ─── CREATE MANUAL ORDER ────────────────────────────────────────────
 export async function createOrderManualAction(input: unknown) {
   const session = await requireOrdersManage();
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const parsed = orderCreateManualSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -146,6 +149,12 @@ export async function createOrderManualAction(input: unknown) {
   }
 
   const data = parsed.data;
+
+  // Cách ly cơ sở (ghi): nếu form chọn cơ sở, cơ sở đó phải thuộc tầm nhìn actor
+  // (orders:manage hiện là GLOBAL — guard này chỉ chặn khi role bị thu hẹp sau này).
+  if (data.centerId && !passesScope("Order", { centerId: data.centerId }, actor)) {
+    return { ok: false as const, error: "Không có quyền tạo đơn cho cơ sở này" };
+  }
 
   const subtotal = data.items.reduce(
     (s, it) => s + it.unitPrice * it.quantity,
@@ -195,7 +204,8 @@ export async function createOrderManualAction(input: unknown) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
   }
 
-  const pm = await db.paymentMethod.findUnique({
+  // PaymentMethod/Product là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const pm = await sdb.paymentMethod.findUnique({
     where: { id: data.paymentMethodId },
     select: {
       id: true,
@@ -251,7 +261,7 @@ export async function createOrderManualAction(input: unknown) {
         error: "Đơn PRODUCT phải chọn sản phẩm",
       };
     }
-    const product = await db.product.findUnique({
+    const product = await sdb.product.findUnique({
       where: { id: item.productId },
       select: {
         id: true,
@@ -289,8 +299,11 @@ export async function createOrderManualAction(input: unknown) {
 
   // FIX-C5 — codegen atomic BÊN TRONG tx (`generateOrderCode(tx)`) + retry khi
   // đụng unique-violation (P2002) như backstop. Cả tx re-run khi retry.
+  // A0-04: tx từ scopedDb — cast vì extended client không structurally-assignable
+  // vào Prisma.TransactionClient (tiền lệ students/classes). Cấu trúc tx GIỮ NGUYÊN.
   const created = await withUniqueRetry(() =>
-    db.$transaction(async (tx) => {
+    sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       const code = await generateOrderCode(tx);
       const order = await tx.order.create({
       data: {
@@ -496,11 +509,13 @@ export async function changeOrderStatusAction(
     return { ok: false as const, error: "Dữ liệu không hợp lệ" };
   }
 
-  const order = await db.order.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  // findUnique qua scopedDb đã chống IDOR (ngoài scope → null); giữ passesScope làm belt-and-suspenders.
+  const order = await sdb.order.findUnique({
     where: { id: orderId },
     select: { id: true, status: true, centerId: true, leadId: true, totalAmount: true },
   });
-  const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
@@ -523,7 +538,10 @@ export async function changeOrderStatusAction(
   const metadata = await getRequestMetadata();
   const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
 
-  const txResult = await db.$transaction(async (tx) => {
+  // A0-04: tx từ scopedDb — cast (tiền lệ). Cấu trúc transaction tiền GIỮ NGUYÊN
+  // (updateMany optimistic-lock + history + ensureOrderPaymentRecorded atomic).
+  const txResult = await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const updateData: Prisma.OrderUpdateInput = {
       status: parsed.data.toStatus,
     };
@@ -589,7 +607,7 @@ export async function changeOrderStatusAction(
 
   // Fire PAYMENT_RECEIPT when order transitions to CONFIRMED (paidAt set).
   if (parsed.data.toStatus === "CONFIRMED") {
-    const orderForEmail = await db.order.findUnique({
+    const orderForEmail = await sdb.order.findUnique({
       where: { id: orderId },
       include: { paymentMethod: { select: { name: true } } },
     });
@@ -632,18 +650,19 @@ export async function updateOrderNoteAction(
     return { ok: false as const, error: "Ghi chú quá dài (max 2000 ký tự)" };
   }
 
-  const order = await db.order.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const order = await sdb.order.findUnique({
     where: { id: orderId },
     select: { id: true, centerId: true },
   });
-  const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
 
   const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
   // FIX-H9 — ghi có điều kiện updatedAt; 0 row ⇒ người khác vừa sửa → STALE_WRITE.
-  const upd = await db.order.updateMany({
+  const upd = await sdb.order.updateMany({
     where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
     data: { internalNote: internalNote.trim() || null },
   });
@@ -662,11 +681,12 @@ export async function updateOrderPaymentMethodAction(
 ) {
   const session = await requireOrdersManage();
 
-  const order = await db.order.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const order = await sdb.order.findUnique({
     where: { id: orderId },
     select: { id: true, centerId: true, status: true, type: true },
   });
-  const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
   }
@@ -678,7 +698,7 @@ export async function updateOrderPaymentMethodAction(
     };
   }
 
-  const pm = await db.paymentMethod.findUnique({
+  const pm = await sdb.paymentMethod.findUnique({
     where: { id: paymentMethodId },
     select: {
       id: true,
@@ -710,7 +730,7 @@ export async function updateOrderPaymentMethodAction(
   }
 
   const expectedAt = expectedUpdatedAt ? new Date(expectedUpdatedAt) : null;
-  const upd = await db.order.updateMany({
+  const upd = await sdb.order.updateMany({
     where: { id: orderId, ...(expectedAt ? { updatedAt: expectedAt } : {}) },
     data: { paymentMethodId },
   });
@@ -722,10 +742,12 @@ export async function updateOrderPaymentMethodAction(
 
 // ─── HELPER: load form data cho create page ─────────────────────────
 export async function loadCreateOrderFormData() {
-  await requireOrdersManage();
+  const session = await requireOrdersManage();
+  // PaymentMethod/Course/Product là catalog, Center exempt — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
 
   const [paymentMethods, courses, products, centers] = await Promise.all([
-    db.paymentMethod.findMany({
+    sdb.paymentMethod.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: {
@@ -739,7 +761,7 @@ export async function loadCreateOrderFormData() {
         canBuyProduct: true,
       },
     }),
-    db.course.findMany({
+    sdb.course.findMany({
       // O1/O3: chỉ khoá DẠY thật (Sata 1–8 + combo teachable), loại 2 "danh mục"
       // Lập trình Robot / Luyện thi RoboSim (isTeachable=false). Combo 1&2 là course
       // teachable nên tự nằm trong danh sách "Khoá học".
@@ -749,7 +771,7 @@ export async function loadCreateOrderFormData() {
       orderBy: { displayOrder: "asc" },
       select: { id: true, code: true, name: true, price: true, type: true },
     }),
-    db.product.findMany({
+    sdb.product.findMany({
       // O3: đơn "Sản phẩm" chỉ gồm KIT_ROBOT + SENSOR.
       where: { status: "ACTIVE", category: { in: ["KIT_ROBOT", "SENSOR"] } },
       orderBy: { name: "asc" },
@@ -763,7 +785,7 @@ export async function loadCreateOrderFormData() {
         category: true,
       },
     }),
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
@@ -789,9 +811,11 @@ export async function sendManualOrderEmailAction(input: {
     return { ok: false as const, error: "Email không hợp lệ" };
   }
 
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const [template, order] = await Promise.all([
-    db.emailTemplate.findUnique({ where: { id: input.templateId } }),
-    db.order.findUnique({
+    sdb.emailTemplate.findUnique({ where: { id: input.templateId } }),
+    sdb.order.findUnique({
       where: { id: input.orderId },
       include: {
         items: true,
@@ -803,7 +827,6 @@ export async function sendManualOrderEmailAction(input: {
     return { ok: false as const, error: "Template không tồn tại" };
   if (!template.isActive)
     return { ok: false as const, error: "Template đã bị tắt" };
-  const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Đơn hàng không tồn tại" };
   }
@@ -869,11 +892,11 @@ export async function recordOrderInstallmentsAction(input: {
   // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
   if (!(await checkPermission("orders:manage"))) return { ok: false, error: "Không có quyền" };
 
-  const order = await db.order.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const order = await scopedDb(actor).order.findUnique({
     where: { id: input.orderId },
     select: { id: true, centerId: true, leadId: true },
   });
-  const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false, error: "Không tìm thấy đơn hàng" };
   }
@@ -908,11 +931,11 @@ export async function markOrderInstallmentPaidAction(
   if (!(await checkPermission("orders:manage"))) return { ok: false, error: "Không có quyền" };
 
   // R7-00 AC4 — chặn IDOR chéo cơ sở: xác nhận đơn nằm trong scope trước khi mutate.
-  const order = await db.order.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const order = await scopedDb(actor).order.findUnique({
     where: { id: orderId },
     select: { id: true, centerId: true, leadId: true },
   });
-  const actor = await resolveActor(session.user.id);
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false, error: "Không tìm thấy đơn hàng" };
   }

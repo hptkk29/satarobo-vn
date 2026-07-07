@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import {
   receiptSchema,
   issueSchema,
@@ -31,18 +32,24 @@ class MovementError extends Error {
   }
 }
 
+type Sdb = ReturnType<typeof scopedDb>;
+
 /**
  * FIX-C4 — Transaction Serializable + retry khi xung đột ghi (Prisma P2034 /
  * Postgres 40001). Dùng cho kiểm kê (đọc tồn → tính delta → ghi) phải nhất quán.
+ * A0-04: chạy trên scopedDb — cast tx (extended client không structurally-assignable
+ * vào Prisma.TransactionClient; runtime read-hook vẫn scope — tiền lệ students/classes).
  */
 async function runSerializable<T>(
+  sdb: Sdb,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await db.$transaction(fn, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      });
+      return await sdb.$transaction(
+        async (tx) => fn(tx as unknown as Prisma.TransactionClient),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
     } catch (err) {
       const isConflict =
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -53,8 +60,11 @@ async function runSerializable<T>(
   }
 }
 
+// Cách ly cơ sở (A0-04): StockBalance/StockMovement ∈ SCOPED_MODELS. Mọi movement
+// đều gate bằng read StockBalance qua scopedDb (findUnique chống IDOR → cơ sở
+// ngoài tầm nhìn trả null) TRƯỚC khi ghi — nên phần ghi trong tx giữ nguyên.
 async function requireRole(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; actor: Actor; sdb: Sdb }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -62,13 +72,15 @@ async function requireRole(): Promise<
   if (!(await checkPermission("inventory:movement"))) {
     return { ok: false, error: "Không có quyền ghi nhận giao dịch kho" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, userId: session.user.id ?? "", actor, sdb: scopedDb(actor) };
 }
 
-async function resolveEmployeeId(userId: string): Promise<string | null> {
+async function resolveEmployeeId(sdb: Sdb, userId: string): Promise<string | null> {
   if (!userId) return null;
   try {
-    const u = await db.user.findUnique({
+    // User ∈ SCOPE_EXEMPT (identity) — scopedDb pass-through.
+    const u = await sdb.user.findUnique({
       where: { id: userId },
       select: { employeeId: true },
     });
@@ -98,7 +110,8 @@ export async function recordReceipt(input: ReceiptInput): Promise<Result> {
   }
   const data = parsed.data;
 
-  const balance = await db.stockBalance.findUnique({
+  // Scope-gate (chống IDOR ghi): balance cơ sở ngoài tầm nhìn → null → chặn.
+  const balance = await gate.sdb.stockBalance.findUnique({
     where: {
       itemId_centerId: { itemId: data.itemId, centerId: data.centerId },
     },
@@ -113,10 +126,10 @@ export async function recordReceipt(input: ReceiptInput): Promise<Result> {
 
   const totalCost =
     data.unitPrice !== null ? data.unitPrice * data.quantity : null;
-  const performedById = await resolveEmployeeId(gate.userId);
+  const performedById = await resolveEmployeeId(gate.sdb, gate.userId);
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       await tx.stockMovement.create({
         data: {
           itemId: data.itemId,
@@ -166,7 +179,8 @@ export async function recordIssue(input: IssueInput): Promise<Result> {
   }
   const data = parsed.data;
 
-  const balance = await db.stockBalance.findUnique({
+  // Scope-gate (chống IDOR ghi): balance cơ sở ngoài tầm nhìn → null → chặn.
+  const balance = await gate.sdb.stockBalance.findUnique({
     where: {
       itemId_centerId: { itemId: data.itemId, centerId: data.centerId },
     },
@@ -176,12 +190,12 @@ export async function recordIssue(input: IssueInput): Promise<Result> {
     return { ok: false, error: "Chưa có bản ghi tồn kho cho cặp item × cơ sở" };
   }
 
-  const performedById = await resolveEmployeeId(gate.userId);
+  const performedById = await resolveEmployeeId(gate.sdb, gate.userId);
 
   // FIX-C4 — decrement có điều kiện trong tx (guarded updateMany): chỉ trừ khi
   // tồn hiện tại >= số cần xuất. Nếu count === 0 ⇒ không đủ tồn (chống TOCTOU).
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       await tx.stockMovement.create({
         data: {
           itemId: data.itemId,
@@ -238,14 +252,17 @@ export async function recordTransfer(input: TransferInput): Promise<Result> {
   }
   const data = parsed.data;
 
+  // Scope-gate (chống IDOR ghi): cả 2 đầu chuyển đọc qua scopedDb — cơ sở ngoài
+  // tầm nhìn actor → null → chặn. Chuyển CHÉO cơ sở cần actor nhìn thấy cả 2 đầu
+  // (HO/SUPER_ADMIN); CM center-scope chỉ chuyển giữa các cơ sở mình quản.
   const [fromBalance, toBalance] = await Promise.all([
-    db.stockBalance.findUnique({
+    gate.sdb.stockBalance.findUnique({
       where: {
         itemId_centerId: { itemId: data.itemId, centerId: data.fromCenterId },
       },
       select: { quantity: true },
     }),
-    db.stockBalance.findUnique({
+    gate.sdb.stockBalance.findUnique({
       where: {
         itemId_centerId: { itemId: data.itemId, centerId: data.toCenterId },
       },
@@ -263,11 +280,11 @@ export async function recordTransfer(input: TransferInput): Promise<Result> {
         "Cơ sở đích chưa có bản ghi tồn kho — mở mặt hàng và Lưu (hoặc kích hoạt cơ sở) để tự khởi tạo trước khi chuyển.",
     };
   }
-  const performedById = await resolveEmployeeId(gate.userId);
+  const performedById = await resolveEmployeeId(gate.sdb, gate.userId);
 
   // FIX-C4 — decrement có điều kiện ở cơ sở nguồn trong tx (chống TOCTOU âm kho).
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       const outMove = await tx.stockMovement.create({
         data: {
           itemId: data.itemId,
@@ -358,12 +375,14 @@ export async function recordAdjustment(input: AdjustmentInput): Promise<Result> 
   }
   const data = parsed.data;
 
-  const performedById = await resolveEmployeeId(gate.userId);
+  const performedById = await resolveEmployeeId(gate.sdb, gate.userId);
 
   // FIX-C4 — đọc tồn + tính delta + ghi trong CÙNG tx (Serializable) để delta
   // nhất quán với tồn thực tại thời điểm ghi (chống lost-update giữa các phiếu).
+  // Scope-gate nằm ngay trong tx: tx.stockBalance.findUnique chạy qua read-hook
+  // của scopedDb → cơ sở ngoài tầm nhìn trả null → MovementError, rollback.
   try {
-    await runSerializable(async (tx) => {
+    await runSerializable(gate.sdb, async (tx) => {
       const balance = await tx.stockBalance.findUnique({
         where: {
           itemId_centerId: { itemId: data.itemId, centerId: data.centerId },

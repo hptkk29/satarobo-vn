@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { VoucherForm } from "../../_components/voucher-form";
 
 export const metadata = { title: "Sửa voucher | Admin" };
@@ -22,7 +23,9 @@ export default async function EditVoucherPage({ params }: Props) {
   }
 
   const { id } = await params;
-  const voucher = await db.voucher.findUnique({ where: { id } });
+  // Voucher là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const voucher = await sdb.voucher.findUnique({ where: { id } });
   if (!voucher) notFound();
 
   return (

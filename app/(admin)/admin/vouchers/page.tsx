@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { Plus, Ticket } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { Button } from "@/components/ui/button";
 import { VouchersTable } from "./_components/vouchers-table";
 
@@ -21,7 +22,9 @@ export default async function VouchersPage() {
   // vouchers:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
   const canManage = await checkPermission("vouchers:manage");
 
-  const vouchers = await db.voucher.findMany({
+  // Voucher là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const vouchers = await sdb.voucher.findMany({
     orderBy: [{ createdAt: "desc" }],
     select: {
       id: true,

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import {
   paymentMethodCreateSchema,
   paymentMethodUpdateSchema,
@@ -16,6 +17,7 @@ import {
   getAuditActor,
 } from "@/lib/audit/log";
 
+// PaymentMethod là catalog toàn cục (không scoped) — scopedDb pass-through (A0-04).
 async function requirePaymentsManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -23,7 +25,7 @@ async function requirePaymentsManage() {
   if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  return session;
+  return { session, sdb: scopedDb(await resolveActor(session.user.id)) };
 }
 
 function readForm(formData: FormData) {
@@ -53,7 +55,7 @@ function readForm(formData: FormData) {
 
 // ─── CREATE ───────────────────────────────────────────────────────────
 export async function createPaymentMethodAction(formData: FormData) {
-  const session = await requirePaymentsManage();
+  const { session, sdb } = await requirePaymentsManage();
 
   const parsed = paymentMethodCreateSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -64,7 +66,7 @@ export async function createPaymentMethodAction(formData: FormData) {
     };
   }
 
-  const existing = await db.paymentMethod.findUnique({
+  const existing = await sdb.paymentMethod.findUnique({
     where: { code: parsed.data.code },
     select: { id: true },
   });
@@ -81,7 +83,9 @@ export async function createPaymentMethodAction(formData: FormData) {
     ? (JSON.parse(parsed.data.gatewayConfig) as Prisma.InputJsonValue)
     : undefined;
 
-  const created = await db.$transaction(async (tx) => {
+  // A0-04: tx từ scopedDb — cast (tiền lệ); cấu trúc transaction giữ nguyên.
+  const created = await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const pm = await tx.paymentMethod.create({
       data: {
         code: parsed.data.code,
@@ -151,9 +155,9 @@ export async function updatePaymentMethodAction(
   id: string,
   formData: FormData,
 ) {
-  const session = await requirePaymentsManage();
+  const { session, sdb } = await requirePaymentsManage();
 
-  const before = await db.paymentMethod.findUnique({
+  const before = await sdb.paymentMethod.findUnique({
     where: { id },
     select: SNAPSHOT_SELECT,
   });
@@ -169,7 +173,7 @@ export async function updatePaymentMethodAction(
   }
 
   if (parsed.data.code !== before.code) {
-    const dup = await db.paymentMethod.findUnique({
+    const dup = await sdb.paymentMethod.findUnique({
       where: { code: parsed.data.code },
       select: { id: true },
     });
@@ -187,7 +191,8 @@ export async function updatePaymentMethodAction(
     ? (JSON.parse(parsed.data.gatewayConfig) as Prisma.InputJsonValue)
     : Prisma.JsonNull;
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const updated = await tx.paymentMethod.update({
       where: { id },
       data: {
@@ -231,9 +236,9 @@ export async function updatePaymentMethodAction(
 
 // ─── TOGGLE ACTIVE ────────────────────────────────────────────────────
 export async function togglePaymentMethodActiveAction(id: string) {
-  const session = await requirePaymentsManage();
+  const { session, sdb } = await requirePaymentsManage();
 
-  const pm = await db.paymentMethod.findUnique({
+  const pm = await sdb.paymentMethod.findUnique({
     where: { id },
     select: { isActive: true, code: true },
   });
@@ -242,7 +247,8 @@ export async function togglePaymentMethodActiveAction(id: string) {
   const { actorId, actorName } = getAuditActor(session);
   const willBeActive = !pm.isActive;
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.paymentMethod.update({
       where: { id },
       data: { isActive: willBeActive },

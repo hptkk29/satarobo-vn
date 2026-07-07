@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { ProductForm } from "../../_components/product-form";
 
 export const metadata = { title: "Sửa sản phẩm | Admin" };
@@ -22,9 +23,11 @@ export default async function EditProductPage({ params }: Props) {
   }
 
   const { id } = await params;
+  // Product/ZMRoboKit là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
   const [product, zmroboKits] = await Promise.all([
-    db.product.findUnique({ where: { id } }),
-    db.zMRoboKit.findMany({
+    sdb.product.findUnique({ where: { id } }),
+    sdb.zMRoboKit.findMany({
       where: { isPublished: true },
       select: { id: true, title: true, code: true },
       orderBy: { title: "asc" },

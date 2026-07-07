@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { InventoryCategoryEnum } from "@/lib/validators/inventory";
@@ -137,8 +138,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: 0, errors });
   }
 
+  // A0-04: import là thao tác catalog (InventoryItem không có centerId — upsert theo
+  // itemCode toàn cục). StockBalance chỉ được SEED = 0 cho MỌI cơ sở active với
+  // skipDuplicates (giống createItem) — không nhận centerId từ form, không đổi
+  // quantity đang có → không có vector IDOR ghi chéo cơ sở. Center ∈ SCOPE_EXEMPT.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   // Load active centers once — used to seed balances on newly-created items.
-  const centers = await db.center.findMany({
+  const centers = await sdb.center.findMany({
     where: { isActive: true },
     select: { id: true },
   });
@@ -154,7 +161,7 @@ export async function POST(req: NextRequest) {
 
   let success = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         const baseData = {

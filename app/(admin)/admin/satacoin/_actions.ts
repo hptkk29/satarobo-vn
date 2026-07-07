@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { logStudentAudit, getAuditActor } from "@/lib/audit/log";
 import { recordTransaction, reverseTransaction } from "@/lib/satacoin/service";
 import { resolveActor } from "@/lib/auth/actor";
@@ -36,8 +35,11 @@ export async function createRule(input: unknown): Promise<{ ok: boolean; error?:
   const parsed = ruleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   const d = parsed.data;
+  // SataCoinRule ∈ SCOPE_EXEMPT (config; centerId null = áp mọi cơ sở) — scopedDb
+  // pass-through, rule toàn hệ thống KHÔNG bị ẩn.
+  const sdb = scopedDb(await resolveActor(session!.user.id));
   try {
-    await db.sataCoinRule.create({
+    await sdb.sataCoinRule.create({
       data: { code: d.code, label: d.label, amount: d.amount, centerId: d.centerId || null },
     });
   } catch {
@@ -50,8 +52,10 @@ export async function createRule(input: unknown): Promise<{ ok: boolean; error?:
 export async function toggleRule(id: string): Promise<{ ok: boolean }> {
   const session = await auth();
   if (await gate(session)) return { ok: false };
-  const r = await db.sataCoinRule.findUnique({ where: { id }, select: { isActive: true } });
-  if (r) await db.sataCoinRule.update({ where: { id }, data: { isActive: !r.isActive } });
+  // SataCoinRule ∈ SCOPE_EXEMPT — pass-through (rule centerId null không bị ẩn).
+  const sdb = scopedDb(await resolveActor(session!.user.id));
+  const r = await sdb.sataCoinRule.findUnique({ where: { id }, select: { isActive: true } });
+  if (r) await sdb.sataCoinRule.update({ where: { id }, data: { isActive: !r.isActive } });
   revalidatePath("/admin/satacoin");
   return { ok: true };
 }

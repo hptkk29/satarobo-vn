@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { Button } from "@/components/ui/button";
 import {
   PRODUCT_CATEGORY_LABEL,
@@ -42,7 +43,9 @@ export default async function ProductDetailPage({ params }: Props) {
   const canManage = await checkPermission("products:manage");
   const { id } = await params;
 
-  const product = await db.product.findUnique({
+  // Product/ProductMovement là catalog + sổ kho SP toàn cục (không scoped) — pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const product = await sdb.product.findUnique({
     where: { id },
     include: {
       movements: { orderBy: { createdAt: "desc" }, take: 50 },

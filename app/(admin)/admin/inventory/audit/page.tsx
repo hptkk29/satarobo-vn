@@ -3,7 +3,8 @@ import { ChevronLeft, ClipboardCheck, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { InventoryAuditStatus, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,10 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Cách ly cơ sở: InventoryAudit ∈ SCOPED_MODELS → scopedDb tự inject
+  // `centerId IN visibleCenterIds` cho findMany (Center là exempt — pass-through).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const sp = await searchParams;
   const statusFilter =
     sp.status && VALID_STATUSES.includes(sp.status as InventoryAuditStatus)
@@ -57,7 +62,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
   };
 
   const [audits, centers] = await Promise.all([
-    db.inventoryAudit.findMany({
+    sdb.inventoryAudit.findMany({
       where,
       include: {
         center: { select: { name: true } },
@@ -67,7 +72,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       take: 100,
     }),
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true },
       select: { id: true, name: true },
       orderBy: { displayOrder: "asc" },

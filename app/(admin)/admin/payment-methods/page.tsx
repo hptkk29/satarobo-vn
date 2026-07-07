@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { Plus, CreditCard } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { Button } from "@/components/ui/button";
 import { PaymentMethodsTable } from "./_components/payment-methods-table";
 
@@ -18,7 +19,9 @@ export default async function PaymentMethodsPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const methods = await db.paymentMethod.findMany({
+  // PaymentMethod là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const methods = await sdb.paymentMethod.findMany({
     orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
   });
 

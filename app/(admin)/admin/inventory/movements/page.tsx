@@ -3,7 +3,8 @@ import { ChevronLeft, History } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { StockMovementType, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,10 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Cách ly cơ sở: StockMovement ∈ SCOPED_MODELS → findMany tự inject
+  // `centerId IN visibleCenterIds` (InventoryItem catalog / Center exempt — pass-through).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const sp = await searchParams;
   const typeFilter =
     sp.type && VALID_TYPES.includes(sp.type as StockMovementType)
@@ -110,7 +115,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
   };
 
   const [movements, items, centers] = await Promise.all([
-    db.stockMovement.findMany({
+    sdb.stockMovement.findMany({
       where,
       include: {
         item: { select: { itemCode: true, name: true, unit: true } },
@@ -123,12 +128,12 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
       orderBy: { performedAt: "desc" },
       take: 200,
     }),
-    db.inventoryItem.findMany({
+    sdb.inventoryItem.findMany({
       orderBy: { itemCode: "asc" },
       select: { id: true, itemCode: true, name: true },
       take: 500,
     }),
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true },

@@ -3,7 +3,8 @@ import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import {
   BulkAuditForm,
   type AuditRowInit,
@@ -24,7 +25,9 @@ export default async function EditAuditPage({ params }: Props) {
 
   const { id } = await params;
 
-  const audit = await db.inventoryAudit.findUnique({
+  // Cách ly cơ sở: findUnique qua scopedDb — phiếu ngoài scope → null → notFound (chống IDOR).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const audit = await sdb.inventoryAudit.findUnique({
     where: { id },
     include: {
       center: { select: { id: true, name: true } },
@@ -37,7 +40,9 @@ export default async function EditAuditPage({ params }: Props) {
   }
 
   // Load every active item + this center's current balance.
-  const items = await db.inventoryItem.findMany({
+  // InventoryItem là catalog (không scoped); balances đã filter tay theo
+  // audit.centerId (nested include không auto-scope — AC7) và audit đã qua scope-gate.
+  const items = await sdb.inventoryItem.findMany({
     where: { isActive: true },
     include: {
       balances: {

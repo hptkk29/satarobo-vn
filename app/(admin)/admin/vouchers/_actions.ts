@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
+import type { Prisma } from "@prisma/client";
 import {
   voucherCreateSchema,
   voucherUpdateSchema,
@@ -15,6 +17,7 @@ import {
   getAuditActor,
 } from "@/lib/audit/log";
 
+// Voucher là catalog toàn cục (không có centerId, không scoped) — scopedDb pass-through (A0-04).
 async function requireVouchersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -22,12 +25,12 @@ async function requireVouchersManage() {
   if (!(await checkPermission("vouchers:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  return session;
+  return { session, sdb: scopedDb(await resolveActor(session.user.id)) };
 }
 
 // ─── CREATE ───────────────────────────────────────────────────────────
 export async function createVoucherAction(input: unknown) {
-  const session = await requireVouchersManage();
+  const { session, sdb } = await requireVouchersManage();
   const parsed = voucherCreateSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -39,7 +42,7 @@ export async function createVoucherAction(input: unknown) {
 
   const data = parsed.data;
 
-  const existing = await db.voucher.findUnique({
+  const existing = await sdb.voucher.findUnique({
     where: { code: data.code },
     select: { id: true },
   });
@@ -49,7 +52,9 @@ export async function createVoucherAction(input: unknown) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  const created = await db.$transaction(async (tx) => {
+  // A0-04: tx từ scopedDb — cast (tiền lệ); cấu trúc transaction giữ nguyên.
+  const created = await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const v = await tx.voucher.create({
       data: {
         code: data.code,
@@ -118,9 +123,9 @@ const SNAPSHOT_SELECT = {
 
 // ─── UPDATE ───────────────────────────────────────────────────────────
 export async function updateVoucherAction(id: string, input: unknown) {
-  const session = await requireVouchersManage();
+  const { session, sdb } = await requireVouchersManage();
 
-  const before = await db.voucher.findUnique({
+  const before = await sdb.voucher.findUnique({
     where: { id },
     select: SNAPSHOT_SELECT,
   });
@@ -159,7 +164,8 @@ export async function updateVoucherAction(id: string, input: unknown) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const updated = await tx.voucher.update({
       where: { id },
       data: {
@@ -197,9 +203,9 @@ export async function updateVoucherAction(id: string, input: unknown) {
 
 // ─── TOGGLE ACTIVE ────────────────────────────────────────────────────
 export async function toggleVoucherActiveAction(id: string) {
-  const session = await requireVouchersManage();
+  const { session, sdb } = await requireVouchersManage();
 
-  const v = await db.voucher.findUnique({
+  const v = await sdb.voucher.findUnique({
     where: { id },
     select: { isActive: true, code: true },
   });
@@ -208,7 +214,8 @@ export async function toggleVoucherActiveAction(id: string) {
   const { actorId, actorName } = getAuditActor(session);
   const willBeActive = !v.isActive;
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.voucher.update({
       where: { id },
       data: { isActive: willBeActive },

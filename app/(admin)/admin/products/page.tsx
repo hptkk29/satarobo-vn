@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Plus, Package2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import {
   ProductCategory,
@@ -43,6 +44,8 @@ export default async function ProductsPage({ searchParams }: Props) {
 
   // products:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
   const canManage = await checkPermission("products:manage");
+  // Product là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const categoryParam = CATEGORIES.includes(sp.category as ProductCategory)
@@ -71,7 +74,7 @@ export default async function ProductsPage({ searchParams }: Props) {
   let totalCount: number;
 
   if (lowStock) {
-    const all = await db.product.findMany({
+    const all = await sdb.product.findMany({
       where: { ...where, status: { in: ["ACTIVE", "PAUSED"] } },
       orderBy: { name: "asc" },
     });
@@ -80,8 +83,8 @@ export default async function ProductsPage({ searchParams }: Props) {
     products = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   } else {
     const [count, rows] = await Promise.all([
-      db.product.count({ where }),
-      db.product.findMany({
+      sdb.product.count({ where }),
+      sdb.product.findMany({
         where,
         orderBy: [{ createdAt: "desc" }],
         skip: (page - 1) * PAGE_SIZE,

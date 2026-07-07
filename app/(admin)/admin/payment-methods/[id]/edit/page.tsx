@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { PaymentMethodForm } from "../../_components/payment-method-form";
 
 export const metadata = { title: "Sửa phương thức thanh toán | Admin" };
@@ -22,7 +23,9 @@ export default async function EditPaymentMethodPage({ params }: Props) {
   }
 
   const { id } = await params;
-  const method = await db.paymentMethod.findUnique({ where: { id } });
+  // PaymentMethod là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const method = await sdb.paymentMethod.findUnique({ where: { id } });
   if (!method) notFound();
 
   return (

@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { ProductForm } from "../_components/product-form";
 
 export const metadata = { title: "Thêm sản phẩm | Admin" };
@@ -17,7 +18,9 @@ export default async function NewProductPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const zmroboKits = await db.zMRoboKit.findMany({
+  // ZMRoboKit là catalog toàn cục (không scoped) — scopedDb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const zmroboKits = await sdb.zMRoboKit.findMany({
     where: { isPublished: true },
     select: { id: true, title: true, code: true },
     orderBy: { title: "asc" },
