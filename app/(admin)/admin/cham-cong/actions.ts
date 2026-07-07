@@ -4,7 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { verifyQrToken, distanceMeters } from "@/lib/attendance/qr";
 import { getSetting } from "@/lib/settings/service";
 
@@ -46,8 +47,12 @@ export async function recordCheckin(input: {
     return { ok: false, error: "Mã QR không đúng cơ sở — quét lại mã tại quầy" };
   }
 
+  // Cách ly cơ sở (A0-04): EmployeeCheckin ∈ SCOPED_MODELS → đọc/ghi qua scopedDb.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Geofence (nếu cơ sở có toạ độ).
-  const center = await db.center.findUnique({
+  const center = await sdb.center.findUnique({
     where: { id: d.centerId },
     select: { latitude: true, longitude: true, allowedRadiusMeters: true, name: true },
   });
@@ -76,7 +81,7 @@ export async function recordCheckin(input: {
   startOfDay.setHours(0, 0, 0, 0);
   const dayKey = `${startOfDay.getFullYear()}-${String(startOfDay.getMonth() + 1).padStart(2, "0")}-${String(startOfDay.getDate()).padStart(2, "0")}`;
   const storedToken = `${d.centerId}:${dayKey}`;
-  const dupToday = await db.employeeCheckin.findFirst({
+  const dupToday = await sdb.employeeCheckin.findFirst({
     where: { userId: session.user.id, type: d.type, checkedAt: { gte: startOfDay } },
     select: { id: true },
   });
@@ -88,7 +93,7 @@ export async function recordCheckin(input: {
   }
 
   try {
-    await db.employeeCheckin.create({
+    await sdb.employeeCheckin.create({
       data: {
         userId: session.user.id,
         userName: session.user.name ?? session.user.email ?? null,

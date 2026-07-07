@@ -3,7 +3,8 @@ import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { SHIFT_EXCEL_COLUMNS, shiftsToCell } from "@/lib/attendance/shift-excel";
 
 export const runtime = "nodejs";
@@ -37,7 +38,9 @@ export async function GET(req: NextRequest) {
   const monthStart = new Date(year, monthIdx, 1);
   const monthEnd = new Date(year, monthIdx + 1, 1);
 
-  const regs = await db.shiftRegistration.findMany({
+  // Cách ly cơ sở (A0-04): ShiftRegistration ∈ SCOPED_MODELS → đọc qua scopedDb.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const regs = await sdb.shiftRegistration.findMany({
     where: {
       date: { gte: monthStart, lt: monthEnd },
       status: "REGISTERED",

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import type { WorkShift } from "@prisma/client";
 
 // Module Chấm công PHẦN 2 — quản lý import lịch ca → ĐÈ HOÀN TOÀN lịch CHÍNH THỨC
@@ -59,8 +60,11 @@ export async function importApprovedShifts(input: unknown): Promise<Result> {
   const monthStart = new Date(year, monthIdx, 1);
   const monthEnd = new Date(year, monthIdx + 1, 1);
 
+  // Cách ly cơ sở (A0-04): ShiftRegistration ∈ SCOPED_MODELS → đọc/ghi qua scopedDb.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   // Nhân viên thuộc cơ sở (để validate "mã NV tồn tại + thuộc cơ sở").
-  const staff = await db.user.findMany({
+  const staff = await sdb.user.findMany({
     where: { centerId, role: { not: "PARENT" }, deletedAt: null },
     select: { id: true, email: true },
   });
@@ -108,13 +112,13 @@ export async function importApprovedShifts(input: unknown): Promise<Result> {
   const staffIds = staff.map((s) => s.id);
 
   try {
-    await db.$transaction([
+    await sdb.$transaction([
       // ĐÈ: xoá toàn bộ lịch tháng đó của nhân viên cơ sở rồi tạo lại APPROVED.
-      db.shiftRegistration.deleteMany({
+      sdb.shiftRegistration.deleteMany({
         where: { userId: { in: staffIds }, date: { gte: monthStart, lt: monthEnd } },
       }),
       ...finalRows.map((v) =>
-        db.shiftRegistration.create({
+        sdb.shiftRegistration.create({
           data: {
             userId: v.userId,
             centerId,

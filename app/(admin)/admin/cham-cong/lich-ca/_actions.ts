@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { WorkShift } from "@prisma/client";
@@ -30,6 +31,9 @@ export async function saveMyShifts(input: unknown): Promise<Result> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
+  // Cách ly cơ sở (A0-04): ShiftRegistration ∈ SCOPED_MODELS → đọc/ghi qua scopedDb.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const { note } = parsed.data;
   const shifts = [...new Set(parsed.data.shifts)];
   // Ngày làm (chuẩn hoá về 00:00 local → lưu @db.Date).
@@ -43,13 +47,14 @@ export async function saveMyShifts(input: unknown): Promise<Result> {
   if (status === "LEAVE_REQUESTED") {
     const monthStart = new Date(workDate.getFullYear(), workDate.getMonth(), 1);
     const monthEnd = new Date(workDate.getFullYear(), workDate.getMonth() + 1, 1);
-    const existingToday = await db.shiftRegistration.findUnique({
+    // select thêm centerId: sdb.findUnique lọc hậu kỳ theo passesScope (cần centerId).
+    const existingToday = await sdb.shiftRegistration.findUnique({
       where: { userId_date: { userId: session.user.id, date: workDate } },
-      select: { status: true },
+      select: { status: true, centerId: true },
     });
     const alreadyEmergency = existingToday?.status === "LEAVE_REQUESTED";
     if (!alreadyEmergency) {
-      const used = await db.shiftRegistration.count({
+      const used = await sdb.shiftRegistration.count({
         where: {
           userId: session.user.id,
           status: "LEAVE_REQUESTED",
@@ -70,7 +75,7 @@ export async function saveMyShifts(input: unknown): Promise<Result> {
     if (shifts.length === 0) {
       // Bỏ hết ca = xoá đăng ký (nếu sát ngày, vẫn lưu LEAVE_REQUESTED rỗng để quản lý thấy).
       if (status === "LEAVE_REQUESTED") {
-        await db.shiftRegistration.upsert({
+        await sdb.shiftRegistration.upsert({
           where: { userId_date: { userId: session.user.id, date: workDate } },
           update: { shifts: [], status, note: note || null, centerId: session.user.centerId },
           create: {
@@ -83,12 +88,12 @@ export async function saveMyShifts(input: unknown): Promise<Result> {
           },
         });
       } else {
-        await db.shiftRegistration.deleteMany({
+        await sdb.shiftRegistration.deleteMany({
           where: { userId: session.user.id, date: workDate },
         });
       }
     } else {
-      await db.shiftRegistration.upsert({
+      await sdb.shiftRegistration.upsert({
         where: { userId_date: { userId: session.user.id, date: workDate } },
         update: { shifts, status, note: note || null, centerId: session.user.centerId },
         create: {

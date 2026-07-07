@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasRole } from "@/lib/auth/permissions";
@@ -42,9 +43,13 @@ export async function saveCenterChecklist(input: unknown): Promise<Result> {
   const flags: Record<string, boolean> = {};
   for (const k of ALL_CHECKLIST_KEYS) flags[k] = parsed.data.flags[k] === true;
 
+  // Cách ly cơ sở (A0-04): CenterDayChecklist ∈ SCOPED_MODELS → ghi qua scopedDb.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const date = new Date(`${parsed.data.date}T00:00:00`);
   try {
-    await db.centerDayChecklist.upsert({
+    await sdb.centerDayChecklist.upsert({
       where: { centerId_date: { centerId, date } },
       update: { ...flags, note: note || null, byUserId: session.user.id },
       create: { centerId, date, ...flags, note: note || null, byUserId: session.user.id },

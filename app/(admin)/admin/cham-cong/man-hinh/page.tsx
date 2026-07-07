@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { QrScreen } from "./_components/qr-screen";
 
 export const metadata = { title: "Màn hình chấm công | Admin" };
@@ -20,7 +21,8 @@ export default async function ManHinhPage({ searchParams }: Props) {
   if (!(await checkPermission("hr_attendance:view", { centerId: centerId ?? session.user.centerId ?? null }))) {
     redirect("/dashboard");
   }
-  const centers = await db.center.findMany({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const centers = await sdb.center.findMany({
     where: { isActive: true },
     select: { id: true, name: true },
     orderBy: { displayOrder: "asc" },

@@ -3,7 +3,8 @@ import { CalendarCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { isManagerImportWindowOpen, lastDayOfMonth } from "@/lib/shifts";
 import { ShiftApproval } from "./_components/shift-approval";
 
@@ -21,7 +22,8 @@ export default async function DuyetCaPage() {
     redirect("/dashboard");
   }
 
-  const centers = await db.center.findMany({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const centers = await sdb.center.findMany({
     where: { isActive: true, ...(fixedCenterId ? { id: fixedCenterId } : {}) },
     orderBy: { displayOrder: "asc" },
     select: { id: true, name: true },

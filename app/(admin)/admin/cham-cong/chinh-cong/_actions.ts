@@ -6,11 +6,16 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getAuditActor } from "@/lib/audit/log";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { canAdjustTimesheet, combineVNDateTime } from "@/lib/attendance/adjust";
 import { getSetting } from "@/lib/settings/service";
 
 // Module Chấm công PHẦN 4 — yêu cầu chỉnh công (NV gửi) + duyệt/áp chỉnh (quản lý).
+// Cách ly cơ sở (A0-04): TimesheetAdjustmentRequest/EmployeeCheckin ∈ SCOPED_MODELS
+// → đọc/ghi qua scopedDb(actor). TimesheetEditLog/User không scope (pass-through).
+
+type Sdb = ReturnType<typeof scopedDb>;
 
 type Result = { ok: boolean; error?: string };
 
@@ -33,7 +38,8 @@ export async function createAdjustmentRequest(input: unknown): Promise<Result> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   const d = parsed.data;
 
-  await db.timesheetAdjustmentRequest.create({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  await sdb.timesheetAdjustmentRequest.create({
     data: {
       userId: session.user.id,
       centerId: session.user.centerId,
@@ -51,7 +57,7 @@ export async function createAdjustmentRequest(input: unknown): Promise<Result> {
 
 // ── Áp chỉnh sửa bản ghi công (dùng chung) + ghi log ────────────────────────
 
-async function applyCorrection(params: {
+async function applyCorrection(sdb: Sdb, params: {
   userId: string;
   centerId: string | null;
   dateStr: string;
@@ -66,7 +72,7 @@ async function applyCorrection(params: {
   const dayEnd = new Date(dayStart.getTime() + 86400000);
   const dateOnly = new Date(`${params.dateStr}T00:00:00`);
 
-  const existing = await db.employeeCheckin.findMany({
+  const existing = await sdb.employeeCheckin.findMany({
     where: { userId: params.userId, checkedAt: { gte: dayStart, lt: dayEnd } },
     select: { id: true, type: true, checkedAt: true },
   });
@@ -84,9 +90,9 @@ async function applyCorrection(params: {
     const fromValue = cur?.checkedAt.toISOString() ?? null;
 
     if (cur) {
-      await db.employeeCheckin.update({ where: { id: cur.id }, data: { checkedAt: newAt } });
+      await sdb.employeeCheckin.update({ where: { id: cur.id }, data: { checkedAt: newAt } });
     } else {
-      await db.employeeCheckin.create({
+      await sdb.employeeCheckin.create({
         data: {
           userId: params.userId,
           centerId: params.centerId,
@@ -98,7 +104,7 @@ async function applyCorrection(params: {
       });
     }
 
-    await db.timesheetEditLog.create({
+    await sdb.timesheetEditLog.create({
       data: {
         userId: params.userId,
         date: dateOnly,
@@ -132,7 +138,9 @@ export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   const p = parsed.data;
 
-  const req = await db.timesheetAdjustmentRequest.findUnique({ where: { id: p.id } });
+  // sdb.findUnique tự null-filter yêu cầu ngoài tầm nhìn cơ sở (chống IDOR duyệt chéo).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const req = await sdb.timesheetAdjustmentRequest.findUnique({ where: { id: p.id } });
   if (!req) return { ok: false, error: "Không tìm thấy yêu cầu" };
   if (!(await checkPermission("hr_attendance:adjust", { centerId: req.centerId }))) {
     return { ok: false, error: "Không có quyền" };
@@ -162,7 +170,7 @@ export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
     );
     if (!gate.ok) return { ok: false, error: gate.reason };
 
-    await applyCorrection({
+    await applyCorrection(sdb, {
       userId: req.userId,
       centerId: req.centerId,
       dateStr,
@@ -175,7 +183,7 @@ export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
     });
   }
 
-  await db.timesheetAdjustmentRequest.update({
+  await sdb.timesheetAdjustmentRequest.update({
     where: { id: req.id },
     data: {
       status: p.decision,
@@ -211,7 +219,8 @@ export async function adjustTimesheetDirect(input: unknown): Promise<Result> {
   const p = parsed.data;
   if (!p.checkIn && !p.checkOut) return { ok: false, error: "Nhập ít nhất 1 giờ vào/ra" };
 
-  const target = await db.user.findUnique({ where: { id: p.userId }, select: { centerId: true } });
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const target = await sdb.user.findUnique({ where: { id: p.userId }, select: { centerId: true } });
   if (!target) return { ok: false, error: "Nhân viên không tồn tại" };
 
   if (!(await checkPermission("hr_attendance:adjust", { centerId: target.centerId }))) {
@@ -236,7 +245,7 @@ export async function adjustTimesheetDirect(input: unknown): Promise<Result> {
   if (!gate.ok) return { ok: false, error: gate.reason };
 
   const { actorId, actorName } = getAuditActor(session);
-  await applyCorrection({
+  await applyCorrection(sdb, {
     userId: p.userId,
     centerId: target.centerId,
     dateStr: p.date,
