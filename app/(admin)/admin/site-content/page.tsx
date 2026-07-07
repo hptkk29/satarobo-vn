@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { SiteContentClient } from "./client";
 
@@ -32,8 +33,10 @@ export default async function SiteContentPage() {
     redirect("/dashboard");
   }
 
-  // Load tất cả site content cho 10 pages
-  const allContent = await db.sitePageContent.findMany({
+  // Load tất cả site content cho 10 pages.
+  // SitePageContent là model global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const allContent = await scopedDb(actor).sitePageContent.findMany({
     where: { pageKey: { in: PAGES.map((p) => p.pageKey) } },
   });
 

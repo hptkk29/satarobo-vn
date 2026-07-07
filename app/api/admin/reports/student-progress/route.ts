@@ -2,7 +2,8 @@ import { createElement, type ReactElement } from "react";
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getStudentProgress } from "@/lib/progress";
 import {
   ProgressReportPdf,
@@ -50,8 +51,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Cách ly cơ sở: Student/Class ∈ SCOPED_MODELS → sdb tự inject centerId; HV/lớp cơ sở
+  // khác → null → 404 (CM không xuất PDF tiến độ chéo cơ sở). Submission/Attempt phía
+  // dưới đã ràng theo studentId + classId vừa xác minh trong scope.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [student, cls] = await Promise.all([
-    db.student.findFirst({
+    sdb.student.findFirst({
       where: { id: studentId, deletedAt: null },
       select: {
         id: true,
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest) {
         phone: true,
       },
     }),
-    db.class.findFirst({
+    sdb.class.findFirst({
       where: { id: classId, deletedAt: null },
       include: {
         course: { select: { name: true } },
@@ -95,13 +102,13 @@ export async function POST(req: NextRequest) {
 
   const [progress, submissions, attempts] = await Promise.all([
     getStudentProgress(studentId, classId),
-    db.assignmentSubmission.findMany({
+    sdb.assignmentSubmission.findMany({
       where: { studentId, assignment: { classId } },
       include: { assignment: { select: { title: true, totalPoints: true } } },
       orderBy: { updatedAt: "desc" },
       take: 10,
     }),
-    db.examAttempt.findMany({
+    sdb.examAttempt.findMany({
       where: { studentId, exam: { classId } },
       include: { exam: { select: { title: true } } },
       orderBy: [{ submittedAt: "desc" }, { startedAt: "desc" }],
@@ -178,13 +185,13 @@ export async function POST(req: NextRequest) {
   try {
     let generatedById: string | null = null;
     if (session.user.id) {
-      const u = await db.user.findUnique({
+      const u = await sdb.user.findUnique({
         where: { id: session.user.id },
         select: { employeeId: true },
       });
       generatedById = u?.employeeId ?? null;
     }
-    await db.progressReportLog.create({
+    await sdb.progressReportLog.create({
       data: {
         studentId,
         classId,

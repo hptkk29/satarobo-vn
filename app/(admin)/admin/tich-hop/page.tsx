@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { znsProvider } from "@/lib/zalo/provider";
 import { isMisaConfigured, isMisaLive, getMisaConfig } from "@/lib/misa/service";
 import { getPaymentConfig } from "@/lib/payments/vietqr";
@@ -28,14 +29,16 @@ export default async function IntegrationsPage() {
   const zaloConfigured = znsProvider.isConfigured();
   const zaloLive = znsProvider.isLive();
 
+  // ZaloMessageLog/IntegrationLog là log tích hợp global (∉ SCOPED_MODELS) → pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
   const [zaloLogs, misaCfg, misaLogs] = await Promise.all([
-    db.zaloMessageLog.findMany({
+    sdb.zaloMessageLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 30,
       select: { id: true, toPhone: true, templateKey: true, status: true, errorMessage: true, fallbackEmailed: true, createdAt: true },
     }),
     getMisaConfig(),
-    db.integrationLog.findMany({
+    sdb.integrationLog.findMany({
       where: { provider: "MISA" },
       orderBy: { createdAt: "desc" },
       take: 30,
