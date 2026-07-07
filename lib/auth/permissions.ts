@@ -62,6 +62,7 @@ export type Action =
   | "leads:assign"
   | "leads:delete"
   | "leads:export"
+  | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
 
   // --- Trial classes (Phase T1.4) ---
   | "trials:view"
@@ -293,6 +294,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  // Task #07 — theo pattern students:import. NOTE: chưa seed RolePermission v2
+  // (rolepermission-seed-gap.md) — khi bật RBAC_V2 cần seed leads:import cho
+  // CENTER_MANAGER (CENTER) + cân nhắc CENTER_SALES_CSM (hỏi Kiệt).
+  "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Trial classes (Phase T1.4) ---
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
