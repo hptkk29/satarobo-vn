@@ -4,13 +4,13 @@ import { useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuditLogDetailModal } from "./audit-log-detail-modal";
-import type { AuditTab, AnyAuditRow } from "../_actions";
+import type { UnifiedAuditRow } from "../_actions";
 
 interface Props {
-  tab: AuditTab;
-  items: AnyAuditRow[];
+  items: UnifiedAuditRow[];
   isPending: boolean;
   hasMore: boolean;
+  revealed: boolean;
   onLoadMore: () => void;
 }
 
@@ -24,8 +24,10 @@ const ACTION_COLORS: Record<string, string> = {
   DELETE: "bg-red-100 text-red-700",
   REMOVE: "bg-red-100 text-red-700",
   DISABLE: "bg-red-100 text-red-700",
+  EXPORT: "bg-purple-100 text-purple-700",
   PASSWORD_RESET: "bg-orange-100 text-orange-700",
   ROLE_CHANGE: "bg-purple-100 text-purple-700",
+  "audit.pii-unmasked": "bg-amber-100 text-amber-800",
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -46,97 +48,17 @@ function formatTime(date: Date): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  }).format(new Date(date));
 }
-
-// ─── Target column rendering per tab ────────────────────────────────
-function renderTarget(tab: AuditTab, row: AnyAuditRow): React.ReactNode {
-  switch (tab) {
-    case "user": {
-      const r = row as Extract<AnyAuditRow, { userId: string; user?: unknown }>;
-      const u = (r as { user?: { email: string; name: string | null } }).user;
-      return (
-        <div className="text-sm">
-          <div className="font-medium text-gray-900">
-            {u?.email ?? "—"}
-          </div>
-          {u?.name && (
-            <div className="text-xs text-gray-500">{u.name}</div>
-          )}
-        </div>
-      );
-    }
-    case "grant": {
-      const r = row as Extract<
-        AnyAuditRow,
-        { actionKey: string; oldGrant: string | null; newGrant: string | null }
-      >;
-      const u = (r as { user?: { email: string; name: string | null } }).user;
-      return (
-        <div className="text-sm">
-          <div className="font-medium text-gray-900">
-            {u?.email ?? "—"}
-          </div>
-          <code className="text-xs text-orange-600">{r.actionKey}</code>
-          <div className="text-xs text-gray-500">
-            {r.oldGrant ?? "∅"} → {r.newGrant ?? "∅"}
-          </div>
-        </div>
-      );
-    }
-    case "lead": {
-      const l = (row as { lead?: { parentName: string; phone: string } }).lead;
-      return (
-        <div className="text-sm">
-          <div className="font-medium text-gray-900">
-            {l?.parentName ?? "—"}
-          </div>
-          {l?.phone && (
-            <div className="text-xs text-gray-500">{l.phone}</div>
-          )}
-        </div>
-      );
-    }
-    case "class": {
-      const c = (
-        row as { class?: { name: string; classCode: string | null } }
-      ).class;
-      return (
-        <div className="text-sm">
-          <div className="font-medium text-gray-900">{c?.name ?? "—"}</div>
-          {c?.classCode && (
-            <div className="text-xs text-gray-500">{c.classCode}</div>
-          )}
-        </div>
-      );
-    }
-    case "student": {
-      const s = (row as { student?: { name: string } }).student;
-      return (
-        <div className="text-sm font-medium text-gray-900">
-          {s?.name ?? "—"}
-        </div>
-      );
-    }
-  }
-}
-
-const TARGET_LABEL: Record<AuditTab, string> = {
-  user: "Email",
-  grant: "User / Quyền",
-  lead: "Lead",
-  class: "Lớp",
-  student: "Học viên",
-};
 
 export function AuditLogTable({
-  tab,
   items,
   isPending,
   hasMore,
+  revealed,
   onLoadMore,
 }: Props) {
-  const [selected, setSelected] = useState<AnyAuditRow | null>(null);
+  const [selected, setSelected] = useState<UnifiedAuditRow | null>(null);
 
   if (!isPending && items.length === 0) {
     return (
@@ -160,7 +82,7 @@ export function AuditLogTable({
                   Hành động
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  {TARGET_LABEL[tab]}
+                  Module / Đối tượng
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Thực hiện bởi
@@ -179,9 +101,37 @@ export function AuditLogTable({
                   <td className="px-4 py-3">
                     <ActionBadge action={row.action} />
                   </td>
-                  <td className="px-4 py-3">{renderTarget(tab, row)}</td>
+                  <td className="px-4 py-3">
+                    <div className="text-sm">
+                      <div className="font-medium text-gray-900">
+                        {row.module}
+                        <span className="text-gray-400"> · </span>
+                        <span className="text-gray-600">{row.entityType}</span>
+                      </div>
+                      <div className="max-w-[220px] truncate text-xs text-gray-500">
+                        {row.entityId}
+                      </div>
+                      {row.changedFields.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {row.changedFields.slice(0, 4).map((f) => (
+                            <span
+                              key={f}
+                              className="inline-flex rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600"
+                            >
+                              {f}
+                            </span>
+                          ))}
+                          {row.changedFields.length > 4 && (
+                            <span className="text-[10px] text-gray-400">
+                              +{row.changedFields.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                    {row.changedByName}
+                    {row.actorName}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -224,8 +174,8 @@ export function AuditLogTable({
       <AuditLogDetailModal
         open={!!selected}
         onClose={() => setSelected(null)}
-        tab={tab}
         row={selected}
+        revealed={revealed}
       />
     </>
   );

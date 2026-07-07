@@ -3,7 +3,9 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  actorCapabilities,
   buildPublishedSnapshot,
+  canEditReportCardContent,
   checkEnrollmentScope,
   checkTransition,
   computeAssignmentSummary,
@@ -15,6 +17,7 @@ import {
   parsePublishedSnapshot,
   type ReportCardMetrics,
 } from "@/lib/lms/report-card-core";
+import { can } from "@/lib/auth/permissions";
 
 describe("[R7-15] transition guard matrix", () => {
   it("[C4] GV (manage) nộp DRAFT→PENDING_REVIEW: OK", () => {
@@ -58,6 +61,37 @@ describe("[R7-15] transition guard matrix", () => {
     expect(isReportCardEditable("RECALLED")).toBe(true);
     expect(isReportCardEditable("PENDING_REVIEW")).toBe(false);
     expect(isReportCardEditable("PUBLISHED")).toBe(false);
+  });
+});
+
+describe("[#17] recall-edit-by-role (câu 55): siết quyền sửa sau phát hành", () => {
+  // Capability suy từ ma trận v1 (permissions.ts) — hành vi go-live (RBAC_V2 flag OFF).
+  const caps = (role: "TRAINING" | "TEACHER" | "CENTER_MANAGER" | "SUPER_ADMIN") =>
+    actorCapabilities({
+      manage: can(role, "report-cards:manage"),
+      review: can(role, "report-cards:review"),
+    });
+
+  it("TRAINING (Toại) SỬA được học bạ ĐÃ THU HỒI (RECALLED) — có review", () => {
+    expect(canEditReportCardContent("RECALLED", caps("TRAINING"))).toBe(true);
+  });
+
+  it("CENTER_MANAGER SỬA được học bạ ĐÃ THU HỒI (QL cơ sở)", () => {
+    expect(canEditReportCardContent("RECALLED", caps("CENTER_MANAGER"))).toBe(true);
+  });
+
+  it("TEACHER (GV) BỊ CHẶN sửa học bạ đã THU HỒI (chỉ có manage, thiếu review)", () => {
+    expect(canEditReportCardContent("RECALLED", caps("TEACHER"))).toBe(false);
+  });
+
+  it("GV vẫn viết được DRAFT (manage) — không đụng đánh giá buổi", () => {
+    expect(canEditReportCardContent("DRAFT", caps("TEACHER"))).toBe(true);
+  });
+
+  it("PENDING_REVIEW / PUBLISHED khoá nội dung với mọi vai (kể cả reviewer)", () => {
+    expect(canEditReportCardContent("PENDING_REVIEW", caps("CENTER_MANAGER"))).toBe(false);
+    expect(canEditReportCardContent("PUBLISHED", caps("SUPER_ADMIN"))).toBe(false);
+    expect(canEditReportCardContent("PUBLISHED", caps("TRAINING"))).toBe(false);
   });
 });
 

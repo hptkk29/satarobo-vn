@@ -226,6 +226,8 @@ export type Action =
 
   // --- Audit logs (NEW) ---
   | "audit-logs:view"
+  // #05 — break-glass: xem đầy đủ PII (bỏ mask) trong audit viewer, kèm reason + log riêng.
+  | "audit-logs:view-pii"
 
   // --- Settings / system (NEW) ---
   | "settings:view"
@@ -393,8 +395,14 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "evaluations:view-detail": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Report cards (R7-15) ---
-  "report-cards:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
-  "report-cards:review": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // #17 (câu 55, Đào tạo & GV — Toại 06/07/2026): sau khi PHÁT HÀNH học bạ chỉ QL cơ
+  // sở + Phan Thành Toại (Đào tạo/TRAINING) được sửa; Toại giữ quyền duyệt/phát hành.
+  // → TRAINING nhận CẢ manage (để nộp lại RECALLED→PENDING_REVIEW) LẪN review (duyệt/
+  // phát hành/thu hồi). GIỮ TEACHER ở manage (GV vẫn viết DRAFT + đánh giá buổi). Việc
+  // "siết sửa-sau-thu-hồi về đúng review-havers (QL/Đào tạo/Admin), chặn GV" làm ở tầng
+  // action (saveReportCardAction → canEditReportCardContent), KHÔNG gỡ TEACHER ở đây.
+  "report-cards:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "TRAINING"],
+  "report-cards:review": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   "satacoin:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "enrollments:cancel": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "enrollments:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -406,7 +414,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "sessions:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "attendance:mark": ["TEACHER", "SUPER_ADMIN", "CENTER_MANAGER"],
-  "attendance:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Task #16 (Kiệt duyệt 07/07/2026, Phương án A): CSKH (SALES_CSM) được SỬA/hồi tố
+  // điểm danh — cửa sổ 7 ngày enforce ở call-site (markAttendance). v2 seed CENTER cho
+  // CENTER_SALES_CSM + RoleDef mới CENTER_CLASS_MANAGER (prisma/seed-roles.ts).
+  "attendance:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
 
   // --- Courses + Packages ---
   // FL W0-NAV-2 hygiene: SALES_CSM + ACCOUNTANT bỏ "Khoá dạy" (Sale bán qua Gói học = course-packages; KT không cần).
@@ -487,7 +498,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "site-content:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Audit logs ---
+  // Câu 13 BGĐ (đã ký): BGĐ (SUPER_ADMIN) + Quản lý cơ sở (CENTER_MANAGER, mỗi
+  // người chỉ xem cơ sở mình — scope ép ở tầng query theo orgUnit) được xem; PII
+  // che mặc định. view-pii = break-glass "xem đầy đủ" có kiểm soát (reason + log
+  // riêng audit.pii-unmasked). Cùng tập role với view — kiểm soát nằm ở reason+audit.
   "audit-logs:view": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "audit-logs:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Settings / system ---
   "settings:view": ["SUPER_ADMIN", "CENTER_MANAGER"],

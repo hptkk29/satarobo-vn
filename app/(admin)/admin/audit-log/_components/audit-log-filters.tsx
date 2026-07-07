@@ -1,42 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Filter, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import type { AuditFilters, AuditTab } from "../_actions";
+import type { AuditFilters } from "../_actions";
 
 type Actor = { id: string; name: string | null; email: string };
-
-const ACTIONS_BY_TAB: Record<AuditTab, string[]> = {
-  user: ["CREATE", "UPDATE", "DISABLE", "ENABLE", "PASSWORD_RESET", "ROLE_CHANGE"],
-  grant: ["ADD", "UPDATE", "REMOVE"],
-  lead: ["CREATE", "UPDATE", "DELETE", "ASSIGN", "STATUS_CHANGE"],
-  class: ["CREATE", "UPDATE", "DELETE"],
-  student: ["CREATE", "UPDATE", "DELETE"],
-};
-
-const selectClass =
-  "h-9 w-full rounded-lg border border-input bg-white px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
 
 export function AuditLogFilters({
   filters,
   actors,
-  tab,
   onApply,
 }: {
   filters: AuditFilters;
   actors: Actor[];
-  tab: AuditTab;
   onApply: (f: AuditFilters) => void;
 }) {
   const [draft, setDraft] = useState<AuditFilters>(filters);
 
-  // Reset draft khi đổi tab (action filter có thể không hợp lệ)
-  useEffect(() => {
-    setDraft((prev) => ({ ...prev, action: undefined }));
-  }, [tab]);
+  const selectClass =
+    "h-9 w-full rounded-lg border border-input bg-white px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
 
   function update<K extends keyof AuditFilters>(key: K, value: AuditFilters[K]) {
     setDraft((prev) => ({ ...prev, [key]: value || undefined }));
@@ -57,7 +42,7 @@ export function AuditLogFilters({
       onSubmit={apply}
       className="rounded-xl border border-gray-200 bg-gray-50/50 p-3"
     >
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-4">
         <div className="space-y-1">
           <Label htmlFor="dateFrom" className="text-xs">
             Từ ngày
@@ -104,40 +89,47 @@ export function AuditLogFilters({
         </div>
 
         <div className="space-y-1">
-          <Label htmlFor="action" className="text-xs">
-            Hành động
+          <Label htmlFor="module" className="text-xs">
+            Module
           </Label>
-          <select
-            id="action"
-            value={draft.action ?? ""}
-            onChange={(e) => update("action", e.target.value)}
-            className={selectClass}
-          >
-            <option value="">— Tất cả —</option>
-            {ACTIONS_BY_TAB[tab].map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+          <Input
+            id="module"
+            value={draft.module ?? ""}
+            onChange={(e) => update("module", e.target.value)}
+            placeholder="students, orders, rbac..."
+            className="h-9"
+          />
         </div>
 
         <div className="space-y-1">
-          <Label htmlFor="targetIdSearch" className="text-xs">
-            ID / Email / Tên / SĐT
+          <Label htmlFor="action" className="text-xs">
+            Hành động
           </Label>
           <Input
-            id="targetIdSearch"
-            value={draft.targetIdSearch ?? ""}
-            onChange={(e) => update("targetIdSearch", e.target.value)}
-            placeholder="Tìm target..."
+            id="action"
+            value={draft.action ?? ""}
+            onChange={(e) => update("action", e.target.value)}
+            placeholder="CREATE, UPDATE, DELETE..."
+            className="h-9"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="entitySearch" className="text-xs">
+            Đối tượng (loại / ID)
+          </Label>
+          <Input
+            id="entitySearch"
+            value={draft.entitySearch ?? ""}
+            onChange={(e) => update("entitySearch", e.target.value)}
+            placeholder="Student, Order, id..."
             className="h-9"
           />
         </div>
 
         <div className="space-y-1">
           <Label htmlFor="freeText" className="text-xs">
-            Tìm trong reason
+            Tìm trong lý do
           </Label>
           <Input
             id="freeText"

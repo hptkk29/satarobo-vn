@@ -173,6 +173,23 @@ export function isReportCardEditable(status: ReportCardStatusValue): boolean {
   return status === "DRAFT" || status === "RECALLED";
 }
 
+/**
+ * Ai được SỬA nội dung học bạ theo trạng thái + capability (THUẦN — #17 Gap3, câu 55).
+ *  - DRAFT / mới          → cần 'manage' (GV nhập đánh giá).
+ *  - RECALLED (đã phát hành RỒI thu hồi) → cần 'review': CHỈ QL cơ sở / Đào tạo / Admin
+ *    được sửa lại; GV (manage-only) BỊ CHẶN. GV vẫn viết DRAFT + đánh giá buổi bình thường.
+ *  - PENDING_REVIEW / PUBLISHED → khoá nội dung (isReportCardEditable=false).
+ * Dùng ở tầng action (saveReportCardAction) để siết đúng "sửa-sau-phát-hành".
+ */
+export function canEditReportCardContent(
+  status: ReportCardStatusValue,
+  capabilities: ReportCardCapability[],
+): boolean {
+  if (!isReportCardEditable(status)) return false;
+  const required: ReportCardCapability = status === "RECALLED" ? "review" : "manage";
+  return capabilities.includes(required);
+}
+
 /** Capability từ kết quả can() (manage = GV nhập, review = QL/Đào tạo duyệt). */
 export function actorCapabilities(perms: { manage: boolean; review: boolean }): ReportCardCapability[] {
   const caps: ReportCardCapability[] = [];

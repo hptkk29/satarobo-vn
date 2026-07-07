@@ -13,6 +13,10 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "roles:manage", scopeType: "GLOBAL" },
       { action: "roles:assign", scopeType: "GLOBAL" },
+      // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
+      // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
+      { action: "report-cards:manage", scopeType: "GLOBAL" },
+      { action: "report-cards:review", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -194,6 +198,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "documents:upload", scopeType: "GLOBAL" },
       { action: "documents:delete", scopeType: "GLOBAL" },
       { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
+      // #17 (câu 55, Toại 06/07): Đào tạo (Phan Thành Toại) duyệt/phát hành/thu hồi +
+      // sửa lại học bạ đã thu hồi — cross-center (nội dung dùng chung, actor HO-level).
+      { action: "report-cards:manage", scopeType: "GLOBAL" },
+      { action: "report-cards:review", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -206,6 +214,34 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "students:view-all", scopeType: "CENTER" },
       { action: "classes:view-all", scopeType: "CENTER" },
+      // #17 (câu 55): QL cơ sở duyệt/phát hành/thu hồi + sửa lại học bạ đã thu hồi.
+      // Scope GLOBAL (KHÔNG CENTER) — cố ý: report-cards:* được check ở authContext
+      // KHÔNG kèm target (ReportCard là SCOPE_EXEMPT), nên CENTER-scope sẽ trả false
+      // sau flip #09 (scopeMatches cần target.centerId). Cách ly cơ sở đã được ép TAY
+      // ở checkEnrollmentScope (actor.visibleCenterIds) trong action → GLOBAL an toàn.
+      { action: "report-cards:manage", scopeType: "GLOBAL" },
+      { action: "report-cards:review", scopeType: "GLOBAL" },
+      // #05 (câu 13 BGĐ): QL cơ sở xem audit log + break-glass xem đầy đủ PII.
+      // Scope GLOBAL (KHÔNG CENTER) — cố ý, cùng lý do report-cards ở trên: viewer
+      // hợp nhất check `audit-logs:view*` KHÔNG kèm target (AuditLog không có centerId
+      // dạng target), nên CENTER-scope sẽ trả false sau flip #09. Cách ly cơ sở đã ép
+      // TAY ở tầng query (queryUnifiedAuditLogs lọc orgUnitId ∈ visibleOrgUnitIds) →
+      // GLOBAL an toàn: mỗi QL cơ sở vẫn chỉ thấy log cơ sở mình.
+      { action: "audit-logs:view", scopeType: "GLOBAL" },
+      { action: "audit-logs:view-pii", scopeType: "GLOBAL" },
+    ],
+  },
+  {
+    // Role MỚI — Task #16 (Kiệt duyệt 07/07/2026, Phương án A). "Quản lý lớp học" chuyên
+    // trách theo dõi lớp + điểm danh trong 1 cơ sở (subset của CENTER_MANAGER, không có
+    // quyền tiền/nhân sự). Cửa sổ hồi tố 7 ngày cho attendance:edit enforce ở call-site
+    // (markAttendance). CHƯA gán UserOrgRole cho ai — để trống cho tương lai.
+    code: "CENTER_CLASS_MANAGER", name: "Quản lý lớp học",
+    perms: [
+      { action: "attendance:edit", scopeType: "CENTER" },
+      { action: "attendance:view", scopeType: "CENTER" },
+      { action: "classes:view-all", scopeType: "CENTER" },
+      { action: "students:view-all", scopeType: "CENTER" },
     ],
   },
   {
@@ -229,6 +265,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "students:view-all", scopeType: "CENTER" },
       { action: "students:edit", scopeType: "CENTER" },
       { action: "classes:view-all", scopeType: "CENTER" },
+      // Task #16 (Kiệt duyệt 07/07/2026, Phương án A) — CSKH được SỬA/hồi tố điểm danh
+      // trong phạm vi cơ sở; cửa sổ 7 ngày enforce ở call-site (markAttendance).
+      { action: "attendance:edit", scopeType: "CENTER" },
       { action: "enrollments:view-all", scopeType: "CENTER" },
       { action: "enrollments:create", scopeType: "CENTER" },
       { action: "enrollments:edit", scopeType: "CENTER" },

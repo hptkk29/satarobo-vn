@@ -2,12 +2,18 @@
 
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createMakeupNeed } from "@/lib/makeup/service";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
-import { notifyAttendanceForSession } from "@/lib/notify/attendance";
+import {
+  notifyAttendanceForSession,
+  notifyTeacherAttendanceEdited,
+} from "@/lib/notify/attendance";
+import { writeAudit } from "@/lib/audit/audit-log";
+import { decideAttendanceWrite } from "@/lib/lms/attendance-edit-policy";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 
 type ActionResult = { error?: string; saved?: number };
@@ -52,12 +58,9 @@ export async function markAttendance(
     absenceReason?: string | null;
   }>,
 ): Promise<ActionResult> {
-  let user: Awaited<ReturnType<typeof requireTeacherOrAdmin>>;
-  try {
-    user = await requireTeacherOrAdmin();
-  } catch {
-    return { error: "Không có quyền điểm danh" };
-  }
+  const session = await auth();
+  if (!session?.user) return { error: "Chưa đăng nhập" };
+  const user = session.user;
 
   const parsed = payloadSchema.safeParse({ sessionId, records });
   if (!parsed.success) {
@@ -67,22 +70,52 @@ export async function markAttendance(
   const data = parsed.data;
 
   // Cách ly cơ sở (A0-04): ClassSession ∈ SCOPED_MODELS → đọc qua scopedDb;
+  // findUnique trả null nếu buổi ngoài tầm nhìn cơ sở (CSKH CS1 KHÔNG thấy buổi CS2).
   // Attendance CHƯA scoped (SCOPE_EXEMPT chờ backfill) — scope tay qua classSession.class.
-  const sdb = scopedDb(await resolveActor(user.id));
+  const actor = await resolveActor(user.id);
+  const sdb = scopedDb(actor);
 
-  // LMS-1 / W1-1 — owner-scope: GV chỉ điểm danh lớp mình dạy/trợ giảng;
-  // admin/CENTER_MANAGER theo cơ sở (tái dùng canManageSessionClass).
   // select thêm centerId top-level: sdb.findUnique lọc hậu kỳ theo passesScope.
   const gateSess = await sdb.classSession.findUnique({
     where: { id: data.sessionId },
-    select: { centerId: true, class: { select: { teacherId: true, assistantId: true, centerId: true } } },
+    select: {
+      date: true,
+      centerId: true,
+      class: { select: { teacherId: true, assistantId: true, centerId: true } },
+    },
   });
   if (!gateSess) return { error: "Buổi học không tồn tại" };
-  const allowed = await canManageSessionClass(
+
+  const centerId = gateSess.class.centerId ?? gateSess.centerId ?? null;
+
+  // Task #16 (Kiệt duyệt 07/07/2026, Phương án A) — phân quyền + cửa sổ hồi tố:
+  //  • canManageSessionClass = GV chính/trợ giảng lớp mình (attendance:mark, LMS-1/W1-1),
+  //    CENTER_MANAGER cùng cơ sở, SUPER_ADMIN → thao tác KHÔNG giới hạn thời gian
+  //    (buổi chưa có bản ghi = ĐÁNH MỚI; buổi đã có = SỬA).
+  //  • Còn lại chỉ qua attendance:edit theo cơ sở (CSKH SALES_CSM / Quản lý lớp học
+  //    CENTER_CLASS_MANAGER) → chỉ SỬA/hồi tố trong 7 ngày; quá hạn phải nhờ quản lý cơ sở.
+  const canManage = await canManageSessionClass(
     { id: user.id, role: user.role, centerId: user.centerId },
     gateSess.class,
   );
-  if (!allowed) return { error: "Không có quyền với buổi của lớp này" };
+  const hasEditPermission = canManage
+    ? true
+    : await checkPermission("attendance:edit", { centerId });
+
+  // Buổi đã có bản ghi điểm danh (đang SỬA) hay chưa (ĐÁNH MỚI)? — dùng làm snapshot audit.
+  const beforeRows = await sdb.attendance.findMany({
+    where: { sessionId: data.sessionId },
+    select: { studentId: true, status: true, note: true, makeupStatus: true, absenceReason: true },
+    orderBy: { studentId: "asc" },
+  });
+
+  const decision = decideAttendanceWrite({
+    canManage,
+    hasEditPermission,
+    hasExistingAttendance: beforeRows.length > 0,
+    sessionDate: gateSess.date,
+  });
+  if (!decision.ok) return { error: decision.message };
 
   // Upsert each — composite unique key sessionId_studentId.
   // Wrap in $transaction so a mid-batch failure rolls back the entire save
@@ -121,6 +154,41 @@ export async function markAttendance(
   } catch (err) {
     console.error("[markAttendance]", err);
     return { error: "Lỗi cơ sở dữ liệu — không lưu được điểm danh" };
+  }
+
+  // Task #16 — SỬA/hồi tố buổi ĐÃ điểm danh: ghi AuditLog (before/after) + báo GV
+  // đứng lớp. "ĐÁNH MỚI" (mode=mark, buổi chưa có bản ghi) KHÔNG audit/notify.
+  // Best-effort: lỗi audit/notify KHÔNG ảnh hưởng việc lưu điểm danh.
+  if (decision.mode === "edit") {
+    try {
+      const afterRows = await sdb.attendance.findMany({
+        where: { sessionId: data.sessionId },
+        select: { studentId: true, status: true, note: true, makeupStatus: true, absenceReason: true },
+        orderBy: { studentId: "asc" },
+      });
+      await writeAudit({
+        actor: { id: user.id, name: user.name ?? user.email ?? "Unknown" },
+        module: "attendance",
+        entityType: "ClassSession",
+        entityId: data.sessionId,
+        action: "attendance.edited",
+        oldValues: { records: beforeRows },
+        newValues: { records: afterRows },
+        changedFields: ["attendance"],
+        orgUnitId: null,
+      });
+    } catch (err) {
+      console.error("[markAttendance] audit error:", err);
+    }
+    try {
+      await notifyTeacherAttendanceEdited({
+        sessionId: data.sessionId,
+        editedByUserId: user.id,
+        editedByName: user.name ?? user.email ?? null,
+      });
+    } catch (err) {
+      console.error("[markAttendance] notify teacher error:", err);
+    }
   }
 
   // B1 — record "Cần học bù" (NEEDS_MAKEUP) → tạo MakeupNeed PENDING gắn buổi này.

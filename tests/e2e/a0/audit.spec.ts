@@ -7,7 +7,14 @@ import { resetDb, seedOrg, seedRoles, seedUser } from "../_helpers/seed";
 import { testEmail } from "../_helpers/fixtures";
 import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
 import { resolveActorUncached } from "../../../lib/auth/actor";
-import { writeAudit, getAuditLogsScoped } from "../../../lib/audit/audit-log";
+import {
+  writeAudit,
+  getAuditLogsScoped,
+  queryUnifiedAuditLogs,
+  recordPiiUnmask,
+} from "../../../lib/audit/audit-log";
+import { can } from "../../../lib/auth/can";
+import { breakGlassSchema } from "../../../lib/validators/audit";
 
 const SA: RbacActor = { id: "seed-sa", name: "SA", role: "SUPER_ADMIN" };
 const orgId = async (code: string) =>
@@ -70,5 +77,106 @@ test.describe("[A0-06] AuditLog hợp nhất", () => {
     const log = await db.auditLog.findFirst({ where: { action: "EXPORT" } });
     expect(log?.module).toBe("orders");
     expect(log?.reason).toContain("xuất Excel");
+  });
+});
+
+// #05 — Viewer hợp nhất + break-glass PII (câu 13 BGĐ).
+test.describe("[#05] Audit viewer hợp nhất + break-glass PII", () => {
+  test.beforeEach(async () => {
+    await resetDb();
+    await seedOrg(["HO", "CS1", "CS2"]);
+    await seedRoles();
+  });
+
+  // Ghi 1 log PII ở CS1 + 1 ở CS2 để kiểm tra scope + mask.
+  async function seedPiiLogs() {
+    const cs1 = await orgId("CS1");
+    const cs2 = await orgId("CS2");
+    await writeAudit({
+      actor: { id: "s", name: "S" }, module: "leads", entityType: "Lead", entityId: "L1",
+      action: "UPDATE", newValues: { phone: "0901234567", email: "a@x.com", note: "ok" },
+      orgUnitId: cs1,
+    });
+    await writeAudit({
+      actor: { id: "s", name: "S" }, module: "leads", entityType: "Lead", entityId: "L2",
+      action: "UPDATE", newValues: { phone: "0912345678", email: "b@y.com" },
+      orgUnitId: cs2,
+    });
+    return { cs1, cs2 };
+  }
+
+  test("[#05-T5] CENTER_MANAGER CS1 chỉ thấy log cơ sở mình; SUPER_ADMIN thấy tất cả", async () => {
+    const { cs1 } = await seedPiiLogs();
+    const cm1 = await userActor("cm1", "CS1", "CENTER_MANAGER");
+    const sa = await userActor("sa", "HO", "SUPER_ADMIN");
+
+    const cmRes = await queryUnifiedAuditLogs(cm1, {}, null);
+    expect(cmRes.items.map((r) => r.orgUnitId)).toEqual([cs1]);
+
+    const saRes = await queryUnifiedAuditLogs(sa, {}, null);
+    expect(saRes.items.length).toBe(2);
+  });
+
+  test("[#05-T6] mask mặc định cho MỌI người (kể cả đủ quyền)", async () => {
+    await seedPiiLogs();
+    const cm1 = await userActor("cm1", "CS1", "CENTER_MANAGER");
+    const sa = await userActor("sa", "HO", "SUPER_ADMIN");
+
+    const cmRes = await queryUnifiedAuditLogs(cm1, {}, null); // KHÔNG unmask
+    const cmRow = cmRes.items[0]!;
+    expect(cmRow.piiMasked).toBe(true);
+    expect((cmRow.newValues as { phone: string }).phone).toBe("09***67");
+    expect((cmRow.newValues as { email: string }).email).toBe("a***@x.com");
+
+    // SUPER_ADMIN cũng bị mask mặc định (không tự động unmask).
+    const saRow = (await queryUnifiedAuditLogs(sa, {}, null)).items[0]!;
+    expect(saRow.piiMasked).toBe(true);
+    expect((saRow.newValues as { phone: string }).phone).not.toContain("012345");
+  });
+
+  test("[#05-T2] break-glass unmask → hiện SĐT/email đầy đủ", async () => {
+    await seedPiiLogs();
+    const cm1 = await userActor("cm1", "CS1", "CENTER_MANAGER");
+
+    const res = await queryUnifiedAuditLogs(cm1, {}, null, { unmask: true });
+    const row = res.items[0]!;
+    expect(row.piiMasked).toBe(false);
+    expect((row.newValues as { phone: string }).phone).toBe("0901234567");
+    expect((row.newValues as { email: string }).email).toBe("a@x.com");
+  });
+
+  test("[#05-T2] quyền view-pii: CENTER_MANAGER có, TEACHER không", async () => {
+    const cm1 = await userActor("cm1", "CS1", "CENTER_MANAGER");
+    const tea = await userActor("tea", "CS1", "TEACHER");
+    const sa = await userActor("sa", "HO", "SUPER_ADMIN");
+
+    expect(can(cm1, "audit-logs:view-pii")).toBe(true);
+    expect(can(sa, "audit-logs:view-pii")).toBe(true); // SUPER_ADMIN bypass
+    expect(can(tea, "audit-logs:view-pii")).toBe(false);
+  });
+
+  test("[#05-T2] reason < 10 ký tự bị từ chối; >= 10 ký tự chấp nhận", () => {
+    expect(breakGlassSchema.safeParse({ reason: "ngắn" }).success).toBe(false);
+    expect(breakGlassSchema.safeParse({ reason: "   " }).success).toBe(false);
+    expect(
+      breakGlassSchema.safeParse({ reason: "đối soát khiếu nại phụ huynh" }).success,
+    ).toBe(true);
+  });
+
+  test("[#05-T2] recordPiiUnmask ghi log RIÊNG audit.pii-unmasked kèm reason", async () => {
+    const cm1 = await userActor("cm1", "CS1", "CENTER_MANAGER");
+    await recordPiiUnmask(
+      { id: cm1.userId, name: "CM1" },
+      "đối soát khiếu nại phụ huynh về đổi SĐT",
+      { ip: "1.2.3.4", userAgent: "test" },
+    );
+
+    const log = await db.auditLog.findFirst({
+      where: { action: "audit.pii-unmasked" },
+    });
+    expect(log?.module).toBe("audit");
+    expect(log?.actorId).toBe(cm1.userId);
+    expect(log?.reason).toContain("đối soát");
+    expect(log?.ip).toBe("1.2.3.4");
   });
 });

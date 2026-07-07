@@ -2,262 +2,104 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { PermissionError } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
-import type { Prisma } from "@prisma/client";
+import { getAuditActor } from "@/lib/audit/log";
+import { getRequestMetadata } from "@/lib/audit/headers";
+import { breakGlassSchema } from "@/lib/validators/audit";
+import {
+  queryUnifiedAuditLogs,
+  recordPiiUnmask,
+  writeAudit,
+  type UnifiedAuditFilters,
+  type UnifiedAuditRow,
+} from "@/lib/audit/audit-log";
+import type { Session } from "next-auth";
 
-const PAGE_SIZE = 20;
 const EXPORT_CAP = 5000;
 const RETENTION_DAYS = 365;
 
-async function requireAuditView() {
+// #05 — Viewer đọc bảng AuditLog HỢP NHẤT (KHÔNG 5 bảng legacy). Gate view = quyền
+// `audit-logs:view` (sửa nợ: trước đây requireAuditView dùng `users:manage` trong khi
+// page.tsx dùng `audit-logs:view` → CENTER_MANAGER thấy menu nhưng mọi action fail).
+async function requireAuditView(): Promise<Session> {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("audit-logs:view"))) {
+    redirect("/dashboard?error=unauthorized");
+  }
+  return session;
+}
+
+// Thao tác phá hủy (prune retention) giữ gate MẠNH `users:manage` (SUPER_ADMIN) —
+// KHÔNG hạ theo audit-logs:view (tránh CENTER_MANAGER xoá được audit).
+async function requireAuditCleanup(): Promise<Session> {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("users:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  return session.user;
+  return session;
 }
 
-// 5 bảng audit-log LEGACY không thuộc SCOPED_MODELS → scopedDb pass-through (chỉ
-// đổi client cho sạch import @/lib/db trần — R6-F1). Viewer hợp nhất theo bảng
-// AuditLog là việc riêng (L9), KHÔNG làm ở đây.
-async function requireAuditDb() {
-  const user = await requireAuditView();
-  return scopedDb(await resolveActor(user.id));
+export type AuditFilters = UnifiedAuditFilters;
+export type { UnifiedAuditRow };
+
+// ─── QUERY (mask mặc định + break-glass) ─────────────────────────────────────
+/**
+ * Query viewer hợp nhất. `unmask=true` (break-glass) chỉ có hiệu lực khi actor
+ * thực sự có quyền `audit-logs:view-pii` — RE-CHECK mỗi lần (defense in depth,
+ * không tin cờ client). Không đủ quyền → im lặng trả bản MASK (an toàn).
+ */
+export async function queryAuditLogs(
+  filters: AuditFilters,
+  cursor: string | null,
+  unmask = false,
+): Promise<{ items: UnifiedAuditRow[]; nextCursor: string | null }> {
+  const session = await requireAuditView();
+  const actor = await resolveActor(session.user.id);
+  const effectiveUnmask = unmask && (await checkPermission("audit-logs:view-pii"));
+  return queryUnifiedAuditLogs(actor, filters, cursor, { unmask: effectiveUnmask });
 }
 
-export type AuditFilters = {
-  dateFrom?: string;
-  dateTo?: string;
-  actorId?: string;
-  action?: string;
-  targetIdSearch?: string;
-  freeText?: string;
-};
+// ─── BREAK-GLASS: mở PII cho phiên xem (câu 13 BGĐ) ──────────────────────────
+/**
+ * Bấm "Xem đầy đủ" → nhập lý do (>=10 ký tự) → server verify quyền view-pii +
+ * ghi log RIÊNG `audit.pii-unmasked` (ai – lúc nào – lý do). Trả ok để client
+ * chuyển sang chế độ unmask cho phiên; query sau đó vẫn re-check quyền.
+ */
+export async function revealAuditPii(
+  input: unknown,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireAuditView();
 
-export type AuditTab = "user" | "grant" | "lead" | "class" | "student";
-
-export type Cursor = string;
-
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({ c: createdAt.toISOString(), i: id }),
-  ).toString("base64");
-}
-
-function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
   try {
-    const decoded = JSON.parse(Buffer.from(cursor, "base64").toString()) as {
-      c: string;
-      i: string;
-    };
-    return { createdAt: new Date(decoded.c), id: decoded.i };
-  } catch {
-    return null;
-  }
-}
-
-type WhereAnd = Array<Record<string, unknown>>;
-
-function buildCommonAnd(
-  filters: AuditFilters,
-  cursor: Cursor | null,
-): WhereAnd {
-  const AND: WhereAnd = [];
-
-  if (filters.dateFrom) {
-    AND.push({ createdAt: { gte: new Date(filters.dateFrom) } });
-  }
-  if (filters.dateTo) {
-    const to = new Date(filters.dateTo);
-    to.setHours(23, 59, 59, 999);
-    AND.push({ createdAt: { lte: to } });
-  }
-  if (filters.actorId) AND.push({ changedByUserId: filters.actorId });
-  if (filters.action) AND.push({ action: filters.action });
-  if (filters.freeText) {
-    AND.push({
-      reason: { contains: filters.freeText, mode: "insensitive" },
-    });
-  }
-
-  if (cursor) {
-    const decoded = decodeCursor(cursor);
-    if (decoded) {
-      AND.push({
-        OR: [
-          { createdAt: { lt: decoded.createdAt } },
-          {
-            AND: [
-              { createdAt: decoded.createdAt },
-              { id: { lt: decoded.id } },
-            ],
-          },
-        ],
-      });
+    await assertPermission("audit-logs:view-pii");
+  } catch (e) {
+    if (e instanceof PermissionError) {
+      return { ok: false, error: "Bạn không có quyền xem đầy đủ PII" };
     }
+    throw e;
   }
 
-  return AND;
-}
-
-function paginate<T extends { createdAt: Date; id: string }>(rows: T[]): {
-  items: T[];
-  nextCursor: Cursor | null;
-} {
-  const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  const last = items[items.length - 1];
-  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
-  return { items, nextCursor };
-}
-
-// ─── QUERY USER AUDIT ───────────────────────────────────────────────
-export async function queryUserAuditLogs(
-  filters: AuditFilters,
-  cursor: Cursor | null,
-) {
-  const sdb = await requireAuditDb();
-  const AND = buildCommonAnd(filters, cursor);
-
-  if (filters.targetIdSearch) {
-    const search = filters.targetIdSearch.trim();
-    AND.push({
-      OR: [
-        { userId: search },
-        { user: { email: { contains: search, mode: "insensitive" } } },
-      ],
-    });
+  const parsed = breakGlassSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Lý do không hợp lệ" };
   }
 
-  const rows = await sdb.userAuditLog.findMany({
-    where: AND.length ? { AND } : undefined,
-    include: { user: { select: { email: true, name: true } } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: PAGE_SIZE + 1,
+  const { actorId, actorName } = getAuditActor(session);
+  const meta = await getRequestMetadata();
+  await recordPiiUnmask({ id: actorId, name: actorName }, parsed.data.reason, {
+    ip: meta.ip ?? null,
+    userAgent: meta.userAgent ?? null,
   });
 
-  return paginate(rows);
+  return { ok: true };
 }
 
-// ─── QUERY GRANT AUDIT ──────────────────────────────────────────────
-export async function queryGrantAuditLogs(
-  filters: AuditFilters,
-  cursor: Cursor | null,
-) {
-  const sdb = await requireAuditDb();
-  const AND = buildCommonAnd(filters, cursor);
-
-  if (filters.targetIdSearch) {
-    const search = filters.targetIdSearch.trim();
-    AND.push({
-      OR: [
-        { userId: search },
-        { actionKey: { contains: search, mode: "insensitive" } },
-        { user: { email: { contains: search, mode: "insensitive" } } },
-      ],
-    });
-  }
-
-  const rows = await sdb.permissionGrantAuditLog.findMany({
-    where: AND.length ? { AND } : undefined,
-    include: { user: { select: { email: true, name: true } } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: PAGE_SIZE + 1,
-  });
-
-  return paginate(rows);
-}
-
-// ─── QUERY LEAD AUDIT ───────────────────────────────────────────────
-export async function queryLeadAuditLogs(
-  filters: AuditFilters,
-  cursor: Cursor | null,
-) {
-  const sdb = await requireAuditDb();
-  const AND = buildCommonAnd(filters, cursor);
-
-  if (filters.targetIdSearch) {
-    const search = filters.targetIdSearch.trim();
-    AND.push({
-      OR: [
-        { leadId: search },
-        { lead: { phone: { contains: search } } },
-        { lead: { parentName: { contains: search, mode: "insensitive" } } },
-      ],
-    });
-  }
-
-  const rows = await sdb.leadAuditLog.findMany({
-    where: AND.length ? { AND } : undefined,
-    include: { lead: { select: { parentName: true, phone: true } } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: PAGE_SIZE + 1,
-  });
-
-  return paginate(rows);
-}
-
-// ─── QUERY CLASS AUDIT ──────────────────────────────────────────────
-export async function queryClassAuditLogs(
-  filters: AuditFilters,
-  cursor: Cursor | null,
-) {
-  const sdb = await requireAuditDb();
-  const AND = buildCommonAnd(filters, cursor);
-
-  if (filters.targetIdSearch) {
-    const search = filters.targetIdSearch.trim();
-    AND.push({
-      OR: [
-        { classId: search },
-        { class: { name: { contains: search, mode: "insensitive" } } },
-        { class: { classCode: { contains: search, mode: "insensitive" } } },
-      ],
-    });
-  }
-
-  const rows = await sdb.classAuditLog.findMany({
-    where: AND.length ? { AND } : undefined,
-    include: { class: { select: { name: true, classCode: true } } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: PAGE_SIZE + 1,
-  });
-
-  return paginate(rows);
-}
-
-// ─── QUERY STUDENT AUDIT ────────────────────────────────────────────
-export async function queryStudentAuditLogs(
-  filters: AuditFilters,
-  cursor: Cursor | null,
-) {
-  const sdb = await requireAuditDb();
-  const AND = buildCommonAnd(filters, cursor);
-
-  if (filters.targetIdSearch) {
-    const search = filters.targetIdSearch.trim();
-    AND.push({
-      OR: [
-        { studentId: search },
-        { student: { name: { contains: search, mode: "insensitive" } } },
-      ],
-    });
-  }
-
-  const rows = await sdb.studentAuditLog.findMany({
-    where: AND.length ? { AND } : undefined,
-    include: { student: { select: { name: true } } },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: PAGE_SIZE + 1,
-  });
-
-  return paginate(rows);
-}
-
-// ─── EXPORT CSV ─────────────────────────────────────────────────────
+// ─── EXPORT CSV (mask mặc định — KHÔNG bao giờ leak raw PII qua bulk export) ──
 function csvEscape(val: unknown): string {
   if (val === null || val === undefined) return "";
   const str =
@@ -272,281 +114,78 @@ function csvEscape(val: unknown): string {
   return str;
 }
 
-type AuditMetadata = { ip?: string; userAgent?: string } | null;
-
 export async function exportAuditLogsCSV(
-  tab: AuditTab,
   filters: AuditFilters,
 ): Promise<
   | { ok: true; csv: string; filename: string }
   | { ok: false; error: string }
 > {
-  const sdb = await requireAuditDb();
-  const AND = buildCommonAnd(filters, null);
+  const session = await requireAuditView();
+  const actor = await resolveActor(session.user.id);
 
-  // Apply same targetIdSearch logic per tab
-  if (filters.targetIdSearch) {
-    const search = filters.targetIdSearch.trim();
-    switch (tab) {
-      case "user":
-        AND.push({
-          OR: [
-            { userId: search },
-            { user: { email: { contains: search, mode: "insensitive" } } },
-          ],
-        });
-        break;
-      case "grant":
-        AND.push({
-          OR: [
-            { userId: search },
-            { actionKey: { contains: search, mode: "insensitive" } },
-            { user: { email: { contains: search, mode: "insensitive" } } },
-          ],
-        });
-        break;
-      case "lead":
-        AND.push({
-          OR: [
-            { leadId: search },
-            { lead: { phone: { contains: search } } },
-            { lead: { parentName: { contains: search, mode: "insensitive" } } },
-          ],
-        });
-        break;
-      case "class":
-        AND.push({
-          OR: [
-            { classId: search },
-            { class: { name: { contains: search, mode: "insensitive" } } },
-            { class: { classCode: { contains: search, mode: "insensitive" } } },
-          ],
-        });
-        break;
-      case "student":
-        AND.push({
-          OR: [
-            { studentId: search },
-            { student: { name: { contains: search, mode: "insensitive" } } },
-          ],
-        });
-        break;
-    }
-  }
+  // Bulk export = rủi ro PII cao nhất → LUÔN mask (break-glass chỉ áp cho xem từng
+  // dòng trên UI, không mở qua CSV).
+  const { items } = await queryUnifiedAuditLogs(actor, filters, null, {
+    take: EXPORT_CAP,
+    unmask: false,
+  });
 
-  const where = AND.length ? { AND } : undefined;
-  const orderBy: Prisma.UserAuditLogOrderByWithRelationInput[] = [
-    { createdAt: "desc" },
-    { id: "desc" },
+  const headers = [
+    "createdAt",
+    "module",
+    "entityType",
+    "entityId",
+    "action",
+    "actorName",
+    "changedFields",
+    "reason",
+    "oldValues",
+    "newValues",
+    "orgUnitId",
+    "ip",
+    "userAgent",
   ];
-
-  let headers: string[];
-  const lines: string[] = [];
-
-  switch (tab) {
-    case "user": {
-      const rows = await sdb.userAuditLog.findMany({
-        where,
-        include: { user: { select: { email: true } } },
-        orderBy,
-        take: EXPORT_CAP,
-      });
-      headers = [
-        "createdAt",
-        "action",
-        "targetEmail",
-        "targetUserId",
-        "actorName",
-        "changedFields",
-        "reason",
-        "ip",
-        "userAgent",
-      ];
-      lines.push(headers.join(","));
-      for (const r of rows) {
-        const meta = r.metadata as AuditMetadata;
-        lines.push(
-          [
-            csvEscape(r.createdAt),
-            csvEscape(r.action),
-            csvEscape(r.user?.email),
-            csvEscape(r.userId),
-            csvEscape(r.changedByName),
-            csvEscape(r.changedFields.join("|")),
-            csvEscape(r.reason),
-            csvEscape(meta?.ip),
-            csvEscape(meta?.userAgent),
-          ].join(","),
-        );
-      }
-      break;
-    }
-    case "grant": {
-      const rows = await sdb.permissionGrantAuditLog.findMany({
-        where,
-        include: { user: { select: { email: true } } },
-        orderBy,
-        take: EXPORT_CAP,
-      });
-      headers = [
-        "createdAt",
-        "action",
-        "targetEmail",
-        "actionKey",
-        "oldGrant",
-        "newGrant",
-        "actorName",
-        "reason",
-        "ip",
-        "userAgent",
-      ];
-      lines.push(headers.join(","));
-      for (const r of rows) {
-        const meta = r.metadata as AuditMetadata;
-        lines.push(
-          [
-            csvEscape(r.createdAt),
-            csvEscape(r.action),
-            csvEscape(r.user?.email),
-            csvEscape(r.actionKey),
-            csvEscape(r.oldGrant),
-            csvEscape(r.newGrant),
-            csvEscape(r.changedByName),
-            csvEscape(r.reason),
-            csvEscape(meta?.ip),
-            csvEscape(meta?.userAgent),
-          ].join(","),
-        );
-      }
-      break;
-    }
-    case "lead": {
-      const rows = await sdb.leadAuditLog.findMany({
-        where,
-        include: { lead: { select: { parentName: true, phone: true } } },
-        orderBy,
-        take: EXPORT_CAP,
-      });
-      headers = [
-        "createdAt",
-        "action",
-        "leadName",
-        "leadPhone",
-        "leadId",
-        "actorName",
-        "changedFields",
-        "reason",
-        "ip",
-        "userAgent",
-      ];
-      lines.push(headers.join(","));
-      for (const r of rows) {
-        const meta = r.metadata as AuditMetadata;
-        lines.push(
-          [
-            csvEscape(r.createdAt),
-            csvEscape(r.action),
-            csvEscape(r.lead?.parentName),
-            csvEscape(r.lead?.phone),
-            csvEscape(r.leadId),
-            csvEscape(r.changedByName),
-            csvEscape(r.changedFields.join("|")),
-            csvEscape(r.reason),
-            csvEscape(meta?.ip),
-            csvEscape(meta?.userAgent),
-          ].join(","),
-        );
-      }
-      break;
-    }
-    case "class": {
-      const rows = await sdb.classAuditLog.findMany({
-        where,
-        include: { class: { select: { name: true, classCode: true } } },
-        orderBy,
-        take: EXPORT_CAP,
-      });
-      headers = [
-        "createdAt",
-        "action",
-        "className",
-        "classCode",
-        "classId",
-        "actorName",
-        "changedFields",
-        "reason",
-        "ip",
-        "userAgent",
-      ];
-      lines.push(headers.join(","));
-      for (const r of rows) {
-        const meta = r.metadata as AuditMetadata;
-        lines.push(
-          [
-            csvEscape(r.createdAt),
-            csvEscape(r.action),
-            csvEscape(r.class?.name),
-            csvEscape(r.class?.classCode),
-            csvEscape(r.classId),
-            csvEscape(r.changedByName),
-            csvEscape(r.changedFields.join("|")),
-            csvEscape(r.reason),
-            csvEscape(meta?.ip),
-            csvEscape(meta?.userAgent),
-          ].join(","),
-        );
-      }
-      break;
-    }
-    case "student": {
-      const rows = await sdb.studentAuditLog.findMany({
-        where,
-        include: { student: { select: { name: true } } },
-        orderBy,
-        take: EXPORT_CAP,
-      });
-      headers = [
-        "createdAt",
-        "action",
-        "studentName",
-        "studentId",
-        "actorName",
-        "changedFields",
-        "reason",
-        "ip",
-        "userAgent",
-      ];
-      lines.push(headers.join(","));
-      for (const r of rows) {
-        const meta = r.metadata as AuditMetadata;
-        lines.push(
-          [
-            csvEscape(r.createdAt),
-            csvEscape(r.action),
-            csvEscape(r.student?.name),
-            csvEscape(r.studentId),
-            csvEscape(r.changedByName),
-            csvEscape(r.changedFields.join("|")),
-            csvEscape(r.reason),
-            csvEscape(meta?.ip),
-            csvEscape(meta?.userAgent),
-          ].join(","),
-        );
-      }
-      break;
-    }
-    default:
-      return { ok: false, error: "Tab không hợp lệ" };
+  const lines: string[] = [headers.join(",")];
+  for (const r of items) {
+    lines.push(
+      [
+        csvEscape(r.createdAt),
+        csvEscape(r.module),
+        csvEscape(r.entityType),
+        csvEscape(r.entityId),
+        csvEscape(r.action),
+        csvEscape(r.actorName),
+        csvEscape(r.changedFields.join("|")),
+        csvEscape(r.reason),
+        csvEscape(r.oldValues),
+        csvEscape(r.newValues),
+        csvEscape(r.orgUnitId),
+        csvEscape(r.ip),
+        csvEscape(r.userAgent),
+      ].join(","),
+    );
   }
+
+  // Audit lại chính hành động export (CLAUDE.md: export nhạy cảm có audit).
+  const { actorId, actorName } = getAuditActor(session);
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "audit",
+    entityType: "AuditLog",
+    entityId: "*",
+    action: "EXPORT",
+    reason: `Export audit log (${items.length} dòng, đã mask PII)`,
+  });
 
   const csv = "﻿" + lines.join("\n");
   const dateStr = new Date().toISOString().slice(0, 10);
-  const filename = `audit-log-${tab}-${dateStr}.csv`;
-
+  const filename = `audit-log-${dateStr}.csv`;
   return { ok: true, csv, filename };
 }
 
-// ─── CLEANUP >365 DAYS ──────────────────────────────────────────────
+// ─── CLEANUP >365 DAYS (prune 5 bảng legacy — read-only history) ─────────────
+// GIỮ prune 5 bảng legacy (chưa freeze-legacy — 58 writer vẫn ghi, HOÃN). Bảng
+// AuditLog hợp nhất KHÔNG xoá ở đây (immutable — A0-06 AC4). Gate SUPER_ADMIN.
 export async function cleanupOldAuditLogs(): Promise<
   | {
       ok: true;
@@ -560,7 +199,8 @@ export async function cleanupOldAuditLogs(): Promise<
     }
   | { ok: false; error: string }
 > {
-  const sdb = await requireAuditDb();
+  const session = await requireAuditCleanup();
+  const sdb = scopedDb(await resolveActor(session.user.id));
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
@@ -586,27 +226,3 @@ export async function cleanupOldAuditLogs(): Promise<
     },
   };
 }
-
-// ─── Row types for client (Promise return types from server actions) ──
-export type UserAuditRow = Awaited<
-  ReturnType<typeof queryUserAuditLogs>
->["items"][number];
-export type GrantAuditRow = Awaited<
-  ReturnType<typeof queryGrantAuditLogs>
->["items"][number];
-export type LeadAuditRow = Awaited<
-  ReturnType<typeof queryLeadAuditLogs>
->["items"][number];
-export type ClassAuditRow = Awaited<
-  ReturnType<typeof queryClassAuditLogs>
->["items"][number];
-export type StudentAuditRow = Awaited<
-  ReturnType<typeof queryStudentAuditLogs>
->["items"][number];
-
-export type AnyAuditRow =
-  | UserAuditRow
-  | GrantAuditRow
-  | LeadAuditRow
-  | ClassAuditRow
-  | StudentAuditRow;

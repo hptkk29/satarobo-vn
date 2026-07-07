@@ -19,6 +19,12 @@ export default async function AuditLogPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // Break-glass (câu 13 BGĐ) + prune destructive gate riêng (SUPER_ADMIN).
+  const [canViewPii, canCleanup] = await Promise.all([
+    checkPermission("audit-logs:view-pii"),
+    checkPermission("users:manage"),
+  ]);
+
   // User SCOPE_EXEMPT (identity toàn cục) → sdb pass-through, hành vi y nguyên.
   const sdb = scopedDb(await resolveActor(session.user.id));
   const actors = await sdb.user.findMany({
@@ -36,8 +42,8 @@ export default async function AuditLogPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Lịch sử thay đổi của User, Phân quyền, Leads, Lớp, Học viên
-            (giữ trong 365 ngày)
+            Nhật ký thay đổi hợp nhất toàn hệ thống. Quản lý cơ sở chỉ thấy log
+            cơ sở mình; PII (SĐT/email) che mặc định, xem đầy đủ có kiểm soát.
           </p>
         </div>
       </div>
@@ -47,7 +53,11 @@ export default async function AuditLogPage() {
           <div className="h-40 animate-pulse rounded-xl bg-gray-100" />
         }
       >
-        <AuditLogClient actors={actors} />
+        <AuditLogClient
+          actors={actors}
+          canViewPii={canViewPii}
+          canCleanup={canCleanup}
+        />
       </Suspense>
     </div>
   );
