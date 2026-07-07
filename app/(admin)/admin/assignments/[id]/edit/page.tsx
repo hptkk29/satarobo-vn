@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -93,13 +92,14 @@ export default async function EditAssignmentPage({ params }: Props) {
       select: { id: true, name: true, classCode: true },
       take: 200,
     }),
-    db.lesson.findMany({
+    // Lesson/Document = học liệu toàn cục (không center-scope) → sdb pass-through.
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       take: 500,
     }),
-    db.document.findMany({
+    sdb.document.findMany({
       orderBy: { updatedAt: "desc" },
       select: {
         id: true,
