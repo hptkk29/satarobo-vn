@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
@@ -33,8 +32,9 @@ export default async function AdminMediaPage() {
   });
   const classIds = classes.map((c) => c.id);
 
+  // ClassSessionMedia ∉ SCOPED_MODELS → cách ly qua classIds đã scope ở trên (sdb.class).
   const rows = classIds.length
-    ? await db.classSessionMedia.findMany({
+    ? await sdb.classSessionMedia.findMany({
         where: { classId: { in: classIds } },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -46,7 +46,7 @@ export default async function AdminMediaPage() {
   const classMap = new Map(classes.map((c) => [c.id, c]));
   const studentIds = [...new Set(rows.flatMap((r) => r.tags.map((t) => t.studentId)))];
   const students = studentIds.length
-    ? await db.student.findMany({
+    ? await sdb.student.findMany({
         where: { id: { in: studentIds } },
         select: { id: true, name: true },
       })

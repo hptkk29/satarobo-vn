@@ -4,11 +4,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { createMakeupNeed } from "@/lib/makeup/service";
 import { resolveActor } from "@/lib/auth/actor";
-import { passesScope } from "@/lib/db-scope";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 
 // Cách ly cơ sở (chống IDOR ghi): ParentRequest relation-scoped qua student.centerId.
 // Duyệt/xử lý theo requestId từ client phải xác minh HV thuộc tầm nhìn actor.
@@ -49,7 +48,9 @@ export async function handleParentRequest(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const req = await db.parentRequest.findUnique({
+  // ParentRequest ∉ SCOPED_MODELS → sdb pass-through; cách ly qua requestStudentInScope.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const req = await sdb.parentRequest.findUnique({
     where: { id: parsed.data.id },
     select: { status: true, student: { select: { centerId: true } } },
   });
@@ -63,7 +64,7 @@ export async function handleParentRequest(input: {
   }
 
   const { actorId, actorName } = getAuditActor(session);
-  await db.parentRequest.update({
+  await sdb.parentRequest.update({
     where: { id: parsed.data.id },
     data: {
       status: parsed.data.decision,
@@ -99,7 +100,8 @@ export async function resolveAbsence(input: {
     return { ok: false, error: "Không có quyền" };
   }
 
-  const req = await db.parentRequest.findUnique({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const req = await sdb.parentRequest.findUnique({
     where: { id: input.requestId },
     select: {
       id: true, type: true, status: true, studentId: true, sessionId: true, content: true,
@@ -123,8 +125,8 @@ export async function resolveAbsence(input: {
   const { actorId, actorName } = getAuditActor(session);
 
   try {
-    await db.$transaction([
-      db.attendance.upsert({
+    await sdb.$transaction([
+      sdb.attendance.upsert({
         where: { sessionId_studentId: { sessionId: req.sessionId, studentId: req.studentId } },
         create: {
           sessionId: req.sessionId,
@@ -135,7 +137,7 @@ export async function resolveAbsence(input: {
         },
         update: { status, makeupStatus, absenceReason },
       }),
-      db.parentRequest.update({
+      sdb.parentRequest.update({
         where: { id: req.id },
         data: {
           status: "APPROVED",

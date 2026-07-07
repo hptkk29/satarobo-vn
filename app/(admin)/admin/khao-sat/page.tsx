@@ -29,7 +29,12 @@ export default async function SurveyPage() {
       : { OR: [{ centerId: null }, { centerId: { in: visibleSurveyCenters } }] };
 
   const [centers, surveys, responses] = await Promise.all([
-    db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
+    sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
+    // ⚠️ GIỮ db trần CHỦ ĐÍCH cho riêng query này: Survey ∈ SCOPED_MODELS nhưng có
+    // record centerId=null hợp lệ (khảo sát dùng chung toàn hệ thống). sdb sẽ inject
+    // `centerId IN visible` → ẨN NHẦM khảo sát chung với actor center-scope (DoD #03).
+    // Scope thủ công "null OR visible" ở trên đã cách ly đúng. File này vẫn nằm trong
+    // db-import-allowlist với lý do này.
     db.survey.findMany({
       where: surveyWhere,
       orderBy: { createdAt: "desc" },

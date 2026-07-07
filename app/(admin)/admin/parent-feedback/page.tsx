@@ -3,7 +3,6 @@ import type { Prisma } from "@prisma/client";
 import { Star } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { FeedbackReply } from "./_components/feedback-reply";
@@ -22,19 +21,21 @@ export default async function AdminParentFeedbackPage() {
   // lọc feedback theo studentId IN [...]. Feedback studentId=null (góp ý chung) chỉ
   // actor global (SUPER_ADMIN/HO) mới thấy — tự rớt khỏi kết quả non-global.
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
 
   let where: Prisma.ParentFeedbackWhereInput = {};
   if (!isGlobal) {
-    const visibleStudents = await scopedDb(actor).student.findMany({
+    const visibleStudents = await sdb.student.findMany({
       select: { id: true },
     });
     where = { studentId: { in: visibleStudents.map((s) => s.id) } };
   }
 
+  // ParentFeedback ∉ SCOPED_MODELS → sdb pass-through; cách ly nằm ở `where` 2 bước trên.
   const [rows, agg] = await Promise.all([
-    db.parentFeedback.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 }),
-    db.parentFeedback.aggregate({ where, _avg: { rating: true }, _count: true }),
+    sdb.parentFeedback.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 }),
+    sdb.parentFeedback.aggregate({ where, _avg: { rating: true }, _count: true }),
   ]);
 
   const avg = agg._avg.rating ? agg._avg.rating.toFixed(1) : "—";

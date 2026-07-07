@@ -4,9 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
-import { passesScope } from "@/lib/db-scope";
+import { scopedDb } from "@/lib/db-scope";
 
 // P1-g — admin phản hồi lại đánh giá phụ huynh.
 const schema = z.object({
@@ -22,27 +21,26 @@ export async function respondToFeedback(input: unknown): Promise<{ ok: boolean; 
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
 
-  // Cách ly cơ sở (best-effort): ParentFeedback.studentId là cột phẳng (không FK).
-  // Nếu có gắn HV → HV phải thuộc tầm nhìn actor; feedback ẩn danh (studentId=null) → cho qua.
-  const fb = await db.parentFeedback.findUnique({
+  // Cách ly cơ sở: ParentFeedback.studentId là cột phẳng (không FK). Nếu có gắn HV →
+  // HV phải thuộc tầm nhìn actor; feedback ẩn danh (studentId=null) → cho qua.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const fb = await sdb.parentFeedback.findUnique({
     where: { id: parsed.data.id },
     select: { studentId: true },
   });
   if (!fb) return { ok: false, error: "Không tìm thấy đánh giá" };
-  if (fb.studentId && session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!actor.isSuperAdmin && !actor.isHoLevel) {
-      const st = await db.student.findUnique({
-        where: { id: fb.studentId },
-        select: { centerId: true },
-      });
-      if (st && !passesScope("Student", st, actor)) {
-        return { ok: false, error: "Không tìm thấy đánh giá" };
-      }
-    }
+  if (fb.studentId && !actor.isSuperAdmin && !actor.isHoLevel) {
+    // Student ∈ SCOPED_MODELS: sdb.findUnique trả null nếu HV ngoài tầm nhìn (hoặc đã
+    // xoá) → deny. Khớp trang list (chỉ hiện feedback của HV trong tầm nhìn).
+    const st = await sdb.student.findUnique({
+      where: { id: fb.studentId },
+      select: { id: true },
+    });
+    if (!st) return { ok: false, error: "Không tìm thấy đánh giá" };
   }
 
-  await db.parentFeedback.update({
+  await sdb.parentFeedback.update({
     where: { id: parsed.data.id },
     data: {
       adminResponse: parsed.data.response,

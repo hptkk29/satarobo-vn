@@ -2,7 +2,8 @@ import { createElement, type ReactElement } from "react";
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import { CertificatePdf, type CertificateData } from "@/lib/pdf/certificate";
 import { checkPermission } from "@/lib/auth/check-permission";
 
@@ -32,17 +33,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Thiếu mã chứng chỉ" }, { status: 400 });
   }
 
-  const completion = await db.courseCompletion.findUnique({
+  // CourseCompletion ∉ SCOPED_MODELS → cách ly tay qua student.centerId (Loại B):
+  // CM cơ sở này không xuất PDF chứng chỉ của học viên cơ sở khác.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const completion = await sdb.courseCompletion.findUnique({
     where: { certificateCode: code },
     select: {
       certificateCode: true,
       completedAt: true,
       finalGrade: true,
-      student: { select: { name: true, studentCode: true } },
+      student: { select: { name: true, studentCode: true, centerId: true } },
       course: { select: { name: true } },
     },
   });
-  if (!completion) {
+  if (
+    !completion ||
+    !passesScope("Student", { centerId: completion.student.centerId }, actor)
+  ) {
     return NextResponse.json({ error: "Không tìm thấy chứng chỉ" }, { status: 404 });
   }
 

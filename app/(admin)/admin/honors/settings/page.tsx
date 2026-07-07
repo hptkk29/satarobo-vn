@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { HonorsSettingsClient } from "@/components/admin/honors/settings-client";
 
 export const metadata = { title: "Cài đặt Hall of Fame | Admin" };
@@ -51,7 +52,9 @@ export default async function HonorsSettingsPage() {
     redirect("/dashboard");
   }
 
-  const settings = await db.sitePageContent.findMany({
+  // SitePageContent là model global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const settings = await scopedDb(actor).sitePageContent.findMany({
     where: { pageKey: "honors" },
   });
 

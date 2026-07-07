@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { assertPermission } from "@/lib/auth/check-permission";
 
@@ -29,11 +30,13 @@ export async function saveSiteContentAction(
     return { ok: false, error: "Thiếu pageKey hoặc contentKey" };
   }
 
+  // SitePageContent là model global (∉ SCOPED_MODELS) → sdb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
   if (!contentValue) {
     // Empty → delete row (fallback to default)
-    await db.sitePageContent.deleteMany({ where: { pageKey, contentKey } });
+    await sdb.sitePageContent.deleteMany({ where: { pageKey, contentKey } });
   } else {
-    await db.sitePageContent.upsert({
+    await sdb.sitePageContent.upsert({
       where: { pageKey_contentKey: { pageKey, contentKey } },
       update: { contentValue, updatedById: session.user.id },
       create: { pageKey, contentKey, contentValue, updatedById: session.user.id },

@@ -2,8 +2,8 @@ import { createElement, type ReactElement } from "react";
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { hasRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getStudentTranscript } from "@/lib/transcript/service";
 import { TranscriptPdf } from "@/lib/pdf/transcript";
@@ -29,14 +29,15 @@ export async function GET(req: NextRequest) {
   const studentId = req.nextUrl.searchParams.get("studentId");
   if (!studentId) return NextResponse.json({ error: "Thiếu studentId" }, { status: 400 });
 
-  // Center scope: CENTER_MANAGER (không phải super) chỉ xem HV cơ sở mình.
-  if (hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")) {
-    const ok = await db.student.findFirst({
-      where: { id: studentId, centerId: session.user.centerId },
-      select: { id: true },
-    });
-    if (!ok) return NextResponse.json({ error: "Ngoài phạm vi cơ sở" }, { status: 403 });
-  }
+  // Cách ly cơ sở: Student ∈ SCOPED_MODELS → sdb tự inject centerId IN tầm nhìn actor
+  // (thay check legacy CENTER_MANAGER × User.centerId — giờ áp cho MỌI actor không
+  // cross-center, SUPER_ADMIN/HO bypass). Ngoài tầm nhìn → như không tồn tại (chống IDOR).
+  const actor = await resolveActor(session.user.id);
+  const ok = await scopedDb(actor).student.findFirst({
+    where: { id: studentId },
+    select: { id: true },
+  });
+  if (!ok) return NextResponse.json({ error: "Không tìm thấy học viên" }, { status: 404 });
 
   const t = await getStudentTranscript(studentId);
   if (!t) return NextResponse.json({ error: "Không tìm thấy học viên" }, { status: 404 });

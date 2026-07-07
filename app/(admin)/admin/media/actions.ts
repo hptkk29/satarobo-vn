@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -17,13 +17,16 @@ import { canManageClass } from "@/lib/auth/lms-scope";
 // Duyệt/xoá theo mediaId từ client phải xác minh lớp thuộc tầm nhìn actor.
 async function mediaClassInScope(userId: string | undefined, mediaId: string): Promise<boolean> {
   if (!userId) return false;
-  const m = await db.classSessionMedia.findUnique({
+  const actor = await resolveActor(userId);
+  const sdb = scopedDb(actor);
+  const m = await sdb.classSessionMedia.findUnique({
     where: { id: mediaId },
     select: { classId: true },
   });
   if (!m) return false;
-  const cls = await db.class.findUnique({ where: { id: m.classId }, select: { centerId: true } });
-  const actor = await resolveActor(userId);
+  // Class ∈ SCOPED_MODELS: sdb.findUnique trả null nếu lớp ngoài tầm nhìn → centerId
+  // null → canManageClass deny (tương đương passesScope thủ công trước đây).
+  const cls = await sdb.class.findUnique({ where: { id: m.classId }, select: { centerId: true } });
   return canManageClass(actor, m.classId, cls?.centerId ?? null);
 }
 
@@ -39,8 +42,11 @@ type SessionUser = NonNullable<Session["user"]>;
  * R7-09 — "Sale phụ trách lớp" = Sale (Lead.assignedToId) của các đơn có ghi danh
  * thuộc lớp. DERIVE từ enrollment → orderItem → order → lead (KHÔNG thêm cột).
  */
-async function deriveClassSaleIds(classId: string): Promise<Set<string>> {
-  const orders = await db.order.findMany({
+async function deriveClassSaleIds(
+  sdb: ReturnType<typeof scopedDb>,
+  classId: string,
+): Promise<Set<string>> {
+  const orders = await sdb.order.findMany({
     where: { items: { some: { enrollment: { classId } } } },
     select: { lead: { select: { assignedToId: true } } },
   });
@@ -60,7 +66,10 @@ async function canUploadToClass(
   user: SessionUser,
   classId: string,
 ): Promise<boolean> {
-  const cls = await db.class.findUnique({
+  const actor = await resolveActor(user.id);
+  const sdb = scopedDb(actor);
+  // Class ∈ SCOPED_MODELS → sdb trả null nếu lớp ngoài tầm nhìn actor (cách ly cơ sở).
+  const cls = await sdb.class.findUnique({
     where: { id: classId },
     select: { teacherId: true, assistantId: true, centerId: true },
   });
@@ -70,13 +79,12 @@ async function canUploadToClass(
   // IDOR chéo cơ sở: CS1 manager không upload/đọc context lớp CS2). canManageClass
   // đã enforce passesScope + SUPER_ADMIN/HO bypass. Trùng pattern mediaClassInScope.
   if (await checkPermission("media:approve")) {
-    const actor = await resolveActor(user.id);
     return canManageClass(actor, classId, cls.centerId);
   }
 
   if (cls.teacherId === user.id || cls.assistantId === user.id) return true;
 
-  const saleIds = await deriveClassSaleIds(classId);
+  const saleIds = await deriveClassSaleIds(sdb, classId);
   return saleIds.has(user.id);
 }
 
@@ -101,14 +109,15 @@ export async function getClassUploadContext(
   if (!session?.user) return empty;
   if (!(await canUploadToClass(session.user, classId))) return empty;
 
+  const sdb = scopedDb(await resolveActor(session.user.id));
   const [enr, nonConsent, sessions] = await Promise.all([
-    db.enrollment.findMany({
+    sdb.enrollment.findMany({
       where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
       select: { student: { select: { id: true, name: true } } },
       orderBy: { createdAt: "asc" },
     }),
     getNonConsentStudents(classId),
-    db.classSession.findMany({
+    sdb.classSession.findMany({
       where: { classId },
       select: { id: true, date: true, topic: true },
       orderBy: { date: "desc" },
@@ -170,6 +179,8 @@ export async function uploadClassMedia(input: {
     return { ok: false, error: "Bạn không phụ trách lớp này — không thể đăng ảnh" };
   }
 
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   // Class-wide & tag theo HS là loại trừ nhau: class-wide thì bỏ qua studentIds.
   const isClassWide = !!d.isClassWide;
   const tagIds = isClassWide ? [] : (d.studentIds ?? []);
@@ -177,14 +188,14 @@ export async function uploadClassMedia(input: {
   // C6.3 / AC4 — KHÔNG cho tag HS chưa có consent CLASS_MEDIA (reject server-side).
   // Kiểm tra TRỰC TIẾP theo tagId (không chỉ dựa danh sách lớp) → chống payload tuỳ ý.
   if (tagIds.length > 0) {
-    const granted = await db.studentConsent.findMany({
+    const granted = await sdb.studentConsent.findMany({
       where: { studentId: { in: tagIds }, type: "CLASS_MEDIA", status: "GRANTED" },
       select: { studentId: true },
     });
     const grantedSet = new Set(granted.map((g) => g.studentId));
     const blockedIds = tagIds.filter((id) => !grantedSet.has(id));
     if (blockedIds.length > 0) {
-      const names = await db.student.findMany({
+      const names = await sdb.student.findMany({
         where: { id: { in: blockedIds } },
         select: { name: true },
       });
@@ -208,7 +219,7 @@ export async function uploadClassMedia(input: {
   }
   let classSessionId: string | null = null;
   if (d.classSessionId) {
-    const ses = await db.classSession.findFirst({
+    const ses = await sdb.classSession.findFirst({
       where: { id: d.classSessionId, classId: d.classId },
       select: { id: true, date: true },
     });
@@ -221,7 +232,7 @@ export async function uploadClassMedia(input: {
   // GV/Sale upload → PENDING; người có quyền duyệt upload → APPROVED luôn.
   const autoApprove = await checkPermission("media:approve");
 
-  const created = await db.classSessionMedia.create({
+  const created = await sdb.classSessionMedia.create({
     data: {
       classId: d.classId,
       fileUrl: d.fileUrl,
@@ -243,7 +254,7 @@ export async function uploadClassMedia(input: {
     select: { id: true },
   });
 
-  const cls = await db.class.findUnique({
+  const cls = await sdb.class.findUnique({
     where: { id: d.classId },
     select: { centerId: true },
   });
@@ -280,7 +291,8 @@ export async function reviewMedia(input: {
   }
 
   const { actorId, actorName } = getAuditActor(session);
-  await db.classSessionMedia.update({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  await sdb.classSessionMedia.update({
     where: { id: input.id },
     data: {
       status: input.decision,
@@ -311,7 +323,8 @@ export async function deleteMedia(id: string): Promise<{ ok: boolean; error?: st
     return { ok: false, error: "Không tìm thấy ảnh" };
   }
   const { actorId, actorName } = getAuditActor(session);
-  await db.classSessionMedia.delete({ where: { id } }).catch(() => null);
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  await sdb.classSessionMedia.delete({ where: { id } }).catch(() => null);
   await writeAudit({
     actor: { id: actorId, name: actorName },
     module: "media",

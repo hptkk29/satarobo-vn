@@ -1,5 +1,7 @@
-import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { NewsForm } from "../../_components/news-form";
 
 interface Props {
@@ -7,8 +9,13 @@ interface Props {
 }
 
 export default async function EditNewsPage({ params }: Props) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // News là nội dung global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+
   const { id } = await params;
-  const news = await db.news.findUnique({ where: { id } });
+  const news = await scopedDb(actor).news.findUnique({ where: { id } });
   if (!news) notFound();
 
   return (

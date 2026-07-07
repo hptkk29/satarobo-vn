@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { EmailLogStatus, type Prisma } from "@prisma/client";
 import {
@@ -30,6 +31,10 @@ export default async function EmailLogsPage({ searchParams }: Props) {
   if (!(await checkPermission("emails:view")))
     redirect("/dashboard?error=unauthorized");
 
+  // EmailLog/EmailTemplate là model global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const sp = await searchParams;
   const q = sp.q?.trim() || "";
   const statusParam =
@@ -50,8 +55,8 @@ export default async function EmailLogsPage({ searchParams }: Props) {
   if (templateId) where.templateId = templateId;
 
   const [totalCount, logs, templates] = await Promise.all([
-    db.emailLog.count({ where }),
-    db.emailLog.findMany({
+    sdb.emailLog.count({ where }),
+    sdb.emailLog.findMany({
       where,
       include: {
         template: { select: { id: true, name: true, code: true } },
@@ -60,7 +65,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
-    db.emailTemplate.findMany({
+    sdb.emailTemplate.findMany({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
