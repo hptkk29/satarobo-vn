@@ -3,7 +3,9 @@
 // components/admin/slide-stage.tsx — khung trình chiếu DÙNG CHUNG cho giáo án PDF & SCORM.
 //   • Thanh tiêu đề (luôn hiện kể cả full màn hình): tên + toolbar + nút full + nhãn loại.
 //   • Khung đen chứa nội dung (iframe SCORM hoặc canvas PDF) truyền qua children.
-//   • Watermark {mã NV · tên · giờ} di chuyển + tự khôi phục khi bị sửa (truy vết người lộ).
+//   • Watermark theo câu 56 (Toại, tối giản để không phá trải nghiệm bé): 1 chữ "SataRobo"
+//     cỡ LỚN + rất mờ ở giữa (vẫn đọc slide được) + ID giáo viên (mã NV) nhỏ ở góc, kèm dấu
+//     giờ để truy vết; React dựng lại mỗi giây nếu lớp watermark bị can thiệp DOM.
 //   • Blur overlay CHỈ khi RỜI THẬT (đổi tab / thu nhỏ / chuyển ứng dụng) — KHÔNG ẩn khi
 //     bấm nút/next hay click vào nội dung (focus vào iframe) hay lúc bật/tắt full màn hình.
 //   Lưu ý: KHÔNG thể chặn chụp màn hình OS (PrintScreen / Win+Shift+S) từ web — watermark
@@ -181,23 +183,32 @@ export function SlideStage({
       <div className="relative flex-1 overflow-hidden rounded-md border border-border bg-black">
         {children}
 
-        {/* Watermark LẶP KÍN slide (chéo) — chống xoá bằng Photoshop sau khi chụp:
-            phủ {mã NV · tên · giờ} khắp nội dung; gỡ hết các lớp đè lên slide = phá luôn
-            nội dung. KHÔNG bắt sự kiện. (Web không thể chặn chụp màn hình OS — đây là
-            biện pháp truy vết/răn đe chính.) */}
+        {/* Watermark theo câu 56 (Toại — tối giản, không phá trải nghiệm bé):
+            1 chữ "SataRobo" cỡ LỚN + rất mờ ở giữa (vẫn đọc slide được) + ID giáo viên
+            (mã NV · tên · giờ) nhỏ ở góc để truy vết người trình chiếu. pointer-events:none
+            → KHÔNG chặn thao tác. Re-render mỗi giây (đồng hồ) giúp React dựng lại lớp này
+            nếu bị can thiệp DOM. (Web không chặn được chụp màn hình OS — đây là răn đe/truy vết.) */}
         <div className="pointer-events-none absolute inset-0 z-10 select-none overflow-hidden">
-          <div className="absolute inset-[-20%] flex flex-wrap content-center justify-center gap-x-28 gap-y-28 rotate-[-30deg]">
-            {Array.from({ length: 18 }).map((_, i) => (
-              <span
-                key={i}
-                aria-hidden
-                className="whitespace-nowrap text-3xl font-semibold text-neutral-500"
-                style={{ opacity: 0.1 }}
-              >
-                {watermark}
-              </span>
-            ))}
+          {/* Chữ "SataRobo" lớn, rất mờ, giữa khung — vẫn nhìn thấy nhưng không cản đọc slide */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span
+              aria-hidden
+              className="select-none whitespace-nowrap font-bold uppercase tracking-[0.15em] text-neutral-400"
+              style={{ opacity: 0.07, fontSize: "clamp(2.5rem, 11vw, 9rem)" }}
+            >
+              SataRobo
+            </span>
           </div>
+          {/* ID giáo viên đang chiếu (nhỏ) + giờ ở góc — vệt truy vết ai lộ nội dung */}
+          {watermark ? (
+            <span
+              aria-hidden
+              className="absolute bottom-1.5 right-2.5 whitespace-nowrap text-[11px] font-medium text-neutral-400"
+              style={{ opacity: 0.35 }}
+            >
+              {watermark}
+            </span>
+          ) : null}
         </div>
 
         {/* Blur overlay khi rời cửa sổ học thật sự */}
