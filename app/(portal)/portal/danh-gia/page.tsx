@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { Star } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { FeedbackForm } from "./_components/feedback-form";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,10 @@ export default async function DanhGiaPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "PARENT") redirect("/login");
 
-  const mine = await db.parentFeedback.findMany({
+  // ParentFeedback KHÔNG thuộc SCOPED_MODELS → scopedDb pass-through (cách ly bằng
+  // ownership: where parentUserId của chính PH đang đăng nhập).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const mine = await sdb.parentFeedback.findMany({
     where: { parentUserId: session.user.id },
     orderBy: { createdAt: "desc" },
     take: 50,

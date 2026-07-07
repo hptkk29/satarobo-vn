@@ -7,7 +7,8 @@ import {
 } from "@/lib/portal/learning";
 import { getStudentProgress } from "@/lib/progress";
 import { getStudentClassProgress } from "@/lib/students/progress";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
@@ -21,7 +22,7 @@ const ASSIGN_STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 export default async function KetQuaPage() {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
   const [classes, examResults, assignmentResults, latestReport] =
     await Promise.all([
       getStudentClasses(studentId),
@@ -38,7 +39,10 @@ export default async function KetQuaPage() {
   );
 
   // LMS-5 — năng lực robotics hiện tại (bản mới nhất mỗi kỹ năng).
-  const skillRows = await db.studentSkillAssessment.findMany({
+  // StudentSkillAssessment KHÔNG thuộc SCOPED_MODELS → scopedDb pass-through
+  // (cách ly bằng ownership: studentId đã verify qua requireActiveStudent).
+  const sdb = scopedDb(await resolveActor(ctx.parentUserId));
+  const skillRows = await sdb.studentSkillAssessment.findMany({
     where: { studentId },
     orderBy: { assessedAt: "desc" },
     select: { skill: true, level: true },

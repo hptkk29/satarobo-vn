@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getPortalContext } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 
 // Phase NHÓM 3 — phụ huynh gửi đánh giá (gắn với con đang chọn).
 const schema = z.object({
@@ -23,7 +24,10 @@ export async function createParentFeedback(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  await db.parentFeedback.create({
+  // ParentFeedback KHÔNG thuộc SCOPED_MODELS → scopedDb pass-through (portal cách ly
+  // bằng ownership: parentUserId/activeStudent đã verify trong getPortalContext).
+  const sdb = scopedDb(await resolveActor(ctx.parentUserId));
+  await sdb.parentFeedback.create({
     data: {
       parentUserId: ctx.parentUserId,
       parentName: ctx.parentName,
