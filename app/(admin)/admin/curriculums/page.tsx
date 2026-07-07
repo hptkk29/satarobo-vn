@@ -2,7 +2,8 @@ import Link from "next/link";
 import { BookOpen, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import type { Prisma } from "@prisma/client";
 
@@ -35,8 +36,13 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
     ...(activeFilter !== undefined ? { isActive: activeFilter } : {}),
   };
 
+  // Nhóm 01 L1 — Curriculum/Course = giáo trình dùng chung toàn hệ thống (câu 74a),
+  // scopedDb pass-through; dùng để sạch whitelist db trần.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [curriculums, courses] = await Promise.all([
-    db.curriculum.findMany({
+    sdb.curriculum.findMany({
       where,
       include: {
         course: { select: { name: true } },
@@ -45,7 +51,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
       orderBy: [{ courseId: "asc" }, { version: "desc" }],
       take: 200,
     }),
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },

@@ -2,7 +2,8 @@
 
 import { auth } from "@/lib/auth";
 import { hasAnyRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -103,7 +104,10 @@ async function requireAdmin() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  return session.user;
+  // Nhóm 01 L1 — CoursePackage/Course = catalog LMS toàn cục (không center-scope),
+  // scopedDb pass-through; dùng để sạch whitelist db trần.
+  const actor = await resolveActor(session.user.id);
+  return { user: session.user, sdb: scopedDb(actor) };
 }
 
 function readPackageForm(formData: FormData, includeCode: boolean) {
@@ -151,7 +155,7 @@ function readPackageForm(formData: FormData, includeCode: boolean) {
 }
 
 export async function createPackage(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { sdb } = await requireAdmin();
 
   const parsed = packageSchema.safeParse(readPackageForm(formData, true));
   if (!parsed.success) {
@@ -202,37 +206,44 @@ export async function createPackage(formData: FormData): Promise<ActionResult> {
   };
 
   try {
-    await db.coursePackage.create({ data });
+    await sdb.coursePackage.create({ data });
   } catch {
     return { error: "Slug hoac code da ton tai, hoac co loi co so du lieu" };
   }
 
   // Đợt 6 — đồng bộ "Số buổi" sang Course.totalSessions (khớp slug/code).
-  await syncCourseTotalSessions({ slug: data.slug, code: data.code, lessons: data.lessons ?? null });
+  await syncCourseTotalSessions(sdb, {
+    slug: data.slug,
+    code: data.code,
+    lessons: data.lessons ?? null,
+  });
 
   revalidatePath("/course-packages");
   redirect("/course-packages");
 }
 
 /** Đồng bộ số buổi (CoursePackage.lessons) → Course.totalSessions theo slug/code. */
-async function syncCourseTotalSessions(opts: {
-  slug?: string | null;
-  code?: string | null;
-  lessons: number | null;
-}): Promise<void> {
+async function syncCourseTotalSessions(
+  sdb: ReturnType<typeof scopedDb>,
+  opts: {
+    slug?: string | null;
+    code?: string | null;
+    lessons: number | null;
+  },
+): Promise<void> {
   const or: { slug?: string; code?: string }[] = [];
   if (opts.slug) or.push({ slug: opts.slug });
   if (opts.code) or.push({ code: opts.code });
   if (or.length === 0) return;
   try {
-    await db.course.updateMany({ where: { OR: or }, data: { totalSessions: opts.lessons } });
+    await sdb.course.updateMany({ where: { OR: or }, data: { totalSessions: opts.lessons } });
   } catch {
     /* khoá chưa có bản Course tương ứng — bỏ qua */
   }
 }
 
 export async function updatePackage(id: string, formData: FormData): Promise<ActionResult> {
-  const admin = await requireAdmin();
+  const { user: admin, sdb } = await requireAdmin();
 
   const parsed = packageSchema.safeParse(readPackageForm(formData, false));
   if (!parsed.success) {
@@ -283,7 +294,7 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
   };
 
   try {
-    await db.coursePackage.update({ where: { id }, data });
+    await sdb.coursePackage.update({ where: { id }, data });
   } catch {
     return { error: "Package khong ton tai, slug bi trung, hoac co loi co so du lieu" };
   }
@@ -306,11 +317,11 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
 
   // Đợt 6 — đồng bộ "Số buổi" sang Course.totalSessions (đọc lại slug/code đã lưu).
   try {
-    const saved = await db.coursePackage.findUnique({
+    const saved = await sdb.coursePackage.findUnique({
       where: { id },
       select: { slug: true, code: true, lessons: true },
     });
-    if (saved) await syncCourseTotalSessions(saved);
+    if (saved) await syncCourseTotalSessions(sdb, saved);
   } catch {
     /* bỏ qua lỗi đồng bộ — không chặn lưu package */
   }
@@ -321,10 +332,10 @@ export async function updatePackage(id: string, formData: FormData): Promise<Act
 }
 
 export async function deletePackage(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { sdb } = await requireAdmin();
 
   try {
-    await db.coursePackage.delete({ where: { id } });
+    await sdb.coursePackage.delete({ where: { id } });
   } catch {
     return { error: "Khong the xoa package nay" };
   }

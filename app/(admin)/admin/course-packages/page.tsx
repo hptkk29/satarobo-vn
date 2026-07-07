@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
@@ -13,7 +14,12 @@ export default async function CoursePackagesPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const packages = await db.coursePackage.findMany({
+  // Nhóm 01 L1 — CoursePackage/Course = catalog LMS toàn cục (không center-scope),
+  // scopedDb pass-through; dùng để sạch whitelist db trần.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const packages = await sdb.coursePackage.findMany({
     orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
     select: {
       id: true,

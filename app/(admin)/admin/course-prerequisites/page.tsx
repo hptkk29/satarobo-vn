@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Workflow } from "lucide-react";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { PrerequisitesManager } from "./_components/prerequisites-manager";
 
@@ -17,13 +18,17 @@ export default async function CoursePrerequisitesPage() {
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("courses:create"))) redirect("/dashboard");
 
+  // Nhóm 01 L1 — Course/CoursePrerequisite = catalog LMS toàn cục, scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [allCourses, withPrereqs] = await Promise.all([
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true },
     }),
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true, prerequisites: { some: {} } },
       orderBy: { displayOrder: "asc" },
       select: {

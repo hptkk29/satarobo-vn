@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { classGroupCreateSchema } from "@/lib/validators/class-group";
@@ -68,14 +68,15 @@ export async function createClassGroup(
   if (!centerId) return { error: "Nhóm lớp phải thuộc một cơ sở cụ thể" };
 
   // Cách ly cơ sở: chỉ tạo nhóm lớp cho cơ sở trong tầm nhìn actor.
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!actorCanUseCenter(actor, centerId)) {
-      return { error: "Không có quyền tạo nhóm lớp cho cơ sở này" };
-    }
+  const uid = session.user.id;
+  if (!uid) return { error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  if (!actorCanUseCenter(actor, centerId)) {
+    return { error: "Không có quyền tạo nhóm lớp cho cơ sở này" };
   }
+  const sdb = scopedDb(actor);
 
-  const center = await db.center.findUnique({
+  const center = await sdb.center.findUnique({
     where: { id: centerId },
     select: { code: true },
   });
@@ -83,7 +84,8 @@ export async function createClassGroup(
 
   try {
     // Atomic: sinh code + tạo group trong cùng transaction.
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       const code = await genClassGroupCode(center.code ?? "CS", tx);
       await tx.classGroup.create({
         data: {
@@ -141,7 +143,7 @@ export async function updateClassGroup(
     return { error: "Không có quyền chuyển nhóm lớp sang cơ sở này" };
   }
 
-  await db.classGroup.update({
+  await sdb.classGroup.update({
     where: { id },
     data: {
       displayCode: data.displayCode,
@@ -162,15 +164,15 @@ export async function updateClassGroup(
 export async function deleteClassGroup(id: string): Promise<ActionResult> {
   const session = await requireWrite("delete");
   // Cách ly cơ sở: chỉ xoá nhóm lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    const sdb = scopedDb(actor);
-    const existing = await sdb.classGroup.findUnique({ where: { id }, select: { centerId: true } });
-    if (!existing || !passesScope("ClassGroup", existing, actor)) {
-      return { error: "Nhóm lớp không tồn tại" };
-    }
+  const uid = session.user.id;
+  if (!uid) return { error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.classGroup.findUnique({ where: { id }, select: { centerId: true } });
+  if (!existing || !passesScope("ClassGroup", existing, actor)) {
+    return { error: "Nhóm lớp không tồn tại" };
   }
-  await db.classGroup.update({
+  await sdb.classGroup.update({
     where: { id },
     data: { deletedAt: new Date() },
   });
@@ -194,17 +196,17 @@ export async function deleteClassGroupAction(
   }
 
   // Cách ly cơ sở: chỉ xoá nhóm lớp trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    const sdb = scopedDb(actor);
-    const existing = await sdb.classGroup.findUnique({ where: { id }, select: { centerId: true } });
-    if (!existing || !passesScope("ClassGroup", existing, actor)) {
-      return { ok: false, error: "Nhóm lớp không tồn tại" };
-    }
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const existing = await sdb.classGroup.findUnique({ where: { id }, select: { centerId: true } });
+  if (!existing || !passesScope("ClassGroup", existing, actor)) {
+    return { ok: false, error: "Nhóm lớp không tồn tại" };
   }
 
   try {
-    await db.classGroup.update({
+    await sdb.classGroup.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
@@ -228,11 +230,16 @@ export async function searchStudentsForGroup(
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("class_group:edit"))) return { ok: false, error: "Không có quyền" };
 
-  const group = await db.classGroup.findUnique({ where: { id: groupId }, select: { centerId: true } });
+  // Cách ly cơ sở: nhóm ngoài tầm nhìn → null (sdb IDOR-filter trên findUnique).
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const group = await sdb.classGroup.findUnique({ where: { id: groupId }, select: { centerId: true } });
   if (!group) return { ok: false, error: "Không tìm thấy nhóm" };
 
   const q = query.trim();
-  const items = await db.student.findMany({
+  const items = await sdb.student.findMany({
     where: {
       deletedAt: null,
       classGroupId: null,
@@ -269,7 +276,7 @@ export async function addStudentToGroup(input: { groupId: string; studentId: str
   if (student.classGroupId && student.classGroupId !== input.groupId) {
     return { ok: false, error: "Học viên đã thuộc nhóm khác — gỡ khỏi nhóm cũ trước" };
   }
-  await db.student.update({ where: { id: student.id }, data: { classGroupId: input.groupId } });
+  await sdb.student.update({ where: { id: student.id }, data: { classGroupId: input.groupId } });
   revalidatePath(`/class-groups/${input.groupId}`);
   return { ok: true };
 }
@@ -280,15 +287,15 @@ export async function removeStudentFromGroup(input: { groupId: string; studentId
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("class_group:edit"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ gỡ HV trong tầm nhìn actor (chống IDOR).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    const sdb = scopedDb(actor);
-    const student = await sdb.student.findUnique({ where: { id: input.studentId }, select: { centerId: true } });
-    if (!student || !passesScope("Student", student, actor)) {
-      return { ok: false, error: "Không tìm thấy học viên" };
-    }
+  const uid = session.user.id;
+  if (!uid) return { ok: false, error: "Phiên không hợp lệ" };
+  const actor = await resolveActor(uid);
+  const sdb = scopedDb(actor);
+  const student = await sdb.student.findUnique({ where: { id: input.studentId }, select: { centerId: true } });
+  if (!student || !passesScope("Student", student, actor)) {
+    return { ok: false, error: "Không tìm thấy học viên" };
   }
-  await db.student.update({ where: { id: input.studentId }, data: { classGroupId: null } });
+  await sdb.student.update({ where: { id: input.studentId }, data: { classGroupId: null } });
   revalidatePath(`/class-groups/${input.groupId}`);
   return { ok: true };
 }
@@ -332,7 +339,7 @@ export async function enrollGroupIntoClass(input: {
       skipped++;
       continue;
     }
-    const existing = await db.enrollment.findFirst({
+    const existing = await sdb.enrollment.findFirst({
       where: { studentId, classId: cls.id, status: { in: [...ENROLL_ACTIVE] } },
       select: { id: true },
     });
@@ -340,7 +347,7 @@ export async function enrollGroupIntoClass(input: {
       skipped++;
       continue;
     }
-    await db.enrollment.create({
+    await sdb.enrollment.create({
       data: { studentId, classId: cls.id, courseId: cls.courseId, centerId: cls.centerId, status: "CONFIRMED", confirmedAt: new Date(), notes: `Ghi danh theo nhóm ${input.groupId}` },
     });
     created++;
