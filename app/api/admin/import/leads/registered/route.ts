@@ -12,7 +12,12 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb, getModelVisibleCenterIds, logScopeBypass } from "@/lib/db-scope";
+import {
+  scopedDb,
+  passesScope,
+  getModelVisibleCenterIds,
+  logScopeBypass,
+} from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -141,6 +146,23 @@ export async function POST(req: NextRequest) {
   });
 
   const changedMerges = plan.merges.filter((m) => m.changed);
+
+  // ── Cách ly cơ sở trên đường TẠO lead (DoD#4). scopedDb chỉ scope READ, KHÔNG
+  // scope WRITE → chốt WRITE bằng passesScope per-lead như route import sự kiện
+  // (app/api/admin/import/leads/route.ts): actor center-level KHÔNG được tạo lead
+  // cho cơ sở NGOÀI phạm vi (vd Sale CS1 gặp dòng gắn CS2 → loại, không tạo lead CS2).
+  // Lead untagged (centerId null) KHÔNG phải leak cross-center → giữ (tạo như hiện trạng;
+  // gán cơ sở sau). Đường GỘP (merge) là dedupe SĐT toàn hệ thống có chủ đích (câu 34,
+  // đã audit bypass ở trên) — giữ nguyên semantics, xem ghi chú deviation task #07.
+  const scopeRejected: { sdt: string; tenPH: string; coSo: string }[] = [];
+  const scopedCreates = plan.creates.filter((c) => {
+    if (c.centerId == null || passesScope("Lead", { centerId: c.centerId }, actor)) {
+      return true;
+    }
+    scopeRejected.push({ sdt: c.phone, tenPH: c.parentName, coSo: c.centerId });
+    return false;
+  });
+
   const summary = {
     // Preview dry-run theo spec task #07.
     tongDongDoc: parsed.totalDataRows,
@@ -150,11 +172,12 @@ export async function POST(req: NextRequest) {
     loi: parsed.errors.map((e) => ({ sheet: e.sheet, dong: e.row, lyDo: e.reason })),
     phuHuynh: parsed.parents.length,
     hocVien: parsed.parents.reduce((n, p) => n + p.children.length, 0),
-    seTao: plan.creates.map((c) => ({
+    seTao: scopedCreates.map((c) => ({
       sdt: c.phone,
       tenPH: c.parentName,
       soCon: c.children.length,
     })),
+    ngoaiPhamVi: scopeRejected,
     seGop: plan.merges.map((m) => ({
       sdt: m.phone,
       tenPH: m.parentName,
@@ -178,7 +201,7 @@ export async function POST(req: NextRequest) {
   try {
     await sdb.$transaction(
       async (tx) => {
-        for (const c of plan.creates) {
+        for (const c of scopedCreates) {
           await tx.lead.create({
             data: {
               parentName: c.parentName,
