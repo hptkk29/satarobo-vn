@@ -1,11 +1,16 @@
 import type { Role } from "@prisma/client";
+import { isTeacherSiteEnabled } from "@/lib/flags";
 
 /**
  * Host-based access control — PURE decision layer (no NextRequest dependency).
  *
- * 3 subdomain · 8 role. Quy tắc truy cập theo HOST (tầng 1):
+ * 4 subdomain · 8 role. Quy tắc truy cập theo HOST (tầng 1):
  *  - 7 role staff (mọi role TRỪ PARENT): vào được admin host; CẤM portal host.
  *  - PARENT: vào được portal host; CẤM admin host.
+ *  - TEACHER (L5, flag `TEACHER_SITE_ENABLED`): vào được teacher host
+ *    (`giaovien.satarobo.vn` — phiếu BGĐ câu 7, 04/07/2026); role khác vào
+ *    teacher host bị đá về khu của họ. Flag OFF → teacher host bounce về admin
+ *    (GV tiếp tục dùng admin, KHÔNG đổi hành vi hiện tại).
  *  - Chưa login + route bảo vệ: redirect /login GIỮ NGUYÊN host đang đứng.
  *  - Public host: ai cũng vào; route /admin|/portal lọt vào → đá về đúng host.
  *
@@ -15,9 +20,23 @@ import type { Role } from "@prisma/client";
  * proxy.ts (middleware) chỉ đọc host/pathname/session rồi gọi `decideRoute()`
  * và thực thi `RouteDecision`. Toàn bộ logic quyết định được test bằng
  * `route-policy.test.ts` (bảng tổ hợp host × role × sessionValid).
+ *
+ * ⚠️ L5 WIRING CÒN THIẾU (PR proxy riêng, đi cùng ticket DNS/Vercel — KHÔNG làm
+ * trong PR này vì proxy.ts đang khoá): (1) `detectHost()` map
+ * `giaovien.satarobo.vn` → "teacher"; (2) thêm `teacher: GIAOVIEN_HOST` vào
+ * `HOST_BY_KIND`; (3) mở rộng union `RouteDecision.redirectHost.host` thêm
+ * "teacher" + rule "TEACHER-only trên admin host (flag ON) → redirectHost
+ * teacher". Trước khi wiring, host giaovien rơi vào nhánh `unknown` của proxy —
+ * decideRoute chưa nhận hostKind "teacher" từ production.
  */
 
-export type HostKind = "public" | "admin" | "portal" | "vercel" | "unknown";
+export type HostKind =
+  | "public"
+  | "admin"
+  | "portal"
+  | "teacher"
+  | "vercel"
+  | "unknown";
 
 /** `null` = chưa login. */
 export type MaybeRole = Role | null;
@@ -42,6 +61,11 @@ export interface RouteInput {
   roles?: MaybeRole[];
   /** `false` nếu deactivated / tokenVersion mismatch / không có session. */
   sessionValid: boolean;
+  /**
+   * L5 — flag site giáo viên. Bỏ trống → đọc env `TEACHER_SITE_ENABLED`
+   * (mặc định OFF). Test truyền tường minh để không phụ thuộc env.
+   */
+  teacherSiteEnabled?: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -155,6 +179,11 @@ export function isPortalPath(p: string): boolean {
   return p === "/portal" || p.startsWith("/portal/");
 }
 
+/** L5 — path site giáo viên (route group `app/(teacher)/teacher/*`). */
+export function isTeacherPath(p: string): boolean {
+  return p === "/teacher" || p.startsWith("/teacher/");
+}
+
 export function isLegacyAdminPrefixed(p: string): boolean {
   return p === "/admin" || p.startsWith("/admin/");
 }
@@ -179,6 +208,7 @@ export function sanitizeCallbackUrl(p: string): string {
 
 const PORTAL_HOME = "/";
 const STAFF_HOME = "/dashboard";
+const TEACHER_HOME = "/"; // clean URL trên teacher host (rewrite nội bộ → /teacher)
 
 /**
  * Quyết định routing thuần tuý cho 3 host thật (public/admin/portal).
@@ -203,6 +233,9 @@ export function decideRoute(input: RouteInput): RouteDecision {
   // nhân viên (≠ PARENT) → ưu tiên host admin nếu lỡ trộn (defensive).
   const isStaff = authed && effectiveRoles.some((r) => r !== null && r !== "PARENT");
   const isParent = authed && !isStaff && effectiveRoles.includes("PARENT");
+  // L5 — có role TEACHER (kể cả kiêm nhiệm) → được vào teacher host khi flag ON.
+  const isTeacher = authed && effectiveRoles.includes("TEACHER");
+  const teacherSiteOn = input.teacherSiteEnabled ?? isTeacherSiteEnabled();
 
   // Chỉ gắn reason khi đã từng có session nhưng bị vô hiệu (deactivated),
   // KHÔNG gắn cho khách ẩn danh (chưa login).
@@ -266,6 +299,75 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (isPortalPath(pathname)) return { type: "next" };
     if (pathname === "/") return { type: "rewrite", path: "/portal" };
     return { type: "rewrite", path: "/portal" + pathname };
+  }
+
+  // ── Teacher host (giaovien.satarobo.vn) — L5, phiếu BGĐ câu 7 (04/07/2026) ─
+  // 2-phase qua flag TEACHER_SITE_ENABLED. Chỉ TEACHER (kể cả đa vai trò kiêm
+  // TEACHER); role khác đá về khu của họ. Clean URL rewrite nội bộ → /teacher/*.
+  if (hostKind === "teacher") {
+    if (isInfraPath(pathname)) return { type: "next" };
+
+    // Flag OFF (phase 1): site GV chưa mở — GIỮ hành vi hiện tại (GV làm việc
+    // trên admin). KHÔNG serve site GV, KHÔNG đá GV khỏi admin.
+    if (!teacherSiteOn) {
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
+    }
+
+    if (pathname === "/login") {
+      if (isTeacher) return { type: "redirectPath", path: TEACHER_HOME };
+      if (isStaff) {
+        return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
+      }
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "next" }; // chưa login → form login
+    }
+
+    // Trang kích hoạt OTP — công khai (chưa login vẫn vào).
+    if (pathname === "/kich-hoat") {
+      if (isTeacher) return { type: "redirectPath", path: TEACHER_HOME };
+      if (isStaff) {
+        return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
+      }
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "next" };
+    }
+
+    if (!authed) {
+      return {
+        type: "redirectPath",
+        path: "/login",
+        callbackUrl: sanitizeCallbackUrl(pathname),
+        reason: invalidReason,
+      };
+    }
+
+    // Đã login nhưng KHÔNG có role TEACHER → về đúng khu của họ.
+    if (!isTeacher) {
+      if (isStaff) {
+        return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
+      }
+      return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+    }
+
+    // TEACHER: chuẩn hoá path lạc khu (vd callbackUrl mặc định /dashboard,
+    // /portal/*, legacy /admin/*) về teacher home, rồi rewrite clean URL.
+    if (
+      isAdminRoute(pathname) ||
+      isPortalPath(pathname) ||
+      isLegacyAdminPrefixed(pathname)
+    ) {
+      return { type: "redirectPath", path: TEACHER_HOME };
+    }
+    if (isTeacherPath(pathname)) return { type: "next" };
+    if (pathname === "/") return { type: "rewrite", path: "/teacher" };
+    return { type: "rewrite", path: "/teacher" + pathname };
   }
 
   // ── Admin host (admin.satarobo.vn) — clean URLs, internal rewrite ────────

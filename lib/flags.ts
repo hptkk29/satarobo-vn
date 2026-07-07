@@ -67,3 +67,16 @@ export function isScormEnabled(): boolean {
 export function isPortalV2Enabled(): boolean {
   return process.env.PORTAL_V2_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * L5 — Site giáo viên riêng `giaovien.satarobo.vn` (ĐẢO Doc 15 §0 theo phiếu BGĐ
+ * câu 7, ký 04/07/2026). 2-phase:
+ *  - OFF (mặc định): hành vi hiện tại Y NGUYÊN — GV vẫn làm việc trên admin,
+ *    layout `app/(teacher)` đá về /dashboard, host giaovien (khi đã wiring
+ *    proxy) bounce về admin. KHÔNG đá GV khỏi admin khi site chưa đủ tính năng.
+ *  - ON: GV trên host giaovien vào site GV (decideRoute rewrite /teacher/*);
+ *    role khác vào giaovien bị đá về khu của họ. Bật sau khi L6 đủ tính năng.
+ */
+export function isTeacherSiteEnabled(): boolean {
+  return process.env.TEACHER_SITE_ENABLED === "true"; // mặc định OFF
+}

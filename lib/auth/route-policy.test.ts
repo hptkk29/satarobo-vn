@@ -446,6 +446,226 @@ describe("3B. đa vai trò (roles[])", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// L5 — teacher host (giaovien.satarobo.vn) × role × flag TEACHER_SITE_ENABLED
+// (phiếu BGĐ câu 7, 04/07/2026). 2-phase: flag OFF = hành vi hiện tại y nguyên.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("L5. teacher host × role — flag OFF (mặc định)", () => {
+  const OFF = { teacherSiteEnabled: false } as const;
+
+  it("TEACHER trên giaovien → bounce admin /dashboard (site chưa mở, GV vẫn dùng admin)", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/", ...authed("TEACHER"), ...OFF }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("mọi staff role trên giaovien → bounce admin; PARENT → portal; ẩn danh → admin", () => {
+    for (const role of STAFF_ROLES) {
+      expect(
+        decideRoute({ hostKind: "teacher", pathname: "/lich", ...authed(role), ...OFF }),
+      ).toEqual<RouteDecision>({
+        type: "redirectHost",
+        host: "admin",
+        path: "/dashboard",
+        status: 307,
+      });
+    }
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/lich", ...authed("PARENT"), ...OFF }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/lich", role: null, sessionValid: false, ...OFF }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("bỏ trống flag (env unset trong test) → mặc định OFF", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/", ...authed("TEACHER") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("infra path → next (không bị bounce, kể cả flag OFF)", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/api/auth/session", role: null, sessionValid: false, ...OFF }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+});
+
+describe("L5. teacher host × role — flag ON", () => {
+  const ON = { teacherSiteEnabled: true } as const;
+
+  it("TEACHER: / → rewrite /teacher; clean URL /lich → rewrite /teacher/lich; /teacher/lich → next", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/teacher" });
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/lich", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/teacher/lich" });
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/teacher/lich", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("TEACHER ở /login (đã login) → teacher home", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/login", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+
+  it("đa vai trò kiêm TEACHER ([CENTER_MANAGER, TEACHER]) → vào site GV", () => {
+    expect(
+      decideRoute({
+        hostKind: "teacher",
+        pathname: "/lich",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "TEACHER"],
+        sessionValid: true,
+        ...ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/teacher/lich" });
+  });
+
+  it("staff KHÔNG có role TEACHER (CENTER_MANAGER) → bounce admin /dashboard", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/lich", ...authed("CENTER_MANAGER"), ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+    // kể cả đứng ở /login
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/login", ...authed("CENTER_MANAGER"), ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("PARENT → bounce portal /", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/lich", ...authed("PARENT"), ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/login", ...authed("PARENT"), ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("chưa login → /login GIỮ host teacher + callbackUrl; ở /login → next (form)", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/lich", role: null, sessionValid: false, ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/lich",
+      reason: undefined,
+    });
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/login", role: null, sessionValid: false, ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("sessionValid=false (deactivated) → /login + reason", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/lich", role: "TEACHER", sessionValid: false, ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/lich",
+      reason: "session-invalidated",
+    });
+  });
+
+  it("TEACHER vào path lạc khu (/dashboard, /portal/x, /admin/x) → teacher home", () => {
+    for (const p of ["/dashboard", "/leads", "/portal/lich-hoc", "/admin/leads"]) {
+      expect(
+        decideRoute({ hostKind: "teacher", pathname: p, ...authed("TEACHER"), ...ON }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    }
+  });
+
+  it("infra path → next", () => {
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/_next/static/x.js", role: null, sessionValid: false, ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+});
+
+describe("L5. TEACHER trên host khác — hành vi GIỮ NGUYÊN cả 2 trạng thái flag", () => {
+  // ⚠️ "GV trên admin host (flag ON) → redirectHost giaovien" CHƯA bật được ở
+  // đây: cần wiring proxy.ts (detectHost + HOST_BY_KIND + mở union redirectHost)
+  // — xem ghi chú L5 WIRING trong route-policy.ts. Đi cùng PR ticket DNS/Vercel.
+  // Test này KHÓA hành vi hiện tại để flag ON không phá GV đang làm việc trên admin.
+  for (const flag of [false, true]) {
+    it(`flag=${flag}: TEACHER trên admin host → rewrite /admin/* (vẫn dùng admin)`, () => {
+      expect(
+        decideRoute({
+          hostKind: "admin",
+          pathname: "/leads",
+          ...authed("TEACHER"),
+          teacherSiteEnabled: flag,
+        }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+    });
+
+    it(`flag=${flag}: TEACHER trên public host (apex) → next`, () => {
+      expect(
+        decideRoute({
+          hostKind: "public",
+          pathname: "/khoa-hoc",
+          ...authed("TEACHER"),
+          teacherSiteEnabled: flag,
+        }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    });
+
+    it(`flag=${flag}: TEACHER login xong trên admin host → /dashboard (chưa auto-bounce giaovien)`, () => {
+      expect(
+        decideRoute({
+          hostKind: "admin",
+          pathname: "/login",
+          ...authed("TEACHER"),
+          teacherSiteEnabled: flag,
+        }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/dashboard" });
+    });
+  }
+});
+
 describe("Invariants bảo mật", () => {
   it("PARENT KHÔNG bao giờ nhận rewrite vào /admin/*", () => {
     for (const p of ["/leads", "/dashboard", "/users", "/nhan-su", "/settings"]) {
@@ -459,6 +679,23 @@ describe("Invariants bảo mật", () => {
       for (const p of ["/lich-hoc", "/bai-tap", "/ho-so"]) {
         const d = decideRoute({ hostKind: "portal", pathname: p, ...authed(role) });
         expect(d.type === "rewrite" && d.path.startsWith("/portal")).toBe(false);
+      }
+    }
+  });
+
+  it("L5: role KHÔNG-TEACHER không bao giờ nhận rewrite vào /teacher/* (kể cả flag ON)", () => {
+    const nonTeacher = [...STAFF_ROLES.filter((r) => r !== "TEACHER"), "PARENT"] as const;
+    for (const role of nonTeacher) {
+      for (const p of ["/", "/lich", "/teacher/lich"]) {
+        for (const flag of [false, true]) {
+          const d = decideRoute({
+            hostKind: "teacher",
+            pathname: p,
+            ...authed(role),
+            teacherSiteEnabled: flag,
+          });
+          expect(d.type === "rewrite" || d.type === "next").toBe(false);
+        }
       }
     }
   });

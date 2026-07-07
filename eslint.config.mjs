@@ -138,6 +138,25 @@ export default tseslint.config(
     },
   },
 
+  // app/(teacher)/** — L5 site giáo viên: shadcn THUẦN (chặn Magic/Motion như
+  // admin + Recharts như client) + db block (site MỚI đi scopedDb từ đầu,
+  // KHÔNG grandfather).
+  {
+    files: ['app/(teacher)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
   // R6-F1 — grandfather: 201 file hiện trạng tạm miễn db block (whitelist→0 theo
   // từng epic). Vẫn GIỮ Magic/Motion block (chỉ bỏ pattern @/lib/db). Override này
   // đặt CUỐI để thắng. Migrate file sang scopedDb → xóa entry khỏi allowlist.
