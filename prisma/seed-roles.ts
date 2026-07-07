@@ -222,6 +222,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:view-own", scopeType: "OWN" },
       { action: "leads:create", scopeType: "OWN" },
       { action: "leads:edit", scopeType: "OWN" },
+      // Task #07 — quyết định user 07/07/2026: Sale được import danh sách "đã đăng
+      // ký" (Sale giữ Google Sheet gốc — câu 33). CENTER: import gán vào cơ sở mình.
+      { action: "leads:import", scopeType: "CENTER" },
       { action: "students:create", scopeType: "CENTER" },
       { action: "students:view-all", scopeType: "CENTER" },
       { action: "students:edit", scopeType: "CENTER" },

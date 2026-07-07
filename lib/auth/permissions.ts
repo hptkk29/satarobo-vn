@@ -294,10 +294,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
-  // Task #07 — theo pattern students:import. NOTE: chưa seed RolePermission v2
-  // (rolepermission-seed-gap.md) — khi bật RBAC_V2 cần seed leads:import cho
-  // CENTER_MANAGER (CENTER) + cân nhắc CENTER_SALES_CSM (hỏi Kiệt).
-  "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Task #07 — theo pattern students:import. SALES_CSM được cấp theo quyết định
+  // user 07/07/2026 (Sale là người giữ danh sách đăng ký thật — câu 33 phiếu Sale).
+  // v2: đã seed CENTER scope cho CENTER_SALES_CSM trong seed-roles.ts cùng ngày.
+  "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
 
   // --- Trial classes (Phase T1.4) ---
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
