@@ -2,7 +2,8 @@ import Link from "next/link";
 import { FileSpreadsheet, HelpCircle, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { QuestionType, QuestionDifficulty } from "@prisma/client";
 import { buildQuestionWhere } from "@/lib/questions/filter";
@@ -69,8 +70,13 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
     tag: tagFilter,
   });
 
+  // Nhóm 01 L1 — Question/Lesson/Curriculum = ngân hàng câu hỏi + giáo trình
+  // toàn cục (không center-scope), scopedDb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [questions, lessons, curriculums] = await Promise.all([
-    db.question.findMany({
+    sdb.question.findMany({
       where,
       include: {
         lesson: {
@@ -87,13 +93,13 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
       orderBy: { updatedAt: "desc" },
       take: 100,
     }),
-    db.lesson.findMany({
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       include: { curriculum: { select: { name: true } } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       take: 500,
     }),
-    db.curriculum.findMany({
+    sdb.curriculum.findMany({
       where: { isActive: true },
       include: { course: { select: { name: true } } },
       orderBy: [{ courseId: "asc" }, { version: "desc" }],

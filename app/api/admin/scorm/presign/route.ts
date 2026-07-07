@@ -10,7 +10,8 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getR2Client, getR2Bucket } from "@/lib/storage/r2-client";
 import { isScormEnabled } from "@/lib/flags";
 
@@ -66,8 +67,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Nhóm 01 L1 — Lesson/ScormPackage = học liệu toàn cục (không center-scope),
+  // scopedDb pass-through; dùng để sạch whitelist db trần.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   // Buổi phải tồn tại trước khi tạo gói (FK + tránh gói mồ côi).
-  const lesson = await db.lesson.findUnique({
+  const lesson = await sdb.lesson.findUnique({
     where: { id: lessonId },
     select: { id: true },
   });
@@ -80,7 +85,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // Tạo bản ghi UPLOADING trước → có id để dựng prefix R2 ổn định.
-    const pkg = await db.scormPackage.create({
+    const pkg = await sdb.scormPackage.create({
       data: {
         lessonId,
         name,
@@ -92,7 +97,7 @@ export async function POST(req: NextRequest) {
     });
     const storagePrefix = `scorm/${pkg.id}/`;
     const uploadKey = `${storagePrefix}_src/package.zip`;
-    await db.scormPackage.update({
+    await sdb.scormPackage.update({
       where: { id: pkg.id },
       data: { storagePrefix, uploadKey },
     });
