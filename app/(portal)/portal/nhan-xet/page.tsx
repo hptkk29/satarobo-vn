@@ -1,5 +1,6 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import {
   getStudentSessionEvals,
   getSessionMediaForStudent,
@@ -40,8 +41,12 @@ export default async function NhanXetPage() {
     );
   }
 
+  // StudentSessionFeedback KHÔNG thuộc SCOPED_MODELS → scopedDb pass-through
+  // (cách ly bằng ownership: studentId đã verify qua requireActiveStudent; nested
+  // include classSession/class chỉ đọc metadata buổi của chính feedback đó).
+  const sdb = scopedDb(await resolveActor(ctx.parentUserId));
   const [feedbacks, evals] = await Promise.all([
-    db.studentSessionFeedback.findMany({
+    sdb.studentSessionFeedback.findMany({
       where: { studentId },
       orderBy: { createdAt: "desc" },
       take: 100,
