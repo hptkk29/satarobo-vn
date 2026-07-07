@@ -3,7 +3,6 @@
 import { z } from "zod";
 import type { Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { hasRole } from "@/lib/auth/permissions";
 import { assertPermission } from "@/lib/auth/check-permission";
@@ -19,6 +18,8 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 type ActionResult<T = unknown> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
+
+type Sdb = ReturnType<typeof scopedDb>;
 
 // Cách ly cơ sở (chống IDOR ghi): Employee ∈ SCOPED_MODELS. NV HO có centerId=null
 // (cross-center) → chỉ SUPER_ADMIN/HO thao tác. CENTER_MANAGER chỉ NV cơ sở mình.
@@ -40,8 +41,8 @@ async function employeeInScope(userId: string | undefined, id: string): Promise<
 // HO là OrgUnit type=HO (Doc 15 OI-1), KHÔNG phải Center. NV "thuộc HO" khi có
 // EmployeeOrgAssignment PRIMARY active tới OrgUnit HO. Bật cờ ⇒ upsert assignment;
 // tắt ⇒ EXPIRE assignment. assignment KHÔNG sinh quyền (quyền chỉ từ UserOrgRole).
-async function getHoUnitId(): Promise<string | null> {
-  const ho = await db.orgUnit.findFirst({
+async function getHoUnitId(sdb: Sdb): Promise<string | null> {
+  const ho = await sdb.orgUnit.findFirst({
     where: { type: "HO", deletedAt: null },
     select: { id: true },
   });
@@ -49,20 +50,21 @@ async function getHoUnitId(): Promise<string | null> {
 }
 
 async function syncHoAssignment(
+  sdb: Sdb,
   actor: { id: string | null; name: string },
   employeeId: string,
   isHO: boolean,
 ): Promise<void> {
-  const hoUnitId = await getHoUnitId();
+  const hoUnitId = await getHoUnitId(sdb);
   if (!hoUnitId) return; // không có OrgUnit HO → bỏ qua (pre-check đã chặn khi bật)
 
   if (isHO) {
-    const existing = await db.employeeOrgAssignment.findFirst({
+    const existing = await sdb.employeeOrgAssignment.findFirst({
       where: { employeeId, orgUnitId: hoUnitId, status: "ACTIVE" },
       select: { id: true },
     });
     if (existing) return; // idempotent
-    const created = await db.employeeOrgAssignment.create({
+    const created = await sdb.employeeOrgAssignment.create({
       data: {
         employeeId,
         orgUnitId: hoUnitId,
@@ -81,12 +83,12 @@ async function syncHoAssignment(
       orgUnitId: hoUnitId,
     });
   } else {
-    const actives = await db.employeeOrgAssignment.findMany({
+    const actives = await sdb.employeeOrgAssignment.findMany({
       where: { employeeId, orgUnitId: hoUnitId, status: "ACTIVE" },
       select: { id: true },
     });
     if (actives.length === 0) return;
-    await db.employeeOrgAssignment.updateMany({
+    await sdb.employeeOrgAssignment.updateMany({
       where: { employeeId, orgUnitId: hoUnitId, status: "ACTIVE" },
       data: { status: "EXPIRED", effectiveTo: new Date() },
     });
@@ -134,8 +136,12 @@ export async function createEmployeeAction(
     };
   }
 
+  // Cách ly cơ sở (A0-04): Employee ∈ SCOPED_MODELS → đọc/ghi qua scopedDb.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Bật cờ HO nhưng chưa seed OrgUnit HO → chặn sớm, tránh tạo NV "mồ côi" cơ sở.
-  if (isHO && !(await getHoUnitId())) {
+  if (isHO && !(await getHoUnitId(sdb))) {
     return {
       ok: false,
       error:
@@ -143,7 +149,9 @@ export async function createEmployeeAction(
     };
   }
 
-  const existing = await db.employee.findUnique({
+  // Pre-check trùng (sdb null-filter record ngoài tầm nhìn — unique constraint DB
+  // vẫn là chốt chặn cuối, bắt ở try/catch create bên dưới).
+  const existing = await sdb.employee.findUnique({
     where: { employeeCode: parsed.data.employeeCode },
   });
   if (existing) {
@@ -151,7 +159,7 @@ export async function createEmployeeAction(
   }
 
   if (parsed.data.email) {
-    const existingEmail = await db.employee.findUnique({
+    const existingEmail = await sdb.employee.findUnique({
       where: { email: parsed.data.email },
     });
     if (existingEmail) {
@@ -161,7 +169,7 @@ export async function createEmployeeAction(
 
   // Ensure chỉ 1 CEO
   if (parsed.data.isCEO) {
-    await db.employee.updateMany({
+    await sdb.employee.updateMany({
       where: { isCEO: true },
       data: { isCEO: false },
     });
@@ -172,21 +180,28 @@ export async function createEmployeeAction(
   if (isHO) createData.centerId = null;
 
   // Cách ly cơ sở: chỉ tạo NV cho cơ sở trong tầm nhìn actor (NV HO/centerId=null → super/HO).
-  if (session.user.id) {
-    const actor = await resolveActor(session.user.id);
-    if (!actorCanUseCenter(actor, createData.centerId ?? null)) {
-      return { ok: false, error: "Không có quyền tạo nhân sự cho cơ sở này" };
-    }
+  if (!actorCanUseCenter(actor, createData.centerId ?? null)) {
+    return { ok: false, error: "Không có quyền tạo nhân sự cho cơ sở này" };
   }
 
-  const created = await db.employee.create({
-    data: {
-      ...createData,
-      createdById: session.user.id,
-    },
-  });
+  let created: { id: string };
+  try {
+    created = await sdb.employee.create({
+      data: {
+        ...createData,
+        createdById: session.user.id,
+      },
+      select: { id: true },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Unique constraint")) {
+      return { ok: false, error: "Mã nhân viên hoặc email đã tồn tại" };
+    }
+    return { ok: false, error: "Lỗi cơ sở dữ liệu — không tạo được nhân sự" };
+  }
 
   await syncHoAssignment(
+    sdb,
     { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? "Unknown" },
     created.id,
     isHO,
@@ -194,6 +209,7 @@ export async function createEmployeeAction(
 
   // #10 — NV HO: gán phân công PRIMARY vào OrgUnit Hội sở (khi isHO, orgUnitId rỗng).
   await syncHoAssignment(
+    sdb,
     { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" },
     created.id,
     isHO,
@@ -211,9 +227,13 @@ export async function updateEmployeeAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
+  // Cách ly cơ sở (A0-04): Employee ∈ SCOPED_MODELS → đọc/ghi qua scopedDb.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Target gate: employees:edit có cả tầng GLOBAL (HO_HR) và CENTER (CENTER_HR) —
   // truyền centerId của NV HIỆN TẠI để v2 đánh giá đúng nhánh CENTER.
-  const targetEmployee = await db.employee.findUnique({ where: { id }, select: { centerId: true } });
+  const targetEmployee = await sdb.employee.findUnique({ where: { id }, select: { centerId: true } });
   if (!targetEmployee) return { ok: false, error: "Không tìm thấy nhân sự" };
   try {
     await assertPermission("employees:edit", { centerId: targetEmployee.centerId });
@@ -229,7 +249,7 @@ export async function updateEmployeeAction(
     };
   }
 
-  if (isHO === true && !(await getHoUnitId())) {
+  if (isHO === true && !(await getHoUnitId(sdb))) {
     return {
       ok: false,
       error:
@@ -252,24 +272,24 @@ export async function updateEmployeeAction(
   if (isHO === true) data.centerId = null;
 
   // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
-  if (data.centerId !== undefined && session.user.id) {
-    const actor = await resolveActor(session.user.id);
+  if (data.centerId !== undefined) {
     if (!actorCanUseCenter(actor, data.centerId ?? null)) {
       return { ok: false, error: "Không có quyền chuyển nhân sự sang cơ sở này" };
     }
   }
 
   if (data.isCEO) {
-    await db.employee.updateMany({
+    await sdb.employee.updateMany({
       where: { isCEO: true, NOT: { id } },
       data: { isCEO: false },
     });
   }
 
-  await db.employee.update({ where: { id }, data });
+  await sdb.employee.update({ where: { id }, data });
 
   if (typeof isHO === "boolean") {
     await syncHoAssignment(
+      sdb,
       { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? "Unknown" },
       id,
       isHO,
@@ -279,6 +299,7 @@ export async function updateEmployeeAction(
   // #10 — NV HO: đồng bộ phân công PRIMARY vào OrgUnit Hội sở.
   if (isHO !== undefined) {
     await syncHoAssignment(
+      sdb,
       { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" },
       id,
       isHO,
@@ -303,9 +324,10 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
   if (!(await employeeInScope(session.user.id, id))) {
     return { ok: false, error: "Không tìm thấy nhân sự" };
   }
+  const sdb = scopedDb(await resolveActor(session.user.id));
 
   // Check xem có Honor đang link không
-  const honorCount = await db.honor.count({ where: { employeeId: id } });
+  const honorCount = await sdb.honor.count({ where: { employeeId: id } });
   if (honorCount > 0) {
     return {
       ok: false,
@@ -313,7 +335,7 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
     };
   }
 
-  await db.employee.delete({ where: { id } });
+  await sdb.employee.delete({ where: { id } });
   revalidateAll();
   return { ok: true };
 }
@@ -322,7 +344,8 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
-  const emp = await db.employee.findUnique({ where: { id } });
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const emp = await sdb.employee.findUnique({ where: { id } });
   if (!emp) return { ok: false, error: "Không tìm thấy" };
   try {
     await assertPermission("employees:edit", { centerId: emp.centerId });
@@ -334,7 +357,7 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
   if (!(await employeeInScope(session.user.id, id))) {
     return { ok: false, error: "Không tìm thấy" };
   }
-  await db.employee.update({
+  await sdb.employee.update({
     where: { id },
     data: { isActive: !emp.isActive },
   });
@@ -346,7 +369,8 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
-  const emp = await db.employee.findUnique({ where: { id } });
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const emp = await sdb.employee.findUnique({ where: { id } });
   if (!emp) return { ok: false, error: "Không tìm thấy" };
   try {
     await assertPermission("employees:edit", { centerId: emp.centerId });
@@ -358,7 +382,7 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
   if (!(await employeeInScope(session.user.id, id))) {
     return { ok: false, error: "Không tìm thấy" };
   }
-  await db.employee.update({
+  await sdb.employee.update({
     where: { id },
     data: { isPublic: !emp.isPublic },
   });
@@ -413,11 +437,14 @@ export async function changeEmployeeRoleAction(input: {
   const roles = [...new Set(parsed.data.roles)] as ValidRole[];
   const primaryRole = parsed.data.primaryRole;
 
-  const employee = await db.employee.findUnique({
+  // SUPER_ADMIN-only (gate ở trên) → sdb bypass scope; select thêm centerId cho passesScope.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const employee = await sdb.employee.findUnique({
     where: { id: parsed.data.employeeId },
     select: {
       id: true,
       fullName: true,
+      centerId: true,
       userAccount: { select: { id: true, role: true, roles: true } },
     },
   });
@@ -447,14 +474,14 @@ export async function changeEmployeeRoleAction(input: {
   }
 
   try {
-    await db.$transaction([
-      db.user.update({
+    await sdb.$transaction([
+      sdb.user.update({
         where: { id: employee.userAccount.id },
         // Bump tokenVersion → token cũ vô hiệu ngay request kế (buộc re-login để
         // mang roles mới). role = vai trò chính; roles = union.
         data: { role: primaryRole, roles, tokenVersion: { increment: 1 } },
       }),
-      db.roleAuditLog.create({
+      sdb.roleAuditLog.create({
         data: {
           employeeId: employee.id,
           fromRole,
