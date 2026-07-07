@@ -4,7 +4,6 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 
@@ -38,15 +37,16 @@ export async function createSurvey(input: unknown): Promise<{ ok: boolean; error
   const d = parsed.data;
 
   // Cách ly cơ sở: nếu gán Survey cho 1 cơ sở, cơ sở đó phải nằm trong tầm nhìn actor.
+  const actor = await resolveActor(session.user.id);
   const centerId = d.centerId || null;
   if (centerId) {
-    const actor = await resolveActor(session.user.id);
     const canUse =
       actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(centerId);
     if (!canUse) return { ok: false, error: "Không có quyền với cơ sở này" };
   }
 
-  await db.survey.create({
+  // Write không bị scopedDb can thiệp (chỉ đọc bị scope) — sdb để sạch import db trần.
+  await scopedDb(actor).survey.create({
     data: {
       title: d.title,
       milestone: d.milestone,
@@ -73,7 +73,7 @@ export async function toggleSurvey(id: string): Promise<{ ok: boolean }> {
   const sdb = scopedDb(actor);
   const s = await sdb.survey.findUnique({ where: { id }, select: { isActive: true, centerId: true } });
   if (!s || !passesScope("Survey", s, actor)) return { ok: false };
-  await db.survey.update({ where: { id }, data: { isActive: !s.isActive } });
+  await sdb.survey.update({ where: { id }, data: { isActive: !s.isActive } });
   revalidatePath("/khao-sat");
   return { ok: true };
 }

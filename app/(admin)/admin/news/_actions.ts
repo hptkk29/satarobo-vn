@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -62,6 +63,7 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+// News là nội dung global (∉ SCOPED_MODELS) → sdb pass-through, hành vi y nguyên.
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -73,7 +75,8 @@ async function requireAdmin() {
   ) {
     redirect("/dashboard?error=unauthorized");
   }
-  return session.user;
+  const actor = await resolveActor(session.user.id);
+  return { user: session.user, sdb: scopedDb(actor) };
 }
 
 function readForm(formData: FormData) {
@@ -94,7 +97,7 @@ function readForm(formData: FormData) {
 }
 
 export async function createNews(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { sdb } = await requireAdmin();
 
   const parsed = newsSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -119,7 +122,7 @@ export async function createNews(formData: FormData): Promise<ActionResult> {
   };
 
   try {
-    await db.news.create({ data });
+    await sdb.news.create({ data });
   } catch {
     return { error: "Slug đã tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
@@ -130,14 +133,14 @@ export async function createNews(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateNews(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { sdb } = await requireAdmin();
 
   const parsed = newsSchema.safeParse(readForm(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const existing = await db.news.findUnique({
+  const existing = await sdb.news.findUnique({
     where: { id },
     select: { isPublished: true, publishedAt: true },
   });
@@ -169,7 +172,7 @@ export async function updateNews(id: string, formData: FormData): Promise<Action
   };
 
   try {
-    await db.news.update({ where: { id }, data });
+    await sdb.news.update({ where: { id }, data });
   } catch {
     return { error: "Bài viết không tồn tại, slug trùng, hoặc lỗi cơ sở dữ liệu" };
   }
@@ -182,9 +185,9 @@ export async function updateNews(id: string, formData: FormData): Promise<Action
 }
 
 export async function deleteNews(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { sdb } = await requireAdmin();
   try {
-    await db.news.delete({ where: { id } });
+    await sdb.news.delete({ where: { id } });
   } catch {
     return { error: "Không thể xoá bài viết này" };
   }
@@ -194,9 +197,9 @@ export async function deleteNews(id: string): Promise<ActionResult> {
 }
 
 export async function toggleNewsPublished(id: string, newValue: boolean): Promise<ActionResult> {
-  await requireAdmin();
+  const { sdb } = await requireAdmin();
   try {
-    const existing = await db.news.findUnique({
+    const existing = await sdb.news.findUnique({
       where: { id },
       select: { publishedAt: true, isPublished: true },
     });
@@ -206,7 +209,7 @@ export async function toggleNewsPublished(id: string, newValue: boolean): Promis
     if (newValue && !existing.isPublished) publishedAt = new Date();
     if (!newValue) publishedAt = null;
 
-    await db.news.update({
+    await sdb.news.update({
       where: { id },
       data: { isPublished: newValue, publishedAt },
     });

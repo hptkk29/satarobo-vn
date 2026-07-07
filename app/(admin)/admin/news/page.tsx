@@ -1,12 +1,19 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { NewsListRow } from "./_components/news-list-row";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewsAdminPage() {
-  const news = await db.news.findMany({
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // News là nội dung global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const news = await scopedDb(actor).news.findMany({
     orderBy: [{ displayOrder: "asc" }, { publishedAt: "desc" }],
     select: {
       id: true,
