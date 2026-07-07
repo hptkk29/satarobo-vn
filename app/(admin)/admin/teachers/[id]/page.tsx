@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { hasRole } from "@/lib/auth/permissions";
@@ -29,7 +28,13 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   const { id } = await params;
   const { month: monthParam } = await searchParams;
 
-  const teacher = await db.user.findUnique({
+  // Cách ly cơ sở: lớp của GV (Class ∈ SCOPED_MODELS) đọc qua scopedDb → CM@CS1 không
+  // thấy lớp CS khác. ClassSession/Enrollment phía dưới lọc theo mainClassIds (đã isolate)
+  // nên an toàn theo. SUPER_ADMIN/HO tự bypass (ALL). User exempt (pass-through).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const teacher = await sdb.user.findUnique({
     where: { id },
     select: {
       id: true,
@@ -67,12 +72,6 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   // Sửa: SUPER_ADMIN, hoặc CM cùng cơ sở.
   const canEdit = hasRole(me, "SUPER_ADMIN") || cmInScope;
 
-  // Cách ly cơ sở: lớp của GV (Class ∈ SCOPED_MODELS) đọc qua scopedDb → CM@CS1 không
-  // thấy lớp CS khác. ClassSession/Enrollment phía dưới lọc theo mainClassIds (đã isolate)
-  // nên an toàn theo. SUPER_ADMIN/HO tự bypass (ALL).
-  const actor = await resolveActor(session.user.id);
-  const sdb = scopedDb(actor);
-
   const p = teacher.teacherProfile;
   const teacherCourseIds = p?.teachableCourses.map((t) => t.courseId) ?? [];
 
@@ -88,7 +87,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   } as const;
 
   const [courses, mainClasses, assistantClasses, assignableRaw] = await Promise.all([
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true },
@@ -153,7 +152,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   const mainClassIds = mainClasses.map((c) => c.id);
   const taughtSessions =
     mainClassIds.length > 0
-      ? await db.classSession.findMany({
+      ? await sdb.classSession.findMany({
           where: {
             classId: { in: mainClassIds },
             date: { gte: monthStart, lt: monthEnd, lte: now },
@@ -173,7 +172,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   const enrolledStudentIds =
     mainClassIds.length > 0
       ? (
-          await db.enrollment.findMany({
+          await sdb.enrollment.findMany({
             where: { classId: { in: mainClassIds } },
             select: { studentId: true },
             distinct: ["studentId"],
@@ -182,14 +181,14 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
       : [];
   const [parentFeedback, internalReviews] = await Promise.all([
     enrolledStudentIds.length > 0
-      ? db.parentFeedback.findMany({
+      ? sdb.parentFeedback.findMany({
           where: { studentId: { in: enrolledStudentIds } },
           orderBy: { createdAt: "desc" },
           take: 50,
           select: { rating: true, content: true, studentName: true, createdAt: true },
         })
       : Promise.resolve([] as { rating: number; content: string; studentName: string | null; createdAt: Date }[]),
-    db.teacherReview.findMany({
+    sdb.teacherReview.findMany({
       where: { teacherProfile: { userId: id } },
       orderBy: { createdAt: "desc" },
       take: 30,
