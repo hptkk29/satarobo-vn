@@ -23,6 +23,8 @@ import {
   getNonConsentStudents,
   grantMediaConsent,
   revokeMediaConsent,
+  setMediaConsent,
+  hasMediaConsent,
   tagStudentToMedia,
   isMediaVisibleForStudent,
 } from "../../../lib/lms/media-consent";
@@ -279,6 +281,38 @@ test.describe("R7-09 portal dashboard + media", () => {
     // Thu hồi consent → ẩn NGAY (tag vẫn còn nhưng consent != GRANTED).
     await revokeMediaConsent(studentId);
     expect(await isMediaVisibleForStudent(media.id, studentId)).toBe(false);
+  });
+
+  // ── #08 L7 — PH tự bật/thu hồi consent (setMediaConsent) + audit + ẩn ảnh ──
+  test("[#08-L7] setMediaConsent bật→hiện, thu hồi→ẩn + ghi AuditLog theo nguồn portal", async () => {
+    await seedCenter();
+    const { classId, studentId } = await seedClassWithStudent({ slug: "consent-l7" });
+    const actor = { id: "ph-l7", name: "Phụ huynh L7" };
+
+    // Bật đồng ý (grant) qua toggle portal → consent GRANTED + audit.
+    await setMediaConsent(studentId, true, { actor, source: "PORTAL_SELF_SERVICE" });
+    expect(await hasMediaConsent(studentId)).toBe(true);
+
+    const media = await db.classSessionMedia.create({
+      data: { classId, fileUrl: "https://cdn.example/l7.jpg", status: "APPROVED" },
+      select: { id: true },
+    });
+    await tagStudentToMedia(media.id, studentId);
+    expect(await isMediaVisibleForStudent(media.id, studentId)).toBe(true);
+
+    // Thu hồi (revoke) → consent REVOKED + ảnh ẩn NGAY + audit REVOKED.
+    await setMediaConsent(studentId, false, { actor, source: "PORTAL_SELF_SERVICE" });
+    expect(await hasMediaConsent(studentId)).toBe(false);
+    expect(await isMediaVisibleForStudent(media.id, studentId)).toBe(false);
+
+    const logs = await db.auditLog.findMany({
+      where: { entityType: "StudentConsent", entityId: studentId },
+      orderBy: { createdAt: "asc" },
+      select: { action: true, orgUnitId: true, newValues: true },
+    });
+    expect(logs.map((l) => l.action)).toEqual(["CONSENT_GRANTED", "CONSENT_REVOKED"]);
+    // orgUnitId tự suy từ Student.centerId (CS1) khi không truyền tường minh.
+    expect(logs.every((l) => l.orgUnitId === CENTER)).toBe(true);
   });
 
   // ── AC5 — signed URL: tách key đúng; hết hạn/đổi id → 403 (R2) ──

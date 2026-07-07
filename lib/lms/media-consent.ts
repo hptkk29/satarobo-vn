@@ -1,8 +1,12 @@
 // lib/lms/media-consent.ts — R3-06: media tag bắt buộc + StudentConsent (privacy-first).
 // C6.1 upload phải tag ≥1 HS · C6.2 không tag → không hiển thị PH · C6.3 chưa consent → không tag
 // · C6.4 thu hồi consent → media có tag con đó ẩn ngay.
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
+
+type ConsentDbClient = PrismaClient | Prisma.TransactionClient;
 
 export class ConsentError extends Error {
   readonly code: string;
@@ -13,22 +17,80 @@ export class ConsentError extends Error {
   }
 }
 
-/** PH cấp đồng ý dùng hình ảnh cho 1 học viên. */
-export async function grantMediaConsent(studentId: string): Promise<void> {
-  await db.studentConsent.upsert({
+/**
+ * #08 — ngữ cảnh audit khi PH tự bật/thu hồi consent trên portal (hoặc admin đổi hộ).
+ * Truyền `audit` → ghi AuditLog (ai – lúc nào – GRANTED/REVOKED – nguồn) CÙNG transaction
+ * với StudentConsent. KHÔNG truyền (test/nội bộ) → chỉ upsert như cũ (không audit).
+ * Nhánh convert lead (convert-lead-v2.ts) tự ghi audit riêng nên KHÔNG gọi các hàm này.
+ */
+export type ConsentAuditOpts = {
+  actor: AuditActor;
+  /** Nguồn thay đổi (mặc định PORTAL_SELF_SERVICE). */
+  source?: string;
+  /** orgUnitId để scope AuditLog; bỏ trống → tự suy từ Student.centerId. */
+  orgUnitId?: string | null;
+};
+
+async function upsertConsent(
+  client: ConsentDbClient,
+  studentId: string,
+  status: "GRANTED" | "REVOKED",
+): Promise<void> {
+  const revokedAt = status === "REVOKED" ? new Date() : null;
+  await client.studentConsent.upsert({
     where: { studentId_type: { studentId, type: "CLASS_MEDIA" } },
-    update: { status: "GRANTED", revokedAt: null },
-    create: { studentId, type: "CLASS_MEDIA", status: "GRANTED" },
+    update: { status, revokedAt },
+    create: { studentId, type: "CLASS_MEDIA", status, revokedAt },
   });
 }
 
-/** PH thu hồi đồng ý (C6.4). */
-export async function revokeMediaConsent(studentId: string): Promise<void> {
-  await db.studentConsent.upsert({
-    where: { studentId_type: { studentId, type: "CLASS_MEDIA" } },
-    update: { status: "REVOKED", revokedAt: new Date() },
-    create: { studentId, type: "CLASS_MEDIA", status: "REVOKED", revokedAt: new Date() },
+async function applyConsent(
+  studentId: string,
+  status: "GRANTED" | "REVOKED",
+  audit?: ConsentAuditOpts,
+): Promise<void> {
+  if (!audit) {
+    await upsertConsent(db, studentId, status);
+    return;
+  }
+  // Consent + audit atomic: thay đổi quyền riêng tư LUÔN đi kèm dấu vết (DoD #08).
+  await db.$transaction(async (tx) => {
+    await upsertConsent(tx, studentId, status);
+    const orgUnitId =
+      audit.orgUnitId ??
+      (await tx.student.findUnique({ where: { id: studentId }, select: { centerId: true } }))
+        ?.centerId ??
+      null;
+    await writeAudit({
+      actor: audit.actor,
+      module: "enrollment",
+      entityType: "StudentConsent",
+      entityId: studentId,
+      action: status === "GRANTED" ? "CONSENT_GRANTED" : "CONSENT_REVOKED",
+      newValues: { type: "CLASS_MEDIA", status, source: audit.source ?? "PORTAL_SELF_SERVICE" },
+      orgUnitId,
+      tx,
+    });
   });
+}
+
+/** PH cấp đồng ý dùng hình ảnh cho 1 học viên (audit tuỳ chọn). */
+export async function grantMediaConsent(studentId: string, audit?: ConsentAuditOpts): Promise<void> {
+  await applyConsent(studentId, "GRANTED", audit);
+}
+
+/** PH thu hồi đồng ý (C6.4) — audit tuỳ chọn. */
+export async function revokeMediaConsent(studentId: string, audit?: ConsentAuditOpts): Promise<void> {
+  await applyConsent(studentId, "REVOKED", audit);
+}
+
+/** Bật/tắt consent theo boolean (dùng cho toggle portal). */
+export async function setMediaConsent(
+  studentId: string,
+  grant: boolean,
+  audit?: ConsentAuditOpts,
+): Promise<void> {
+  await applyConsent(studentId, grant ? "GRANTED" : "REVOKED", audit);
 }
 
 export async function hasMediaConsent(studentId: string): Promise<boolean> {

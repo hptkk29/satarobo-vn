@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireActiveStudent, assertOwnsStudent } from "@/lib/portal/session";
+import { publishEvent } from "@/lib/events/publish";
 
 // Chống spam: trần số yêu cầu ĐANG PENDING / tài khoản phụ huynh (CANCELLED/
 // APPROVED/REJECTED không tính) — tránh ngập hàng đợi /admin/parent-requests.
@@ -95,16 +96,33 @@ export async function createParentRequest(input: {
       ? new Date(d.preferredDate)
       : null);
 
-  await db.parentRequest.create({
-    data: {
-      studentId,
-      parentUserId: ctx.parentUserId,
-      type: d.type,
-      content: d.content,
-      preferredDate,
-      sessionId,
-      status: "PENDING",
-    },
+  // Tạo yêu cầu + phát DomainEvent CÙNG transaction (outbox atomic): rollback nghiệp vụ
+  // → không có event; commit → dispatcher báo Sale/QL cơ sở (#08 L8.2). dedupeKey theo
+  // requestId → replay/tick lặp không nhân đôi thông báo.
+  await db.$transaction(async (tx) => {
+    const req = await tx.parentRequest.create({
+      data: {
+        studentId,
+        parentUserId: ctx.parentUserId,
+        type: d.type,
+        content: d.content,
+        preferredDate,
+        sessionId,
+        status: "PENDING",
+      },
+      select: { id: true },
+    });
+    await publishEvent(
+      "parent_request.created",
+      {
+        requestId: req.id,
+        studentId,
+        centerId: ctx.activeStudent?.centerId ?? null,
+        type: d.type,
+        parentUserId: ctx.parentUserId,
+      },
+      { tx, dedupeKey: `parent_request.created:${req.id}` },
+    );
   });
 
   revalidatePath("/portal/yeu-cau");

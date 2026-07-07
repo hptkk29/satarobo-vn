@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Camera, ImageOff } from "lucide-react";
 import type { StudentPhotos } from "@/lib/portal/photos";
 import { PageHero } from "@/components/portal/page-header";
@@ -33,9 +34,18 @@ export function HinhAnhPageV2({
       />
 
       {!data.consentGranted ? (
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
           <ImageOff className="size-8 text-muted-foreground/60" />
-          Cần đồng ý sử dụng hình ảnh của con để xem ảnh lớp. Liên hệ trung tâm hoặc bật đồng ý trong Hồ sơ.
+          <p>
+            Cần bật <span className="font-semibold text-foreground">đồng ý dùng hình ảnh</span> cho
+            con thì mới xem được ảnh lớp. Bạn có thể thu hồi bất cứ lúc nào.
+          </p>
+          <Link
+            href="/portal/ho-so-con/chi-tiet"
+            className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+          >
+            Bật đồng ý trong Hồ sơ con
+          </Link>
         </div>
       ) : data.groups.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">Chưa có ảnh lớp nào.</div>

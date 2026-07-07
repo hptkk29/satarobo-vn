@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Save, Cake, School, HeartPulse, BookOpen, ShieldCheck,
+  ArrowLeft, Save, Cake, School, HeartPulse, BookOpen,
   TriangleAlert, Sparkles, IdCard, Users, GraduationCap,
 } from "lucide-react";
 import { SKILL_LABEL, LEVEL_LABEL } from "@/lib/lms/skills";
 import type { SkillLevel } from "@prisma/client";
 import type { ChildDetail } from "@/lib/portal/child-detail";
 import { updateChildProfile } from "@/app/(portal)/portal/ho-so-con/chi-tiet/actions";
+import { MediaConsentToggle } from "@/components/portal/media-consent-toggle";
 
 const LEVEL_CLS: Record<SkillLevel, string> = {
   NEED_SUPPORT: "bg-destructive/10 text-destructive",
@@ -77,11 +78,11 @@ export function ChildDetailPage({ data }: { data: ChildDetail }) {
             <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground"><IdCard className="size-4" /> {data.studentCode ?? "Chưa có mã HV"}</p>
           </div>
         </div>
-        {data.mediaConsent ? (
-          <span className="inline-flex items-center gap-1.5 rounded-xl bg-success/10 px-3 py-2 text-xs font-bold text-success"><ShieldCheck className="size-4" /> Đã đồng ý hình ảnh</span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-xl bg-caution/10 px-3 py-2 text-xs font-bold text-caution"><TriangleAlert className="size-4" /> Chưa đồng ý hình ảnh</span>
-        )}
+        <MediaConsentToggle
+          studentId={data.id}
+          studentName={data.name}
+          consentGranted={data.mediaConsent}
+        />
       </div>
 
       {/* Thông tin sửa được */}
