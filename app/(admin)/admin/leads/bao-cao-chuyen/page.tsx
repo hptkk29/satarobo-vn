@@ -3,8 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeftRight } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
-import { getModelVisibleCenterIds } from "@/lib/db-scope";
+import { getModelVisibleCenterIds, scopedDb, logScopeBypass } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
 
@@ -27,6 +26,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
   // sở của model Lead (đọc động từ actor/UserOrgRole, không phụ thuộc session.centerId
   // cũ): CM@CS1 chỉ thấy transfer vào/ra CS1; SUPER_ADMIN/HO (ALL) thấy toàn hệ thống.
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const visibleCenters = getModelVisibleCenterIds("Lead", actor);
   const isAll = visibleCenters === "ALL";
 
@@ -56,7 +56,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
         }),
   };
 
-  const transfersRaw = await db.leadTransfer.findMany({
+  const transfersRaw = await sdb.leadTransfer.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: 500,
@@ -69,12 +69,23 @@ export default async function TransferReportPage({ searchParams }: Props) {
   ];
   const leadIds = [...new Set(transfers.map((t) => t.leadId))];
 
+  // Lead hiển thị: leadIds đến từ transfer ĐÃ scope tay ở trên (vào/ra cơ sở mình).
+  // Lead chuyển ĐI hiện thuộc cơ sở khác → sdb.lead sẽ ẩn, trong khi báo cáo cần
+  // thấy kết quả "đã chốt" của lead mình chuyển đi → bypass HẸP cho đúng 1 truy vấn
+  // này (select tối thiểu, key từ transfer đã scope) + ghi audit bypass (AC10).
+  const leadReadDb = isAll ? sdb : scopedDb(actor, { bypass: true });
+  if (!isAll && leadIds.length) {
+    await logScopeBypass(
+      actor,
+      "bao-cao-chuyen: đọc tên/trạng thái lead đã chuyển đi khỏi cơ sở (báo cáo liên cơ sở)",
+    );
+  }
   const [centers, leads] = await Promise.all([
     centerIds.length
-      ? db.center.findMany({ where: { id: { in: centerIds } }, select: { id: true, name: true, code: true } })
+      ? sdb.center.findMany({ where: { id: { in: centerIds } }, select: { id: true, name: true, code: true } })
       : Promise.resolve([]),
     leadIds.length
-      ? db.lead.findMany({ where: { id: { in: leadIds } }, select: { id: true, parentName: true, phone: true, status: true } })
+      ? leadReadDb.lead.findMany({ where: { id: { in: leadIds } }, select: { id: true, parentName: true, phone: true, status: true } })
       : Promise.resolve([]),
   ]);
   const centerMap = new Map(centers.map((c) => [c.id, c]));

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { LeadForm } from "../_components/lead-form";
@@ -16,11 +16,13 @@ export default async function NewLeadPage() {
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("leads:create"))) redirect("/leads");
 
+  // Cách ly cơ sở: Course là catalog global (không scoped) → sdb pass-through.
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const [orgUnits, courses] = await Promise.all([
     getSelectableOrgUnits(actor),
     // Chỉ khoá LÁ dạy được (Sata1-8/Combo) — kèm category để nhóm optgroup.
-    db.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
+    sdb.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
   ]);
 
   return (

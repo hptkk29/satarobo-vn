@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -24,7 +23,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
   const actor = await resolveActor(session.user.id);
   // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → sdb.lead tự inject `centerId IN visible`.
   // CENTER_MANAGER@CS1 sửa lead CS2 → findFirst trả null → notFound() (chống IDOR).
-  // SUPER_ADMIN/HO bypass (ALL). Course không scoped → giữ db.
+  // SUPER_ADMIN/HO bypass (ALL). Course không scoped → sdb pass-through.
   const sdb = scopedDb(actor);
   const [lead, orgUnits, courses] = await Promise.all([
     sdb.lead.findFirst({
@@ -61,7 +60,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
       },
     }),
     getSelectableOrgUnits(actor),
-    db.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
+    sdb.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
   ]);
   if (!lead) notFound();
 
