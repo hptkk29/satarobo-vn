@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 
@@ -28,7 +27,7 @@ export async function resolveRiskAlert(id: string): Promise<Result> {
   const sdb = scopedDb(actor);
   const row = await sdb.studentRiskAlert.findUnique({ where: { id }, select: { centerId: true } });
   if (!row || !passesScope("StudentRiskAlert", row, actor)) return { ok: false, error: "Không tìm thấy" };
-  await db.studentRiskAlert.update({
+  await sdb.studentRiskAlert.update({
     where: { id },
     data: { status: "RESOLVED", resolvedById: g.uid, resolvedAt: new Date() },
   });
@@ -44,7 +43,7 @@ export async function escalateRiskAlert(id: string): Promise<Result> {
   const sdb = scopedDb(actor);
   const row = await sdb.studentRiskAlert.findUnique({ where: { id }, select: { centerId: true } });
   if (!row || !passesScope("StudentRiskAlert", row, actor)) return { ok: false, error: "Không tìm thấy" };
-  await db.studentRiskAlert.update({ where: { id }, data: { status: "ESCALATED", severity: "HIGH" } });
+  await sdb.studentRiskAlert.update({ where: { id }, data: { status: "ESCALATED", severity: "HIGH" } });
   revalidatePath("/canh-bao-rui-ro");
   return { ok: true };
 }
@@ -56,14 +55,14 @@ export async function completeCareTask(id: string): Promise<Result> {
   const sdb = scopedDb(actor);
   const existing = await sdb.studentCareTask.findUnique({ where: { id }, select: { centerId: true } });
   if (!existing || !passesScope("StudentCareTask", existing, actor)) return { ok: false, error: "Không tìm thấy" };
-  const task = await db.studentCareTask.update({
+  const task = await sdb.studentCareTask.update({
     where: { id },
     data: { status: "DONE", completedAt: new Date() },
     select: { riskAlertId: true },
   });
   // Hoàn tất task chăm sóc → đóng alert liên quan (nếu còn OPEN).
   if (task.riskAlertId) {
-    await db.studentRiskAlert.updateMany({
+    await sdb.studentRiskAlert.updateMany({
       where: { id: task.riskAlertId, status: "OPEN" },
       data: { status: "RESOLVED", resolvedById: g.uid, resolvedAt: new Date() },
     });

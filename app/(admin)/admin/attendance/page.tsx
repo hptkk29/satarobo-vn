@@ -1,11 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ClipboardCheck, AlertCircle } from "lucide-react";
 import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
-import { withMakeupException } from "@/lib/db-scope";
+import { scopedDb, withMakeupException } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
@@ -34,21 +34,24 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   // LMS-1 / W1-1 — owner-scope cho selector: GV chỉ thấy lớp mình dạy/trợ giảng;
   // CENTER_MANAGER theo cơ sở; SUPER_ADMIN toàn bộ (cùng quy tắc canManageSessionClass).
   const gateUser = (await auth())?.user;
+  if (!gateUser) redirect("/login");
   const NONE: Prisma.ClassWhereInput = { id: "__none__" };
-  const classScope: Prisma.ClassWhereInput = !gateUser
-    ? NONE
-    : hasRole(gateUser, "SUPER_ADMIN")
-      ? {}
-      : hasRole(gateUser, "CENTER_MANAGER")
-        ? gateUser.centerId
-          ? { centerId: gateUser.centerId }
-          : NONE
-        : hasRole(gateUser, "TEACHER")
-          ? { OR: [{ teacherId: gateUser.id }, { assistantId: gateUser.id }] }
-          : NONE;
+  const classScope: Prisma.ClassWhereInput = hasRole(gateUser, "SUPER_ADMIN")
+    ? {}
+    : hasRole(gateUser, "CENTER_MANAGER")
+      ? gateUser.centerId
+        ? { centerId: gateUser.centerId }
+        : NONE
+      : hasRole(gateUser, "TEACHER")
+        ? { OR: [{ teacherId: gateUser.id }, { assistantId: gateUser.id }] }
+        : NONE;
+
+  // Cách ly cơ sở (A0-04): Class/ClassSession ∈ SCOPED_MODELS → đọc qua scopedDb.
+  const actor = await resolveActor(gateUser.id);
+  const sdb = scopedDb(actor);
 
   // Load list of sessions for selector (upcoming or recent past)
-  const sessions = await db.classSession.findMany({
+  const sessions = await sdb.classSession.findMany({
     where: {
       ...(classFilter ? { classId: classFilter } : {}),
       class: classScope,
@@ -65,7 +68,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     },
   });
 
-  const classes = await db.class.findMany({
+  const classes = await sdb.class.findMany({
     where: { deletedAt: null, ...classScope },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
@@ -97,7 +100,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
 
   if (sessionId) {
     // Scope theo selector: GV mở thẳng sessionId của lớp ngoài phạm vi → null (ẩn roster).
-    const sess = await db.classSession.findFirst({
+    const sess = await sdb.classSession.findFirst({
       where: { id: sessionId, class: classScope },
       include: {
         class: {
@@ -157,9 +160,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
       // R7-08 (AC4) — HS được xếp HỌC BÙ vào buổi này (có thể từ cơ sở khác).
       // GV lớp đích thấy HS bù trong ĐÚNG buổi này + badge "Học bù từ <CS>";
       // KHÔNG truy cập hồ sơ đầy đủ. Đọc chéo cơ sở qua exception whitelist.
-      const authSession = await auth();
-      if (authSession?.user?.id) {
-        const actor = await resolveActor(authSession.user.id);
+      {
         const xdb = withMakeupException(actor);
         const guests = await xdb.makeupNeed.findMany({
           where: { makeupSessionId: sessionId, status: "SCHEDULED" },
@@ -173,7 +174,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
         const visitors = guests.filter((g) => !enrolledIds.has(g.studentId));
         if (visitors.length > 0) {
           const centerIds = [...new Set(visitors.map((g) => g.centerId).filter(Boolean))] as string[];
-          const centers = await db.center.findMany({
+          const centers = await sdb.center.findMany({
             where: { id: { in: centerIds } },
             select: { id: true, name: true, code: true },
           });
