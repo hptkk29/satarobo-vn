@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import {
   emailTemplateSchema,
   TRIGGER_VARIABLES,
@@ -14,16 +15,18 @@ import { sendEmail } from "@/lib/email/send";
 import { SAMPLE_VARS } from "@/lib/email/sample-vars";
 import { getAuditActor } from "@/lib/audit/log";
 
+// EmailTemplate/EmailLog là model global (∉ SCOPED_MODELS) → sdb pass-through.
 async function requireEmailsManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("emails:manage")))
     redirect("/dashboard?error=unauthorized");
-  return session;
+  const actor = await resolveActor(session.user.id);
+  return { session, sdb: scopedDb(actor) };
 }
 
 export async function createTemplateAction(input: unknown) {
-  await requireEmailsManage();
+  const { sdb } = await requireEmailsManage();
   const parsed = emailTemplateSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -33,7 +36,7 @@ export async function createTemplateAction(input: unknown) {
   }
   const data = parsed.data;
 
-  const existing = await db.emailTemplate.findUnique({
+  const existing = await sdb.emailTemplate.findUnique({
     where: { code: data.code },
   });
   if (existing)
@@ -53,7 +56,7 @@ export async function createTemplateAction(input: unknown) {
     };
   }
 
-  const template = await db.emailTemplate.create({
+  const template = await sdb.emailTemplate.create({
     data: {
       code: data.code,
       name: data.name,
@@ -77,7 +80,7 @@ export async function createTemplateAction(input: unknown) {
 }
 
 export async function updateTemplateAction(id: string, input: unknown) {
-  await requireEmailsManage();
+  const { sdb } = await requireEmailsManage();
   const parsed = emailTemplateSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -87,7 +90,7 @@ export async function updateTemplateAction(id: string, input: unknown) {
   }
   const data = parsed.data;
 
-  const existing = await db.emailTemplate.findUnique({ where: { id } });
+  const existing = await sdb.emailTemplate.findUnique({ where: { id } });
   if (!existing)
     return { ok: false as const, error: "Template không tồn tại" };
 
@@ -112,7 +115,7 @@ export async function updateTemplateAction(id: string, input: unknown) {
     };
   }
 
-  await db.emailTemplate.update({
+  await sdb.emailTemplate.update({
     where: { id },
     data: {
       name: data.name,
@@ -138,15 +141,15 @@ export async function updateTemplateAction(id: string, input: unknown) {
 }
 
 export async function toggleTemplateActiveAction(id: string) {
-  await requireEmailsManage();
-  const existing = await db.emailTemplate.findUnique({
+  const { sdb } = await requireEmailsManage();
+  const existing = await sdb.emailTemplate.findUnique({
     where: { id },
     select: { isActive: true },
   });
   if (!existing)
     return { ok: false as const, error: "Template không tồn tại" };
 
-  await db.emailTemplate.update({
+  await sdb.emailTemplate.update({
     where: { id },
     data: { isActive: !existing.isActive },
   });
@@ -156,15 +159,15 @@ export async function toggleTemplateActiveAction(id: string) {
 }
 
 export async function deleteTemplateAction(id: string) {
-  await requireEmailsManage();
-  const logCount = await db.emailLog.count({ where: { templateId: id } });
+  const { sdb } = await requireEmailsManage();
+  const logCount = await sdb.emailLog.count({ where: { templateId: id } });
   if (logCount > 0) {
     return {
       ok: false as const,
       error: `Template đã có ${logCount} email logs. Đặt isActive=false thay vì xoá.`,
     };
   }
-  await db.emailTemplate.delete({ where: { id } });
+  await sdb.emailTemplate.delete({ where: { id } });
   revalidatePath("/email-templates");
   return { ok: true as const };
 }
@@ -175,13 +178,13 @@ export async function sendTestEmailAction(input: {
   toEmail: string;
   varOverrides?: Record<string, string>;
 }) {
-  const session = await requireEmailsManage();
+  const { session, sdb } = await requireEmailsManage();
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.toEmail)) {
     return { ok: false as const, error: "Email không hợp lệ" };
   }
 
-  const template = await db.emailTemplate.findUnique({
+  const template = await sdb.emailTemplate.findUnique({
     where: { id: input.templateId },
   });
   if (!template)

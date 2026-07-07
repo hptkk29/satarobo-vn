@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, ClipboardCheck, FileWarning, AlertTriangle } from "lucide-react";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { buildWeeklySchedule, WEEKDAY_LABELS, type TeacherClassSlot } from "@/lib/teachers/schedule";
 
@@ -12,7 +13,16 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
 
-  const myClasses = await db.class.findMany({
+  // Cách ly cơ sở: Class/ClassSession ∈ SCOPED_MODELS → sdb tự inject centerId.
+  // AssignmentSubmission KHÔNG scoped → scope tay qua assignment.class.centerId,
+  // đồng bộ đúng tập center mà sdb cho phép trên model Class (AC7).
+  const actor = await resolveActor(userId);
+  const sdb = scopedDb(actor);
+  const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
+  const classCenterScope =
+    visibleClassCenters === "ALL" ? {} : { centerId: { in: visibleClassCenters } };
+
+  const myClasses = await sdb.class.findMany({
     where: { teacherId: userId, deletedAt: null, status: { in: ["PLANNED", "RECRUITING", "ACTIVE"] } },
     select: {
       id: true, name: true, classCode: true, scheduleDays: true, startTime: true, endTime: true,
@@ -22,13 +32,17 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
   });
 
   const [sessionsToday, toGrade] = await Promise.all([
-    db.classSession.findMany({
+    sdb.classSession.findMany({
       where: { class: { teacherId: userId }, date: { gte: dayStart, lt: dayEnd } },
       select: { id: true, status: true, class: { select: { name: true, classCode: true } } },
       orderBy: { date: "asc" },
     }),
-    db.assignmentSubmission.count({
-      where: { assignment: { class: { teacherId: userId } }, status: { in: ["SUBMITTED", "LATE"] }, score: null },
+    sdb.assignmentSubmission.count({
+      where: {
+        assignment: { class: { teacherId: userId, ...classCenterScope } },
+        status: { in: ["SUBMITTED", "LATE"] },
+        score: null,
+      },
     }),
   ]);
 

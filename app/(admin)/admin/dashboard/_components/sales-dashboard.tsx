@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Users, CheckSquare, FlaskConical, TrendingUp, GraduationCap } from "lucide-react";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import type { LeadStatus } from "@prisma/client";
 import { KANBAN_COLUMNS, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
@@ -13,23 +14,32 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
   dayEnd.setDate(dayEnd.getDate() + 1);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+  // Cách ly cơ sở: Lead/TrialClass ∈ SCOPED_MODELS → sdb tự inject centerId. LeadTask
+  // KHÔNG scoped (không có centerId) → scope tay qua lead.centerId, đồng bộ đúng tập
+  // center mà sdb cho phép trên model Lead (AC7 — nested/dependent model không auto-scope).
+  const actor = await resolveActor(userId);
+  const sdb = scopedDb(actor);
+  const visibleLeadCenters = getModelVisibleCenterIds("Lead", actor);
+  const leadTaskScope =
+    visibleLeadCenters === "ALL" ? {} : { lead: { centerId: { in: visibleLeadCenters } } };
+
   const [pipeline, totalMine, enrolledMonth, openTasks, trials, nearingEnd] = await Promise.all([
-    db.lead.groupBy({
+    sdb.lead.groupBy({
       by: ["status"],
       where: { assignedToId: userId, deletedAt: null },
       _count: { _all: true },
     }),
-    db.lead.count({ where: { assignedToId: userId, deletedAt: null } }),
-    db.lead.count({
+    sdb.lead.count({ where: { assignedToId: userId, deletedAt: null } }),
+    sdb.lead.count({
       where: { assignedToId: userId, deletedAt: null, status: "ENROLLED", updatedAt: { gte: monthStart } },
     }),
-    db.leadTask.findMany({
-      where: { assignedToId: userId, status: "OPEN" },
+    sdb.leadTask.findMany({
+      where: { assignedToId: userId, status: "OPEN", ...leadTaskScope },
       orderBy: { dueAt: "asc" },
       take: 50,
       select: { id: true, title: true, dueAt: true, leadId: true },
     }),
-    db.trialClass.findMany({
+    sdb.trialClass.findMany({
       where: {
         lead: { assignedToId: userId },
         scheduledAt: { gte: dayStart },

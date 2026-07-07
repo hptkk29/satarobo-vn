@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { EmailTemplateTrigger } from "@prisma/client";
 import { EMAIL_TRIGGER_LABEL } from "@/lib/validators/email-template";
@@ -18,7 +19,9 @@ export default async function EmailTemplatesPage() {
 
   const canManage = await checkPermission("emails:manage");
 
-  const templates = await db.emailTemplate.findMany({
+  // EmailTemplate là model global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const templates = await scopedDb(actor).emailTemplate.findMany({
     orderBy: [{ trigger: "asc" }, { name: "asc" }],
   });
 

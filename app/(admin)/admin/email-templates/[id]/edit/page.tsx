@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { TemplateForm } from "../../_components/template-form";
 import { TestSendButton } from "../../_components/test-send-button";
 
@@ -18,8 +19,10 @@ export default async function EditTemplatePage({ params }: Props) {
   if (!(await checkPermission("emails:manage")))
     redirect("/dashboard?error=unauthorized");
 
+  // EmailTemplate là model global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
   const { id } = await params;
-  const template = await db.emailTemplate.findUnique({ where: { id } });
+  const template = await scopedDb(actor).emailTemplate.findUnique({ where: { id } });
   if (!template) notFound();
 
   const currentUserEmail = session.user.email ?? null;
