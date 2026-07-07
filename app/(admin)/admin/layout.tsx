@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { hasStaffRole } from "@/lib/auth/permissions";
 import { isEvalV2Enabled, isScormEnabled } from "@/lib/flags";
 import { Sidebar } from "@/components/admin/sidebar";
@@ -24,7 +25,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // match. Nếu admin disable user / soft-delete / bump tokenVersion → logout
   // ngay request kế tiếp. 1 DB query / request /admin/* acceptable cho admin
   // panel (~10 users).
-  const dbUser = await db.user.findUnique({
+  // User là SCOPE_EXEMPT → sdb pass-through, hành vi y nguyên (kể cả deletedAt
+  // filter tự đọc field trần bên dưới). resolveActor được React.cache — page con
+  // gọi checkPermission dùng chung 1 lần resolve/request.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const dbUser = await sdb.user.findUnique({
     where: { id: session.user.id },
     select: { isActive: true, tokenVersion: true, deletedAt: true },
   });

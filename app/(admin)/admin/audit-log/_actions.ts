@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import type { Prisma } from "@prisma/client";
 
 const PAGE_SIZE = 20;
@@ -17,6 +18,14 @@ async function requireAuditView() {
     redirect("/dashboard?error=unauthorized");
   }
   return session.user;
+}
+
+// 5 bảng audit-log LEGACY không thuộc SCOPED_MODELS → scopedDb pass-through (chỉ
+// đổi client cho sạch import @/lib/db trần — R6-F1). Viewer hợp nhất theo bảng
+// AuditLog là việc riêng (L9), KHÔNG làm ở đây.
+async function requireAuditDb() {
+  const user = await requireAuditView();
+  return scopedDb(await resolveActor(user.id));
 }
 
 export type AuditFilters = {
@@ -110,7 +119,7 @@ export async function queryUserAuditLogs(
   filters: AuditFilters,
   cursor: Cursor | null,
 ) {
-  await requireAuditView();
+  const sdb = await requireAuditDb();
   const AND = buildCommonAnd(filters, cursor);
 
   if (filters.targetIdSearch) {
@@ -123,7 +132,7 @@ export async function queryUserAuditLogs(
     });
   }
 
-  const rows = await db.userAuditLog.findMany({
+  const rows = await sdb.userAuditLog.findMany({
     where: AND.length ? { AND } : undefined,
     include: { user: { select: { email: true, name: true } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -138,7 +147,7 @@ export async function queryGrantAuditLogs(
   filters: AuditFilters,
   cursor: Cursor | null,
 ) {
-  await requireAuditView();
+  const sdb = await requireAuditDb();
   const AND = buildCommonAnd(filters, cursor);
 
   if (filters.targetIdSearch) {
@@ -152,7 +161,7 @@ export async function queryGrantAuditLogs(
     });
   }
 
-  const rows = await db.permissionGrantAuditLog.findMany({
+  const rows = await sdb.permissionGrantAuditLog.findMany({
     where: AND.length ? { AND } : undefined,
     include: { user: { select: { email: true, name: true } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -167,7 +176,7 @@ export async function queryLeadAuditLogs(
   filters: AuditFilters,
   cursor: Cursor | null,
 ) {
-  await requireAuditView();
+  const sdb = await requireAuditDb();
   const AND = buildCommonAnd(filters, cursor);
 
   if (filters.targetIdSearch) {
@@ -181,7 +190,7 @@ export async function queryLeadAuditLogs(
     });
   }
 
-  const rows = await db.leadAuditLog.findMany({
+  const rows = await sdb.leadAuditLog.findMany({
     where: AND.length ? { AND } : undefined,
     include: { lead: { select: { parentName: true, phone: true } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -196,7 +205,7 @@ export async function queryClassAuditLogs(
   filters: AuditFilters,
   cursor: Cursor | null,
 ) {
-  await requireAuditView();
+  const sdb = await requireAuditDb();
   const AND = buildCommonAnd(filters, cursor);
 
   if (filters.targetIdSearch) {
@@ -210,7 +219,7 @@ export async function queryClassAuditLogs(
     });
   }
 
-  const rows = await db.classAuditLog.findMany({
+  const rows = await sdb.classAuditLog.findMany({
     where: AND.length ? { AND } : undefined,
     include: { class: { select: { name: true, classCode: true } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -225,7 +234,7 @@ export async function queryStudentAuditLogs(
   filters: AuditFilters,
   cursor: Cursor | null,
 ) {
-  await requireAuditView();
+  const sdb = await requireAuditDb();
   const AND = buildCommonAnd(filters, cursor);
 
   if (filters.targetIdSearch) {
@@ -238,7 +247,7 @@ export async function queryStudentAuditLogs(
     });
   }
 
-  const rows = await db.studentAuditLog.findMany({
+  const rows = await sdb.studentAuditLog.findMany({
     where: AND.length ? { AND } : undefined,
     include: { student: { select: { name: true } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -272,7 +281,7 @@ export async function exportAuditLogsCSV(
   | { ok: true; csv: string; filename: string }
   | { ok: false; error: string }
 > {
-  await requireAuditView();
+  const sdb = await requireAuditDb();
   const AND = buildCommonAnd(filters, null);
 
   // Apply same targetIdSearch logic per tab
@@ -336,7 +345,7 @@ export async function exportAuditLogsCSV(
 
   switch (tab) {
     case "user": {
-      const rows = await db.userAuditLog.findMany({
+      const rows = await sdb.userAuditLog.findMany({
         where,
         include: { user: { select: { email: true } } },
         orderBy,
@@ -373,7 +382,7 @@ export async function exportAuditLogsCSV(
       break;
     }
     case "grant": {
-      const rows = await db.permissionGrantAuditLog.findMany({
+      const rows = await sdb.permissionGrantAuditLog.findMany({
         where,
         include: { user: { select: { email: true } } },
         orderBy,
@@ -412,7 +421,7 @@ export async function exportAuditLogsCSV(
       break;
     }
     case "lead": {
-      const rows = await db.leadAuditLog.findMany({
+      const rows = await sdb.leadAuditLog.findMany({
         where,
         include: { lead: { select: { parentName: true, phone: true } } },
         orderBy,
@@ -451,7 +460,7 @@ export async function exportAuditLogsCSV(
       break;
     }
     case "class": {
-      const rows = await db.classAuditLog.findMany({
+      const rows = await sdb.classAuditLog.findMany({
         where,
         include: { class: { select: { name: true, classCode: true } } },
         orderBy,
@@ -490,7 +499,7 @@ export async function exportAuditLogsCSV(
       break;
     }
     case "student": {
-      const rows = await db.studentAuditLog.findMany({
+      const rows = await sdb.studentAuditLog.findMany({
         where,
         include: { student: { select: { name: true } } },
         orderBy,
@@ -551,19 +560,19 @@ export async function cleanupOldAuditLogs(): Promise<
     }
   | { ok: false; error: string }
 > {
-  await requireAuditView();
+  const sdb = await requireAuditDb();
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
 
-  const [user, grant, lead, cls, student] = await db.$transaction([
-    db.userAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-    db.permissionGrantAuditLog.deleteMany({
+  const [user, grant, lead, cls, student] = await sdb.$transaction([
+    sdb.userAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    sdb.permissionGrantAuditLog.deleteMany({
       where: { createdAt: { lt: cutoff } },
     }),
-    db.leadAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-    db.classAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-    db.studentAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    sdb.leadAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    sdb.classAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    sdb.studentAuditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
   ]);
 
   return {

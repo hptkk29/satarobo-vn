@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
+import type { Prisma } from "@prisma/client";
 import {
   grantCreateSchema,
   grantUpdateSchema,
@@ -21,9 +23,16 @@ async function requireUsersManage() {
   return session;
 }
 
+// User/UserPermissionGrant không thuộc SCOPED_MODELS (identity/quyền toàn cục)
+// → scopedDb pass-through, hành vi y nguyên; swap để sạch import @/lib/db (R6-F1).
+async function scopedDbForSession(session: { user: { id: string } }) {
+  return scopedDb(await resolveActor(session.user.id));
+}
+
 // ─── ADD GRANT ──────────────────────────────────────────────────────
 export async function addGrantAction(userId: string, formData: FormData) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
   const me = session.user;
 
   const parsed = grantCreateSchema.safeParse({
@@ -39,7 +48,7 @@ export async function addGrantAction(userId: string, formData: FormData) {
     };
   }
 
-  const targetUser = await db.user.findUnique({
+  const targetUser = await sdb.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true },
   });
@@ -54,7 +63,7 @@ export async function addGrantAction(userId: string, formData: FormData) {
   }
 
   // Duplicate check (composite unique sẽ throw, nhưng UX tốt hơn nếu báo trước)
-  const existing = await db.userPermissionGrant.findUnique({
+  const existing = await sdb.userPermissionGrant.findUnique({
     where: { userId_action: { userId, action: parsed.data.action } },
     select: { id: true },
   });
@@ -67,7 +76,8 @@ export async function addGrantAction(userId: string, formData: FormData) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const newGrant = await tx.userPermissionGrant.create({
       data: {
         userId,
@@ -105,6 +115,7 @@ export async function addGrantAction(userId: string, formData: FormData) {
 // ─── UPDATE GRANT ───────────────────────────────────────────────────
 export async function updateGrantAction(grantId: string, formData: FormData) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
 
   const parsed = grantUpdateSchema.safeParse({
     grant: formData.get("grant"),
@@ -118,7 +129,7 @@ export async function updateGrantAction(grantId: string, formData: FormData) {
     };
   }
 
-  const currentGrant = await db.userPermissionGrant.findUnique({
+  const currentGrant = await sdb.userPermissionGrant.findUnique({
     where: { id: grantId },
     select: { userId: true, action: true, grant: true },
   });
@@ -127,7 +138,8 @@ export async function updateGrantAction(grantId: string, formData: FormData) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.userPermissionGrant.update({
       where: { id: grantId },
       data: { grant: parsed.data.grant, reason: parsed.data.reason ?? null },
@@ -160,8 +172,9 @@ export async function updateGrantAction(grantId: string, formData: FormData) {
 // ─── REMOVE GRANT ───────────────────────────────────────────────────
 export async function removeGrantAction(grantId: string) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
 
-  const currentGrant = await db.userPermissionGrant.findUnique({
+  const currentGrant = await sdb.userPermissionGrant.findUnique({
     where: { id: grantId },
     select: { userId: true, action: true, grant: true },
   });
@@ -170,7 +183,8 @@ export async function removeGrantAction(grantId: string) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.userPermissionGrant.delete({ where: { id: grantId } });
 
     await tx.user.update({
