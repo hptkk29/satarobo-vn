@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { HonorsAdminTable } from "@/components/admin/honors/honors-admin-table";
@@ -15,7 +16,9 @@ export default async function HonorsAdminPage() {
     redirect("/dashboard");
   }
 
-  const honors = await db.honor.findMany({
+  // Honor là nội dung global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const honors = await scopedDb(actor).honor.findMany({
     orderBy: [{ displayOrder: "asc" }, { awardedAt: "desc" }],
     include: { createdBy: { select: { name: true } } },
   });

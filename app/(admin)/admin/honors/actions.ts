@@ -2,7 +2,8 @@
 
 import { auth } from "@/lib/auth";
 import { assertPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import {
   honorCreateSchema,
@@ -38,24 +39,29 @@ export async function createHonorAction(input: unknown) {
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
     };
 
-  // Verify Employee tồn tại
-  const employee = await db.employee.findUnique({
+  // Honor/TimelineItem/SitePageContent là nội dung global (∉ SCOPED_MODELS) → sdb
+  // pass-through. Employee ∈ SCOPED_MODELS → chỉ vinh danh nhân sự trong tầm nhìn actor.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  // Verify Employee tồn tại (trong tầm nhìn cơ sở của actor)
+  const employee = await sdb.employee.findUnique({
     where: { id: parsed.data.employeeId },
   });
   if (!employee) return { ok: false, error: "Nhân sự không tồn tại" };
 
-  const existing = await db.honor.findUnique({ where: { slug: parsed.data.slug } });
+  const existing = await sdb.honor.findUnique({ where: { slug: parsed.data.slug } });
   if (existing) return { ok: false, error: "Slug đã tồn tại, vui lòng chọn slug khác" };
 
   // Nếu đặt isFeatured=true → bỏ featured của tất cả honors khác
   if (parsed.data.isFeatured) {
-    await db.honor.updateMany({
+    await sdb.honor.updateMany({
       where: { isFeatured: true },
       data: { isFeatured: false },
     });
   }
 
-  const honor = await db.honor.create({
+  const honor = await sdb.honor.create({
     data: {
       ...parsed.data,
       // 2-phase: vẫn populate old fields cho code cũ fallback
@@ -87,19 +93,22 @@ export async function updateHonorAction(id: string, input: unknown) {
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
     };
 
-  const employee = await db.employee.findUnique({
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const employee = await sdb.employee.findUnique({
     where: { id: parsed.data.employeeId },
   });
   if (!employee) return { ok: false, error: "Nhân sự không tồn tại" };
 
   if (parsed.data.isFeatured) {
-    await db.honor.updateMany({
+    await sdb.honor.updateMany({
       where: { isFeatured: true, NOT: { id } },
       data: { isFeatured: false },
     });
   }
 
-  const honor = await db.honor.update({
+  const honor = await sdb.honor.update({
     where: { id },
     data: {
       ...parsed.data,
@@ -123,7 +132,8 @@ export async function deleteHonorAction(id: string) {
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
   }
 
-  const honor = await db.honor.delete({ where: { id } });
+  const actor = await resolveActor(session.user.id);
+  const honor = await scopedDb(actor).honor.delete({ where: { id } });
   revalidatePublic(honor.slug);
   return { ok: true };
 }
@@ -137,20 +147,23 @@ export async function toggleFeaturedAction(id: string) {
     return { ok: false };
   }
 
-  const honor = await db.honor.findUnique({ where: { id } });
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const honor = await sdb.honor.findUnique({ where: { id } });
   if (!honor) return { ok: false, error: "Không tìm thấy honor" };
 
   if (!honor.isFeatured) {
-    await db.honor.updateMany({
+    await sdb.honor.updateMany({
       where: { isFeatured: true },
       data: { isFeatured: false },
     });
-    await db.honor.update({
+    await sdb.honor.update({
       where: { id },
       data: { isFeatured: true },
     });
   } else {
-    await db.honor.update({
+    await sdb.honor.update({
       where: { id },
       data: { isFeatured: false },
     });
@@ -169,10 +182,13 @@ export async function togglePublishedAction(id: string) {
     return { ok: false };
   }
 
-  const honor = await db.honor.findUnique({ where: { id } });
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const honor = await sdb.honor.findUnique({ where: { id } });
   if (!honor) return { ok: false };
 
-  await db.honor.update({
+  await sdb.honor.update({
     where: { id },
     data: { isPublished: !honor.isPublished },
   });
@@ -198,7 +214,8 @@ export async function createTimelineAction(input: unknown) {
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
     };
 
-  const item = await db.timelineItem.create({
+  const actor = await resolveActor(session.user.id);
+  const item = await scopedDb(actor).timelineItem.create({
     data: {
       ...parsed.data,
       coverImageUrl: parsed.data.coverImageUrl || null,
@@ -226,7 +243,8 @@ export async function updateTimelineAction(id: string, input: unknown) {
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
     };
 
-  await db.timelineItem.update({
+  const actor = await resolveActor(session.user.id);
+  await scopedDb(actor).timelineItem.update({
     where: { id },
     data: {
       ...parsed.data,
@@ -248,7 +266,8 @@ export async function deleteTimelineAction(id: string) {
     return { ok: false, error: "Chỉ SUPER_ADMIN được xoá" };
   }
 
-  await db.timelineItem.delete({ where: { id } });
+  const actor = await resolveActor(session.user.id);
+  await scopedDb(actor).timelineItem.delete({ where: { id } });
   revalidatePath("/honors/timeline");
   revalidatePath("/vinh-danh");
   return { ok: true };
@@ -271,7 +290,8 @@ export async function updatePageContentAction(input: unknown) {
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
     };
 
-  await db.sitePageContent.upsert({
+  const actor = await resolveActor(session.user.id);
+  await scopedDb(actor).sitePageContent.upsert({
     where: {
       pageKey_contentKey: {
         pageKey: parsed.data.pageKey,

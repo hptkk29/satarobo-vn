@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { TimelineAdminClient } from "@/components/admin/honors/timeline-admin-client";
 import { checkPermission } from "@/lib/auth/check-permission";
 
@@ -13,7 +14,9 @@ export default async function TimelineAdminPage() {
     redirect("/dashboard");
   }
 
-  const items = await db.timelineItem.findMany({
+  // TimelineItem là model global (∉ SCOPED_MODELS) → sdb pass-through.
+  const actor = await resolveActor(session.user.id);
+  const items = await scopedDb(actor).timelineItem.findMany({
     orderBy: { occurredAt: "asc" },
   });
 

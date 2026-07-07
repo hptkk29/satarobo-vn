@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { HonorForm } from "@/components/admin/honors/honor-form";
 
@@ -15,13 +16,18 @@ export default async function EditHonorPage({ params }: Props) {
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("honors:edit"))) redirect("/dashboard");
 
+  // Honor global → pass-through; Employee ∈ SCOPED_MODELS → dropdown chỉ nhân sự
+  // trong tầm nhìn cơ sở của actor (SUPER_ADMIN/HO thấy tất cả).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const { id } = await params;
   const [honor, employees] = await Promise.all([
-    db.honor.findUnique({
+    sdb.honor.findUnique({
       where: { id },
       include: { employee: { select: { fullName: true } } },
     }),
-    db.employee.findMany({
+    sdb.employee.findMany({
       where: { isActive: true },
       orderBy: [{ department: "asc" }, { fullName: "asc" }],
       select: {
