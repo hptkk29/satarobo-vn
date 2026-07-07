@@ -5,13 +5,16 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { logProductAudit, getAuditActor } from "@/lib/audit/log";
 import {
   productSchema,
   productMovementSchema,
 } from "@/lib/validators/product";
 
+// Product/ProductMovement là catalog + sổ kho SP toàn cục (không có centerId,
+// không thuộc SCOPED_MODELS) — scopedDb pass-through (A0-04).
 async function requireProductsManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -19,7 +22,7 @@ async function requireProductsManage() {
   if (!(await checkPermission("products:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  return session;
+  return { session, sdb: scopedDb(await resolveActor(session.user.id)) };
 }
 
 // Fields tracked for the UPDATE audit diff. Excludes stockOnHand (changes
@@ -42,7 +45,7 @@ const TRACKED_UPDATE_FIELDS = [
 
 // ─── CREATE ─────────────────────────────────────────────────────────
 export async function createProductAction(input: unknown) {
-  const session = await requireProductsManage();
+  const { session, sdb } = await requireProductsManage();
   const parsed = productSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -52,7 +55,7 @@ export async function createProductAction(input: unknown) {
   }
   const data = parsed.data;
 
-  const existing = await db.product.findUnique({
+  const existing = await sdb.product.findUnique({
     where: { sku: data.sku },
     select: { id: true },
   });
@@ -61,7 +64,7 @@ export async function createProductAction(input: unknown) {
   }
 
   if (data.zmroboKitId) {
-    const kit = await db.zMRoboKit.findUnique({
+    const kit = await sdb.zMRoboKit.findUnique({
       where: { id: data.zmroboKitId },
       select: { id: true },
     });
@@ -70,7 +73,9 @@ export async function createProductAction(input: unknown) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  const product = await db.$transaction(async (tx) => {
+  // A0-04: tx từ scopedDb — cast (tiền lệ); cấu trúc transaction giữ nguyên.
+  const product = await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const p = await tx.product.create({
       data: {
         sku: data.sku,
@@ -130,7 +135,7 @@ export async function createProductAction(input: unknown) {
 
 // ─── UPDATE ─────────────────────────────────────────────────────────
 export async function updateProductAction(productId: string, input: unknown) {
-  const session = await requireProductsManage();
+  const { session, sdb } = await requireProductsManage();
   const parsed = productSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -140,13 +145,13 @@ export async function updateProductAction(productId: string, input: unknown) {
   }
   const data = parsed.data;
 
-  const existing = await db.product.findUnique({ where: { id: productId } });
+  const existing = await sdb.product.findUnique({ where: { id: productId } });
   if (!existing) {
     return { ok: false as const, error: "Không tìm thấy sản phẩm" };
   }
 
   if (data.sku !== existing.sku) {
-    const dup = await db.product.findUnique({
+    const dup = await sdb.product.findUnique({
       where: { sku: data.sku },
       select: { id: true },
     });
@@ -186,7 +191,8 @@ export async function updateProductAction(productId: string, input: unknown) {
   const isStatusChange =
     changedFields.length === 1 && changedFields[0] === "status";
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.product.update({
       where: { id: productId },
       data: {
@@ -227,9 +233,9 @@ export async function updateProductAction(productId: string, input: unknown) {
 
 // ─── DELETE (hard delete blocked if product has movement history) ────
 export async function deleteProductAction(productId: string) {
-  const session = await requireProductsManage();
+  const { session, sdb } = await requireProductsManage();
 
-  const movementCount = await db.productMovement.count({
+  const movementCount = await sdb.productMovement.count({
     where: { productId },
   });
   if (movementCount > 0) {
@@ -240,7 +246,7 @@ export async function deleteProductAction(productId: string) {
     };
   }
 
-  const product = await db.product.findUnique({
+  const product = await sdb.product.findUnique({
     where: { id: productId },
     select: { id: true, sku: true, name: true },
   });
@@ -250,7 +256,8 @@ export async function deleteProductAction(productId: string) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await logProductAudit({
       productId,
       action: "DELETE",
@@ -269,7 +276,7 @@ export async function deleteProductAction(productId: string) {
 
 // ─── ADJUST STOCK (manual movement) ──────────────────────────────────
 export async function adjustStockAction(input: unknown) {
-  const session = await requireProductsManage();
+  const { session, sdb } = await requireProductsManage();
   const parsed = productMovementSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -279,7 +286,7 @@ export async function adjustStockAction(input: unknown) {
   }
   const data = parsed.data;
 
-  const product = await db.product.findUnique({
+  const product = await sdb.product.findUnique({
     where: { id: data.productId },
     select: { id: true, stockOnHand: true },
   });
@@ -297,7 +304,9 @@ export async function adjustStockAction(input: unknown) {
 
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  // Giữ NGUYÊN cấu trúc transaction (update tồn + movement atomic) — chỉ đổi nguồn client.
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.product.update({
       where: { id: data.productId },
       data: { stockOnHand: newStock },

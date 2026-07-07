@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,7 +62,11 @@ export default async function VoucherDetailPage({ params }: Props) {
   }
 
   const { id } = await params;
-  const voucher = await db.voucher.findUnique({
+  // Voucher/VoucherRedemption là catalog + sổ đổi mã toàn cục (không scoped) —
+  // pass-through. Include order là quan hệ to-one (không auto-scope được — AC7);
+  // vouchers:view là quyền GLOBAL nên giữ nguyên hành vi.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const voucher = await sdb.voucher.findUnique({
     where: { id },
     include: {
       redemptions: {
