@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma, TrialClassStatus } from "@prisma/client";
@@ -52,7 +51,7 @@ export default async function TrialsPage({ searchParams }: Props) {
   if (isTeacher) where.teacherId = session.user.id;
 
   // Cách ly cơ sở: TrialClass/Room/Class đều thuộc SCOPED_MODELS (có centerId) → scopedDb
-  // tự inject `centerId IN visible`. User/Course không scope (global) → giữ db trần.
+  // tự inject `centerId IN visible`. User/Course không scope (global) → sdb pass-through.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
@@ -78,7 +77,7 @@ export default async function TrialsPage({ searchParams }: Props) {
         teacher: { select: { id: true, name: true } },
       },
     }),
-    db.user.findMany({
+    sdb.user.findMany({
       where: { roles: { has: "TEACHER" }, isActive: true, deletedAt: null },
       select: { id: true, name: true },
       orderBy: { name: "asc" },

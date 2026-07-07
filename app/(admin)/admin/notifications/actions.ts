@@ -4,7 +4,6 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { getAuditActor } from "@/lib/audit/log";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
@@ -73,7 +72,7 @@ export async function createNotification(
     if (!st || !passesScope("Student", st, actor)) return { ok: false, error: "Không có quyền với học viên này" };
   }
 
-  await db.notification.create({
+  await sdb.notification.create({
     data: {
       title: d.title,
       body: d.body,
@@ -111,7 +110,7 @@ export async function toggleNotificationPublish(
   if (!n || !passesScope("Notification", n, actor)) return { ok: false, error: "Không tìm thấy" };
 
   const willPublish = !n.isPublished;
-  await db.notification.update({
+  await sdb.notification.update({
     where: { id },
     data: {
       isPublished: willPublish,
@@ -137,7 +136,7 @@ export async function deleteNotification(
   if (!n || !passesScope("Notification", n, actor)) {
     return { ok: false, error: "Không tìm thấy" };
   }
-  await db.notification.delete({ where: { id } }).catch(() => null);
+  await sdb.notification.delete({ where: { id } }).catch(() => null);
   revalidatePath("/notifications");
   return { ok: true };
 }

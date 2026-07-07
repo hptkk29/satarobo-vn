@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events/publish";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -13,7 +12,7 @@ import {
   trialUpdateSchema,
   trialFeedbackSchema,
 } from "@/lib/validators/trial";
-import type { LeadStatus, TrialClassStatus } from "@prisma/client";
+import type { LeadStatus, Prisma, TrialClassStatus } from "@prisma/client";
 
 // Cách ly cơ sở (chống IDOR ghi): TrialClass (V1) ∈ SCOPED_MODELS → đọc qua scopedDb
 // (auto null-filter) + passesScope trước khi update/delete/upsert.
@@ -62,7 +61,8 @@ export async function updateTrialAction(
   const newAt = new Date(parsed.data.scheduledAt);
   const scheduleChanged = trial.scheduledAt?.getTime() !== newAt.getTime();
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.trialClass.update({
       where: { id: trialId },
       data: {
@@ -171,7 +171,8 @@ export async function deleteTrialAction(
   const { actorId, actorName } = getAuditActor(session);
 
   // TrialFeedback có onDelete: Cascade theo trialClassId → xoá kèm.
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.trialClass.delete({ where: { id: trialId } });
     await writeAudit({
       actor: { id: actorId, name: actorName },
@@ -229,7 +230,8 @@ export async function saveTrialFeedbackAction(
     recommendedCourseId: parsed.data.recommendedCourseId,
   };
 
-  await db.trialFeedback.upsert({
+  // TrialFeedback không scoped → sdb pass-through (trial đã qua passesScope ở trên).
+  await sdb.trialFeedback.upsert({
     where: { trialClassId: trialId },
     create: { trialClassId: trialId, ...data },
     update: data,

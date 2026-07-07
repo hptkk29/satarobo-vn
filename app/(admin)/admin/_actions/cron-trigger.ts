@@ -2,7 +2,8 @@
 
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { wasReminderSent } from "@/lib/email/reminder-helpers";
 import { revalidatePath } from "next/cache";
@@ -18,7 +19,12 @@ export async function triggerClassReminderAction(input: { sessionId: string }) {
     return { ok: false as const, error: "Không có quyền" };
   }
 
-  const cs = await db.classSession.findUnique({
+  // Cách ly cơ sở: ClassSession/Enrollment ∈ SCOPED_MODELS → sdb tự inject
+  // `centerId IN visible`; buổi cơ sở khác → findUnique trả null (chống IDOR).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const cs = await sdb.classSession.findUnique({
     where: { id: input.sessionId },
     include: {
       class: {
@@ -31,7 +37,7 @@ export async function triggerClassReminderAction(input: { sessionId: string }) {
   });
   if (!cs) return { ok: false as const, error: "Buổi học không tồn tại" };
 
-  const enrollments = await db.enrollment.findMany({
+  const enrollments = await sdb.enrollment.findMany({
     where: {
       classId: cs.classId,
       status: { in: ["ACTIVE", "STUDYING"] },
