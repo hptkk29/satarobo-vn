@@ -2,8 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
-import { getModelVisibleCenterIds } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type {
   Prisma,
@@ -88,12 +87,14 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
   // tiếp) → phụ thuộc cơ sở qua student.centerId. Scope thủ công bằng tầm nhìn cơ sở của
   // model Student (mẫu như /admin/enrollments scope qua class.centerId). SUPER_ADMIN/HO → ALL.
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const visibleStudentCenters = getModelVisibleCenterIds("Student", actor);
   if (visibleStudentCenters !== "ALL") {
     where.student = { centerId: { in: visibleStudentCenters } };
   }
 
-  const rows = await db.parentRequest.findMany({
+  // ParentRequest ∉ SCOPED_MODELS → sdb pass-through; cách ly nằm ở where.student trên.
+  const rows = await sdb.parentRequest.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -130,8 +131,9 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
   const sessionIds = rows
     .map((r) => r.sessionId)
     .filter((x): x is string => !!x);
+  // ClassSession ∈ SCOPED_MODELS → auto-scope theo tầm nhìn (buổi cùng cơ sở HV).
   const sessions = sessionIds.length
-    ? await db.classSession.findMany({
+    ? await sdb.classSession.findMany({
         where: { id: { in: sessionIds } },
         select: { id: true, date: true, class: { select: { name: true } } },
       })
@@ -145,7 +147,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
     ),
   );
   const parents = parentIds.length
-    ? await db.user.findMany({
+    ? await sdb.user.findMany({
         where: { id: { in: parentIds } },
         select: { id: true, name: true, email: true },
       })
