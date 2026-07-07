@@ -3,7 +3,8 @@ import { Settings2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { ModeSelector } from "./_components/mode-selector";
 
 export const metadata = { title: "Cấu hình chia lead | Admin" };
@@ -17,12 +18,17 @@ export default async function AssignConfigPage() {
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER") && !isSuper;
 
-  const centers = await db.center.findMany({
+  // Cách ly cơ sở: Center + LeadAssignmentConfig đều SCOPE_EXEMPT (hạ tầng/config)
+  // → sdb pass-through; giữ lọc CM theo centerId thủ công như cũ.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const centers = await sdb.center.findMany({
     where: { isActive: true, ...(isCM && session.user.centerId ? { id: session.user.centerId } : {}) },
     orderBy: { displayOrder: "asc" },
     select: { id: true, name: true },
   });
-  const configs = await db.leadAssignmentConfig.findMany({
+  const configs = await sdb.leadAssignmentConfig.findMany({
     where: { centerId: { in: centers.map((c) => c.id) } },
     select: { centerId: true, mode: true },
   });

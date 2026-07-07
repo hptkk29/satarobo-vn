@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
@@ -88,8 +87,9 @@ export default async function LeadDetailPage({ params }: Props) {
   const status = lead.status as LeadStatus;
 
   // PHẦN 2 — danh sách sale để gán tay (ưu tiên sale cùng cơ sở lead).
+  // User/Center/Course/Product không scoped (exempt/global) → sdb pass-through.
   const assignableSales = canAssign
-    ? await db.user.findMany({
+    ? await sdb.user.findMany({
         where: {
           roles: { has: "SALES_CSM" },
           isActive: true,
@@ -105,8 +105,8 @@ export default async function LeadDetailPage({ params }: Props) {
   const canTransfer = (await checkPermission("leads:edit", { centerId: lead.centerId }));
   const [transferCenters, transferSales] = canTransfer
     ? await Promise.all([
-        db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
-        db.user.findMany({
+        sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
+        sdb.user.findMany({
           where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null },
           orderBy: { name: "asc" },
           select: { id: true, name: true, centerId: true },
@@ -121,18 +121,18 @@ export default async function LeadDetailPage({ params }: Props) {
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
   const [childCenters, childCourses, expectedProducts] = await Promise.all([
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true },
     }),
-    db.course.findMany({
+    sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true, code: true },
     }),
     // G2 — sản phẩm dự kiến (loại đơn = Sản phẩm): chỉ KIT_ROBOT/SENSOR đang bán.
-    db.product.findMany({
+    sdb.product.findMany({
       where: { status: "ACTIVE", category: { in: ["KIT_ROBOT", "SENSOR"] } },
       orderBy: { name: "asc" },
       take: 200,
@@ -172,11 +172,12 @@ export default async function LeadDetailPage({ params }: Props) {
 
   // LD3 (display) — buổi đã chọn (scheduledSessionId) là scalar, không có relation
   // Prisma → resolve thủ công ra ngày/giờ để hiện trong banner "đang học thử".
+  // TrialClassSession không scoped; id đến từ lead ĐÃ qua scope ở trên → an toàn.
   const scheduledSessionIds = lead.children
     .map((c) => c.trialEnrollments[0]?.scheduledSessionId)
     .filter((v): v is string => Boolean(v));
   const scheduledSessions = scheduledSessionIds.length
-    ? await db.trialClassSession.findMany({
+    ? await sdb.trialClassSession.findMany({
         where: { id: { in: scheduledSessionIds } },
         select: { id: true, seq: true, date: true, startTime: true, endTime: true },
       })

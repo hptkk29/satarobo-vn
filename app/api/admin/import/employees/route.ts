@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -166,15 +167,21 @@ export async function POST(req: NextRequest) {
     ),
   ];
 
+  // Cách ly cơ sở: Employee ∈ SCOPED_MODELS → lookup manager tự giới hạn theo tầm
+  // nhìn actor; write theo centerId form → guard passesScope per-row (CM chỉ import
+  // nhân sự vào cơ sở mình; nhân sự HO/không cơ sở cần quyền HO/SUPER_ADMIN).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [centers, managers] = await Promise.all([
     slugs.length
-      ? db.center.findMany({
+      ? sdb.center.findMany({
           where: { slug: { in: slugs } },
           select: { id: true, slug: true },
         })
       : Promise.resolve([] as { id: string; slug: string }[]),
     managerCodes.length
-      ? db.employee.findMany({
+      ? sdb.employee.findMany({
           where: { employeeCode: { in: managerCodes } },
           select: { id: true, employeeCode: true },
         })
@@ -230,6 +237,16 @@ export async function POST(req: NextRequest) {
       managerId = id;
     }
 
+    if (!passesScope("Employee", { centerId }, actor)) {
+      errors.push({
+        row: i + 2,
+        error: entry.data.centerSlug
+          ? `Cơ sở "${entry.data.centerSlug}" ngoài phạm vi quyền của bạn`
+          : "Nhân sự không gắn cơ sở (HO/toàn hệ thống) cần quyền HO/SUPER_ADMIN",
+      });
+      continue;
+    }
+
     const orgUnitId = centerId
       ? (centerIdToOrgUnitId.get(centerId) ?? null)
       : null;
@@ -243,7 +260,7 @@ export async function POST(req: NextRequest) {
   // Stage 3: upsert by employeeCode in a transaction.
   let success = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         const base = {

@@ -2,9 +2,10 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, KeyRound, Shield, AlertCircle } from "lucide-react";
-import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { RoleBadges } from "./_components/role-badge";
 import {
   UserStatusToggle,
@@ -54,7 +55,9 @@ export default async function UsersAdminPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const users = await db.user.findMany({
+  // User là SCOPE_EXEMPT (identity toàn cục) → sdb pass-through, hành vi y nguyên.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const users = await sdb.user.findMany({
     where: { deletedAt: null },
     orderBy: { createdAt: "desc" },
     include: {

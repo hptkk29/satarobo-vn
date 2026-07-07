@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { ScrollText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { AuditLogClient } from "./_components/audit-log-client";
 
 export const metadata = { title: "Audit Log | Admin" };
@@ -18,7 +19,9 @@ export default async function AuditLogPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const actors = await db.user.findMany({
+  // User SCOPE_EXEMPT (identity toàn cục) → sdb pass-through, hành vi y nguyên.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actors = await sdb.user.findMany({
     where: { deletedAt: null },
     select: { id: true, name: true, email: true },
     orderBy: [{ name: "asc" }, { email: "asc" }],

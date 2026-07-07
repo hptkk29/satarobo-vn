@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import {
+  scopedDb,
+  passesScope,
+  getModelVisibleCenterIds,
+  logScopeBypass,
+} from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { parseLeadImportRow } from "@/lib/lead/import";
@@ -35,13 +41,19 @@ export async function POST(req: NextRequest) {
   // Resolve cơ sở (mã CS → centerId, mọi cơ sở có code) + khoá (tên/slug → courseId).
   // Dual-write 2-phase: resolve OrgUnit theo mã (tự nhiên gồm cả HO "HO" — HO
   // không có Center row nên chỉ map được qua OrgUnit).
+  // Cách ly cơ sở: Lead ∈ SCOPED_MODELS. Write theo centerId form → guard passesScope
+  // per-row (CM chỉ import lead vào cơ sở mình; Sale HO/SUPER_ADMIN chọn cơ sở tự do
+  // — câu 4.1 BGĐ). Center/OrgUnit exempt, Course catalog global → pass-through.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const [centers, orgUnits, courses] = await Promise.all([
-    db.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
-    db.orgUnit.findMany({
+    sdb.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
+    sdb.orgUnit.findMany({
       where: { deletedAt: null },
       select: { id: true, code: true },
     }),
-    db.course.findMany({ select: { id: true, name: true, slug: true } }),
+    sdb.course.findMany({ select: { id: true, name: true, slug: true } }),
   ]);
   const centerByCode = new Map(centers.map((c) => [c.code, c.id]));
   const orgUnitByCode = new Map(orgUnits.map((o) => [o.code, o.id]));
@@ -97,6 +109,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!passesScope("Lead", { centerId }, actor)) {
+      errors.push({
+        row: rowNo,
+        error: d.centerCode
+          ? `Cơ sở "${d.centerCode}" ngoài phạm vi quyền của bạn`
+          : "Lead không gắn cơ sở cần quyền HO/SUPER_ADMIN",
+      });
+      continue;
+    }
+
     // Chống trùng trong file.
     if (seenPhones.has(d.phone)) {
       errors.push({ row: rowNo, error: `Trùng SĐT trong file: ${d.phone}` });
@@ -118,9 +140,14 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Chống trùng với lead đã tồn tại (theo SĐT).
+  // Chống trùng với lead đã tồn tại (theo SĐT) — dedupe TOÀN HỆ THỐNG (không tạo
+  // lead trùng SĐT giữa các cơ sở). sdb sẽ ẩn lead cơ sở khác → dùng bypass HẸP cho
+  // đúng truy vấn này (chỉ select phone, không lộ PII khác) + ghi audit AC10.
   if (valid.length > 0) {
-    const existing = await db.lead.findMany({
+    if (getModelVisibleCenterIds("Lead", actor) !== "ALL") {
+      await logScopeBypass(actor, "import/leads: dedupe SĐT lead toàn hệ thống");
+    }
+    const existing = await scopedDb(actor, { bypass: true }).lead.findMany({
       where: { phone: { in: valid.map((v) => v.phone) }, deletedAt: null },
       select: { phone: true },
     });
@@ -139,7 +166,7 @@ export async function POST(req: NextRequest) {
   let success = 0;
   const createdIds: string[] = [];
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (tx) => {
       for (const v of valid) {
         const created = await tx.lead.create({
           data: {

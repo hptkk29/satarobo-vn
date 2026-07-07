@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ClassStatusEnum } from "@/lib/validators/class";
@@ -201,22 +202,28 @@ export async function POST(req: NextRequest) {
     if (r.data.assistantCode) employeeCodes.add(r.data.assistantCode);
   }
 
+  // Cách ly cơ sở: Class/Room/Employee ∈ SCOPED_MODELS → lookup GV/phòng tự giới
+  // hạn theo tầm nhìn actor; write theo centerId form → guard passesScope per-row
+  // (CM chỉ import lớp vào cơ sở mình; SUPER_ADMIN/HO bypass). Course/Center exempt.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Stage 2b: bulk lookup (Phase 1 — independent unique-key references)
   const [courses, centers, employees] = await Promise.all([
     courseSlugs.size
-      ? db.course.findMany({
+      ? sdb.course.findMany({
           where: { slug: { in: [...courseSlugs] } },
           select: { id: true, slug: true },
         })
       : Promise.resolve([] as { id: string; slug: string }[]),
     centerSlugs.size
-      ? db.center.findMany({
+      ? sdb.center.findMany({
           where: { slug: { in: [...centerSlugs] } },
           select: { id: true, slug: true },
         })
       : Promise.resolve([] as { id: string; slug: string }[]),
     employeeCodes.size
-      ? db.employee.findMany({
+      ? sdb.employee.findMany({
           where: {
             employeeCode: { in: [...employeeCodes] },
             status: "ACTIVE",
@@ -263,7 +270,7 @@ export async function POST(req: NextRequest) {
 
   const rooms =
     roomCenterIds.size && roomCodes.size
-      ? await db.room.findMany({
+      ? await sdb.room.findMany({
           where: {
             centerId: { in: [...roomCenterIds] },
             code: { in: [...roomCodes] },
@@ -309,6 +316,13 @@ export async function POST(req: NextRequest) {
       errors.push({
         row: rowNo,
         error: `Không tìm thấy cơ sở slug "${d.centerSlug}"`,
+      });
+      continue;
+    }
+    if (!passesScope("Class", { centerId }, actor)) {
+      errors.push({
+        row: rowNo,
+        error: `Cơ sở "${d.centerSlug}" ngoài phạm vi quyền của bạn`,
       });
       continue;
     }
@@ -379,7 +393,7 @@ export async function POST(req: NextRequest) {
   // Stage 4: upsert by classCode in a single transaction.
   let success = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         const base = {

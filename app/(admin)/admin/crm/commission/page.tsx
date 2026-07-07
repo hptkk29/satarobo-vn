@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { Coins } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -18,12 +19,34 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Hoa hồng | Admin" };
 
 export default async function CommissionPage() {
-  await auth();
+  const session = await auth();
+  if (!session?.user) redirect("/login");
   if (!(await checkPermission("payments:manage"))) redirect("/admin/dashboard");
 
-  const statements = await db.commissionStatement.findMany({
+  // Cách ly cơ sở (scope TAY): CommissionStatement là bảng KỲ toàn hệ thống
+  // (period @unique, KHÔNG có centerId) → scopedDb pass-through. Hoa hồng "theo cơ
+  // sở" đi qua NGƯỜI HƯỞNG (CommissionLine.recipientId → User.centerId): actor không
+  // phải SUPER_ADMIN/HO chỉ thấy dòng của user thuộc cơ sở trong tầm nhìn.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleCenters = getModelVisibleCenterIds("CommissionStatement", actor);
+  const lineWhere =
+    visibleCenters === "ALL"
+      ? undefined
+      : {
+          recipientId: {
+            in: (
+              await sdb.user.findMany({
+                where: { centerId: { in: visibleCenters } },
+                select: { id: true },
+              })
+            ).map((u) => u.id),
+          },
+        };
+
+  const statements = await sdb.commissionStatement.findMany({
     orderBy: { period: "desc" },
-    include: { lines: { select: { amount: true } } },
+    include: { lines: { where: lineWhere, select: { amount: true } } },
   });
 
   return (

@@ -6,7 +6,9 @@ import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
+import type { Prisma } from "@prisma/client";
 import {
   userCreateSchema,
   userUpdateSchema,
@@ -29,9 +31,16 @@ async function requireUsersManage() {
   return session;
 }
 
+// User là SCOPE_EXEMPT (identity toàn cục) → scopedDb pass-through, hành vi y nguyên;
+// swap để file sạch import @/lib/db trần (R6-F1).
+async function scopedDbForSession(session: { user: { id: string } }) {
+  return scopedDb(await resolveActor(session.user.id));
+}
+
 // ─── CREATE ──────────────────────────────────────────────────────────
 export async function createUserAction(formData: FormData) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
 
   const parsed = userCreateSchema.safeParse({
     name: formData.get("name"),
@@ -52,7 +61,7 @@ export async function createUserAction(formData: FormData) {
   }
 
   // Email unique
-  const existing = await db.user.findUnique({
+  const existing = await sdb.user.findUnique({
     where: { email: parsed.data.email },
     select: { id: true },
   });
@@ -62,7 +71,7 @@ export async function createUserAction(formData: FormData) {
 
   // Employee chưa link User khác
   if (parsed.data.employeeId) {
-    const empUsed = await db.user.findFirst({
+    const empUsed = await sdb.user.findFirst({
       where: { employeeId: parsed.data.employeeId },
       select: { id: true },
     });
@@ -78,7 +87,8 @@ export async function createUserAction(formData: FormData) {
   const orgUnitId = parsed.data.orgUnitId ?? null;
   const centerId = await centerIdForOrgUnit(orgUnitId);
 
-  const user = await db.$transaction(async (tx) => {
+  const user = await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const created = await tx.user.create({
       data: {
         name: parsed.data.name,
@@ -130,6 +140,7 @@ export async function createUserAction(formData: FormData) {
 // ─── UPDATE ──────────────────────────────────────────────────────────
 export async function updateUserAction(id: string, formData: FormData) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
   const me = session.user;
 
   const parsed = userUpdateSchema.safeParse({
@@ -149,7 +160,7 @@ export async function updateUserAction(id: string, formData: FormData) {
     };
   }
 
-  const current = await db.user.findUnique({
+  const current = await sdb.user.findUnique({
     where: { id },
     select: {
       id: true,
@@ -181,7 +192,7 @@ export async function updateUserAction(id: string, formData: FormData) {
   const wasSuperAdmin = currentRoles.includes("SUPER_ADMIN");
   const willBeSuperAdmin = nextRoles.includes("SUPER_ADMIN");
   if (wasSuperAdmin && !willBeSuperAdmin) {
-    const remaining = await db.user.count({
+    const remaining = await sdb.user.count({
       where: {
         roles: { has: "SUPER_ADMIN" },
         isActive: true,
@@ -199,7 +210,7 @@ export async function updateUserAction(id: string, formData: FormData) {
 
   // Email unique nếu thay đổi
   if (parsed.data.email !== current.email) {
-    const existing = await db.user.findUnique({
+    const existing = await sdb.user.findUnique({
       where: { email: parsed.data.email },
       select: { id: true },
     });
@@ -210,7 +221,7 @@ export async function updateUserAction(id: string, formData: FormData) {
 
   // Employee link nếu thay đổi
   if (parsed.data.employeeId && parsed.data.employeeId !== current.employeeId) {
-    const empUsed = await db.user.findFirst({
+    const empUsed = await sdb.user.findFirst({
       where: { employeeId: parsed.data.employeeId, id: { not: id } },
       select: { id: true },
     });
@@ -226,7 +237,8 @@ export async function updateUserAction(id: string, formData: FormData) {
   const orgUnitId = parsed.data.orgUnitId ?? null;
   const centerId = await centerIdForOrgUnit(orgUnitId);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     const updated = await tx.user.update({
       where: { id },
       data: {
@@ -288,13 +300,14 @@ export async function updateUserAction(id: string, formData: FormData) {
 // ─── TOGGLE ACTIVE ───────────────────────────────────────────────────
 export async function toggleUserActiveAction(id: string) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
   const me = session.user;
 
   if (id === me.id) {
     return { ok: false, error: "Không thể tự disable chính mình" };
   }
 
-  const user = await db.user.findUnique({
+  const user = await sdb.user.findUnique({
     where: { id },
     select: { isActive: true, role: true, roles: true },
   });
@@ -304,7 +317,7 @@ export async function toggleUserActiveAction(id: string) {
 
   // Last SUPER_ADMIN check (chỉ áp dụng khi đang active + đi disable)
   if (hasRole(user, "SUPER_ADMIN") && user.isActive) {
-    const remaining = await db.user.count({
+    const remaining = await sdb.user.count({
       where: {
         roles: { has: "SUPER_ADMIN" },
         isActive: true,
@@ -322,7 +335,8 @@ export async function toggleUserActiveAction(id: string) {
 
   // P0-c: bọc try/catch — lỗi DB trả message rõ, không ném stack trace cho client.
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       await tx.user.update({
         where: { id },
         data: {
@@ -365,13 +379,14 @@ export async function toggleUserActiveAction(id: string) {
 // delete (User có nhiều quan hệ: leads, lớp dạy, audit logs, con cái).
 export async function deleteUserAction(id: string) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
   const me = session.user;
 
   if (id === me.id) {
     return { ok: false, error: "Không thể tự xóa chính mình" };
   }
 
-  const user = await db.user.findUnique({
+  const user = await sdb.user.findUnique({
     where: { id },
     select: { isActive: true, email: true, role: true, roles: true },
   });
@@ -388,7 +403,7 @@ export async function deleteUserAction(id: string) {
     (user.role === "SUPER_ADMIN" || user.roles.includes("SUPER_ADMIN")) &&
     user.isActive
   ) {
-    const remaining = await db.user.count({
+    const remaining = await sdb.user.count({
       where: {
         roles: { has: "SUPER_ADMIN" },
         isActive: true,
@@ -404,7 +419,8 @@ export async function deleteUserAction(id: string) {
   const { actorId, actorName } = getAuditActor(session);
 
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       await tx.user.update({
         where: { id },
         data: {
@@ -438,6 +454,7 @@ export async function deleteUserAction(id: string) {
 // ─── RESET PASSWORD ──────────────────────────────────────────────────
 export async function resetUserPasswordAction(id: string, formData: FormData) {
   const session = await requireUsersManage();
+  const sdb = await scopedDbForSession(session);
 
   const parsed = passwordResetSchema.safeParse({
     newPassword: formData.get("newPassword"),
@@ -451,13 +468,14 @@ export async function resetUserPasswordAction(id: string, formData: FormData) {
     };
   }
 
-  const user = await db.user.findUnique({ where: { id }, select: { id: true } });
+  const user = await sdb.user.findUnique({ where: { id }, select: { id: true } });
   if (!user) return { ok: false, error: "Không tìm thấy user" };
 
   const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
   const { actorId, actorName } = getAuditActor(session);
 
-  await db.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
     await tx.user.update({
       where: { id },
       data: {

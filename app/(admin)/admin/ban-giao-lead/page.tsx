@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { HandoverForm } from "./_components/handover-form";
@@ -27,12 +26,12 @@ export default async function HandoverPage() {
 
   // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → đọc qua scopedDb để chỉ thấy chiến dịch
   // của lead trong tầm nhìn cơ sở (SUPER_ADMIN/HO bypass → ALL). User là SCOPE_EXEMPT
-  // (identity, đọc toàn cục) → giữ db trần + lọc center thủ công như cũ.
+  // (identity, đọc toàn cục) → sdb pass-through + lọc center thủ công như cũ.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
   const [sales, campaigns] = await Promise.all([
-    db.user.findMany({
+    sdb.user.findMany({
       where: {
         roles: { has: "SALES_CSM" },
         deletedAt: null,

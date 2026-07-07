@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Users, CheckCircle2, Percent, Loader2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { LeadStatus } from "@prisma/client";
@@ -39,7 +38,7 @@ export default async function CrmDashboardPage() {
 
   // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → đọc qua scopedDb để CENTER_MANAGER@CS1
   // không thấy lead CS2. groupBy/count auto-inject centerId theo tầm nhìn của actor.
-  // User là SCOPE_EXEMPT (identity toàn cục) → giữ db trần.
+  // User là SCOPE_EXEMPT (identity toàn cục) → sdb pass-through.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
@@ -68,7 +67,7 @@ export default async function CrmDashboardPage() {
         where: { deletedAt: null, assignedToId: { not: null }, status: "ENROLLED" },
         _count: { _all: true },
       }),
-      db.user.findMany({
+      sdb.user.findMany({
         where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null },
         select: { id: true, name: true, email: true },
         orderBy: { name: "asc" },

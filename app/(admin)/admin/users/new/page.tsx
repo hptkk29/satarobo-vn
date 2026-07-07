@@ -2,9 +2,9 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { db } from "@/lib/db";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { UserForm } from "../_components/user-form";
 
@@ -24,6 +24,11 @@ export default async function NewUserPage({ searchParams }: Props) {
 
   const { employeeId: prefillEmployeeId } = await searchParams;
 
+  // Cách ly cơ sở: Employee ∈ SCOPED_MODELS → sdb tự inject `centerId IN visible`
+  // (chỉ pre-fill/list nhân sự trong tầm nhìn actor; SUPER_ADMIN/HO thấy tất cả).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Nếu có ?employeeId=... → pre-fill from employee. Nếu employee đó đã có
   // user account → redirect về trang edit user đó (W2 idempotent).
   let prefillData:
@@ -35,7 +40,7 @@ export default async function NewUserPage({ searchParams }: Props) {
     | undefined;
 
   if (prefillEmployeeId) {
-    const emp = await db.employee.findUnique({
+    const emp = await sdb.employee.findUnique({
       where: { id: prefillEmployeeId },
       select: {
         id: true,
@@ -60,10 +65,9 @@ export default async function NewUserPage({ searchParams }: Props) {
   }
 
   // PR-C: picker đơn vị tổ chức qua OrgUnit tree (gồm HO) thay cho db.center.
-  const actor = await resolveActor(session.user.id);
   const [orgUnits, unlinkedEmployees] = await Promise.all([
     getSelectableOrgUnits(actor),
-    db.employee.findMany({
+    sdb.employee.findMany({
       where: { status: "ACTIVE", userAccount: null },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, employeeCode: true },

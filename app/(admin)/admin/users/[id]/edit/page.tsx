@@ -2,10 +2,10 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, KeyRound, Power, Shield, ArrowRight } from "lucide-react";
-import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { UserForm } from "../../_components/user-form";
 import { toggleUserActiveAction } from "../../_actions";
@@ -35,8 +35,12 @@ export default async function EditUserPage({ params }: Props) {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // User SCOPE_EXEMPT → sdb pass-through; Employee ∈ SCOPED_MODELS → tự cách ly cơ sở.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const { id } = await params;
-  const user = await db.user.findFirst({
+  const user = await sdb.user.findFirst({
     where: { id, deletedAt: null },
     include: {
       employee: { select: { id: true, fullName: true, employeeCode: true } },
@@ -47,10 +51,9 @@ export default async function EditUserPage({ params }: Props) {
   if (!user) notFound();
 
   // PR-C: picker đơn vị tổ chức qua OrgUnit tree (gồm HO) thay cho db.center.
-  const actor = await resolveActor(session.user.id);
   const [orgUnits, unlinkedEmployees] = await Promise.all([
     getSelectableOrgUnits(actor),
-    db.employee.findMany({
+    sdb.employee.findMany({
       where: { status: "ACTIVE", userAccount: null },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, employeeCode: true },
@@ -68,7 +71,7 @@ export default async function EditUserPage({ params }: Props) {
   const isSelf = user.id === session.user.id;
 
   // Last active SUPER_ADMIN protection mirror với list page (xét union roles).
-  const activeSuperAdminCount = await db.user.count({
+  const activeSuperAdminCount = await sdb.user.count({
     where: { roles: { has: "SUPER_ADMIN" }, isActive: true, deletedAt: null },
   });
   const isLastActiveSuperAdmin =

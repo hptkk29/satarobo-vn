@@ -2,8 +2,9 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, KeyRound } from "lucide-react";
-import { db } from "@/lib/db";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { ResetPasswordForm } from "../../_components/reset-password-form";
 
 export const metadata = { title: "Đổi mật khẩu | Admin" };
@@ -20,8 +21,11 @@ export default async function ResetPasswordPage({ params }: Props) {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // User SCOPE_EXEMPT (identity toàn cục) → sdb pass-through, hành vi y nguyên.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const { id } = await params;
-  const user = await db.user.findFirst({
+  const user = await sdb.user.findFirst({
     where: { id, deletedAt: null },
     select: { id: true, email: true, name: true },
   });

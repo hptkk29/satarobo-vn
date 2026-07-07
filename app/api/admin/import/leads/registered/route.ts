@@ -11,7 +11,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, getModelVisibleCenterIds, logScopeBypass } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -74,17 +75,26 @@ export async function POST(req: NextRequest) {
 
   // ── Context resolve từ DB (center/orgUnit theo code — dual-write 2-phase như
   // route import leads sự kiện; course theo tên/slug; user active cho fuzzy Sales).
+  // Cách ly cơ sở: Center/OrgUnit/User exempt, Course global → sdb pass-through.
+  // Lead trùng SĐT phải tra TOÀN HỆ THỐNG (câu 34 BGĐ: gộp về record CŨ NHẤT bất kể
+  // cơ sở — sdb sẽ ẩn lead cơ sở khác và gây TẠO TRÙNG) → bypass HẸP cho đúng truy
+  // vấn này + ghi audit AC10 khi actor không phải HO/SUPER_ADMIN.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const phones = parsed.parents.map((p) => p.phone);
+  if (phones.length > 0 && getModelVisibleCenterIds("Lead", actor) !== "ALL") {
+    await logScopeBypass(actor, "import/leads/registered: dedupe+gộp lead theo SĐT toàn hệ thống");
+  }
   const [centers, orgUnits, courses, users, existingLeads] = await Promise.all([
-    db.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
-    db.orgUnit.findMany({ where: { deletedAt: null }, select: { id: true, code: true } }),
-    db.course.findMany({ select: { id: true, name: true, slug: true } }),
-    db.user.findMany({
+    sdb.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
+    sdb.orgUnit.findMany({ where: { deletedAt: null }, select: { id: true, code: true } }),
+    sdb.course.findMany({ select: { id: true, name: true, slug: true } }),
+    sdb.user.findMany({
       where: { deletedAt: null, isActive: true },
       select: { id: true, name: true, role: true, roles: true },
     }),
     phones.length > 0
-      ? db.lead.findMany({
+      ? scopedDb(actor, { bypass: true }).lead.findMany({
           where: { phone: { in: phones }, deletedAt: null },
           orderBy: { createdAt: "asc" },
           select: {
@@ -166,7 +176,7 @@ export async function POST(req: NextRequest) {
   let createdChildren = 0;
   let mergedLeads = 0;
   try {
-    await db.$transaction(
+    await sdb.$transaction(
       async (tx) => {
         for (const c of plan.creates) {
           await tx.lead.create({

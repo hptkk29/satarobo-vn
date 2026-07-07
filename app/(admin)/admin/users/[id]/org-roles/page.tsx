@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { KeyRound } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { listRoles, listUserOrgRoles } from "@/lib/auth/rbac-service";
 import { OrgRolesManager } from "./_components/org-roles-manager";
 
@@ -12,11 +14,16 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function UserOrgRolesPage({ params }: Props) {
   const { id } = await params;
+  const session = await auth();
+  if (!session?.user) redirect("/login");
   if (!(await checkPermission("roles:assign"))) {
     redirect("/admin/dashboard");
   }
 
-  const user = await db.user.findUnique({
+  // User + OrgUnit đều SCOPE_EXEMPT (identity/hạ tầng tổ chức) → sdb pass-through.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
+  const user = await sdb.user.findUnique({
     where: { id },
     select: { id: true, name: true, email: true },
   });
@@ -24,7 +31,7 @@ export default async function UserOrgRolesPage({ params }: Props) {
 
   const [roles, orgUnits, assignments] = await Promise.all([
     listRoles(),
-    db.orgUnit.findMany({
+    sdb.orgUnit.findMany({
       where: { deletedAt: null },
       orderBy: { code: "asc" },
       select: { id: true, code: true, name: true },
