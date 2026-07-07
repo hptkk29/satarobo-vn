@@ -2,7 +2,8 @@
 
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -97,13 +98,15 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+// ZMRoboKit là catalog toàn cục (không có centerId, không scoped) — scopedDb
+// pass-through; đi qua scopedDb để thống nhất cổng truy vấn (A0-04).
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("kits:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  return session.user;
+  return scopedDb(await resolveActor(session.user.id));
 }
 
 function readForm(formData: FormData) {
@@ -130,7 +133,7 @@ function readForm(formData: FormData) {
 }
 
 export async function createKit(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const sdb = await requireAdmin();
 
   const parsed = kitSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -160,7 +163,7 @@ export async function createKit(formData: FormData): Promise<ActionResult> {
   };
 
   try {
-    await db.zMRoboKit.create({ data });
+    await sdb.zMRoboKit.create({ data });
   } catch {
     return { error: "Slug đã tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
@@ -171,7 +174,7 @@ export async function createKit(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateKit(id: string, formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const sdb = await requireAdmin();
 
   const parsed = kitSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -201,7 +204,7 @@ export async function updateKit(id: string, formData: FormData): Promise<ActionR
   };
 
   try {
-    await db.zMRoboKit.update({ where: { id }, data });
+    await sdb.zMRoboKit.update({ where: { id }, data });
   } catch {
     return { error: "Kit không tồn tại, slug trùng, hoặc lỗi cơ sở dữ liệu" };
   }
@@ -213,9 +216,9 @@ export async function updateKit(id: string, formData: FormData): Promise<ActionR
 }
 
 export async function deleteKit(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  const sdb = await requireAdmin();
   try {
-    await db.zMRoboKit.delete({ where: { id } });
+    await sdb.zMRoboKit.delete({ where: { id } });
   } catch {
     return { error: "Không thể xoá kit này" };
   }
@@ -225,9 +228,9 @@ export async function deleteKit(id: string): Promise<ActionResult> {
 }
 
 export async function toggleKitPublished(id: string, newValue: boolean): Promise<ActionResult> {
-  await requireAdmin();
+  const sdb = await requireAdmin();
   try {
-    await db.zMRoboKit.update({
+    await sdb.zMRoboKit.update({
       where: { id },
       data: { isPublished: newValue },
     });
@@ -240,9 +243,9 @@ export async function toggleKitPublished(id: string, newValue: boolean): Promise
 }
 
 export async function toggleKitAvailable(id: string, newValue: boolean): Promise<ActionResult> {
-  await requireAdmin();
+  const sdb = await requireAdmin();
   try {
-    await db.zMRoboKit.update({
+    await sdb.zMRoboKit.update({
       where: { id },
       data: { isAvailable: newValue },
     });

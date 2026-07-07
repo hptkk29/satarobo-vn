@@ -1,12 +1,21 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, Package } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { KitListRow } from "./_components/kit-list-row";
 
 export const dynamic = "force-dynamic";
 
 export default async function KitsAdminPage() {
-  const kits = await db.zMRoboKit.findMany({
+  // A0-04: layout admin đã gate auth; cần session để dựng actor cho scopedDb.
+  // ZMRoboKit là catalog toàn cục (không scoped) — pass-through.
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
+  const kits = await sdb.zMRoboKit.findMany({
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,

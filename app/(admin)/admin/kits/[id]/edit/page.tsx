@@ -1,5 +1,7 @@
-import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { KitForm } from "../../_components/kit-form";
 
 interface Props {
@@ -24,8 +26,14 @@ function asStringRecord(v: unknown): Record<string, string> {
 }
 
 export default async function EditKitPage({ params }: Props) {
+  // A0-04: layout admin đã gate auth; cần session để dựng actor cho scopedDb.
+  // ZMRoboKit là catalog toàn cục (không scoped) — pass-through.
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const { id } = await params;
-  const kit = await db.zMRoboKit.findUnique({ where: { id } });
+  const kit = await sdb.zMRoboKit.findUnique({ where: { id } });
   if (!kit) notFound();
 
   return (
