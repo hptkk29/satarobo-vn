@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -150,11 +151,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Quá 5000 rows" }, { status: 400 });
   }
 
+  // Cách ly cơ sở: Question/Course/Curriculum là catalog GLOBAL (không center-scope),
+  // User exempt → sdb pass-through, hành vi y nguyên.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   // Resolve current user's Employee id once (authorId targets Employee).
   let authorEmployeeId: string | null = null;
   if (session.user.id) {
     try {
-      const u = await db.user.findUnique({
+      const u = await sdb.user.findUnique({
         where: { id: session.user.id },
         select: { employeeId: true },
       });
@@ -167,8 +172,8 @@ export async function POST(req: NextRequest) {
   // FL1-03 — preload maps để gắn câu hỏi vào khung CT: Course.slug → id và
   // (courseId, version) → curriculumId. Tránh N query trong vòng lặp.
   const [courses, curricula] = await Promise.all([
-    db.course.findMany({ select: { id: true, slug: true } }),
-    db.curriculum.findMany({ select: { id: true, courseId: true, version: true } }),
+    sdb.course.findMany({ select: { id: true, slug: true } }),
+    sdb.curriculum.findMany({ select: { id: true, courseId: true, version: true } }),
   ]);
   const courseBySlug = new Map(courses.map((c) => [c.slug.toLowerCase(), c.id]));
   const curriculumByKey = new Map(
@@ -293,7 +298,7 @@ export async function POST(req: NextRequest) {
 
   let success = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         const baseData = {

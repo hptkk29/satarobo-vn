@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -109,10 +110,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: 0, errors }, { status: 200 });
   }
 
+  // Center SCOPE_EXEMPT (ranh giới tenant, RBAC-DECISION #5) → sdb pass-through;
+  // quyền tạo/sửa cơ sở đã gate tường minh bằng checkPermission("centers:edit").
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   try {
-    await db.$transaction(
+    await sdb.$transaction(
       validRows.map((r) =>
-        db.center.upsert({
+        sdb.center.upsert({
           where: { slug: r.slug },
           create: {
             name: r.name,

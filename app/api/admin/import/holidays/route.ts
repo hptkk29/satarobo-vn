@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -122,6 +123,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Cách ly cơ sở: Holiday ∈ SCOPED_MODELS. Write theo centerId form → guard
+  // passesScope per-row; row KHÔNG có centerSlug = ngày nghỉ TOÀN HỆ THỐNG
+  // (centerId null) → chỉ SUPER_ADMIN/HO được import. Center exempt.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Stage 2: resolve centerSlug → id
   const slugs = [
     ...new Set(
@@ -131,7 +138,7 @@ export async function POST(req: NextRequest) {
     ),
   ];
   const centers = slugs.length
-    ? await db.center.findMany({
+    ? await sdb.center.findMany({
         where: { slug: { in: slugs } },
         select: { id: true, slug: true },
       })
@@ -169,6 +176,15 @@ export async function POST(req: NextRequest) {
       }
       centerId = id;
     }
+    if (!passesScope("Holiday", { centerId }, actor)) {
+      errors.push({
+        row: i + 2,
+        error: entry.data.centerSlug
+          ? `Cơ sở "${entry.data.centerSlug}" ngoài phạm vi quyền của bạn`
+          : "Ngày nghỉ toàn hệ thống (không có centerSlug) cần quyền HO/SUPER_ADMIN",
+      });
+      continue;
+    }
     const orgUnitId = centerId
       ? (centerIdToOrgUnitId.get(centerId) ?? null)
       : null;
@@ -183,7 +199,7 @@ export async function POST(req: NextRequest) {
   // upserts on (date, name, centerId) awkward; explicit check is clearer).
   let success = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         const existing = await tx.holiday.findFirst({

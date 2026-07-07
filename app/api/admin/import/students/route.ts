@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -183,6 +184,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Cách ly cơ sở: Student ∈ SCOPED_MODELS. Write theo centerSlug form (preferred
+  // center) → guard passesScope per-row: CM chỉ import học viên cho cơ sở mình;
+  // row không có centerSlug (toàn hệ thống) cần quyền HO/SUPER_ADMIN. Center exempt.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Stage 2: resolve centerSlug → preferredCenterId
   const slugs = [
     ...new Set(
@@ -190,7 +197,7 @@ export async function POST(req: NextRequest) {
     ),
   ];
   const centers = slugs.length
-    ? await db.center.findMany({
+    ? await sdb.center.findMany({
         where: { slug: { in: slugs } },
         select: { id: true, slug: true },
       })
@@ -230,6 +237,16 @@ export async function POST(req: NextRequest) {
       preferredCenterId = id;
     }
 
+    if (!passesScope("Student", { centerId: preferredCenterId }, actor)) {
+      errors.push({
+        row: i + 2,
+        error: entry.data.centerSlug
+          ? `Cơ sở "${entry.data.centerSlug}" ngoài phạm vi quyền của bạn`
+          : "Học viên không gắn cơ sở cần quyền HO/SUPER_ADMIN",
+      });
+      continue;
+    }
+
     const preferredOrgUnitId = preferredCenterId
       ? (centerIdToOrgUnitId.get(preferredCenterId) ?? null)
       : null;
@@ -244,7 +261,7 @@ export async function POST(req: NextRequest) {
   // Stage 3: upsert by studentCode in a transaction. Empty code → create only.
   let success = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         // Map Excel fullName → DB name (schema didn't rename in D1).
