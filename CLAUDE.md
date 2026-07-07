@@ -1,6 +1,6 @@
 # CLAUDE.md — Sata Robo VN
 
-Brand hub + admin CMS + portal phụ huynh cho Sata Robo (Đà Nẵng). 3 site / 3 domain (public `satarobo.vn`, admin `admin.satarobo.vn`, portal `hocvien.satarobo.vn`) chạy chung 1 app Next.js, chia route group `app/(public)/`, `app/(legacy)/`, `app/(admin)/admin/`, `app/(portal)/portal/`, `app/(auth)/`.
+Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đà Nẵng). 4 site / 4 domain (public `satarobo.vn`, admin `admin.satarobo.vn`, portal `hocvien.satarobo.vn`, teacher `giaovien.satarobo.vn` — BGĐ duyệt 04/07/2026, 2-phase flag `TEACHER_SITE_ENABLED`) chạy chung 1 app Next.js, chia route group `app/(public)/`, `app/(legacy)/`, `app/(admin)/admin/`, `app/(portal)/portal/`, `app/(teacher)/teacher/`, `app/(auth)/`.
 
 > ⭐ **BLUEPRINT CHỐT:** [`Document/2-architecture-design/15-final-architecture-blueprint.md`](Document/2-architecture-design/15-final-architecture-blueprint.md) là nguồn kiến trúc đúng nhất. Khi xung đột giữa "hiện trạng" trong file này và Doc 15 → **Doc 15 thắng cho việc xây MỚI**. File CLAUDE.md mô tả hiện trạng repo + hướng chuyển dịch (mục "Kiến trúc đích" cuối file). Kế hoạch thực thi theo phase: [`Document/0-yeucau/3-ke-hoach-trien-khai/phases/`](Document/0-yeucau/3-ke-hoach-trien-khai/phases/README.md) (A0 → R5).
 
@@ -16,7 +16,7 @@ Brand hub + admin CMS + portal phụ huynh cho Sata Robo (Đà Nẵng). 3 site /
 
 1. **Server-first** — default Server Component. `'use client'` chỉ khi cần state/effect/handler. Data fetch trong RSC (`async`), mutations qua Server Actions (`'use server'`).
 2. **Strict TS** — không `any` (dùng `unknown` + narrow). Zod schema là source of truth → suy ra type qua `z.infer`.
-3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, auth: `app/(auth)/login/...`. Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
+3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, teacher: `app/(teacher)/teacher/...` (L5 — flag `TEACHER_SITE_ENABLED` default OFF; host `giaovien.` chưa wire trong proxy.ts, xem ghi chú L5 WIRING trong route-policy.ts), auth: `app/(auth)/login/...`. Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
 4. **Imports** — `@/lib/db` (Prisma), `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Target (sau A0-04):** code đọc nghiệp vụ trong `app/**` đi qua `scopedDb(actor)` — KHÔNG import `@/lib/db` trần (ESLint sẽ chặn).
 5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Hiện tại: `can(role, action)` từ `@/lib/auth/permissions`. **Target (A0-03):** `can(actor, action, target)` đọc role động từ DB. Portal actions thêm ownership check `assertOwnsStudent`.
 6. **Prisma migrations** — KHÔNG raw SQL trừ khi cần. Mỗi schema change: `pnpm db:migrate` + tên rõ nghĩa. Sau migration: restart dev server (Prisma Client cache stale trong memory).
@@ -37,6 +37,7 @@ app/
 ├── (legacy)/          # landing khóa học cũ
 ├── (admin)/admin/     # /admin/dashboard, /admin/leads, /admin/honors, /admin/nhan-su, ...
 ├── (portal)/portal/   # cổng phụ huynh: /portal/ho-so, /portal/bai-thi, /portal/yeu-cau, ...
+├── (teacher)/teacher/ # site giáo viên (L5): /teacher (việc chưa xong), /teacher/lich, /teacher/lop — flag TEACHER_SITE_ENABLED
 ├── (auth)/login/      # cổng login (target: chung satarobo.vn/login → redirect theo role)
 └── api/               # /api/leads, /api/admin/upload-url, /api/cron/*, /api/public/webhook/*, /api/auth/...
 
@@ -104,7 +105,7 @@ prisma/
 - ❌ KHÔNG thiết kế `HO = CS2` / HO nằm dưới CS2 (Doc 15 OI-1) — HO là OrgUnit độc lập dưới ROOT.
 - ❌ KHÔNG hardcode danh sách center / "HO + CS2" — đi qua OrgUnit tree (CS3/CS4... thêm không sửa code).
 - ❌ KHÔNG để side-effect "dính chùm" inline trong action (target: side-effect không-atomic đi qua DomainEvent; tiền/enrollment đi transaction).
-- ❌ KHÔNG đưa lại scope đã LOẠI (Doc 15 §0): AI camera/sinh trắc/định vị học sinh · Web3/NFT/blockchain · marketplace · student login riêng · teacher domain riêng · online video LMS · AI learning path/prediction. Nhu cầu "dự báo/khuyến nghị" làm **rule-based**.
+- ❌ KHÔNG đưa lại scope đã LOẠI (Doc 15 §0): AI camera/sinh trắc/định vị học sinh · Web3/NFT/blockchain · marketplace · student login riêng · online video LMS · AI learning path/prediction. Nhu cầu "dự báo/khuyến nghị" làm **rule-based**. (Riêng "teacher domain riêng": **ĐÃ ĐẢO 04/07/2026** — phiếu BGĐ câu 7 duyệt site GV riêng `giaovien.satarobo.vn` → route group `app/(teacher)/teacher/`, 2-phase flag `TEACHER_SITE_ENABLED`.)
 - ❌ KHÔNG lưu giấy tờ tùy thân học viên; media phải tag + tôn trọng `StudentConsent`; KHÔNG lộ `studentId` trên URL portal.
 
 ## Workflow

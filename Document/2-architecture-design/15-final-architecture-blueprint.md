@@ -20,7 +20,7 @@
 | Q7 | Audit | **AuditLog hợp nhất 1 bảng** cho dữ liệu mới; 8 bảng cũ đọc-only |
 | Q8 | Integration | Mọi external call qua `modules/integration` (Meta Messenger/Ads, Resend, R2; sau: SMS, Zalo, MISA, VNPay) |
 | Q9 | Login | **Cổng login chung `satarobo.vn/login`** → tự nhận role redirect: staff (`hovaten@satarobo.vn`) → admin; parent (phone/email) → hocvien |
-| Q10 | Portal | `hocvien.satarobo.vn` = phụ huynh + học sinh chung 1 tài khoản — **site phụ huynh + site từng con**; route đẹp **KHÔNG lộ `studentId`** (active profile trong signed cookie). KHÔNG student login riêng, KHÔNG teacher domain riêng |
+| Q10 | Portal | `hocvien.satarobo.vn` = phụ huynh + học sinh chung 1 tài khoản — **site phụ huynh + site từng con**; route đẹp **KHÔNG lộ `studentId`** (active profile trong signed cookie). KHÔNG student login riêng, ~~KHÔNG teacher domain riêng~~ **[ĐẢO 04/07/2026 — phiếu BGĐ câu 7: LÀM site giáo viên riêng `giaovien.satarobo.vn` (L5, route group `app/(teacher)/teacher/`, 2-phase flag `TEACHER_SITE_ENABLED`)]** |
 | Q11 | Lead | **Messenger Ads qua Page HO là kênh CHÍNH** (webhook → conversation → L1); phụ: GForm, landing, web form, import, giới thiệu |
 | Q12 | Khóa học | Core = **offline Sata 1–8 + Combo Sata 1&2**. Online course **trỏ Sataworld** — không build video LMS |
 | Q13 | OTP/Activation | KHÔNG mật khẩu mặc định. Core: activation qua **Resend email**, parent tự đặt mật khẩu; OTP provider abstraction để cắm SMS/Zalo sau |
@@ -34,7 +34,7 @@
 | Pháp lý dữ liệu trẻ em | AI camera/face recognition, phân tích sức khỏe, sinh trắc học, geofencing/IoT/định vị **học sinh** | Điểm danh thủ công bởi GV/admin + PH báo vắng + lịch sử chỉnh sửa. Geofence CHỈ cho nhân viên (R5) |
 | Quá xa MVP | Web3/NFT/IPFS, SataCoin blockchain, Learn2Earn, Marketplace, SaaS/White-label/Franchise billing | Chứng chỉ PDF + mã tra cứu; điểm thưởng/badge nội bộ (backlog) |
 | AI (toàn bộ) | AI Tutor/CRM Assistant/Reporting/Learning path/Prediction | Rule-based: `nextCourseId`, RiskAlert, Class Health Score |
-| Sai quyết định cũ | FB Lead Form là main flow → **Messenger**; student login riêng → profile trong tài khoản PH; teacher domain riêng → admin theo role; route có studentId → active profile; `User.centerId` → OrgUnit |
+| Sai quyết định cũ | FB Lead Form là main flow → **Messenger**; student login riêng → profile trong tài khoản PH; ~~teacher domain riêng → admin theo role~~ **[ĐẢO 04/07/2026 — phiếu BGĐ câu 7 duyệt lại: site GV riêng `giaovien.satarobo.vn`]**; route có studentId → active profile; `User.centerId` → OrgUnit |
 
 ### Backlog phase sau (thứ tự đề xuất)
 
@@ -1078,6 +1078,6 @@ Modular Monolith
 + Audit hợp nhất + Privacy-first dữ liệu trẻ em
 ```
 
-KHÔNG đưa lại vào core: AI camera, sinh trắc học, định vị học sinh, Web3/NFT/blockchain, marketplace, student login riêng, teacher domain riêng, online video LMS, AI learning path, AI prediction.
+KHÔNG đưa lại vào core: AI camera, sinh trắc học, định vị học sinh, Web3/NFT/blockchain, marketplace, student login riêng, ~~teacher domain riêng~~ (đảo 04/07/2026 — phiếu BGĐ câu 7, xem §0 Q10), online video LMS, AI learning path, AI prediction.
 
 > §11 đã CHỐT (2026-06-06) — đủ điều kiện bắt đầu **PR-A0-01: OrgUnit schema + seed ROOT SataRobo + HO/CS1/CS2**.
