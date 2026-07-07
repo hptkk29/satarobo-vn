@@ -23,6 +23,12 @@ export default function ImportLeadsPage() {
         <p className="mt-1 text-sm text-neutral-500">
           Nhập nhiều lead thu ở sự kiện. Cột cố định, validate từng dòng, chống trùng theo SĐT.
         </p>
+        <p className="mt-2 text-sm">
+          Có file <b>danh sách khách ĐÃ ĐĂNG KÝ</b> của Sale (nhiều sheet theo tháng)?{" "}
+          <Link href="/leads/import/registered" className="text-blue-600 hover:underline">
+            Import danh sách đã đăng ký →
+          </Link>
+        </p>
       </div>
 
       <ExcelImporter<LeadImportRow>
