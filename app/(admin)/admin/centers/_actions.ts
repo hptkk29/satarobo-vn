@@ -2,7 +2,8 @@
 
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -71,13 +72,17 @@ function parseIntOrNull(value: FormDataEntryValue | null): number | null {
 // SUPER_ADMIN-only (Doc 15: chỉ SUPER_ADMIN tạo/sửa cấu trúc tổ chức). `centers:edit`
 // trong ma trận quyền = ["SUPER_ADMIN"]. Trước đây gate cho cả CENTER_MANAGER ⇒
 // BẤT KỲ CM nào sửa/xoá Center BẤT KỲ qua id (Center ∉ SCOPED_MODELS, không cách ly).
+//
+// RBAC-DECISION #5 (06/07): Center ∈ SCOPE_EXEMPT (ranh giới tenant, không tự scope) →
+// scopedDb pass-through, hành vi y nguyên; lớp bảo vệ là gate `centers:edit` ở trên.
 async function requireOrgAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("centers:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
-  return session.user;
+  const actor = await resolveActor(session.user.id);
+  return { user: session.user, sdb: scopedDb(actor) };
 }
 
 function readForm(formData: FormData) {
@@ -129,7 +134,7 @@ function toData(c: z.infer<typeof centerSchema>): Prisma.CenterCreateInput {
 }
 
 export async function createCenter(formData: FormData): Promise<ActionResult> {
-  await requireOrgAdmin();
+  const { sdb } = await requireOrgAdmin();
 
   const parsed = centerSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -137,7 +142,7 @@ export async function createCenter(formData: FormData): Promise<ActionResult> {
   }
 
   try {
-    await db.center.create({ data: toData(parsed.data) });
+    await sdb.center.create({ data: toData(parsed.data) });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Slug đã tồn tại — chọn slug khác" };
@@ -151,7 +156,7 @@ export async function createCenter(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateCenter(id: string, formData: FormData): Promise<ActionResult> {
-  await requireOrgAdmin();
+  const { sdb } = await requireOrgAdmin();
 
   const parsed = centerSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -159,7 +164,7 @@ export async function updateCenter(id: string, formData: FormData): Promise<Acti
   }
 
   try {
-    await db.center.update({ where: { id }, data: toData(parsed.data) });
+    await sdb.center.update({ where: { id }, data: toData(parsed.data) });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Slug đã tồn tại — chọn slug khác" };
@@ -174,12 +179,12 @@ export async function updateCenter(id: string, formData: FormData): Promise<Acti
 }
 
 export async function deleteCenter(id: string): Promise<ActionResult> {
-  await requireOrgAdmin();
+  const { sdb } = await requireOrgAdmin();
 
   // Check linked relations — Center có quan hệ với users, leads, classes, students, employees.
   // Prisma onDelete mặc định Restrict — sẽ throw nếu có liên kết.
   // Đếm trước để báo lỗi rõ ràng.
-  const counts = await db.center
+  const counts = await sdb.center
     .findUnique({
       where: { id },
       select: {
@@ -207,7 +212,7 @@ export async function deleteCenter(id: string): Promise<ActionResult> {
   }
 
   try {
-    await db.center.delete({ where: { id } });
+    await sdb.center.delete({ where: { id } });
   } catch {
     return { error: "Không thể xoá cơ sở này" };
   }
@@ -218,9 +223,9 @@ export async function deleteCenter(id: string): Promise<ActionResult> {
 }
 
 export async function toggleCenterActive(id: string, newValue: boolean): Promise<ActionResult> {
-  await requireOrgAdmin();
+  const { sdb } = await requireOrgAdmin();
   try {
-    await db.center.update({ where: { id }, data: { isActive: newValue } });
+    await sdb.center.update({ where: { id }, data: { isActive: newValue } });
   } catch {
     return { error: "Không thể cập nhật trạng thái" };
   }

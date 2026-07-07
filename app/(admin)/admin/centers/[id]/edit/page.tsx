@@ -1,5 +1,7 @@
-import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { CenterForm } from "../../_components/center-form";
 
 interface Props {
@@ -7,8 +9,15 @@ interface Props {
 }
 
 export default async function EditCenterPage({ params }: Props) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // Center ∈ SCOPE_EXEMPT → sdb pass-through (hành vi y nguyên); gate sửa/xoá nằm ở
+  // server actions (`centers:edit`).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const { id } = await params;
-  const center = await db.center.findUnique({ where: { id } });
+  const center = await sdb.center.findUnique({ where: { id } });
   if (!center) notFound();
 
   return (

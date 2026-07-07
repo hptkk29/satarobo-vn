@@ -1,12 +1,21 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, MapPin, FileSpreadsheet } from "lucide-react";
-import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { CenterListRow } from "./_components/center-list-row";
 
 export const dynamic = "force-dynamic";
 
 export default async function CentersAdminPage() {
-  const centers = await db.center.findMany({
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // RBAC-DECISION #5: Center ∈ SCOPE_EXEMPT (ranh giới tenant) → sdb pass-through,
+  // hành vi y nguyên. Chặn CM xem center ngoài tầm nhìn = permission tường minh (follow-up).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const centers = await sdb.center.findMany({
     orderBy: [{ isActive: "desc" }, { displayOrder: "asc" }, { name: "asc" }],
     select: {
       id: true,
