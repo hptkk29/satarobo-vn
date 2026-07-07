@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { EmployeeForm } from "@/components/admin/nhan-su/employee-form";
 
@@ -13,8 +13,15 @@ export default async function NewEmployeePage() {
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("employees:create"))) redirect("/dashboard");
 
+  // Cách ly cơ sở (A0-04): Employee ∈ SCOPED_MODELS → đọc qua scopedDb.
+  // Lưu ý: employees:create hiện chỉ cấp cho SUPER_ADMIN/HR HO-level (scope ALL) nên
+  // mã đề xuất vẫn tính trên TOÀN BỘ NV; nếu sau này cấp cho center-level, mã chỉ là
+  // đề xuất — create action vẫn chặn trùng bằng unique employeeCode.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   // Tính next employee code (SR.NV.001, SR.NV.002, ...)
-  const lastEmployee = await db.employee.findFirst({
+  const lastEmployee = await sdb.employee.findFirst({
     where: { employeeCode: { startsWith: "SR.NV." } },
     orderBy: { employeeCode: "desc" },
   });
@@ -28,15 +35,14 @@ export default async function NewEmployeePage() {
     }
   }
 
-  const actor = await resolveActor(session.user.id);
   const [orgUnits, managers, departments] = await Promise.all([
     getSelectableOrgUnits(actor),
-    db.employee.findMany({
+    sdb.employee.findMany({
       where: { isActive: true },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, jobTitle: true },
     }),
-    db.departmentDef.findMany({
+    sdb.departmentDef.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: { code: true, name: true, isTeaching: true },

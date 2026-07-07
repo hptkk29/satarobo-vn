@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import type { Prisma } from "@prisma/client";
@@ -79,8 +80,12 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
     teacherClass: { scheduleDays: number[]; startTime: string | null; endTime: string | null }[];
   }> = [];
 
+  // Cách ly cơ sở (A0-04): User exempt (pass-through) — migrate cho sạch whitelist;
+  // scope cơ sở đã đi qua where.centerId (CM) ở trên.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   try {
-    staff = await db.user.findMany({
+    staff = await sdb.user.findMany({
       where,
       orderBy: { name: "asc" },
       select: {

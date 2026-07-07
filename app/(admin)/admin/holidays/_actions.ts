@@ -2,7 +2,6 @@
 
 import { auth } from "@/lib/auth";
 import { hasAnyRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -157,10 +156,11 @@ export async function createHoliday(formData: FormData): Promise<ActionResult> {
   if (!actorCanUseCenterTarget(actor, centerId)) {
     return { error: "Không có quyền tạo ngày nghỉ cho phạm vi cơ sở này" };
   }
+  const sdb = scopedDb(actor);
 
   let created: { date: Date; endDate: Date | null; centerId: string | null };
   try {
-    created = await db.holiday.create({
+    created = await sdb.holiday.create({
       data: toCreate(parsed.data, centerId),
       select: { date: true, endDate: true, centerId: true },
     });
@@ -208,7 +208,7 @@ export async function updateHoliday(
 
   let updated: { date: Date; endDate: Date | null; centerId: string | null };
   try {
-    updated = await db.holiday.update({
+    updated = await sdb.holiday.update({
       where: { id },
       data: toUpdate(parsed.data, centerId),
       select: { date: true, endDate: true, centerId: true },
@@ -240,7 +240,7 @@ export async function deleteHoliday(id: string): Promise<ActionResult> {
     return { error: "Ngày nghỉ không tồn tại" };
   }
   try {
-    await db.holiday.delete({ where: { id } });
+    await sdb.holiday.delete({ where: { id } });
   } catch {
     return { error: "Không thể xoá ngày nghỉ này" };
   }

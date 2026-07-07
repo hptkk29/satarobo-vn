@@ -2,8 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { HolidayForm } from "../../_components/holiday-form";
 import { DeleteHolidayButton } from "../../_components/delete-button";
@@ -22,8 +22,12 @@ export default async function EditHolidayPage({ params }: Props) {
   const actor = await resolveActor(session.user.id);
 
   // Ngày nghỉ = vận hành → áp được cho cả HO (default scope, gồm HO).
+  // Cách ly cơ sở (A0-04): Holiday ∈ SCOPED_MODELS — sdb.findUnique null-filter record
+  // ngoài tầm nhìn. Ngày nghỉ TOÀN HỆ THỐNG (centerId=null) → chỉ SUPER_ADMIN/HO sửa
+  // (khớp chính sách trong _actions.ts) — center-level mở link cũ sẽ thấy 404.
+  const sdb = scopedDb(actor);
   const [holiday, orgUnits] = await Promise.all([
-    db.holiday.findUnique({ where: { id } }),
+    sdb.holiday.findUnique({ where: { id } }),
     getSelectableOrgUnits(actor),
   ]);
 

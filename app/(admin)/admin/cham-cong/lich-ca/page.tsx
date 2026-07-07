@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { isNextMonthWindowOpen, isWeekendEditWindow, EMERGENCY_MONTHLY_LIMIT } from "@/lib/shifts";
 import { getSetting } from "@/lib/settings/service";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -32,13 +33,16 @@ export default async function MyShiftsPage({ searchParams }: Props) {
   const monthStart = new Date(year, monthIdx, 1);
   const monthEnd = new Date(year, monthIdx + 1, 1);
 
+  // Cách ly cơ sở (A0-04): ShiftRegistration/ClassSession ∈ SCOPED_MODELS → scopedDb.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const [regs, teachingSessions] = await Promise.all([
-    db.shiftRegistration.findMany({
+    sdb.shiftRegistration.findMany({
       where: { userId: session.user.id, date: { gte: monthStart, lt: monthEnd } },
       select: { date: true, shifts: true, status: true, note: true },
     }),
     // PHẦN 3 — buổi dạy của GV (lớp GV phụ trách chính/trợ giảng) trong tháng.
-    db.classSession.findMany({
+    sdb.classSession.findMany({
       where: {
         date: { gte: monthStart, lt: monthEnd },
         class: { OR: [{ teacherId: session.user.id }, { assistantId: session.user.id }] },
@@ -55,7 +59,7 @@ export default async function MyShiftsPage({ searchParams }: Props) {
   );
 
   // PHẦN 6 — số lần khẩn cấp đã dùng trong tháng đang xem.
-  const emergencyUsed = await db.shiftRegistration.count({
+  const emergencyUsed = await sdb.shiftRegistration.count({
     where: { userId: session.user.id, status: "LEAVE_REQUESTED", date: { gte: monthStart, lt: monthEnd } },
   });
 

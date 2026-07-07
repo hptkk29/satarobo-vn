@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, Users, AlertTriangle, MessageSquareWarning }
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import type { Prisma, WorkShift } from "@prisma/client";
 import {
   computeShiftAttendance,
@@ -71,8 +72,12 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
   const filterCenter = forcedCenter ?? (canViewAll ? centerId ?? null : null);
   const selfOnly = !canViewAll;
 
+  // Cách ly cơ sở (A0-04): ShiftRegistration/EmployeeCheckin/TimesheetAdjustmentRequest
+  // ∈ SCOPED_MODELS → đọc qua scopedDb.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const centers = canViewAll && !forcedCenter
-    ? await db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
+    ? await sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
     : [];
 
   const userWhere: Prisma.UserWhereInput = selfOnly
@@ -85,12 +90,12 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
       };
 
   const [staffRaw, regs, checkins, adjustments] = await Promise.all([
-    db.user.findMany({
+    sdb.user.findMany({
       where: userWhere,
       orderBy: { name: "asc" },
       select: { id: true, name: true, email: true, center: { select: { name: true } } },
     }),
-    db.shiftRegistration.findMany({
+    sdb.shiftRegistration.findMany({
       where: {
         date: { gte: weekStart, lt: weekEnd },
         status: "APPROVED", // chỉ lịch CHÍNH THỨC
@@ -98,14 +103,14 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
       },
       select: { userId: true, date: true, shifts: true },
     }),
-    db.employeeCheckin.findMany({
+    sdb.employeeCheckin.findMany({
       where: {
         checkedAt: { gte: weekStart, lt: weekEnd },
         ...(selfOnly ? { userId: session.user.id } : filterCenter ? { centerId: filterCenter } : {}),
       },
       select: { userId: true, type: true, checkedAt: true, withinGeofence: true },
     }),
-    db.timesheetAdjustmentRequest.findMany({
+    sdb.timesheetAdjustmentRequest.findMany({
       where: {
         date: { gte: weekStart, lt: weekEnd },
         ...(selfOnly ? { userId: session.user.id } : filterCenter ? { centerId: filterCenter } : {}),

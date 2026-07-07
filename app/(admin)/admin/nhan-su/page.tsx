@@ -2,7 +2,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, Search, FileSpreadsheet } from "lucide-react";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { EmployeesAdminTable } from "@/components/admin/nhan-su/employees-admin-table";
 import type { Department, EmploymentStatus, Prisma } from "@prisma/client";
@@ -97,15 +98,19 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
     ];
   }
 
+  // Cách ly cơ sở (A0-04): Employee ∈ SCOPED_MODELS → đọc qua scopedDb (center-level
+  // chỉ thấy NV cơ sở mình; NV HO centerId=null chỉ hiện với SUPER/HO-level).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   // Đơn vị Hội sở (HO) — OrgUnit type=HO (Doc 15 OI-1). Dùng để gắn cờ "Nhân viên HO"
   // trên cột Cơ sở cho NV không gán Center mà có EmployeeOrgAssignment PRIMARY tới HO.
-  const hoUnit = await db.orgUnit.findFirst({
+  const hoUnit = await sdb.orgUnit.findFirst({
     where: { type: "HO", deletedAt: null },
     select: { id: true },
   });
 
   const [employees, departmentCounts, centers, hoAssignments] = await Promise.all([
-    db.employee.findMany({
+    sdb.employee.findMany({
       where,
       orderBy: [{ displayOrder: "asc" }, { fullName: "asc" }],
       take: 200,
@@ -115,18 +120,18 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         userAccount: { select: { role: true, roles: true } },
       },
     }),
-    db.employee.groupBy({
+    sdb.employee.groupBy({
       by: ["department"],
       _count: { id: true },
       where: { status: "ACTIVE" },
     }),
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true },
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
     hoUnit
-      ? db.employeeOrgAssignment.findMany({
+      ? sdb.employeeOrgAssignment.findMany({
           where: { orgUnitId: hoUnit.id, status: "ACTIVE" },
           select: { employeeId: true },
         })

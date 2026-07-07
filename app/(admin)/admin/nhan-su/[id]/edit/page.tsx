@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
@@ -28,7 +28,11 @@ export default async function EditEmployeePage({ params }: Props) {
   if (!session?.user) redirect("/login");
 
   const { id } = await params;
-  const employee = await db.employee.findUnique({
+  // Cách ly cơ sở (A0-04): Employee ∈ SCOPED_MODELS — sdb.findUnique null-filter NV
+  // ngoài tầm nhìn cơ sở (chống IDOR) → notFound.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const employee = await sdb.employee.findUnique({
     where: { id },
     include: {
       userAccount: {
@@ -54,16 +58,15 @@ export default async function EditEmployeePage({ params }: Props) {
   }
 
   const canManageUsers = await checkPermission("users:manage");
-  const actor = await resolveActor(session.user.id);
 
   const [orgUnits, managers, departments] = await Promise.all([
     getSelectableOrgUnits(actor),
-    db.employee.findMany({
+    sdb.employee.findMany({
       where: { isActive: true, NOT: { id } },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, jobTitle: true },
     }),
-    db.departmentDef.findMany({
+    sdb.departmentDef.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
       select: { code: true, name: true, isTeaching: true },
@@ -71,12 +74,12 @@ export default async function EditEmployeePage({ params }: Props) {
   ]);
 
   // Cờ "Nhân viên HO": có EmployeeOrgAssignment active tới OrgUnit type=HO (Doc 15 OI-1).
-  const hoUnit = await db.orgUnit.findFirst({
+  const hoUnit = await sdb.orgUnit.findFirst({
     where: { type: "HO", deletedAt: null },
     select: { id: true },
   });
   const initialIsHO = hoUnit
-    ? (await db.employeeOrgAssignment.count({
+    ? (await sdb.employeeOrgAssignment.count({
         where: { employeeId: id, orgUnitId: hoUnit.id, status: "ACTIVE" },
       })) > 0
     : false;
@@ -86,7 +89,7 @@ export default async function EditEmployeePage({ params }: Props) {
   const showScheduleLink = TEACHING_DEPARTMENTS.has(employee.department);
 
   const auditLogs = canViewAudit
-    ? await db.roleAuditLog.findMany({
+    ? await sdb.roleAuditLog.findMany({
         where: { employeeId: id },
         orderBy: { createdAt: "desc" },
         take: 20,

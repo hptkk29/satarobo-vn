@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasRole } from "@/lib/auth/permissions";
@@ -11,13 +12,16 @@ import { TeacherRank, EmploymentType, TeacherStatus } from "@prisma/client";
 type Result = { ok: true } | { ok: false; error: string };
 
 // Gác quyền quản lý GV: SUPER_ADMIN/HR toàn quyền; CENTER_MANAGER chỉ trong cơ sở mình.
+// Cách ly cơ sở (A0-04): Class ∈ SCOPED_MODELS → đọc qua scopedDb (trả kèm sdb);
+// TeacherProfile/TeacherReview/User không scope — cách ly qua gate employees:edit.
 async function requireTeacherManager(targetUserId: string) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
+  const sdb = scopedDb(await resolveActor(session.user.id));
 
   // employees:edit có cả tầng GLOBAL (HO_HR) và CENTER (CENTER_HR) — truyền
   // centerId của GV đích để v2 đánh giá đúng nhánh CENTER.
-  const target = await db.user.findUnique({
+  const target = await sdb.user.findUnique({
     where: { id: targetUserId },
     select: { centerId: true },
   });
@@ -29,7 +33,7 @@ async function requireTeacherManager(targetUserId: string) {
       return { ok: false as const, error: "Giáo viên không thuộc cơ sở của bạn" };
     }
   }
-  return { ok: true as const, session };
+  return { ok: true as const, session, sdb };
 }
 
 const profileSchema = z.object({
@@ -52,7 +56,7 @@ export async function updateTeacherProfile(input: unknown): Promise<Result> {
   const gate = await requireTeacherManager(userId);
   if (!gate.ok) return gate;
 
-  const teacher = await db.user.findUnique({
+  const teacher = await gate.sdb.user.findUnique({
     where: { id: userId },
     select: { role: true, roles: true },
   });
@@ -63,7 +67,7 @@ export async function updateTeacherProfile(input: unknown): Promise<Result> {
   const needsTeacherRole = !hasRole(teacher, "TEACHER");
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       if (needsTeacherRole) {
         await tx.user.update({
           where: { id: userId },
@@ -119,7 +123,7 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
   const gate = await requireTeacherManager(teacherUserId);
   if (!gate.ok) return gate;
 
-  const cls = await db.class.findFirst({
+  const cls = await gate.sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
     select: { id: true, centerId: true },
   });
@@ -129,7 +133,7 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
   }
 
   try {
-    await db.class.update({
+    await gate.sdb.class.update({
       where: { id: classId },
       data: as === "teacher" ? { teacherId: teacherUserId } : { assistantId: teacherUserId },
     });
@@ -163,13 +167,13 @@ export async function addTeacherReview(input: unknown): Promise<Result> {
   if (!gate.ok) return gate;
 
   try {
-    const profile = await db.teacherProfile.upsert({
+    const profile = await gate.sdb.teacherProfile.upsert({
       where: { userId },
       update: {},
       create: { userId },
       select: { id: true },
     });
-    await db.teacherReview.create({
+    await gate.sdb.teacherReview.create({
       data: {
         teacherProfileId: profile.id,
         reviewerId: gate.session.user.id ?? null,
@@ -203,7 +207,7 @@ export async function unassignClassFromTeacher(input: unknown): Promise<Result> 
   const gate = await requireTeacherManager(teacherUserId);
   if (!gate.ok) return gate;
 
-  const cls = await db.class.findUnique({
+  const cls = await gate.sdb.class.findUnique({
     where: { id: classId },
     select: { centerId: true, teacherId: true, assistantId: true },
   });
@@ -213,7 +217,7 @@ export async function unassignClassFromTeacher(input: unknown): Promise<Result> 
   }
 
   try {
-    await db.class.update({
+    await gate.sdb.class.update({
       where: { id: classId },
       data: as === "teacher" ? { teacherId: null } : { assistantId: null },
     });

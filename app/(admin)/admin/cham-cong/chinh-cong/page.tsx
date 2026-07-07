@@ -3,7 +3,8 @@ import { ClipboardEdit } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { canAdjustTimesheet } from "@/lib/attendance/adjust";
 import { getSetting } from "@/lib/settings/service";
 import { ReviewRow, type ReviewItem } from "./_components/review-row";
@@ -23,7 +24,10 @@ export default async function ChinhCongPage() {
     redirect("/dashboard");
   }
 
-  const rows = await db.timesheetAdjustmentRequest.findMany({
+  // Cách ly cơ sở (A0-04): TimesheetAdjustmentRequest ∈ SCOPED_MODELS → đọc qua scopedDb.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
+  const rows = await sdb.timesheetAdjustmentRequest.findMany({
     where: { status: "PENDING", ...(centerScope ? { centerId: centerScope } : {}) },
     orderBy: { createdAt: "asc" },
     take: 200,
@@ -31,7 +35,7 @@ export default async function ChinhCongPage() {
 
   const userIds = [...new Set(rows.map((r) => r.userId))];
   const users = userIds.length
-    ? await db.user.findMany({
+    ? await sdb.user.findMany({
         where: { id: { in: userIds } },
         select: { id: true, name: true, email: true, center: { select: { name: true } } },
       })

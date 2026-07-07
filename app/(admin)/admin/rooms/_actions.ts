@@ -2,7 +2,6 @@
 
 import { auth } from "@/lib/auth";
 import { hasAnyRole } from "@/lib/auth/permissions";
-import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -145,7 +144,7 @@ export async function createRoom(formData: FormData): Promise<ActionResult> {
   }
 
   try {
-    await db.room.create({ data: toCreate(parsed.data, centerId) });
+    await scopedDb(actor).room.create({ data: toCreate(parsed.data, centerId) });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã phòng đã tồn tại trong cơ sở này" };
@@ -184,7 +183,7 @@ export async function updateRoom(id: string, formData: FormData): Promise<Action
   }
 
   try {
-    await db.room.update({ where: { id }, data: toUpdate(parsed.data, centerId) });
+    await sdb.room.update({ where: { id }, data: toUpdate(parsed.data, centerId) });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã phòng đã tồn tại trong cơ sở này" };
@@ -207,7 +206,7 @@ export async function deleteRoom(id: string): Promise<ActionResult> {
     return { error: "Phòng không tồn tại" };
   }
   try {
-    await db.room.delete({ where: { id } });
+    await sdb.room.delete({ where: { id } });
   } catch {
     return { error: "Không thể xoá phòng này" };
   }

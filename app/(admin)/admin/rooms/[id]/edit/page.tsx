@@ -2,8 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { RoomForm } from "../../_components/room-form";
 import { DeleteRoomButton } from "../../_components/delete-button";
@@ -22,8 +22,11 @@ export default async function EditRoomPage({ params }: Props) {
   const actor = await resolveActor(session.user.id);
 
   // Room = vị trí vật lý → chỉ chọn CENTER, loại HO (Hội sở không có phòng học).
+  // Cách ly cơ sở (A0-04): Room ∈ SCOPED_MODELS — sdb.findUnique null-filter phòng
+  // ngoài tầm nhìn cơ sở (chống IDOR) → notFound.
+  const sdb = scopedDb(actor);
   const [room, orgUnits] = await Promise.all([
-    db.room.findUnique({ where: { id } }),
+    sdb.room.findUnique({ where: { id } }),
     getSelectableOrgUnits(actor, { types: ["CENTER"] }),
   ]);
 

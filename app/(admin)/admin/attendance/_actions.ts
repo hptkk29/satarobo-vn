@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createMakeupNeed } from "@/lib/makeup/service";
@@ -65,11 +66,16 @@ export async function markAttendance(
 
   const data = parsed.data;
 
+  // Cách ly cơ sở (A0-04): ClassSession ∈ SCOPED_MODELS → đọc qua scopedDb;
+  // Attendance CHƯA scoped (SCOPE_EXEMPT chờ backfill) — scope tay qua classSession.class.
+  const sdb = scopedDb(await resolveActor(user.id));
+
   // LMS-1 / W1-1 — owner-scope: GV chỉ điểm danh lớp mình dạy/trợ giảng;
   // admin/CENTER_MANAGER theo cơ sở (tái dùng canManageSessionClass).
-  const gateSess = await db.classSession.findUnique({
+  // select thêm centerId top-level: sdb.findUnique lọc hậu kỳ theo passesScope.
+  const gateSess = await sdb.classSession.findUnique({
     where: { id: data.sessionId },
-    select: { class: { select: { teacherId: true, assistantId: true, centerId: true } } },
+    select: { centerId: true, class: { select: { teacherId: true, assistantId: true, centerId: true } } },
   });
   if (!gateSess) return { error: "Buổi học không tồn tại" };
   const allowed = await canManageSessionClass(
@@ -82,13 +88,13 @@ export async function markAttendance(
   // Wrap in $transaction so a mid-batch failure rolls back the entire save
   // (atomicity matters when teacher hits Save with concurrent edits open).
   try {
-    await db.$transaction(
+    await sdb.$transaction(
       data.records.map((r) => {
         const absent = r.status === "ABSENT" || r.status === "EXCUSED";
         // Có mặt → reset makeup/lý do vắng; vắng → giữ giá trị nhập (mặc định NONE).
         const makeupStatus: MakeupStatus = absent ? (r.makeupStatus ?? "NONE") : "NONE";
         const absenceReason = absent ? (r.absenceReason?.trim() || null) : null;
-        return db.attendance.upsert({
+        return sdb.attendance.upsert({
           where: {
             sessionId_studentId: {
               sessionId: data.sessionId,
@@ -131,7 +137,10 @@ export async function markAttendance(
   try {
     const absent = data.records.filter((r) => r.status === "ABSENT" || r.status === "EXCUSED");
     const sess = absent.length
-      ? await db.classSession.findUnique({ where: { id: data.sessionId }, select: { classId: true } })
+      ? await sdb.classSession.findUnique({
+          where: { id: data.sessionId },
+          select: { classId: true, centerId: true }, // centerId cho passesScope hậu kỳ
+        })
       : null;
     if (sess) {
       for (const r of absent) await evaluateAbsenceRisk(r.studentId, sess.classId);
@@ -162,8 +171,11 @@ export async function deleteAttendance(id: string): Promise<ActionResult> {
     return { error: "Không có quyền" };
   }
 
+  // Cách ly cơ sở: Attendance chưa scoped — scope tay qua session.class (dưới).
+  const sdb = scopedDb(await resolveActor(user.id));
+
   // LMS-1 / W1-1 — owner-scope: chặn GV xoá điểm danh lớp không thuộc mình.
-  const att = await db.attendance.findUnique({
+  const att = await sdb.attendance.findUnique({
     where: { id },
     select: {
       session: { select: { class: { select: { teacherId: true, assistantId: true, centerId: true } } } },
@@ -177,7 +189,7 @@ export async function deleteAttendance(id: string): Promise<ActionResult> {
   if (!allowed) return { error: "Không có quyền với buổi của lớp này" };
 
   try {
-    await db.attendance.delete({ where: { id } });
+    await sdb.attendance.delete({ where: { id } });
   } catch {
     return { error: "Không thể xoá bản ghi" };
   }

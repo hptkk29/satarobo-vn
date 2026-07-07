@@ -4,7 +4,8 @@ import { ChevronLeft, ClipboardCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { OPEN_FIELDS, CLOSE_FIELDS, type ChecklistKey } from "@/lib/center-checklist";
 
 export const metadata = { title: "Tổng quan checklist cơ sở | Admin" };
@@ -29,16 +30,20 @@ export default async function ChecklistOverviewPage() {
     redirect("/dashboard");
   }
 
+  // Cách ly cơ sở (A0-04): CenterDayChecklist ∈ SCOPED_MODELS → đọc qua scopedDb.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (DAYS - 1));
 
   const [centers, rows] = await Promise.all([
-    db.center.findMany({
+    sdb.center.findMany({
       where: { isActive: true, ...(centerScope ? { id: centerScope } : {}) },
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true },
     }),
-    db.centerDayChecklist.findMany({
+    sdb.centerDayChecklist.findMany({
       where: { date: { gte: start }, ...(centerScope ? { centerId: centerScope } : {}) },
       select: {
         centerId: true,

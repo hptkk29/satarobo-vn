@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { ClipboardEdit } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { isWeekendEditWindow } from "@/lib/shifts";
 import { AdjustRequestForm } from "./_components/request-form";
 
@@ -25,7 +26,8 @@ export default async function YeuCauCongPage() {
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("hr_attendance:checkin", { centerId: session.user.centerId }))) redirect("/dashboard");
 
-  const requests = await db.timesheetAdjustmentRequest.findMany({
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const requests = await sdb.timesheetAdjustmentRequest.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
     take: 100,

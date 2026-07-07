@@ -4,7 +4,8 @@ import { ClipboardCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 import { CenterChecklistForm } from "./_components/checklist-form";
 
@@ -27,6 +28,10 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
   const gateCenterId = (isCM && session.user.centerId) || sp.centerId || session.user.centerId || null;
   if (!(await checkPermission("hr_attendance:view", { centerId: gateCenterId }))) redirect("/dashboard");
 
+  // Cách ly cơ sở (A0-04): CenterDayChecklist ∈ SCOPED_MODELS → đọc qua scopedDb.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
   const now = new Date();
   const dateStr =
     sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date)
@@ -34,10 +39,10 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
       : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   const centers = isSuper
-    ? await db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
+    ? await sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
     : isCM && session.user.centerId
-      ? await db.center.findMany({ where: { id: session.user.centerId }, select: { id: true, name: true } })
-      : await db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } });
+      ? await sdb.center.findMany({ where: { id: session.user.centerId }, select: { id: true, name: true } })
+      : await sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } });
 
   // CM cố định cơ sở mình; còn lại chọn (mặc định cơ sở đầu).
   const centerId = isCM && session.user.centerId ? session.user.centerId : (sp.centerId || centers[0]?.id || "");
@@ -48,7 +53,7 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
 
   const date = new Date(`${dateStr}T00:00:00`);
   const existing = centerId
-    ? await db.centerDayChecklist.findUnique({ where: { centerId_date: { centerId, date } } })
+    ? await sdb.centerDayChecklist.findUnique({ where: { centerId_date: { centerId, date } } })
     : null;
 
   const existingRec = existing as unknown as Record<string, unknown> | null;

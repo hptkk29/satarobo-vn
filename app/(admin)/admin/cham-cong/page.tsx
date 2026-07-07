@@ -4,7 +4,8 @@ import { Monitor, AlertTriangle, MapPinOff } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import type { WorkShift } from "@prisma/client";
 import {
   computeShiftAttendance,
@@ -46,12 +47,15 @@ export default async function ChamCongPage({ searchParams }: Props) {
   end.setDate(end.getDate() + 1);
   const dateStr = start.toISOString().slice(0, 10);
 
+  // Cách ly cơ sở (A0-04): EmployeeCheckin/ShiftRegistration ∈ SCOPED_MODELS → scopedDb.
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
   const [rows, regs] = await Promise.all([
-    db.employeeCheckin.findMany({
+    sdb.employeeCheckin.findMany({
       where: { checkedAt: { gte: start, lt: end }, ...(centerScope ? { centerId: centerScope } : {}) },
       orderBy: { checkedAt: "asc" },
     }),
-    db.shiftRegistration.findMany({
+    sdb.shiftRegistration.findMany({
       // Chỉ lịch CHÍNH THỨC (APPROVED) mới dùng tính công (PHẦN 2).
       where: { date: { gte: start, lt: end }, status: "APPROVED", ...(centerScope ? { centerId: centerScope } : {}) },
       select: { userId: true, shifts: true, user: { select: { name: true, centerId: true } } },
@@ -104,7 +108,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
       ),
     }));
 
-  const centers = await db.center.findMany({ select: { id: true, name: true } });
+  const centers = await sdb.center.findMany({ select: { id: true, name: true } });
   const centerName = new Map(centers.map((c) => [c.id, c.name]));
 
   const missingOut = list.filter((a) => a.checkIn && !a.checkOut).length;
