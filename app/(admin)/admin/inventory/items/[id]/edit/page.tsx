@@ -3,8 +3,8 @@ import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import {
   ItemForm,
@@ -28,9 +28,12 @@ export default async function EditInventoryItemPage({ params }: Props) {
   const { id } = await params;
 
   const actor = await resolveActor(session.user.id);
+  // Cách ly cơ sở: StockBalance ∈ SCOPED_MODELS → findMany tự inject
+  // `centerId IN visibleCenterIds` (InventoryItem là catalog — pass-through).
+  const sdb = scopedDb(actor);
   const [item, balances, selectableOrgUnits] = await Promise.all([
-    db.inventoryItem.findUnique({ where: { id } }),
-    db.stockBalance.findMany({
+    sdb.inventoryItem.findUnique({ where: { id } }),
+    sdb.stockBalance.findMany({
       where: { itemId: id },
       include: { center: { select: { name: true, displayOrder: true } } },
       orderBy: { center: { displayOrder: "asc" } },

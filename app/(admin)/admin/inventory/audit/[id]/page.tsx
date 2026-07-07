@@ -3,7 +3,8 @@ import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { InventoryAuditStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,9 @@ export default async function AuditDetailPage({ params }: Props) {
 
   const { id } = await params;
 
-  const audit = await db.inventoryAudit.findUnique({
+  // Cách ly cơ sở: findUnique qua scopedDb — phiếu ngoài scope → null → notFound (chống IDOR).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const audit = await sdb.inventoryAudit.findUnique({
     where: { id },
     include: {
       center: { select: { name: true } },

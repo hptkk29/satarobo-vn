@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import {
   startAuditSchema,
@@ -17,8 +18,12 @@ type Result<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
+type Sdb = ReturnType<typeof scopedDb>;
+
+// Cách ly cơ sở (A0-04): InventoryAudit ∈ SCOPED_MODELS — đọc qua scopedDb(actor)
+// (findUnique chống IDOR chéo cơ sở); ghi guard bằng passesScope trước khi tạo.
 async function requireRole(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; actor: Actor; sdb: Sdb }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -26,13 +31,15 @@ async function requireRole(): Promise<
   if (!(await checkPermission("inventory:audit"))) {
     return { ok: false, error: "Không có quyền kiểm kê" };
   }
-  return { ok: true, userId: session.user.id ?? "" };
+  const actor = await resolveActor(session.user.id);
+  return { ok: true, userId: session.user.id ?? "", actor, sdb: scopedDb(actor) };
 }
 
-async function resolveEmployeeId(userId: string): Promise<string | null> {
+async function resolveEmployeeId(sdb: Sdb, userId: string): Promise<string | null> {
   if (!userId) return null;
   try {
-    const u = await db.user.findUnique({
+    // User ∈ SCOPE_EXEMPT (identity) — scopedDb pass-through.
+    const u = await sdb.user.findUnique({
       where: { id: userId },
       select: { employeeId: true },
     });
@@ -59,7 +66,9 @@ export async function startAudit(
   const data = parsed.data;
 
   if (data.auditCode) {
-    const dup = await db.inventoryAudit.findUnique({
+    // Dup-check qua scopedDb: phiếu trùng ở cơ sở ngoài scope → null, nhưng unique
+    // constraint DB vẫn chặn ở create (trả lỗi DB thay vì message thân thiện).
+    const dup = await gate.sdb.inventoryAudit.findUnique({
       where: { auditCode: data.auditCode },
       select: { id: true },
     });
@@ -76,8 +85,13 @@ export async function startAudit(
     return { ok: false, error: "Đơn vị không hợp lệ (không gắn cơ sở kho)" };
   }
 
+  // Cách ly cơ sở (ghi): chỉ tạo phiếu kiểm kê cho cơ sở trong tầm nhìn của actor.
+  if (!passesScope("InventoryAudit", { centerId }, gate.actor)) {
+    return { ok: false, error: "Không có quyền kiểm kê cơ sở này" };
+  }
+
   try {
-    const audit = await db.inventoryAudit.create({
+    const audit = await gate.sdb.inventoryAudit.create({
       data: {
         centerId,
         orgUnitId,
@@ -119,7 +133,8 @@ export async function saveAuditDraft(
   }
   const { auditId, lines } = parsed.data;
 
-  const audit = await db.inventoryAudit.findUnique({
+  // findUnique qua scopedDb: phiếu ngoài scope cơ sở → null (chống IDOR).
+  const audit = await gate.sdb.inventoryAudit.findUnique({
     where: { id: auditId },
     select: { status: true },
   });
@@ -135,7 +150,7 @@ export async function saveAuditDraft(
   const deduped = Array.from(byItem.values());
 
   try {
-    await db.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (tx) => {
       await tx.inventoryAuditItem.deleteMany({ where: { auditId } });
       if (deduped.length === 0) return;
       await tx.inventoryAuditItem.createMany({
@@ -169,7 +184,8 @@ export async function submitAudit(auditId: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const audit = await db.inventoryAudit.findUnique({
+  // findUnique qua scopedDb: phiếu ngoài scope cơ sở → null (chống IDOR).
+  const audit = await gate.sdb.inventoryAudit.findUnique({
     where: { id: auditId },
     include: { items: true },
   });
@@ -194,7 +210,7 @@ export async function submitAudit(auditId: string): Promise<Result> {
     }
   }
 
-  const performedById = await resolveEmployeeId(gate.userId);
+  const performedById = await resolveEmployeeId(gate.sdb, gate.userId);
   const now = new Date();
 
   let totalAdjusted = 0;
@@ -202,7 +218,9 @@ export async function submitAudit(auditId: string): Promise<Result> {
   let totalDecreases = 0;
 
   try {
-    await db.$transaction(async (tx) => {
+    // Giữ NGUYÊN cấu trúc transaction (movement + balance + audit atomic) — chỉ đổi
+    // nguồn client. audit đã qua scope-gate nên audit.centerId thuộc tầm nhìn actor.
+    await gate.sdb.$transaction(async (tx) => {
       for (const line of audit.items) {
         if (line.delta === 0) continue;
         totalAdjusted += 1;
@@ -288,7 +306,8 @@ export async function cancelAudit(auditId: string): Promise<Result> {
   const gate = await requireRole();
   if (!gate.ok) return gate;
 
-  const audit = await db.inventoryAudit.findUnique({
+  // findUnique qua scopedDb: phiếu ngoài scope cơ sở → null (chống IDOR).
+  const audit = await gate.sdb.inventoryAudit.findUnique({
     where: { id: auditId },
     select: { status: true },
   });
@@ -298,7 +317,7 @@ export async function cancelAudit(auditId: string): Promise<Result> {
   }
 
   try {
-    await db.inventoryAudit.update({
+    await gate.sdb.inventoryAudit.update({
       where: { id: auditId },
       data: { status: "CANCELLED" },
     });

@@ -10,7 +10,8 @@ import {
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { InventoryCategory, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -68,10 +69,20 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
       : {}),
   };
 
-  const items = await db.inventoryItem.findMany({
+  // Cách ly cơ sở: InventoryItem là catalog (không scoped), nhưng balances
+  // (StockBalance ∈ SCOPED_MODELS) là nested include KHÔNG auto-scope (AC7)
+  // → filter tay theo tầm nhìn cơ sở của actor (tổng tồn chỉ tính cơ sở nhìn thấy).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const visibleCenters = getModelVisibleCenterIds("StockBalance", actor);
+  const balanceWhere =
+    visibleCenters === "ALL" ? undefined : { centerId: { in: visibleCenters } };
+
+  const items = await sdb.inventoryItem.findMany({
     where,
     include: {
       balances: {
+        where: balanceWhere,
         select: {
           quantity: true,
           reserved: true,
