@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowRightLeft, ChevronLeft, ClipboardList, History } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ChangeStatusDialog } from "../../_components/change-status-dialog";
@@ -61,17 +60,20 @@ export default async function EditEnrollmentPage({ params }: Props) {
   const { id } = await params;
   const canViewAudit = await checkPermission("audit-logs:view");
 
-  // Cách ly cơ sở: Enrollment KHÔNG nằm trong SCOPED_MODELS (không có centerId trực
-  // tiếp) → scopedDb không auto-scope findUnique. Scope thủ công qua class.centerId,
-  // dùng cùng tầm nhìn cơ sở của model Class. targetClasses đọc qua sdb (auto-scope).
+  // Cách ly cơ sở: Enrollment NAY ∈ SCOPED_MODELS (FL3-02) → sdb.findUnique tự
+  // IDOR-filter theo centerId denormalized; check thủ công qua class.centerId
+  // bên dưới GIỮ làm lớp phòng thủ kép. targetClasses đọc qua sdb (auto-scope).
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
 
-  const enrollment = await db.enrollment.findUnique({
+  const enrollment = await sdb.enrollment.findUnique({
     where: { id },
+    // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này
+    // (thiếu → passesScope fail → ẩn nhầm record hợp lệ với actor center-scope).
     select: {
       id: true,
+      centerId: true,
       status: true,
       notes: true,
       enrolledAt: true,
@@ -154,7 +156,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
       take: 200,
     }),
     canViewAudit
-      ? db.enrollmentAuditLog.findMany({
+      ? sdb.enrollmentAuditLog.findMany({
           where: { enrollmentId: id },
           orderBy: { createdAt: "desc" },
           take: 30,

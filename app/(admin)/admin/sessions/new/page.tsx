@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { SessionForm } from "../_components/session-form";
@@ -13,7 +12,7 @@ interface Props {
 
 export default async function NewSessionPage({ searchParams }: Props) {
   // Cách ly cơ sở: dropdown lớp phải theo tầm nhìn cơ sở của actor (Class ∈ SCOPED_MODELS
-  // → sdb.class auto inject centerId). Lesson không scope theo cơ sở → giữ db trần.
+  // → sdb.class auto inject centerId). Lesson không scope theo cơ sở → sdb pass-through.
   const session = await auth();
   if (!session?.user) redirect("/login");
   const actor = await resolveActor(session.user.id);
@@ -33,7 +32,7 @@ export default async function NewSessionPage({ searchParams }: Props) {
       },
       take: 200,
     }),
-    db.lesson.findMany({
+    sdb.lesson.findMany({
       where: { curriculum: { isActive: true } },
       orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
       select: {

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, CalendarDays } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { SessionFeedbackEditor } from "./_components/session-feedback-editor";
 import { SessionChecklist } from "./_components/session-checklist";
 import { canManageSessionClass } from "./_actions";
@@ -25,10 +26,17 @@ export default async function SessionDetailPage({ params }: Props) {
   if (!session?.user) redirect("/login");
   const { id } = await params;
 
-  const sess = await db.classSession.findUnique({
+  // Nhóm 01 L1 — ClassSession ∈ SCOPED_MODELS: sdb.findUnique lọc hậu kỳ theo
+  // record.centerId → select PHẢI kèm centerId. Buổi ngoài tầm nhìn cơ sở → 404
+  // (học bù liên cơ sở đi qua lib/makeup + trang điểm danh, không qua trang này).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const sess = await sdb.classSession.findUnique({
     where: { id },
     select: {
       id: true,
+      centerId: true,
       date: true,
       topic: true,
       notes: true,
@@ -75,7 +83,7 @@ export default async function SessionDetailPage({ params }: Props) {
     redirect("/sessions");
   }
 
-  const enrollments = await db.enrollment.findMany({
+  const enrollments = await sdb.enrollment.findMany({
     where: { classId: sess.class.id, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
     select: { student: { select: { id: true, name: true } } },
     orderBy: { student: { name: "asc" } },
