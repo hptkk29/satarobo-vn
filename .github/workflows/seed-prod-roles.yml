@@ -1,0 +1,63 @@
+name: Seed Production RolePermission (Supabase)
+
+# =============================================================================
+# Chạy TAY (workflow_dispatch) — seed RoleDef + RolePermission (RBAC v2) lên PROD.
+#
+# deploy.yml chỉ `migrate deploy` (SCHEMA). Workflow này seed DATA quyền v2
+# (prisma/seed-roles.ts): upsert RoleDef theo code + reset RolePermission mỗi lần
+# chạy → idempotent, chạy lại an toàn.
+#
+# KHI NÀO CHẠY: trước khi flip RBAC_V2_ENABLED (#09). Runtime hiện chạy v1 matrix
+# (RBAC_V2 OFF) nên seed này KHÔNG đổi hành vi cho tới khi flip — chỉ để prod v2
+# sẵn sàng (payments:view-pii, attendance:edit, CENTER_CLASS_MANAGER,
+# report-cards:*@TEACHER/TRAINING/CENTER_MANAGER, audit-logs:view-pii, ...).
+#
+# ⚠️ Ghi đè RolePermission bằng ĐỊNH NGHĨA TRONG CODE (seed-roles.ts). Nếu prod có
+# chỉnh role runtime qua UI mà KHÔNG đưa vào seed-roles.ts, chỉnh đó sẽ bị reset.
+#
+# SECRETS (đã khai cho deploy.yml): PROD_DATABASE_URL / PROD_DIRECT_URL.
+# Dùng PROD_DIRECT_URL (session pooler :5432) cho client seed để tránh quirk
+# prepared-statement của transaction pooler.
+# =============================================================================
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: seed-production-roles
+  cancel-in-progress: false
+
+jobs:
+  seed-roles:
+    name: Seed RoleDef + RolePermission (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secrets prod (fail sớm)
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Seed RolePermission (prod) — kỳ vọng "✅ Seeded 14 RoleDef"
+        run: pnpm exec tsx prisma/seed-roles.ts
+        env:
+          # client seed dùng session pooler (:5432) để tránh prepared-statement quirk
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
