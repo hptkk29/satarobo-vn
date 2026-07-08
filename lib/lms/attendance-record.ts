@@ -35,6 +35,8 @@ export async function recordAttendance(
           status: input.status,
           note: input.note ?? null,
           makeupStatus: willMakeup ? "NEEDS_MAKEUP" : "NONE",
+          // #04 prep: denormalize centerId (record mới không null → sẵn sàng flip SCOPED).
+          centerId: input.centerId ?? null,
         },
       });
 

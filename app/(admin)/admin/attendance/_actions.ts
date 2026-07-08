@@ -141,6 +141,9 @@ export async function markAttendance(
             note: r.note ?? null,
             makeupStatus,
             absenceReason,
+            // #04 prep: denormalize centerId từ buổi/lớp để Attendance sẵn sàng flip
+            // EXEMPT→SCOPED (record mới KHÔNG null → không bị ẩn nhầm sau flip).
+            centerId,
           },
           update: {
             status: r.status as AttendanceStatus,

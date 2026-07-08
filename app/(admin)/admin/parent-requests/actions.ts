@@ -134,6 +134,8 @@ export async function resolveAbsence(input: {
           status,
           makeupStatus,
           absenceReason,
+          // #04 prep: denormalize centerId (từ cơ sở HV) để record mới không null → sẵn sàng flip SCOPED.
+          centerId: req.student?.centerId ?? null,
         },
         update: { status, makeupStatus, absenceReason },
       }),
