@@ -132,9 +132,11 @@ WHERE a."centerId" IS NOT NULL
 **Vì sao:** RBAC v2 dùng nguyên tắc **ALLOW-wins, KHÔNG có DENY override**. Nếu prod còn grant `effect = DENY` (v1 tôn trọng, v2 bỏ qua) → sau flip #09 người đó **được cấp quyền ngoài ý muốn**.
 
 ```sql
-SELECT "userId", "action", "effect", "createdAt"
+-- LƯU Ý: cột là "grant" (enum GrantType ALLOW/DENY), KHÔNG phải "effect".
+-- "grant" là từ khoá SQL → BẮT BUỘC để trong nháy kép.
+SELECT "userId", "action", "grant", "reason", "createdAt"
 FROM "UserPermissionGrant"
-WHERE "effect" = 'DENY';
+WHERE "grant" = 'DENY';
 ```
 
 | Kết quả | Xử lý |
@@ -228,6 +230,6 @@ GROUP BY action, v1, v2, "targetKey" ORDER BY n DESC;
 
 - `Attendance."sessionId"` → FK `ClassSession.id`
 - `ClassSession."classId"` → FK `Class.id`; `ClassSession."centerId"` (ưu tiên); `Class."centerId"` (fallback)
-- `UserPermissionGrant."effect"` ∈ {ALLOW, DENY}
+- `UserPermissionGrant."grant"` ∈ {ALLOW, DENY} (cột tên `grant` — từ khoá SQL, phải quote; KHÔNG phải `effect`)
 - `RbacShadowDiff(action, userId, v1, v2, targetKey, createdAt)` — helper: `lib/auth/shadow-report.ts` (`getShadowDiffStats`, `isSafeToEnableRbacV2`)
 - Seed prod v2: workflow `seed-prod-roles.yml` (Actions → Run workflow); nguồn `prisma/seed-roles.ts`
