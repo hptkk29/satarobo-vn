@@ -22,6 +22,7 @@ export type StudentFormValue = {
   parentPhone: string | null;
   parentEmail: string | null;
   parentRelation: string | null;
+  parentNationalId: string | null;
   parent2Name: string | null;
   parent2Phone: string | null;
   parent2Relation: string | null;
@@ -79,9 +80,13 @@ function toDateInput(d: Date | null): string {
 export function StudentForm({
   student,
   orgUnits,
+  canViewParentCccd = false,
 }: {
   student?: StudentFormValue;
   orgUnits: OrgUnitOption[];
+  // #15 — CCCD PH là PII (mask + break-glass ở màn thanh toán). Chỉ actor có
+  // payments:view-pii mới THẤY + nhập ô này; vai khác (Sale/CM) ẩn hoàn toàn.
+  canViewParentCccd?: boolean;
 }) {
   const router = useRouter();
   const isEdit = Boolean(student);
@@ -216,12 +221,25 @@ export function StudentForm({
           />
         </Grid>
 
-        <Field
-          label="Email PH chính"
-          name="parentEmail"
-          type="email"
-          defaultValue={student?.parentEmail ?? undefined}
-        />
+        <Grid cols={2}>
+          <Field
+            label="Email PH chính"
+            name="parentEmail"
+            type="email"
+            defaultValue={student?.parentEmail ?? undefined}
+          />
+          {/* #15 — chỉ kế toán/admin (payments:view-pii) mới thấy + nhập CCCD PH.
+              Vai khác: KHÔNG render ô (không prefill raw); giá trị cũ được server giữ. */}
+          {canViewParentCccd && (
+            <Field
+              label="CCCD phụ huynh"
+              name="parentNationalId"
+              defaultValue={student?.parentNationalId ?? undefined}
+              placeholder="Số CCCD/CMND phụ huynh"
+              helper="Dùng cho phiếu thu/hóa đơn. Thông tin nhạy cảm — che mặc định, chỉ kế toán mở xem đầy đủ."
+            />
+          )}
+        </Grid>
 
         <details className="border-t border-neutral-200 pt-3">
           <summary className="cursor-pointer text-sm font-medium text-neutral-600 hover:text-neutral-900">

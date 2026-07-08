@@ -14,6 +14,9 @@ export default async function NewStudentPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // #15 — chỉ kế toán/admin (payments:view-pii) mới thấy + nhập CCCD PH (PII).
+  const canViewParentCccd = await checkPermission("payments:view-pii");
+
   // PR-C: picker đơn vị qua OrgUnit tree (gồm cả HO) — không dùng db.center.findMany.
   const actor = await resolveActor(session.user.id);
   const orgUnits = await getSelectableOrgUnits(actor);
@@ -21,7 +24,10 @@ export default async function NewStudentPage() {
   return (
     <div>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm học viên mới</h1>
-      <StudentForm orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))} />
+      <StudentForm
+        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+        canViewParentCccd={canViewParentCccd}
+      />
     </div>
   );
 }

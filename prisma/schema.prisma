@@ -1123,6 +1123,7 @@ model Student {
   parentPhone     String?
   parentEmail     String?
   parentRelation  String?
+  parentNationalId String? // CCCD phụ huynh (#15 câu 32) — CHỈ CCCD PH; PII: mask + audit khi xem
   parent2Name     String?
   parent2Phone    String?
   parent2Relation String?

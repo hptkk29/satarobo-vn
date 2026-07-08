@@ -240,6 +240,7 @@ export type Action =
   | "payments:manage"
   | "payments:record" // R7-04 — Sale ghi nhận khoản
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
+  | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "orders:view"
   | "orders:manage"
@@ -516,6 +517,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "payments:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // #15 (câu 32) — CCCD PH + địa chỉ mask mặc định; break-glass "Xem đầy đủ" (reason
+  // ≥10 ký tự + audit) chỉ cho kế toán + admin. v2: HO_ACCOUNTANT GLOBAL,
+  // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.
+  "payments:view-pii": ["SUPER_ADMIN", "ACCOUNTANT"],
   // C4 — duyệt kế hoạch trả góp 2 đợt: chỉ quản lý cơ sở + admin (audit + reason bắt buộc khi từ chối).
   "installments:approve": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],

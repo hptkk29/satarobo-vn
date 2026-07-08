@@ -33,6 +33,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payroll:edit", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
+      // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ ở màn thanh toán.
+      { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
       { action: "vouchers:view", scopeType: "GLOBAL" },
       { action: "vouchers:manage", scopeType: "GLOBAL" },
@@ -310,6 +312,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payments:manage", scopeType: "CENTER" },
       { action: "payments:record", scopeType: "CENTER" },
       { action: "payments:confirm", scopeType: "CENTER" },
+      // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).
+      { action: "payments:view-pii", scopeType: "CENTER" },
       { action: "students:view-all", scopeType: "CENTER" },
       { action: "classes:view-all", scopeType: "CENTER" },
       { action: "enrollments:view-all", scopeType: "CENTER" },

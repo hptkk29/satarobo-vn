@@ -77,6 +77,9 @@ export const studentCreateSchema = z.object({
   parentPhone: z.string().trim().min(1, "SĐT phụ huynh bắt buộc"),
   parentEmail: nullableEmail,
   parentRelation: nullableStr,
+  // #15 (câu 32) — CCCD phụ huynh (CHỈ phụ huynh, KHÔNG lưu CCCD học viên). PII nhạy
+  // cảm: hiển thị mask + break-glass ở màn thanh toán. Nhập tại form học viên.
+  parentNationalId: nullableStr,
   parent2Name: nullableStr,
   parent2Phone: nullableStr,
   parent2Relation: nullableStr,

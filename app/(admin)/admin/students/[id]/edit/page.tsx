@@ -31,6 +31,10 @@ export default async function EditStudentPage({ params }: Props) {
     redirect("/dashboard?error=unauthorized");
   }
 
+  // #15 — CCCD PH là PII: chỉ actor có payments:view-pii (kế toán/admin) mới thấy +
+  // sửa. Sale/CM có students:edit nhưng KHÔNG có view-pii → ẩn ô + không prefill raw.
+  const canViewParentCccd = await checkPermission("payments:view-pii");
+
   const { id } = await params;
 
   const actor = await resolveActor(session.user.id);
@@ -53,6 +57,7 @@ export default async function EditStudentPage({ params }: Props) {
         parentPhone: true,
         parentEmail: true,
         parentRelation: true,
+        parentNationalId: true,
         parent2Name: true,
         parent2Phone: true,
         parent2Relation: true,
@@ -132,6 +137,8 @@ export default async function EditStudentPage({ params }: Props) {
     parentPhone: student.parentPhone,
     parentEmail: student.parentEmail,
     parentRelation: student.parentRelation,
+    // Không gửi raw CCCD xuống client khi actor không có quyền xem đầy đủ.
+    parentNationalId: canViewParentCccd ? student.parentNationalId : null,
     parent2Name: student.parent2Name,
     parent2Phone: student.parent2Phone,
     parent2Relation: student.parent2Relation,
@@ -232,6 +239,7 @@ export default async function EditStudentPage({ params }: Props) {
         <StudentForm
           student={formValue}
           orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+          canViewParentCccd={canViewParentCccd}
         />
       </div>
 
