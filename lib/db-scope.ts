@@ -23,6 +23,12 @@ export const SCOPED_MODELS = new Set<string>([
   // (centerId null sẽ bị inject `centerId IN [...]` → ẨN NHẦM record). Xem e2e cách ly.
   "Enrollment", // FL3-02 — đăng ký học theo cơ sở (trước scope tay qua class.centerId)
   "ClassSession", // FL3-02 — buổi học theo cơ sở; vẫn ∈ MAKEUP_EXCEPTION_MODELS (đọc chéo khi học bù)
+  // #04 (08/07) — flip EXEMPT→SCOPED. Điều kiện đã đạt: centerId backfill prod = 0 null +
+  // mọi đường tạo Attendance set centerId (attendance/_actions, parent-requests,
+  // recordAttendance — commit 6a8ba7a). Cách ly: HO/SUPER thấy toàn bộ; center-actor chỉ
+  // cơ sở mình. Reads bị scope = sdb.attendance (marking/báo cáo/sessions). Makeup đọc
+  // Attendance qua raw db (KHÔNG qua scopedDb) → KHÔNG cần MAKEUP_EXCEPTION.
+  "Attendance",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -50,13 +56,6 @@ export const SCOPE_EXEMPT = new Set<string>([
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
   // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
   "RefundRequest",
-  // LMS-18 (W5f phase A) — centerId ĐÃ thêm. FL3-02 đã flip Enrollment + ClassSession
-  // sang SCOPED_MODELS. Attendance CHƯA flip: backfill DEV đã chạy + verify sạch
-  // (06/07, script sửa lỗi join sessionId→ClassSession→Class, xem
-  // Document/.../backfill_attendance_centerid.sql) — PROD CHƯA verify/backfill, đây là
-  // điều kiện bắt buộc trước khi flip (RBAC flip go/no-go #2). Cách ly hiện vẫn qua
-  // sessionId/classId IN scopedClassIds (manual) ở trang điểm danh.
-  "Attendance",
   // RBAC-DECISION #5 (06/07) — Center LÀ ranh giới tenant, không tự scope theo chính
   // nó (self-referential, sẽ vỡ mọi thao tác cross-center hợp lệ: HO xem toàn bộ
   // center, branch switcher, super-admin list center). Lớp bảo vệ PHẢI là permission

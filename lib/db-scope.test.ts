@@ -92,9 +92,15 @@ describe("[FL3-02] Enrollment + ClassSession auto-scope (flip EXEMPT→SCOPED)",
     expect(SCOPE_EXEMPT.has("ClassSession")).toBe(false);
   });
 
-  it("Attendance VẪN exempt (ngoài scope FL3-02)", () => {
-    expect(SCOPE_EXEMPT.has("Attendance")).toBe(true);
-    expect(SCOPED_MODELS.has("Attendance")).toBe(false);
+  it("Attendance ∈ SCOPED_MODELS (flip #04), không còn exempt", () => {
+    expect(SCOPED_MODELS.has("Attendance")).toBe(true);
+    expect(SCOPE_EXEMPT.has("Attendance")).toBe(false);
+  });
+
+  it("injectScope(Attendance) — center-actor không HO → centerId IN visibleCenterIds", () => {
+    expect(injectScope("Attendance", {}, enrollClerk)).toEqual({
+      where: { centerId: { in: ["c1"] } },
+    });
   });
 
   it("injectScope(Enrollment) — clerk có perm enrollments: → centerId IN [c1]", () => {
