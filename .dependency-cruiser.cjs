@@ -47,10 +47,15 @@ module.exports = {
        (scopedDb) + modules/* hoàn tất → đổi sang 'error'. Xem ghi chú từng rule. */
     {
       name: "app-no-direct-prisma",
-      // TODO(A0-04): đổi 'warn' → 'error' sau khi scopedDb hoàn tất.
+      // #04 (08/07): GIỮ 'warn' có chủ đích — KHÔNG flip 'error'. Enforcement CHÍNH XÁC
+      // do ESLint lo (eslint.config.mjs + lib/eslint/db-import-allowlist.mjs: error-level,
+      // phủ app/(admin|portal|teacher) + allowlist 25 exception hợp lệ đã có comment lý do).
+      // Rule depcruise này khớp THÔ mọi ^app/ → lib/db.ts (gồm Loại C public/api/(auth)/cron/
+      // OG legit import db không actor) nên 'error' sẽ false-positive; để 'warn' làm tín hiệu
+      // kiến trúc, ESLint mới là cổng chặn.
       severity: "warn",
       comment:
-        "app/** KHÔNG import @/lib/db trực tiếp — phải đi qua scopedDb(actor) để ép cách ly cơ sở (Doc 15 §4.4/§4.10).",
+        "app/** KHÔNG import @/lib/db trực tiếp — phải đi qua scopedDb(actor) (Doc 15 §4.4/§4.10). Enforcement chính xác: ESLint allowlist (25 exception). Đây là cảnh báo thô.",
       from: { path: "^app/" },
       to: { path: "^lib/db\\.ts$" },
     },
