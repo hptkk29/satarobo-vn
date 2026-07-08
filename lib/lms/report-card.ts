@@ -107,6 +107,9 @@ export interface EnrollmentContext {
   studentName: string;
   studentCode: string | null;
   courseName: string;
+  // #04 carve-out câu 20: cơ sở HIỆN TẠI của HV (khác centerId enrollment/lớp nếu đã chuyển
+  // cơ sở) — để QL cơ sở tiếp nhận XEM học bạ cũ.
+  studentCurrentCenterId: string | null;
 }
 
 export async function getEnrollmentContext(enrollmentId: string): Promise<EnrollmentContext | null> {
@@ -117,7 +120,7 @@ export async function getEnrollmentContext(enrollmentId: string): Promise<Enroll
       classId: true,
       courseId: true,
       studentId: true,
-      student: { select: { name: true, studentCode: true } },
+      student: { select: { name: true, studentCode: true, centerId: true } },
       class: { select: { name: true, centerId: true, teacherId: true } },
       course: { select: { name: true } },
     },
@@ -134,6 +137,7 @@ export async function getEnrollmentContext(enrollmentId: string): Promise<Enroll
     studentName: enr.student.name,
     studentCode: enr.student.studentCode,
     courseName: enr.course.name,
+    studentCurrentCenterId: enr.student.centerId,
   };
 }
 

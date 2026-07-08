@@ -270,6 +270,39 @@ describe("[R7-15] T5 scope (C6)", () => {
     expect(r.ok).toBe(false);
   });
 
+  it("[#04 câu 20] QL@CS2 XEM học bạ cũ CS1 của HV đã chuyển VỀ CS2 → OK (carve-out READ)", () => {
+    const r = checkEnrollmentScope({
+      actor: sa({ visibleCenterIds: ["CS2"] }),
+      centerId: "CS1", // học bạ cũ ở CS1
+      classId: "CLS1",
+      capabilities: ["review"],
+      receivingCenterId: "CS2", // HV hiện thuộc CS2 (đã chuyển về) → QL tiếp nhận xem được
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("[#04 câu 20] QL@CS2 XEM học bạ CS1 của HV KHÔNG ở CS2 → CHẶN (không carve-out)", () => {
+    const r = checkEnrollmentScope({
+      actor: sa({ visibleCenterIds: ["CS2"] }),
+      centerId: "CS1",
+      classId: "CLS1",
+      capabilities: ["review"],
+      receivingCenterId: "CS3", // HV ở CS3 — ngoài tầm nhìn actor
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("[#04 câu 20] EDIT (KHÔNG truyền receivingCenterId) → giữ cách ly ghi (chặn cơ sở khác)", () => {
+    // Đường GHI (_actions.ts) KHÔNG truyền receivingCenterId → carve-out không kích hoạt.
+    const r = checkEnrollmentScope({
+      actor: sa({ visibleCenterIds: ["CS2"] }),
+      centerId: "CS1",
+      classId: "CLS1",
+      capabilities: ["review"],
+    });
+    expect(r.ok).toBe(false);
+  });
+
   it("QL@CS1 duyệt học bạ lớp bất kỳ CS1 → OK (không cần là GV lớp)", () => {
     const r = checkEnrollmentScope({
       actor: sa({ assignedClassIds: new Set() }),

@@ -218,11 +218,21 @@ export function checkEnrollmentScope(input: {
   centerId: string | null;
   classId: string;
   capabilities: ReportCardCapability[];
+  // #04 carve-out câu 20 (2 QL đã ký): HV chuyển cơ sở → QL cơ sở TIẾP NHẬN được XEM học bạ
+  // cũ (gồm phần cơ sở cũ). CHỈ đường ĐỌC (view page) truyền receivingCenterId = cơ sở HIỆN
+  // TẠI của HV (Student.centerId). Đường GHI (save/recall/publish) KHÔNG truyền → EDIT vẫn
+  // chỉ cơ sở cũ + Toại (giữ cách ly ghi, #17).
+  receivingCenterId?: string | null;
 }): { ok: boolean; error?: string } {
-  const { actor, centerId, classId, capabilities } = input;
+  const { actor, centerId, classId, capabilities, receivingCenterId } = input;
   if (actor.isSuperAdmin || actor.isHoLevel) return { ok: true };
 
   if (!centerId || !actor.visibleCenterIds.includes(centerId)) {
+    // Carve-out câu 20 (READ-only): học bạ ngoài cơ sở NHƯNG HV hiện thuộc cơ sở actor quản lý
+    // (đã chuyển về) → cho XEM. receivingCenterId chỉ được truyền ở đường đọc → không nới EDIT.
+    if (receivingCenterId && actor.visibleCenterIds.includes(receivingCenterId)) {
+      return { ok: true };
+    }
     return { ok: false, error: "Học bạ ngoài phạm vi cơ sở của bạn" };
   }
   const isReviewer = capabilities.includes("review");

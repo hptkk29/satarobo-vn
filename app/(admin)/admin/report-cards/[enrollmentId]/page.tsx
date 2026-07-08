@@ -43,6 +43,9 @@ export default async function ReportCardEditorPage({
     centerId: enr.centerId,
     classId: enr.classId,
     capabilities,
+    // #04 carve-out câu 20 (READ-only, CHỈ đường ĐỌC): QL cơ sở tiếp nhận xem học bạ cũ của
+    // HV đã chuyển VỀ cơ sở mình. Đường GHI (_actions.ts) KHÔNG truyền → EDIT vẫn cách ly.
+    receivingCenterId: enr.studentCurrentCenterId,
   });
 
   if (!scope.ok) {
