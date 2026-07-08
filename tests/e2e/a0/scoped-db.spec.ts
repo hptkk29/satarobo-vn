@@ -99,7 +99,7 @@ test.describe("[A0-04] scopedDb cách ly cơ sở", () => {
 
   test("[A0-04-T1-01] model không centerId (RoleDef) → không bị scope (AC9)", async () => {
     const actor = await makeUser("cm1f", "CS1", "CENTER_MANAGER");
-    expect(await scopedDb(actor).roleDef.count()).toBe(11);
+    expect(await scopedDb(actor).roleDef.count()).toBe(14);
   });
 
   test("[A0-04-T1-02] bypass → thấy tất cả + ghi AuditLog SCOPE_BYPASS (AC10)", async () => {

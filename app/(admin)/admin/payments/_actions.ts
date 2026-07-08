@@ -4,9 +4,15 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
+import { PermissionError } from "@/lib/auth/can";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { maskNationalId, maskAddress } from "@/lib/finance/pii-mask";
+import { breakGlassSchema } from "@/lib/validators/audit";
+import { writeAudit } from "@/lib/audit/audit-log";
+import { getAuditActor } from "@/lib/audit/log";
+import { getRequestMetadata } from "@/lib/audit/headers";
 // ─── lib/finance/* — parallel agent owns these. Combined typecheck resolves. ──
 // Contract assumed (single object arg, returns discriminated `{ ok }`):
 //   recordPayment(input)  -> { ok:true; paymentId } | { ok:false; error }
@@ -82,9 +88,41 @@ export type PaymentFilters = {
   search?: string;
 };
 
-export async function queryPayments(filters: PaymentFilters) {
-  const session = await requireRecord();
-  const sdb = scopedDb(await resolveActor(session.user.id));
+// #15 (câu 32) — 1 dòng khoản chờ xác nhận cho màn Kế toán. Flat DTO (serializable),
+// CHỈ gồm field cần hiển thị; PII (CCCD PH + địa chỉ) đã MASK sẵn ở server, KHÔNG gửi
+// bản raw xuống client khi chưa break-glass.
+export type PaymentListRow = {
+  id: string;
+  amount: number;
+  method: string;
+  paidDate: string; // ISO
+  updatedAt: string; // ISO
+  saleStatus: string;
+  accountantStatus: string;
+  orderCode: string | null;
+  customerName: string | null;
+  studentName: string | null; // tên bé
+  className: string | null; // lớp
+  collectedByName: string | null; // người thu (recordedBy)
+  leadSource: string | null; // nguồn học viên
+  parentName: string | null; // tên PH
+  parentNationalId: string | null; // CCCD PH — mask/raw theo break-glass
+  address: string | null; // địa chỉ — mask/raw theo break-glass
+  piiMasked: boolean; // true = đang che (mặc định); false = đã break-glass
+  receiptCode: string | null; // mã phiếu thu ACTIVE (để in)
+  hasActiveReceipt: boolean;
+};
+
+// Lõi query dùng chung (KHÔNG export → không phải 'use server' entry point). Chỉ được
+// gọi sau khi caller đã gác quyền. `wantUnmask=true` chỉ đi từ revealPaymentsPii (đã
+// assertPermission + reason + writeAudit). scopedDb ép cách ly cơ sở như thường.
+async function fetchPaymentRows(
+  userId: string,
+  filters: PaymentFilters,
+  wantUnmask: boolean,
+): Promise<PaymentListRow[]> {
+  const actor = await resolveActor(userId);
+  const sdb = scopedDb(actor);
 
   const AND: Array<Record<string, unknown>> = [];
   if (filters.saleStatus) AND.push({ saleStatus: filters.saleStatus });
@@ -100,21 +138,143 @@ export async function queryPayments(filters: PaymentFilters) {
     });
   }
 
+  // Payment ∈ SCOPED_MODELS → findMany đã tự lọc centerId theo actor (cách ly cơ sở:
+  // CENTER_ACCOUNTANT CS1 KHÔNG thấy khoản/CCCD CS2). Nested include chỉ để hiển thị.
   const rows = await sdb.payment.findMany({
     where: AND.length ? { AND } : undefined,
     include: {
-      order: { select: { id: true, code: true, customerName: true } },
-      enrollment: { select: { id: true } },
+      order: {
+        select: {
+          id: true,
+          code: true,
+          customerName: true,
+          student: {
+            select: {
+              name: true,
+              parentName: true,
+              parentNationalId: true,
+              address: true,
+            },
+          },
+          lead: { select: { source: true } },
+        },
+      },
+      enrollment: { select: { id: true, class: { select: { name: true } } } },
       receipts: { select: { code: true, status: true } },
     },
     orderBy: [{ createdAt: "desc" }],
     take: PAGE_SIZE,
   });
 
-  return rows;
+  // "Người thu" = người ghi nhận khoản (Payment.recordedById là String thuần, KHÔNG có
+  // quan hệ Prisma) → tra tên qua 1 query User (User ∈ SCOPE_EXEMPT, đọc toàn cục OK).
+  const collectorIds = [
+    ...new Set(rows.map((r) => r.recordedById).filter((v): v is string => !!v)),
+  ];
+  const collectors = collectorIds.length
+    ? await sdb.user.findMany({
+        where: { id: { in: collectorIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const nameById = new Map(collectors.map((u) => [u.id, u.name]));
+
+  // Defense in depth: chỉ unmask khi caller THẬT SỰ có quyền. Không đủ quyền → im lặng
+  // trả bản MASK (an toàn). wantUnmask chỉ true khi đã qua break-glass ở revealPaymentsPii.
+  const unmask = wantUnmask && (await checkPermission("payments:view-pii"));
+
+  return rows.map((p) => {
+    const activeReceipt = p.receipts.find((r) => r.status === "ACTIVE");
+    const rawCccd = p.order?.student?.parentNationalId ?? null;
+    const rawAddress = p.order?.student?.address ?? null;
+    return {
+      id: p.id,
+      amount: p.amount,
+      method: p.method,
+      paidDate: p.paidDate.toISOString(),
+      updatedAt: p.updatedAt.toISOString(),
+      saleStatus: p.saleStatus,
+      accountantStatus: p.accountantStatus,
+      orderCode: p.order?.code ?? null,
+      customerName: p.order?.customerName ?? null,
+      studentName: p.order?.student?.name ?? null,
+      className: p.enrollment?.class?.name ?? null,
+      collectedByName: p.recordedById
+        ? (nameById.get(p.recordedById) ?? null)
+        : null,
+      leadSource: p.order?.lead?.source ?? null,
+      parentName: p.order?.student?.parentName ?? null,
+      parentNationalId: unmask ? rawCccd : maskNationalId(rawCccd),
+      address: unmask ? rawAddress : maskAddress(rawAddress),
+      piiMasked: !unmask,
+      receiptCode: activeReceipt?.code ?? null,
+      hasActiveReceipt: !!activeReceipt,
+    };
+  });
 }
 
-export type PaymentRow = Awaited<ReturnType<typeof queryPayments>>[number];
+// LUÔN trả bản MASK. Raw CCCD PH + địa chỉ KHÔNG BAO GIỜ ra từ đây — chỉ qua
+// revealPaymentsPii (đường DUY NHẤT có reason + audit). Không còn tham số unmask.
+export async function queryPayments(
+  filters: PaymentFilters,
+): Promise<PaymentListRow[]> {
+  const session = await requireRecord();
+  return fetchPaymentRows(session.user.id, filters, false);
+}
+
+export type PaymentRow = PaymentListRow;
+
+// ─── #15 — BREAK-GLASS: mở xem đầy đủ CCCD PH + địa chỉ (reason + audit) ──────────
+/**
+ * ĐƯỜNG DUY NHẤT trả raw CCCD PH + địa chỉ. Bấm "Xem đầy đủ" → nhập lý do (≥10 ký tự)
+ * → (1) assertPermission('payments:view-pii'); (2) reason ≥10; (3) ghi log RIÊNG
+ * `payments.pii-unmasked` (ai – lúc nào – lý do) TRƯỚC khi trả raw; (4) query & trả
+ * rows UNMASK. Mọi lối trả raw đều đi qua audit — không còn queryPayments({unmask}).
+ */
+export async function revealPaymentsPii(
+  filters: PaymentFilters,
+  reason: string,
+): Promise<{ ok: true; rows: PaymentListRow[] } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  // (1) Chỉ kế toán/admin (payments:view-pii) mới mở xem đầy đủ.
+  try {
+    await assertPermission("payments:view-pii");
+  } catch (e) {
+    if (e instanceof PermissionError) {
+      return { ok: false, error: "Bạn không có quyền xem đầy đủ CCCD/địa chỉ" };
+    }
+    throw e;
+  }
+
+  // (2) Bắt buộc reason ≥10 ký tự (break-glass).
+  const parsed = breakGlassSchema.safeParse({ reason });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Lý do không hợp lệ",
+    };
+  }
+
+  // (3) Ghi log break-glass TRƯỚC khi trả raw.
+  const { actorId, actorName } = getAuditActor(session);
+  const meta = await getRequestMetadata();
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "finance",
+    entityType: "Payment",
+    entityId: "*",
+    action: "payments.pii-unmasked",
+    reason: parsed.data.reason,
+    ip: meta.ip ?? null,
+    userAgent: meta.userAgent ?? null,
+  });
+
+  // (4) Đã audit → mới trả rows UNMASK (scopedDb vẫn cách ly cơ sở).
+  const rows = await fetchPaymentRows(session.user.id, filters, true);
+  return { ok: true, rows };
+}
 
 /** Đơn hàng gần đây trong scope — dùng cho select của form ghi nhận khoản. */
 export async function loadOrderOptions() {

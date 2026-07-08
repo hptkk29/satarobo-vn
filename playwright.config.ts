@@ -15,7 +15,7 @@ export default defineConfig({
   // LOCAL + tsconfig.playwright.json (stub server-only) + globalSetup + workers 1.
   // Loại khỏi smoke (smoke không có setup/seed → fl service-spec sẽ fail; fl/* import
   // lib server-only không resolve). FL chạy ở playwright.fl.config.ts + job CI riêng.
-  testIgnore: ["**/a0/**", "**/r[0-9]*/**", "**/fl/**"],
+  testIgnore: ["**/a0/**", "**/r[0-9]*/**", "**/fl/**", "**/crm/**"],
   // Each test gets 30s timeout
   timeout: 30_000,
   expect: { timeout: 5_000 },

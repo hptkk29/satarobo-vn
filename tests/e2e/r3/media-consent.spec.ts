@@ -51,4 +51,28 @@ test.describe("[R3-06] Media + consent", () => {
     await revokeMediaConsent(student.id);
     expect(await isMediaVisibleForStudent(media.id, student.id)).toBe(false); // ẩn ngay
   });
+
+  // #08 (L7) — grant/revoke KÈM audit → ghi AuditLog (ai – GRANTED/REVOKED – nguồn).
+  test("[#08-L7] grant/revoke có audit → AuditLog StudentConsent GRANTED rồi REVOKED", async () => {
+    const { student } = await setup();
+    const actor = { id: "u-audit-1", name: "PH Test" };
+
+    await grantMediaConsent(student.id, { actor, source: "PORTAL_SELF_SERVICE" });
+    await revokeMediaConsent(student.id, { actor, source: "PORTAL_SELF_SERVICE" });
+
+    const logs = await db.auditLog.findMany({
+      where: { entityType: "StudentConsent", entityId: student.id },
+      orderBy: { createdAt: "asc" },
+      select: { action: true, actorId: true, newValues: true },
+    });
+    expect(logs.map((l) => l.action)).toEqual(["CONSENT_GRANTED", "CONSENT_REVOKED"]);
+    expect(logs.every((l) => l.actorId === "u-audit-1")).toBe(true);
+
+    // Không truyền audit → KHÔNG phát sinh thêm log (backward-compat cho caller cũ/test).
+    await grantMediaConsent(student.id);
+    const after = await db.auditLog.count({
+      where: { entityType: "StudentConsent", entityId: student.id },
+    });
+    expect(after).toBe(2);
+  });
 });

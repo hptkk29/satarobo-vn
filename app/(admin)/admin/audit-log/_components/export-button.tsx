@@ -4,20 +4,14 @@ import { useTransition } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { exportAuditLogsCSV, type AuditFilters, type AuditTab } from "../_actions";
+import { exportAuditLogsCSV, type AuditFilters } from "../_actions";
 
-export function ExportButton({
-  tab,
-  filters,
-}: {
-  tab: AuditTab;
-  filters: AuditFilters;
-}) {
+export function ExportButton({ filters }: { filters: AuditFilters }) {
   const [pending, startTransition] = useTransition();
 
   function onClick() {
     startTransition(async () => {
-      const result = await exportAuditLogsCSV(tab, filters);
+      const result = await exportAuditLogsCSV(filters);
       if (!result.ok) {
         toast.error(result.error);
         return;

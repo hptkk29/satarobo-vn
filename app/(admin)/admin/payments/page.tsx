@@ -24,6 +24,10 @@ export default async function PaymentsPage() {
       hasRole(session.user, "SUPER_ADMIN") ||
       hasRole(session.user, "CENTER_MANAGER"));
 
+  // #15 (câu 32) — chỉ kế toán/admin (payments:view-pii) mới thấy nút "Xem đầy đủ"
+  // CCCD PH + địa chỉ (break-glass). Mặc định mọi người xem bản đã che.
+  const canViewPii = await checkPermission("payments:view-pii");
+
   const [rows, orders] = await Promise.all([
     queryPayments({}),
     loadOrderOptions(),
@@ -48,6 +52,7 @@ export default async function PaymentsPage() {
         orders={orders}
         canConfirm={canConfirm}
         canRecord={await checkPermission("payments:manage")}
+        canViewPii={canViewPii}
       />
     </div>
   );

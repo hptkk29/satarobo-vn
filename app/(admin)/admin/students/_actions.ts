@@ -131,6 +131,12 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
+  // #15 — CCCD PH là PII: chỉ actor có payments:view-pii (kế toán/admin) mới ghi được.
+  // Vai khác không thấy ô nhập → chặn set qua formData thủ công (không lộ PII không kiểm soát).
+  if (!(await checkPermission("payments:view-pii"))) {
+    data.parentNationalId = null;
+  }
+
   // PR-C dual-write: OrgUnit là nguồn chính; suy centerId/preferredCenterId (HO→null).
   data.centerId = await centerIdForOrgUnit(data.orgUnitId ?? null);
   data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
@@ -207,6 +213,12 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
 
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
+
+  // #15 — CCCD PH là PII: chỉ actor có payments:view-pii mới sửa. Vai khác GIỮ NGUYÊN
+  // giá trị cũ → bỏ field khỏi payload update (không ghi đè null/rỗng, không lộ PII qua form).
+  if (!(await checkPermission("payments:view-pii"))) {
+    delete data.parentNationalId;
+  }
 
   // PR-C dual-write: nếu đổi đơn vị → suy centerId/preferredCenterId (HO→null).
   if (data.orgUnitId !== undefined) {
@@ -352,6 +364,8 @@ function readForm(formData: FormData) {
     parentPhone: emptyToUndefined(formData.get("parentPhone")) ?? "",
     parentEmail: emptyToUndefined(formData.get("parentEmail")),
     parentRelation: emptyToUndefined(formData.get("parentRelation")),
+    // #15 — CCCD phụ huynh (PII; mask + break-glass ở màn thanh toán).
+    parentNationalId: emptyToUndefined(formData.get("parentNationalId")),
     parent2Name: emptyToUndefined(formData.get("parent2Name")),
     parent2Phone: emptyToUndefined(formData.get("parent2Phone")),
     parent2Relation: emptyToUndefined(formData.get("parent2Relation")),

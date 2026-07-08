@@ -9,9 +9,15 @@
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
-import { resetDb } from "../_helpers/seed";
+import { resetDb, seedOrg, seedRoles, seedUser } from "../_helpers/seed";
+import { testEmail } from "../_helpers/fixtures";
+import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
+import { resolveActorUncached, type Actor } from "../../../lib/auth/actor";
+import { can as canV2 } from "../../../lib/auth/can";
 import {
+  actorCapabilities,
   buildPublishedSnapshot,
+  canEditReportCardContent,
   computeReportCardMetrics,
   getPublishedReportCards,
   getPublishedReportCardForStudent,
@@ -175,4 +181,85 @@ test.describe("[R7-15] Học bạ ReportCard", () => {
   //  • AC4: vòng RECALLED→sửa→PENDING_REVIEW→PUBLISHED có đủ AuditLog (đếm log STATUS_CHANGE).
   //  • Portal: PH login → /portal/hoc-ba thấy bản PUBLISHED + tải /api/portal/report-card/[id];
   //        con khác cơ sở/khác PH → 404 (IDOR guard getPublishedReportCardForStudent).
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// [#17] Siết quyền SỬA học bạ sau phát hành (câu 55, Đào tạo & GV — Toại 06/07).
+// Actor resolve THẬT từ DB (OrgUnit + RoleDef + UserOrgRole) như security-gate.spec —
+// khẳng định seed RBAC v2 (report-cards:*) đúng SAU flip #09 + rule Gap3 (chặn GV).
+// ═══════════════════════════════════════════════════════════════════════════
+test.describe("[#17] Học bạ — siết quyền sửa sau phát hành (câu 55)", () => {
+  const SA: RbacActor = { id: "seed-sa-17", name: "SA", role: "SUPER_ADMIN" };
+
+  async function orgId(code: string) {
+    return (await db.orgUnit.findUnique({ where: { code }, select: { id: true } }))!.id;
+  }
+  async function roleId(code: string) {
+    return (await db.roleDef.findUnique({ where: { code }, select: { id: true } }))!.id;
+  }
+  async function makeActor(slug: string, orgCode: string, roleCode: string): Promise<Actor> {
+    const u = await seedUser({ email: testEmail(slug), role: "TEACHER" });
+    await assignUserOrgRole(SA, {
+      userId: u.id,
+      orgUnitId: await orgId(orgCode),
+      roleId: await roleId(roleCode),
+      reason: "seed #17",
+    });
+    return resolveActorUncached(u.id);
+  }
+  const caps = (actor: Actor) =>
+    actorCapabilities({
+      manage: canV2(actor, "report-cards:manage"),
+      review: canV2(actor, "report-cards:review"),
+    });
+
+  test.beforeEach(async () => {
+    await resetDb();
+    await db.center.create({ data: { code: "CS1", name: "CS1", slug: "cs1-rc17", address: "a", city: "" } });
+    await db.center.create({ data: { code: "CS2", name: "CS2", slug: "cs2-rc17", address: "b", city: "" } });
+    await seedOrg(["HO", "CS1", "CS2"]);
+    await seedRoles();
+  });
+
+  test("[#17-C55a] TRAINING (Toại) sửa được học bạ ĐÃ THU HỒI (v2 seed cấp manage+review)", async () => {
+    const training = await makeActor("toai17", "HO", "TRAINING");
+    expect(canV2(training, "report-cards:manage")).toBe(true);
+    expect(canV2(training, "report-cards:review")).toBe(true);
+    expect(canEditReportCardContent("RECALLED", caps(training))).toBe(true);
+  });
+
+  test("[#17-C55b] CENTER_MANAGER duyệt/sửa sau thu hồi vẫn OK sau flip #09 (v2 seed)", async () => {
+    const cm = await makeActor("cm17", "CS1", "CENTER_MANAGER");
+    expect(canV2(cm, "report-cards:manage")).toBe(true);
+    expect(canV2(cm, "report-cards:review")).toBe(true);
+    expect(canEditReportCardContent("RECALLED", caps(cm))).toBe(true);
+  });
+
+  test("[#17-C55c] TEACHER (GV) BỊ CHẶN sửa học bạ đã THU HỒI (không có review)", async () => {
+    const teacher = await makeActor("gv17", "CS1", "TEACHER");
+    expect(canV2(teacher, "report-cards:review")).toBe(false);
+    expect(canEditReportCardContent("RECALLED", caps(teacher))).toBe(false);
+  });
+
+  test("[#17-C55d] PH chỉ thấy PUBLISHED — thu hồi thì học bạ ẩn khỏi portal", async () => {
+    const centerId = (await db.orgUnit.findUnique({ where: { code: "CS1" }, select: { centerId: true } }))!.centerId!;
+    const course = await db.course.create({ data: { name: "Khoá rc17", slug: "rc17" } });
+    const cls = await db.class.create({
+      data: { name: "Lớp rc17", courseId: course.id, centerId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    const student = await db.student.create({ data: { name: "HV rc17", centerId }, select: { id: true } });
+    const enr = await db.enrollment.create({
+      data: { studentId: student.id, classId: cls.id, courseId: course.id, status: "STUDYING" },
+      select: { id: true },
+    });
+
+    const rc = await publishReportCard(enr.id);
+    expect(await getPublishedReportCards(student.id)).toHaveLength(1);
+
+    // Thu hồi (PUBLISHED→RECALLED) → PH không còn thấy + tải PDF 404.
+    await db.reportCard.update({ where: { enrollmentId: enr.id }, data: { status: "RECALLED" } });
+    expect(await getPublishedReportCards(student.id)).toHaveLength(0);
+    expect(await getPublishedReportCardForStudent(rc.id, student.id)).toBeNull();
+  });
 });

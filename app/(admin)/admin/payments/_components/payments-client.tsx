@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Plus, Check, X, Pencil } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Check,
+  X,
+  Pencil,
+  Printer,
+  Eye,
+  EyeOff,
+  ShieldAlert,
+} from "lucide-react";
 import {
   Table,
   TableBody,
@@ -28,12 +38,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   recordPaymentAction,
   confirmPaymentAction,
   rejectPaymentAction,
   adjustPaymentAction,
+  revealPaymentsPii,
   type PaymentRow,
 } from "../_actions";
 
@@ -79,7 +98,7 @@ const METHOD_OPTIONS = [
 function vnd(n: number): string {
   return n.toLocaleString("vi-VN") + " đ";
 }
-function fmtDate(d: Date): string {
+function fmtDate(d: string | Date): string {
   return new Intl.DateTimeFormat("vi-VN", {
     day: "2-digit",
     month: "2-digit",
@@ -92,14 +111,22 @@ export function PaymentsClient({
   orders,
   canConfirm,
   canRecord,
+  canViewPii,
 }: {
   initialRows: PaymentRow[];
   orders: OrderOption[];
   canConfirm: boolean;
   canRecord: boolean;
+  canViewPii: boolean;
 }) {
-  const [rows] = useState<PaymentRow[]>(initialRows);
+  const [rows, setRows] = useState<PaymentRow[]>(initialRows);
   const [showForm, setShowForm] = useState(false);
+  // #15 — break-glass: mặc định che CCCD PH + địa chỉ; kế toán mở xem đầy đủ có kiểm soát.
+  const revealed = rows.length > 0 ? !rows[0]!.piiMasked : false;
+
+  // Số cột (đồng bộ colSpan hàng rỗng): đơn hàng, tên bé, lớp, số tiền, PT, ngày,
+  // người thu, nguồn HV, tên PH, CCCD PH, địa chỉ, Sale, Kế toán, Phiếu thu (+ thao tác).
+  const colCount = 14 + (canConfirm ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -121,14 +148,37 @@ export function PaymentsClient({
         </div>
       )}
 
+      {canViewPii && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5">
+          <p className="text-xs text-amber-800">
+            CCCD phụ huynh &amp; địa chỉ được che mặc định (thông tin nhạy cảm).
+            {revealed
+              ? " Đang xem đầy đủ — hành động đã được ghi log."
+              : " Mở xem đầy đủ cần lý do và sẽ được ghi log."}
+          </p>
+          <PiiRevealControl
+            revealed={revealed}
+            onRevealed={(unmaskedRows) => setRows(unmaskedRows)}
+            onHide={() => setRows(initialRows)}
+          />
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-neutral-200">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Đơn hàng</TableHead>
+              <TableHead>Tên bé</TableHead>
+              <TableHead>Lớp</TableHead>
               <TableHead className="text-right">Số tiền</TableHead>
-              <TableHead>PT</TableHead>
+              <TableHead>Hình thức</TableHead>
               <TableHead>Ngày thu</TableHead>
+              <TableHead>Người thu</TableHead>
+              <TableHead>Nguồn HV</TableHead>
+              <TableHead>Tên PH</TableHead>
+              <TableHead>CCCD PH</TableHead>
+              <TableHead>Địa chỉ</TableHead>
               <TableHead>Sale</TableHead>
               <TableHead>Kế toán</TableHead>
               <TableHead>Phiếu thu</TableHead>
@@ -139,60 +189,207 @@ export function PaymentsClient({
             {rows.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={canConfirm ? 8 : 7}
+                  colSpan={colCount}
                   className="py-8 text-center text-sm text-neutral-500"
                 >
                   Chưa có khoản thanh toán nào
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((p) => {
-              const receipt = p.receipts.find((r) => r.status === "ACTIVE");
-              return (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">
-                    <div>{p.order?.code ?? "—"}</div>
-                    <div className="text-xs text-neutral-500">
-                      {p.order?.customerName ?? ""}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {vnd(p.amount)}
-                  </TableCell>
-                  <TableCell className="text-xs">{p.method}</TableCell>
-                  <TableCell className="text-xs">{fmtDate(p.paidDate)}</TableCell>
-                  <TableCell>
-                    <Badge className={SALE_BADGE[p.saleStatus] ?? ""}>
-                      {SALE_LABEL[p.saleStatus] ?? p.saleStatus}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={ACC_BADGE[p.accountantStatus] ?? ""}>
-                      {ACC_LABEL[p.accountantStatus] ?? p.accountantStatus}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs font-mono">
-                    {receipt?.code ?? "—"}
-                  </TableCell>
-                  {canConfirm && (
-                    <TableCell className="text-right">
-                      {p.accountantStatus === "PENDING" ? (
-                        <RowActions
-                          paymentId={p.id}
-                          updatedAt={new Date(p.updatedAt).toISOString()}
-                        />
-                      ) : (
-                        <span className="text-xs text-neutral-400">—</span>
-                      )}
-                    </TableCell>
+            {rows.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell className="font-medium">
+                  <div>{p.orderCode ?? "—"}</div>
+                  <div className="text-xs text-neutral-500">
+                    {p.customerName ?? ""}
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm">{p.studentName ?? "—"}</TableCell>
+                <TableCell className="text-xs">{p.className ?? "—"}</TableCell>
+                <TableCell className="text-right font-semibold">
+                  {vnd(p.amount)}
+                </TableCell>
+                <TableCell className="text-xs">{p.method}</TableCell>
+                <TableCell className="text-xs">{fmtDate(p.paidDate)}</TableCell>
+                <TableCell className="text-xs">{p.collectedByName ?? "—"}</TableCell>
+                <TableCell className="text-xs">{p.leadSource ?? "—"}</TableCell>
+                <TableCell className="text-sm">{p.parentName ?? "—"}</TableCell>
+                <TableCell
+                  className={
+                    "font-mono text-xs " +
+                    (p.piiMasked ? "text-neutral-400" : "text-neutral-800")
+                  }
+                >
+                  {p.parentNationalId ?? "—"}
+                </TableCell>
+                <TableCell
+                  className={
+                    "max-w-[180px] truncate text-xs " +
+                    (p.piiMasked ? "text-neutral-400" : "text-neutral-800")
+                  }
+                  title={p.address ?? undefined}
+                >
+                  {p.address ?? "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge className={SALE_BADGE[p.saleStatus] ?? ""}>
+                    {SALE_LABEL[p.saleStatus] ?? p.saleStatus}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge className={ACC_BADGE[p.accountantStatus] ?? ""}>
+                    {ACC_LABEL[p.accountantStatus] ?? p.accountantStatus}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs font-mono">
+                  {p.hasActiveReceipt ? (
+                    <a
+                      href={`/admin/payments/${p.id}/phieu-thu`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[#7C3AED] hover:underline"
+                      title="In phiếu thu (PDF)"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      {p.receiptCode}
+                    </a>
+                  ) : (
+                    "—"
                   )}
-                </TableRow>
-              );
-            })}
+                </TableCell>
+                {canConfirm && (
+                  <TableCell className="text-right">
+                    {p.accountantStatus === "PENDING" ? (
+                      <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                    ) : (
+                      <span className="text-xs text-neutral-400">—</span>
+                    )}
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>
     </div>
+  );
+}
+
+// ─── #15 — BREAK-GLASS "Xem đầy đủ" CCCD PH + địa chỉ (reason ≥10 + audit) ────────
+const MIN_PII_REASON = 10;
+
+function PiiRevealControl({
+  revealed,
+  onRevealed,
+  onHide,
+}: {
+  revealed: boolean;
+  onRevealed: (rows: PaymentRow[]) => void;
+  onHide: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [pending, start] = useTransition();
+
+  if (revealed) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onHide}
+        className="border-amber-300 text-amber-700 hover:bg-amber-50"
+      >
+        <EyeOff className="h-4 w-4" />
+        Ẩn lại
+      </Button>
+    );
+  }
+
+  function submit() {
+    if (reason.trim().length < MIN_PII_REASON) {
+      toast.error(`Vui lòng nhập lý do tối thiểu ${MIN_PII_REASON} ký tự`);
+      return;
+    }
+    start(async () => {
+      // 1 đường DUY NHẤT: reveal vừa audit vừa trả rows raw (server đã reason≥10 + log).
+      const res = await revealPaymentsPii({}, reason.trim());
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Đã mở xem đầy đủ. Hành động này đã được ghi log.");
+      setOpen(false);
+      setReason("");
+      onRevealed(res.rows);
+    });
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="border-amber-300 text-amber-700 hover:bg-amber-50"
+      >
+        <Eye className="h-4 w-4" />
+        Xem đầy đủ
+      </Button>
+
+      <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-600" />
+              Xem đầy đủ CCCD phụ huynh &amp; địa chỉ
+            </DialogTitle>
+            <DialogDescription>
+              CCCD phụ huynh và địa chỉ đang được che mặc định. Mở xem đầy đủ là
+              hành động có kiểm soát — bắt buộc nhập lý do và sẽ được ghi log riêng
+              (ai, lúc nào, lý do gì).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="pii-reason" className="text-xs">
+              Lý do (tối thiểu {MIN_PII_REASON} ký tự)
+            </Label>
+            <Textarea
+              id="pii-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Ví dụ: đối soát hóa đơn/công nợ tháng 07 cho phụ huynh..."
+              rows={3}
+              disabled={pending}
+            />
+            <p className="text-xs text-neutral-400">
+              {reason.trim().length}/{MIN_PII_REASON}
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={pending}
+            >
+              Huỷ
+            </Button>
+            <Button
+              type="button"
+              onClick={submit}
+              disabled={pending || reason.trim().length < MIN_PII_REASON}
+            >
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Xác nhận xem đầy đủ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

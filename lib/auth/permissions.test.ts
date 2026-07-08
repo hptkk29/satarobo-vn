@@ -196,6 +196,34 @@ describe("permissions matrix — FL W0-NAV-2 role hygiene (BA #07 3.C)", () => {
   });
 });
 
+describe("permissions matrix — #17 học bạ sau phát hành (câu 55, Toại 06/07)", () => {
+  it("TRAINING (Đào tạo/Toại) có CẢ report-cards:manage + review (recall/duyệt/phát hành/sửa lại)", () => {
+    expect(can("TRAINING", "report-cards:manage")).toBe(true);
+    expect(can("TRAINING", "report-cards:review")).toBe(true);
+  });
+
+  it("CENTER_MANAGER giữ report-cards:manage + review (QL cơ sở duyệt/phát hành)", () => {
+    expect(can("CENTER_MANAGER", "report-cards:manage")).toBe(true);
+    expect(can("CENTER_MANAGER", "report-cards:review")).toBe(true);
+  });
+
+  it("SUPER_ADMIN có cả hai", () => {
+    expect(can("SUPER_ADMIN", "report-cards:manage")).toBe(true);
+    expect(can("SUPER_ADMIN", "report-cards:review")).toBe(true);
+  });
+
+  it("TEACHER GIỮ report-cards:manage (viết DRAFT) nhưng KHÔNG có review (không sửa sau phát hành)", () => {
+    expect(can("TEACHER", "report-cards:manage")).toBe(true);
+    expect(can("TEACHER", "report-cards:review")).toBe(false);
+  });
+
+  it("vai không liên quan không có report-cards:*", () => {
+    expect(can("SALES_CSM", "report-cards:review")).toBe(false);
+    expect(can("ACCOUNTANT", "report-cards:manage")).toBe(false);
+    expect(can("PARENT", "report-cards:review")).toBe(false);
+  });
+});
+
 describe("permissions matrix — sanity", () => {
   it("teaching-materials:view-own-class tồn tại trong matrix", () => {
     expect(ALL_ACTIONS).toContain("teaching-materials:view-own-class");

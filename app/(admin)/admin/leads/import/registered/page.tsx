@@ -26,6 +26,8 @@ interface DryRunData {
   salesKhongKhop: string[];
   khoaKhongKhop: string[];
   coSoKhongKhop: string[];
+  // Dòng gắn cơ sở NGOÀI phạm vi quyền của bạn → hệ thống KHÔNG tạo (cách ly cơ sở).
+  ngoaiPhamVi?: { sdt: string; tenPH: string; coSo: string }[];
   daTaoLead?: number;
   daTaoHocVien?: number;
   daGopLead?: number;
@@ -167,9 +169,16 @@ export default function ImportRegisteredLeadsPage() {
 
           {(preview.salesKhongKhop.length > 0 ||
             preview.khoaKhongKhop.length > 0 ||
-            preview.coSoKhongKhop.length > 0) && (
+            preview.coSoKhongKhop.length > 0 ||
+            (preview.ngoaiPhamVi?.length ?? 0) > 0) && (
             <Alert className="border-yellow-500">
               <AlertDescription className="space-y-1">
+                {(preview.ngoaiPhamVi?.length ?? 0) > 0 && (
+                  <p>
+                    Ngoài phạm vi cơ sở của bạn — KHÔNG tạo (<b>{preview.ngoaiPhamVi!.length}</b> dòng):{" "}
+                    <b>{preview.ngoaiPhamVi!.map((r) => r.sdt).join(", ")}</b>
+                  </p>
+                )}
                 {preview.salesKhongKhop.length > 0 && (
                   <p>
                     Sales không khớp user (giữ tên trong ghi chú):{" "}

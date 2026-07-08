@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { db } from "@/lib/db";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
@@ -89,7 +90,21 @@ export default async function HinhAnhPage() {
         Ảnh hoạt động của con tại lớp (đã được trung tâm duyệt).
       </p>
 
-      {media.length === 0 ? (
+      {!consentGranted ? (
+        // Chưa đồng ý dùng hình ảnh → giải thích + lối tới trang bật đồng ý (C6.4/L7).
+        <div className="space-y-3 rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center">
+          <p className="text-sm text-neutral-600">
+            Bạn cần bật <span className="font-semibold">đồng ý dùng hình ảnh</span> cho con thì
+            trung tâm mới hiển thị ảnh hoạt động tại lớp. Bạn có thể thu hồi bất cứ lúc nào.
+          </p>
+          <Link
+            href="/portal/ho-so-con/chi-tiet"
+            className="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+          >
+            Bật đồng ý trong Hồ sơ con
+          </Link>
+        </div>
+      ) : media.length === 0 ? (
         <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
           Chưa có hình ảnh nào.
         </p>

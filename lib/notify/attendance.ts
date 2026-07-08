@@ -102,3 +102,48 @@ export async function notifyAttendanceForSession(sessionId: string): Promise<voi
     }
   }
 }
+
+// =============================================================================
+// Task #16 (Kiệt duyệt 07/07/2026) — báo GIÁO VIÊN đứng lớp khi 1 buổi ĐÃ điểm
+// danh bị người khác SỬA/hồi tố (CSKH SALES_CSM / Quản lý cơ sở / Quản lý lớp học).
+//  - Kênh: StaffNotification (chuông inbox admin) — theo mẫu r7-notifications.ts.
+//  - Bỏ qua nếu người sửa CHÍNH là GV của lớp (không tự báo mình).
+//  - dedupeKey ổn định theo buổi → mỗi lần sửa cập nhật nội dung + đưa lại về CHƯA
+//    đọc (readAt=null) thay vì tạo hàng loạt bản ghi.
+// =============================================================================
+export async function notifyTeacherAttendanceEdited(params: {
+  sessionId: string;
+  editedByUserId: string;
+  editedByName?: string | null;
+}): Promise<void> {
+  const sess = await db.classSession.findUnique({
+    where: { id: params.sessionId },
+    select: {
+      date: true,
+      class: { select: { name: true, teacherId: true } },
+    },
+  });
+  const teacherId = sess?.class.teacherId ?? null;
+  // Không có GV, hoặc GV chính là người vừa sửa → không cần báo.
+  if (!sess || !teacherId || teacherId === params.editedByUserId) return;
+
+  const dateStr = sess.date.toLocaleDateString("vi-VN");
+  const by = params.editedByName?.trim() ? ` bởi ${params.editedByName.trim()}` : "";
+  const dedupeKey = `attendance.edited:${params.sessionId}`;
+  await db.staffNotification.upsert({
+    where: { userId_dedupeKey: { userId: teacherId, dedupeKey } },
+    create: {
+      userId: teacherId,
+      category: "CLASS",
+      title: "Điểm danh buổi học bị chỉnh sửa",
+      body: `Điểm danh buổi ${dateStr} lớp ${sess.class.name} vừa được cập nhật${by}. Vui lòng kiểm tra lại.`,
+      href: `/attendance?sessionId=${params.sessionId}`,
+      dedupeKey,
+    },
+    // Sửa lại lần nữa → làm mới nội dung + đưa về chưa đọc để GV thấy.
+    update: {
+      body: `Điểm danh buổi ${dateStr} lớp ${sess.class.name} vừa được cập nhật${by}. Vui lòng kiểm tra lại.`,
+      readAt: null,
+    },
+  });
+}

@@ -12,6 +12,7 @@ import { publishEvent } from "@/lib/events/publish";
 import {
   actorCapabilities,
   buildPublishedSnapshot,
+  canEditReportCardContent,
   checkEnrollmentScope,
   checkTransition,
   computeReportCardMetrics,
@@ -73,7 +74,9 @@ async function authContext() {
 export async function saveReportCardAction(input: unknown): Promise<Result> {
   const ctx = await authContext();
   if ("error" in ctx) return { ok: false, error: ctx.error ?? "Không có quyền" };
-  if (!ctx.capabilities.includes("manage")) return { ok: false, error: "Không có quyền nhập học bạ" };
+  // Guard capability theo TRẠNG THÁI học bạ (sau khi biết status ở dưới) —
+  // #17 Gap3: DRAFT cần 'manage', RECALLED cần 'review'. authContext đã đảm bảo
+  // actor có ít nhất manage HOẶC review.
 
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -110,6 +113,18 @@ export async function saveReportCardAction(input: unknown): Promise<Result> {
   const status = (existing?.status ?? "DRAFT") as ReportCardStatusValue;
   if (existing && !isReportCardEditable(status)) {
     return { ok: false, error: "Học bạ đang chờ duyệt/đã phát hành — không sửa được nội dung" };
+  }
+  // #17 Gap3 (câu 55): học bạ đã THU HỒI (RECALLED = từng phát hành) → chỉ người có
+  // quyền DUYỆT (QL cơ sở / Đào tạo / Admin) mới sửa lại; GV (manage-only) BỊ CHẶN.
+  // DRAFT/mới → cần 'manage' (GV nhập). Rule THUẦN, test được: canEditReportCardContent.
+  if (!canEditReportCardContent(status, ctx.capabilities)) {
+    return {
+      ok: false,
+      error:
+        status === "RECALLED"
+          ? "Học bạ đã phát hành & thu hồi — chỉ Quản lý cơ sở hoặc Đào tạo được sửa lại"
+          : "Không có quyền nhập học bạ",
+    };
   }
 
   const periodComments = d.periodComments.filter((p) => p.period || p.comment);
