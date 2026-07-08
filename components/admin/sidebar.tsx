@@ -17,7 +17,7 @@ import {
   Settings,
   SlidersHorizontal,
   Briefcase,
-  Trophy,
+  // Trophy, // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
   IdCard,
   Image as ImageIcon,
   Newspaper,
@@ -171,7 +171,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tổng hợp công ca", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:view"] },
       { label: "Duyệt ca (Excel)", href: "/cham-cong/duyet-ca", icon: CalendarCheck, perm: ["hr_attendance:view"] },
       { label: "Tuyển dụng", href: "/jobs", icon: Briefcase, perm: ["jobs:view"] },
-      { label: "Vinh danh", href: "/honors", icon: Trophy, perm: ["honors:settings"] },
+      // Tạm ẩn khu Vinh danh khỏi admin (giữ code + dữ liệu). Bật lại: bỏ comment
+      // dòng dưới + import Trophy, và xoá app/(admin)/admin/honors/layout.tsx.
+      // { label: "Vinh danh", href: "/honors", icon: Trophy, perm: ["honors:settings"] },
     ],
   },
   {
