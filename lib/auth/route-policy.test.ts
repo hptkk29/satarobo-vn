@@ -666,6 +666,66 @@ describe("L5. TEACHER trên host khác — hành vi GIỮ NGUYÊN cả 2 trạng
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Sale host (sale.satarobo.vn) — site tĩnh CÔNG KHAI, KHÔNG auth.
+// Form nhập liệu Sale → MISA AMIS CRM. Clean URL rewrite nội bộ →
+// public/sale/*.html (giữ nguyên mã nhúng MISA). MISA tự POST + redirect về
+// /thank-you (field RedirectURL trong form) — decideRoute chỉ serve URL đó.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("Sale host (sale.satarobo.vn) — form tĩnh, không auth", () => {
+  it("/ → rewrite form nhập liệu tĩnh", () => {
+    expect(
+      decideRoute({ hostKind: "sale", pathname: "/", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
+  });
+
+  it("/thank-you (+ trailing slash) → rewrite trang cảm ơn tĩnh", () => {
+    expect(
+      decideRoute({ hostKind: "sale", pathname: "/thank-you", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
+    expect(
+      decideRoute({ hostKind: "sale", pathname: "/thank-you/", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
+  });
+
+  it("file tĩnh /sale/*.html (đích rewrite / truy cập trực tiếp) → next", () => {
+    for (const p of ["/sale/nhap-lieu.html", "/sale/thank-you.html"]) {
+      expect(
+        decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("path lạ trên sale host → về form nhập liệu (/)", () => {
+    for (const p of ["/random", "/khoa-hoc", "/admin/leads", "/portal/lich-hoc", "/login"]) {
+      expect(
+        decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    }
+  });
+
+  it("infra path (favicon/api/robots/_next) → next", () => {
+    for (const p of ["/favicon.ico", "/api/anything", "/robots.txt", "/_next/static/x.js"]) {
+      expect(
+        decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("CÔNG KHAI: mọi role + ẩn danh đều nhận CÙNG quyết định (auth bị bỏ qua)", () => {
+    for (const role of [...ALL_ROLES, null] as MaybeRole[]) {
+      const sessionValid = role !== null;
+      expect(
+        decideRoute({ hostKind: "sale", pathname: "/", role, sessionValid }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
+      expect(
+        decideRoute({ hostKind: "sale", pathname: "/thank-you", role, sessionValid }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
+    }
+  });
+});
+
 describe("Invariants bảo mật", () => {
   it("PARENT KHÔNG bao giờ nhận rewrite vào /admin/*", () => {
     for (const p of ["/leads", "/dashboard", "/users", "/nhan-su", "/settings"]) {

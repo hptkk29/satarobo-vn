@@ -14,11 +14,13 @@ import {
 const PUBLIC_HOST = "satarobo.vn";
 const ADMIN_HOST = "admin.satarobo.vn";
 const PORTAL_HOST = "hocvien.satarobo.vn"; // Phase T2.2 — portal phụ huynh/site con
+const SALE_HOST = "sale.satarobo.vn"; // Site tĩnh nhập liệu Sale → MISA AMIS CRM
 
 function detectHost(host: string): HostKind {
   if (host === PUBLIC_HOST || host === `www.${PUBLIC_HOST}`) return "public";
   if (host === ADMIN_HOST) return "admin";
   if (host === PORTAL_HOST) return "portal";
+  if (host === SALE_HOST) return "sale";
   if (host.endsWith(".vercel.app")) return "vercel";
   return "unknown"; // localhost, preview deployments
 }
@@ -124,7 +126,12 @@ export default auth((req: NextAuthRequest) => {
   // isActive (cần DB) → sessionValid = có JWT hợp lệ; tầng liveness
   // (deactivated/tokenVersion) enforce ở layout RSC. defense-in-depth.
   // ═══════════════════════════════════════════════════════════════════
-  if (kind === "public" || kind === "admin" || kind === "portal") {
+  if (
+    kind === "public" ||
+    kind === "admin" ||
+    kind === "portal" ||
+    kind === "sale"
+  ) {
     const decision = decideRoute({
       hostKind: kind,
       pathname,

@@ -4,13 +4,18 @@ import { isTeacherSiteEnabled } from "@/lib/flags";
 /**
  * Host-based access control — PURE decision layer (no NextRequest dependency).
  *
- * 4 subdomain · 8 role. Quy tắc truy cập theo HOST (tầng 1):
+ * 5 subdomain · 8 role. Quy tắc truy cập theo HOST (tầng 1):
  *  - 7 role staff (mọi role TRỪ PARENT): vào được admin host; CẤM portal host.
  *  - PARENT: vào được portal host; CẤM admin host.
  *  - TEACHER (L5, flag `TEACHER_SITE_ENABLED`): vào được teacher host
  *    (`giaovien.satarobo.vn` — phiếu BGĐ câu 7, 04/07/2026); role khác vào
  *    teacher host bị đá về khu của họ. Flag OFF → teacher host bounce về admin
  *    (GV tiếp tục dùng admin, KHÔNG đổi hành vi hiện tại).
+ *  - Sale host (`sale.satarobo.vn`): site tĩnh CÔNG KHAI (KHÔNG auth) — form
+ *    nhập liệu cho Sale đẩy thẳng về MISA AMIS CRM. Phục vụ 2 trang HTML
+ *    self-contained từ `public/sale/*` (giữ NGUYÊN mã nhúng MISA). MISA tự
+ *    POST + redirect về `/thank-you` (field `RedirectURL` trong form); ta chỉ
+ *    rewrite clean URL → file .html tĩnh. `noindex` nằm trong meta của HTML.
  *  - Chưa login + route bảo vệ: redirect /login GIỮ NGUYÊN host đang đứng.
  *  - Public host: ai cũng vào; route /admin|/portal lọt vào → đá về đúng host.
  *
@@ -35,6 +40,7 @@ export type HostKind =
   | "admin"
   | "portal"
   | "teacher"
+  | "sale"
   | "vercel"
   | "unknown";
 
@@ -209,6 +215,9 @@ export function sanitizeCallbackUrl(p: string): string {
 const PORTAL_HOME = "/";
 const STAFF_HOME = "/dashboard";
 const TEACHER_HOME = "/"; // clean URL trên teacher host (rewrite nội bộ → /teacher)
+// Sale host — 2 trang HTML tĩnh self-contained (giữ nguyên mã nhúng MISA).
+const SALE_FORM_FILE = "/sale/nhap-lieu.html";
+const SALE_THANKYOU_FILE = "/sale/thank-you.html";
 
 /**
  * Quyết định routing thuần tuý cho 3 host thật (public/admin/portal).
@@ -368,6 +377,25 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (isTeacherPath(pathname)) return { type: "next" };
     if (pathname === "/") return { type: "rewrite", path: "/teacher" };
     return { type: "rewrite", path: "/teacher" + pathname };
+  }
+
+  // ── Sale host (sale.satarobo.vn) — form nhập liệu Sale → MISA AMIS CRM ───
+  // Site tĩnh CÔNG KHAI, KHÔNG auth (role/session bỏ qua). Phục vụ 2 trang HTML
+  // self-contained từ public/sale/* (giữ NGUYÊN mã nhúng MISA). MISA tự POST +
+  // redirect về /thank-you (field RedirectURL trong form) — ta chỉ rewrite
+  // clean URL nội bộ → file .html tĩnh. noindex đã nằm trong meta của HTML.
+  if (hostKind === "sale") {
+    if (isInfraPath(pathname)) return { type: "next" };
+    // File tĩnh (đích của rewrite, hoặc truy cập trực tiếp) → phục vụ nguyên trạng.
+    if (pathname.startsWith("/sale/")) return { type: "next" };
+    if (pathname === "/thank-you" || pathname === "/thank-you/") {
+      return { type: "rewrite", path: SALE_THANKYOU_FILE };
+    }
+    if (pathname === "/") {
+      return { type: "rewrite", path: SALE_FORM_FILE };
+    }
+    // Path lạ trên sale host → về form nhập liệu (site chỉ có 2 trang).
+    return { type: "redirectPath", path: "/" };
   }
 
   // ── Admin host (admin.satarobo.vn) — clean URLs, internal rewrite ────────
