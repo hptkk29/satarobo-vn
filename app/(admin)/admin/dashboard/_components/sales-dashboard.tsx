@@ -5,6 +5,8 @@ import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import type { LeadStatus } from "@prisma/client";
 import { KANBAN_COLUMNS, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
+import { groupByWeek, type LeadReportRecord } from "@/lib/reports/lead";
+import { BarChart } from "@/components/charts/bar-chart";
 
 // Đợt 3C — Dashboard SALES_CSM. Chỉ lead/việc CỦA TÔI. KHÔNG tài chính/quản trị.
 export async function SalesDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
@@ -13,6 +15,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const eightWeeksAgo = new Date(now.getTime() - 8 * 7 * 86_400_000);
 
   // Cách ly cơ sở: Lead/TrialClass ∈ SCOPED_MODELS → sdb tự inject centerId. LeadTask
   // KHÔNG scoped (không có centerId) → scope tay qua lead.centerId, đồng bộ đúng tập
@@ -23,7 +26,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
   const leadTaskScope =
     visibleLeadCenters === "ALL" ? {} : { lead: { centerId: { in: visibleLeadCenters } } };
 
-  const [pipeline, totalMine, enrolledMonth, openTasks, trials, nearingEnd] = await Promise.all([
+  const [pipeline, totalMine, enrolledMonth, openTasks, trials, nearingEnd, leadsForWeekly] = await Promise.all([
     sdb.lead.groupBy({
       by: ["status"],
       where: { assignedToId: userId, deletedAt: null },
@@ -50,11 +53,28 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
       select: { id: true, scheduledAt: true, lead: { select: { id: true, parentName: true, childName: true } } },
     }),
     getNearingEndEnrollments(),
+    // Phễu lead theo TUẦN (8 tuần) — lead CỦA TÔI: tổng mới vs chuyển đổi.
+    sdb.lead.findMany({
+      where: { assignedToId: userId, deletedAt: null, createdAt: { gte: eightWeeksAgo } },
+      select: { createdAt: true, status: true },
+    }),
   ]);
 
   const countByStatus = new Map<LeadStatus, number>(
     pipeline.map((p) => [p.status, p._count._all]),
   );
+  const weeklyRecords: LeadReportRecord[] = leadsForWeekly.map((l) => ({
+    status: l.status,
+    source: null,
+    centerId: null,
+    commissionSource: null,
+    createdAt: l.createdAt,
+  }));
+  const weeklyBars = groupByWeek(weeklyRecords, 8, now).map((w) => ({
+    week: w.label,
+    total: w.total,
+    converted: w.converted,
+  }));
   const overdue = openTasks.filter((t) => t.dueAt < now);
   const dueToday = openTasks.filter((t) => t.dueAt >= now && t.dueAt < dayEnd);
   const closeRate = totalMine > 0
@@ -94,6 +114,21 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
             </Link>
           ))}
         </div>
+      </section>
+
+      {/* Phễu lead theo TUẦN — lead của tôi: mới vs chuyển đổi (8 tuần gần nhất). */}
+      <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <h2 className="mb-1 text-sm font-bold uppercase tracking-wider text-gray-500">Phễu lead theo tuần</h2>
+        <p className="mb-4 text-xs text-gray-400">Lead mới vs đã chuyển đổi mỗi tuần (8 tuần gần nhất)</p>
+        <BarChart
+          data={weeklyBars}
+          xKey="week"
+          bars={[
+            { key: "total", name: "Lead mới", color: "#F97316" },
+            { key: "converted", name: "Chuyển đổi", color: "#7C3AED" },
+          ]}
+          height={240}
+        />
       </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

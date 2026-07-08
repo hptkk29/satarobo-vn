@@ -21,7 +21,9 @@ export type PendingTaskType =
   | "lead_followup"
   | "renewal"
   | "student_risk"
-  | "student_care";
+  | "student_care"
+  | "class_no_teacher"
+  | "registered_stale";
 
 export interface PendingTaskItem {
   id: string;
@@ -49,6 +51,12 @@ interface PendingCfg {
   itemLimit: number;
   staleMs: number;
 }
+
+/** Câu 08 — SLA xử lý yêu cầu phụ huynh: 12 giờ. */
+const PARENT_REQUEST_SLA_MS = 12 * 60 * 60 * 1000;
+/** Câu 38 — khách đã đăng ký (REGISTERED) chưa convert quá lâu → nhắc chốt ghi danh. */
+const REGISTERED_STALE_DAYS = 3;
+const REGISTERED_STALE_MS = REGISTERED_STALE_DAYS * 86_400_000;
 
 function scope(user: TaskUser) {
   const isSuper = hasRole(user, "SUPER_ADMIN");
@@ -118,7 +126,8 @@ async function timesheetAdjust(user: TaskUser, now: Date, cfg: PendingCfg): Prom
 async function parentRequest(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   if (!can(user, "parent-requests:manage")) return null;
   const { centerScope } = scope(user);
-  const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
+  // Câu 08 — SLA yêu cầu phụ huynh là 12h (KHÔNG dùng staleDays chung của dashboard).
+  const staleBefore = new Date(now.getTime() - PARENT_REQUEST_SLA_MS);
 
   const rows = await db.parentRequest.findMany({
     where: { status: "PENDING", ...(centerScope ? { student: { centerId: centerScope } } : {}) },
@@ -126,7 +135,7 @@ async function parentRequest(user: TaskUser, now: Date, cfg: PendingCfg): Promis
     orderBy: { createdAt: "asc" },
     take: 50,
   });
-  const overdueCount = rows.filter((r) => r.createdAt < twoDaysAgo).length;
+  const overdueCount = rows.filter((r) => r.createdAt < staleBefore).length;
   return {
     type: "parent_request",
     label: "Yêu cầu phụ huynh",
@@ -137,7 +146,7 @@ async function parentRequest(user: TaskUser, now: Date, cfg: PendingCfg): Promis
       id: r.id,
       label: `${r.student.name} — ${r.type}`,
       href: r.type === "ABSENCE" ? "/parent-requests/bao-vang" : "/parent-requests",
-      overdue: r.createdAt < twoDaysAgo,
+      overdue: r.createdAt < staleBefore,
     })),
   };
 }
@@ -361,6 +370,79 @@ async function studentCare(user: TaskUser, now: Date, cfg: PendingCfg): Promise<
   };
 }
 
+async function classNoTeacher(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
+  const { isManager, centerScope } = scope(user);
+  if (!isManager) return null;
+  // Buổi NGÀY MAI chưa có GV (class.teacherId null) và không có GV thực/dạy-thay.
+  const startTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const endTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+
+  const rows = await db.classSession.findMany({
+    where: {
+      date: { gte: startTomorrow, lt: endTomorrow },
+      status: { not: "CANCELLED" },
+      actualTeacherId: null,
+      substituteTeacherId: null,
+      // Lọc lớp chưa gán GV + cách ly cơ sở qua class.centerId (ClassSession gắn lớp).
+      class: { teacherId: null, deletedAt: null, ...(centerScope ? { centerId: centerScope } : {}) },
+    },
+    select: { id: true, date: true, class: { select: { name: true, classCode: true } } },
+    orderBy: { date: "asc" },
+    take: 50,
+  });
+  return {
+    type: "class_no_teacher",
+    label: "Lớp thiếu GV ngày mai",
+    count: rows.length,
+    overdueCount: rows.length, // ngày mai đã thiếu GV → cần xử lý gấp
+    href: "/sessions",
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
+      id: r.id,
+      label: `${r.class.classCode ? `${r.class.classCode} · ` : ""}${r.class.name} (${new Date(r.date).toLocaleDateString("vi-VN")})`,
+      href: `/sessions/${r.id}`,
+      overdue: true,
+    })),
+  };
+}
+
+async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
+  // Câu 38 — khách đã "Đã đăng ký" (REGISTERED) nhưng chưa chốt ghi danh quá lâu.
+  const canAll = can(user, "leads:view-all");
+  const canOwn = can(user, "leads:view-own");
+  if (!canAll && !canOwn) return null;
+  const { isSuper, isCM } = scope(user);
+  const centerScope = isCM && !isSuper ? (user.centerId ?? null) : null;
+  const selfOnly = !canAll && canOwn; // SALES_CSM (chỉ view-own) → khách của mình.
+  const staleBefore = new Date(now.getTime() - REGISTERED_STALE_MS);
+
+  const rows = await db.lead.findMany({
+    where: {
+      deletedAt: null,
+      status: "REGISTERED",
+      // updatedAt = mốc gần nhất chạm lead (proxy thời gian nằm ở REGISTERED — schema không
+      // có status-history riêng). Quá REGISTERED_STALE_DAYS → nhắc chốt.
+      updatedAt: { lt: staleBefore },
+      ...(selfOnly ? { assignedToId: user.id } : centerScope ? { centerId: centerScope } : {}),
+    },
+    select: { id: true, parentName: true, childName: true, updatedAt: true },
+    orderBy: { updatedAt: "asc" },
+    take: 50,
+  });
+  return {
+    type: "registered_stale",
+    label: "Khách đã đăng ký quá lâu",
+    count: rows.length,
+    overdueCount: rows.length,
+    href: "/leads?status=REGISTERED",
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
+      id: r.id,
+      label: `${r.childName ?? r.parentName} — chưa chốt ghi danh`,
+      href: `/leads/${r.id}`,
+      overdue: true,
+    })),
+  };
+}
+
 /**
  * Gom mọi loại việc cần xử lý theo quyền + cơ sở của user. Trả về các nhóm
  * (chỉ nhóm user có quyền), sắp xếp nhóm có việc QUÁ HẠN lên đầu.
@@ -383,6 +465,8 @@ export async function getPendingTasks(user: TaskUser): Promise<PendingTaskGroup[
     renewal(user, cfg),
     studentRisk(user, now, cfg),
     studentCare(user, now, cfg),
+    classNoTeacher(user, now, cfg),
+    registeredStale(user, now, cfg),
   ]);
   return groups
     .filter((g): g is PendingTaskGroup => g !== null)

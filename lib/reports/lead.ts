@@ -92,6 +92,18 @@ export function monthKeyVN(date: Date): string {
   return `${vn.getUTCFullYear()}-${pad(vn.getUTCMonth() + 1)}`;
 }
 
+/** "YYYY-MM-DD" theo giờ Việt Nam (UTC+7, không DST). THUẦN. */
+export function dateKeyVN(date: Date): string {
+  const vn = new Date(date.getTime() + 7 * 3_600_000);
+  return `${vn.getUTCFullYear()}-${pad(vn.getUTCMonth() + 1)}-${pad(vn.getUTCDate())}`;
+}
+
+/** Nhãn ngắn "dd/MM" theo giờ Việt Nam. THUẦN. */
+function dayLabelVN(date: Date): string {
+  const vn = new Date(date.getTime() + 7 * 3_600_000);
+  return `${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}`;
+}
+
 export type StatusCount = { status: string; label: string; count: number };
 
 /** Đếm lead theo từng status hiện tại (mọi enum, kể cả off-pipeline). */
@@ -183,6 +195,39 @@ export function groupByMonth(records: LeadReportRecord[]): MonthStat[] {
   return [...m.entries()]
     .map(([month, v]) => ({ month, total: v.total, converted: v.converted }))
     .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+const WEEK_MS = 7 * 86_400_000;
+
+export type WeekStat = { weekStart: string; label: string; total: number; converted: number };
+
+/**
+ * Phễu lead theo TUẦN (câu 16): `weeks` tuần gần nhất (mỗi tuần = bucket 7 ngày) tính
+ * đến `now`. Mỗi bucket: tổng lead tạo trong tuần + số đã chuyển đổi (REGISTERED/ENROLLED
+ * ∈ CONVERTED_STATUSES). Sắp cũ→mới. THUẦN — nhận `now` để test tất định. Đầu vào rỗng →
+ * vẫn trả đủ `weeks` bucket số 0.
+ */
+export function groupByWeek(
+  records: LeadReportRecord[],
+  weeks = 8,
+  now: Date = new Date(),
+): WeekStat[] {
+  const end = now.getTime();
+  const startAll = end - weeks * WEEK_MS;
+  const counts = Array.from({ length: weeks }, () => ({ total: 0, converted: 0 }));
+  for (const r of records) {
+    const t = r.createdAt.getTime();
+    // Bao gồm record tạo ĐÚNG thời điểm `now` (t === end) vào tuần hiện tại; chỉ loại
+    // record ngoài cửa sổ (cũ hơn startAll) hoặc ở TƯƠNG LAI (t > end). idx clamp weeks-1.
+    if (t < startAll || t > end) continue;
+    const idx = Math.min(weeks - 1, Math.floor((t - startAll) / WEEK_MS));
+    counts[idx].total += 1;
+    if (isConverted(r)) counts[idx].converted += 1;
+  }
+  return counts.map((c, i) => {
+    const winStart = new Date(startAll + i * WEEK_MS);
+    return { weekStart: dateKeyVN(winStart), label: dayLabelVN(winStart), total: c.total, converted: c.converted };
+  });
 }
 
 /** Helper nhóm generic (THUẦN). */

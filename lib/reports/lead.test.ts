@@ -9,6 +9,7 @@ import {
   groupByCenter,
   groupByCommissionSource,
   groupByMonth,
+  groupByWeek,
   leadSummary,
   monthKeyVN,
   type LeadReportRecord,
@@ -35,6 +36,29 @@ describe("[R7-17] monthKeyVN", () => {
     // 2026-05-31T18:00:00Z = 2026-06-01 01:00 giờ VN → tháng 06.
     expect(monthKeyVN(d("2026-05-31T18:00:00Z"))).toBe("2026-06");
     expect(monthKeyVN(d("2026-05-02T03:00:00Z"))).toBe("2026-05");
+  });
+});
+
+describe("[#10] groupByWeek — phễu lead theo tuần", () => {
+  const now = d("2026-07-08T00:00:00Z");
+  it("bucket 7 ngày, đếm tổng + chuyển đổi (REGISTERED/ENROLLED); ngoài cửa sổ → bỏ", () => {
+    const recs: LeadReportRecord[] = [
+      { status: "NEW", source: null, centerId: null, commissionSource: null, createdAt: d("2026-07-07T00:00:00Z") }, // tuần cuối (idx7)
+      { status: "REGISTERED", source: null, centerId: null, commissionSource: null, createdAt: d("2026-07-06T00:00:00Z") }, // idx7, converted
+      { status: "NEW", source: null, centerId: null, commissionSource: null, createdAt: d("2026-06-30T00:00:00Z") }, // idx6
+      { status: "ENROLLED", source: null, centerId: null, commissionSource: null, createdAt: d("2026-05-01T00:00:00Z") }, // ngoài 8 tuần → bỏ
+    ];
+    const w = groupByWeek(recs, 8, now);
+    expect(w).toHaveLength(8);
+    expect(w.reduce((s, x) => s + x.total, 0)).toBe(3); // 3 trong cửa sổ, ENROLLED cũ bị loại
+    expect(w[7]).toMatchObject({ total: 2, converted: 1 });
+    expect(w[6]).toMatchObject({ total: 1, converted: 0 });
+  });
+
+  it("mảng rỗng → vẫn đủ N bucket số 0", () => {
+    const w = groupByWeek([], 8, now);
+    expect(w).toHaveLength(8);
+    expect(w.every((x) => x.total === 0 && x.converted === 0)).toBe(true);
   });
 });
 
