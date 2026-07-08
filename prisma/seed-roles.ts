@@ -295,6 +295,12 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "attendance:mark", scopeType: "CLASS" },
       { action: "students:view-own-class", scopeType: "CLASS" },
+      // #09-gate (vá gap sau #17): GV viết/sửa NHÁP học bạ lớp mình (câu 55). v1 đã có
+      // report-cards:manage@TEACHER; thêm v2 để sau khi flip RBAC_V2 GV KHÔNG mất quyền
+      // viết DRAFT. Cách ly lớp ép qua checkEnrollmentScope tại action (giống TRAINING/
+      // CENTER_MANAGER dùng GLOBAL). KHÔNG có report-cards:review → GV không duyệt/sửa
+      // học bạ đã PUBLISHED/RECALLED (#17 đã siết ở tầng action).
+      { action: "report-cards:manage", scopeType: "GLOBAL" },
     ],
   },
   {
