@@ -1,17 +1,20 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { db } from '@/lib/db'
+import { resolveActor } from '@/lib/auth/actor'
+import { scopedDb } from '@/lib/db-scope'
 import { isSuperAdmin } from '@/lib/auth/permissions'
 import { ChangePasswordForm } from './_components/change-password-form'
 
 export default async function SettingsPage() {
   const session = await auth()
   if (!session?.user) redirect('/login')
+  // Center ∈ SCOPE_EXEMPT → scopedDb pass-through; superAdmin vẫn thấy mọi cơ sở (#03).
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
   const superAdmin = isSuperAdmin(session.user.role)
 
   const centers = superAdmin
-    ? await db.center.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, address: true, phone: true, email: true, isActive: true } }).catch(() => [])
+    ? await sdb.center.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, address: true, phone: true, email: true, isActive: true } }).catch(() => [])
     : []
 
   return (

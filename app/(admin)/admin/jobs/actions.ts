@@ -2,9 +2,13 @@
 
 import { auth } from '@/lib/auth'
 import { assertPermission } from '@/lib/auth/check-permission'
-import { db } from '@/lib/db'
+import { resolveActor } from '@/lib/auth/actor'
+import { scopedDb } from '@/lib/db-scope'
 import { revalidatePath } from 'next/cache'
 import { jobCreateSchema } from '@/lib/validators/job'
+
+// JobPosting KHÔNG ∈ SCOPED_MODELS → scopedDb(actor) là pass-through (không đổi hành vi);
+// dùng để tuân quy ước "app/** không import @/lib/db trần" (#03).
 
 export async function createJobAction(input: unknown) {
   const session = await auth()
@@ -14,14 +18,15 @@ export async function createJobAction(input: unknown) {
   } catch {
     return { ok: false, error: 'Khong co quyen' }
   }
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
   const parsed = jobCreateSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Du lieu khong hop le' }
 
-  const existing = await db.jobPosting.findUnique({ where: { slug: parsed.data.slug } })
+  const existing = await sdb.jobPosting.findUnique({ where: { slug: parsed.data.slug } })
   if (existing) return { ok: false, error: 'Slug da ton tai, vui long chon slug khac' }
 
-  const job = await db.jobPosting.create({
+  const job = await sdb.jobPosting.create({
     data: {
       ...parsed.data,
       closesAt: parsed.data.closesAt ?? null,
@@ -43,11 +48,12 @@ export async function updateJobAction(id: string, input: unknown) {
   } catch {
     return { ok: false, error: 'Khong co quyen' }
   }
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
   const parsed = jobCreateSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Du lieu khong hop le' }
 
-  const job = await db.jobPosting.update({
+  const job = await sdb.jobPosting.update({
     where: { id },
     data: {
       ...parsed.data,
@@ -70,8 +76,9 @@ export async function deleteJobAction(id: string) {
   } catch {
     return { ok: false, error: 'Khong co quyen xoa JD' }
   }
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
-  const job = await db.jobPosting.delete({ where: { id } })
+  const job = await sdb.jobPosting.delete({ where: { id } })
 
   revalidatePath('/jobs')
   revalidatePath('/tuyen-dung')
@@ -88,12 +95,13 @@ export async function duplicateJobAction(id: string) {
   } catch {
     return { ok: false, error: 'Khong co quyen' }
   }
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
-  const original = await db.jobPosting.findUnique({ where: { id } })
+  const original = await sdb.jobPosting.findUnique({ where: { id } })
   if (!original) return { ok: false, error: 'Khong tim thay JD' }
 
   const newSlug = `${original.slug}-copy-${Date.now()}`
-  const newJob = await db.jobPosting.create({
+  const newJob = await sdb.jobPosting.create({
     data: {
       slug: newSlug,
       title: `[COPY] ${original.title}`,
@@ -131,8 +139,9 @@ export async function changeJobStatusAction(id: string, status: string) {
   } catch {
     return { ok: false }
   }
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
-  const job = await db.jobPosting.update({
+  const job = await sdb.jobPosting.update({
     where: { id },
     data: { status: status as never },
   })

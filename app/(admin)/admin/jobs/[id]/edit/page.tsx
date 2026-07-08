@@ -2,7 +2,8 @@ import { auth } from '@/lib/auth'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, ExternalLink } from 'lucide-react'
-import { db } from '@/lib/db'
+import { resolveActor } from '@/lib/auth/actor'
+import { scopedDb } from '@/lib/db-scope'
 import { JobForm } from '@/components/admin/jobs/job-form'
 import { updateJobAction } from '@/app/(admin)/admin/jobs/actions'
 
@@ -14,9 +15,11 @@ export default async function EditJobPage({
   const session = await auth()
   if (!session?.user) redirect('/login')
   if (!['SUPER_ADMIN', 'CENTER_MANAGER'].includes(session.user.role)) redirect('/jobs')
+  // JobPosting non-scoped → scopedDb pass-through (#03).
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
   const { id } = await params
-  const job = await db.jobPosting.findUnique({ where: { id } })
+  const job = await sdb.jobPosting.findUnique({ where: { id } })
   if (!job) notFound()
 
   const boundAction = updateJobAction.bind(null, job.id)

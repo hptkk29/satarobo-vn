@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { db } from '@/lib/db'
+import { resolveActor } from '@/lib/auth/actor'
+import { scopedDb } from '@/lib/db-scope'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { JobsAdminTable } from '@/components/admin/jobs/jobs-admin-table'
@@ -23,6 +24,8 @@ interface SearchParams {
 export default async function AdminJobsPage({ searchParams }: SearchParams) {
   const session = await auth()
   if (!session?.user) redirect('/login')
+  // JobPosting non-scoped → scopedDb pass-through (#03).
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
   const canEdit = ['SUPER_ADMIN', 'CENTER_MANAGER'].includes(session.user.role)
 
@@ -44,7 +47,7 @@ export default async function AdminJobsPage({ searchParams }: SearchParams) {
   }> = []
 
   try {
-    jobs = await db.jobPosting.findMany({
+    jobs = await sdb.jobPosting.findMany({
       where: statusFilter ? { status: statusFilter } : {},
       orderBy: { updatedAt: 'desc' },
       select: {

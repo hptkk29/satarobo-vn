@@ -1,7 +1,8 @@
 'use server'
 
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { resolveActor } from '@/lib/auth/actor'
+import { scopedDb } from '@/lib/db-scope'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 
@@ -14,6 +15,8 @@ const changePasswordSchema = z.object({
 export async function changePassword(formData: FormData): Promise<{ error?: string }> {
   const session = await auth()
   if (!session?.user?.id) return { error: 'Chua dang nhap' }
+  // User ∈ SCOPE_EXEMPT → scopedDb pass-through (#03).
+  const sdb = scopedDb(await resolveActor(session.user.id))
 
   const raw = {
     currentPassword: formData.get('currentPassword') as string,
@@ -28,7 +31,7 @@ export async function changePassword(formData: FormData): Promise<{ error?: stri
 
   if (newPassword !== confirmPassword) return { error: 'Mat khau xac nhan khong khop' }
 
-  const user = await db.user.findUnique({
+  const user = await sdb.user.findUnique({
     where: { id: session.user.id },
     select: { password: true },
   })
@@ -39,7 +42,7 @@ export async function changePassword(formData: FormData): Promise<{ error?: stri
   if (!valid) return { error: 'Mat khau hien tai khong dung' }
 
   const hashed = await bcrypt.hash(newPassword, 12)
-  await db.user.update({ where: { id: session.user.id }, data: { password: hashed } })
+  await sdb.user.update({ where: { id: session.user.id }, data: { password: hashed } })
 
   return {}
 }
