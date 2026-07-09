@@ -291,7 +291,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Leads ---
   "leads:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
-  "leads:view-own": ["SALES_CSM"],
+  // SUPER_ADMIN có mặt ở mọi action *-own để khớp bypass `isSuperAdmin` của can() v2
+  // (lib/auth/can.ts) — nếu thiếu, shadow-compare đẻ lệch v1=false/v2=true mỗi lần
+  // admin chạm trang này. Behavior-neutral: call-site chỉ thu hẹp khi `!viewAll && viewOwn`.
+  "leads:view-own": ["SUPER_ADMIN", "SALES_CSM"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -361,7 +364,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Students ---
   "students:view-all": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT", "HR"],
-  "students:view-own-class": ["TEACHER"],
+  "students:view-own-class": ["SUPER_ADMIN", "TEACHER"],
   "students:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // FL W0 (QĐ-T4): kế toán KHÔNG sửa hồ sơ học viên (gỡ ACCOUNTANT).
   "students:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
@@ -371,7 +374,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Classes ---
   "classes:view-all": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING"],
-  "classes:view-own": ["TEACHER"],
+  "classes:view-own": ["SUPER_ADMIN", "TEACHER"],
   "classes:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "classes:delete": ["SUPER_ADMIN"],
@@ -384,7 +387,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Enrollments ---
   "enrollments:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
-  "enrollments:view-own": ["TEACHER"],
+  "enrollments:view-own": ["SUPER_ADMIN", "TEACHER"],
   "enrollments:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "enrollments:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "enrollments:transfer": ["SUPER_ADMIN", "CENTER_MANAGER"],

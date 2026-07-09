@@ -75,6 +75,19 @@ Không có mục "Bỏ qua", không dòng `KÍCH HOẠT LẠI`, không cấp rol
 Thiếu QL cơ sở / Sale-CSM / Kế toán / HR / Marketing ⇒ đồng hồ sẽ **xanh giả**: 5 ngày sạch chỉ chứng minh
 được 3 role, trong khi flip #09 tác động 8 role. Phải provisioning đủ tài khoản TRƯỚC khi bấm đồng hồ.
 
+**Prod chưa từng được provisioning (đo 09/07).** `Employee` active = **1** (CEO, không email/cơ sở/tài khoản);
+tài khoản nhân viên = 3 (kỹ thuật); `UserOrgRole` trước hôm nay = 0; không học viên, không traffic.
+⇒ Cổng C *"3–5 ngày sạch trên traffic thật"* **không đạt được trên prod trước 17/07**. Đề xuất đổi cổng:
+[`de-xuat-doi-cong-c.md`](de-xuat-doi-cong-c.md) — chờ Kiệt/BGĐ duyệt.
+
+**Vá lớp nhiễu có cấu trúc (09/07).** 4/150 action trong matrix v1 không liệt kê `SUPER_ADMIN`
+(`leads:view-own`, `students:view-own-class`, `classes:view-own`, `enrollments:view-own`) trong khi
+`can.ts:40` cho v2 bypass toàn bộ khi `isSuperAdmin` ⇒ admin chạm 4 trang đó là đẻ lệch `v1=false/v2=true`.
+Đúng nguồn của 57 dòng đang tồn trên DEV. Đã thêm `SUPER_ADMIN` vào 4 dòng + test bất biến
+*"SUPER_ADMIN phủ toàn bộ action"*. Behavior-neutral với v1: mọi call-site chỉ thu hẹp khi `!viewAll && viewOwn`,
+mà cả 4 `*:view-all` đều đã có `SUPER_ADMIN`. Đây là **đổi mapping** ⇒ nếu đồng hồ đã chạy thì phải
+`TRUNCATE` + đếm lại; hiện chưa bấm nên không tốn ngày nào.
+
 **Việc phải làm trước khi bấm đồng hồ (đúng thứ tự):**
 
 - [x] `patch-rbac-staff` `mode=apply` → 3 `UserOrgRole` đầu tiên; `admin@` thành SUPER_ADMIN thật ở v2. *(09/07)*

@@ -237,3 +237,20 @@ describe("permissions matrix — sanity", () => {
     expect(can("PARENT", "students:view-all")).toBe(false);
   });
 });
+
+// #01 shadow-compare: can() v2 (lib/auth/can.ts) bypass mọi action khi
+// `actor.isSuperAdmin`. Nếu matrix v1 thiếu SUPER_ADMIN ở một action nào đó thì
+// mỗi lần admin chạm call-site đó là một dòng RbacShadowDiff (v1=false, v2=true)
+// → cổng `isSafeToEnableRbacV2` (đếm thô, không whitelist) không bao giờ về 0.
+// Trước bản vá 09/07 có 4 action rơi vào bẫy này: leads:view-own,
+// students:view-own-class, classes:view-own, enrollments:view-own.
+describe("permissions matrix — SUPER_ADMIN phủ toàn bộ action (khớp bypass v2)", () => {
+  it("mọi action trong ALL_ACTIONS đều cấp cho SUPER_ADMIN", () => {
+    const thieu = ALL_ACTIONS.filter((a) => !PERMISSIONS[a].includes("SUPER_ADMIN"));
+    expect(thieu).toEqual([]);
+  });
+
+  it("can(SUPER_ADMIN, *) = true với mọi action", () => {
+    for (const a of ALL_ACTIONS) expect(can("SUPER_ADMIN", a)).toBe(true);
+  });
+});
