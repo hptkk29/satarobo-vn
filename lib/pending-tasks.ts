@@ -3,6 +3,7 @@ import { can, hasRole, type CanUser } from "@/lib/auth/permissions";
 import { isChecklistComplete } from "@/lib/center-checklist";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { getSetting } from "@/lib/settings/service";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { normalizePeriodComments } from "@/lib/lms/report-card-core";
 import {
   REPORT_CARD_MILESTONES,
@@ -256,7 +257,9 @@ async function reportCardMilestone(user: TaskUser, cfg: PendingCfg): Promise<Pen
   if (reached.length === 0) return null;
 
   const enrollments = await db.enrollment.findMany({
-    where: { classId: { in: reached.map((c) => c.id) }, status: "ACTIVE" },
+    // `ACTIVE` là status LEGACY; workflow D5 dùng CONFIRMED/STUDYING/PAUSED. Lọc "ACTIVE"
+    // trần sẽ bỏ sót gần hết ghi danh thật → dùng đúng hằng số chung.
+    where: { classId: { in: reached.map((c) => c.id) }, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
     select: { id: true, classId: true, student: { select: { name: true } } },
   });
   if (enrollments.length === 0) return null;
