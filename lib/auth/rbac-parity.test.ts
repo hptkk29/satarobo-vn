@@ -33,16 +33,12 @@ const INTENTIONAL: Record<string, string[]> = {
     "employees:view-personal",
     "employees:view-salary",
     "payroll:view",
-    // TTS Nhân sự không phụ trách nội dung tuyển dụng / vinh danh / blog.
+    // TTS Nhân sự không phụ trách nội dung marketing / vinh danh.
     "blog:view",
     "courses:view",
     "honors:create",
     "honors:edit",
     "honors:view",
-    "jobs:create",
-    "jobs:delete",
-    "jobs:edit",
-    "jobs:view",
     "news:view",
   ],
 };
@@ -57,6 +53,9 @@ const INTENTIONAL: Record<string, string[]> = {
 const KNOWN_GAPS: Record<string, number> = {
   CENTER_MANAGER: 105,
   TEACHER: 32,
+  // TTS Nhân sự LÀ người đăng tin tuyển dụng (user chốt 09/07) ⇒ jobs:* không phải
+  // thu hẹp có chủ đích, mà là seed thiếu. Vá cùng đợt CENTER_MANAGER/TEACHER.
+  HR: 4, // jobs:create, jobs:delete, jobs:edit, jobs:view
 };
 
 const v2ByCode = new Map(ROLE_SEED.map((r) => [r.code, new Set(r.perms.map((p) => p.action))]));
