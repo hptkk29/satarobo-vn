@@ -21,7 +21,13 @@ export type PermEntry = {
   scopeType: ScopeType;
   orgUnitId: string;
   roleCode: string;
-  /** Chỉ cho CENTER: "ALL" (role HO/ROOT — cross-center theo chức năng) hoặc list centerId subtree. */
+  /**
+   * Tầm nhìn cơ sở của CHÍNH permission này: "ALL" khi role gắn ở HO/ROOT (cross-center
+   * theo chức năng — Doc 15 §2), ngược lại là list centerId trong subtree của orgUnit.
+   * Gán cho MỌI perm (không riêng scopeType CENTER) — `getModelVisibleCenterIds` gom
+   * union theo prefix action của model, nhờ đó một người kiêm TRAINING@HO + CM@CS1
+   * thấy học viên/lớp cả 2 cơ sở nhưng chỉ thấy lead/doanh thu CS1.
+   */
   centerScope: "ALL" | string[] | null;
 };
 

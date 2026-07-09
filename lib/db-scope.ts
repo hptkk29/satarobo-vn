@@ -88,7 +88,19 @@ export function getModelPrefixes(model: string): string[] {
     case "ClassGroup":
       return ["classes:", "class_group:"];
     case "Enrollment":
-      return ["enrollments:"];
+      // report-cards: cũng map vào đây — học bạ gắn với enrollment. Nhờ vậy TRAINING@HO
+      // (report-cards:* + students/classes:view-all) đọc được ghi danh cả 2 cơ sở để làm
+      // học bạ, còn CENTER_MANAGER@CS1 (enrollments:* @CS1) vẫn chỉ thấy CS1.
+      return ["enrollments:", "report-cards:"];
+    case "Attendance":
+      // #04 flip EXEMPT→SCOPED nhưng QUÊN map prefix → rơi vào fallback `isHoLevel ? ALL`,
+      // tức bất kỳ ai có 1 role HO đều thấy điểm danh toàn hệ thống bất kể chức năng.
+      // Điểm danh là dữ liệu đào tạo: bám attendance:/classes: giống ClassSession.
+      return ["attendance:", "classes:"];
+    case "LeadTrialHistory":
+      // Dữ liệu LEAD (lịch sử học thử của lead) — KHÔNG phải dữ liệu đào tạo. Thiếu map
+      // → fallback ALL → Đào tạo/HO nhìn thấy lead cơ sở khác. Bám đúng `leads:`.
+      return ["leads:"];
     case "ClassSession":
       // Buổi học gắn lớp → map cả action sessions: lẫn classes: (ai quản lý lớp ở cơ sở
       // nào thì thấy buổi cơ sở đó). GV có classes:view-own/sessions:view → scope cơ sở mình.

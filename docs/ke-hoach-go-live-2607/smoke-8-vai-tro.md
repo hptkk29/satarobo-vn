@@ -103,23 +103,38 @@ Mỗi ô "phải vào được" = trang mở ra, KHÔNG bị đá về `/dashboa
 | C1 | Liên (QL CS2) mở chi tiết 1 lead của CS1 bằng URL trực tiếp | 404 / chặn (`scopedDb`) |
 | C2 | Diệu (Sale CS1) mở lead của Lộc bằng URL trực tiếp | chặn (`scopeToSelf` + ownership) |
 | C3 | Đức (GV CS1) mở lớp của Trang (CS2) bằng URL trực tiếp | chặn (`assignedClassIds`) |
-| C4 | Toại (QL CS1) duyệt học bạ 1 HV **CS2** | **xem §5.1 — đây là câu hỏi, không phải kỳ vọng** |
+| C4 | Toại (QL CS1 + Đào tạo HO) duyệt học bạ 1 HV **CS2** | **được** (`checkEnrollmentScope` cho `isHoLevel` qua) |
+| C5 | Toại mở `/leads` | **chỉ thấy lead CS1** — nếu thấy lead CS2 là hồi quy, xem §5.1 |
+| C6 | Toại mở `/payments` (nếu vào được) | **chỉ thấy khoản CS1** |
 
 ## 5. Hai lỗ smoke không lấp được — phải quyết trước flip
 
-### 5.1 Toại có `TRAINING @ HO` ⇒ `actor.isHoLevel = true` ⇒ thấy **toàn bộ** CS2
+### 5.1 ~~Toại thấy toàn bộ CS2~~ — ĐÃ SỬA 09/07 (bản đầu của mục này SAI)
 
-`resolveActor` bật `isHoLevel` khi actor có **bất kỳ** role nào tại OrgUnit type `HO`/`ROOT`, và `scopedDb`
-dùng cờ đó để mở `visibleCenterIds` ra **mọi cơ sở**. Toại kiêm `CENTER_MANAGER @ CS1` + `TRAINING @ HO`
-⇒ với tư cách QL cơ sở anh ấy vẫn **đọc được lead / học viên / lớp của CS2**.
+**Đính chính.** Bản đầu viết rằng `scopedDb` dùng `actor.visibleCenterIds` (blanket theo `isHoLevel`).
+Sai: `injectScope` gọi `getModelVisibleCenterIds(model, actor)`, hàm này gom union `centerScope` của các
+permission **khớp prefix action của model** (`db-scope.ts:127`). Cross-center **đã** bám chức năng.
 
-Doc 15 §2 viết *"Role HO = cross-center **theo chức năng**"* — nhưng `scopedDb` đang áp cross-center
-**theo con người**, không theo chức năng. Đây là lệch giữa thiết kế và hiện thực, và nó **đã đúng như vậy
-ngay bây giờ** (v1 cũng dùng `scopedDb`), không phải do flip gây ra.
+Thực trạng sau bản vá seed + 2 prefix còn thiếu (`Attendance`, `LeadTrialHistory`):
 
-Ba lựa chọn: (a) chấp nhận — Đào tạo vốn nhìn toàn hệ thống; (b) tách `TRAINING` sang tài khoản riêng
-(đã bàn, đã loại vì mất truy vết audit); (c) sửa `scopedDb` để cross-center bám theo **permission** thay vì
-theo actor — đúng Doc 15, nhưng là việc lớn, **không nên gộp vào flip #09**.
+| Model | Toại (`TRAINING@HO` + `CM@CS1`) | Vì sao |
+|---|---|---|
+| `Student`, `Class`, `ClassSession` | **cả 2 cơ sở** | `students/classes:view-all` từ `TRAINING @ HO` → `centerScope: "ALL"` |
+| `Enrollment` | **cả 2 cơ sở** | prefix `report-cards:` map vào `Enrollment` — học bạ gắn ghi danh |
+| `Attendance` | **cả 2 cơ sở** | dữ liệu đào tạo (prefix `attendance:`/`classes:`) |
+| `Lead`, `MessengerConversation`, `LeadTrialHistory` | **chỉ CS1** | `leads:*` chỉ đến từ `CENTER_MANAGER @ CS1` |
+| `Payment`, `Order` | **chỉ CS1** | `payments:record`/`orders:view` chỉ ở CS1 |
+| `Employee` | **chỉ CS1** | `employees:view-all` chỉ ở CS1 |
+
+Đúng yêu cầu: *"thấy học viên/lớp CS2 để đánh giá học bạ, không thấy lead, doanh thu, phần ngoài đào tạo."*
+Khoá bằng `lib/db-scope-function.test.ts` (ca Toại) + test "mọi `SCOPED_MODEL` phải có prefix".
+
+**Lỗi gốc:** `#04` flip `Attendance` sang `SCOPED_MODELS` nhưng quên thêm prefix ⇒ nó rơi vào nhánh
+fallback `isHoLevel ? "ALL"`. `LeadTrialHistory` cũng vậy — và đó là dữ liệu **lead**, nên Đào tạo/HO
+nhìn thấy lead cơ sở khác. Cả hai đã vá.
+
+> Còn lại: nhánh fallback vẫn tồn tại cho model chưa map. Nay đã có test chặn, nhưng nếu thêm
+> `SCOPED_MODEL` mới thì **phải** map prefix, đừng để nó âm thầm mở cross-center.
 
 ### 5.2 Bốn RoleDef không có người giữ
 
