@@ -77,8 +77,8 @@ Thiếu QL cơ sở / Sale-CSM / Kế toán / HR / Marketing ⇒ đồng hồ s�
 
 **Việc phải làm trước khi bấm đồng hồ (đúng thứ tự):**
 
-- [ ] `patch-rbac-staff` `mode=apply` → 3 `UserOrgRole` đầu tiên; `admin@` thành SUPER_ADMIN thật ở v2.
-- [ ] Xác nhận picker "Đơn vị" ở `/admin/users/new` đã hiện `Hội sở / Cơ sở 1 / Cơ sở 2`.
+- [x] `patch-rbac-staff` `mode=apply` → 3 `UserOrgRole` đầu tiên; `admin@` thành SUPER_ADMIN thật ở v2. *(09/07)*
+- [x] Xác nhận picker "Đơn vị" ở `/admin/users/new` đã hiện `Hội sở / Cơ sở 1 / Cơ sở 2`. *(09/07 — deadlock RC-A đã gỡ)*
 - [ ] Tạo **đủ** tài khoản nhân sự thật (GV CS2, QL cơ sở, Sale-CSM, Kế toán, HR, Marketing) + set Đơn vị.
 - [ ] Gán `UserOrgRole` cho các tài khoản mới — ưu tiên `/admin/users/[id]/org-roles` (qua `rbac-service`
       → có `RbacAuditLog` + reason); hoặc chạy lại patch (idempotent, suy cơ sở qua `centerId`).
