@@ -9,9 +9,16 @@
 // ⚠️ Câu 46: GV KHÔNG xem SĐT/email phụ huynh. Trang này không chạm dữ liệu PH;
 // trang nào sau này hiển thị học viên/PH PHẢI mask theo canViewParentContact
 // (lib/auth/permissions.ts) — không đưa contact PH vào payload gửi client.
+import type { SubmissionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { isSessionEvalRoundApplicable } from "@/lib/eval/session-eval";
+import {
+  REPORT_CARD_STATUS_LABEL,
+  canEditReportCardContent,
+  type ReportCardStatusValue,
+} from "@/lib/lms/report-card-core";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -90,6 +97,88 @@ export default async function TeacherHomePage() {
           orderBy: { date: "asc" },
         });
 
+  // ── #2 "Bài chưa chấm": bài HV đã NỘP chờ chấm (SUBMITTED/LATE, chưa GRADED)
+  // của lớp mình. AssignmentSubmission KHÔNG ∈ SCOPED_MODELS → cách ly qua
+  // assignment.classId ∈ assignedClassIds (KHÔNG theo cơ sở). NOT_SUBMITTED/GRADED
+  // không tính (khớp computeAssignmentSummary: SUBMITTED/LATE/GRADED = "đã nộp").
+  const gradingWhere = {
+    status: { in: ["SUBMITTED", "LATE"] as SubmissionStatus[] },
+    assignment: { classId: { in: classIds } },
+  };
+  const [gradingCount, gradingRows] = await Promise.all([
+    sdb.assignmentSubmission.count({ where: gradingWhere }),
+    sdb.assignmentSubmission.findMany({
+      where: gradingWhere,
+      select: {
+        id: true,
+        student: { select: { name: true } }, // câu 46: CHỈ tên HV, KHÔNG contact PH
+        assignment: { select: { title: true, class: { select: { name: true } } } },
+      },
+      orderBy: { submittedAt: "asc" },
+      take: 5,
+    }),
+  ]);
+
+  // ── #3 "Đánh giá học viên": đợt SESSION_EVAL đang MỞ áp cho lớp mình. ──
+  // EvaluationRound ∈ SCOPE_EXEMPT (centerId null = toàn hệ thống) → không auto-scope;
+  // cách ly bằng cách CHỈ so khớp với TỪNG lớp mình qua isSessionEvalRoundApplicable
+  // (dùng centerId/courseId của lớp — reuse helper thuần lib/eval/session-eval).
+  const myClasses = await sdb.class.findMany({
+    where: { id: { in: classIds } },
+    select: { id: true, name: true, centerId: true, courseId: true },
+  });
+  const openEvalRounds = await sdb.evaluationRound.findMany({
+    where: { scope: "SESSION_EVAL", status: "OPEN" },
+    select: {
+      id: true,
+      name: true,
+      scope: true,
+      status: true,
+      opensAt: true,
+      closesAt: true,
+      centerId: true,
+      courseId: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const evalNow = new Date();
+  const evalItems = myClasses.flatMap((cls) =>
+    openEvalRounds
+      .filter((r) =>
+        isSessionEvalRoundApplicable(
+          r,
+          { centerId: cls.centerId, courseId: cls.courseId },
+          evalNow,
+        ),
+      )
+      .map((r) => ({ key: `${r.id}:${cls.id}`, primary: cls.name, secondary: `Đợt: ${r.name}` })),
+  );
+
+  // ── #4 "Hồ sơ port": học bạ lớp mình GV còn hoàn thiện được (DRAFT/RECALLED). ──
+  // ReportCard ∈ SCOPE_EXEMPT (enrollmentId phẳng, không quan hệ) → lấy enrollment
+  // của lớp mình trước (Enrollment auto-scope theo cơ sở), rồi lọc học bạ theo
+  // enrollmentId + trạng thái GV sửa-được (isReportCardEditable → DRAFT/RECALLED).
+  // GV chỉ hoàn thiện được học bạ mình SỬA-ĐƯỢC: DRAFT (viết nháp). RECALLED cần
+  // capability 'review' (QL cơ sở/Toại — #17) → KHÔNG phải việc của GV, không vào TODO.
+  const reportCardTodoStatus = (
+    ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "RECALLED"] as ReportCardStatusValue[]
+  ).filter((s) => canEditReportCardContent(s, ["manage"]));
+  const myEnrollments = await sdb.enrollment.findMany({
+    where: { classId: { in: classIds }, deletedAt: null },
+    select: {
+      id: true,
+      class: { select: { name: true } },
+      student: { select: { name: true } }, // câu 46: chỉ tên HV
+    },
+  });
+  const enrollmentIds = myEnrollments.map((e) => e.id);
+  const enrollmentById = new Map(myEnrollments.map((e) => [e.id, e]));
+  const reportCards = await sdb.reportCard.findMany({
+    where: { enrollmentId: { in: enrollmentIds }, status: { in: reportCardTodoStatus } },
+    select: { id: true, enrollmentId: true, status: true },
+    orderBy: { updatedAt: "asc" },
+  });
+
   const sections: PendingSection[] = [
     {
       id: "attendance",
@@ -110,29 +199,44 @@ export default async function TeacherHomePage() {
       })),
       emptyText: "Hôm nay không còn buổi nào chờ điểm danh.",
     },
-    // ── Placeholder có cấu trúc — L6 nối query, giữ nguyên shape ──────────────
     {
       id: "grading",
       title: "Bài chưa chấm",
       description: "Bài tập học viên đã nộp, chờ bạn chấm.",
-      count: null, // L6: đếm HomeworkAssignment status SUBMITTED của lớp mình
-      items: [],
+      count: gradingCount,
+      items: gradingRows.map((s) => ({
+        key: s.id,
+        primary: s.student.name,
+        secondary: [s.assignment.class.name, s.assignment.title].filter(Boolean).join(" · "),
+      })),
       emptyText: "Không có bài chờ chấm.",
     },
     {
       id: "evaluation",
       title: "Đánh giá học viên",
-      description: "Nhận xét/đánh giá định kỳ học viên đến hạn.",
-      count: null, // L6: đợt đánh giá đang mở áp cho lớp mình
-      items: [],
-      emptyText: "Không có đánh giá đến hạn.",
+      description: "Đợt đánh giá buổi học đang mở, áp cho lớp bạn.",
+      count: evalItems.length,
+      items: evalItems.slice(0, 5),
+      emptyText: "Không có đợt đánh giá đang mở.",
     },
     {
       id: "report-card",
       title: "Hồ sơ port",
       description: "Hồ sơ/học bạ học viên cần hoàn thiện để bàn giao.",
-      count: null, // L6: report-card/hồ sơ cuối khóa còn thiếu của lớp mình
-      items: [],
+      count: reportCards.length,
+      items: reportCards.slice(0, 5).map((c) => {
+        const enr = enrollmentById.get(c.enrollmentId);
+        return {
+          key: c.id,
+          primary: enr?.student.name ?? "Học viên",
+          secondary: [
+            enr?.class.name ? `Lớp ${enr.class.name}` : null,
+            `Học bạ: ${REPORT_CARD_STATUS_LABEL[c.status]}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        };
+      }),
       emptyText: "Không có hồ sơ chờ hoàn thiện.",
     },
   ];
