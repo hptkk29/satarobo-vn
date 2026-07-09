@@ -8,8 +8,20 @@ import {
   type ReportCardStatusValue,
 } from "@/lib/lms/report-card-core";
 import { SKILL_LABEL, LEVEL_LABEL as SKILL_LEVEL_LABEL } from "@/lib/lms/skills";
+import {
+  isMilestonePeriod,
+  milestoneLabel,
+  REPORT_CARD_MILESTONES,
+  milestonePeriodKey,
+} from "@/lib/lms/report-card-milestone";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { saveReportCardAction, transitionReportCardAction } from "../_actions";
+
+/** Nhãn tiếng Việt cho khoá kỳ chuẩn (SESSION_5/SESSION_12); period tự do giữ nguyên. */
+function periodDisplayLabel(period: string): string | null {
+  const m = REPORT_CARD_MILESTONES.find((x) => milestonePeriodKey(x) === period.trim());
+  return m ? milestoneLabel(m) : null;
+}
 
 const LEVEL_LABEL: Record<number, string> = {
   1: "1 · Cần cố gắng",
@@ -166,15 +178,23 @@ export function ReportCardEditor(props: {
           <div className="space-y-2">
             {periods.map((p, i) => (
               <div key={i} className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  value={p.period}
-                  disabled={!editable}
-                  placeholder="Giai đoạn (vd Giữa khoá)"
-                  onChange={(e) =>
-                    setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, period: e.target.value } : x)))
-                  }
-                  className="rounded-md border border-neutral-300 px-3 py-2 text-sm sm:w-48"
-                />
+                {/* #17 (câu 55) — kỳ buổi 5 / buổi 12 là mốc cố định: hiện nhãn, khoá tên kỳ,
+                    không cho xoá. Giai đoạn tự do cũ vẫn sửa/xoá được như trước. */}
+                {periodDisplayLabel(p.period) ? (
+                  <span className="flex items-center rounded-md bg-purple-50 px-3 py-2 text-sm font-medium text-purple-800 sm:w-48">
+                    {periodDisplayLabel(p.period)}
+                  </span>
+                ) : (
+                  <input
+                    value={p.period}
+                    disabled={!editable}
+                    placeholder="Giai đoạn (vd Giữa khoá)"
+                    onChange={(e) =>
+                      setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, period: e.target.value } : x)))
+                    }
+                    className="rounded-md border border-neutral-300 px-3 py-2 text-sm sm:w-48"
+                  />
+                )}
                 <input
                   value={p.comment}
                   disabled={!editable}
@@ -184,7 +204,7 @@ export function ReportCardEditor(props: {
                   }
                   className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
                 />
-                {editable ? (
+                {editable && !isMilestonePeriod(p.period) ? (
                   <button
                     type="button"
                     onClick={() => setPeriods((prev) => prev.filter((_, j) => j !== i))}

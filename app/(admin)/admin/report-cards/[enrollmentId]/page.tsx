@@ -14,6 +14,7 @@ import {
   normalizePeriodComments,
   type ReportCardStatusValue,
 } from "@/lib/lms/report-card";
+import { ensureMilestonePeriods } from "@/lib/lms/report-card-milestone";
 import { ReportCardEditor } from "../_components/report-card-editor";
 
 export const metadata = { title: "Nhập học bạ | Admin" };
@@ -59,7 +60,9 @@ export default async function ReportCardEditorPage({
     );
   }
 
-  const [criteria, metrics, rc] = await Promise.all([
+  // #17 Gap 1 (câu 55): "đạt buổi N" = lớp đã có N buổi COMPLETED (ClassSession không
+  // có số thứ tự buổi). Mốc đã đạt → form luôn hiện sẵn ô nhập kỳ tương ứng.
+  const [criteria, metrics, rc, completedSessions] = await Promise.all([
     getCourseCriteria(enr.courseId),
     computeReportCardMetrics(enrollmentId),
     db.reportCard.findUnique({
@@ -73,6 +76,7 @@ export default async function ReportCardEditorPage({
         scores: { select: { criterionId: true, level: true, note: true } },
       },
     }),
+    db.classSession.count({ where: { classId: enr.classId, status: "COMPLETED" } }),
   ]);
 
   const status = (rc?.status ?? "DRAFT") as ReportCardStatusValue;
@@ -114,7 +118,7 @@ export default async function ReportCardEditorPage({
         criteria={criteria}
         finalComment={rc?.finalComment ?? ""}
         completionStatus={rc?.completionStatus ?? ""}
-        periodComments={normalizePeriodComments(rc?.periodComments)}
+        periodComments={ensureMilestonePeriods(completedSessions, normalizePeriodComments(rc?.periodComments))}
         scores={criteria.map((c) => {
           const s = scoreMap.get(c.id);
           return { criterionId: c.id, level: s?.level ?? 0, note: s?.note ?? "" };

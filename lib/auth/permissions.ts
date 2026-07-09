@@ -525,7 +525,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.
   "payments:view-pii": ["SUPER_ADMIN", "ACCOUNTANT"],
   // C4 — duyệt kế hoạch trả góp 2 đợt: chỉ quản lý cơ sở + admin (audit + reason bắt buộc khi từ chối).
-  "installments:approve": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // #09 (09/07): v2 chuyển quyền này sang HO_ACCOUNTANT (de-xuat-scope §3.3 "tiền tập
+  // trung"). `lib/orders/installments.ts` gate bằng matrix v1 (không theo cờ) làm lớp
+  // phòng thủ, nên v1 PHẢI có ACCOUNTANT — nếu không, sau flip kế toán Hội sở qua được
+  // gate v2 ở wrapper rồi bị chính lib chặn. CENTER_MANAGER giữ ở v1 cho tới khi flip:
+  // gate thật nằm ở `checkPermission` trong _installment-approval-actions.ts.
+  "installments:approve": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
 

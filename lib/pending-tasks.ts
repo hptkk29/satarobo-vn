@@ -3,6 +3,12 @@ import { can, hasRole, type CanUser } from "@/lib/auth/permissions";
 import { isChecklistComplete } from "@/lib/center-checklist";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { getSetting } from "@/lib/settings/service";
+import { normalizePeriodComments } from "@/lib/lms/report-card-core";
+import {
+  REPORT_CARD_MILESTONES,
+  milestoneLabel,
+  missingMilestoneComments,
+} from "@/lib/lms/report-card-milestone";
 
 // =============================================================================
 // MODULE TRUNG TÂM PHÊ DUYỆT & NHẮC VIỆC — PHẦN 1
@@ -23,7 +29,8 @@ export type PendingTaskType =
   | "student_risk"
   | "student_care"
   | "class_no_teacher"
-  | "registered_stale";
+  | "registered_stale"
+  | "report_card_milestone";
 
 export interface PendingTaskItem {
   id: string;
@@ -211,6 +218,84 @@ async function sessionIncomplete(user: TaskUser, now: Date, cfg: PendingCfg): Pr
       href: `/sessions/${r.id}`,
       overdue: true,
     })),
+  };
+}
+
+/**
+ * #17 Gap 1 (câu 55) — GV viết đánh giá kỳ ở BUỔI 5 và BUỔI 12.
+ *
+ * "Đạt buổi N" = lớp đã có N buổi COMPLETED (ClassSession không có số thứ tự buổi;
+ * buổi CANCELLED không tính vì buổi bù là ClassSession riêng). Việc chưa xong = mốc đã
+ * đạt nhưng `ReportCard.periodComments` chưa có nhận xét cho kỳ đó.
+ *
+ * Phạm vi: GV thấy lớp MÌNH dạy (teacher/assistant); quản lý thấy lớp trong cơ sở mình.
+ * Không gate theo action — đây là "việc của tôi", lọc bằng quyền sở hữu lớp.
+ */
+async function reportCardMilestone(user: TaskUser, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
+  const { isManager, centerScope } = scope(user);
+  const isTeacher = hasRole(user, "TEACHER");
+  if (!isManager && !isTeacher) return null;
+
+  const classWhere = isManager
+    ? { deletedAt: null, ...(centerScope ? { centerId: centerScope } : {}) }
+    : { deletedAt: null, OR: [{ teacherId: user.id }, { assistantId: user.id }] };
+
+  const classes = await db.class.findMany({
+    where: classWhere,
+    select: {
+      id: true,
+      name: true,
+      classCode: true,
+      _count: { select: { sessions: { where: { status: "COMPLETED" } } } },
+    },
+    take: 100,
+  });
+
+  const minMilestone = REPORT_CARD_MILESTONES[0];
+  const reached = classes.filter((c) => c._count.sessions >= minMilestone);
+  if (reached.length === 0) return null;
+
+  const enrollments = await db.enrollment.findMany({
+    where: { classId: { in: reached.map((c) => c.id) }, status: "ACTIVE" },
+    select: { id: true, classId: true, student: { select: { name: true } } },
+  });
+  if (enrollments.length === 0) return null;
+
+  // ReportCard là ref phẳng (enrollmentId @unique, không có relation) → query riêng.
+  const cards = await db.reportCard.findMany({
+    where: { enrollmentId: { in: enrollments.map((e) => e.id) } },
+    select: { enrollmentId: true, periodComments: true },
+  });
+  const commentsByEnrollment = new Map(
+    cards.map((c) => [c.enrollmentId, normalizePeriodComments(c.periodComments)]),
+  );
+  const completedByClass = new Map(reached.map((c) => [c.id, c._count.sessions]));
+  const classById = new Map(reached.map((c) => [c.id, c]));
+
+  const items: PendingTaskItem[] = [];
+  for (const e of enrollments) {
+    const completed = completedByClass.get(e.classId) ?? 0;
+    const missing = missingMilestoneComments(completed, commentsByEnrollment.get(e.id) ?? []);
+    for (const m of missing) {
+      const cls = classById.get(e.classId)!;
+      items.push({
+        id: `${e.id}:${m}`,
+        label: `${cls.classCode ? `${cls.classCode} · ` : ""}${e.student.name} — ${milestoneLabel(m)}`,
+        href: `/report-cards/${e.id}`,
+        // Buổi 12 mà chưa viết kỳ buổi 5 → trễ hẳn một kỳ.
+        overdue: completed >= REPORT_CARD_MILESTONES[REPORT_CARD_MILESTONES.length - 1],
+      });
+    }
+  }
+  if (items.length === 0) return null;
+
+  return {
+    type: "report_card_milestone",
+    label: "Học bạ kỳ chưa viết (buổi 5 / buổi 12)",
+    count: items.length,
+    overdueCount: items.filter((i) => i.overdue).length,
+    href: "/report-cards",
+    items: items.slice(0, cfg.itemLimit),
   };
 }
 
@@ -466,6 +551,7 @@ export async function getPendingTasks(user: TaskUser): Promise<PendingTaskGroup[
     studentRisk(user, now, cfg),
     studentCare(user, now, cfg),
     classNoTeacher(user, now, cfg),
+    reportCardMilestone(user, cfg),
     registeredStale(user, now, cfg),
   ]);
   return groups

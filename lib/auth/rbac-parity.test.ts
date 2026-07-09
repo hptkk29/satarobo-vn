@@ -120,3 +120,41 @@ describe("#09 parity v1↔v2 — không ai được mất quyền ngoài dự ki
     }
   });
 });
+
+/**
+ * "Thu hẹp" ≠ "xoá sổ". Khi bỏ một action khỏi role A với ý định chuyển sang role B,
+ * phải THẬT SỰ thêm vào B. Nếu quên, action đó không còn role thường nào giữ ⇒ sau
+ * flip #09 cả tổ chức không ai làm được (chỉ SUPER_ADMIN bypass được).
+ *
+ * Đã xảy ra thật 09/07: `installments:approve`, `inventory:edit`, `course-packages:edit`,
+ * `news:delete`, `honors:settings` bị xoá khỏi CENTER_MANAGER mà quên thêm vào role đích.
+ * Lỗi bị che vì lib/orders/installments.ts còn gate bằng matrix v1 (không theo cờ).
+ */
+const SUPER_ADMIN_ONLY = new Set([
+  // Kiệt/user chốt 09/07: không hard-delete ngoài SUPER_ADMIN; QL dùng cancel.
+  "leads:delete",
+  "students:delete",
+  "enrollments:delete",
+  // Lịch nghỉ toàn hệ thống.
+  "holidays:edit",
+]);
+
+describe("#09 — không action nào MỒ CÔI ở v2", () => {
+  const v2Actions = new Set(
+    ROLE_SEED.filter((r) => r.code !== "SUPER_ADMIN").flatMap((r) => r.perms.map((p) => p.action)),
+  );
+
+  it("mọi action v1 cấp cho ≥1 role thường đều có ≥1 role thường ở v2 (trừ allowlist)", () => {
+    const orphan = ALL_ACTIONS.filter((a) => {
+      const v1Roles = PERMISSIONS[a].filter((r) => r !== "SUPER_ADMIN");
+      return v1Roles.length > 0 && !v2Actions.has(a) && !SUPER_ADMIN_ONLY.has(a);
+    });
+    expect(orphan).toEqual([]);
+  });
+
+  it("allowlist SUPER_ADMIN-only đúng là mồ côi có chủ đích (không thừa dòng)", () => {
+    for (const a of SUPER_ADMIN_ONLY) {
+      expect({ action: a, coRoleThuongOV2: v2Actions.has(a) }).toEqual({ action: a, coRoleThuongOV2: false });
+    }
+  });
+});

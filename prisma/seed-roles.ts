@@ -64,6 +64,11 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "enrollments:view-all", scopeType: "GLOBAL" },
       { action: "inventory:view", scopeType: "GLOBAL" },
       { action: "inventory:audit", scopeType: "GLOBAL" },
+      // #09 (09/07) — nhận bàn giao từ CENTER_MANAGER theo de-xuat-scope §3.3 "tiền & kho
+      // tập trung → HO_ACCOUNTANT". Trước đó chỉ XOÁ khỏi CM mà quên THÊM vào đây ⇒ 2 action
+      // này mồ côi ở v2 (sau flip không role thường nào làm được). Xem test "không action mồ côi".
+      { action: "inventory:edit", scopeType: "GLOBAL" },
+      { action: "installments:approve", scopeType: "GLOBAL" },
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "GLOBAL" },
@@ -163,6 +168,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "news:create", scopeType: "GLOBAL" },
       { action: "news:edit", scopeType: "GLOBAL" },
       { action: "news:publish", scopeType: "GLOBAL" },
+      // #09 (09/07) — nhận bàn giao từ CENTER_MANAGER (de-xuat-scope §3.3 "nội dung đối ngoại
+      // → HO_MARKETING"). Trước đó chỉ xoá khỏi CM, quên thêm vào đây ⇒ mồ côi ở v2.
+      { action: "news:delete", scopeType: "GLOBAL" },
+      { action: "honors:settings", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "courses:view", scopeType: "GLOBAL" },
@@ -204,6 +213,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "courses:edit", scopeType: "GLOBAL" },
       { action: "courses:delete", scopeType: "GLOBAL" },
       { action: "course-packages:view", scopeType: "GLOBAL" },
+      // #09 (09/07) — nhận bàn giao từ CENTER_MANAGER (de-xuat-scope §3.3 "chương trình
+      // & giáo án → TRAINING"). Trước đó chỉ xoá khỏi CM, quên thêm vào đây ⇒ mồ côi ở v2.
+      { action: "course-packages:edit", scopeType: "GLOBAL" },
       { action: "curriculum:view", scopeType: "GLOBAL" },
       { action: "curriculum:create", scopeType: "GLOBAL" },
       { action: "curriculum:edit", scopeType: "GLOBAL" },

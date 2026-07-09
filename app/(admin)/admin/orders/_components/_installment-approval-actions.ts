@@ -3,8 +3,9 @@
 // OD1b — bridge server actions cho UI duyệt kế hoạch trả góp 2 đợt.
 // Bọc các hàm lib SPINE (server-only) trong lib/orders/installments.ts để gọi từ
 // client component. KHÔNG đặt trong orders/_actions.ts (file của SPINE) — file riêng,
-// không đụng tới hàm của agent khác. Quyền: lib tự assertCan('installments:approve')
-// cho approve/reject; wrapper thêm auth + scope (chống IDOR chéo cơ sở).
+// không đụng tới hàm của agent khác. Quyền: gate CHÍNH là `checkPermission` ở wrapper
+// (theo cờ RBAC_V2 + sinh shadow-diff); `assertCan` trong lib là lớp phòng thủ cho caller
+// gọi thẳng lib (e2e). Wrapper thêm auth + scope (chống IDOR chéo cơ sở).
 
 import { revalidatePath } from "next/cache";
 import type { Session } from "next-auth";
@@ -75,13 +76,26 @@ export async function requestInstallmentApprovalAction(
   return res;
 }
 
-/** CENTER_MANAGER/SUPER_ADMIN duyệt kế hoạch 2 đợt (assertCan trong lib). */
+/**
+ * Duyệt kế hoạch 2 đợt. Gate CHÍNH đặt ở đây, không ở lib.
+ *
+ * `lib/orders/installments.ts` nhận `actor` thuần và gate bằng `assertCan` (matrix v1) —
+ * nghĩa là nó KHÔNG theo cờ `RBAC_V2_ENABLED` và KHÔNG sinh shadow-diff. Hệ quả: mọi
+ * thay đổi quyền ở v2 (vd chuyển `installments:approve` từ QL cơ sở sang kế toán Hội sở)
+ * sẽ vô hiệu trên đường này. `checkPermission` ở đây mới là nơi cờ có hiệu lực; `assertCan`
+ * trong lib giữ lại làm lớp phòng thủ cho caller khác (e2e gọi thẳng lib).
+ */
 export async function approveInstallmentPlanAction(
   orderId: string,
   reason?: string,
 ): Promise<ActionResult> {
   const ctx = await loadScopedOrder(orderId);
   if ("error" in ctx) return { ok: false, error: ctx.error };
+  // GLOBAL scope (R1 — call-site gate chạy trước khi có centerId); cách ly cơ sở đã do
+  // scopedDb lo ở loadScopedOrder.
+  if (!(await checkPermission("installments:approve"))) {
+    return { ok: false, error: "Không có quyền duyệt kế hoạch trả góp" };
+  }
   const res = await approveInstallmentPlan({
     orderId,
     actor: buildApprovalActor(ctx.session),
@@ -91,13 +105,16 @@ export async function approveInstallmentPlanAction(
   return res;
 }
 
-/** CENTER_MANAGER/SUPER_ADMIN từ chối kế hoạch 2 đợt (reason bắt buộc, assertCan trong lib). */
+/** Từ chối kế hoạch 2 đợt (reason bắt buộc). Gate chính ở đây — xem chú thích approve. */
 export async function rejectInstallmentPlanAction(
   orderId: string,
   reason: string,
 ): Promise<ActionResult> {
   const ctx = await loadScopedOrder(orderId);
   if ("error" in ctx) return { ok: false, error: ctx.error };
+  if (!(await checkPermission("installments:approve"))) {
+    return { ok: false, error: "Không có quyền duyệt kế hoạch trả góp" };
+  }
   const res = await rejectInstallmentPlan({
     orderId,
     actor: buildApprovalActor(ctx.session),

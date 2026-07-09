@@ -18,6 +18,14 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/substitute-teacher-notify",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/session-close-reminder",
+      "schedule": "0 14 * * *"
+    },
+    {
       "path": "/api/cron/dispatch-events",
       "schedule": "* * * * *"
     },
