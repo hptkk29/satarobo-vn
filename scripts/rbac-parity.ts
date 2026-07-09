@@ -64,7 +64,9 @@ for (const [legacy, v2code] of Object.entries(LEGACY_TO_V2)) {
 
 console.log(`\n# Tổng: ${tongMat} action bị mất khi flip.`);
 if (tongMat > 0) {
-  console.log("Mỗi dòng 🔴 = một người thật mất một chức năng thật ngay khi đổi env.");
-  console.log("Xử lý: bổ sung vào prisma/seed-roles.ts (kèm scopeType đúng) → re-seed prod → chạy lại script này.");
-  process.exitCode = 1;
+  console.log("Mỗi dòng 🔴 = một người thật mất một chức năng thật ngay khi đổi env — TRỪ KHI");
+  console.log("đó là thu hẹp đã được ký. Danh sách đã ký nằm ở INTENTIONAL trong");
+  console.log("lib/auth/rbac-parity.test.ts — ĐÓ mới là cổng chính thức (script này chỉ in thô).");
+  console.log("Mất mát ngoài danh sách đó: bổ sung vào prisma/seed-roles.ts (scopeType theo R1)");
+  console.log("→ re-seed prod → chạy lại `pnpm exec vitest run lib/auth/rbac-parity.test.ts`.");
 }

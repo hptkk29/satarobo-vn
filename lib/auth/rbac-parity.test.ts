@@ -41,22 +41,47 @@ const INTENTIONAL: Record<string, string[]> = {
     "honors:view",
     "news:view",
   ],
+  /** Kiệt duyệt 09/07/2026 — de-xuat-scope-v2-center-manager-teacher.md §3.3. */
+  CENTER_MANAGER: [
+    // Nội dung đối ngoại → HO_MARKETING
+    "blog:create", "blog:edit",
+    "news:create", "news:edit", "news:publish", "news:delete",
+    "site-content:view", "site-content:edit",
+    "honors:create", "honors:edit", "honors:settings",
+    "emails:view", "emails:manage",
+    // Chương trình & giáo án → TRAINING
+    "courses:create", "courses:edit", "course-packages:edit",
+    "lesson-change:approve", "trials:config",
+    // Tiền & kho tập trung → HO_ACCOUNTANT
+    "payments:manage", "orders:manage", "installments:approve",
+    "vouchers:manage", "products:manage",
+    "inventory:edit", "inventory:audit", "kits:edit",
+    // Nhân sự & tuyển dụng → CENTER_HR
+    "employees:edit", "jobs:create", "jobs:edit",
+    // Cấu hình toàn hệ thống → SUPER_ADMIN
+    "holidays:edit",
+    // Xoá cứng → SUPER_ADMIN. QL dùng enrollments:cancel (CLAUDE.md).
+    "students:delete", "enrollments:delete",
+    // ⚠️ CHƯA ĐƯỢC HỎI RÕ (ngoài 6 câu 09/07) — mặc định theo nguyên tắc không
+    // hard-delete. Nếu QL cơ sở cần xoá lead, thêm lại 1 dòng vào seed + re-seed.
+    "leads:delete",
+  ],
+  /** Kiệt duyệt 09/07/2026 — §4.4 + câu 5 (giữ satacoin) và câu 6 (bỏ inventory:movement). */
+  TEACHER: [
+    "completions:manage", // QL cơ sở xác nhận hoàn thành khoá
+    "sessions:create", // GV chốt buổi (sessions:edit), không xếp lịch — câu 48
+    "inventory:movement", // câu 6: "không"
+  ],
 };
 
 /**
- * NỢ ĐÃ BIẾT — seed v2 của 2 role này còn là stub (plan #01 chỉ liệt kê 5 role Kiệt
- * duyệt; CENTER_MANAGER và TEACHER không nằm trong đó). Flip #09 khi danh sách này
- * chưa rỗng ⇒ QL cơ sở và giáo viên mất hàng loạt chức năng.
+ * NỢ ĐÃ BIẾT — đã trả hết 09/07/2026 (seed CENTER_MANAGER 6→78, TEACHER 3→32,
+ * CENTER_HR +jobs:*). Giữ map rỗng để nếu ai đó cần ghi nợ mới thì có chỗ, nhưng
+ * mặc định mọi role phải parity hoặc chỉ mất đúng phần INTENTIONAL.
  *
- * ⚠️ Danh sách này CHỈ ĐƯỢC CO LẠI. Vá `prisma/seed-roles.ts` → xoá dòng tương ứng.
+ * ⚠️ Danh sách này CHỈ ĐƯỢC CO LẠI, không được phình ra.
  */
-const KNOWN_GAPS: Record<string, number> = {
-  CENTER_MANAGER: 105,
-  TEACHER: 32,
-  // TTS Nhân sự LÀ người đăng tin tuyển dụng (user chốt 09/07) ⇒ jobs:* không phải
-  // thu hẹp có chủ đích, mà là seed thiếu. Vá cùng đợt CENTER_MANAGER/TEACHER.
-  HR: 4, // jobs:create, jobs:delete, jobs:edit, jobs:view
-};
+const KNOWN_GAPS: Record<string, number> = {};
 
 const v2ByCode = new Map(ROLE_SEED.map((r) => [r.code, new Set(r.perms.map((p) => p.action))]));
 const v1Actions = (role: string) => ALL_ACTIONS.filter((a) => PERMISSIONS[a].includes(role as never));

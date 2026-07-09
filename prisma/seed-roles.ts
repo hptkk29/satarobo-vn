@@ -7,6 +7,25 @@ type Perm = { action: string; scopeType: ScopeType };
 type RoleSeed = { code: string; name: string; isSystem?: boolean; perms: Perm[] };
 
 // Action phải nằm trong ACTION_REGISTRY (lib/auth/action-registry.ts).
+//
+// ─── R1: scopeType KHÔNG phải nơi cách ly cơ sở ──────────────────────────────
+// `can.ts` trả FALSE khi scope cần target mà call-site không truyền:
+//   CENTER → target.centerId · CLASS/ASSIGNED → target.classId
+//   OWN    → target.createdById · CHILDREN → target.parentUserId
+// Mà phần lớn call-site là page-gate gọi trần: `checkPermission("leads:view-all")`
+// (9 chỗ), `students:view-all` (8), `leads:edit` (15), `classes:view-own` (6)…
+// ⇒ Gán CENTER/OWN/CLASS cho những action đó KHÔNG phải "siết scope", mà là KHOÁ
+//   TRANG của role ngay khi flip #09.
+//
+// Cách ly cơ sở đến từ `scopedDb` (#03/#04: Lead/Student/Class/Enrollment/Attendance
+// ∈ SCOPED_MODELS) + `checkEnrollmentScope`, KHÔNG từ scopeType. GLOBAL ở tầng
+// permission = giữ nguyên hiện trạng v1 (v1 vốn không có scope), không phải nới quyền.
+//
+// Quy tắc: action còn ≥1 call-site gọi trần ⇒ GLOBAL. Chỉ giữ scope hẹp khi MỌI
+// call-site đã truyền target (vd `attendance:edit` — công của #16).
+// Kiểm bằng: `pnpm exec tsx scripts/rbac-scope-audit.ts` (CI: lib/auth/rbac-scope.test.ts).
+// Quyết định giữ/siết/bỏ: docs/ke-hoach-go-live-2607/de-xuat-scope-v2-center-manager-teacher.md
+// (Kiệt duyệt 09/07/2026).
 export const ROLE_SEED: RoleSeed[] = [
   {
     code: "SUPER_ADMIN", name: "Quản trị tối cao", isSystem: true,
@@ -105,10 +124,17 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "employees:edit", scopeType: "CENTER" },
       { action: "hr_attendance:checkin", scopeType: "CENTER" },
       { action: "hr_attendance:view", scopeType: "CENTER" },
-      { action: "students:view-all", scopeType: "CENTER" },
-      { action: "classes:view-all", scopeType: "CENTER" },
+      // R1 — 8 và 10 call-site gọi trần.
+      { action: "students:view-all", scopeType: "GLOBAL" },
+      { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "centers:view", scopeType: "CENTER" },
       { action: "holidays:view", scopeType: "CENTER" },
+      // User chốt 09/07: TTS Nhân sự LÀ người đăng tin tuyển dụng (gồm cả xoá tin).
+      // Trước đó jobs:* bị xếp nhầm vào "thu hẹp có chủ đích" của Phương án A.
+      { action: "jobs:view", scopeType: "GLOBAL" },
+      { action: "jobs:create", scopeType: "GLOBAL" },
+      { action: "jobs:edit", scopeType: "GLOBAL" },
+      { action: "jobs:delete", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -212,10 +238,103 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [{ action: "leads:view-all", scopeType: "GLOBAL" }],
   },
   {
+    // #09 — Kiệt duyệt 09/07/2026 (de-xuat-scope-v2-center-manager-teacher.md §3).
+    // Trước đó role này chỉ có 6 perm (stub) trong khi v1 cho 111 → flip là mất
+    // quyền quản lý cơ sở. Scope theo R1 (xem đầu file): GLOBAL cho action bị gọi
+    // trần, cách ly cơ sở do scopedDb.
+    // SIẾT có chủ đích (bỏ khỏi v1): nội dung marketing (blog/news/site-content/
+    // honors/emails) → HO_MARKETING · chương trình (courses:create/edit,
+    // course-packages:edit, lesson-change:approve, trials:config) → TRAINING ·
+    // tiền & kho quản lý tập trung (payments:manage, orders:manage,
+    // installments:approve, vouchers:manage, products:manage, inventory:edit/audit,
+    // kits:edit) → HO_ACCOUNTANT · employees:edit + jobs:create/edit → CENTER_HR ·
+    // holidays:edit → SUPER_ADMIN · students:delete + enrollments:delete →
+    // SUPER_ADMIN (QL dùng enrollments:cancel; CLAUDE.md cấm hard-delete).
     code: "CENTER_MANAGER", name: "Quản lý cơ sở",
     perms: [
-      { action: "students:view-all", scopeType: "CENTER" },
-      { action: "classes:view-all", scopeType: "CENTER" },
+      // ── Lead ──
+      { action: "leads:view-all", scopeType: "GLOBAL" },
+      { action: "leads:create", scopeType: "GLOBAL" },
+      { action: "leads:edit", scopeType: "GLOBAL" },
+      { action: "leads:assign", scopeType: "GLOBAL" },
+      { action: "leads:import", scopeType: "GLOBAL" },
+      { action: "leads:export", scopeType: "GLOBAL" },
+      // ── Học viên · lớp · ghi danh ──
+      { action: "students:view-all", scopeType: "GLOBAL" },
+      { action: "students:create", scopeType: "GLOBAL" },
+      { action: "students:edit", scopeType: "GLOBAL" },
+      { action: "students:import", scopeType: "GLOBAL" },
+      { action: "classes:view-all", scopeType: "GLOBAL" },
+      { action: "classes:create", scopeType: "GLOBAL" },
+      { action: "classes:edit", scopeType: "GLOBAL" },
+      { action: "class_group:view-all", scopeType: "GLOBAL" },
+      { action: "class_group:create", scopeType: "GLOBAL" },
+      { action: "class_group:edit", scopeType: "GLOBAL" },
+      { action: "enrollments:view-all", scopeType: "GLOBAL" },
+      { action: "enrollments:create", scopeType: "GLOBAL" },
+      { action: "enrollments:edit", scopeType: "GLOBAL" },
+      { action: "enrollments:cancel", scopeType: "GLOBAL" },
+      { action: "enrollments:transfer", scopeType: "GLOBAL" },
+      // ── Điểm danh · buổi học · phòng ──
+      { action: "attendance:view", scopeType: "GLOBAL" },
+      { action: "attendance:mark", scopeType: "GLOBAL" },
+      // Ngoại lệ R1: 0 call-site trần (#16 đã truyền target) → giữ CENTER thật sự.
+      { action: "attendance:edit", scopeType: "CENTER" },
+      { action: "sessions:view", scopeType: "GLOBAL" },
+      { action: "sessions:create", scopeType: "GLOBAL" },
+      { action: "sessions:edit", scopeType: "GLOBAL" },
+      { action: "rooms:view", scopeType: "GLOBAL" },
+      { action: "rooms:edit", scopeType: "GLOBAL" },
+      // ── Trải nghiệm · phụ huynh · media ──
+      { action: "trials:view", scopeType: "GLOBAL" },
+      { action: "trials:manage", scopeType: "GLOBAL" },
+      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      { action: "trials:feedback", scopeType: "GLOBAL" },
+      { action: "trials:override-capacity", scopeType: "GLOBAL" },
+      { action: "parent-requests:manage", scopeType: "GLOBAL" },
+      { action: "parent-feedback:view", scopeType: "GLOBAL" },
+      { action: "media:view", scopeType: "GLOBAL" },
+      { action: "media:upload", scopeType: "GLOBAL" },
+      { action: "media:approve", scopeType: "GLOBAL" },
+      // ── Học tập ──
+      { action: "evaluations:manage", scopeType: "GLOBAL" },
+      { action: "evaluations:view-aggregate", scopeType: "GLOBAL" },
+      { action: "evaluations:view-detail", scopeType: "GLOBAL" },
+      { action: "exams:view", scopeType: "GLOBAL" },
+      { action: "exams:grade", scopeType: "GLOBAL" },
+      { action: "assignments:view", scopeType: "GLOBAL" },
+      { action: "assignments:grade", scopeType: "GLOBAL" },
+      { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
+      { action: "completions:manage", scopeType: "GLOBAL" },
+      { action: "satacoin:manage", scopeType: "GLOBAL" },
+      { action: "notifications:manage", scopeType: "GLOBAL" },
+      // ── Nhân sự · chấm công ──
+      { action: "employees:view-all", scopeType: "GLOBAL" },
+      { action: "hr_attendance:view", scopeType: "CENTER" },
+      { action: "hr_attendance:adjust", scopeType: "CENTER" },
+      { action: "hr_attendance:checkin", scopeType: "OWN" },
+      // ── Thu tiền tại quầy · xuất kit (user chốt 09/07 câu 4: "có, có") ──
+      { action: "payments:record", scopeType: "GLOBAL" },
+      { action: "inventory:movement", scopeType: "GLOBAL" },
+      // ── Đọc tham chiếu ──
+      { action: "centers:view", scopeType: "GLOBAL" },
+      { action: "holidays:view", scopeType: "GLOBAL" },
+      { action: "settings:view", scopeType: "GLOBAL" },
+      { action: "documents:view", scopeType: "GLOBAL" },
+      { action: "curriculum:view", scopeType: "GLOBAL" },
+      { action: "questions:view", scopeType: "GLOBAL" },
+      { action: "courses:view", scopeType: "GLOBAL" },
+      { action: "course-packages:view", scopeType: "GLOBAL" },
+      { action: "kits:view", scopeType: "GLOBAL" },
+      { action: "inventory:view", scopeType: "GLOBAL" },
+      { action: "products:view", scopeType: "GLOBAL" },
+      { action: "vouchers:view", scopeType: "GLOBAL" },
+      { action: "orders:view", scopeType: "GLOBAL" },
+      { action: "honors:view", scopeType: "GLOBAL" },
+      { action: "blog:view", scopeType: "GLOBAL" },
+      { action: "news:view", scopeType: "GLOBAL" },
+      { action: "jobs:view", scopeType: "GLOBAL" },
+      { action: "employees:view-public", scopeType: "GLOBAL" },
       // #17 (câu 55): QL cơ sở duyệt/phát hành/thu hồi + sửa lại học bạ đã thu hồi.
       // Scope GLOBAL (KHÔNG CENTER) — cố ý: report-cards:* được check ở authContext
       // KHÔNG kèm target (ReportCard là SCOPE_EXEMPT), nên CENTER-scope sẽ trả false
@@ -242,8 +361,8 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "attendance:edit", scopeType: "CENTER" },
       { action: "attendance:view", scopeType: "CENTER" },
-      { action: "classes:view-all", scopeType: "CENTER" },
-      { action: "students:view-all", scopeType: "CENTER" },
+      { action: "classes:view-all", scopeType: "GLOBAL" },
+      { action: "students:view-all", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -257,44 +376,83 @@ export const ROLE_SEED: RoleSeed[] = [
     // dùng chung trong team — xem mapping-proposal.md §3, không khớp 6 scopeType.
     code: "CENTER_SALES_CSM", name: "Tư vấn & CSKH cơ sở",
     perms: [
-      { action: "leads:view-own", scopeType: "OWN" },
-      { action: "leads:create", scopeType: "OWN" },
-      { action: "leads:edit", scopeType: "OWN" },
+      { action: "leads:view-own", scopeType: "GLOBAL" },
+      { action: "leads:create", scopeType: "GLOBAL" },
+      { action: "leads:edit", scopeType: "GLOBAL" },
       // Task #07 — quyết định user 07/07/2026: Sale được import danh sách "đã đăng
       // ký" (Sale giữ Google Sheet gốc — câu 33). CENTER: import gán vào cơ sở mình.
-      { action: "leads:import", scopeType: "CENTER" },
-      { action: "students:create", scopeType: "CENTER" },
-      { action: "students:view-all", scopeType: "CENTER" },
-      { action: "students:edit", scopeType: "CENTER" },
-      { action: "classes:view-all", scopeType: "CENTER" },
+      { action: "leads:import", scopeType: "GLOBAL" },
+      { action: "students:create", scopeType: "GLOBAL" },
+      { action: "students:view-all", scopeType: "GLOBAL" },
+      { action: "students:edit", scopeType: "GLOBAL" },
+      { action: "classes:view-all", scopeType: "GLOBAL" },
       // Task #16 (Kiệt duyệt 07/07/2026, Phương án A) — CSKH được SỬA/hồi tố điểm danh
       // trong phạm vi cơ sở; cửa sổ 7 ngày enforce ở call-site (markAttendance).
       { action: "attendance:edit", scopeType: "CENTER" },
-      { action: "enrollments:view-all", scopeType: "CENTER" },
-      { action: "enrollments:create", scopeType: "CENTER" },
-      { action: "enrollments:edit", scopeType: "CENTER" },
+      { action: "enrollments:view-all", scopeType: "GLOBAL" },
+      { action: "enrollments:create", scopeType: "GLOBAL" },
+      { action: "enrollments:edit", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "CENTER" },
       { action: "honors:view", scopeType: "CENTER" },
-      { action: "trials:view", scopeType: "CENTER" },
-      { action: "trials:manage", scopeType: "CENTER" },
-      { action: "parent-requests:manage", scopeType: "CENTER" },
+      { action: "trials:view", scopeType: "GLOBAL" },
+      { action: "trials:manage", scopeType: "GLOBAL" },
+      { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "OWN" },
       { action: "blog:view", scopeType: "CENTER" },
       { action: "course-packages:view", scopeType: "CENTER" },
       { action: "centers:view", scopeType: "CENTER" },
       { action: "holidays:view", scopeType: "CENTER" },
       { action: "kits:view", scopeType: "CENTER" },
-      { action: "payments:record", scopeType: "CENTER" },
-      { action: "orders:view", scopeType: "CENTER" },
-      { action: "vouchers:view", scopeType: "CENTER" },
-      { action: "products:view", scopeType: "CENTER" },
+      { action: "payments:record", scopeType: "GLOBAL" },
+      { action: "orders:view", scopeType: "GLOBAL" },
+      { action: "vouchers:view", scopeType: "GLOBAL" },
+      { action: "products:view", scopeType: "GLOBAL" },
     ],
   },
   {
+    // #09 — Kiệt duyệt 09/07/2026 (de-xuat-scope-v2-center-manager-teacher.md §4).
+    // Trước đó 3 perm (stub) trong khi v1 cho 35 → flip là GV không mở nổi /classes
+    // (gate `classes:view-own`, classes/page.tsx:74) và mất site GV #06.
+    // Cách ly "chỉ lớp mình" đến từ actor.assignedClassIds + checkEnrollmentScope,
+    // KHÔNG từ scopeType (R1 — 6 call-site trần cho classes:view-own).
+    // SIẾT có chủ đích: completions:manage (QL xác nhận hoàn thành khoá) ·
+    // sessions:create (GV chốt buổi, không xếp lịch — câu 48) · inventory:movement
+    // (user chốt 09/07 câu 6: "không"). GIỮ satacoin:manage (câu 5: "GV tự thưởng được").
     code: "TEACHER", name: "Giáo viên",
     perms: [
-      { action: "attendance:mark", scopeType: "CLASS" },
-      { action: "students:view-own-class", scopeType: "CLASS" },
+      { action: "attendance:mark", scopeType: "CLASS" }, // 0 call-site trần → CLASS thật
+      { action: "students:view-own-class", scopeType: "GLOBAL" }, // R1 — 1 call-site trần
+      // ── Lớp mình dạy ──
+      { action: "classes:view-own", scopeType: "GLOBAL" },
+      { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
+      { action: "sessions:view", scopeType: "GLOBAL" },
+      { action: "sessions:edit", scopeType: "GLOBAL" },
+      { action: "attendance:view", scopeType: "GLOBAL" },
+      { action: "assignments:view", scopeType: "GLOBAL" },
+      { action: "assignments:grade", scopeType: "GLOBAL" },
+      { action: "exams:view", scopeType: "GLOBAL" },
+      { action: "exams:grade", scopeType: "GLOBAL" },
+      { action: "enrollments:view-own", scopeType: "GLOBAL" },
+      { action: "evaluations:view-aggregate", scopeType: "GLOBAL" },
+      { action: "trials:view", scopeType: "GLOBAL" },
+      { action: "trials:feedback", scopeType: "GLOBAL" },
+      { action: "media:view", scopeType: "GLOBAL" },
+      { action: "media:upload", scopeType: "GLOBAL" },
+      { action: "satacoin:manage", scopeType: "GLOBAL" },
+      { action: "hr_attendance:checkin", scopeType: "OWN" },
+      // ── Đọc tham chiếu ──
+      { action: "courses:view", scopeType: "GLOBAL" },
+      { action: "curriculum:view", scopeType: "GLOBAL" },
+      { action: "documents:view", scopeType: "GLOBAL" },
+      { action: "questions:view", scopeType: "GLOBAL" },
+      { action: "news:view", scopeType: "GLOBAL" },
+      { action: "blog:view", scopeType: "GLOBAL" },
+      { action: "honors:view", scopeType: "GLOBAL" },
+      { action: "holidays:view", scopeType: "GLOBAL" },
+      { action: "centers:view", scopeType: "GLOBAL" },
+      { action: "rooms:view", scopeType: "GLOBAL" },
+      { action: "inventory:view", scopeType: "GLOBAL" },
+      { action: "employees:view-public", scopeType: "GLOBAL" },
       // #09-gate (vá gap sau #17): GV viết/sửa NHÁP học bạ lớp mình (câu 55). v1 đã có
       // report-cards:manage@TEACHER; thêm v2 để sau khi flip RBAC_V2 GV KHÔNG mất quyền
       // viết DRAFT. Cách ly lớp ép qua checkEnrollmentScope tại action (giống TRAINING/
@@ -315,15 +473,15 @@ export const ROLE_SEED: RoleSeed[] = [
     // HO_ACCOUNTANT — đây là chức năng quản lý tập trung, không phải thu tiền quầy.
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
-      { action: "payments:manage", scopeType: "CENTER" },
-      { action: "payments:record", scopeType: "CENTER" },
-      { action: "payments:confirm", scopeType: "CENTER" },
+      { action: "payments:manage", scopeType: "GLOBAL" },
+      { action: "payments:record", scopeType: "GLOBAL" },
+      { action: "payments:confirm", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).
-      { action: "payments:view-pii", scopeType: "CENTER" },
-      { action: "students:view-all", scopeType: "CENTER" },
-      { action: "classes:view-all", scopeType: "CENTER" },
-      { action: "enrollments:view-all", scopeType: "CENTER" },
-      { action: "orders:view", scopeType: "CENTER" },
+      { action: "payments:view-pii", scopeType: "GLOBAL" },
+      { action: "students:view-all", scopeType: "GLOBAL" },
+      { action: "classes:view-all", scopeType: "GLOBAL" },
+      { action: "enrollments:view-all", scopeType: "GLOBAL" },
+      { action: "orders:view", scopeType: "GLOBAL" },
     ],
   },
   {
