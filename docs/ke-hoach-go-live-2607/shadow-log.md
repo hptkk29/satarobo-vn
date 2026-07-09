@@ -106,6 +106,21 @@ mà cả 4 `*:view-all` đều đã có `SUPER_ADMIN`. Đây là **đổi mappin
 | Thêm user vào role × đơn vị **đã** có tài khoản thao tác trong cửa sổ | Không | Không sinh dòng lệch nào; mapping không đổi |
 | Thêm role × đơn vị **chưa từng** có tài khoản nào chạy qua | Không (kỹ thuật) | Nhưng ngày sạch cũ **không chứng minh gì** cho tổ hợp mới ⇒ phủ đủ tổ hợp TRƯỚC khi bấm đồng hồ |
 
+### 09/07/2026 — sweep parity OFFLINE (code-side) SẠCH
+
+Chạy cổng tĩnh v1↔v2 (không cần prod, không cần traffic) — bổ trợ cho đồng hồ prod:
+
+- `pnpm exec vitest run lib/auth/rbac-parity.test.ts lib/auth/rbac-scope.test.ts` → **13/13 pass.**
+  Mọi lệch v1↔v2 (script `rbac-parity.ts` in thô 46 action) đều nằm trong danh sách `INTENTIONAL`
+  đã ký → **không có seed gap ngoài ý muốn.**
+- `pnpm exec tsx scripts/rbac-scope-audit.ts` → **toàn ✅**, không call-site gọi trần mà seed non-GLOBAL.
+
+**Ý nghĩa cho phân loại C3:** cổng tĩnh sạch ⇒ khi đồng hồ prod chạy, **loại (b) "seed thiếu action"
+sẽ không xuất hiện.** Lệch prod (nếu có) chỉ còn 2 nguồn: (a) actor thiếu `UserOrgRole` (mục 3b/P1)
+và (c) call-site chưa truyền `target` ở action CENTER-scope. Thu hẹp trước phạm vi phải soi khi đọc report.
+
+Đây **không thay** DoD "3–5 ngày sạch traffic thật" — chỉ là điều kiện cần đã xanh ở tầng định nghĩa.
+
 ---
 
 ### Mẫu dòng nhật ký hằng ngày
