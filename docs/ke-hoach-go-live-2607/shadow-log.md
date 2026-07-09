@@ -53,14 +53,38 @@ phân loại**; nhiều khả năng toàn bộ là `v1=true, v2=false` sinh bở
 1. P1 đỏ ⇒ 3 tài khoản này còn đẻ lệch mỗi lần thao tác.
 2. Vá P1 = gán `UserOrgRole` = **đổi hành vi v2** ⇒ quy tắc vàng bắt `TRUNCATE` + đếm lại.
 
-**Việc phải làm trước khi bấm đồng hồ:**
+**Deadlock bootstrap (phát hiện 09/07).** Không thể set cơ sở cho tài khoản qua UI: picker "Đơn vị"
+(`app/(admin)/admin/users/new/page.tsx:69` → `getSelectableOrgUnits(actor)` → `lib/org/org-tree.ts:150-158`)
+lọc theo `isSuperAdmin / isHoLevel / visibleCenterIds / roleOrgUnitIds` — cả bốn đều suy từ `UserOrgRole`.
+`admin@` không có dòng nào ⇒ picker rỗng ⇒ không gán được đơn vị, kể cả Hội sở (HO là **đơn vị**, không phải
+role — `lib/validators/user.ts:6`). Triệu chứng đã ghi sẵn trong header `prisma/patch-rbac-admins.ts` (RC-A).
+⇒ **Phải chạy patch TRƯỚC, sửa tài khoản SAU.** Đuôi email `.cs1@`/`.cs2@` là escape hatch cho đúng ca này.
 
-- [ ] Gán `UserOrgRole` cho `admin@` (SUPER_ADMIN @ HO) và `daotao@` (TRAINING @ HO)
-      → `prisma/patch-rbac-staff.ts` (idempotent, không reset RolePermission).
-- [ ] `giaovien@satarobo.vn`: set `User.centerId` (CS1 hay CS2?) rồi chạy lại patch, **hoặc** gán tay qua
-      `/admin/users/[id]/org-roles` (đi qua `rbac-service` → có `RbacAuditLog` + reason — đường ưu tiên).
+**Dry-run `patch-rbac-staff` (prod, 09/07) — chứng từ cấp quyền.**
+Script gán `UserOrgRole` **không đi qua `rbac-service`** ⇒ **không sinh `RbacAuditLog`**. Mục này là chứng từ thay thế.
+
+```
+[dry] admin@satarobo.vn        → SUPER_ADMIN @ HO
+[dry] daotao@satarobo.vn       → TRAINING    @ HO
+[dry] giaovien.cs1@satarobo.vn → TEACHER     @ CS1
+🔎 DRY-RUN: sẽ ghi 3 · giữ nguyên 0 UserOrgRole.
+```
+Không có mục "Bỏ qua", không dòng `KÍCH HOẠT LẠI`, không cấp role chức năng `HO_*`. → duyệt apply.
+
+**⚠️ `giữ nguyên 0` = prod chưa có bất kỳ `UserOrgRole` nào, và chỉ có 3 tài khoản nhân viên active.**
+Thiếu QL cơ sở / Sale-CSM / Kế toán / HR / Marketing ⇒ đồng hồ sẽ **xanh giả**: 5 ngày sạch chỉ chứng minh
+được 3 role, trong khi flip #09 tác động 8 role. Phải provisioning đủ tài khoản TRƯỚC khi bấm đồng hồ.
+
+**Việc phải làm trước khi bấm đồng hồ (đúng thứ tự):**
+
+- [ ] `patch-rbac-staff` `mode=apply` → 3 `UserOrgRole` đầu tiên; `admin@` thành SUPER_ADMIN thật ở v2.
+- [ ] Xác nhận picker "Đơn vị" ở `/admin/users/new` đã hiện `Hội sở / Cơ sở 1 / Cơ sở 2`.
+- [ ] Tạo **đủ** tài khoản nhân sự thật (GV CS2, QL cơ sở, Sale-CSM, Kế toán, HR, Marketing) + set Đơn vị.
+- [ ] Gán `UserOrgRole` cho các tài khoản mới — ưu tiên `/admin/users/[id]/org-roles` (qua `rbac-service`
+      → có `RbacAuditLog` + reason); hoặc chạy lại patch (idempotent, suy cơ sở qua `centerId`).
 - [ ] Chạy lại report → P1 = 0 dòng.
 - [ ] `TRUNCATE "RbacShadowDiff";` → ghi mốc bấm đồng hồ vào bảng "Trạng thái" ở trên.
+      **Sau mốc này, mọi lần tạo tài khoản / gán role đều reset đồng hồ.**
 
 ---
 
