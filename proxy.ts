@@ -15,12 +15,14 @@ const PUBLIC_HOST = "satarobo.vn";
 const ADMIN_HOST = "admin.satarobo.vn";
 const PORTAL_HOST = "hocvien.satarobo.vn"; // Phase T2.2 — portal phụ huynh/site con
 const SALE_HOST = "sale.satarobo.vn"; // Site tĩnh nhập liệu Sale → MISA AMIS CRM
+const TEACHER_HOST = "giaovien.satarobo.vn"; // L6 — site giáo viên (flag TEACHER_SITE_ENABLED)
 
 function detectHost(host: string): HostKind {
   if (host === PUBLIC_HOST || host === `www.${PUBLIC_HOST}`) return "public";
   if (host === ADMIN_HOST) return "admin";
   if (host === PORTAL_HOST) return "portal";
   if (host === SALE_HOST) return "sale";
+  if (host === TEACHER_HOST) return "teacher";
   if (host.endsWith(".vercel.app")) return "vercel";
   return "unknown"; // localhost, preview deployments
 }
@@ -29,6 +31,7 @@ const HOST_BY_KIND = {
   admin: ADMIN_HOST,
   portal: PORTAL_HOST,
   public: PUBLIC_HOST,
+  teacher: TEACHER_HOST,
 } as const;
 
 /** Redirect to same path on different host (preserves query string). */
@@ -130,7 +133,8 @@ export default auth((req: NextAuthRequest) => {
     kind === "public" ||
     kind === "admin" ||
     kind === "portal" ||
-    kind === "sale"
+    kind === "sale" ||
+    kind === "teacher"
   ) {
     const decision = decideRoute({
       hostKind: kind,
@@ -140,7 +144,8 @@ export default auth((req: NextAuthRequest) => {
       sessionValid: Boolean(session?.user),
     });
     const response = execute(req, decision);
-    return kind === "admin" ? withAdminHeaders(response) : response;
+    // Admin + teacher là khu nội bộ → noindex (SEO defense).
+    return kind === "admin" || kind === "teacher" ? withAdminHeaders(response) : response;
   }
 
   // ═══════════════════════════════════════════════════════════════════

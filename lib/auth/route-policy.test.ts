@@ -625,23 +625,9 @@ describe("L5. teacher host × role — flag ON", () => {
   });
 });
 
-describe("L5. TEACHER trên host khác — hành vi GIỮ NGUYÊN cả 2 trạng thái flag", () => {
-  // ⚠️ "GV trên admin host (flag ON) → redirectHost giaovien" CHƯA bật được ở
-  // đây: cần wiring proxy.ts (detectHost + HOST_BY_KIND + mở union redirectHost)
-  // — xem ghi chú L5 WIRING trong route-policy.ts. Đi cùng PR ticket DNS/Vercel.
-  // Test này KHÓA hành vi hiện tại để flag ON không phá GV đang làm việc trên admin.
+describe("L5/L6. TEACHER × host × flag TEACHER_SITE_ENABLED (2-phase, ĐÃ wire proxy #06)", () => {
+  // Public host: GV vẫn xem site công khai bình thường (cả 2 flag).
   for (const flag of [false, true]) {
-    it(`flag=${flag}: TEACHER trên admin host → rewrite /admin/* (vẫn dùng admin)`, () => {
-      expect(
-        decideRoute({
-          hostKind: "admin",
-          pathname: "/leads",
-          ...authed("TEACHER"),
-          teacherSiteEnabled: flag,
-        }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
-    });
-
     it(`flag=${flag}: TEACHER trên public host (apex) → next`, () => {
       expect(
         decideRoute({
@@ -652,18 +638,45 @@ describe("L5. TEACHER trên host khác — hành vi GIỮ NGUYÊN cả 2 trạng
         }),
       ).toEqual<RouteDecision>({ type: "next" });
     });
-
-    it(`flag=${flag}: TEACHER login xong trên admin host → /dashboard (chưa auto-bounce giaovien)`, () => {
-      expect(
-        decideRoute({
-          hostKind: "admin",
-          pathname: "/login",
-          ...authed("TEACHER"),
-          teacherSiteEnabled: flag,
-        }),
-      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/dashboard" });
-    });
   }
+
+  // flag OFF (L5, 2-phase): GV thuần vẫn LÀM VIỆC trên admin — KHÔNG đá đi.
+  it("flag=false: GV thuần trên admin host → rewrite /admin/* (vẫn dùng admin)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", ...authed("TEACHER"), teacherSiteEnabled: false }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
+  it("flag=false: GV thuần login trên admin host → /dashboard (chưa auto-bounce)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/login", ...authed("TEACHER"), teacherSiteEnabled: false }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/dashboard" });
+  });
+
+  // flag ON (L6, đã wire proxy #06): GV THUẦN trên admin → auto-bounce sang giaovien.
+  it("flag=true: GV thuần trên admin host → redirectHost teacher (L6 auto-bounce)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", ...authed("TEACHER"), teacherSiteEnabled: true }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "teacher", path: "/", status: 307 });
+  });
+  it("flag=true: GV thuần login trên admin host → redirectHost teacher (L6)", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/login", ...authed("TEACHER"), teacherSiteEnabled: true }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "teacher", path: "/", status: 307 });
+  });
+
+  // flag ON: GV KIÊM vai trò admin (CENTER_MANAGER) → KHÔNG auto-bounce, vẫn dùng admin.
+  it("flag=true: GV kiêm CENTER_MANAGER trên admin host → vẫn admin (isTeacherOnly=false)", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "TEACHER"],
+        sessionValid: true,
+        teacherSiteEnabled: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────

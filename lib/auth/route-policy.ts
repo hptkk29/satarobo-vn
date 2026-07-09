@@ -53,7 +53,7 @@ export type RouteDecision =
   | { type: "redirectPath"; path: string; callbackUrl?: string; reason?: string }
   | {
       type: "redirectHost";
-      host: "admin" | "portal" | "public";
+      host: "admin" | "portal" | "public" | "teacher";
       path: string;
       status: 307 | 308;
     };
@@ -244,6 +244,11 @@ export function decideRoute(input: RouteInput): RouteDecision {
   const isParent = authed && !isStaff && effectiveRoles.includes("PARENT");
   // L5 — có role TEACHER (kể cả kiêm nhiệm) → được vào teacher host khi flag ON.
   const isTeacher = authed && effectiveRoles.includes("TEACHER");
+  // L6 — GV THUẦN: role nhân sự DUY NHẤT là TEACHER (không kiêm CM/Sale/HR...). GV thuần
+  // trên admin host (flag ON) → chuyển sang site GV riêng; GV kiêm vai trò admin vẫn ở admin.
+  const isTeacherOnly =
+    isTeacher &&
+    effectiveRoles.filter((r) => r !== null && r !== "PARENT").every((r) => r === "TEACHER");
   const teacherSiteOn = input.teacherSiteEnabled ?? isTeacherSiteEnabled();
 
   // Chỉ gắn reason khi đã từng có session nhưng bị vô hiệu (deactivated),
@@ -411,6 +416,13 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (isLegacyAdminPrefixed(pathname)) {
       const cleanPath = pathname.replace(/^\/admin/, "") || STAFF_HOME;
       return { type: "redirectPath", path: cleanPath };
+    }
+
+    // L6 (flag TEACHER_SITE_ENABLED ON): GV THUẦN → site GV riêng (giaovien).
+    // Flag OFF → KHÔNG đụng (GV vẫn làm việc trên admin — 2-phase). GV kiêm vai trò
+    // admin (CM...) KHÔNG bị đá (isTeacherOnly=false). infra path đã `next` ở trên.
+    if (teacherSiteOn && isTeacherOnly) {
+      return { type: "redirectHost", host: "teacher", path: "/", status: 307 };
     }
 
     if (pathname === "/") {
