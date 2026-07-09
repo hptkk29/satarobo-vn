@@ -1,5 +1,9 @@
 import { db } from "@/lib/db";
-import { can, hasRole, type CanUser } from "@/lib/auth/permissions";
+import { hasRole, type Action, type CanUser } from "@/lib/auth/permissions";
+import type { Actor } from "@/lib/auth/actor";
+import { evaluatePermission } from "@/lib/auth/permission-eval";
+import { recordPermissionShadow } from "@/lib/auth/shadow-report";
+import { isRbacV2Enabled } from "@/lib/flags";
 import { isChecklistComplete } from "@/lib/center-checklist";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { getSetting } from "@/lib/settings/service";
@@ -58,6 +62,32 @@ export type TaskUser = CanUser & {
 interface PendingCfg {
   itemLimit: number;
   staleMs: number;
+  /**
+   * Kiểm quyền THEO CỜ `RBAC_V2_ENABLED` + sinh shadow-diff.
+   *
+   * Trước đây file này gọi thẳng `can()` matrix v1 ⇒ (a) không sinh dòng shadow nào nên
+   * lệch v1↔v2 ở đây chưa từng được kiểm, (b) sau flip #09 vẫn lọc nhóm việc theo v1.
+   * Không dùng `checkPermission()` vì nó tự gọi `auth()`+`resolveActor()` — 9 lần/request
+   * và làm hàm mất tính thuần. Thay vào đó caller resolve `Actor` MỘT lần rồi truyền vào.
+   */
+  can: (action: Action) => boolean;
+}
+
+/** Đóng gói `evaluatePermission` + ghi shadow (fire-and-forget) cho 1 request. */
+function makePermChecker(user: TaskUser, actor: Actor): (action: Action) => boolean {
+  const flagOn = isRbacV2Enabled();
+  return (action) =>
+    evaluatePermission({
+      sessionUser: user,
+      actor,
+      action,
+      flagOn,
+      onEvaluated: ({ v1, v2 }) => {
+        if (v1 !== v2) {
+          void recordPermissionShadow({ action, userId: actor.userId, v1, v2, targetKey: null });
+        }
+      },
+    });
 }
 
 /** Câu 08 — SLA xử lý yêu cầu phụ huynh: 12 giờ. */
@@ -105,7 +135,7 @@ async function classApproval(user: TaskUser, now: Date, cfg: PendingCfg): Promis
 }
 
 async function timesheetAdjust(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  if (!can(user, "hr_attendance:adjust")) return null;
+  if (!cfg.can("hr_attendance:adjust")) return null;
   const { centerScope } = scope(user);
   const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
@@ -132,7 +162,7 @@ async function timesheetAdjust(user: TaskUser, now: Date, cfg: PendingCfg): Prom
 }
 
 async function parentRequest(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  if (!can(user, "parent-requests:manage")) return null;
+  if (!cfg.can("parent-requests:manage")) return null;
   const { centerScope } = scope(user);
   // Câu 08 — SLA yêu cầu phụ huynh là 12h (KHÔNG dùng staleDays chung của dashboard).
   const staleBefore = new Date(now.getTime() - PARENT_REQUEST_SLA_MS);
@@ -160,7 +190,7 @@ async function parentRequest(user: TaskUser, now: Date, cfg: PendingCfg): Promis
 }
 
 async function mediaApproval(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  if (!can(user, "media:approve")) return null;
+  if (!cfg.can("media:approve")) return null;
   const { centerScope } = scope(user);
   const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
@@ -333,8 +363,8 @@ async function centerChecklist(user: TaskUser, now: Date, cfg: PendingCfg): Prom
 }
 
 async function leadFollowup(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  const canAll = can(user, "leads:view-all");
-  const canOwn = can(user, "leads:view-own");
+  const canAll = cfg.can("leads:view-all");
+  const canOwn = cfg.can("leads:view-own");
   if (!canAll && !canOwn) return null;
   const { isSuper, isCM } = scope(user);
   const centerScope = isCM && !isSuper ? (user.centerId ?? null) : null;
@@ -378,8 +408,8 @@ async function leadFollowup(user: TaskUser, now: Date, cfg: PendingCfg): Promise
 }
 
 async function renewal(user: TaskUser, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  const canAll = can(user, "enrollments:view-all");
-  if (!canAll && !can(user, "enrollments:view-own")) return null;
+  const canAll = cfg.can("enrollments:view-all");
+  if (!canAll && !cfg.can("enrollments:view-own")) return null;
   const { isSuper, isCM } = scope(user);
   const centerScope = isCM && !isSuper ? (user.centerId ?? null) : null;
 
@@ -495,8 +525,8 @@ async function classNoTeacher(user: TaskUser, now: Date, cfg: PendingCfg): Promi
 
 async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   // Câu 38 — khách đã "Đã đăng ký" (REGISTERED) nhưng chưa chốt ghi danh quá lâu.
-  const canAll = can(user, "leads:view-all");
-  const canOwn = can(user, "leads:view-own");
+  const canAll = cfg.can("leads:view-all");
+  const canOwn = cfg.can("leads:view-own");
   if (!canAll && !canOwn) return null;
   const { isSuper, isCM } = scope(user);
   const centerScope = isCM && !isSuper ? (user.centerId ?? null) : null;
@@ -535,13 +565,17 @@ async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Prom
  * Gom mọi loại việc cần xử lý theo quyền + cơ sở của user. Trả về các nhóm
  * (chỉ nhóm user có quyền), sắp xếp nhóm có việc QUÁ HẠN lên đầu.
  */
-export async function getPendingTasks(user: TaskUser): Promise<PendingTaskGroup[]> {
+export async function getPendingTasks(user: TaskUser, actor: Actor): Promise<PendingTaskGroup[]> {
   const now = new Date();
   const [itemLimit, staleDays] = await Promise.all([
     getSetting("dashboard.pendingItemLimit"),
     getSetting("dashboard.pendingStaleDays"),
   ]);
-  const cfg: PendingCfg = { itemLimit, staleMs: staleDays * 86400000 };
+  const cfg: PendingCfg = {
+    itemLimit,
+    staleMs: staleDays * 86400000,
+    can: makePermChecker(user, actor),
+  };
   const groups = await Promise.all([
     classApproval(user, now, cfg),
     timesheetAdjust(user, now, cfg),

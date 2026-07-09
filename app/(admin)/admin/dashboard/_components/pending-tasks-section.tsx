@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { CheckCircle2, AlertTriangle, ClipboardList } from "lucide-react";
+import { resolveActor } from "@/lib/auth/actor";
 import { getPendingTasks, summarizePendingTasks, type TaskUser } from "@/lib/pending-tasks";
 
 // Module nhắc việc PHẦN 2 — khu "Cần xử lý" trên dashboard (server component).
 export async function PendingTasksSection({ user }: { user: TaskUser }) {
-  const groups = await getPendingTasks(user);
+  // Actor resolve 1 lần/request (React.cache) → lọc nhóm việc theo cờ RBAC_V2 + sinh shadow.
+  const groups = await getPendingTasks(user, await resolveActor(user.id));
   if (groups.length === 0) return null;
 
   const { total, overdue } = summarizePendingTasks(groups);

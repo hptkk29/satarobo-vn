@@ -10,6 +10,7 @@
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb } from "../_helpers/seed";
+import { resolveActorUncached } from "../../../lib/auth/actor";
 import { getPendingTasks, type TaskUser } from "../../../lib/pending-tasks";
 
 const CS1 = "CS1";
@@ -106,7 +107,8 @@ const manager = (id: string, centerId: string): TaskUser => ({
 });
 
 async function milestoneGroup(user: TaskUser) {
-  const groups = await getPendingTasks(user);
+  // Actor thật từ DB (user không có UserOrgRole → v2 rỗng quyền; cờ OFF nên v1 quyết định).
+  const groups = await getPendingTasks(user, await resolveActorUncached(user.id));
   return groups.find((g) => g.type === "report_card_milestone") ?? null;
 }
 

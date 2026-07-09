@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
 import { getPendingTasks, type TaskUser } from "@/lib/pending-tasks";
 
 // =============================================================================
@@ -23,7 +24,8 @@ type Desired = { dedupeKey: string; category: string; title: string; body: strin
 
 /** Đồng bộ thông báo cho user từ việc cần xử lý hiện tại. Trả về số chưa đọc. */
 export async function syncStaffNotifications(user: TaskUser): Promise<number> {
-  const groups = await getPendingTasks(user);
+  // Chuông gọi từ route handler (có request context) → resolveActor cache theo request.
+  const groups = await getPendingTasks(user, await resolveActor(user.id));
 
   const desired: Desired[] = [];
   for (const g of groups) {

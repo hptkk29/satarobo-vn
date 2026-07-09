@@ -188,7 +188,7 @@ test.describe("[#10] Dashboard đa vai trò — cách ly cơ sở panel Quản l
     await makeUser("cm1-pend", "CS1", "CENTER_MANAGER"); // gán RoleDef (legacy can() dùng role)
     cmCs1Id = (await db.user.findUnique({ where: { email: testEmail("cm1-pend") }, select: { id: true } }))!.id;
     const taskUser: TaskUser = { id: cmCs1Id, role: "CENTER_MANAGER", centerId: c1 };
-    const groups = await getPendingTasks(taskUser);
+    const groups = await getPendingTasks(taskUser, await resolveActorUncached(cmCs1Id));
     const by = (t: string) => groups.find((g) => g.type === t);
 
     expect(by("class_no_teacher")?.count).toBe(1);
