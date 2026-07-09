@@ -1,16 +1,17 @@
 // app/(teacher)/teacher/lich/page.tsx — L6: "Lịch dạy" (phiếu GV câu 47).
 //
 // Buổi dạy trong khoảng [hôm nay−3, hôm nay+28] (giờ VN), gom theo NGÀY. Lọc theo
-// actor.assignedClassIds (lớp GV được phân) qua scopedDb — KHÔNG theo cơ sở. Có kèm
-// buổi GV dạy thay/thực dạy (substituteTeacherId/actualTeacherId = userId) TRONG các
-// cơ sở GV nhìn thấy (scopedDb vẫn cách ly cơ sở; buổi dạy bù LIÊN cơ sở nằm ngoài
-// slice này — cần luồng makeup-exception, xem deviation).
+// actor.assignedClassIds (lớp GV được phân) HOẶC buổi GV dạy thay/thực dạy
+// (substituteTeacherId/actualTeacherId = userId). Đọc qua withMakeupException:
+// ClassSession ∈ MAKEUP_EXCEPTION_MODELS → GV dạy bù LIÊN CƠ SỞ thấy đúng buổi ở cơ sở
+// khác (câu 47 "dạy nhiều cơ sở OK"). An toàn: WHERE khoá theo assignedClassIds/userId
+// nên chỉ lộ buổi CỦA CHÍNH GV, không phải toàn bộ buổi cơ sở khác.
 //
 // ⚠️ Câu 46: KHÔNG hiển thị SĐT/email/contact phụ huynh — chỉ thông tin lớp + buổi.
 import type { SessionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { withMakeupException } from "@/lib/db-scope";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 import type { VariantProps } from "class-variance-authority";
 import { Badge, badgeVariants } from "@/components/ui/badge";
@@ -74,14 +75,14 @@ export default async function TeacherSchedulePage() {
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
   const actor = await resolveActor(session.user.id);
-  const sdb = scopedDb(actor);
+  const sdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
   const assigned = new Set(classIds);
   const { from, to } = vnScheduleRange();
 
-  // Buổi của lớp mình HOẶC buổi mình dạy thay/thực dạy (userId). scopedDb vẫn ép
-  // cách ly cơ sở (ClassSession ∈ SCOPED_MODELS) nên buổi dạy thay chỉ hiện trong
-  // cơ sở GV nhìn thấy — dạy bù LIÊN cơ sở ngoài phạm vi slice này.
+  // Buổi của lớp mình HOẶC buổi mình dạy thay/thực dạy (userId). withMakeupException
+  // bỏ lọc cơ sở cho ClassSession (∈ MAKEUP_EXCEPTION_MODELS) → buổi dạy bù/thay ở cơ
+  // sở khác hiện đúng. WHERE khoá theo assignedClassIds/userId nên chỉ buổi CỦA GV.
   const sessions = await sdb.classSession.findMany({
     where: {
       date: { gte: from, lt: to },
@@ -127,7 +128,7 @@ export default async function TeacherSchedulePage() {
         <h1 className="text-2xl font-bold text-neutral-900">Lịch dạy</h1>
         <p className="mt-1 text-sm text-neutral-500">
           Buổi dạy của bạn từ {DAYS_BACK} ngày trước đến {DAYS_FORWARD} ngày tới — gồm cả
-          buổi dạy thay trong cơ sở của bạn.
+          buổi dạy thay và dạy bù, kể cả ở cơ sở khác.
         </p>
       </div>
 
