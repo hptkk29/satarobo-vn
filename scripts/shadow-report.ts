@@ -104,6 +104,23 @@ async function main() {
     LIMIT 25
   `;
 
+  // ── 3b. Lệch theo NGƯỜI — phân biệt "seed thiếu action" với "actor thiếu UserOrgRole" ──
+  // Không có mục này thì mọi lệch v1=true/v2=false trông giống nhau, trong khi nguyên
+  // nhân phổ biến nhất lại là actor rỗng quyền ở v2 (chưa được gán UserOrgRole).
+  const byUser = await db.$queryRaw<
+    { userId: string; email: string | null; so_lech: number; actions: string }[]
+  >`
+    SELECT d."userId", u.email,
+           COUNT(*)::int AS so_lech,
+           string_agg(DISTINCT d.action, ', ') AS actions
+    FROM "RbacShadowDiff" d
+    LEFT JOIN "User" u ON u.id = d."userId"
+    WHERE d."createdAt" >= ${since}
+    GROUP BY d."userId", u.email
+    ORDER BY so_lech DESC
+    LIMIT 20
+  `;
+
   const [{ tong, cu_nhat, moi_nhat }] = await db.$queryRaw<
     { tong: number; cu_nhat: Date | null; moi_nhat: Date | null }[]
   >`SELECT COUNT(*)::int AS tong, MIN("createdAt") AS cu_nhat, MAX("createdAt") AS moi_nhat
@@ -153,20 +170,35 @@ async function main() {
   if (byAction.length === 0) {
     out.push("Không có lệch.");
   } else {
-    out.push("| action | v1 | v2 | thiếu target | số lệch | số user | phân loại gợi ý |");
-    out.push("|---|:--:|:--:|:--:|---:|---:|---|");
+    out.push("| action | v1 | v2 | thiếu target | số lệch | số user |");
+    out.push("|---|:--:|:--:|:--:|---:|---:|");
     for (const r of byAction) {
-      const hint =
-        r.v1 && !r.v2 && r.thieu_target
-          ? "gate check trước khi có target → sửa call-site truyền `target`"
-          : r.v1 && !r.v2
-            ? "seed v2 thiếu action cho role → sửa `seed-roles.ts` + re-seed + TRUNCATE"
-            : "v2 rộng hơn v1 → soi `lib/auth/can.ts`";
       out.push(
         `| \`${r.action}\` | ${r.v1 ? "✔" : "✘"} | ${r.v2 ? "✔" : "✘"} | ${r.thieu_target ? "✔" : "✘"} |` +
-          ` ${r.so_lech} | ${r.so_user} | ${hint} |`,
+          ` ${r.so_lech} | ${r.so_user} |`,
       );
     }
+    out.push("");
+    out.push("> Đọc mục 3b TRƯỚC khi kết luận. `v1=true, v2=false` có 3 nguyên nhân khác hẳn nhau:");
+    out.push("> (a) actor chưa có `UserOrgRole` → v2 rỗng quyền (phổ biến nhất, xem cột *thiếu UserOrgRole*);");
+    out.push("> (b) `seed-roles.ts` thiếu action cho role → sửa seed + re-seed + TRUNCATE;");
+    out.push("> (c) gate check chạy trước khi có `target` ở action CENTER-scope → sửa call-site truyền `target`.");
+  }
+  out.push("");
+
+  out.push(`### 3b. Lệch theo người (trong ${WINDOW_DAYS} ngày)`);
+  if (byUser.length === 0) {
+    out.push("Không có lệch.");
+  } else {
+    const gapIds = new Set(coverage.map((u) => u.id));
+    out.push("| email | thiếu UserOrgRole | số lệch | action |");
+    out.push("|---|:--:|---:|---|");
+    for (const r of byUser) {
+      const gap = gapIds.has(r.userId);
+      out.push(`| ${r.email ?? `(userId ${r.userId})`} | ${gap ? "🔴 CÓ" : "—"} | ${r.so_lech} | ${r.actions} |`);
+    }
+    out.push("");
+    out.push("> Dòng có 🔴: lệch chỉ vì actor rỗng quyền ở v2. Gán `UserOrgRole` xong là hết — **không** phải sửa seed/call-site.");
   }
   out.push("");
 
