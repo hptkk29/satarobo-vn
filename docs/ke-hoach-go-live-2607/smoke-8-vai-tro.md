@@ -14,6 +14,18 @@ không thấy được:
 - **`assignedClassIds`** cho GV;
 - **`resolveActor`** đọc đúng `UserOrgRole` vừa gán.
 
+## 0.1 ⚠️ Đọc kết quả cho đúng: smoke chạy khi `RBAC_V2_ENABLED=false`
+
+Đó là chủ ý — v1 phục vụ người dùng, v2 chạy ngầm để so. Hệ quả khi đọc kết quả:
+
+- **S1–S10 (trang vào được / bị chặn) đang kiểm v1, KHÔNG kiểm v2.** Nếu v2 sai, trang vẫn mở bình
+  thường và bạn **không thấy gì** — sai sót chỉ hiện ra dưới dạng một dòng `RbacShadowDiff`.
+  ⇒ Giá trị của S1–S10 là **ép `checkPermission()` chạy** để v1↔v2 được đối chiếu.
+  ⇒ **Tiêu chí PASS là số dòng lệch = 0**, không phải "mở được trang".
+- **C1–C6 (cách ly) kiểm thật.** `scopedDb` đọc `UserOrgRole` qua `resolveActor`, **không phụ thuộc cờ**.
+  Cách ly sai ở đây là sai ngay hôm nay, không đợi flip.
+- Vì cờ tắt nên smoke **an toàn**: một quyền v2 thiếu sẽ thành dòng lệch, không thành người bị khoá.
+
 ## 1. Vạch xuất phát (làm đúng thứ tự)
 
 - [ ] Workflow **Seed Production RolePermission** → `✅ Seeded 14 RoleDef`
