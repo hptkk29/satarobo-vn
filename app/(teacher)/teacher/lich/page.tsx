@@ -11,6 +11,7 @@ import type { SessionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 import type { VariantProps } from "class-variance-authority";
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import {
@@ -19,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { SessionActions } from "./_components/session-actions";
 
 export const metadata = { title: "Lịch dạy | Giáo viên Sata Robo" };
 
@@ -95,11 +97,15 @@ export default async function TeacherSchedulePage() {
       date: true,
       topic: true,
       status: true,
+      lessonId: true, // #06 — có bài giảng → hiện "Đề xuất sửa giáo án"
       class: { select: { name: true, startTime: true, endTime: true } },
     },
     orderBy: { date: "asc" },
     take: 500,
   });
+
+  // #06 — gate "Hoàn tất buổi" (lifecycle v2). Đọc 1 lần, truyền xuống card.
+  const lifecycleV2 = isSessionLifecycleV2Enabled();
 
   // Gom theo NGÀY (giờ VN), giữ thứ tự tăng dần (query đã orderBy date asc).
   const groups: { key: string; label: string; sessions: typeof sessions }[] = [];
@@ -160,6 +166,12 @@ export default async function TeacherSchedulePage() {
                         {s.topic && (
                           <p className="mt-0.5 text-sm text-neutral-500">{s.topic}</p>
                         )}
+                        <SessionActions
+                          sessionId={s.id}
+                          status={s.status}
+                          hasLesson={s.lessonId != null}
+                          lifecycleV2={lifecycleV2}
+                        />
                       </CardContent>
                     </Card>
                   );
