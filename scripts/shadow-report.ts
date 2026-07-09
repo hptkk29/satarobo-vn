@@ -1,0 +1,196 @@
+/**
+ * scripts/shadow-report.ts — #01 báo cáo shadow-compare RBAC v1↔v2. CHỈ ĐỌC.
+ *
+ *   pnpm exec tsx scripts/shadow-report.ts            # cửa sổ 7 ngày (mặc định)
+ *   SHADOW_WINDOW_DAYS=5 pnpm exec tsx scripts/shadow-report.ts
+ *
+ * In ra Markdown (stdout) để đổ thẳng vào $GITHUB_STEP_SUMMARY:
+ *   1. Preflight coverage — nhân viên thiếu UserOrgRole ACTIVE (v2 sẽ deny sạch).
+ *   2. Lệch theo ngày (giờ VN) + chi tiết theo action trong cửa sổ.
+ *   3. Cổng flip #09 — khớp `isSafeToEnableRbacV2()` (lib/auth/shadow-report.ts).
+ *
+ * KHÔNG ghi gì vào DB. Reset đồng hồ (TRUNCATE) làm tay theo runbook, không ở đây.
+ * Cảnh báo (::warning::) đi ra stderr để summary sạch.
+ */
+import { PrismaClient } from "@prisma/client";
+
+const db = new PrismaClient();
+
+const WINDOW_DAYS = Number(process.env.SHADOW_WINDOW_DAYS ?? 7);
+const TZ = "Asia/Ho_Chi_Minh";
+
+type CoverageRow = { id: string; email: string; role: string; roles: string[] };
+type DayRow = { ngay: string; so_lech: number; so_user: number };
+type ActionRow = {
+  action: string;
+  v1: boolean;
+  v2: boolean;
+  thieu_target: boolean;
+  so_lech: number;
+  so_user: number;
+};
+
+/** Ngày hiện tại theo giờ VN, dạng YYYY-MM-DD (không phụ thuộc TZ của runner). */
+function vnToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function shiftDay(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Số ngày VN TRỌN VẸN liên tiếp (không tính hôm nay) không có dòng lệch nào. */
+function cleanStreak(daysWithDiff: Set<string>): number {
+  let streak = 0;
+  let cursor = shiftDay(vnToday(), -1);
+  while (!daysWithDiff.has(cursor) && streak < 30) {
+    streak += 1;
+    cursor = shiftDay(cursor, -1);
+  }
+  return streak;
+}
+
+async function main() {
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  // ── 1. Preflight: nhân viên (≠ PARENT) chưa có UserOrgRole ACTIVE ──────────
+  // v2 (lib/auth/actor.ts) lấy quyền DUY NHẤT từ UserOrgRole → RoleDef →
+  // RolePermission. Thiếu dòng này ⇒ v2 = false mọi action ⇒ lệch giả tràn bảng,
+  // và sau flip #09 người đó mất sạch quyền.
+  const coverage = await db.$queryRaw<CoverageRow[]>`
+    SELECT u.id, u.email, u.role::text AS role, u.roles::text[] AS roles
+    FROM "User" u
+    WHERE u."deletedAt" IS NULL
+      AND u."isActive" = true
+      AND NOT (u.roles <@ ARRAY['PARENT']::"Role"[])
+      AND NOT EXISTS (
+        SELECT 1 FROM "UserOrgRole" r
+        WHERE r."userId" = u.id
+          AND r.status = 'ACTIVE'
+          AND r."effectiveFrom" <= now()
+          AND (r."effectiveTo" IS NULL OR r."effectiveTo" >= now())
+      )
+    ORDER BY u.email
+  `;
+
+  // ── 2. Lệch theo ngày VN (toàn bộ bảng, để thấy đồng hồ) ───────────────────
+  const byDay = await db.$queryRaw<DayRow[]>`
+    SELECT to_char("createdAt" AT TIME ZONE ${TZ}, 'YYYY-MM-DD') AS ngay,
+           COUNT(*)::int AS so_lech,
+           COUNT(DISTINCT "userId")::int AS so_user
+    FROM "RbacShadowDiff"
+    GROUP BY 1
+    ORDER BY 1 DESC
+    LIMIT 14
+  `;
+
+  // ── 3. Chi tiết theo action trong cửa sổ (để phân loại theo runbook C3) ────
+  const byAction = await db.$queryRaw<ActionRow[]>`
+    SELECT action, v1, v2,
+           ("targetKey" IS NULL) AS thieu_target,
+           COUNT(*)::int AS so_lech,
+           COUNT(DISTINCT "userId")::int AS so_user
+    FROM "RbacShadowDiff"
+    WHERE "createdAt" >= ${since}
+    GROUP BY 1, 2, 3, 4
+    ORDER BY so_lech DESC
+    LIMIT 25
+  `;
+
+  const [{ tong, cu_nhat, moi_nhat }] = await db.$queryRaw<
+    { tong: number; cu_nhat: Date | null; moi_nhat: Date | null }[]
+  >`SELECT COUNT(*)::int AS tong, MIN("createdAt") AS cu_nhat, MAX("createdAt") AS moi_nhat
+    FROM "RbacShadowDiff"`;
+
+  const windowTotal = byAction.reduce((s, r) => s + r.so_lech, 0);
+  const streak = cleanStreak(new Set(byDay.map((d) => d.ngay)));
+  const coverageOk = coverage.length === 0;
+  const gateOk = windowTotal === 0;
+
+  // ── In Markdown ────────────────────────────────────────────────────────────
+  const out: string[] = [];
+  out.push(`## Shadow-compare RBAC v1↔v2 — cửa sổ ${WINDOW_DAYS} ngày`);
+  out.push("");
+  out.push(`- Tổng dòng trong bảng: **${tong}**`);
+  out.push(`- Cũ nhất: \`${cu_nhat?.toISOString() ?? "—"}\` · Mới nhất: \`${moi_nhat?.toISOString() ?? "—"}\``);
+  out.push(`- Lệch trong cửa sổ: **${windowTotal}**`);
+  out.push(`- Ngày VN trọn vẹn liên tiếp sạch (không tính hôm nay): **${streak}**`);
+  out.push("");
+
+  out.push(`### 1. Preflight — nhân viên thiếu \`UserOrgRole\` ACTIVE`);
+  if (coverageOk) {
+    out.push("✅ Không có ai. v2 resolve được quyền cho mọi nhân viên.");
+  } else {
+    out.push(
+      `🔴 **${coverage.length} người** — v2 deny sạch với họ. ĐỒNG HỒ KHÔNG HỢP LỆ cho tới khi gán xong,` +
+        ` và flip #09 sẽ KHOÁ những tài khoản này.`,
+    );
+    out.push("");
+    out.push("| email | role (v1) | roles[] |");
+    out.push("|---|---|---|");
+    for (const u of coverage) out.push(`| ${u.email} | ${u.role} | ${u.roles.join(", ")} |`);
+  }
+  out.push("");
+
+  out.push("### 2. Lệch theo ngày (giờ VN)");
+  if (byDay.length === 0) {
+    out.push("Bảng trống. ⚠️ Trống vì *không ai dùng prod* ≠ đã kiểm chứng — xem mục traffic trong plan #01.");
+  } else {
+    out.push("| ngày | số lệch | số user |");
+    out.push("|---|---:|---:|");
+    for (const d of byDay) out.push(`| ${d.ngay} | ${d.so_lech} | ${d.so_user} |`);
+  }
+  out.push("");
+
+  out.push(`### 3. Chi tiết theo action (trong ${WINDOW_DAYS} ngày)`);
+  if (byAction.length === 0) {
+    out.push("Không có lệch.");
+  } else {
+    out.push("| action | v1 | v2 | thiếu target | số lệch | số user | phân loại gợi ý |");
+    out.push("|---|:--:|:--:|:--:|---:|---:|---|");
+    for (const r of byAction) {
+      const hint =
+        r.v1 && !r.v2 && r.thieu_target
+          ? "gate check trước khi có target → sửa call-site truyền `target`"
+          : r.v1 && !r.v2
+            ? "seed v2 thiếu action cho role → sửa `seed-roles.ts` + re-seed + TRUNCATE"
+            : "v2 rộng hơn v1 → soi `lib/auth/can.ts`";
+      out.push(
+        `| \`${r.action}\` | ${r.v1 ? "✔" : "✘"} | ${r.v2 ? "✔" : "✘"} | ${r.thieu_target ? "✔" : "✘"} |` +
+          ` ${r.so_lech} | ${r.so_user} | ${hint} |`,
+      );
+    }
+  }
+  out.push("");
+
+  out.push("### Cổng flip #09");
+  const verdict = !coverageOk
+    ? "🔴 **CHẶN** — preflight coverage đỏ, đồng hồ chưa được phép chạy."
+    : gateOk
+      ? `🟢 lệch = 0 trong cửa sổ. Cần **3–5 ngày sạch liên tiếp có traffic thật** (hiện: ${streak}).`
+      : `🔴 còn **${windowTotal}** lệch — phân loại theo bảng trên, sửa xong thì TRUNCATE và đếm lại.`;
+  out.push(verdict);
+
+  console.log(out.join("\n"));
+
+  if (!coverageOk) {
+    console.error(`::warning::Preflight ĐỎ — ${coverage.length} nhân viên thiếu UserOrgRole ACTIVE`);
+  }
+  if (!gateOk) {
+    console.error(`::warning::Còn ${windowTotal} lệch shadow trong ${WINDOW_DAYS} ngày — chưa đủ điều kiện flip #09`);
+  }
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => void db.$disconnect());

@@ -15,7 +15,13 @@
 // không suy được cơ sở → SKIP + cảnh báo (không đoán bừa HO).
 //
 // AN TOÀN PROD: idempotent (upsert theo khoá composite), KHÔNG xoá/không reset
-// RolePermission, KHÔNG sửa User.centerId. Chạy: `pnpm exec tsx prisma/patch-rbac-staff.ts`
+// RolePermission, KHÔNG sửa User.centerId.
+//
+//   pnpm exec tsx prisma/patch-rbac-staff.ts            # DRY-RUN (mặc định, không ghi)
+//   pnpm exec tsx prisma/patch-rbac-staff.ts --apply    # thực thi
+//
+// Dry-run KHÔNG gọi seedOrgUnits / upsert RoleDef (cả hai đều ghi) — chỉ đọc và in
+// kế hoạch. Prod đã có cây OrgUnit (A0) + 14 RoleDef (seed-prod-roles) nên đọc đủ.
 import { PrismaClient } from "@prisma/client";
 import { seedOrgUnits } from "./seed-orgunit";
 
@@ -40,18 +46,24 @@ const LEGACY_TO_ROLEDEF: Record<string, Mapping> = {
   TRAINING: { roleCode: "TRAINING", org: "HO" },
 };
 
+const APPLY = process.argv.includes("--apply");
+
 async function main() {
-  console.log("🔧 K1 patch: gán UserOrgRole cho tài khoản thật…");
+  console.log(`🔧 K1 patch: gán UserOrgRole cho tài khoản thật… [${APPLY ? "APPLY" : "DRY-RUN"}]`);
 
-  await seedOrgUnits(db);
+  if (APPLY) {
+    await seedOrgUnits(db);
 
-  // RoleDef TRAINING chưa có trong seed-roles (11 role) — upsert tối thiểu để
-  // Đào tạo có scope HO-level; RolePermission của TRAINING do vé H5 bổ sung.
-  await db.roleDef.upsert({
-    where: { code: "TRAINING" },
-    update: { isActive: true },
-    create: { code: "TRAINING", name: "Đào tạo (toàn LMS)" },
-  });
+    // RoleDef TRAINING chưa có trong seed-roles (11 role) — upsert tối thiểu để
+    // Đào tạo có scope HO-level; RolePermission của TRAINING do vé H5 bổ sung.
+    await db.roleDef.upsert({
+      where: { code: "TRAINING" },
+      update: { isActive: true },
+      create: { code: "TRAINING", name: "Đào tạo (toàn LMS)" },
+    });
+  } else {
+    console.log("🔎 DRY-RUN — không ghi gì vào DB. Thêm --apply để thực thi.\n");
+  }
 
   const orgs = await db.orgUnit.findMany({
     where: { deletedAt: null },
@@ -103,6 +115,17 @@ async function main() {
       const existing = await db.userOrgRole.findUnique({
         where: { userId_orgUnitId_roleId: { userId: u.id, orgUnitId: target.id, roleId } },
       });
+      // upsert.update kích hoạt lại dòng đã REVOKED/hết hạn → đó cũng là một lượt GHI,
+      // dry-run phải nêu ra (đừng để nó ẩn dưới nhãn "giữ nguyên").
+      const willReactivate = !!existing && (existing.status !== "ACTIVE" || existing.effectiveTo !== null);
+      if (existing && !willReactivate) { kept++; continue; }
+
+      const label = willReactivate ? `${roleCode} @ ${target.code} (KÍCH HOẠT LẠI)` : `${roleCode} @ ${target.code}`;
+      if (!APPLY) {
+        created++;
+        console.log(`  [dry] ${u.email} → ${label}`);
+        continue;
+      }
       await db.userOrgRole.upsert({
         where: { userId_orgUnitId_roleId: { userId: u.id, orgUnitId: target.id, roleId } },
         update: { status: "ACTIVE", effectiveTo: null },
@@ -111,12 +134,16 @@ async function main() {
           grantedById: u.id, // nguồn cấp = script K1 (như tiền lệ patch-rbac-admins)
         },
       });
-      if (existing) kept++;
-      else { created++; console.log(`  ✓ ${u.email} → ${roleCode} @ ${target.code}`); }
+      created++;
+      console.log(`  ✓ ${u.email} → ${label}`);
     }
   }
 
-  console.log(`✅ Tạo mới ${created} · giữ nguyên ${kept} UserOrgRole.`);
+  console.log(
+    APPLY
+      ? `✅ Tạo mới ${created} · giữ nguyên ${kept} UserOrgRole.`
+      : `🔎 DRY-RUN: sẽ ghi ${created} · giữ nguyên ${kept} UserOrgRole. Chạy lại với --apply để thực thi.`,
+  );
   if (skipped.length) {
     console.warn("⚠️  Bỏ qua (cần người quyết):");
     for (const s of skipped) console.warn(`  - ${s}`);

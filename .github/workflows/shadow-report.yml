@@ -1,0 +1,69 @@
+name: Shadow-compare report (read-only)
+
+# =============================================================================
+# Báo cáo lệch RBAC v1↔v2 trên Supabase PROD — CHỈ ĐỌC, không ghi/không TRUNCATE.
+#
+# Đây là bước C1/C2 hằng ngày của task #01 (docs/ke-hoach-go-live-2607/
+# runbook-prod-flip-prereq.md §4). Thay cho việc mở SQL Editor mỗi sáng — cũng
+# để tránh gõ nhầm TRUNCATE vào project DEV.
+#
+# Chạy tay: Actions → "Shadow-compare report (read-only)" → Run workflow.
+# Kết quả nằm ở Summary của run (bảng lệch theo ngày + theo action + cổng flip).
+#
+# Job LUÔN xanh nếu kết nối được — "đỏ" của cổng flip hiện dưới dạng ::warning::
+# và trong Summary, không phải exit code. Chỉ đỏ khi thiếu secret / không kết nối.
+#
+# SECRETS (dùng chung với deploy.yml): PROD_DATABASE_URL / PROD_DIRECT_URL.
+# Dùng PROD_DIRECT_URL (session pooler :5432) để tránh quirk prepared-statement
+# của transaction pooler — giống seed-prod-roles.yml.
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Cửa sổ đếm lệch (ngày) — cổng flip dùng 7"
+        required: false
+        default: "7"
+
+concurrency:
+  group: shadow-report
+  cancel-in-progress: true
+
+jobs:
+  report:
+    name: RbacShadowDiff report (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secrets prod (fail sớm)
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Shadow report
+        # pipefail: nếu tsx chết thì job đỏ (tee sẽ nuốt exit code nếu không có).
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/shadow-report.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          SHADOW_WINDOW_DAYS: ${{ inputs.days }}
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

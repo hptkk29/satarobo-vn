@@ -1,0 +1,85 @@
+name: Patch UserOrgRole cho nhân sự (prod)
+
+# =============================================================================
+# Gán UserOrgRole cho tài khoản nhân viên thật trên Supabase PROD
+# (prisma/patch-rbac-staff.ts) — điều kiện tiên quyết của task #01: v2 lấy quyền
+# DUY NHẤT từ UserOrgRole, thiếu dòng này thì shadow-compare lệch giả và flip #09
+# sẽ khoá tài khoản đó ra ngoài.
+#
+# MẶC ĐỊNH DRY-RUN — in kế hoạch, không ghi gì. Muốn ghi thật phải chọn
+# mode=apply VÀ gõ đúng chuỗi xác nhận. Script idempotent (upsert theo khoá
+# composite), không xoá, không reset RolePermission, không sửa User.centerId.
+#
+# ⚠️ Ghi xong là ĐỔI HÀNH VI v2 ⇒ theo quy tắc vàng của runbook phải
+# TRUNCATE "RbacShadowDiff" và đếm lại đồng hồ ngày sạch từ đầu.
+#
+# SECRETS: PROD_DATABASE_URL / PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run = chỉ in kế hoạch · apply = ghi thật"
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      confirm:
+        description: 'Khi mode=apply: gõ đúng "GHI THAT VAO PROD"'
+        required: false
+        default: ""
+
+concurrency:
+  group: patch-rbac-staff
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    name: patch-rbac-staff (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::mode=apply nhưng chuỗi xác nhận sai — dừng, không ghi gì."
+            missing=1
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Chạy patch
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            pnpm exec tsx prisma/patch-rbac-staff.ts --apply | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            pnpm exec tsx prisma/patch-rbac-staff.ts | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          # session pooler (:5432) — tránh quirk prepared-statement của transaction pooler
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Nhắc reset đồng hồ
+        if: ${{ inputs.mode == 'apply' }}
+        run: |
+          echo '::warning::Đã ghi UserOrgRole → hành vi v2 thay đổi. TRUNCATE "RbacShadowDiff" và đếm lại ngày sạch từ đầu (docs/ke-hoach-go-live-2607/shadow-log.md).'
