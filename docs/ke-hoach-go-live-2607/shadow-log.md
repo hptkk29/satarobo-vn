@@ -84,7 +84,14 @@ Thiếu QL cơ sở / Sale-CSM / Kế toán / HR / Marketing ⇒ đồng hồ s�
       → có `RbacAuditLog` + reason); hoặc chạy lại patch (idempotent, suy cơ sở qua `centerId`).
 - [ ] Chạy lại report → P1 = 0 dòng.
 - [ ] `TRUNCATE "RbacShadowDiff";` → ghi mốc bấm đồng hồ vào bảng "Trạng thái" ở trên.
-      **Sau mốc này, mọi lần tạo tài khoản / gán role đều reset đồng hồ.**
+
+**Khi nào PHẢI reset đồng hồ (làm rõ — bản 09/07 trước đó viết quá tay):**
+
+| Thay đổi | Reset? | Vì sao |
+|---|---|---|
+| Sửa `seed-roles.ts` / `can.ts` / `permissions.ts` | **Có** | Đổi mapping role→permission cho mọi người ⇒ quan sát cũ vô nghĩa |
+| Thêm user vào role × đơn vị **đã** có tài khoản thao tác trong cửa sổ | Không | Không sinh dòng lệch nào; mapping không đổi |
+| Thêm role × đơn vị **chưa từng** có tài khoản nào chạy qua | Không (kỹ thuật) | Nhưng ngày sạch cũ **không chứng minh gì** cho tổ hợp mới ⇒ phủ đủ tổ hợp TRƯỚC khi bấm đồng hồ |
 
 ---
 
