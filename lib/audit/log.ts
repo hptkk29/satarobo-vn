@@ -2,9 +2,43 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { Session } from "next-auth";
 import { db } from "@/lib/db";
 import { getRequestMetadata } from "@/lib/audit/headers";
+import { writeAudit } from "@/lib/audit/audit-log";
 
 type TxClient = Prisma.TransactionClient;
 type DbClient = PrismaClient | TxClient;
+
+// ─── #05 FREEZE-LEGACY (09/07/2026) ──────────────────────────────────────────
+// 5 helper dưới đây (user / grant / lead / class / student) TRƯỚC ĐÂY ghi vào 5 bảng
+// audit riêng. Không UI nào đọc chúng (chỉ `cleanupOldAuditLogs` prune), trong khi viewer
+// hợp nhất `/admin/audit-log` chỉ đọc bảng `AuditLog` ⇒ mọi thao tác trên user/lead/lớp/
+// học viên là VÔ HÌNH với người xem log. Nay chuyển sang `writeAudit` (bảng hợp nhất).
+//
+// Chữ ký helper GIỮ NGUYÊN → 58 call-site không phải sửa. Bảng cũ + dữ liệu cũ giữ lại,
+// đọc qua tab "Lịch sử cũ" (read-only). Chưa freeze: paymentMethod/voucher/product
+// (cấu hình toàn hệ thống, không có orgUnitId để scope) và rbacAuditLog (audit RBAC
+// riêng theo Doc 15, có test a0 phụ thuộc).
+//
+// ⚠️ `queryUnifiedAuditLogs` lọc `orgUnitId IN visibleOrgUnitIds` ⇒ dòng có orgUnitId=null
+// BỊ ẨN với actor cấp cơ sở. Vì vậy mỗi helper phải nạp `orgUnitId` của thực thể.
+
+/** orgUnitId của thực thể, để QL cơ sở nhìn thấy log của cơ sở mình. Null nếu không suy được. */
+async function resolveOrgUnitId(
+  client: DbClient,
+  entity: "user" | "lead" | "class" | "student",
+  id: string,
+): Promise<string | null> {
+  const select = { orgUnitId: true } as const;
+  switch (entity) {
+    case "user":
+      return (await client.user.findUnique({ where: { id }, select }))?.orgUnitId ?? null;
+    case "lead":
+      return (await client.lead.findUnique({ where: { id }, select }))?.orgUnitId ?? null;
+    case "class":
+      return (await client.class.findUnique({ where: { id }, select }))?.orgUnitId ?? null;
+    case "student":
+      return (await client.student.findUnique({ where: { id }, select }))?.orgUnitId ?? null;
+  }
+}
 
 // ─── USER AUDIT ─────────────────────────────────────────────────────
 export type UserAuditAction =
@@ -28,18 +62,20 @@ export async function logUserAudit(params: {
 }) {
   const metadata = await getRequestMetadata();
   const client: DbClient = params.tx ?? db;
-  await client.userAuditLog.create({
-    data: {
-      userId: params.userId,
-      action: params.action,
-      changedByUserId: params.actorId ?? null,
-      changedByName: params.actorName,
-      oldValues: params.oldValues as Prisma.InputJsonValue | undefined,
-      newValues: params.newValues as Prisma.InputJsonValue | undefined,
-      changedFields: params.changedFields ?? [],
-      reason: params.reason ?? null,
-      metadata: metadata as unknown as Prisma.InputJsonValue,
-    },
+  await writeAudit({
+    actor: { id: params.actorId, name: params.actorName },
+    module: "users",
+    entityType: "User",
+    entityId: params.userId,
+    action: `user.${params.action.toLowerCase()}`,
+    oldValues: params.oldValues,
+    newValues: params.newValues,
+    changedFields: params.changedFields,
+    reason: params.reason,
+    orgUnitId: await resolveOrgUnitId(client, "user", params.userId),
+    ip: metadata.ip ?? null,
+    userAgent: metadata.userAgent ?? null,
+    tx: params.tx,
   });
 }
 
@@ -60,19 +96,23 @@ export async function logGrantAudit(params: {
 }) {
   const metadata = await getRequestMetadata();
   const client: DbClient = params.tx ?? db;
-  await client.permissionGrantAuditLog.create({
-    data: {
-      userId: params.userId,
-      grantId: params.grantId ?? null,
-      actionKey: params.actionKey,
-      action: params.action,
-      changedByUserId: params.actorId ?? null,
-      changedByName: params.actorName,
-      oldGrant: params.oldGrant ?? null,
-      newGrant: params.newGrant ?? null,
-      reason: params.reason ?? null,
-      metadata: metadata as unknown as Prisma.InputJsonValue,
-    },
+  // Bảng cũ có cột riêng (grantId/actionKey/oldGrant/newGrant); bảng hợp nhất chỉ có
+  // oldValues/newValues → gói vào JSON, KHÔNG mất thông tin. `changedFields` khai tường
+  // minh vì grant chỉ đổi đúng 1 trường.
+  await writeAudit({
+    actor: { id: params.actorId, name: params.actorName },
+    module: "permissions",
+    entityType: "UserPermissionGrant",
+    entityId: params.grantId ?? params.userId,
+    action: `grant.${params.action.toLowerCase()}`,
+    oldValues: { grant: params.oldGrant ?? null },
+    newValues: { userId: params.userId, actionKey: params.actionKey, grant: params.newGrant ?? null },
+    changedFields: ["grant"],
+    reason: params.reason,
+    orgUnitId: await resolveOrgUnitId(client, "user", params.userId),
+    ip: metadata.ip ?? null,
+    userAgent: metadata.userAgent ?? null,
+    tx: params.tx,
   });
 }
 
@@ -97,18 +137,20 @@ export async function logLeadAudit(params: {
 }) {
   const metadata = await getRequestMetadata();
   const client: DbClient = params.tx ?? db;
-  await client.leadAuditLog.create({
-    data: {
-      leadId: params.leadId,
-      action: params.action,
-      changedByUserId: params.actorId ?? null,
-      changedByName: params.actorName,
-      oldValues: params.oldValues as Prisma.InputJsonValue | undefined,
-      newValues: params.newValues as Prisma.InputJsonValue | undefined,
-      changedFields: params.changedFields ?? [],
-      reason: params.reason ?? null,
-      metadata: metadata as unknown as Prisma.InputJsonValue,
-    },
+  await writeAudit({
+    actor: { id: params.actorId, name: params.actorName },
+    module: "leads",
+    entityType: "Lead",
+    entityId: params.leadId,
+    action: `lead.${params.action.toLowerCase()}`,
+    oldValues: params.oldValues,
+    newValues: params.newValues,
+    changedFields: params.changedFields,
+    reason: params.reason,
+    orgUnitId: await resolveOrgUnitId(client, "lead", params.leadId),
+    ip: metadata.ip ?? null,
+    userAgent: metadata.userAgent ?? null,
+    tx: params.tx,
   });
 }
 
@@ -128,18 +170,20 @@ export async function logClassAudit(params: {
 }) {
   const metadata = await getRequestMetadata();
   const client: DbClient = params.tx ?? db;
-  await client.classAuditLog.create({
-    data: {
-      classId: params.classId,
-      action: params.action,
-      changedByUserId: params.actorId ?? null,
-      changedByName: params.actorName,
-      oldValues: params.oldValues as Prisma.InputJsonValue | undefined,
-      newValues: params.newValues as Prisma.InputJsonValue | undefined,
-      changedFields: params.changedFields ?? [],
-      reason: params.reason ?? null,
-      metadata: metadata as unknown as Prisma.InputJsonValue,
-    },
+  await writeAudit({
+    actor: { id: params.actorId, name: params.actorName },
+    module: "classes",
+    entityType: "Class",
+    entityId: params.classId,
+    action: `class.${params.action.toLowerCase()}`,
+    oldValues: params.oldValues,
+    newValues: params.newValues,
+    changedFields: params.changedFields,
+    reason: params.reason,
+    orgUnitId: await resolveOrgUnitId(client, "class", params.classId),
+    ip: metadata.ip ?? null,
+    userAgent: metadata.userAgent ?? null,
+    tx: params.tx,
   });
 }
 
@@ -159,18 +203,20 @@ export async function logStudentAudit(params: {
 }) {
   const metadata = await getRequestMetadata();
   const client: DbClient = params.tx ?? db;
-  await client.studentAuditLog.create({
-    data: {
-      studentId: params.studentId,
-      action: params.action,
-      changedByUserId: params.actorId ?? null,
-      changedByName: params.actorName,
-      oldValues: params.oldValues as Prisma.InputJsonValue | undefined,
-      newValues: params.newValues as Prisma.InputJsonValue | undefined,
-      changedFields: params.changedFields ?? [],
-      reason: params.reason ?? null,
-      metadata: metadata as unknown as Prisma.InputJsonValue,
-    },
+  await writeAudit({
+    actor: { id: params.actorId, name: params.actorName },
+    module: "students",
+    entityType: "Student",
+    entityId: params.studentId,
+    action: `student.${params.action.toLowerCase()}`,
+    oldValues: params.oldValues,
+    newValues: params.newValues,
+    changedFields: params.changedFields,
+    reason: params.reason,
+    orgUnitId: await resolveOrgUnitId(client, "student", params.studentId),
+    ip: metadata.ip ?? null,
+    userAgent: metadata.userAgent ?? null,
+    tx: params.tx,
   });
 }
 

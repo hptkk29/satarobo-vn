@@ -1,9 +1,11 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ScrollText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { canReadLegacyAudit } from "@/lib/audit/legacy-log";
 import { scopedDb } from "@/lib/db-scope";
 import { AuditLogClient } from "./_components/audit-log-client";
 
@@ -26,7 +28,9 @@ export default async function AuditLogPage() {
   ]);
 
   // User SCOPE_EXEMPT (identity toàn cục) → sdb pass-through, hành vi y nguyên.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const canReadLegacy = canReadLegacyAudit(actor);
+  const sdb = scopedDb(actor);
   const actors = await sdb.user.findMany({
     where: { deletedAt: null },
     select: { id: true, name: true, email: true },
@@ -45,6 +49,16 @@ export default async function AuditLogPage() {
             Nhật ký thay đổi hợp nhất toàn hệ thống. Quản lý cơ sở chỉ thấy log
             cơ sở mình; PII (SĐT/email) che mặc định, xem đầy đủ có kiểm soát.
           </p>
+          {/* #05 freeze-legacy: 5 bảng cũ đóng băng 09/07, chỉ Quản trị/Hội sở đọc được
+              (bản ghi cũ không mang orgUnitId nên không lọc theo cơ sở được). */}
+          {canReadLegacy ? (
+            <Link
+              href="/audit-log/legacy"
+              className="mt-2 inline-block text-sm font-medium text-orange-600 hover:underline"
+            >
+              Xem lịch sử cũ (đọc-only) →
+            </Link>
+          ) : null}
         </div>
       </div>
 
