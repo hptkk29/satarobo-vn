@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 
 // B3 — phụ huynh trả lời khảo sát/NPS cho con đang chọn.
 //
@@ -34,7 +34,8 @@ const schema = z.object({
 export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -42,12 +43,12 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
 
   // KHÔNG tin surveyId từ client: survey phải tồn tại, đang mở (isActive) và trong
   // phạm vi cơ sở của con (centerId null = toàn hệ thống) — chống ghi bẩn KPI CSKH.
-  const student = await db.student.findUnique({
+  const student = await pdb.student.findUnique({
     where: { id: studentId },
     select: { centerId: true, preferredCenterId: true },
   });
   const centerIds = [student?.centerId, student?.preferredCenterId].filter((x): x is string => !!x);
-  const survey = await db.survey.findFirst({
+  const survey = await pdb.survey.findFirst({
     where: {
       id: d.surveyId,
       isActive: true,
@@ -99,20 +100,20 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
   }
 
   // Chống trả lời trùng cùng survey cho 1 con.
-  const dup = await db.surveyResponse.findFirst({
+  const dup = await pdb.surveyResponse.findFirst({
     where: { surveyId: d.surveyId, studentId },
     select: { id: true },
   });
   if (dup) return { ok: false, error: "Bạn đã trả lời khảo sát này rồi." };
 
   // Gắn center/class/teacher/csm để làm cơ sở KPI.
-  const enr = await db.enrollment.findFirst({
+  const enr = await pdb.enrollment.findFirst({
     where: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null }, // FIX-C3
     orderBy: { createdAt: "desc" },
     select: { class: { select: { id: true, centerId: true, teacherId: true } } },
   });
   // CSM phụ trách: lấy từ care task gần nhất (nếu có).
-  const care = await db.studentCareTask.findFirst({
+  const care = await pdb.studentCareTask.findFirst({
     where: { studentId, assignedToId: { not: null } },
     orderBy: { createdAt: "desc" },
     select: { assignedToId: true },
@@ -121,7 +122,7 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
   // Chốt chống trùng bằng UNIQUE (surveyId, studentId) — findFirst ở trên chỉ là
   // pre-check thân thiện, double-submit (2 tab / TOCTOU) sẽ chạm P2002 tại đây.
   try {
-    await db.surveyResponse.create({
+    await pdb.surveyResponse.create({
       data: {
         surveyId: d.surveyId,
         studentId,

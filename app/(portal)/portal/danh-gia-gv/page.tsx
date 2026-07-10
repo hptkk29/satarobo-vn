@@ -1,5 +1,5 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { isEvalV2Enabled } from "@/lib/flags";
 import { isRoundOpen } from "@/lib/eval/rounds";
 import { getEligibleTeacherEvals } from "@/lib/eval/eligibility";
@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Đánh giá giáo viên | Sata Robo", robots: { index: false } };
 
 export default async function DanhGiaGvPage() {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   if (!isEvalV2Enabled()) {
     return (
@@ -24,7 +25,7 @@ export default async function DanhGiaGvPage() {
     );
   }
 
-  const rounds = await db.evaluationRound.findMany({
+  const rounds = await pdb.evaluationRound.findMany({
     where: { scope: "TEACHER_EVAL", status: "OPEN" },
     orderBy: { createdAt: "desc" },
     select: {
@@ -56,7 +57,7 @@ export default async function DanhGiaGvPage() {
     if (eligible.length === 0) continue;
 
     // Loại cặp (enrollment×GV) đã gửi.
-    const existing = await db.evalResponse.findMany({
+    const existing = await pdb.evalResponse.findMany({
       where: { roundId: r.id, studentId },
       select: { enrollmentId: true, teacherId: true },
     });

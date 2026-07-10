@@ -3,9 +3,9 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { portalDb, portalTx } from "@/lib/portal/db";
 import { rateLimit } from "@/lib/rate-limit";
-import { requireActiveStudent, assertOwnsStudent } from "@/lib/portal/session";
+import { requireActiveStudent, assertOwnsStudent, getChildren } from "@/lib/portal/session";
 import { publishEvent } from "@/lib/events/publish";
 
 // Chống spam: trần số yêu cầu ĐANG PENDING / tài khoản phụ huynh (CANCELLED/
@@ -31,6 +31,7 @@ export async function createParentRequest(input: {
   sessionId?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) {
@@ -40,7 +41,7 @@ export async function createParentRequest(input: {
 
   // Chốt server-side chống spam (không tin client):
   // 1) Trần yêu cầu PENDING — chỉ đếm PENDING, yêu cầu đã huỷ/duyệt không tính.
-  const pendingCount = await db.parentRequest.count({
+  const pendingCount = await pdb.parentRequest.count({
     where: { parentUserId: ctx.parentUserId, status: "PENDING" },
   });
   if (pendingCount >= MAX_PENDING_REQUESTS) {
@@ -68,7 +69,7 @@ export async function createParentRequest(input: {
   let sessionId: string | null = null;
   let sessionDate: Date | null = null;
   if (d.type === "ABSENCE" && d.sessionId) {
-    const sess = await db.classSession.findFirst({
+    const sess = await pdb.classSession.findFirst({
       where: {
         id: d.sessionId,
         date: { gte: new Date() },
@@ -99,7 +100,7 @@ export async function createParentRequest(input: {
   // Tạo yêu cầu + phát DomainEvent CÙNG transaction (outbox atomic): rollback nghiệp vụ
   // → không có event; commit → dispatcher báo Sale/QL cơ sở (#08 L8.2). dedupeKey theo
   // requestId → replay/tick lặp không nhân đôi thông báo.
-  await db.$transaction(async (tx) => {
+  await portalTx(async (tx) => {
     const req = await tx.parentRequest.create({
       data: {
         studentId,
@@ -145,7 +146,12 @@ export async function cancelParentRequest(
   if (!parsedId.success) return { ok: false, error: "Dữ liệu không hợp lệ" };
   const requestId = parsedId.data;
 
-  const req = await db.parentRequest.findUnique({
+  // childIds thật từ getChildren (React.cache) → pdb hậu-kiểm ownership ở tầng query
+  // (belt); assertOwnsStudent bên dưới vẫn là guard chính. Record của nhà khác → null
+  // → gộp vào nhánh "Không tìm thấy yêu cầu" (an toàn hơn, không lộ tồn tại).
+  const children = await getChildren(session.user.id);
+  const pdb = portalDb({ parentUserId: session.user.id, childIds: children.map((c) => c.id) });
+  const req = await pdb.parentRequest.findUnique({
     where: { id: requestId },
     select: { studentId: true },
   });
@@ -156,7 +162,8 @@ export async function cancelParentRequest(
 
   // Atomic check-and-update: chỉ huỷ khi CÒN PENDING — tránh race ghi đè
   // APPROVED/REJECTED (admin xử lý giữa lúc đọc và ghi) thành CANCELLED.
-  const updated = await db.parentRequest.updateMany({
+  // updateMany là WRITE → portalDb pass-through; where giữ nguyên (atomic check-and-update).
+  const updated = await pdb.parentRequest.updateMany({
     where: { id: requestId, status: "PENDING" },
     data: { status: "CANCELLED" },
   });

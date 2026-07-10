@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { PORTAL_VIEW_COOKIE, type PortalView } from "@/lib/portal/learning";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -35,9 +35,13 @@ export async function submitAssignment(input: {
   fileSize?: number | null;
   mimeType?: string | null;
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
-  const assignment = await db.assignment.findUnique({
+  const assignment = await pdb.assignment.findUnique({
     where: { id: input.assignmentId },
     select: {
       id: true,
@@ -53,7 +57,7 @@ export async function submitAssignment(input: {
     return { ok: false, error: "Bài tập chưa mở hoặc đã đóng" };
   }
 
-  const enrolled = await db.enrollment.findFirst({
+  const enrolled = await pdb.enrollment.findFirst({
     where: {
       studentId,
       classId: assignment.classId,
@@ -70,7 +74,7 @@ export async function submitAssignment(input: {
     return { ok: false, error: "Vui lòng nhập nội dung hoặc đính kèm file" };
   }
 
-  const existing = await db.assignmentSubmission.findUnique({
+  const existing = await pdb.assignmentSubmission.findUnique({
     where: {
       assignmentId_studentId: {
         assignmentId: input.assignmentId,
@@ -97,7 +101,7 @@ export async function submitAssignment(input: {
     status,
   };
 
-  await db.assignmentSubmission.upsert({
+  await pdb.assignmentSubmission.upsert({
     where: {
       assignmentId_studentId: {
         assignmentId: input.assignmentId,

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { db } from "@/lib/db";
+import { portalDb, portalTx } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
 
 // =============================================================================
@@ -30,11 +30,12 @@ function attemptDeadline(
 
 /** HS có đang học lớp được giao đề này không. */
 async function studentOwnsExam(
+  pdb: ReturnType<typeof portalDb>,
   studentId: string,
   examClassId: string | null,
 ): Promise<boolean> {
   if (!examClassId) return false;
-  const enr = await db.enrollment.findFirst({
+  const enr = await pdb.enrollment.findFirst({
     where: {
       studentId,
       classId: examClassId,
@@ -49,9 +50,13 @@ async function studentOwnsExam(
 export async function startAttempt(
   examId: string,
 ): Promise<ActionResult<{ attemptId: string }>> {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
-  const exam = await db.exam.findUnique({
+  const exam = await pdb.exam.findUnique({
     where: { id: examId },
     select: {
       id: true,
@@ -64,7 +69,7 @@ export async function startAttempt(
     },
   });
   if (!exam) return { ok: false, error: "Không tìm thấy đề thi" };
-  if (!(await studentOwnsExam(studentId, exam.classId))) {
+  if (!(await studentOwnsExam(pdb, studentId, exam.classId))) {
     return { ok: false, error: "Đề thi không thuộc lớp của con" };
   }
   if (exam.status !== "PUBLISHED") {
@@ -82,7 +87,7 @@ export async function startAttempt(
   }
 
   // LMS-12 (thi lại): nếu đang có bài DỞ → trả lại để làm tiếp (không tạo trùng).
-  const inProgress = await db.examAttempt.findFirst({
+  const inProgress = await pdb.examAttempt.findFirst({
     where: { examId, studentId, status: "IN_PROGRESS" },
     select: { id: true },
   });
@@ -93,7 +98,7 @@ export async function startAttempt(
   // Hết IN_PROGRESS → đếm số lần đã làm; chặn khi đã đạt maxAttempts.
   // maxAttempts null → mặc định 1 lần (đề cũ không cấu hình thi lại).
   const maxAttempts = exam.maxAttempts ?? 1;
-  const count = await db.examAttempt.count({ where: { examId, studentId } });
+  const count = await pdb.examAttempt.count({ where: { examId, studentId } });
   if (count >= maxAttempts) {
     return {
       ok: false,
@@ -101,7 +106,7 @@ export async function startAttempt(
     };
   }
 
-  const created = await db.examAttempt.create({
+  const created = await pdb.examAttempt.create({
     data: { examId, studentId, status: "IN_PROGRESS", attemptNo: count + 1 },
     select: { id: true },
   });
@@ -114,9 +119,13 @@ export async function saveAnswer(input: {
   selectedChoiceIds?: string[];
   textAnswer?: string | null;
 }): Promise<ActionResult> {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
-  const attempt = await db.examAttempt.findUnique({
+  const attempt = await pdb.examAttempt.findUnique({
     where: { id: input.attemptId },
     select: {
       id: true,
@@ -142,7 +151,7 @@ export async function saveAnswer(input: {
   }
 
   // examQuestion phải thuộc đúng đề của attempt (chống chèn câu lạ).
-  const eq = await db.examQuestion.findUnique({
+  const eq = await pdb.examQuestion.findUnique({
     where: { id: input.examQuestionId },
     select: { id: true, examId: true },
   });
@@ -154,7 +163,7 @@ export async function saveAnswer(input: {
     selectedChoiceIds: input.selectedChoiceIds ?? [],
     textAnswer: input.textAnswer?.trim() || null,
   };
-  await db.examAnswer.upsert({
+  await pdb.examAnswer.upsert({
     where: {
       attemptId_examQuestionId: {
         attemptId: input.attemptId,
@@ -170,9 +179,13 @@ export async function saveAnswer(input: {
 export async function submitAttempt(
   attemptId: string,
 ): Promise<ActionResult<{ graded: boolean; late?: boolean; message?: string }>> {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
-  const attempt = await db.examAttempt.findUnique({
+  const attempt = await pdb.examAttempt.findUnique({
     where: { id: attemptId },
     include: {
       answers: {
@@ -220,7 +233,7 @@ export async function submitAttempt(
 
   let totalScore = 0;
   try {
-    await db.$transaction(async (tx) => {
+    await portalTx(async (tx) => {
       for (const ans of attempt.answers) {
         const q = ans.examQuestion.question;
         // Mặc định cho ESSAY/CODE: chưa chấm (chờ giáo viên).
