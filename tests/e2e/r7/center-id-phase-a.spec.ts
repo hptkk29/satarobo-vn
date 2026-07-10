@@ -12,7 +12,7 @@ import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb } from "../_helpers/seed";
 import { postMessage } from "../../../lib/conversation/service";
-import { SCOPED_MODELS } from "../../../lib/db-scope";
+import { NULL_IS_GLOBAL_MODELS, SCOPED_MODELS } from "../../../lib/db-scope";
 
 const CS1 = "CS1";
 
@@ -39,7 +39,7 @@ async function seedEnrollment() {
   return { enrollmentId: enr.id, userId: user.id };
 }
 
-test.describe("[#03 Pha A] centerId denormalize", () => {
+test.describe("[#03] centerId denormalize + flip scope", () => {
   test.beforeEach(async () => {
     await resetDb();
   });
@@ -69,10 +69,18 @@ test.describe("[#03 Pha A] centerId denormalize", () => {
     expect(row.centerId).toBe(CS1);
   });
 
-  test("[#03-A3] CHƯA flip: 3 model vẫn ngoài SCOPED_MODELS", () => {
-    // Pha B chỉ được chạy sau khi PROD xác nhận 0 null (xem migration + runbook).
+  test("[#03-B1] ĐÃ flip: 3 model nằm trong SCOPED_MODELS (prod xác nhận 0 null 10/07)", () => {
     for (const m of ["ConversationMessage", "ReportCard", "EvaluationRound"]) {
-      expect({ model: m, scoped: SCOPED_MODELS.has(m) }).toEqual({ model: m, scoped: false });
+      expect({ model: m, scoped: SCOPED_MODELS.has(m) }).toEqual({ model: m, scoped: true });
     }
+  });
+
+  test("[#03-B2] chỉ EvaluationRound/Survey coi centerId=null là 'toàn hệ thống'", () => {
+    // Với ReportCard/ConversationMessage, null = dữ liệu chưa backfill → PHẢI bị chặn,
+    // không được biến thành "ai cũng thấy".
+    expect(NULL_IS_GLOBAL_MODELS.has("EvaluationRound")).toBe(true);
+    expect(NULL_IS_GLOBAL_MODELS.has("Survey")).toBe(true);
+    expect(NULL_IS_GLOBAL_MODELS.has("ReportCard")).toBe(false);
+    expect(NULL_IS_GLOBAL_MODELS.has("ConversationMessage")).toBe(false);
   });
 });

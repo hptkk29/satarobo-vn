@@ -29,6 +29,27 @@ export const SCOPED_MODELS = new Set<string>([
   // cơ sở mình. Reads bị scope = sdb.attendance (marking/báo cáo/sessions). Makeup đọc
   // Attendance qua raw db (KHÔNG qua scopedDb) → KHÔNG cần MAKEUP_EXCEPTION.
   "Attendance",
+  // #03 Pha B (10/07) — flip sau khi PROD xác nhận 0 null (msg_null=rc_null=enr_null=0).
+  // Pha A đã thêm cột + backfill + ép mọi đường tạo set centerId.
+  "ReportCard", // học bạ theo cơ sở (centerId denormalize từ Enrollment)
+  "ConversationMessage", // tin nhắn PH↔nhân viên theo cơ sở
+  "EvaluationRound", // ⚠️ centerId null = vòng TOÀN HỆ THỐNG → xem NULL_IS_GLOBAL_MODELS
+]);
+
+/**
+ * Model mà `centerId = NULL` mang nghĩa "bản ghi TOÀN HỆ THỐNG", không phải "chưa gán".
+ *
+ * Với các model này, inject `centerId IN (...)` trần sẽ ẩn nhầm bản ghi chung — đó là lý
+ * do `Survey` và `EvaluationRound` trước đây phải scope tay / nằm ngoài scopedDb. Nay
+ * scopedDb hiểu semantics đó: `centerId IS NULL OR centerId IN (...)`.
+ *
+ * KHÔNG thêm model thường vào đây: với chúng, centerId null = dữ liệu chưa backfill và
+ * PHẢI bị chặn, không được biến thành "ai cũng thấy".
+ */
+export const NULL_IS_GLOBAL_MODELS = new Set<string>([
+  "Survey", // khảo sát chung (không gắn cơ sở)
+  "SurveyResponse", // phản hồi của khảo sát chung
+  "EvaluationRound", // vòng đánh giá scope SYSTEM / TEACHER_EVAL
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -46,18 +67,8 @@ export const SCOPE_EXEMPT = new Set<string>([
   // LMS-16 — RevenueTarget là config mục tiêu KPI; centerId null = mục tiêu toàn hệ
   // thống; scope tay qua getRevenueTargets. (Trước đây khai báo lặp 2 lần — đã dọn.)
   "RevenueTarget",
-  // R7-15/R7-16 (tech-debt — xem db-import-allowlist): ReportCard/EvaluationRound dùng
-  // bare db + manual scope-check (ownership/center) trong lib/lms/* + lib/eval/*. CHƯA
-  // auto-scope: ReportCard.centerId nullable, EvaluationRound có round TEACHER_EVAL
-  // centerId=null (toàn hệ thống) → inject `centerId IN ...` sẽ ẩn nhầm. TODO: chuyển
-  // sang SCOPED_MODELS + scopedDb khi 2 model này center-scope hẳn.
-  "ReportCard",
-  "EvaluationRound",
-  // #03 Pha A (10/07) — vừa thêm centerId + backfill (migration p03_phase_a_center_id_backfill),
-  // đường tạo (lib/conversation/service.ts postMessage) đã set. CHƯA flip sang SCOPED_MODELS:
-  // phải chờ PROD xác nhận 0 dòng centerId NULL, đúng deploy-gate của #04 với Attendance.
-  // Hiện scope tay bằng ownership/assignedClassIds trong admin/tin-nhan + portal/tin-nhan.
-  "ConversationMessage",
+  // (#03 Pha B, 10/07 — ReportCard / EvaluationRound / ConversationMessage đã rời khỏi đây
+  //  sang SCOPED_MODELS sau khi PROD xác nhận 0 dòng centerId NULL.)
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
   // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
   "RefundRequest",
@@ -92,6 +103,16 @@ export function getModelPrefixes(model: string): string[] {
     case "Class":
     case "ClassGroup":
       return ["classes:", "class_group:"];
+    case "ReportCard":
+      // Học bạ gắn ghi danh. TRAINING@HO (report-cards:* GLOBAL, centerScope ALL) → cả 2
+      // cơ sở, đúng câu 55 (Toại duyệt học bạ liên cơ sở). CM@CS1 → chỉ CS1.
+      return ["report-cards:", "enrollments:"];
+    case "ConversationMessage":
+      // Tin nhắn PH↔nhân viên gắn ghi danh/lớp. GV (classes:view-own @center) chỉ thấy cơ
+      // sở mình; Đào tạo/HO thấy cross-center giống lớp & học viên.
+      return ["classes:", "enrollments:"];
+    case "EvaluationRound":
+      return ["evaluations:"];
     case "Enrollment":
       // report-cards: cũng map vào đây — học bạ gắn với enrollment. Nhờ vậy TRAINING@HO
       // (report-cards:* + students/classes:view-all) đọc được ghi danh cả 2 cơ sở để làm
@@ -196,7 +217,12 @@ export function injectScope<A>(model: string, args: A, actor: Actor): A {
   if (visibleCenters === "ALL") return args;
 
   const a = (args ?? {}) as { where?: unknown };
-  const scopeWhere = { centerId: { in: visibleCenters } };
+  // #03 Pha B — với NULL_IS_GLOBAL_MODELS, `centerId = NULL` nghĩa là "toàn hệ thống",
+  // KHÔNG phải "chưa gán". Inject `centerId IN (...)` trần sẽ ẩn nhầm bản ghi chung
+  // (khảo sát chung, vòng đánh giá SYSTEM/TEACHER_EVAL) → dùng OR-null.
+  const scopeWhere = NULL_IS_GLOBAL_MODELS.has(model)
+    ? { OR: [{ centerId: null }, { centerId: { in: visibleCenters } }] }
+    : { centerId: { in: visibleCenters } };
   return { ...a, where: a.where ? { AND: [a.where, scopeWhere] } : scopeWhere } as A;
 }
 
@@ -212,7 +238,11 @@ export function passesScope(
   const visibleCenters = getModelVisibleCenterIds(model, actor);
   if (visibleCenters === "ALL") return true;
 
-  return record.centerId != null && visibleCenters.includes(record.centerId);
+  // Bản ghi "toàn hệ thống" (centerId null hợp lệ) → ai cũng đọc được. Với model thường,
+  // centerId null = dữ liệu hỏng/chưa backfill → CHẶN (an toàn), giữ nguyên hành vi cũ.
+  if (record.centerId == null) return NULL_IS_GLOBAL_MODELS.has(model);
+
+  return visibleCenters.includes(record.centerId);
 }
 
 /**
