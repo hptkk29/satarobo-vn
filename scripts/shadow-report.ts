@@ -126,7 +126,13 @@ async function main() {
   >`SELECT COUNT(*)::int AS tong, MIN("createdAt") AS cu_nhat, MAX("createdAt") AS moi_nhat
     FROM "RbacShadowDiff"`;
 
-  const windowTotal = byAction.reduce((s, r) => s + r.so_lech, 0);
+  // Đếm THẬT — không cộng từ bảng byAction (bảng đó LIMIT 25 nhóm, cộng lại sẽ THIẾU
+  // khi có >25 nhóm; 10/07 từng báo 746 trong khi tổng thật 778). Đây là số cổng flip,
+  // phải khớp isSafeToEnableRbacV2.
+  const [{ window_total }] = await db.$queryRaw<{ window_total: number }[]>`
+    SELECT COUNT(*)::int AS window_total FROM "RbacShadowDiff" WHERE "createdAt" >= ${since}
+  `;
+  const windowTotal = window_total;
   const streak = cleanStreak(new Set(byDay.map((d) => d.ngay)));
   const coverageOk = coverage.length === 0;
   const gateOk = windowTotal === 0;
