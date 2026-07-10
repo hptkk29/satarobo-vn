@@ -123,6 +123,29 @@ và (c) call-site chưa truyền `target` ở action CENTER-scope. Thu hẹp tr�
 
 ---
 
+### 10/07/2026 — 🔴 PROD mất/chưa từng có 17 UserOrgRole của người thật
+
+Report sáng 10/07: preflight đỏ **14 người** (toàn bộ tài khoản thật) — trong khi 09/07 đã
+duyệt apply 17 dòng. Hai dữ kiện khoanh vùng nguyên nhân:
+
+1. `admin@` + `daotao@` KHÔNG nằm trong danh sách thiếu → assignment từ lần apply ĐẦU
+   (3 dòng) còn nguyên ⇒ **không có chuyện bị xoá hàng loạt**.
+2. `seedRoles()` (prisma/seed-roles.ts:505-520) chỉ upsert `RoleDef` + reset
+   `RolePermission`; **không đụng `UserOrgRole`**, và FK `UserOrgRole.role` là
+   `onDelete: Restrict` ⇒ re-seed không thể quét mất assignment.
+
+⇒ Giả thuyết mạnh nhất: **lần apply 17 dòng (batch người thật) chưa bao giờ chạy thành
+công** — hôm 09/07 chỉ có 2 lần DRY-RUN được dán vào chat, không có output apply.
+
+**Chẩn đoán quyết định (chạy trước, 1 phút):** Actions → *Patch UserOrgRole cho nhân sự
+(prod)* → `mode=dry-run`:
+- Ra `sẽ ghi 17 · giữ nguyên 2` ⇒ đúng giả thuyết — chạy lại `mode=apply` + confirm là xong.
+- Ra `sẽ ghi 0 · giữ nguyên 19` ⇒ assignment TỒN TẠI nhưng report không thấy ⇒ lỗi ở
+  query preflight (status/effectiveFrom?) — dừng lại, báo để soi script.
+
+Lưu ý thêm 10/07: lệnh `pnpm exec tsx prisma/seed-roles.ts` chạy LOCAL đọc `.env` = **DEV**
+Supabase — muốn seed PROD phải đi qua workflow *Seed Production RolePermission*.
+
 ### Mẫu dòng nhật ký hằng ngày
 
 ```
