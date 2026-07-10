@@ -288,3 +288,61 @@ target `centerId`, không quy về so-sánh-tập-hợp được).
 
 **Việc prod còn lại:** chạy lại workflow `seed-prod-roles` để `CENTER_CLASS_MANAGER` nhận
 `parent-requests:manage`. Không chạy ⇒ sau flip Giáo vụ mất trang CSKH.
+
+## 9. Đã sửa (10/07, đợt 2) — menu đi theo cờ, và crash #13
+
+Chốt của BGĐ: **giữ `#13` đầy đủ** (phương án A). Kéo theo hai việc.
+
+### 9.1 Crash RoleSwitcher — truy nguyên xong, không phải bí ẩn
+
+`DropdownMenuLabel` map thẳng sang `Menu.GroupLabel` của `@base-ui/react`. Đọc mã nguồn thư viện:
+
+```js
+function useMenuGroupRootContext() {
+  const context = React.useContext(MenuGroupContext);
+  if (context === undefined) throw new Error('… Menu group parts must be used within <Menu.Group>.');
+```
+
+RoleSwitcher đặt `<DropdownMenuLabel>` **trần** trong `DropdownMenuContent` ⇒ mở dropdown là throw
+khi render popup. Prod minify lỗi thành `formatErrorMessage(31)` nên người dùng chỉ thấy
+*"This page couldn't load"*. Menu tài khoản ở topbar không dùng `Label`, nên nó chạy — chính điều
+đó làm lỗi trông như ngẫu nhiên.
+
+Sửa: bọc `<DropdownMenuGroup>`. Khoá bằng `components/ui/dropdown-menu.test.tsx`:
+tái hiện crash trong unit test (không Group ⇒ throw), khẳng định có Group ⇒ render, và quét tĩnh
+"mọi file dùng `DropdownMenuLabel` phải có `DropdownMenuGroup`".
+
+### 9.2 Menu hỏi cùng một nguồn với cổng trang
+
+`layout.tsx` (server) gọi `grantedMenuActions()` — dùng đúng `evaluatePermission` + cờ mà
+`checkPermission` dùng — rồi truyền tập action xuống `<Sidebar granted={...}>`. Sidebar thôi tự gọi
+`can()` v1. Hết lệch menu↔cổng ở cả hai phía cờ.
+
+Hai điều cố ý **không** làm trong `grantedMenuActions`: không ghi `RbacShadowDiff` (menu không phải
+điểm cưỡng chế — ghi vào là bơm ~120 dòng nhiễu mỗi lần mở trang) và không dùng logger mặc định
+(`decidePermission` mặc định `logger = console`, sẽ warn ~120 lần/request).
+
+### 9.3 RoleSwitcher phải đổi sang mã vai v2
+
+Phát hiện khi soi kỹ: **Role enum legacy và RoleDef code chỉ trùng nhau 5/9.**
+
+| Trùng | Chỉ có ở v1 | Chỉ có ở v2 |
+|---|---|---|
+| `SUPER_ADMIN` `CENTER_MANAGER` `TEACHER` `TRAINING` `PARENT` | `HR` `SALES_CSM` `MARKETING` `ACCOUNTANT` | `HO_*` `CENTER_HR` `CENTER_SALES_CSM` `CENTER_ACCOUNTANT` `CENTER_CLASS_MANAGER` `ASSISTANT_TEACHER` `HO_SALE` |
+
+Nếu giữ switcher chạy trên mã legacy trong khi menu đọc v2, **Mỹ chọn "Sale" sẽ mất sạch menu Giáo
+vụ** — đúng lớp lỗi "menu nói dối" mà §8 vừa diệt. Nên: cờ OFF → chọn theo vai legacy; cờ ON → theo
+RoleDef code (`activeRoleOptions`). `menuActorForRole` hạ cả `isSuperAdmin` theo vai đang chọn, nếu
+không thì Kiệt chọn "Giáo viên" vẫn thấy menu quản trị (v2 bypass). Grant riêng (`grantsAllow`) giữ
+nguyên vì nó gắn với con người, không gắn với vai. `dashboard/page.tsx` và `setActiveRoleAction`
+dùng chung nguồn xác thực vai đó, không thì cookie mang mã v2 sẽ bị coi là "không sở hữu".
+
+### 9.4 Lưới an toàn của chính cuộc refactor
+
+`lib/auth/menu-permissions.test.ts` khẳng định: **cờ OFF ⇒ tập action menu trùng khít `can(user, a)`
+cũ** cho 5 tổ hợp vai. Prod đang chạy cờ OFF, nên đây là bằng chứng "không đổi một ly". Đã
+mutation-test (ép `flagOn: true` ⇒ 5 ca parity đỏ). Cộng thêm: cờ ON ⇒ `payments:manage` biến khỏi
+menu QL cơ sở — tức 9 dead-link của Toại được diệt tại gốc, không phải bằng cách vá từng mục.
+
+**Còn lại trước flip:** diễn tập rollback (`RBAC_V2_ENABLED=false` + redeploy, bấm giờ < 10 phút) và
+báo trước cho Toại 9 nhóm quyền anh mất tại thời điểm flip.
