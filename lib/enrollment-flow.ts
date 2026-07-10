@@ -8,25 +8,41 @@ import type { OrgUnitType } from "@prisma/client";
 // ─── FL2-05 — loại Hội sở khỏi picker/list đơn vị nhận học viên ───────────────
 
 /**
- * Pure: từ danh sách OrgUnit → các `centerId` KHÔNG nhận học viên (đơn vị không phải
- * cơ sở vận hành: HO/ROOT/PARTNER…). Chỉ OrgUnit type=CENTER mới là cơ sở nhận HV
- * (Doc 15 OI-1: HO là đơn vị độc lập, không nhận học viên). Bỏ qua node đã xoá mềm.
+ * Pure: `Center` nào KHÔNG nhận học viên. Cơ sở nhận HV = Center **có** một
+ * `OrgUnit type=CENTER` (còn sống) trỏ tới. Mọi Center còn lại → loại.
+ *
+ * ⚠️ Bản cũ đi NGƯỢC chiều: lọc `OrgUnit` có `type != CENTER` **và** `centerId != null`.
+ * Tổ hợp đó KHÔNG BAO GIỜ tồn tại — `prisma/seed-orgunit.ts` seed HO với `centerCode: null`
+ * (và `schema.prisma` ghi rõ `centerId` "chỉ type=CENTER"). Nên hàm luôn trả `[]` và
+ * "Hội sở" vẫn nằm trong picker chuyển lớp trên prod (phát hiện 10/07/2026). Test cũ vẫn
+ * xanh vì nó dựng một thế giới giả trong đó `OrgUnit(HO)` CÓ `centerId` — thế giới mà
+ * seed chưa bao giờ tạo ra.
+ *
+ * Đi từ `Center` ra thì bắt được cả `Center` MỒ CÔI (không OrgUnit nào trỏ tới) — đúng
+ * hình dạng của `Center(hoi-so)` trên prod. Mở CS mới vẫn không cần sửa code: thêm
+ * `OrgUnit type=CENTER` trỏ vào Center đó là nó tự được nhận học viên (Doc 15 OI-1).
  */
 export function nonEnrollableCenterIds(
+  centers: { id: string }[],
   orgUnits: { type: OrgUnitType; centerId: string | null; deletedAt?: Date | null }[],
 ): string[] {
-  return orgUnits
-    .filter((o) => o.type !== "CENTER" && o.deletedAt == null && o.centerId != null)
-    .map((o) => o.centerId as string);
+  const enrollable = new Set(
+    orgUnits
+      .filter((o) => o.type === "CENTER" && o.deletedAt == null && o.centerId != null)
+      .map((o) => o.centerId as string),
+  );
+  // Cây OrgUnit chưa dựng (fixture cũ, DB test tối giản) → đừng khoá sạch mọi picker.
+  if (enrollable.size === 0) return [];
+  return centers.filter((c) => !enrollable.has(c.id)).map((c) => c.id);
 }
 
-/** DB-backed: `centerId` của các đơn vị KHÔNG nhận học viên (vd Center của Hội sở). */
+/** DB-backed: id các `Center` KHÔNG nhận học viên (vd Center "Hội sở"). */
 export async function getNonEnrollableCenterIds(): Promise<string[]> {
-  const rows = await db.orgUnit.findMany({
-    where: { deletedAt: null, type: { not: "CENTER" }, centerId: { not: null } },
-    select: { type: true, centerId: true },
-  });
-  return nonEnrollableCenterIds(rows);
+  const [centers, orgUnits] = await Promise.all([
+    db.center.findMany({ select: { id: true } }),
+    db.orgUnit.findMany({ where: { deletedAt: null }, select: { type: true, centerId: true } }),
+  ]);
+  return nonEnrollableCenterIds(centers, orgUnits);
 }
 
 /**

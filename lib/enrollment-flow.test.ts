@@ -6,35 +6,47 @@ import {
   buildStudentCourseChain,
 } from "./enrollment-flow";
 
-// FL2-05 — nhận diện Hội sở QUA OrgUnit tree (type ≠ CENTER), không hardcode "HO".
+// FL2-05 — "cơ sở nhận học viên" = Center CÓ OrgUnit type=CENTER trỏ tới.
+// Ca prod 10/07: Center(hoi-so) MỒ CÔI — không OrgUnit nào trỏ tới nó, nên bản cũ
+// (đi từ OrgUnit ra, đòi type != CENTER && centerId != null) không thể thấy.
 describe("nonEnrollableCenterIds", () => {
   const ou = (type: OrgUnitType, centerId: string | null, deletedAt: Date | null = null) => ({
     type,
     centerId,
     deletedAt,
   });
+  const cs = (...ids: string[]) => ids.map((id) => ({ id }));
 
-  it("trả centerId của HO (đơn vị không nhận học viên), bỏ CENTER", () => {
-    const ids = nonEnrollableCenterIds([
+  it("[PROD 10/07] Center mồ côi (không OrgUnit nào trỏ tới) → bị loại", () => {
+    const ids = nonEnrollableCenterIds(cs("c-cs1", "c-cs2", "hoi-so"), [
       ou("ROOT", null),
-      ou("HO", "c-ho"),
+      ou("HO", null), // ĐÚNG như seed-orgunit.ts: HO không có centerId
       ou("CENTER", "c-cs1"),
       ou("CENTER", "c-cs2"),
     ]);
+    expect(ids).toEqual(["hoi-so"]);
+  });
+
+  it("tương thích ngược: nếu ai đó nối OrgUnit(HO).centerId thì vẫn loại (type ≠ CENTER)", () => {
+    const ids = nonEnrollableCenterIds(cs("c-cs1", "c-ho"), [ou("HO", "c-ho"), ou("CENTER", "c-cs1")]);
     expect(ids).toEqual(["c-ho"]);
   });
 
-  it("mở cơ sở mới (type=CENTER) tự được coi là nhận HV → KHÔNG bị loại", () => {
-    const ids = nonEnrollableCenterIds([ou("CENTER", "c-cs3")]);
-    expect(ids).toEqual([]);
+  it("mở cơ sở mới: thêm OrgUnit type=CENTER trỏ vào Center đó → tự nhận HV, không sửa code", () => {
+    expect(nonEnrollableCenterIds(cs("c-cs3"), [ou("CENTER", "c-cs3")])).toEqual([]);
   });
 
-  it("bỏ qua đơn vị xoá mềm và đơn vị không có centerId", () => {
-    const ids = nonEnrollableCenterIds([
-      ou("HO", "c-ho", new Date()), // xoá mềm → bỏ
-      ou("PARTNER", null), // không có centerId → bỏ
+  it("OrgUnit type=CENTER đã xoá mềm → Center của nó thành mồ côi → bị loại", () => {
+    const ids = nonEnrollableCenterIds(cs("c-cs1", "c-cs2"), [
+      ou("CENTER", "c-cs1"),
+      ou("CENTER", "c-cs2", new Date()),
     ]);
-    expect(ids).toEqual([]);
+    expect(ids).toEqual(["c-cs2"]);
+  });
+
+  it("chưa dựng cây OrgUnit ⇒ trả [] (fail-open) — không khoá sạch mọi picker", () => {
+    expect(nonEnrollableCenterIds(cs("c-cs1", "c-cs2"), [ou("ROOT", null)])).toEqual([]);
+    expect(nonEnrollableCenterIds(cs("c-cs1"), [])).toEqual([]);
   });
 });
 
