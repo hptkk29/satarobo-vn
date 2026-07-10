@@ -119,6 +119,14 @@ export async function completeCourse(params: {
     await enqueueEmail({
       to: student.parentUser.email,
       toName: student.parentUser.name ?? undefined,
+      // B1.5: template DB (admin sửa ở /admin/email-templates) — inline dưới là fallback.
+      templateKey: "COURSE_COMPLETION",
+      vars: {
+        parentName: student.parentUser.name ?? "quý phụ huynh",
+        studentName: student.name,
+        courseName: course.name,
+        certificateCode: completion.certificateCode,
+      },
       subject: `Chúc mừng bé ${student.name} hoàn thành khoá ${course.name}`,
       bodyText: `Chào ${student.parentUser.name ?? "quý phụ huynh"},\nBé ${student.name} đã hoàn thành khoá ${course.name}. Mã chứng chỉ: ${completion.certificateCode}.\nMời quý phụ huynh làm khảo sát cuối khoá tại cổng học viên (mục Khảo sát).\n— Sata Robo`,
       bodyHtml: `<div style="font-family:system-ui,sans-serif">

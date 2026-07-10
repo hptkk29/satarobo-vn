@@ -916,6 +916,15 @@ export async function gradeSubmissionRubric(
     await enqueueEmail({
       to: submission.student.parentUser.email,
       toName: submission.student.parentUser.name ?? undefined,
+      // B1.5: template DB (admin sửa) — inline dưới là fallback.
+      templateKey: "RUBRIC_GRADED",
+      vars: {
+        parentName: submission.student.parentUser.name ?? "quý phụ huynh",
+        studentName: submission.student.name,
+        assignmentTitle: submission.assignment.title,
+        scoreText: String(score ?? "—"),
+        feedback: data.feedback,
+      },
       subject: `Kết quả chấm bài: ${submission.assignment.title} — ${submission.student.name}`,
       bodyText: `Bài "${submission.assignment.title}" của bé ${submission.student.name} đã được chấm.\nĐiểm: ${score ?? "—"}/10.\nNhận xét: ${data.feedback}\nXem chi tiết rubric tại cổng học viên.`,
       context: { type: "RUBRIC_GRADED", id: data.submissionId },

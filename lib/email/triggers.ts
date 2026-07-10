@@ -3,8 +3,13 @@ import { enqueueEmail } from "./queue";
 // =============================================================================
 // Cụm A2 — enqueue helper cho các trigger phase đầu.
 // MỖI email chỉ chứa dữ liệu CỦA CON LIÊN QUAN — không lộ con khác.
-// Dùng inline content (hoạt động ngay cả khi chưa seed template); nếu có
-// EmailTemplate.code tương ứng, truyền templateKey để render qua template.
+//
+// B1.5 (10/07): mỗi trigger truyền `templateKey` (mã trong lib/email/template-codes.ts)
+// + `vars` → worker ưu tiên EmailTemplate ACTIVE trong DB (admin sửa nội dung ở
+// /admin/email-templates, quyền emails:manage) rồi mới rơi về inline dưới đây.
+// Inline giữ NGUYÊN VĂN cũ — chưa seed template thì hành vi không đổi.
+// ⚠️ vars phải LUÔN là string có nghĩa (renderer giữ nguyên "{{var}}" khi null) —
+// phần điều kiện compose sẵn thành var "…Part" (rỗng khi thiếu).
 // =============================================================================
 
 const SIGNATURE = "\n\n— Trung tâm Sata Robo";
@@ -17,13 +22,20 @@ const wrap = (title: string, lines: string[]) =>
 
 /** (a) Tài khoản phụ huynh được kích hoạt. */
 export function enqueueAccountActivated(p: { to: string; parentName?: string | null; childName?: string | null }) {
+  const parentName = p.parentName ?? "quý phụ huynh";
   return enqueueEmail({
     to: p.to,
     toName: p.parentName ?? undefined,
+    templateKey: "ACCOUNT_ACTIVATED",
+    vars: {
+      parentName,
+      childPart: p.childName ? ` của bé ${p.childName}` : "",
+      childPartHtml: p.childName ? ` của bé <b>${p.childName}</b>` : "",
+    },
     subject: "Tài khoản phụ huynh Sata Robo đã kích hoạt",
-    bodyText: `Chào ${p.parentName ?? "quý phụ huynh"},\nTài khoản theo dõi học tập${p.childName ? ` của bé ${p.childName}` : ""} đã được kích hoạt. Bạn có thể đăng nhập tại hocvien.satarobo.vn.${SIGNATURE}`,
+    bodyText: `Chào ${parentName},\nTài khoản theo dõi học tập${p.childName ? ` của bé ${p.childName}` : ""} đã được kích hoạt. Bạn có thể đăng nhập tại hocvien.satarobo.vn.${SIGNATURE}`,
     bodyHtml: wrap("Tài khoản đã kích hoạt", [
-      `Chào <b>${p.parentName ?? "quý phụ huynh"}</b>,`,
+      `Chào <b>${parentName}</b>,`,
       `Tài khoản theo dõi học tập${p.childName ? ` của bé <b>${p.childName}</b>` : ""} đã được kích hoạt.`,
       `Đăng nhập tại <a href="https://hocvien.satarobo.vn">hocvien.satarobo.vn</a>.`,
     ]),
@@ -41,14 +53,25 @@ export function enqueueEnrollmentConfirmation(p: {
   courseName: string;
   startDate?: string | null;
 }) {
+  const parentName = p.parentName ?? "quý phụ huynh";
   const lines = [
-    `Chào ${p.parentName ?? "quý phụ huynh"},`,
+    `Chào ${parentName},`,
     `Bé <b>${p.studentName}</b>${p.studentCode ? ` (mã ${p.studentCode})` : ""} đã được đăng ký vào lớp <b>${p.className}</b> — khoá ${p.courseName}.`,
     p.startDate ? `Ngày bắt đầu: <b>${p.startDate}</b>.` : "",
   ].filter(Boolean);
   return enqueueEmail({
     to: p.to,
     toName: p.parentName ?? undefined,
+    templateKey: "ENROLLMENT_CONFIRMATION",
+    vars: {
+      parentName,
+      studentName: p.studentName,
+      codePart: p.studentCode ? ` (mã ${p.studentCode})` : "",
+      className: p.className,
+      courseName: p.courseName,
+      startPart: p.startDate ? `\nNgày bắt đầu: ${p.startDate}.` : "",
+      startPartHtml: p.startDate ? `Ngày bắt đầu: <b>${p.startDate}</b>.` : "",
+    },
     subject: `Xác nhận đăng ký khoá học — ${p.studentName}`,
     bodyText: lines.map((l) => l.replace(/<[^>]+>/g, "")).join("\n") + SIGNATURE,
     bodyHtml: wrap("Xác nhận đăng ký", lines),
@@ -64,14 +87,18 @@ export function enqueueDebtReminder(p: {
   orderCode: string;
   amount: number;
 }) {
+  const customerName = p.customerName ?? "quý phụ huynh";
   const amt = p.amount.toLocaleString("vi-VN");
   return enqueueEmail({
     to: p.to,
     toName: p.customerName ?? undefined,
+    templateKey: "DEBT_REMINDER_ORDER",
+    // amount để RAW NUMBER — template dùng {{amount:currency}} (formatter render.ts).
+    vars: { customerName, orderCode: p.orderCode, amount: p.amount },
     subject: `Nhắc thanh toán học phí — ${p.orderCode}`,
-    bodyText: `Chào ${p.customerName ?? "quý phụ huynh"},\nHoá đơn ${p.orderCode} còn ${amt}đ chưa thanh toán. Vui lòng hoàn tất giúp trung tâm.${SIGNATURE}`,
+    bodyText: `Chào ${customerName},\nHoá đơn ${p.orderCode} còn ${amt}đ chưa thanh toán. Vui lòng hoàn tất giúp trung tâm.${SIGNATURE}`,
     bodyHtml: wrap("Nhắc thanh toán học phí", [
-      `Chào <b>${p.customerName ?? "quý phụ huynh"}</b>,`,
+      `Chào <b>${customerName}</b>,`,
       `Hoá đơn <b>${p.orderCode}</b> còn <b>${amt}đ</b> chưa thanh toán.`,
       `Vui lòng hoàn tất giúp trung tâm. Cảm ơn quý phụ huynh.`,
     ]),
@@ -88,8 +115,9 @@ export function enqueueNewFeedback(p: {
   comment: string;
   rating?: number | null;
 }) {
+  const parentName = p.parentName ?? "quý phụ huynh";
   const lines = [
-    `Chào ${p.parentName ?? "quý phụ huynh"},`,
+    `Chào ${parentName},`,
     `Giáo viên vừa có nhận xét mới cho bé <b>${p.studentName}</b> (lớp ${p.className}):`,
     `<i>"${p.comment}"</i>${p.rating ? ` — ${p.rating}/5⭐` : ""}`,
     `Xem chi tiết tại mục Nhận xét trên cổng học viên.`,
@@ -97,6 +125,14 @@ export function enqueueNewFeedback(p: {
   return enqueueEmail({
     to: p.to,
     toName: p.parentName ?? undefined,
+    templateKey: "NEW_FEEDBACK",
+    vars: {
+      parentName,
+      studentName: p.studentName,
+      className: p.className,
+      comment: p.comment,
+      ratingPart: p.rating ? ` — ${p.rating}/5⭐` : "",
+    },
     subject: `Nhận xét mới cho bé ${p.studentName}`,
     bodyText: lines.map((l) => l.replace(/<[^>]+>/g, "")).join("\n") + SIGNATURE,
     bodyHtml: wrap("Nhận xét mới", lines),
@@ -113,14 +149,24 @@ export function enqueueNewAssignment(p: {
   assignmentTitle: string;
   dueAt?: string | null;
 }) {
+  const parentName = p.parentName ?? "quý phụ huynh";
   const lines = [
-    `Chào ${p.parentName ?? "quý phụ huynh"},`,
+    `Chào ${parentName},`,
     `Lớp <b>${p.className}</b> của bé <b>${p.studentName}</b> vừa có bài tập mới: <b>${p.assignmentTitle}</b>.`,
     p.dueAt ? `Hạn nộp: <b>${p.dueAt}</b>.` : "",
   ].filter(Boolean);
   return enqueueEmail({
     to: p.to,
     toName: p.parentName ?? undefined,
+    templateKey: "NEW_ASSIGNMENT",
+    vars: {
+      parentName,
+      studentName: p.studentName,
+      className: p.className,
+      assignmentTitle: p.assignmentTitle,
+      duePart: p.dueAt ? `\nHạn nộp: ${p.dueAt}.` : "",
+      duePartHtml: p.dueAt ? `Hạn nộp: <b>${p.dueAt}</b>.` : "",
+    },
     subject: `Bài tập mới — ${p.assignmentTitle}`,
     bodyText: lines.map((l) => l.replace(/<[^>]+>/g, "")).join("\n") + SIGNATURE,
     bodyHtml: wrap("Bài tập mới", lines),
@@ -137,13 +183,22 @@ export function enqueueAssignmentGraded(p: {
   score: number | null;
   total: number;
 }) {
+  const parentName = p.parentName ?? "quý phụ huynh";
   const lines = [
-    `Chào ${p.parentName ?? "quý phụ huynh"},`,
+    `Chào ${parentName},`,
     `Bài tập <b>${p.assignmentTitle}</b> của bé <b>${p.studentName}</b> đã được chấm: <b>${p.score ?? "—"}/${p.total}</b>.`,
   ];
   return enqueueEmail({
     to: p.to,
     toName: p.parentName ?? undefined,
+    templateKey: "ASSIGNMENT_GRADED",
+    vars: {
+      parentName,
+      studentName: p.studentName,
+      assignmentTitle: p.assignmentTitle,
+      scoreText: String(p.score ?? "—"),
+      total: p.total,
+    },
     subject: `Kết quả bài tập — ${p.studentName}`,
     bodyText: lines.map((l) => l.replace(/<[^>]+>/g, "")).join("\n") + SIGNATURE,
     bodyHtml: wrap("Bài tập đã chấm", lines),

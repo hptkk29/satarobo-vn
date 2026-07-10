@@ -1,4 +1,5 @@
 import { PrismaClient, EmailTemplateTrigger } from "@prisma/client";
+import { EMAIL_TEMPLATE_DEFS } from "../lib/email/template-codes";
 
 const TEMPLATES = [
   {
@@ -478,7 +479,38 @@ export async function seedEmailTemplates(prisma: PrismaClient) {
     if (existing) updated++;
     else created++;
   }
-  console.log(`Email templates: ${created} mới · ${updated} cập nhật`);
+
+  // ── B1.5 (10/07) — 9 email hệ thống (trigger + call-site) từ template-codes.ts ──
+  // Khác TEMPLATES ở trên: CREATE-ONLY — nội dung do ADMIN SỞ HỮU sau khi seed
+  // (sửa ở /admin/email-templates, quyền emails:manage). Seed chạy lại KHÔNG đè
+  // bản admin đã sửa. Trigger MANUAL (worker tìm theo CODE, không theo trigger).
+  let sysCreated = 0;
+  let sysKept = 0;
+  for (const [code, def] of Object.entries(EMAIL_TEMPLATE_DEFS)) {
+    const existing = await prisma.emailTemplate.findUnique({ where: { code }, select: { id: true } });
+    if (existing) {
+      sysKept++;
+      continue;
+    }
+    await prisma.emailTemplate.create({
+      data: {
+        code,
+        name: def.name,
+        description: def.description,
+        trigger: EmailTemplateTrigger.MANUAL,
+        isActive: true,
+        subject: def.subject,
+        bodyText: def.bodyText,
+        bodyHtml: def.bodyHtml,
+        availableVariables: def.availableVariables,
+      },
+    });
+    sysCreated++;
+  }
+
+  console.log(
+    `Email templates: ${created} mới · ${updated} cập nhật · hệ thống (create-only): ${sysCreated} mới · ${sysKept} giữ nguyên`,
+  );
 }
 
 if (require.main === module) {
