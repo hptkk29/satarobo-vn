@@ -12,13 +12,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/** Chữ cái đầu để dựng avatar khi không có ảnh — tối đa 2 ký tự. */
+/**
+ * Chữ cái đầu để dựng avatar khi không có ảnh — tối đa 2 ký tự.
+ *
+ * Bỏ qua các từ không bắt đầu bằng chữ cái, nếu không tên kiểu "Thầy Nam (Test)"
+ * sẽ ra "T(" vì từ cuối là "(Test)".
+ */
 function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter((p) => /^\p{L}/u.test(p));
   if (parts.length === 0) return "GV";
-  const last = parts[parts.length - 1]!;
   const first = parts[0]!;
-  return (parts.length === 1 ? first.slice(0, 2) : first[0]! + last[0]!).toUpperCase();
+  if (parts.length === 1) return first.slice(0, 2).toUpperCase();
+  const last = parts[parts.length - 1]!;
+  return (first[0]! + last[0]!).toUpperCase();
 }
 
 export function UserMenu({ name }: { name: string }) {

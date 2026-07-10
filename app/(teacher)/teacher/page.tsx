@@ -2,14 +2,21 @@
 // (phiếu GV câu 45: buổi chưa điểm danh · bài chưa chấm · đánh giá học viên ·
 // hồ sơ port — ưu tiên hiển thị ngay khi mở trang).
 //
-// SKELETON có cấu trúc cho Vy (UI) + L6 (data): mục 1 lấy DATA THẬT (buổi
-// SCHEDULED hôm nay của lớp mình theo actor.assignedClassIds, qua scopedDb);
-// 3 mục còn lại là placeholder có cấu trúc — L6 điền query, Vy điền UI.
+// Giao diện port từ TeachUI: lời chào + hàng StatCard đếm việc tồn + 2 cột thẻ
+// việc. Cả 4 mục đều lấy DATA THẬT qua scopedDb (actor.assignedClassIds).
 //
 // ⚠️ Câu 46: GV KHÔNG xem SĐT/email phụ huynh. Trang này không chạm dữ liệu PH;
 // trang nào sau này hiển thị học viên/PH PHẢI mask theo canViewParentContact
 // (lib/auth/permissions.ts) — không đưa contact PH vào payload gửi client.
 import Link from "next/link";
+import {
+  CalendarCheck,
+  CheckCircle2,
+  ClipboardCheck,
+  GraduationCap,
+  MessageSquareText,
+  type LucideIcon,
+} from "lucide-react";
 import type { SubmissionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -20,14 +27,8 @@ import {
   canEditReportCardContent,
   type ReportCardStatusValue,
 } from "@/lib/lms/report-card-core";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SuccessBanner } from "./_components/ui/empty-state";
+import { StatCard, type StatTone } from "./_components/ui/stat-card";
 
 export const metadata = { title: "Việc chưa xong | Giáo viên Sata Robo" };
 
@@ -68,6 +69,10 @@ type PendingSection = {
   emptyText: string;
   /** Trang đích xử lý việc (batch 1) — có thì hiện nút "Mở →". */
   href?: string;
+  /** Icon + tone cho thẻ số liệu (UI TeachUI). */
+  icon: LucideIcon;
+  /** Tone khi CÒN việc; hết việc thì luôn chuyển sang xanh. */
+  tone: StatTone;
 };
 
 export default async function TeacherHomePage() {
@@ -187,6 +192,8 @@ export default async function TeacherHomePage() {
     {
       id: "attendance",
       href: "/teacher/lop",
+      icon: CalendarCheck,
+      tone: "brand",
       title: "Buổi chưa điểm danh",
       description: "Buổi học hôm nay của lớp bạn chưa hoàn tất điểm danh.",
       count: todaySessions.length,
@@ -207,6 +214,8 @@ export default async function TeacherHomePage() {
     {
       id: "grading",
       href: "/teacher/cham-bai",
+      icon: ClipboardCheck,
+      tone: "amber",
       title: "Bài chưa chấm",
       description: "Bài tập học viên đã nộp, chờ bạn chấm.",
       count: gradingCount,
@@ -220,6 +229,8 @@ export default async function TeacherHomePage() {
     {
       id: "evaluation",
       href: "/teacher/nhan-xet",
+      icon: MessageSquareText,
+      tone: "blue",
       title: "Đánh giá học viên",
       description: "Đợt đánh giá buổi học đang mở, áp cho lớp bạn.",
       count: evalItems.length,
@@ -229,7 +240,9 @@ export default async function TeacherHomePage() {
     {
       id: "report-card",
       href: "/teacher/hoc-ba",
-      title: "Hồ sơ port",
+      icon: GraduationCap,
+      tone: "amber",
+      title: "Hồ sơ học bạ",
       description: "Hồ sơ/học bạ học viên cần hoàn thiện để bàn giao.",
       count: reportCards.length,
       items: reportCards.slice(0, 5).map((c) => {
@@ -249,60 +262,81 @@ export default async function TeacherHomePage() {
     },
   ];
 
+  const teacherName = session.user.name ?? "thầy/cô";
+  const totalPending = sections.reduce((n, s) => n + (s.count ?? 0), 0);
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Việc chưa xong</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
+          Xin chào, {teacherName} 👋
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           {dayFmt.format(new Date())} — các việc cần xử lý, ưu tiên từ trên xuống.
         </p>
       </div>
 
+      {totalPending === 0 && (
+        <SuccessBanner icon={CheckCircle2}>
+          Đã sạch việc — không còn đầu việc nào chờ bạn xử lý hôm nay.
+        </SuccessBanner>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {sections.map((s) => (
+          <StatCard
+            key={s.id}
+            icon={s.icon}
+            value={s.count ?? "—"}
+            label={s.title}
+            // Hết việc → xanh. Ngôn ngữ màu nhất quán: cam/amber = cần làm,
+            // xanh lá = xong. Cam KHÔNG bao giờ mang nghĩa "tốt".
+            tone={s.count === null ? "blue" : s.count > 0 ? s.tone : "green"}
+          />
+        ))}
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         {sections.map((section) => (
-          <Card key={section.id}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-base">
-                  {section.href ? (
-                    <Link href={section.href} className="hover:underline">
-                      {section.title} →
-                    </Link>
-                  ) : (
-                    section.title
-                  )}
-                </CardTitle>
-                {section.count === null ? (
-                  <Badge variant="outline" className="text-neutral-400">
-                    Sắp có
-                  </Badge>
+          <section key={section.id} className="t-card t-card-hover p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-base font-bold text-foreground">
+                {section.href ? (
+                  <Link
+                    href={section.href}
+                    className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {section.title} →
+                  </Link>
                 ) : (
-                  <Badge variant={section.count > 0 ? "destructive" : "secondary"}>
-                    {section.count}
-                  </Badge>
+                  section.title
                 )}
-              </div>
-              <CardDescription>{section.description}</CardDescription>
-            </CardHeader>
-            <CardContent>
+              </h2>
+              {section.count !== null && section.count > 0 && (
+                <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                  {section.count}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">{section.description}</p>
+
+            <div className="mt-3">
               {section.count === null ? (
-                <p className="rounded-md border border-dashed border-neutral-200 p-3 text-sm text-neutral-400">
-                  Đang xây (L6) — dữ liệu sẽ hiển thị tại đây.
+                <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                  Đang xây — dữ liệu sẽ hiển thị tại đây.
                 </p>
               ) : section.items.length === 0 ? (
-                <p className="text-sm text-neutral-500">{section.emptyText}</p>
+                <p className="text-sm text-muted-foreground">{section.emptyText}</p>
               ) : (
                 <ul className="space-y-2">
                   {section.items.map((item) => (
                     <li
                       key={item.key}
-                      className="rounded-md border border-neutral-200 bg-white p-3"
+                      className="rounded-lg border border-border bg-muted/40 p-3"
                     >
-                      <p className="text-sm font-medium text-neutral-900">
-                        {item.primary}
-                      </p>
+                      <p className="text-sm font-medium text-foreground">{item.primary}</p>
                       {item.secondary && (
-                        <p className="mt-0.5 text-xs text-neutral-500">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {item.secondary}
                         </p>
                       )}
@@ -310,8 +344,8 @@ export default async function TeacherHomePage() {
                   ))}
                 </ul>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         ))}
       </div>
     </div>
