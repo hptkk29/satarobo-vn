@@ -17,11 +17,11 @@ export type ThemeMode = "light" | "dark" | "system";
 
 export type AccentPreset = { id: string; hex: string; name: string };
 
-/** Bộ màu gợi ý. `coral` = mặc định phụ huynh, `orange` = mặc định học sinh. */
+/** Bộ màu gợi ý. `purple` = mặc định phụ huynh, `orange` = mặc định học sinh. */
 export const ACCENT_PRESETS: readonly AccentPreset[] = [
-  { id: "coral", hex: "#F5788B", name: "San hô" },
-  { id: "orange", hex: "#FD8F2D", name: "Cam" },
   { id: "purple", hex: "#610C8D", name: "Tím" },
+  { id: "orange", hex: "#FD8F2D", name: "Cam" },
+  { id: "coral", hex: "#F5788B", name: "San hô" },
   { id: "teal", hex: "#1F93A8", name: "Xanh ngọc" },
   { id: "green", hex: "#2F9E6A", name: "Xanh lá" },
   { id: "indigo", hex: "#4F46E5", name: "Chàm" },
@@ -29,7 +29,7 @@ export const ACCENT_PRESETS: readonly AccentPreset[] = [
 
 /** Phải khớp `--parent` / `--student` trong app/globals.css. */
 export const ROLE_DEFAULT_ACCENT: Record<PortalRole, string> = {
-  parent: "#F5788B",
+  parent: "#610C8D",
   student: "#FD8F2D",
 };
 
@@ -158,8 +158,16 @@ export function loadAppearance(): PortalAppearance {
 
 export function saveAppearance(state: PortalAppearance): void {
   if (typeof window === "undefined") return;
+  // CHỈ ghi màu KHÁC mặc định. Nếu ghi cả màu mặc định, người dùng mới bật Tối
+  // (setTheme cũng gọi hàm này) sẽ bị "đóng đinh" màu mặc định tại thời điểm đó,
+  // và không bao giờ nhận được mặc định mới khi ta đổi. Thiếu key ⇒ dùng mặc định
+  // hiện hành (xem mergeAppearance).
+  const accents: Partial<Record<PortalRole, string>> = {};
+  for (const role of PORTAL_ROLES) {
+    if (state.accents[role] !== ROLE_DEFAULT_ACCENT[role]) accents[role] = state.accents[role];
+  }
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: state.theme, accents }));
   } catch {
     // Hết quota / bị chặn → bỏ qua, phiên hiện tại vẫn áp dụng được.
   }

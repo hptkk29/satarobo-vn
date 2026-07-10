@@ -47,9 +47,15 @@ describe("contrast guard", () => {
     expect(inkOn("#610C8D")).toBe("#FFFFFF");
   });
 
-  it("coral phụ huynh mặc định vẫn dùng chữ trắng", () => {
+  it("mặc định tím (phụ huynh) và cam (học sinh) đều đủ tối → chữ trắng", () => {
+    // Nếu đổi mặc định sang màu sáng, `--accent-foreground: #fff` cứng trong
+    // globals.css sẽ sai ở lần paint đầu → test này chặn.
+    expect(ROLE_DEFAULT_ACCENT.parent).toBe("#610C8D");
+    expect(ROLE_DEFAULT_ACCENT.student).toBe("#FD8F2D");
     expect(isLightAccent(ROLE_DEFAULT_ACCENT.parent)).toBe(false);
+    expect(isLightAccent(ROLE_DEFAULT_ACCENT.student)).toBe(false);
     expect(inkOn(ROLE_DEFAULT_ACCENT.parent)).toBe("#FFFFFF");
+    expect(inkOn(ROLE_DEFAULT_ACCENT.student)).toBe("#FFFFFF");
   });
 
   it("HEX hỏng → luminance 0 (coi như màu tối), không ném lỗi", () => {
@@ -154,5 +160,31 @@ describe("loadAppearance", () => {
   it("accents không phải object → mặc định", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: "dark", accents: "nope" }));
     expect(loadAppearance()).toEqual({ ...defaultAppearance(), theme: "dark" });
+  });
+});
+
+describe("saveAppearance — không đóng đinh màu mặc định", () => {
+  it("chỉ bật Tối (chưa đổi màu) → không ghi accent nào", () => {
+    saveAppearance({ theme: "dark", accents: { ...ROLE_DEFAULT_ACCENT } });
+    expect(JSON.parse(store[STORAGE_KEY]).accents).toEqual({});
+  });
+
+  it("người chưa đổi màu vẫn nhận mặc định MỚI khi ta đổi mặc định", () => {
+    // Mô phỏng: đã lưu (chỉ theme), sau đó mặc định đổi → load phải trả mặc định
+    // hiện hành chứ không phải màu cũ đã đóng băng.
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: "dark", accents: {} }));
+    expect(loadAppearance().accents).toEqual(ROLE_DEFAULT_ACCENT);
+  });
+
+  it("chỉ ghi vai trò có màu khác mặc định", () => {
+    saveAppearance({
+      theme: "light",
+      accents: { parent: "#123456", student: ROLE_DEFAULT_ACCENT.student },
+    });
+    expect(JSON.parse(store[STORAGE_KEY]).accents).toEqual({ parent: "#123456" });
+    expect(loadAppearance().accents).toEqual({
+      parent: "#123456",
+      student: ROLE_DEFAULT_ACCENT.student,
+    });
   });
 });

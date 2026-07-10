@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 //
 // Chữ dùng `--accent-foreground` (mực tương phản với accent) thay vì trắng cứng:
 // phụ huynh đổi được màu nhấn sang màu SÁNG, khi đó chữ trắng sẽ không đọc nổi.
-// Với accent mặc định (coral/cam) biến này = #fff nên hiển thị y như trước.
+// Với accent mặc định (tím/cam) biến này = #fff nên hiển thị y như trước.
 
 export function PageHero({
   icon: Icon,
