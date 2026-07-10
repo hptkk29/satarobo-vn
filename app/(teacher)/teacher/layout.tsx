@@ -4,6 +4,7 @@
 // chưa mở, về khu hiện tại (GV vẫn dùng admin — 2-phase, KHÔNG đá GV khỏi admin);
 // (3) login nhưng KHÔNG có role TEACHER → về khu đúng của họ (staff → admin,
 // PARENT → portal). UI: shadcn thuần — KHÔNG Magic UI/Framer/Recharts (ESLint chặn).
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasRole, hasStaffRole } from "@/lib/auth/permissions";
@@ -70,9 +71,14 @@ export default async function TeacherLayout({
               Giáo viên
             </span>
           </div>
-          <span className="truncate text-sm text-neutral-500">
+          {/* Batch 4 — bấm tên mở Hồ sơ cá nhân (/teacher/ho-so). */}
+          <Link
+            href="/teacher/ho-so"
+            className="truncate text-sm text-neutral-500 hover:text-neutral-800 hover:underline"
+            title="Hồ sơ cá nhân"
+          >
             {session.user.name ?? session.user.email}
-          </span>
+          </Link>
         </div>
         <TeacherNav />
       </header>

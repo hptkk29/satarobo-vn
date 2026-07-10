@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import {
   Award,
   BookOpenText,
+  Camera,
   CalendarDays,
   ClipboardCheck,
   Clock,
@@ -31,6 +32,8 @@ const NAV_ITEMS = [
   // Batch 3 (10/07) — bảng công + hoàn thành khoá.
   { href: "/teacher/bang-cong", label: "Bảng công", icon: Clock },
   { href: "/teacher/hoan-thanh", label: "Hoàn thành", icon: Award },
+  // Batch 4 (10/07) — ảnh lớp.
+  { href: "/teacher/anh-lop", label: "Ảnh lớp", icon: Camera },
 ] as const;
 
 /** Path đang đứng có khớp item không — chấp nhận cả clean URL (bỏ /teacher). */
