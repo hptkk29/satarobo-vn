@@ -1,5 +1,5 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { getStudentClasses } from "@/lib/portal/learning";
 import { getParentChildrenOverview } from "@/lib/portal/dashboard";
 import { isPortalV2Enabled } from "@/lib/flags";
@@ -13,6 +13,7 @@ export const metadata = { title: "Hồ sơ con | Sata Robo", robots: { index: fa
 
 export default async function HoSoConPage() {
   const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   // Portal v2 — trang "Các con" (danh sách) giống SataUI.
   if (isPortalV2Enabled()) {
@@ -21,7 +22,7 @@ export default async function HoSoConPage() {
   }
 
   const [student, classes, skillRows] = await Promise.all([
-    db.student.findUnique({
+    pdb.student.findUnique({
       where: { id: studentId },
       select: {
         name: true,
@@ -35,7 +36,7 @@ export default async function HoSoConPage() {
       },
     }),
     getStudentClasses(studentId),
-    db.studentSkillAssessment.findMany({
+    pdb.studentSkillAssessment.findMany({
       where: { studentId },
       orderBy: { assessedAt: "desc" },
       select: { skill: true, level: true },

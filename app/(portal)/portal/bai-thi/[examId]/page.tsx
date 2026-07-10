@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { ExamTaking } from "./_components/exam-taking";
 
@@ -34,10 +34,14 @@ interface Props {
 }
 
 export default async function ExamTakingPage({ params }: Props) {
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
   const { examId } = await params;
 
-  const exam = await db.exam.findUnique({
+  const exam = await pdb.exam.findUnique({
     where: { id: examId },
     select: {
       id: true,
@@ -69,7 +73,7 @@ export default async function ExamTakingPage({ params }: Props) {
 
   // Access: con phải đang học lớp được giao đề.
   const enrolled = exam.classId
-    ? await db.enrollment.findFirst({
+    ? await pdb.enrollment.findFirst({
         where: { studentId, classId: exam.classId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
         select: { id: true },
       })
@@ -79,11 +83,11 @@ export default async function ExamTakingPage({ params }: Props) {
   // LMS-12 (thi lại): nhiều attempt/đề → ưu tiên bài ĐANG LÀM; nếu không có thì
   // lấy lần mới nhất (attemptNo desc) để quyết định điều hướng.
   const attempt =
-    (await db.examAttempt.findFirst({
+    (await pdb.examAttempt.findFirst({
       where: { examId, studentId, status: "IN_PROGRESS" },
       select: { id: true, status: true, startedAt: true },
     })) ??
-    (await db.examAttempt.findFirst({
+    (await pdb.examAttempt.findFirst({
       where: { examId, studentId },
       orderBy: { attemptNo: "desc" },
       select: { id: true, status: true, startedAt: true },
@@ -91,7 +95,7 @@ export default async function ExamTakingPage({ params }: Props) {
   if (!attempt) redirect("/portal/bai-thi");
   if (attempt.status !== "IN_PROGRESS") redirect("/portal/ket-qua");
 
-  const answers = await db.examAnswer.findMany({
+  const answers = await pdb.examAnswer.findMany({
     where: { attemptId: attempt.id },
     select: { examQuestionId: true, selectedChoiceIds: true, textAnswer: true },
   });

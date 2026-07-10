@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 
 // =============================================================================
 // PORTAL PROFILE — Phase NHÓM 3
@@ -25,13 +25,14 @@ export async function updateParentName(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await requireParent();
   if (!user) return { ok: false, error: "Chưa đăng nhập" };
+  const pdb = portalDb({ parentUserId: user.id, childIds: [] });
 
   const parsed = nameSchema.safeParse(name);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Tên không hợp lệ" };
   }
 
-  await db.user.update({ where: { id: user.id }, data: { name: parsed.data } });
+  await pdb.user.update({ where: { id: user.id }, data: { name: parsed.data } });
   revalidatePath("/portal/ho-so");
   revalidatePath("/portal");
   return { ok: true };
@@ -55,13 +56,14 @@ export async function changeParentPassword(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const user = await requireParent();
   if (!user) return { ok: false, error: "Chưa đăng nhập" };
+  const pdb = portalDb({ parentUserId: user.id, childIds: [] });
 
   const parsed = passwordSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
-  const row = await db.user.findUnique({
+  const row = await pdb.user.findUnique({
     where: { id: user.id },
     select: { password: true },
   });
@@ -71,7 +73,7 @@ export async function changeParentPassword(input: {
   if (!valid) return { ok: false, error: "Mật khẩu hiện tại không đúng" };
 
   const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
-  await db.user.update({ where: { id: user.id }, data: { password: hashed } });
+  await pdb.user.update({ where: { id: user.id }, data: { password: hashed } });
   return { ok: true };
 }
 
@@ -94,6 +96,7 @@ export async function updateParentProfile(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const user = await requireParent();
   if (!user) return { ok: false, error: "Chưa đăng nhập" };
+  const pdb = portalDb({ parentUserId: user.id, childIds: [] });
 
   const parsed = profileSchema.safeParse(input);
   if (!parsed.success) {
@@ -102,12 +105,12 @@ export async function updateParentProfile(input: {
   const d = parsed.data;
   const nz = (s: string) => (s.length ? s : null);
 
-  await db.user.update({
+  await pdb.user.update({
     where: { id: user.id },
     data: { name: d.name, address: nz(d.address) },
   });
   // Cập nhật SĐT PH + PH thứ hai cho toàn bộ con (denormalized theo hồ sơ hộ).
-  await db.student.updateMany({
+  await pdb.student.updateMany({
     where: { parentUserId: user.id, deletedAt: null },
     data: {
       parentName: d.name,

@@ -3,8 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { assertOwnsStudent } from "@/lib/portal/session";
+import { portalDb } from "@/lib/portal/db";
+import { assertOwnsStudent, getChildren } from "@/lib/portal/session";
 import { postMessage } from "@/lib/conversation/service";
 
 // =============================================================================
@@ -33,7 +33,11 @@ export async function sendParentMessage(input: {
   }
 
   // Ownership: enrollment → student → phải là con của PH đang đăng nhập.
-  const enr = await db.enrollment.findUnique({
+  // childIds thật từ getChildren (React.cache — 1 query/request); pdb hậu-kiểm ownership
+  // ở tầng query (belt), assertOwnsStudent bên dưới vẫn là guard chính (suspenders).
+  const children = await getChildren(session.user.id);
+  const pdb = portalDb({ parentUserId: session.user.id, childIds: children.map((c) => c.id) });
+  const enr = await pdb.enrollment.findUnique({
     where: { id: parsed.data.enrollmentId },
     select: { studentId: true },
   });

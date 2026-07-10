@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { isEvalV2Enabled } from "@/lib/flags";
 import { isRoundOpen } from "@/lib/eval/rounds";
@@ -32,14 +32,15 @@ export async function submitTeacherEval(input: unknown): Promise<Res> {
 
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  const { studentId } = await requireActiveStudent();
+  const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   const parsed = submitSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Dữ liệu không hợp lệ" };
   const d = parsed.data;
 
   // Đợt phải MỞ (round đóng giữa lúc điền → fail lịch sự).
-  const round = await db.evaluationRound.findUnique({
+  const round = await pdb.evaluationRound.findUnique({
     where: { id: d.roundId },
     select: {
       scope: true,
@@ -76,7 +77,7 @@ export async function submitTeacherEval(input: unknown): Promise<Res> {
 
   // Tạo response + answers; chống trùng qua UNIQUE (roundId, enrollmentId, teacherId).
   try {
-    await db.evalResponse.create({
+    await pdb.evalResponse.create({
       data: {
         roundId: d.roundId,
         enrollmentId: d.enrollmentId,

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getPortalContext } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { getThread, markThreadRead } from "@/lib/conversation/service";
 import { MessageForm } from "./_components/message-form";
 
@@ -32,13 +32,17 @@ export default async function PortalMessagesPage({
     );
   }
   const parentUserId = ctx.parentUserId;
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
   const params = await searchParams;
   const selectedId = params.e?.trim() || null;
 
   // Ownership + mark-read PHẢI làm TRƯỚC khi đọc danh sách (để badge phản ánh đúng).
   let selectedOwned = false;
   if (selectedId) {
-    const owned = await db.enrollment.findFirst({
+    const owned = await pdb.enrollment.findFirst({
       where: { id: selectedId, student: { parentUserId, deletedAt: null } },
       select: { id: true },
     });
@@ -47,7 +51,7 @@ export default async function PortalMessagesPage({
   }
 
   // Các enrollment ĐANG HỌC của tất cả các con (mỗi enrollment = 1 luồng).
-  const enrollments = await db.enrollment.findMany({
+  const enrollments = await pdb.enrollment.findMany({
     where: {
       deletedAt: null,
       status: { in: [...ACTIVE_ENROLLMENT] },

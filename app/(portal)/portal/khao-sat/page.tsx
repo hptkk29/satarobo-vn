@@ -1,5 +1,5 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { getEligibleCenterRounds } from "@/lib/eval/center-survey";
 import { getCenterSurveys } from "@/lib/portal/surveys";
@@ -12,6 +12,7 @@ export const metadata = { title: "Khảo sát | Sata Robo", robots: { index: fal
 
 export default async function KhaoSatPage() {
   const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   // Portal v2 — trang Khảo sát trung tâm giống SataUI (thẻ danh mục).
   // Vẫn nạp đợt CENTER_SURVEY (FL4-03 — luồng chính) để PH không mất form khi bật v2.
@@ -37,7 +38,7 @@ export default async function KhaoSatPage() {
   // chính. Survey/NPS dưới đây giữ song song (2-phase, sẽ deprecate — KHÔNG xoá).
   const centerRounds = isEvalV2Enabled() ? await getEligibleCenterRounds(ctx.parentUserId) : [];
 
-  const student = await db.student.findUnique({
+  const student = await pdb.student.findUnique({
     where: { id: studentId },
     select: { centerId: true, preferredCenterId: true },
   });
@@ -45,7 +46,7 @@ export default async function KhaoSatPage() {
 
   // @deprecated Survey/NPS cũ — thay dần bằng CENTER_SURVEY ở trên. Vẫn đọc để PH
   // trả nốt khảo sát đang chạy; không tạo mới qua admin (xem _actions.ts createSurvey).
-  const surveys = await db.survey.findMany({
+  const surveys = await pdb.survey.findMany({
     where: {
       isActive: true,
       OR: [{ centerId: null }, ...(centerIds.length ? [{ centerId: { in: centerIds } }] : [])],
@@ -57,7 +58,7 @@ export default async function KhaoSatPage() {
 
   // Loại survey đã trả lời cho con này.
   const answered = new Set(
-    (await db.surveyResponse.findMany({ where: { studentId, surveyId: { in: surveys.map((s) => s.id) } }, select: { surveyId: true } }))
+    (await pdb.surveyResponse.findMany({ where: { studentId, surveyId: { in: surveys.map((s) => s.id) } }, select: { surveyId: true } }))
       .map((r) => r.surveyId),
   );
   const pending = surveys.filter((s) => !answered.has(s.id));

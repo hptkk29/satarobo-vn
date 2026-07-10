@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireActiveStudent } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { isPortalV2Enabled } from "@/lib/flags";
@@ -14,6 +14,7 @@ const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 export default async function HinhAnhPage() {
   const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   // Portal v2 — trang Hình ảnh lớp giống SataUI.
   if (isPortalV2Enabled()) {
@@ -35,7 +36,7 @@ export default async function HinhAnhPage() {
   // (b) ảnh được ĐÁNH DẤU "Ảnh chung cả lớp" (isClassWide) của lớp con đang học.
   // Ảnh gắn thẻ HS khác → KHÔNG hiện. Ảnh không tag & KHÔNG class-wide cũng ẩn
   // (bất biến C6.2). Vẫn yêu cầu consent của con.
-  const enr = await db.enrollment.findMany({
+  const enr = await pdb.enrollment.findMany({
     where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
     select: { classId: true },
   });
@@ -43,7 +44,7 @@ export default async function HinhAnhPage() {
 
   const rawMedia =
     consentGranted && classIds.length > 0
-      ? await db.classSessionMedia.findMany({
+      ? await pdb.classSessionMedia.findMany({
           where: {
             classId: { in: classIds },
             status: "APPROVED",

@@ -1,5 +1,5 @@
 import { requireActiveStudent } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import {
   REQUEST_TYPE_LABEL,
   REQUEST_STATUS_LABEL,
@@ -48,12 +48,13 @@ export default async function YeuCauPage({
   searchParams: Promise<{ bu?: string }>;
 }) {
   const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
 
   // Portal v2 — trang Yêu cầu học bù giống SataUI (per-child) + form gửi/huỷ yêu cầu.
   if (isPortalV2Enabled()) {
     const [data, requests, sessions, sp] = await Promise.all([
       getStudentMakeup(studentId),
-      db.parentRequest.findMany({
+      pdb.parentRequest.findMany({
         where: { studentId },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -86,7 +87,7 @@ export default async function YeuCauPage({
   }
 
   const [requests, sessions, makeups] = await Promise.all([
-    db.parentRequest.findMany({
+    pdb.parentRequest.findMany({
       where: { studentId },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -94,7 +95,7 @@ export default async function YeuCauPage({
     }),
     getStudentUpcomingSessions(studentId),
     // B1 — trạng thái học bù của con.
-    db.makeupNeed.findMany({
+    pdb.makeupNeed.findMany({
       where: { studentId },
       orderBy: { createdAt: "desc" },
       take: 30,
