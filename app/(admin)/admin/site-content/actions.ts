@@ -19,7 +19,7 @@ export async function saveSiteContentAction(
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   try {
-    await assertPermission("honors:settings");
+    await assertPermission("site-content:edit");
   } catch {
     return { ok: false, error: "Không có quyền" };
   }

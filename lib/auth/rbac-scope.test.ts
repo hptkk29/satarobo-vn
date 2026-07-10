@@ -14,6 +14,7 @@ import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ROLE_SEED } from "../../prisma/seed-roles";
+import { PAGE_GATES } from "./page-gates";
 
 const ROOTS = ["app", "lib"];
 
@@ -41,16 +42,24 @@ const blob = ROOTS.flatMap((r) => walk(r))
   .join("\n");
 
 /**
- * Call-site gọi TRẦN (không target), 2 dạng:
+ * Call-site gọi TRẦN (không target), 3 dạng:
  * - `checkPermission("x")` / `assertPermission("x")` — page-gate;
- * - `<obj>.can("x")` — cfg.can của pending-tasks (evaluatePermission, cũng chạy v2).
- * Shadow prod 10/07 bắt 25 lệch `hr_attendance:adjust` vì scanner cũ mù dạng thứ hai.
+ * - `<obj>.can("x")` — cfg.can của pending-tasks (evaluatePermission, cũng chạy v2);
+ * - action nằm trong `PAGE_GATES` — page.tsx gọi `checkAnyPermission(PAGE_GATES["/x"])`,
+ *   không truyền target ⇒ mọi action trong bảng đều là call-site trần.
+ *
+ * Mỗi dạng từng là một điểm mù: shadow prod 10/07 bắt 25 lệch `hr_attendance:adjust`
+ * vì scanner mù dạng 2. Dạng 3 sinh ra cùng ngày khi gộp gate về một bảng — thêm ngay,
+ * đừng để nó âm thầm cho phép scope CENTER trên action gác trang.
  */
+const PAGE_GATE_ACTIONS = new Set<string>(Object.values(PAGE_GATES).flat());
+
 function bareCallSites(action: string): number {
   const esc = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`(checkPermission|assertPermission)\\(\\s*["']${esc}["']\\s*\\)`, "g");
   const reDotCan = new RegExp(`\\.can\\(\\s*["']${esc}["']\\s*\\)`, "g");
-  return (blob.match(re) ?? []).length + (blob.match(reDotCan) ?? []).length;
+  const viaTable = PAGE_GATE_ACTIONS.has(action) ? 1 : 0;
+  return (blob.match(re) ?? []).length + (blob.match(reDotCan) ?? []).length + viaTable;
 }
 
 /**

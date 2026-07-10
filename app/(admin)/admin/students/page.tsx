@@ -5,7 +5,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { getSetting } from "@/lib/settings/service";
 import { StudentStatus, type Prisma } from "@prisma/client";
 import {
@@ -105,7 +106,7 @@ const STUDENT_LIST_SELECT = {
 export default async function StudentsPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("students:view-all"))) redirect("/dashboard");
+  if (!(await checkAnyPermission(PAGE_GATES["/students"]))) redirect("/dashboard");
 
   const canCreate = await checkPermission("students:create");
   const canUpdate = await checkPermission("students:edit");

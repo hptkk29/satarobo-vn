@@ -2,7 +2,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { SiteContentClient } from "./client";
 
 export const metadata = { title: "Hình ảnh & nội dung trang | Admin" };
@@ -29,7 +30,7 @@ const FIELDS = [
 export default async function SiteContentPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("honors:settings"))) {
+  if (!(await checkAnyPermission(PAGE_GATES["/site-content"]))) {
     redirect("/dashboard");
   }
 
