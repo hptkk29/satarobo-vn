@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb } from "@/lib/db-scope";
 import { CriteriaManager } from "../_components/criteria-manager";
 
 export const metadata = { title: "Tiêu chí học bạ | Admin" };
@@ -11,11 +12,15 @@ export const dynamic = "force-dynamic";
 export default async function ReportCardCriteriaPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // Cấu hình tiêu chí = quyền duyệt (Đào tạo/Quản lý). report-cards:* CHƯA có trong
-  // seed RBAC v2 — không truyền target (chưa chắc scope, không đoán mò).
+  // Cấu hình tiêu chí = quyền duyệt (Đào tạo/Quản lý). report-cards:review đã có ở v2,
+  // scope GLOBAL (#09) — gate không truyền target, đúng R1.
   if (!(await checkPermission("report-cards:review"))) redirect("/report-cards");
 
-  const courses = await db.course.findMany({
+  // Course/ReportCardCriterion không center-scope → sdb pass-through. Dùng sdb để file
+  // không phải import db trần (ESLint db-import-allowlist).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+
+  const courses = await sdb.course.findMany({
     where: { isActive: true },
     orderBy: [{ isTeachable: "desc" }, { displayOrder: "asc" }, { name: "asc" }],
     take: 300,
@@ -27,7 +32,7 @@ export default async function ReportCardCriteriaPage() {
     },
   });
 
-  const criteria = await db.reportCardCriterion.findMany({
+  const criteria = await sdb.reportCardCriterion.findMany({
     where: { courseId: { in: courses.map((c) => c.id) } },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     select: { id: true, courseId: true, name: true, order: true, active: true },

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
@@ -34,9 +33,12 @@ export default async function AdminMessagesPage({
   }
 
   // Lớp actor phụ trách: Manager/Super → scopedDb (cách ly cơ sở); GV → lớp phân công.
+  // Enrollment + ConversationMessage ∈ SCOPED_MODELS (#03 Pha B) → sdb cách ly luôn ở
+  // tầng query. assignedClassIds lấy từ lớp GV đứng tên (actor.ts:185) nên cùng cơ sở.
+  const sdb = scopedDb(actor);
   let allowedClassIds: string[];
   if (canViewAllClasses) {
-    const classes = await scopedDb(actor)
+    const classes = await sdb
       .class.findMany({ where: { deletedAt: null }, select: { id: true } })
       .catch(() => [] as { id: string }[]);
     allowedClassIds = classes.map((c) => c.id);
@@ -50,7 +52,7 @@ export default async function AdminMessagesPage({
 
   // Ownership + mark-read TRƯỚC khi đọc danh sách (badge phản ánh đúng).
   if (selectedId) {
-    const e = await db.enrollment.findUnique({
+    const e = await sdb.enrollment.findUnique({
       where: { id: selectedId },
       select: { classId: true },
     });
@@ -58,7 +60,7 @@ export default async function AdminMessagesPage({
   }
 
   // Inbox: các enrollment trong phạm vi phụ trách CÓ ≥1 tin nhắn.
-  const enrollments = await db.enrollment.findMany({
+  const enrollments = await sdb.enrollment.findMany({
     where: {
       deletedAt: null,
       classId: { in: allowedClassIds },

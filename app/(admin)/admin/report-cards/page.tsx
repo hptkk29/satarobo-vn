@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import {
@@ -64,12 +63,13 @@ export default async function ReportCardsPage({
   if (classId) {
     const inScope = await sdb.class.findUnique({ where: { id: classId }, select: { id: true } });
     if (inScope) {
-      const enrollments = await db.enrollment.findMany({
+      // Lớp đã qua sdb.class.findUnique ở trên ⇒ cùng cơ sở; ghi danh + học bạ cũng scoped.
+      const enrollments = await sdb.enrollment.findMany({
         where: { classId },
         orderBy: { createdAt: "asc" },
         select: { id: true, student: { select: { name: true, studentCode: true } } },
       });
-      const cards = await db.reportCard.findMany({
+      const cards = await sdb.reportCard.findMany({
         where: { enrollmentId: { in: enrollments.map((e) => e.id) } },
         select: { enrollmentId: true, status: true },
       });

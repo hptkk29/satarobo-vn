@@ -3,8 +3,7 @@ import { redirect } from "next/navigation";
 import { Gauge, ClipboardList, ArrowRight } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { db } from "@/lib/db";
-import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { computeNps } from "@/lib/survey/nps";
 import { SurveyAdmin } from "./_components/survey-admin";
@@ -17,26 +16,16 @@ export default async function SurveyPage() {
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("parent-feedback:view"))) redirect("/dashboard");
 
-  // Cách ly cơ sở: Survey/SurveyResponse ∈ SCOPED_MODELS. SurveyResponse → sdb auto-scope
-  // (centerId IN tầm nhìn). Survey CÓ THỂ centerId=null (khảo sát dùng chung toàn hệ thống)
-  // → KHÔNG dùng auto-scope (sẽ ẩn mất khảo sát chung); scope thủ công "null OR visible".
+  // Cách ly cơ sở: Survey/SurveyResponse ∈ SCOPED_MODELS. Survey có record centerId=null
+  // hợp lệ (khảo sát dùng chung toàn hệ thống) — trước đây phải scope THỦ CÔNG "null OR
+  // visible" vì sdb inject `centerId IN` sẽ ẩn nhầm. Từ #03 Pha B, NULL_IS_GLOBAL_MODELS
+  // đã dạy scopedDb đúng semantics đó → dùng sdb thẳng, bỏ scope tay.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const visibleSurveyCenters = getModelVisibleCenterIds("Survey", actor);
-  const surveyWhere =
-    visibleSurveyCenters === "ALL"
-      ? {}
-      : { OR: [{ centerId: null }, { centerId: { in: visibleSurveyCenters } }] };
 
   const [centers, surveys, responses] = await Promise.all([
     sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
-    // ⚠️ GIỮ db trần CHỦ ĐÍCH cho riêng query này: Survey ∈ SCOPED_MODELS nhưng có
-    // record centerId=null hợp lệ (khảo sát dùng chung toàn hệ thống). sdb sẽ inject
-    // `centerId IN visible` → ẨN NHẦM khảo sát chung với actor center-scope (DoD #03).
-    // Scope thủ công "null OR visible" ở trên đã cách ly đúng. File này vẫn nằm trong
-    // db-import-allowlist với lý do này.
-    db.survey.findMany({
-      where: surveyWhere,
+    sdb.survey.findMany({
       orderBy: { createdAt: "desc" },
       take: 50,
       select: { id: true, title: true, milestone: true, isActive: true, _count: { select: { responses: true } } },

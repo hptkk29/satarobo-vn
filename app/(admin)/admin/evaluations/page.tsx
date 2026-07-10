@@ -3,7 +3,7 @@ import { ClipboardList } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/db-scope";
 import { listForms } from "@/lib/eval/forms";
 import { listRounds } from "@/lib/eval/rounds";
 import type { EvalScopeValue } from "@/lib/eval/schema";
@@ -19,13 +19,14 @@ export default async function EvaluationsPage() {
   if (!(await checkPermission("evaluations:manage"))) redirect("/dashboard");
 
   const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const centerScope = actor.isSuperAdmin || actor.isHoLevel ? null : actor.visibleCenterIds;
 
   const [forms, rounds, centers, courses] = await Promise.all([
     listForms(),
     listRounds({ centerIds: centerScope }),
-    db.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
-    db.course.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
+    sdb.course.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const centerName = new Map(centers.map((c) => [c.id, c.name]));

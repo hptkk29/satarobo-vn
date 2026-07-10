@@ -5,7 +5,6 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { db } from "@/lib/db";
 import { getRound } from "@/lib/eval/rounds";
 import { aggregateRound, getRoundDetail, type RoundAggregate } from "@/lib/eval/aggregate";
 import { parseOptions } from "@/lib/eval/forms";
@@ -60,7 +59,7 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
       // Student ∈ SCOPED_MODELS → sdb tự inject centerId: tên HV cơ sở khác (đợt
       // TEACHER_EVAL toàn hệ thống, centerId=null bỏ qua gate trên) sẽ không lộ.
       sdb.student.findMany({ where: { id: { in: studentIds } }, select: { id: true, name: true } }),
-      db.user.findMany({ where: { id: { in: [...teacherIds, ...parentIds] } }, select: { id: true, name: true } }),
+      sdb.user.findMany({ where: { id: { in: [...teacherIds, ...parentIds] } }, select: { id: true, name: true } }),
     ]);
     nameMap = new Map([
       ...students.map((s) => [s.id, s.name] as const),

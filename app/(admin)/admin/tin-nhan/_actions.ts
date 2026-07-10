@@ -7,7 +7,6 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
@@ -26,7 +25,10 @@ export async function staffOwnsEnrollment(
   actor: Actor,
   enrollmentId: string,
 ): Promise<boolean> {
-  const enr = await db.enrollment.findUnique({
+  // Enrollment ∈ SCOPED_MODELS (#03 Pha B) → sdb.findUnique trả null nếu ngoài cơ sở của
+  // actor (chống IDOR). Nhánh GV bên dưới vẫn đúng: assignedClassIds lấy từ lớp GV đứng tên
+  // (actor.ts:185) nên luôn cùng cơ sở.
+  const enr = await scopedDb(actor).enrollment.findUnique({
     where: { id: enrollmentId },
     select: { classId: true },
   });
