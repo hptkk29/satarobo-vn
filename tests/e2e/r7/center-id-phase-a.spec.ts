@@ -83,4 +83,51 @@ test.describe("[#03] centerId denormalize + flip scope", () => {
     expect(NULL_IS_GLOBAL_MODELS.has("ReportCard")).toBe(false);
     expect(NULL_IS_GLOBAL_MODELS.has("ConversationMessage")).toBe(false);
   });
+
+  test("[#03-A3] backfill migration: 2 câu UPDATE heal dòng null từ Enrollment.centerId", async () => {
+    // Mô phỏng dữ liệu QUÁ KHỨ (trước Pha A): row centerId=null trên enrollment CÓ cơ sở
+    // + enrollment KHÔNG cơ sở (phải giữ null). Chạy đúng 2 UPDATE của migration
+    // 20260710000000_p03_phase_a_center_id_backfill rồi assert — SQL backfill trước đó
+    // ship KHÔNG có test (gap A1-review 10/07).
+    const { enrollmentId, userId } = await seedEnrollment();
+    // Enrollment thứ 2 KHÔNG centerId (lớp HO/legacy) — backfill phải bỏ qua.
+    const course2 = await db.course.create({ data: { name: "Khoá B", slug: "khoa-b-a3" } });
+    const cls2 = await db.class.create({
+      data: { name: "Lớp B", courseId: course2.id, status: "ACTIVE" },
+      select: { id: true },
+    });
+    const student2 = await db.student.create({ data: { name: "HV2", centerId: CS1 }, select: { id: true } });
+    const enrNull = await db.enrollment.create({
+      data: { studentId: student2.id, classId: cls2.id, courseId: course2.id, status: "STUDYING" },
+      select: { id: true },
+    });
+
+    const msg = await db.conversationMessage.create({
+      data: { enrollmentId, authorUserId: userId, authorSide: "STAFF", body: "legacy" },
+      select: { id: true },
+    });
+    const msgNull = await db.conversationMessage.create({
+      data: { enrollmentId: enrNull.id, authorUserId: userId, authorSide: "STAFF", body: "legacy-null" },
+      select: { id: true },
+    });
+    const rc = await db.reportCard.create({
+      data: { enrollmentId, teacherId: userId, status: "DRAFT" },
+      select: { id: true },
+    });
+
+    // 2 câu UPDATE — GIỮ NGUYÊN VĂN theo migration.sql.
+    await db.$executeRaw`UPDATE "ConversationMessage" AS m
+      SET "centerId" = e."centerId"
+      FROM "Enrollment" AS e
+      WHERE m."enrollmentId" = e."id" AND m."centerId" IS NULL AND e."centerId" IS NOT NULL`;
+    await db.$executeRaw`UPDATE "ReportCard" AS r
+      SET "centerId" = e."centerId"
+      FROM "Enrollment" AS e
+      WHERE r."enrollmentId" = e."id" AND r."centerId" IS NULL AND e."centerId" IS NOT NULL`;
+
+    expect((await db.conversationMessage.findUniqueOrThrow({ where: { id: msg.id } })).centerId).toBe(CS1);
+    expect((await db.reportCard.findUniqueOrThrow({ where: { id: rc.id } })).centerId).toBe(CS1);
+    // Enrollment không cơ sở → giữ null (backfill không đoán bừa).
+    expect((await db.conversationMessage.findUniqueOrThrow({ where: { id: msgNull.id } })).centerId).toBeNull();
+  });
 });
