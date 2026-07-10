@@ -147,6 +147,9 @@
   /* Portal v2 (SataUI) — accent coral phụ huynh; chỉ kích hoạt trong .portal-v2 */
   --parent: #F5788B;
   --parent-soft: #FFF4F0;
+  /* Cổng học sinh (student-mode trong .portal-v2) — accent cam SataUI */
+  --student: #FD8F2D;
+  --student-soft: #FFF3E6;
   --accent-soft: oklch(0.97 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
@@ -518,8 +521,25 @@
   box-shadow: 0 1px 6px rgba(0,0,0,0.20);
 }
 /* Portal v2 (merge SataUI) — accent coral phụ huynh, CHỈ trong cây .portal-v2.
-   Không đụng admin/public (vốn dùng --accent neutral của main). */
+   Không đụng admin/public (vốn dùng --accent neutral của main).
+
+   Đây là giá trị MẶC ĐỊNH cho lần paint đầu (SSR). Sau khi mount,
+   PortalAppearanceProvider ghi đè inline `--accent`/`--primary`/… trên chính
+   phần tử này bằng màu người dùng đã lưu — inline thắng mọi rule ở đây.
+   Class `.dark` cũng nằm trên phần tử này nên `.portal-v2` (khai báo sau) thắng
+   `--accent` neutral của `.dark`. */
 .portal-v2 {
   --accent: var(--parent);
   --accent-soft: var(--parent-soft);
+  /* Cả coral lẫn cam đều đủ tối → chữ trắng. Phải khai báo ở đây, KHÔNG để rơi về
+     `--accent-foreground` của :root (màu tối) — nếu không hero sẽ chữ tối trên nền
+     coral ở lần paint đầu, trước khi provider gán inline. */
+  --accent-foreground: #ffffff;
+}
+
+/* Cổng học sinh: cùng shell, accent cam. Specificity 0,2,0 > .portal-v2 và .dark. */
+.portal-v2[data-mode="student"] {
+  --accent: var(--student);
+  --accent-soft: var(--student-soft);
+  --accent-foreground: #ffffff;
 }
