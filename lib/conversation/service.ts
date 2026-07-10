@@ -46,7 +46,10 @@ export async function postMessage(input: {
   // không dòng mới sẽ null và bị ẩn nhầm sau khi flip SCOPED_MODELS ở pha B (bài học #04).
   const enr = await client.enrollment.findUnique({
     where: { id: input.enrollmentId },
-    select: { centerId: true },
+    // A1-LOW 10/07: fallback class.centerId khi enrollment.centerId null (đường tạo
+    // enrollment nào đó quên denormalize) — tin nhắn null bị ẨN với actor cấp cơ sở
+    // (ConversationMessage ∉ NULL_IS_GLOBAL). Lớp HO thật (cả 2 null) giữ null.
+    select: { centerId: true, class: { select: { centerId: true } } },
   });
   const msg = await client.conversationMessage.create({
     data: {
@@ -54,7 +57,7 @@ export async function postMessage(input: {
       authorUserId: input.authorUserId,
       authorSide: input.authorSide,
       body,
-      centerId: enr?.centerId ?? null,
+      centerId: enr?.centerId ?? enr?.class?.centerId ?? null,
     },
   });
 
