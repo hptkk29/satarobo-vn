@@ -6,9 +6,13 @@
 
 ## 1. Vì sao chưa code được (2 phát hiện từ audit code 09/07)
 
-### 1.1 Bug gốc "gán role HO không nhận" là THẬT & còn MỞ — **desync 2 writer**
-`actor.ts` union KHÔNG lỗi (HO+CS gộp đúng: `buildActor` union mọi live row, `isHoLevel`, `visibleCenterIds`).
-Lỗi nằm ở **2 nguồn ghi role KHÔNG đồng bộ nhau**:
+### 1.1 "Gán role HO không nhận" — KHÔNG phải lỗi quyền, nhưng CÓ staleness tầng session
+**Hoà giải với README §63 (đã ký 07/07):** đúng — đây KHÔNG phải lỗi permission. `HO_*` chỉ tồn tại ở RBAC v2
+(`UserOrgRole`+`RoleDef`); runtime chạy v1 matrix (`RBAC_V2_ENABLED=false`) nên v1 path không đọc `HO_*`;
+assignment ĐÃ ghi đúng DB, kích hoạt tại flip #09. `actor.ts` union cũng KHÔNG lỗi (gộp HO+CS đúng).
+
+**Điểm #13 phải lưu (không mâu thuẫn README):** menu đọc vai trò từ đâu? Nếu đọc `session.user.roles`
+(=`User.roles`) thì có **staleness tầng session** — 2 writer không đồng bộ:
 
 | Writer | Ghi gì | KHÔNG ghi gì | Hệ quả |
 |---|---|---|---|
@@ -58,4 +62,6 @@ là **đổi panel/ngữ cảnh TRONG admin** (việc của #10 dashboard đa-va
 - [ ] Quyền union giữ nguyên khi chuyển; e2e: chuyển sang khu vực không quyền → `decideRoute` chặn.
 
 ## Trạng thái
-🔴 **CHẶN** bởi 3 tiền đề (mục 3). Mảnh an toàn làm trước được: helper `listSwitchableAreas` (mục 4.3) — pure + test, dùng chung #10.
+🔴 **CHẶN** bởi 3 tiền đề (mục 3) cho phần MENU. ✅ Mảnh an toàn ĐÃ LÀM: helper `lib/auth/switchable-areas.ts`
+`listSwitchableAreas` (mục 4.3) — pure, probe qua `decideRoute`, Vitest 11/11 (commit 4218da5), dùng chung #10.
+Còn lại của #13 (menu + login primaryRole) chờ 3 tiền đề.
