@@ -21,9 +21,11 @@ import { PageHero } from "@/components/portal/page-header";
 import { usePortalAppearance } from "@/components/portal/appearance-provider";
 import {
   ACCENT_PRESETS,
+  INK_DARK,
   ROLE_DEFAULT_ACCENT,
+  WCAG_AA,
+  accentContrast,
   inkOn,
-  isLightAccent,
   type PortalRole,
   type ThemeMode,
 } from "@/lib/portal/appearance";
@@ -71,8 +73,10 @@ export function GiaoDienPage() {
     return () => clearTimeout(t);
   }, [justSaved]);
 
-  const light = isLightAccent(accent);
   const ink = inkOn(accent);
+  // Tương phản THỰC của chữ trên nền accent, sau khi đã chọn mực tốt nhất.
+  const ratio = accentContrast(accent);
+  const passesAA = ratio >= WCAG_AA;
   const isDefault = accent.toUpperCase() === ROLE_DEFAULT_ACCENT[editRole].toUpperCase();
   const previewingShell = editRole === role;
 
@@ -276,20 +280,20 @@ export function GiaoDienPage() {
                   className={cn(
                     // Nền dark rất tối → sắc 700 chìm hẳn; cần nâng lên 300 ở dark.
                     "flex items-start gap-2 rounded-xl p-3 text-sm font-semibold",
-                    light
-                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    passesAA
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "bg-amber-500/10 text-amber-700 dark:text-amber-300",
                   )}
                 >
-                  {light ? (
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  ) : (
+                  {passesAA ? (
                     <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   )}
                   <span>
-                    {light
-                      ? "Màu sáng — chữ trên nền này tự chuyển sang tối (#241A2E) để đạt tương phản."
-                      : "Tương phản tốt — chữ trắng dễ đọc trên nền màu này."}
+                    {passesAA
+                      ? `Tương phản tốt (${ratio.toFixed(1)}:1) — chữ ${ink === INK_DARK ? "tối" : "trắng"} dễ đọc trên nền này.`
+                      : `Tương phản thấp (${ratio.toFixed(1)}:1) — chưa đạt chuẩn WCAG AA (${WCAG_AA}:1). Hãy chọn màu đậm hơn hoặc nhạt hơn.`}
                   </span>
                 </div>
               </div>

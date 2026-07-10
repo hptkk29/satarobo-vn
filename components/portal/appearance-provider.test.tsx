@@ -106,10 +106,11 @@ describe("PortalAppearanceProvider", () => {
     expect(screen.getByTestId("dirty").textContent).toBe("false");
   });
 
-  it("role=student: data-mode và màu nhấn theo học sinh", () => {
+  it("role=student: data-mode, màu cam, và mực TỐI (cam là màu sáng)", () => {
     const { wrapper } = renderProvider("student");
     expect(wrapper.dataset.mode).toBe("student");
     expect(wrapper.style.getPropertyValue("--primary")).toBe(ROLE_DEFAULT_ACCENT.student);
+    expect(wrapper.style.getPropertyValue("--primary-foreground")).toBe("#241A2E");
   });
 
   it("nhận lại chế độ Tối đã lưu ở shell v2 cũ (key `portal-theme`)", () => {

@@ -60,6 +60,13 @@ const isThemeMode = (v: unknown): v is ThemeMode =>
 
 // ---- Contrast guard ----
 
+/** Hai mực khả dụng cho chữ đặt trên nền accent. */
+export const INK_DARK = "#241A2E";
+export const INK_LIGHT = "#FFFFFF";
+
+/** Ngưỡng WCAG AA cho chữ thường. */
+export const WCAG_AA = 4.5;
+
 /** Độ sáng tương đối theo WCAG. HEX không hợp lệ → 0 (coi như màu tối). */
 export function relLuminance(hex: string): number {
   const m = hex.replace("#", "");
@@ -74,11 +81,31 @@ export function relLuminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-export const isLightAccent = (hex: string): boolean => relLuminance(hex) > 0.42;
+/** Tỉ lệ tương phản WCAG giữa hai màu (1:1 … 21:1). */
+export function contrastRatio(a: string, b: string): number {
+  const la = relLuminance(a);
+  const lb = relLuminance(b);
+  const hi = Math.max(la, lb);
+  const lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
 
-/** Chữ trên nền accent: màu sáng → mực tối; màu tối → chữ trắng. */
+/**
+ * Chữ trên nền accent: chọn mực nào cho tương phản CAO HƠN.
+ *
+ * Bản cũ dùng ngưỡng luminance 0.42 (bê từ SataUI). Sai: điểm hoà của hai mực nằm
+ * ở luminance ≈ 0.207, không phải 0.42. Cam #FD8F2D (lum 0.407) lọt ngay dưới
+ * ngưỡng nên bị gán chữ trắng — chỉ 2.3:1, trượt WCAG AA; mực tối cho 7.2:1.
+ * So tỉ lệ trực tiếp thì không cần ngưỡng ma thuật nào cả.
+ */
 export const inkOn = (hex: string): string =>
-  isLightAccent(hex) ? "#241A2E" : "#FFFFFF";
+  contrastRatio(hex, INK_DARK) >= contrastRatio(hex, INK_LIGHT) ? INK_DARK : INK_LIGHT;
+
+/** Nền sáng tới mức phải dùng mực tối. */
+export const needsDarkInk = (hex: string): boolean => inkOn(hex) === INK_DARK;
+
+/** Tương phản thực tế của chữ trên nền accent, sau khi đã chọn mực tốt nhất. */
+export const accentContrast = (hex: string): number => contrastRatio(hex, inkOn(hex));
 
 /**
  * Tint nhạt dạng rgba — dùng cho nền `bg-accent-soft`.
