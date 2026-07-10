@@ -267,6 +267,9 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       // ── Lead ──
       { action: "leads:view-all", scopeType: "GLOBAL" },
+      // #11 T2 (Kiệt ký 10/07) — PII lead cho role trực tiếp CSKH; GLOBAL theo R1
+      // (call-site gọi trần qua canViewLeadPii), cách ly cơ sở do scopedDb.
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
@@ -393,6 +396,8 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "CENTER_SALES_CSM", name: "Tư vấn & CSKH cơ sở",
     perms: [
       { action: "leads:view-own", scopeType: "GLOBAL" },
+      // #11 T2 — như CENTER_MANAGER: Sale trực tiếp gọi khách phải thấy SĐT.
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       // Task #07 — quyết định user 07/07/2026: Sale được import danh sách "đã đăng

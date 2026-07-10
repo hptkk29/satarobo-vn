@@ -959,6 +959,12 @@ model Lead {
   orgUnitId        String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   courseId         String?
   assignedToId     String?
+  // #11 T1 (câu 10 BGĐ, Kiệt ký 10/07): "dùng chung" — CSKH cùng CƠ SỞ thấy lead này
+  // (đọc mở rộng OR isSharedWithTeam=true, cách ly cơ sở vẫn do scopedDb). Chỉ owner
+  // (assignee) hoặc CENTER_MANAGER bật/tắt; sharedById = ai bật (không FK — chỉ hiển thị).
+  isSharedWithTeam Boolean    @default(false)
+  sharedAt         DateTime?  @db.Timestamptz(6)
+  sharedById       String?
   status           LeadStatus @default(NEW)
   source           String?
   utmSource        String?
