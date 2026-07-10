@@ -575,7 +575,9 @@ export function getEffectiveRoles(user: {
       : user.role
         ? [user.role]
         : [];
-  return arr.filter(Boolean) as Role[];
+  // Dedup (#13): User.roles trùng phần tử → không nhân đôi item ở RoleSwitcher
+  // (trùng React key) / không hiện nút chuyển vai cho user thực chất 1 vai.
+  return [...new Set(arr.filter(Boolean))] as Role[];
 }
 
 function roleListAllows(roles: Role[], action: Action): boolean {

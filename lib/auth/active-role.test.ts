@@ -1,6 +1,7 @@
 // #13 (câu 11) — "Chuyển vai trò". Lõi THUẦN: cookie do client set nên KHÔNG được tin.
 import { describe, it, expect } from "vitest";
-import { hasMultipleRoles, menuUserForRole, resolveActiveRole } from "@/lib/auth/active-role";
+import { menuUserForRole, resolveActiveRole } from "@/lib/auth/active-role";
+import { getEffectiveRoles } from "@/lib/auth/permissions";
 
 const toai = { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER", "TEACHER", "TRAINING"] };
 const duc = { role: "TEACHER", roles: ["TEACHER"] };
@@ -43,7 +44,9 @@ describe("menuUserForRole — lọc menu, KHÔNG đụng grant riêng", () => {
   });
 });
 
-describe("hasMultipleRoles — quyết định hiện nút chuyển vai", () => {
-  it("nhiều vai → true", () => expect(hasMultipleRoles(toai)).toBe(true));
-  it("một vai → false", () => expect(hasMultipleRoles(duc)).toBe(false));
+describe("getEffectiveRoles.length — quyết định hiện nút chuyển vai (hasMultipleRoles đã gỡ, check tại chỗ)", () => {
+  it("nhiều vai → >1", () => expect(getEffectiveRoles(toai).length > 1).toBe(true));
+  it("một vai → không hiện", () => expect(getEffectiveRoles(duc).length > 1).toBe(false));
+  it("dedup: roles trùng phần tử → vẫn tính 1 vai", () =>
+    expect(getEffectiveRoles({ role: "TEACHER", roles: ["TEACHER", "TEACHER"] }).length > 1).toBe(false));
 });
