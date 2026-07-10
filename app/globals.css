@@ -144,12 +144,14 @@
   --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  /* Portal v2 (SataUI) — accent coral phụ huynh; chỉ kích hoạt trong .portal-v2 */
-  --parent: #F5788B;
-  --parent-soft: #FFF4F0;
-  /* Cổng học sinh (student-mode trong .portal-v2) — accent cam SataUI */
+  /* Portal v2 (SataUI) — accent mặc định: phụ huynh TÍM, học sinh CAM.
+     Chỉ kích hoạt trong .portal-v2. Phải khớp ROLE_DEFAULT_ACCENT trong
+     lib/portal/appearance.ts. *-soft để rgba (không phải hex đục) để đọc tốt ở
+     cả nền sáng lẫn tối, và khớp softTint() mà provider gán sau khi mount. */
+  --parent: #610C8D;
+  --parent-soft: rgba(97, 12, 141, 0.12);
   --student: #FD8F2D;
-  --student-soft: #FFF3E6;
+  --student-soft: rgba(253, 143, 45, 0.12);
   --accent-soft: oklch(0.97 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
@@ -520,7 +522,7 @@
   opacity: 1;
   box-shadow: 0 1px 6px rgba(0,0,0,0.20);
 }
-/* Portal v2 (merge SataUI) — accent coral phụ huynh, CHỈ trong cây .portal-v2.
+/* Portal v2 (merge SataUI) — accent tím phụ huynh, CHỈ trong cây .portal-v2.
    Không đụng admin/public (vốn dùng --accent neutral của main).
 
    Đây là giá trị MẶC ĐỊNH cho lần paint đầu (SSR). Sau khi mount,
@@ -531,9 +533,9 @@
 .portal-v2 {
   --accent: var(--parent);
   --accent-soft: var(--parent-soft);
-  /* Cả coral lẫn cam đều đủ tối → chữ trắng. Phải khai báo ở đây, KHÔNG để rơi về
+  /* Cả tím lẫn cam đều đủ tối → chữ trắng. Phải khai báo ở đây, KHÔNG để rơi về
      `--accent-foreground` của :root (màu tối) — nếu không hero sẽ chữ tối trên nền
-     coral ở lần paint đầu, trước khi provider gán inline. */
+     tím ở lần paint đầu, trước khi provider gán inline. */
   --accent-foreground: #ffffff;
 }
 

@@ -140,17 +140,24 @@ describe("Trang /portal/giao-dien", () => {
     expect(wrapper.classList.contains("dark")).toBe(true);
   });
 
+  it("bấm đúng preset mặc định (Tím) thì không có gì để lưu", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Màu Tím" }));
+    expect(screen.getByRole("button", { name: /Lưu thay đổi/ })).toBeDisabled();
+  });
+
   it("chọn preset rồi Lưu → ghi đúng màu cho vai trò đang sửa", () => {
     renderPage();
     const save = screen.getByRole("button", { name: /Lưu thay đổi/ });
     expect(save).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Màu Tím" }));
+    fireEvent.click(screen.getByRole("button", { name: "Màu Xanh ngọc" }));
     expect(save).toBeEnabled();
     fireEvent.click(save);
 
-    expect(saved().accents.parent).toBe("#610C8D");
-    expect(saved().accents.student).toBe(ROLE_DEFAULT_ACCENT.student);
+    expect(saved().accents.parent).toBe("#1F93A8");
+    // Học sinh chưa đổi → không ghi, để nhận mặc định hiện hành.
+    expect(saved().accents.student).toBeUndefined();
   });
 
   it("đổi tab sang Học sinh thì sửa màu học sinh, không đụng màu phụ huynh", () => {
@@ -160,7 +167,7 @@ describe("Trang /portal/giao-dien", () => {
     fireEvent.click(screen.getByRole("button", { name: /Lưu thay đổi/ }));
 
     expect(saved().accents.student).toBe("#4F46E5");
-    expect(saved().accents.parent).toBe(ROLE_DEFAULT_ACCENT.parent);
+    expect(saved().accents.parent).toBeUndefined();
   });
 
   it("ô HEX chỉ commit khi đủ 6 ký tự hợp lệ", () => {
