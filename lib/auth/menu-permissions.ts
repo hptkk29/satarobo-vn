@@ -11,30 +11,46 @@
 // Cách sửa: layout (server) hỏi CÙNG hàm quyết định mà cổng trang dùng
 // (`evaluatePermission` + cờ), trả xuống sidebar một tập action đã chốt.
 //
-// Hai điều KHÔNG được làm ở đây, cố ý:
-//  1. KHÔNG ghi shadow-diff. Menu không phải điểm cưỡng chế; ghi vào sẽ bơm ~120 dòng
-//     RbacShadowDiff mỗi lần mở trang và dìm chết tín hiệu thật.
-//  2. KHÔNG dùng logger mặc định. `decidePermission` mặc định `logger = console` và warn
-//     mỗi lần v1≠v2 ⇒ ~120 lần warn/request. Truyền logger câm.
-import { PERMISSIONS, type Action } from "@/lib/auth/permissions";
-import { evaluatePermission } from "@/lib/auth/permission-eval";
+// Menu KHÔNG ghi shadow-diff và KHÔNG dùng logger mặc định của `decidePermission`
+// (mặc định là `console`, sẽ warn ~120 lần/request). Menu không phải điểm cưỡng chế;
+// ghi shadow ở đây sẽ bơm ~120 dòng RbacShadowDiff mỗi lần mở trang, dìm chết tín hiệu thật.
+import { PERMISSIONS, can as canMatrix, type Action } from "@/lib/auth/permissions";
 import type { Actor } from "@/lib/auth/actor";
-import type { ShadowLogger } from "@/lib/auth/shadow-compare";
 
-/** Menu không log lệch — shadow chỉ đo ở điểm cưỡng chế (checkPermission). */
-const SILENT: ShadowLogger = { warn: () => {} };
-
-type MenuUser = Parameters<typeof evaluatePermission>[0]["sessionUser"];
+type MenuUser = Parameters<typeof canMatrix>[0];
 
 /**
- * Mọi action user được phép, theo ĐÚNG hệ quyền mà cổng trang đang dùng.
+ * v2: user có GIỮ action này không (ở BẤT KỲ scope nào)?
+ *
+ * ⚠️ Câu hỏi này KHÁC câu hỏi của cổng trang. Cổng hỏi "với target cụ thể này thì được
+ * không"; menu không có target nào để hỏi — nó chỉ quyết định có vẽ lối vào hay không.
+ *
+ * Trước đây hàm này gọi `evaluatePermission` trần (không target). `can.ts:scopeMatches`
+ * trả **false** cho scope CENTER/CLASS/OWN/ASSIGNED khi thiếu target ⇒ ngay lúc flip,
+ * mọi mục menu gác bằng action scope-cơ-sở sẽ BIẾN MẤT dù trang vẫn cho vào:
+ *   · Giáo vụ / Trợ giảng giữ `attendance:view[CENTER|ASSIGNED]` → mất "Điểm danh"
+ *   · QL cơ sở + Nhân sự cơ sở giữ `hr_attendance:view[CENTER]`  → mất "Chấm công"
+ * Tức là chính lớp lỗi "ẩn oan" mà `page-gates.ts` sinh ra để diệt. Bắt được nhờ phản
+ * biện SRE trước khi viết runbook rollback, 10/07.
+ *
+ * Vẫn an toàn: cách ly cơ sở nằm ở `scopedDb` + target ở cổng, KHÔNG ở việc giấu menu.
+ * Còn action dùng làm **gate trần** (mọi action trong `PAGE_GATES`) bắt buộc `GLOBAL`
+ * — `rbac-scope.test.ts` ép — nên với chúng "có giữ" ≡ "dùng được ngay": menu và cổng
+ * vẫn nói đúng một câu chuyện ở mọi route trong bảng.
+ */
+function v2HoldsAction(actor: Actor | null, action: string): boolean {
+  if (!actor) return false;
+  if (actor.isSuperAdmin) return true;
+  if (actor.grantsAllow.has(action)) return true;
+  return actor.permissions.some((p) => p.action === action);
+}
+
+/**
+ * Mọi action user được phép, theo ĐÚNG hệ quyền mà cổng trang đang dùng (v1 hay v2 tuỳ cờ).
  *
  * Đánh giá toàn bộ `PERMISSIONS` (~120 action) chứ không chỉ action có trong menu: rẻ
  * (thuần in-memory, không I/O) và tránh phải kéo cây menu vào server. Không rò rỉ gì —
  * trước đây client đã nhận cả ma trận v1 qua `can()` trong bundle sidebar.
- *
- * Action gọi TRẦN (không target): scope CENTER/CLASS/OWN ở v2 trả false — giống hệt cổng
- * trang, vốn cũng gọi trần. Nhờ vậy menu và cổng nói cùng một câu chuyện.
  */
 export function grantedMenuActions(params: {
   sessionUser: MenuUser;
@@ -43,13 +59,9 @@ export function grantedMenuActions(params: {
 }): string[] {
   const out: string[] = [];
   for (const action of Object.keys(PERMISSIONS) as Action[]) {
-    const ok = evaluatePermission({
-      sessionUser: params.sessionUser,
-      actor: params.actor,
-      action,
-      flagOn: params.flagOn,
-      logger: SILENT,
-    });
+    const ok = params.flagOn
+      ? v2HoldsAction(params.actor, action)
+      : canMatrix(params.sessionUser, action);
     if (ok) out.push(action);
   }
   return out;
