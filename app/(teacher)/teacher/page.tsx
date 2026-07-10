@@ -120,7 +120,8 @@ export default async function TeacherHomePage() {
   ]);
 
   // ── #3 "Đánh giá học viên": đợt SESSION_EVAL đang MỞ áp cho lớp mình. ──
-  // EvaluationRound ∈ SCOPE_EXEMPT (centerId null = toàn hệ thống) → không auto-scope;
+  // EvaluationRound ∈ SCOPED_MODELS + NULL_IS_GLOBAL (#03 Pha B): auto-scope theo cơ sở,
+  // round centerId=null (toàn hệ thống) vẫn hiện;
   // cách ly bằng cách CHỈ so khớp với TỪNG lớp mình qua isSessionEvalRoundApplicable
   // (dùng centerId/courseId của lớp — reuse helper thuần lib/eval/session-eval).
   const myClasses = await sdb.class.findMany({
@@ -155,7 +156,7 @@ export default async function TeacherHomePage() {
   );
 
   // ── #4 "Hồ sơ port": học bạ lớp mình GV còn hoàn thiện được (DRAFT/RECALLED). ──
-  // ReportCard ∈ SCOPE_EXEMPT (enrollmentId phẳng, không quan hệ) → lấy enrollment
+  // ReportCard ∈ SCOPED_MODELS (#03 Pha B — KHÔNG NULL_IS_GLOBAL) → lấy enrollment
   // của lớp mình trước (Enrollment auto-scope theo cơ sở), rồi lọc học bạ theo
   // enrollmentId + trạng thái GV sửa-được (isReportCardEditable → DRAFT/RECALLED).
   // GV chỉ hoàn thiện được học bạ mình SỬA-ĐƯỢC: DRAFT (viết nháp). RECALLED cần

@@ -57,7 +57,8 @@ const transitionSchema = z.object({
 async function authContext() {
   const session = await auth();
   if (!session?.user) return { error: "Chưa đăng nhập" as const };
-  // report-cards:* CHƯA có trong seed RBAC v2 (ReportCard vẫn SCOPE_EXEMPT) — không
+  // report-cards:* seed v2 scope GLOBAL cố ý (check ở authContext, cách ly do
+  // scopedDb — ReportCard ∈ SCOPED_MODELS từ #03 Pha B 86edfbc) — không
   // truyền target (chưa chắc scope, không đoán mò).
   const canManage = await checkPermission("report-cards:manage");
   const canReview = await checkPermission("report-cards:review");
@@ -138,7 +139,13 @@ export async function saveReportCardAction(input: unknown): Promise<Result> {
   await db.$transaction(async (tx) => {
     let reportCardId: string;
     if (existing) {
-      await tx.reportCard.update({ where: { id: existing.id }, data: dataCommon });
+      // Không REGRESS centerId non-null → null (lớp/enrollment chuyển về HO):
+      // ReportCard ∈ SCOPED_MODELS (∉ NULL_IS_GLOBAL) — row null tàng hình với mọi
+      // actor cấp cơ sở. undefined = giữ nguyên cột; vẫn heal null→CS khi enr có centerId.
+      await tx.reportCard.update({
+        where: { id: existing.id },
+        data: { ...dataCommon, centerId: enr.centerId ?? undefined },
+      });
       reportCardId = existing.id;
     } else {
       const created = await tx.reportCard.create({

@@ -208,7 +208,9 @@ export type ScopeActor = Pick<
 >;
 
 /**
- * ReportCard/Enrollment KHÔNG nằm trong SCOPED_MODELS (db-scope) → ép scope TAY:
+ * ReportCard/Enrollment ĐÃ ∈ SCOPED_MODELS (#03 Pha B 86edfbc) nhưng hàm này vẫn là
+ * cổng scope TAY cho đường đọc RAW db (carve-out câu 20 — QL tiếp nhận XEM học bạ
+ * cũ HV chuyển cơ sở; ĐỪNG migrate các call-site đó sang sdb, sẽ giết carve-out):
  *  - SUPER_ADMIN / HO-level: bỏ qua.
  *  - Mọi vai khác: centerId của lớp PHẢI ∈ visibleCenterIds (T5).
  *  - GV (chỉ có capability=manage, KHÔNG review): classId PHẢI ∈ assignedClassIds.
