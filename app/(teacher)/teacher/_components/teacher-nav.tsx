@@ -5,13 +5,27 @@
 // match cả 2 dạng path. L6/Vy bổ sung mục mới: thêm vào NAV_ITEMS là đủ.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Home, Users } from "lucide-react";
+import {
+  BookOpenText,
+  CalendarDays,
+  ClipboardCheck,
+  GraduationCap,
+  Home,
+  MessageSquareText,
+  Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/teacher", label: "Việc chưa xong", icon: Home },
   { href: "/teacher/lich", label: "Lịch dạy", icon: CalendarDays },
   { href: "/teacher/lop", label: "Lớp của tôi", icon: Users },
+  // Batch 1 (10/07) — port từ satarobo-ui-giaovien: nhận xét buổi + chấm bài.
+  { href: "/teacher/nhan-xet", label: "Nhận xét", icon: MessageSquareText },
+  { href: "/teacher/cham-bai", label: "Chấm bài", icon: ClipboardCheck },
+  // Batch 2 (10/07) — tài liệu giảng dạy + học bạ.
+  { href: "/teacher/tai-lieu", label: "Tài liệu", icon: BookOpenText },
+  { href: "/teacher/hoc-ba", label: "Học bạ", icon: GraduationCap },
 ] as const;
 
 /** Path đang đứng có khớp item không — chấp nhận cả clean URL (bỏ /teacher). */

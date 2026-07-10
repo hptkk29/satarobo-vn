@@ -9,6 +9,7 @@
 // ⚠️ Câu 46: GV KHÔNG xem SĐT/email phụ huynh. Trang này không chạm dữ liệu PH;
 // trang nào sau này hiển thị học viên/PH PHẢI mask theo canViewParentContact
 // (lib/auth/permissions.ts) — không đưa contact PH vào payload gửi client.
+import Link from "next/link";
 import type { SubmissionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -65,6 +66,8 @@ type PendingSection = {
   count: number | null;
   items: { key: string; primary: string; secondary: string }[];
   emptyText: string;
+  /** Trang đích xử lý việc (batch 1) — có thì hiện nút "Mở →". */
+  href?: string;
 };
 
 export default async function TeacherHomePage() {
@@ -183,6 +186,7 @@ export default async function TeacherHomePage() {
   const sections: PendingSection[] = [
     {
       id: "attendance",
+      href: "/teacher/lop",
       title: "Buổi chưa điểm danh",
       description: "Buổi học hôm nay của lớp bạn chưa hoàn tất điểm danh.",
       count: todaySessions.length,
@@ -202,6 +206,7 @@ export default async function TeacherHomePage() {
     },
     {
       id: "grading",
+      href: "/teacher/cham-bai",
       title: "Bài chưa chấm",
       description: "Bài tập học viên đã nộp, chờ bạn chấm.",
       count: gradingCount,
@@ -214,6 +219,7 @@ export default async function TeacherHomePage() {
     },
     {
       id: "evaluation",
+      href: "/teacher/nhan-xet",
       title: "Đánh giá học viên",
       description: "Đợt đánh giá buổi học đang mở, áp cho lớp bạn.",
       count: evalItems.length,
@@ -222,6 +228,7 @@ export default async function TeacherHomePage() {
     },
     {
       id: "report-card",
+      href: "/teacher/hoc-ba",
       title: "Hồ sơ port",
       description: "Hồ sơ/học bạ học viên cần hoàn thiện để bàn giao.",
       count: reportCards.length,
@@ -256,7 +263,15 @@ export default async function TeacherHomePage() {
           <Card key={section.id}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-base">{section.title}</CardTitle>
+                <CardTitle className="text-base">
+                  {section.href ? (
+                    <Link href={section.href} className="hover:underline">
+                      {section.title} →
+                    </Link>
+                  ) : (
+                    section.title
+                  )}
+                </CardTitle>
                 {section.count === null ? (
                   <Badge variant="outline" className="text-neutral-400">
                     Sắp có
