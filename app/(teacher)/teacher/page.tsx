@@ -228,6 +228,7 @@ export default async function TeacherHomePage() {
     },
     {
       id: "report-card",
+      href: "/teacher/hoc-ba",
       title: "Hồ sơ port",
       description: "Hồ sơ/học bạ học viên cần hoàn thiện để bàn giao.",
       count: reportCards.length,
