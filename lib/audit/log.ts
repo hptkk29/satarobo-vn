@@ -359,24 +359,9 @@ export async function logRbacAudit(params: {
 }
 
 // ─── UTILITY: detect changed fields ─────────────────────────────────
-/**
- * Compare old vs new object, return list of changed field names.
- * Shallow comparison (===). Handles Date instances.
- */
-export function detectChangedFields<T extends Record<string, unknown>>(
-  oldData: T | null | undefined,
-  newData: Partial<T>,
-): string[] {
-  if (!oldData) return Object.keys(newData);
-  return Object.keys(newData).filter((key) => {
-    const oldVal = oldData[key];
-    const newVal = newData[key];
-    if (oldVal instanceof Date && newVal instanceof Date) {
-      return oldVal.getTime() !== newVal.getTime();
-    }
-    return oldVal !== newVal;
-  });
-}
+// Chuyển sang leaf lib/audit/diff.ts để cắt vòng import (audit-log.ts ↔ log.ts).
+// Re-export giữ nguyên đường import cũ `@/lib/audit/log` cho các consumer.
+export { detectChangedFields } from "@/lib/audit/diff";
 
 // ─── UTILITY: extract actor info from session ───────────────────────
 /**

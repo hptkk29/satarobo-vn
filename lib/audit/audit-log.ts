@@ -3,7 +3,7 @@
 // theo orgUnit. KHÔNG gọi headers() → dùng được ngoài request (test/cron); ip/UA truyền vào.
 import type { Prisma, PrismaClient, AuditLog } from "@prisma/client";
 import { db } from "@/lib/db";
-import { detectChangedFields } from "@/lib/audit/log";
+import { detectChangedFields } from "@/lib/audit/diff";
 import type { Actor } from "@/lib/auth/actor";
 
 type TxClient = Prisma.TransactionClient;
