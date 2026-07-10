@@ -13,6 +13,8 @@
  * Cảnh báo (::warning::) đi ra stderr để summary sạch.
  */
 import { PrismaClient } from "@prisma/client";
+import { PERMISSIONS } from "../lib/auth/permissions";
+import { isIntentionalMismatch } from "../lib/auth/rbac-intentional";
 
 const db = new PrismaClient();
 
@@ -133,9 +135,36 @@ async function main() {
     SELECT COUNT(*)::int AS window_total FROM "RbacShadowDiff" WHERE "createdAt" >= ${since}
   `;
   const windowTotal = window_total;
+
+  // ── Phân loại CÓ CHỦ ĐÍCH vs CẦN XỬ LÝ ─────────────────────────────────────
+  // Các thu hẹp đã ký (rbac-intentional.ts) làm v1=true/v2=false MỖI LẦN người giữ role
+  // bị siết chạm trang — v1 runtime vẫn cấp và UI vẫn hiện nút cho tới flip. Đó là lệch
+  // ĐÚNG THIẾT KẾ; cổng flip đếm phần CẦN XỬ LÝ (mismatch v1→v2 ngoài danh sách +
+  // toàn bộ chiều ngược v1=false/v2=true).
+  const perUserAction = await db.$queryRaw<
+    { userId: string; action: string; v1: boolean; v2: boolean; n: number; roles: string[] | null }[]
+  >`
+    SELECT d."userId", d.action, d.v1, d.v2, COUNT(*)::int AS n,
+           u.roles::text[] AS roles
+    FROM "RbacShadowDiff" d
+    LEFT JOIN "User" u ON u.id = d."userId"
+    WHERE d."createdAt" >= ${since}
+    GROUP BY d."userId", d.action, d.v1, d.v2, u.roles
+  `;
+  let intentionalCount = 0;
+  const intentionalPairs = new Set<string>();
+  for (const r of perUserAction) {
+    if (
+      r.v1 && !r.v2 &&
+      isIntentionalMismatch(r.action, r.roles ?? [], PERMISSIONS as Record<string, readonly string[]>)
+    ) {
+      intentionalCount += r.n;
+      intentionalPairs.add(r.action);
+    }
+  }
+  const mustFixTotal = windowTotal - intentionalCount;
   const streak = cleanStreak(new Set(byDay.map((d) => d.ngay)));
   const coverageOk = coverage.length === 0;
-  const gateOk = windowTotal === 0;
 
   // ── In Markdown ────────────────────────────────────────────────────────────
   const out: string[] = [];
@@ -143,7 +172,10 @@ async function main() {
   out.push("");
   out.push(`- Tổng dòng trong bảng: **${tong}**`);
   out.push(`- Cũ nhất: \`${cu_nhat?.toISOString() ?? "—"}\` · Mới nhất: \`${moi_nhat?.toISOString() ?? "—"}\``);
-  out.push(`- Lệch trong cửa sổ: **${windowTotal}**`);
+  out.push(`- Lệch trong cửa sổ: **${windowTotal}** — trong đó **CẦN XỬ LÝ: ${mustFixTotal}**` +
+    (intentionalCount > 0
+      ? ` · có chủ đích (đã ký, tồn tại tới flip): ${intentionalCount} (${[...intentionalPairs].join(", ")})`
+      : ""));
   out.push(`- Ngày VN trọn vẹn liên tiếp sạch (không tính hôm nay): **${streak}**`);
   out.push("");
 
@@ -211,9 +243,9 @@ async function main() {
   out.push("### Cổng flip #09");
   const verdict = !coverageOk
     ? "🔴 **CHẶN** — preflight coverage đỏ, đồng hồ chưa được phép chạy."
-    : gateOk
-      ? `🟢 lệch = 0 trong cửa sổ. Cần **3–5 ngày sạch liên tiếp có traffic thật** (hiện: ${streak}).`
-      : `🔴 còn **${windowTotal}** lệch — phân loại theo bảng trên, sửa xong thì TRUNCATE và đếm lại.`;
+    : mustFixTotal === 0
+      ? `🟢 lệch CẦN XỬ LÝ = 0${intentionalCount > 0 ? ` (${intentionalCount} lệch có chủ đích — sẽ tự hết sau flip)` : ""}. Đủ điều kiện chạy smoke 8 vai trò.`
+      : `🔴 còn **${mustFixTotal}** lệch CẦN XỬ LÝ — phân loại theo bảng trên, sửa xong thì TRUNCATE và đếm lại.`;
   out.push(verdict);
 
   console.log(out.join("\n"));
@@ -221,8 +253,8 @@ async function main() {
   if (!coverageOk) {
     console.error(`::warning::Preflight ĐỎ — ${coverage.length} nhân viên thiếu UserOrgRole ACTIVE`);
   }
-  if (!gateOk) {
-    console.error(`::warning::Còn ${windowTotal} lệch shadow trong ${WINDOW_DAYS} ngày — chưa đủ điều kiện flip #09`);
+  if (mustFixTotal > 0) {
+    console.error(`::warning::Còn ${mustFixTotal} lệch CẦN XỬ LÝ trong ${WINDOW_DAYS} ngày — chưa đủ điều kiện flip #09`);
   }
 }
 

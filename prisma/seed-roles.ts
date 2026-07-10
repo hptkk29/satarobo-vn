@@ -127,7 +127,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "employees:view-all", scopeType: "CENTER" },
       { action: "employees:view-public", scopeType: "CENTER" },
       { action: "employees:edit", scopeType: "CENTER" },
-      { action: "hr_attendance:checkin", scopeType: "CENTER" },
+      // Shadow prod 10/07: checkin đồng nhất GLOBAL mọi role (self-action). view giữ CENTER.
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "hr_attendance:view", scopeType: "CENTER" },
       // R1 — 8 và 10 call-site gọi trần.
       { action: "students:view-all", scopeType: "GLOBAL" },
@@ -323,8 +324,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // ── Nhân sự · chấm công ──
       { action: "employees:view-all", scopeType: "GLOBAL" },
       { action: "hr_attendance:view", scopeType: "CENTER" },
-      { action: "hr_attendance:adjust", scopeType: "CENTER" },
-      { action: "hr_attendance:checkin", scopeType: "OWN" },
+      // Shadow prod 10/07 (25+2 lệch): adjust bị pending-tasks cfg.can() gọi TRẦN → GLOBAL
+      // (đúng R1); checkin call-site truyền {centerId} nhưng OWN đòi createdById → GLOBAL
+      // (action tự ghi userId từ session, permission chỉ gate "là nhân viên").
+      { action: "hr_attendance:adjust", scopeType: "GLOBAL" },
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       // ── Thu tiền tại quầy · xuất kit (user chốt 09/07 câu 4: "có, có") ──
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "inventory:movement", scopeType: "GLOBAL" },
@@ -409,7 +413,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
-      { action: "hr_attendance:checkin", scopeType: "OWN" },
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "CENTER" },
       { action: "course-packages:view", scopeType: "CENTER" },
       { action: "centers:view", scopeType: "CENTER" },
@@ -451,7 +455,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "media:view", scopeType: "GLOBAL" },
       { action: "media:upload", scopeType: "GLOBAL" },
       { action: "satacoin:manage", scopeType: "GLOBAL" },
-      { action: "hr_attendance:checkin", scopeType: "OWN" },
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       // ── Đọc tham chiếu ──
       { action: "courses:view", scopeType: "GLOBAL" },
       { action: "curriculum:view", scopeType: "GLOBAL" },

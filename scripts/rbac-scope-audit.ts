@@ -34,11 +34,12 @@ const stripComments = (src: string): string =>
 const sources = ROOTS.flatMap((r) => walk(r)).map((f) => stripComments(readFileSync(f, "utf8")));
 const blob = sources.join("\n");
 
-/** Số call-site `checkPermission("action")` / `assertPermission("action")` KHÔNG có tham số 2. */
+/** Call-site gọi TRẦN: checkPermission/assertPermission("x") + `<obj>.can("x")` (cfg.can). */
 function bareCallSites(action: string): number {
   const esc = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`(checkPermission|assertPermission)\\(\\s*["']${esc}["']\\s*\\)`, "g");
-  return (blob.match(re) ?? []).length;
+  const reDotCan = new RegExp(`\\.can\\(\\s*["']${esc}["']\\s*\\)`, "g");
+  return (blob.match(re) ?? []).length + (blob.match(reDotCan) ?? []).length;
 }
 
 const cache = new Map<string, number>();
