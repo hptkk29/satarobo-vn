@@ -9,13 +9,15 @@
 // thấy đúng buổi/lớp ở cơ sở khác; quyền sở hữu thật do assignedClassIds / ownership gác.
 // ⚠️ Câu 46: roster từ server đã strip studentPhone — client CHỈ nhận tên HV.
 import Link from "next/link";
+import { ArrowLeft, BookOpen, CalendarX2, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { EmptyState } from "../_components/ui/empty-state";
+import { PageHeader } from "../_components/ui/page-header";
 import { AttendancePanel, type AttendancePanelRow } from "./_components/attendance-panel";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
@@ -33,6 +35,32 @@ const SESSION_STATUS_LABEL: Record<string, string> = {
   COMPLETED: "Đã dạy",
   CANCELLED: "Đã hủy",
 };
+
+/**
+ * Màu pill trạng thái BUỔI HỌC. Cố ý KHÔNG dùng `StatusPill` dùng chung: ở đó
+ * `completed` nghĩa là "Hoàn thành" (khoá học), còn với buổi học nghĩa là
+ * "Đã dạy". Trộn hai từ điển vào một map sẽ sai nghĩa ở một trong hai chỗ.
+ */
+const SESSION_STATUS_CLASS: Record<string, string> = {
+  SCHEDULED: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  IN_PROGRESS: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  COMPLETED:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+};
+
+function SessionStatusPill({ status }: { status: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+        SESSION_STATUS_CLASS[status] ?? "bg-muted text-muted-foreground",
+      )}
+    >
+      {SESSION_STATUS_LABEL[status] ?? status}
+    </span>
+  );
+}
 
 export default async function TeacherClassesPage({
   searchParams,
@@ -88,14 +116,13 @@ export default async function TeacherClassesPage({
     }));
 
     return (
-      <div className="space-y-4">
-        <BackLink href={`?classId=${classId}`} label="← Buổi học của lớp" />
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Điểm danh — {sess.class.name}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            {dayFmt.format(sess.date)} · {SESSION_STATUS_LABEL[sess.status] ?? sess.status}
-          </p>
-        </div>
+      <div>
+        <BackLink href={`?classId=${classId}`} label="Buổi học của lớp" />
+        <PageHeader
+          title={`Điểm danh — ${sess.class.name}`}
+          subtitle={dayFmt.format(sess.date)}
+          actions={<SessionStatusPill status={sess.status} />}
+        />
         <AttendancePanel
           sessionId={sessionId}
           rows={panelRows}
@@ -115,29 +142,30 @@ export default async function TeacherClassesPage({
       take: 40,
     });
     return (
-      <div className="space-y-4">
-        <BackLink href="?" label="← Lớp của tôi" />
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">{cls?.name ?? "Lớp"}</h1>
-          <p className="mt-1 text-sm text-neutral-500">Chọn buổi để điểm danh.</p>
-        </div>
+      <div>
+        <BackLink href="?" label="Lớp của tôi" />
+        <PageHeader title={cls?.name ?? "Lớp"} subtitle="Chọn buổi để điểm danh." />
         {sessions.length === 0 ? (
-          <EmptyBox text="Lớp chưa có buổi học nào." />
+          <EmptyState icon={CalendarX2} title="Lớp chưa có buổi học nào." />
         ) : (
           <div className="space-y-2">
             {sessions.map((s) => (
               // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
               // (clean URL /lop) LẪN localhost/preview (path thật /teacher/lop).
-              <Link key={s.id} href={`?classId=${classId}&sessionId=${s.id}`} className="block">
-                <Card className="transition-colors hover:border-neutral-400">
-                  <CardContent className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="text-sm font-medium text-neutral-800">{dayFmt.format(s.date)}</p>
-                      {s.topic && <p className="text-xs text-neutral-500">{s.topic}</p>}
-                    </div>
-                    <Badge variant="outline">{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
-                  </CardContent>
-                </Card>
+              <Link
+                key={s.id}
+                href={`?classId=${classId}&sessionId=${s.id}`}
+                className="t-card t-card-hover flex items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {dayFmt.format(s.date)}
+                  </p>
+                  {s.topic && (
+                    <p className="truncate text-xs text-muted-foreground">{s.topic}</p>
+                  )}
+                </div>
+                <SessionStatusPill status={s.status} />
               </Link>
             ))}
           </div>
@@ -156,28 +184,38 @@ export default async function TeacherClassesPage({
     : [];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Lớp của tôi</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Các lớp bạn được phân công — chọn lớp để điểm danh 6 nhãn.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Lớp của tôi"
+        subtitle="Các lớp bạn được phân công — chọn lớp để điểm danh 6 nhãn."
+      />
       {classes.length === 0 ? (
-        <EmptyBox text="Bạn chưa được phân công lớp nào." />
+        <EmptyState icon={BookOpen} title="Bạn chưa được phân công lớp nào." />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {classes.map((c) => (
             // href chỉ-query — xem ghi chú ở link buổi học.
-            <Link key={c.id} href={`?classId=${c.id}`} className="block">
-              <Card className="h-full transition-colors hover:border-neutral-400">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{c.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <p className="text-sm text-neutral-500">{c._count.enrollments} học viên</p>
-                </CardContent>
-              </Card>
+            <Link
+              key={c.id}
+              href={`?classId=${c.id}`}
+              className="t-card t-card-hover flex h-full flex-col gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-base font-bold text-foreground">{c.name}</p>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-500/15">
+                  <BookOpen
+                    className="h-[18px] w-[18px] text-orange-600 dark:text-orange-400"
+                    aria-hidden
+                  />
+                </span>
+              </div>
+              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Users className="h-4 w-4" aria-hidden />
+                {c._count.enrollments} học viên
+              </p>
+              <p className="mt-auto text-sm font-semibold text-orange-600 dark:text-orange-400">
+                Mở lớp →
+              </p>
             </Link>
           ))}
         </div>
@@ -188,25 +226,21 @@ export default async function TeacherClassesPage({
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
   );
 }
 
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
-  );
-}
-
 function NotYours() {
   return (
-    <div className="space-y-4">
-      <BackLink href="?" label="← Lớp của tôi" />
-      <EmptyBox text="Buổi học không thuộc lớp bạn phụ trách." />
+    <div>
+      <BackLink href="?" label="Lớp của tôi" />
+      <EmptyState icon={CalendarX2} title="Buổi học không thuộc lớp bạn phụ trách." />
     </div>
   );
 }
