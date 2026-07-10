@@ -146,6 +146,30 @@ công** — hôm 09/07 chỉ có 2 lần DRY-RUN được dán vào chat, không
 Lưu ý thêm 10/07: lệnh `pnpm exec tsx prisma/seed-roles.ts` chạy LOCAL đọc `.env` = **DEV**
 Supabase — muốn seed PROD phải đi qua workflow *Seed Production RolePermission*.
 
+### 10/07/2026 (trưa) — 🟢 ĐÈN XANH cổng lệch: CẦN XỬ LÝ = 0
+
+Chuỗi sự kiện trong ngày: dry-run xác nhận batch apply 09/07 chưa từng chạy → apply 17
+UserOrgRole (preflight ✅) → re-seed prod qua workflow (lần đầu đúng đường) → TRUNCATE →
+3 vòng phân loại trên traffic thật:
+
+| Vòng | Lệch | Kết luận |
+|---|---|---|
+| 1 | 778 | nhiễu coverage TRƯỚC apply (14 người rỗng quyền v2) — TRUNCATE |
+| 2 | 29 | tín hiệu thật đầu tiên: 25 adjust (cfg.can gọi trần — scanner mù pattern mới, PR #42 vá seed GLOBAL + mở rộng scanner) + 2 checkin (OWN đòi createdById, call-site truyền centerId → GLOBAL) + 2 có chủ đích |
+| 3 | 15 | **CẦN XỬ LÝ = 0** — 15 lệch còn lại đều CÓ CHỦ ĐÍCH (Toại/CENTER_MANAGER chạm 9 action đã ký siết: payments:manage, orders:manage, vouchers:manage, products:manage, inventory:audit, honors:settings, students:delete, enrollments:delete, leads:delete) — sẽ TỰ HẾT sau flip |
+
+Report từ PR #42 tách 2 số: "CẦN XỬ LÝ" (cổng flip) vs "có chủ đích" (rbac-intentional.ts —
+nguồn sự thật chung với parity test). Đếm thô sẽ không bao giờ về 0 chừng nào Toại còn bấm
+các trang mà v1 vẫn hiện nút.
+
+**⚠️ Vận hành sau flip — báo trước cho Toại:** 9 nhóm quyền trên biến mất khỏi tài khoản
+anh ấy NGAY khi flip (đúng phiếu ký 09/07). Tiền/kho/voucher → Huệ (HO_ACCOUNTANT);
+xoá cứng → SUPER_ADMIN; nội dung → HO_MARKETING. Nên nói trước, đừng để anh ấy tưởng hệ hỏng.
+
+**Còn lại trước flip:** gán CENTER_CLASS_MANAGER cho 1 Sale/cơ sở (S11) → smoke S1–S11 +
+C1–C6 (smoke-8-vai-tro.md, PASS = CẦN XỬ LÝ vẫn 0 sau smoke) → diễn tập rollback (<10 phút)
+→ flip RBAC_V2_ENABLED=true trước UAT 20/07 → giữ shadow 1 tuần sau flip (runbook §5.3).
+
 ### Mẫu dòng nhật ký hằng ngày
 
 ```
