@@ -53,6 +53,11 @@ export const SCOPE_EXEMPT = new Set<string>([
   // sang SCOPED_MODELS + scopedDb khi 2 model này center-scope hẳn.
   "ReportCard",
   "EvaluationRound",
+  // #03 Pha A (10/07) — vừa thêm centerId + backfill (migration p03_phase_a_center_id_backfill),
+  // đường tạo (lib/conversation/service.ts postMessage) đã set. CHƯA flip sang SCOPED_MODELS:
+  // phải chờ PROD xác nhận 0 dòng centerId NULL, đúng deploy-gate của #04 với Attendance.
+  // Hiện scope tay bằng ownership/assignedClassIds trong admin/tin-nhan + portal/tin-nhan.
+  "ConversationMessage",
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
   // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
   "RefundRequest",

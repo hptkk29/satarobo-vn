@@ -4917,8 +4917,13 @@ model ConversationMessage {
   // Đánh dấu đã đọc theo từng phía (null = chưa đọc).
   readByParentAt DateTime?      @db.Timestamptz(6)
   readByStaffAt  DateTime?      @db.Timestamptz(6)
+  // #03 Pha A — denormalize từ Enrollment.centerId để cách ly cơ sở ở tầng query.
+  // Nullable trong pha A (dòng cũ backfill bằng migration; đường tạo mới đã set).
+  // Pha B (sau khi prod 0 null) mới đưa vào SCOPED_MODELS — xem lib/db-scope.ts.
+  centerId       String?
 
   @@index([enrollmentId, createdAt])
+  @@index([centerId])
 }
 
 // LMS-16 — Mục tiêu doanh thu theo kỳ (cho báo cáo doanh-thu-vs-mục-tiêu).

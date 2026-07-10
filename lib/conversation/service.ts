@@ -42,12 +42,19 @@ export async function postMessage(input: {
   if (body.length > MAX_BODY) throw new Error(`Tin nhắn tối đa ${MAX_BODY} ký tự`);
 
   const client = input.tx ?? db;
+  // #03 Pha A — denormalize centerId từ Enrollment. Bắt buộc set ở MỌI đường tạo, nếu
+  // không dòng mới sẽ null và bị ẩn nhầm sau khi flip SCOPED_MODELS ở pha B (bài học #04).
+  const enr = await client.enrollment.findUnique({
+    where: { id: input.enrollmentId },
+    select: { centerId: true },
+  });
   const msg = await client.conversationMessage.create({
     data: {
       enrollmentId: input.enrollmentId,
       authorUserId: input.authorUserId,
       authorSide: input.authorSide,
       body,
+      centerId: enr?.centerId ?? null,
     },
   });
 
