@@ -204,6 +204,7 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "TRAINING", name: "Đào tạo (toàn LMS)",
     perms: [
       { action: "training:manage", scopeType: "GLOBAL" },
+      { action: "reports:training", scopeType: "GLOBAL" },
       { action: "trials:config", scopeType: "GLOBAL" },
       { action: "lesson-change:approve", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },
@@ -341,6 +342,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "settings:view", scopeType: "GLOBAL" },
       { action: "documents:view", scopeType: "GLOBAL" },
       { action: "curriculum:view", scopeType: "GLOBAL" },
+      // 10/07 — báo cáo đào tạo theo chức năng (xem lib/auth/page-gates.ts).
+      { action: "reports:training", scopeType: "GLOBAL" },
       { action: "questions:view", scopeType: "GLOBAL" },
       { action: "courses:view", scopeType: "GLOBAL" },
       { action: "course-packages:view", scopeType: "GLOBAL" },

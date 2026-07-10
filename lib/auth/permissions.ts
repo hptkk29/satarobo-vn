@@ -73,6 +73,7 @@ export type Action =
   | "trials:assign-teacher"
   | "trials:override-capacity"
   | "training:manage"
+  | "reports:training"
   // FL W0-NAV-2 (QĐ-T3b) — 2 việc vận hành CM giữ qua action RIÊNG (KHÔNG trả training:manage):
   | "trials:config" // cấu hình số buổi lớp trải nghiệm
   | "lesson-change:approve" // duyệt LessonChangeRequest (chấp nhận/từ chối đề xuất chỉnh bài)
@@ -318,6 +319,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],
+  // 10/07 — BGĐ: "báo cáo của chức năng nào thì role chức năng đó xem". Ba báo cáo đào
+  // tạo trước đây gác bằng `classes:view-all` ⇒ HR/Kế toán/Marketing mở được bằng URL.
+  // Không tái dùng `training:manage` (QL cơ sở sẽ mất báo cáo lớp của chính mình) cũng
+  // không dùng `curriculum:view` (kéo cả GV vào xem hiệu suất đồng nghiệp).
+  "reports:training": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
   // FL W0-NAV-2 (QĐ-T3b): trả lại cho CM 2 việc vận hành qua action riêng — KHÔNG mở lại training:manage.
   // CM cần cấu hình số buổi lớp trải nghiệm + duyệt đề xuất chỉnh bài của GV.
   "trials:config": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
