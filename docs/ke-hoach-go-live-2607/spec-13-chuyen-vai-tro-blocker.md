@@ -61,7 +61,19 @@ là **đổi panel/ngữ cảnh TRONG admin** (việc của #10 dashboard đa-va
 - [ ] Toại: thấy 2 vai, chuyển được (khi #06 flip + #10 panel) — Đào tạo(HO) ↔ QL CS1; login đáp xuống vai chính.
 - [ ] Quyền union giữ nguyên khi chuyển; e2e: chuyển sang khu vực không quyền → `decideRoute` chặn.
 
+## 7. Hai mảnh #13 — đừng nhầm (chốt 09/07)
+Có **2 file khác concept**, cùng phục vụ câu 11 nhưng ở 2 tầng khác nhau:
+
+| File | Concept | Trạng thái |
+|---|---|---|
+| `lib/auth/active-role.ts` + `app/(admin)/admin/_actions/active-role.ts` + `components/admin/role-switcher.tsx` | **phase-1 ĐÃ ship**: bộ lọc vai trò cookie-based **trong admin** — chỉ đổi MENU + panel dashboard, **cùng host, không đổi quyền** (user chốt 09/07). | ✅ chạy thật |
+| `lib/auth/switchable-areas.ts` (`listSwitchableAreas`) | **tương lai**: chuyển **cross-host** admin↔teacher↔portal (mục 4.3), probe qua `decideRoute`. | ⏳ chưa wire |
+
+→ active-role = đổi ngữ cảnh **trong** admin (host không đổi); switchable-areas = bắc **qua** ranh giới host. Không chồng chéo.
+
 ## Trạng thái
-🔴 **CHẶN** bởi 3 tiền đề (mục 3) cho phần MENU. ✅ Mảnh an toàn ĐÃ LÀM: helper `lib/auth/switchable-areas.ts`
-`listSwitchableAreas` (mục 4.3) — pure, probe qua `decideRoute`, Vitest 11/11 (commit 4218da5), dùng chung #10.
-Còn lại của #13 (menu + login primaryRole) chờ 3 tiền đề.
+🔴 **CHẶN** bởi 3 tiền đề (mục 3) cho phần MENU cross-host. ✅ Đã ship phase-1 (menu/panel trong admin) qua
+`active-role.ts` (mục 7). ✅ Mảnh an toàn cross-host ĐÃ LÀM: helper `lib/auth/switchable-areas.ts`
+`listSwitchableAreas` (mục 4.3) — pure, probe qua `decideRoute`, Vitest 11/11 (commit 4218da5), **hiện chưa import
+ở đâu** (building block đã test, chờ `TEACHER_SITE_ENABLED` ON / #10 wiring), dùng chung #10.
+Còn lại của #13 (menu cross-host + login primaryRole) chờ 3 tiền đề.

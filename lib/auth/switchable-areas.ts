@@ -1,4 +1,16 @@
-// lib/auth/switchable-areas.ts — #13 (câu 11 BGĐ): các "khu vực" user chuyển được.
+// lib/auth/switchable-areas.ts — #13 (câu 11 BGĐ): helper CHUYỂN KHU VỰC CROSS-HOST
+// (admin ↔ teacher ↔ portal).
+//
+// ⚠️ ĐỪNG NHẦM với `lib/auth/active-role.ts`. Hai concept KHÁC nhau:
+//   • active-role.ts  = ĐÃ ship #13 phase-1 (câu 11, user chốt 09/07): bộ lọc vai trò
+//     cookie-based CHỈ trong admin — đổi MENU + panel dashboard mặc định, KHÔNG đổi host,
+//     KHÔNG đổi quyền. Là cái đang chạy thật.
+//   • switchable-areas.ts (file này) = nút chuyển QUA ranh giới HOST (admin↔teacher↔portal),
+//     dành cho tương lai — chưa wire vào đâu cả.
+//
+// TRẠNG THÁI: hiện KHÔNG được import ở đâu (chưa dead code — là mảnh building block đã test).
+// Chờ mở khoá: `TEACHER_SITE_ENABLED` = ON (mới có host teacher khác admin để mà "chuyển")
+// và/hoặc #10 dashboard đa-vai wire helper này. Xem spec-13-chuyen-vai-tro-blocker.md §4.3.
 //
 // Dùng cho nút "Chuyển vai trò" (#13) + panel đa-vai (#10). NGUỒN SỰ THẬT = decideRoute:
 // một area là "chuyển được" ⇔ decideRoute KHÔNG đá user khỏi host đó. Nhờ vậy helper
