@@ -11,6 +11,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { Check, Save } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -182,9 +183,13 @@ export function AttendancePanel({
                       {initials(r.studentName)}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-neutral-900">
+                      <Link
+                        href={`/teacher/hoc-vien?s=${r.studentId}`}
+                        className="block truncate text-sm font-semibold text-neutral-900 hover:text-purple-700 hover:underline"
+                        title="Mở hồ sơ học viên"
+                      >
                         {r.studentName}
-                      </p>
+                      </Link>
                       {r.makeupFromCenter && (
                         <span className="mt-0.5 inline-block rounded bg-purple-100 px-1.5 py-0.5 text-[11px] text-purple-700">
                           Học bù từ {r.makeupFromCenter}

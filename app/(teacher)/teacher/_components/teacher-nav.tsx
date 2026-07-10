@@ -6,9 +6,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Award,
   BookOpenText,
   CalendarDays,
   ClipboardCheck,
+  Clock,
   GraduationCap,
   Home,
   MessageSquareText,
@@ -26,6 +28,9 @@ const NAV_ITEMS = [
   // Batch 2 (10/07) — tài liệu giảng dạy + học bạ.
   { href: "/teacher/tai-lieu", label: "Tài liệu", icon: BookOpenText },
   { href: "/teacher/hoc-ba", label: "Học bạ", icon: GraduationCap },
+  // Batch 3 (10/07) — bảng công + hoàn thành khoá.
+  { href: "/teacher/bang-cong", label: "Bảng công", icon: Clock },
+  { href: "/teacher/hoan-thanh", label: "Hoàn thành", icon: Award },
 ] as const;
 
 /** Path đang đứng có khớp item không — chấp nhận cả clean URL (bỏ /teacher). */
