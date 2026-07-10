@@ -346,3 +346,38 @@ menu QL cơ sở — tức 9 dead-link của Toại được diệt tại gốc,
 
 **Còn lại trước flip:** diễn tập rollback (`RBAC_V2_ENABLED=false` + redeploy, bấm giờ < 10 phút) và
 báo trước cho Toại 9 nhóm quyền anh mất tại thời điểm flip.
+
+## 10. Báo cáo gác theo chức năng (BGĐ chốt 10/07)
+
+> *"Báo cáo liên quan của chức năng nào thì role đó được xem thôi."*
+
+Rà cả 8 trang `/bao-cao/*`: **5 trang đã đúng** — `lead` → `leads:view-*`, `trial` → `trials:view`,
+`doanh-thu` + `trung-tam` → `payments:manage`, `churn` → `enrollments:view-all`.
+
+Sai là 3 báo cáo đào tạo (`dao-tao`, `hieu-suat-gv`, `cohort`): gác bằng
+`classes:view-all ∨ training:manage`, mà `classes:view-all` thì HR / Kế toán / Marketing / Sale đều
+giữ ⇒ mở được bằng URL. Menu thì khai `courses:create` nên giấu — lại đúng cặp lệch quen thuộc.
+
+**Không action nào sẵn có diễn tả đúng "chức năng đào tạo":**
+
+| Ứng viên | Vấn đề |
+|---|---|
+| `training:manage` | chỉ Đào tạo giữ ⇒ QL cơ sở mất báo cáo lớp của chính mình |
+| `curriculum:view` | kéo cả Giáo viên vào xem *Hiệu suất giáo viên* của đồng nghiệp |
+| `courses:create` | là quyền **ghi**, mượn nó làm cổng **đọc** là lặp lại đúng lỗi `honors:settings` |
+
+→ Thêm action đọc riêng **`reports:training`**: v1 `SUPER_ADMIN · TRAINING · CENTER_MANAGER`;
+v2 `TRAINING[GLOBAL] · CENTER_MANAGER[GLOBAL]` (SUPER_ADMIN bypass).
+
+| | Trước | Sau |
+|---|---|---|
+| Vào được | SA, Đào tạo, QL cơ sở, **Sale, Kế toán, HR, Marketing** | SA, Đào tạo, QL cơ sở |
+| Hiện trên menu | SA, Đào tạo, QL cơ sở | SA, Đào tạo, QL cơ sở |
+
+**Menu không đổi một mục nào** — người dùng hợp lệ không thấy khác biệt gì; chỉ lỗ URL bị bịt.
+
+`GATE_MISMATCH_ALLOWLIST` còn đúng **1** mục: `/cham-cong/lich-ca-nhan-vien` (gate có target
+`centerId`, không quy về so-sánh-tập-hợp được — nhân viên xem bảng ca của chính cơ sở mình là thiết kế).
+
+**Việc prod:** chạy lại workflow `seed-prod-roles` để `TRAINING` + `CENTER_MANAGER` nhận
+`reports:training`. Chỉ ảnh hưởng **sau** flip; trước flip v1 đã cấp sẵn.

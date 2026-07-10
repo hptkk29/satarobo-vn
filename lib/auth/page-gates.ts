@@ -54,17 +54,19 @@ export const PAGE_GATES = {
   /** Thư viện media buổi học. Menu cũ khai thiếu `media:upload` (cùng người giữ ở v1
    *  nên chưa ai đau) — khai đủ để menu ≡ gate. */
   "/media": ["media:view", "media:upload"],
+
+  /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng
+   *  đó xem". Trước đây gác `classes:view-all` ∨ `training:manage` ⇒ HR/Kế toán/Marketing
+   *  mở được bằng URL (menu thì khai `courses:create`, nên giấu). Nay: Đào tạo + QL cơ sở. */
+  "/bao-cao/dao-tao": ["reports:training"],
+  "/bao-cao/hieu-suat-gv": ["reports:training"],
+  "/bao-cao/cohort": ["reports:training"],
 } as const satisfies Record<string, readonly Action[]>;
 
 export type GatedHref = keyof typeof PAGE_GATES;
 
 /**
  * CHƯA đưa vào bảng — gate và menu vẫn lệch, có chủ đích, chờ BGĐ chốt:
- *
- *   /bao-cao/dao-tao · /bao-cao/hieu-suat-gv · /bao-cao/cohort
- *     menu: courses:create   ·   gate: classes:view-all ∨ training:manage
- *     ⇒ HR / Kế toán / Marketing mở được bằng URL (báo cáo tổng hợp, không có PII HV).
- *     Siết gate hay mở menu đều đổi ai-thấy-gì ⇒ cần quyết định nghiệp vụ.
  *
  *   /cham-cong/lich-ca-nhan-vien
  *     menu: hr_attendance:view   ·   gate: view(cơ-sở-đang-xem) ∨ checkin(cơ-sở-của-mình)
@@ -74,9 +76,4 @@ export type GatedHref = keyof typeof PAGE_GATES;
  * `page-gates.test.ts` giữ danh sách này làm ngoại lệ tường minh — thêm route mới vào
  * đây phải kèm lý do, không được im lặng.
  */
-export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [
-  "/bao-cao/dao-tao",
-  "/bao-cao/hieu-suat-gv",
-  "/bao-cao/cohort",
-  "/cham-cong/lich-ca-nhan-vien",
-];
+export const GATE_MISMATCH_ALLOWLIST: readonly string[] = ["/cham-cong/lich-ca-nhan-vien"];
