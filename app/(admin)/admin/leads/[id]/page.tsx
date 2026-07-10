@@ -17,6 +17,9 @@ import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
 import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
+import { canViewLeadPii } from "@/lib/auth/permissions";
+import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
+import { ShareToggle } from "./_components/share-toggle";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -75,10 +78,31 @@ export default async function LeadDetailPage({ params }: Props) {
   });
   if (!lead) notFound();
 
-  // Scope: SALES_CSM chỉ xem lead của mình.
-  if (!canViewAll && lead.assignedToId !== session.user.id) {
+  // Scope: SALES_CSM chỉ xem lead của mình — TRỪ lead đã bật "dùng chung" (#11 T1
+  // câu 10 BGĐ): CSKH cùng cơ sở xem được (cách ly cơ sở đã do scopedDb lo ở trên).
+  if (!canViewAll && lead.assignedToId !== session.user.id && !lead.isSharedWithTeam) {
     redirect("/leads?view=kanban");
   }
+
+  // #11 T1 Q2 — actor chỉ vào được NHỜ "dùng chung" → read-only về UX: ẩn nút
+  // sửa/chuyển/convert/xếp học thử (server action đã chặn mutator qua
+  // actorMayMutateLead); GIỮ khối ghi chú/hoạt động (Q2 cho phép ghi chú).
+  const isSharedViewer = !canViewAll && lead.assignedToId !== session.user.id;
+
+  // #11 T2 — mask PII ở SERVER trước khi render/truyền client (chặn leak qua RSC
+  // payload, không chỉ che ở UI). Non-holder `leads:view-pii` (vd MARKETING) thấy
+  // bản mask; dùng canViewLeadPii (v1-only, xem comment tại helper).
+  const canViewPii = canViewLeadPii(session.user);
+  const piiLead = maskLeadPiiFields(
+    {
+      parentName: lead.parentName,
+      phone: lead.phone,
+      email: lead.email,
+      childName: lead.childName,
+      note: lead.note,
+    },
+    canViewPii,
+  );
 
   const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
   const canCloseDeal =
@@ -139,8 +163,8 @@ export default async function LeadDetailPage({ params }: Props) {
       select: { id: true, sku: true, name: true },
     }),
   ]);
-  // Lead LOST (hoặc không có quyền sửa) → con hiển thị read-only.
-  const childrenReadOnly = !canTransfer || status === "LOST";
+  // Lead LOST (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
+  const childrenReadOnly = !canTransfer || status === "LOST" || isSharedViewer;
 
   // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
   const canTrialManage = (await checkPermission("trials:manage", { centerId: lead.centerId }));
@@ -198,7 +222,7 @@ export default async function LeadDetailPage({ params }: Props) {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold text-gray-900">
-              {lead.parentName}
+              {piiLead.parentName}
             </h1>
             <span
               className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${LEAD_STATUS_BADGE[status]}`}
@@ -207,14 +231,29 @@ export default async function LeadDetailPage({ params }: Props) {
             </span>
           </div>
           <div className="mt-1 text-sm text-gray-600">
-            <a href={`tel:${lead.phone}`} className="font-medium text-orange-600">
-              {lead.phone}
-            </a>
-            {lead.email && <span> · {lead.email}</span>}
+            {/* #11 T2 — non-holder: hiện SĐT mask + BỎ link tel: (href sẽ lộ số thật) */}
+            {canViewPii ? (
+              <a href={`tel:${lead.phone}`} className="font-medium text-orange-600">
+                {piiLead.phone}
+              </a>
+            ) : (
+              <span className="font-medium text-orange-600">{piiLead.phone}</span>
+            )}
+            {piiLead.email && <span> · {piiLead.email}</span>}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {canTransfer && (
+          {/* #11 T1 — bật/tắt "dùng chung": chỉ OWNER hoặc QL cơ sở (leads:assign);
+              server action tự guard lại (đây là gate hiển thị). */}
+          {(lead.assignedToId === session.user.id || canAssign) && (
+            <ShareToggle
+              leadId={lead.id}
+              isShared={lead.isSharedWithTeam}
+              sharedAt={lead.sharedAt ? lead.sharedAt.toISOString() : null}
+            />
+          )}
+          {/* #11 T1 Q2 — shared-viewer: ẩn nút sửa/chuyển (chỉ xem + ghi chú) */}
+          {canTransfer && !isSharedViewer && (
             <Link
               href={`/leads/${lead.id}/edit`}
               className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -229,7 +268,7 @@ export default async function LeadDetailPage({ params }: Props) {
               current={lead.assignedToId}
             />
           )}
-          {canTransfer && (
+          {canTransfer && !isSharedViewer && (
             <TransferDialog
               leadId={lead.id}
               centers={transferCenters}
@@ -246,13 +285,16 @@ export default async function LeadDetailPage({ params }: Props) {
       {lead.handoverNote && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Bàn giao — đã tư vấn</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{lead.handoverNote}</p>
+          {/* #11 T2 — nội dung tư vấn là PII (Q7) → non-holder thấy MASKED_TEXT */}
+          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">
+            {canViewPii ? lead.handoverNote : maskFreeText(lead.handoverNote)}
+          </p>
         </div>
       )}
 
       {/* Info grid */}
       <dl className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-4">
-        <Info label="Tên con" value={lead.childName} />
+        <Info label="Tên con" value={piiLead.childName} />
         <Info label="Tuổi" value={lead.childAge?.toString() ?? null} />
         <Info label="Khoá quan tâm" value={lead.course?.name ?? lead.source} />
         <Info label="Cơ sở" value={lead.center?.name ?? null} />
@@ -262,7 +304,7 @@ export default async function LeadDetailPage({ params }: Props) {
           label="Ngày tạo"
           value={lead.createdAt.toLocaleDateString("vi-VN")}
         />
-        <Info label="Ghi chú" value={lead.note} />
+        <Info label="Ghi chú" value={piiLead.note} />
       </dl>
 
       {/* LD1/G2 — loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể theo loại */}
@@ -274,7 +316,7 @@ export default async function LeadDetailPage({ params }: Props) {
           currentProductId={lead.expectedProductId}
           courses={childCourses.map((c) => ({ id: c.id, name: c.name, code: c.code }))}
           products={expectedProducts}
-          readOnly={!canTransfer}
+          readOnly={!canTransfer || isSharedViewer}
         />
       </div>
 
@@ -284,15 +326,17 @@ export default async function LeadDetailPage({ params }: Props) {
           leadId={lead.id}
           childrenList={lead.children.map((c) => ({
             id: c.id,
-            fullName: c.fullName,
-            dob: c.dob ? c.dob.toISOString() : null,
+            // #11 T2 — tên HS là PII (Q7): non-holder thấy bản mask; dob/trường
+            // ẨN HẲN (truyền null — không xuống client qua RSC payload).
+            fullName: canViewPii ? c.fullName : maskPersonName(c.fullName),
+            dob: canViewPii && c.dob ? c.dob.toISOString() : null,
             ageYears: c.ageYears,
             gender: c.gender,
-            schoolName: c.schoolName,
+            schoolName: canViewPii ? c.schoolName : null,
             gradeLevel: c.gradeLevel,
             interestedCourseId: c.interestedCourseId,
             interestedCenterId: c.interestedCenterId,
-            note: c.note,
+            note: canViewPii ? c.note : maskFreeText(c.note),
             trialStatus: c.trialStatus,
             trialHistory: c.trialHistory
               .filter((h) => h.attendedCount > 0)
@@ -307,13 +351,13 @@ export default async function LeadDetailPage({ params }: Props) {
           centers={childCenters}
           courses={childCourses}
           readOnly={childrenReadOnly}
-          legacyChildName={lead.childName}
+          legacyChildName={piiLead.childName}
           legacyChildAge={lead.childAge}
         />
       </div>
 
-      {/* R7-02 — xếp con vào lớp trải nghiệm */}
-      {canTrialManage && lead.children.length > 0 && (
+      {/* R7-02 — xếp con vào lớp trải nghiệm (shared-viewer: ẩn — chỉ xem + ghi chú) */}
+      {canTrialManage && !isSharedViewer && lead.children.length > 0 && (
         <div className="mb-6">
           <TrialEnrollWidget
             children={lead.children.map((c) => {
@@ -323,7 +367,7 @@ export default async function LeadDetailPage({ params }: Props) {
                 : null;
               return {
                 id: c.id,
-                fullName: c.fullName,
+                fullName: canViewPii ? c.fullName : maskPersonName(c.fullName),
                 currentTrial: enr?.trialClass
                   ? {
                       className: enr.trialClass.name,
@@ -367,7 +411,7 @@ export default async function LeadDetailPage({ params }: Props) {
 
       {/* Chốt deal — R7 (quyết định): Convert v2 là entry point DUY NHẤT
           (per-child, guard payment CONFIRMED, dedupe, consent). Bỏ flow gộp lead cũ. */}
-      {dealClosable && (
+      {dealClosable && !isSharedViewer && (
         <div className="mb-6">
           <Link
             href={`/leads/${lead.id}/convert`}
@@ -429,8 +473,11 @@ export default async function LeadDetailPage({ params }: Props) {
         activities={lead.activities.map((a) => ({
           id: a.id,
           type: a.type,
-          content: a.content,
-          metadata: a.metadata,
+          // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
+          // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
+          // metadata null sẽ tự fallback render `content` (đã mask).
+          content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
+          metadata: canViewPii ? a.metadata : null,
           actorName: a.actorName,
           createdAt: a.createdAt.toISOString(),
         }))}

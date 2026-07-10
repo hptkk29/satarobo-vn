@@ -28,16 +28,16 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
-  // Cách ly cơ sở cho người xem CHI TIẾT (QL): đợt gắn CS ngoài scope → chặn.
-  if (canDetail) {
-    if (
-      !actor.isSuperAdmin &&
-      !actor.isHoLevel &&
-      round.centerId &&
-      !actor.visibleCenterIds.includes(round.centerId)
-    ) {
-      redirect("/evaluations");
-    }
+  // Cách ly cơ sở cho MỌI người xem (A1-LOW 10/07 — trước đây chỉ áp canDetail:
+  // GV view-aggregate cầm roundId CENTER_SURVEY cơ sở khác vẫn đọc được tổng hợp
+  // góp ý TEXTBOX nguyên văn). Đợt toàn hệ thống (centerId=null) không bị chặn.
+  if (
+    !actor.isSuperAdmin &&
+    !actor.isHoLevel &&
+    round.centerId &&
+    !actor.visibleCenterIds.includes(round.centerId)
+  ) {
+    redirect("/evaluations");
   }
 
   // GV chỉ-tổng-hợp + đợt TEACHER_EVAL → tổng hợp lọc theo CHÍNH MÌNH (AC4).

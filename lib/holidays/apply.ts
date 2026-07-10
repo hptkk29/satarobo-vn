@@ -103,6 +103,14 @@ export async function applyHolidayShift(holiday: {
       await enqueueEmail({
         to: email,
         toName: s.class.teacher?.name ?? undefined,
+        // B1.5: template DB (admin sửa) — inline dưới là fallback.
+        templateKey: "HOLIDAY_SHIFT",
+        vars: {
+          teacherName: s.class.teacher?.name ?? "thầy/cô",
+          className: s.class.name,
+          oldDate: ymdLocal(s.date),
+          newDate: ymdLocal(found),
+        },
         subject: `Dời buổi học do nghỉ — lớp ${s.class.name}`,
         bodyText: `Buổi học lớp ${s.class.name} ngày ${ymdLocal(s.date)} trùng ngày nghỉ đã được dời sang ${ymdLocal(found)}.`,
         context: { type: "HOLIDAY_SHIFT", id: s.id },

@@ -1,0 +1,59 @@
+name: Seed Production EmailTemplates (Supabase)
+
+# =============================================================================
+# Chạy TAY (workflow_dispatch) — seed EmailTemplate lên PROD (B1.5 10/07).
+#
+# Sau khi chạy, MỌI email tự động (kích hoạt tài khoản, xác nhận ghi danh, nhắc
+# công nợ, nhận xét, bài tập, hoàn thành khoá, dời buổi, chấm rubric...) hiện ra
+# ở /admin/email-templates để admin/role có `emails:manage` (SUPER_ADMIN /
+# CENTER_MANAGER / MARKETING) TỰ SỬA nội dung — không cần code.
+#
+# 2 nhóm trong prisma/seed-email-templates.ts:
+# - TEMPLATES (orders/reminders cũ): upsert — nội dung theo CODE thắng.
+# - EMAIL_TEMPLATE_DEFS (9 email hệ thống mới): CREATE-ONLY — bản admin đã sửa
+#   được GIỮ NGUYÊN khi chạy lại. Idempotent, chạy lại an toàn.
+#
+# KHÔNG đụng RBAC/shadow — an toàn chạy bất kỳ lúc nào.
+# SECRETS: PROD_DATABASE_URL / PROD_DIRECT_URL (đã khai cho deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: seed-production-email-templates
+  cancel-in-progress: false
+
+jobs:
+  seed-email-templates:
+    name: Seed EmailTemplate (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secrets prod (fail sớm)
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Seed EmailTemplate (prod)
+        run: pnpm exec tsx prisma/seed-email-templates.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

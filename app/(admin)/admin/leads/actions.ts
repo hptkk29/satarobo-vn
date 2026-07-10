@@ -2,7 +2,7 @@
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { hasRole } from '@/lib/auth/permissions'
+import { hasRole, canViewLeadPii } from '@/lib/auth/permissions'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -36,6 +36,90 @@ const statusSchema = z.enum([
   'DEMO_SCHEDULED',
 ])
 
+// ─── #11 T1 (câu 10 BGĐ, Kiệt ký spec 10/07) — lead "dùng chung" ────────────
+/**
+ * Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity). Mọi mutator
+ * (status/fields/note/loại đơn/task) đòi OWNER (assignee) hoặc actor view-all
+ * (QL/Admin). KHÔNG export ('use server': export async = public endpoint).
+ * Cũng vá luôn lỗ pre-existing: Sale A gọi action với leadId của Sale B cùng cơ sở.
+ */
+async function actorMayMutateLead(
+  sessionUserId: string,
+  assignedToId: string | null,
+): Promise<boolean> {
+  if (assignedToId === sessionUserId) return true
+  return checkPermission('leads:view-all')
+}
+
+const MUTATE_DENIED =
+  'Chỉ người phụ trách lead được sửa — lead dùng chung chỉ xem + ghi chú'
+
+/**
+ * Q1/Q3: bật/tắt "dùng chung" — chỉ OWNER (assignee) hoặc QL cơ sở (leads:assign).
+ * Q4: phạm vi chia sẻ = trong cơ sở (scopedDb cách ly, không nới). Ghi audit.
+ */
+export async function toggleLeadShareAction(
+  leadId: string,
+  share: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
+
+  const before = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { assignedToId: true, centerId: true, isSharedWithTeam: true },
+  })
+  const actor = await resolveActor(session.user.id)
+  if (!before || !passesScope('Lead', before, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
+
+  const isOwner = before.assignedToId === session.user.id
+  // QL cơ sở: leads:assign (điều phối lead) — có ở cả v1 matrix lẫn v2 seed (không lệch shadow).
+  if (!isOwner && !(await checkPermission('leads:assign', { centerId: before.centerId }))) {
+    return { ok: false, error: 'Chỉ người phụ trách hoặc Quản lý cơ sở được bật/tắt dùng chung' }
+  }
+  if (before.isSharedWithTeam === share) return { ok: true }
+
+  const { actorId, actorName } = getAuditActor(session)
+  await db.$transaction(async (tx) => {
+    await tx.lead.update({
+      where: { id: leadId },
+      data: {
+        isSharedWithTeam: share,
+        sharedAt: share ? new Date() : null,
+        sharedById: share ? session.user.id : null,
+      },
+    })
+    await logLeadAudit({
+      leadId,
+      action: 'UPDATE',
+      actorId,
+      actorName,
+      oldValues: { isSharedWithTeam: before.isSharedWithTeam },
+      newValues: { isSharedWithTeam: share },
+      changedFields: ['isSharedWithTeam'],
+      tx,
+    })
+    await tx.leadActivity.create({
+      data: {
+        leadId,
+        actorId,
+        actorName,
+        type: 'NOTE',
+        content: share
+          ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
+          : 'Tắt "dùng chung"',
+      },
+    })
+  })
+
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  return { ok: true }
+}
+
 export async function updateLeadStatus(
   leadId: string,
   rawStatus: string,
@@ -49,11 +133,14 @@ export async function updateLeadStatus(
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
-    select: { status: true, centerId: true },
+    select: { status: true, centerId: true, assignedToId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!before || !passesScope('Lead', before, actor)) {
     return { ok: false, error: 'Lead khong ton tai' }
+  }
+  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   // R7-01 — chỉ cho phép chuyển trạng thái hợp lệ theo pipeline.
@@ -166,11 +253,14 @@ export async function updateLeadOrderKind(
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
-    select: { centerId: true },
+    select: { centerId: true, assignedToId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!before || !passesScope('Lead', before, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
+  }
+  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   // Validate item khớp loại đơn (nếu có chọn item).
@@ -280,6 +370,9 @@ export async function addLeadTask(input: {
   if (!lead || !passesScope('Lead', lead, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
   }
+  if (!(await actorMayMutateLead(session.user.id, lead.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
+  }
 
   const { actorId, actorName } = getAuditActor(session)
   // AC4 — tạo việc cũng là hoạt động → reset đồng hồ SLA idle trong 1 tx.
@@ -313,11 +406,14 @@ export async function completeLeadTask(
 
   const task = await db.leadTask.findUnique({
     where: { id: taskId },
-    select: { leadId: true, lead: { select: { centerId: true } } },
+    select: { leadId: true, lead: { select: { centerId: true, assignedToId: true } } },
   })
   const actor = await resolveActor(session.user.id)
   if (!task || !passesScope('Lead', { centerId: task.lead?.centerId ?? null }, actor)) {
     return { ok: false, error: 'Việc không tồn tại' }
+  }
+  if (!(await actorMayMutateLead(session.user.id, task.lead?.assignedToId ?? null))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   await db.$transaction(async (tx) => {
@@ -346,11 +442,14 @@ export async function updateLeadNote(
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
-    select: { note: true, centerId: true },
+    select: { note: true, centerId: true, assignedToId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!before || !passesScope('Lead', before, actor)) {
     return { ok: false, error: 'Lead khong ton tai' }
+  }
+  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   const newNote = note.trim() || null
@@ -501,9 +600,13 @@ export async function createLeadManual(
     },
   })
   if (dup) {
+    // #11 T2 — chi tiết trùng (trạng thái + tên sale phụ trách) là dữ liệu tư vấn/PII:
+    // chỉ lộ khi VỪA trong scope (view-all theo cơ sở HOẶC cùng cơ sở) VỪA có quyền
+    // leads:view-pii. Non-holder (vd MARKETING) chỉ nhận thông báo chung, không chi tiết.
     const canSeeDetail =
-      (await checkPermission('leads:view-all', { centerId: dup.centerId })) ||
-      (!!dup.centerId && dup.centerId === session.user.centerId)
+      canViewLeadPii(session.user) &&
+      ((await checkPermission('leads:view-all', { centerId: dup.centerId })) ||
+        (!!dup.centerId && dup.centerId === session.user.centerId))
     if (canSeeDetail) {
       const who = dup.assignedTo?.name ? `, phụ trách: ${dup.assignedTo.name}` : ''
       return {
@@ -513,7 +616,7 @@ export async function createLeadManual(
     }
     return {
       ok: false,
-      error: 'SĐT đã tồn tại trong hệ thống (thuộc cơ sở khác). Vui lòng báo quản lý cơ sở kiểm tra.',
+      error: 'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.',
     }
   }
 
@@ -603,6 +706,7 @@ export async function updateLeadFields(
       courseId: true,
       source: true,
       note: true,
+      assignedToId: true,
     },
   })
   // Cách ly cơ sở (chống IDOR ghi): Lead phải thuộc tầm nhìn cơ sở actor —
@@ -610,6 +714,9 @@ export async function updateLeadFields(
   const actor = await resolveActor(session.user.id)
   if (!before || !passesScope('Lead', before, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
+  }
+  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   // Đổi SĐT → kiểm tra trùng.

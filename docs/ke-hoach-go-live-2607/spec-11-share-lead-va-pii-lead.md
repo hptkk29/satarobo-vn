@@ -79,4 +79,20 @@ admin cấp"**, không mặc định. Ghi chú cảnh báo đã có sẵn trong 
 - [ ] Ticket 2: e2e mask PII khi thiếu quyền + reveal có audit+reason.
 
 ## Trạng thái
-🔴 **CHỜ DUYỆT** — không code cho tới khi Q1–Q9 được BGĐ/Kiệt chốt bằng văn bản. Xếp sau 26/07 trừ khi BGĐ đẩy sớm.
+🟢 **ĐÃ KÝ 10/07 (Kiệt: "không có chỉnh sửa" — theo đúng mặc định đề xuất Q1–Q9)** → code cùng ngày.
+
+### Ghi chú thực thi (10/07)
+- **Q1–Q5 (T1):** `Lead.isSharedWithTeam/sharedAt/sharedById` + `toggleLeadShareAction` (owner/QL) +
+  guard 6 mutator (owner-hoặc-view-all; `addLeadActivity` giữ mở = "ghi chú") + mở rộng read view-own
+  `OR isSharedWithTeam` (AND-wrap, scopedDb cách ly Q4). Pending-tasks + KPI sales-dashboard GIỮ owner-only
+  (lead chia sẻ không phải việc-phải-nhắc/thành tích của viewer).
+- **Q6–Q7, Q9 (T2):** action `leads:view-pii` (v1 matrix SA/CM/SALES_CSM; v2 seed CM+CENTER_SALES_CSM GLOBAL);
+  mask server-side 5 nhóm field (SĐT/email/tên PH/tên HS/nội dung tư vấn) tại list + detail + activities +
+  children + export CSV + messenger + oracle trùng-SĐT. `canViewLeadPii` cố ý v1-only tới sau flip #09
+  (né bẩn shadow); MARKETING cần xem → Kiệt cấp grant per-user tại `/admin/users/[id]/permissions`.
+- **Q8 (reveal):** thực thi ở granularity **grant per-user** — cấp `leads:view-pii` qua UI grant (bắt buộc
+  reason + `RbacAuditLog`) rồi thấy raw; KHÔNG làm nút reveal per-lead vì với mặc định Q9 nó không có
+  đối tượng dùng hợp lý (holder thấy thẳng để làm việc; non-holder mà tự reveal được thì mask vô nghĩa).
+  Nếu Kiệt muốn ceremony per-lead (như `revealPaymentsPii` #15) → follow-up ~0.5d, pattern sẵn.
+- **Edit page:** thêm 2 lớp gate (ownership + PII) — MARKETING không còn vào form edit lead (form prefill
+  PII raw + nguy cơ save đè bản mask); tạo lead + import vẫn nguyên.

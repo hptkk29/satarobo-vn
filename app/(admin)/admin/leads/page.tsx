@@ -3,8 +3,9 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
-import { hasRole } from '@/lib/auth/permissions'
+import { canViewLeadPii } from '@/lib/auth/permissions'
 import { checkPermission } from '@/lib/auth/check-permission'
+import { maskLeadPiiFields } from '@/lib/lead/pii'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
@@ -13,13 +14,6 @@ import type { LeadStatus, Prisma } from '@prisma/client'
 
 const PAGE_SIZE = 20
 const KANBAN_LIMIT = 500
-
-function maskPhone(phone: string): string {
-  if (phone.length < 6) return phone
-  const keep = 2
-  const masked = phone.length - keep * 2
-  return phone.slice(0, keep) + 'x'.repeat(masked) + phone.slice(-keep)
-}
 
 type SP = {
   page?: string
@@ -83,7 +77,21 @@ export default async function LeadsPage({
   // + đếm badge tab "Đã đăng ký" (luôn đếm trên scope hiện tại, bất kể view/status filter).
   const baseWhere: Prisma.LeadWhereInput = {
     deletedAt: null,
-    ...(scopeToSelf ? { assignedToId: session.user.id } : {}),
+    // SHARE T1 — sale view-own thấy lead của mình HOẶC lead team đã bật "dùng chung".
+    // Gói trong AND để không đè key OR của search q bên dưới (2 OR sống chung).
+    // Cách ly cơ sở vẫn do scopedDb inject centerId — share không xuyên cơ sở.
+    ...(scopeToSelf
+      ? {
+          AND: [
+            {
+              OR: [
+                { assignedToId: session.user.id },
+                { isSharedWithTeam: true },
+              ],
+            },
+          ],
+        }
+      : {}),
     ...(filterAssignedTo && canViewAll
       ? { assignedToId: filterAssignedTo }
       : {}),
@@ -112,7 +120,9 @@ export default async function LeadsPage({
     where: { ...baseWhere, status: 'REGISTERED' },
   })
 
-  const isMarketing = hasRole(session.user, 'MARKETING')
+  // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) ở SERVER cho actor không có
+  // quyền leads:view-pii (vd MARKETING) — chặn leak qua RSC payload, không chỉ che UI.
+  const canViewPii = canViewLeadPii(session.user)
   const canCloseDeal =
     (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
   const canAssign = (await checkPermission('leads:assign'))
@@ -163,7 +173,9 @@ export default async function LeadsPage({
     })
 
     const canUpdate = (await checkPermission('leads:edit'))
-    const kanbanLeads: KanbanLead[] = rawLeads.map((l) => {
+    const kanbanLeads: KanbanLead[] = rawLeads.map((raw) => {
+      // #11 T2 — mask PII (tên PH/SĐT/tên con) trước khi build payload client.
+      const l = maskLeadPiiFields(raw, canViewPii)
       // ngày học thử gần nhất across mọi con.
       const trialDates = l.children
         .flatMap((c) => c.trialHistory.map((h) => h.lastAttendedAt))
@@ -172,7 +184,7 @@ export default async function LeadsPage({
       return {
         id: l.id,
         parentName: l.parentName,
-        phone: isMarketing ? maskPhone(l.phone) : l.phone,
+        phone: l.phone,
         childName: l.childName,
         status: l.status,
         source: l.source,
@@ -181,6 +193,9 @@ export default async function LeadsPage({
         createdAt: l.createdAt.toISOString(),
         overdue: l.tasks.length > 0,
         lastTrialDate: trialDates[0]?.toISOString() ?? null,
+        // SHARE T1 — badge "Dùng chung" trên card.
+        isSharedWithTeam: l.isSharedWithTeam,
+        assignedToId: l.assignedToId,
       }
     })
 
@@ -200,6 +215,7 @@ export default async function LeadsPage({
           canUpdate={canUpdate}
           canCloseDeal={canCloseDeal}
           canAssign={canAssign}
+          currentUserId={session.user.id}
         />
       </div>
     )
@@ -224,30 +240,37 @@ export default async function LeadsPage({
   const canUpdate = (await checkPermission('leads:edit'))
   const canDelete = (await checkPermission('leads:delete'))
 
-  const leads: LeadRow[] = rawLeads.map((lead) => ({
-    id: lead.id,
-    parentName: lead.parentName,
-    phone: isMarketing ? maskPhone(lead.phone) : lead.phone,
-    email: lead.email,
-    childName: lead.childName,
-    childAge: lead.childAge,
-    status: lead.status,
-    source: lead.source,
-    note: lead.note,
-    utmSource: lead.utmSource,
-    utmMedium: lead.utmMedium,
-    utmCampaign: lead.utmCampaign,
-    eventId: lead.eventId,
-    landingPage: lead.landingPage,
-    referrer: lead.referrer,
-    ipAddress: lead.ipAddress,
-    userAgent: lead.userAgent,
-    consentMarketing: lead.consentMarketing,
-    createdAt: lead.createdAt.toISOString(),
-    center: lead.center,
-    courseName: lead.course?.name ?? null,
-    assignedTo: lead.assignedTo,
-  }))
+  const leads: LeadRow[] = rawLeads.map((raw) => {
+    // #11 T2 — mask PII (tên PH/SĐT/email/tên con/note) trước khi build payload client.
+    const lead = maskLeadPiiFields(raw, canViewPii)
+    return {
+      id: lead.id,
+      parentName: lead.parentName,
+      phone: lead.phone,
+      email: lead.email,
+      childName: lead.childName,
+      childAge: lead.childAge,
+      status: lead.status,
+      source: lead.source,
+      note: lead.note,
+      utmSource: lead.utmSource,
+      utmMedium: lead.utmMedium,
+      utmCampaign: lead.utmCampaign,
+      eventId: lead.eventId,
+      landingPage: lead.landingPage,
+      referrer: lead.referrer,
+      ipAddress: lead.ipAddress,
+      userAgent: lead.userAgent,
+      consentMarketing: lead.consentMarketing,
+      createdAt: lead.createdAt.toISOString(),
+      center: lead.center,
+      courseName: lead.course?.name ?? null,
+      assignedTo: lead.assignedTo,
+      // SHARE T1 — badge "Dùng chung" trên bảng.
+      isSharedWithTeam: lead.isSharedWithTeam,
+      assignedToId: lead.assignedToId,
+    }
+  })
 
   return (
     <div>
@@ -269,6 +292,7 @@ export default async function LeadsPage({
         canDelete={canDelete}
         currentStatus={statusFilter}
         currentQ={q}
+        currentUserId={session.user.id}
       />
     </div>
   )

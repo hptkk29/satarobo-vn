@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { canViewLeadPii } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { maskPhone } from "@/lib/lead/pii";
 import { Badge } from "@/components/ui/badge";
 import { ReplyBox } from "./_components/reply-box";
 
@@ -25,6 +27,10 @@ export default async function MessengerInboxPage() {
     include: { messages: { orderBy: { sentAt: "desc" }, take: 1 } },
   });
 
+  // #11 T2 — SĐT là PII lead: mask ở SERVER cho actor không có leads:view-pii
+  // (vd MARKETING). Nội dung tin nhắn cuối GIỮ nguyên — nghiệp vụ inbox cần đọc.
+  const canViewPii = canViewLeadPii(session.user);
+
   return (
     <div>
       <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
@@ -41,7 +47,11 @@ export default async function MessengerInboxPage() {
               <div className="mb-2 flex items-center justify-between">
                 <div className="font-semibold text-neutral-900">
                   {c.parentName ?? `PSID ${c.psid.slice(0, 8)}`}
-                  {c.phone ? <span className="ml-2 text-sm text-neutral-500">{c.phone}</span> : null}
+                  {c.phone ? (
+                    <span className="ml-2 text-sm text-neutral-500">
+                      {canViewPii ? c.phone : maskPhone(c.phone)}
+                    </span>
+                  ) : null}
                 </div>
                 <Badge variant={c.status === "QUALIFIED" ? "default" : "secondary"}>{c.status}</Badge>
               </div>

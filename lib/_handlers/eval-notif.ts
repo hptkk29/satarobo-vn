@@ -25,13 +25,15 @@ export async function onEvalOpened(event: DomainEventLite): Promise<void> {
   const roundName = round.name;
 
   if (scope === "CENTER_SURVEY") {
-    // PH cơ sở của đợt — broadcast theo centerId (audience=CENTER).
+    // PH cơ sở của đợt — broadcast theo centerId (audience=CENTER). A1-LOW 10/07:
+    // đợt TOÀN HỆ THỐNG (centerId=null) → audience CENTER+null KHÔNG match
+    // parentAudienceOr (centerId IN [...]) = không ai nhận chuông → dùng ALL_PARENTS.
     await db.notification.upsert({
       where: { dedupeKey: `eval.opened:${roundId}` },
       create: {
         title: "Khảo sát trung tâm đang mở",
         body: `Khảo sát "${roundName}" đang mở. Vui lòng dành ít phút gửi ý kiến của quý phụ huynh.`,
-        audience: "CENTER",
+        audience: centerId ? "CENTER" : "ALL_PARENTS",
         centerId,
         createdByName: "Hệ thống",
         dedupeKey: `eval.opened:${roundId}`,

@@ -10,6 +10,7 @@ import {
   LEAD_STATUS_LABEL,
   LEAD_STATUS_ACCENT,
 } from "@/lib/leads/status";
+import { Badge } from "@/components/ui/badge";
 import { updateLeadStatus, autoAssignLeadAction } from "../actions";
 
 export type KanbanLead = {
@@ -24,7 +25,29 @@ export type KanbanLead = {
   createdAt: string; // ISO
   overdue: boolean; // T1.2 — quá hạn follow-up (tạm false cho tới khi có LeadTask)
   lastTrialDate: string | null; // FL-R2 (item 6) — lần học thử gần nhất (ISO) hoặc null
+  isSharedWithTeam: boolean; // SHARE T1 — lead bật "dùng chung" cho team
+  assignedToId: string | null;
 };
+
+/** SHARE T1 — chip "Dùng chung": outline = lead người khác chia sẻ cho mình;
+ *  secondary = lead mình đang chia sẻ cho team. */
+function SharedBadge({
+  lead,
+  currentUserId,
+}: {
+  lead: KanbanLead;
+  currentUserId: string;
+}) {
+  if (!lead.isSharedWithTeam) return null;
+  if (lead.assignedToId === currentUserId) {
+    return (
+      <Badge variant="secondary" title="Bạn đang chia sẻ lead này">
+        Dùng chung
+      </Badge>
+    );
+  }
+  return <Badge variant="outline">Dùng chung</Badge>;
+}
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("vi-VN", {
@@ -39,11 +62,13 @@ export function LeadsKanban({
   canUpdate,
   canCloseDeal = false,
   canAssign = false,
+  currentUserId,
 }: {
   leads: KanbanLead[];
   canUpdate: boolean;
   canCloseDeal?: boolean;
   canAssign?: boolean;
+  currentUserId: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -166,11 +191,14 @@ export function LeadsKanban({
                       >
                         {lead.parentName}
                       </Link>
-                      {lead.overdue && (
-                        <span className="flex-shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
-                          Quá hạn
-                        </span>
-                      )}
+                      <div className="flex flex-shrink-0 items-center gap-1">
+                        <SharedBadge lead={lead} currentUserId={currentUserId} />
+                        {lead.overdue && (
+                          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                            Quá hạn
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <a
                       href={`tel:${lead.phone}`}

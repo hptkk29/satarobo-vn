@@ -63,6 +63,7 @@ export type Action =
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
+  | "leads:view-pii" // #11 T2 (OI-4, Kiệt ký 10/07) — xem PII lead (SĐT/email/tên PH-HS/tư vấn); MARKETING mặc định KHÔNG có, cấp per-user qua grant
 
   // --- Trial classes (Phase T1.4) ---
   | "trials:view"
@@ -295,6 +296,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // (lib/auth/can.ts) — nếu thiếu, shadow-compare đẻ lệch v1=false/v2=true mỗi lần
   // admin chạm trang này. Behavior-neutral: call-site chỉ thu hẹp khi `!viewAll && viewOwn`.
   "leads:view-own": ["SUPER_ADMIN", "SALES_CSM"],
+  // #11 T2 — Q9: Sale/QL cơ sở (trực tiếp CSKH) mặc định ĐƯỢC xem PII lead;
+  // MARKETING (leads:view-all cross-center) KHÔNG mặc định — cấp per-user khi cần.
+  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -732,4 +736,15 @@ const PARENT_CONTACT_ROLES: Role[] = [
 /** User có được xem SĐT/email phụ huynh không (PII). */
 export function canViewParentContact(user: RoleHolder): boolean {
   return hasAnyRole(user, PARENT_CONTACT_ROLES);
+}
+
+/**
+ * #11 T2 — user có được xem PII lead (SĐT/email/tên PH-HS/nội dung tư vấn) không.
+ * ⚠️ CỐ Ý dùng can() v1 TRỰC TIẾP (không checkPermission): action mới chưa seed v2
+ * trên prod (seed-prod-roles bị khoá tới sau flip #09) — checkPermission sẽ đẻ lệch
+ * shadow v1≠v2 làm bẩn đồng hồ #01. Sau flip + seed → đổi sang checkPermission.
+ * Grant per-user (UserPermissionGrant ALLOW leads:view-pii) đi qua can() nên vẫn ăn.
+ */
+export function canViewLeadPii(user: CanUser): boolean {
+  return can(user, "leads:view-pii");
 }
