@@ -13,11 +13,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Star } from "lucide-react";
+import { Save, Star, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { EmptyState } from "../../_components/ui/empty-state";
 import { saveSessionFeedback } from "@/app/(admin)/admin/sessions/[id]/_actions";
 
 // Avatar initials — copy helper từ lop/_components/attendance-panel (2 chữ cái cuối tên).
@@ -87,11 +88,7 @@ export function FeedbackPanel({
   }
 
   if (rows.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
-        Không có học viên đi học để nhận xét.
-      </p>
-    );
+    return <EmptyState icon={Users} title="Không có học viên đi học để nhận xét." />;
   }
 
   return (
@@ -99,13 +96,13 @@ export function FeedbackPanel({
       {rows.map((r) => {
         const cur = state[r.studentId] ?? { comment: "", rating: null };
         return (
-          <div key={r.studentId} className="rounded-lg border border-neutral-200 bg-white p-4">
+          <div key={r.studentId} className="t-card p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-purple-700 text-xs font-bold text-white">
+                <span className="brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
                   {initials(r.studentName)}
                 </span>
-                <p className="truncate text-sm font-semibold text-neutral-900">{r.studentName}</p>
+                <p className="truncate text-sm font-semibold text-foreground">{r.studentName}</p>
               </div>
               <div className="flex shrink-0 items-center gap-0.5">
                 {STARS.map((star) => {
@@ -118,12 +115,13 @@ export function FeedbackPanel({
                       onClick={() => setRating(r.studentId, star)}
                       aria-pressed={cur.rating === star}
                       aria-label={`${star} sao — ${r.studentName}`}
-                      className="rounded p-1 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded p-1 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Star
+                        aria-hidden
                         className={cn(
                           "h-5 w-5",
-                          active ? "fill-amber-400 text-amber-400" : "text-neutral-300",
+                          active ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40",
                         )}
                       />
                     </button>
@@ -151,7 +149,7 @@ export function FeedbackPanel({
             <Save className="mr-1.5 h-4 w-4" />
             {pending ? "Đang lưu…" : "Lưu tất cả"}
           </Button>
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-muted-foreground">
             Ô nhận xét để trống khi lưu = xoá nhận xét đã lưu của học viên đó (sao chỉ được lưu
             kèm nhận xét).
           </p>

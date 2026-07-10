@@ -20,7 +20,17 @@
 // ngày VN bằng mốc "UTC 00:00" (dayUtc) để so sánh cột @db.Date; riêng ClassSession.date
 // là Timestamptz → trừ 7h ra mốc UTC thật (toVnInstant) khi query.
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarOff,
+  CalendarRange,
+  CalendarX2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  List,
+  type LucideIcon,
+} from "lucide-react";
 import type { HolidayType, SessionStatus } from "@prisma/client";
 import type { VariantProps } from "class-variance-authority";
 import { auth } from "@/lib/auth";
@@ -42,6 +52,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "../_components/ui/empty-state";
+import { PageHeader } from "../_components/ui/page-header";
 import { SessionActions } from "./_components/session-actions";
 
 export const metadata = { title: "Lịch dạy | Giáo viên Sata Robo" };
@@ -297,26 +309,28 @@ export default async function TeacherSchedulePage({
   // quay về danh sách đầy đủ như cũ, tránh kẹt ở chế độ lọc 1 ngày).
   const mocQS = mocUtc ? `&moc=${isoKey(mocUtc)}` : "";
 
+  // Phụ đề đổi theo view + trạng thái lọc 1 ngày.
+  const subtitle =
+    view === "ds" && mocUtc
+      ? `Các buổi trong ngày ${isoKey(mocUtc).split("-").reverse().join("/")}.`
+      : view === "ds"
+        ? `Buổi dạy của bạn từ ${DAYS_BACK} ngày trước đến ${DAYS_FORWARD} ngày tới — gồm cả buổi dạy thay và dạy bù, kể cả ở cơ sở khác.`
+        : "Buổi lớp, buổi Trial, ca làm việc và ngày nghỉ — bấm vào một ngày để xem chi tiết.";
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Lịch dạy</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            {view === "ds" && mocUtc
-              ? `Các buổi trong ngày ${isoKey(mocUtc).split("-").reverse().join("/")}.`
-              : view === "ds"
-                ? `Buổi dạy của bạn từ ${DAYS_BACK} ngày trước đến ${DAYS_FORWARD} ngày tới — gồm cả buổi dạy thay và dạy bù, kể cả ở cơ sở khác.`
-                : "Buổi lớp, buổi Trial, ca làm việc và ngày nghỉ — bấm vào một ngày để xem chi tiết."}
-          </p>
-        </div>
-        {/* Chuyển view — Link CHỈ-query, giữ mốc đang xem cho Tháng/Tuần. */}
-        <div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100 p-1">
-          <ToggleLink active={view === "thang"} href={`?view=thang${mocQS}`} label="Tháng" />
-          <ToggleLink active={view === "tuan"} href={`?view=tuan${mocQS}`} label="Tuần" />
-          <ToggleLink active={view === "ds"} href="?view=ds" label="Danh sách" />
-        </div>
-      </div>
+      <PageHeader
+        title="Lịch dạy"
+        subtitle={subtitle}
+        actions={
+          /* Chuyển view — Link CHỈ-query, giữ mốc đang xem cho Tháng/Tuần. */
+          <div className="inline-flex rounded-lg border border-border bg-muted/50 p-1">
+            <ToggleLink active={view === "thang"} href={`?view=thang${mocQS}`} label="Tháng" icon={CalendarDays} />
+            <ToggleLink active={view === "tuan"} href={`?view=tuan${mocQS}`} label="Tuần" icon={CalendarRange} />
+            <ToggleLink active={view === "ds"} href="?view=ds" label="Danh sách" icon={List} />
+          </div>
+        }
+      />
 
       {view !== "ds" && <Legend />}
 
@@ -378,13 +392,17 @@ function ListView({
   return (
     <div className="space-y-5">
       {singleDay && (
-        <Link href="?" className="text-sm text-neutral-500 hover:text-neutral-800">
+        <Link
+          href="?"
+          className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
           ← Toàn bộ lịch dạy
         </Link>
       )}
       {keys.length === 0 ? (
-        <EmptyBox
-          text={
+        <EmptyState
+          icon={CalendarX2}
+          title={
             singleDay
               ? "Không có buổi dạy nào trong ngày này."
               : "Không có buổi dạy nào trong khoảng thời gian này."
@@ -397,15 +415,15 @@ function ListView({
           const shift = shiftsByDay.get(key);
           return (
             <section key={key} className="space-y-2">
-              <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold capitalize text-neutral-700">
+              <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold capitalize text-foreground">
                 {dayFmt.format(agg.labelDate)}
                 {holiday && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700">
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                     {holiday.typeLabel} · {holiday.name}
                   </span>
                 )}
                 {shift && (
-                  <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-violet-700">
+                  <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
                     {shift.labels.join(" · ")}
                     {shift.leave ? " · xin nghỉ" : ""}
                   </span>
@@ -456,8 +474,8 @@ function ClassSessionCard({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <p className="text-sm text-neutral-600">{classTime(s)}</p>
-        {s.topic && <p className="mt-0.5 text-sm text-neutral-500">{s.topic}</p>}
+        <p className="text-sm text-muted-foreground">{classTime(s)}</p>
+        {s.topic && <p className="mt-0.5 text-sm text-muted-foreground">{s.topic}</p>}
         <SessionActions
           sessionId={s.id}
           status={s.status}
@@ -477,7 +495,9 @@ function TrialCard({ t }: { t: TeacherTrialSessionRow }) {
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">{t.trialClassName}</CardTitle>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Badge className="border-transparent bg-orange-100 text-orange-700">Trial</Badge>
+            <Badge className="border-transparent bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-200">
+              Trial
+            </Badge>
             <Badge variant={t.status === "COMPLETED" ? "outline" : "secondary"}>
               {t.status === "COMPLETED" ? "Đã dạy" : "Đã lên lịch"}
             </Badge>
@@ -485,10 +505,10 @@ function TrialCard({ t }: { t: TeacherTrialSessionRow }) {
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-muted-foreground">
           {t.startTime}–{t.endTime}
         </p>
-        <p className="mt-0.5 text-sm text-neutral-500">Lớp trải nghiệm</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">Lớp trải nghiệm</p>
       </CardContent>
     </Card>
   );
@@ -544,7 +564,7 @@ function MonthView({
             {DOW_SHORT.map((d) => (
               <p
                 key={d}
-                className="text-center text-[11px] font-semibold uppercase tracking-wide text-neutral-500"
+                className="text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
               >
                 {d}
               </p>
@@ -565,12 +585,12 @@ function MonthView({
                   href={`?view=ds&moc=${c.key}`}
                   title={shift ? `Ca làm: ${shift.labels.join(" · ")}` : undefined}
                   className={cn(
-                    "block min-h-[76px] rounded-lg border p-1 transition-colors hover:border-neutral-400",
+                    "t-card-hover block min-h-[76px] rounded-lg border p-1 transition-colors",
                     holiday
-                      ? "border-amber-200 bg-amber-50/70" // nền nhạt: ngày nghỉ
+                      ? "border-amber-200 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10" // nền nhạt: ngày nghỉ
                       : shift
-                        ? "border-violet-300 bg-white" // viền: ngày có ca làm
-                        : "border-neutral-200 bg-white",
+                        ? "border-orange-200 bg-orange-50/60 dark:border-orange-500/30 dark:bg-orange-500/10" // viền: ngày có ca làm
+                        : "border-border bg-card",
                     !c.inMonth && "opacity-40",
                   )}
                 >
@@ -578,16 +598,20 @@ function MonthView({
                     <span
                       className={cn(
                         "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold",
-                        isToday ? "bg-orange-500 text-white" : "text-neutral-500",
+                        isToday ? "bg-orange-500 text-white" : "text-muted-foreground",
                       )}
                     >
                       {c.dayNum}
                     </span>
-                    {shift && <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />}
+                    {holiday ? (
+                      <CalendarOff className="h-3 w-3 text-amber-500" aria-hidden />
+                    ) : (
+                      shift && <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                    )}
                   </div>
                   {holiday && (
                     <p
-                      className="mb-1 truncate rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+                      className="mb-1 truncate rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
                       title={`${holiday.name} · ${holiday.typeLabel}`}
                     >
                       {holiday.name}
@@ -595,12 +619,12 @@ function MonthView({
                   )}
                   <div className="flex flex-wrap items-center gap-1">
                     {nClass > 0 && (
-                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                         {nClass} buổi
                       </span>
                     )}
                     {nTrial > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                      <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/20 dark:text-orange-200">
                         <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
                         {nTrial}
                       </span>
@@ -666,7 +690,7 @@ function WeekView({
                 key={d.key}
                 className={cn(
                   "flex flex-col rounded-lg p-1",
-                  shift && !holiday && "bg-violet-50/60", // nền nhẹ: ngày có ca làm
+                  shift && !holiday && "bg-orange-50/60 dark:bg-orange-500/10", // nền nhẹ: ngày có ca làm
                 )}
               >
                 <Link
@@ -676,8 +700,8 @@ function WeekView({
                     isToday
                       ? "bg-orange-500 text-white"
                       : holiday
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-neutral-100 text-neutral-500",
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                        : "bg-muted/50 text-muted-foreground",
                   )}
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-wide opacity-90">
@@ -691,26 +715,29 @@ function WeekView({
                       {shift.labels.map((l) => (
                         <span
                           key={l}
-                          className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+                          className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
                         >
                           {l}
                         </span>
                       ))}
                       {shift.leave && (
-                        <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">
+                        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-300">
                           Xin nghỉ
                         </span>
                       )}
                     </div>
                   )}
                   {holiday && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-800">
-                      <p className="truncate text-[11px] font-bold leading-tight">{holiday.name}</p>
-                      <p className="text-[10px] opacity-80">{holiday.typeLabel}</p>
+                    <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                      <CalendarOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-bold leading-tight">{holiday.name}</p>
+                        <p className="text-[10px] opacity-80">{holiday.typeLabel}</p>
+                      </div>
                     </div>
                   )}
                   {items.length === 0 && !holiday ? (
-                    <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-neutral-200 py-6 text-[11px] text-neutral-400">
+                    <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border py-6 text-[11px] text-muted-foreground">
                       –
                     </div>
                   ) : (
@@ -719,50 +746,54 @@ function WeekView({
                         <div
                           key={it.s.id}
                           className={cn(
-                            "rounded-lg border border-neutral-200 border-l-4 border-l-blue-500 bg-blue-50/50 p-2",
+                            "rounded-lg border border-border border-l-4 border-l-blue-500 bg-blue-50/50 p-2 dark:bg-blue-500/10",
                             it.s.status === "CANCELLED" && "opacity-60",
                           )}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-[10px] font-bold text-neutral-500">{classTime(it.s)}</p>
+                            <p className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                              <Clock className="h-3 w-3" aria-hidden />
+                              {classTime(it.s)}
+                            </p>
                             {!assigned.has(it.s.classId) && (
-                              <span className="rounded bg-blue-100 px-1 text-[10px] font-bold text-blue-700">
+                              <span className="rounded bg-blue-100 px-1 text-[10px] font-bold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                                 Thay
                               </span>
                             )}
                           </div>
                           <p
                             className={cn(
-                              "mt-0.5 text-[13px] font-bold leading-tight text-neutral-900",
+                              "mt-0.5 text-[13px] font-bold leading-tight text-foreground",
                               it.s.status === "CANCELLED" && "line-through",
                             )}
                           >
                             {it.s.class.name}
                           </p>
                           {it.s.topic && (
-                            <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">{it.s.topic}</p>
+                            <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{it.s.topic}</p>
                           )}
                           {it.s.status === "CANCELLED" && (
-                            <p className="mt-0.5 text-[10px] font-semibold text-rose-600">Đã hủy</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400">Đã hủy</p>
                           )}
                         </div>
                       ) : (
                         <div
                           key={it.t.id}
-                          className="rounded-lg border border-neutral-200 border-l-4 border-l-orange-500 bg-orange-50/60 p-2"
+                          className="rounded-lg border border-border border-l-4 border-l-orange-500 bg-orange-50/60 p-2 dark:bg-orange-500/10"
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-[10px] font-bold text-neutral-500">
+                            <p className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                              <Clock className="h-3 w-3" aria-hidden />
                               {it.t.startTime}–{it.t.endTime}
                             </p>
-                            <span className="rounded bg-orange-100 px-1 text-[10px] font-bold text-orange-700">
+                            <span className="rounded bg-orange-100 px-1 text-[10px] font-bold text-orange-700 dark:bg-orange-500/20 dark:text-orange-200">
                               Thử
                             </span>
                           </div>
-                          <p className="mt-0.5 text-[13px] font-bold leading-tight text-neutral-900">
+                          <p className="mt-0.5 text-[13px] font-bold leading-tight text-foreground">
                             {it.t.trialClassName}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-neutral-500">Lớp trải nghiệm</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">Lớp trải nghiệm</p>
                         </div>
                       ),
                     )
@@ -780,15 +811,28 @@ function WeekView({
 /* ─────────────────────────────── UI phụ trợ (server) ─────────────────────────────── */
 
 /** Nút chuyển view — Link chỉ-query (giữ path, chạy đúng trên host giaovien lẫn localhost). */
-function ToggleLink({ active, href, label }: { active: boolean; href: string; label: string }) {
+function ToggleLink({
+  active,
+  href,
+  label,
+  icon: Icon,
+}: {
+  active: boolean;
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}) {
   return (
     <Link
       href={href}
       className={cn(
-        "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
-        active ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-800",
+        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
+        active
+          ? "bg-card text-orange-700 shadow-sm dark:text-orange-300"
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
+      <Icon className="h-4 w-4" aria-hidden />
       {label}
     </Link>
   );
@@ -816,26 +860,26 @@ function CalNav({
         <Link
           href={prevHref}
           aria-label="Trước"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition-colors hover:bg-neutral-50"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4" aria-hidden />
         </Link>
         <Link
           href={nextHref}
           aria-label="Sau"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition-colors hover:bg-neutral-50"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4" aria-hidden />
         </Link>
         <Link
           href={todayHref}
-          className="ml-1 inline-flex h-9 items-center rounded-lg border border-neutral-200 bg-white px-3 text-sm font-semibold text-neutral-500 transition-colors hover:bg-neutral-50"
+          className="ml-1 inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted/50"
         >
           {todayLabel}
         </Link>
-        <p className="ml-2 text-sm font-semibold text-neutral-900">{label}</p>
+        <p className="ml-2 text-sm font-semibold text-foreground">{label}</p>
       </div>
-      <p className="hidden text-sm text-neutral-500 sm:block">{count}</p>
+      <p className="hidden text-sm text-muted-foreground sm:block">{count}</p>
     </div>
   );
 }
@@ -843,7 +887,7 @@ function CalNav({
 /** Chú thích màu cho view Tháng/Tuần. */
 function Legend() {
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-neutral-500">
+    <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
       <span className="inline-flex items-center gap-1.5">
         <span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Buổi lớp
       </span>
@@ -851,19 +895,11 @@ function Legend() {
         <span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Trial
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-3 w-3 rounded border border-violet-300 bg-violet-50" /> Ngày có ca làm
+        <span className="h-3 w-3 rounded border border-orange-300 bg-orange-50 dark:border-orange-500/40 dark:bg-orange-500/20" /> Ngày có ca làm
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-3 w-3 rounded bg-amber-100 ring-1 ring-amber-300" /> Ngày nghỉ
+        <CalendarOff className="h-3.5 w-3.5 text-amber-500" aria-hidden /> Ngày nghỉ
       </span>
-    </div>
-  );
-}
-
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
     </div>
   );
 }

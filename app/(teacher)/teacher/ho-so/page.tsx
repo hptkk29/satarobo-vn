@@ -17,9 +17,11 @@ import { BookOpen, CalendarDays, Lock, Mail, MapPin } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
-import { roleLabel, roleColor } from "@/lib/labels";
+import { roleLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "../_components/ui/empty-state";
+import { PageHeader } from "../_components/ui/page-header";
 import { ChangePasswordDialog } from "./_components/change-password-dialog";
 
 export const metadata = { title: "Hồ sơ cá nhân | Giáo viên Sata Robo" };
@@ -35,12 +37,27 @@ const initials = (name: string) =>
 
 // Nhãn trạng thái lớp — đồng bộ STATUS_INFO của /admin/classes.
 const CLASS_STATUS: Record<ClassStatus, { label: string; cls: string }> = {
-  PLANNED: { label: "Đang lên KH", cls: "bg-neutral-100 text-neutral-600" },
-  RECRUITING: { label: "Tuyển sinh", cls: "bg-amber-100 text-amber-700" },
-  PENDING_APPROVAL: { label: "Chờ duyệt", cls: "bg-orange-100 text-orange-700" },
-  ACTIVE: { label: "Đang dạy", cls: "bg-emerald-100 text-emerald-700" },
-  COMPLETED: { label: "Hoàn thành", cls: "bg-blue-100 text-blue-700" },
-  CANCELLED: { label: "Huỷ", cls: "bg-rose-100 text-rose-700" },
+  PLANNED: { label: "Đang lên KH", cls: "bg-muted text-muted-foreground" },
+  RECRUITING: {
+    label: "Tuyển sinh",
+    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  },
+  PENDING_APPROVAL: {
+    label: "Chờ duyệt",
+    cls: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+  },
+  ACTIVE: {
+    label: "Đang dạy",
+    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+  },
+  COMPLETED: {
+    label: "Hoàn thành",
+    cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  },
+  CANCELLED: {
+    label: "Huỷ",
+    cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  },
 };
 
 const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -120,137 +137,131 @@ export default async function TeacherProfilePage() {
   const roleCodes: Role[] = [...new Set<Role>([user.role, ...user.roles])];
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Hồ sơ cá nhân</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Thông tin tài khoản và lớp phụ trách của bạn — vai trò/cơ sở do quản trị
-          cấp, liên hệ quản lý nếu cần thay đổi.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Hồ sơ cá nhân"
+        subtitle="Thông tin tài khoản và lớp phụ trách của bạn — vai trò/cơ sở do quản trị cấp, liên hệ quản lý nếu cần thay đổi."
+      />
 
-      {/* Danh tính (port card đầu của mock profile) */}
-      <Card>
-        <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
-          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-purple-700 text-xl font-bold text-white">
-            {initials(displayName)}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-extrabold text-neutral-900">{displayName}</h2>
-              {roleCodes.map((code) => (
-                <span
-                  key={code}
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                    roleColor(code),
-                  )}
-                >
-                  {roleLabel(code)}
-                </span>
-              ))}
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-neutral-500">
-              <span className="inline-flex items-center gap-1.5">
-                <Mail className="h-4 w-4" />
-                {user.email}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <MapPin className="h-4 w-4" />
-                {user.center?.name ?? "Chưa gán cơ sở"}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lớp đang phụ trách */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BookOpen className="h-4 w-4 text-purple-700" />
-            Lớp đang phụ trách
-          </CardTitle>
-          <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-600">
-            {classes.length} lớp
-          </span>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {classes.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500">
-              Bạn chưa được phân công lớp nào.
-            </p>
-          ) : (
-            classes.map((c) => (
-              <Link
-                key={c.id}
-                href={`/teacher/lop?classId=${c.id}`}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 px-4 py-3 transition-colors hover:border-neutral-400"
-                title="Mở buổi học của lớp"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-neutral-900">{c.name}</p>
-                  <p className="truncate text-sm text-neutral-500">
-                    {c.course.name}
-                    {c.center?.name ? ` · ${c.center.name}` : ""}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-500">
-                  <span className="inline-flex items-center gap-1.5">
-                    <CalendarDays className="h-4 w-4" />
-                    {scheduleText(c)}
-                  </span>
-                  <span>
-                    {c._count.enrollments}/{c.maxStudents} HV
-                  </span>
+      <div className="space-y-5">
+        {/* Danh tính (port card đầu của mock profile) */}
+        <Card>
+          <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+            <span className="brand-gradient flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white">
+              {initials(displayName)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-extrabold text-foreground">{displayName}</h2>
+                {roleCodes.map((code) => (
                   <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-medium",
-                      CLASS_STATUS[c.status].cls,
-                    )}
+                    key={code}
+                    className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
                   >
-                    {CLASS_STATUS[c.status].label}
+                    {roleLabel(code)}
                   </span>
-                </div>
-              </Link>
-            ))
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail className="h-4 w-4" aria-hidden />
+                  {user.email}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4" aria-hidden />
+                  {user.center?.name ?? "Chưa gán cơ sở"}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Thông tin cá nhân (grid Field như mock) */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Thông tin cá nhân</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-          <Field label="Họ và tên" value={displayName} />
-          <Field label="Vai trò" value={roleCodes.map(roleLabel).join(", ")} />
-          <Field label="Email" value={user.email} />
-          <Field label="Cơ sở" value={user.center?.name ?? "Chưa gán cơ sở"} />
-          <Field label="Tham gia hệ thống" value={joinFmt.format(user.createdAt)} />
-          <Field label="Lớp đang phụ trách" value={`${classes.length} lớp`} />
-        </CardContent>
-      </Card>
+        {/* Lớp đang phụ trách */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+              Lớp đang phụ trách
+            </CardTitle>
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+              {classes.length} lớp
+            </span>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {classes.length === 0 ? (
+              <EmptyState icon={BookOpen} title="Bạn chưa được phân công lớp nào." />
+            ) : (
+              classes.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/teacher/lop?classId=${c.id}`}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 transition-colors hover:bg-muted/50"
+                  title="Mở buổi học của lớp"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-foreground">{c.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {c.course.name}
+                      {c.center?.name ? ` · ${c.center.name}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <CalendarDays className="h-4 w-4" aria-hidden />
+                      {scheduleText(c)}
+                    </span>
+                    <span>
+                      {c._count.enrollments}/{c.maxStudents} HV
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium",
+                        CLASS_STATUS[c.status].cls,
+                      )}
+                    >
+                      {CLASS_STATUS[c.status].label}
+                    </span>
+                  </div>
+                </Link>
+              ))
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Bảo mật (port card Bảo mật của mock settings — chỉ giữ đổi mật khẩu) */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Lock className="h-4 w-4 text-purple-700" />
-            Bảo mật
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-neutral-900">Mật khẩu</p>
-            <p className="text-xs text-neutral-500">
-              Đổi mật khẩu đăng nhập của bạn — nên đổi định kỳ.
-            </p>
-          </div>
-          <ChangePasswordDialog />
-        </CardContent>
-      </Card>
+        {/* Thông tin cá nhân (grid Field như mock) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Thông tin cá nhân</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+            <Field label="Họ và tên" value={displayName} />
+            <Field label="Vai trò" value={roleCodes.map(roleLabel).join(", ")} />
+            <Field label="Email" value={user.email} />
+            <Field label="Cơ sở" value={user.center?.name ?? "Chưa gán cơ sở"} />
+            <Field label="Tham gia hệ thống" value={joinFmt.format(user.createdAt)} />
+            <Field label="Lớp đang phụ trách" value={`${classes.length} lớp`} />
+          </CardContent>
+        </Card>
+
+        {/* Bảo mật (port card Bảo mật của mock settings — chỉ giữ đổi mật khẩu) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Lock className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+              Bảo mật
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Mật khẩu</p>
+              <p className="text-xs text-muted-foreground">
+                Đổi mật khẩu đăng nhập của bạn — nên đổi định kỳ.
+              </p>
+            </div>
+            <ChangePasswordDialog />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -258,8 +269,8 @@ export default async function TeacherProfilePage() {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</p>
-      <p className="mt-1 text-sm font-medium text-neutral-900">{value}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
     </div>
   );
 }

@@ -20,6 +20,7 @@
 // ⚠️ Câu 46: KHÔNG SĐT/email/tên phụ huynh — mock lộ parentName/phone, KHÔNG port.
 // Student CHỈ select {id, name, studentCode, avatarUrl, currentGrade, school}.
 import Link from "next/link";
+import { ArrowLeft, GraduationCap, Lock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -28,6 +29,8 @@ import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "../_components/ui/empty-state";
+import { PageHeader } from "../_components/ui/page-header";
 
 export const metadata = { title: "Hồ sơ học viên | Giáo viên Sata Robo" };
 
@@ -149,7 +152,7 @@ export default async function TeacherStudentProfilePage({
 
     return (
       <div className="space-y-5">
-        <BackLink href="?" label="← Học viên lớp tôi" />
+        <BackLink href="?" label="Học viên lớp tôi" />
 
         {/* Định danh — avatar + tên + mã HV + lớp trường (KHÔNG contact PH, câu 46) */}
         <div className="flex items-center gap-4">
@@ -158,21 +161,21 @@ export default async function TeacherStudentProfilePage({
             <img
               src={student.avatarUrl}
               alt={student.name}
-              className="h-14 w-14 shrink-0 rounded-full border border-neutral-200 object-cover"
+              className="h-14 w-14 shrink-0 rounded-full border border-border object-cover"
             />
           ) : (
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-purple-100 text-lg font-semibold text-purple-700">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-orange-100 text-lg font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
               {initials(student.name)}
             </span>
           )}
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-neutral-900">
+            <h1 className="text-2xl font-bold text-foreground">
               {student.name}
               {student.studentCode ? (
-                <span className="text-neutral-400"> ({student.studentCode})</span>
+                <span className="text-muted-foreground"> ({student.studentCode})</span>
               ) : null}
             </h1>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               {[
                 student.currentGrade != null ? `Lớp ${student.currentGrade}` : null,
                 student.school,
@@ -204,7 +207,7 @@ export default async function TeacherStudentProfilePage({
               <CardContent className="space-y-5">
                 {/* Chuyên cần — attendanceSummary: attended đã gồm buổi bù xong */}
                 <section>
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Chuyên cần
                   </h3>
                   <div className="grid grid-cols-3 gap-3">
@@ -221,11 +224,11 @@ export default async function TeacherStudentProfilePage({
                     <StatBox
                       value={String(sum.absent + sum.needMakeup)}
                       label="Vắng (buổi)"
-                      tone="rose"
+                      tone="red"
                     />
                   </div>
                   {(sum.madeUp > 0 || sum.needMakeup > 0) && (
-                    <p className="mt-2 text-xs text-neutral-500">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       {sum.madeUp > 0 ? `Đã học bù ${sum.madeUp} buổi (tính vào đã học).` : ""}
                       {sum.madeUp > 0 && sum.needMakeup > 0 ? " " : ""}
                       {sum.needMakeup > 0 ? `Đang chờ bù ${sum.needMakeup} buổi.` : ""}
@@ -235,15 +238,15 @@ export default async function TeacherStudentProfilePage({
 
                 {/* Năng lực học bạ — tiêu chí khoá + level 1-4 đã chấm */}
                 <section>
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Năng lực (học bạ, thang 1-4)
                   </h3>
                   {criteria.length === 0 ? (
-                    <p className="text-sm text-neutral-400">
+                    <p className="text-sm text-muted-foreground">
                       Khoá học chưa cấu hình tiêu chí năng lực.
                     </p>
                   ) : levelByCriterion.size === 0 ? (
-                    <p className="text-sm text-neutral-400">
+                    <p className="text-sm text-muted-foreground">
                       Học bạ chưa chấm tiêu chí nào — vào mục Học bạ để nhập.
                     </p>
                   ) : (
@@ -270,7 +273,7 @@ export default async function TeacherStudentProfilePage({
           </CardHeader>
           <CardContent>
             {subs.length === 0 ? (
-              <p className="text-sm text-neutral-400">
+              <p className="text-sm text-muted-foreground">
                 Chưa có bài tập nào được giao trong lớp bạn phụ trách.
               </p>
             ) : (
@@ -294,19 +297,19 @@ export default async function TeacherStudentProfilePage({
           </CardHeader>
           <CardContent>
             {feedbacks.length === 0 ? (
-              <p className="text-sm text-neutral-400">Chưa có nhận xét buổi học nào.</p>
+              <p className="text-sm text-muted-foreground">Chưa có nhận xét buổi học nào.</p>
             ) : (
               <ul className="space-y-3">
                 {feedbacks.map((f) => (
-                  <li key={f.id} className="rounded-lg bg-neutral-50 px-3.5 py-2.5">
+                  <li key={f.id} className="rounded-lg bg-muted/50 px-3.5 py-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs font-medium text-neutral-500">
+                      <p className="text-xs font-medium text-muted-foreground">
                         {dayFmt.format(f.classSession.date)} · {f.classSession.class.name}
                         {f.classSession.topic ? ` · ${f.classSession.topic}` : ""}
                       </p>
                       {f.rating != null && <RatingStars rating={f.rating} />}
                     </div>
-                    <p className="mt-1 text-sm text-neutral-800">{f.comment}</p>
+                    <p className="mt-1 text-sm text-foreground">{f.comment}</p>
                   </li>
                 ))}
               </ul>
@@ -346,35 +349,35 @@ export default async function TeacherStudentProfilePage({
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Hồ sơ học viên</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Học viên các lớp bạn phụ trách — chọn học viên để xem chuyên cần, năng lực,
-          bài tập và nhận xét.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Hồ sơ học viên"
+        subtitle="Học viên các lớp bạn phụ trách — chọn học viên để xem chuyên cần, năng lực, bài tập và nhận xét."
+      />
       {byStudent.size === 0 ? (
-        <EmptyBox text="Bạn chưa được phân công lớp nào hoặc lớp chưa có học viên." />
+        <EmptyState
+          icon={GraduationCap}
+          title="Bạn chưa được phân công lớp nào hoặc lớp chưa có học viên."
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[...byStudent.entries()].map(([id, s]) => (
             // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
             // (clean URL /hoc-vien) LẪN localhost/preview (path thật /teacher/hoc-vien).
             <Link key={id} href={`?s=${id}`} className="block">
-              <Card className="h-full transition-colors hover:border-neutral-400">
+              <Card className="t-card-hover h-full">
                 <CardContent className="flex items-center gap-3 py-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
                     {initials(s.name)}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-neutral-900">
+                    <p className="truncate text-sm font-medium text-foreground">
                       {s.name}
                       {s.studentCode ? (
-                        <span className="text-neutral-400"> ({s.studentCode})</span>
+                        <span className="text-muted-foreground"> ({s.studentCode})</span>
                       ) : null}
                     </p>
-                    <p className="truncate text-xs text-neutral-500">{s.classes.join(" · ")}</p>
+                    <p className="truncate text-xs text-muted-foreground">{s.classes.join(" · ")}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -388,10 +391,10 @@ export default async function TeacherStudentProfilePage({
 
 /** Ô chỉ số nhỏ (port StatCard của mock về tile Tailwind thuần). */
 const STAT_TONE = {
-  emerald: "bg-emerald-50 text-emerald-700",
-  blue: "bg-blue-50 text-blue-700",
-  rose: "bg-rose-50 text-rose-700",
-  amber: "bg-amber-50 text-amber-700",
+  emerald: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  blue: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  red: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  amber: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
 } as const;
 
 function StatBox({
@@ -417,13 +420,13 @@ function CompetencyBar({ label, level }: { label: string; level: number | null }
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2 text-sm">
-        <span className="min-w-0 truncate font-medium text-neutral-800">{label}</span>
-        <span className="shrink-0 text-xs font-semibold text-neutral-600">
+        <span className="min-w-0 truncate font-medium text-foreground">{label}</span>
+        <span className="shrink-0 text-xs font-semibold text-muted-foreground">
           {level != null ? (LEVEL_LABEL[level] ?? String(level)) : "Chưa chấm"}
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">
-        <div className="h-full rounded-full bg-purple-600" style={{ width: `${pct}%` }} />
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -435,32 +438,28 @@ function RatingStars({ rating }: { rating: number }) {
   return (
     <span className="text-sm leading-none text-amber-500" aria-label={`${filled}/5 sao`}>
       {"★".repeat(filled)}
-      <span className="text-neutral-300">{"★".repeat(5 - filled)}</span>
+      <span className="text-muted-foreground/30">{"★".repeat(5 - filled)}</span>
     </span>
   );
 }
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
-  );
-}
-
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
   );
 }
 
 function NotYours() {
   return (
     <div className="space-y-4">
-      <BackLink href="?" label="← Hồ sơ học viên" />
-      <EmptyBox text="Học viên không thuộc lớp bạn phụ trách." />
+      <BackLink href="?" label="Hồ sơ học viên" />
+      <EmptyState icon={Lock} title="Học viên không thuộc lớp bạn phụ trách." />
     </div>
   );
 }

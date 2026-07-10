@@ -12,11 +12,14 @@
 // ⚠️ Câu 46: payload client CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 import Link from "next/link";
 import type { SubmissionStatus } from "@prisma/client";
+import { ArrowLeft, Ban, ClipboardCheck, FileX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "../_components/ui/page-header";
+import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
 
 export const metadata = { title: "Chấm bài | Giáo viên Sata Robo" };
@@ -78,24 +81,20 @@ export default async function TeacherGradingPage({
 
     if (sub.status === "NOT_SUBMITTED") {
       return (
-        <div className="space-y-4">
-          <BackLink href="?" label="← Bài chờ chấm" />
-          <EmptyBox text="Học viên chưa nộp bài — chưa thể chấm." />
+        <div>
+          <BackLink href="?" label="Bài chờ chấm" />
+          <EmptyState icon={FileX2} title="Học viên chưa nộp bài — chưa thể chấm." />
         </div>
       );
     }
 
     return (
-      <div className="space-y-4">
-        <BackLink href="?" label="← Bài chờ chấm" />
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">
-            Chấm bài — {sub.student.name}
-          </h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            {sub.assignment.title} · Lớp {sub.assignment.class.name}
-          </p>
-        </div>
+      <div>
+        <BackLink href="?" label="Bài chờ chấm" />
+        <PageHeader
+          title={`Chấm bài — ${sub.student.name}`}
+          subtitle={`${sub.assignment.title} · Lớp ${sub.assignment.class.name}`}
+        />
         <GradeForm
           submissionId={sub.id}
           studentName={sub.student.name}
@@ -161,17 +160,16 @@ export default async function TeacherGradingPage({
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Bài tập &amp; chấm điểm</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Bài học viên đã nộp, chờ bạn chấm — chọn bài để chấm nhanh hoặc chấm rubric.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Bài tập & chấm điểm"
+        subtitle="Bài học viên đã nộp, chờ bạn chấm — chọn bài để chấm nhanh hoặc chấm rubric."
+      />
 
       {rows.length === 0 ? (
-        <EmptyBox
-          text={
+        <EmptyState
+          icon={ClipboardCheck}
+          title={
             classIds.length === 0
               ? "Bạn chưa được phân công lớp nào."
               : "Không có bài chờ chấm."
@@ -194,26 +192,33 @@ export default async function TeacherGradingPage({
                 {g.items.map((r) => (
                   // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host
                   // giaovien (clean URL /cham-bai) LẪN localhost (/teacher/cham-bai).
-                  <Link key={r.id} href={`?submissionId=${r.id}`} className="block">
-                    <div className="flex items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white p-3 transition-colors hover:border-neutral-400">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-neutral-900">
-                          {r.student.name}
-                        </p>
-                        <p className="mt-0.5 text-xs text-neutral-500">
-                          {r.submittedAt
-                            ? `Nộp: ${submitFmt.format(r.submittedAt)}`
-                            : "Chưa rõ thời điểm nộp"}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {r.status === "LATE" && (
-                          <Badge variant="outline" className="border-amber-400 text-amber-600">
-                            Nộp muộn
-                          </Badge>
-                        )}
-                        <span className="text-sm font-semibold text-purple-700">Chấm →</span>
-                      </div>
+                  <Link
+                    key={r.id}
+                    href={`?submissionId=${r.id}`}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-card p-3 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {r.student.name}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {r.submittedAt
+                          ? `Nộp: ${submitFmt.format(r.submittedAt)}`
+                          : "Chưa rõ thời điểm nộp"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {r.status === "LATE" && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-300 text-amber-700 dark:border-amber-500/40 dark:text-amber-300"
+                        >
+                          Nộp muộn
+                        </Badge>
+                      )}
+                      <span className="text-sm font-semibold text-orange-600 dark:text-orange-400">
+                        Chấm →
+                      </span>
                     </div>
                   </Link>
                 ))}
@@ -228,25 +233,21 @@ export default async function TeacherGradingPage({
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
   );
 }
 
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
-  );
-}
-
 function NotYours() {
   return (
-    <div className="space-y-4">
-      <BackLink href="?" label="← Bài chờ chấm" />
-      <EmptyBox text="Bài nộp không thuộc lớp bạn phụ trách." />
+    <div>
+      <BackLink href="?" label="Bài chờ chấm" />
+      <EmptyState icon={Ban} title="Bài nộp không thuộc lớp bạn phụ trách." />
     </div>
   );
 }

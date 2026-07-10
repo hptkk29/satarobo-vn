@@ -21,6 +21,7 @@
 // (không tin client) — giống admin hoan-thanh-khoa/_actions.ts.
 // ⚠️ Câu 46: payload chỉ TÊN học viên — KHÔNG SĐT/email/tên phụ huynh.
 import Link from "next/link";
+import { ArrowLeft, GraduationCap, Lock, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -36,6 +37,8 @@ import type {
 } from "@/lib/labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "../_components/ui/empty-state";
+import { PageHeader } from "../_components/ui/page-header";
 
 export const metadata = { title: "Hoàn thành khoá | Giáo viên Sata Robo" };
 
@@ -144,10 +147,10 @@ export default async function TeacherCompletionsPage({
 
     return (
       <div className="space-y-4">
-        <BackLink href="?" label="← Hoàn thành khoá" />
+        <BackLink href="?" label="Hoàn thành khoá" />
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">{cls.name}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h1 className="text-2xl font-bold text-foreground">{cls.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {cls.course.name} · tiến độ và trạng thái hoàn thành khoá — chỉ xem.
           </p>
         </div>
@@ -156,8 +159,8 @@ export default async function TeacherCompletionsPage({
         <Card>
           <CardContent className="space-y-2 py-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-neutral-800">Tiến độ lớp</span>
-              <span className="text-neutral-500">
+              <span className="font-medium text-foreground">Tiến độ lớp</span>
+              <span className="text-muted-foreground">
                 {progress.completed}/{progress.total} buổi · {progress.pct}%
               </span>
             </div>
@@ -166,13 +169,13 @@ export default async function TeacherCompletionsPage({
         </Card>
 
         {enrollments.length === 0 ? (
-          <EmptyBox text="Lớp chưa có học viên đang học." />
+          <EmptyState icon={Users} title="Lớp chưa có học viên đang học." />
         ) : (
-          <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+          <section className="t-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     <th scope="col" className="px-4 py-3">Học viên</th>
                     <th scope="col" className="px-4 py-3">Chuyên cần</th>
                     <th scope="col" className="px-4 py-3">Hoàn thành khoá</th>
@@ -188,28 +191,28 @@ export default async function TeacherCompletionsPage({
                     return (
                       <tr
                         key={e.id}
-                        className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-neutral-50"
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
                               {initials(e.student.name)}
                             </span>
-                            <span className="font-medium text-neutral-900">
+                            <span className="font-medium text-foreground">
                               {e.student.name}
                             </span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           {progress.completed === 0 ? (
-                            <span className="text-xs text-neutral-400">Chưa có buổi nào</span>
+                            <span className="text-xs text-muted-foreground">Chưa có buổi nào</span>
                           ) : (
                             <div>
-                              <p className="font-medium text-neutral-800">
+                              <p className="font-medium text-foreground">
                                 {s.attended}/{progress.completed} buổi
                               </p>
                               {s.absent > 0 || s.needMakeup > 0 ? (
-                                <p className="text-xs text-neutral-500">
+                                <p className="text-xs text-muted-foreground">
                                   Vắng {s.absent}
                                   {s.needMakeup > 0 ? ` · chờ bù ${s.needMakeup}` : ""}
                                 </p>
@@ -222,16 +225,16 @@ export default async function TeacherCompletionsPage({
                             <div className="flex flex-col gap-0.5">
                               <Badge
                                 variant="outline"
-                                className="w-fit border-emerald-300 bg-emerald-50 text-emerald-700"
+                                className="w-fit border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300"
                               >
                                 Đã hoàn thành · {done.certificateCode}
                               </Badge>
-                              <span className="text-xs text-neutral-500">
+                              <span className="text-xs text-muted-foreground">
                                 {dayFmt.format(done.completedAt)}
                               </span>
                             </div>
                           ) : (
-                            <span className="text-xs text-neutral-400">Chưa hoàn thành</span>
+                            <span className="text-xs text-muted-foreground">Chưa hoàn thành</span>
                           )}
                         </td>
                       </tr>
@@ -283,17 +286,14 @@ export default async function TeacherCompletionsPage({
   const studentCountByClass = new Map(enrollRows.map((r) => [r.classId, r._count._all]));
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Hoàn thành khoá</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Tiến độ khoá học và trạng thái hoàn thành của học viên các lớp bạn phụ trách —
-          chỉ xem; xác nhận hoàn thành do trung tâm thao tác trên trang quản trị.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Hoàn thành khoá"
+        subtitle="Tiến độ khoá học và trạng thái hoàn thành của học viên các lớp bạn phụ trách — chỉ xem; xác nhận hoàn thành do trung tâm thao tác trên trang quản trị."
+      />
 
       {classes.length === 0 ? (
-        <EmptyBox text="Bạn chưa được phân công lớp nào." />
+        <EmptyState icon={GraduationCap} title="Bạn chưa được phân công lớp nào." />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {classes.map((c) => {
@@ -302,17 +302,17 @@ export default async function TeacherCompletionsPage({
               // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
               // (clean URL /hoan-thanh) LẪN localhost/preview (path /teacher/hoan-thanh).
               <Link key={c.id} href={`?classId=${c.id}`} className="block">
-                <Card className="h-full transition-colors hover:border-neutral-400">
+                <Card className="t-card-hover h-full">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">{c.name}</CardTitle>
-                    <p className="text-xs text-neutral-500">{c.course.name}</p>
+                    <p className="text-xs text-muted-foreground">{c.course.name}</p>
                   </CardHeader>
                   <CardContent className="space-y-2 pt-0">
-                    <div className="flex items-center justify-between text-xs text-neutral-500">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>
                         {p.completed}/{p.total} buổi · {studentCountByClass.get(c.id) ?? 0} học viên
                       </span>
-                      <span className="font-medium text-neutral-700">{p.pct}%</span>
+                      <span className="font-medium text-foreground">{p.pct}%</span>
                     </div>
                     <ProgressBar pct={p.pct} />
                   </CardContent>
@@ -330,9 +330,9 @@ export default async function TeacherCompletionsPage({
 function ProgressBar({ pct }: { pct: number }) {
   const width = Math.min(100, Math.max(0, pct));
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
       <div
-        className="h-full rounded-full bg-purple-600"
+        className="h-full rounded-full bg-orange-500"
         style={{ width: `${width}%` }}
       />
     </div>
@@ -341,25 +341,21 @@ function ProgressBar({ pct }: { pct: number }) {
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
-  );
-}
-
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
   );
 }
 
 function NotYours() {
   return (
     <div className="space-y-4">
-      <BackLink href="?" label="← Hoàn thành khoá" />
-      <EmptyBox text="Lớp không thuộc danh sách bạn phụ trách." />
+      <BackLink href="?" label="Hoàn thành khoá" />
+      <EmptyState icon={Lock} title="Lớp không thuộc danh sách bạn phụ trách." />
     </div>
   );
 }

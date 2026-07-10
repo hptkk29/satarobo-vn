@@ -22,7 +22,15 @@
 // ⚠️ Múi giờ: như lich/page.tsx — ngày VN biểu diễn bằng dayUtc (UTC 00:00) so
 // thẳng cột @db.Date; ClassSession.date là Timestamptz → trừ 7h (toVnInstant).
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, GraduationCap, Layers } from "lucide-react";
+import {
+  CalendarX2,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Clock,
+  GraduationCap,
+  Layers,
+} from "lucide-react";
 import type { AdjustStatus, ShiftRegStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -32,6 +40,9 @@ import { SHIFT_ORDER, shiftLabel } from "@/lib/shifts";
 import { getOwnShiftRegistrations } from "@/lib/lms/teacher-schedule";
 import { getOwnAdjustmentRequests } from "@/lib/attendance/own-adjustments";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "../_components/ui/page-header";
+import { StatCard } from "../_components/ui/stat-card";
+import { EmptyState } from "../_components/ui/empty-state";
 import { AdjustRequestDialog } from "./_components/adjust-request-dialog";
 
 export const metadata = { title: "Bảng công | Giáo viên Sata Robo" };
@@ -103,16 +114,31 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
 /* ───────────────────────────────── Nhãn hiển thị ───────────────────────────────── */
 
 const SHIFT_STATUS: Record<ShiftRegStatus, { label: string; cls: string }> = {
-  REGISTERED: { label: "Đã đăng ký", cls: "bg-neutral-100 text-neutral-600" },
-  APPROVED: { label: "Đã duyệt", cls: "bg-emerald-100 text-emerald-700" },
-  LEAVE_REQUESTED: { label: "Xin nghỉ khẩn", cls: "bg-rose-100 text-rose-700" },
+  REGISTERED: { label: "Đã đăng ký", cls: "bg-muted text-muted-foreground" },
+  APPROVED: {
+    label: "Đã duyệt",
+    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+  },
+  LEAVE_REQUESTED: {
+    label: "Xin nghỉ khẩn",
+    cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  },
 };
 
 // Đồng bộ trang admin /admin/cham-cong/yeu-cau-cong (STATUS_BADGE/STATUS_LABEL).
 const ADJUST_STATUS: Record<AdjustStatus, { label: string; cls: string }> = {
-  PENDING: { label: "Chờ duyệt", cls: "bg-amber-100 text-amber-700" },
-  APPROVED: { label: "Đã duyệt", cls: "bg-emerald-100 text-emerald-700" },
-  REJECTED: { label: "Từ chối", cls: "bg-rose-100 text-rose-700" },
+  PENDING: {
+    label: "Chờ duyệt",
+    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  },
+  APPROVED: {
+    label: "Đã duyệt",
+    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+  },
+  REJECTED: {
+    label: "Từ chối",
+    cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  },
 };
 
 /** Dòng bảng chi tiết: 1 ngày có ca đăng ký và/hoặc buổi đã dạy. */
@@ -215,192 +241,192 @@ export default async function TeacherTimesheetPage({
   const monthLabel = `Tháng ${monthStart.getUTCMonth() + 1}/${monthStart.getUTCFullYear()}`;
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header + nút yêu cầu chỉnh công (port PageHeader actions từ mock) */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Bảng công</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Ca đăng ký và buổi đã dạy theo tháng — giờ dạy là ước tính từ khung giờ
-            lớp, không phải công chính thức.
-          </p>
+      <PageHeader
+        title="Bảng công"
+        subtitle="Ca đăng ký và buổi đã dạy theo tháng — giờ dạy là ước tính từ khung giờ lớp, không phải công chính thức."
+        actions={
+          canRequestAdjust ? (
+            <AdjustRequestDialog defaultDate={todayUtc.toISOString().slice(0, 10)} />
+          ) : null
+        }
+      />
+
+      <div className="space-y-6">
+        {/* Chọn tháng — toàn Link CHỈ-query (giữ path hiện tại) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <NavLink href={`?thang=${monthKey(addMonthsUtc(monthStart, -1))}`} aria="Tháng trước">
+            <ChevronLeft className="h-4 w-4" />
+          </NavLink>
+          <NavLink href={`?thang=${monthKey(nextMonth)}`} aria="Tháng sau">
+            <ChevronRight className="h-4 w-4" />
+          </NavLink>
+          <Link
+            href="?"
+            className="ml-1 inline-flex h-9 items-center rounded-lg border border-border bg-card px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            Tháng này
+          </Link>
+          <p className="ml-2 text-base font-bold text-foreground">{monthLabel}</p>
+          {isCurrentMonth && (
+            <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              tạm tính đến hôm nay
+            </span>
+          )}
         </div>
-        {canRequestAdjust && (
-          <AdjustRequestDialog defaultDate={todayUtc.toISOString().slice(0, 10)} />
-        )}
-      </div>
 
-      {/* Chọn tháng — toàn Link CHỈ-query (giữ path hiện tại) */}
-      <div className="flex flex-wrap items-center gap-2">
-        <NavLink href={`?thang=${monthKey(addMonthsUtc(monthStart, -1))}`} aria="Tháng trước">
-          <ChevronLeft className="h-4 w-4" />
-        </NavLink>
-        <NavLink href={`?thang=${monthKey(nextMonth)}`} aria="Tháng sau">
-          <ChevronRight className="h-4 w-4" />
-        </NavLink>
-        <Link
-          href="?"
-          className="ml-1 inline-flex h-9 items-center rounded-lg border border-neutral-200 bg-white px-3 text-sm font-semibold text-neutral-500 transition-colors hover:bg-neutral-50"
-        >
-          Tháng này
-        </Link>
-        <p className="ml-2 text-base font-bold text-neutral-900">{monthLabel}</p>
-        {isCurrentMonth && (
-          <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
-            tạm tính đến hôm nay
-          </span>
-        )}
-      </div>
+        {/* Tổng hợp (StatCard dùng chung — token cam-only, tự đúng ở chế độ Tối) */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard icon={Layers} value={totalShifts} label="Số ca đăng ký" tone="brand" />
+          <StatCard
+            icon={GraduationCap}
+            value={sessions.length}
+            label="Buổi đã dạy"
+            tone="green"
+          />
+          <StatCard
+            icon={Clock}
+            value={`${fmtHours(totalHours)}h`}
+            label="Giờ dạy (ước tính)"
+            tone="blue"
+          />
+        </div>
 
-      {/* Tổng hợp (port StatCard từ mock — dựng bằng token repo, không thêm dep) */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          icon={<Layers className="h-5 w-5" />}
-          tone="bg-violet-100 text-violet-700"
-          value={String(totalShifts)}
-          label="Số ca đăng ký"
-        />
-        <StatCard
-          icon={<GraduationCap className="h-5 w-5" />}
-          tone="bg-emerald-100 text-emerald-700"
-          value={String(sessions.length)}
-          label="Buổi đã dạy"
-        />
-        <StatCard
-          icon={<Clock className="h-5 w-5" />}
-          tone="bg-blue-100 text-blue-700"
-          value={`${fmtHours(totalHours)}h`}
-          label="Giờ dạy (ước tính)"
-        />
-      </div>
-
-      {/* Chi tiết theo ngày */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-500">
-          Chi tiết theo ngày ({dayRows.length})
-        </h2>
-        {dayRows.length === 0 ? (
-          <EmptyBox text="Không có ca đăng ký hay buổi dạy nào trong tháng này." />
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    <th scope="col" className="px-4 py-3">Ngày</th>
-                    <th scope="col" className="px-4 py-3">Ca đăng ký</th>
-                    <th scope="col" className="px-4 py-3">Buổi đã dạy</th>
-                    <th scope="col" className="px-4 py-3 text-right">Giờ dạy (ước tính)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dayRows.map((r) => {
-                    const dayHours = r.sessions.reduce((n, s) => n + s.hours, 0);
-                    return (
-                      <tr
-                        key={r.key}
-                        className="border-b border-neutral-100 align-top transition-colors last:border-0 hover:bg-neutral-50"
-                      >
-                        <td className="whitespace-nowrap px-4 py-3 font-semibold capitalize text-neutral-900">
-                          {dayFmt.format(r.labelDate)}
-                        </td>
-                        <td className="px-4 py-3">
-                          {r.shiftLabels.length === 0 ? (
-                            <span className="text-neutral-400">—</span>
-                          ) : (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {r.shiftLabels.map((l) => (
-                                <span
-                                  key={l}
-                                  className="rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-700"
-                                >
-                                  {l}
-                                </span>
-                              ))}
-                              {r.shiftStatus && (
-                                <span
-                                  className={cn(
-                                    "rounded-full px-2 py-0.5 text-xs font-medium",
-                                    SHIFT_STATUS[r.shiftStatus].cls,
-                                  )}
-                                >
-                                  {SHIFT_STATUS[r.shiftStatus].label}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {r.sessions.length === 0 ? (
-                            <span className="text-neutral-400">—</span>
-                          ) : (
-                            <div className="space-y-1">
-                              {r.sessions.map((s) => (
-                                <p key={s.id} className="text-neutral-700">
-                                  <span className="font-medium text-neutral-900">
-                                    {s.className}
-                                  </span>{" "}
-                                  <span className="text-xs text-neutral-500">{s.time}</span>
-                                </p>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-neutral-900">
-                          {r.sessions.length === 0 ? (
-                            <span className="font-normal text-neutral-400">—</span>
-                          ) : (
-                            `${fmtHours(dayHours)}h`
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        {/* Chi tiết theo ngày */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+            Chi tiết theo ngày ({dayRows.length})
+          </h2>
+          {dayRows.length === 0 ? (
+            <EmptyState
+              icon={CalendarX2}
+              title="Không có ca đăng ký hay buổi dạy nào trong tháng này."
+            />
+          ) : (
+            <div className="t-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <th scope="col" className="px-4 py-3">Ngày</th>
+                      <th scope="col" className="px-4 py-3">Ca đăng ký</th>
+                      <th scope="col" className="px-4 py-3">Buổi đã dạy</th>
+                      <th scope="col" className="px-4 py-3 text-right">Giờ dạy (ước tính)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dayRows.map((r) => {
+                      const dayHours = r.sessions.reduce((n, s) => n + s.hours, 0);
+                      return (
+                        <tr
+                          key={r.key}
+                          className="border-b border-border/60 align-top transition-colors last:border-0 hover:bg-muted/50"
+                        >
+                          <td className="whitespace-nowrap px-4 py-3 font-semibold capitalize text-foreground">
+                            {dayFmt.format(r.labelDate)}
+                          </td>
+                          <td className="px-4 py-3">
+                            {r.shiftLabels.length === 0 ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {r.shiftLabels.map((l) => (
+                                  <span
+                                    key={l}
+                                    className="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+                                  >
+                                    {l}
+                                  </span>
+                                ))}
+                                {r.shiftStatus && (
+                                  <span
+                                    className={cn(
+                                      "rounded-full px-2 py-0.5 text-xs font-medium",
+                                      SHIFT_STATUS[r.shiftStatus].cls,
+                                    )}
+                                  >
+                                    {SHIFT_STATUS[r.shiftStatus].label}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {r.sessions.length === 0 ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <div className="space-y-1">
+                                {r.sessions.map((s) => (
+                                  <p key={s.id} className="text-foreground">
+                                    <span className="font-medium text-foreground">
+                                      {s.className}
+                                    </span>{" "}
+                                    <span className="text-xs text-muted-foreground">{s.time}</span>
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-foreground">
+                            {r.sessions.length === 0 ? (
+                              <span className="font-normal text-muted-foreground">—</span>
+                            ) : (
+                              `${fmtHours(dayHours)}h`
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
 
-      {/* Yêu cầu chỉnh công của mình trong tháng */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-500">
-          Yêu cầu chỉnh công trong tháng ({adjustRequests.length})
-        </h2>
-        {adjustRequests.length === 0 ? (
-          <EmptyBox text="Chưa có yêu cầu chỉnh công nào cho tháng này." />
-        ) : (
-          <ul className="space-y-2">
-            {adjustRequests.map((r) => (
-              <li key={r.id} className="rounded-xl border border-neutral-200 bg-white p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-semibold capitalize text-neutral-900">
-                    {dayFmt.format(r.date)}
-                  </span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                      ADJUST_STATUS[r.status].cls,
-                    )}
-                  >
-                    {ADJUST_STATUS[r.status].label}
-                  </span>
-                </div>
-                {r.requested && (
-                  <p className="mt-1 text-sm text-neutral-700">Đề nghị: {r.requested}</p>
-                )}
-                <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600">{r.reason}</p>
-                {r.reviewNote && (
-                  <p className="mt-2 rounded-lg bg-neutral-50 p-2 text-sm text-neutral-600">
-                    Phản hồi: {r.reviewNote}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        {/* Yêu cầu chỉnh công của mình trong tháng */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+            Yêu cầu chỉnh công trong tháng ({adjustRequests.length})
+          </h2>
+          {adjustRequests.length === 0 ? (
+            <EmptyState
+              icon={ClipboardList}
+              title="Chưa có yêu cầu chỉnh công nào cho tháng này."
+            />
+          ) : (
+            <ul className="space-y-2">
+              {adjustRequests.map((r) => (
+                <li key={r.id} className="t-card p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold capitalize text-foreground">
+                      {dayFmt.format(r.date)}
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                        ADJUST_STATUS[r.status].cls,
+                      )}
+                    >
+                      {ADJUST_STATUS[r.status].label}
+                    </span>
+                  </div>
+                  {r.requested && (
+                    <p className="mt-1 text-sm text-foreground">Đề nghị: {r.requested}</p>
+                  )}
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{r.reason}</p>
+                  {r.reviewNote && (
+                    <p className="mt-2 rounded-lg bg-muted/50 p-2 text-sm text-muted-foreground">
+                      Phản hồi: {r.reviewNote}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
@@ -421,44 +447,9 @@ function NavLink({
     <Link
       href={href}
       aria-label={aria}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition-colors hover:bg-neutral-50"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted/50"
     >
       {children}
     </Link>
-  );
-}
-
-/** StatCard tổng hợp — port visual từ mock (icon chip màu + số to + nhãn). */
-function StatCard({
-  icon,
-  tone,
-  value,
-  label,
-}: {
-  icon: React.ReactNode;
-  tone: string;
-  value: string;
-  label: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4">
-      <span
-        className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", tone)}
-      >
-        {icon}
-      </span>
-      <div>
-        <p className="text-xl font-bold text-neutral-900">{value}</p>
-        <p className="text-sm text-neutral-500">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
   );
 }
