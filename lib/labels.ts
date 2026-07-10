@@ -17,6 +17,32 @@ export const ROLE_LABELS: Record<Role, string> = {
   PARENT: "Phụ huynh",
 };
 
+// 14 RoleDef code của RBAC v2 (nguồn nhãn: prisma/seed-roles.ts `name`). Cần vì khi cờ
+// RBAC_V2_ENABLED bật, RoleSwitcher chọn theo RoleDef code chứ không theo Role enum
+// legacy — hai bộ mã chỉ trùng nhau 5/9 (xem lib/auth/active-role.ts).
+export const ROLE_DEF_LABELS: Record<string, string> = {
+  SUPER_ADMIN: "Quản trị tối cao",
+  HO_ACCOUNTANT: "Kế toán Hội sở",
+  HO_HR: "Nhân sự Hội sở",
+  CENTER_HR: "Nhân sự cơ sở",
+  HO_MARKETING: "Marketing Hội sở",
+  TRAINING: "Đào tạo (toàn LMS)",
+  HO_SALE: "Sale Hội sở (chỉ xem)",
+  CENTER_MANAGER: "Quản lý cơ sở",
+  CENTER_CLASS_MANAGER: "Quản lý lớp học",
+  CENTER_SALES_CSM: "Tư vấn & CSKH cơ sở",
+  TEACHER: "Giáo viên",
+  ASSISTANT_TEACHER: "Trợ giảng",
+  CENTER_ACCOUNTANT: "Kế toán cơ sở",
+  PARENT: "Phụ huynh",
+};
+
+/** Nhãn cho mã vai bất kỳ: ưu tiên RoleDef (v2), lùi về Role enum legacy (v1). */
+export function roleCodeLabel(code: string | null | undefined): string {
+  if (!code) return "—";
+  return ROLE_DEF_LABELS[code] ?? roleLabel(code);
+}
+
 export function roleLabel(role: Role | string | null | undefined): string {
   if (!role) return "—";
   return ROLE_LABELS[role as Role] ?? String(role);

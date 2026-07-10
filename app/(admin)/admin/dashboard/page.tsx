@@ -1,10 +1,15 @@
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
-import { ACTIVE_ROLE_COOKIE, resolveActiveRole } from "@/lib/auth/active-role";
-import { roleLabel } from "@/lib/labels";
+import {
+  ACTIVE_ROLE_COOKIE,
+  activeRoleOptions,
+  resolveActiveRoleFrom,
+} from "@/lib/auth/active-role";
+import { roleCodeLabel } from "@/lib/labels";
 import { redirect } from "next/navigation";
 import { getEffectiveRoles, hasRole, hasAnyRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
+import { isRbacV2Enabled } from "@/lib/flags";
 import { ManagerDashboard } from "./_components/manager-dashboard";
 import { TeacherDashboard } from "./_components/teacher-dashboard";
 import { SalesDashboard } from "./_components/sales-dashboard";
@@ -15,15 +20,26 @@ import { PendingTasksSection } from "./_components/pending-tasks-section";
 // Đợt 3B/3C — Dashboard GỘP (union): hiển thị panel của TẤT CẢ vai trò user giữ.
 // Thứ tự: Quản lý → Giáo viên → Tư vấn → Kế toán → Marketing → Nhân sự.
 /** #13 — vai trò (enum v1) → panel dashboard tương ứng. TRAINING dùng panel quản lý. */
+// Nhận CẢ mã legacy (cờ OFF) lẫn RoleDef code (cờ ON) — hai bộ chỉ trùng nhau 5/9,
+// xem lib/auth/active-role.ts. Mã lạ → undefined → hiện mọi panel (hành vi mặc định).
 const PANEL_KEY_BY_ROLE: Record<string, string> = {
   SUPER_ADMIN: "manager",
   CENTER_MANAGER: "manager",
   TRAINING: "manager",
   TEACHER: "teacher",
+  ASSISTANT_TEACHER: "teacher",
   SALES_CSM: "sales",
+  CENTER_SALES_CSM: "sales",
+  HO_SALE: "sales",
+  CENTER_CLASS_MANAGER: "manager",
   ACCOUNTANT: "acc",
+  HO_ACCOUNTANT: "acc",
+  CENTER_ACCOUNTANT: "acc",
   MARKETING: "mkt",
+  HO_MARKETING: "mkt",
   HR: "hr",
+  HO_HR: "hr",
+  CENTER_HR: "hr",
 };
 
 export default async function DashboardPage() {
@@ -77,7 +93,12 @@ export default async function DashboardPage() {
   // #13 (câu 11) — đang chọn 1 vai → chỉ hiện panel của vai đó. Quyền KHÔNG đổi
   // (xem lib/auth/active-role.ts); đây thuần là lọc hiển thị.
   const jar = await cookies();
-  const activeRole = resolveActiveRole(session.user, jar.get(ACTIVE_ROLE_COOKIE)?.value);
+  // Cùng nguồn xác thực vai với layout — nếu không, cờ ON sẽ khiến sidebar lọc theo vai
+  // còn dashboard thì không (cookie mang RoleDef code, resolveActiveRole cũ chỉ biết legacy).
+  const activeRole = resolveActiveRoleFrom(
+    activeRoleOptions(session.user, actor, isRbacV2Enabled()),
+    jar.get(ACTIVE_ROLE_COOKIE)?.value,
+  );
   const activeKey = activeRole ? PANEL_KEY_BY_ROLE[activeRole] : undefined;
   const visiblePanels = activeKey ? panels.filter((p) => p.key === activeKey) : panels;
 
@@ -90,7 +111,7 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-bold text-neutral-900">Xin chào, {lastName} 👋</h1>
         <p className="mt-1 text-sm text-neutral-500">
           {activeRole
-            ? `Đang xem theo vai trò: ${roleLabel(activeRole)} — đổi ở góc trên bên phải. Quyền của bạn không thay đổi.`
+            ? `Đang xem theo vai trò: ${roleCodeLabel(activeRole)} — đổi ở góc trên bên phải. Quyền của bạn không thay đổi.`
             : multi
               ? `Bạn đang giữ ${roles.length} vai trò — dashboard gộp đầy đủ công việc của bạn.`
               : new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long" })}

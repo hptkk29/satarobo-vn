@@ -1,0 +1,139 @@
+/**
+ * Sidebar đọc quyền theo cờ (10/07) — ba thứ phải đúng:
+ *
+ *  1. PARITY: cờ OFF ⇒ tập action của menu PHẢI trùng khít `can(user, a)` cũ. Đây là
+ *     lưới an toàn của chính cuộc refactor: prod đang chạy cờ OFF, không được đổi một ly.
+ *  2. Cờ ON ⇒ menu theo v2, tức là theo đúng thứ mà cổng trang sẽ dùng sau flip.
+ *  3. RoleSwitcher thu hẹp được menu ở CẢ hai nhánh — kể cả khi mã vai v1 và v2 khác nhau
+ *     (chỉ 5/9 mã trùng: HR/SALES_CSM/MARKETING/ACCOUNTANT không có RoleDef cùng tên).
+ */
+import { describe, it, expect } from "vitest";
+import { PERMISSIONS, can, type Action } from "@/lib/auth/permissions";
+import { grantedMenuActions } from "@/lib/auth/menu-permissions";
+import {
+  activeRoleOptions,
+  menuActorForRole,
+  menuUserForRole,
+  resolveActiveRoleFrom,
+} from "@/lib/auth/active-role";
+import type { Actor } from "@/lib/auth/actor";
+
+const ALL = Object.keys(PERMISSIONS) as Action[];
+
+function actorOf(perms: { action: string; roleCode: string }[], orgRoles: string[], isSuperAdmin = false): Actor {
+  return {
+    userId: "u1",
+    isSuperAdmin,
+    isHoLevel: false,
+    orgRoles: orgRoles.map((roleCode) => ({ orgUnitId: "org-cs2", roleCode })),
+    permissions: perms.map((p) => ({
+      action: p.action,
+      scopeType: "GLOBAL" as const,
+      orgUnitId: "org-cs2",
+      roleCode: p.roleCode,
+      centerScope: ["cs2"],
+    })),
+    visibleCenterIds: ["cs2"],
+    visibleOrgUnitIds: ["org-cs2"],
+    grantsAllow: new Set<string>(),
+    assignedClassIds: new Set<string>(),
+  } as unknown as Actor;
+}
+
+describe("grantedMenuActions — parity với can() khi cờ OFF", () => {
+  for (const roles of [["CENTER_MANAGER"], ["TEACHER"], ["MARKETING"], ["SALES_CSM", "TEACHER"], ["ACCOUNTANT"]]) {
+    it(`vai [${roles}]: menu mới ≡ menu cũ (can v1)`, () => {
+      const user = { role: roles[0], roles };
+      const cu = ALL.filter((a) => can(user, a)).sort();
+      const moi = grantedMenuActions({ sessionUser: user, actor: null, flagOn: false }).sort();
+      expect(moi).toEqual(cu);
+    });
+  }
+
+  it("actor v2 KHÔNG ảnh hưởng menu khi cờ OFF (v1 vẫn quyết định)", () => {
+    const user = { role: "TEACHER", roles: ["TEACHER"] };
+    const actorGiau = actorOf([{ action: "payments:manage", roleCode: "TEACHER" }], ["TEACHER"]);
+    const g = grantedMenuActions({ sessionUser: user, actor: actorGiau, flagOn: false });
+    expect(g).not.toContain("payments:manage");
+  });
+});
+
+describe("grantedMenuActions — cờ ON thì menu theo v2", () => {
+  it("action v2 có ⇒ hiện; action chỉ có ở v1 ⇒ ẩn (đúng thứ cổng trang sẽ làm)", () => {
+    // Người này ở v1 là CENTER_MANAGER (có payments:manage), ở v2 thì không.
+    const user = { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"] };
+    const actor = actorOf([{ action: "students:view-all", roleCode: "CENTER_MANAGER" }], ["CENTER_MANAGER"]);
+
+    expect(can(user, "payments:manage" as Action)).toBe(true); // v1 vẫn cho
+    const g = grantedMenuActions({ sessionUser: user, actor, flagOn: true });
+    expect(g).toContain("students:view-all");
+    expect(g).not.toContain("payments:manage"); // ⇐ hết dead-link sau flip
+  });
+});
+
+describe("menuActorForRole — RoleSwitcher thu hẹp menu ở nhánh v2", () => {
+  const actor = actorOf(
+    [
+      { action: "payments:manage", roleCode: "CENTER_MANAGER" },
+      { action: "attendance:mark", roleCode: "TEACHER" },
+    ],
+    ["CENTER_MANAGER", "TEACHER"],
+  );
+
+  it("chọn TEACHER ⇒ chỉ còn quyền của TEACHER", () => {
+    const m = menuActorForRole(actor, "TEACHER")!;
+    expect(m.permissions.map((p) => p.action)).toEqual(["attendance:mark"]);
+    expect(m.orgRoles).toHaveLength(1);
+  });
+
+  it("hạ isSuperAdmin theo vai — nếu không, Kiệt chọn 'Giáo viên' vẫn thấy menu quản trị", () => {
+    const kiet = actorOf([{ action: "attendance:mark", roleCode: "TEACHER" }], ["SUPER_ADMIN", "TEACHER"], true);
+    expect(menuActorForRole(kiet, "TEACHER")!.isSuperAdmin).toBe(false);
+    expect(menuActorForRole(kiet, "SUPER_ADMIN")!.isSuperAdmin).toBe(true);
+    // SUPER_ADMIN bypass ⇒ chọn vai SUPER_ADMIN thì menu đầy đủ.
+    const g = grantedMenuActions({
+      sessionUser: menuUserForRole({ role: "SUPER_ADMIN", roles: ["SUPER_ADMIN", "TEACHER"] }, "SUPER_ADMIN"),
+      actor: menuActorForRole(kiet, "SUPER_ADMIN"),
+      flagOn: true,
+    });
+    expect(g.length).toBe(ALL.length);
+  });
+
+  it("mã vai không thuộc orgRoles (vd vai legacy khi cờ OFF) ⇒ KHÔNG thu hẹp, fail-open", () => {
+    expect(menuActorForRole(actor, "MARKETING")).toBe(actor);
+    expect(menuActorForRole(actor, null)).toBe(actor);
+    expect(menuActorForRole(null, "TEACHER")).toBeNull();
+  });
+
+  it("grant riêng (gắn con người, không gắn vai) được giữ nguyên", () => {
+    const a = actorOf([{ action: "x:y", roleCode: "TEACHER" }], ["TEACHER"]);
+    a.grantsAllow = new Set(["leads:export"]);
+    expect(menuActorForRole(a, "TEACHER")!.grantsAllow.has("leads:export")).toBe(true);
+  });
+});
+
+describe("activeRoleOptions / resolveActiveRoleFrom — chọn đúng bộ mã theo cờ", () => {
+  const user = { role: "SALES_CSM", roles: ["SALES_CSM"] };
+  const actor = actorOf([], ["CENTER_SALES_CSM", "CENTER_CLASS_MANAGER"]);
+
+  it("cờ OFF ⇒ vai legacy; cờ ON ⇒ RoleDef code", () => {
+    expect(activeRoleOptions(user, actor, false)).toEqual(["SALES_CSM"]);
+    expect(activeRoleOptions(user, actor, true)).toEqual(["CENTER_CLASS_MANAGER", "CENTER_SALES_CSM"]);
+  });
+
+  it("cookie mang vai KHÔNG sở hữu ⇒ null (không tin client)", () => {
+    expect(resolveActiveRoleFrom(["CENTER_SALES_CSM"], "SUPER_ADMIN")).toBeNull();
+    expect(resolveActiveRoleFrom(["CENTER_SALES_CSM"], "CENTER_SALES_CSM")).toBe("CENTER_SALES_CSM");
+    expect(resolveActiveRoleFrom(["CENTER_SALES_CSM"], undefined)).toBeNull();
+  });
+
+  it("ca Mỹ: cờ ON mà switcher vẫn chạy mã legacy ⇒ mất menu Giáo vụ (lý do đổi sang mã v2)", () => {
+    // Nếu activeRole = "SALES_CSM" (legacy) thì menuActorForRole không khớp orgRole nào
+    // ⇒ fail-open, giữ NGUYÊN cả 2 vai — không thu hẹp được, tức switcher vô dụng.
+    expect(menuActorForRole(actor, "SALES_CSM")).toBe(actor);
+    // Với mã v2 thì thu hẹp đúng.
+    expect(menuActorForRole(actor, "CENTER_CLASS_MANAGER")!.orgRoles).toEqual([
+      { orgUnitId: "org-cs2", roleCode: "CENTER_CLASS_MANAGER" },
+    ]);
+  });
+});

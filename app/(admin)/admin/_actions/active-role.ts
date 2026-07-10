@@ -5,7 +5,13 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { ACTIVE_ROLE_COOKIE, resolveActiveRole } from "@/lib/auth/active-role";
+import { resolveActor } from "@/lib/auth/actor";
+import { isRbacV2Enabled } from "@/lib/flags";
+import {
+  ACTIVE_ROLE_COOKIE,
+  activeRoleOptions,
+  resolveActiveRoleFrom,
+} from "@/lib/auth/active-role";
 
 export async function setActiveRoleAction(role: string): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
@@ -21,7 +27,10 @@ export async function setActiveRoleAction(role: string): Promise<{ ok: boolean; 
   }
 
   // Chỉ nhận vai trò user THỰC SỰ giữ — chặn tự set vai lạ qua devtools.
-  const valid = resolveActiveRole(session.user, role);
+  // Cờ ON → đối chiếu RoleDef code (actor.orgRoles); cờ OFF → vai legacy trong JWT.
+  const actor = await resolveActor(session.user.id);
+  const owned = activeRoleOptions(session.user, actor, isRbacV2Enabled());
+  const valid = resolveActiveRoleFrom(owned, role);
   if (!valid) return { ok: false, error: "Bạn không giữ vai trò này" };
 
   jar.set(ACTIVE_ROLE_COOKIE, valid, {

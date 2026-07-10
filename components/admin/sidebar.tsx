@@ -60,7 +60,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { can, type Action } from "@/lib/auth/permissions";
+import { type Action } from "@/lib/auth/permissions";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 
 type NavItem = {
@@ -233,20 +233,18 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-type SidebarUser = {
-  role: string | null;
-  roles?: string[]; // Đợt 3B — menu = UNION quyền các vai trò
-  grants?: { action: string; grant: "ALLOW" | "DENY" }[];
-};
+// `granted` do layout tính sẵn ở server bằng grantedMenuActions() — CÙNG hàm quyết định
+// với cổng trang (evaluatePermission + cờ RBAC_V2_ENABLED). Sidebar không tự phán quyền
+// nữa: trước 10/07 nó gọi can() v1 tĩnh, nên bật cờ là menu và cổng lệch nhau.
 
 const STORAGE_KEY = "satarobo:sidebar:collapsed";
 
 export function Sidebar({
-  user,
+  granted,
   evalV2Enabled = false,
   scormEnabled = false,
 }: {
-  user: SidebarUser;
+  granted: string[];
   evalV2Enabled?: boolean;
   scormEnabled?: boolean;
 }) {
@@ -254,6 +252,7 @@ export function Sidebar({
 
   // Lọc menu theo quyền — chỉ giữ mục user được phép thấy. Mục không có `perm`
   // (Dashboard) luôn hiện. Mục gắn flag chỉ hiện khi flag bật. Nhóm rỗng sau lọc → ẩn.
+  const grantedSet = useMemo(() => new Set(granted), [granted]);
   const visibleGroups = useMemo(() => {
     return NAV_GROUPS.map((g) => ({
       label: g.label,
@@ -262,10 +261,10 @@ export function Sidebar({
           (!it.flag ||
             (it.flag === "eval" && evalV2Enabled) ||
             (it.flag === "scorm" && scormEnabled)) &&
-          (!it.perm || it.perm.some((p) => can(user, p))),
+          (!it.perm || it.perm.some((p) => grantedSet.has(p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [user, evalV2Enabled, scormEnabled]);
+  }, [grantedSet, evalV2Enabled, scormEnabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {

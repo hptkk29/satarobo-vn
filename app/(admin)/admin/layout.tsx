@@ -3,9 +3,16 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { getEffectiveRoles, hasStaffRole } from "@/lib/auth/permissions";
-import { ACTIVE_ROLE_COOKIE, menuUserForRole, resolveActiveRole } from "@/lib/auth/active-role";
-import { isEvalV2Enabled, isScormEnabled } from "@/lib/flags";
+import { hasStaffRole } from "@/lib/auth/permissions";
+import {
+  ACTIVE_ROLE_COOKIE,
+  activeRoleOptions,
+  menuActorForRole,
+  menuUserForRole,
+  resolveActiveRoleFrom,
+} from "@/lib/auth/active-role";
+import { grantedMenuActions } from "@/lib/auth/menu-permissions";
+import { isEvalV2Enabled, isRbacV2Enabled, isScormEnabled } from "@/lib/flags";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { Toaster } from "@/components/ui/sonner";
@@ -30,7 +37,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // User là SCOPE_EXEMPT → sdb pass-through, hành vi y nguyên (kể cả deletedAt
   // filter tự đọc field trần bên dưới). resolveActor được React.cache — page con
   // gọi checkPermission dùng chung 1 lần resolve/request.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const dbUser = await sdb.user.findUnique({
     where: { id: session.user.id },
     select: { isActive: true, tokenVersion: true, deletedAt: true },
@@ -47,19 +55,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   // #13 (câu 11) — vai trò đang dùng, chỉ lọc MENU. Quyền không đổi: resolveActor vẫn
-  // union mọi UserOrgRole. Cookie do client set → resolveActiveRole kiểm chứng sở hữu.
+  // union mọi UserOrgRole. Cookie do client set → resolveActiveRoleFrom kiểm chứng sở hữu.
+  // Cờ OFF → chọn theo vai legacy; cờ ON → theo RoleDef code (hai bộ mã chỉ trùng 5/9).
+  const flagOn = isRbacV2Enabled();
   const jar = await cookies();
-  const activeRole = resolveActiveRole(session.user, jar.get(ACTIVE_ROLE_COOKIE)?.value);
+  const roleOptions = activeRoleOptions(session.user, actor, flagOn);
+  const activeRole = resolveActiveRoleFrom(roleOptions, jar.get(ACTIVE_ROLE_COOKIE)?.value);
   const menuUser = menuUserForRole(
     { role: session.user.role, roles: session.user.roles, grants: session.user.grants },
     activeRole,
   );
 
+  // Menu hỏi ĐÚNG hàm quyết định mà cổng trang dùng (evaluatePermission + cờ). Trước
+  // 10/07 sidebar tự gọi can() v1 ⇒ bật cờ là menu và cổng nói hai câu chuyện khác nhau.
+  const granted = grantedMenuActions({
+    sessionUser: menuUser,
+    actor: menuActorForRole(actor, activeRole),
+    flagOn,
+  });
+
   return (
     <div className="admin-scope flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex md:shrink-0">
-        <Sidebar user={menuUser} evalV2Enabled={isEvalV2Enabled()} scormEnabled={isScormEnabled()} />
+        <Sidebar granted={granted} evalV2Enabled={isEvalV2Enabled()} scormEnabled={isScormEnabled()} />
       </div>
 
       {/* Main */}
@@ -67,7 +86,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Topbar
           userName={session.user.name}
           userRole={activeRole ?? session.user.role}
-          roles={getEffectiveRoles(session.user)}
+          roles={roleOptions}
           activeRole={activeRole}
         />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
