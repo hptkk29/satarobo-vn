@@ -27,7 +27,11 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const sources = ROOTS.flatMap((r) => walk(r)).map((f) => readFileSync(f, "utf8"));
+/** Bỏ comment: dòng chú thích chứa `checkPermission("x")` từng bị đếm thành call-site trần. */
+const stripComments = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+const sources = ROOTS.flatMap((r) => walk(r)).map((f) => stripComments(readFileSync(f, "utf8")));
 const blob = sources.join("\n");
 
 /** Số call-site `checkPermission("action")` / `assertPermission("action")` KHÔNG có tham số 2. */

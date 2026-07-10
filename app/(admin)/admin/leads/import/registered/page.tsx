@@ -28,6 +28,8 @@ interface DryRunData {
   coSoKhongKhop: string[];
   // Dòng gắn cơ sở NGOÀI phạm vi quyền của bạn → hệ thống KHÔNG tạo (cách ly cơ sở).
   ngoaiPhamVi?: { sdt: string; tenPH: string; coSo: string }[];
+  // Câu 34 — SĐT đã thuộc lead của cơ sở khác → KHÔNG gộp, KHÔNG tạo. Chỉ hiện SĐT.
+  trungCoSoKhac?: { sdt: string }[];
   daTaoLead?: number;
   daTaoHocVien?: number;
   daGopLead?: number;
@@ -170,6 +172,7 @@ export default function ImportRegisteredLeadsPage() {
           {(preview.salesKhongKhop.length > 0 ||
             preview.khoaKhongKhop.length > 0 ||
             preview.coSoKhongKhop.length > 0 ||
+            (preview.trungCoSoKhac?.length ?? 0) > 0 ||
             (preview.ngoaiPhamVi?.length ?? 0) > 0) && (
             <Alert className="border-yellow-500">
               <AlertDescription className="space-y-1">
@@ -177,6 +180,13 @@ export default function ImportRegisteredLeadsPage() {
                   <p>
                     Ngoài phạm vi cơ sở của bạn — KHÔNG tạo (<b>{preview.ngoaiPhamVi!.length}</b> dòng):{" "}
                     <b>{preview.ngoaiPhamVi!.map((r) => r.sdt).join(", ")}</b>
+                  </p>
+                )}
+                {(preview.trungCoSoKhac?.length ?? 0) > 0 && (
+                  <p>
+                    SĐT đang được cơ sở khác chăm sóc — KHÔNG gộp, KHÔNG tạo (
+                    <b>{preview.trungCoSoKhac!.length}</b> dòng):{" "}
+                    <b>{preview.trungCoSoKhac!.map((r) => r.sdt).join(", ")}</b>. Báo quản lý cơ sở kiểm tra.
                   </p>
                 )}
                 {preview.salesKhongKhop.length > 0 && (

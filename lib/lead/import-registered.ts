@@ -684,3 +684,26 @@ export function planRegisteredImport(
     unmatchedCenters: [...unmatchedCenters],
   };
 }
+
+// ─── Câu 34 (user chốt 09/07/2026) — CHẶN gộp cross-center ────────────────────
+// Đường GỘP trước đây dedupe SĐT toàn hệ thống: Sale CS1 import SĐT đang thuộc lead CS2
+// thì ghi thẳng vào lead CS2. `scopedDb` chỉ scope READ nên không chặn được đường ghi này.
+// Nay: lead cũ thuộc cơ sở ngoài phạm vi actor → KHÔNG gộp, KHÔNG tạo, chỉ báo SĐT
+// (không trả tên PH / trạng thái / người phụ trách — không lộ dữ liệu cơ sở khác).
+// Lead untagged (centerId = null) vẫn gộp: nó chưa thuộc cơ sở nào.
+//
+// Tách THUẦN khỏi route để test được không cần request/DB.
+export function splitMergesByScope(
+  merges: LeadMergePlan[],
+  centerIdByPhone: Map<string, string | null>,
+  isInScope: (centerId: string) => boolean,
+): { allowed: LeadMergePlan[]; rejectedPhones: string[] } {
+  const allowed: LeadMergePlan[] = [];
+  const rejectedPhones: string[] = [];
+  for (const m of merges) {
+    const centerId = centerIdByPhone.get(m.phone);
+    if (centerId == null || isInScope(centerId)) allowed.push(m);
+    else rejectedPhones.push(m.phone);
+  }
+  return { allowed, rejectedPhones };
+}

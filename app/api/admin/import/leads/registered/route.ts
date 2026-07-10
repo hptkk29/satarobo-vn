@@ -24,6 +24,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import {
   parseRegisteredSheets,
   planRegisteredImport,
+  splitMergesByScope,
   buildCourseKeyMap,
   type SheetAoA,
   type CellValue,
@@ -145,15 +146,28 @@ export async function POST(req: NextRequest) {
     existingByPhone,
   });
 
-  const changedMerges = plan.merges.filter((m) => m.changed);
+  // ── Câu 34 (user chốt 09/07/2026): CHẶN gộp cross-center ──────────────────
+  // Trước đây đường GỘP là dedupe SĐT toàn hệ thống: Sale CS1 import một SĐT đang thuộc
+  // lead của CS2 thì ghi đè/bổ sung thẳng vào lead CS2 — vượt qua cách ly cơ sở, và
+  // đường ghi KHÔNG được scopedDb bảo vệ (scopedDb chỉ scope READ).
+  // Nay: existing lead có centerId ngoài phạm vi actor → KHÔNG gộp, KHÔNG tạo mới, chỉ
+  // báo SĐT. Không trả tên phụ huynh / trạng thái / người phụ trách (không lộ cơ sở khác).
+  // Lead untagged (centerId null) vẫn gộp — không phải dữ liệu của cơ sở nào.
+  const { allowed: scopedMerges, rejectedPhones } = splitMergesByScope(
+    plan.merges,
+    new Map([...existingByPhone].map(([phone, l]) => [phone, l.centerId])),
+    (centerId) => passesScope("Lead", { centerId }, actor),
+  );
+  const mergeRejected = rejectedPhones.map((sdt) => ({ sdt }));
+
+  const changedMerges = scopedMerges.filter((m) => m.changed);
 
   // ── Cách ly cơ sở trên đường TẠO lead (DoD#4). scopedDb chỉ scope READ, KHÔNG
   // scope WRITE → chốt WRITE bằng passesScope per-lead như route import sự kiện
   // (app/api/admin/import/leads/route.ts): actor center-level KHÔNG được tạo lead
   // cho cơ sở NGOÀI phạm vi (vd Sale CS1 gặp dòng gắn CS2 → loại, không tạo lead CS2).
   // Lead untagged (centerId null) KHÔNG phải leak cross-center → giữ (tạo như hiện trạng;
-  // gán cơ sở sau). Đường GỘP (merge) là dedupe SĐT toàn hệ thống có chủ đích (câu 34,
-  // đã audit bypass ở trên) — giữ nguyên semantics, xem ghi chú deviation task #07.
+  // gán cơ sở sau). Đường GỘP nay cũng bị chặn cross-center — xem `mergeRejected` bên dưới.
   const scopeRejected: { sdt: string; tenPH: string; coSo: string }[] = [];
   const scopedCreates = plan.creates.filter((c) => {
     if (c.centerId == null || passesScope("Lead", { centerId: c.centerId }, actor)) {
@@ -178,12 +192,14 @@ export async function POST(req: NextRequest) {
       soCon: c.children.length,
     })),
     ngoaiPhamVi: scopeRejected,
-    seGop: plan.merges.map((m) => ({
+    seGop: scopedMerges.map((m) => ({
       sdt: m.phone,
       tenPH: m.parentName,
       soConMoi: m.newChildren.length,
       coThayDoi: m.changed,
     })),
+    // Câu 34 — SĐT trùng lead cơ sở khác: không gộp, không tạo. Chỉ SĐT (không lộ tên).
+    trungCoSoKhac: mergeRejected,
     salesKhongKhop: plan.unmatchedSales,
     khoaKhongKhop: plan.unmatchedCourses,
     coSoKhongKhop: plan.unmatchedCenters,

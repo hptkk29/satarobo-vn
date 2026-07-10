@@ -11,6 +11,8 @@ import { describe, it, expect } from "vitest";
 import {
   parseRegisteredSheets,
   planRegisteredImport,
+  splitMergesByScope,
+  type LeadMergePlan,
   matchSalesUser,
   buildCourseKeyMap,
   normalizeRegisteredPhone,
@@ -349,5 +351,57 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
     expect(plan.unmatchedCenters).toEqual(["CS2"]);
     expect(plan.unmatchedCourses).toEqual(["Sata 4"]);
     expect(plan.creates).toHaveLength(4); // vẫn tạo, thông tin raw nằm trong note
+  });
+});
+
+// ─── Câu 34 — chặn gộp cross-center (user chốt 09/07/2026) ────────────────────
+describe("splitMergesByScope — SĐT trùng lead cơ sở khác thì KHÔNG gộp", () => {
+  const merge = (phone: string): LeadMergePlan => ({
+    leadId: `lead-${phone}`,
+    phone,
+    parentName: `PH ${phone}`,
+    set: {},
+    newChildren: [],
+    childUpdates: [],
+    noteAppend: null,
+    changed: true,
+  });
+  const inScopeCs1 = (centerId: string) => centerId === "CS1";
+
+  it("lead cũ cùng cơ sở → cho gộp", () => {
+    const r = splitMergesByScope([merge("0900000001")], new Map([["0900000001", "CS1"]]), inScopeCs1);
+    expect(r.allowed).toHaveLength(1);
+    expect(r.rejectedPhones).toEqual([]);
+  });
+
+  it("lead cũ thuộc cơ sở KHÁC → chặn, chỉ trả SĐT", () => {
+    const r = splitMergesByScope([merge("0900000002")], new Map([["0900000002", "CS2"]]), inScopeCs1);
+    expect(r.allowed).toEqual([]);
+    expect(r.rejectedPhones).toEqual(["0900000002"]);
+  });
+
+  it("lead untagged (centerId null) → vẫn gộp, chưa thuộc cơ sở nào", () => {
+    const r = splitMergesByScope([merge("0900000003")], new Map([["0900000003", null]]), inScopeCs1);
+    expect(r.allowed).toHaveLength(1);
+    expect(r.rejectedPhones).toEqual([]);
+  });
+
+  it("không tìm thấy lead cũ → không chặn (planner sẽ xử lý như tạo mới)", () => {
+    const r = splitMergesByScope([merge("0900000004")], new Map(), inScopeCs1);
+    expect(r.allowed).toHaveLength(1);
+  });
+
+  it("trộn nhiều dòng: chỉ dòng cơ sở khác bị loại", () => {
+    const r = splitMergesByScope(
+      [merge("0900000001"), merge("0900000002"), merge("0900000003")],
+      new Map([
+        ["0900000001", "CS1"],
+        ["0900000002", "CS2"],
+        ["0900000003", null],
+      ]),
+      inScopeCs1,
+    );
+    expect(r.allowed.map((m) => m.phone)).toEqual(["0900000001", "0900000003"]);
+    expect(r.rejectedPhones).toEqual(["0900000002"]);
   });
 });

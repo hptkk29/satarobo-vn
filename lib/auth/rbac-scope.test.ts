@@ -26,8 +26,18 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/**
+ * Bỏ comment trước khi quét. Không có bước này, một dòng chú thích như
+ * `// checkPermission("attendance:mark") — ...` bị đếm thành call-site trần và test đỏ
+ * oan (đã xảy ra 10/07 với app/(teacher)/teacher/lop/_actions.ts:7, nơi lời gọi THẬT ở
+ * dòng 109 có truyền target). Guard `[^:]` để không cắt nhầm `https://`.
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 const blob = ROOTS.flatMap((r) => walk(r))
-  .map((f) => readFileSync(f, "utf8"))
+  .map((f) => stripComments(readFileSync(f, "utf8")))
   .join("\n");
 
 /** `checkPermission("x")` / `assertPermission("x")` KHÔNG có tham số target. */
