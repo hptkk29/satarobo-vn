@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import { PERMISSIONS, ALL_ACTIONS } from "@/lib/auth/permissions";
 import { ROLE_SEED } from "../../prisma/seed-roles";
+import { INTENTIONAL } from "@/lib/auth/rbac-intentional";
 
 /** Ánh xạ legacy Role → RoleDef code, khớp LEGACY_TO_ROLEDEF của patch-rbac-staff.ts. */
 const LEGACY_TO_V2: Record<string, string> = {
@@ -27,52 +28,7 @@ const LEGACY_TO_V2: Record<string, string> = {
  * CENTER_HR = 9 action vận hành tại 1 cơ sở, KHÔNG gồm lương / hồ sơ cá nhân /
  * payroll / tạo nhân sự. Xem satarobo_task/12-hr-tts-accounts/plan.md.
  */
-const INTENTIONAL: Record<string, string[]> = {
-  HR: [
-    "employees:create",
-    "employees:view-personal",
-    "employees:view-salary",
-    "payroll:view",
-    // TTS Nhân sự không phụ trách nội dung marketing / vinh danh.
-    "blog:view",
-    "courses:view",
-    "honors:create",
-    "honors:edit",
-    "honors:view",
-    "news:view",
-  ],
-  /** Kiệt duyệt 09/07/2026 — de-xuat-scope-v2-center-manager-teacher.md §3.3. */
-  CENTER_MANAGER: [
-    // Nội dung đối ngoại → HO_MARKETING
-    "blog:create", "blog:edit",
-    "news:create", "news:edit", "news:publish", "news:delete",
-    "site-content:view", "site-content:edit",
-    "honors:create", "honors:edit", "honors:settings",
-    "emails:view", "emails:manage",
-    // Chương trình & giáo án → TRAINING
-    "courses:create", "courses:edit", "course-packages:edit",
-    "lesson-change:approve", "trials:config",
-    // Tiền & kho tập trung → HO_ACCOUNTANT
-    "payments:manage", "orders:manage", "installments:approve",
-    "vouchers:manage", "products:manage",
-    "inventory:edit", "inventory:audit", "kits:edit",
-    // Nhân sự & tuyển dụng → CENTER_HR
-    "employees:edit", "jobs:create", "jobs:edit",
-    // Cấu hình toàn hệ thống → SUPER_ADMIN
-    "holidays:edit",
-    // Xoá cứng → SUPER_ADMIN. QL dùng enrollments:cancel (CLAUDE.md).
-    "students:delete", "enrollments:delete",
-    // ⚠️ CHƯA ĐƯỢC HỎI RÕ (ngoài 6 câu 09/07) — mặc định theo nguyên tắc không
-    // hard-delete. Nếu QL cơ sở cần xoá lead, thêm lại 1 dòng vào seed + re-seed.
-    "leads:delete",
-  ],
-  /** Kiệt duyệt 09/07/2026 — §4.4 + câu 5 (giữ satacoin) và câu 6 (bỏ inventory:movement). */
-  TEACHER: [
-    "completions:manage", // QL cơ sở xác nhận hoàn thành khoá
-    "sessions:create", // GV chốt buổi (sessions:edit), không xếp lịch — câu 48
-    "inventory:movement", // câu 6: "không"
-  ],
-};
+// INTENTIONAL chuyển sang lib/auth/rbac-intentional.ts (dùng chung với shadow-report).
 
 /**
  * NỢ ĐÃ BIẾT — đã trả hết 09/07/2026 (seed CENTER_MANAGER 6→78, TEACHER 3→32,
@@ -97,7 +53,7 @@ function lostOnFlip(legacy: string): string[] {
 describe("#09 parity v1↔v2 — không ai được mất quyền ngoài dự kiến khi flip", () => {
   it.each(Object.keys(LEGACY_TO_V2))("%s: mất mát nằm trong INTENTIONAL/KNOWN_GAPS", (legacy) => {
     const lost = lostOnFlip(legacy);
-    const intentional = new Set(INTENTIONAL[legacy] ?? []);
+    const intentional = new Set(INTENTIONAL[legacy as keyof typeof INTENTIONAL] ?? []);
     const ngoaiDuKien = lost.filter((a) => !intentional.has(a));
 
     const gapCount = KNOWN_GAPS[legacy];

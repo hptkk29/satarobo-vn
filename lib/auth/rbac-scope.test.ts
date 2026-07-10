@@ -40,11 +40,17 @@ const blob = ROOTS.flatMap((r) => walk(r))
   .map((f) => stripComments(readFileSync(f, "utf8")))
   .join("\n");
 
-/** `checkPermission("x")` / `assertPermission("x")` KHÔNG có tham số target. */
+/**
+ * Call-site gọi TRẦN (không target), 2 dạng:
+ * - `checkPermission("x")` / `assertPermission("x")` — page-gate;
+ * - `<obj>.can("x")` — cfg.can của pending-tasks (evaluatePermission, cũng chạy v2).
+ * Shadow prod 10/07 bắt 25 lệch `hr_attendance:adjust` vì scanner cũ mù dạng thứ hai.
+ */
 function bareCallSites(action: string): number {
   const esc = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`(checkPermission|assertPermission)\\(\\s*["']${esc}["']\\s*\\)`, "g");
-  return (blob.match(re) ?? []).length;
+  const reDotCan = new RegExp(`\\.can\\(\\s*["']${esc}["']\\s*\\)`, "g");
+  return (blob.match(re) ?? []).length + (blob.match(reDotCan) ?? []).length;
 }
 
 /**
