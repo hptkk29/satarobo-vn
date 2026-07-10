@@ -10,6 +10,7 @@ import {
   LEAD_STATUS_BADGE as STATUS_COLORS,
   KANBAN_COLUMNS,
 } from '@/lib/leads/status'
+import { Badge } from '@/components/ui/badge'
 
 export type LeadRow = {
   id: string
@@ -34,6 +35,23 @@ export type LeadRow = {
   center: { name: string } | null
   courseName: string | null
   assignedTo: { name: string | null } | null
+  // SHARE T1 — lead bật "dùng chung" cho team (badge trên bảng).
+  isSharedWithTeam: boolean
+  assignedToId: string | null
+}
+
+/** SHARE T1 — chip "Dùng chung": outline = lead người khác chia sẻ cho mình;
+ *  secondary = lead mình đang chia sẻ cho team. */
+function SharedBadge({ lead, currentUserId }: { lead: LeadRow; currentUserId: string }) {
+  if (!lead.isSharedWithTeam) return null
+  if (lead.assignedToId === currentUserId) {
+    return (
+      <Badge variant="secondary" title="Bạn đang chia sẻ lead này">
+        Dùng chung
+      </Badge>
+    )
+  }
+  return <Badge variant="outline">Dùng chung</Badge>
 }
 
 function shortSource(source: string | null): string {
@@ -289,6 +307,7 @@ export function LeadsTable({
   canDelete,
   currentStatus,
   currentQ,
+  currentUserId,
 }: {
   leads: LeadRow[]
   total: number
@@ -298,6 +317,7 @@ export function LeadsTable({
   canDelete: boolean
   currentStatus?: string
   currentQ?: string
+  currentUserId: string
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -423,7 +443,10 @@ export function LeadsTable({
                     className="cursor-pointer hover:bg-gray-50/60"
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{lead.parentName}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-gray-900">{lead.parentName}</span>
+                        <SharedBadge lead={lead} currentUserId={currentUserId} />
+                      </div>
                       {lead.childName && (
                         <div className="text-xs text-gray-400">
                           Con: {lead.childName}

@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
+import { canViewLeadPii } from "@/lib/auth/permissions";
 import { LeadForm } from "../../_components/lead-form";
 import { LeadChildrenManager } from "../../_components/lead-children";
 
@@ -18,6 +19,8 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("leads:edit"))) redirect("/leads");
+  // #11 T1 — cần biết actor có view-all không để check ownership sau khi load lead.
+  const canViewAll = await checkPermission("leads:view-all");
 
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
@@ -31,6 +34,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
       select: {
         id: true,
         status: true,
+        assignedToId: true,
         parentName: true,
         phone: true,
         email: true,
@@ -63,6 +67,15 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
     sdb.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
   ]);
   if (!lead) notFound();
+
+  // #11 T1/T2 — 2 lớp chặn vào form edit (LeadForm prefill PII RAW từ DB):
+  // (a) Ownership (Q2): lead "dùng chung" chỉ cho XEM + GHI CHÚ → shared-viewer
+  //     KHÔNG được vào edit. Đồng thời vá lỗ pre-existing: sale cùng cơ sở đoán
+  //     URL /edit của lead người khác (trước chỉ cần leads:edit + qua scope là lọt).
+  if (!canViewAll && lead.assignedToId !== session.user.id) redirect(`/leads/${id}`);
+  // (b) PII (Q7): non-holder leads:view-pii (vd MARKETING) vào form sẽ thấy PII raw
+  //     + nguy cơ bấm Lưu đè bản mask ngược vào DB → chặn hẳn, về chi tiết (đã mask).
+  if (!canViewLeadPii(session.user)) redirect(`/leads/${id}`);
 
   return (
     <div className="p-6">

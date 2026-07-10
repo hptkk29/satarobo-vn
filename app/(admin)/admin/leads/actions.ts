@@ -2,7 +2,7 @@
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { hasRole } from '@/lib/auth/permissions'
+import { hasRole, canViewLeadPii } from '@/lib/auth/permissions'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -600,9 +600,13 @@ export async function createLeadManual(
     },
   })
   if (dup) {
+    // #11 T2 — chi tiết trùng (trạng thái + tên sale phụ trách) là dữ liệu tư vấn/PII:
+    // chỉ lộ khi VỪA trong scope (view-all theo cơ sở HOẶC cùng cơ sở) VỪA có quyền
+    // leads:view-pii. Non-holder (vd MARKETING) chỉ nhận thông báo chung, không chi tiết.
     const canSeeDetail =
-      (await checkPermission('leads:view-all', { centerId: dup.centerId })) ||
-      (!!dup.centerId && dup.centerId === session.user.centerId)
+      canViewLeadPii(session.user) &&
+      ((await checkPermission('leads:view-all', { centerId: dup.centerId })) ||
+        (!!dup.centerId && dup.centerId === session.user.centerId))
     if (canSeeDetail) {
       const who = dup.assignedTo?.name ? `, phụ trách: ${dup.assignedTo.name}` : ''
       return {
@@ -612,7 +616,7 @@ export async function createLeadManual(
     }
     return {
       ok: false,
-      error: 'SĐT đã tồn tại trong hệ thống (thuộc cơ sở khác). Vui lòng báo quản lý cơ sở kiểm tra.',
+      error: 'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.',
     }
   }
 
