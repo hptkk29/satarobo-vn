@@ -20,8 +20,12 @@ const sendSchema = z.object({
 /**
  * Actor có phụ trách lớp chứa enrollment này không?
  * Teacher → lớp ∈ assignedClassIds; Manager/Super → lớp ∈ scope cơ sở (scopedDb).
+ *
+ * ⚠️ KHÔNG export: file 'use server' — mọi export async thành PUBLIC endpoint.
+ * Hàm nhận `actor` từ THAM SỐ (không auth() bên trong) nên nếu export, client
+ * gọi được với actor GIẢ (isSuperAdmin:true) → oracle dò enrollmentId cross-center.
  */
-export async function staffOwnsEnrollment(
+async function staffOwnsEnrollment(
   actor: Actor,
   enrollmentId: string,
 ): Promise<boolean> {
