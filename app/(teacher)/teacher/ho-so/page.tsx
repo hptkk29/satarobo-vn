@@ -1,0 +1,265 @@
+// app/(teacher)/teacher/ho-so/page.tsx — #06 (L6): màn "Hồ sơ cá nhân" site GV
+// (port visual từ mock satarobo-ui-giaovien profile/page.tsx + phần Bảo mật của
+// settings/page.tsx — GỘP 1 màn; bỏ mục thông báo/giao diện vì chưa có backend).
+//
+// Data thật, CHỈ ĐỌC — không cho sửa role/cơ sở (thông tin do quản trị cấp):
+// • Danh tính: User qua scopedDb (User/Center ∈ SCOPE_EXEMPT → pass-through,
+//   giữ chuẩn app/(teacher) không import @/lib/db trần).
+// • Lớp đang phụ trách: actor.assignedClassIds → Class qua withMakeupException
+//   (như lop/page.tsx — GV kiêm nhiệm/dạy lớp ở cơ sở khác vẫn thấy đủ lớp mình).
+// • Đổi mật khẩu: ChangePasswordDialog (bản teacher mỏng) TÁI DÙNG action
+//   changePassword của admin settings — self-service, không viết action mới.
+//
+// ⚠️ Câu 46: màn này KHÔNG đụng học viên/phụ huynh — chỉ tên lớp + sĩ số (con số).
+import Link from "next/link";
+import type { ClassStatus, Role } from "@prisma/client";
+import { BookOpen, CalendarDays, Lock, Mail, MapPin } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { resolveActor } from "@/lib/auth/actor";
+import { scopedDb, withMakeupException } from "@/lib/db-scope";
+import { roleLabel, roleColor } from "@/lib/labels";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChangePasswordDialog } from "./_components/change-password-dialog";
+
+export const metadata = { title: "Hồ sơ cá nhân | Giáo viên Sata Robo" };
+
+// Avatar initials — cùng helper với attendance-panel (2 chữ cái cuối của tên).
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .slice(-2)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .toUpperCase();
+
+// Nhãn trạng thái lớp — đồng bộ STATUS_INFO của /admin/classes.
+const CLASS_STATUS: Record<ClassStatus, { label: string; cls: string }> = {
+  PLANNED: { label: "Đang lên KH", cls: "bg-neutral-100 text-neutral-600" },
+  RECRUITING: { label: "Tuyển sinh", cls: "bg-amber-100 text-amber-700" },
+  PENDING_APPROVAL: { label: "Chờ duyệt", cls: "bg-orange-100 text-orange-700" },
+  ACTIVE: { label: "Đang dạy", cls: "bg-emerald-100 text-emerald-700" },
+  COMPLETED: { label: "Hoàn thành", cls: "bg-blue-100 text-blue-700" },
+  CANCELLED: { label: "Huỷ", cls: "bg-rose-100 text-rose-700" },
+};
+
+const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+
+/** Lịch học hiển thị: scheduleDays + khung giờ; thiếu → fallback free-text cũ. */
+function scheduleText(c: {
+  schedule: string | null;
+  scheduleDays: number[];
+  startTime: string | null;
+  endTime: string | null;
+}): string {
+  const days = c.scheduleDays
+    .filter((d) => d >= 0 && d <= 6)
+    .map((d) => DAY_LABELS[d])
+    .join(", ");
+  const time = c.startTime && c.endTime ? `${c.startTime}–${c.endTime}` : "";
+  return [days, time].filter(Boolean).join(" · ") || c.schedule || "—";
+}
+
+// "MM/YYYY" giờ VN — hiển thị mốc tham gia hệ thống (User.createdAt).
+const joinFmt = new Intl.DateTimeFormat("vi-VN", {
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Asia/Ho_Chi_Minh",
+});
+
+export default async function TeacherProfilePage() {
+  const session = await auth();
+  if (!session?.user) return null; // layout đã gate — guard cho type-narrow
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const xdb = withMakeupException(actor);
+  const classIds = [...actor.assignedClassIds];
+
+  const [user, classes] = await Promise.all([
+    // Danh tính CHÍNH MÌNH (where id = mình) — User ∈ SCOPE_EXEMPT nên pass-through.
+    sdb.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        name: true,
+        email: true,
+        role: true,
+        roles: true,
+        createdAt: true,
+        center: { select: { name: true } },
+      },
+    }),
+    // Lớp mình phụ trách (teacher/assistant) — Class ∈ MAKEUP_EXCEPTION_MODELS,
+    // đọc qua withMakeupException để lớp kiêm nhiệm ở cơ sở khác không bị ẩn oan.
+    // Câu 46: chỉ tên lớp/khoá/cơ sở/lịch + SĨ SỐ (con số) — không dữ liệu HV/PH.
+    classIds.length
+      ? xdb.class.findMany({
+          where: { id: { in: classIds } },
+          select: {
+            id: true,
+            name: true,
+            schedule: true,
+            scheduleDays: true,
+            startTime: true,
+            endTime: true,
+            status: true,
+            maxStudents: true,
+            course: { select: { name: true } },
+            center: { select: { name: true } },
+            _count: { select: { enrollments: true } },
+          },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  if (!user) return null; // layout liveness đã chặn user xoá/disable
+
+  const displayName = user.name ?? user.email;
+  // Vai trò = union role chính + roles[] (đa vai trò) — CHỈ ĐỌC, không cho sửa.
+  const roleCodes: Role[] = [...new Set<Role>([user.role, ...user.roles])];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold text-neutral-900">Hồ sơ cá nhân</h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          Thông tin tài khoản và lớp phụ trách của bạn — vai trò/cơ sở do quản trị
+          cấp, liên hệ quản lý nếu cần thay đổi.
+        </p>
+      </div>
+
+      {/* Danh tính (port card đầu của mock profile) */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-purple-700 text-xl font-bold text-white">
+            {initials(displayName)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-extrabold text-neutral-900">{displayName}</h2>
+              {roleCodes.map((code) => (
+                <span
+                  key={code}
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                    roleColor(code),
+                  )}
+                >
+                  {roleLabel(code)}
+                </span>
+              ))}
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-neutral-500">
+              <span className="inline-flex items-center gap-1.5">
+                <Mail className="h-4 w-4" />
+                {user.email}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="h-4 w-4" />
+                {user.center?.name ?? "Chưa gán cơ sở"}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lớp đang phụ trách */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BookOpen className="h-4 w-4 text-purple-700" />
+            Lớp đang phụ trách
+          </CardTitle>
+          <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-semibold text-neutral-600">
+            {classes.length} lớp
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {classes.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500">
+              Bạn chưa được phân công lớp nào.
+            </p>
+          ) : (
+            classes.map((c) => (
+              <Link
+                key={c.id}
+                href={`/teacher/lop?classId=${c.id}`}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 px-4 py-3 transition-colors hover:border-neutral-400"
+                title="Mở buổi học của lớp"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-neutral-900">{c.name}</p>
+                  <p className="truncate text-sm text-neutral-500">
+                    {c.course.name}
+                    {c.center?.name ? ` · ${c.center.name}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays className="h-4 w-4" />
+                    {scheduleText(c)}
+                  </span>
+                  <span>
+                    {c._count.enrollments}/{c.maxStudents} HV
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-xs font-medium",
+                      CLASS_STATUS[c.status].cls,
+                    )}
+                  >
+                    {CLASS_STATUS[c.status].label}
+                  </span>
+                </div>
+              </Link>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Thông tin cá nhân (grid Field như mock) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Thông tin cá nhân</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+          <Field label="Họ và tên" value={displayName} />
+          <Field label="Vai trò" value={roleCodes.map(roleLabel).join(", ")} />
+          <Field label="Email" value={user.email} />
+          <Field label="Cơ sở" value={user.center?.name ?? "Chưa gán cơ sở"} />
+          <Field label="Tham gia hệ thống" value={joinFmt.format(user.createdAt)} />
+          <Field label="Lớp đang phụ trách" value={`${classes.length} lớp`} />
+        </CardContent>
+      </Card>
+
+      {/* Bảo mật (port card Bảo mật của mock settings — chỉ giữ đổi mật khẩu) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Lock className="h-4 w-4 text-purple-700" />
+            Bảo mật
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-neutral-900">Mật khẩu</p>
+            <p className="text-xs text-neutral-500">
+              Đổi mật khẩu đăng nhập của bạn — nên đổi định kỳ.
+            </p>
+          </div>
+          <ChangePasswordDialog />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</p>
+      <p className="mt-1 text-sm font-medium text-neutral-900">{value}</p>
+    </div>
+  );
+}

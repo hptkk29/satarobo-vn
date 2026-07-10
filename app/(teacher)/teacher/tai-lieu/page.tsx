@@ -11,9 +11,9 @@
 //                      tên buổi + tài liệu đính kèm (Document, mở tab mới) + SCORM.
 //
 // Tôn trọng watermark #14: KHÔNG tạo đường tải / expose fileUrl SCORM thô nào mới —
-// SCORM chỉ hiện badge + nút mở trỏ sang flow viewer sẵn có /admin/scorm/play/[id]
-// (player tự gate canOpenScorm + blur/watermark). Document thường (PDF/ảnh/link) mở
-// trực tiếp fileUrl tab mới — đúng cách admin documents/page.tsx đang mở.
+// SCORM chỉ hiện badge + nút mở trỏ sang viewer site GV /teacher/scorm/play/[id]
+// (mirror viewer admin: player tự gate canOpenScorm + blur/watermark). Document thường
+// (PDF/ảnh/link) mở trực tiếp fileUrl tab mới — đúng cách admin documents/page.tsx đang mở.
 // ⚠️ Câu 46: màn này KHÔNG có dữ liệu HV/PH — select chỉ kéo giáo trình/tài liệu.
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -251,10 +251,10 @@ export default async function TeacherMaterialsPage({
                       )}
                     </div>
 
-                    {/* SCORM: bản đầu CHỈ badge + nút mở — trỏ sang viewer ADMIN đang
-                        dùng (/admin/scorm/play/[id], player tự gate + watermark #14).
-                        TODO(#06 batch sau): port viewer sang host GV — link /admin chỉ
-                        chạy khi GV còn dùng admin host (chấp nhận giai đoạn flag OFF). */}
+                    {/* SCORM: badge + nút mở — trỏ viewer SITE GV /teacher/scorm/play/[id]
+                        (mirror viewer admin, player tự gate + watermark #14). Prefix
+                        /teacher như nav: chạy đúng cả trên host giaovien (pass-through)
+                        lẫn localhost/preview. */}
                     {scormOn && l.scorm && (
                       <div className="flex shrink-0 items-center gap-2">
                         <Badge
@@ -266,8 +266,8 @@ export default async function TeacherMaterialsPage({
                         <a
                           href={
                             l.scorm.sessionId
-                              ? `/admin/scorm/play/${l.scorm.id}?sessionId=${l.scorm.sessionId}`
-                              : `/admin/scorm/play/${l.scorm.id}`
+                              ? `/teacher/scorm/play/${l.scorm.id}?sessionId=${l.scorm.sessionId}`
+                              : `/teacher/scorm/play/${l.scorm.id}`
                           }
                           target="_blank"
                           rel="noopener noreferrer"
