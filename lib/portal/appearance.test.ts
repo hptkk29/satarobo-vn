@@ -2,19 +2,25 @@
 // Dữ liệu trong localStorage do client ghi nên KHÔNG được tin: phải narrow trước khi dùng.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ACCENT_PRESETS,
+  accentContrast,
   accentCssVars,
   accentsEqual,
+  contrastRatio,
   defaultAppearance,
+  INK_DARK,
+  INK_LIGHT,
   inkOn,
-  isLightAccent,
   isValidHex,
   loadAppearance,
+  needsDarkInk,
   normalizeHex,
   relLuminance,
   resolveDark,
   ROLE_DEFAULT_ACCENT,
   saveAppearance,
   softTint,
+  WCAG_AA,
 } from "@/lib/portal/appearance";
 
 const STORAGE_KEY = "sata-portal-appearance";
@@ -40,28 +46,54 @@ beforeEach(() => {
 });
 
 describe("contrast guard", () => {
-  it("nền sáng → mực tối; nền tối → chữ trắng", () => {
-    expect(inkOn("#FFFFFF")).toBe("#241A2E");
-    expect(inkOn("#FFFF00")).toBe("#241A2E");
-    expect(inkOn("#000000")).toBe("#FFFFFF");
-    expect(inkOn("#610C8D")).toBe("#FFFFFF");
+  it("contrastRatio khớp WCAG: trắng/đen = 21:1, cùng màu = 1:1", () => {
+    expect(contrastRatio("#FFFFFF", "#000000")).toBeCloseTo(21, 1);
+    expect(contrastRatio("#610C8D", "#610C8D")).toBeCloseTo(1, 5);
   });
 
-  it("mặc định tím (phụ huynh) và cam (học sinh) đều đủ tối → chữ trắng", () => {
-    // Nếu đổi mặc định sang màu sáng, `--accent-foreground: #fff` cứng trong
-    // globals.css sẽ sai ở lần paint đầu → test này chặn.
+  it("chọn mực cho tương phản CAO HƠN, không dùng ngưỡng luminance", () => {
+    expect(inkOn("#FFFFFF")).toBe(INK_DARK);
+    expect(inkOn("#FFFF00")).toBe(INK_DARK);
+    expect(inkOn("#000000")).toBe(INK_LIGHT);
+    expect(inkOn("#610C8D")).toBe(INK_LIGHT);
+  });
+
+  it("cam #FD8F2D phải dùng mực TỐI — ngưỡng 0.42 cũ chọn sai (2.3:1, trượt AA)", () => {
+    // Đây là ca bug: luminance 0.407 lọt dưới 0.42 nên bản cũ trả chữ trắng.
+    expect(relLuminance("#FD8F2D")).toBeGreaterThan(0.4);
+    expect(relLuminance("#FD8F2D")).toBeLessThan(0.42);
+    expect(contrastRatio("#FD8F2D", INK_LIGHT)).toBeLessThan(WCAG_AA);
+    expect(inkOn("#FD8F2D")).toBe(INK_DARK);
+    expect(accentContrast("#FD8F2D")).toBeGreaterThanOrEqual(WCAG_AA);
+  });
+
+  it("cả hai màu mặc định đều đạt WCAG AA sau khi chọn mực", () => {
     expect(ROLE_DEFAULT_ACCENT.parent).toBe("#610C8D");
     expect(ROLE_DEFAULT_ACCENT.student).toBe("#FD8F2D");
-    expect(isLightAccent(ROLE_DEFAULT_ACCENT.parent)).toBe(false);
-    expect(isLightAccent(ROLE_DEFAULT_ACCENT.student)).toBe(false);
-    expect(inkOn(ROLE_DEFAULT_ACCENT.parent)).toBe("#FFFFFF");
-    expect(inkOn(ROLE_DEFAULT_ACCENT.student)).toBe("#FFFFFF");
+    // Khớp `--accent-foreground` cứng trong globals.css cho lần paint đầu.
+    expect(inkOn(ROLE_DEFAULT_ACCENT.parent)).toBe(INK_LIGHT);
+    expect(inkOn(ROLE_DEFAULT_ACCENT.student)).toBe(INK_DARK);
+    expect(accentContrast(ROLE_DEFAULT_ACCENT.parent)).toBeGreaterThanOrEqual(WCAG_AA);
+    expect(accentContrast(ROLE_DEFAULT_ACCENT.student)).toBeGreaterThanOrEqual(WCAG_AA);
+  });
+
+  it("mọi preset gợi ý đều đạt WCAG AA", () => {
+    for (const preset of ACCENT_PRESETS) {
+      expect(accentContrast(preset.hex), `${preset.name} ${preset.hex}`).toBeGreaterThanOrEqual(
+        WCAG_AA,
+      );
+    }
+  });
+
+  it("màu xám giữa dải → không mực nào đạt AA ⇒ UI phải cảnh báo", () => {
+    expect(needsDarkInk("#808080")).toBe(true);
+    expect(accentContrast("#808080")).toBeLessThan(WCAG_AA);
   });
 
   it("HEX hỏng → luminance 0 (coi như màu tối), không ném lỗi", () => {
     expect(relLuminance("#GGG")).toBe(0);
     expect(relLuminance("")).toBe(0);
-    expect(inkOn("nonsense")).toBe("#FFFFFF");
+    expect(inkOn("nonsense")).toBe(INK_LIGHT);
   });
 });
 

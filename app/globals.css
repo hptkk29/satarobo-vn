@@ -531,17 +531,25 @@
    Class `.dark` cũng nằm trên phần tử này nên `.portal-v2` (khai báo sau) thắng
    `--accent` neutral của `.dark`. */
 .portal-v2 {
+  --primary: var(--parent);
+  --primary-foreground: #ffffff;
+  --ring: var(--parent);
   --accent: var(--parent);
   --accent-soft: var(--parent-soft);
-  /* Cả tím lẫn cam đều đủ tối → chữ trắng. Phải khai báo ở đây, KHÔNG để rơi về
+  /* Tím #610C8D: chữ trắng cho 10.8:1. Phải khai báo ở đây, KHÔNG để rơi về
      `--accent-foreground` của :root (màu tối) — nếu không hero sẽ chữ tối trên nền
      tím ở lần paint đầu, trước khi provider gán inline. */
   --accent-foreground: #ffffff;
 }
 
-/* Cổng học sinh: cùng shell, accent cam. Specificity 0,2,0 > .portal-v2 và .dark. */
+/* Cổng học sinh: cùng shell, accent cam. Specificity 0,2,0 > .portal-v2 và .dark.
+   Cam #FD8F2D là màu SÁNG: chữ trắng chỉ 2.3:1 (trượt WCAG AA), mực tối được
+   7.2:1 — khớp inkOn() trong lib/portal/appearance.ts. */
 .portal-v2[data-mode="student"] {
+  --primary: var(--student);
+  --primary-foreground: #241a2e;
+  --ring: var(--student);
   --accent: var(--student);
   --accent-soft: var(--student-soft);
-  --accent-foreground: #ffffff;
+  --accent-foreground: #241a2e;
 }
