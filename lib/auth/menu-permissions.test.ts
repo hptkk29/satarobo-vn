@@ -17,10 +17,18 @@ import {
   resolveActiveRoleFrom,
 } from "@/lib/auth/active-role";
 import type { Actor } from "@/lib/auth/actor";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
+import { ROLE_SEED } from "../../prisma/seed-roles";
 
 const ALL = Object.keys(PERMISSIONS) as Action[];
 
-function actorOf(perms: { action: string; roleCode: string }[], orgRoles: string[], isSuperAdmin = false): Actor {
+type Scope = "GLOBAL" | "CENTER" | "CLASS" | "OWN" | "ASSIGNED";
+
+function actorOf(
+  perms: { action: string; roleCode: string; scopeType?: Scope }[],
+  orgRoles: string[],
+  isSuperAdmin = false,
+): Actor {
   return {
     userId: "u1",
     isSuperAdmin,
@@ -28,7 +36,7 @@ function actorOf(perms: { action: string; roleCode: string }[], orgRoles: string
     orgRoles: orgRoles.map((roleCode) => ({ orgUnitId: "org-cs2", roleCode })),
     permissions: perms.map((p) => ({
       action: p.action,
-      scopeType: "GLOBAL" as const,
+      scopeType: p.scopeType ?? "GLOBAL",
       orgUnitId: "org-cs2",
       roleCode: p.roleCode,
       centerScope: ["cs2"],
@@ -135,5 +143,64 @@ describe("activeRoleOptions / resolveActiveRoleFrom — chọn đúng bộ mã t
     expect(menuActorForRole(actor, "CENTER_CLASS_MANAGER")!.orgRoles).toEqual([
       { orgUnitId: "org-cs2", roleCode: "CENTER_CLASS_MANAGER" },
     ]);
+  });
+});
+
+describe("Menu hỏi 'CÓ GIỮ action không', KHÔNG hỏi 'dùng được ngay không'", () => {
+  // Bug tự tạo ở PR #47: grantedMenuActions gọi evaluatePermission TRẦN (không target).
+  // can.ts trả false cho scope CENTER/CLASS/OWN khi thiếu target ⇒ sau flip, mọi mục menu
+  // gác bằng action scope-cơ-sở sẽ BIẾN MẤT, dù trang vẫn cho vào (trang có truyền target).
+  // Đúng lớp lỗi "ẩn oan" mà page-gates.ts sinh ra để diệt.
+  //
+  // Ca thật: Giáo vụ giữ attendance:view[CENTER]; QL cơ sở + Nhân sự cơ sở giữ
+  // hr_attendance:view[CENTER] → mất menu "Điểm danh" / "Chấm công" ngay lúc flip.
+
+  it("[REGRESSION] attendance:view scope CENTER ⇒ menu Điểm danh VẪN hiện", () => {
+    const giaoVu = actorOf(
+      [{ action: "attendance:view", roleCode: "CENTER_CLASS_MANAGER", scopeType: "CENTER" }],
+      ["CENTER_CLASS_MANAGER"],
+    );
+    const g = grantedMenuActions({ sessionUser: { role: "SALES_CSM", roles: ["SALES_CSM"] }, actor: giaoVu, flagOn: true });
+    expect(g).toContain("attendance:view");
+  });
+
+  it("[REGRESSION] hr_attendance:view scope CENTER ⇒ QL cơ sở VẪN thấy menu Chấm công", () => {
+    const ql = actorOf(
+      [{ action: "hr_attendance:view", roleCode: "CENTER_MANAGER", scopeType: "CENTER" }],
+      ["CENTER_MANAGER"],
+    );
+    const g = grantedMenuActions({ sessionUser: { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"] }, actor: ql, flagOn: true });
+    expect(g).toContain("hr_attendance:view");
+  });
+
+  it("scope CLASS/ASSIGNED cũng vậy (GV, trợ giảng)", () => {
+    const gv = actorOf([{ action: "attendance:mark", roleCode: "TEACHER", scopeType: "CLASS" }], ["TEACHER"]);
+    expect(grantedMenuActions({ sessionUser: { role: "TEACHER", roles: ["TEACHER"] }, actor: gv, flagOn: true })).toContain("attendance:mark");
+  });
+
+  it("KHÔNG giữ action ⇒ vẫn ẩn (menu không được nới rộng thành 'thấy hết')", () => {
+    const ql = actorOf([{ action: "students:view-all", roleCode: "CENTER_MANAGER" }], ["CENTER_MANAGER"]);
+    const g = grantedMenuActions({ sessionUser: { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"] }, actor: ql, flagOn: true });
+    expect(g).not.toContain("payments:manage");
+    expect(g).not.toContain("attendance:view");
+  });
+
+  it("grant riêng ALLOW cũng mở mục menu tương ứng", () => {
+    const a = actorOf([], ["TEACHER"]);
+    a.grantsAllow = new Set(["leads:export"]);
+    expect(grantedMenuActions({ sessionUser: { role: "TEACHER", roles: ["TEACHER"] }, actor: a, flagOn: true })).toContain("leads:export");
+  });
+
+  it("action gác trang TRẦN (PAGE_GATES) buộc GLOBAL ⇒ menu ≡ cổng cho nhóm đó", () => {
+    // rbac-scope.test.ts đã ép mọi action trong PAGE_GATES phải GLOBAL trên mọi role.
+    // Nhờ vậy "có giữ action" và "dùng được ngay" trùng nhau đúng ở những route đó.
+    for (const actions of Object.values(PAGE_GATES)) {
+      for (const action of actions) {
+        for (const role of ROLE_SEED) {
+          const p = role.perms.find((x) => x.action === action);
+          if (p) expect(p.scopeType, `${role.code}:${action}`).toBe("GLOBAL");
+        }
+      }
+    }
   });
 });
