@@ -1,4 +1,7 @@
+import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
+import { ACTIVE_ROLE_COOKIE, resolveActiveRole } from "@/lib/auth/active-role";
+import { roleLabel } from "@/lib/labels";
 import { redirect } from "next/navigation";
 import { getEffectiveRoles, hasRole, hasAnyRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
@@ -11,6 +14,18 @@ import { PendingTasksSection } from "./_components/pending-tasks-section";
 
 // Đợt 3B/3C — Dashboard GỘP (union): hiển thị panel của TẤT CẢ vai trò user giữ.
 // Thứ tự: Quản lý → Giáo viên → Tư vấn → Kế toán → Marketing → Nhân sự.
+/** #13 — vai trò (enum v1) → panel dashboard tương ứng. TRAINING dùng panel quản lý. */
+const PANEL_KEY_BY_ROLE: Record<string, string> = {
+  SUPER_ADMIN: "manager",
+  CENTER_MANAGER: "manager",
+  TRAINING: "manager",
+  TEACHER: "teacher",
+  SALES_CSM: "sales",
+  ACCOUNTANT: "acc",
+  MARKETING: "mkt",
+  HR: "hr",
+};
+
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -59,7 +74,14 @@ export default async function DashboardPage() {
     });
   }
 
-  const multi = panels.length > 1;
+  // #13 (câu 11) — đang chọn 1 vai → chỉ hiện panel của vai đó. Quyền KHÔNG đổi
+  // (xem lib/auth/active-role.ts); đây thuần là lọc hiển thị.
+  const jar = await cookies();
+  const activeRole = resolveActiveRole(session.user, jar.get(ACTIVE_ROLE_COOKIE)?.value);
+  const activeKey = activeRole ? PANEL_KEY_BY_ROLE[activeRole] : undefined;
+  const visiblePanels = activeKey ? panels.filter((p) => p.key === activeKey) : panels;
+
+  const multi = visiblePanels.length > 1;
   const lastName = name.split(" ").slice(-1)[0] || "bạn";
 
   return (
@@ -67,16 +89,18 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-neutral-900">Xin chào, {lastName} 👋</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          {multi
-            ? `Bạn đang giữ ${roles.length} vai trò — dashboard gộp đầy đủ công việc của bạn.`
-            : new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long" })}
+          {activeRole
+            ? `Đang xem theo vai trò: ${roleLabel(activeRole)} — đổi ở góc trên bên phải. Quyền của bạn không thay đổi.`
+            : multi
+              ? `Bạn đang giữ ${roles.length} vai trò — dashboard gộp đầy đủ công việc của bạn.`
+              : new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long" })}
         </p>
       </div>
 
       {/* Module nhắc việc — khu "Cần xử lý" gom mọi nguồn theo quyền + cơ sở. */}
       <PendingTasksSection user={session.user} />
 
-      {panels.map((p) => (
+      {visiblePanels.map((p) => (
         <section key={p.key} className="space-y-4">
           {multi && (
             <div className="flex items-center gap-2">

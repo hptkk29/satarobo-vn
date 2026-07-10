@@ -1,8 +1,10 @@
 import { auth } from "@/lib/auth";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { hasStaffRole } from "@/lib/auth/permissions";
+import { getEffectiveRoles, hasStaffRole } from "@/lib/auth/permissions";
+import { ACTIVE_ROLE_COOKIE, menuUserForRole, resolveActiveRole } from "@/lib/auth/active-role";
 import { isEvalV2Enabled, isScormEnabled } from "@/lib/flags";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
@@ -44,16 +46,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/login?reason=session-invalidated");
   }
 
+  // #13 (câu 11) — vai trò đang dùng, chỉ lọc MENU. Quyền không đổi: resolveActor vẫn
+  // union mọi UserOrgRole. Cookie do client set → resolveActiveRole kiểm chứng sở hữu.
+  const jar = await cookies();
+  const activeRole = resolveActiveRole(session.user, jar.get(ACTIVE_ROLE_COOKIE)?.value);
+  const menuUser = menuUserForRole(
+    { role: session.user.role, roles: session.user.roles, grants: session.user.grants },
+    activeRole,
+  );
+
   return (
     <div className="admin-scope flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex md:shrink-0">
-        <Sidebar user={{ role: session.user.role, roles: session.user.roles, grants: session.user.grants }} evalV2Enabled={isEvalV2Enabled()} scormEnabled={isScormEnabled()} />
+        <Sidebar user={menuUser} evalV2Enabled={isEvalV2Enabled()} scormEnabled={isScormEnabled()} />
       </div>
 
       {/* Main */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar userName={session.user.name} userRole={session.user.role} />
+        <Topbar
+          userName={session.user.name}
+          userRole={activeRole ?? session.user.role}
+          roles={getEffectiveRoles(session.user)}
+          activeRole={activeRole}
+        />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
 

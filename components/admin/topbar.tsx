@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { LogOut, ChevronDown, User, Search } from "lucide-react";
 import { NotificationBell } from "@/components/admin/notification-bell";
+import { RoleSwitcher } from "@/components/admin/role-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,9 +18,13 @@ import { roleLabel } from "@/lib/labels";
 interface TopbarProps {
   userName?: string | null;
   userRole?: string;
+  /** #13 — mọi vai trò user giữ; ≤1 vai thì RoleSwitcher tự ẩn. */
+  roles?: string[];
+  /** null = đang xem gộp mọi vai trò. */
+  activeRole?: string | null;
 }
 
-export function Topbar({ userName, userRole }: TopbarProps) {
+export function Topbar({ userName, userRole, roles = [], activeRole = null }: TopbarProps) {
   const router = useRouter();
   const initials = userName
     ? userName
@@ -46,6 +51,7 @@ export function Topbar({ userName, userRole }: TopbarProps) {
 
       <div className="flex items-center gap-2">
         {/* Module nhắc việc — chuông thông báo việc cần xử lý */}
+        <RoleSwitcher roles={roles} activeRole={activeRole} />
         <NotificationBell />
 
         {/* User dropdown */}
