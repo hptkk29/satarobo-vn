@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { can, type Action } from "@/lib/auth/permissions";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 
 type NavItem = {
   label: string;
@@ -102,13 +103,13 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Học viên & Đăng ký học",
     items: [
-      { label: "Học viên", href: "/students", icon: GraduationCap, perm: ["students:view-all", "students:view-own-class"] },
+      { label: "Học viên", href: "/students", icon: GraduationCap, perm: [...PAGE_GATES["/students"]] },
       { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all"] },
-      { label: "Chuyển lớp / cơ sở", href: "/chuyen-lop", icon: ArrowLeftRight, perm: ["enrollments:transfer"] },
+      { label: "Chuyển lớp / cơ sở", href: "/chuyen-lop", icon: ArrowLeftRight, perm: [...PAGE_GATES["/chuyen-lop"]] },
       { label: "Sắp hết khoá", href: "/students/sap-het-khoa", icon: GraduationCap, perm: ["enrollments:view-all"] },
       { label: "Hoàn thành khoá & chứng chỉ", href: "/hoan-thanh-khoa", icon: Award, perm: ["completions:manage"] },
       // FL W0-NAV-2 hygiene: Học bạ (học thuật) gate `curriculum:view` (Super/Training/CM/GV) — ẩn khỏi Sale/KT/MKT/HR.
-      { label: "Học bạ", href: "/hoc-ba", icon: ScrollText, perm: ["curriculum:view"] },
+      { label: "Học bạ", href: "/hoc-ba", icon: ScrollText, perm: [...PAGE_GATES["/hoc-ba"]] },
       { label: "Học bạ năng lực", href: "/report-cards", icon: NotebookPen, perm: ["report-cards:manage", "report-cards:review"] },
       { label: "SataCoin", href: "/satacoin", icon: Coins, perm: ["satacoin:manage"] },
     ],
@@ -120,7 +121,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view"] },
-      { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: ["media:view"] },
+      { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: [...PAGE_GATES["/media"]] },
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
       { label: "Phòng học", href: "/rooms", icon: DoorOpen, perm: ["rooms:view"] },
@@ -146,16 +147,16 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CSKH & Phụ huynh",
     items: [
       // FL W0-NAV-2 hygiene: Tin nhắn (CSKH) gate CSKH+GV — ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
-      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: ["parent-requests:manage", "classes:view-own"] },
+      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: [...PAGE_GATES["/tin-nhan"]] },
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },
       { label: "Đánh giá & Khảo sát", href: "/evaluations", icon: ClipboardList, perm: ["evaluations:manage"], flag: "eval" },
       { label: "Thông báo PH", href: "/notifications", icon: Bell, perm: ["notifications:manage"] },
       // FL W0-NAV-2 hygiene: Cảnh báo rủi ro = CSKH/quản lý (giữ Sale), ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
-      { label: "Cảnh báo rủi ro", href: "/canh-bao-rui-ro", icon: AlertTriangle, perm: ["parent-requests:manage"] },
+      { label: "Cảnh báo rủi ro", href: "/canh-bao-rui-ro", icon: AlertTriangle, perm: [...PAGE_GATES["/canh-bao-rui-ro"]] },
       // FL W0-NAV-2 hygiene: Chăm sóc HV = CSKH/quản lý + GV (giữ Sale & GV), ẩn khỏi KT.
-      { label: "Chăm sóc HV", href: "/cham-soc-hv", icon: HeartHandshake, perm: ["parent-requests:manage", "students:view-own-class"] },
+      { label: "Chăm sóc HV", href: "/cham-soc-hv", icon: HeartHandshake, perm: [...PAGE_GATES["/cham-soc-hv"]] },
     ],
   },
   {
@@ -199,8 +200,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Website & Marketing",
     items: [
       { label: "Tin tức", href: "/news", icon: Newspaper, perm: ["news:view"] },
-      { label: "Nội dung website", href: "/site-content", icon: ImageIcon, perm: ["site-content:view"] },
-      { label: "Tracking", href: "/marketing", icon: BarChart3, perm: ["site-content:view"] },
+      { label: "Nội dung website", href: "/site-content", icon: ImageIcon, perm: [...PAGE_GATES["/site-content"]] },
+      { label: "Tracking", href: "/marketing", icon: BarChart3, perm: [...PAGE_GATES["/marketing"]] },
     ],
   },
   {

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ResolveButtons } from "./_components/alert-actions";
@@ -27,7 +28,7 @@ const SEV_BADGE: Record<string, string> = {
 export default async function RiskAlertPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("students:view-all"))) redirect("/dashboard");
+  if (!(await checkAnyPermission(PAGE_GATES["/canh-bao-rui-ro"]))) redirect("/dashboard");
 
   // Cách ly cơ sở: StudentRiskAlert ∈ SCOPED_MODELS → scopedDb tự inject centerId IN
   // tầm-nhìn-cơ-sở của actor (SUPER_ADMIN/HO bypass → ALL). Thay manual centerScope cũ.

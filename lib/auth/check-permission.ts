@@ -40,3 +40,46 @@ export async function checkPermission(action: string, target?: Target): Promise<
 export async function assertPermission(action: string, target?: Target): Promise<void> {
   if (!(await checkPermission(action, target))) throw new PermissionError();
 }
+
+/**
+ * Vào được nếu có ÍT NHẤT MỘT action trong danh sách (OR). Dùng với `PAGE_GATES`
+ * để gate trang, thay chuỗi `!(await checkPermission(a)) && !(await checkPermission(b))`
+ * — vốn gọi `auth()` + `resolveActor()` lặp mỗi action.
+ *
+ * Short-circuit: dừng ở action đầu tiên PASS, nên shadow-diff chỉ ghi cho những action
+ * thực sự được đánh giá. Đúng bằng hành vi của chuỗi `||` cũ, không thêm nhiễu.
+ */
+export async function checkAnyPermission(
+  actions: readonly string[],
+  target?: Target,
+): Promise<boolean> {
+  const session = await auth();
+  if (!session?.user) return false;
+  const actor = await resolveActor(session.user.id);
+  const flagOn = isRbacV2Enabled();
+
+  for (const action of actions) {
+    const ok = evaluatePermission({
+      sessionUser: session.user,
+      actor,
+      action,
+      target,
+      flagOn,
+      onEvaluated: ({ v1, v2 }) => {
+        if (v1 !== v2) {
+          void recordPermissionShadow({ action, userId: actor.userId, v1, v2, targetKey: targetKey(target) });
+        }
+      },
+    });
+    if (ok) return true;
+  }
+  return false;
+}
+
+/** Bản ném lỗi của checkAnyPermission (đầu Server Action/route). */
+export async function assertAnyPermission(
+  actions: readonly string[],
+  target?: Target,
+): Promise<void> {
+  if (!(await checkAnyPermission(actions, target))) throw new PermissionError();
+}

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getStudentTranscript } from "@/lib/transcript/service";
@@ -16,11 +17,10 @@ export default async function AdminTranscriptPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // GV/quản lý/CSKH/HR đều xem được học bạ.
-  if (
-    !(await checkPermission("students:view-all")) &&
-    !(await checkPermission("students:view-own-class"))
-  ) {
+  // Gate 10/07 (BGĐ chốt) — học bạ = hồ sơ học tập + xuất PDF: chỉ Đào tạo, QL cơ sở,
+  // GV. Trước đó gác bằng `students:view-all` ⇒ HR, Kế toán, Marketing, Sale, Giáo vụ
+  // đều tải được học bạ mọi HV bằng URL (menu thì gác `curriculum:view`, nên giấu).
+  if (!(await checkAnyPermission(PAGE_GATES["/hoc-ba"]))) {
     redirect("/dashboard");
   }
 

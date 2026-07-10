@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { HeartHandshake } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
@@ -15,7 +16,10 @@ export const dynamic = "force-dynamic";
 export default async function CareTaskPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("students:view-all")) && !hasRole(session.user, "SALES_CSM")) redirect("/dashboard");
+  // Gate 10/07: parent-requests:manage (QL co so, Sale/CSKH, Giao vu). Bo hack
+  // `hasRole(SALES_CSM)` - Sale von da giu chinh action do. GV khong vao: trang
+  // khong loc theo lop phan cong.
+  if (!(await checkAnyPermission(PAGE_GATES["/cham-soc-hv"]))) redirect("/dashboard");
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");

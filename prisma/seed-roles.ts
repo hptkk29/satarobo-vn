@@ -382,6 +382,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "attendance:view", scopeType: "CENTER" },
       { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },
+      // 10/07 — gate CSKH (/tin-nhan, /canh-bao-rui-ro, /cham-soc-hv) doi
+      // parent-requests:manage. Giao vu la vai #16 sinh ra de lam CSKH => phai co.
+      { action: "parent-requests:manage", scopeType: "GLOBAL" },
     ],
   },
   {

@@ -166,3 +166,125 @@ nhìn thấy lead cơ sở khác. Cả hai đã vá.
 - [ ] Diễn tập rollback: đổi `RBAC_V2_ENABLED=false` + redeploy, bấm giờ < 10 phút
 
 Xanh cả ba ⇒ đủ cổng (a)(b)(c)(d) → **flip `RBAC_V2_ENABLED=true`**, trước UAT 20/07.
+
+---
+
+## 7. Kết quả smoke thật trên prod (10/07/2026, chỉ-đọc)
+
+S1 Kiệt · S2+S9 Toại · S3 Liên · S4 Đức · S5 Diệu · S6 Huệ · S7 Linh — **gate vào/chặn đúng hết**.
+Cách ly cơ sở quan sát được: Liên (QL CS2) thấy `0 học viên`, Kiệt thấy `1`.
+
+Smoke không chỉ nghiệm thu checklist — nó lòi ra **3 lỗi lệch giữa menu và cổng trang**, cả 3 đều
+có sẵn trên prod hôm nay và **không do RBAC v2 sinh ra** (v1 dính y hệt).
+
+### 7.1 Dead link — menu mời vào, trang đá ra
+
+| Vai | Mục menu | Menu đòi | Trang gác bằng | Hệ quả |
+|---|---|---|---|---|
+| MARKETING | Nội dung website `/site-content` | `site-content:view` | `honors:settings` | bấm → văng `/dashboard` |
+| TEACHER | Học viên `/students` | `students:view-own-class` | `students:view-all` | bấm → văng `/dashboard` |
+| TEACHER | Chăm sóc HV `/cham-soc-hv` | `students:view-own-class` | `students:view-all` | bấm → văng `/dashboard` |
+
+Ca `/site-content` đã **quan sát trực tiếp** trên phiên của Linh. Hai ca TEACHER suy ra từ quét tĩnh
+(`sidebar.tsx` × gate `page.tsx`), cùng biểu hiện ở cả v1 lẫn v2.
+
+Sau flip, `/site-content` tự hết đau vì `HO_MARKETING` tình cờ giữ **cả** `honors:settings` — tức là
+đúng do may, không do thiết kế. Gác `/site-content` bằng `honors:settings` là sai ngữ nghĩa: action
+`site-content:view` / `site-content:edit` có tồn tại nhưng **không call-site nào dùng để gác trang**.
+
+### 7.2 Ẩn mà vẫn vào được — hở quyền theo URL (nặng hơn)
+
+Chiều ngược lại nguy hiểm hơn: menu giấu, nhưng gõ URL thì trang mở. Quan sát trực tiếp trên phiên
+**Linh (Marketing)** — 4 trang dưới đây **không** có trong sidebar của cô ấy, vẫn vào được:
+
+| URL | Trang gác bằng | Marketing có? | Nội dung lộ |
+|---|---|---|---|
+| `/tin-nhan` | `classes:view-all` ∨ `classes:view-own` | ✅ `classes:view-all` | toàn bộ hội thoại phụ huynh ↔ giáo viên |
+| `/hoc-ba` | `students:view-all` ∨ `students:view-own-class` | ✅ `students:view-all` | học bạ từng HV + **xuất PDF** |
+| `/canh-bao-rui-ro` | `students:view-all` | ✅ | HV nguy cơ rời bỏ |
+| `/cham-soc-hv` | `students:view-all` | ✅ | ghi chú chăm sóc HV |
+
+Không riêng Marketing. Cùng khe hở đó, theo ma trận:
+
+- **v1:** `ACCOUNTANT`, `HR`, `MARKETING` (đều có `students:view-all` + `classes:view-all`).
+- **v2:** `HO_ACCOUNTANT`, `HO_HR`, `HO_MARKETING`, `CENTER_ACCOUNTANT`, `CENTER_HR`,
+  `CENTER_CLASS_MANAGER` — và HO thì `scopedDb` cho **xuyên cơ sở**.
+
+Nghĩa là **kế toán Hội sở đọc được tin nhắn phụ huynh của mọi cơ sở, và tải được học bạ mọi HV.**
+Hôm nay prod gần như trống nên thiệt hại bằng 0; sau UAT 20/07 có dữ liệu thật thì không còn vô hại.
+
+Đây **không phải** lỗi của `scopedDb` (nó cách ly *cơ sở*, không cách ly *chức năng*). Lỗi ở chỗ trang
+CSKH/học bạ mượn tạm `students:view-all` làm cổng, trong khi action đúng là `parent-requests:manage`
+(CSKH) và `curriculum:view` / `report-cards:view` (học bạ).
+
+### 7.3 Vì sao shadow-compare không bắt được
+
+`RbacShadowDiff` chỉ ghi khi **v1 ≠ v2** trên cùng một action. Ở đây v1 và v2 **đồng ý với nhau** —
+cùng cho Marketing `students:view-all`. Sai nằm ở *chọn nhầm action để gác*, không ở *ai giữ action*.
+Shadow xanh không đồng nghĩa phân quyền đúng; nó chỉ nói v2 không làm lệch so với v1.
+
+→ Bài học: bổ sung một invariant tĩnh **"perm ở menu ⊆ gate của trang"** vào CI (script quét đã có).
+
+### 7.4 Phát hiện thứ tư — sidebar dùng v1, cổng trang dùng cờ ⇒ **chặn flip**
+
+`components/admin/sidebar.tsx` lọc menu bằng `can(user, perm)` — ma trận **v1 tĩnh, luôn luôn**.
+`page.tsx` gác bằng `checkPermission()` — **theo cờ `RBAC_V2_ENABLED`**.
+
+Hôm nay cờ OFF ⇒ hai bên trùng nhau, không ai thấy gì bất thường. Bật cờ ⇒ chúng tách đôi ở
+**mọi** vai có v2 ≠ v1:
+
+- Toại (`CENTER_MANAGER`) mất 9 nhóm quyền ở v2 (`payments:manage`, `orders:manage`,
+  `vouchers:manage`, `products:manage`, `inventory:audit`, `honors:settings`, `students:delete`,
+  `enrollments:delete`, `leads:delete`) — nhưng menu v1 vẫn mời anh ấy vào cả 9 ⇒ **9 dead link
+  sinh ra đúng lúc flip.**
+- Ngược lại `HO_MARKETING` được `honors:settings` ở v2 nhưng menu v1 (`MARKETING`) không có
+  ⇒ "Vinh danh" vẫn ẩn dù trang đã mở.
+
+Sửa đúng: `layout.tsx` (server) tính sẵn tập action được phép — bằng chính `evaluatePermission`
++ cờ mà trang dùng — rồi truyền xuống `<Sidebar>`; sidebar lọc theo tập đó thay vì tự gọi `can()`.
+
+⚠️ Vướng `#13` (RoleSwitcher): hiện switcher thu hẹp menu bằng cách lọc `user.roles` **phía v1**.
+Khi sidebar chạy theo v2, `actor` không biết "vai đang chọn" ⇒ switcher hết tác dụng lọc menu.
+Cần `menuActorForRole(actor, roleCode)` song song với `menuUserForRole` đã có. **Chưa làm** —
+và RoleSwitcher còn đang **crash tab** (gặp ở S2, chưa truy nguyên).
+
+→ Cả hai là **điều kiện tiên quyết của flip**, độc lập với 3 lỗi ở §7.1–§7.2.
+
+## 8. Đã sửa (10/07) — gom cổng về một bảng
+
+`lib/auth/page-gates.ts` thành **nguồn duy nhất**: sidebar lấy `perm` từ đó, `page.tsx` gác bằng
+`checkAnyPermission(PAGE_GATES[href])`. Menu và cổng không còn hai danh sách để lệch nhau.
+
+| Route | Trước | Sau | Ai đổi |
+|---|---|---|---|
+| `/site-content` | gate `honors:settings` | `site-content:view` | Marketing **hết dead link** |
+| `/students` | menu có `students:view-own-class` | menu = gate | GV hết dead link (mục biến mất) |
+| `/hoc-ba` | gate `students:view-all` | `curriculum:view` ∨ `students:view-own-class` | **cắt** HR, Kế toán, Marketing, Sale, Giáo vụ |
+| `/tin-nhan` | gate `classes:view-all` | `parent-requests:manage` ∨ `classes:view-own` | **cắt** Đào tạo, HR, Kế toán, Marketing |
+| `/canh-bao-rui-ro` | gate `students:view-all` | `parent-requests:manage` | **cắt** Đào tạo, HR, Kế toán, Marketing |
+| `/cham-soc-hv` | gate `students:view-all` ∨ `hasRole(SALES_CSM)` | `parent-requests:manage` | như trên; bỏ hack `hasRole` |
+| `/marketing` | menu `site-content:view` | menu = gate `leads:view-all` | QL cơ sở hết bị ẩn mục Tracking (v2) |
+| `/chuyen-lop` | menu `enrollments:transfer` | menu = gate `enrollments:create` | **Sale thấy được** việc của chính mình |
+| `/media` | menu thiếu `media:upload` | menu = gate | không ai đổi (cùng người giữ) |
+
+Kèm theo: `CENTER_CLASS_MANAGER` (Giáo vụ) được cấp `parent-requests:manage[GLOBAL]` — vai `#16`
+sinh ra để làm CSKH thì phải qua được cổng CSKH.
+
+**Khoá lại bằng test** (`lib/auth/page-gates.test.ts`, chạy trong Vitest CI):
+
+1. `menu ≡ gate` cho mọi mục sidebar có `perm` và trang có `if (...) redirect(...)`.
+   Lệch chiều nào cũng đỏ. Đã thử tái tạo bug cũ ⇒ test đỏ đúng route.
+2. Mọi action trong bảng phải tồn tại trong `PERMISSIONS` v1.
+3. Route trong bảng phải gác bằng chính `PAGE_GATES[href]`, không khai action rời.
+4. `GATE_MISMATCH_ALLOWLIST` chỉ chứa route **thực sự còn lệch** (hết lệch mà quên xoá → đỏ).
+
+Và `rbac-scope.test.ts` học thêm **dạng call-site trần thứ ba**: action nằm trong `PAGE_GATES`
+đều được gọi không-target ⇒ bắt buộc `scopeType = GLOBAL`. (Hai dạng trước: `checkPermission("x")`
+và `cfg.can("x")` — mỗi dạng từng là một điểm mù đã cắn ta một lần.)
+
+**Còn lệch có chủ đích** (khai trong `GATE_MISMATCH_ALLOWLIST`, kèm lý do):
+`/bao-cao/*` (chờ BGĐ chốt ai xem báo cáo đào tạo) · `/cham-cong/lich-ca-nhan-vien` (gate có
+target `centerId`, không quy về so-sánh-tập-hợp được).
+
+**Việc prod còn lại:** chạy lại workflow `seed-prod-roles` để `CENTER_CLASS_MANAGER` nhận
+`parent-requests:manage`. Không chạy ⇒ sau flip Giáo vụ mất trang CSKH.

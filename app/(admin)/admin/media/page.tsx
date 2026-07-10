@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
@@ -12,10 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminMediaPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (
-    !(await checkPermission("media:view")) &&
-    !(await checkPermission("media:upload"))
-  ) {
+  if (!(await checkAnyPermission(PAGE_GATES["/media"]))) {
     redirect("/dashboard");
   }
   const canApprove = await checkPermission("media:approve");

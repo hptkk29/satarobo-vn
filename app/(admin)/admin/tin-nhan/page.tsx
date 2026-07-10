@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { scopedDb } from "@/lib/db-scope";
 import {
   getThreadForStudent,
@@ -39,10 +40,14 @@ export default async function AdminMessagesPage({
   if (!session?.user) redirect("/login");
 
   const actor = await resolveActor(session.user.id);
-  const canViewAllClasses = await checkPermission("classes:view-all");
-  if (!canViewAllClasses && !(await checkPermission("classes:view-own"))) {
+  // Gate 10/07 — hội thoại PH là PII: chỉ QL cơ sở / Sale-CSKH / Giáo vụ / GV(lớp mình).
+  // Trước đó gác bằng `classes:view-all` ⇒ Đào tạo, HR, Kế toán, Marketing đọc được
+  // tin nhắn mọi nhà bằng cách gõ URL (menu vẫn giấu). Xem lib/auth/page-gates.ts.
+  if (!(await checkAnyPermission(PAGE_GATES["/tin-nhan"]))) {
     redirect("/dashboard");
   }
+  // KHÔNG phải gate — quyết định phạm vi đọc: xem mọi lớp, hay chỉ lớp phân công.
+  const canViewAllClasses = await checkPermission("classes:view-all");
 
   const sdb = scopedDb(actor);
   // GV: giới hạn theo lớp phân công (câu 19 — không đọc lịch sử lớp/cơ sở khác).
