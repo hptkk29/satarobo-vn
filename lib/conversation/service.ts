@@ -74,6 +74,131 @@ export async function postMessage(input: {
   return msg;
 }
 
+export type StudentThreadMessage = ThreadMessage & {
+  enrollmentId: string;
+  className: string | null;
+};
+
+/**
+ * (b) 10/07 — LIỀN MẠCH hội thoại khi HV chuyển lớp/cơ sở: toàn bộ tin nhắn của
+ * HỌC VIÊN qua MỌI enrollment (kể cả TRANSFERRED/COMPLETED), thứ tự thời gian.
+ * Entitlement do CALLER gác (tiền lệ câu 20 — Student.centerId = cơ sở HIỆN TẠI,
+ * transfer đã update nó ở lib/transfer/service.ts): admin = sdb.student thấy được;
+ * portal = ownership parentUserId. `classIds` để GV chỉ đọc luồng lớp mình (câu 19
+ * — GV không mở hồ sơ/lịch sử cơ sở khác).
+ */
+export async function getThreadForStudent(
+  studentId: string,
+  opts?: { classIds?: readonly string[] },
+): Promise<StudentThreadMessage[]> {
+  const rows = await db.conversationMessage.findMany({
+    where: {
+      enrollment: {
+        studentId,
+        deletedAt: null,
+        ...(opts?.classIds ? { classId: { in: [...opts.classIds] } } : {}),
+      },
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      enrollmentId: true,
+      authorUserId: true,
+      authorSide: true,
+      body: true,
+      createdAt: true,
+      readByParentAt: true,
+      readByStaffAt: true,
+      enrollment: { select: { class: { select: { name: true } } } },
+    },
+  });
+  return rows.map(({ enrollment, ...m }) => ({
+    ...m,
+    className: enrollment.class?.name ?? null,
+  }));
+}
+
+/** Đánh dấu đã đọc cho 1 phía trên MỌI enrollment của HV (đi kèm getThreadForStudent). */
+export async function markStudentThreadRead(
+  studentId: string,
+  side: ConversationSide,
+  opts?: { classIds?: readonly string[] },
+): Promise<number> {
+  const now = new Date();
+  const enrollment = {
+    studentId,
+    deletedAt: null,
+    ...(opts?.classIds ? { classId: { in: [...opts.classIds] } } : {}),
+  };
+  if (side === "PARENT") {
+    const r = await db.conversationMessage.updateMany({
+      where: { enrollment, authorSide: "STAFF", readByParentAt: null },
+      data: { readByParentAt: now },
+    });
+    return r.count;
+  }
+  const r = await db.conversationMessage.updateMany({
+    where: { enrollment, authorSide: "PARENT", readByStaffAt: null },
+    data: { readByStaffAt: now },
+  });
+  return r.count;
+}
+
+/**
+ * Tổng hợp inbox THEO HỌC VIÊN cho danh sách studentIds (caller đã gác quyền):
+ * tin mới nhất + số tin PH gửi chưa đọc — gộp mọi enrollment của từng HV.
+ */
+export async function listStudentThreadSummaries(
+  studentIds: readonly string[],
+  opts?: { classIds?: readonly string[] },
+): Promise<Map<string, { lastMessageAt: Date | null; unreadFromParent: number }>> {
+  const out = new Map<string, { lastMessageAt: Date | null; unreadFromParent: number }>();
+  if (studentIds.length === 0) return out;
+  const msgs = await db.conversationMessage.findMany({
+    where: {
+      enrollment: {
+        studentId: { in: [...studentIds] },
+        deletedAt: null,
+        ...(opts?.classIds ? { classId: { in: [...opts.classIds] } } : {}),
+      },
+    },
+    select: {
+      createdAt: true,
+      authorSide: true,
+      readByStaffAt: true,
+      enrollment: { select: { studentId: true } },
+    },
+  });
+  for (const m of msgs) {
+    const sid = m.enrollment.studentId;
+    const cur = out.get(sid) ?? { lastMessageAt: null, unreadFromParent: 0 };
+    if (!cur.lastMessageAt || m.createdAt > cur.lastMessageAt) cur.lastMessageAt = m.createdAt;
+    if (m.authorSide === "PARENT" && m.readByStaffAt === null) cur.unreadFromParent++;
+    out.set(sid, cur);
+  }
+  return out;
+}
+
+/** Số tin STAFF chưa đọc THEO TỪNG HV của 1 phụ huynh (badge danh sách portal). */
+export async function countUnreadForParentByStudent(
+  parentUserId: string,
+): Promise<Map<string, number>> {
+  const msgs = await db.conversationMessage.findMany({
+    where: {
+      authorSide: "STAFF",
+      readByParentAt: null,
+      enrollment: { deletedAt: null, student: { parentUserId, deletedAt: null } },
+    },
+    select: { enrollment: { select: { studentId: true } } },
+  });
+  const out = new Map<string, number>();
+  for (const m of msgs) {
+    const sid = m.enrollment.studentId;
+    out.set(sid, (out.get(sid) ?? 0) + 1);
+  }
+  return out;
+}
+
 /** Toàn bộ tin nhắn của 1 luồng (enrollment) theo thứ tự thời gian tăng dần. */
 export async function getThread(enrollmentId: string): Promise<ThreadMessage[]> {
   return db.conversationMessage.findMany({

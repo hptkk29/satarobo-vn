@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { getPortalContext } from "@/lib/portal/session";
 import { portalDb } from "@/lib/portal/db";
-import { getThread, markThreadRead } from "@/lib/conversation/service";
+import {
+  countUnreadForParentByStudent,
+  getThreadForStudent,
+  markStudentThreadRead,
+} from "@/lib/conversation/service";
 import { MessageForm } from "./_components/message-form";
 
 export const dynamic = "force-dynamic";
@@ -39,15 +43,18 @@ export default async function PortalMessagesPage({
   const params = await searchParams;
   const selectedId = params.e?.trim() || null;
 
-  // Ownership + mark-read PHẢI làm TRƯỚC khi đọc danh sách (để badge phản ánh đúng).
-  let selectedOwned = false;
+  // (b) 10/07 — luồng đọc THEO HỌC VIÊN: chọn 1 enrollment (URL ?e= giữ nguyên,
+  // KHÔNG lộ studentId trên URL portal) nhưng hiển thị + mark-read TOÀN BỘ lịch sử
+  // của bé qua mọi enrollment (kể cả lớp cũ/cơ sở cũ đã TRANSFERRED) — PH không mất
+  // liền mạch trao đổi khi con chuyển lớp/cơ sở. Ownership vẫn theo parentUserId.
+  let selectedStudentId: string | null = null;
   if (selectedId) {
     const owned = await pdb.enrollment.findFirst({
       where: { id: selectedId, student: { parentUserId, deletedAt: null } },
-      select: { id: true },
+      select: { studentId: true },
     });
-    selectedOwned = !!owned;
-    if (selectedOwned) await markThreadRead(selectedId, "PARENT");
+    selectedStudentId = owned?.studentId ?? null;
+    if (selectedStudentId) await markStudentThreadRead(selectedStudentId, "PARENT");
   }
 
   // Các enrollment ĐANG HỌC của tất cả các con (mỗi enrollment = 1 luồng).
@@ -60,20 +67,20 @@ export default async function PortalMessagesPage({
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
+      studentId: true,
       student: { select: { name: true } },
       class: { select: { name: true, course: { select: { name: true } } } },
-      _count: {
-        select: {
-          messages: { where: { authorSide: "STAFF", readByParentAt: null } },
-        },
-      },
     },
   });
+  // Badge chưa đọc GỘP theo học viên (tin ở lớp cũ vẫn được đếm).
+  const unreadByStudent = await countUnreadForParentByStudent(parentUserId);
 
-  const selected = selectedOwned
+  const selected = selectedStudentId
     ? enrollments.find((e) => e.id === selectedId) ?? null
     : null;
-  const thread = selected ? await getThread(selected.id) : [];
+  const thread = selected ? await getThreadForStudent(selected.studentId) : [];
+  // Nhãn lớp trên từng tin khi lịch sử trải qua ≥2 lớp (bé đã chuyển).
+  const multiClass = new Set(thread.map((m) => m.className ?? "")).size > 1;
 
   return (
     <div className="space-y-5">
@@ -95,7 +102,7 @@ export default async function PortalMessagesPage({
             <ul className="space-y-2">
               {enrollments.map((e) => {
                 const active = e.id === selected?.id;
-                const unread = e._count.messages;
+                const unread = unreadByStudent.get(e.studentId) ?? 0;
                 return (
                   <li key={e.id}>
                     <Link
@@ -165,6 +172,7 @@ export default async function PortalMessagesPage({
                           </div>
                           <span className="mt-0.5 text-[10px] text-neutral-400">
                             {mine ? "Bạn" : "Giáo viên"} · {fmt(m.createdAt)}
+                            {multiClass && m.className ? ` · ${m.className}` : ""}
                           </span>
                         </div>
                       );
