@@ -29,12 +29,20 @@ describe("[A0-05] login chung + redirect theo role", () => {
     expect(d).toMatchObject({ type: "redirectHost", host: "admin" });
   });
 
-  it("[A0-05-T4-03] đa vai (staff+parent) → ưu tiên admin", () => {
+  it("[A0-05-T4-03] đa vai (staff+parent) → ưu tiên khu staff", () => {
+    // PARENT+TEACHER: staff duy nhất là TEACHER = GV thuần → sau flip 10/07
+    // (TEACHER_SITE_ENABLED default ON) đáp xuống SITE GV, không phải admin.
     const d = decideRoute({
       hostKind: "admin", pathname: "/leads", role: "PARENT",
       roles: ["PARENT", "TEACHER"], sessionValid: true,
     });
-    expect(d).toMatchObject({ type: "rewrite", path: "/admin/leads" }); // staff → vào được admin
+    expect(d).toMatchObject({ type: "redirectHost", host: "teacher" });
+    // Kiêm vai admin thật (PARENT + CENTER_MANAGER) → vẫn ưu tiên admin.
+    const d2 = decideRoute({
+      hostKind: "admin", pathname: "/leads", role: "PARENT",
+      roles: ["PARENT", "CENTER_MANAGER"], sessionValid: true,
+    });
+    expect(d2).toMatchObject({ type: "rewrite", path: "/admin/leads" });
   });
 
   it("[A0-05-T10-01/02/03] sanitizeCallbackUrl chặn open-redirect (AC6)", () => {

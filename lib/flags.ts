@@ -78,5 +78,10 @@ export function isPortalV2Enabled(): boolean {
  *    role khác vào giaovien bị đá về khu của họ. Bật sau khi L6 đủ tính năng.
  */
 export function isTeacherSiteEnabled(): boolean {
-  return process.env.TEACHER_SITE_ENABLED === "true"; // mặc định OFF
+  // 🚀 FLIP 10/07/2026 (Kiệt duyệt sau merge batch 1-4 — site GV 13 route data thật):
+  // mặc định ON. Hệ quả: giaovien.satarobo.vn phục vụ site GV; GV THUẦN đăng nhập
+  // admin.satarobo.vn bị chuyển sang site GV (GV kiêm nhiệm vẫn ở admin) — xem
+  // decideRoute (lib/auth/route-policy.ts). ROLLBACK NHANH: đặt env
+  // TEACHER_SITE_ENABLED="false" trên Vercel + redeploy (không cần revert code).
+  return process.env.TEACHER_SITE_ENABLED !== "false";
 }
