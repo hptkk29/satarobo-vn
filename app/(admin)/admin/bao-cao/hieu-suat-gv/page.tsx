@@ -90,7 +90,8 @@ export default async function TeacherPerformanceReportPage() {
   const enrollmentToClass = new Map(enrollmentRows.map((e) => [e.id, e.classId]));
   const enrollmentIds = enrollmentRows.map((e) => e.id);
 
-  // 5. Học bạ + điểm tiêu chí (ReportCard không scoped → lọc theo enrollmentIds đã scope).
+  // 5. Học bạ + điểm tiêu chí (ReportCard ∈ SCOPED_MODELS #03 Pha B — filter
+  //    enrollmentIds đã scope vẫn giữ, auto-scope chỉ là lớp bọc thêm).
   const reportCardRows = enrollmentIds.length
     ? await sdb.reportCard.findMany({
         where: { enrollmentId: { in: enrollmentIds } },

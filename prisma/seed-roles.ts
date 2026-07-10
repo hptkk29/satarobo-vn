@@ -349,7 +349,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "employees:view-public", scopeType: "GLOBAL" },
       // #17 (câu 55): QL cơ sở duyệt/phát hành/thu hồi + sửa lại học bạ đã thu hồi.
       // Scope GLOBAL (KHÔNG CENTER) — cố ý: report-cards:* được check ở authContext
-      // KHÔNG kèm target (ReportCard là SCOPE_EXEMPT), nên CENTER-scope sẽ trả false
+      // KHÔNG kèm target (cách ly đã do scopedDb — ReportCard ∈ SCOPED_MODELS #03 Pha B), nên CENTER-scope sẽ trả false
       // sau flip #09 (scopeMatches cần target.centerId). Cách ly cơ sở đã được ép TAY
       // ở checkEnrollmentScope (actor.visibleCenterIds) trong action → GLOBAL an toàn.
       { action: "report-cards:manage", scopeType: "GLOBAL" },

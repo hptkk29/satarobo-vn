@@ -34,7 +34,8 @@ export default async function ReportCardsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // report-cards:* CHƯA có trong seed RBAC v2 (ReportCard vẫn SCOPE_EXEMPT) — không
+  // report-cards:* seed v2 scope GLOBAL cố ý (check ở authContext, cách ly do
+  // scopedDb — ReportCard ∈ SCOPED_MODELS từ #03 Pha B 86edfbc) — không
   // truyền target (chưa chắc scope, không đoán mò).
   const canManageReportCards = await checkPermission("report-cards:manage");
   const canReviewReportCards = await checkPermission("report-cards:review");

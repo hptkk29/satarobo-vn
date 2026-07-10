@@ -28,14 +28,6 @@ export function resolveActiveRole(
   return owned.find((r) => r === cookieValue) ?? null;
 }
 
-/** User có nhiều hơn 1 vai trò → mới hiện nút chuyển vai. */
-export function hasMultipleRoles(user: {
-  role?: Role | string | null;
-  roles?: (Role | string)[] | null;
-}): boolean {
-  return getEffectiveRoles(user).length > 1;
-}
-
 /**
  * `user` dùng để lọc menu: nếu đang chọn 1 vai thì chỉ xét vai đó. Grant riêng
  * (`UserPermissionGrant` ALLOW) GIỮ NGUYÊN — nó gắn với con người, không gắn với vai.

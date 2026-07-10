@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useEffect, useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
 import { setActiveSite } from "@/app/(portal)/portal/actions";
 import type { SwitcherChild } from "@/lib/portal/child-switcher-data";
@@ -29,8 +29,6 @@ import {
   LogOut,
   Palette,
   KeyRound,
-  Sun,
-  Moon,
   Check,
   type LucideIcon,
 } from "lucide-react";
@@ -42,6 +40,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PortalAppearanceProvider } from "@/components/portal/appearance-provider";
+import { PortalThemeToggle } from "@/components/portal/theme-toggle";
 
 // Portal v2 (merge SataUI) — shell Cổng phụ huynh: sidebar coral + topbar profile chip.
 // Nav map sang route /portal/* của main. Bọc .portal-v2 để accent coral.
@@ -143,21 +143,14 @@ export function PortalV2Shell({
   const nameWords = parentName.trim().split(/\s+/).filter((w) => /\p{L}/u.test(w[0] ?? ""));
   const initials = nameWords.slice(-1)[0]?.[0]?.toUpperCase() ?? "P";
 
-  // Giao diện: sáng/tối — scope trong .portal-v2 (không đụng admin/public).
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    setDark(localStorage.getItem("portal-theme") === "dark");
-  }, []);
-  const toggleTheme = () => {
-    setDark((d) => {
-      const next = !d;
-      localStorage.setItem("portal-theme", next ? "dark" : "light");
-      return next;
-    });
-  };
-
   return (
-    <div className={cn("portal-v2 flex min-h-screen bg-muted/50", dark && "dark")} data-mode="parent">
+    // Giao diện (sáng/tối + màu nhấn theo vai trò) — scope trong .portal-v2,
+    // không đụng admin/public. Provider tự render wrapper vì class `.dark` và
+    // CSS variable màu nhấn phải nằm trên đúng phần tử này.
+    <PortalAppearanceProvider
+      role={isStudent ? "student" : "parent"}
+      className="portal-v2 flex min-h-screen bg-muted/50"
+    >
       {/* Sidebar (desktop) */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border/60 bg-card lg:flex">
         <div className="flex h-16 shrink-0 items-center justify-center border-b border-border/40 px-5">
@@ -211,6 +204,8 @@ export function PortalV2Shell({
 
 
           <div className="ml-auto flex items-center gap-2">
+            <PortalThemeToggle />
+
             <Link
               href="/portal/thong-bao"
               aria-label="Thông báo"
@@ -245,17 +240,10 @@ export function PortalV2Shell({
                   <Settings className="size-4 text-muted-foreground" /> Hồ sơ liên lạc
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    toggleTheme();
-                  }}
+                  onClick={() => router.push("/portal/giao-dien")}
                   className="cursor-pointer gap-2.5"
                 >
                   <Palette className="size-4 text-muted-foreground" /> Giao diện
-                  <span className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground">
-                    {dark ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
-                    {dark ? "Tối" : "Sáng"}
-                  </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push("/portal/ho-so")} className="cursor-pointer gap-2.5">
                   <KeyRound className="size-4 text-muted-foreground" /> Đổi mật khẩu
@@ -343,7 +331,7 @@ export function PortalV2Shell({
           </DropdownMenu>
         </nav>
       </div>
-    </div>
+    </PortalAppearanceProvider>
   );
 }
 

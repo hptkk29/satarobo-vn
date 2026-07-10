@@ -18,7 +18,8 @@ import { z } from "zod";
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
-// Cách ly cơ sở cho EvaluationRound (SCOPE_EXEMPT — scopedDb pass-through, nên
+// Cách ly cơ sở cho EvaluationRound (∈ SCOPED_MODELS + NULL_IS_GLOBAL từ #03 Pha B;
+// filter tay dưới đây vẫn giữ làm defense-in-depth, nên
 // scope THỦ CÔNG ở đây). Đợt gắn cơ sở (CENTER_SURVEY, hoặc TEACHER_EVAL có centerId)
 // → center-level chỉ thao tác trong tầm nhìn của mình. Đợt toàn hệ thống (centerId
 // null) → chỉ SUPER_ADMIN/HO. setRoundStatus/createRound trong lib KHÔNG ép center.

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireActiveStudent } from "@/lib/portal/session";
-import { db } from "@/lib/db";
+import { portalDb } from "@/lib/portal/db";
 import { isEvalV2Enabled } from "@/lib/flags";
 import { isRoundOpen } from "@/lib/eval/rounds";
 import { isParentEligibleForCenterDb } from "@/lib/eval/eligibility";
@@ -29,13 +29,14 @@ export async function submitCenterSurvey(input: unknown): Promise<Res> {
   if (!isEvalV2Enabled()) return { ok: false, error: "Tính năng chưa được mở" };
 
   const { ctx, studentId } = await requireActiveStudent();
+  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
   const parentUserId = ctx.parentUserId;
 
   const parsed = submitSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Dữ liệu không hợp lệ" };
   const d = parsed.data;
 
-  const round = await db.evaluationRound.findUnique({
+  const round = await pdb.evaluationRound.findUnique({
     where: { id: d.roundId },
     select: {
       scope: true,
@@ -69,7 +70,7 @@ export async function submitCenterSurvey(input: unknown): Promise<Res> {
 
   // Chống trùng qua UNIQUE (roundId, parentUserId).
   try {
-    await db.evalResponse.create({
+    await pdb.evalResponse.create({
       data: {
         roundId: d.roundId,
         parentUserId,

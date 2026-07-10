@@ -99,7 +99,9 @@ export default async function CenterReportPage() {
   }));
 
   // 3. Hài lòng — rating sao của khảo sát cơ sở (CENTER_SURVEY). EvaluationRound ∈
-  // SCOPE_EXEMPT (centerId nullable) → LỌC THỦ CÔNG theo visibleCenterIds (HO/super bypass).
+  // SCOPED_MODELS + NULL_IS_GLOBAL (#03 Pha B): auto-scope OR-null — round global (null)
+  // vẫn lọt vào, nên GIỮ filter tay visibleCenterIds dưới đây (đừng bỏ khi refactor,
+  // bỏ là KPI cơ sở gộp cả rating đợt global toàn hệ thống).
   const roundRows = await sdb.evaluationRound.findMany({
     where: {
       scope: "CENTER_SURVEY",

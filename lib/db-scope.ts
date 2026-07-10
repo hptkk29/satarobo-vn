@@ -245,6 +245,42 @@ export function passesScope(
   return visibleCenters.includes(record.centerId);
 }
 
+type FindUniqueArgs = { select?: Record<string, unknown> | null } | undefined;
+type FindUniqueQuery = (args: unknown) => Promise<unknown>;
+
+/**
+ * findUnique + lọc hậu kỳ passesScope, CHỊU ĐƯỢC select hẹp.
+ *
+ * Bug gốc (có từ A0-04, quét 10/07 ra 28 call-site dính): passesScope đọc
+ * `record.centerId`, nhưng nếu caller `select` không xin centerId thì field là
+ * undefined → actor cấp cơ sở bị trả null OAN trên chính record của cơ sở mình
+ * (chuyển lớp, hoàn thành khoá, in phiếu thu, tin nhắn...). SUPER_ADMIN/HO không
+ * dính (bypass/ALL) nên bug ẩn tới khi có user cấp cơ sở thật.
+ *
+ * Fix: model SCOPED + có select thiếu centerId → merge `centerId: true` vào query,
+ * check scope xong STRIP để trả đúng shape caller xin. `include` không cần merge
+ * (mọi scalar top-level đã trả về).
+ */
+async function findUniqueScoped(
+  model: string,
+  args: unknown,
+  query: FindUniqueQuery,
+  actor: Actor,
+): Promise<unknown> {
+  const a = args as FindUniqueArgs;
+  const needsMerge =
+    SCOPED_MODELS.has(model) && !!a?.select && !("centerId" in a.select);
+  const r = await query(
+    needsMerge ? { ...a, select: { ...a!.select, centerId: true } } : args,
+  );
+  if (!passesScope(model, r as { centerId?: string | null } | null, actor)) return null;
+  if (needsMerge && r && typeof r === "object") {
+    const { centerId: _stripped, ...rest } = r as Record<string, unknown>;
+    return rest;
+  }
+  return r;
+}
+
 /**
  * Prisma Client mở rộng đã cách ly theo `actor`. Đọc + count/aggregate/groupBy bị scope;
  * findUnique lọc hậu kỳ (IDOR → null). bypass=true (job hạ tầng) → db trần + ghi audit.
@@ -273,11 +309,8 @@ export function scopedDb(actor: Actor, opts?: { bypass?: boolean }) {
         },
         async findUnique({ model, args, query }) {
           // Soft-delete null-filter do base `db` lo; ở đây chỉ chống IDOR theo scope.
-          const r = await query(args);
-          if (bypass) return r;
-          return passesScope(model, r as { centerId?: string | null } | null, actor)
-            ? r
-            : null;
+          if (bypass) return query(args);
+          return findUniqueScoped(model, args, query as FindUniqueQuery, actor);
         },
         async findFirstOrThrow({ model, args, query }) {
           return query(bypass ? args : injectScope(model, args, actor));
@@ -337,11 +370,8 @@ export function withMakeupException(actor: Actor) {
           return query(inject(model, args));
         },
         async findUnique({ model, args, query }) {
-          const r = await query(args);
-          if (bypass || MAKEUP_EXCEPTION_MODELS.has(model)) return r;
-          return passesScope(model, r as { centerId?: string | null } | null, actor)
-            ? r
-            : null;
+          if (bypass || MAKEUP_EXCEPTION_MODELS.has(model)) return query(args);
+          return findUniqueScoped(model, args, query as FindUniqueQuery, actor);
         },
         async findFirstOrThrow({ model, args, query }) {
           return query(inject(model, args));
