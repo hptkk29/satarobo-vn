@@ -64,8 +64,18 @@ async function expectNoContactLeak(page: Page) {
 test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId trên URL", () => {
   test.beforeAll(async () => {
     await resetDb();
-    await db.center.create({ data: { code: "CS1", name: "CS1", slug: "cs1-gv-pii", address: "a", city: "" } });
-    await db.center.create({ data: { code: "CS2", name: "CS2", slug: "cs2-gv-pii", address: "b", city: "" } });
+    // Upsert (không create): test DB dùng CHUNG giữa các phiên/suite chạy song song —
+    // create theo code unique sẽ dính race "resetDb của mình + seed của suite khác".
+    await db.center.upsert({
+      where: { code: "CS1" },
+      create: { code: "CS1", name: "CS1", slug: "cs1-gv-pii", address: "a", city: "" },
+      update: {},
+    });
+    await db.center.upsert({
+      where: { code: "CS2" },
+      create: { code: "CS2", name: "CS2", slug: "cs2-gv-pii", address: "b", city: "" },
+      update: {},
+    });
     await seedOrg(["HO", "CS1", "CS2"]);
     await seedRoles();
     const c1 = await centerIdOf("CS1");

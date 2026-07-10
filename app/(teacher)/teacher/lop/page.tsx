@@ -89,7 +89,7 @@ export default async function TeacherClassesPage({
 
     return (
       <div className="space-y-4">
-        <BackLink href={`/lop?classId=${classId}`} label="← Buổi học của lớp" />
+        <BackLink href={`?classId=${classId}`} label="← Buổi học của lớp" />
         <div>
           <h1 className="text-2xl font-bold text-neutral-900">Điểm danh — {sess.class.name}</h1>
           <p className="mt-1 text-sm text-neutral-500">
@@ -116,7 +116,7 @@ export default async function TeacherClassesPage({
     });
     return (
       <div className="space-y-4">
-        <BackLink href="/lop" label="← Lớp của tôi" />
+        <BackLink href="?" label="← Lớp của tôi" />
         <div>
           <h1 className="text-2xl font-bold text-neutral-900">{cls?.name ?? "Lớp"}</h1>
           <p className="mt-1 text-sm text-neutral-500">Chọn buổi để điểm danh.</p>
@@ -126,7 +126,9 @@ export default async function TeacherClassesPage({
         ) : (
           <div className="space-y-2">
             {sessions.map((s) => (
-              <Link key={s.id} href={`/lop?classId=${classId}&sessionId=${s.id}`} className="block">
+              // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
+              // (clean URL /lop) LẪN localhost/preview (path thật /teacher/lop).
+              <Link key={s.id} href={`?classId=${classId}&sessionId=${s.id}`} className="block">
                 <Card className="transition-colors hover:border-neutral-400">
                   <CardContent className="flex items-center justify-between py-3">
                     <div>
@@ -166,7 +168,8 @@ export default async function TeacherClassesPage({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {classes.map((c) => (
-            <Link key={c.id} href={`/lop?classId=${c.id}`} className="block">
+            // href chỉ-query — xem ghi chú ở link buổi học.
+            <Link key={c.id} href={`?classId=${c.id}`} className="block">
               <Card className="h-full transition-colors hover:border-neutral-400">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{c.name}</CardTitle>
@@ -202,7 +205,7 @@ function EmptyBox({ text }: { text: string }) {
 function NotYours() {
   return (
     <div className="space-y-4">
-      <BackLink href="/lop" label="← Lớp của tôi" />
+      <BackLink href="?" label="← Lớp của tôi" />
       <EmptyBox text="Buổi học không thuộc lớp bạn phụ trách." />
     </div>
   );
