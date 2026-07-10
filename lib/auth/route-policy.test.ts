@@ -42,11 +42,21 @@ function authed(role: MaybeRole) {
 // ─────────────────────────────────────────────────────────────────────────
 
 describe("A. admin host × role", () => {
-  it("mọi staff role vào admin route → rewrite /admin/*", () => {
+  it("mọi staff role vào admin route → rewrite /admin/* (GV THUẦN → site GV sau flip 10/07)", () => {
     for (const role of STAFF_ROLES) {
-      expect(
-        decideRoute({ hostKind: "admin", pathname: "/leads", ...authed(role) }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+      const d = decideRoute({ hostKind: "admin", pathname: "/leads", ...authed(role) });
+      if (role === "TEACHER") {
+        // Flip TEACHER_SITE_ENABLED (default ON): GV thuần không làm việc trên
+        // admin nữa — chuyển sang giaovien. GV kiêm nhiệm (test L6 riêng) ở lại.
+        expect(d).toEqual<RouteDecision>({
+          type: "redirectHost",
+          host: "teacher",
+          path: "/",
+          status: 307,
+        });
+      } else {
+        expect(d).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+      }
     }
   });
 
@@ -494,15 +504,13 @@ describe("L5. teacher host × role — flag OFF (mặc định)", () => {
     });
   });
 
-  it("bỏ trống flag (env unset trong test) → mặc định OFF", () => {
+  it("bỏ trống flag (env unset trong test) → mặc định ON (FLIP 10/07 — site GV mở)", () => {
+    // Trước flip default OFF → GV trên teacher host bị đá về admin. Sau flip
+    // (lib/flags.ts !== "false") GV vào thẳng site GV; rollback = env "false"
+    // (hành vi OFF vẫn được phủ bởi các test truyền teacherSiteEnabled: false).
     expect(
       decideRoute({ hostKind: "teacher", pathname: "/", ...authed("TEACHER") }),
-    ).toEqual<RouteDecision>({
-      type: "redirectHost",
-      host: "admin",
-      path: "/dashboard",
-      status: 307,
-    });
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/teacher" });
   });
 
   it("infra path → next (không bị bounce, kể cả flag OFF)", () => {
