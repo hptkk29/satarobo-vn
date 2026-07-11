@@ -6,6 +6,7 @@ import { ChevronDown, LogOut, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -47,11 +48,15 @@ export function UserMenu({ name }: { name: string }) {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="sm:hidden">
-          <span className="block truncate text-sm font-bold text-foreground">{name}</span>
-          <span className="block text-xs font-normal text-muted-foreground">Giáo viên</span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator className="sm:hidden" />
+        {/* Group BẮT BUỘC: DropdownMenuLabel = Menu.GroupLabel của base-ui — thiếu
+            <Menu.Group> bọc ngoài là mở dropdown crash cả tab (như RoleSwitcher 10/07). */}
+        <DropdownMenuGroup className="sm:hidden">
+          <DropdownMenuLabel>
+            <span className="block truncate text-sm font-bold text-foreground">{name}</span>
+            <span className="block text-xs font-normal text-muted-foreground">Giáo viên</span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+        </DropdownMenuGroup>
 
         <DropdownMenuItem render={<Link href="/teacher/ho-so" />}>
           <User className="h-4 w-4" aria-hidden />
