@@ -54,9 +54,10 @@ import {
 } from "@/components/ui/card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
+import { ScheduleToolbar } from "./_components/schedule-toolbar";
 import { SessionActions } from "./_components/session-actions";
 
-export const metadata = { title: "Lịch dạy | Giáo viên Sata Robo" };
+export const metadata = { title: "Lịch làm việc | Giáo viên Sata Robo" };
 
 /* ───────────────────────────── Helpers ngày (giờ VN) ─────────────────────────────
  * Quy ước "dayUtc": Date tại UTC 00:00 của một NGÀY theo lịch VN — cộng/trừ DAY_MS
@@ -188,16 +189,28 @@ function mergeDayItems(agg: DayAgg | undefined) {
 
 /* ──────────────────────────────────── Page ──────────────────────────────────── */
 
+const VALID_STATUS = new Set<string>(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
+
 export default async function TeacherSchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; moc?: string }>;
+  searchParams: Promise<{
+    view?: string;
+    moc?: string;
+    q?: string;
+    type?: string;
+    status?: string;
+  }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
   const sp = await searchParams;
   const view: ViewMode = sp.view === "thang" || sp.view === "tuan" ? sp.view : "ds";
+  // Bộ lọc toolbar (giữ trong searchParams — server lọc trước khi gom theo ngày).
+  const q = (sp.q ?? "").trim().toLowerCase();
+  const typeFilter = sp.type === "lop" || sp.type === "trial" ? sp.type : "all";
+  const statusFilter = sp.status && VALID_STATUS.has(sp.status) ? sp.status : "all";
   const todayUtc = vnTodayUtc();
   const todayKey = isoKey(todayUtc);
   const mocUtc = parseMoc(sp.moc);
@@ -270,6 +283,25 @@ export default async function TeacherSchedulePage({
   // #06 — gate "Hoàn tất buổi" (lifecycle v2). Đọc 1 lần, truyền xuống card.
   const lifecycleV2 = isSessionLifecycleV2Enabled();
 
+  // ── Lọc theo toolbar (loại sự kiện / trạng thái / từ khoá) ──────────────────────
+  // Chỉ lọc SỰ KIỆN (buổi lớp + Trial). Ca làm & ngày nghỉ là bối cảnh ngày → giữ
+  // nguyên (trừ khi lọc theo trạng thái buổi thì cũng không ẩn — chúng không có
+  // "trạng thái buổi"). status áp cho buổi lớp; Trial không có SessionStatus.
+  const fSessions = sessions.filter((s) => {
+    if (typeFilter === "trial") return false;
+    if (statusFilter !== "all" && s.status !== statusFilter) return false;
+    if (q && !(s.class.name.toLowerCase().includes(q) || (s.topic ?? "").toLowerCase().includes(q)))
+      return false;
+    return true;
+  });
+  const fTrials = trials.filter((t) => {
+    if (typeFilter === "lop") return false;
+    // Trial bị loại khi lọc theo trạng thái buổi lớp cụ thể (không phải "all").
+    if (statusFilter !== "all") return false;
+    if (q && !t.trialClassName.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
   // ── Gom theo NGÀY (khóa "YYYY-MM-DD" giờ VN) ────────────────────────────────────
   const byDay = new Map<string, DayAgg>();
   const dayAgg = (key: string, labelDate: Date): DayAgg => {
@@ -280,9 +312,9 @@ export default async function TeacherSchedulePage({
     }
     return g;
   };
-  for (const s of sessions) dayAgg(dayKeyFmt.format(s.date), s.date).classes.push(s);
+  for (const s of fSessions) dayAgg(dayKeyFmt.format(s.date), s.date).classes.push(s);
   // @db.Date trả UTC 00:00 = 07:00 VN cùng ngày lịch → isoKey khớp khóa VN.
-  for (const t of trials) dayAgg(isoKey(t.date), t.date).trials.push(t);
+  for (const t of fTrials) dayAgg(isoKey(t.date), t.date).trials.push(t);
 
   const shiftsByDay = new Map<string, DayShift>();
   for (const r of shiftRows) {
@@ -308,6 +340,12 @@ export default async function TeacherSchedulePage({
   // Query string giữ mốc khi chuyển Tháng↔Tuần (toggle "Danh sách" KHÔNG mang moc —
   // quay về danh sách đầy đủ như cũ, tránh kẹt ở chế độ lọc 1 ngày).
   const mocQS = mocUtc ? `&moc=${isoKey(mocUtc)}` : "";
+  // Giữ bộ lọc toolbar khi chuyển view / tháng-tuần (nối vào href điều hướng).
+  const filterParams = new URLSearchParams();
+  if (q) filterParams.set("q", (sp.q ?? "").trim());
+  if (typeFilter !== "all") filterParams.set("type", typeFilter);
+  if (statusFilter !== "all") filterParams.set("status", statusFilter);
+  const filterQS = filterParams.toString() ? `&${filterParams.toString()}` : "";
 
   // Phụ đề đổi theo view + trạng thái lọc 1 ngày.
   const subtitle =
@@ -315,22 +353,24 @@ export default async function TeacherSchedulePage({
       ? `Các buổi trong ngày ${isoKey(mocUtc).split("-").reverse().join("/")}.`
       : view === "ds"
         ? `Buổi dạy của bạn từ ${DAYS_BACK} ngày trước đến ${DAYS_FORWARD} ngày tới — gồm cả buổi dạy thay và dạy bù, kể cả ở cơ sở khác.`
-        : "Buổi lớp, buổi Trial, ca làm việc và ngày nghỉ — bấm vào một ngày để xem chi tiết.";
+        : "Lịch dạy lớp, Trial và ca làm việc. Ngày có ca làm được tô cam nhạt; ô vàng là ngày nghỉ.";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Lịch dạy"
+        title="Lịch làm việc"
         subtitle={subtitle}
         actions={
-          /* Chuyển view — Link CHỈ-query, giữ mốc đang xem cho Tháng/Tuần. */
+          /* Chuyển view — Link CHỈ-query, giữ mốc + bộ lọc đang xem. */
           <div className="inline-flex rounded-lg border border-border bg-muted/50 p-1">
-            <ToggleLink active={view === "thang"} href={`?view=thang${mocQS}`} label="Tháng" icon={CalendarDays} />
-            <ToggleLink active={view === "tuan"} href={`?view=tuan${mocQS}`} label="Tuần" icon={CalendarRange} />
-            <ToggleLink active={view === "ds"} href="?view=ds" label="Danh sách" icon={List} />
+            <ToggleLink active={view === "thang"} href={`?view=thang${mocQS}${filterQS}`} label="Tháng" icon={CalendarDays} />
+            <ToggleLink active={view === "tuan"} href={`?view=tuan${mocQS}${filterQS}`} label="Tuần" icon={CalendarRange} />
+            <ToggleLink active={view === "ds"} href={`?view=ds${filterQS}`} label="Danh sách" icon={List} />
           </div>
         }
       />
+
+      <ScheduleToolbar q={sp.q ?? ""} type={typeFilter} status={statusFilter} />
 
       {view !== "ds" && <Legend />}
 
@@ -340,6 +380,7 @@ export default async function TeacherSchedulePage({
           fromDay={fromDay}
           toDay={toDay}
           todayKey={todayKey}
+          filterQS={filterQS}
           byDay={byDay}
           shiftsByDay={shiftsByDay}
           holidayByDay={holidayByDay}
@@ -350,6 +391,7 @@ export default async function TeacherSchedulePage({
         <WeekView
           weekStart={weekStart}
           todayKey={todayKey}
+          filterQS={filterQS}
           byDay={byDay}
           shiftsByDay={shiftsByDay}
           holidayByDay={holidayByDay}
@@ -521,6 +563,7 @@ function MonthView({
   fromDay,
   toDay,
   todayKey,
+  filterQS,
   byDay,
   shiftsByDay,
   holidayByDay,
@@ -529,6 +572,7 @@ function MonthView({
   fromDay: Date;
   toDay: Date;
   todayKey: string;
+  filterQS: string;
   byDay: Map<string, DayAgg>;
   shiftsByDay: Map<string, DayShift>;
   holidayByDay: Map<string, DayHoliday>;
@@ -553,9 +597,9 @@ function MonthView({
       <CalNav
         label={`Tháng ${month0 + 1}/${year}`}
         count={`${monthCount} buổi trong tháng`}
-        prevHref={`?view=thang&moc=${isoKey(addMonthsUtc(monthStart, -1))}`}
-        nextHref={`?view=thang&moc=${isoKey(addMonthsUtc(monthStart, 1))}`}
-        todayHref="?view=thang"
+        prevHref={`?view=thang&moc=${isoKey(addMonthsUtc(monthStart, -1))}${filterQS}`}
+        nextHref={`?view=thang&moc=${isoKey(addMonthsUtc(monthStart, 1))}${filterQS}`}
+        todayHref={`?view=thang${filterQS}`}
         todayLabel="Tháng này"
       />
       <div className="overflow-x-auto pb-1">
@@ -573,11 +617,12 @@ function MonthView({
           <div className="grid grid-cols-7 gap-1.5">
             {cells.map((c) => {
               const agg = byDay.get(c.key);
-              const nClass = agg?.classes.length ?? 0;
-              const nTrial = agg?.trials.length ?? 0;
+              const items = mergeDayItems(agg); // buổi lớp + Trial, sort theo giờ
               const holiday = holidayByDay.get(c.key);
               const shift = shiftsByDay.get(c.key);
               const isToday = c.key === todayKey;
+              const shown = items.slice(0, 2);
+              const overflow = items.length - shown.length;
               return (
                 // Click ô → danh sách đúng ngày đó (href CHỈ-query).
                 <Link
@@ -585,7 +630,7 @@ function MonthView({
                   href={`?view=ds&moc=${c.key}`}
                   title={shift ? `Ca làm: ${shift.labels.join(" · ")}` : undefined}
                   className={cn(
-                    "t-card-hover block min-h-[76px] rounded-lg border p-1 transition-colors",
+                    "t-card-hover block min-h-[92px] rounded-lg border p-1 transition-colors",
                     holiday
                       ? "border-amber-200 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10" // nền nhạt: ngày nghỉ
                       : shift
@@ -617,17 +662,30 @@ function MonthView({
                       {holiday.name}
                     </p>
                   )}
-                  <div className="flex flex-wrap items-center gap-1">
-                    {nClass > 0 && (
-                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-                        {nClass} buổi
-                      </span>
+                  <div className="space-y-1">
+                    {shown.map((it) =>
+                      it.kind === "class" ? (
+                        <p
+                          key={it.s.id}
+                          title={`${classTime(it.s)} · ${it.s.class.name}`}
+                          className="truncate rounded border-l-2 border-blue-400 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
+                        >
+                          {(it.s.class.startTime ?? timeFmt.format(it.s.date))} {it.s.class.name}
+                        </p>
+                      ) : (
+                        <p
+                          key={it.t.id}
+                          title={`${it.t.startTime} · ${it.t.trialClassName}`}
+                          className="truncate rounded border-l-2 border-orange-400 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+                        >
+                          {it.t.startTime} {it.t.trialClassName}
+                        </p>
+                      ),
                     )}
-                    {nTrial > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/20 dark:text-orange-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-                        {nTrial}
-                      </span>
+                    {overflow > 0 && (
+                      <p className="px-1.5 text-[10px] font-medium text-muted-foreground">
+                        +{overflow} buổi nữa
+                      </p>
                     )}
                   </div>
                 </Link>
@@ -645,6 +703,7 @@ function MonthView({
 function WeekView({
   weekStart,
   todayKey,
+  filterQS,
   byDay,
   shiftsByDay,
   holidayByDay,
@@ -652,6 +711,7 @@ function WeekView({
 }: {
   weekStart: Date;
   todayKey: string;
+  filterQS: string;
   byDay: Map<string, DayAgg>;
   shiftsByDay: Map<string, DayShift>;
   holidayByDay: Map<string, DayHoliday>;
@@ -673,9 +733,9 @@ function WeekView({
       <CalNav
         label={rangeLabel}
         count={`${weekCount} buổi trong tuần`}
-        prevHref={`?view=tuan&moc=${isoKey(addDaysUtc(weekStart, -7))}`}
-        nextHref={`?view=tuan&moc=${isoKey(addDaysUtc(weekStart, 7))}`}
-        todayHref="?view=tuan"
+        prevHref={`?view=tuan&moc=${isoKey(addDaysUtc(weekStart, -7))}${filterQS}`}
+        nextHref={`?view=tuan&moc=${isoKey(addDaysUtc(weekStart, 7))}${filterQS}`}
+        todayHref={`?view=tuan${filterQS}`}
         todayLabel="Tuần này"
       />
       <div className="overflow-x-auto pb-1">

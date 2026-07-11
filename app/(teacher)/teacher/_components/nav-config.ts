@@ -50,7 +50,7 @@ export const navGroups: NavGroup[] = [
     label: "Giảng dạy",
     items: [
       { label: "Lớp của tôi", href: "/teacher/lop", icon: Users },
-      { label: "Lịch dạy", href: "/teacher/lich", icon: CalendarDays },
+      { label: "Lịch làm việc", href: "/teacher/lich", icon: CalendarDays },
       { label: "Nhận xét", href: "/teacher/nhan-xet", icon: MessageSquareText },
       { label: "Chấm bài", href: "/teacher/cham-bai", icon: ClipboardCheck },
       { label: "Tài liệu", href: "/teacher/tai-lieu", icon: BookOpenText },
