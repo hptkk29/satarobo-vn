@@ -1,22 +1,27 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Logo chữ SATA ROBO. Repo không có file logo trong `public/`, nên dùng text
- * lockup. Gradient hổ phách→cam→cam đậm là chỗ DUY NHẤT còn dùng gradient trong
- * site GV (theo TeachUI: "gradient dành riêng cho logo/avatar").
+ * Logo thương hiệu SATA ROBO (asset thật `/brand/logo-satarobo.png`, 644×380,
+ * nền trong suốt → hợp cả Sáng lẫn Tối). Đây là LOGO nên vẫn giữ cả tông tím —
+ * quy tắc "site GV cam-only" áp cho accent UI, không áp cho logo thương hiệu.
  */
 export function Logo({ className }: { className?: string }) {
   return (
     <Link
       href="/teacher"
       aria-label="Sata Robo — Giáo viên"
-      className={cn("inline-flex items-baseline gap-1.5", className)}
+      className={cn("inline-flex items-center", className)}
     >
-      <span className="brand-text text-lg font-extrabold tracking-tight">
-        Sata Robo
-      </span>
-      <span className="text-xs font-medium text-muted-foreground">Giáo viên</span>
+      <Image
+        src="/brand/logo-satarobo.png"
+        alt="Sata Robo"
+        width={644}
+        height={380}
+        priority
+        className="h-9 w-auto"
+      />
     </Link>
   );
 }

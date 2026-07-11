@@ -9,16 +9,18 @@
 // thấy đúng buổi/lớp ở cơ sở khác; quyền sở hữu thật do assignedClassIds / ownership gác.
 // ⚠️ Câu 46: roster từ server đã strip studentPhone — client CHỈ nhận tên HV.
 import Link from "next/link";
-import { ArrowLeft, BookOpen, CalendarX2, Users } from "lucide-react";
+import { ArrowLeft, CalendarX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { SessionStatusPill } from "../_components/ui/session-status-pill";
 import { AttendancePanel, type AttendancePanelRow } from "./_components/attendance-panel";
+import { ClassList, ClassListEmpty, type ClassRow } from "./_components/class-list";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
 
@@ -28,6 +30,29 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   month: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",
 });
+
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7, không DST)
+
+/** Mốc hết ngày hôm nay (giờ VN) dạng UTC — để đếm buổi "đã tới ngày". */
+function vnTodayEnd(now = new Date()): Date {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  const startUtc =
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+  return new Date(startUtc + 24 * 60 * 60 * 1000);
+}
+
+/** scheduleDays: 0=CN … 6=T7 → nhãn tiếng Việt. */
+const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+
+/** "T7 · 08:00-10:00" từ scheduleDays + giờ lớp. */
+function scheduleText(days: number[], start: string | null, end: string | null): string {
+  const d = days
+    .map((x) => DAY_LABELS[x])
+    .filter((x): x is string => Boolean(x))
+    .join(" ");
+  const t = start && end ? `${start}-${end}` : "";
+  return [d, t].filter(Boolean).join(" · ");
+}
 
 export default async function TeacherClassesPage({
   searchParams,
@@ -142,51 +167,81 @@ export default async function TeacherClassesPage({
   }
 
   // ── (a) Danh sách lớp được phân ───────────────────────────────────────────────
-  const classes = classIds.length
+  const rawClasses = classIds.length
     ? await xdb.class.findMany({
         where: { id: { in: classIds } },
-        select: { id: true, name: true, _count: { select: { enrollments: true } } },
+        select: {
+          id: true,
+          name: true,
+          classCode: true,
+          status: true,
+          scheduleDays: true,
+          startTime: true,
+          endTime: true,
+          maxStudents: true,
+          course: { select: { name: true } },
+          center: { select: { name: true } },
+          _count: {
+            select: {
+              enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+            },
+          },
+        },
         orderBy: { name: "asc" },
       })
     : [];
 
+  // Cột "Cần xử lý": đếm buổi (60 ngày gần, đã tới hết hôm nay, chưa hủy) chưa có
+  // bản ghi điểm danh — theo từng lớp. Cùng tín hiệu "chưa điểm danh" với dashboard.
+  const todayEnd = vnTodayEnd();
+  const pendFrom = new Date(todayEnd.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const pendSessions = classIds.length
+    ? await xdb.classSession.findMany({
+        where: {
+          classId: { in: classIds },
+          status: { not: "CANCELLED" },
+          date: { gte: pendFrom, lte: todayEnd },
+        },
+        select: { id: true, classId: true },
+      })
+    : [];
+  const attendedSet = new Set(
+    pendSessions.length
+      ? (
+          await xdb.attendance.findMany({
+            where: { sessionId: { in: pendSessions.map((s) => s.id) } },
+            select: { sessionId: true },
+          })
+        ).map((a) => a.sessionId)
+      : [],
+  );
+  const pendingByClass = new Map<string, number>();
+  for (const s of pendSessions) {
+    if (!attendedSet.has(s.id)) {
+      pendingByClass.set(s.classId, (pendingByClass.get(s.classId) ?? 0) + 1);
+    }
+  }
+
+  const rows: ClassRow[] = rawClasses.map((c) => ({
+    id: c.id,
+    name: c.name,
+    code: c.classCode,
+    center: c.center?.name ?? null,
+    course: c.course.name,
+    schedule: scheduleText(c.scheduleDays, c.startTime, c.endTime),
+    enrolled: c._count.enrollments,
+    capacity: c.maxStudents,
+    status: c.status,
+    pending: pendingByClass.get(c.id) ?? 0,
+  }));
+
   return (
     <div>
       <PageHeader
-        title="Lớp của tôi"
-        subtitle="Các lớp bạn được phân công — chọn lớp để điểm danh 6 nhãn."
+        title="Lớp học của tôi"
+        subtitle="Các lớp bạn đang phụ trách. Bấm vào một lớp để điểm danh, nhận xét, giao bài và xem học viên."
       />
-      {classes.length === 0 ? (
-        <EmptyState icon={BookOpen} title="Bạn chưa được phân công lớp nào." />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {classes.map((c) => (
-            // href chỉ-query — xem ghi chú ở link buổi học.
-            <Link
-              key={c.id}
-              href={`?classId=${c.id}`}
-              className="t-card t-card-hover flex h-full flex-col gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-base font-bold text-foreground">{c.name}</p>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-500/15">
-                  <BookOpen
-                    className="h-[18px] w-[18px] text-orange-600 dark:text-orange-400"
-                    aria-hidden
-                  />
-                </span>
-              </div>
-              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Users className="h-4 w-4" aria-hidden />
-                {c._count.enrollments} học viên
-              </p>
-              <p className="mt-auto text-sm font-semibold text-orange-600 dark:text-orange-400">
-                Mở lớp →
-              </p>
-            </Link>
-          ))}
-        </div>
-      )}
+      {rows.length === 0 ? <ClassListEmpty /> : <ClassList rows={rows} />}
     </div>
   );
 }
