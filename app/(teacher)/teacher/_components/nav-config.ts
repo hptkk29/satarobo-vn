@@ -52,7 +52,7 @@ export const navGroups: NavGroup[] = [
       { label: "Lớp của tôi", href: "/teacher/lop", icon: Users },
       { label: "Lịch làm việc", href: "/teacher/lich", icon: CalendarDays },
       { label: "Nhận xét", href: "/teacher/nhan-xet", icon: MessageSquareText },
-      { label: "Chấm bài", href: "/teacher/cham-bai", icon: ClipboardCheck },
+      { label: "Bài tập", href: "/teacher/cham-bai", icon: ClipboardCheck },
       { label: "Tài liệu", href: "/teacher/tai-lieu", icon: BookOpenText },
     ],
   },
