@@ -21,6 +21,7 @@ import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
 import { AssignmentList, type AssignmentRow } from "./_components/assignment-list";
+import { AssignDialog } from "./_components/assign-dialog";
 
 export const metadata = { title: "Bài tập & kiểm tra | Giáo viên Sata Robo" };
 
@@ -267,21 +268,32 @@ export default async function TeacherAssignmentsPage({
       })
     : [];
 
-  // Sĩ số (mẫu số cột "Đã nộp") = số HV đang học của lớp.
+  // Sĩ số (mẫu số cột "Đã nộp") = số HV đang học của lớp. + tên lớp cho dialog Giao bài.
   const classCounts = classIds.length
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
         select: {
           id: true,
+          name: true,
           _count: {
             select: {
               enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
             },
           },
         },
+        orderBy: { name: "asc" },
       })
     : [];
   const enrollBy = new Map(classCounts.map((c) => [c.id, c._count.enrollments]));
+
+  // Thư viện đầu bài để "Giao bài" (template admin/khung CT). isTest = có câu hỏi.
+  const templates = classIds.length
+    ? await sdb.assignmentTemplate.findMany({
+        select: { id: true, title: true, _count: { select: { templateQuestions: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      })
+    : [];
 
   const rows: AssignmentRow[] = assignments.map((a) => ({
     id: a.id,
@@ -300,7 +312,19 @@ export default async function TeacherAssignmentsPage({
     <div>
       <PageHeader
         title="Bài tập & kiểm tra"
-        subtitle="Bài đã giao ở các lớp bạn phụ trách. Đầu bài lấy từ kho bạn tự soạn hoặc thư viện admin."
+        subtitle="Bài đã giao ở các lớp bạn phụ trách. Đầu bài lấy từ thư viện admin."
+        actions={
+          classIds.length > 0 ? (
+            <AssignDialog
+              classes={classCounts.map((c) => ({ id: c.id, name: c.name }))}
+              templates={templates.map((t) => ({
+                id: t.id,
+                title: t.title,
+                isTest: t._count.templateQuestions > 0,
+              }))}
+            />
+          ) : undefined
+        }
       />
       {classIds.length === 0 ? (
         <EmptyState icon={ClipboardCheck} title="Bạn chưa được phân công lớp nào." />
