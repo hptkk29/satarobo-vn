@@ -1,353 +1,436 @@
-// app/(teacher)/teacher/page.tsx — L5: trang chủ site GV = khu "Việc chưa xong"
-// (phiếu GV câu 45: buổi chưa điểm danh · bài chưa chấm · đánh giá học viên ·
-// hồ sơ port — ưu tiên hiển thị ngay khi mở trang).
+// app/(teacher)/teacher/page.tsx — L5: trang chủ site GV = "Tổng quan" (phiếu GV
+// câu 45). Bố cục port ĐÚNG theo TeachUI dashboard: banner nhắc điểm danh trước
+// giờ học · 3 StatCard (lớp phụ trách / buổi chưa điểm danh / buổi chưa nhận xét)
+// · "Lớp dạy hôm nay" · 2 cột (chưa điểm danh / chưa nhận xét) · bài tập đang mở.
 //
-// Giao diện port từ TeachUI: lời chào + hàng StatCard đếm việc tồn + 2 cột thẻ
-// việc. Cả 4 mục đều lấy DATA THẬT qua scopedDb (actor.assignedClassIds).
+// TẤT CẢ dữ liệu là THẬT qua scopedDb (actor.assignedClassIds) — không mock.
+// "Đã điểm danh?" suy từ có/không bản ghi Attendance; "đã nhận xét x/y" dùng
+// summarizeSessionFeedback (cùng helper trang /nhan-xet để 2 nơi không lệch).
 //
-// ⚠️ Câu 46: GV KHÔNG xem SĐT/email phụ huynh. Trang này không chạm dữ liệu PH;
-// trang nào sau này hiển thị học viên/PH PHẢI mask theo canViewParentContact
-// (lib/auth/permissions.ts) — không đưa contact PH vào payload gửi client.
+// Cửa sổ quét việc tồn: 30 ngày gần nhất tính cả hôm nay (bounded — dashboard
+// "cần xử lý" chỉ quan tâm buổi gần; buổi cũ hơn 30 ngày hiếm khi còn phải xử lý).
+//
+// ⚠️ Câu 46: GV KHÔNG xem SĐT/email phụ huynh. Trang này chỉ chạm tên lớp/buổi +
+// đếm — không đưa contact PH (hay cả tên HV) vào payload client.
 import Link from "next/link";
 import {
+  AlarmClock,
   CalendarCheck,
-  CheckCircle2,
+  CalendarDays,
+  ChevronRight,
+  CircleCheck,
   ClipboardCheck,
-  GraduationCap,
-  MessageSquareText,
-  type LucideIcon,
+  ClipboardPen,
+  Clock,
+  NotebookPen,
+  School,
 } from "lucide-react";
-import type { SubmissionStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { isSessionEvalRoundApplicable } from "@/lib/eval/session-eval";
-import {
-  REPORT_CARD_STATUS_LABEL,
-  canEditReportCardContent,
-  type ReportCardStatusValue,
-} from "@/lib/lms/report-card-core";
+import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { SuccessBanner } from "./_components/ui/empty-state";
-import { StatCard, type StatTone } from "./_components/ui/stat-card";
+import { StatCard } from "./_components/ui/stat-card";
 
-export const metadata = { title: "Việc chưa xong | Giáo viên Sata Robo" };
+export const metadata = { title: "Tổng quan | Giáo viên Sata Robo" };
 
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7, không DST)
+const TZ = "Asia/Ho_Chi_Minh";
 
-/** [00:00, 24:00) hôm nay theo giờ tường VN, trả về mốc UTC để query Timestamptz. */
-function vnTodayRange(now = new Date()): { from: Date; to: Date } {
+/** [00:00, 24:00) hôm nay theo giờ tường VN, trả mốc UTC để query Timestamptz. */
+function vnTodayRange(now: Date): { from: Date; to: Date } {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
   const startUtc =
     Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
   return { from: new Date(startUtc), to: new Date(startUtc + 24 * 60 * 60 * 1000) };
 }
 
-const timeFmt = new Intl.DateTimeFormat("vi-VN", {
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Asia/Ho_Chi_Minh",
-});
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
-  weekday: "long",
+  weekday: "short",
   day: "2-digit",
   month: "2-digit",
-  year: "numeric",
-  timeZone: "Asia/Ho_Chi_Minh",
+  timeZone: TZ,
 });
 
-/**
- * Hợp đồng dữ liệu 1 khu "việc chưa xong" — Vy render theo shape này, L6 thay
- * `pending: null` bằng query thật (giữ nguyên field để UI không phải sửa).
- */
-type PendingSection = {
-  id: string;
-  title: string;
-  description: string;
-  /** null = L6 chưa nối data (hiện "Sắp có"); số = badge đếm việc tồn. */
-  count: number | null;
-  items: { key: string; primary: string; secondary: string }[];
-  emptyText: string;
-  /** Trang đích xử lý việc (batch 1) — có thì hiện nút "Mở →". */
-  href?: string;
-  /** Icon + tone cho thẻ số liệu (UI TeachUI). */
-  icon: LucideIcon;
-  /** Tone khi CÒN việc; hết việc thì luôn chuyển sang xanh. */
-  tone: StatTone;
-};
+/** "Thứ Bảy, 27 tháng 6 năm 2026" theo giờ VN. */
+function greetingDate(now: Date): string {
+  const wd = new Intl.DateTimeFormat("vi-VN", { weekday: "long", timeZone: TZ }).format(now);
+  const num = (opt: Intl.DateTimeFormatOptions) =>
+    Number(new Intl.DateTimeFormat("en", { ...opt, timeZone: TZ }).format(now));
+  const cap = wd.charAt(0).toUpperCase() + wd.slice(1);
+  return `${cap}, ${num({ day: "numeric" })} tháng ${num({ month: "numeric" })} năm ${num({ year: "numeric" })}`;
+}
+
+/** Tên gọi (từ cuối bắt đầu bằng chữ cái) — "Hoàng Phan Tuấn Kiệt" → "Kiệt". */
+function firstName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter((p) => /^\p{L}/u.test(p));
+  return parts.length ? parts[parts.length - 1]! : full;
+}
+
+/** Số phút từ NOW đến lúc buổi (theo startTime "HH:mm" của lớp) bắt đầu hôm nay. */
+function minutesUntil(startTime: string, vnMidnightMs: number, nowMs: number): number | null {
+  const [h, m] = startTime.split(":").map(Number);
+  if (h == null || m == null || Number.isNaN(h) || Number.isNaN(m)) return null;
+  const startUtc = vnMidnightMs + h * 3_600_000 + m * 60_000;
+  return Math.round((startUtc - nowMs) / 60_000);
+}
 
 export default async function TeacherHomePage() {
   const session = await auth();
-  if (!session?.user) return null; // layout đã gate — guard cho type-narrow
+  if (!session?.user) return null; // layout đã gate
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
-  const { from, to } = vnTodayRange();
 
-  // Buổi SCHEDULED hôm nay của lớp mình (teacherId/assistantId → assignedClassIds).
-  // L6: mở rộng thành "chưa điểm danh/chưa hoàn tất" (ckAttendance, lifecycle v2)
-  // + buổi dạy thay/bù liên cơ sở (exception MAKEUP — KHÔNG lọc theo cơ sở).
-  const todaySessions =
-    classIds.length === 0
-      ? []
-      : await sdb.classSession.findMany({
-          where: {
-            classId: { in: classIds },
-            status: "SCHEDULED",
-            date: { gte: from, lt: to },
-          },
-          select: {
-            id: true,
-            date: true,
-            topic: true,
-            class: { select: { name: true, startTime: true, endTime: true } },
-          },
-          orderBy: { date: "asc" },
-        });
+  const now = new Date();
+  const { from: todayStart, to: todayEnd } = vnTodayRange(now);
+  const windowFrom = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  // ── #2 "Bài chưa chấm": bài HV đã NỘP chờ chấm (SUBMITTED/LATE, chưa GRADED)
-  // của lớp mình. AssignmentSubmission KHÔNG ∈ SCOPED_MODELS → cách ly qua
-  // assignment.classId ∈ assignedClassIds (KHÔNG theo cơ sở). NOT_SUBMITTED/GRADED
-  // không tính (khớp computeAssignmentSummary: SUBMITTED/LATE/GRADED = "đã nộp").
-  const gradingWhere = {
-    status: { in: ["SUBMITTED", "LATE"] as SubmissionStatus[] },
-    assignment: { classId: { in: classIds } },
-  };
-  const [gradingCount, gradingRows] = await Promise.all([
-    sdb.assignmentSubmission.count({ where: gradingWhere }),
-    sdb.assignmentSubmission.findMany({
-      where: gradingWhere,
-      select: {
-        id: true,
-        student: { select: { name: true } }, // câu 46: CHỈ tên HV, KHÔNG contact PH
-        assignment: { select: { title: true, class: { select: { name: true } } } },
-      },
-      orderBy: { submittedAt: "asc" },
-      take: 5,
-    }),
+  // Buổi 30 ngày gần nhất (tới hết hôm nay) của lớp mình, trừ buổi đã hủy.
+  const sessions = classIds.length
+    ? await sdb.classSession.findMany({
+        where: {
+          classId: { in: classIds },
+          status: { not: "CANCELLED" },
+          date: { gte: windowFrom, lte: todayEnd },
+        },
+        select: {
+          id: true,
+          date: true,
+          topic: true,
+          status: true,
+          classId: true,
+          class: {
+            select: {
+              name: true,
+              startTime: true,
+              endTime: true,
+              room: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { date: "asc" },
+      })
+    : [];
+
+  const sessionIds = sessions.map((s) => s.id);
+
+  // Attendance + feedback gom 1 lượt cho các buổi trên; open assignments đếm riêng.
+  // (cùng pattern /nhan-xet: fetch tách rồi tổng hợp in-memory — tránh nested
+  // include phức tạp qua scopedDb). Assignment lọc theo classId ∈ assignedClassIds.
+  const [attRows, fbRows, openAssignments] = await Promise.all([
+    sessionIds.length
+      ? sdb.attendance.findMany({
+          where: { sessionId: { in: sessionIds } },
+          select: { sessionId: true, studentId: true, status: true },
+        })
+      : Promise.resolve([]),
+    sessionIds.length
+      ? sdb.studentSessionFeedback.findMany({
+          where: { classSessionId: { in: sessionIds } },
+          select: { classSessionId: true, studentId: true },
+        })
+      : Promise.resolve([]),
+    classIds.length
+      ? sdb.assignment.count({ where: { classId: { in: classIds }, status: "PUBLISHED" } })
+      : Promise.resolve(0),
   ]);
 
-  // ── #3 "Đánh giá học viên": đợt SESSION_EVAL đang MỞ áp cho lớp mình. ──
-  // EvaluationRound ∈ SCOPED_MODELS + NULL_IS_GLOBAL (#03 Pha B): auto-scope theo cơ sở,
-  // round centerId=null (toàn hệ thống) vẫn hiện;
-  // cách ly bằng cách CHỈ so khớp với TỪNG lớp mình qua isSessionEvalRoundApplicable
-  // (dùng centerId/courseId của lớp — reuse helper thuần lib/eval/session-eval).
-  const myClasses = await sdb.class.findMany({
-    where: { id: { in: classIds } },
-    select: { id: true, name: true, centerId: true, courseId: true },
-  });
-  const openEvalRounds = await sdb.evaluationRound.findMany({
-    where: { scope: "SESSION_EVAL", status: "OPEN" },
-    select: {
-      id: true,
-      name: true,
-      scope: true,
-      status: true,
-      opensAt: true,
-      closesAt: true,
-      centerId: true,
-      courseId: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  const evalNow = new Date();
-  const evalItems = myClasses.flatMap((cls) =>
-    openEvalRounds
-      .filter((r) =>
-        isSessionEvalRoundApplicable(
-          r,
-          { centerId: cls.centerId, courseId: cls.courseId },
-          evalNow,
-        ),
-      )
-      .map((r) => ({ key: `${r.id}:${cls.id}`, primary: cls.name, secondary: `Đợt: ${r.name}` })),
-  );
+  const attBySession = new Map<string, { studentId: string; status: string }[]>();
+  for (const a of attRows) {
+    const list = attBySession.get(a.sessionId) ?? [];
+    list.push({ studentId: a.studentId, status: a.status });
+    attBySession.set(a.sessionId, list);
+  }
+  const fbBySession = new Map<string, string[]>();
+  for (const f of fbRows) {
+    const list = fbBySession.get(f.classSessionId) ?? [];
+    list.push(f.studentId);
+    fbBySession.set(f.classSessionId, list);
+  }
 
-  // ── #4 "Hồ sơ port": học bạ lớp mình GV còn hoàn thiện được (DRAFT/RECALLED). ──
-  // ReportCard ∈ SCOPED_MODELS (#03 Pha B — KHÔNG NULL_IS_GLOBAL) → lấy enrollment
-  // của lớp mình trước (Enrollment auto-scope theo cơ sở), rồi lọc học bạ theo
-  // enrollmentId + trạng thái GV sửa-được (isReportCardEditable → DRAFT/RECALLED).
-  // GV chỉ hoàn thiện được học bạ mình SỬA-ĐƯỢC: DRAFT (viết nháp). RECALLED cần
-  // capability 'review' (QL cơ sở/Toại — #17) → KHÔNG phải việc của GV, không vào TODO.
-  const reportCardTodoStatus = (
-    ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "RECALLED"] as ReportCardStatusValue[]
-  ).filter((s) => canEditReportCardContent(s, ["manage"]));
-  const myEnrollments = await sdb.enrollment.findMany({
-    where: { classId: { in: classIds }, deletedAt: null },
-    select: {
-      id: true,
-      class: { select: { name: true } },
-      student: { select: { name: true } }, // câu 46: chỉ tên HV
-    },
-  });
-  const enrollmentIds = myEnrollments.map((e) => e.id);
-  const enrollmentById = new Map(myEnrollments.map((e) => [e.id, e]));
-  const reportCards = await sdb.reportCard.findMany({
-    where: { enrollmentId: { in: enrollmentIds }, status: { in: reportCardTodoStatus } },
-    select: { id: true, enrollmentId: true, status: true },
-    orderBy: { updatedAt: "asc" },
+  type Sess = (typeof sessions)[number];
+  const statOf = (s: Sess) =>
+    summarizeSessionFeedback(attBySession.get(s.id) ?? [], fbBySession.get(s.id) ?? []);
+
+  const todaySessions = sessions.filter((s) => s.date >= todayStart && s.date < todayEnd);
+  // "Chưa điểm danh" = buổi (trong cửa sổ, đã tới ngày) chưa có bản ghi điểm danh.
+  const needAttendance = sessions.filter((s) => !statOf(s).attendanceTaken);
+  // "Chưa nhận xét" = buổi đã điểm danh, có HV đi học, nhận xét chưa đủ.
+  const needEvaluation = sessions.filter((s) => {
+    const st = statOf(s);
+    return st.attendanceTaken && st.attended > 0 && !st.complete;
   });
 
-  const sections: PendingSection[] = [
-    {
-      id: "attendance",
-      href: "/teacher/lop",
-      icon: CalendarCheck,
-      tone: "brand",
-      title: "Buổi chưa điểm danh",
-      description: "Buổi học hôm nay của lớp bạn chưa hoàn tất điểm danh.",
-      count: todaySessions.length,
-      items: todaySessions.map((s) => ({
-        key: s.id,
-        primary: s.class.name,
-        secondary: [
-          s.class.startTime && s.class.endTime
-            ? `${s.class.startTime}–${s.class.endTime}`
-            : timeFmt.format(s.date),
-          s.topic,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      })),
-      emptyText: "Hôm nay không còn buổi nào chờ điểm danh.",
-    },
-    {
-      id: "grading",
-      href: "/teacher/cham-bai",
-      icon: ClipboardCheck,
-      tone: "amber",
-      title: "Bài chưa chấm",
-      description: "Bài tập học viên đã nộp, chờ bạn chấm.",
-      count: gradingCount,
-      items: gradingRows.map((s) => ({
-        key: s.id,
-        primary: s.student.name,
-        secondary: [s.assignment.class.name, s.assignment.title].filter(Boolean).join(" · "),
-      })),
-      emptyText: "Không có bài chờ chấm.",
-    },
-    {
-      id: "evaluation",
-      href: "/teacher/nhan-xet",
-      icon: MessageSquareText,
-      tone: "blue",
-      title: "Đánh giá học viên",
-      description: "Đợt đánh giá buổi học đang mở, áp cho lớp bạn.",
-      count: evalItems.length,
-      items: evalItems.slice(0, 5),
-      emptyText: "Không có đợt đánh giá đang mở.",
-    },
-    {
-      id: "report-card",
-      href: "/teacher/hoc-ba",
-      icon: GraduationCap,
-      tone: "amber",
-      title: "Hồ sơ học bạ",
-      description: "Hồ sơ/học bạ học viên cần hoàn thiện để bàn giao.",
-      count: reportCards.length,
-      items: reportCards.slice(0, 5).map((c) => {
-        const enr = enrollmentById.get(c.enrollmentId);
-        return {
-          key: c.id,
-          primary: enr?.student.name ?? "Học viên",
-          secondary: [
-            enr?.class.name ? `Lớp ${enr.class.name}` : null,
-            `Học bạ: ${REPORT_CARD_STATUS_LABEL[c.status]}`,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        };
-      }),
-      emptyText: "Không có hồ sơ chờ hoàn thiện.",
-    },
-  ];
+  // Nhắc điểm danh: buổi hôm nay chưa điểm danh, sắp bắt đầu (hoặc vừa bắt đầu
+  // trong 30'). Ưu tiên buổi gần giờ nhất; urgent nếu ≤15'.
+  const vnMidnightMs = todayStart.getTime();
+  const nowMs = now.getTime();
+  const reminder = todaySessions
+    .filter((s) => !statOf(s).attendanceTaken && s.class.startTime)
+    .map((s) => ({ s, minutes: minutesUntil(s.class.startTime!, vnMidnightMs, nowMs) }))
+    .filter((x): x is { s: Sess; minutes: number } => x.minutes != null && x.minutes >= -30)
+    .sort((a, b) => a.minutes - b.minutes)[0];
+  const reminderUrgent = reminder != null && reminder.minutes <= 15;
 
-  const teacherName = session.user.name ?? "thầy/cô";
-  const totalPending = sections.reduce((n, s) => n + (s.count ?? 0), 0);
+  const attHref = (s: Sess) => `/teacher/lop?classId=${s.classId}&sessionId=${s.id}`;
+  const evalHref = (s: Sess) => `/teacher/nhan-xet?classId=${s.classId}&sessionId=${s.id}`;
+  const timeRange = (s: Sess) =>
+    s.class.startTime && s.class.endTime
+      ? `${s.class.startTime}–${s.class.endTime}`
+      : dayFmt.format(s.date);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div>
+      <div className="mb-6">
         <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
-          Xin chào, {teacherName} 👋
+          Xin chào, {firstName(session.user.name ?? "thầy/cô")} <span aria-hidden>👋</span>
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {dayFmt.format(new Date())} — các việc cần xử lý, ưu tiên từ trên xuống.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{greetingDate(now)}</p>
       </div>
 
-      {totalPending === 0 && (
-        <SuccessBanner icon={CheckCircle2}>
-          Đã sạch việc — không còn đầu việc nào chờ bạn xử lý hôm nay.
-        </SuccessBanner>
+      {/* Nhắc điểm danh trước giờ học */}
+      {reminder && (
+        <Link
+          href={attHref(reminder.s)}
+          className={cn(
+            "mb-6 flex items-center gap-4 rounded-xl border px-5 py-4 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            reminderUrgent
+              ? "border-orange-200 bg-orange-50 hover:bg-orange-100 dark:border-orange-600/30 dark:bg-orange-600/15 dark:hover:bg-orange-600/25"
+              : "border-blue-100 bg-blue-50 hover:bg-blue-100 dark:border-blue-600/30 dark:bg-blue-600/15 dark:hover:bg-blue-600/25",
+          )}
+        >
+          <span
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white",
+              reminderUrgent ? "bg-orange-600" : "bg-blue-600",
+            )}
+          >
+            <AlarmClock className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p
+              className={cn(
+                "font-bold",
+                reminderUrgent
+                  ? "text-orange-800 dark:text-orange-200"
+                  : "text-blue-800 dark:text-blue-200",
+              )}
+            >
+              {reminder.minutes > 0
+                ? `Lớp ${reminder.s.class.name} bắt đầu sau ${reminder.minutes} phút`
+                : `Lớp ${reminder.s.class.name} đã bắt đầu`}
+              {reminderUrgent ? " — điểm danh ngay" : ""}
+            </p>
+            <p className="mt-0.5 truncate text-sm text-muted-foreground">
+              {[timeRange(reminder.s), reminder.s.class.room?.name, reminder.s.topic]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <span
+            className={cn(
+              "hidden shrink-0 items-center gap-1 rounded-lg px-3.5 py-2 text-sm font-semibold text-white sm:inline-flex",
+              reminderUrgent ? "bg-orange-600" : "bg-blue-600",
+            )}
+          >
+            <ClipboardCheck className="h-4 w-4" aria-hidden /> Điểm danh
+          </span>
+        </Link>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {sections.map((s) => (
-          <StatCard
-            key={s.id}
-            icon={s.icon}
-            value={s.count ?? "—"}
-            label={s.title}
-            // Hết việc → xanh. Ngôn ngữ màu nhất quán: cam/amber = cần làm,
-            // xanh lá = xong. Cam KHÔNG bao giờ mang nghĩa "tốt".
-            tone={s.count === null ? "blue" : s.count > 0 ? s.tone : "green"}
-          />
-        ))}
+      {/* Stat tổng quan */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard icon={School} value={classIds.length} label="Lớp tôi phụ trách" tone="brand" />
+        <StatCard
+          icon={ClipboardCheck}
+          value={needAttendance.length}
+          label="Buổi chưa điểm danh"
+          tone={needAttendance.length ? "amber" : "green"}
+        />
+        <StatCard
+          icon={ClipboardPen}
+          value={needEvaluation.length}
+          label="Buổi chưa nhận xét"
+          tone={needEvaluation.length ? "amber" : "green"}
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {sections.map((section) => (
-          <section key={section.id} className="t-card t-card-hover p-4 sm:p-5">
-            <div className="flex items-start justify-between gap-2">
-              <h2 className="text-base font-bold text-foreground">
-                {section.href ? (
+      {/* Lớp dạy hôm nay */}
+      <section className="t-card mb-6 overflow-hidden">
+        <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-3.5">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <CalendarDays className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+            Lớp dạy hôm nay ({todaySessions.length})
+          </h2>
+          <Badge variant="secondary">{dayFmt.format(now)}</Badge>
+        </header>
+        {todaySessions.length === 0 ? (
+          <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+            Hôm nay bạn không có lớp.
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {todaySessions.map((s) => {
+              const done = statOf(s).attendanceTaken;
+              return (
+                <li key={s.id}>
                   <Link
-                    href={section.href}
-                    className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                    href={attHref(s)}
+                    className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
                   >
-                    {section.title} →
-                  </Link>
-                ) : (
-                  section.title
-                )}
-              </h2>
-              {section.count !== null && section.count > 0 && (
-                <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                  {section.count}
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">{section.description}</p>
-
-            <div className="mt-3">
-              {section.count === null ? (
-                <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-                  Đang xây — dữ liệu sẽ hiển thị tại đây.
-                </p>
-              ) : section.items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{section.emptyText}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {section.items.map((item) => (
-                    <li
-                      key={item.key}
-                      className="rounded-lg border border-border bg-muted/40 p-3"
-                    >
-                      <p className="text-sm font-medium text-foreground">{item.primary}</p>
-                      {item.secondary && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {item.secondary}
-                        </p>
+                    <div className="flex w-16 shrink-0 flex-col items-center rounded-lg bg-orange-50 py-2 text-orange-700 dark:bg-orange-600/15 dark:text-orange-200">
+                      <span className="text-base leading-none font-extrabold">
+                        {s.class.startTime ?? "—"}
+                      </span>
+                      {s.class.room?.name && (
+                        <span className="mt-1 text-[11px] font-medium text-orange-500 dark:text-orange-300">
+                          {s.class.room.name}
+                        </span>
                       )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-        ))}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-foreground">{s.class.name}</p>
+                      {s.topic && (
+                        <p className="truncate text-sm text-muted-foreground">{s.topic}</p>
+                      )}
+                    </div>
+                    {done ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200">
+                        <CircleCheck className="h-3.5 w-3.5" aria-hidden /> Đã điểm danh
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                        Chưa điểm danh
+                      </span>
+                    )}
+                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/50" aria-hidden />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* Cần xử lý: điểm danh / nhận xét */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PendingList
+          title="Lớp chưa điểm danh"
+          icon={CalendarCheck}
+          sessions={needAttendance}
+          emptyText="Đã điểm danh đầy đủ các buổi."
+          href={attHref}
+          renderMeta={(s) => `${dayFmt.format(s.date)} · ${timeRange(s)}`}
+        />
+        <PendingList
+          title="Buổi chưa nhận xét"
+          icon={ClipboardPen}
+          sessions={needEvaluation}
+          emptyText="Đã nhận xét đầy đủ học viên."
+          href={evalHref}
+          renderMeta={(s) => {
+            const st = statOf(s);
+            return `${dayFmt.format(s.date)} · đã nhận xét ${st.reviewed}/${st.attended} HV`;
+          }}
+        />
       </div>
+
+      {/* Tổng quan bài tập */}
+      <section className="t-card mt-6 overflow-hidden">
+        <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-3.5">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <NotebookPen className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+            Bài tập &amp; kiểm tra đang mở
+          </h2>
+          <Link
+            href="/teacher/cham-bai"
+            className="rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+          >
+            Xem tất cả
+          </Link>
+        </header>
+        <div className="px-5 py-4">
+          {openAssignments === 0 ? (
+            <SuccessBanner icon={CircleCheck}>Không có bài tập nào đang chờ.</SuccessBanner>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Bạn đang có{" "}
+              <span className="font-bold text-foreground">{openAssignments}</span> bài tập /
+              kiểm tra đang mở ở các lớp.
+            </p>
+          )}
+        </div>
+      </section>
     </div>
+  );
+}
+
+function PendingList<
+  T extends {
+    id: string;
+    status: string;
+    class: { name: string };
+  },
+>({
+  title,
+  icon: Icon,
+  sessions,
+  emptyText,
+  href,
+  renderMeta,
+}: {
+  title: string;
+  icon: typeof CalendarCheck;
+  sessions: T[];
+  emptyText: string;
+  href: (s: T) => string;
+  renderMeta: (s: T) => string;
+}) {
+  return (
+    <section className="t-card overflow-hidden">
+      <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-3.5">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+          <Icon className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+          {title}
+        </h2>
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+            sessions.length
+              ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+          )}
+        >
+          {sessions.length} buổi
+        </span>
+      </header>
+      {sessions.length === 0 ? (
+        <div className="px-5 py-8 text-center text-sm text-muted-foreground">{emptyText}</div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {sessions.map((s) => (
+            <li key={s.id}>
+              <Link
+                href={href(s)}
+                className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground">{s.class.name}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" aria-hidden />
+                    {renderMeta(s)}
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/50" aria-hidden />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
