@@ -32,6 +32,7 @@ import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { SuccessBanner } from "./_components/ui/empty-state";
+import { SessionStatusPill } from "./_components/ui/session-status-pill";
 import { StatCard } from "./_components/ui/stat-card";
 
 export const metadata = { title: "Tổng quan | Giáo viên Sata Robo" };
@@ -425,6 +426,7 @@ function PendingList<
                     {renderMeta(s)}
                   </p>
                 </div>
+                <SessionStatusPill status={s.status} />
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/50" aria-hidden />
               </Link>
             </li>

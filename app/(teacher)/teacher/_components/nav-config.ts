@@ -44,7 +44,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Tổng quan",
     standalone: true,
-    items: [{ label: "Việc chưa xong", href: "/teacher", icon: LayoutDashboard }],
+    items: [{ label: "Tổng quan", href: "/teacher", icon: LayoutDashboard }],
   },
   {
     label: "Giảng dạy",

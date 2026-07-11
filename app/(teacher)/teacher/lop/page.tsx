@@ -15,9 +15,9 @@ import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
-import { cn } from "@/lib/utils";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
+import { SessionStatusPill } from "../_components/ui/session-status-pill";
 import { AttendancePanel, type AttendancePanelRow } from "./_components/attendance-panel";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
@@ -28,39 +28,6 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   month: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-
-const SESSION_STATUS_LABEL: Record<string, string> = {
-  SCHEDULED: "Đã lên lịch",
-  IN_PROGRESS: "Đang diễn ra",
-  COMPLETED: "Đã dạy",
-  CANCELLED: "Đã hủy",
-};
-
-/**
- * Màu pill trạng thái BUỔI HỌC. Cố ý KHÔNG dùng `StatusPill` dùng chung: ở đó
- * `completed` nghĩa là "Hoàn thành" (khoá học), còn với buổi học nghĩa là
- * "Đã dạy". Trộn hai từ điển vào một map sẽ sai nghĩa ở một trong hai chỗ.
- */
-const SESSION_STATUS_CLASS: Record<string, string> = {
-  SCHEDULED: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  IN_PROGRESS: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  COMPLETED:
-    "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
-  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
-};
-
-function SessionStatusPill({ status }: { status: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-        SESSION_STATUS_CLASS[status] ?? "bg-muted text-muted-foreground",
-      )}
-    >
-      {SESSION_STATUS_LABEL[status] ?? status}
-    </span>
-  );
-}
 
 export default async function TeacherClassesPage({
   searchParams,
