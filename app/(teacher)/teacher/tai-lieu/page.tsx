@@ -1,20 +1,17 @@
-// app/(teacher)/teacher/tai-lieu/page.tsx — #06 (L6): "Tài liệu giảng dạy" site GV.
+// app/(teacher)/teacher/tai-lieu/page.tsx — #06 (L6): "Thư viện tài liệu" site GV.
 //
-// MIRROR trang admin app/(admin)/admin/teaching-materials/page.tsx nhưng thu hẹp cho
-// site GV: CHỈ lớp được phân công (assignedClassIds) — KHÔNG có nhánh manager/cơ sở.
-// Visual port từ mock satarobo-ui-giaovien/src/app/(admin)/materials/page.tsx
-// (card bài học + thanh gradient trái + số buổi tròn); data layer viết lại toàn bộ.
+// Bố cục theo reference TeachUI: BẢNG theo KHÓA HỌC (buổi/giáo án/bài tập) + tìm
+// kiếm; bấm "Xem tài liệu" → bài giảng theo khung chương trình.
 //
-// 2 mức điều hướng qua searchParams (không cần route động):
-//   (a) không tham số → grid lớp GV được phân.
-//   (b) ?classId=…   → bài giảng theo khung chương trình (Curriculum) của khoá lớp đó:
-//                      tên buổi + tài liệu đính kèm (Document, mở tab mới) + SCORM.
+// SCOPE: chỉ KHOÁ mà GV đang dạy (suy từ assignedClassIds → courseId). KHÔNG hiện
+// khoá GV không dạy — vì viewer SCORM /teacher/scorm/play gate canOpenScorm theo
+// lớp GV; hiện khoá lạ sẽ ra nút mở bị chặn. Tài liệu là teaching-materials (không
+// PII HV/PH — câu 46 an toàn: màn này không chạm dữ liệu HV/PH).
 //
-// Tôn trọng watermark #14: KHÔNG tạo đường tải / expose fileUrl SCORM thô nào mới —
-// SCORM chỉ hiện badge + nút mở trỏ sang viewer site GV /teacher/scorm/play/[id]
-// (mirror viewer admin: player tự gate canOpenScorm + blur/watermark). Document thường
-// (PDF/ảnh/link) mở trực tiếp fileUrl tab mới — đúng cách admin documents/page.tsx đang mở.
-// ⚠️ Câu 46: màn này KHÔNG có dữ liệu HV/PH — select chỉ kéo giáo trình/tài liệu.
+// 2 mức qua searchParams (không route động):
+//   (a) không tham số → bảng khoá GV dạy.
+//   (b) ?courseId=…   → bài giảng khung CT (Curriculum ACTIVE) của khoá: tài liệu
+//                       (Document, mở tab mới) + SCORM (viewer site GV, watermark #14).
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, BookOpen, ExternalLink, FileText, Play } from "lucide-react";
@@ -23,14 +20,16 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
+import {
+  CourseMaterialsList,
+  type CourseMaterialRow,
+} from "./_components/course-materials-list";
 
-export const metadata = { title: "Tài liệu giảng dạy | Giáo viên Sata Robo" };
+export const metadata = { title: "Thư viện tài liệu | Giáo viên Sata Robo" };
 
-/** Nhãn tiếng Việt cho DocumentType (enum Prisma) — badge loại tài liệu đính kèm. */
 const DOC_TYPE_LABEL: Record<string, string> = {
   PDF: "PDF",
   IMAGE: "Ảnh",
@@ -41,8 +40,8 @@ const DOC_TYPE_LABEL: Record<string, string> = {
   OTHER: "Khác",
 };
 
-// Select khung CT dùng chung cho 2 nhánh (bản ghim R7-06 / bản ACTIVE của khoá).
 const CURRICULUM_SELECT = {
+  id: true,
   name: true,
   lessons: {
     where: { archivedAt: null },
@@ -56,7 +55,6 @@ type LessonView = {
   order: number;
   title: string;
   objectives: string[];
-  /** Gói bài giảng active của buổi — CHỈ id/name (không fileUrl thô, #14). */
   scorm: { id: string; name: string; sessionId: string | null } | null;
   documents: { id: string; title: string; fileUrl: string; typeLabel: string }[];
 };
@@ -64,56 +62,45 @@ type LessonView = {
 export default async function TeacherMaterialsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string }>;
+  searchParams: Promise<{ courseId?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate login + role TEACHER
 
-  // Gate CÙNG permission với trang admin teaching-materials (checkPermission chạy
-  // v1/v2 shadow). Fail → về home GV ("/" trên host giaovien rewrite thành /teacher).
   if (!(await checkPermission("teaching-materials:view-own-class"))) redirect("/");
 
   const sp = await searchParams;
-  const classId = sp.classId?.trim() || null;
+  const courseId = sp.courseId?.trim() || null;
 
   const actor = await resolveActor(session.user.id);
-  // scopedDb ép cách ly cơ sở (Class là SCOPED_MODEL); quyền sở hữu thật do
-  // assignedClassIds gác bên dưới.
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
 
-  // ── (b) Bài giảng + tài liệu của 1 lớp ──────────────────────────────────────
-  if (classId) {
-    // Guard sở hữu TRƯỚC (chống IDOR — GV truyền classId lạ) rồi mới chạm DB;
-    // re-fetch qua scopedDb là lớp double-guard theo cơ sở.
-    if (!actor.assignedClassIds.has(classId)) return <NotYours />;
+  // Lớp GV dạy → khoá GV dạy (nguồn scope cho cả 2 mức).
+  const myClasses = classIds.length
+    ? await sdb.class.findMany({
+        where: { id: { in: classIds }, deletedAt: null },
+        select: { id: true, courseId: true },
+      })
+    : [];
+  const myCourseIds = [...new Set(myClasses.map((c) => c.courseId))];
 
-    const cls = await sdb.class.findFirst({
-      where: { id: classId, deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        classCode: true,
-        courseId: true,
-        curriculumId: true,
-      },
+  // ── (b) Bài giảng của 1 khoá ────────────────────────────────────────────────
+  if (courseId) {
+    // Guard sở hữu: chỉ khoá GV đang dạy (chống IDOR courseId lạ).
+    if (!myCourseIds.includes(courseId)) return <NotYours />;
+
+    const course = await sdb.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, name: true },
     });
-    if (!cls) return <NotYours />;
+    if (!course) return <NotYours />;
 
-    // Khung CT của lớp: ưu tiên bản đã ghim (R7-06); lớp cũ chưa ghim → bản ACTIVE
-    // mới nhất của khoá (mirror logic trang admin teaching-materials).
-    const curriculum =
-      (cls.curriculumId
-        ? await sdb.curriculum.findUnique({
-            where: { id: cls.curriculumId },
-            select: CURRICULUM_SELECT,
-          })
-        : null) ??
-      (await sdb.curriculum.findFirst({
-        where: { courseId: cls.courseId, status: "ACTIVE" },
-        orderBy: { version: "desc" },
-        select: CURRICULUM_SELECT,
-      }));
+    const curriculum = await sdb.curriculum.findFirst({
+      where: { courseId, status: "ACTIVE" },
+      orderBy: { version: "desc" },
+      select: CURRICULUM_SELECT,
+    });
 
     const curriculumName = curriculum?.name ?? null;
     const lessons = curriculum?.lessons ?? [];
@@ -122,15 +109,14 @@ export default async function TeacherMaterialsPage({
 
     let lessonViews: LessonView[] = [];
     if (lessonIds.length > 0) {
+      // Lớp GV dạy khoá này → lấy buổi gắn lesson để cấp sessionId cho viewer SCORM.
+      const myCourseClassIds = myClasses.filter((c) => c.courseId === courseId).map((c) => c.id);
       const [docs, scormPkgs, sessions] = await Promise.all([
-        // Tài liệu đính kèm theo buổi — select tối thiểu (không HV/PH, câu 46).
         sdb.document.findMany({
           where: { lessonId: { in: lessonIds } },
           orderBy: { title: "asc" },
           select: { id: true, title: true, fileUrl: true, type: true, lessonId: true },
         }),
-        // Gói SCORM đang dùng (PUBLISHED + active) — chỉ khi bật cờ; KHÔNG kéo
-        // storagePrefix/launchUrl (không expose đường asset thô, #14).
         scormOn
           ? sdb.scormPackage.findMany({
               where: {
@@ -141,11 +127,9 @@ export default async function TeacherMaterialsPage({
               select: { id: true, name: true, lessonId: true },
             })
           : Promise.resolve([] as { id: string; name: string; lessonId: string }[]),
-        // Buổi lớp gắn lesson → cấp sessionId cho player (mirror admin: player gate
-        // canOpenScorm theo GV lớp; thiếu session vẫn mở được vì GV được phân lớp).
-        scormOn
+        scormOn && myCourseClassIds.length
           ? sdb.classSession.findMany({
-              where: { classId: cls.id, lessonId: { in: lessonIds } },
+              where: { classId: { in: myCourseClassIds }, lessonId: { in: lessonIds } },
               orderBy: { date: "desc" },
               select: { id: true, lessonId: true },
             })
@@ -167,7 +151,6 @@ export default async function TeacherMaterialsPage({
       const scormByLesson = new Map(scormPkgs.map((p) => [p.lessonId, p]));
       const sessionByLesson = new Map<string, string>();
       for (const s of sessions) {
-        // date desc → giữ buổi mới nhất của mỗi lesson.
         if (s.lessonId && !sessionByLesson.has(s.lessonId)) {
           sessionByLesson.set(s.lessonId, s.id);
         }
@@ -190,14 +173,14 @@ export default async function TeacherMaterialsPage({
 
     return (
       <div className="space-y-4">
-        <BackLink href="?" label="Tài liệu giảng dạy" />
+        <BackLink href="?" label="Thư viện tài liệu" />
         <PageHeader
-          title={`Tài liệu — ${cls.name}`}
-          subtitle="Bài giảng theo khung chương trình của khoá — chỉ xem & trình chiếu, không chỉnh sửa."
+          title={`Tài liệu — ${course.name}`}
+          subtitle="Bài giảng theo khung chương trình — chỉ xem & trình chiếu, không chỉnh sửa."
         />
 
         <div className="rounded-xl border border-border bg-orange-50 p-4 dark:bg-orange-500/10">
-          <div className="text-xs font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400">
+          <div className="text-xs font-bold tracking-wider text-orange-600 uppercase dark:text-orange-400">
             Khung chương trình
           </div>
           <div className="mt-1 flex items-center gap-2 text-lg font-bold text-foreground">
@@ -205,8 +188,7 @@ export default async function TeacherMaterialsPage({
             {curriculumName ?? "Chưa gán khung chương trình"}
           </div>
           <div className="mt-0.5 text-sm text-muted-foreground">
-            {cls.name}
-            {cls.classCode ? ` · ${cls.classCode}` : ""} · {lessonViews.length} buổi
+            {course.name} · {lessonViews.length} buổi
           </div>
         </div>
 
@@ -218,18 +200,18 @@ export default async function TeacherMaterialsPage({
         )}
 
         {lessonViews.length === 0 ? (
-          <EmptyBox
-            text={
+          <EmptyState
+            icon={FileText}
+            title={
               curriculumName
                 ? "Khung chương trình chưa có buổi học nào."
-                : "Lớp chưa gán khung chương trình — liên hệ Đào tạo."
+                : "Khoá chưa gán khung chương trình — liên hệ Đào tạo."
             }
           />
         ) : (
           <ul className="space-y-3">
             {lessonViews.map((l) => (
               <li key={l.id} className="t-card relative overflow-hidden p-4">
-                {/* Thanh gradient trái — port visual từ mock materials/page.tsx */}
                 <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-orange-400 to-orange-600" />
                 <div className="space-y-3 pl-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -247,10 +229,6 @@ export default async function TeacherMaterialsPage({
                       )}
                     </div>
 
-                    {/* SCORM: badge + nút mở — trỏ viewer SITE GV /teacher/scorm/play/[id]
-                        (mirror viewer admin, player tự gate + watermark #14). Prefix
-                        /teacher như nav: chạy đúng cả trên host giaovien (pass-through)
-                        lẫn localhost/preview. */}
                     {scormOn && l.scorm && (
                       <div className="flex shrink-0 items-center gap-2">
                         <Badge
@@ -276,8 +254,6 @@ export default async function TeacherMaterialsPage({
                     )}
                   </div>
 
-                  {/* Tài liệu đính kèm (Document) — mở tab mới trực tiếp fileUrl, đúng
-                      cách admin documents/page.tsx đang mở (không tạo đường tải mới). */}
                   {l.documents.length > 0 ? (
                     <ul className="space-y-1.5 pl-8">
                       {l.documents.map((d) => (
@@ -314,54 +290,69 @@ export default async function TeacherMaterialsPage({
     );
   }
 
-  // ── (a) Grid lớp được phân ───────────────────────────────────────────────────
-  const classes = classIds.length
-    ? await sdb.class.findMany({
-        where: { id: { in: classIds }, deletedAt: null },
+  // ── (a) Bảng khoá GV dạy ─────────────────────────────────────────────────────
+  const courses = myCourseIds.length
+    ? await sdb.course.findMany({
+        where: { id: { in: myCourseIds } },
         select: {
           id: true,
           name: true,
-          classCode: true,
-          schedule: true,
-          course: { select: { name: true } }, // Course là catalog toàn cục (không scoped)
+          shortDescription: true,
+          description: true,
+          totalSessions: true,
+          curriculums: {
+            where: { status: "ACTIVE" },
+            orderBy: { version: "desc" },
+            take: 1,
+            select: {
+              lessons: {
+                where: { archivedAt: null },
+                select: { id: true, homeworkDefault: true },
+              },
+            },
+          },
         },
         orderBy: { name: "asc" },
       })
     : [];
 
+  // GIÁO ÁN = số tài liệu (Document) đính kèm các buổi — đếm gộp 1 lượt.
+  const allLessonIds = courses.flatMap((c) => c.curriculums[0]?.lessons.map((l) => l.id) ?? []);
+  const docCounts = allLessonIds.length
+    ? await sdb.document.groupBy({
+        by: ["lessonId"],
+        where: { lessonId: { in: allLessonIds } },
+        _count: { _all: true },
+      })
+    : [];
+  const docByLesson = new Map(docCounts.map((d) => [d.lessonId, d._count._all]));
+
+  const rows: CourseMaterialRow[] = courses.map((c) => {
+    const lessons = c.curriculums[0]?.lessons ?? [];
+    const plans = lessons.reduce((n, l) => n + (docByLesson.get(l.id) ?? 0), 0);
+    const homeworks = lessons.filter((l) => (l.homeworkDefault ?? "").trim().length > 0).length;
+    return {
+      id: c.id,
+      name: c.name,
+      description: c.shortDescription ?? c.description ?? null,
+      // "Buổi học" = số buổi trong khung CT (khớp trang chi tiết); fallback
+      // totalSessions khi khoá chưa có khung CT active.
+      sessions: lessons.length || c.totalSessions || 0,
+      plans,
+      homeworks,
+    };
+  });
+
   return (
-    <div className="space-y-4">
+    <div>
       <PageHeader
-        title="Tài liệu giảng dạy"
-        subtitle="Chọn lớp bạn dạy để xem bài giảng theo khung chương trình: slide bài học (SCORM) và tài liệu đính kèm."
+        title="Thư viện tài liệu"
+        subtitle="Chọn một khóa học để xem toàn bộ giáo án theo buổi: giáo án PDF, giáo án SCORM và bài tập về nhà."
       />
-      {classes.length === 0 ? (
-        <EmptyBox text="Bạn chưa được phân công lớp nào." />
+      {classIds.length === 0 ? (
+        <EmptyState icon={FileText} title="Bạn chưa được phân công lớp nào." />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {classes.map((c) => (
-            // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
-            // (clean URL /tai-lieu) LẪN localhost/preview (path thật /teacher/tai-lieu).
-            <Link key={c.id} href={`?classId=${c.id}`} className="block">
-              <Card className="h-full t-card-hover">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base">{c.name}</CardTitle>
-                    <Badge variant="outline" className="shrink-0">
-                      {c.course.name}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <p className="text-sm text-muted-foreground">
-                    {c.classCode ?? "—"}
-                    {c.schedule ? ` · ${c.schedule}` : ""}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <CourseMaterialsList rows={rows} />
       )}
     </div>
   );
@@ -379,15 +370,11 @@ function BackLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function EmptyBox({ text }: { text: string }) {
-  return <EmptyState icon={FileText} title={text} />;
-}
-
 function NotYours() {
   return (
     <div className="space-y-4">
-      <BackLink href="?" label="Tài liệu giảng dạy" />
-      <EmptyBox text="Lớp không thuộc danh sách lớp bạn phụ trách." />
+      <BackLink href="?" label="Thư viện tài liệu" />
+      <EmptyState icon={FileText} title="Khoá không thuộc danh sách khoá bạn dạy." />
     </div>
   );
 }
