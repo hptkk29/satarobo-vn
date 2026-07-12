@@ -63,10 +63,14 @@ test.describe("[R6-D1] Action factory chuẩn", () => {
     await db.center.create({ data: { code: "CS2", name: "CS2", slug: "cs2-af", address: "b", city: "" } });
     await seedOrg(["HO", "CS1", "CS2"]);
     await seedRoles();
-    // Cấp leads:edit CENTER cho CENTER_MANAGER (seed-roles mẫu chưa có).
+    // Đảm bảo leads:edit CENTER cho CENTER_MANAGER. Upsert, KHÔNG create: seed-roles
+    // nay ĐÃ có sẵn mapping này (vá gate #09 ngày 09-10/07) → create đụng unique
+    // (roleId, action) và gãy toàn suite.
     const cm = (await db.roleDef.findUnique({ where: { code: "CENTER_MANAGER" }, select: { id: true } }))!;
-    await db.rolePermission.create({
-      data: { roleId: cm.id, action: "leads:edit", scopeType: "CENTER" },
+    await db.rolePermission.upsert({
+      where: { roleId_action: { roleId: cm.id, action: "leads:edit" } },
+      create: { roleId: cm.id, action: "leads:edit", scopeType: "CENTER" },
+      update: { scopeType: "CENTER" },
     });
   });
 
