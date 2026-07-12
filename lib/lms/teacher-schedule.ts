@@ -136,6 +136,8 @@ export type TrialRosterStudent = {
   courseName: string | null;
   /** ACTIVE/COMPLETED/WITHDRAWN — trạng thái ghi danh trải nghiệm của HV. */
   status: TrialEnrollmentStatus;
+  /** Đã có phiếu rubric chưa (→ "Xem phiếu"/"Xuất PDF" thay vì "Nhập phiếu"). */
+  evaluated: boolean;
 };
 
 export type TrialRosterSlot = {
@@ -201,6 +203,16 @@ export async function getTeacherTrialRoster(
     : [];
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
 
+  // Enrollment nào đã có phiếu rubric → cờ evaluated.
+  const evaluatedSet = new Set(
+    (
+      await db.trialRubricEval.findMany({
+        where: { trialEnrollmentId: { in: enrollments.map((e) => e.id) } },
+        select: { trialEnrollmentId: true },
+      })
+    ).map((r) => r.trialEnrollmentId),
+  );
+
   const nowYear = new Date().getUTCFullYear();
   const bySession = new Map<string, TrialRosterStudent[]>();
   for (const e of enrollments) {
@@ -217,6 +229,7 @@ export async function getTeacherTrialRoster(
         ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
         : null,
       status: e.status,
+      evaluated: evaluatedSet.has(e.id),
     });
     bySession.set(e.scheduledSessionId, arr);
   }
@@ -289,5 +302,100 @@ export async function getTeacherTrialEvalProps(
       name: e.leadChild.fullName,
       present: true,
     })),
+  };
+}
+
+/* ─────────────── Phiếu đánh giá rubric 1 HV trải nghiệm (form + PDF) ─────────────── */
+
+export type TeacherTrialRubricContext = {
+  enrollmentId: string;
+  trialClassSessionId: string | null;
+  studentName: string;
+  courseName: string | null;
+  trialClassName: string;
+  /** Phiếu đã lưu (null = chưa đánh giá). scores: criterionId -> points. */
+  existing: {
+    scores: Record<string, number>;
+    totalScore: number;
+    rank: string;
+    generalComment: string | null;
+    orientation: string | null;
+    updatedAt: Date;
+    evaluatedByName: string | null;
+  } | null;
+};
+
+/** Bối cảnh phiếu rubric cho 1 enrollment — null nếu không phải HV trải nghiệm của GV.
+ * ⚠️ Câu 46: chỉ tên HV + khoá, KHÔNG lead.parentName/phone/email. */
+export async function getTeacherTrialRubricContext(
+  userId: string,
+  enrollmentId: string,
+): Promise<TeacherTrialRubricContext | null> {
+  const enr = await db.trialEnrollment.findUnique({
+    where: { id: enrollmentId },
+    select: {
+      id: true,
+      scheduledSessionId: true,
+      leadChild: { select: { fullName: true, interestedCourseId: true } },
+      trialClass: { select: { name: true, teacherId: true, assistantId: true } },
+    },
+  });
+  if (!enr) return null;
+
+  // Guard own-teacher: GV chính/trợ giảng lớp Trial, hoặc GV của buổi được xếp.
+  let sessionTeacherId: string | null = null;
+  if (enr.scheduledSessionId) {
+    const sess = await db.trialClassSession.findUnique({
+      where: { id: enr.scheduledSessionId },
+      select: { teacherId: true },
+    });
+    sessionTeacherId = sess?.teacherId ?? null;
+  }
+  const owned =
+    enr.trialClass.teacherId === userId ||
+    enr.trialClass.assistantId === userId ||
+    sessionTeacherId === userId;
+  if (!owned) return null;
+
+  const courseName = enr.leadChild.interestedCourseId
+    ? (
+        await db.course.findUnique({
+          where: { id: enr.leadChild.interestedCourseId },
+          select: { name: true },
+        })
+      )?.name ?? null
+    : null;
+
+  const eval0 = await db.trialRubricEval.findUnique({
+    where: { trialEnrollmentId: enrollmentId },
+    select: {
+      scores: true,
+      totalScore: true,
+      rank: true,
+      generalComment: true,
+      orientation: true,
+      updatedAt: true,
+      evaluatedByName: true,
+    },
+  });
+
+  return {
+    enrollmentId: enr.id,
+    trialClassSessionId: enr.scheduledSessionId,
+    studentName: enr.leadChild.fullName,
+    courseName,
+    trialClassName: enr.trialClass.name,
+    existing: eval0
+      ? {
+          // scores lưu JSON → ép về Record<string, number>.
+          scores: (eval0.scores as Record<string, number>) ?? {},
+          totalScore: eval0.totalScore,
+          rank: eval0.rank,
+          generalComment: eval0.generalComment,
+          orientation: eval0.orientation,
+          updatedAt: eval0.updatedAt,
+          evaluatedByName: eval0.evaluatedByName,
+        }
+      : null,
   };
 }

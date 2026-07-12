@@ -5096,6 +5096,27 @@ model TrialAttendance {
   @@unique([trialSessionId, trialEnrollmentId])
 }
 
+// Phiếu đánh giá buổi TRẢI NGHIỆM (rubric thang 8.0 SataRobo) — 1 phiếu/HV trải
+// nghiệm. Ref phẳng tới TrialEnrollment (@unique) + buổi (scalar) để blast radius nhỏ.
+// scores = JSON { focus, interact, keyboard, experience, absorb, logic } → điểm đã chọn.
+// Cấu trúc rubric cố định trong lib/trial/rubric.ts (không drive bằng DB).
+model TrialRubricEval {
+  id                  String   @id @default(cuid())
+  trialEnrollmentId   String   @unique
+  trialClassSessionId String? // buổi được đánh giá (ref phẳng)
+  scores              Json // criterionId -> points (thang 8.0)
+  totalScore          Float
+  rank                String // "Tốt" | "Khá" | "Trung bình" | "Cần cố gắng"
+  generalComment      String?  @db.Text // Nhận xét chung
+  orientation         String?  @db.Text // Định hướng của SataRobo
+  evaluatedById       String? // GV (User.id)
+  evaluatedByName     String?
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([trialClassSessionId])
+}
+
 // ═══ R7-05 — Convert v2 ═══════════════════════════════════════════════════════
 enum ConvertConflictStatus {
   OPEN

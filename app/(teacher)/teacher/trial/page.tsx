@@ -18,12 +18,12 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import {
   getTeacherTrialRoster,
-  getTeacherTrialEvalProps,
+  getTeacherTrialRubricContext,
 } from "@/lib/lms/teacher-schedule";
-import { TrialSessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/trial-session-eval-fill";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { TrialList, type TrialSlotView } from "./_components/trial-list";
+import { TrialEvalForm } from "./_components/trial-eval-form";
 
 export const metadata = { title: "Danh sách Trial | Giáo viên Sata Robo" };
 
@@ -54,39 +54,39 @@ function capitalize(s: string): string {
 export default async function TeacherTrialPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sessionId?: string }>;
+  searchParams: Promise<{ enrollmentId?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate login + role TEACHER
 
   if (!(await checkPermission("trials:view"))) redirect("/");
 
-  const { sessionId } = await searchParams;
+  const { enrollmentId } = await searchParams;
 
-  // ── (b) Phiếu đánh giá 1 buổi Trial ─────────────────────────────────────────
-  if (sessionId) {
-    const props = await getTeacherTrialEvalProps(session.user.id, sessionId);
-    if (!props) return <NotYours />;
-    const canFill = await checkPermission("trials:feedback");
+  // ── (b) Phiếu đánh giá rubric 1 HV trải nghiệm ──────────────────────────────
+  if (enrollmentId) {
+    const ctx = await getTeacherTrialRubricContext(session.user.id, enrollmentId);
+    if (!ctx) return <NotYours />;
 
     return (
       <div className="space-y-4">
         <BackLink href="?" label="Danh sách Trial" />
-        <PageHeader
-          title={`Phiếu đánh giá — ${props.trialClassName}`}
-          subtitle="Nhận xét buổi trải nghiệm cho từng học viên. Chọn buổi ở ô bên dưới nếu lớp có nhiều buổi."
+        <PageHeader title="Phiếu đánh giá buổi thử" subtitle={ctx.trialClassName} />
+        <TrialEvalForm
+          enrollmentId={ctx.enrollmentId}
+          studentName={ctx.studentName}
+          courseName={ctx.courseName}
+          existing={
+            ctx.existing
+              ? {
+                  scores: ctx.existing.scores,
+                  generalComment: ctx.existing.generalComment,
+                  orientation: ctx.existing.orientation,
+                }
+              : null
+          }
+          pdfHref={`/teacher/trial/pdf/${ctx.enrollmentId}`}
         />
-        {props.evalStudents.length === 0 ? (
-          <EmptyState icon={Ban} title="Buổi chưa xếp học viên nào để đánh giá." />
-        ) : (
-          <div className="t-card p-4">
-            <TrialSessionEvalFill
-              trialSessions={props.evalSessions}
-              students={props.evalStudents}
-              canEdit={canFill}
-            />
-          </div>
-        )}
       </div>
     );
   }
@@ -110,6 +110,7 @@ export default async function TeacherTrialPage({
       birthYear: st.birthYear,
       courseName: st.courseName,
       status: st.status,
+      evaluated: st.evaluated,
     })),
   }));
 

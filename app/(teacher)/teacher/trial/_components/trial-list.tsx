@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardPen, Clock, Sparkles, Users } from "lucide-react";
+import { ClipboardPen, Clock, FileDown, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ListToolbar, type SelectFilter } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
@@ -14,6 +14,8 @@ export interface TrialStudentView {
   birthYear: number | null;
   courseName: string | null;
   status: string; // ACTIVE | COMPLETED | WITHDRAWN
+  /** Đã có phiếu rubric chưa. */
+  evaluated: boolean;
 }
 
 /** Một buổi Trial (slot) — plain data từ server (date đã format sẵn). */
@@ -165,12 +167,30 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                                   {st2.courseName ?? "—"}
                                 </td>
                                 <td className="px-5 py-3 text-right whitespace-nowrap">
-                                  <Link
-                                    href={`?sessionId=${s.sessionId}`}
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-orange-700 focus-visible:ring-2 focus-visible:ring-ring"
-                                  >
-                                    <ClipboardPen className="h-3.5 w-3.5" aria-hidden /> Nhập phiếu
-                                  </Link>
+                                  <div className="inline-flex items-center gap-1.5">
+                                    <Link
+                                      href={`?enrollmentId=${st2.enrollmentId}`}
+                                      className={cn(
+                                        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                                        st2.evaluated
+                                          ? "border border-border text-foreground hover:bg-muted"
+                                          : "bg-orange-600 text-white hover:bg-orange-700",
+                                      )}
+                                    >
+                                      <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
+                                      {st2.evaluated ? "Xem phiếu" : "Nhập phiếu"}
+                                    </Link>
+                                    {st2.evaluated && (
+                                      <a
+                                        href={`/teacher/trial/pdf/${st2.enrollmentId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        <FileDown className="h-3.5 w-3.5" aria-hidden /> Xuất PDF
+                                      </a>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
