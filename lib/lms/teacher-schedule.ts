@@ -15,7 +15,13 @@
 // ⚠️ Câu 46: các hàm chỉ trả tên lớp/giờ/ngày — KHÔNG đụng học viên/phụ huynh.
 // ⚠️ @db.Date: tham số from/to là mốc UTC 00:00 của NGÀY VN, khoảng nửa mở [from, to).
 import "server-only";
-import type { ShiftRegStatus, TrialSessionStatus, WorkShift, HolidayType } from "@prisma/client";
+import type {
+  ShiftRegStatus,
+  TrialSessionStatus,
+  TrialEnrollmentStatus,
+  WorkShift,
+  HolidayType,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 
 /** Buổi Trial GV phụ trách trong [from, to) — bỏ buổi đã hủy. */
@@ -113,4 +119,175 @@ export async function getVisibleHolidays(
     orderBy: { date: "asc" },
     take: 50,
   });
+}
+
+/* ─────────────────────────── Danh sách Trial (site GV) ───────────────────────────
+ * "Danh sách Trial": buổi Trial GV phụ trách + học viên mỗi buổi. Own-rows: buổi mà
+ * teacherId = GV HOẶC trialClass.teacherId = GV (GV chính của lớp Trial).
+ *
+ * ⚠️ Câu 46: CHỈ trả tên HV + năm sinh + khoá quan tâm — TUYỆT ĐỐI KHÔNG đụng
+ * lead.parentName/phone/email (khác các trang GV khác đều strip tên PH). Chốt với
+ * chủ nhiệm: site GV ẩn hẳn phụ huynh cho lớp Trial. */
+
+export type TrialRosterStudent = {
+  enrollmentId: string;
+  studentName: string;
+  birthYear: number | null;
+  courseName: string | null;
+  /** ACTIVE/COMPLETED/WITHDRAWN — trạng thái ghi danh trải nghiệm của HV. */
+  status: TrialEnrollmentStatus;
+};
+
+export type TrialRosterSlot = {
+  sessionId: string;
+  trialClassName: string;
+  date: Date; // @db.Date → UTC 00:00 của ngày VN
+  startTime: string;
+  endTime: string;
+  status: TrialSessionStatus;
+  students: TrialRosterStudent[];
+};
+
+/** Buổi Trial GV phụ trách trong [from, to) + học viên (ghép theo scheduledSessionId). */
+export async function getTeacherTrialRoster(
+  teacherId: string,
+  from: Date,
+  to: Date,
+): Promise<TrialRosterSlot[]> {
+  const sessions = await db.trialClassSession.findMany({
+    where: {
+      status: { not: "CANCELLED" },
+      date: { gte: from, lt: to },
+      // Own-rows: buổi GV trực tiếp dạy HOẶC là GV chính của lớp Trial.
+      OR: [{ teacherId }, { trialClass: { teacherId } }],
+    },
+    select: {
+      id: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      status: true,
+      trialClass: { select: { name: true } },
+    },
+    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    take: 200,
+  });
+  if (sessions.length === 0) return [];
+
+  const sessionIds = sessions.map((s) => s.id);
+  // HV xếp vào từng buổi (scheduledSessionId). Câu 46: leadChild only — KHÔNG lead.*.
+  const enrollments = await db.trialEnrollment.findMany({
+    where: { scheduledSessionId: { in: sessionIds } },
+    select: {
+      id: true,
+      scheduledSessionId: true,
+      status: true,
+      leadChild: {
+        select: { fullName: true, dob: true, ageYears: true, interestedCourseId: true },
+      },
+    },
+    orderBy: { leadChild: { fullName: "asc" } },
+  });
+
+  const courseIds = [
+    ...new Set(
+      enrollments
+        .map((e) => e.leadChild.interestedCourseId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const courses = courseIds.length
+    ? await db.course.findMany({ where: { id: { in: courseIds } }, select: { id: true, name: true } })
+    : [];
+  const courseName = new Map(courses.map((c) => [c.id, c.name]));
+
+  const nowYear = new Date().getUTCFullYear();
+  const bySession = new Map<string, TrialRosterStudent[]>();
+  for (const e of enrollments) {
+    if (!e.scheduledSessionId) continue;
+    const birthYear =
+      e.leadChild.dob?.getUTCFullYear() ??
+      (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null);
+    const arr = bySession.get(e.scheduledSessionId) ?? [];
+    arr.push({
+      enrollmentId: e.id,
+      studentName: e.leadChild.fullName,
+      birthYear,
+      courseName: e.leadChild.interestedCourseId
+        ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
+        : null,
+      status: e.status,
+    });
+    bySession.set(e.scheduledSessionId, arr);
+  }
+
+  return sessions.map((s) => ({
+    sessionId: s.id,
+    trialClassName: s.trialClass.name,
+    date: s.date,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    status: s.status,
+    students: bySession.get(s.id) ?? [],
+  }));
+}
+
+/** Props điền phiếu đánh giá 1 buổi Trial (reuse TrialSessionEvalFill). null = không
+ * phải buổi của GV (guard own-teacher — khớp gateTrialFill của session-eval-actions). */
+export type TeacherTrialEvalProps = {
+  trialClassName: string;
+  /** Buổi được bấm đặt LÊN ĐẦU để component preselect đúng. */
+  evalSessions: { id: string; label: string }[];
+  /** studentId = LeadChild.id (khớp evalStudents admin). name = tên HV (câu 46: không PH). */
+  evalStudents: { studentId: string; name: string; present: boolean }[];
+};
+
+export async function getTeacherTrialEvalProps(
+  userId: string,
+  sessionId: string,
+): Promise<TeacherTrialEvalProps | null> {
+  const sess = await db.trialClassSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      teacherId: true,
+      trialClass: {
+        select: {
+          name: true,
+          teacherId: true,
+          assistantId: true,
+          sessions: {
+            where: { status: { not: "CANCELLED" } },
+            orderBy: { seq: "asc" },
+            select: { id: true, seq: true },
+          },
+          enrollments: {
+            orderBy: { leadChild: { fullName: "asc" } },
+            select: { id: true, leadChild: { select: { id: true, fullName: true } } },
+          },
+        },
+      },
+    },
+  });
+  if (!sess) return null;
+
+  // Guard own-teacher (khớp gateTrialFill): buổi mình dạy / GV chính / trợ giảng lớp Trial.
+  const owned =
+    sess.teacherId === userId ||
+    sess.trialClass.teacherId === userId ||
+    sess.trialClass.assistantId === userId;
+  if (!owned) return null;
+
+  const ordered = [
+    ...sess.trialClass.sessions.filter((s) => s.id === sessionId),
+    ...sess.trialClass.sessions.filter((s) => s.id !== sessionId),
+  ];
+  return {
+    trialClassName: sess.trialClass.name,
+    evalSessions: ordered.map((s) => ({ id: s.id, label: `Buổi ${s.seq}` })),
+    evalStudents: sess.trialClass.enrollments.map((e) => ({
+      studentId: e.leadChild.id,
+      name: e.leadChild.fullName,
+      present: true,
+    })),
+  };
 }

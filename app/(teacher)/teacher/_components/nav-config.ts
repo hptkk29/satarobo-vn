@@ -8,6 +8,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   MessageSquareText,
+  Sparkles,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -37,8 +38,8 @@ export interface NavGroup {
  * Trên host `giaovien.satarobo.vn`, proxy rewrite clean URL (`/lich` → `/teacher/lich`),
  * nên `isNavItemActive()` phải khớp cả hai dạng path.
  *
- * Hai mục của TeachUI CHƯA có ở đây — "Trial" và "Đơn từ" — cần model mới trong
- * Prisma (batch 2). Cố ý không thêm link chết vào sidebar.
+ * "Đơn từ" của TeachUI CHƯA có (cần model mới — batch 2). "Danh sách Trial" đã có
+ * (model TrialClassV2 đủ) → thêm nhóm Trial.
  */
 export const navGroups: NavGroup[] = [
   {
@@ -55,6 +56,10 @@ export const navGroups: NavGroup[] = [
       { label: "Bài tập", href: "/teacher/cham-bai", icon: ClipboardCheck },
       { label: "Tài liệu", href: "/teacher/tai-lieu", icon: BookOpenText },
     ],
+  },
+  {
+    label: "Trial",
+    items: [{ label: "Danh sách Trial", href: "/teacher/trial", icon: Sparkles }],
   },
   {
     label: "Học viên & Học bạ",
