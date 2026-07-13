@@ -14,7 +14,7 @@
 //                       (Document, mở tab mới) + SCORM (viewer site GV, watermark #14).
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, BookOpen, ExternalLink, FileText, Play } from "lucide-react";
+import { ArrowLeft, BookOpen, ExternalLink, FileText, NotebookPen, Play } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -46,7 +46,13 @@ const CURRICULUM_SELECT = {
   lessons: {
     where: { archivedAt: null },
     orderBy: { order: "asc" },
-    select: { id: true, order: true, title: true, objectives: true },
+    select: {
+      id: true,
+      order: true,
+      title: true,
+      objectives: true,
+      homeworkDefault: true,
+    },
   },
 } as const;
 
@@ -55,6 +61,7 @@ type LessonView = {
   order: number;
   title: string;
   objectives: string[];
+  homework: string | null;
   scorm: { id: string; name: string; sessionId: string | null } | null;
   documents: { id: string; title: string; fileUrl: string; typeLabel: string }[];
 };
@@ -163,6 +170,7 @@ export default async function TeacherMaterialsPage({
           order: l.order,
           title: l.title,
           objectives: l.objectives,
+          homework: (l.homeworkDefault ?? "").trim() || null,
           scorm: pkg
             ? { id: pkg.id, name: pkg.name, sessionId: sessionByLesson.get(l.id) ?? null }
             : null,
@@ -280,6 +288,17 @@ export default async function TeacherMaterialsPage({
                         ? "Không có tài liệu đính kèm khác."
                         : "Buổi này chưa có tài liệu."}
                     </p>
+                  )}
+
+                  {l.homework && (
+                    <div className="ml-8 rounded-lg border border-orange-200 bg-orange-50/60 p-3 dark:border-orange-500/30 dark:bg-orange-500/10">
+                      <div className="flex items-center gap-1.5 text-xs font-bold tracking-wide text-orange-700 uppercase dark:text-orange-300">
+                        <NotebookPen className="h-3.5 w-3.5" aria-hidden /> Bài tập về nhà
+                      </div>
+                      <p className="mt-1 text-sm whitespace-pre-wrap text-foreground">
+                        {l.homework}
+                      </p>
+                    </div>
                   )}
                 </div>
               </li>

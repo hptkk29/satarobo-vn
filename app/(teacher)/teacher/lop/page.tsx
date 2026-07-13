@@ -94,10 +94,12 @@ export default async function TeacherClassesPage({
         id: true,
         classId: true,
         date: true,
+        topic: true,
         status: true,
         substituteTeacherId: true,
         actualTeacherId: true,
-        class: { select: { name: true } },
+        room: { select: { code: true, name: true } },
+        class: { select: { name: true, startTime: true, endTime: true } },
       },
     });
     const owned =
@@ -130,8 +132,17 @@ export default async function TeacherClassesPage({
       <div>
         <BackLink href={`?classId=${classId}&tab=diem-danh`} label="Điểm danh của lớp" />
         <PageHeader
-          title={`Điểm danh — ${sess.class.name}`}
-          subtitle={dayFmt.format(sess.date)}
+          title={`Điểm danh — ${sess.topic ?? sess.class.name}`}
+          subtitle={[
+            dayFmt.format(sess.date),
+            sess.class.startTime && sess.class.endTime
+              ? `${sess.class.startTime}-${sess.class.endTime}`
+              : null,
+            sess.room ? `Phòng ${sess.room.code ?? sess.room.name}` : null,
+            sess.topic ? sess.class.name : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
           actions={<SessionStatusPill status={sess.status} />}
         />
         <AttendancePanel
