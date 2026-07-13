@@ -1550,8 +1550,14 @@ model StudentSessionFeedback {
   id             String       @id @default(cuid())
   classSessionId String
   studentId      String
-  comment        String       @db.Text
-  rating         Int? // 1-5 tuỳ chọn
+  // Phiếu nhận xét buổi (site GV): comment giữ tương thích cũ (nay nullable — phiếu
+  // rubric-only không bắt buộc văn xuôi). projectName + notes(4 mục) + rubric(9 tiêu
+  // chí 1-5) là dữ liệu phiếu mở rộng (lib/lms/session-eval-rubric).
+  comment        String?      @db.Text
+  rating         Int? // 1-5 tuỳ chọn (đường sao cũ — /teacher/nhan-xet)
+  projectName    String? // tên dự án buổi
+  notes          Json? // { knowledge, skill, attitude, proposal }
+  rubric         Json? // { criterionId: level 1-5 }
   createdById    String // GV
   createdAt      DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(6)

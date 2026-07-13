@@ -37,7 +37,19 @@ import {
 const selectCls =
   "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:border-orange-400 focus:outline-none disabled:opacity-50";
 
-export function UploadPhotoDialog({ classId }: { classId: string }) {
+export function UploadPhotoDialog({
+  classId,
+  // Preselect (dùng ở phiếu nhận xét buổi: "Tải ảnh" 1 HV cho đúng buổi). compact =
+  // nút nhỏ nhãn "Tải ảnh" thay "Đăng ảnh lớp".
+  initialSessionId,
+  initialTagged,
+  compact = false,
+}: {
+  classId: string;
+  initialSessionId?: string;
+  initialTagged?: string[];
+  compact?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -46,13 +58,13 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
   const [ctx, setCtx] = useState<ClassUploadContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
 
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useState(initialSessionId ?? "");
   const [takenAt, setTakenAt] = useState("");
   const [caption, setCaption] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [tagged, setTagged] = useState<string[]>([]);
+  const [tagged, setTagged] = useState<string[]>(initialTagged ?? []);
   const [wholeClass, setWholeClass] = useState(false);
 
   const nonConsentIds = new Set((ctx?.nonConsent ?? []).map((s) => s.id));
@@ -171,8 +183,13 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
   return (
     <>
       {/* Dialog controlled (open/onOpenChange) theo pattern site GV — không DialogTrigger */}
-      <Button onClick={() => onOpenChange(true)}>
-        <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden /> Đăng ảnh lớp
+      <Button
+        onClick={() => onOpenChange(true)}
+        size={compact ? "sm" : "default"}
+        variant={compact ? "outline" : "default"}
+      >
+        <ImagePlus className={compact ? "mr-1 h-3.5 w-3.5" : "mr-1.5 h-4 w-4"} aria-hidden />
+        {compact ? "Tải ảnh" : "Đăng ảnh lớp"}
       </Button>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
