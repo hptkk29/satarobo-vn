@@ -40,7 +40,7 @@ const CLASS_STATUS_CLASS: Record<string, string> = {
   CANCELLED: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
 };
 
-function ClassStatusPill({ status }: { status: string }) {
+export function ClassStatusPill({ status }: { status: string }) {
   return (
     <span
       className={cn(

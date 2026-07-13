@@ -20,7 +20,19 @@ import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { SessionStatusPill } from "../_components/ui/session-status-pill";
 import { AttendancePanel, type AttendancePanelRow } from "./_components/attendance-panel";
-import { ClassList, ClassListEmpty, type ClassRow } from "./_components/class-list";
+import {
+  ClassList,
+  ClassListEmpty,
+  ClassStatusPill,
+  type ClassRow,
+} from "./_components/class-list";
+import { HubTabBar, parseHubTab } from "./_components/hub-tab-bar";
+import { HubSessionsTab } from "./_components/hub-sessions-tab";
+import { HubStudentsTab } from "./_components/hub-students-tab";
+import { HubReviewsTab } from "./_components/hub-reviews-tab";
+import { HubAssignmentsTab } from "./_components/hub-assignments-tab";
+import { HubMaterialsTab } from "./_components/hub-materials-tab";
+import { HubGalleryTab } from "./_components/hub-gallery-tab";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
 
@@ -57,12 +69,12 @@ function scheduleText(days: number[], start: string | null, end: string | null):
 export default async function TeacherClassesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string; sessionId?: string }>;
+  searchParams: Promise<{ classId?: string; sessionId?: string; tab?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
-  const { classId, sessionId } = await searchParams;
+  const { classId, sessionId, tab } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
@@ -124,44 +136,82 @@ export default async function TeacherClassesPage({
     );
   }
 
-  // ── (b) Các buổi của 1 lớp ────────────────────────────────────────────────────
+  // ── (b) Class Hub: 1 lớp, 6 tab (Học viên / Điểm danh / Nhận xét / Bài tập /
+  //        Tài liệu / Ảnh lớp) qua ?tab=. Header + tab bar do page dựng; nội dung
+  //        tab đọc scoped riêng trong từng HubXxxTab (chỉ tab đang mở fetch data).
   if (classId && actor.assignedClassIds.has(classId)) {
-    const cls = await xdb.class.findUnique({ where: { id: classId }, select: { name: true } });
-    const sessions = await xdb.classSession.findMany({
-      where: { classId },
-      select: { id: true, date: true, topic: true, status: true },
-      orderBy: { date: "desc" },
-      take: 40,
+    const activeTab = parseHubTab(tab);
+    const cls = await xdb.class.findUnique({
+      where: { id: classId },
+      select: {
+        name: true,
+        classCode: true,
+        status: true,
+        scheduleDays: true,
+        startTime: true,
+        endTime: true,
+        course: { select: { name: true } },
+        center: { select: { name: true } },
+      },
     });
+    if (!cls) return <NotYours />;
+
+    // Badge tab Điểm danh: buổi (60 ngày gần, đã tới hết hôm nay, chưa hủy) chưa có
+    // bản ghi điểm danh — cùng tín hiệu "Cần xử lý" ở danh sách lớp.
+    const todayEnd = vnTodayEnd();
+    const pendFrom = new Date(todayEnd.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const pendSessions = await xdb.classSession.findMany({
+      where: { classId, status: { not: "CANCELLED" }, date: { gte: pendFrom, lte: todayEnd } },
+      select: { id: true },
+    });
+    const attendedSet = new Set(
+      pendSessions.length
+        ? (
+            await xdb.attendance.findMany({
+              where: { sessionId: { in: pendSessions.map((s) => s.id) } },
+              select: { sessionId: true },
+            })
+          ).map((a) => a.sessionId)
+        : [],
+    );
+    const attendancePending = pendSessions.filter((s) => !attendedSet.has(s.id)).length;
+
+    const timeLabel =
+      cls.startTime && cls.endTime ? `${cls.startTime}-${cls.endTime}` : "";
+    const subtitle = [
+      cls.classCode,
+      cls.course.name,
+      scheduleText(cls.scheduleDays, cls.startTime, cls.endTime),
+      cls.center?.name,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
     return (
       <div>
         <BackLink href="?" label="Lớp của tôi" />
-        <PageHeader title={cls?.name ?? "Lớp"} subtitle="Chọn buổi để điểm danh." />
-        {sessions.length === 0 ? (
-          <EmptyState icon={CalendarX2} title="Lớp chưa có buổi học nào." />
-        ) : (
-          <div className="space-y-2">
-            {sessions.map((s) => (
-              // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
-              // (clean URL /lop) LẪN localhost/preview (path thật /teacher/lop).
-              <Link
-                key={s.id}
-                href={`?classId=${classId}&sessionId=${s.id}`}
-                className="t-card t-card-hover flex items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">
-                    {dayFmt.format(s.date)}
-                  </p>
-                  {s.topic && (
-                    <p className="truncate text-xs text-muted-foreground">{s.topic}</p>
-                  )}
-                </div>
-                <SessionStatusPill status={s.status} />
-              </Link>
-            ))}
+
+        {/* Header lớp — tên + trạng thái + mã/khoá/lịch/cơ sở (khớp reference) */}
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">{cls.name}</h1>
+            <ClassStatusPill status={cls.status} />
           </div>
+          {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+        </div>
+
+        <HubTabBar classId={classId} active={activeTab} attendancePending={attendancePending} />
+
+        {activeTab === "hoc-vien" && <HubStudentsTab actor={actor} classId={classId} />}
+        {activeTab === "diem-danh" && (
+          <HubSessionsTab actor={actor} classId={classId} timeLabel={timeLabel} />
         )}
+        {activeTab === "nhan-xet" && <HubReviewsTab actor={actor} classId={classId} />}
+        {activeTab === "bai-tap" && (
+          <HubAssignmentsTab actor={actor} classId={classId} className={cls.name} />
+        )}
+        {activeTab === "tai-lieu" && <HubMaterialsTab actor={actor} classId={classId} />}
+        {activeTab === "anh-lop" && <HubGalleryTab actor={actor} classId={classId} />}
       </div>
     );
   }
