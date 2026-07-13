@@ -69,12 +69,19 @@ function scheduleText(days: number[], start: string | null, end: string | null):
 export default async function TeacherClassesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string; sessionId?: string; tab?: string }>;
+  searchParams: Promise<{
+    classId?: string;
+    sessionId?: string;
+    tab?: string;
+    rvSession?: string; // Nhận xét deep — buổi cần nhận xét
+    asgId?: string; // Bài tập deep — bài cần xem chi tiết
+    subId?: string; // Bài tập deep — bài nộp cần chấm
+  }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
-  const { classId, sessionId, tab } = await searchParams;
+  const { classId, sessionId, tab, rvSession, asgId, subId } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
@@ -121,7 +128,7 @@ export default async function TeacherClassesPage({
 
     return (
       <div>
-        <BackLink href={`?classId=${classId}`} label="Buổi học của lớp" />
+        <BackLink href={`?classId=${classId}&tab=diem-danh`} label="Điểm danh của lớp" />
         <PageHeader
           title={`Điểm danh — ${sess.class.name}`}
           subtitle={dayFmt.format(sess.date)}
@@ -206,9 +213,17 @@ export default async function TeacherClassesPage({
         {activeTab === "diem-danh" && (
           <HubSessionsTab actor={actor} classId={classId} timeLabel={timeLabel} />
         )}
-        {activeTab === "nhan-xet" && <HubReviewsTab actor={actor} classId={classId} />}
+        {activeTab === "nhan-xet" && (
+          <HubReviewsTab actor={actor} classId={classId} reviewSessionId={rvSession} />
+        )}
         {activeTab === "bai-tap" && (
-          <HubAssignmentsTab actor={actor} classId={classId} className={cls.name} />
+          <HubAssignmentsTab
+            actor={actor}
+            classId={classId}
+            className={cls.name}
+            assignmentId={asgId}
+            submissionId={subId}
+          />
         )}
         {activeTab === "tai-lieu" && <HubMaterialsTab actor={actor} classId={classId} />}
         {activeTab === "anh-lop" && <HubGalleryTab actor={actor} classId={classId} />}

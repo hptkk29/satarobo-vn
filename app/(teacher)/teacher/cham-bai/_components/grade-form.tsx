@@ -63,6 +63,10 @@ export type GradeFormProps = {
   fileSize: number | null;
   initialScore: number | null;
   initialFeedback: string | null;
+  /** Query suffix (bắt đầu bằng "?") để quay về sau khi chấm xong — GHÉP với pathname
+   * hiện tại nên host-safe (/lop vs /teacher/lop). Mặc định (undefined) = về pathname
+   * trần (list trang /cham-bai). Class Hub truyền "?classId=…&tab=bai-tap&asgId=…". */
+  backHref?: string;
 };
 
 export function GradeForm({
@@ -78,6 +82,7 @@ export function GradeForm({
   fileSize,
   initialScore,
   initialFeedback,
+  backHref,
 }: GradeFormProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -99,9 +104,10 @@ export function GradeForm({
   const previewScore =
     chosen.length === RUBRIC_CRITERIA.length ? rubricToScore(chosen) : null;
 
-  /** Sau khi chấm OK: về list (bỏ query) + refresh để bài biến khỏi "chờ chấm". */
+  /** Sau khi chấm OK: về list (bỏ query) + refresh để bài biến khỏi "chờ chấm".
+   * Trong Class Hub, backHref trỏ về roster chi tiết bài để chấm HV tiếp theo. */
   function backToList() {
-    router.replace(pathname);
+    router.replace(backHref ? `${pathname}${backHref}` : pathname);
     router.refresh();
   }
 

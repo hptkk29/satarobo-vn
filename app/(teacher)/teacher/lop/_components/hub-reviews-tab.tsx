@@ -1,17 +1,26 @@
-// hub-reviews-tab.tsx — Tab "Nhận xét" của Class Hub.
+// hub-reviews-tab.tsx — Tab "Nhận xét" của Class Hub (2 mức inline).
 //
-// List buổi 14 ngày gần của lớp + badge "đã nhận xét x/y HV" (summarizeSessionFeedback).
-// Bấm 1 buổi → phiếu nhận xét chi tiết ở trang chuyên: /teacher/nhan-xet?classId&sessionId
-// (dùng lại toàn bộ FeedbackPanel + gate của trang đó, không dựng lại logic mutation).
-// ⚠️ Câu 46: màn này chỉ đọc metadata buổi + đếm — không chạm contact PH.
+//   · List:  buổi 14 ngày gần của lớp + badge "đã nhận xét x/y HV".
+//   · Detail (?rvSession=): phiếu nhận xét từng HV ĐI HỌC của buổi — comment + sao
+//     1-5 (FeedbackPanel, TÁI DÙNG action saveSessionFeedback self-gated). Chưa điểm
+//     danh → hiện toàn roster + banner cảnh báo. Back về list = ?classId&tab=nhan-xet.
+//
+// Guard: sessionId phải thuộc ĐÚNG classId (đã ∈ assignedClassIds ở caller) — chống
+// IDOR. StudentSessionFeedback ∉ SCOPED_MODELS → sdb pass-through SAU guard classId.
+// ⚠️ Câu 46: payload client CHỈ tên HV — không SĐT/email/tên PH.
 import Link from "next/link";
-import { CalendarX2 } from "lucide-react";
+import { ArrowLeft, Ban, CalendarX2 } from "lucide-react";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import {
+  deriveFeedbackRoster,
+  summarizeSessionFeedback,
+} from "@/lib/lms/session-feedback-roster";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
+import { FeedbackPanel, type FeedbackPanelRow } from "../../nhan-xet/_components/feedback-panel";
 
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
@@ -37,16 +46,112 @@ function recentWindow(): { from: Date; to: Date } {
   return { from, to };
 }
 
+function BackToList({ classId }: { classId: string }) {
+  return (
+    <Link
+      href={`?classId=${classId}&tab=nhan-xet`}
+      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden /> Tất cả buổi nhận xét
+    </Link>
+  );
+}
+
 export async function HubReviewsTab({
   actor,
   classId,
+  reviewSessionId,
 }: {
   actor: Actor;
   classId: string;
+  reviewSessionId?: string;
 }) {
   const sdb = scopedDb(actor);
-  const { from, to } = recentWindow();
 
+  // ── Detail: phiếu nhận xét từng HV của 1 buổi ────────────────────────────────
+  if (reviewSessionId) {
+    const sess = await sdb.classSession.findUnique({
+      where: { id: reviewSessionId },
+      select: {
+        id: true,
+        classId: true,
+        centerId: true, // model scoped — findUnique lọc hậu kỳ theo field này
+        date: true,
+        topic: true,
+        status: true,
+      },
+    });
+    if (!sess || sess.classId !== classId) {
+      return (
+        <div>
+          <BackToList classId={classId} />
+          <EmptyState icon={Ban} title="Buổi học không thuộc lớp bạn phụ trách." />
+        </div>
+      );
+    }
+
+    const [attRows, enrCls, fbRows] = await Promise.all([
+      sdb.attendance.findMany({
+        where: { sessionId: reviewSessionId },
+        select: { studentId: true, status: true, student: { select: { name: true } } },
+        orderBy: { student: { name: "asc" } },
+      }),
+      // Fallback roster khi buổi CHƯA điểm danh — đọc QUA quan hệ class (đã guard):
+      // enrollment dev có centerId=null → query thẳng sdb.enrollment bị scopedDb lọc
+      // mất (rỗng) → panel trống. Đọc qua class khớp pattern hoc-vien/bai-tap tab.
+      sdb.class.findUnique({
+        where: { id: classId },
+        select: {
+          enrollments: {
+            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            select: { student: { select: { id: true, name: true } } },
+            orderBy: { student: { name: "asc" } },
+          },
+        },
+      }),
+      sdb.studentSessionFeedback.findMany({
+        where: { classSessionId: reviewSessionId },
+        select: { studentId: true, comment: true, rating: true },
+      }),
+    ]);
+
+    const { attendanceTaken, students } = deriveFeedbackRoster(
+      attRows.map((a) => ({ studentId: a.studentId, studentName: a.student.name, status: a.status })),
+      (enrCls?.enrollments ?? []).map((e) => ({ studentId: e.student.id, studentName: e.student.name })),
+    );
+    const fbByStudent = new Map(fbRows.map((f) => [f.studentId, f]));
+    const rows: FeedbackPanelRow[] = students.map((s) => ({
+      studentId: s.studentId,
+      studentName: s.studentName,
+      existingComment: fbByStudent.get(s.studentId)?.comment ?? "",
+      existingRating: fbByStudent.get(s.studentId)?.rating ?? null,
+    }));
+
+    return (
+      <div>
+        <BackToList classId={classId} />
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-foreground">{sess.topic ?? "Buổi học"}</h2>
+          <p className="text-sm text-muted-foreground">
+            {dayFmt.format(sess.date)} · {SESSION_STATUS_LABEL[sess.status] ?? sess.status}
+          </p>
+        </div>
+        {!attendanceTaken && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            Buổi chưa điểm danh — đang hiện toàn bộ lớp.
+          </p>
+        )}
+        <FeedbackPanel
+          sessionId={reviewSessionId}
+          rows={rows}
+          editable={sess.status !== "CANCELLED"}
+        />
+      </div>
+    );
+  }
+
+  // ── List: buổi 14 ngày gần của lớp ───────────────────────────────────────────
+  const { from, to } = recentWindow();
   const sessions = await sdb.classSession.findMany({
     where: { classId, date: { gte: from, lte: to }, status: { not: "CANCELLED" } },
     select: { id: true, date: true, topic: true, status: true },
@@ -97,7 +202,7 @@ export async function HubReviewsTab({
         return (
           <Link
             key={s.id}
-            href={`/teacher/nhan-xet?classId=${classId}&sessionId=${s.id}`}
+            href={`?classId=${classId}&tab=nhan-xet&rvSession=${s.id}`}
             className="t-card t-card-hover flex items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div className="min-w-0">
