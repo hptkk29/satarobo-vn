@@ -108,7 +108,9 @@ export function StudentEvalDialog({
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-4xl overflow-y-auto p-5">
+        {/* base DialogContent mặc định sm:max-w-sm (384px) → PHẢI override ở CHÍNH
+            modifier sm: nếu không phiếu bị bó hẹp; 2 cột cần ~896px. */}
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-4xl overflow-y-auto p-5 sm:max-w-4xl">
           <DialogHeader className="mb-3">
             <DialogTitle>Nhận xét buổi học</DialogTitle>
             <DialogDescription>
