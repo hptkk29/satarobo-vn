@@ -26,13 +26,16 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { attendanceSummary } from "@/lib/attendance/summary";
 import {
   REPORT_CARD_STATUS_LABEL,
   canEditReportCardContent,
+  computeAssignmentSummary,
   computeReportCardMetrics,
   getCourseCriteria,
   getEnrollmentContext,
   normalizePeriodComments,
+  type AssignmentSubmissionLite,
   type PeriodComment,
   type ReportCardStatusValue,
 } from "@/lib/lms/report-card";
@@ -47,30 +50,47 @@ import {
   countCompletedClassSessions,
   getReportCardEditorRecord,
 } from "@/lib/lms/report-card-editor-data";
-import { Badge } from "@/components/ui/badge";
 import { ReportCardEditor } from "@/app/(admin)/admin/report-cards/_components/report-card-editor";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
+import {
+  ReportCardsList,
+  type MilestoneChip,
+  type ReportCardRow,
+} from "./_components/report-cards-list";
 
 export const metadata = { title: "Học bạ | Giáo viên Sata Robo" };
 
-// Màu pill trạng thái — đồng bộ ngữ nghĩa trang admin /admin/report-cards, thêm biến
-// thể Tối để không chìm trên nền tối của site GV.
-const STATUS_CLASS: Record<ReportCardStatusValue, string> = {
-  DRAFT: "bg-muted text-muted-foreground",
-  PENDING_REVIEW: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  PUBLISHED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
-  RECALLED: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
-};
+const updatedFmt = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Asia/Ho_Chi_Minh",
+});
 
-/** Initials avatar (port visual từ mock hoc-ba — không thêm dependency). */
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
+/**
+ * Precompute chip mốc buổi 5/12 cho LIST (#17 Gap 1, câu 55) — 3 trạng thái mỗi mốc:
+ * chưa đạt buổi N (pending) · đạt nhưng THIẾU nhận xét (missing — việc GV cần làm) ·
+ * đã viết nhận xét (done). Server precompute → client chỉ render (không import lib mốc).
+ */
+function buildMilestones(completedSessions: number, periods: PeriodComment[]): MilestoneChip[] {
+  const reached = new Set<number>(reachedMilestones(completedSessions));
+  const missing = new Set<number>(missingMilestoneComments(completedSessions, periods));
+  return REPORT_CARD_MILESTONES.map((m): MilestoneChip => {
+    const state: MilestoneChip["state"] = !reached.has(m)
+      ? "pending"
+      : missing.has(m)
+        ? "missing"
+        : "done";
+    const text =
+      state === "pending"
+        ? `Buổi ${m}`
+        : state === "missing"
+          ? `Buổi ${m} · thiếu nhận xét`
+          : `Buổi ${m} ✓`;
+    return { milestone: m, state, text, label: milestoneLabel(m) };
+  });
+}
 
 export default async function TeacherReportCardsPage({
   searchParams,
@@ -155,37 +175,119 @@ export default async function TeacherReportCardsPage({
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
 
-  const enrollments = classIds.length
-    ? await sdb.enrollment.findMany({
-        where: { classId: { in: classIds }, deletedAt: null },
+  // Đọc QUA quan hệ class (đã guard classId ∈ assignedClassIds) — enrollment dev
+  // centerId=null bị scopedDb lọc mất nếu query sdb.enrollment trực tiếp (pattern
+  // hub-students-tab / hoc-vien). Đồng thời lấy sẵn khoá học cho cột + bộ lọc.
+  const listClasses = classIds.length
+    ? await sdb.class.findMany({
+        where: { id: { in: classIds } },
         select: {
           id: true,
-          classId: true,
-          student: { select: { name: true } }, // câu 46: CHỈ tên HV, KHÔNG contact PH
-          class: { select: { name: true } },
+          name: true,
+          course: { select: { name: true } },
+          enrollments: {
+            where: { deletedAt: null },
+            // Câu 46: CHỈ tên + mã HV — KHÔNG contact PH.
+            select: {
+              id: true,
+              courseId: true,
+              student: { select: { id: true, name: true, studentCode: true } },
+            },
+            orderBy: { createdAt: "asc" },
+          },
         },
-        orderBy: [{ class: { name: "asc" } }, { createdAt: "asc" }],
+        orderBy: { name: "asc" },
       })
     : [];
+  const enrollments = listClasses.flatMap((c) =>
+    c.enrollments.map((e) => ({
+      id: e.id,
+      classId: c.id,
+      studentId: e.student.id,
+      studentName: e.student.name,
+      studentCode: e.student.studentCode,
+      className: c.name,
+      courseName: c.course.name,
+    })),
+  );
 
   const enrollmentIds = enrollments.map((e) => e.id);
-  const cards = enrollmentIds.length
-    ? await sdb.reportCard.findMany({
-        where: { enrollmentId: { in: enrollmentIds } },
-        select: { enrollmentId: true, status: true, periodComments: true },
-      })
-    : [];
-  // Số buổi COMPLETED mỗi lớp — xác định mốc 5/12 đã đạt (#17 Gap 1, câu 55).
-  const completedRows = classIds.length
-    ? await sdb.classSession.groupBy({
-        by: ["classId"],
-        where: { classId: { in: classIds }, status: "COMPLETED" },
-        _count: { _all: true },
-      })
-    : [];
+  const [cards, completedRows, summaries, gradedSubs] = await Promise.all([
+    enrollmentIds.length
+      ? sdb.reportCard.findMany({
+          where: { enrollmentId: { in: enrollmentIds } },
+          select: { enrollmentId: true, status: true, periodComments: true, updatedAt: true },
+        })
+      : Promise.resolve([]),
+    // Số buổi COMPLETED mỗi lớp — xác định mốc 5/12 đã đạt (#17 Gap 1, câu 55).
+    classIds.length
+      ? sdb.classSession.groupBy({
+          by: ["classId"],
+          where: { classId: { in: classIds }, status: "COMPLETED" },
+          _count: { _all: true },
+        })
+      : Promise.resolve([]),
+    // Chuyên cần từng ghi danh — dùng lib R7-08 (attended gồm buổi bù, total = số buổi chuẩn).
+    Promise.all(enrollments.map((e) => attendanceSummary(e.id))),
+    // Điểm TB bài tập (thang 10): 1 query gộp cho mọi lớp; AssignmentSubmission ∉ SCOPED
+    // → guard qua assignment.classId ∈ classIds (pattern AssignmentsTab hoc-vien).
+    classIds.length
+      ? sdb.assignmentSubmission.findMany({
+          where: {
+            status: "GRADED",
+            score: { not: null },
+            assignment: { classId: { in: classIds } },
+          },
+          select: {
+            studentId: true,
+            score: true,
+            assignment: { select: { classId: true, totalPoints: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const cardByEnrollment = new Map(cards.map((c) => [c.enrollmentId, c]));
   const completedByClass = new Map(completedRows.map((r) => [r.classId, r._count._all]));
+  const summaryByEnrollment = new Map(enrollments.map((e, i) => [e.id, summaries[i]]));
+
+  // Gom bài đã chấm theo (studentId × classId) → điểm TB qua computeAssignmentSummary.
+  const gradedByKey = new Map<string, AssignmentSubmissionLite[]>();
+  for (const s of gradedSubs) {
+    const key = `${s.studentId}::${s.assignment.classId}`;
+    const arr = gradedByKey.get(key) ?? [];
+    arr.push({ status: "GRADED", score: s.score, totalPoints: s.assignment.totalPoints });
+    gradedByKey.set(key, arr);
+  }
+
+  const rows: ReportCardRow[] = enrollments.map((e) => {
+    const card = cardByEnrollment.get(e.id);
+    const status = (card?.status ?? null) as ReportCardStatusValue | null;
+    const sum = summaryByEnrollment.get(e.id) ?? { total: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
+    const avgScore = computeAssignmentSummary(
+      gradedByKey.get(`${e.studentId}::${e.classId}`) ?? [],
+    ).averageScore;
+    return {
+      enrollmentId: e.id,
+      studentName: e.studentName,
+      studentCode: e.studentCode,
+      className: e.className,
+      courseName: e.courseName,
+      status,
+      statusLabel: status ? REPORT_CARD_STATUS_LABEL[status] : null,
+      // Chưa có học bạ = lưu lần đầu sẽ tạo DRAFT → xét quyền sửa như DRAFT.
+      editableByTeacher: canEditReportCardContent(status ?? "DRAFT", ["manage"]),
+      attendedSessions: sum.attended,
+      totalSessions: sum.total,
+      avgScore,
+      updatedAtLabel: card?.updatedAt ? updatedFmt.format(card.updatedAt) : null,
+      hasCard: !!card,
+      milestones: buildMilestones(
+        completedByClass.get(e.classId) ?? 0,
+        normalizePeriodComments(card?.periodComments),
+      ),
+    };
+  });
 
   return (
     <div>
@@ -200,125 +302,8 @@ export default async function TeacherReportCardsPage({
           title="Bạn chưa được phân công lớp nào hoặc lớp chưa có học viên."
         />
       ) : (
-        <section className="t-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th scope="col" className="px-4 py-3">Học viên</th>
-                  <th scope="col" className="px-4 py-3">Lớp</th>
-                  <th scope="col" className="px-4 py-3">Trạng thái học bạ</th>
-                  <th scope="col" className="px-4 py-3">Mốc buổi</th>
-                  <th scope="col" className="px-4 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {enrollments.map((e) => {
-                  const card = cardByEnrollment.get(e.id);
-                  const status = (card?.status ?? null) as ReportCardStatusValue | null;
-                  // Chưa có học bạ = lưu lần đầu sẽ tạo DRAFT → xét quyền sửa như DRAFT.
-                  const editableByTeacher = canEditReportCardContent(status ?? "DRAFT", ["manage"]);
-                  return (
-                    <tr
-                      key={e.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                            {initials(e.student.name)}
-                          </span>
-                          <span className="font-medium text-foreground">{e.student.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{e.class.name}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <StatusPill status={status} />
-                          {editableByTeacher ? (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-300 text-emerald-700 dark:border-emerald-500/40 dark:text-emerald-300"
-                            >
-                              GV sửa được
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <MilestoneCell
-                          completedSessions={completedByClass.get(e.classId) ?? 0}
-                          periods={normalizePeriodComments(card?.periodComments)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {/* href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host
-                            giaovien (clean URL /hoc-ba) LẪN localhost (/teacher/hoc-ba). */}
-                        <Link
-                          href={`?enrollmentId=${e.id}`}
-                          className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-700"
-                        >
-                          {card ? "Mở học bạ" : "Nhập học bạ"}
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <ReportCardsList rows={rows} />
       )}
-    </div>
-  );
-}
-
-function StatusPill({ status }: { status: ReportCardStatusValue | null }) {
-  if (!status) return <span className="text-xs text-muted-foreground">Chưa có</span>;
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status]}`}>
-      {REPORT_CARD_STATUS_LABEL[status]}
-    </span>
-  );
-}
-
-/**
- * Mốc buổi 5/12 (#17, câu 55) — 3 trạng thái mỗi mốc:
- * chưa đạt buổi N (xám) · đạt nhưng THIẾU nhận xét (amber — việc GV cần làm)
- * · đã viết nhận xét (emerald). Tính bằng reachedMilestones/missingMilestoneComments.
- */
-function MilestoneCell({
-  completedSessions,
-  periods,
-}: {
-  completedSessions: number;
-  periods: PeriodComment[];
-}) {
-  const reached = new Set<number>(reachedMilestones(completedSessions));
-  const missing = new Set<number>(missingMilestoneComments(completedSessions, periods));
-  return (
-    <div className="flex flex-wrap gap-1">
-      {REPORT_CARD_MILESTONES.map((m) => {
-        const cls = !reached.has(m)
-          ? "border border-border text-muted-foreground"
-          : missing.has(m)
-            ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
-            : "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200";
-        const text = !reached.has(m)
-          ? `Buổi ${m}`
-          : missing.has(m)
-            ? `Buổi ${m} · thiếu nhận xét`
-            : `Buổi ${m} ✓`;
-        return (
-          <span
-            key={m}
-            title={milestoneLabel(m)}
-            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
-          >
-            {text}
-          </span>
-        );
-      })}
     </div>
   );
 }

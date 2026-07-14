@@ -4,7 +4,10 @@
 //
 // Data thật, CHỈ ĐỌC — không cho sửa role/cơ sở (thông tin do quản trị cấp):
 // • Danh tính: User qua scopedDb (User/Center ∈ SCOPE_EXEMPT → pass-through,
-//   giữ chuẩn app/(teacher) không import @/lib/db trần).
+//   giữ chuẩn app/(teacher) không import @/lib/db trần). SĐT + ngày vào làm đọc
+//   qua quan hệ 1-1 User.employee (Employee.phone/joinedAt) — nested select KHÔNG
+//   bị auto-scope, nhưng đây là employee record của CHÍNH GV (câu 46: SĐT GV được
+//   phép hiện; joinedAt = ngày vào làm, chỉ đổi nhãn khi thật sự có).
 // • Lớp đang phụ trách: actor.assignedClassIds → Class qua withMakeupException
 //   (như lop/page.tsx — GV kiêm nhiệm/dạy lớp ở cơ sở khác vẫn thấy đủ lớp mình).
 // • Đổi mật khẩu: ChangePasswordDialog (bản teacher mỏng) TÁI DÙNG action
@@ -13,7 +16,7 @@
 // ⚠️ Câu 46: màn này KHÔNG đụng học viên/phụ huynh — chỉ tên lớp + sĩ số (con số).
 import Link from "next/link";
 import type { ClassStatus, Role } from "@prisma/client";
-import { BookOpen, CalendarDays, Lock, Mail, MapPin } from "lucide-react";
+import { BookOpen, CalendarDays, Lock, Mail, MapPin, Phone } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
@@ -77,7 +80,8 @@ function scheduleText(c: {
   return [days, time].filter(Boolean).join(" · ") || c.schedule || "—";
 }
 
-// "MM/YYYY" giờ VN — hiển thị mốc tham gia hệ thống (User.createdAt).
+// "MM/YYYY" giờ VN — mốc ngày vào làm (Employee.joinedAt nếu có) hoặc tham gia
+// hệ thống (User.createdAt) khi chưa có hồ sơ nhân sự.
 const joinFmt = new Intl.DateTimeFormat("vi-VN", {
   month: "2-digit",
   year: "numeric",
@@ -104,6 +108,9 @@ export default async function TeacherProfilePage() {
         roles: true,
         createdAt: true,
         center: { select: { name: true } },
+        // Hồ sơ nhân sự CHÍNH GV (1-1 qua employeeId) — chỉ SĐT + ngày vào làm.
+        // Câu 46: đây là dữ liệu của chính GV, KHÔNG phải học viên/phụ huynh.
+        employee: { select: { phone: true, joinedAt: true } },
       },
     }),
     // Lớp mình phụ trách (teacher/assistant) — Class ∈ MAKEUP_EXCEPTION_MODELS,
@@ -136,6 +143,14 @@ export default async function TeacherProfilePage() {
   // Vai trò = union role chính + roles[] (đa vai trò) — CHỈ ĐỌC, không cho sửa.
   const roleCodes: Role[] = [...new Set<Role>([user.role, ...user.roles])];
 
+  // SĐT + ngày vào làm từ hồ sơ nhân sự (nếu GV có Employee record 1-1).
+  const phone = user.employee?.phone ?? null;
+  // Chỉ đổi nhãn "Tham gia hệ thống"→"Ngày vào làm" khi thật sự có joinedAt;
+  // nếu chỉ có User.createdAt (chưa có hồ sơ NS) thì giữ nhãn cũ (đừng bịa).
+  const hireDate = user.employee?.joinedAt ?? null;
+  const joinLabel = hireDate ? "Ngày vào làm" : "Tham gia hệ thống";
+  const joinValue = joinFmt.format(hireDate ?? user.createdAt);
+
   return (
     <div>
       <PageHeader
@@ -167,6 +182,12 @@ export default async function TeacherProfilePage() {
                   <Mail className="h-4 w-4" aria-hidden />
                   {user.email}
                 </span>
+                {phone && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Phone className="h-4 w-4" aria-hidden />
+                    {phone}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="h-4 w-4" aria-hidden />
                   {user.center?.name ?? "Chưa gán cơ sở"}
@@ -237,8 +258,9 @@ export default async function TeacherProfilePage() {
             <Field label="Họ và tên" value={displayName} />
             <Field label="Vai trò" value={roleCodes.map(roleLabel).join(", ")} />
             <Field label="Email" value={user.email} />
+            <Field label="Số điện thoại" value={phone ?? "Chưa cập nhật"} />
             <Field label="Cơ sở" value={user.center?.name ?? "Chưa gán cơ sở"} />
-            <Field label="Tham gia hệ thống" value={joinFmt.format(user.createdAt)} />
+            <Field label={joinLabel} value={joinValue} />
             <Field label="Lớp đang phụ trách" value={`${classes.length} lớp`} />
           </CardContent>
         </Card>

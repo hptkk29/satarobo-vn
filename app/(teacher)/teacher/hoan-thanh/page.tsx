@@ -36,9 +36,9 @@ import type {
   SessionStatusValue,
 } from "@/lib/labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
+import { CompletionTable, type CompletionTableRow } from "./_components/completion-table";
 
 export const metadata = { title: "Hoàn thành khoá | Giáo viên Sata Robo" };
 
@@ -48,15 +48,6 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-
-/** Initials avatar (đồng bộ hoc-ba — không thêm dependency). */
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 /** Gom kết quả groupBy buổi học → { tổng (loại CANCELLED), đã dạy, % }. */
 function tallySessions(rows: { status: string; _count: { _all: number } }[]) {
@@ -100,15 +91,24 @@ export default async function TeacherCompletionsPage({
         where: { classId },
         _count: { _all: true },
       }),
-      sdb.enrollment.findMany({
-        where: { classId, deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-        select: {
-          id: true,
-          studentId: true,
-          student: { select: { name: true } }, // câu 46: CHỈ tên HV, KHÔNG contact PH
-        },
-        orderBy: { student: { name: "asc" } },
-      }),
+      // Đọc QUA quan hệ class (enrollment dev centerId=null bị scopedDb lọc nếu query
+      // thẳng → bảng rỗng). Pattern hub-students-tab / hoc-vien.
+      sdb.class
+        .findUnique({
+          where: { id: classId },
+          select: {
+            enrollments: {
+              where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              select: {
+                id: true,
+                studentId: true,
+                student: { select: { name: true } }, // câu 46: CHỈ tên HV, KHÔNG contact PH
+              },
+              orderBy: { student: { name: "asc" } },
+            },
+          },
+        })
+        .then((c) => c?.enrollments ?? []),
     ]);
     const progress = tallySessions(sessionRows);
     const studentIds = enrollments.map((e) => e.studentId);
@@ -145,6 +145,25 @@ export default async function TeacherCompletionsPage({
     }
     const completionByStudent = new Map(completions.map((c) => [c.studentId, c]));
 
+    // Rows PLAIN cho client table (search + cột Kết quả). Câu 46: chỉ tên HV.
+    const rows: CompletionTableRow[] = enrollments.map((e) => {
+      const s = computeAttendanceSummary({
+        totalLessons: progress.total,
+        attendances: attByStudent.get(e.studentId) ?? [],
+      });
+      const done = completionByStudent.get(e.studentId);
+      return {
+        id: e.id,
+        name: e.student.name,
+        attended: s.attended,
+        absent: s.absent,
+        needMakeup: s.needMakeup,
+        passed: Boolean(done),
+        certificateCode: done?.certificateCode ?? null,
+        completedAtLabel: done ? dayFmt.format(done.completedAt) : null,
+      };
+    });
+
     return (
       <div className="space-y-4">
         <BackLink href="?" label="Hoàn thành khoá" />
@@ -171,79 +190,7 @@ export default async function TeacherCompletionsPage({
         {enrollments.length === 0 ? (
           <EmptyState icon={Users} title="Lớp chưa có học viên đang học." />
         ) : (
-          <section className="t-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <th scope="col" className="px-4 py-3">Học viên</th>
-                    <th scope="col" className="px-4 py-3">Chuyên cần</th>
-                    <th scope="col" className="px-4 py-3">Hoàn thành khoá</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {enrollments.map((e) => {
-                    const s = computeAttendanceSummary({
-                      totalLessons: progress.total,
-                      attendances: attByStudent.get(e.studentId) ?? [],
-                    });
-                    const done = completionByStudent.get(e.studentId);
-                    return (
-                      <tr
-                        key={e.id}
-                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                              {initials(e.student.name)}
-                            </span>
-                            <span className="font-medium text-foreground">
-                              {e.student.name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {progress.completed === 0 ? (
-                            <span className="text-xs text-muted-foreground">Chưa có buổi nào</span>
-                          ) : (
-                            <div>
-                              <p className="font-medium text-foreground">
-                                {s.attended}/{progress.completed} buổi
-                              </p>
-                              {s.absent > 0 || s.needMakeup > 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  Vắng {s.absent}
-                                  {s.needMakeup > 0 ? ` · chờ bù ${s.needMakeup}` : ""}
-                                </p>
-                              ) : null}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {done ? (
-                            <div className="flex flex-col gap-0.5">
-                              <Badge
-                                variant="outline"
-                                className="w-fit border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300"
-                              >
-                                Đã hoàn thành · {done.certificateCode}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {dayFmt.format(done.completedAt)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Chưa hoàn thành</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <CompletionTable rows={rows} completedSessions={progress.completed} />
         )}
       </div>
     );
@@ -264,16 +211,19 @@ export default async function TeacherCompletionsPage({
         _count: { _all: true },
       })
     : [];
-  // Sĩ số đang học (groupBy 1 query — _count lồng where không dùng để khỏi lệch active).
-  const enrollRows = classIds.length
-    ? await sdb.enrollment.groupBy({
-        by: ["classId"],
-        where: {
-          classId: { in: classIds },
-          deletedAt: null,
-          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+  // Sĩ số đang học — đọc qua _count LỒNG quan hệ class (KHÔNG bị scopedDb lọc như
+  // groupBy/findMany enrollment trực tiếp khi enrollment dev centerId=null).
+  const enrollCounts = classIds.length
+    ? await sdb.class.findMany({
+        where: { id: { in: classIds } },
+        select: {
+          id: true,
+          _count: {
+            select: {
+              enrollments: { where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+            },
+          },
         },
-        _count: { _all: true },
       })
     : [];
 
@@ -283,7 +233,7 @@ export default async function TeacherCompletionsPage({
     list.push(r);
     sessionsByClass.set(r.classId, list);
   }
-  const studentCountByClass = new Map(enrollRows.map((r) => [r.classId, r._count._all]));
+  const studentCountByClass = new Map(enrollCounts.map((c) => [c.id, c._count.enrollments]));
 
   return (
     <div>

@@ -46,6 +46,7 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
   const [query, setQuery] = useState("");
   const [slot, setSlot] = useState(ALL);
   const [status, setStatus] = useState(ALL);
+  const [evaluated, setEvaluated] = useState(ALL);
 
   const slotOptions = useMemo<SelectFilter["options"]>(() => {
     const times = [...new Set(slots.map((s) => s.timeLabel))].sort();
@@ -58,19 +59,29 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
     { value: "COMPLETED", label: "Đã dạy" },
   ];
 
-  // Lọc slot theo khung giờ + tình trạng; lọc HV trong slot theo từ khoá tên.
+  const evaluatedOptions: SelectFilter["options"] = [
+    { value: ALL, label: "Tất cả đánh giá" },
+    { value: "chua", label: "Chưa đánh giá" },
+    { value: "da", label: "Đã đánh giá" },
+  ];
+
+  // Lọc slot theo khung giờ + tình trạng; lọc HV trong slot theo từ khoá tên +
+  // trạng thái đánh giá (evaluated). Khi có lọc HV → bỏ slot rỗng.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const filterStudents = q !== "" || evaluated !== ALL;
     return slots
       .filter((s) => (slot === ALL || s.timeLabel === slot) && (status === ALL || s.status === status))
       .map((s) => ({
         ...s,
-        students: q
-          ? s.students.filter((st) => st.studentName.toLowerCase().includes(q))
-          : s.students,
+        students: s.students.filter(
+          (st) =>
+            (!q || st.studentName.toLowerCase().includes(q)) &&
+            (evaluated === ALL || (evaluated === "da" ? st.evaluated : !st.evaluated)),
+        ),
       }))
-      .filter((s) => !q || s.students.length > 0);
-  }, [slots, query, slot, status]);
+      .filter((s) => !filterStudents || s.students.length > 0);
+  }, [slots, query, slot, status, evaluated]);
 
   // Nhóm theo ngày (giữ thứ tự đã sort của server).
   const byDate = useMemo(() => {
@@ -92,13 +103,18 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
         filters={[
           { value: slot, onChange: setSlot, options: slotOptions },
           { value: status, onChange: setStatus, options: statusOptions },
+          { value: evaluated, onChange: setEvaluated, options: evaluatedOptions },
         ]}
       />
 
       {slots.length === 0 ? (
         <EmptyState icon={Sparkles} title="Bạn chưa phụ trách buổi Trial nào." />
       ) : byDate.length === 0 ? (
-        <EmptyState icon={Sparkles} title="Không có buổi Trial khớp bộ lọc." />
+        <EmptyState
+          icon={Sparkles}
+          title="Không có buổi Trial khớp bộ lọc."
+          description="Thử đổi từ khoá hoặc bộ lọc."
+        />
       ) : (
         <div className="space-y-6">
           {byDate.map((day) => (
