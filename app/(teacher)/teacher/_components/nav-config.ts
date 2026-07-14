@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Clock,
+  FileText,
   GraduationCap,
   LayoutDashboard,
   ListChecks,
@@ -74,7 +75,10 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Ca & Chấm công",
-    items: [{ label: "Bảng công", href: "/teacher/bang-cong", icon: Clock }],
+    items: [
+      { label: "Bảng công", href: "/teacher/bang-cong", icon: Clock },
+      { label: "Đơn từ", href: "/teacher/don-tu", icon: FileText },
+    ],
   },
 ];
 

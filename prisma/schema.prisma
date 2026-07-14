@@ -3964,6 +3964,56 @@ model TimesheetEditLog {
   @@index([createdAt])
 }
 
+// Đơn từ GV (site giáo viên): 10 loại / 3 nhóm. GV gửi → PENDING → CENTER_MANAGER cơ sở
+// duyệt/từ chối (scope theo centerId). Plain-string FK theo pattern TimesheetAdjustmentRequest
+// (không relation — app resolve tên khi cần). Không tự sinh side-effect (chỉ trạng thái).
+enum WorkRequestKind {
+  CLASS_CHANGE // Đổi lớp dạy
+  SUB_TEACH // Dạy thay
+  CLASS_OFF // Nghỉ buổi dạy
+  SHIFT_SWAP // Đổi ca
+  OT // Tăng ca
+  LATE_EARLY // Đi muộn / Về sớm
+  TIMESHEET_FIX // Chỉnh công
+  LEAVE // Nghỉ phép
+  REMOTE // Làm từ xa
+  BUSINESS_TRIP // Đi công tác
+}
+
+enum WorkRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WorkRequest {
+  id            String            @id @default(cuid())
+  requesterId   String // User (GV gửi đơn)
+  centerId      String? // cơ sở của GV (scope duyệt CENTER_MANAGER)
+  kind          WorkRequestKind
+  status        WorkRequestStatus @default(PENDING)
+  fromDate      DateTime?         @db.Date // ngày / từ ngày (đơn theo ngày)
+  toDate        DateTime?         @db.Date // đến ngày (đơn khoảng)
+  startTime     String? // "HH:mm"
+  endTime       String? // "HH:mm"
+  hours         Float? // OT tự tính / chỉnh công
+  className     String? // tên lớp (snapshot, đơn liên quan lớp)
+  classId       String? // link lớp (tuỳ chọn)
+  targetUserId  String? // người dạy thay / nhận ca
+  targetShiftId String? // ca muốn đổi (ShiftRegistration id)
+  detail        String? // meta phụ (nơi đến, hình thức muộn/sớm, người nhận…)
+  reason        String            @db.Text // lý do (bắt buộc)
+  reviewedById  String?
+  reviewedByName String?
+  reviewedAt    DateTime?         @db.Timestamptz(6)
+  reviewNote    String?           @db.Text
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@index([requesterId, status])
+  @@index([centerId, status, createdAt])
+}
+
 // Module Quản lý lớp phần 4 — checklist mở/đóng cơ sở theo ngày.
 model CenterDayChecklist {
   id        String   @id @default(cuid())
