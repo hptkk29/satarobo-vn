@@ -196,6 +196,7 @@ export type Action =
   | "assignments:grade"
   | "assignments:delete"
   | "assignments:assign-own"
+  | "assignments:author-own"
 
   // --- Documents (NEW) ---
   | "documents:view"
@@ -478,6 +479,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // giao lại template, và action tự khoá classId ∈ assignedClassIds (cấp LỚP,
   // không phải cấp cơ sở). GV KHÔNG soạn kho/không sửa bài admin.
   "assignments:assign-own": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // Site GV (L6) — "Kho bài tập của tôi": GV TỰ SOẠN đề trắc nghiệm/tự luận + tự
+  // xoá đề của MÌNH (AssignmentTemplate.createdById = employeeId/userId của GV).
+  // KHÁC assignments:create (TRAINING soạn kho toàn hệ thống) — capability này chỉ
+  // đụng template do chính GV tạo (own-scope qua createdById), KHÔNG sửa/xoá bài admin.
+  "assignments:author-own": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
 
   // --- Documents ---
   // FL W0 (QĐ-T1): tài liệu LMS biên soạn/upload bởi TRAINING. TEACHER + CENTER_MANAGER chỉ XEM.

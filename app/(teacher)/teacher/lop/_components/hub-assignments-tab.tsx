@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { AssignDialog } from "../../cham-bai/_components/assign-dialog";
 import { GradeForm } from "../../cham-bai/_components/grade-form";
+import { resolveTemplateOwnerId } from "../../kho-bai-tap/_owner";
 
 const SUBMITTED_STATUSES: SubmissionStatus[] = ["SUBMITTED", "LATE", "GRADED"];
 
@@ -256,7 +257,7 @@ export async function HubAssignmentsTab({
   }
 
   // ── List: bài đã giao ở lớp + Giao bài ───────────────────────────────────────
-  const [assignments, cls, templates] = await Promise.all([
+  const [assignments, cls, templates, owner] = await Promise.all([
     sdb.assignment.findMany({
       where: { classId, status: { in: ["PUBLISHED", "CLOSED"] } },
       select: {
@@ -285,12 +286,19 @@ export async function HubAssignmentsTab({
       },
     }),
     sdb.assignmentTemplate.findMany({
-      select: { id: true, title: true, _count: { select: { templateQuestions: true } } },
+      select: {
+        id: true,
+        title: true,
+        createdById: true,
+        _count: { select: { templateQuestions: true } },
+      },
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
+    resolveTemplateOwnerId(sdb, actor.userId),
   ]);
   const rosterCount = cls?._count.enrollments ?? 0;
+  const ownerId = owner.ownerId;
 
   return (
     <div className="space-y-4">
@@ -304,6 +312,7 @@ export async function HubAssignmentsTab({
             id: t.id,
             title: t.title,
             isTest: t._count.templateQuestions > 0,
+            isMine: t.createdById === ownerId,
           }))}
         />
       </div>

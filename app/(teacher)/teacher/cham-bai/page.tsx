@@ -22,6 +22,7 @@ import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
 import { AssignmentList, type AssignmentRow } from "./_components/assignment-list";
 import { AssignDialog } from "./_components/assign-dialog";
+import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
 
 export const metadata = { title: "Bài tập & kiểm tra | Giáo viên Sata Robo" };
 
@@ -286,14 +287,24 @@ export default async function TeacherAssignmentsPage({
     : [];
   const enrollBy = new Map(classCounts.map((c) => [c.id, c._count.enrollments]));
 
-  // Thư viện đầu bài để "Giao bài" (template admin/khung CT). isTest = có câu hỏi.
+  // Thư viện đầu bài để "Giao bài": gồm template Đào tạo/admin LẪN đề GV tự soạn
+  // (createdById = ownerId). AssignDialog lọc theo "Nguồn đầu bài" qua cờ isMine.
   const templates = classIds.length
     ? await sdb.assignmentTemplate.findMany({
-        select: { id: true, title: true, _count: { select: { templateQuestions: true } } },
+        select: {
+          id: true,
+          title: true,
+          createdById: true,
+          _count: { select: { templateQuestions: true } },
+        },
         orderBy: { createdAt: "desc" },
         take: 200,
       })
     : [];
+  // Chủ sở hữu "Kho của tôi" (employeeId ?? userId) — khớp createdById đề GV tự soạn.
+  const { ownerId } = classIds.length
+    ? await resolveTemplateOwnerId(sdb, session.user.id)
+    : { ownerId: "" };
 
   const rows: AssignmentRow[] = assignments.map((a) => ({
     id: a.id,
@@ -321,6 +332,7 @@ export default async function TeacherAssignmentsPage({
                 id: t.id,
                 title: t.title,
                 isTest: t._count.templateQuestions > 0,
+                isMine: t.createdById === ownerId,
               }))}
             />
           ) : undefined
