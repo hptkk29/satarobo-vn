@@ -7,6 +7,7 @@ import {
   Clock,
   GraduationCap,
   LayoutDashboard,
+  ListChecks,
   MessageSquareText,
   Sparkles,
   Users,
@@ -52,6 +53,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: "Lớp của tôi", href: "/teacher/lop", icon: Users },
       { label: "Lịch làm việc", href: "/teacher/lich", icon: CalendarDays },
+      { label: "Điểm danh", href: "/teacher/diem-danh", icon: ListChecks },
       { label: "Nhận xét", href: "/teacher/nhan-xet", icon: MessageSquareText },
       { label: "Bài tập", href: "/teacher/cham-bai", icon: ClipboardCheck },
       { label: "Tài liệu", href: "/teacher/tai-lieu", icon: BookOpenText },
