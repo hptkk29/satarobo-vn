@@ -321,6 +321,11 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "exams:grade", scopeType: "GLOBAL" },
       { action: "assignments:view", scopeType: "GLOBAL" },
       { action: "assignments:grade", scopeType: "GLOBAL" },
+      // L6 site GV — capability "own" (parity v1↔v2): soạn đề kho riêng + giao bài +
+      // đề xuất hoàn thành (QL cơ sở cũng dùng được; xác nhận thật = completions:manage).
+      { action: "assignments:author-own", scopeType: "CENTER" },
+      { action: "assignments:assign-own", scopeType: "CENTER" },
+      { action: "completions:propose-own", scopeType: "CENTER" },
       { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
       { action: "completions:manage", scopeType: "GLOBAL" },
       { action: "satacoin:manage", scopeType: "GLOBAL" },
@@ -486,6 +491,13 @@ export const ROLE_SEED: RoleSeed[] = [
       // CENTER_MANAGER dùng GLOBAL). KHÔNG có report-cards:review → GV không duyệt/sửa
       // học bạ đã PUBLISHED/RECALLED (#17 đã siết ở tầng action).
       { action: "report-cards:manage", scopeType: "GLOBAL" },
+      // L6 site GV — capability "own" (parity v1↔v2): GV tự soạn đề vào kho riêng +
+      // giao bài cho lớp mình + ĐỀ XUẤT hoàn thành khoá (xác nhận thật vẫn là
+      // completions:manage của trung tâm — GV KHÔNG có). Cách ly lớp/chủ sở hữu ép ở
+      // tầng action (assignedClassIds / createdById).
+      { action: "assignments:author-own", scopeType: "GLOBAL" },
+      { action: "assignments:assign-own", scopeType: "CLASS" },
+      { action: "completions:propose-own", scopeType: "CLASS" },
     ],
   },
   {
