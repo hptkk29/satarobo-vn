@@ -81,7 +81,12 @@ export default async function TeacherCompletionsPage({
 
     const cls = await sdb.class.findUnique({
       where: { id: classId },
-      select: { id: true, name: true, courseId: true, course: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        courseId: true,
+        course: { select: { name: true, nextCourse: { select: { name: true } } } },
+      },
     });
     if (!cls) return <NotYours />; // ngoài scope cơ sở / đã xoá
 
@@ -126,12 +131,22 @@ export default async function TeacherCompletionsPage({
         })
       : [];
     // CourseCompletion theo unique (studentId, courseId) — courseId suy từ lớp.
-    const completions = studentIds.length
-      ? await sdb.courseCompletion.findMany({
-          where: { courseId: cls.courseId, studentId: { in: studentIds } },
-          select: { studentId: true, certificateCode: true, completedAt: true },
-        })
-      : [];
+    const [completions, pendingReqs] = await Promise.all([
+      studentIds.length
+        ? sdb.courseCompletion.findMany({
+            where: { courseId: cls.courseId, studentId: { in: studentIds } },
+            select: { studentId: true, certificateCode: true, completedAt: true, finalGrade: true },
+          })
+        : Promise.resolve([] as { studentId: string; certificateCode: string; completedAt: Date; finalGrade: string | null }[]),
+      // Đề xuất hoàn thành đang CHỜ DUYỆT của các ghi danh này (trạng thái "Chờ duyệt").
+      enrollments.length
+        ? sdb.courseCompletionRequest.findMany({
+            where: { enrollmentId: { in: enrollments.map((e) => e.id) }, status: "PENDING" },
+            select: { enrollmentId: true },
+          })
+        : Promise.resolve([] as { enrollmentId: string }[]),
+    ]);
+    const pendingSet = new Set(pendingReqs.map((r) => r.enrollmentId));
 
     const attByStudent = new Map<string, AttendanceSummaryItem[]>();
     for (const a of attRows) {
@@ -161,6 +176,9 @@ export default async function TeacherCompletionsPage({
         passed: Boolean(done),
         certificateCode: done?.certificateCode ?? null,
         completedAtLabel: done ? dayFmt.format(done.completedAt) : null,
+        finalGrade: done?.finalGrade ?? null,
+        nextCourseName: cls.course.nextCourse?.name ?? null,
+        requestPending: pendingSet.has(e.id),
       };
     });
 

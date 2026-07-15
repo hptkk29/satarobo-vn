@@ -860,6 +860,12 @@ model Course {
   teacherCourses TeacherCourse[]
   completions    CourseCompletion[] @relation("CourseCompletions")
 
+  // R7 — lộ trình chuyển cấp: khoá kế tiếp (vd Sata 3 → Sata 4). Self-relation, cấu
+  // hình admin; hoàn thành khoá gợi ý "Chuyển sang".
+  nextCourseId String?
+  nextCourse   Course?  @relation("CourseProgression", fields: [nextCourseId], references: [id], onDelete: SetNull)
+  prevCourses  Course[] @relation("CourseProgression")
+
   // FL W0 — gộp gói bán (FL1-05) + kho câu hỏi theo khoá (FL1-03).
   coursePackages CoursePackage[]
   questions      Question[]
@@ -4369,6 +4375,37 @@ model CourseCompletion {
   @@unique([studentId, courseId])
   @@index([studentId])
   @@index([courseId])
+}
+
+// Đề xuất hoàn thành khoá (site GV): GV đề xuất → CENTER_MANAGER cơ sở duyệt → tạo
+// CourseCompletion. Plain-string FK (pattern WorkRequest). GV chỉ ĐỀ XUẤT (không tự
+// xác nhận hoàn thành — quyền completions:manage vẫn ở trung tâm).
+enum CourseCompletionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model CourseCompletionRequest {
+  id             String                        @id @default(cuid())
+  enrollmentId   String
+  studentId      String
+  courseId       String
+  centerId       String?
+  requesterId    String // GV đề xuất
+  status         CourseCompletionRequestStatus @default(PENDING)
+  nextCourseId   String? // lộ trình chuyển cấp đề xuất
+  note           String?                       @db.Text
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?                     @db.Timestamptz(6)
+  reviewNote     String?                       @db.Text
+  createdAt      DateTime                      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime                      @updatedAt @db.Timestamptz(6)
+
+  @@index([enrollmentId, status])
+  @@index([centerId, status])
+  @@index([requesterId, status])
 }
 
 // =============================================================================

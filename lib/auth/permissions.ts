@@ -154,6 +154,7 @@ export type Action =
 
   // --- Course completion (B4) ---
   | "completions:manage"
+  | "completions:propose-own"
 
   // --- SataCoin (C4) ---
   | "satacoin:manage"
@@ -404,6 +405,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "enrollments:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "enrollments:transfer": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "completions:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // GV chỉ ĐỀ XUẤT hoàn thành khoá (xác nhận thật = completions:manage của trung tâm).
+  "completions:propose-own": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
 
   // --- Evaluations / surveys (R7-16) ---
   "evaluations:manage": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
