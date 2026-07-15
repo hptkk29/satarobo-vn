@@ -123,8 +123,10 @@ test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId tr
       data: { studentId: student.id, classId: cls.id, courseId: cls.courseId, status: "STUDYING" },
     });
 
-    // Buổi trong khoảng [hôm nay−3, +28] để cả /lop lẫn /lich đều thấy.
-    const when = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    // Buổi HÔM QUA (−1 ngày): nằm trong khoảng lịch [hôm nay−3, +28] để /lich thấy,
+    // ĐỒNG THỜI đã "tới giờ" (date ≤ hết hôm nay) nên tab Điểm danh của Class Hub render
+    // link "Điểm danh" ?sessionId= (buổi tương lai chỉ hiện "Chưa tới giờ", không có link).
+    const when = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
     const sess = await db.classSession.create({
       data: { classId: cls.id, centerId: c1, date: when, status: "SCHEDULED" },
       select: { id: true },
