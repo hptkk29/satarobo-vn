@@ -12,16 +12,17 @@
 // ⚠️ Câu 46: payload client CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 import Link from "next/link";
 import type { SubmissionStatus } from "@prisma/client";
-import { ArrowLeft, Ban, ClipboardCheck, FileX2 } from "lucide-react";
+import { ArrowLeft, Ban, ClipboardCheck, FileX2, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
 import { AssignmentList, type AssignmentRow } from "./_components/assignment-list";
-import { AssignDialog } from "./_components/assign-dialog";
+import { AssignForm } from "./_components/assign-form";
 import { BatchGrade } from "./_components/batch-grade";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
 
@@ -65,12 +66,18 @@ const SUB_STATUS: Record<SubmissionStatus, { label: string; cls: string }> = {
 export default async function TeacherAssignmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ assignmentId?: string; submissionId?: string }>;
+  searchParams: Promise<{
+    assignmentId?: string;
+    submissionId?: string;
+    compose?: string;
+    lockClassId?: string;
+    back?: string;
+  }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
-  const { assignmentId, submissionId } = await searchParams;
+  const { assignmentId, submissionId, compose, lockClassId, back } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
@@ -267,6 +274,70 @@ export default async function TeacherAssignmentsPage({
     );
   }
 
+  // ── (d) Giao bài — FULL PAGE (thay popup) ────────────────────────────────────
+  // Vào từ nút "Giao bài" (?compose=giao) hoặc từ Class Hub (?compose=giao&lockClassId
+  // &back=<hub url>). lockClassId khoá 1 lớp; back = nơi quay về sau khi giao/huỷ.
+  if (compose === "giao") {
+    const backHref = back && back.startsWith("/teacher/") ? back : "/teacher/cham-bai";
+    if (classIds.length === 0) {
+      return (
+        <div>
+          <BackLink href={backHref} label="Bài tập & kiểm tra" />
+          <EmptyState icon={ClipboardCheck} title="Bạn chưa được phân công lớp nào." />
+        </div>
+      );
+    }
+
+    // Lớp có thể giao: khoá 1 lớp nếu lockClassId hợp lệ (từ Class Hub), else tất cả.
+    const lockOne = lockClassId && actor.assignedClassIds.has(lockClassId) ? lockClassId : null;
+    const [composeClasses, composeTemplates, composeOwner] = await Promise.all([
+      sdb.class.findMany({
+        where: { id: { in: lockOne ? [lockOne] : classIds } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      sdb.assignmentTemplate.findMany({
+        select: {
+          id: true,
+          title: true,
+          createdById: true,
+          _count: { select: { templateQuestions: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      }),
+      resolveTemplateOwnerId(sdb, session.user.id),
+    ]);
+    const composeOwnerId = composeOwner.ownerId;
+
+    // selfHref: URL trang giao hiện tại — để "Tạo bài tập mới" quay lại đúng chỗ.
+    const selfParams = new URLSearchParams({ compose: "giao" });
+    if (lockOne) selfParams.set("lockClassId", lockOne);
+    if (back) selfParams.set("back", back);
+    const selfHref = `/teacher/cham-bai?${selfParams.toString()}`;
+
+    return (
+      <div>
+        <BackLink href={backHref} label="Bài tập & kiểm tra" />
+        <PageHeader
+          title="Giao bài cho lớp"
+          subtitle="Chọn nguồn đầu bài, lớp bạn phụ trách và hạn nộp. Bài giao xong sẽ mở ngay cho học viên."
+        />
+        <AssignForm
+          classes={composeClasses}
+          templates={composeTemplates.map((t) => ({
+            id: t.id,
+            title: t.title,
+            isTest: t._count.templateQuestions > 0,
+            isMine: t.createdById === composeOwnerId,
+          }))}
+          back={backHref}
+          selfHref={selfHref}
+        />
+      </div>
+    );
+  }
+
   // ── (a) Bảng bài tập đã giao ─────────────────────────────────────────────────
   const assignments = classIds.length
     ? await sdb.assignment.findMany({
@@ -308,25 +379,6 @@ export default async function TeacherAssignmentsPage({
     : [];
   const enrollBy = new Map(classCounts.map((c) => [c.id, c._count.enrollments]));
 
-  // Thư viện đầu bài để "Giao bài": gồm template Đào tạo/admin LẪN đề GV tự soạn
-  // (createdById = ownerId). AssignDialog lọc theo "Nguồn đầu bài" qua cờ isMine.
-  const templates = classIds.length
-    ? await sdb.assignmentTemplate.findMany({
-        select: {
-          id: true,
-          title: true,
-          createdById: true,
-          _count: { select: { templateQuestions: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      })
-    : [];
-  // Chủ sở hữu "Kho của tôi" (employeeId ?? userId) — khớp createdById đề GV tự soạn.
-  const { ownerId } = classIds.length
-    ? await resolveTemplateOwnerId(sdb, session.user.id)
-    : { ownerId: "" };
-
   const rows: AssignmentRow[] = assignments.map((a) => ({
     id: a.id,
     title: a.title,
@@ -348,15 +400,11 @@ export default async function TeacherAssignmentsPage({
         subtitle="Bài đã giao ở các lớp bạn phụ trách. Đầu bài lấy từ thư viện admin."
         actions={
           classIds.length > 0 ? (
-            <AssignDialog
-              classes={classCounts.map((c) => ({ id: c.id, name: c.name }))}
-              templates={templates.map((t) => ({
-                id: t.id,
-                title: t.title,
-                isTest: t._count.templateQuestions > 0,
-                isMine: t.createdById === ownerId,
-              }))}
-            />
+            <Button asChild className="shrink-0">
+              <Link href="?compose=giao">
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Giao bài
+              </Link>
+            </Button>
           ) : undefined
         }
       />

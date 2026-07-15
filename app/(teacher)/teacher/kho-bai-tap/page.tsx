@@ -3,15 +3,18 @@
 // Đề trắc nghiệm/tự luận GV TỰ SOẠN — list AssignmentTemplate where createdById = ownerId
 // (own-scope, xem _owner.ts). Mỗi đề: hình thức (kind) + số câu + thang điểm + Xem trước
 // + Xoá (chỉ đề của mình). Câu 46: đây là SOẠN NỘI DUNG — không chạm dữ liệu HV/PH.
-import { NotebookPen } from "lucide-react";
+import { Suspense } from "react";
+import Link from "next/link";
+import { ArrowLeft, NotebookPen, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { KhoList } from "./_components/kho-list";
-import { CreateTemplateLauncher } from "./_components/create-template-launcher";
+import { CreateAssignmentForm } from "./_components/create-assignment-form";
 import { resolveTemplateOwnerId } from "./_owner";
 import type { KhoTemplate } from "./_types";
 
@@ -24,11 +27,45 @@ const dateFmt = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
-export default async function KhoBaiTapPage() {
+/** BackLink nội bộ /teacher/* (chống open-redirect qua param `back`). */
+function safeBack(raw: string | undefined): string {
+  return raw && raw.startsWith("/teacher/") ? raw : "/teacher/kho-bai-tap";
+}
+
+export default async function KhoBaiTapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ compose?: string; back?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
   const canAuthor = await checkPermission("assignments:author-own");
+  const { compose, back } = await searchParams;
+
+  // ── Trình soạn đề (FULL PAGE thay popup) ─────────────────────────────────────
+  if (compose === "tao") {
+    if (!canAuthor) {
+      return (
+        <div>
+          <BackLink href="/teacher/kho-bai-tap" label="Kho bài tập của tôi" />
+          <EmptyState icon={NotebookPen} title="Bạn không có quyền soạn bài." />
+        </div>
+      );
+    }
+    return (
+      <div>
+        <BackLink href={safeBack(back)} label="Kho bài tập của tôi" />
+        <PageHeader
+          title="Tạo bài tập mới"
+          subtitle="Soạn đề trắc nghiệm hoặc tự luận. Bài lưu vào Kho của bạn, giao lại cho lớp mình phụ trách ở trang Bài tập."
+        />
+        <Suspense>
+          <CreateAssignmentForm />
+        </Suspense>
+      </div>
+    );
+  }
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
@@ -97,7 +134,15 @@ export default async function KhoBaiTapPage() {
       <PageHeader
         title="Kho bài tập của tôi"
         subtitle="Đề trắc nghiệm & tự luận bạn tự soạn. Giao lại cho lớp mình phụ trách ở trang Bài tập."
-        actions={canAuthor ? <CreateTemplateLauncher /> : undefined}
+        actions={
+          canAuthor ? (
+            <Button asChild className="shrink-0">
+              <Link href="?compose=tao">
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Tạo bài tập
+              </Link>
+            </Button>
+          ) : undefined
+        }
       />
 
       {rows.length === 0 ? (
@@ -114,5 +159,17 @@ export default async function KhoBaiTapPage() {
         <KhoList rows={rows} />
       )}
     </div>
+  );
+}
+
+function BackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
+      {label}
+    </Link>
   );
 }

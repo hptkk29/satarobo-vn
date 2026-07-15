@@ -10,16 +10,15 @@
 // (guard ở caller + kiểm lại sub.assignment.classId===classId chống IDOR).
 // ⚠️ Câu 46: payload client CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 import Link from "next/link";
-import { ArrowLeft, Ban, Eye, FileX2, Library, PencilLine } from "lucide-react";
+import { ArrowLeft, Ban, Eye, FileX2, Library, PencilLine, Plus } from "lucide-react";
 import type { SubmissionStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "../../_components/ui/empty-state";
-import { AssignDialog } from "../../cham-bai/_components/assign-dialog";
 import { GradeForm } from "../../cham-bai/_components/grade-form";
-import { resolveTemplateOwnerId } from "../../kho-bai-tap/_owner";
 
 const SUBMITTED_STATUSES: SubmissionStatus[] = ["SUBMITTED", "LATE", "GRADED"];
 
@@ -257,7 +256,7 @@ export async function HubAssignmentsTab({
   }
 
   // ── List: bài đã giao ở lớp + Giao bài ───────────────────────────────────────
-  const [assignments, cls, templates, owner] = await Promise.all([
+  const [assignments, cls] = await Promise.all([
     sdb.assignment.findMany({
       where: { classId, status: { in: ["PUBLISHED", "CLOSED"] } },
       select: {
@@ -285,20 +284,12 @@ export async function HubAssignmentsTab({
         },
       },
     }),
-    sdb.assignmentTemplate.findMany({
-      select: {
-        id: true,
-        title: true,
-        createdById: true,
-        _count: { select: { templateQuestions: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    }),
-    resolveTemplateOwnerId(sdb, actor.userId),
   ]);
   const rosterCount = cls?._count.enrollments ?? 0;
-  const ownerId = owner.ownerId;
+
+  // Giao bài → trang riêng (thay popup): khoá lớp này + quay lại đúng tab Bài tập.
+  const backToHub = `/teacher/lop?classId=${classId}&tab=bai-tap`;
+  const assignHref = `/teacher/cham-bai?compose=giao&lockClassId=${classId}&back=${encodeURIComponent(backToHub)}`;
 
   return (
     <div className="space-y-4">
@@ -306,15 +297,11 @@ export async function HubAssignmentsTab({
         <p className="text-sm text-muted-foreground">
           Bài tập &amp; kiểm tra đã giao cho lớp. Đầu bài lấy từ thư viện Đào tạo.
         </p>
-        <AssignDialog
-          classes={[{ id: classId, name: className }]}
-          templates={templates.map((t) => ({
-            id: t.id,
-            title: t.title,
-            isTest: t._count.templateQuestions > 0,
-            isMine: t.createdById === ownerId,
-          }))}
-        />
+        <Button asChild className="shrink-0">
+          <Link href={assignHref}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Giao bài
+          </Link>
+        </Button>
       </div>
 
       <div className="t-card overflow-hidden">
