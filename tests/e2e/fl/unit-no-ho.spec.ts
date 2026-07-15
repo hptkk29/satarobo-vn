@@ -13,20 +13,20 @@ import { nonEnrollableCenterIds, notHeadOfficeWhere } from "../../../lib/enrollm
 const ou = (type: OrgUnitType, centerId: string | null) => ({ type, centerId, deletedAt: null });
 
 test.describe("[FL2-05] Bỏ Hội sở khỏi đơn vị nhận học viên", () => {
-  // AC3 — nhận diện Hội sở QUA OrgUnit tree (type ≠ CENTER), KHÔNG hardcode "HO".
-  test("[FL2-05-T1] HO (type≠CENTER) bị loại; CS1/CS2 (type=CENTER) giữ", async () => {
-    const ids = nonEnrollableCenterIds([
-      ou("ROOT", null),
-      ou("HO", "c-ho"),
-      ou("CENTER", "c-cs1"),
-      ou("CENTER", "c-cs2"),
-    ]);
-    expect(ids).toEqual(["c-ho"]);
+  // AC3 — "cơ sở nhận HV" = Center CÓ OrgUnit type=CENTER trỏ tới. KHÔNG hardcode "HO".
+  // Prod 10/07: Center(hoi-so) mồ côi — seed-orgunit.ts để HO.centerId = null, nên bản cũ
+  // (đi từ OrgUnit ra) không bao giờ thấy nó và picker vẫn hiện "Hội sở".
+  test("[FL2-05-T1] Center mồ côi (Hội sở) bị loại; CS1/CS2 có OrgUnit CENTER thì giữ", async () => {
+    const ids = nonEnrollableCenterIds(
+      [{ id: "c-cs1" }, { id: "c-cs2" }, { id: "hoi-so" }],
+      [ou("ROOT", null), ou("HO", null), ou("CENTER", "c-cs1"), ou("CENTER", "c-cs2")],
+    );
+    expect(ids).toEqual(["hoi-so"]);
   });
 
   // Mở CS mới (CS3/CS4...) chỉ thêm data type=CENTER → tự nhận HV, không sửa code.
   test("[FL2-05-T2] CS mới type=CENTER không bị loại", async () => {
-    expect(nonEnrollableCenterIds([ou("CENTER", "c-cs3")])).toEqual([]);
+    expect(nonEnrollableCenterIds([{ id: "c-cs3" }], [ou("CENTER", "c-cs3")])).toEqual([]);
   });
 
   // Where-fragment giữ row centerId=null (legacy), chỉ loại đúng cơ sở Hội sở.
@@ -44,6 +44,8 @@ test.describe("[FL2-05] Bỏ Hội sở khỏi đơn vị nhận học viên", (
   });
 
   // AC3 (UI) — picker cơ sở (nguồn & đích) ở /admin/chuyen-lop không gồm Hội sở.
+  // Lõi quyết định đã khoá ở T1 (Center mồ côi bị loại) + T3 (where-fragment). Phần UI
+  // còn lại chỉ là truyền `id: { notIn: ids }` vào sdb.center.findMany.
   test.fixme("[FL2-05-T5] chuyen-lop: picker cơ sở không gồm Hội sở", async () => {
     // TODO(fixture): mở /admin/chuyen-lop → assert option "Hội sở" vắng ở cả 2 select cơ sở.
   });

@@ -6,12 +6,20 @@ import { db } from "../../../lib/db";
 import { resetDb, seedOrg, seedRoles, seedUser } from "../../e2e/_helpers/seed";
 import { testEmail } from "../../e2e/_helpers/fixtures";
 import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
-import { submitReport } from "../../../lib/crm/marketing-report";
+import { submitReport, previousMonthKey } from "../../../lib/crm/marketing-report";
 import { runMarketingAlerts } from "../../../lib/crm/marketing-alerts";
 
 const SA: RbacActor = { id: "seed-sa", name: "SA", role: "SUPER_ADMIN" };
-const AFTER_DEADLINE = new Date("2026-07-10T00:00:00Z"); // prev month = 2026-06
-const BEFORE_DEADLINE = new Date("2026-07-03T00:00:00Z");
+// KHÔNG hardcode mốc "now": getSuperAdminUserIds lọc effectiveFrom ≤ now, mà seed
+// gán UserOrgRole với effectiveFrom = thời điểm CHẠY test → mốc cố định trong quá
+// khứ ("2026-07-10") loại role vừa seed → 0 alert (bom hẹn giờ, nổ 11/07/2026).
+// → Lấy ngày 10 / ngày 03 của THÁNG SAU thời điểm chạy: luôn ≥ effectiveFrom và
+// vẫn đúng phía sau/trước deadline ngày 05.
+const NOW = new Date();
+const AFTER_DEADLINE = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 1, 10));
+const BEFORE_DEADLINE = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() + 1, 3));
+// Kỳ bị soi = tháng liền trước AFTER_DEADLINE (thay cho "2026-06" cứng).
+const PREV_PERIOD = previousMonthKey(AFTER_DEADLINE);
 
 async function seedSuperAdmin() {
   const u = await seedUser({ email: testEmail("sa-alert"), role: "SUPER_ADMIN" });
@@ -50,8 +58,8 @@ test.describe("[R1-12/09] Marketing report + alerts", () => {
 
   test("[R1-09-C9.5] đã CONFIRMED + có báo cáo → không alert", async () => {
     const sa = await seedSuperAdmin();
-    await db.marketingCostPeriod.create({ data: { period: "2026-06", totalQcCost: 1, status: "CONFIRMED" } });
-    await submitReport({ submittedById: sa.id, periodType: "MONTH", periodKey: "2026-06", snapshot: {} });
+    await db.marketingCostPeriod.create({ data: { period: PREV_PERIOD, totalQcCost: 1, status: "CONFIRMED" } });
+    await submitReport({ submittedById: sa.id, periodType: "MONTH", periodKey: PREV_PERIOD, snapshot: {} });
     const r = await runMarketingAlerts(AFTER_DEADLINE);
     expect(r.alerts).toBe(0);
   });
