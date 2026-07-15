@@ -72,6 +72,14 @@ export const SCOPE_EXEMPT = new Set<string>([
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
   // centerId chỉ là snapshot nullable (HO/centerId null), inject `centerId IN` sẽ ẩn nhầm.
   "RefundRequest",
+  // L6 — Đơn từ GV: đọc theo requesterId = chính mình (không list chéo); duyệt gate
+  // CENTER_MANAGER + so centerId THỦ CÔNG trong reviewWorkRequest. centerId = snapshot
+  // session.user.centerId (có thể null) → inject `centerId IN` sẽ ẩn nhầm đơn của chính GV.
+  "WorkRequest",
+  // Hoàn thành khoá — đề xuất đọc theo enrollmentId ∈ lớp mình phụ trách (Enrollment/Class
+  // đã SCOPED) hoặc theo id + so centerId THỦ CÔNG trong reviewCourseCompletion. centerId
+  // là snapshot nullable từ class → scope qua quan hệ, không inject trực tiếp.
+  "CourseCompletionRequest",
   // RBAC-DECISION #5 (06/07) — Center LÀ ranh giới tenant, không tự scope theo chính
   // nó (self-referential, sẽ vỡ mọi thao tác cross-center hợp lệ: HO xem toàn bộ
   // center, branch switcher, super-admin list center). Lớp bảo vệ PHẢI là permission

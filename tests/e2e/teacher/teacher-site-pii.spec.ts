@@ -43,11 +43,18 @@ async function centerIdOf(code: string) {
 
 /** Login TEACHER qua form thật; chịu được cold-compile của `next dev`. */
 async function loginTeacher(page: Page) {
-  await page.goto(`/login?callbackUrl=${encodeURIComponent("/teacher/lop")}`, {
-    waitUntil: "domcontentloaded",
-  });
-  await page.getByLabel("Email").fill(teacherEmail);
-  await page.getByLabel("Mật khẩu").fill(TEST_PASSWORD);
+  // KHÔNG dùng waitUntil "domcontentloaded": form Waves là controlled input —
+  // fill trước khi React hydrate xong sẽ bị hydration XOÁ TRẮNG giá trị →
+  // validation "Email không hợp lệ" chặn, signIn không bao giờ bắn (fail câm).
+  await page.goto(`/login?callbackUrl=${encodeURIComponent("/teacher/lop")}`);
+  const email = page.getByLabel("Email");
+  // Điền rồi xác nhận giá trị CÒN DÍNH (hydration muộn vẫn có thể wipe sau "load")
+  // — bị wipe thì toPass() điền lại tới khi ổn định.
+  await expect(async () => {
+    await email.fill(teacherEmail);
+    await page.getByLabel("Mật khẩu").fill(TEST_PASSWORD);
+    await expect(email).toHaveValue(teacherEmail, { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   await page.getByRole("button", { name: "Đăng nhập" }).click();
   await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 30_000 });
 }
