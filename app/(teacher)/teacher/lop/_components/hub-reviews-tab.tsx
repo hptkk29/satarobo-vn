@@ -11,7 +11,7 @@
 // classId. Roster đọc QUA quan hệ class (enrollment dev centerId=null bị scopedDb lọc).
 // ⚠️ Câu 46: payload client CHỈ tên HV — không SĐT/email/tên PH.
 import Link from "next/link";
-import { ArrowLeft, Ban, CalendarX2 } from "lucide-react";
+import { ArrowLeft, Ban, CalendarX2, ClipboardPen } from "lucide-react";
 import type { AttendanceStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -78,14 +78,12 @@ const initials = (name: string) =>
     .join("")
     .toUpperCase();
 
-/** Cửa sổ buổi: 14 ngày gần nhất tính cả hôm nay (khớp trang Nhận xét). */
-function recentWindow(): { from: Date; to: Date } {
-  const from = new Date();
-  from.setDate(from.getDate() - 14);
-  from.setHours(0, 0, 0, 0);
-  const to = new Date();
-  to.setHours(23, 59, 59, 999);
-  return { from, to };
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7)
+/** Mốc hết hôm nay (giờ VN) dạng ms — buổi ≤ mốc này = đã diễn ra. */
+function vnTodayEndMs(now = new Date()): number {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  const startUtc = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+  return startUtc + 24 * 60 * 60 * 1000;
 }
 
 function BackToList({ classId }: { classId: string }) {
@@ -313,12 +311,31 @@ export async function HubReviewsTab({
     );
   }
 
-  // ── List: buổi 14 ngày gần của lớp ───────────────────────────────────────────
-  const { from, to } = recentWindow();
+  // ── List: MỌI buổi đã diễn ra của lớp (bảng 5 cột + cột Đi học) ──────────────
+  const cls = await sdb.class.findUnique({
+    where: { id: classId },
+    select: {
+      startTime: true,
+      endTime: true,
+      _count: {
+        select: { enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } } },
+      },
+    },
+  });
+  const rosterCount = cls?._count.enrollments ?? 0;
+  const timeLabel = cls?.startTime && cls?.endTime ? `${cls.startTime}-${cls.endTime}` : "";
+
   const sessions = await sdb.classSession.findMany({
-    where: { classId, date: { gte: from, lte: to }, status: { not: "CANCELLED" } },
-    select: { id: true, date: true, topic: true, status: true },
+    where: { classId, status: { not: "CANCELLED" }, date: { lte: new Date(vnTodayEndMs()) } },
+    select: {
+      id: true,
+      date: true,
+      topic: true,
+      status: true,
+      room: { select: { code: true, name: true } },
+    },
     orderBy: { date: "desc" },
+    take: 100,
   });
 
   const ids = sessions.map((s) => s.id);
@@ -350,50 +367,87 @@ export async function HubReviewsTab({
   }
 
   if (sessions.length === 0) {
-    return (
-      <EmptyState icon={CalendarX2} title="Lớp không có buổi học nào trong 14 ngày gần đây." />
-    );
+    return <EmptyState icon={CalendarX2} title="Lớp chưa có buổi học nào đã diễn ra." />;
   }
 
   return (
-    <div className="space-y-2">
-      {sessions.map((s) => {
-        const stat = summarizeSessionFeedback(
-          attBySession.get(s.id) ?? [],
-          fbBySession.get(s.id) ?? [],
-        );
-        return (
-          <Link
-            key={s.id}
-            href={`?classId=${classId}&tab=nhan-xet&rvSession=${s.id}`}
-            className="t-card t-card-hover flex items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">{dayFmt.format(s.date)}</p>
-              {s.topic && <p className="truncate text-xs text-muted-foreground">{s.topic}</p>}
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-              {stat.attendanceTaken ? (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    stat.complete
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-600/15 dark:text-emerald-200"
-                      : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300",
-                  )}
+    <div className="t-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              <th scope="col" className="px-5 py-3">Buổi học</th>
+              <th scope="col" className="px-5 py-3">Ngày · Giờ</th>
+              <th scope="col" className="px-5 py-3">Đi học</th>
+              <th scope="col" className="px-5 py-3">Nhận xét</th>
+              <th scope="col" className="px-5 py-3 text-right">
+                <span className="sr-only">Thao tác</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s) => {
+              const stat = summarizeSessionFeedback(
+                attBySession.get(s.id) ?? [],
+                fbBySession.get(s.id) ?? [],
+              );
+              const roomLabel = s.room?.code ?? s.room?.name ?? null;
+              return (
+                <tr
+                  key={s.id}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                 >
-                  Đã nhận xét {stat.reviewed}/{stat.attended} HV
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-muted-foreground">
-                  Chưa điểm danh
-                </Badge>
-              )}
-              <Badge variant="outline">{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
-            </div>
-          </Link>
-        );
-      })}
+                  <td className="px-5 py-3.5">
+                    <p className="font-semibold text-foreground">{s.topic ?? "Buổi học"}</p>
+                    {roomLabel && <p className="text-xs text-muted-foreground">Phòng {roomLabel}</p>}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <p className="text-foreground">{dayFmt.format(s.date)}</p>
+                    {timeLabel && <p className="text-xs text-muted-foreground">{timeLabel}</p>}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                    {stat.attendanceTaken ? `${stat.attended}/${rosterCount}` : "—"}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    {!stat.attendanceTaken ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Chưa điểm danh
+                      </Badge>
+                    ) : stat.complete ? (
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-600/15 dark:text-emerald-200"
+                      >
+                        Đã nhận xét
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300"
+                      >
+                        {stat.reviewed}/{stat.attended} HV
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    <Link
+                      href={`?classId=${classId}&tab=nhan-xet&rvSession=${s.id}`}
+                      className={
+                        stat.complete
+                          ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                          : "inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-orange-700 focus-visible:ring-2 focus-visible:ring-ring"
+                      }
+                    >
+                      <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
+                      {stat.complete ? "Xem lại" : "Nhận xét"}
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -518,6 +518,14 @@ function ClassSessionCard({
       <CardContent className="pt-0">
         <p className="text-sm text-muted-foreground">{classTime(s)}</p>
         {s.topic && <p className="mt-0.5 text-sm text-muted-foreground">{s.topic}</p>}
+        {s.status !== "CANCELLED" && (
+          <Link
+            href={`/teacher/lop?classId=${s.classId}&sessionId=${s.id}`}
+            className="mt-2 inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+          >
+            Mở điểm danh →
+          </Link>
+        )}
         <SessionActions
           sessionId={s.id}
           status={s.status}

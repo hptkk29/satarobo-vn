@@ -8,7 +8,7 @@
 // tên + mã HV). Cam-only orange, shadcn/base-ui. Dùng ListToolbar chung của site GV.
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { FileDown, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
@@ -215,15 +215,27 @@ export function ReportCardsList({ rows }: { rows: ReportCardRow[] }) {
                     <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                       {r.updatedAtLabel ?? "—"}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {/* href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host
-                          giaovien (clean URL /hoc-ba) LẪN localhost (/teacher/hoc-ba). */}
-                      <Link
-                        href={`?enrollmentId=${r.enrollmentId}`}
-                        className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-700"
-                      >
-                        {r.hasCard ? "Mở học bạ" : "Nhập học bạ"}
-                      </Link>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        {r.status === "PUBLISHED" && (
+                          <a
+                            href={`/teacher/hoc-ba/pdf/${r.enrollmentId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                          >
+                            <FileDown className="h-3.5 w-3.5" aria-hidden /> Xuất học bạ
+                          </a>
+                        )}
+                        {/* href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host
+                            giaovien (clean URL /hoc-ba) LẪN localhost (/teacher/hoc-ba). */}
+                        <Link
+                          href={`?enrollmentId=${r.enrollmentId}`}
+                          className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-700"
+                        >
+                          {r.hasCard ? "Mở học bạ" : "Nhập học bạ"}
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
