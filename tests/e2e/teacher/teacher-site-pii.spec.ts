@@ -135,9 +135,9 @@ test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId tr
   test("[câu 46 + studentId-URL] /teacher/lop → roster: tên HV hiện, KHÔNG lộ SĐT/email PH; studentId không lên URL", async ({ page }) => {
     await loginTeacher(page);
 
-    // (a) Danh sách lớp được phân.
+    // (a) Danh sách lớp được phân. (Reskin TeachUI: tiêu đề trang = "Lớp học của tôi".)
     await page.goto("/teacher/lop", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Lớp của tôi" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Lớp học của tôi" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(className)).toBeVisible();
     expect(page.url()).not.toContain(studentId);
     await expectNoContactLeak(page);
@@ -163,7 +163,8 @@ test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId tr
   test("[câu 46 + studentId-URL] /teacher/lich hiển thị lịch dạy, KHÔNG lộ contact PH; studentId không lên URL", async ({ page }) => {
     await loginTeacher(page);
     await page.goto("/teacher/lich", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Lịch dạy" })).toBeVisible({ timeout: 30_000 });
+    // Reskin TeachUI: tiêu đề trang = "Lịch làm việc" (bao cả ca làm & ngày nghỉ, không chỉ lịch dạy).
+    await expect(page.getByRole("heading", { name: "Lịch làm việc" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(className).first()).toBeVisible();
     expect(page.url()).not.toContain(studentId);
     await expectNoContactLeak(page);
