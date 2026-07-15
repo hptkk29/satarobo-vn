@@ -1,14 +1,21 @@
 "use client";
 
 // app/(teacher)/teacher/hoc-ba/_components/report-cards-list.tsx — #06 (L6):
-// bảng LIST học bạ site GV + tìm kiếm HV + lọc Khoá học/Trạng thái (client).
+// 2 tab LIST học bạ site GV (client toggle, KHÔNG searchParams):
+//   • "Học bạ"  — bảng tổng quan mỗi HV (chuyên cần, điểm TB bài tập, trạng thái học
+//                 bạ, mốc buổi 5/12, thao tác mở/nhập/xuất). Lọc Khoá học + Trạng thái.
+//   • "Năng lực" — BẢNG so sánh chéo mọi HV: cột = tiêu chí năng lực (thang 1–4, gộp
+//                 theo TÊN để so sánh chéo khoá) + cột "TB" + cột "Xếp loại". Lọc
+//                 Khoá học + Xếp loại (Xuất sắc/Giỏi/Khá/Cần cố gắng).
 //
-// Nhận `rows` PLAIN từ server (page.tsx đã scopedDb + gác IDOR + precompute mốc buổi
-// và cột tổng quan) → chỉ lọc/hiển thị. KHÔNG đọc DB, KHÔNG contact PH (câu 46: chỉ
-// tên + mã HV). Cam-only orange, shadcn/base-ui. Dùng ListToolbar chung của site GV.
+// Nhận `rows` PLAIN từ server (page.tsx đã scopedDb + gác IDOR + precompute mốc buổi,
+// cột tổng quan VÀ dữ liệu năng lực + xếp loại) → chỉ lọc/hiển thị. KHÔNG đọc DB,
+// KHÔNG contact PH (câu 46: chỉ tên + mã HV). Câu 55: KHÔNG nút "Duyệt (Quản lý)".
+// Cam-only orange, shadcn/base-ui. Dùng ListToolbar chung của site GV.
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { FileDown, FileText } from "lucide-react";
+import { ClipboardList, FileDown, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
@@ -21,6 +28,23 @@ export type MilestoneChip = {
   text: string;
   label: string;
 };
+
+/** Xếp loại năng lực suy từ điểm TB các tiêu chí (thang 1–4) — xem deriveCompetencyRank trong page.tsx. */
+export type CompetencyRank = "Xuất sắc" | "Giỏi" | "Khá" | "Cần cố gắng";
+
+/** 1 tiêu chí năng lực của khoá + mức đã chấm (level 0 = chưa chấm). */
+export interface CompetencyCell {
+  name: string;
+  order: number;
+  level: number;
+}
+
+export interface CompetencyData {
+  cells: CompetencyCell[];
+  /** Điểm TB tiêu chí đã chấm (thang 1–4, làm tròn 1 số lẻ); null nếu chưa chấm tiêu chí nào. */
+  avgLevel: number | null;
+  rank: CompetencyRank | null;
+}
 
 export interface ReportCardRow {
   enrollmentId: string;
@@ -38,6 +62,7 @@ export interface ReportCardRow {
   updatedAtLabel: string | null;
   hasCard: boolean;
   milestones: MilestoneChip[];
+  competency: CompetencyData;
 }
 
 // Màu pill trạng thái — đồng bộ ngữ nghĩa trang admin /admin/report-cards, có biến thể
@@ -55,6 +80,23 @@ const MILESTONE_CLASS: Record<MilestoneChip["state"], string> = {
   done: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
 };
 
+// Pill xếp loại — cam-forward (thương hiệu), bậc dưới về trung tính/hổ phách, KHÔNG thêm
+// màu trang trí mới (tím/xanh) ngoài bảng màu cam của site GV.
+const RANK_CLASS: Record<CompetencyRank, string> = {
+  "Xuất sắc": "bg-orange-600 text-white dark:bg-orange-500 dark:text-white",
+  "Giỏi": "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+  "Khá": "bg-muted text-muted-foreground",
+  "Cần cố gắng": "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+};
+
+/** Nhãn mức năng lực (thang 1–4) — hiện ở tooltip ô điểm tiêu chí. */
+const LEVEL_LABEL: Record<number, string> = {
+  1: "Cần cố gắng",
+  2: "Đạt",
+  3: "Khá",
+  4: "Tốt",
+};
+
 const STATUS_FILTER_OPTIONS = [
   { value: "all", label: "Mọi trạng thái" },
   { value: "none", label: "Chưa có học bạ" },
@@ -62,6 +104,14 @@ const STATUS_FILTER_OPTIONS = [
   { value: "PENDING_REVIEW", label: "Chờ duyệt" },
   { value: "PUBLISHED", label: "Đã phát hành" },
   { value: "RECALLED", label: "Đã thu hồi" },
+];
+
+const RANK_FILTER_OPTIONS = [
+  { value: "all", label: "Mọi xếp loại" },
+  { value: "Xuất sắc", label: "Xuất sắc" },
+  { value: "Giỏi", label: "Giỏi" },
+  { value: "Khá", label: "Khá" },
+  { value: "Cần cố gắng", label: "Cần cố gắng" },
 ];
 
 const initials = (name: string) =>
@@ -72,7 +122,51 @@ const initials = (name: string) =>
     .join("")
     .toUpperCase();
 
+type TabKey = "hocba" | "nangluc";
+
+const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
+  { key: "hocba", label: "Học bạ", icon: FileText },
+  { key: "nangluc", label: "Năng lực", icon: ClipboardList },
+];
+
 export function ReportCardsList({ rows }: { rows: ReportCardRow[] }) {
+  const [tab, setTab] = useState<TabKey>("hocba");
+  return (
+    <div>
+      <div className="mb-6 overflow-x-auto">
+        <nav className="flex min-w-max gap-1 border-b border-border" aria-label="Chế độ xem học bạ">
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            const isActive = t.key === tab;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive
+                    ? "border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+                {t.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {tab === "hocba" ? <HocBaTab rows={rows} /> : <NangLucTab rows={rows} />}
+    </div>
+  );
+}
+
+/* --------------------------------- Tab Học bạ -------------------------------- */
+
+function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
   const [query, setQuery] = useState("");
   const [course, setCourse] = useState("all");
   const [status, setStatus] = useState("all");
@@ -248,11 +342,177 @@ export function ReportCardsList({ rows }: { rows: ReportCardRow[] }) {
   );
 }
 
+/* -------------------------------- Tab Năng lực ------------------------------- */
+
+function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
+  const [query, setQuery] = useState("");
+  const [course, setCourse] = useState("all");
+  const [rank, setRank] = useState("all");
+
+  const courses = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.courseName))).sort((a, b) => a.localeCompare(b, "vi")),
+    [rows],
+  );
+
+  // Lọc theo tìm kiếm + khoá TRƯỚC (chưa theo xếp loại) → cột tiêu chí ổn định khi
+  // đổi bộ lọc xếp loại (không nhấp nháy header).
+  const scopeRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => {
+      const matchQ =
+        !q ||
+        r.studentName.toLowerCase().includes(q) ||
+        (r.studentCode?.toLowerCase().includes(q) ?? false);
+      const matchCourse = course === "all" || r.courseName === course;
+      return matchQ && matchCourse;
+    });
+  }, [rows, query, course]);
+
+  // Cột tiêu chí = HỢP các tiêu chí xuất hiện trong scopeRows, GỘP theo TÊN để so
+  // sánh chéo khoá (khoá khác nhau có bộ tiêu chí khác nhau). Sắp theo order rồi tên.
+  const columns = useMemo(() => {
+    const orderByName = new Map<string, number>();
+    for (const r of scopeRows) {
+      for (const c of r.competency.cells) {
+        const prev = orderByName.get(c.name);
+        if (prev === undefined || c.order < prev) orderByName.set(c.name, c.order);
+      }
+    }
+    return [...orderByName.entries()]
+      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0], "vi"))
+      .map(([name]) => name);
+  }, [scopeRows]);
+
+  const filtered = useMemo(
+    () => scopeRows.filter((r) => rank === "all" || r.competency.rank === rank),
+    [scopeRows, rank],
+  );
+
+  return (
+    <div>
+      <ListToolbar
+        query={query}
+        onQuery={setQuery}
+        placeholder="Tìm theo tên học viên, mã HV..."
+        filters={[
+          {
+            value: course,
+            onChange: setCourse,
+            options: [
+              { value: "all", label: "Tất cả khoá học" },
+              ...courses.map((c) => ({ value: c, label: c })),
+            ],
+          },
+          {
+            value: rank,
+            onChange: setRank,
+            options: RANK_FILTER_OPTIONS,
+          },
+        ]}
+      />
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={ClipboardList}
+          title="Không tìm thấy học viên"
+          description="Thử đổi từ khoá tìm kiếm hoặc bộ lọc."
+        />
+      ) : (
+        <section className="t-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <th scope="col" className="px-4 py-3">Học viên</th>
+                  <th scope="col" className="px-4 py-3">Khoá học</th>
+                  {columns.map((name) => (
+                    <th key={name} scope="col" className="px-4 py-3 text-center whitespace-nowrap">
+                      {name}
+                    </th>
+                  ))}
+                  <th scope="col" className="px-4 py-3 whitespace-nowrap" title="Điểm trung bình các tiêu chí năng lực (thang 1–4)">
+                    TB
+                  </th>
+                  <th scope="col" className="px-4 py-3">Xếp loại</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => {
+                  const levelByName = new Map(r.competency.cells.map((c) => [c.name, c.level]));
+                  return (
+                    <tr
+                      key={r.enrollmentId}
+                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                            {initials(r.studentName)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground">{r.studentName}</p>
+                            {r.studentCode ? (
+                              <p className="text-xs text-muted-foreground">{r.studentCode}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-foreground">{r.courseName}</p>
+                        <p className="text-xs text-muted-foreground">{r.className}</p>
+                      </td>
+                      {columns.map((name) => {
+                        const lv = levelByName.get(name) ?? 0;
+                        return (
+                          <td key={name} className="px-4 py-3 text-center whitespace-nowrap">
+                            {lv >= 1 ? (
+                              <span title={LEVEL_LABEL[lv] ?? String(lv)} className="font-semibold text-foreground">
+                                {lv}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {r.competency.avgLevel != null ? (
+                          <span className="font-semibold text-foreground">
+                            {r.competency.avgLevel.toFixed(1)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <RankPill rank={r.competency.rank} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function StatusPill({ status, label }: { status: ReportCardStatus | null; label: string | null }) {
   if (!status || !label) return <span className="text-xs text-muted-foreground">Chưa có</span>;
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status]}`}>
       {label}
+    </span>
+  );
+}
+
+function RankPill({ rank }: { rank: CompetencyRank | null }) {
+  if (!rank) return <span className="text-xs text-muted-foreground">Chưa chấm</span>;
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RANK_CLASS[rank]}`}>
+      {rank}
     </span>
   );
 }

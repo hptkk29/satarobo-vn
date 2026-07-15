@@ -14,19 +14,19 @@
 //                       (Document, mở tab mới) + SCORM (viewer site GV, watermark #14).
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, BookOpen, ExternalLink, FileText, NotebookPen, Play } from "lucide-react";
+import { ArrowLeft, BookOpen, FileText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
-import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import {
   CourseMaterialsList,
   type CourseMaterialRow,
 } from "./_components/course-materials-list";
+import { LessonFilterList, type LessonView } from "./_components/lesson-filter-list";
 
 export const metadata = { title: "Thư viện tài liệu | Giáo viên Sata Robo" };
 
@@ -55,16 +55,6 @@ const CURRICULUM_SELECT = {
     },
   },
 } as const;
-
-type LessonView = {
-  id: string;
-  order: number;
-  title: string;
-  objectives: string[];
-  homework: string | null;
-  scorm: { id: string; name: string; sessionId: string | null } | null;
-  documents: { id: string; title: string; fileUrl: string; typeLabel: string }[];
-};
 
 export default async function TeacherMaterialsPage({
   searchParams,
@@ -217,93 +207,7 @@ export default async function TeacherMaterialsPage({
             }
           />
         ) : (
-          <ul className="space-y-3">
-            {lessonViews.map((l) => (
-              <li key={l.id} className="t-card relative overflow-hidden p-4">
-                <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-orange-400 to-orange-600" />
-                <div className="space-y-3 pl-2">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-500/15 dark:text-orange-300">
-                          {l.order}
-                        </span>
-                        <h2 className="text-base font-semibold text-foreground">{l.title}</h2>
-                      </div>
-                      {l.objectives.length > 0 && (
-                        <p className="mt-0.5 line-clamp-2 pl-8 text-xs text-muted-foreground">
-                          {l.objectives.join(" · ")}
-                        </p>
-                      )}
-                    </div>
-
-                    {scormOn && l.scorm && (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className="border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-300"
-                        >
-                          Bài giảng SCORM
-                        </Badge>
-                        <a
-                          href={
-                            l.scorm.sessionId
-                              ? `/teacher/scorm/play/${l.scorm.id}?sessionId=${l.scorm.sessionId}`
-                              : `/teacher/scorm/play/${l.scorm.id}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={l.scorm.name}
-                          className="inline-flex items-center gap-1 rounded-md border border-orange-200 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-500/30 dark:text-orange-300 dark:hover:bg-orange-500/10"
-                        >
-                          <Play className="h-3.5 w-3.5" aria-hidden /> Mở trình chiếu
-                        </a>
-                      </div>
-                    )}
-                  </div>
-
-                  {l.documents.length > 0 ? (
-                    <ul className="space-y-1.5 pl-8">
-                      {l.documents.map((d) => (
-                        <li key={d.id}>
-                          <a
-                            href={d.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="group inline-flex max-w-full items-center gap-2 text-sm text-foreground hover:text-orange-700 dark:hover:text-orange-300"
-                          >
-                            <FileText className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-orange-500" aria-hidden />
-                            <span className="truncate font-medium">{d.title}</span>
-                            <Badge variant="outline" className="shrink-0 text-[10px]">
-                              {d.typeLabel}
-                            </Badge>
-                            <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="pl-8 text-xs text-muted-foreground">
-                      {scormOn && l.scorm
-                        ? "Không có tài liệu đính kèm khác."
-                        : "Buổi này chưa có tài liệu."}
-                    </p>
-                  )}
-
-                  {l.homework && (
-                    <div className="ml-8 rounded-lg border border-orange-200 bg-orange-50/60 p-3 dark:border-orange-500/30 dark:bg-orange-500/10">
-                      <div className="flex items-center gap-1.5 text-xs font-bold tracking-wide text-orange-700 uppercase dark:text-orange-300">
-                        <NotebookPen className="h-3.5 w-3.5" aria-hidden /> Bài tập về nhà
-                      </div>
-                      <p className="mt-1 text-sm whitespace-pre-wrap text-foreground">
-                        {l.homework}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <LessonFilterList lessonViews={lessonViews} scormOn={scormOn} />
         )}
       </div>
     );

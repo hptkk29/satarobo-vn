@@ -45,15 +45,38 @@ export function CompletionTable({
   completedSessions: number;
 }) {
   const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"all" | "pending" | "done" | "open">("all");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => r.name.toLowerCase().includes(q));
-  }, [rows, query]);
+    return rows.filter((r) => {
+      if (q && !r.name.toLowerCase().includes(q)) return false;
+      if (status === "pending" && !r.requestPending) return false;
+      if (status === "done" && !r.passed) return false;
+      // "Chưa đề xuất" = chưa hoàn thành và chưa có đề xuất chờ duyệt.
+      if (status === "open" && (r.passed || r.requestPending)) return false;
+      return true;
+    });
+  }, [rows, query, status]);
 
   return (
     <>
-      <ListToolbar query={query} onQuery={setQuery} placeholder="Tìm theo tên học viên..." />
+      <ListToolbar
+        query={query}
+        onQuery={setQuery}
+        placeholder="Tìm theo tên học viên..."
+        filters={[
+          {
+            value: status,
+            onChange: (v) => setStatus(v as typeof status),
+            options: [
+              { value: "all", label: "Tất cả trạng thái" },
+              { value: "open", label: "Chưa đề xuất" },
+              { value: "pending", label: "Chờ duyệt" },
+              { value: "done", label: "Đã hoàn thành" },
+            ],
+          },
+        ]}
+      />
 
       <section className="t-card overflow-hidden">
         <div className="overflow-x-auto">

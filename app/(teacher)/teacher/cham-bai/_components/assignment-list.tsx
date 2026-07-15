@@ -11,6 +11,8 @@ import { EmptyState } from "../../_components/ui/empty-state";
 export interface AssignmentRow {
   id: string;
   title: string;
+  /** Lớp của bài — dùng link sang trang lớp (/teacher/lop?classId=…). */
+  classId: string;
   className: string;
   /** true = có câu hỏi (trắc nghiệm/kiểm tra); false = bài tập tự luận/nộp tệp. */
   isTest: boolean;
@@ -123,8 +125,13 @@ export function AssignmentList({ rows }: { rows: AssignmentRow[] }) {
                           {r.title}
                         </Link>
                       </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap font-medium text-orange-600 dark:text-orange-400">
-                        {r.className}
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <Link
+                          href={`/teacher/lop?classId=${r.classId}`}
+                          className="rounded-sm font-medium text-orange-600 outline-none hover:text-orange-700 hover:underline focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400 dark:hover:text-orange-300"
+                        >
+                          {r.className}
+                        </Link>
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         {r.isTest ? (

@@ -22,6 +22,7 @@ import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
 import { AssignmentList, type AssignmentRow } from "./_components/assignment-list";
 import { AssignDialog } from "./_components/assign-dialog";
+import { BatchGrade } from "./_components/batch-grade";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
 
 export const metadata = { title: "Bài tập & kiểm tra | Giáo viên Sata Robo" };
@@ -153,6 +154,7 @@ export default async function TeacherAssignmentsPage({
         title: true,
         classId: true,
         totalPoints: true,
+        kind: true, // CLASSWORK/HOMEWORK — cùng _count.questions xác định isTest
         class: {
           select: {
             name: true,
@@ -171,6 +173,7 @@ export default async function TeacherAssignmentsPage({
             score: true,
           },
         },
+        _count: { select: { questions: true } }, // >0 → hình thức "Kiểm tra"
       },
     });
     if (!asg || !actor.assignedClassIds.has(asg.classId)) return <NotYours />;
@@ -182,12 +185,30 @@ export default async function TeacherAssignmentsPage({
       SUBMITTED_STATUSES.includes(s.status),
     ).length;
 
+    // Bài "Kiểm tra" (có câu hỏi online HOẶC bài trên lớp CLASSWORK) → cho chấm cả lớp
+    // (HV kiểm tra offline không nộp online). Bài tập về nhà (HOMEWORK) chấm theo bài nộp.
+    const isTest = asg._count.questions > 0 || asg.kind === "CLASSWORK";
+    const batchRoster = roster.map((e) => ({
+      studentId: e.student.id,
+      name: e.student.name, // câu 46: chỉ tên HV
+      score: subByStudent.get(e.student.id)?.score ?? null,
+    }));
+
     return (
       <div>
         <BackLink href="?" label="Bài tập & kiểm tra" />
         <PageHeader
           title={asg.title}
           subtitle={`Lớp ${asg.class.name} · Thang điểm ${asg.totalPoints} · Đã nộp ${submittedCount}/${roster.length}`}
+          actions={
+            isTest ? (
+              <BatchGrade
+                assignmentId={asg.id}
+                totalPoints={asg.totalPoints}
+                roster={batchRoster}
+              />
+            ) : undefined
+          }
         />
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
@@ -309,6 +330,7 @@ export default async function TeacherAssignmentsPage({
   const rows: AssignmentRow[] = assignments.map((a) => ({
     id: a.id,
     title: a.title,
+    classId: a.classId,
     className: a.class.name,
     isTest: a._count.questions > 0,
     fromAdmin: a.templateId != null,

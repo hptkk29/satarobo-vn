@@ -21,6 +21,7 @@
 // là Timestamptz → trừ 7h ra mốc UTC thật (toVnInstant) khi query.
 import Link from "next/link";
 import {
+  ArrowRight,
   CalendarDays,
   CalendarOff,
   CalendarRange,
@@ -559,6 +560,13 @@ function TrialCard({ t }: { t: TeacherTrialSessionRow }) {
           {t.startTime}–{t.endTime}
         </p>
         <p className="mt-0.5 text-sm text-muted-foreground">Lớp trải nghiệm</p>
+        <Link
+          href="/teacher/trial"
+          className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-orange-700 hover:underline dark:text-orange-300"
+        >
+          Phiếu đánh giá Trial
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
       </CardContent>
     </Card>
   );

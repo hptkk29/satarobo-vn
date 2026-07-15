@@ -55,6 +55,7 @@ import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import {
   ReportCardsList,
+  type CompetencyRank,
   type MilestoneChip,
   type ReportCardRow,
 } from "./_components/report-cards-list";
@@ -90,6 +91,20 @@ function buildMilestones(completedSessions: number, periods: PeriodComment[]): M
           : `Buổi ${m} ✓`;
     return { milestone: m, state, text, label: milestoneLabel(m) };
   });
+}
+
+/**
+ * Xếp loại năng lực suy từ điểm TB các tiêu chí ĐÃ CHẤM (thang 1–4). Repo CHƯA có hàm
+ * map điểm→xếp loại (mức 1–4 chỉ có nhãn 1 Cần cố gắng · 2 Đạt · 3 Khá · 4 Tốt), nên
+ * suy 4 bậc cho tab "Năng lực" (câu 55): ≥3.5 Xuất sắc · ≥2.75 Giỏi · ≥2.0 Khá · còn
+ * lại Cần cố gắng. avg=null (chưa chấm tiêu chí nào) → null (hiện "Chưa chấm").
+ */
+function deriveCompetencyRank(avg: number | null): CompetencyRank | null {
+  if (avg == null) return null;
+  if (avg >= 3.5) return "Xuất sắc";
+  if (avg >= 2.75) return "Giỏi";
+  if (avg >= 2.0) return "Khá";
+  return "Cần cố gắng";
 }
 
 export default async function TeacherReportCardsPage({
@@ -203,6 +218,7 @@ export default async function TeacherReportCardsPage({
     c.enrollments.map((e) => ({
       id: e.id,
       classId: c.id,
+      courseId: e.courseId,
       studentId: e.student.id,
       studentName: e.student.name,
       studentCode: e.student.studentCode,
@@ -212,11 +228,22 @@ export default async function TeacherReportCardsPage({
   );
 
   const enrollmentIds = enrollments.map((e) => e.id);
-  const [cards, completedRows, summaries, gradedSubs] = await Promise.all([
+  // Tiêu chí năng lực theo KHOÁ (tab "Năng lực") — Đào tạo cấu hình per-course; đọc raw
+  // qua lib getCourseCriteria (app/(teacher) không import @/lib/db trần). Dedupe courseId
+  // để mỗi khoá chỉ 1 query.
+  const courseIds = [...new Set(enrollments.map((e) => e.courseId))];
+  const [cards, completedRows, summaries, gradedSubs, criteriaLists] = await Promise.all([
     enrollmentIds.length
       ? sdb.reportCard.findMany({
           where: { enrollmentId: { in: enrollmentIds } },
-          select: { enrollmentId: true, status: true, periodComments: true, updatedAt: true },
+          select: {
+            enrollmentId: true,
+            status: true,
+            periodComments: true,
+            updatedAt: true,
+            // Mức năng lực đã chấm (thang 1–4) cho bảng so sánh chéo + xếp loại.
+            scores: { select: { criterionId: true, level: true } },
+          },
         })
       : Promise.resolve([]),
     // Số buổi COMPLETED mỗi lớp — xác định mốc 5/12 đã đạt (#17 Gap 1, câu 55).
@@ -245,11 +272,14 @@ export default async function TeacherReportCardsPage({
           },
         })
       : Promise.resolve([]),
+    // Tiêu chí ACTIVE mỗi khoá (song song thứ tự courseIds).
+    Promise.all(courseIds.map((id) => getCourseCriteria(id))),
   ]);
 
   const cardByEnrollment = new Map(cards.map((c) => [c.enrollmentId, c]));
   const completedByClass = new Map(completedRows.map((r) => [r.classId, r._count._all]));
   const summaryByEnrollment = new Map(enrollments.map((e, i) => [e.id, summaries[i]]));
+  const criteriaByCourse = new Map(courseIds.map((id, i) => [id, criteriaLists[i]]));
 
   // Gom bài đã chấm theo (studentId × classId) → điểm TB qua computeAssignmentSummary.
   const gradedByKey = new Map<string, AssignmentSubmissionLite[]>();
@@ -267,6 +297,20 @@ export default async function TeacherReportCardsPage({
     const avgScore = computeAssignmentSummary(
       gradedByKey.get(`${e.studentId}::${e.classId}`) ?? [],
     ).averageScore;
+
+    // ── Năng lực (tab "Năng lực", câu 55): mức 1–4 mỗi tiêu chí của khoá + TB + xếp loại.
+    // level 0 = chưa chấm. Chỉ tính TB trên tiêu chí ĐÃ CHẤM (level≥1).
+    const levelByCriterion = new Map((card?.scores ?? []).map((s) => [s.criterionId, s.level]));
+    const cells = (criteriaByCourse.get(e.courseId) ?? []).map((c) => ({
+      name: c.name,
+      order: c.order,
+      level: levelByCriterion.get(c.id) ?? 0,
+    }));
+    const scoredLevels = cells.filter((c) => c.level >= 1).map((c) => c.level);
+    const avgLevel = scoredLevels.length
+      ? Math.round((scoredLevels.reduce((a, b) => a + b, 0) / scoredLevels.length) * 10) / 10
+      : null;
+
     return {
       enrollmentId: e.id,
       studentName: e.studentName,
@@ -286,6 +330,7 @@ export default async function TeacherReportCardsPage({
         completedByClass.get(e.classId) ?? 0,
         normalizePeriodComments(card?.periodComments),
       ),
+      competency: { cells, avgLevel, rank: deriveCompetencyRank(avgLevel) },
     };
   });
 

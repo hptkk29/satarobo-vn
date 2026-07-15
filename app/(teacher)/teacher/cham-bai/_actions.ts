@@ -219,3 +219,118 @@ export async function assignTemplateAction(input: {
   revalidatePath("/teacher/cham-bai");
   return { ok: true, assignmentId };
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Chấm điểm HÀNG LOẠT — bài KIỂM TRA offline (HV không nộp online).
+//
+// GV nhập điểm cho từng HV trong roster lớp mình → upsert AssignmentSubmission
+// {assignmentId,studentId} sang GRADED. Ô rỗng = bỏ qua (không đụng bản nộp cũ).
+//
+// BẢO MẬT — cùng khoá 2 lớp như assignTemplateAction (KHÔNG dùng classCenterVisible
+// rộng của admin — GV bị siết chặt hơn ở cấp LỚP):
+//   (1) checkPermission("assignments:grade") — TEACHER đã có (matrix permissions.ts).
+//   (2) assignment.classId ∈ actor.assignedClassIds — chỉ chấm lớp mình phụ trách.
+// Thêm: mọi studentId phải ∈ roster ACTIVE của lớp (chống tiêm studentId lạ).
+// Roster đọc QUA quan hệ class (đã guard) — né enrollment null-centerId bị scopedDb lọc.
+// Câu 46: chỉ đọc studentId (không contact PH).
+// ──────────────────────────────────────────────────────────────────────────
+const batchGradeSchema = z.object({
+  assignmentId: z.string().min(1, "Thiếu mã bài"),
+  scores: z
+    .array(
+      z.object({
+        studentId: z.string().min(1),
+        score: z.coerce.number().min(0, "Điểm phải ≥ 0"),
+      }),
+    )
+    .min(1, "Chưa nhập điểm cho học viên nào"),
+});
+
+type BatchGradeResult = { ok: true; graded: number } | { ok: false; error: string };
+
+export async function gradeBatchAction(input: {
+  assignmentId: string;
+  scores: { studentId: string; score: number }[];
+}): Promise<BatchGradeResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = batchGradeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { assignmentId, scores } = parsed.data;
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const asg = await sdb.assignment.findUnique({
+    where: { id: assignmentId },
+    select: {
+      id: true,
+      classId: true,
+      totalPoints: true,
+      class: {
+        select: {
+          enrollments: {
+            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            select: { studentId: true },
+          },
+        },
+      },
+    },
+  });
+  if (!asg) return { ok: false, error: "Không tìm thấy bài" };
+
+  // (2) Cấp LỚP: chỉ chấm lớp mình phụ trách (chống IDOR đổi assignmentId trên client).
+  if (!actor.assignedClassIds.has(asg.classId)) {
+    return { ok: false, error: "Bài không thuộc lớp bạn phụ trách" };
+  }
+  // (1) Role có capability chấm bài không.
+  const allowed = await checkPermission("assignments:grade", { classId: asg.classId });
+  if (!allowed) return { ok: false, error: "Không có quyền chấm bài" };
+
+  // Chỉ chấm HV đang học của lớp + điểm trong thang.
+  const rosterIds = new Set(asg.class.enrollments.map((e) => e.studentId));
+  for (const s of scores) {
+    if (!rosterIds.has(s.studentId)) {
+      return { ok: false, error: "Có học viên không thuộc lớp" };
+    }
+    if (s.score < 0 || s.score > asg.totalPoints) {
+      return { ok: false, error: `Điểm phải trong khoảng 0–${asg.totalPoints}` };
+    }
+  }
+
+  const me = await sdb.user.findUnique({
+    where: { id: session.user.id },
+    select: { employeeId: true },
+  });
+  const gradedById = me?.employeeId ?? null;
+  const now = new Date();
+
+  try {
+    await sdb.$transaction(async (tx) => {
+      for (const s of scores) {
+        await tx.assignmentSubmission.upsert({
+          where: { assignmentId_studentId: { assignmentId, studentId: s.studentId } },
+          update: { status: "GRADED", score: s.score, gradedAt: now, gradedById },
+          create: {
+            assignmentId,
+            studentId: s.studentId,
+            status: "GRADED",
+            score: s.score,
+            gradedAt: now,
+            gradedById,
+          },
+        });
+      }
+    });
+  } catch (err) {
+    console.error("[gradeBatchAction]", err);
+    return { ok: false, error: "Lỗi cơ sở dữ liệu — không lưu được điểm" };
+  }
+
+  revalidatePath("/cham-bai");
+  revalidatePath("/teacher/cham-bai");
+  return { ok: true, graded: scores.length };
+}

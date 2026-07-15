@@ -11,7 +11,7 @@
 // classId. Roster đọc QUA quan hệ class (enrollment dev centerId=null bị scopedDb lọc).
 // ⚠️ Câu 46: payload client CHỈ tên HV — không SĐT/email/tên PH.
 import Link from "next/link";
-import { ArrowLeft, Ban, CalendarX2, ClipboardPen } from "lucide-react";
+import { ArrowLeft, Ban, CalendarX2, ClipboardCheck, ClipboardPen } from "lucide-react";
 import type { AttendanceStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -190,9 +190,16 @@ export async function HubReviewsTab({
         </div>
 
         {!attendanceTaken && (
-          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-            Buổi chưa điểm danh — đang hiện toàn bộ lớp.
-          </p>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            <span>Buổi chưa điểm danh — đang hiện toàn bộ lớp.</span>
+            <Link
+              href={`?classId=${classId}&sessionId=${reviewSessionId}`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-500/40 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-500/10"
+            >
+              <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
+              Điểm danh buổi này
+            </Link>
+          </div>
         )}
 
         {roster.length === 0 ? (

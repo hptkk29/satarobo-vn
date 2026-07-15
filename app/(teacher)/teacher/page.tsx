@@ -24,10 +24,12 @@ import {
   Clock,
   NotebookPen,
   School,
+  Users,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +120,23 @@ export default async function TeacherHomePage() {
     : [];
 
   const sessionIds = sessions.map((s) => s.id);
+
+  // Tổng học viên đang học (distinct) — đọc QUA quan hệ class (enrollment dev
+  // centerId=null bị scopedDb lọc nếu query thẳng). Chỉ đếm, không lộ tên/PII.
+  const rosters = classIds.length
+    ? await sdb.class.findMany({
+        where: { id: { in: classIds } },
+        select: {
+          enrollments: {
+            where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            select: { studentId: true },
+          },
+        },
+      })
+    : [];
+  const totalStudents = new Set(
+    rosters.flatMap((c) => c.enrollments.map((e) => e.studentId)),
+  ).size;
 
   // Attendance + feedback gom 1 lượt cho các buổi trên; open assignments đếm riêng.
   // (cùng pattern /nhan-xet: fetch tách rồi tổng hợp in-memory — tránh nested
@@ -244,8 +263,9 @@ export default async function TeacherHomePage() {
       )}
 
       {/* Stat tổng quan */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={School} value={classIds.length} label="Lớp tôi phụ trách" tone="brand" />
+        <StatCard icon={Users} value={totalStudents} label="Tổng học viên" tone="blue" />
         <StatCard
           icon={ClipboardCheck}
           value={needAttendance.length}
