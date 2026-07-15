@@ -321,6 +321,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "exams:grade", scopeType: "GLOBAL" },
       { action: "assignments:view", scopeType: "GLOBAL" },
       { action: "assignments:grade", scopeType: "GLOBAL" },
+      // L6 site GV — capability "own" (parity v1↔v2): soạn đề kho riêng + giao bài +
+      // đề xuất hoàn thành (QL cơ sở cũng dùng được; xác nhận thật = completions:manage).
+      // GLOBAL vì gọi TRẦN (không target); cách ly cơ sở ép ở tầng action.
+      { action: "assignments:author-own", scopeType: "GLOBAL" },
+      { action: "assignments:assign-own", scopeType: "GLOBAL" },
+      { action: "completions:propose-own", scopeType: "GLOBAL" },
       { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
       { action: "completions:manage", scopeType: "GLOBAL" },
       { action: "satacoin:manage", scopeType: "GLOBAL" },
@@ -486,6 +492,16 @@ export const ROLE_SEED: RoleSeed[] = [
       // CENTER_MANAGER dùng GLOBAL). KHÔNG có report-cards:review → GV không duyệt/sửa
       // học bạ đã PUBLISHED/RECALLED (#17 đã siết ở tầng action).
       { action: "report-cards:manage", scopeType: "GLOBAL" },
+      // L6 site GV — capability "own" (parity v1↔v2): GV tự soạn đề vào kho riêng +
+      // giao bài cho lớp mình + ĐỀ XUẤT hoàn thành khoá (xác nhận thật vẫn là
+      // completions:manage của trung tâm — GV KHÔNG có). Cách ly lớp/chủ sở hữu ép ở
+      // tầng action (assignedClassIds / createdById).
+      // scope GLOBAL: 3 action gọi TRẦN qua checkPermission (page/action gate không
+      // truyền target) — non-GLOBAL sẽ khoá trang sau flip (xem rbac-scope.test). Cách
+      // ly lớp/chủ sở hữu ép ở tầng action (assignedClassIds / createdById).
+      { action: "assignments:author-own", scopeType: "GLOBAL" },
+      { action: "assignments:assign-own", scopeType: "GLOBAL" },
+      { action: "completions:propose-own", scopeType: "GLOBAL" },
     ],
   },
   {

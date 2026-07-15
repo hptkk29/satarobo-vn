@@ -54,7 +54,8 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
       dateISO: r.classSession?.date?.toISOString() ?? "",
       teacher: tmap.get(r.createdById) ?? null,
       className: r.classSession?.class?.classCode ?? null,
-      comment: r.comment,
+      // comment nay nullable (phiếu nhận xét buổi rubric-only) → coalesce cho portal PH.
+      comment: r.comment ?? "",
       rating: r.rating,
     };
   });

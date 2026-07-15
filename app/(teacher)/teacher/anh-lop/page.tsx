@@ -20,7 +20,7 @@
 // (GV dạy bù liên cơ sở vẫn thấy đúng lớp/buổi mình phụ trách).
 // ⚠️ Câu 46: tag chỉ hiện TÊN học viên — KHÔNG SĐT/email/tên phụ huynh trong payload.
 import Link from "next/link";
-import { Calendar, ChevronRight, Images } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronRight, Images } from "lucide-react";
 import type { MediaStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -28,6 +28,8 @@ import { withMakeupException } from "@/lib/db-scope";
 import { resolveMediaUrls } from "@/lib/storage/signed-url";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "../_components/ui/page-header";
+import { EmptyState } from "../_components/ui/empty-state";
 import { UploadPhotoDialog } from "./_components/upload-photo-dialog";
 
 export const metadata = { title: "Ảnh lớp | Giáo viên Sata Robo" };
@@ -56,18 +58,28 @@ const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
 
 // Đồng bộ nhãn/màu trạng thái duyệt với admin media-client (Chờ/Duyệt/Từ chối).
 const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
-  PENDING: { label: "Chờ duyệt", cls: "bg-amber-100 text-amber-700" },
-  APPROVED: { label: "Đã duyệt", cls: "bg-emerald-100 text-emerald-700" },
-  REJECTED: { label: "Từ chối", cls: "bg-rose-100 text-rose-700" },
+  PENDING: {
+    label: "Chờ duyệt",
+    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  },
+  APPROVED: {
+    label: "Đã duyệt",
+    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+  },
+  REJECTED: {
+    label: "Từ chối",
+    cls: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+  },
 };
 
-// Cover gradient album (port visual mock media/page.tsx `album.cover`) — xoay vòng theo lớp.
+// Cover gradient album (port visual mock media/page.tsx `album.cover`) — xoay vòng theo
+// lớp. Chỉ dùng hue được phép ở site GV (bỏ tím/violet) — cam/sky/emerald/amber/cyan.
 const COVERS = [
-  "from-orange-400 to-purple-600",
+  "from-orange-400 to-orange-600",
   "from-sky-400 to-blue-600",
   "from-emerald-400 to-teal-600",
-  "from-violet-400 to-purple-600",
-  "from-amber-400 to-orange-500",
+  "from-amber-400 to-orange-600",
+  "from-cyan-400 to-sky-600",
 ];
 
 /** 1 ảnh trong album — payload đã lọc theo câu 46 (tag chỉ TÊN học viên). */
@@ -185,19 +197,12 @@ export default async function TeacherClassPhotosPage({
 
     return (
       <div className="space-y-6">
-        <BackLink href="?" label="← Ảnh lớp" />
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-neutral-900">
-              Ảnh lớp — {cls?.name ?? "Lớp"}
-            </h1>
-            <p className="mt-1 text-sm text-neutral-500">
-              Ảnh gom theo buổi học. Bạn đăng ảnh → quản lý duyệt → phụ huynh xem
-              ảnh con được gắn thẻ (hoặc ảnh chung lớp).
-            </p>
-          </div>
-          <UploadPhotoDialog classId={classId} />
-        </div>
+        <BackLink href="?" label="Ảnh lớp" />
+        <PageHeader
+          title={`Ảnh lớp — ${cls?.name ?? "Lớp"}`}
+          subtitle="Ảnh gom theo buổi học. Bạn đăng ảnh → quản lý duyệt → phụ huynh xem ảnh con được gắn thẻ (hoặc ảnh chung lớp)."
+          actions={<UploadPhotoDialog classId={classId} />}
+        />
 
         {media.length === 0 ? (
           <EmptyBox text="Lớp chưa có ảnh nào — bấm “Đăng ảnh lớp” để tải ảnh buổi học." />
@@ -206,16 +211,13 @@ export default async function TeacherClassPhotosPage({
             {ordered.map((g) => (
               <section key={g.key}>
                 <div className="mb-2 flex items-center gap-2">
-                  <Images className="h-4 w-4 text-purple-700" />
-                  <h2 className="text-sm font-bold capitalize text-neutral-900">{g.label}</h2>
+                  <Images className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+                  <h2 className="text-sm font-bold capitalize text-foreground">{g.label}</h2>
                   <Badge variant="outline">{g.items.length} ảnh</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {g.items.map((m) => (
-                    <figure
-                      key={m.id}
-                      className="overflow-hidden rounded-xl border border-neutral-200 bg-white"
-                    >
+                    <figure key={m.id} className="t-card overflow-hidden">
                       {/* Preview thumbnail (R2 / presigned) — <img> như admin media-client */}
                       <img
                         src={m.url}
@@ -233,16 +235,16 @@ export default async function TeacherClassPhotosPage({
                             {MEDIA_STATUS[m.status].label}
                           </span>
                           {m.isClassWide && (
-                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                               Ảnh chung lớp
                             </span>
                           )}
                         </div>
                         {m.caption && (
-                          <p className="line-clamp-2 text-xs text-neutral-600">{m.caption}</p>
+                          <p className="line-clamp-2 text-xs text-muted-foreground">{m.caption}</p>
                         )}
                         {m.tagNames.length > 0 && (
-                          <p className="truncate text-[11px] text-neutral-400">
+                          <p className="truncate text-[11px] text-muted-foreground">
                             Tag: {m.tagNames.join(", ")}
                           </p>
                         )}
@@ -287,13 +289,10 @@ export default async function TeacherClassPhotosPage({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Ảnh lớp</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Ảnh các buổi học ở những lớp bạn phụ trách — chọn lớp để xem album và đăng
-          ảnh mới.
-        </p>
-      </div>
+      <PageHeader
+        title="Ảnh lớp"
+        subtitle="Ảnh các buổi học ở những lớp bạn phụ trách — chọn lớp để xem album và đăng ảnh mới."
+      />
       {classes.length === 0 ? (
         <EmptyBox text="Bạn chưa được phân công lớp nào." />
       ) : (
@@ -304,27 +303,27 @@ export default async function TeacherClassPhotosPage({
               // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
               // (clean URL /anh-lop) LẪN localhost/preview (path thật /teacher/anh-lop).
               <Link key={c.id} href={`?classId=${c.id}`} className="block">
-                <div className="h-full overflow-hidden rounded-xl border border-neutral-200 bg-white transition-colors hover:border-neutral-400">
+                <div className="t-card t-card-hover h-full overflow-hidden">
                   <div className={cn("h-28 bg-gradient-to-br", COVERS[i % COVERS.length])} />
                   <div className="p-4">
                     <div className="flex items-center justify-between">
-                      <h2 className="font-semibold text-neutral-900">{c.name}</h2>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-neutral-300" />
+                      <h2 className="font-semibold text-foreground">{c.name}</h2>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                     </div>
-                    <div className="mt-2 flex items-center justify-between text-sm text-neutral-500">
+                    <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
                       <span className="flex items-center gap-1.5">
-                        <Images className="h-4 w-4" />
+                        <Images className="h-4 w-4" aria-hidden />
                         {st.total} ảnh
                       </span>
                       {st.latest && (
                         <span className="flex items-center gap-1.5">
-                          <Calendar className="h-4 w-4" />
+                          <Calendar className="h-4 w-4" aria-hidden />
                           {shortFmt.format(st.latest)}
                         </span>
                       )}
                     </div>
                     {st.pending > 0 && (
-                      <span className="mt-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      <span className="mt-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                         {st.pending} chờ duyệt
                       </span>
                     )}
@@ -341,24 +340,24 @@ export default async function TeacherClassPhotosPage({
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
   );
 }
 
 function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
-  );
+  return <EmptyState icon={Images} title={text} />;
 }
 
 function NotYours() {
   return (
     <div className="space-y-4">
-      <BackLink href="?" label="← Ảnh lớp" />
+      <BackLink href="?" label="Ảnh lớp" />
       <EmptyBox text="Lớp không thuộc danh sách bạn phụ trách." />
     </div>
   );

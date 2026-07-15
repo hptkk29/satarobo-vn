@@ -1,0 +1,196 @@
+/* Site giáo viên (giaovien.satarobo.vn) — design tokens port từ TeachUI.
+ *
+ * Cam #F97316 là tone thương hiệu DUY NHẤT ở đây: tím bị loại bỏ hoàn toàn, và
+ * cam chỉ mang nghĩa "thương hiệu + hành động" (CTA, nav active, focus ring).
+ * Trạng thái ngữ nghĩa dùng thang riêng — emerald (thành công), amber (chờ),
+ * red (lỗi/từ chối), blue (thông tin) — lấy thẳng từ palette mặc định Tailwind.
+ *
+ * Mọi thứ scoped dưới `.teacher-root`, KHÔNG đụng `:root` trong app/globals.css.
+ * → admin / portal / public giữ nguyên nhận diện cam+tím hiện tại.
+ *
+ * Sáng/Tối: class `.dark` đặt TRÊN CHÍNH `.teacher-root` (không phải <html>), theo
+ * đúng pattern của app/(auth)/auth.css. Nhờ `@custom-variant dark (&:is(.dark *))`
+ * trong globals.css, các utility `dark:` của con vẫn chạy đúng, mà điều hướng
+ * client sang /admin không bị dính nền tối.
+ */
+
+/* ── Sáng ─────────────────────────────────────────────────────────────────── */
+.teacher-root {
+  --background: hsl(220 20% 97%); /* canvas #f7f8fa */
+  --foreground: hsl(222 47% 11%); /* slate-900 */
+
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(222 47% 11%);
+
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(222 47% 11%);
+
+  --primary: hsl(24 95% 53%); /* cam #F97316 (orange-500) */
+  --primary-foreground: hsl(0 0% 100%);
+
+  --secondary: hsl(210 40% 96%); /* slate-100 */
+  --secondary-foreground: hsl(222 47% 11%);
+
+  --muted: hsl(210 40% 96%);
+  --muted-foreground: hsl(215 16% 47%); /* slate-500 */
+
+  /* `--accent` là lớp wash cam RẤT nhạt cho hover — KHÔNG phải cam CTA.
+     Cam CTA nằm ở utility `orange-500/600` của Tailwind. */
+  --accent: hsl(33 100% 96%); /* orange-50 */
+  --accent-foreground: hsl(21 90% 40%); /* orange-700 */
+
+  --destructive: hsl(0 84% 60%);
+
+  --border: hsl(214 32% 91%); /* slate-200 */
+  --input: hsl(214 32% 91%);
+  --ring: hsl(24 95% 53%); /* focus ring cam */
+
+  --radius: 0.75rem;
+
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* ── Tối ──────────────────────────────────────────────────────────────────── */
+.teacher-root.dark {
+  --background: hsl(222 47% 11%);
+  --foreground: hsl(210 40% 98%);
+
+  --card: hsl(222 40% 14%);
+  --card-foreground: hsl(210 40% 98%);
+
+  --popover: hsl(222 40% 14%);
+  --popover-foreground: hsl(210 40% 98%);
+
+  /* Cam sáng hơn (orange-400 #FB923C) để đủ tương phản trên nền tối. */
+  --primary: hsl(27 96% 61%);
+  --primary-foreground: hsl(0 0% 100%);
+
+  --secondary: hsl(217 33% 20%);
+  --secondary-foreground: hsl(210 40% 98%);
+
+  --muted: hsl(217 33% 20%);
+  --muted-foreground: hsl(215 20% 65%);
+
+  --accent: hsl(217 33% 22%);
+  --accent-foreground: hsl(210 40% 98%);
+
+  --destructive: hsl(0 63% 45%);
+
+  --border: hsl(217 33% 22%);
+  --input: hsl(217 33% 22%);
+  --ring: hsl(27 96% 61%);
+}
+
+/* ── Bản in (xuất PDF phiếu nhận xét / phiếu Trial) ────────────────────────
+   Luôn ép nền sáng kể cả đang ở chế độ Tối — tránh nền tối lem vào bản in. */
+@media print {
+  .teacher-root.dark {
+    --background: hsl(0 0% 100%);
+    --foreground: hsl(222 47% 11%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(222 47% 11%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(222 47% 11%);
+    --secondary: hsl(210 40% 96%);
+    --secondary-foreground: hsl(222 47% 11%);
+    --muted: hsl(210 40% 96%);
+    --muted-foreground: hsl(215 16% 47%);
+    --accent: hsl(33 100% 96%);
+    --accent-foreground: hsl(21 90% 40%);
+    --border: hsl(214 32% 91%);
+    --input: hsl(214 32% 91%);
+  }
+}
+
+/* ── Thanh cuộn mảnh, khớp UI tham chiếu ───────────────────────────────────── */
+.teacher-root ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.teacher-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.teacher-root ::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+  border-radius: 9999px;
+}
+.teacher-root ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+}
+
+.teacher-root ::selection {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ── Thẻ ──────────────────────────────────────────────────────────────────
+   TeachUI dùng `.card` + `shadow-card`. Ở đây đặt tên `.t-card` để không đụng
+   bất kỳ class toàn cục nào của repo, và scoped dưới .teacher-root cho chắc. */
+.teacher-root .t-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow:
+    0 1px 2px 0 rgb(15 23 42 / 0.04),
+    0 1px 3px 0 rgb(15 23 42 / 0.06);
+}
+.teacher-root.dark .t-card {
+  box-shadow: none;
+}
+.teacher-root .t-card-hover {
+  transition: box-shadow 150ms ease;
+}
+.teacher-root .t-card-hover:hover {
+  box-shadow: 0 4px 12px -2px rgb(15 23 42 / 0.08);
+}
+
+/* ── Điều hướng sidebar ───────────────────────────────────────────────────── */
+.teacher-root .t-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.teacher-root .t-nav-link:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+/* Nav active = cam nhạt + chữ cam đậm. Cam ở đây mang nghĩa "vị trí hiện tại",
+   cùng ngôn ngữ với CTA — không dùng màu ngữ nghĩa nào khác. */
+.teacher-root .t-nav-link-active,
+.teacher-root .t-nav-link-active:hover {
+  background: #fff7ed; /* orange-50 */
+  color: #c2410c; /* orange-700 */
+}
+.teacher-root.dark .t-nav-link-active,
+.teacher-root.dark .t-nav-link-active:hover {
+  background: rgb(234 88 12 / 0.15); /* orange-600/15 */
+  color: #fdba74; /* orange-300 */
+}
+
+.teacher-root .t-section-label {
+  padding: 1rem 0.75rem 0.25rem;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+
+/* ── Gradient thương hiệu — chỉ dùng cho logo / avatar, không dùng làm nền ─── */
+.teacher-root .brand-gradient {
+  background-image: linear-gradient(135deg, #fbbf24 0%, #f97316 55%, #ea580c 100%);
+}
+.teacher-root .brand-text {
+  background-image: linear-gradient(135deg, #fbbf24 0%, #f97316 55%, #ea580c 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}

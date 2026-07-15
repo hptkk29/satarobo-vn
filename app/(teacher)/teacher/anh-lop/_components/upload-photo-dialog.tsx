@@ -35,9 +35,21 @@ import {
 } from "@/app/(admin)/admin/media/actions";
 
 const selectCls =
-  "h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-purple-400 focus:outline-none disabled:opacity-50";
+  "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:border-orange-400 focus:outline-none disabled:opacity-50";
 
-export function UploadPhotoDialog({ classId }: { classId: string }) {
+export function UploadPhotoDialog({
+  classId,
+  // Preselect (dùng ở phiếu nhận xét buổi: "Tải ảnh" 1 HV cho đúng buổi). compact =
+  // nút nhỏ nhãn "Tải ảnh" thay "Đăng ảnh lớp".
+  initialSessionId,
+  initialTagged,
+  compact = false,
+}: {
+  classId: string;
+  initialSessionId?: string;
+  initialTagged?: string[];
+  compact?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -46,13 +58,13 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
   const [ctx, setCtx] = useState<ClassUploadContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
 
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useState(initialSessionId ?? "");
   const [takenAt, setTakenAt] = useState("");
   const [caption, setCaption] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [tagged, setTagged] = useState<string[]>([]);
+  const [tagged, setTagged] = useState<string[]>(initialTagged ?? []);
   const [wholeClass, setWholeClass] = useState(false);
 
   const nonConsentIds = new Set((ctx?.nonConsent ?? []).map((s) => s.id));
@@ -171,8 +183,13 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
   return (
     <>
       {/* Dialog controlled (open/onOpenChange) theo pattern site GV — không DialogTrigger */}
-      <Button onClick={() => onOpenChange(true)}>
-        <ImagePlus className="mr-1.5 h-4 w-4" /> Đăng ảnh lớp
+      <Button
+        onClick={() => onOpenChange(true)}
+        size={compact ? "sm" : "default"}
+        variant={compact ? "outline" : "default"}
+      >
+        <ImagePlus className={compact ? "mr-1 h-3.5 w-3.5" : "mr-1.5 h-4 w-4"} aria-hidden />
+        {compact ? "Tải ảnh" : "Đăng ảnh lớp"}
       </Button>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -185,23 +202,23 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
           </DialogHeader>
 
           {loadingCtx || ctx === null ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-neutral-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> Đang tải thông tin lớp…
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Đang tải thông tin lớp…
             </div>
           ) : blocked ? (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300">
               Bạn không phụ trách lớp này nên không thể đăng ảnh.
             </div>
           ) : (
             <div className="space-y-3">
               {/* Banner HS CHƯA đồng ý dùng hình ảnh (consent) — mirror admin media-client */}
               {ctx.nonConsent.length > 0 && (
-                <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                   <div>
                     <p className="font-semibold">Học viên CHƯA đồng ý dùng hình ảnh:</p>
                     <p className="mt-0.5">{ctx.nonConsent.map((s) => s.name).join(", ")}</p>
-                    <p className="mt-1 text-amber-700">
+                    <p className="mt-1 text-amber-700 dark:text-amber-300">
                       Vui lòng làm mờ thủ công hoặc loại các em này khỏi khung hình.
                       Không thể gắn thẻ các em này.
                     </p>
@@ -248,11 +265,11 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
                   className="h-40 w-full rounded-lg object-cover"
                 />
               ) : (
-                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 p-6 text-sm text-neutral-500 hover:bg-neutral-50">
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 text-sm text-muted-foreground hover:bg-muted">
                   {uploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   ) : (
-                    <Upload className="h-4 w-4" />
+                    <Upload className="h-4 w-4" aria-hidden />
                   )}
                   {uploading ? "Đang tải…" : "Chọn ảnh"}
                   <input type="file" accept="image/*" onChange={onFile} className="hidden" />
@@ -274,7 +291,7 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
 
               {ctx.students.length > 0 && (
                 <div className="space-y-2">
-                  <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-neutral-700">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
                     <input
                       type="checkbox"
                       checked={wholeClass}
@@ -283,14 +300,14 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
                         setWholeClass(e.target.checked);
                         if (e.target.checked) setTagged([]);
                       }}
-                      className="h-4 w-4 rounded border-neutral-300 text-purple-600 focus:ring-purple-400"
+                      className="h-4 w-4 rounded border-input text-orange-600 focus:ring-orange-400"
                     />
                     Ảnh chung cả lớp (mọi phụ huynh trong lớp đều xem được)
                   </label>
 
                   {!wholeClass && (
                     <div>
-                      <p className="mb-1 text-xs font-medium text-neutral-500">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">
                         Gắn thẻ học viên (chỉ phụ huynh được gắn thẻ mới thấy ảnh)
                       </p>
                       <div className="flex flex-wrap gap-1.5">
@@ -310,10 +327,10 @@ export function UploadPhotoDialog({ classId }: { classId: string }) {
                               }
                               className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                                 noConsent
-                                  ? "cursor-not-allowed bg-neutral-100 text-neutral-300 line-through"
+                                  ? "cursor-not-allowed bg-muted text-muted-foreground/50 line-through"
                                   : on
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                                    ? "bg-orange-600 text-white"
+                                    : "bg-muted text-muted-foreground hover:bg-muted/70"
                               }`}
                             >
                               {s.name}

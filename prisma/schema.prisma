@@ -860,6 +860,12 @@ model Course {
   teacherCourses TeacherCourse[]
   completions    CourseCompletion[] @relation("CourseCompletions")
 
+  // R7 — lộ trình chuyển cấp: khoá kế tiếp (vd Sata 3 → Sata 4). Self-relation, cấu
+  // hình admin; hoàn thành khoá gợi ý "Chuyển sang".
+  nextCourseId String?
+  nextCourse   Course?  @relation("CourseProgression", fields: [nextCourseId], references: [id], onDelete: SetNull)
+  prevCourses  Course[] @relation("CourseProgression")
+
   // FL W0 — gộp gói bán (FL1-05) + kho câu hỏi theo khoá (FL1-03).
   coursePackages CoursePackage[]
   questions      Question[]
@@ -1550,8 +1556,14 @@ model StudentSessionFeedback {
   id             String       @id @default(cuid())
   classSessionId String
   studentId      String
-  comment        String       @db.Text
-  rating         Int? // 1-5 tuỳ chọn
+  // Phiếu nhận xét buổi (site GV): comment giữ tương thích cũ (nay nullable — phiếu
+  // rubric-only không bắt buộc văn xuôi). projectName + notes(4 mục) + rubric(9 tiêu
+  // chí 1-5) là dữ liệu phiếu mở rộng (lib/lms/session-eval-rubric).
+  comment        String?      @db.Text
+  rating         Int? // 1-5 tuỳ chọn (đường sao cũ — /teacher/nhan-xet)
+  projectName    String? // tên dự án buổi
+  notes          Json? // { knowledge, skill, attitude, proposal }
+  rubric         Json? // { criterionId: level 1-5 }
   createdById    String // GV
   createdAt      DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
@@ -3958,6 +3970,56 @@ model TimesheetEditLog {
   @@index([createdAt])
 }
 
+// Đơn từ GV (site giáo viên): 10 loại / 3 nhóm. GV gửi → PENDING → CENTER_MANAGER cơ sở
+// duyệt/từ chối (scope theo centerId). Plain-string FK theo pattern TimesheetAdjustmentRequest
+// (không relation — app resolve tên khi cần). Không tự sinh side-effect (chỉ trạng thái).
+enum WorkRequestKind {
+  CLASS_CHANGE // Đổi lớp dạy
+  SUB_TEACH // Dạy thay
+  CLASS_OFF // Nghỉ buổi dạy
+  SHIFT_SWAP // Đổi ca
+  OT // Tăng ca
+  LATE_EARLY // Đi muộn / Về sớm
+  TIMESHEET_FIX // Chỉnh công
+  LEAVE // Nghỉ phép
+  REMOTE // Làm từ xa
+  BUSINESS_TRIP // Đi công tác
+}
+
+enum WorkRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WorkRequest {
+  id            String            @id @default(cuid())
+  requesterId   String // User (GV gửi đơn)
+  centerId      String? // cơ sở của GV (scope duyệt CENTER_MANAGER)
+  kind          WorkRequestKind
+  status        WorkRequestStatus @default(PENDING)
+  fromDate      DateTime?         @db.Date // ngày / từ ngày (đơn theo ngày)
+  toDate        DateTime?         @db.Date // đến ngày (đơn khoảng)
+  startTime     String? // "HH:mm"
+  endTime       String? // "HH:mm"
+  hours         Float? // OT tự tính / chỉnh công
+  className     String? // tên lớp (snapshot, đơn liên quan lớp)
+  classId       String? // link lớp (tuỳ chọn)
+  targetUserId  String? // người dạy thay / nhận ca
+  targetShiftId String? // ca muốn đổi (ShiftRegistration id)
+  detail        String? // meta phụ (nơi đến, hình thức muộn/sớm, người nhận…)
+  reason        String            @db.Text // lý do (bắt buộc)
+  reviewedById  String?
+  reviewedByName String?
+  reviewedAt    DateTime?         @db.Timestamptz(6)
+  reviewNote    String?           @db.Text
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@index([requesterId, status])
+  @@index([centerId, status, createdAt])
+}
+
 // Module Quản lý lớp phần 4 — checklist mở/đóng cơ sở theo ngày.
 model CenterDayChecklist {
   id        String   @id @default(cuid())
@@ -4313,6 +4375,37 @@ model CourseCompletion {
   @@unique([studentId, courseId])
   @@index([studentId])
   @@index([courseId])
+}
+
+// Đề xuất hoàn thành khoá (site GV): GV đề xuất → CENTER_MANAGER cơ sở duyệt → tạo
+// CourseCompletion. Plain-string FK (pattern WorkRequest). GV chỉ ĐỀ XUẤT (không tự
+// xác nhận hoàn thành — quyền completions:manage vẫn ở trung tâm).
+enum CourseCompletionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model CourseCompletionRequest {
+  id             String                        @id @default(cuid())
+  enrollmentId   String
+  studentId      String
+  courseId       String
+  centerId       String?
+  requesterId    String // GV đề xuất
+  status         CourseCompletionRequestStatus @default(PENDING)
+  nextCourseId   String? // lộ trình chuyển cấp đề xuất
+  note           String?                       @db.Text
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?                     @db.Timestamptz(6)
+  reviewNote     String?                       @db.Text
+  createdAt      DateTime                      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime                      @updatedAt @db.Timestamptz(6)
+
+  @@index([enrollmentId, status])
+  @@index([centerId, status])
+  @@index([requesterId, status])
 }
 
 // =============================================================================
@@ -5094,6 +5187,27 @@ model TrialAttendance {
   updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
 
   @@unique([trialSessionId, trialEnrollmentId])
+}
+
+// Phiếu đánh giá buổi TRẢI NGHIỆM (rubric thang 8.0 SataRobo) — 1 phiếu/HV trải
+// nghiệm. Ref phẳng tới TrialEnrollment (@unique) + buổi (scalar) để blast radius nhỏ.
+// scores = JSON { focus, interact, keyboard, experience, absorb, logic } → điểm đã chọn.
+// Cấu trúc rubric cố định trong lib/trial/rubric.ts (không drive bằng DB).
+model TrialRubricEval {
+  id                  String   @id @default(cuid())
+  trialEnrollmentId   String   @unique
+  trialClassSessionId String? // buổi được đánh giá (ref phẳng)
+  scores              Json // criterionId -> points (thang 8.0)
+  totalScore          Float
+  rank                String // "Tốt" | "Khá" | "Trung bình" | "Cần cố gắng"
+  generalComment      String?  @db.Text // Nhận xét chung
+  orientation         String?  @db.Text // Định hướng của SataRobo
+  evaluatedById       String? // GV (User.id)
+  evaluatedByName     String?
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([trialClassSessionId])
 }
 
 // ═══ R7-05 — Convert v2 ═══════════════════════════════════════════════════════

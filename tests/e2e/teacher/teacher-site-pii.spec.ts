@@ -123,8 +123,10 @@ test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId tr
       data: { studentId: student.id, classId: cls.id, courseId: cls.courseId, status: "STUDYING" },
     });
 
-    // Buổi trong khoảng [hôm nay−3, +28] để cả /lop lẫn /lich đều thấy.
-    const when = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    // Buổi HÔM QUA (−1 ngày): nằm trong khoảng lịch [hôm nay−3, +28] để /lich thấy,
+    // ĐỒNG THỜI đã "tới giờ" (date ≤ hết hôm nay) nên tab Điểm danh của Class Hub render
+    // link "Điểm danh" ?sessionId= (buổi tương lai chỉ hiện "Chưa tới giờ", không có link).
+    const when = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
     const sess = await db.classSession.create({
       data: { classId: cls.id, centerId: c1, date: when, status: "SCHEDULED" },
       select: { id: true },
@@ -135,9 +137,9 @@ test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId tr
   test("[câu 46 + studentId-URL] /teacher/lop → roster: tên HV hiện, KHÔNG lộ SĐT/email PH; studentId không lên URL", async ({ page }) => {
     await loginTeacher(page);
 
-    // (a) Danh sách lớp được phân.
+    // (a) Danh sách lớp được phân. (Reskin TeachUI: tiêu đề trang = "Lớp học của tôi".)
     await page.goto("/teacher/lop", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Lớp của tôi" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Lớp học của tôi" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(className)).toBeVisible();
     expect(page.url()).not.toContain(studentId);
     await expectNoContactLeak(page);
@@ -163,7 +165,8 @@ test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId tr
   test("[câu 46 + studentId-URL] /teacher/lich hiển thị lịch dạy, KHÔNG lộ contact PH; studentId không lên URL", async ({ page }) => {
     await loginTeacher(page);
     await page.goto("/teacher/lich", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Lịch dạy" })).toBeVisible({ timeout: 30_000 });
+    // Reskin TeachUI: tiêu đề trang = "Lịch làm việc" (bao cả ca làm & ngày nghỉ, không chỉ lịch dạy).
+    await expect(page.getByRole("heading", { name: "Lịch làm việc" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(className).first()).toBeVisible();
     expect(page.url()).not.toContain(studentId);
     await expectNoContactLeak(page);

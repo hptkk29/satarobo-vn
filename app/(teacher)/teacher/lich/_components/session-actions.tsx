@@ -117,7 +117,7 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
           </DialogHeader>
 
           <div className="space-y-2">
-            <label htmlFor="class-comment" className="text-sm font-medium text-neutral-700">
+            <label htmlFor="class-comment" className="text-sm font-medium text-foreground">
               Nhận xét lớp (tuỳ chọn)
             </label>
             <Textarea
@@ -129,7 +129,7 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
               placeholder="Ví dụ: Cả lớp hoàn thành mục tiêu buổi…"
             />
             {confirmWarning && (
-              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
                 {confirmWarning}
               </p>
             )}

@@ -63,6 +63,10 @@ export type GradeFormProps = {
   fileSize: number | null;
   initialScore: number | null;
   initialFeedback: string | null;
+  /** Query suffix (bắt đầu bằng "?") để quay về sau khi chấm xong — GHÉP với pathname
+   * hiện tại nên host-safe (/lop vs /teacher/lop). Mặc định (undefined) = về pathname
+   * trần (list trang /cham-bai). Class Hub truyền "?classId=…&tab=bai-tap&asgId=…". */
+  backHref?: string;
 };
 
 export function GradeForm({
@@ -78,6 +82,7 @@ export function GradeForm({
   fileSize,
   initialScore,
   initialFeedback,
+  backHref,
 }: GradeFormProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -99,9 +104,10 @@ export function GradeForm({
   const previewScore =
     chosen.length === RUBRIC_CRITERIA.length ? rubricToScore(chosen) : null;
 
-  /** Sau khi chấm OK: về list (bỏ query) + refresh để bài biến khỏi "chờ chấm". */
+  /** Sau khi chấm OK: về list (bỏ query) + refresh để bài biến khỏi "chờ chấm".
+   * Trong Class Hub, backHref trỏ về roster chi tiết bài để chấm HV tiếp theo. */
   function backToList() {
-    router.replace(pathname);
+    router.replace(backHref ? `${pathname}${backHref}` : pathname);
     router.refresh();
   }
 
@@ -168,25 +174,31 @@ export function GradeForm({
             <CardTitle className="text-base">Bài nộp</CardTitle>
             <div className="flex items-center gap-2">
               {isLate && (
-                <Badge variant="outline" className="border-amber-400 text-amber-600">
+                <Badge
+                  variant="outline"
+                  className="border-amber-300 text-amber-700 dark:border-amber-500/40 dark:text-amber-300"
+                >
                   Nộp muộn
                 </Badge>
               )}
               {graded && (
-                <Badge variant="outline" className="border-emerald-500 text-emerald-600">
+                <Badge
+                  variant="outline"
+                  className="border-emerald-300 text-emerald-700 dark:border-emerald-500/40 dark:text-emerald-300"
+                >
                   Đã chấm{initialScore != null ? ` — ${initialScore}/${totalPoints}` : ""}
                 </Badge>
               )}
             </div>
           </div>
           {submittedAtText && (
-            <p className="text-sm text-neutral-500">Nộp lúc: {submittedAtText}</p>
+            <p className="text-sm text-muted-foreground">Nộp lúc: {submittedAtText}</p>
           )}
         </CardHeader>
         <CardContent className="space-y-3">
           {textAnswer && (
-            <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3">
-              <p className="whitespace-pre-wrap text-sm text-neutral-800">{textAnswer}</p>
+            <div className="rounded-md border border-border bg-muted/40 p-3">
+              <p className="whitespace-pre-wrap text-sm text-foreground">{textAnswer}</p>
             </div>
           )}
           {fileUrl && (
@@ -194,17 +206,17 @@ export function GradeForm({
               href={fileUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-purple-700 hover:text-purple-800"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
             >
-              <ExternalLink className="h-4 w-4" />
+              <ExternalLink className="h-4 w-4" aria-hidden />
               {fileName ?? "Tệp đính kèm"}
               {formatSize(fileSize) && (
-                <span className="font-normal text-neutral-400">({formatSize(fileSize)})</span>
+                <span className="font-normal text-muted-foreground">({formatSize(fileSize)})</span>
               )}
             </a>
           )}
           {!textAnswer && !fileUrl && (
-            <p className="text-sm text-neutral-500">Không có nội dung đính kèm.</p>
+            <p className="text-sm text-muted-foreground">Không có nội dung đính kèm.</p>
           )}
         </CardContent>
       </Card>
@@ -231,8 +243,8 @@ export function GradeForm({
                   className={cn(
                     "rounded-md border px-2.5 py-1 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                     mode === m.key
-                      ? "border-purple-700 bg-purple-700 text-white"
-                      : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50",
+                      ? "border-orange-500 bg-orange-500 text-white"
+                      : "border-border bg-card text-muted-foreground hover:bg-muted",
                   )}
                 >
                   {m.label}
@@ -244,7 +256,7 @@ export function GradeForm({
         <CardContent className="space-y-4">
           {mode === "quick" ? (
             <label className="block text-sm">
-              <span className="mb-1 block font-medium text-neutral-700">
+              <span className="mb-1 block font-medium text-foreground">
                 Điểm (0–{totalPoints})
               </span>
               <Input
@@ -263,10 +275,10 @@ export function GradeForm({
           ) : (
             <div className="space-y-3">
               {RUBRIC_CRITERIA.map((c) => (
-                <div key={c.key} className="rounded-lg border border-neutral-200 p-3">
+                <div key={c.key} className="rounded-lg border border-border p-3">
                   <div className="mb-2">
-                    <p className="text-sm font-semibold text-neutral-800">{c.label}</p>
-                    <p className="text-xs text-neutral-400">{c.desc}</p>
+                    <p className="text-sm font-semibold text-foreground">{c.label}</p>
+                    <p className="text-xs text-muted-foreground">{c.desc}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {RUBRIC_LEVELS.map((l) => {
@@ -285,7 +297,7 @@ export function GradeForm({
                             "rounded-md border px-2.5 py-1 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                             active
                               ? LEVEL_ACTIVE[l.key]
-                              : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50",
+                              : "border-border bg-card text-muted-foreground hover:bg-muted",
                           )}
                         >
                           {l.label} ({l.points})
@@ -295,9 +307,9 @@ export function GradeForm({
                   </div>
                 </div>
               ))}
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-muted-foreground">
                 Điểm quy đổi:{" "}
-                <span className="font-semibold text-neutral-900">
+                <span className="font-semibold text-foreground">
                   {previewScore != null ? `${previewScore}/10` : "— (chấm đủ 6 tiêu chí)"}
                 </span>
               </p>
@@ -305,7 +317,7 @@ export function GradeForm({
           )}
 
           <label className="block text-sm">
-            <span className="mb-1 block font-medium text-neutral-700">
+            <span className="mb-1 block font-medium text-foreground">
               Nhận xét {mode === "rubric" ? "(bắt buộc)" : "(tuỳ chọn)"}
             </span>
             <Textarea
@@ -318,7 +330,7 @@ export function GradeForm({
           </label>
 
           {mode === "rubric" && (
-            <label className="flex items-center gap-2 text-sm text-neutral-600">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
                 checked={sendEmail}

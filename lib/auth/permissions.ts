@@ -154,6 +154,7 @@ export type Action =
 
   // --- Course completion (B4) ---
   | "completions:manage"
+  | "completions:propose-own"
 
   // --- SataCoin (C4) ---
   | "satacoin:manage"
@@ -195,6 +196,8 @@ export type Action =
   | "assignments:edit"
   | "assignments:grade"
   | "assignments:delete"
+  | "assignments:assign-own"
+  | "assignments:author-own"
 
   // --- Documents (NEW) ---
   | "documents:view"
@@ -402,6 +405,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "enrollments:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "enrollments:transfer": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "completions:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // GV chỉ ĐỀ XUẤT hoàn thành khoá (xác nhận thật = completions:manage của trung tâm).
+  "completions:propose-own": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
 
   // --- Evaluations / surveys (R7-16) ---
   "evaluations:manage": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
@@ -472,6 +477,16 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "assignments:edit": ["SUPER_ADMIN", "TRAINING"],
   "assignments:grade": ["TEACHER", "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
   "assignments:delete": ["SUPER_ADMIN", "TRAINING"],
+  // Site GV (L6): GV GIAO bài từ template có sẵn cho LỚP MÌNH phụ trách. KHÁC
+  // assignments:create (TRAINING soạn kho toàn hệ thống) — capability này CHỈ cho
+  // giao lại template, và action tự khoá classId ∈ assignedClassIds (cấp LỚP,
+  // không phải cấp cơ sở). GV KHÔNG soạn kho/không sửa bài admin.
+  "assignments:assign-own": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // Site GV (L6) — "Kho bài tập của tôi": GV TỰ SOẠN đề trắc nghiệm/tự luận + tự
+  // xoá đề của MÌNH (AssignmentTemplate.createdById = employeeId/userId của GV).
+  // KHÁC assignments:create (TRAINING soạn kho toàn hệ thống) — capability này chỉ
+  // đụng template do chính GV tạo (own-scope qua createdById), KHÔNG sửa/xoá bài admin.
+  "assignments:author-own": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
 
   // --- Documents ---
   // FL W0 (QĐ-T1): tài liệu LMS biên soạn/upload bởi TRAINING. TEACHER + CENTER_MANAGER chỉ XEM.

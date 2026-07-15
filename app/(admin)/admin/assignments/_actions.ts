@@ -42,13 +42,18 @@ function classCenterVisible(
   return !!cls && cls.centerId != null && actor.visibleCenterIds.includes(cls.centerId);
 }
 
-async function requireRole(): Promise<
+async function requireRole(
+  // Cổng THÔ (coarse) trước khi xét own-class. Mặc định "assignments:create" (soạn/
+  // sửa/xoá/publish = TRAINING/Admin). CHẤM bài truyền "assignments:grade" để GV
+  // (chỉ có grade, không có create) qua được — own-class do canGradeClassWork gác sau.
+  permission: Parameters<typeof checkPermission>[0] = "assignments:create",
+): Promise<
   | { ok: true; userId: string; user: GradeActor; actor: Actor; sdb: Sdb }
   | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!(await checkPermission("assignments:create"))) {
+  if (!(await checkPermission(permission))) {
     return { ok: false, error: "Không có quyền quản lý bài tập" };
   }
   const actor = await resolveActor(session.user.id);
@@ -494,7 +499,7 @@ const GradeSchema = z.object({
 export async function gradeSubmission(
   input: z.infer<typeof GradeSchema>,
 ): Promise<Result> {
-  const gate = await requireRole();
+  const gate = await requireRole("assignments:grade");
   if (!gate.ok) return gate;
 
   const parsed = GradeSchema.safeParse(input);
@@ -842,7 +847,7 @@ const RubricGradeSchema = z.object({
 export async function gradeSubmissionRubric(
   input: z.infer<typeof RubricGradeSchema>,
 ): Promise<Result> {
-  const gate = await requireRole();
+  const gate = await requireRole("assignments:grade");
   if (!gate.ok) return gate;
 
   const parsed = RubricGradeSchema.safeParse(input);

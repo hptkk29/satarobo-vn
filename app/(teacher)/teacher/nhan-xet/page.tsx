@@ -13,6 +13,7 @@
 // StudentSessionFeedback ∉ SCOPED_MODELS → sdb pass-through SAU khi đã guard classId.
 // ⚠️ Câu 46: payload client CHỈ tên HV — không SĐT/email/tên PH.
 import Link from "next/link";
+import { ArrowLeft, Ban, BookOpen, CalendarX2, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -22,8 +23,9 @@ import {
   deriveFeedbackRoster,
   summarizeSessionFeedback,
 } from "@/lib/lms/session-feedback-roster";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "../_components/ui/page-header";
+import { EmptyState } from "../_components/ui/empty-state";
 import { FeedbackPanel, type FeedbackPanelRow } from "./_components/feedback-panel";
 
 export const metadata = { title: "Nhận xét buổi học | Giáo viên Sata Robo" };
@@ -115,17 +117,14 @@ export default async function TeacherFeedbackPage({
     }));
 
     return (
-      <div className="space-y-4">
-        <BackLink href={`?classId=${classId}`} label="← Buổi học của lớp" />
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Nhận xét — {sess.class.name}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            {dayFmt.format(sess.date)}
-            {sess.topic ? ` · ${sess.topic}` : ""} · {SESSION_STATUS_LABEL[sess.status] ?? sess.status}
-          </p>
-        </div>
+      <div>
+        <BackLink href={`?classId=${classId}`} label="Buổi học của lớp" />
+        <PageHeader
+          title={`Nhận xét — ${sess.class.name}`}
+          subtitle={`${dayFmt.format(sess.date)}${sess.topic ? ` · ${sess.topic}` : ""} · ${SESSION_STATUS_LABEL[sess.status] ?? sess.status}`}
+        />
         {!attendanceTaken && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
             Buổi chưa điểm danh — đang hiện toàn bộ lớp.
           </p>
         )}
@@ -175,16 +174,17 @@ export default async function TeacherFeedbackPage({
     }
 
     return (
-      <div className="space-y-4">
-        <BackLink href="?" label="← Nhận xét buổi học" />
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">{cls?.name ?? "Lớp"}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Chọn buổi trong 14 ngày gần đây để nhận xét học viên.
-          </p>
-        </div>
+      <div>
+        <BackLink href="?" label="Nhận xét buổi học" />
+        <PageHeader
+          title={cls?.name ?? "Lớp"}
+          subtitle="Chọn buổi trong 14 ngày gần đây để nhận xét học viên."
+        />
         {sessions.length === 0 ? (
-          <EmptyBox text="Lớp không có buổi học nào trong 14 ngày gần đây." />
+          <EmptyState
+            icon={CalendarX2}
+            title="Lớp không có buổi học nào trong 14 ngày gần đây."
+          />
         ) : (
           <div className="space-y-2">
             {sessions.map((s) => {
@@ -195,34 +195,34 @@ export default async function TeacherFeedbackPage({
               return (
                 // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
                 // (clean URL /nhan-xet) LẪN localhost/preview (path thật /teacher/nhan-xet).
-                <Link key={s.id} href={`?classId=${classId}&sessionId=${s.id}`} className="block">
-                  <Card className="transition-colors hover:border-neutral-400">
-                    <CardContent className="flex items-center justify-between gap-3 py-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-neutral-800">{dayFmt.format(s.date)}</p>
-                        {s.topic && <p className="truncate text-xs text-neutral-500">{s.topic}</p>}
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                        {stat.attendanceTaken ? (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              stat.complete
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                                : "border-amber-300 bg-amber-50 text-amber-700",
-                            )}
-                          >
-                            Đã nhận xét {stat.reviewed}/{stat.attended} HV
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-neutral-500">
-                            Chưa điểm danh
-                          </Badge>
+                <Link
+                  key={s.id}
+                  href={`?classId=${classId}&sessionId=${s.id}`}
+                  className="t-card t-card-hover flex items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{dayFmt.format(s.date)}</p>
+                    {s.topic && <p className="truncate text-xs text-muted-foreground">{s.topic}</p>}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                    {stat.attendanceTaken ? (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          stat.complete
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-600/15 dark:text-emerald-200"
+                            : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300",
                         )}
-                        <Badge variant="outline">{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      >
+                        Đã nhận xét {stat.reviewed}/{stat.attended} HV
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Chưa điểm danh
+                      </Badge>
+                    )}
+                    <Badge variant="outline">{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
+                  </div>
                 </Link>
               );
             })}
@@ -250,30 +250,37 @@ export default async function TeacherFeedbackPage({
     : [];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Nhận xét buổi học</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Chọn lớp → chọn buổi → nhận xét + chấm sao từng học viên đi học.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Nhận xét buổi học"
+        subtitle="Chọn lớp → chọn buổi → nhận xét + chấm sao từng học viên đi học."
+      />
       {classes.length === 0 ? (
-        <EmptyBox text="Bạn chưa được phân công lớp nào." />
+        <EmptyState icon={BookOpen} title="Bạn chưa được phân công lớp nào." />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {classes.map((c) => (
             // href chỉ-query — xem ghi chú ở link buổi học.
-            <Link key={c.id} href={`?classId=${c.id}`} className="block">
-              <Card className="h-full transition-colors hover:border-neutral-400">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{c.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <p className="text-sm text-neutral-500">
-                    {c._count.sessions} buổi trong 14 ngày gần đây
-                  </p>
-                </CardContent>
-              </Card>
+            <Link
+              key={c.id}
+              href={`?classId=${c.id}`}
+              className="t-card t-card-hover flex h-full flex-col gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-base font-bold text-foreground">{c.name}</p>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-500/15">
+                  <MessageSquare
+                    className="h-[18px] w-[18px] text-orange-600 dark:text-orange-400"
+                    aria-hidden
+                  />
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {c._count.sessions} buổi trong 14 ngày gần đây
+              </p>
+              <p className="mt-auto text-sm font-semibold text-orange-600 dark:text-orange-400">
+                Nhận xét →
+              </p>
             </Link>
           ))}
         </div>
@@ -284,25 +291,21 @@ export default async function TeacherFeedbackPage({
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
   );
 }
 
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
-  );
-}
-
 function NotYours() {
   return (
-    <div className="space-y-4">
-      <BackLink href="?" label="← Nhận xét buổi học" />
-      <EmptyBox text="Buổi học không thuộc lớp bạn phụ trách." />
+    <div>
+      <BackLink href="?" label="Nhận xét buổi học" />
+      <EmptyState icon={Ban} title="Buổi học không thuộc lớp bạn phụ trách." />
     </div>
   );
 }
