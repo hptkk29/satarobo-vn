@@ -145,7 +145,12 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
                     className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                   >
                     <td className="px-5 py-3.5">
-                      <p className="font-semibold text-foreground">{r.name}</p>
+                      <Link
+                        href={`?classId=${r.id}`}
+                        className="rounded-sm font-semibold text-foreground outline-none hover:text-orange-700 hover:underline focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-orange-300"
+                      >
+                        {r.name}
+                      </Link>
                       {(r.code || r.center) && (
                         <p className="text-xs text-muted-foreground">
                           {[r.code, r.center].filter(Boolean).join(" · ")}
