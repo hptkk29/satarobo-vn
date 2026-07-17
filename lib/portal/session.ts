@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { makeToken, verifyToken } from "@/lib/portal/active-site-token";
+import { getSigningSecret } from "@/lib/security/signing-key";
 
 // =============================================================================
 // PORTAL SESSION — Phase T2.2 (PHƯƠNG ÁN A)
@@ -34,9 +35,7 @@ export type PortalContext = {
 };
 
 function secret(): string {
-  const s = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
-  if (!s) console.warn("[portal] NEXTAUTH_SECRET trống — cookie activeSite không an toàn");
-  return s;
+  return getSigningSecret(); // SEC-H05: bỏ fallback "" (forge được cookie active-site).
 }
 
 function verifySigned(token: string): string | null {

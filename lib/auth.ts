@@ -4,6 +4,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { loginSchema } from "@/lib/validators/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 type SessionGrant = { action: string; grant: "ALLOW" | "DENY" };
 
@@ -25,6 +26,13 @@ function migrateLegacyRole(role: string): string {
   if (role === "MANAGER") return "CENTER_MANAGER";
   if (role === "SALES") return "SALES_CSM";
   return role;
+}
+
+// SEC-H01 — IP client cho rate-limit login (Vercel để IP thật ở x-forwarded-for).
+function getClientIp(request: Request | undefined): string {
+  const xff = request?.headers?.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0]!.trim();
+  return request?.headers?.get("x-real-ip") ?? "unknown";
 }
 
 declare module "next-auth" {
@@ -80,9 +88,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     : {}),
   providers: [
     Credentials({
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
+
+        // SEC-H01: chống brute-force / credential-stuffing — rate-limit theo IP + email.
+        // rateLimit() fail-soft (Upstash → memory khi lỗi) nên KHÔNG khóa login hàng loạt
+        // khi Redis sự cố. Break-glass: đặt env LOGIN_RATELIMIT_DISABLED=1 để tắt tạm.
+        if (process.env.LOGIN_RATELIMIT_DISABLED !== "1") {
+          const ip = getClientIp(request);
+          const email = parsed.data.email.toLowerCase();
+          const [byIp, byEmail] = await Promise.all([
+            rateLimit({ key: `login:ip:${ip}`, max: 10, windowMs: 60_000 }),
+            rateLimit({ key: `login:email:${email}`, max: 5, windowMs: 60_000 }),
+          ]);
+          if (!byIp.success || !byEmail.success) return null;
+        }
 
         const user = await db.user.findUnique({
           where: { email: parsed.data.email },

@@ -3,6 +3,7 @@ import { createHmac, randomInt, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import { getPrimaryOtpProvider } from "./provider";
 import { getSetting } from "@/lib/settings/service";
+import { getSigningSecret } from "@/lib/security/signing-key";
 
 // =============================================================================
 // Cụm A1 — OTP service (request + verify).
@@ -19,7 +20,7 @@ export const OTP_DAILY_LIMIT = 8; // tối đa số OTP / target / ngày
 export type OtpPurposeKey = "ACTIVATION" | "RESET" | "CHANGE_CONTACT";
 
 function secret(): string {
-  return process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "otp-dev-secret";
+  return getSigningSecret(); // SEC-H05: bỏ fallback hằng số công khai (brute-force OTP hash).
 }
 
 function hashCode(code: string): string {
