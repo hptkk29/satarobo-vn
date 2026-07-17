@@ -303,7 +303,7 @@ model OrgUnit {
   children  OrgUnit[]   @relation("OrgUnitTree")
   centerId  String?     @unique // Phase A: trỏ Center cũ (chỉ type=CENTER)
   isActive  Boolean     @default(true)
-  deletedAt DateTime? @db.Timestamptz(6)
+  deletedAt DateTime?   @db.Timestamptz(6)
   createdAt DateTime    @default(now()) @db.Timestamptz(6)
   updatedAt DateTime    @updatedAt @db.Timestamptz(6)
 
@@ -357,7 +357,7 @@ model UserOrgRole {
   orgUnitId     String
   roleId        String
   effectiveFrom DateTime     @default(now()) @db.Timestamptz(6)
-  effectiveTo   DateTime? @db.Timestamptz(6) // null = vô thời hạn
+  effectiveTo   DateTime?    @db.Timestamptz(6) // null = vô thời hạn
   status        AssignStatus @default(ACTIVE)
   grantedById   String // ai cấp (audit)
   createdAt     DateTime     @default(now()) @db.Timestamptz(6)
@@ -450,7 +450,7 @@ model EmployeeOrgAssignment {
   roleInOrg         String? // mô tả vai trò nghiệp vụ (KHÔNG phải RoleDef)
   assignmentType    AssignmentType
   effectiveFrom     DateTime       @default(now()) @db.Timestamptz(6)
-  effectiveTo       DateTime? @db.Timestamptz(6)
+  effectiveTo       DateTime?      @db.Timestamptz(6)
   status            AssignStatus   @default(ACTIVE)
   allocationPercent Int? // 0..100 — phân bổ chi phí/lương
   createdById       String
@@ -483,8 +483,8 @@ model MessengerConversation {
   status         String             @default("OPEN") // OPEN/QUALIFIED/CLOSED
   centerId       String? // suy từ page mapping → scopedDb
   orgUnitId      String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
-  firstMessageAt DateTime? @db.Timestamptz(6)
-  respondedAt    DateTime? @db.Timestamptz(6)
+  firstMessageAt DateTime?          @db.Timestamptz(6)
+  respondedAt    DateTime?          @db.Timestamptz(6)
   leadId         String?
   createdAt      DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime           @updatedAt @db.Timestamptz(6)
@@ -504,7 +504,7 @@ model MessengerMessage {
   text            String?               @db.Text
   attachments     Json?
   externalEventId String?               @unique // idempotency webhook (R1-02 C2.4)
-  sentAt          DateTime @db.Timestamptz(6)
+  sentAt          DateTime              @db.Timestamptz(6)
   createdAt       DateTime              @default(now()) @db.Timestamptz(6)
   conversation    MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -523,7 +523,7 @@ model CommissionStatement {
   period       String           @unique // "2026-06"
   status       CommissionStatus @default(DRAFT)
   approvedById String?
-  approvedAt   DateTime? @db.Timestamptz(6)
+  approvedAt   DateTime?        @db.Timestamptz(6)
   createdAt    DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime         @updatedAt @db.Timestamptz(6)
   lines        CommissionLine[]
@@ -565,7 +565,7 @@ model CommissionRateConfig {
   id            String    @id @default(cuid())
   tier          String // QC | SALE_ADMIN | SALE | QL_TT
   rate          Float // 0..1
-  effectiveFrom DateTime @db.Timestamptz(6)
+  effectiveFrom DateTime  @db.Timestamptz(6)
   effectiveTo   DateTime? @db.Timestamptz(6) // null = đang hiệu lực
   reason        String?
   createdById   String?
@@ -606,7 +606,7 @@ model MarketingCostPeriod {
   totalQcCost   Int              @default(0) // VND (số nguyên) — H5/COL2
   status        CostPeriodStatus @default(DRAFT)
   confirmedById String?
-  confirmedAt   DateTime? @db.Timestamptz(6)
+  confirmedAt   DateTime?        @db.Timestamptz(6)
   createdAt     DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime         @updatedAt @db.Timestamptz(6)
 }
@@ -643,7 +643,7 @@ model StudentConsent {
   type      ConsentType
   status    ConsentStatus @default(GRANTED)
   grantedAt DateTime      @default(now()) @db.Timestamptz(6)
-  revokedAt DateTime? @db.Timestamptz(6)
+  revokedAt DateTime?     @db.Timestamptz(6)
   updatedAt DateTime      @updatedAt @db.Timestamptz(6)
 
   @@unique([studentId, type])
@@ -671,8 +671,8 @@ model Room {
   createdAt    DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
 
-  classes      Class[]
-  trialClasses TrialClass[]
+  classes       Class[]
+  trialClasses  TrialClass[]
   classSessions ClassSession[] // W2-4b — phòng theo buổi
 
   @@unique([centerId, code])
@@ -844,13 +844,13 @@ model Course {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  leads              Lead[]
-  expectedByLeads    Lead[]          @relation("LeadExpectedCourse") // G2 — khoá dự kiến của lead
-  classes            Class[]
-  enrollments        Enrollment[]
-  curriculums        Curriculum[]
-  discounts          CourseDiscount[] // R7-03
-  trialRecommended   TrialFeedback[] @relation("TrialRecommendedCourse")
+  leads            Lead[]
+  expectedByLeads  Lead[]           @relation("LeadExpectedCourse") // G2 — khoá dự kiến của lead
+  classes          Class[]
+  enrollments      Enrollment[]
+  curriculums      Curriculum[]
+  discounts        CourseDiscount[] // R7-03
+  trialRecommended TrialFeedback[]  @relation("TrialRecommendedCourse")
 
   // FIX 7 — khoá tiên quyết (cấu hình qua UI admin).
   prerequisites     CoursePrerequisite[] @relation("CoursePrereqOwner")
@@ -992,14 +992,14 @@ model Lead {
   handoverNote     String?    @db.Text // Module CRM PHẦN 3 — note bàn giao gần nhất (nổi bật)
   // Cụm A3 — ai/khi nào chuyển lead sang ĐÃ ĐĂNG KÝ.
   convertedById    String?
-  convertedAt      DateTime? @db.Timestamptz(6)
+  convertedAt      DateTime?  @db.Timestamptz(6)
 
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
-  qualifiedAt         DateTime? @db.Timestamptz(6) // L2 — có SĐT + note
-  handedAt            DateTime? @db.Timestamptz(6) // HO bàn giao về CS
-  receivedConfirmedAt DateTime? @db.Timestamptz(6) // CS xác nhận tiếp nhận
-  assignedAt          DateTime? @db.Timestamptz(6) // phân Sale
-  firstContactAt      DateTime? @db.Timestamptz(6) // Sale liên hệ lần đầu
+  qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
+  handedAt            DateTime?         @db.Timestamptz(6) // HO bàn giao về CS
+  receivedConfirmedAt DateTime?         @db.Timestamptz(6) // CS xác nhận tiếp nhận
+  assignedAt          DateTime?         @db.Timestamptz(6) // phân Sale
+  firstContactAt      DateTime?         @db.Timestamptz(6) // Sale liên hệ lần đầu
   commissionSource    CommissionSource? // nguồn để chia hoa hồng
   adminId             String? // Sale Admin xử lý L1→L2
 
@@ -1041,7 +1041,7 @@ model Lead {
 
   // R7-01 — LeadChild (N con) + mốc hoạt động gần nhất cho SLA idle.
   children       LeadChild[]
-  lastActivityAt DateTime? @db.Timestamptz(6) // cập nhật khi có LeadActivity; SLA lead_idle_24h đọc field này
+  lastActivityAt DateTime?   @db.Timestamptz(6) // cập nhật khi có LeadActivity; SLA lead_idle_24h đọc field này
 
   @@index([phone])
   @@index([status])
@@ -1053,6 +1053,9 @@ model Lead {
   @@index([orgUnitId])
   @@index([expectedCourseId])
   @@index([expectedProductId])
+  // IDX-2: trang leads (Kanban + table) page/order theo createdAt DESC dưới scope centerId
+  // → composite cho index-ordered rows (bỏ sort + OFFSET scan). Bảng high-growth.
+  @@index([centerId, status, createdAt])
 }
 
 /// R7-01 — 1 Lead có N con. Nền cho lớp trải nghiệm (R7-02). Field phẳng cũ
@@ -1131,14 +1134,14 @@ model Student {
   // Parent / Guardian
   // parentName + parentPhone stay nullable in the DB for the existing rows
   // (some seeded students lack them). Zod requires them at write time.
-  parentName      String?
-  parentPhone     String?
-  parentEmail     String?
-  parentRelation  String?
+  parentName       String?
+  parentPhone      String?
+  parentEmail      String?
+  parentRelation   String?
   parentNationalId String? // CCCD phụ huynh (#15 câu 32) — CHỈ CCCD PH; PII: mask + audit khi xem
-  parent2Name     String?
-  parent2Phone    String?
-  parent2Relation String?
+  parent2Name      String?
+  parent2Phone     String?
+  parent2Relation  String?
 
   // Address
   address  String?
@@ -1214,6 +1217,8 @@ model Student {
   @@index([parentPhone])
   @@index([parentUserId])
   @@index([orgUnitId])
+  // IDX-3: trang students count+findMany order createdAt DESC paginated dưới scope centerId.
+  @@index([centerId, createdAt])
 }
 
 enum ClassStatus {
@@ -1241,7 +1246,7 @@ model ClassGroup {
   orgUnitId   String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   status      ClassGroupStatus @default(ACTIVE)
   notes       String?          @db.Text
-  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedAt   DateTime?        @db.Timestamptz(6)
   createdAt   DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
 
@@ -1334,14 +1339,14 @@ model Class {
 }
 
 model Enrollment {
-  id        String           @id @default(cuid())
-  studentId String
-  classId   String
-  courseId  String
-  status    EnrollmentStatus @default(ACTIVE)
+  id          String           @id @default(cuid())
+  studentId   String
+  classId     String
+  courseId    String
+  status      EnrollmentStatus @default(ACTIVE)
   // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
   // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
-  centerId  String?
+  centerId    String?
   // R7-06 — truy vết enrollment ⇽ LeadChild nguồn khi convert per-child (additive,
   // nullable; SetNull để không chặn xoá lead). Enrollment tạo trực tiếp → null.
   leadChildId String?
@@ -1392,11 +1397,11 @@ model Enrollment {
 
   // Phase 5.9 — Reserve link (enrollment-specific reserves only; whole-student
   // reserves leave enrollmentId NULL)
-  reserves StudentReserve[] @relation("EnrollmentReserves")
-  payments Payment[]        @relation("EnrollmentPayments") // R7-04
-  receipts Receipt[]        @relation("EnrollmentReceipts") // R7-04
+  reserves       StudentReserve[]      @relation("EnrollmentReserves")
+  payments       Payment[]             @relation("EnrollmentPayments") // R7-04
+  receipts       Receipt[]             @relation("EnrollmentReceipts") // R7-04
   refundRequests RefundRequest[] // W3-1
-  messages ConversationMessage[] // LMS-15 — nhắn 2 chiều PH↔GV
+  messages       ConversationMessage[] // LMS-15 — nhắn 2 chiều PH↔GV
 
   // FIX-C3 (B2b) — KHÔNG @@unique đầy đủ: soft-delete cần cho ghi danh lại cùng
   // (HS×lớp) sau khi xóa mềm. Ràng buộc duy nhất chỉ áp row CÒN SỐNG qua PARTIAL
@@ -1452,8 +1457,8 @@ model ClassSession {
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
-  startedAt         DateTime? @db.Timestamptz(6)
-  completedAt       DateTime? @db.Timestamptz(6)
+  startedAt         DateTime?     @db.Timestamptz(6)
+  completedAt       DateTime?     @db.Timestamptz(6)
   // Chuẩn bị phòng học (Module QL lớp phần 3)
   ckClean           Boolean       @default(false)
   ckEquipment       Boolean       @default(false)
@@ -1467,15 +1472,15 @@ model ClassSession {
   incidentNote      String?       @db.Text
 
   // R7-07 — "Hoàn tất buổi": dữ liệu thực tế + nhận xét lớp (khôi phục sau merge main→erd-fix-p0).
-  actualTeacherId String?
-  actualRoomId    String?
+  actualTeacherId     String?
+  actualRoomId        String?
   // P5/T11 — dạy thay/đổi phòng cấp buổi (kế hoạch trước buổi; persist thay vì chỉ audit).
   substituteTeacherId String?
   substituteRoomId    String?
-  actualStartAt   DateTime? @db.Timestamptz(6)
-  actualEndAt     DateTime? @db.Timestamptz(6)
-  classComment    String?   @db.Text
-  completedById   String?
+  actualStartAt       DateTime? @db.Timestamptz(6)
+  actualEndAt         DateTime? @db.Timestamptz(6)
+  classComment        String?   @db.Text
+  completedById       String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -1533,19 +1538,19 @@ enum RoboticsSkill {
 }
 
 model StudentSkillAssessment {
-  id           String        @id @default(cuid())
-  studentId    String
-  skill        RoboticsSkill
-  level        SkillLevel
-  note         String?
-  assessedById String
-  assessedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  id             String        @id @default(cuid())
+  studentId      String
+  skill          RoboticsSkill
+  level          SkillLevel
+  note           String?
+  assessedById   String
+  assessedAt     DateTime      @default(now()) @db.Timestamptz(6)
   // W4b/LMS-17 — gắn đánh giá kỹ năng vào buổi/bài (tùy chọn; null = đánh giá tổng).
   classSessionId String?
   lessonId       String?
-  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classSession ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
-  lesson       Lesson?       @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSession   ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+  lesson         Lesson?       @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
   @@index([studentId, skill])
   @@index([classSessionId])
@@ -1648,7 +1653,7 @@ model JobPosting {
   authorId         String?
   contactEmail     String?
   contactPhone     String?
-  closesAt         DateTime? @db.Timestamptz(6)
+  closesAt         DateTime?        @db.Timestamptz(6)
   createdAt        DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime         @updatedAt @db.Timestamptz(6)
 
@@ -1815,7 +1820,7 @@ model Honor {
 
   category     HonorCategory
   awardName    String
-  awardedAt    DateTime @db.Timestamptz(6)
+  awardedAt    DateTime      @db.Timestamptz(6)
   awardQuarter String?
 
   story        String  @db.Text
@@ -1937,7 +1942,7 @@ model Employee {
   departmentRef DepartmentDef? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   avatarUrl     String?
   email         String?        @unique
-  joinedAt      DateTime? @db.Timestamptz(6)
+  joinedAt      DateTime?      @db.Timestamptz(6)
   bio           String?        @db.Text
   isActive      Boolean        @default(true)
   isPublic      Boolean        @default(false)
@@ -1945,7 +1950,7 @@ model Employee {
 
   // Tier 2: HR cơ bản
   phone        String?
-  dateOfBirth  DateTime? @db.Timestamptz(6)
+  dateOfBirth  DateTime?     @db.Timestamptz(6)
   gender       Gender?
   contractType ContractType?
   salaryRank   Int?
@@ -2003,6 +2008,10 @@ model Employee {
   @@index([isCEO])
   @@index([status])
   @@index([orgUnitId])
+  // IDX-1: Employee ∈ SCOPED_MODELS — centerId bị inject vào WHERE mọi read scoped
+  // nhưng TRƯỚC ĐÂY thiếu index → seq scan mỗi lần đọc HR. Đây là model scoped DUY NHẤT thiếu.
+  @@index([centerId])
+  @@index([centerId, status])
 }
 
 // Audit trail for User.role changes scoped to one Employee (the linked
@@ -2144,14 +2153,14 @@ model Lesson {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  questions      Question[]
-  exams          Exam[]
-  documents      Document[]
-  assignments    Assignment[]
-  classSessions  ClassSession[]
-  changeRequests LessonChangeRequest[]
-  scormPackages  ScormPackage[]
-  skillAssessments StudentSkillAssessment[] // W4b
+  questions           Question[]
+  exams               Exam[]
+  documents           Document[]
+  assignments         Assignment[]
+  classSessions       ClassSession[]
+  changeRequests      LessonChangeRequest[]
+  scormPackages       ScormPackage[]
+  skillAssessments    StudentSkillAssessment[] // W4b
   assignmentTemplates AssignmentTemplate[] // FL W0 (FL1-06) — template bài tập theo buổi
 
   @@unique([curriculumId, order])
@@ -2530,7 +2539,7 @@ model AssignmentTemplate {
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
-  instances Assignment[]
+  instances         Assignment[]
   // FL1-06 (R2) — câu hỏi gắn vào template (từ ngân hàng) để khi sinh bài giao thì CLONE sang Assignment.
   templateQuestions AssignmentTemplateQuestion[]
 
@@ -2579,7 +2588,7 @@ model AssignmentSubmission {
   fileSize   Int?
   mimeType   String?
 
-  submittedAt DateTime? @db.Timestamptz(6)
+  submittedAt DateTime?        @db.Timestamptz(6)
   status      SubmissionStatus @default(NOT_SUBMITTED)
 
   score      Float?
@@ -2954,8 +2963,8 @@ model LeadTask {
   assignedToName String?
   title          String
   description    String?        @db.Text
-  dueAt          DateTime @db.Timestamptz(6)
-  completedAt    DateTime? @db.Timestamptz(6)
+  dueAt          DateTime       @db.Timestamptz(6)
+  completedAt    DateTime?      @db.Timestamptz(6)
   status         LeadTaskStatus @default(OPEN)
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
 
@@ -3123,10 +3132,10 @@ model Order {
   // FIX lead→payment→enroll (M0/C4) — duyệt kế hoạch thanh toán 2 đợt.
   // null = không có kế hoạch 2 đợt cần duyệt.
   installmentApprovalStatus InstallmentApprovalStatus?
-  installmentRequestedById   String?
-  installmentApprovedById    String?
-  installmentApprovedAt      DateTime? @db.Timestamptz(6)
-  installmentRejectReason    String?   @db.Text
+  installmentRequestedById  String?
+  installmentApprovedById   String?
+  installmentApprovedAt     DateTime?                  @db.Timestamptz(6)
+  installmentRejectReason   String?                    @db.Text
 
   customerNote String? @db.Text
   internalNote String? @db.Text
@@ -3143,7 +3152,7 @@ model Order {
 
   // Commit 4 — thanh toán tối đa 2 đợt
   installments OrderInstallment[]
-  payments     Payment[]         @relation("OrderPayments") // R7-04
+  payments     Payment[]          @relation("OrderPayments") // R7-04
 
   @@index([code])
   @@index([status])
@@ -3154,6 +3163,9 @@ model Order {
   @@index([createdAt])
   @@index([customerPhone])
   @@index([orgUnitId])
+  // IDX-4: cron order-debt-reminder (getOverdueOrders: status=PENDING + createdAt<cutoff
+  // ORDER createdAt) + admin order lists filter status. status+createdAt phục vụ filter+sort.
+  @@index([status, createdAt])
 }
 
 // Commit 4 — lịch thanh toán tối đa 2 đợt cho 1 Order.
@@ -3175,13 +3187,13 @@ model OrderInstallment {
   soDot          Int // 1 hoặc 2
   amount         Int
   status         InstallmentStatus @default(PENDING)
-  dueDate        DateTime? @db.Timestamptz(6)
-  paidAt         DateTime? @db.Timestamptz(6)
+  dueDate        DateTime?         @db.Timestamptz(6)
+  paidAt         DateTime?         @db.Timestamptz(6)
   recordedById   String?
   // R7-04 — số ngày nhắc trước hạn (QĐ-O7); null → đọc SystemSetting default 14.
-  reminderDays Int?
+  reminderDays   Int?
   // Mốc nhắc công nợ gần nhất (chống spam — 1 nhắc/ngày).
-  lastReminderAt DateTime? @db.Timestamptz(6)
+  lastReminderAt DateTime?         @db.Timestamptz(6)
   createdAt      DateTime          @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime          @updatedAt @db.Timestamptz(6)
 
@@ -3623,9 +3635,9 @@ model TrialClass {
   room        Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
   teacherId   String?
   teacher     User?            @relation("TrialTeacher", fields: [teacherId], references: [id])
-  scheduledAt DateTime @db.Timestamptz(6)
+  scheduledAt DateTime         @db.Timestamptz(6)
   status      TrialClassStatus @default(SCHEDULED)
-  attendedAt  DateTime? @db.Timestamptz(6)
+  attendedAt  DateTime?        @db.Timestamptz(6)
   notes       String?          @db.Text
   createdAt   DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
@@ -3665,7 +3677,7 @@ model WebhookDelivery {
   payload      Json
   status       WebhookStatus @default(RECEIVED)
   receivedAt   DateTime      @default(now()) @db.Timestamptz(6)
-  processedAt  DateTime? @db.Timestamptz(6)
+  processedAt  DateTime?     @db.Timestamptz(6)
   errorMessage String?       @db.Text
   retryCount   Int           @default(0)
 
@@ -3716,9 +3728,9 @@ model Notification {
   createdById   String?
   createdByName String?
   // R7-17 — khoá chống trùng cho thông báo sinh từ DomainEvent (null = announcement thủ công).
-  dedupeKey   String?              @unique
-  createdAt   DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime             @updatedAt @db.Timestamptz(6)
+  dedupeKey     String?              @unique
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
 
   @@index([audience, isPublished])
   @@index([centerId])
@@ -3754,14 +3766,14 @@ model ParentRequest {
   parentUserId  String?
   type          ParentRequestType
   content       String              @db.Text
-  preferredDate DateTime? @db.Timestamptz(6)
+  preferredDate DateTime?           @db.Timestamptz(6)
   // Module QL học viên PHẦN 3 — buổi xin vắng (báo vắng ABSENCE); cột phẳng, không FK
   sessionId     String?
   status        ParentRequestStatus @default(PENDING)
   response      String?             @db.Text
   handledById   String?
   handledByName String?
-  handledAt     DateTime? @db.Timestamptz(6)
+  handledAt     DateTime?           @db.Timestamptz(6)
   createdAt     DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime            @updatedAt @db.Timestamptz(6)
 
@@ -3817,7 +3829,7 @@ model ClassSessionMedia {
   uploadedByName String?
   approvedById   String?
   approvedByName String?
-  approvedAt     DateTime? @db.Timestamptz(6)
+  approvedAt     DateTime?   @db.Timestamptz(6)
   createdAt      DateTime    @default(now()) @db.Timestamptz(6)
 
   tags MediaStudentTag[]
@@ -3941,7 +3953,7 @@ model TimesheetAdjustmentRequest {
   status         AdjustStatus @default(PENDING)
   reviewedById   String?
   reviewedByName String?
-  reviewedAt     DateTime? @db.Timestamptz(6)
+  reviewedAt     DateTime?    @db.Timestamptz(6)
   reviewNote     String?      @db.Text
   createdAt      DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
@@ -3993,28 +4005,28 @@ enum WorkRequestStatus {
 }
 
 model WorkRequest {
-  id            String            @id @default(cuid())
-  requesterId   String // User (GV gửi đơn)
-  centerId      String? // cơ sở của GV (scope duyệt CENTER_MANAGER)
-  kind          WorkRequestKind
-  status        WorkRequestStatus @default(PENDING)
-  fromDate      DateTime?         @db.Date // ngày / từ ngày (đơn theo ngày)
-  toDate        DateTime?         @db.Date // đến ngày (đơn khoảng)
-  startTime     String? // "HH:mm"
-  endTime       String? // "HH:mm"
-  hours         Float? // OT tự tính / chỉnh công
-  className     String? // tên lớp (snapshot, đơn liên quan lớp)
-  classId       String? // link lớp (tuỳ chọn)
-  targetUserId  String? // người dạy thay / nhận ca
-  targetShiftId String? // ca muốn đổi (ShiftRegistration id)
-  detail        String? // meta phụ (nơi đến, hình thức muộn/sớm, người nhận…)
-  reason        String            @db.Text // lý do (bắt buộc)
-  reviewedById  String?
+  id             String            @id @default(cuid())
+  requesterId    String // User (GV gửi đơn)
+  centerId       String? // cơ sở của GV (scope duyệt CENTER_MANAGER)
+  kind           WorkRequestKind
+  status         WorkRequestStatus @default(PENDING)
+  fromDate       DateTime?         @db.Date // ngày / từ ngày (đơn theo ngày)
+  toDate         DateTime?         @db.Date // đến ngày (đơn khoảng)
+  startTime      String? // "HH:mm"
+  endTime        String? // "HH:mm"
+  hours          Float? // OT tự tính / chỉnh công
+  className      String? // tên lớp (snapshot, đơn liên quan lớp)
+  classId        String? // link lớp (tuỳ chọn)
+  targetUserId   String? // người dạy thay / nhận ca
+  targetShiftId  String? // ca muốn đổi (ShiftRegistration id)
+  detail         String? // meta phụ (nơi đến, hình thức muộn/sớm, người nhận…)
+  reason         String            @db.Text // lý do (bắt buộc)
+  reviewedById   String?
   reviewedByName String?
-  reviewedAt    DateTime?         @db.Timestamptz(6)
-  reviewNote    String?           @db.Text
-  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime          @updatedAt @db.Timestamptz(6)
+  reviewedAt     DateTime?         @db.Timestamptz(6)
+  reviewNote     String?           @db.Text
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @db.Timestamptz(6)
 
   @@index([requesterId, status])
   @@index([centerId, status, createdAt])
@@ -4097,11 +4109,11 @@ model OtpRequest {
   channel     OtpChannel @default(EMAIL)
   purpose     OtpPurpose
   codeHash    String // HMAC-SHA256(secret, code)
-  expiresAt   DateTime @db.Timestamptz(6)
+  expiresAt   DateTime   @db.Timestamptz(6)
   attempts    Int        @default(0)
   maxAttempts Int        @default(5)
-  verifiedAt  DateTime? @db.Timestamptz(6)
-  consumedAt  DateTime? @db.Timestamptz(6) // đã dùng để hoàn tất nghiệp vụ (set mật khẩu…)
+  verifiedAt  DateTime?  @db.Timestamptz(6)
+  consumedAt  DateTime?  @db.Timestamptz(6) // đã dùng để hoàn tất nghiệp vụ (set mật khẩu…)
   userId      String? // tài khoản liên quan (nếu có)
   createdAt   DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime   @updatedAt @db.Timestamptz(6)
@@ -4155,7 +4167,7 @@ model EmailQueue {
   contextType String?
   contextId   String?
   scheduledAt DateTime         @default(now()) @db.Timestamptz(6)
-  sentAt      DateTime? @db.Timestamptz(6)
+  sentAt      DateTime?        @db.Timestamptz(6)
   emailLogId  String?
   createdAt   DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
@@ -4187,7 +4199,7 @@ model MakeupNeed {
   note            String?          @db.Text
   createdById     String?
   scheduledById   String?
-  completedAt     DateTime? @db.Timestamptz(6)
+  completedAt     DateTime?        @db.Timestamptz(6)
   createdAt       DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
 
@@ -4234,7 +4246,7 @@ model StudentRiskAlert {
   status       RiskStatus    @default(OPEN)
   detail       String?       @db.Text
   resolvedById String?
-  resolvedAt   DateTime? @db.Timestamptz(6)
+  resolvedAt   DateTime?     @db.Timestamptz(6)
   createdAt    DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
 
@@ -4262,9 +4274,9 @@ model StudentCareTask {
   riskAlertId  String?
   title        String
   description  String?        @db.Text
-  dueAt        DateTime @db.Timestamptz(6)
+  dueAt        DateTime       @db.Timestamptz(6)
   status       CareTaskStatus @default(OPEN)
-  completedAt  DateTime? @db.Timestamptz(6)
+  completedAt  DateTime?      @db.Timestamptz(6)
   createdById  String?
   createdAt    DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
@@ -4432,7 +4444,7 @@ model StudentTransferRequest {
   note          String?               @db.Text // ghi chú khi duyệt/từ chối
   requestedById String?
   decidedById   String?
-  decidedAt     DateTime? @db.Timestamptz(6)
+  decidedAt     DateTime?             @db.Timestamptz(6)
   createdAt     DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime              @updatedAt @db.Timestamptz(6)
 
@@ -4608,25 +4620,25 @@ enum LessonMaterialKind {
 }
 
 model ScormPackage {
-  id               String             @id @default(cuid())
-  lessonId         String // gắn buổi (FK)
-  name             String
+  id                String             @id @default(cuid())
+  lessonId          String // gắn buổi (FK)
+  name              String
   // Loại học liệu: SCORM (giải nén + manifest) hoặc PDF (slide render bằng pdf.js).
-  kind             LessonMaterialKind @default(SCORM)
-  scormVersion     ScormVersion?      // đọc từ manifest sau khi giải nén (chỉ SCORM)
-  storagePrefix    String // prefix R2 `scorm/{packageId}/`
-  uploadKey        String? // key R2 của zip gốc đã upload
-  launchUrl        String? // đường dẫn launch (tương đối trong prefix)
-  sizeBytes        Int? // tổng kích thước
-  fileCount        Int? // số entry đã giải nén
-  status           ScormPackageStatus @default(UPLOADING)
-  version          Int                @default(1) // version per lesson
-  isActiveForLesson Boolean           @default(false) // chỉ 1 active/buổi
-  entryCursor      Int                @default(0) // con trỏ entry để job resume (idempotent)
-  error            String? // lý do FAILED
-  uploadedById     String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  kind              LessonMaterialKind @default(SCORM)
+  scormVersion      ScormVersion? // đọc từ manifest sau khi giải nén (chỉ SCORM)
+  storagePrefix     String // prefix R2 `scorm/{packageId}/`
+  uploadKey         String? // key R2 của zip gốc đã upload
+  launchUrl         String? // đường dẫn launch (tương đối trong prefix)
+  sizeBytes         Int? // tổng kích thước
+  fileCount         Int? // số entry đã giải nén
+  status            ScormPackageStatus @default(UPLOADING)
+  version           Int                @default(1) // version per lesson
+  isActiveForLesson Boolean            @default(false) // chỉ 1 active/buổi
+  entryCursor       Int                @default(0) // con trỏ entry để job resume (idempotent)
+  error             String? // lý do FAILED
+  uploadedById      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   lesson     Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   accessLogs ScormAccessLog[]
@@ -4710,7 +4722,7 @@ model ZaloMessageLog {
   errorMessage      String?           @db.Text
   fallbackEmailed   Boolean           @default(false)
   createdAt         DateTime          @default(now()) @db.Timestamptz(6)
-  sentAt            DateTime? @db.Timestamptz(6)
+  sentAt            DateTime?         @db.Timestamptz(6)
 
   @@index([status, createdAt])
 }
@@ -4855,8 +4867,8 @@ model CourseDiscount {
   note       String?
   conditions String?            @db.Text
   active     Boolean            @default(true)
-  validFrom  DateTime? @db.Timestamptz(6)
-  validTo    DateTime? @db.Timestamptz(6)
+  validFrom  DateTime?          @db.Timestamptz(6)
+  validTo    DateTime?          @db.Timestamptz(6)
   createdAt  DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime           @updatedAt @db.Timestamptz(6)
 
@@ -4904,23 +4916,23 @@ enum ReceiptStatus {
 
 /// R7-04 — khoản thanh toán 2 tầng (Sale ghi nhận ↔ Kế toán xác nhận). Center-scoped.
 model Payment {
-  id           String  @id @default(cuid())
+  id           String      @id @default(cuid())
   orderId      String
-  order        Order   @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
+  order        Order       @relation("OrderPayments", fields: [orderId], references: [id], onDelete: Restrict) // FIX-C3
   enrollmentId String?
   enrollment   Enrollment? @relation("EnrollmentPayments", fields: [enrollmentId], references: [id], onDelete: SetNull) // FIX-C3: liên kết mềm, giữ SetNull
   amount       Int
   method       String // tiền mặt / chuyển khoản / ... (id hoặc nhãn)
-  paidDate     DateTime @db.Timestamptz(6)
+  paidDate     DateTime    @db.Timestamptz(6)
   evidenceUrl  String?
-  note         String? @db.Text
+  note         String?     @db.Text
 
   saleStatus       PaymentSaleStatus       @default(RECORDED)
   accountantStatus PaymentAccountantStatus @default(PENDING)
   recordedById     String?
   confirmedById    String?
-  confirmedAt      DateTime? @db.Timestamptz(6)
-  rejectReason     String? @db.Text
+  confirmedAt      DateTime?               @db.Timestamptz(6)
+  rejectReason     String?                 @db.Text
 
   adjustmentOfId String?
   adjustmentOf   Payment?  @relation("PaymentAdjustment", fields: [adjustmentOfId], references: [id], onDelete: SetNull)
@@ -4950,7 +4962,7 @@ model Receipt {
   issuedAt     DateTime      @default(now()) @db.Timestamptz(6)
   status       ReceiptStatus @default(ACTIVE)
 
-  updatedAt DateTime  @updatedAt @default(now()) @db.Timestamptz(6) // FIX-C3 (FIX-M4)
+  updatedAt DateTime  @default(now()) @updatedAt @db.Timestamptz(6) // FIX-C3 (FIX-M4)
   deletedAt DateTime? @db.Timestamptz(6) // FIX-C3 — soft-delete tài chính
 
   @@index([enrollmentId])
@@ -4973,12 +4985,12 @@ enum RefundStatus {
 }
 
 model RefundRequest {
-  id           String     @id @default(cuid())
-  enrollmentId String
-  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
-  centerId     String?
-  trigger      RefundTrigger
-  reason       String     @db.Text
+  id              String        @id @default(cuid())
+  enrollmentId    String
+  enrollment      Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  centerId        String?
+  trigger         RefundTrigger
+  reason          String        @db.Text
   // Số liệu snapshot tại thời điểm tạo (để tính minh bạch, không phụ thuộc thay đổi sau).
   paidConfirmed   Int // Σ Payment CONFIRMED
   sessionsTotal   Int
@@ -4986,13 +4998,13 @@ model RefundRequest {
   unitPrice       Int // finalPrice / sessionsTotal (làm tròn)
   proposedAmount  Int // computeRefund (đề xuất, ≥0)
   approvedAmount  Int?
-  status        RefundStatus @default(PENDING)
-  requestedById String?
-  approvedById  String?
-  approvedAt    DateTime?    @db.Timestamptz(6)
-  note          String?      @db.Text
-  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+  status          RefundStatus  @default(PENDING)
+  requestedById   String?
+  approvedById    String?
+  approvedAt      DateTime?     @db.Timestamptz(6)
+  note            String?       @db.Text
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
 
   @@index([enrollmentId])
   @@index([status])
@@ -5006,16 +5018,16 @@ enum ConversationSide {
 }
 
 model ConversationMessage {
-  id           String           @id @default(cuid())
-  enrollmentId String
-  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  authorUserId String
-  authorSide   ConversationSide
-  body         String           @db.Text
-  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  id             String           @id @default(cuid())
+  enrollmentId   String
+  enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  authorUserId   String
+  authorSide     ConversationSide
+  body           String           @db.Text
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
   // Đánh dấu đã đọc theo từng phía (null = chưa đọc).
-  readByParentAt DateTime?      @db.Timestamptz(6)
-  readByStaffAt  DateTime?      @db.Timestamptz(6)
+  readByParentAt DateTime?        @db.Timestamptz(6)
+  readByStaffAt  DateTime?        @db.Timestamptz(6)
   // #03 Pha A — denormalize từ Enrollment.centerId để cách ly cơ sở ở tầng query.
   // Nullable trong pha A (dòng cũ backfill bằng migration; đường tạo mới đã set).
   // Pha B (sau khi prod 0 null) mới đưa vào SCOPED_MODELS — xem lib/db-scope.ts.
@@ -5080,29 +5092,29 @@ model TrialProgramConfig {
 
 /// R7-02 — lớp trải nghiệm (mới; TrialClass cũ giữ đọc-only 2-phase). Center-scoped.
 model TrialClassV2 {
-  id           String             @id @default(cuid())
-  code         String             @unique
+  id           String              @id @default(cuid())
+  code         String              @unique
   name         String
-  type         String             @default("TRIAL_ROBOSIM")
+  type         String              @default("TRIAL_ROBOSIM")
   centerId     String // cách ly cơ sở (scopedDb)
   roomId       String?
   // FL-R2 (QĐ-R2-1): slot tái sử dụng → startDate nullable (lớp không gắn ngày bắt đầu
   // cố định; buổi tạo ad-hoc theo giờ/giảng viên). Lớp cũ giữ nguyên startDate.
-  startDate    DateTime?          @db.Date
+  startDate    DateTime?           @db.Date
   startTime    String
   endTime      String
   capacity     Int
   teacherId    String?
   assistantId  String?
-  status       TrialClassV2Status @default(OPEN)
+  status       TrialClassV2Status  @default(OPEN)
   configId     String?
   config       TrialProgramConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
   sessionCount Int // snapshot lúc tạo (lớp cũ giữ N cũ khi config đổi)
-  createdAt    DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime           @updatedAt @db.Timestamptz(6)
+  createdAt    DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime            @updatedAt @db.Timestamptz(6)
 
-  sessions    TrialClassSession[]
-  enrollments TrialEnrollment[]
+  sessions     TrialClassSession[]
+  enrollments  TrialEnrollment[]
   trialHistory LeadTrialHistory[]
 
   @@index([centerId, status])
@@ -5153,19 +5165,19 @@ model TrialClassSession {
 
 /// R7-02 — ghi danh 1 LeadChild vào 1 lớp trải nghiệm. Partial-unique 1 lớp ACTIVE/con (migration).
 model TrialEnrollment {
-  id           String                @id @default(cuid())
-  trialClassId String
-  trialClass   TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
-  leadChildId  String
-  leadChild    LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
-  status       TrialEnrollmentStatus @default(ACTIVE)
-  summaryNote  String?               @db.Text // nhận xét tổng kết học thử
+  id                 String                @id @default(cuid())
+  trialClassId       String
+  trialClass         TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  leadChildId        String
+  leadChild          LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
+  status             TrialEnrollmentStatus @default(ACTIVE)
+  summaryNote        String?               @db.Text // nhận xét tổng kết học thử
   // LD3(b) — buổi (TrialClassSession) cụ thể được chọn khi xếp con vào lớp. Scalar nullable
   // (validation "buổi thuộc lớp" đã làm ở action boundary — không cần relation, giữ blast radius nhỏ).
   scheduledSessionId String?
-  addedById    String?
-  createdAt    DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime              @updatedAt @db.Timestamptz(6)
+  addedById          String?
+  createdAt          DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime              @updatedAt @db.Timestamptz(6)
 
   attendances TrialAttendance[]
 
@@ -5347,18 +5359,18 @@ model EvalForm {
 }
 
 model EvalQuestion {
-  id       String           @id @default(cuid())
-  formId   String
-  form     EvalForm         @relation(fields: [formId], references: [id], onDelete: Cascade)
-  type     EvalQuestionType
-  label    String
-  options  Json? // cho RADIO/CHECKBOX (mỗi option có thể là mức mô tả dài — phiếu đánh giá buổi)
-  required Boolean          @default(false)
-  order    Int              @default(0)
+  id              String           @id @default(cuid())
+  formId          String
+  form            EvalForm         @relation(fields: [formId], references: [id], onDelete: Cascade)
+  type            EvalQuestionType
+  label           String
+  options         Json? // cho RADIO/CHECKBOX (mỗi option có thể là mức mô tả dài — phiếu đánh giá buổi)
+  required        Boolean          @default(false)
+  order           Int              @default(0)
   // FL4 (R5) — nhóm tiêu chí (header: "Kiến thức"/"Kỹ năng"/"Sản phẩm"/"Thái độ") để gom câu hỏi như phiếu mẫu.
-  groupLabel     String?
+  groupLabel      String?
   // FL4 (R6) — cho phép GV nhập tự do kèm lựa chọn (RADIO/CHECKBOX) → lưu EvalAnswer.valueText.
-  allowCustomText Boolean   @default(false)
+  allowCustomText Boolean          @default(false)
 
   @@index([formId])
 }
@@ -5383,16 +5395,16 @@ model EvaluationRound {
 }
 
 model EvalResponse {
-  id           String          @id @default(cuid())
-  roundId      String
-  round        EvaluationRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  enrollmentId String?
-  teacherId    String? // GV được đánh giá (TEACHER_EVAL)
-  parentUserId String? // PH làm khảo sát (CENTER_SURVEY)
-  studentId    String?
-  classSessionId String? // FL W0 (FL4-01) — phiếu SESSION_EVAL gắn buổi học (ref phẳng, theo style EvalResponse)
+  id                  String          @id @default(cuid())
+  roundId             String
+  round               EvaluationRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  enrollmentId        String?
+  teacherId           String? // GV được đánh giá (TEACHER_EVAL)
+  parentUserId        String? // PH làm khảo sát (CENTER_SURVEY)
+  studentId           String?
+  classSessionId      String? // FL W0 (FL4-01) — phiếu SESSION_EVAL gắn buổi học (ref phẳng, theo style EvalResponse)
   trialClassSessionId String? // FL4 (R4) — phiếu SESSION_EVAL gắn buổi LỚP TRẢI NGHIỆM (TrialClassSession, ref phẳng)
-  submittedAt  DateTime        @default(now())
+  submittedAt         DateTime        @default(now())
 
   answers EvalAnswer[]
 
