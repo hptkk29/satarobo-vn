@@ -52,6 +52,14 @@
     {
       "path": "/api/cron/parent-request-reminder",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/substitute-teacher-notify",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/session-close-reminder",
+      "schedule": "0 13 * * *"
     }
   ]
 }
