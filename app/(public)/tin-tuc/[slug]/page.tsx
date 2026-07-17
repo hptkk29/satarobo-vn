@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -12,6 +13,11 @@ import { ShareButtons } from "@/components/blog/share-buttons";
 const BASE_URL = "https://satarobo.vn";
 
 export const revalidate = 60;
+
+// PUB-08: dedup fetch giữa generateMetadata + page (cùng slug) trong 1 request.
+const getNewsBySlug = cache((slug: string) =>
+  db.news.findUnique({ where: { slug } }).catch(() => null),
+);
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -35,19 +41,7 @@ function formatVnDate(d: Date | null): string {
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
-  const post = await db.news
-    .findUnique({
-      where: { slug },
-      select: {
-        title: true,
-        seoTitle: true,
-        excerpt: true,
-        seoDescription: true,
-        coverImage: true,
-        publishedAt: true,
-      },
-    })
-    .catch(() => null);
+  const post = await getNewsBySlug(slug);
 
   if (!post) return {};
 
@@ -80,9 +74,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function NewsDetailPage({ params }: Params) {
   const { slug } = await params;
 
-  const post = await db.news
-    .findUnique({ where: { slug } })
-    .catch(() => null);
+  const post = await getNewsBySlug(slug);
 
   if (!post || !post.isPublished) notFound();
 

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -42,6 +43,11 @@ export async function generateStaticParams() {
   return jobs.map((j) => ({ slug: j.slug }));
 }
 
+// PUB-08: dedup fetch giữa generateMetadata + page (cùng slug) trong 1 request.
+const getJobBySlug = cache((slug: string) =>
+  db.jobPosting.findUnique({ where: { slug } }).catch(() => null),
+);
+
 function summarize(text: string, max = 160): string {
   const stripped = text.replace(/\s+/g, " ").trim();
   return stripped.length > max ? `${stripped.slice(0, max - 1)}…` : stripped;
@@ -66,7 +72,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const job = await db.jobPosting.findUnique({ where: { slug } }).catch(() => null);
+  const job = await getJobBySlug(slug);
   if (!job || job.status !== "OPEN") return {};
 
   const description = summarize(job.description, 160);
@@ -90,7 +96,7 @@ export default async function JobDetailPage({
 }) {
   const { slug } = await params;
 
-  const job = await db.jobPosting.findUnique({ where: { slug } }).catch(() => null);
+  const job = await getJobBySlug(slug);
   if (!job || job.status !== "OPEN") notFound();
 
   const salaryLabel = formatSalary(job);

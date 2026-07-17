@@ -36,23 +36,27 @@ const orgJsonLd = organizationJsonLd();
 const siteJsonLd = websiteJsonLd();
 
 export default async function Page() {
-  const rows = await db.course
-    .findMany({
-      where: {
-        isPublished: true,
-        slug: { in: ["laptrinhrobot", "luyenthirobosim"] },
-      },
-      orderBy: { displayOrder: "asc" },
-      select: {
-        id: true,
-        slug: true,
-        name: true,
-        shortDescription: true,
-        description: true,
-        thumbnail: true,
-      },
-    })
-    .catch(() => []);
+  // PUB-17: courses + testimonials độc lập → fetch song song.
+  const [rows, testimonialRows] = await Promise.all([
+    db.course
+      .findMany({
+        where: {
+          isPublished: true,
+          slug: { in: ["laptrinhrobot", "luyenthirobosim"] },
+        },
+        orderBy: { displayOrder: "asc" },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          shortDescription: true,
+          description: true,
+          thumbnail: true,
+        },
+      })
+      .catch(() => []),
+    getTestimonials("home"),
+  ]);
 
   const courses: MainCourseCard[] = rows.map((c) => ({
     id: c.id,
@@ -63,7 +67,6 @@ export default async function Page() {
   }));
 
   // Cảm nhận từ DB (model Testimonial); rỗng → component dùng fallback inline.
-  const testimonialRows = await getTestimonials("home");
   const testimonials = testimonialRows.length
     ? testimonialRows.map((r) => ({
         name: r.name,

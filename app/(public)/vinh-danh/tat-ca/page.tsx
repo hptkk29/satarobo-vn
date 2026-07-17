@@ -9,6 +9,15 @@ export const metadata: Metadata = {
   title: "Tất cả nhân sự được vinh danh | Sata Robo",
   description: "Danh sách đầy đủ các nhân sự xuất sắc của Sata Robo qua các năm.",
   alternates: { canonical: "https://satarobo.vn/vinh-danh/tat-ca" },
+  // PUB-22: bổ sung openGraph khớp các trang sibling.
+  openGraph: {
+    title: "Tất cả nhân sự được vinh danh | Sata Robo",
+    description: "Danh sách đầy đủ các nhân sự xuất sắc của Sata Robo qua các năm.",
+    url: "https://satarobo.vn/vinh-danh/tat-ca",
+    siteName: "Sata Robo",
+    locale: "vi_VN",
+    type: "website",
+  },
 };
 
 export const revalidate = 60;

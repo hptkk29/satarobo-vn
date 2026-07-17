@@ -70,17 +70,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export async function generateStaticParams() {
-  const honors = await db.honor
-    .findMany({
-      where: { isPublished: true },
-      select: { slug: true },
-    })
-    .catch(() => []);
-
-  return [
-    ...Object.keys(CATEGORY_SLUG_MAP).map((slug) => ({ slug })),
-    ...honors.map((h) => ({ slug: h.slug })),
-  ];
+  // PUB-03: /vinh-danh đang bị ẩn cứng (app/(public)/vinh-danh/layout.tsx gọi notFound()).
+  // Trả [] để KHÔNG query DB lúc build cho trang không bao giờ render. Khi mở lại section
+  // (xóa layout ẩn), khôi phục đoạn bên dưới.
+  return [];
+  // const honors = await db.honor
+  //   .findMany({ where: { isPublished: true }, select: { slug: true } })
+  //   .catch(() => []);
+  // return [
+  //   ...Object.keys(CATEGORY_SLUG_MAP).map((slug) => ({ slug })),
+  //   ...honors.map((h) => ({ slug: h.slug })),
+  // ];
 }
 
 export const revalidate = 300;
