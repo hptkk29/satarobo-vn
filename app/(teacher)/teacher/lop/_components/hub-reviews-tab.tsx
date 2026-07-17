@@ -21,6 +21,7 @@ import { normalizeEvalNotes, normalizeEvalRatings } from "@/lib/lms/session-eval
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
+import { SESSION_STATUS_LABEL } from "../../_components/ui/session-status-pill";
 import { UploadPhotoDialog } from "../../anh-lop/_components/upload-photo-dialog";
 import { StudentEvalDialog } from "./student-eval-dialog";
 
@@ -37,13 +38,6 @@ const isoFmt = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-
-const SESSION_STATUS_LABEL: Record<string, string> = {
-  SCHEDULED: "Đã lên lịch",
-  IN_PROGRESS: "Đang diễn ra",
-  COMPLETED: "Đã dạy",
-  CANCELLED: "Đã hủy",
-};
 
 const ATTENDED: AttendanceStatus[] = ["PRESENT", "LATE"];
 const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {

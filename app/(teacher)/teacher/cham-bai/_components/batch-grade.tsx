@@ -5,7 +5,7 @@
 // (không đụng bản nộp cũ). Chỉ hiện ở mức (b) khi bài là "Kiểm tra".
 //
 // Dialog CONTROLLED (open/onOpenChange) + Button onClick — KHÔNG DialogTrigger
-// (pattern site GV, xem assign-dialog.tsx). shadcn thuần, cam-only.
+// (pattern dialog controlled dùng chung ở site GV). shadcn thuần, cam-only.
 // Câu 46: props CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 "use client";
 

@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
+import { SESSION_STATUS_LABEL } from "../_components/ui/session-status-pill";
 import { FeedbackPanel, type FeedbackPanelRow } from "./_components/feedback-panel";
 
 export const metadata = { title: "Nhận xét buổi học | Giáo viên Sata Robo" };
@@ -36,13 +37,6 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   month: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-
-const SESSION_STATUS_LABEL: Record<string, string> = {
-  SCHEDULED: "Đã lên lịch",
-  IN_PROGRESS: "Đang diễn ra",
-  COMPLETED: "Đã dạy",
-  CANCELLED: "Đã hủy",
-};
 
 /** Cửa sổ buổi hiển thị: 14 ngày gần nhất tính cả hôm nay. */
 function recentWindow(): { from: Date; to: Date } {
