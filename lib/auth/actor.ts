@@ -2,10 +2,36 @@
 // Tách 2 lớp: buildActor() THUẦN (test không cần DB) + resolveActor() DB-backed
 // (React.cache → 1 query/request). Quyền resolve per-request từ DB, KHÔNG nằm trong JWT.
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
 import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
 import type { OrgUnitNode } from "@/lib/org/types";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+
+// REQ-02 — Cây OrgUnit là dữ liệu GLOBAL, read-mostly, nhưng resolveActor nạp nó ở
+// MỖI request đã xác thực (hot path 4 site). Cache cross-request qua unstable_cache
+// (tag "org-tree" invalidate khi mutation OrgUnit; TTL 300s = trần staleness nếu org
+// bị sửa NGOÀI app qua SQL/seed). AN TOÀN scope: chỉ cache CẤU TRÚC cây (global) —
+// quyền/role (visibleCenterIds) vẫn tính per-request từ UserOrgRole nạp mới, KHÔNG cache.
+// Cache SAU map, chỉ field primitive; deletedAt luôn null (query đã lọc) → hardcode null,
+// tránh serialize Date qua cache.
+const getOrgTree = unstable_cache(
+  async (): Promise<OrgUnitNode[]> => {
+    const orgUnits = await db.orgUnit.findMany({ where: { deletedAt: null } });
+    return orgUnits.map((o) => ({
+      id: o.id,
+      code: o.code,
+      type: o.type as OrgUnitNode["type"],
+      parentId: o.parentId,
+      centerId: o.centerId,
+      isActive: o.isActive,
+      deletedAt: null,
+    }));
+  },
+  ["org-tree"],
+  { tags: [CACHE_TAGS.orgTree], revalidate: 300 },
+);
 
 export type ScopeType =
   | "GLOBAL"
@@ -166,7 +192,7 @@ export function buildActor(input: {
 
 export async function resolveActorUncached(userId: string): Promise<Actor> {
   const now = new Date();
-  const [rows, orgUnits, grants, classes] = await Promise.all([
+  const [rows, orgNodes, grants, classes] = await Promise.all([
     db.userOrgRole.findMany({
       where: {
         userId,
@@ -176,7 +202,7 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       },
       include: { role: { include: { permissions: true } } },
     }),
-    db.orgUnit.findMany({ where: { deletedAt: null } }),
+    getOrgTree(), // REQ-02: cây OrgUnit cache cross-request (thay findMany mỗi request).
     db.userPermissionGrant.findMany({
       where: { userId },
       select: { action: true, grant: true },
@@ -186,16 +212,6 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       select: { id: true },
     }),
   ]);
-
-  const orgNodes: OrgUnitNode[] = orgUnits.map((o) => ({
-    id: o.id,
-    code: o.code,
-    type: o.type as OrgUnitNode["type"],
-    parentId: o.parentId,
-    centerId: o.centerId,
-    isActive: o.isActive,
-    deletedAt: o.deletedAt,
-  }));
 
   return buildActor({
     userId,
