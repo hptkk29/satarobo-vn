@@ -120,6 +120,34 @@ function revalidateAll() {
   revalidatePath("/ve-chung-toi");
 }
 
+// SEC-M06 — snapshot field cho audit before/after (chỉ primitive để so sánh sạch,
+// tránh false-positive khi diff Date). Không gồm PII quá nhạy (nationalId/address/notes).
+const EMPLOYEE_AUDIT_SELECT = {
+  fullName: true,
+  employeeCode: true,
+  jobTitle: true,
+  department: true,
+  status: true,
+  centerId: true,
+  isActive: true,
+  isPublic: true,
+  salaryRank: true,
+  salaryLevel: true,
+  bhxhBase: true,
+  contractType: true,
+  gender: true,
+  managerId: true,
+} as const;
+
+function auditActorOf(session: {
+  user: { id?: string | null; name?: string | null; email?: string | null };
+}) {
+  return {
+    id: session.user.id ?? null,
+    name: session.user.name ?? session.user.email ?? "Unknown",
+  };
+}
+
 export async function createEmployeeAction(
   input: unknown,
   isHO = false,
@@ -228,6 +256,22 @@ export async function createEmployeeAction(
     isHO,
   );
 
+  // SEC-M06: audit tạo nhân sự.
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: created.id,
+    action: "CREATE",
+    newValues: {
+      employeeCode: createData.employeeCode,
+      fullName: createData.fullName,
+      department: createData.department,
+      centerId: createData.centerId ?? null,
+    },
+    orgUnitId: createData.centerId ?? null,
+  });
+
   revalidateAll();
   return { ok: true, data: { id: created.id } };
 }
@@ -296,7 +340,26 @@ export async function updateEmployeeAction(
     });
   }
 
+  // SEC-M06: audit before/after (snapshot primitive để diff sạch).
+  const auditBefore = await sdb.employee.findUnique({
+    where: { id },
+    select: EMPLOYEE_AUDIT_SELECT,
+  });
   await sdb.employee.update({ where: { id }, data });
+  const auditAfter = await sdb.employee.findUnique({
+    where: { id },
+    select: EMPLOYEE_AUDIT_SELECT,
+  });
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "UPDATE",
+    oldValues: auditBefore,
+    newValues: auditAfter,
+    orgUnitId: auditAfter?.centerId ?? auditBefore?.centerId ?? null,
+  });
 
   if (typeof isHO === "boolean") {
     await syncHoAssignment(
@@ -346,7 +409,21 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
     };
   }
 
+  // SEC-M06: snapshot TRƯỚC khi xoá để audit (hard-delete → mất record).
+  const auditSnapshot = await sdb.employee.findUnique({
+    where: { id },
+    select: EMPLOYEE_AUDIT_SELECT,
+  });
   await sdb.employee.delete({ where: { id } });
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "DELETE",
+    oldValues: auditSnapshot,
+    orgUnitId: auditSnapshot?.centerId ?? null,
+  });
   revalidateAll();
   return { ok: true };
 }
@@ -372,6 +449,18 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
     where: { id },
     data: { isActive: !emp.isActive },
   });
+  // SEC-M06: audit bật/tắt hoạt động.
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "UPDATE",
+    oldValues: { isActive: emp.isActive },
+    newValues: { isActive: !emp.isActive },
+    changedFields: ["isActive"],
+    orgUnitId: emp.centerId,
+  });
   revalidateAll();
   return { ok: true };
 }
@@ -396,6 +485,18 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
   await sdb.employee.update({
     where: { id },
     data: { isPublic: !emp.isPublic },
+  });
+  // SEC-M06: audit bật/tắt hiển thị public.
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "UPDATE",
+    oldValues: { isPublic: emp.isPublic },
+    newValues: { isPublic: !emp.isPublic },
+    changedFields: ["isPublic"],
+    orgUnitId: emp.centerId,
   });
   revalidateAll();
   return { ok: true };
