@@ -30,6 +30,13 @@ export function RoleSwitcher({ roles, activeRole }: { roles: string[]; activeRol
         toast.error(res.error ?? "Không đổi được vai trò");
         return;
       }
+      // F3 (Q41) — vai thuộc khu vực host khác (VD Giáo viên) → điều hướng full-page
+      // sang đúng site. Chỉ có khi SSO đa subdomain đã bật (server quyết); mặc định
+      // targetHost rỗng → chỉ làm mới menu như cũ.
+      if (res.targetHost) {
+        window.location.assign(res.targetHost);
+        return;
+      }
       router.refresh();
     });
   };

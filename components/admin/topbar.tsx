@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { logoutToGate } from "@/lib/auth/logout-client";
 import { LogOut, ChevronDown, User, Search } from "lucide-react";
 import { NotificationBell } from "@/components/admin/notification-bell";
 import { RoleSwitcher } from "@/components/admin/role-switcher";
@@ -77,7 +77,7 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-600 focus:text-red-600"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => logoutToGate()}
             >
               <LogOut className="mr-2 h-4 w-4" /> Đăng xuất
             </DropdownMenuItem>

@@ -14,9 +14,12 @@ import { Topbar } from "./topbar";
  */
 export function AppShell({
   userName,
+  adminReturnUrl,
   children,
 }: {
   userName: string;
+  /** F3 (Q41) — URL admin cho GV kiêm nhiệm; undefined = không hiện lối về admin. */
+  adminReturnUrl?: string;
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -60,7 +63,11 @@ export function AppShell({
 
       {/* Cột nội dung */}
       <div className="flex min-h-screen flex-1 flex-col lg:pl-64 print:pl-0">
-        <Topbar userName={userName} onMenuClick={() => setDrawerOpen(true)} />
+        <Topbar
+          userName={userName}
+          adminReturnUrl={adminReturnUrl}
+          onMenuClick={() => setDrawerOpen(true)}
+        />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 print:max-w-none print:p-0">
           {children}
         </main>

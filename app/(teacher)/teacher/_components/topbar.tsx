@@ -15,9 +15,11 @@ import { UserMenu } from "./user-menu";
  */
 export function Topbar({
   userName,
+  adminReturnUrl,
   onMenuClick,
 }: {
   userName: string;
+  adminReturnUrl?: string;
   onMenuClick: () => void;
 }) {
   return (
@@ -33,7 +35,7 @@ export function Topbar({
 
       <div className="ml-auto flex items-center gap-1 sm:gap-3">
         <ThemeToggle />
-        <UserMenu name={userName} />
+        <UserMenu name={userName} adminReturnUrl={adminReturnUrl} />
       </div>
     </header>
   );

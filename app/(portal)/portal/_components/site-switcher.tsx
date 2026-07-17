@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { logoutToGate } from "@/lib/auth/logout-client";
 import { ChevronDown, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { setActiveSite } from "../actions";
@@ -58,7 +58,7 @@ export function SiteSwitcher({
 
       <button
         type="button"
-        onClick={() => signOut({ callbackUrl: "/login" })}
+        onClick={() => logoutToGate()}
         className="inline-flex items-center gap-1 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
         aria-label="Đăng xuất"
       >

@@ -1,5 +1,5 @@
 import type { Role } from "@prisma/client";
-import { isTeacherSiteEnabled } from "@/lib/flags";
+import { isTeacherSiteEnabled, isCommonLoginAtRootEnabled } from "@/lib/flags";
 
 /**
  * Host-based access control — PURE decision layer (no NextRequest dependency).
@@ -72,6 +72,11 @@ export interface RouteInput {
    * (mặc định OFF). Test truyền tường minh để không phụ thuộc env.
    */
   teacherSiteEnabled?: boolean;
+  /**
+   * F4 (Q41) — cổng login chung ở public host. Bỏ trống → đọc env
+   * `COMMON_LOGIN_AT_ROOT` (mặc định OFF → giữ 308 sang admin). Test truyền tường minh.
+   */
+  commonLoginAtRoot?: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -250,6 +255,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
     isTeacher &&
     effectiveRoles.filter((r) => r !== null && r !== "PARENT").every((r) => r === "TEACHER");
   const teacherSiteOn = input.teacherSiteEnabled ?? isTeacherSiteEnabled();
+  const loginAtRoot = input.commonLoginAtRoot ?? isCommonLoginAtRootEnabled();
 
   // Chỉ gắn reason khi đã từng có session nhưng bị vô hiệu (deactivated),
   // KHÔNG gắn cho khách ẩn danh (chưa login).
@@ -266,7 +272,26 @@ export function decideRoute(input: RouteInput): RouteDecision {
       const cleanPath = pathname.replace(/^\/admin/, "") || STAFF_HOME;
       return { type: "redirectHost", host: "admin", path: cleanPath, status: 308 };
     }
-    if (pathname === "/login" || isAdminRoute(pathname)) {
+    if (pathname === "/login") {
+      // F4 (Q41) — cổng login chung: khi bật, /login ĐỨNG THẬT ở satarobo.vn.
+      if (loginAtRoot) {
+        if (!authed) return { type: "next" }; // chưa login → form login tại public host
+        // Đã login mà mở /login → đưa về đúng host của họ (không hiện form).
+        if (isParent) {
+          return { type: "redirectHost", host: "portal", path: PORTAL_HOME, status: 307 };
+        }
+        if (isTeacherOnly && teacherSiteOn) {
+          return { type: "redirectHost", host: "teacher", path: TEACHER_HOME, status: 307 };
+        }
+        return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
+      }
+      // Mặc định (OFF) — dồn login về admin host. Dùng 307 (temporary) chứ KHÔNG 308:
+      // /login phụ thuộc trạng thái flag, 308 permanent sẽ bị browser/CDN cache vĩnh
+      // viễn → khi bật COMMON_LOGIN_AT_ROOT (F4) sau này client cũ vẫn auto-đá sang
+      // admin/login, F4 không có hiệu lực. 307 không cache nên chuyển đổi sạch.
+      return { type: "redirectHost", host: "admin", path: pathname, status: 307 };
+    }
+    if (isAdminRoute(pathname)) {
       return { type: "redirectHost", host: "admin", path: pathname, status: 308 };
     }
     return { type: "next" };

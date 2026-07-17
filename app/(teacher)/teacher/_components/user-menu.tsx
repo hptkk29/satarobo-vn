@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { signOut } from "next-auth/react";
-import { ChevronDown, LogOut, User } from "lucide-react";
+import { logoutToGate } from "@/lib/auth/logout-client";
+import { ChevronDown, LayoutGrid, LogOut, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +31,14 @@ function initialsOf(name: string): string {
   return (first[0]! + last[0]!).toUpperCase();
 }
 
-export function UserMenu({ name }: { name: string }) {
+export function UserMenu({
+  name,
+  adminReturnUrl,
+}: {
+  name: string;
+  /** F3 (Q41) — GV kiêm nhiệm: lối quay về trang quản trị. undefined = ẩn. */
+  adminReturnUrl?: string;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-xl px-1.5 py-1 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
@@ -63,11 +70,18 @@ export function UserMenu({ name }: { name: string }) {
           Hồ sơ cá nhân
         </DropdownMenuItem>
 
+        {adminReturnUrl ? (
+          <DropdownMenuItem onClick={() => window.location.assign(adminReturnUrl)}>
+            <LayoutGrid className="h-4 w-4" aria-hidden />
+            Về trang quản trị
+          </DropdownMenuItem>
+        ) : null}
+
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
           variant="destructive"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => logoutToGate()}
         >
           <LogOut className="h-4 w-4" aria-hidden />
           Đăng xuất
