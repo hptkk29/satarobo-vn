@@ -10,6 +10,7 @@
  *
  * Variables of complex types (HTML chunks) should be pre-rendered.
  */
+import { formatVndPlain } from "@/lib/format/money";
 
 export type FormatterName = "currency" | "date" | "datetime" | "raw";
 
@@ -37,7 +38,7 @@ function applyFormatter(val: VarValue, formatter: FormatterName): string {
     case "currency": {
       const num = typeof val === "number" ? val : Number(val);
       if (isNaN(num)) return String(val);
-      return num.toLocaleString("vi-VN") + " đ";
+      return formatVndPlain(num);
     }
     case "date": {
       const d = val instanceof Date ? val : new Date(String(val));

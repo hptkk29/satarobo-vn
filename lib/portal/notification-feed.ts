@@ -8,6 +8,7 @@ import { getCenterSurveys, type SurveyCard } from "@/lib/portal/surveys";
 import { getParentNotifications } from "@/lib/portal/notifications";
 import { getChildren } from "@/lib/portal/session";
 import { getPublishedReportCards } from "@/lib/lms/report-card";
+import { formatVndPlain } from "@/lib/format/money";
 
 // Portal v2 — feed thông báo tổng hợp cho phụ huynh (giống SataUI): gom sự kiện thật
 // từ nhận xét · học bù · học phí · học bạ · khảo sát · thông báo trung tâm, gắn danh mục.
@@ -44,7 +45,7 @@ export type NotificationFeed = {
 const READ_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 
 function vnd(n: number): string {
-  return n.toLocaleString("vi-VN") + " đ";
+  return formatVndPlain(n);
 }
 function firstLine(s: string): string {
   const line = s.split("\n").map((x) => x.trim()).find(Boolean) ?? s;

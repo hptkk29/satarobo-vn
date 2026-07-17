@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { OrderType } from "@prisma/client";
+import { formatVndPlain } from "@/lib/format/money";
 
 export type VoucherValidationError =
   | "NOT_FOUND"
@@ -161,7 +162,7 @@ export async function validateAndComputeDiscount(params: {
     return {
       ok: false,
       error: "MIN_ORDER_NOT_MET",
-      message: `${ERROR_LABEL.MIN_ORDER_NOT_MET} (cần ${voucher.minOrderValue.toLocaleString("vi-VN")} đ)`,
+      message: `${ERROR_LABEL.MIN_ORDER_NOT_MET} (cần ${formatVndPlain(voucher.minOrderValue)})`,
     };
   }
 

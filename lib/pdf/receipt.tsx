@@ -5,6 +5,7 @@
 import React from "react";
 import path from "path";
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
+import { formatVndPlain } from "@/lib/format/money";
 
 const FONT_REGULAR = path.join(process.cwd(), "public/fonts/NotoSans-Regular.ttf");
 const FONT_BOLD = path.join(process.cwd(), "public/fonts/NotoSans-Bold.ttf");
@@ -42,7 +43,7 @@ export type ReceiptPdfData = {
 };
 
 function vnd(n: number): string {
-  return n.toLocaleString("vi-VN") + " đ";
+  return formatVndPlain(n);
 }
 
 const s = StyleSheet.create({
