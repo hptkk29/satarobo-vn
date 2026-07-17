@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { ArrowRight, PlayCircle, Sparkles } from "lucide-react";
 import { TextGenerateEffect } from "@/components/aceternity/text-generate-effect";
 import { ShimmerButton } from "@/components/magic/shimmer-button";

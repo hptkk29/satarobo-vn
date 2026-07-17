@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { Menu, X, Phone, ChevronRight, ArrowRight } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 

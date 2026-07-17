@@ -2,7 +2,7 @@
 
 import { TimelineItem } from "@prisma/client";
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
 interface HonorTimelineProps {

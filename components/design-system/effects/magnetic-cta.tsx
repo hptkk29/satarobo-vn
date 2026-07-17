@@ -2,7 +2,7 @@
 
 import type { ReactNode, MouseEvent } from "react";
 import { useRef } from "react";
-import { motion, useMotionValue, useSpring } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "motion/react";
 import { cn } from "@/lib/utils";
 
 interface MagneticCTAProps {

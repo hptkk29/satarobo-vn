@@ -1,4 +1,4 @@
-import type { Variants } from "framer-motion";
+import type { Variants } from "motion/react";
 
 // Reusable Framer Motion variants for Sata Robo client UI.
 // Pair with components/motion/* wrappers (FadeIn, RevealOnScroll,
