@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -23,7 +24,12 @@ export type StudentClass = {
   centerName: string | null;
 };
 
-export async function getStudentClasses(studentId: string): Promise<StudentClass[]> {
+// REQ-03 — React.cache: dedup query enrollment trong 1 request render (classIdsFor
+// gọi bởi 7 helper + summaries + child-detail → trước đây 2-3 query trùng/portal home).
+// Chỉ memo trong phạm vi request, KHÔNG cross-request → không đổi staleness.
+export const getStudentClasses = cache(async (
+  studentId: string,
+): Promise<StudentClass[]> => {
   const enrollments = await db.enrollment.findMany({
     where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
     select: {
@@ -46,7 +52,7 @@ export async function getStudentClasses(studentId: string): Promise<StudentClass
     courseName: e.class.course.name,
     centerName: e.class.center?.name ?? null,
   }));
-}
+});
 
 async function classIdsFor(studentId: string): Promise<string[]> {
   const classes = await getStudentClasses(studentId);

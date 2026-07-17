@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { getChildren } from "@/lib/portal/session";
 import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { computeEnrollmentDebt } from "@/lib/finance/debt";
@@ -34,10 +35,9 @@ export type ParentDashboard = {
 
 /** Dashboard phụ huynh: gộp công nợ + học bù mở + thông báo của tất cả các con. */
 export async function getParentDashboard(parentUserId: string): Promise<ParentDashboard> {
-  const children = await db.student.findMany({
-    where: { parentUserId, deletedAt: null },
-    select: { id: true },
-  });
+  // REQ-08: dùng lại getChildren cached (layout đã gọi trong cùng request) thay vì query
+  // Student riêng → bỏ 1 query trùng/portal home. Chỉ cần id.
+  const children = await getChildren(parentUserId);
   const childIds = children.map((c) => c.id);
 
   if (childIds.length === 0) {
@@ -163,11 +163,9 @@ export type ParentChildOverview = {
 export async function getParentChildrenOverview(
   parentUserId: string,
 ): Promise<ParentChildOverview[]> {
-  const children = await db.student.findMany({
-    where: { parentUserId, deletedAt: null },
-    select: { id: true, name: true, studentCode: true },
-    orderBy: { name: "asc" },
-  });
+  // REQ-08/QRY-13: dùng lại getChildren cached (cùng where + order by name; PortalChild
+  // đã có id/name/studentCode) → bỏ query Student trùng thứ 3/portal home.
+  const children = await getChildren(parentUserId);
 
   return Promise.all(
     children.map(async (c) => {
