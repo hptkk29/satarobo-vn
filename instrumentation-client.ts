@@ -17,9 +17,12 @@ if (dsn) {
     replaysOnErrorSampleRate: 1.0,
     replaysSessionSampleRate: 0.1,
     integrations: [
+      // SEC-M09: mask toàn bộ text + block media trong Session Replay — chống lộ PII
+      // học sinh (vị thành niên)/SĐT-email PH/công nợ lên Sentry. Replay-on-error VẪN
+      // capture để chẩn đoán (chỉ nội dung PII bị ẩn, không tắt hẳn replay).
       Sentry.replayIntegration({
-        maskAllText: false,
-        blockAllMedia: false,
+        maskAllText: true,
+        blockAllMedia: true,
       }),
     ],
     // Don't capture noise we can't act on
