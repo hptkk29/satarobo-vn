@@ -58,33 +58,34 @@ export default async function TeacherPerformanceReportPage() {
   const classToTeacher = new Map<string, string>();
   for (const c of classRows) if (c.teacherId) classToTeacher.set(c.id, c.teacherId);
 
-  // 2. Buổi học của các lớp này (ClassSession không scoped → lọc theo classIds).
-  const sessionRows = classIds.length
-    ? await sdb.classSession.findMany({
-        where: { classId: { in: classIds } },
-        select: { classId: true, status: true, actualTeacherId: true },
-      })
-    : [];
-
-  // 3. Điểm danh các buổi của những lớp này.
-  const attendanceRows = classIds.length
-    ? await sdb.attendance.findMany({
-        where: { session: { classId: { in: classIds } } },
-        select: {
-          status: true,
-          makeupStatus: true,
-          session: { select: { classId: true, status: true } },
-        },
-      })
-    : [];
-
-  // 4. Ghi danh thuộc các lớp này (đếm HV + bắc cầu tới học bạ).
-  const enrollmentRows = classIds.length
-    ? await sdb.enrollment.findMany({
-        where: { classId: { in: classIds }, deletedAt: null },
-        select: { id: true, studentId: true, classId: true, status: true },
-      })
-    : [];
+  // QRY-16: 3 query dưới CHỈ phụ thuộc classIds → chạy song song (thay 3 await tuần tự).
+  const [sessionRows, attendanceRows, enrollmentRows] = await Promise.all([
+    // 2. Buổi học của các lớp này (ClassSession không scoped → lọc theo classIds).
+    classIds.length
+      ? sdb.classSession.findMany({
+          where: { classId: { in: classIds } },
+          select: { classId: true, status: true, actualTeacherId: true },
+        })
+      : Promise.resolve([]),
+    // 3. Điểm danh các buổi của những lớp này.
+    classIds.length
+      ? sdb.attendance.findMany({
+          where: { session: { classId: { in: classIds } } },
+          select: {
+            status: true,
+            makeupStatus: true,
+            session: { select: { classId: true, status: true } },
+          },
+        })
+      : Promise.resolve([]),
+    // 4. Ghi danh thuộc các lớp này (đếm HV + bắc cầu tới học bạ).
+    classIds.length
+      ? sdb.enrollment.findMany({
+          where: { classId: { in: classIds }, deletedAt: null },
+          select: { id: true, studentId: true, classId: true, status: true },
+        })
+      : Promise.resolve([]),
+  ]);
   const enrollmentToClass = new Map(enrollmentRows.map((e) => [e.id, e.classId]));
   const enrollmentIds = enrollmentRows.map((e) => e.id);
 
