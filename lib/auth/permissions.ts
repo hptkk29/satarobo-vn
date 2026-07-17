@@ -698,6 +698,62 @@ export function getEmployeeFieldVisibility(
   };
 }
 
+export type EmployeeFieldVisibility = ReturnType<typeof getEmployeeFieldVisibility>;
+
+// SEC-H04 — nguồn DUY NHẤT map nhóm visibility → field Employee. Khớp CHÍNH XÁC với
+// các input gate trong employee-form.tsx (visibility.contact/salary/personal). Dùng cho
+// CẢ redact-khi-đọc (không serialize PII xuống client) LẪN strip-khi-ghi (client không
+// set/xoá được field ngoài quyền). isCEO KHÔNG nằm đây: non-nullable + đã chặn ở M15.
+export const EMPLOYEE_GATED_FIELDS = {
+  contact: ["email", "phone"],
+  salary: ["salaryRank", "salaryLevel", "bhxhBase"],
+  personal: [
+    "dateOfBirth",
+    "gender",
+    "contractType",
+    "managerId",
+    "endDate",
+    "nationalId",
+    "address",
+    "emergencyContact",
+    "notes",
+  ],
+} as const;
+
+/**
+ * Redact-khi-đọc (H04): set field thuộc nhóm bị ẩn → null TRƯỚC khi serialize xuống
+ * bất kỳ client component. Giữ nguyên shape (field vẫn có, giá trị null) nên type ổn
+ * định + UI (đã ẩn theo cùng visibility) không đổi. Trả về BẢN SAO, không mutate input.
+ */
+export function redactEmployeeFields<T extends Record<string, unknown>>(
+  employee: T,
+  visibility: EmployeeFieldVisibility,
+): T {
+  const out: Record<string, unknown> = { ...employee };
+  for (const group of ["contact", "salary", "personal"] as const) {
+    if (visibility[group]) continue;
+    for (const field of EMPLOYEE_GATED_FIELDS[group]) {
+      if (field in out) out[field] = null;
+    }
+  }
+  return out as T;
+}
+
+/**
+ * Strip-khi-ghi: XOÁ key thuộc nhóm bị ẩn khỏi payload create/update (mutate tại chỗ).
+ * Prisma bỏ qua key vắng → DB giữ nguyên giá trị cũ (chống mất data khi client gửi null
+ * do đã bị redact) + chặn client set field ngoài quyền (write-side hardening).
+ */
+export function stripHiddenEmployeeFields(
+  data: Record<string, unknown>,
+  visibility: EmployeeFieldVisibility,
+): void {
+  for (const group of ["contact", "salary", "personal"] as const) {
+    if (visibility[group]) continue;
+    for (const field of EMPLOYEE_GATED_FIELDS[group]) delete data[field];
+  }
+}
+
 // =============================================================================
 // HELPERS — convenience for common patterns
 // =============================================================================

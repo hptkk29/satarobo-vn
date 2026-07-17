@@ -4,7 +4,11 @@ import { z } from "zod";
 import type { Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { hasRole } from "@/lib/auth/permissions";
+import {
+  hasRole,
+  getEmployeeFieldVisibility,
+  stripHiddenEmployeeFields,
+} from "@/lib/auth/permissions";
 import { assertPermission } from "@/lib/auth/check-permission";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ASSIGNABLE_ROLES } from "@/lib/labels";
@@ -184,10 +188,9 @@ export async function createEmployeeAction(
   // SEC-M15: chống mass-assignment khi CREATE (write path song song với update:265-270).
   // Non-SUPER_ADMIN không được tự đặt cờ CEO; CENTER_MANAGER thuần không được đặt bậc/mức lương.
   if (!canSetPrivileged) createData.isCEO = false;
-  if (hasRole(session.user, "CENTER_MANAGER") && !canSetPrivileged) {
-    createData.salaryRank = null;
-    createData.salaryLevel = null;
-  }
+  // SEC-H04: strip field ngoài quyền (khớp update + redact-khi-đọc). Bao trùm strip
+  // salary CM cũ + chặn set nhóm personal/contact ngoài quyền lúc tạo.
+  stripHiddenEmployeeFields(createData, getEmployeeFieldVisibility(session.user.role));
 
   // Cách ly cơ sở: chỉ tạo NV cho cơ sở trong tầm nhìn actor (NV HO/centerId=null → super/HO).
   if (!actorCanUseCenter(actor, createData.centerId ?? null)) {
@@ -272,12 +275,10 @@ export async function updateEmployeeAction(
     return { ok: false, error: "Không tìm thấy nhân sự" };
   }
 
-  // CENTER_MANAGER role không được edit salary fields
+  // SEC-H04: strip field ngoài quyền (khớp redact-khi-đọc bên page) — chống mất data khi
+  // client gửi null do đã redact + chặn set field ngoài quyền. Bao trùm strip salary CM cũ.
   const data = { ...parsed.data };
-  if (hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")) {
-    delete data.salaryRank;
-    delete data.salaryLevel;
-  }
+  stripHiddenEmployeeFields(data, getEmployeeFieldVisibility(session.user.role));
   // NV HO → không gán Center.
   if (isHO === true) data.centerId = null;
 
