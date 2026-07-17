@@ -11,6 +11,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Kết quả | Sata Robo" };
@@ -87,7 +88,7 @@ export default async function KetQuaPage() {
           <p className="text-xs text-purple-600">
             {latestReport.className ? `${latestReport.className} · ` : ""}
             Lập ngày{" "}
-            {new Date(latestReport.generatedAt).toLocaleDateString("vi-VN")}
+            {formatDateVN(latestReport.generatedAt)}
           </p>
         </div>
       )}

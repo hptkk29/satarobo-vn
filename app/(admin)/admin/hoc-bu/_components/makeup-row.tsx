@@ -10,6 +10,7 @@ import {
   completeMakeupAction,
   cancelMakeupAction,
 } from "../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 export interface MakeupItem {
   id: string;
@@ -92,9 +93,9 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
         </span>
       </div>
       <p className="mt-1 text-sm text-gray-600">
-        Buổi lỡ: {item.missedDate ? new Date(item.missedDate).toLocaleDateString("vi-VN") : "—"}
+        Buổi lỡ: {item.missedDate ? formatDateVN(item.missedDate) : "—"}
         {item.missedLesson ? ` · ${item.missedLesson}` : ""}
-        {item.makeupDate && ` → bù: ${new Date(item.makeupDate).toLocaleDateString("vi-VN")}`}
+        {item.makeupDate && ` → bù: ${formatDateVN(item.makeupDate)}`}
       </p>
 
       {(item.status === "PENDING" || item.status === "SCHEDULED") && (
@@ -132,7 +133,7 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
                 )}
               </span>
               <span className="text-xs text-gray-500">
-                {new Date(s.date).toLocaleDateString("vi-VN")}
+                {formatDateVN(s.date)}
                 {typeof s.capacityLeft === "number" ? ` · còn ${s.capacityLeft} chỗ` : ""}
               </span>
             </button>

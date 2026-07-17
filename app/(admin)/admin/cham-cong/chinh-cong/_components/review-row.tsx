@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, X } from "lucide-react";
 import { reviewAdjustmentRequest } from "../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 export interface ReviewItem {
   id: string;
@@ -47,7 +48,7 @@ export function ReviewRow({ item }: { item: ReviewItem }) {
         <span className="font-semibold text-gray-900">
           {item.userName}
           <span className="ml-2 text-sm font-normal text-gray-500">
-            {new Date(item.date).toLocaleDateString("vi-VN")}
+            {formatDateVN(item.date)}
           </span>
         </span>
         {item.centerName && <span className="text-xs text-gray-400">{item.centerName}</span>}

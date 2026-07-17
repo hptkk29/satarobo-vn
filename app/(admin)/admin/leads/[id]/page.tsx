@@ -20,6 +20,7 @@ import { getLeadPaymentSummary } from "@/lib/payments/summary";
 import { canViewLeadPii } from "@/lib/auth/permissions";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
 import { ShareToggle } from "./_components/share-toggle";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -302,7 +303,7 @@ export default async function LeadDetailPage({ params }: Props) {
         <Info label="Sale phụ trách" value={lead.assignedTo?.name ?? "Chưa gán"} />
         <Info
           label="Ngày tạo"
-          value={lead.createdAt.toLocaleDateString("vi-VN")}
+          value={formatDateVN(lead.createdAt)}
         />
         <Info label="Ghi chú" value={piiLead.note} />
       </dl>

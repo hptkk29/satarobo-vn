@@ -7,6 +7,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ const VALID_STATUSES = Object.values(EnrollmentStatus);
 
 function formatDate(d: Date | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("vi-VN");
+  return formatDateVN(d);
 }
 
 interface SearchParams {

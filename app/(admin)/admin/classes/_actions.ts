@@ -26,6 +26,7 @@ import { publishEvent } from "@/lib/events/publish";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
+import { formatDateVN } from "@/lib/format/date";
 
 type ActionResult = { error?: string };
 
@@ -618,7 +619,7 @@ export async function rejectClass(classId: string, reason: string): Promise<WfRe
   }
   const trimmed = reason.trim();
   if (trimmed.length < 5) return { ok: false, error: "Nhập lý do trả lại (≥5 ký tự)" };
-  const stamp = new Date().toLocaleDateString("vi-VN");
+  const stamp = formatDateVN(new Date());
   await gate.sdb.class.update({
     where: { id: classId },
     data: {

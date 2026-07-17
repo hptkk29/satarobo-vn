@@ -14,6 +14,7 @@ import { getStudentMakeup } from "@/lib/portal/makeup";
 import { YeuCauPageV2 } from "@/components/portal/yeu-cau-page";
 import { RequestForm } from "./_components/request-form";
 import { CancelButton } from "./_components/cancel-button";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Yêu cầu | Sata Robo", robots: { index: false } };
@@ -175,7 +176,7 @@ export default async function YeuCauPage({
                 {r.preferredDate && (
                   <p className="mt-1 text-xs text-neutral-400">
                     {/* preferredDate = wall-clock TZ server (sessionDate) → KHÔNG ép VN. */}
-                    Ngày: {r.preferredDate.toLocaleDateString("vi-VN")}
+                    Ngày: {formatDateVN(r.preferredDate)}
                   </p>
                 )}
                 {r.response && (

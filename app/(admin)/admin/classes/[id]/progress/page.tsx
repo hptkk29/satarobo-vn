@@ -8,6 +8,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getClassProgress, getClassGradebook } from "@/lib/progress";
 import { GenerateReportsButton } from "./_components/generate-reports-button";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -316,7 +317,7 @@ export default async function ClassProgressPage({ params }: Props) {
                   </span>
                   {l.taught && l.sessionDate && (
                     <span className="ml-auto text-xs text-neutral-400 tabular-nums">
-                      Đã dạy {new Date(l.sessionDate).toLocaleDateString("vi-VN")}
+                      Đã dạy {formatDateVN(l.sessionDate)}
                     </span>
                   )}
                 </li>

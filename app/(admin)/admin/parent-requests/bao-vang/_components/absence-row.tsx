@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalendarClock, RotateCcw, X } from "lucide-react";
 import { resolveAbsence } from "../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 export interface AbsenceItem {
   id: string;
@@ -59,7 +60,7 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
           )}
         </div>
         <span className="text-xs text-neutral-400">
-          {new Date(item.createdAt).toLocaleDateString("vi-VN")}
+          {formatDateVN(item.createdAt)}
         </span>
       </div>
 

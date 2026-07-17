@@ -8,6 +8,7 @@ import {
   toggleNotificationPublish,
   deleteNotification,
 } from "../actions";
+import { formatDateVN } from "@/lib/format/date";
 
 type Opt = { id: string; label: string };
 type Item = {
@@ -177,7 +178,7 @@ export function NotificationsClient({
                 <p className="mt-1 line-clamp-2 text-xs text-gray-500">{n.body}</p>
                 <p className="mt-1 text-[10px] text-gray-400">
                   {n.scopeLabel} ·{" "}
-                  {new Date(n.createdAt).toLocaleDateString("vi-VN")}
+                  {formatDateVN(n.createdAt)}
                   {n.createdByName ? ` · ${n.createdByName}` : ""}
                 </p>
                 <div className="mt-2 flex gap-2">

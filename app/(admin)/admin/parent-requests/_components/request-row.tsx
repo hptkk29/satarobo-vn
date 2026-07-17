@@ -11,6 +11,7 @@ import {
 } from "@/lib/portal/request-labels";
 import type { ParentRequestType, ParentRequestStatus } from "@prisma/client";
 import { handleParentRequest, resolveAbsence } from "../actions";
+import { formatDateVN } from "@/lib/format/date";
 
 export type RequestItem = {
   id: string;
@@ -102,12 +103,12 @@ export function RequestRow({ item }: { item: RequestItem }) {
       {item.sessionDate && (
         <p className="mt-1 inline-flex items-center gap-1 text-xs text-gray-500">
           <CalendarClock className="h-3.5 w-3.5" />
-          Buổi/ngày: {new Date(item.sessionDate).toLocaleDateString("vi-VN")}
+          Buổi/ngày: {formatDateVN(item.sessionDate)}
         </p>
       )}
       {!item.sessionDate && item.preferredDate && (
         <p className="mt-1 text-xs text-gray-400">
-          Ngày: {new Date(item.preferredDate).toLocaleDateString("vi-VN")}
+          Ngày: {formatDateVN(item.preferredDate)}
         </p>
       )}
 

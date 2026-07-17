@@ -17,6 +17,7 @@ import { ParentAccountSection } from "../../_components/parent-account-section";
 import { ParentChildrenManager } from "../../_components/parent-children-manager";
 import { SkillEditor } from "../_components/skill-editor";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
+import { formatDateVN } from "@/lib/format/date";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -372,7 +373,7 @@ export default async function EditStudentPage({ params }: Props) {
                 {absences.map((a, i) => (
                   <tr key={i} className="border-b border-neutral-100 last:border-0">
                     <td className="px-4 py-2 tabular-nums text-neutral-700">
-                      {new Date(a.date).toLocaleDateString("vi-VN")}
+                      {formatDateVN(a.date)}
                     </td>
                     <td className="px-4 py-2 text-neutral-700">{a.className}</td>
                     <td className="px-4 py-2 text-neutral-600">{a.absenceReason ?? "—"}</td>
@@ -437,10 +438,10 @@ export default async function EditStudentPage({ params }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2 tabular-nums text-neutral-600">
-                      {h.enrolledAt ? new Date(h.enrolledAt).toLocaleDateString("vi-VN") : "—"}
+                      {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
                     </td>
                     <td className="px-4 py-2 tabular-nums text-neutral-600">
-                      {h.endedAt ? new Date(h.endedAt).toLocaleDateString("vi-VN") : "—"}
+                      {h.endedAt ? formatDateVN(h.endedAt) : "—"}
                     </td>
                   </tr>
                 ))}

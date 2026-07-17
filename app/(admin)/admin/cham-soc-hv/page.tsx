@@ -9,6 +9,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
 import { CompleteCareButton } from "../canh-bao-rui-ro/_components/alert-actions";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Chăm sóc học viên | Admin" };
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export default async function CareTaskPage() {
                 <p className="font-medium text-gray-900">{t.title}</p>
                 <p className="text-xs text-gray-500">
                   <Link href={`/students/${t.student.id}/edit`} className="text-[#7C3AED] hover:underline">{t.student.name}</Link>
-                  {" · "}hạn {new Date(t.dueAt).toLocaleDateString("vi-VN")}
+                  {" · "}hạn {formatDateVN(t.dueAt)}
                   {t.dueAt < now && <span className="ml-1 font-semibold text-rose-600">(quá hạn)</span>}
                 </p>
               </div>

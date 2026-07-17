@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Star } from "lucide-react";
 import { addTeacherReview } from "../../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 type ParentFb = { rating: number; content: string; studentName: string | null; createdAt: string };
 type Review = { score: number; note: string | null; reviewerName: string; createdAt: string };
@@ -81,7 +82,7 @@ export function TeacherEvaluations({
                   <Stars value={f.rating} />
                   <span className="text-xs text-gray-400">
                     {f.studentName ?? "PH"} ·{" "}
-                    {new Date(f.createdAt).toLocaleDateString("vi-VN")}
+                    {formatDateVN(f.createdAt)}
                   </span>
                 </div>
                 <p className="mt-1 text-gray-700">{f.content}</p>
@@ -103,7 +104,7 @@ export function TeacherEvaluations({
                 <div className="flex items-center gap-2">
                   <Stars value={r.score} />
                   <span className="text-xs text-gray-400">
-                    {r.reviewerName} · {new Date(r.createdAt).toLocaleDateString("vi-VN")}
+                    {r.reviewerName} · {formatDateVN(r.createdAt)}
                   </span>
                 </div>
                 {r.note && <p className="mt-1 text-gray-700">{r.note}</p>}

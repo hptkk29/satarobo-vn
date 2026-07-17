@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { getModelVisibleCenterIds, scopedDb, logScopeBypass } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Báo cáo chuyển lead liên cơ sở | Admin" };
 export const dynamic = "force-dynamic";
@@ -189,7 +190,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
                     )}
                   </td>
                   <td className="px-3 py-2 tabular-nums text-gray-500">
-                    {new Date(r.createdAt).toLocaleDateString("vi-VN")}
+                    {formatDateVN(r.createdAt)}
                   </td>
                 </tr>
               ))}

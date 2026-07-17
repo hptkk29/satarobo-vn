@@ -14,6 +14,7 @@ import {
   milestoneLabel,
   missingMilestoneComments,
 } from "@/lib/lms/report-card-milestone";
+import { formatDateVN } from "@/lib/format/date";
 
 // =============================================================================
 // MODULE TRUNG TÂM PHÊ DUYỆT & NHẮC VIỆC — PHẦN 1
@@ -154,7 +155,7 @@ async function timesheetAdjust(user: TaskUser, now: Date, cfg: PendingCfg): Prom
     href: "/cham-cong/chinh-cong",
     items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
-      label: `Chỉnh công ${new Date(r.date).toLocaleDateString("vi-VN")}`,
+      label: `Chỉnh công ${formatDateVN(r.date)}`,
       href: "/cham-cong/chinh-cong",
       overdue: r.createdAt < twoDaysAgo,
     })),
@@ -245,7 +246,7 @@ async function sessionIncomplete(user: TaskUser, now: Date, cfg: PendingCfg): Pr
     href: "/sessions",
     items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
-      label: `${r.class.classCode ? `${r.class.classCode} · ` : ""}${r.class.name} (${new Date(r.date).toLocaleDateString("vi-VN")})`,
+      label: `${r.class.classCode ? `${r.class.classCode} · ` : ""}${r.class.name} (${formatDateVN(r.date)})`,
       href: `/sessions/${r.id}`,
       overdue: true,
     })),
@@ -516,7 +517,7 @@ async function classNoTeacher(user: TaskUser, now: Date, cfg: PendingCfg): Promi
     href: "/sessions",
     items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
-      label: `${r.class.classCode ? `${r.class.classCode} · ` : ""}${r.class.name} (${new Date(r.date).toLocaleDateString("vi-VN")})`,
+      label: `${r.class.classCode ? `${r.class.classCode} · ` : ""}${r.class.name} (${formatDateVN(r.date)})`,
       href: `/sessions/${r.id}`,
       overdue: true,
     })),

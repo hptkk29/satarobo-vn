@@ -7,6 +7,7 @@ import { KANBAN_COLUMNS, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/lead
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { groupByWeek, type LeadReportRecord } from "@/lib/reports/lead";
 import { BarChart } from "@/components/charts/bar-chart";
+import { formatDateVN } from "@/lib/format/date";
 
 // Đợt 3C — Dashboard SALES_CSM. Chỉ lead/việc CỦA TÔI. KHÔNG tài chính/quản trị.
 export async function SalesDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
@@ -145,7 +146,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
                 <li key={t.id} className="flex items-center justify-between gap-2">
                   <Link href={`/leads/${t.leadId}`} className="truncate font-medium text-gray-800 hover:text-[#7C3AED]">{t.title}</Link>
                   <span className={`shrink-0 text-xs ${t.dueAt < now ? "font-semibold text-rose-600" : "text-gray-400"}`}>
-                    {new Date(t.dueAt).toLocaleDateString("vi-VN")}
+                    {formatDateVN(t.dueAt)}
                   </span>
                 </li>
               ))}

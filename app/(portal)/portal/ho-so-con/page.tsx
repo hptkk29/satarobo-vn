@@ -7,6 +7,7 @@ import { ChildrenPageV2 } from "@/components/portal/children-page";
 import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { GraduationCap, Cake, School, HeartPulse, BookOpen } from "lucide-react";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Hồ sơ con | Sata Robo", robots: { index: false } };
@@ -66,7 +67,7 @@ export default async function HoSoConPage() {
           </div>
         </div>
         <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Info icon={Cake} label="Ngày sinh" value={student?.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString("vi-VN") : "—"} />
+          <Info icon={Cake} label="Ngày sinh" value={student?.dateOfBirth ? formatDateVN(student.dateOfBirth) : "—"} />
           <Info icon={GraduationCap} label="Lớp (văn hoá)" value={student?.currentGrade ? `Lớp ${student.currentGrade}` : "—"} />
           <Info icon={School} label="Trường" value={student?.school ?? "—"} />
           <Info

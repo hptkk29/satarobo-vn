@@ -1,6 +1,7 @@
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentExams } from "@/lib/portal/learning";
 import { StartExamButton } from "./_components/start-exam-button";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Bài thi | Sata Robo" };
@@ -35,7 +36,7 @@ export default async function BaiThiPage() {
                     {e.className ? `${e.className} · ` : ""}
                     {e.durationMinutes} phút
                     {e.closeAt &&
-                      ` · Đóng ${new Date(e.closeAt).toLocaleDateString("vi-VN")}`}
+                      ` · Đóng ${formatDateVN(e.closeAt)}`}
                   </p>
                 </div>
                 {done ? (

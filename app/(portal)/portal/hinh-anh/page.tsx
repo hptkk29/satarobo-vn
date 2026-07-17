@@ -6,6 +6,7 @@ import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { isPortalV2Enabled } from "@/lib/flags";
 import { getStudentPhotos } from "@/lib/portal/photos";
 import { HinhAnhPageV2 } from "@/components/portal/hinh-anh-page";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Hình ảnh | Sata Robo", robots: { index: false } };
@@ -126,7 +127,7 @@ export default async function HinhAnhPage() {
               <figcaption className="space-y-0.5 p-2">
                 {m.takenAt && (
                   <p className="text-[11px] text-neutral-400">
-                    {new Date(m.takenAt).toLocaleDateString("vi-VN")}
+                    {formatDateVN(m.takenAt)}
                   </p>
                 )}
                 {m.caption && <p className="text-xs text-neutral-600">{m.caption}</p>}

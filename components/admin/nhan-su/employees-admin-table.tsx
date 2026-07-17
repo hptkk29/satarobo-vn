@@ -10,6 +10,7 @@ import {
   toggleEmployeeActiveAction,
   toggleEmployeePublicAction,
 } from "@/app/(admin)/admin/nhan-su/actions";
+import { formatDateVN } from "@/lib/format/date";
 
 interface EmployeeRow extends Employee {
   center: { name: string } | null;
@@ -77,7 +78,7 @@ const DEPARTMENT_LABELS: Record<Department, string> = {
 
 function fmtDate(d: Date | null): string {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("vi-VN");
+  return formatDateVN(d);
 }
 
 export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }: Props) {

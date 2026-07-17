@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { sendZaloNotification } from "@/lib/zalo/service";
+import { formatDateVN } from "@/lib/format/date";
 
 // =============================================================================
 // Commit 5 — thông báo điểm danh cho phụ huynh.
@@ -127,7 +128,7 @@ export async function notifyTeacherAttendanceEdited(params: {
   // Không có GV, hoặc GV chính là người vừa sửa → không cần báo.
   if (!sess || !teacherId || teacherId === params.editedByUserId) return;
 
-  const dateStr = sess.date.toLocaleDateString("vi-VN");
+  const dateStr = formatDateVN(sess.date);
   const by = params.editedByName?.trim() ? ` bởi ${params.editedByName.trim()}` : "";
   const dedupeKey = `attendance.edited:${params.sessionId}`;
   await db.staffNotification.upsert({

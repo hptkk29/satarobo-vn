@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { QrCode, BadgeCheck, CalendarClock } from "lucide-react";
 import { recordOrderInstallmentsAction, markOrderInstallmentPaidAction } from "../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 type Installment = {
   id: string;
@@ -93,7 +94,7 @@ export function OrderInstallmentPlan({
           <div key={i.id} className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2 text-sm">
             <span>
               <b>Đợt {i.soDot}</b> · {vnd(i.amount)}
-              {i.soDot === 2 && i.dueDate ? ` · hẹn ${new Date(i.dueDate).toLocaleDateString("vi-VN")}` : ""}
+              {i.soDot === 2 && i.dueDate ? ` · hẹn ${formatDateVN(i.dueDate)}` : ""}
             </span>
             {i.status === "PAID" ? (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">

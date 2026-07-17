@@ -19,6 +19,7 @@ import { db } from "@/lib/db";
 import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
 import { HR_CONTACT } from "@/lib/data/job-options";
+import { formatDateVN } from "@/lib/format/date";
 
 export const revalidate = 60;
 
@@ -179,7 +180,7 @@ export default async function JobDetailPage({
                   <MetaRow
                     icon={CalendarClock}
                     label="Hạn nộp"
-                    value={new Date(job.closesAt).toLocaleDateString("vi-VN")}
+                    value={formatDateVN(job.closesAt)}
                   />
                 )}
               </div>

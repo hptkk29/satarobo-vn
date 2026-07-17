@@ -5,6 +5,7 @@ import {
   getStudentAttendanceSummaries,
   type ClassAttendanceSummary,
 } from "@/lib/portal/learning";
+import { formatDateVN, formatDateDMY } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Lịch học | Sata Robo" };
@@ -53,7 +54,7 @@ export default async function LichHocPage() {
               {p.expectedEndDate && (
                 <p className="mt-1 text-xs text-neutral-500">
                   Dự kiến kết thúc:{" "}
-                  {new Date(p.expectedEndDate).toLocaleDateString("vi-VN")}
+                  {formatDateVN(p.expectedEndDate)}
                 </p>
               )}
               {p.nearingEnd && (
@@ -150,7 +151,7 @@ function Row({
     ? `${s.startTime}${s.endTime ? `–${s.endTime}` : ""}`
     : null;
   const weekday = d.toLocaleDateString("vi-VN", { weekday: "long" });
-  const dateStr = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const dateStr = formatDateDMY(d);
   return (
     <li
       className={`flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 ${

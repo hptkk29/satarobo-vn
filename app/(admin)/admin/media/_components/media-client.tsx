@@ -10,6 +10,7 @@ import {
   deleteMedia,
   getClassUploadContext,
 } from "../actions";
+import { formatDateVN } from "@/lib/format/date";
 
 type Opt = { id: string; label: string };
 type SessionOpt = { id: string; label: string; date: string };
@@ -323,7 +324,7 @@ export function MediaClient({
                   </div>
                   {m.takenAt && (
                     <p className="mt-0.5 text-[10px] text-gray-400">
-                      Buổi {new Date(m.takenAt).toLocaleDateString("vi-VN")}
+                      Buổi {formatDateVN(m.takenAt)}
                     </p>
                   )}
                   {m.caption && <p className="mt-1 line-clamp-2 text-xs text-gray-600">{m.caption}</p>}

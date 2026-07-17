@@ -8,6 +8,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { type Prisma } from "@prisma/client";
 import { SessionListRow } from "./_components/session-list-row";
 import { SessionFilters } from "./_components/session-filters";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -127,8 +128,8 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
           <div className="flex flex-wrap gap-2 text-xs text-amber-800">
             {holidays.map((h) => (
               <span key={h.id} className="rounded-full bg-white px-2.5 py-1">
-                {h.name}: {new Date(h.date).toLocaleDateString("vi-VN")}
-                {h.endDate ? `–${new Date(h.endDate).toLocaleDateString("vi-VN")}` : ""}
+                {h.name}: {formatDateVN(h.date)}
+                {h.endDate ? `–${formatDateVN(h.endDate)}` : ""}
                 {h.center?.name ? ` · ${h.center.name}` : " · Toàn hệ thống"}
               </span>
             ))}

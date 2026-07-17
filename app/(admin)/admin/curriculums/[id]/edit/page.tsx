@@ -18,6 +18,7 @@ import {
 } from "../../_components/lesson-resources";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -227,7 +228,7 @@ export default async function EditCurriculumPage({ params }: Props) {
     content: r.content,
     status: r.status,
     response: r.response,
-    createdAt: r.createdAt.toLocaleDateString("vi-VN"),
+    createdAt: formatDateVN(r.createdAt),
   }));
 
   return (

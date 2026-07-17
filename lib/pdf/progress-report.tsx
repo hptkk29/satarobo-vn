@@ -9,6 +9,7 @@ import {
   Font,
 } from "@react-pdf/renderer";
 import { hotlinesInline } from "@/lib/locations";
+import { formatDateVN } from "@/lib/format/date";
 
 // Register Noto Sans (Vietnamese diacritics support) once at module load.
 // The same TTF is registered for both Regular and Bold; @react-pdf synthesizes
@@ -154,7 +155,7 @@ export interface ProgressReportData {
 
 function fmt(d: Date | null): string {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("vi-VN");
+  return formatDateVN(d);
 }
 
 const ASSIGN_STATUS_LABEL: Record<string, string> = {

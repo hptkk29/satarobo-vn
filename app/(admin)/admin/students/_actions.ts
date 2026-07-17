@@ -25,6 +25,7 @@ import { canTransition } from "@/lib/enrollments/status";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { formatDateVN } from "@/lib/format/date";
 
 type ActionResult = { error?: string };
 
@@ -444,7 +445,7 @@ export async function reserveStudentAction(input: {
   if (existing) {
     return {
       ok: false as const,
-      error: `Học viên đã đang bảo lưu (từ ${existing.startedAt.toLocaleDateString("vi-VN")})`,
+      error: `Học viên đã đang bảo lưu (từ ${formatDateVN(existing.startedAt)})`,
     };
   }
 

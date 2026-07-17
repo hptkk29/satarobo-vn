@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { toggleVoucherActiveAction } from "../_actions";
 import { VOUCHER_TYPE_LABEL } from "@/lib/validators/voucher";
+import { formatDateVN } from "@/lib/format/date";
 
 type VoucherRow = {
   id: string;
@@ -151,8 +152,8 @@ export function VouchersTable({
                   <TableCell className="text-xs">
                     <ValidityBadge v={v} />
                     <div className="mt-1 text-gray-500">
-                      {v.validFrom.toLocaleDateString("vi-VN")} →{" "}
-                      {v.validUntil.toLocaleDateString("vi-VN")}
+                      {formatDateVN(v.validFrom)} →{" "}
+                      {formatDateVN(v.validUntil)}
                     </div>
                   </TableCell>
                   <TableCell>

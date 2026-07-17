@@ -6,6 +6,7 @@ import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { AssignmentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ const VALID_STATUSES = Object.values(AssignmentStatus);
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("vi-VN");
+  return formatDateVN(d);
 }
 
 interface SearchParams {
