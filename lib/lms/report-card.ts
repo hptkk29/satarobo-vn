@@ -7,7 +7,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { attendanceSummary } from "@/lib/attendance/summary";
 import {
-  computeAttendanceRate,
+  attendanceRatePercent,
   computeAssignmentSummary,
   computeExamAverage,
   latestSkillLevels,
@@ -87,7 +87,7 @@ export async function computeReportCardMetrics(enrollmentId: string): Promise<Re
   }
 
   return {
-    attendance: { ...att, rate: computeAttendanceRate(att) },
+    attendance: { ...att, rate: attendanceRatePercent(att) },
     exams: computeExamAverage(attempts),
     assignments: computeAssignmentSummary(submissions),
     skills: latestSkillLevels(skills),

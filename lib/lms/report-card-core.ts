@@ -41,7 +41,9 @@ export interface ReportCardMetrics {
 }
 
 /** Tỉ lệ chuyên cần % (THUẦN — test). */
-export function computeAttendanceRate(att: AttendanceSummary): number {
+// Trả về PHẦN TRĂM 0–100 (khác computeAttendanceRate ở attendance-rate.ts trả PHÂN SỐ 0–1).
+// Rename để không nhầm 100× — LIB-03.
+export function attendanceRatePercent(att: AttendanceSummary): number {
   return att.total > 0 ? Math.round((att.attended / att.total) * 100) : 0;
 }
 
