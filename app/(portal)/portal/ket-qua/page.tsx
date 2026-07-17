@@ -5,7 +5,7 @@ import {
   getStudentAssignmentResults,
   getLatestProgressReport,
 } from "@/lib/portal/learning";
-import { getStudentProgress } from "@/lib/progress";
+import { getStudentProgressForClasses } from "@/lib/progress";
 import { getStudentClassProgress } from "@/lib/students/progress";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -30,10 +30,15 @@ export default async function KetQuaPage() {
       getStudentAssignmentResults(studentId),
       getLatestProgressReport(studentId),
     ]);
+  // QRY-02: tiến độ mọi lớp batch 1 lượt (thay getStudentProgress N+1 trong map).
+  const classProgress = await getStudentProgressForClasses(
+    studentId,
+    classes.map((c) => c.id),
+  );
   const results = await Promise.all(
     classes.map(async (c) => ({
       cls: c,
-      p: await getStudentProgress(studentId, c.id),
+      p: classProgress.get(c.id)!,
       sessions: await getStudentClassProgress(studentId, c.id),
     })),
   );

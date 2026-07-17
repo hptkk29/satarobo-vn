@@ -174,6 +174,127 @@ async function getTotalLessons(courseId: string | null): Promise<number> {
   return activeCurriculum?._count.lessons ?? 0;
 }
 
+/** Tổng lesson theo NHIỀU course trong 1 query → Map<courseId, count>. Lấy curriculum
+ * active version cao nhất mỗi course (khớp getTotalLessons orderBy version desc). */
+async function getTotalLessonsForCourses(courseIds: string[]): Promise<Map<string, number>> {
+  const byCourse = new Map<string, number>();
+  if (courseIds.length === 0) return byCourse;
+  const currs = await db.curriculum.findMany({
+    where: { courseId: { in: courseIds }, isActive: true },
+    orderBy: { version: "desc" },
+    select: { courseId: true, _count: { select: { lessons: true } } },
+  });
+  for (const c of currs) {
+    // orderBy version desc → bản đầu tiên gặp mỗi course = version cao nhất.
+    if (!byCourse.has(c.courseId)) byCourse.set(c.courseId, c._count.lessons);
+  }
+  return byCourse;
+}
+
+/**
+ * QRY-07/14/02 — Tiến độ của 1 HV trên NHIỀU lớp trong ~7 query (thay N×getStudentProgress).
+ * Dùng cho transcript, students/edit, portal ket-qua (1 HV × nhiều enrollment).
+ * Trả Map<classId, StudentProgress>. computeStudentProgress dùng chung → số liệu y hệt.
+ */
+export async function getStudentProgressForClasses(
+  studentId: string,
+  classIds: string[],
+): Promise<Map<string, StudentProgress>> {
+  const result = new Map<string, StudentProgress>();
+  if (classIds.length === 0) return result;
+  const now = new Date();
+
+  const [sessions, classes, submissions, attempts] = await Promise.all([
+    db.classSession.findMany({
+      where: { classId: { in: classIds }, date: { lte: now } },
+      select: { id: true, classId: true, lessonId: true },
+    }),
+    db.class.findMany({
+      where: { id: { in: classIds } },
+      select: { id: true, courseId: true },
+    }),
+    db.assignmentSubmission.findMany({
+      where: { studentId, assignment: { classId: { in: classIds } } },
+      select: {
+        status: true,
+        score: true,
+        assignment: { select: { classId: true, totalPoints: true } },
+      },
+    }),
+    db.examAttempt.findMany({
+      where: {
+        studentId,
+        exam: { classId: { in: classIds } },
+        status: { in: ["SUBMITTED", "GRADED", "REVIEWED"] },
+      },
+      select: { passed: true, exam: { select: { classId: true } } },
+    }),
+  ]);
+
+  const sessionIds = sessions.map((s) => s.id);
+  const sessionClassById = new Map(sessions.map((s) => [s.id, s.classId]));
+  const courseIds = [...new Set(classes.map((c) => c.courseId).filter(Boolean) as string[])];
+
+  const [attendances, lessonsByCourse] = await Promise.all([
+    sessionIds.length > 0
+      ? db.attendance.findMany({
+          where: { sessionId: { in: sessionIds }, studentId },
+          select: { sessionId: true, status: true, makeupStatus: true },
+        })
+      : Promise.resolve([]),
+    getTotalLessonsForCourses(courseIds),
+  ]);
+
+  // Gom theo classId.
+  const sessionsByClass = new Map<string, { id: string; lessonId: string | null }[]>();
+  for (const s of sessions) {
+    const list = sessionsByClass.get(s.classId) ?? [];
+    list.push({ id: s.id, lessonId: s.lessonId });
+    sessionsByClass.set(s.classId, list);
+  }
+  const attByClass = new Map<string, { status: string; makeupStatus: string | null }[]>();
+  for (const a of attendances) {
+    const classId = sessionClassById.get(a.sessionId);
+    if (!classId) continue;
+    const list = attByClass.get(classId) ?? [];
+    list.push({ status: a.status, makeupStatus: a.makeupStatus });
+    attByClass.set(classId, list);
+  }
+  const subByClass = new Map<string, { status: string; score: number | null; totalPoints: number }[]>();
+  for (const s of submissions) {
+    const classId = s.assignment.classId;
+    const list = subByClass.get(classId) ?? [];
+    list.push({ status: s.status, score: s.score, totalPoints: s.assignment.totalPoints });
+    subByClass.set(classId, list);
+  }
+  const attemptByClass = new Map<string, { passed: boolean | null }[]>();
+  for (const a of attempts) {
+    const classId = a.exam.classId;
+    if (!classId) continue; // WHERE đã lọc classId ∈ classIds; guard cho TS narrow.
+    const list = attemptByClass.get(classId) ?? [];
+    list.push({ passed: a.passed });
+    attemptByClass.set(classId, list);
+  }
+  const courseByClass = new Map(classes.map((c) => [c.id, c.courseId]));
+
+  for (const classId of classIds) {
+    const courseId = courseByClass.get(classId) ?? null;
+    result.set(
+      classId,
+      computeStudentProgress({
+        studentId,
+        classId,
+        sessions: sessionsByClass.get(classId) ?? [],
+        attendances: attByClass.get(classId) ?? [],
+        totalLessons: courseId ? (lessonsByCourse.get(courseId) ?? 0) : 0,
+        submissions: subByClass.get(classId) ?? [],
+        attempts: attemptByClass.get(classId) ?? [],
+      }),
+    );
+  }
+  return result;
+}
+
 export interface ClassStudentProgress {
   student: {
     id: string;

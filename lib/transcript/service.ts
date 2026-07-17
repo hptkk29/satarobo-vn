@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getStudentProgress } from "@/lib/progress";
+import { getStudentProgressForClasses } from "@/lib/progress";
 
 // =============================================================================
 // Cụm B5 — Học bạ (StudentTranscript). KHÔNG tạo bảng mới: tổng hợp từ dữ liệu
@@ -105,28 +105,30 @@ export async function getStudentTranscript(studentId: string): Promise<StudentTr
     db.studentSessionFeedback.count({ where: { studentId } }),
   ]);
 
-  // Per-class progress (reuse getStudentProgress — số buổi đã học, điểm TB, exam).
-  const classes: TranscriptClassRow[] = await Promise.all(
-    enrollments.map(async (e) => {
-      const p = await getStudentProgress(studentId, e.classId);
-      return {
-        classId: e.classId,
-        className: e.class.name,
-        classCode: e.class.classCode,
-        courseName: e.class.course.name,
-        centerName: e.class.center?.name ?? null,
-        teacherName: e.class.teacher?.name ?? null,
-        status: e.status,
-        enrolledAt: e.enrolledAt,
-        totalSessions: p.totalSessions,
-        attendedSessions: p.attendedSessions,
-        attendanceRate: p.attendanceRate,
-        averageScore: p.averageScore,
-        passedExams: p.passedExams,
-        examAttempts: p.examAttempts,
-      };
-    }),
+  // QRY-14: tiến độ mọi lớp của HV trong 1 lượt batch (thay N×getStudentProgress).
+  const progressByClass = await getStudentProgressForClasses(
+    studentId,
+    enrollments.map((e) => e.classId),
   );
+  const classes: TranscriptClassRow[] = enrollments.map((e) => {
+    const p = progressByClass.get(e.classId)!; // luôn có: đã truyền mọi classId vào batch.
+    return {
+      classId: e.classId,
+      className: e.class.name,
+      classCode: e.class.classCode,
+      courseName: e.class.course.name,
+      centerName: e.class.center?.name ?? null,
+      teacherName: e.class.teacher?.name ?? null,
+      status: e.status,
+      enrolledAt: e.enrolledAt,
+      totalSessions: p.totalSessions,
+      attendedSessions: p.attendedSessions,
+      attendanceRate: p.attendanceRate,
+      averageScore: p.averageScore,
+      passedExams: p.passedExams,
+      examAttempts: p.examAttempts,
+    };
+  });
 
   // Tổng hợp toàn cục.
   const totalSessions = classes.reduce((s, c) => s + c.totalSessions, 0);
