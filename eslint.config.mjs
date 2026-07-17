@@ -87,6 +87,8 @@ export default tseslint.config(
     files: [
       'components/admin/**/*.{ts,tsx}',
       'components/design-system/admin/**/*.{ts,tsx}',
+      // CMP-26: charts là admin-only → cũng chặn Magic/Motion (defensive, không vi phạm hiện tại).
+      'components/charts/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': ['error', adminBlockedImports],
@@ -124,6 +126,14 @@ export default tseslint.config(
       'components/design-system/decorations/**/*.{ts,tsx}',
       'components/design-system/illustrations/**/*.{ts,tsx}',
       'components/design-system/effects/**/*.{ts,tsx}',
+      // CMP-02: các dir client trước đây KHÔNG được cover recharts-block → bổ sung.
+      // (components/client đã xóa ở batch 1.1; components/lms dùng chung admin+portal → tạm chưa áp.)
+      'components/home/**/*.{ts,tsx}',
+      'components/sections/**/*.{ts,tsx}',
+      'components/khoa-hoc/**/*.{ts,tsx}',
+      'components/report-card/**/*.{ts,tsx}',
+      'components/transcript/**/*.{ts,tsx}',
+      'components/aceternity/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': ['error', clientBlockedImports],
