@@ -5,7 +5,7 @@
 // + Xoá (chỉ đề của mình). Câu 46: đây là SOẠN NỘI DUNG — không chạm dữ liệu HV/PH.
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, NotebookPen, Plus } from "lucide-react";
+import { NotebookPen, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -17,6 +17,7 @@ import { KhoList } from "./_components/kho-list";
 import { CreateAssignmentForm } from "./_components/create-assignment-form";
 import { resolveTemplateOwnerId } from "./_owner";
 import type { KhoTemplate } from "./_types";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Kho bài tập | Giáo viên Sata Robo" };
 
@@ -48,14 +49,14 @@ export default async function KhoBaiTapPage({
     if (!canAuthor) {
       return (
         <div>
-          <BackLink href="/teacher/kho-bai-tap" label="Kho bài tập của tôi" />
+          <BackLink className="mb-4" href="/teacher/kho-bai-tap" label="Kho bài tập của tôi" />
           <EmptyState icon={NotebookPen} title="Bạn không có quyền soạn bài." />
         </div>
       );
     }
     return (
       <div>
-        <BackLink href={safeBack(back)} label="Kho bài tập của tôi" />
+        <BackLink className="mb-4" href={safeBack(back)} label="Kho bài tập của tôi" />
         <PageHeader
           title="Tạo bài tập mới"
           subtitle="Soạn đề trắc nghiệm hoặc tự luận. Bài lưu vào Kho của bạn, giao lại cho lớp mình phụ trách ở trang Bài tập."
@@ -162,14 +163,3 @@ export default async function KhoBaiTapPage({
   );
 }
 
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
-  );
-}

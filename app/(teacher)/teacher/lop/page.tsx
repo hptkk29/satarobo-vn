@@ -8,8 +8,7 @@
 // Cách ly cơ sở + makeup liên cơ sở: đọc qua withMakeupException(actor) để GV dạy bù
 // thấy đúng buổi/lớp ở cơ sở khác; quyền sở hữu thật do assignedClassIds / ownership gác.
 // ⚠️ Câu 46: roster từ server đã strip studentPhone — client CHỈ nhận tên HV.
-import Link from "next/link";
-import { ArrowLeft, CalendarX2 } from "lucide-react";
+import { CalendarX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
@@ -33,6 +32,7 @@ import { HubReviewsTab } from "./_components/hub-reviews-tab";
 import { HubAssignmentsTab } from "./_components/hub-assignments-tab";
 import { HubMaterialsTab } from "./_components/hub-materials-tab";
 import { HubGalleryTab } from "./_components/hub-gallery-tab";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
 
@@ -130,7 +130,7 @@ export default async function TeacherClassesPage({
 
     return (
       <div>
-        <BackLink href={`?classId=${classId}&tab=diem-danh`} label="Điểm danh của lớp" />
+        <BackLink className="mb-4" href={`?classId=${classId}&tab=diem-danh`} label="Điểm danh của lớp" />
         <PageHeader
           title={`Điểm danh — ${sess.topic ?? sess.class.name}`}
           subtitle={[
@@ -207,7 +207,7 @@ export default async function TeacherClassesPage({
 
     return (
       <div>
-        <BackLink href="?" label="Lớp của tôi" />
+        <BackLink className="mb-4" href="?" label="Lớp của tôi" />
 
         {/* Header lớp — tên + trạng thái + mã/khoá/lịch/cơ sở (khớp reference) */}
         <div className="mb-6">
@@ -322,22 +322,10 @@ export default async function TeacherClassesPage({
   );
 }
 
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
-  );
-}
-
 function NotYours() {
   return (
     <div>
-      <BackLink href="?" label="Lớp của tôi" />
+      <BackLink className="mb-4" href="?" label="Lớp của tôi" />
       <EmptyState icon={CalendarX2} title="Buổi học không thuộc lớp bạn phụ trách." />
     </div>
   );

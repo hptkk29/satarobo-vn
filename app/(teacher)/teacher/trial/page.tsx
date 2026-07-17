@@ -11,9 +11,8 @@
 //
 // ⚠️ Câu 46 (chốt với chủ nhiệm): site GV ẨN HẲN phụ huynh cho lớp Trial — chỉ hiện
 // tên HV + năm sinh + khoá quan tâm. Helper đã strip lead.parentName/phone/email.
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Ban } from "lucide-react";
+import { Ban } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import {
@@ -24,6 +23,7 @@ import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { TrialList, type TrialSlotView } from "./_components/trial-list";
 import { TrialEvalForm } from "./_components/trial-eval-form";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Danh sách Trial | Giáo viên Sata Robo" };
 
@@ -122,18 +122,6 @@ export default async function TeacherTrialPage({
       />
       <TrialList slots={slots} />
     </div>
-  );
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
   );
 }
 

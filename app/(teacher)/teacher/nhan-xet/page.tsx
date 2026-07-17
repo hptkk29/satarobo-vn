@@ -13,7 +13,7 @@
 // StudentSessionFeedback ∉ SCOPED_MODELS → sdb pass-through SAU khi đã guard classId.
 // ⚠️ Câu 46: payload client CHỈ tên HV — không SĐT/email/tên PH.
 import Link from "next/link";
-import { ArrowLeft, Ban, BookOpen, CalendarX2, MessageSquare } from "lucide-react";
+import { Ban, BookOpen, CalendarX2, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -28,6 +28,7 @@ import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { SESSION_STATUS_LABEL } from "../_components/ui/session-status-pill";
 import { FeedbackPanel, type FeedbackPanelRow } from "./_components/feedback-panel";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Nhận xét buổi học | Giáo viên Sata Robo" };
 
@@ -112,7 +113,7 @@ export default async function TeacherFeedbackPage({
 
     return (
       <div>
-        <BackLink href={`?classId=${classId}`} label="Buổi học của lớp" />
+        <BackLink className="mb-4" href={`?classId=${classId}`} label="Buổi học của lớp" />
         <PageHeader
           title={`Nhận xét — ${sess.class.name}`}
           subtitle={`${dayFmt.format(sess.date)}${sess.topic ? ` · ${sess.topic}` : ""} · ${SESSION_STATUS_LABEL[sess.status] ?? sess.status}`}
@@ -169,7 +170,7 @@ export default async function TeacherFeedbackPage({
 
     return (
       <div>
-        <BackLink href="?" label="Nhận xét buổi học" />
+        <BackLink className="mb-4" href="?" label="Nhận xét buổi học" />
         <PageHeader
           title={cls?.name ?? "Lớp"}
           subtitle="Chọn buổi trong 14 ngày gần đây để nhận xét học viên."
@@ -283,22 +284,10 @@ export default async function TeacherFeedbackPage({
   );
 }
 
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
-  );
-}
-
 function NotYours() {
   return (
     <div>
-      <BackLink href="?" label="Nhận xét buổi học" />
+      <BackLink className="mb-4" href="?" label="Nhận xét buổi học" />
       <EmptyState icon={Ban} title="Buổi học không thuộc lớp bạn phụ trách." />
     </div>
   );
