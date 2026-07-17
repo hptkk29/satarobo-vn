@@ -1,14 +1,11 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { verifyCronAuth } from "@/lib/cron/auth";
+import { withCron } from "@/lib/cron/handler";
 import { runSlaCheck } from "@/lib/crm/sla";
 
 export const dynamic = "force-dynamic";
 
 // R1-06 — Cron SLA (15'): quét lead vi phạm SLA → StaffNotification (dedupeKey).
-export async function GET(req: NextRequest) {
-  if (!verifyCronAuth(req)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+// API-18: withCron = verifyCronAuth + try/catch có cấu trúc (giữ shape { ok, data }).
+export const GET = withCron("sla-check", async () => {
   const result = await runSlaCheck();
-  return NextResponse.json({ ok: true, data: result });
-}
+  return { ok: true, data: result };
+});
