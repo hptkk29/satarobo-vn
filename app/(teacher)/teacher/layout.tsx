@@ -14,8 +14,13 @@ import { hasRole, hasStaffRole } from "@/lib/auth/permissions";
 import { isTeacherSiteEnabled } from "@/lib/flags";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { adminHomeUrl } from "@/lib/auth/hosts";
 import { AppShell } from "./_components/app-shell";
 import "./teacher.css";
+
+// F2 (Q41) — SSO đa subdomain bật khi env set. Mặc định không → không hiện lối
+// "Về trang quản trị" (nhảy host cần shared cookie, không có thì văng login).
+const ssoEnabled = Boolean(process.env.AUTH_COOKIE_DOMAIN?.trim());
 
 export const dynamic = "force-dynamic";
 
@@ -59,8 +64,16 @@ export default async function TeacherLayout({
     redirect("/login?reason=session-invalidated");
   }
 
+  // F3 (Q41) — GV kiêm nhiệm (có thêm vai staff) được lối quay về admin. Chỉ khi SSO
+  // bật (mặc định off → undefined → UserMenu không hiện mục này → hành vi hiện tại).
+  const adminReturnUrl =
+    ssoEnabled && hasStaffRole(session.user) ? adminHomeUrl() : undefined;
+
   return (
-    <AppShell userName={session.user.name ?? session.user.email ?? "Giáo viên"}>
+    <AppShell
+      userName={session.user.name ?? session.user.email ?? "Giáo viên"}
+      adminReturnUrl={adminReturnUrl}
+    >
       {children}
     </AppShell>
   );

@@ -13,6 +13,19 @@ export function isCommonLoginEnabled(): boolean {
   return process.env.COMMON_LOGIN_ENABLED !== "false"; // mặc định ON (hành vi đã triển khai)
 }
 
+/**
+ * F4 (Q41) — WIRE THẬT của cổng login chung: public host `satarobo.vn/login` SERVE
+ * form login (thay vì 308 permanent sang admin/login như hiện tại). Mặc định OFF →
+ * giữ nguyên hành vi hiện tại (308) → an toàn merge trong tuần flip / UAT.
+ *
+ * ⚠️ CHỈ bật env `COMMON_LOGIN_AT_ROOT="true"` SAU khi F2 (`AUTH_COOKIE_DOMAIN`) đã
+ * bật — không có SSO cookie xuyên subdomain thì login ở public host xong redirect
+ * sang admin/teacher/portal = mất session (cookie host-only). Xem Q41/F4.
+ */
+export function isCommonLoginAtRootEnabled(): boolean {
+  return process.env.COMMON_LOGIN_AT_ROOT === "true";
+}
+
 /** A0-07 — dispatcher DomainEvent (cron). OFF → không xử lý (event vẫn tích PENDING). */
 export function isDispatcherEnabled(): boolean {
   return process.env.DISPATCHER_ENABLED !== "false"; // mặc định ON

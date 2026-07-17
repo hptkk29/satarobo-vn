@@ -7,6 +7,19 @@ import { loginSchema } from "@/lib/validators/auth";
 
 type SessionGrant = { action: string; grant: "ALLOW" | "DENY" };
 
+/**
+ * F2 (Q41) — SSO cookie đa subdomain. Kill-switch: chỉ bật khi env
+ * `AUTH_COOKIE_DOMAIN` có giá trị (VD ".satarobo.vn"). MẶC ĐỊNH không set →
+ * cookie session host-only như hiện tại (KHÔNG SSO, KHÔNG force-logout) → an
+ * toàn để merge trong tuần flip RBAC / UAT mà không đổi behavior.
+ *
+ * ⚠️ CHỈ set env này SAU khi (a) flip RBAC ổn định và (b) đã tách
+ * `sale.satarobo.vn` khỏi zone `.satarobo.vn` (câu 3 Q41) — nếu không, cookie
+ * session lộ sang host tĩnh công khai. Khi bật, cookie ĐỔI TÊN (`__Secure-sr.*`)
+ * nên mọi user re-login 1 lần (force-logout chủ đích — câu 2 Q41).
+ */
+const authCookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined;
+
 // Phase T0.1 — map role cũ (JWT phát hành trước khi rename) sang tên mới.
 function migrateLegacyRole(role: string): string {
   if (role === "MANAGER") return "CENTER_MANAGER";
@@ -45,6 +58,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/login",
   },
+  // F2 (Q41) — chỉ ghi đè cookie sessionToken khi bật SSO đa subdomain qua env.
+  // Không bật (mặc định) → NextAuth tự dùng cookie host-only mặc định.
+  ...(authCookieDomain
+    ? {
+        cookies: {
+          sessionToken: {
+            // Đổi tên (khác `authjs.session-token` mặc định) để không đọc nhầm
+            // cookie host-only cũ → ép re-login sạch 1 lần khi bật SSO.
+            name: "__Secure-sr.session-token",
+            options: {
+              httpOnly: true,
+              sameSite: "lax" as const,
+              path: "/",
+              secure: true,
+              domain: authCookieDomain,
+            },
+          },
+        },
+      }
+    : {}),
   providers: [
     Credentials({
       async authorize(credentials) {
