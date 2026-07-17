@@ -1,9 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { setActiveSite } from "@/app/(portal)/portal/actions";
+import { useSetActiveSite } from "@/components/portal/use-set-active-site";
 
 // "Xem hồ sơ chi tiết" — đổi con đang chọn (setActiveSite) rồi mở trang chi tiết
 // (KHÔNG lộ studentId trên URL — PHƯƠNG ÁN A).
@@ -16,17 +13,15 @@ export function ChildDetailLink({
   className?: string;
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
+  const { pending, switchTo } = useSetActiveSite();
   return (
     <button
       type="button"
       disabled={pending}
       onClick={() =>
-        start(async () => {
-          const res = await setActiveSite(studentId);
-          if (res.ok) router.push("/portal/ho-so-con/chi-tiet");
-          else toast.error(res.error ?? "Không mở được hồ sơ con");
+        switchTo(studentId, {
+          onSuccess: (router) => router.push("/portal/ho-so-con/chi-tiet"),
+          errorMessage: "Không mở được hồ sơ con",
         })
       }
       className={className}
