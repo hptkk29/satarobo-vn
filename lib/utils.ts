@@ -26,16 +26,4 @@ export function maskEmail(email: string): string {
   return local.slice(0, 2) + "*".repeat(local.length - 2) + "@" + domain;
 }
 
-/** Format phone for display: "0818823720" → "0818 823 720" */
-export function formatPhoneVn(phone: string): string {
-  const clean = phone.replace(/\D/g, "");
-  if (clean.length === 10) {
-    return `${clean.slice(0, 4)} ${clean.slice(4, 7)} ${clean.slice(7)}`;
-  }
-  return phone;
-}
-
-/** Encode address into Google Maps search URL */
-export function generateGoogleMapsUrl(address: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-}
+// formatPhoneVn + generateGoogleMapsUrl đã xóa (dead export, 0 usage — LIB-15).
