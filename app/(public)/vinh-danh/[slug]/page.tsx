@@ -9,7 +9,7 @@ import { ShareButtons } from "@/components/blog/share-buttons";
 import { HonorMasonryGrid } from "@/components/honors/masonry-grid";
 import { CATEGORY_META, CATEGORY_SLUG_MAP } from "@/lib/honors/category-meta";
 import { getHonorView } from "@/lib/honors/honor-view";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { PersonSchema } from "@/components/seo/person-schema";
 
 interface Props {
@@ -120,7 +120,7 @@ export default async function VinhDanhSlugPage({ params }: Props) {
       <>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(categoryBreadcrumb) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(categoryBreadcrumb) }}
         />
 
         <div className="bg-gray-50 py-4">
@@ -203,7 +203,7 @@ export default async function VinhDanhSlugPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(personBreadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(personBreadcrumb) }}
       />
       <PersonSchema honor={honor} />
 

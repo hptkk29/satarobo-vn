@@ -15,7 +15,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
 import { HR_CONTACT } from "@/lib/data/job-options";
 
@@ -103,7 +103,7 @@ export default async function JobDetailPage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
+          __html: jsonLdScript(
             breadcrumbJsonLd([
               { name: "Trang chủ", url: "/" },
               { name: "Tuyển dụng", url: "/tuyen-dung" },

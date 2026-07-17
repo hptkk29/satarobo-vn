@@ -3,7 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Calendar, Tag as TagIcon, Newspaper, Star } from "lucide-react";
 import { db } from "@/lib/db";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { HeroMinimal } from "@/components/design-system/heroes/hero-minimal";
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { tokens } from "@/lib/design-tokens";
@@ -58,7 +58,7 @@ export default async function NewsListPage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
+          __html: jsonLdScript(
             breadcrumbJsonLd([
               { name: "Trang chủ", url: "/" },
               { name: "Tin tức", url: "/tin-tuc" },

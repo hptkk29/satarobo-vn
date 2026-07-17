@@ -16,7 +16,7 @@ import {
   Receipt,
   ArrowRight,
 } from "lucide-react";
-import { aboutPageJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { aboutPageJsonLd, breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { HeroParticles } from "@/components/design-system/heroes/hero-particles";
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { Sparkles } from "@/components/design-system/effects/sparkles";
@@ -100,11 +100,11 @@ export default function VeChungToiPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(aboutPageJsonLd()) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(aboutPageJsonLd()) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
       />
 
       <div className="bg-white border-b border-neutral-200 py-3">

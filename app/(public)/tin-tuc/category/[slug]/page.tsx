@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { db } from '@/lib/db'
-import { breadcrumbJsonLd } from '@/lib/seo/jsonld'
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld'
 import { POSTS_PER_PAGE, CATEGORY_DISPLAY } from '@/lib/blog-utils'
 import { BlogCard } from '@/components/blog/blog-card'
 import { BlogListHero } from '../../_components/blog-list-hero'
@@ -89,7 +89,7 @@ export default async function CategoryPage({ params, searchParams }: Params) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
+          __html: jsonLdScript(
             breadcrumbJsonLd([
               { name: 'Trang chủ', url: '/' },
               { name: 'Tin tức', url: '/tin-tuc' },

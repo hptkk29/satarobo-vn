@@ -15,7 +15,7 @@ import {
   Phone,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
@@ -100,7 +100,7 @@ export default async function TuyenDungPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
       />
 
       <div className="bg-white border-b border-neutral-200 py-3">

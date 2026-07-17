@@ -167,8 +167,11 @@ export async function createEmployeeAction(
     }
   }
 
+  // SEC-M15: cờ CEO là danh nghĩa đơn nhất toàn hệ thống → chỉ SUPER_ADMIN được đặt.
+  const canSetPrivileged = hasRole(session.user, "SUPER_ADMIN");
+
   // Ensure chỉ 1 CEO
-  if (parsed.data.isCEO) {
+  if (parsed.data.isCEO && canSetPrivileged) {
     await sdb.employee.updateMany({
       where: { isCEO: true },
       data: { isCEO: false },
@@ -178,6 +181,13 @@ export async function createEmployeeAction(
   // NV HO → không gán Center (centerId null); chỗ làm xác định qua assignment HO.
   const createData = { ...parsed.data };
   if (isHO) createData.centerId = null;
+  // SEC-M15: chống mass-assignment khi CREATE (write path song song với update:265-270).
+  // Non-SUPER_ADMIN không được tự đặt cờ CEO; CENTER_MANAGER thuần không được đặt bậc/mức lương.
+  if (!canSetPrivileged) createData.isCEO = false;
+  if (hasRole(session.user, "CENTER_MANAGER") && !canSetPrivileged) {
+    createData.salaryRank = null;
+    createData.salaryLevel = null;
+  }
 
   // Cách ly cơ sở: chỉ tạo NV cho cơ sở trong tầm nhìn actor (NV HO/centerId=null → super/HO).
   if (!actorCanUseCenter(actor, createData.centerId ?? null)) {

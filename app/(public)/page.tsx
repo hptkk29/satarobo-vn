@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { organizationJsonLd, websiteJsonLd } from "@/lib/seo/jsonld";
+import { organizationJsonLd, websiteJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { HomePage, type MainCourseCard } from "@/components/home/home-page";
 import { getTestimonials } from "@/lib/testimonials";
 
@@ -77,11 +77,11 @@ export default async function Page() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(orgJsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd) }}
       />
       <HomePage courses={courses} testimonials={testimonials} />
     </>

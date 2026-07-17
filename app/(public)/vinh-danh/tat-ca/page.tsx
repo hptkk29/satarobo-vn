@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { HonorUniformGrid } from "@/components/honors/uniform-grid";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 
 export const metadata: Metadata = {
   title: "Tất cả nhân sự được vinh danh | Sata Robo",
@@ -40,7 +40,7 @@ export default async function AllHonorsPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
       />
 
       <div className="bg-gray-50 py-4">

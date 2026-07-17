@@ -1,4 +1,5 @@
 import { getHonorView, type HonorWithEmployee } from "@/lib/honors/honor-view";
+import { jsonLdScript } from '@/lib/seo/jsonld'
 
 const BASE_URL = "https://satarobo.vn";
 
@@ -24,7 +25,7 @@ export function PersonSchema({ honor }: { honor: HonorWithEmployee }) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: jsonLdScript(schema) }}
     />
   );
 }

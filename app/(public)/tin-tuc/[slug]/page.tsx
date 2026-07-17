@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Calendar, Tag, ArrowLeft, Newspaper } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/lib/db";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
 import { ShareButtons } from "@/components/blog/share-buttons";
 
@@ -112,7 +112,7 @@ export default async function NewsDetailPage({ params }: Params) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
+          __html: jsonLdScript(
             breadcrumbJsonLd([
               { name: "Trang chủ", url: "/" },
               { name: "Tin tức", url: "/tin-tuc" },

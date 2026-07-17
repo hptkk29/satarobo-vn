@@ -2,11 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight, Phone, Mail, MapPin, Clock, Star } from "lucide-react";
-import {
-  contactPageJsonLd,
-  localBusinessJsonLd,
-  breadcrumbJsonLd,
-} from "@/lib/seo/jsonld";
+import { contactPageJsonLd, localBusinessJsonLd, breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { ContactForm } from "./_components/contact-form";
 import { SocialLinks } from "./_components/social-links";
 import { SectionBase } from "@/components/design-system/sections/section-base";
@@ -75,20 +71,20 @@ export default async function ContactPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(contactPageJsonLd()) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(contactPageJsonLd()) }}
       />
       {centers.length > 0 && (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(centers.map((c) => localBusinessJsonLd(c))),
+            __html: jsonLdScript(centers.map((c) => localBusinessJsonLd(c))),
           }}
         />
       )}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
+          __html: jsonLdScript(
             breadcrumbJsonLd([
               { name: "Trang chủ", url: "/" },
               { name: "Liên hệ", url: "/lien-he" },

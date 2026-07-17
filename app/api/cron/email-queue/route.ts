@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { processEmailQueue } from "@/lib/email/queue";
+import { safeEqual } from "@/lib/security/safe-equal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ async function authorize(req: NextRequest): Promise<boolean> {
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const header = req.headers.get("authorization");
-    if (header === `Bearer ${secret}`) return true;
+    if (safeEqual(header ?? "", `Bearer ${secret}`)) return true;
   }
   const session = await auth();
   return !!session?.user && (await checkPermission("emails:view"));

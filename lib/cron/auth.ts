@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { safeEqual } from "@/lib/security/safe-equal";
 
 /**
  * Verify Vercel Cron Authorization header.
@@ -11,5 +12,5 @@ export function verifyCronAuth(req: NextRequest): boolean {
     return false;
   }
   const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}`;
+  return safeEqual(auth ?? "", `Bearer ${secret}`);
 }

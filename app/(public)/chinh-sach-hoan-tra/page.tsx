@@ -4,7 +4,7 @@ import path from "path";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { HeroMinimal } from "@/components/design-system/heroes/hero-minimal";
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { tokens } from "@/lib/design-tokens";
@@ -36,7 +36,7 @@ export default async function ChinhSachHoanTraPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
       />
 
       <div className="bg-white border-b border-neutral-200 py-3">
