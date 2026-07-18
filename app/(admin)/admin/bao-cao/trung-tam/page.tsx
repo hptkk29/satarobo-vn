@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import {
@@ -59,76 +62,19 @@ export default async function CenterReportPage() {
   }
 
   const actor = await resolveActor(session.user.id);
-  const sdb = scopedDb(actor); // Payment + Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass).
-  const bypass = actor.isSuperAdmin || actor.isHoLevel;
 
-  // 1. Khoản thanh toán trong phạm vi cơ sở (Payment ∈ SCOPED_MODELS → auto-scope).
-  const paymentRows = await sdb.payment.findMany({
-    select: { centerId: true, amount: true, accountantStatus: true, paidDate: true },
-    take: 5000,
+  // REQ-05: cache số liệu (finance/trend/byCenter/satisfaction/retention) theo scope.
+  // TTL 120s. Tất cả PRIMITIVE nên serialize an toàn.
+  const { finance, trend, byCenter, satisfaction, retention } = await unstable_cache(
+    () => computeTrungTamReport(actor),
+    ["trung-tam-report", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
+
+  // Tên cơ sở cho bảng/biểu đồ — query nhỏ, giữ LIVE (Map không serialize được).
+  const centerRows = await scopedDb(actor).center.findMany({
+    select: { id: true, name: true, code: true },
   });
-  const payments: PaymentRecord[] = paymentRows.map((p) => ({
-    centerId: p.centerId,
-    amount: p.amount,
-    accountantStatus: p.accountantStatus,
-    paidDate: p.paidDate,
-  }));
-
-  // 2. Lớp trong phạm vi → map classId→centerId. Enrollment KHÔNG có centerId nên
-  // lọc thủ công theo classIds đã scope (AC5: Enrollment không nằm trong SCOPED_MODELS).
-  const classRows = await sdb.class.findMany({
-    where: { deletedAt: null },
-    select: { id: true, centerId: true },
-    take: 2000,
-  });
-  const classToCenter = new Map(classRows.map((c) => [c.id, c.centerId]));
-  const classIds = classRows.map((c) => c.id);
-  const enrollmentRows = classIds.length
-    ? await sdb.enrollment.findMany({
-        where: { classId: { in: classIds } },
-        select: { studentId: true, classId: true, finalPrice: true, tuition: true, enrolledAt: true },
-        take: 10000,
-      })
-    : [];
-  const enrollments: EnrollmentRecord[] = enrollmentRows.map((e) => ({
-    studentId: e.studentId,
-    centerId: classToCenter.get(e.classId) ?? null,
-    finalPrice: e.finalPrice,
-    tuition: e.tuition,
-    enrolledAt: e.enrolledAt,
-  }));
-
-  // 3. Hài lòng — rating sao của khảo sát cơ sở (CENTER_SURVEY). EvaluationRound ∈
-  // SCOPED_MODELS + NULL_IS_GLOBAL (#03 Pha B): auto-scope OR-null — round global (null)
-  // vẫn lọt vào, nên GIỮ filter tay visibleCenterIds dưới đây (đừng bỏ khi refactor,
-  // bỏ là KPI cơ sở gộp cả rating đợt global toàn hệ thống).
-  const roundRows = await sdb.evaluationRound.findMany({
-    where: {
-      scope: "CENTER_SURVEY",
-      ...(bypass ? {} : { centerId: { in: actor.visibleCenterIds } }),
-    },
-    select: { id: true },
-    take: 2000,
-  });
-  const roundIds = roundRows.map((r) => r.id);
-  const ratingRows = roundIds.length
-    ? await sdb.evalAnswer.findMany({
-        where: { response: { roundId: { in: roundIds } }, valueNumber: { not: null } },
-        select: { valueNumber: true },
-        take: 20000,
-      })
-    : [];
-  const ratings: RatingRecord[] = ratingRows.map((a) => ({ valueNumber: a.valueNumber }));
-
-  // === Tính toán (hàm THUẦN) ===
-  const finance = summarizeFinance(payments, enrollments);
-  const trend = revenueByMonth(payments);
-  const byCenter = revenueByCenter(payments, enrollments);
-  const satisfaction = summarizeSatisfaction(ratings);
-  const retention = summarizeRetention(enrollments);
-
-  // Tên cơ sở cho bảng/biểu đồ.
-  const centerRows = await sdb.center.findMany({ select: { id: true, name: true, code: true } });
   const centerName = new Map(centerRows.map((c) => [c.id, c.code ?? c.name]));
   const labelCenter = (id: string) => (id === "—" ? "Chưa gán cơ sở" : centerName.get(id) ?? id);
 
@@ -280,4 +226,77 @@ export default async function CenterReportPage() {
       </section>
     </div>
   );
+}
+
+// REQ-05: tính số liệu báo cáo trung tâm (fetch scoped + reduce thuần → PRIMITIVE).
+async function computeTrungTamReport(actor: Actor) {
+  const sdb = scopedDb(actor); // Payment + Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass).
+  const bypass = actor.isSuperAdmin || actor.isHoLevel;
+
+  // 1. Khoản thanh toán trong phạm vi cơ sở (Payment ∈ SCOPED_MODELS → auto-scope).
+  const paymentRows = await sdb.payment.findMany({
+    select: { centerId: true, amount: true, accountantStatus: true, paidDate: true },
+    take: 5000,
+  });
+  const payments: PaymentRecord[] = paymentRows.map((p) => ({
+    centerId: p.centerId,
+    amount: p.amount,
+    accountantStatus: p.accountantStatus,
+    paidDate: p.paidDate,
+  }));
+
+  // 2. Lớp trong phạm vi → map classId→centerId. Enrollment KHÔNG có centerId nên
+  // lọc thủ công theo classIds đã scope (AC5: Enrollment không nằm trong SCOPED_MODELS).
+  const classRows = await sdb.class.findMany({
+    where: { deletedAt: null },
+    select: { id: true, centerId: true },
+    take: 2000,
+  });
+  const classToCenter = new Map(classRows.map((c) => [c.id, c.centerId]));
+  const classIds = classRows.map((c) => c.id);
+  const enrollmentRows = classIds.length
+    ? await sdb.enrollment.findMany({
+        where: { classId: { in: classIds } },
+        select: { studentId: true, classId: true, finalPrice: true, tuition: true, enrolledAt: true },
+        take: 10000,
+      })
+    : [];
+  const enrollments: EnrollmentRecord[] = enrollmentRows.map((e) => ({
+    studentId: e.studentId,
+    centerId: classToCenter.get(e.classId) ?? null,
+    finalPrice: e.finalPrice,
+    tuition: e.tuition,
+    enrolledAt: e.enrolledAt,
+  }));
+
+  // 3. Hài lòng — rating sao của khảo sát cơ sở (CENTER_SURVEY). EvaluationRound ∈
+  // SCOPED_MODELS + NULL_IS_GLOBAL (#03 Pha B): auto-scope OR-null — round global (null)
+  // vẫn lọt vào, nên GIỮ filter tay visibleCenterIds dưới đây (đừng bỏ khi refactor,
+  // bỏ là KPI cơ sở gộp cả rating đợt global toàn hệ thống).
+  const roundRows = await sdb.evaluationRound.findMany({
+    where: {
+      scope: "CENTER_SURVEY",
+      ...(bypass ? {} : { centerId: { in: actor.visibleCenterIds } }),
+    },
+    select: { id: true },
+    take: 2000,
+  });
+  const roundIds = roundRows.map((r) => r.id);
+  const ratingRows = roundIds.length
+    ? await sdb.evalAnswer.findMany({
+        where: { response: { roundId: { in: roundIds } }, valueNumber: { not: null } },
+        select: { valueNumber: true },
+        take: 20000,
+      })
+    : [];
+  const ratings: RatingRecord[] = ratingRows.map((a) => ({ valueNumber: a.valueNumber }));
+
+  // === Tính toán (hàm THUẦN) ===
+  const finance = summarizeFinance(payments, enrollments);
+  const trend = revenueByMonth(payments);
+  const byCenter = revenueByCenter(payments, enrollments);
+  const satisfaction = summarizeSatisfaction(ratings);
+  const retention = summarizeRetention(enrollments);
+
+  return { finance, trend, byCenter, satisfaction, retention };
 }
