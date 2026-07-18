@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { monthKeyVN } from "@/lib/reports/lead";
 import {
   buildRevenueTargetReport,
@@ -42,35 +45,10 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 type SearchParams = { searchParams: Promise<{ center?: string }> };
 
-export default async function RevenueTargetReportPage({ searchParams }: SearchParams) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (!(await checkPermission("payments:manage"))) {
-    redirect("/dashboard?error=unauthorized");
-  }
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính rows doanh thu vs mục tiêu (fetch scoped theo cơ sở đã chọn → PRIMITIVE).
+async function computeRevenueRows(actor: Actor, effectiveCenterId: string | null) {
   const sdb = scopedDb(actor);
-  const isGlobalAllowed = actor.isSuperAdmin || actor.isHoLevel;
-
-  // Center (không scoped) → tự lọc theo tầm nhìn của actor để không lộ cơ sở khác.
-  const allCenters = await sdb.center.findMany({ select: { id: true, name: true } });
-  const visibleCenters = isGlobalAllowed
-    ? allCenters
-    : allCenters.filter((c) => actor.visibleCenterIds.includes(c.id));
-
-  const sp = await searchParams;
-  const requested = sp.center;
-  const defaultSelection = isGlobalAllowed ? "ALL" : (visibleCenters[0]?.id ?? "ALL");
-  // Chỉ chấp nhận "ALL" (nếu được phép) hoặc center trong tầm nhìn (chống IDOR qua URL).
-  let selection = defaultSelection;
-  if (requested === "ALL" && isGlobalAllowed) selection = "ALL";
-  else if (requested && visibleCenters.some((c) => c.id === requested)) selection = requested;
-
-  const effectiveCenterId: string | null = selection === "ALL" ? null : selection;
-
   // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED, deletedAt:null) trong phạm vi.
-  // scopedDb tự cách ly cơ sở; thêm centerId khi chọn cụ thể.
   const [payments, targetRows] = await Promise.all([
     sdb.payment.findMany({
       where: {
@@ -99,7 +77,43 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
     targetAmount: t.targetAmount,
   }));
 
-  const rows = buildRevenueTargetReport(paymentRecords, targets);
+  return buildRevenueTargetReport(paymentRecords, targets);
+}
+
+export default async function RevenueTargetReportPage({ searchParams }: SearchParams) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("payments:manage"))) {
+    redirect("/dashboard?error=unauthorized");
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const isGlobalAllowed = actor.isSuperAdmin || actor.isHoLevel;
+
+  // Center (không scoped) → tự lọc theo tầm nhìn của actor để không lộ cơ sở khác.
+  const allCenters = await sdb.center.findMany({ select: { id: true, name: true } });
+  const visibleCenters = isGlobalAllowed
+    ? allCenters
+    : allCenters.filter((c) => actor.visibleCenterIds.includes(c.id));
+
+  const sp = await searchParams;
+  const requested = sp.center;
+  const defaultSelection = isGlobalAllowed ? "ALL" : (visibleCenters[0]?.id ?? "ALL");
+  // Chỉ chấp nhận "ALL" (nếu được phép) hoặc center trong tầm nhìn (chống IDOR qua URL).
+  let selection = defaultSelection;
+  if (requested === "ALL" && isGlobalAllowed) selection = "ALL";
+  else if (requested && visibleCenters.some((c) => c.id === requested)) selection = requested;
+
+  const effectiveCenterId: string | null = selection === "ALL" ? null : selection;
+
+  // REQ-05: cache số liệu doanh thu theo (scope, cơ sở đã chọn). effectiveCenterId đã
+  // được validate IDOR ở trên → an toàn đưa vào key. TTL 120s. Output rows PRIMITIVE.
+  const rows = await unstable_cache(
+    () => computeRevenueRows(actor, effectiveCenterId),
+    ["revenue-report", actorScopeKey(actor), effectiveCenterId ?? "ALL"],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
   const summary = revenueTargetSummary(rows);
   const scopeLabel =
     effectiveCenterId === null
