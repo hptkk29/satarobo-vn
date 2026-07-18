@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
 import {
@@ -26,15 +29,8 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default async function CohortReportPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
-  if (!(await checkAnyPermission(PAGE_GATES["/bao-cao/cohort"]))) {
-    redirect("/dashboard");
-  }
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính báo cáo cohort (fetch scoped + reduce thuần → object PRIMITIVE).
+async function computeCohortReport(actor: Actor) {
   // Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass). ClassSession/Enrollment
   // đi qua sdb pass-through nhưng LỌC THỦ CÔNG theo classIds đã scope (AC5).
   const sdb = scopedDb(actor);
@@ -82,7 +78,25 @@ export default async function CohortReportPage() {
     };
   });
 
-  const report = buildCohortReport(records);
+  return buildCohortReport(records);
+}
+
+export default async function CohortReportPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
+  if (!(await checkAnyPermission(PAGE_GATES["/bao-cao/cohort"]))) {
+    redirect("/dashboard");
+  }
+
+  const actor = await resolveActor(session.user.id);
+
+  // REQ-05: cache cross-request keyed THEO SCOPE (không leak giữa cơ sở). TTL 120s.
+  const report = await unstable_cache(
+    () => computeCohortReport(actor),
+    ["cohort-report", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
 
   const progressData = report.rows.map((r) => ({
     name: r.cohort,

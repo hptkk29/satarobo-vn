@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { buildChurnReport, type ChurnEnrollmentRecord } from "@/lib/reports/churn";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
@@ -32,14 +35,8 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default async function ChurnReportPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (!(await checkPermission("enrollments:view-all"))) {
-    redirect("/dashboard?error=unauthorized");
-  }
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính báo cáo churn (fetch scoped + reduce thuần → object PRIMITIVE).
+async function computeChurnReport(actor: Actor) {
   const sdb = scopedDb(actor);
 
   // Class LÀ model scoped → trả về CHỈ lớp trong tầm nhìn cơ sở. Enrollment KHÔNG
@@ -74,7 +71,24 @@ export default async function ChurnReportPage() {
     endedAt: e.endedAt,
   }));
 
-  const report = buildChurnReport(records, centerNames);
+  return buildChurnReport(records, centerNames);
+}
+
+export default async function ChurnReportPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("enrollments:view-all"))) {
+    redirect("/dashboard?error=unauthorized");
+  }
+
+  const actor = await resolveActor(session.user.id);
+
+  // REQ-05: cache cross-request keyed THEO SCOPE (không leak giữa cơ sở). TTL 120s.
+  const report = await unstable_cache(
+    () => computeChurnReport(actor),
+    ["churn-report", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
 
   return (
     <div className="space-y-5 p-4">
