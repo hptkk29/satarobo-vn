@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { buildLeadReport, type LeadReportRecord } from "@/lib/reports/lead";
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -33,19 +36,9 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default async function LeadReportPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (
-    !(await checkPermission("leads:view-all")) &&
-    !(await checkPermission("leads:view-own"))
-  ) {
-    redirect("/dashboard");
-  }
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính báo cáo lead (fetch scoped + reduce thuần → object PRIMITIVE, không Date).
+async function computeLeadReport(actor: Actor) {
   const sdb = scopedDb(actor); // Lead auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass).
-
   const [rows, centers] = await Promise.all([
     sdb.lead.findMany({
       where: { deletedAt: null },
@@ -72,8 +65,28 @@ export default async function LeadReportPage() {
     createdAt: r.createdAt,
     convertedAt: r.convertedAt,
   }));
+  return buildLeadReport(records, centerNames);
+}
 
-  const report = buildLeadReport(records, centerNames);
+export default async function LeadReportPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (
+    !(await checkPermission("leads:view-all")) &&
+    !(await checkPermission("leads:view-own"))
+  ) {
+    redirect("/dashboard");
+  }
+
+  const actor = await resolveActor(session.user.id);
+
+  // REQ-05: cache cross-request keyed THEO SCOPE (actorScopeKey bắt buộc → không leak
+  // số liệu giữa cơ sở). TTL 120s; output là báo cáo primitive nên serialize an toàn.
+  const report = await unstable_cache(
+    () => computeLeadReport(actor),
+    ["lead-report", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
 
   return (
     <div className="space-y-5 p-4">
