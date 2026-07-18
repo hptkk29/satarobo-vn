@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { Users, UserPlus, BookOpen, FileText, TrendingUp, Target, FlaskConical, GraduationCap, Wallet } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin";
 import { StatusBadge } from "@/components/design-system/admin/status-badge";
 import { DataTableShell } from "@/components/design-system/admin/data-table-shell";
@@ -50,23 +53,14 @@ function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
   return Object.entries(buckets).map(([date, count]) => ({ date, leads: count }));
 }
 
-export async function ManagerDashboard({
-  userId,
-  name,
-  actor,
-  embedded = false,
-}: {
-  userId: string;
-  name: string;
-  actor: Actor;
-  embedded?: boolean;
-}) {
+// REQ-04: số liệu tổng hợp dashboard quản lý (aggregate theo scope, KHÔNG list per-user).
+// Tự tính `now` bên trong → sau khi cache hết hạn (TTL) tự làm mới mốc thời gian. Output
+// toàn PRIMITIVE (số + mảng {string,number}) → serialize qua unstable_cache an toàn.
+async function getManagerStats(actor: Actor) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  // câu 16 — mốc "hôm nay" + cửa sổ phễu tuần / doanh thu.
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
@@ -75,15 +69,13 @@ export async function ManagerDashboard({
   const currentPeriod = monthKeyVN(now);
 
   // FL0 — cách ly cơ sở: Lead/Student/Payment/TrialClass(V2)/ClassSession ∈ SCOPED_MODELS
-  // → scopedDb lọc theo tầm nhìn cơ sở. News/LeadTask không scoped → đi qua nguyên vẹn
-  // (LeadTask đã lọc assignedToId). RevenueTarget ∈ SCOPE_EXEMPT → scope TAY qua
-  // getRevenueTargets(actor). getDebtRows nhận sdb → lái theo Class (SCOPED) đã cách ly.
+  // → scopedDb lọc theo tầm nhìn cơ sở. News không scoped → đi qua nguyên vẹn.
+  // RevenueTarget ∈ SCOPE_EXEMPT → scope TAY qua getRevenueTargets(actor).
   const sdb = scopedDb(actor);
   const [
     totalLeads, newLeadsThisMonth, newLeadsLastMonth, enrolledLeads, totalStudents,
-    totalPosts, recentLeads, leadsLast14Days, leadsByStatus, myTasksToday,
-    leadsForWeekly, revenuePayments, revenueTargets, trialsLegacyToday, trialV2Classes,
-    sessionsToday, debtRows,
+    totalPosts, leadsLast14Days, leadsByStatus, leadsForWeekly, revenuePayments,
+    revenueTargets, trialsLegacyToday, trialV2Classes, sessionsToday, debtRows,
   ] = await Promise.all([
     sdb.lead.count({ where: ACTIVE_LEAD }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
@@ -91,15 +83,8 @@ export async function ManagerDashboard({
     sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "ENROLLED" } }),
     sdb.student.count({ where: { deletedAt: null } }),
     sdb.news.count({ where: { isPublished: true } }),
-    sdb.lead.findMany({ where: ACTIVE_LEAD, take: 8, orderBy: { createdAt: "desc" }, select: { id: true, parentName: true, phone: true, status: true, createdAt: true } }),
     sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } }, select: { createdAt: true } }),
     sdb.lead.groupBy({ by: ["status"], where: ACTIVE_LEAD, _count: { id: true } }),
-    sdb.leadTask.findMany({
-      where: { assignedToId: userId, status: "OPEN", dueAt: { lte: endOfToday } },
-      include: { lead: { select: { id: true, parentName: true, phone: true } } },
-      orderBy: { dueAt: "asc" },
-      take: 20,
-    }),
     // Phễu lead theo TUẦN (8 tuần) — chỉ cần createdAt + status.
     sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: eightWeeksAgo } }, select: { createdAt: true, status: true } }),
     // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED) — 6 tháng gần nhất.
@@ -141,8 +126,7 @@ export async function ManagerDashboard({
   const revenueAchieved = (currentRevRow ?? computeAchievement(revenueActual, revenueTarget)).achievedRate;
 
   // câu 16 (c) — hẹn học thử hôm nay (TrialClass cũ + buổi TrialClassV2 hôm nay).
-  const trialsTodayV2 = trialV2Classes.reduce((s, c) => s + c.sessions.length, 0);
-  const trialsToday = trialsLegacyToday + trialsTodayV2;
+  const trialsToday = trialsLegacyToday + trialV2Classes.reduce((s, c) => s + c.sessions.length, 0);
 
   // câu 16 (d) — số GV đứng lớp hôm nay (distinct theo GV thực).
   const teacherSet = new Set<string>();
@@ -164,8 +148,53 @@ export async function ManagerDashboard({
     commissionSource: null,
     createdAt: l.createdAt,
   }));
-  const weekly = groupByWeek(weeklyRecords, 8, now);
-  const weeklyBars = weekly.map((w) => ({ week: w.label, total: w.total, converted: w.converted }));
+  const weeklyBars = groupByWeek(weeklyRecords, 8, now).map((w) => ({ week: w.label, total: w.total, converted: w.converted }));
+
+  return {
+    totalLeads, newLeadsThisMonth, enrolledLeads, totalStudents, totalPosts,
+    monthDelta, conversionRate, dailyLeadsChart, statusBars,
+    revenueActual, revenueAchieved, trialsToday, teachersToday, totalDebt, debtCount, weeklyBars,
+  };
+}
+
+export async function ManagerDashboard({
+  userId,
+  name,
+  actor,
+  embedded = false,
+}: {
+  userId: string;
+  name: string;
+  actor: Actor;
+  embedded?: boolean;
+}) {
+  const now = new Date();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+  // Live (KHÔNG cache): leads mới nhất (hiển thị, có Date) + việc CỦA TÔI hôm nay
+  // (theo userId — cache theo scope sẽ lẫn task người khác nên GIỮ live).
+  const sdb = scopedDb(actor);
+  const [recentLeads, myTasksToday] = await Promise.all([
+    sdb.lead.findMany({ where: ACTIVE_LEAD, take: 8, orderBy: { createdAt: "desc" }, select: { id: true, parentName: true, phone: true, status: true, createdAt: true } }),
+    sdb.leadTask.findMany({
+      where: { assignedToId: userId, status: "OPEN", dueAt: { lte: endOfToday } },
+      include: { lead: { select: { id: true, parentName: true, phone: true } } },
+      orderBy: { dueAt: "asc" },
+      take: 20,
+    }),
+  ]);
+
+  // REQ-04: cache số liệu tổng hợp theo scope (KPI + biểu đồ, đều primitive → serialize
+  // an toàn). TTL 60s. actorScopeKey chống leak cross-cơ-sở. `now` tính trong hàm cache.
+  const {
+    totalLeads, newLeadsThisMonth, enrolledLeads, totalStudents, totalPosts,
+    monthDelta, conversionRate, dailyLeadsChart, statusBars,
+    revenueActual, revenueAchieved, trialsToday, teachersToday, totalDebt, debtCount, weeklyBars,
+  } = await unstable_cache(
+    () => getManagerStats(actor),
+    ["manager-dashboard-stats", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
+  )();
 
   return (
     <div className="space-y-6">
