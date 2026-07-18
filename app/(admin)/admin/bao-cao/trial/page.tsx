@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { buildTrialReport, type TrialEnrollmentRec } from "@/lib/reports/trial";
 import { BarChart } from "@/components/charts/bar-chart";
 import { FunnelChart } from "@/components/charts/funnel-chart";
@@ -28,12 +31,8 @@ function Stat({
   );
 }
 
-export default async function TrialReportPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính báo cáo trial (fetch scoped + reduce thuần → object PRIMITIVE).
+async function computeTrialReport(actor: Actor) {
   const sdb = scopedDb(actor); // TrialClassV2 auto-scope theo cơ sở (HO/SUPER_ADMIN bypass)
 
   // 1) Lớp trải nghiệm trong phạm vi cơ sở.
@@ -83,20 +82,30 @@ export default async function TrialReportPage() {
           take: 20000,
         });
 
-  // 4) Tên cơ sở để hiển thị.
-  const centerIds = [...new Set(classes.map((c) => c.centerId))];
-  const centerRows =
-    centerIds.length === 0
-      ? []
-      : await sdb.center.findMany({
-          where: { id: { in: centerIds } },
-          select: { id: true, name: true, code: true },
-        });
+  return buildTrialReport({ classes, enrollments, attendances });
+}
+
+export default async function TrialReportPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
+
+  const actor = await resolveActor(session.user.id);
+
+  // REQ-05: cache phần nặng (query + reduce) theo scope. TTL 120s. Output primitive.
+  const report = await unstable_cache(
+    () => computeTrialReport(actor),
+    ["trial-report", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
+
+  // Tên cơ sở để gắn nhãn — query nhỏ, giữ LIVE (Map không serialize được nên không cache).
+  const centerRows = await scopedDb(actor).center.findMany({
+    select: { id: true, name: true, code: true },
+  });
   const centerName = new Map(
     centerRows.map((c) => [c.id, c.code ? `${c.code} · ${c.name}` : c.name]),
   );
-
-  const report = buildTrialReport({ classes, enrollments, attendances });
 
   const funnelData = [
     { name: "Đã xếp lịch", value: report.funnel.scheduled + report.funnel.inProgress + report.funnel.attended },
