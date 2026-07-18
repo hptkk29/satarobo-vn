@@ -5,7 +5,7 @@ import { getTestimonials } from "@/lib/testimonials";
 const BASE_URL = "https://satarobo.vn";
 
 // ISR: trang marketing tĩnh, regen mỗi 5' để pick up cảm nhận từ DB.
-export const revalidate = 300;
+export const revalidate = 300; // ISR_DETAIL (convention list=60/detail=300, xem lib/isr.ts)
 
 export const metadata: Metadata = {
   title:

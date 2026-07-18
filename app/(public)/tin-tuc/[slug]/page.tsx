@@ -12,7 +12,7 @@ import { ShareButtons } from "@/components/blog/share-buttons";
 
 const BASE_URL = "https://satarobo.vn";
 
-export const revalidate = 60;
+export const revalidate = 300; // ISR_DETAIL — chi tiết tin (convention list=60/detail=300, xem lib/isr.ts)
 
 // PUB-08: dedup fetch giữa generateMetadata + page (cùng slug) trong 1 request.
 const getNewsBySlug = cache((slug: string) =>

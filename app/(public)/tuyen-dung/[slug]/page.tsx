@@ -21,7 +21,7 @@ import { SATA_ROBO_CONTACT } from "@/lib/locations";
 import { HR_CONTACT } from "@/lib/data/job-options";
 import { formatDateVN } from "@/lib/format/date";
 
-export const revalidate = 60;
+export const revalidate = 300; // ISR_DETAIL — chi tiết tuyển dụng (convention list=60/detail=300, xem lib/isr.ts)
 
 const BASE_URL = "https://satarobo.vn";
 const DEFAULT_HR_EMAIL = SATA_ROBO_CONTACT.emails.recruitment;

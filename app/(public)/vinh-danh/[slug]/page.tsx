@@ -83,7 +83,7 @@ export async function generateStaticParams() {
   // ];
 }
 
-export const revalidate = 300;
+export const revalidate = 300; // ISR_DETAIL (convention list=60/detail=300, xem lib/isr.ts)
 
 export default async function VinhDanhSlugPage({ params }: Props) {
   const { slug } = await params;

@@ -7,7 +7,7 @@ import { getInternalAwards, getGifts, getCommitments } from "@/lib/marketing-pol
 const BASE_URL = "https://satarobo.vn";
 
 // ISR: trang marketing tĩnh, regen mỗi 5' để pick up thay đổi ưu đãi từ DB.
-export const revalidate = 300;
+export const revalidate = 300; // ISR_DETAIL (convention list=60/detail=300, xem lib/isr.ts)
 
 export const metadata: Metadata = {
   title:
