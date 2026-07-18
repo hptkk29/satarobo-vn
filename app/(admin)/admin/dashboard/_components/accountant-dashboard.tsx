@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { Wallet, AlertTriangle, TrendingUp } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 
 const PAID_STATUSES = ["CONFIRMED", "COMPLETED"] as const;
 
@@ -10,13 +13,14 @@ function vnd(n: number): string {
 }
 
 // Đợt 3C — Dashboard KẾ TOÁN. Tài chính toàn hệ thống. KHÔNG pipeline/điểm danh/giáo trình.
-export async function AccountantDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
+// REQ-04: số liệu tài chính dashboard kế toán (aggregate theo scope → PRIMITIVE, tên cơ
+// sở resolve sẵn, KHÔNG Map/Date trong output → serialize an toàn).
+async function getAccountantStats(actor: Actor) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const overdueBefore = new Date(now.getTime() - 7 * 86400000); // PENDING_PAYMENT > 7 ngày
 
   // FL0 — cách ly cơ sở: Order ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn cơ sở.
-  // Center không scoped → đi qua nguyên vẹn (chỉ dùng để map tên cơ sở).
   const sdb = scopedDb(actor);
   const [paidAgg, debtAgg, revenueMonth, debtByCenter, overdueOrders, centers] = await Promise.all([
     sdb.order.aggregate({ where: { status: { in: [...PAID_STATUSES] } }, _sum: { totalAmount: true } }),
@@ -35,7 +39,7 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
       orderBy: { createdAt: "asc" },
       take: 12,
       select: {
-        id: true, totalAmount: true, createdAt: true,
+        id: true, totalAmount: true,
         student: { select: { name: true } },
         center: { select: { name: true } },
       },
@@ -44,8 +48,30 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
   ]);
 
   const centerName = new Map(centers.map((c) => [c.id, c.name]));
-  const paid = paidAgg._sum.totalAmount ?? 0;
-  const debt = debtAgg._sum.totalAmount ?? 0;
+  return {
+    paid: paidAgg._sum.totalAmount ?? 0,
+    debt: debtAgg._sum.totalAmount ?? 0,
+    revenueMonth: revenueMonth._sum.totalAmount ?? 0,
+    debtByCenter: debtByCenter.map((d) => ({
+      label: d.centerId ? centerName.get(d.centerId) ?? "—" : "Chưa gán cơ sở",
+      amount: d._sum.totalAmount ?? 0,
+    })),
+    overdueOrders: overdueOrders.map((o) => ({
+      id: o.id,
+      studentName: o.student?.name ?? "—",
+      centerName: o.center?.name ?? "",
+      amount: o.totalAmount,
+    })),
+  };
+}
+
+export async function AccountantDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
+  // REQ-04: cache theo scope, TTL 60s. Output primitive (tên resolve sẵn).
+  const { paid, debt, revenueMonth, debtByCenter, overdueOrders } = await unstable_cache(
+    () => getAccountantStats(actor),
+    ["accountant-dashboard-stats", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
+  )();
 
   return (
     <div className="space-y-6">
@@ -54,7 +80,7 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBig label="Đã thu (tổng)" value={vnd(paid)} tone="ok" icon={<Wallet className="h-5 w-5" />} />
         <StatBig label="Còn nợ (chờ thanh toán)" value={vnd(debt)} tone={debt > 0 ? "danger" : "ok"} icon={<AlertTriangle className="h-5 w-5" />} />
-        <StatBig label="Doanh thu tháng này" value={vnd(revenueMonth._sum.totalAmount ?? 0)} tone="neutral" icon={<TrendingUp className="h-5 w-5" />} />
+        <StatBig label="Doanh thu tháng này" value={vnd(revenueMonth)} tone="neutral" icon={<TrendingUp className="h-5 w-5" />} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -67,8 +93,8 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
             <ul className="space-y-1.5 text-sm">
               {debtByCenter.map((d, i) => (
                 <li key={i} className="flex items-center justify-between">
-                  <span className="text-gray-700">{d.centerId ? centerName.get(d.centerId) ?? "—" : "Chưa gán cơ sở"}</span>
-                  <span className="font-semibold tabular-nums text-rose-600">{vnd(d._sum.totalAmount ?? 0)}</span>
+                  <span className="text-gray-700">{d.label}</span>
+                  <span className="font-semibold tabular-nums text-rose-600">{vnd(d.amount)}</span>
                 </li>
               ))}
             </ul>
@@ -87,10 +113,10 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
               {overdueOrders.map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-2">
                   <Link href={`/orders/${o.id}`} className="truncate text-gray-800 hover:text-[#7C3AED]">
-                    {o.student?.name ?? "—"}
-                    <span className="ml-1 text-xs text-gray-400">{o.center?.name ?? ""}</span>
+                    {o.studentName}
+                    <span className="ml-1 text-xs text-gray-400">{o.centerName}</span>
                   </Link>
-                  <span className="shrink-0 font-semibold tabular-nums text-rose-600">{vnd(o.totalAmount)}</span>
+                  <span className="shrink-0 font-semibold tabular-nums text-rose-600">{vnd(o.amount)}</span>
                 </li>
               ))}
             </ul>

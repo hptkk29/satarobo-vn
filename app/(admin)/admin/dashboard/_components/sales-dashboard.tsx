@@ -1,13 +1,55 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { Users, CheckSquare, FlaskConical, TrendingUp, GraduationCap } from "lucide-react";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
-import type { LeadStatus } from "@prisma/client";
 import { KANBAN_COLUMNS, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { groupByWeek, type LeadReportRecord } from "@/lib/reports/lead";
 import { BarChart } from "@/components/charts/bar-chart";
+import { CACHE_TAGS } from "@/lib/cache/tags";
 import { formatDateVN } from "@/lib/format/date";
+
+// REQ-04: số liệu tổng hợp dashboard sale. Data THEO USER (assignedToId=userId) → cache
+// key = userId. Output PRIMITIVE (countByStatus là object, weeklyBars {string,number},
+// đếm số — KHÔNG Date/Map). Việc-cần-làm + học-thử (có Date) giữ LIVE ở component.
+async function getSalesStats(userId: string) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const eightWeeksAgo = new Date(now.getTime() - 8 * 7 * 86_400_000);
+  const actor = await resolveActor(userId);
+  const sdb = scopedDb(actor);
+
+  const [pipeline, totalMine, enrolledMonth, nearingEnd, leadsForWeekly] = await Promise.all([
+    sdb.lead.groupBy({ by: ["status"], where: { assignedToId: userId, deletedAt: null }, _count: { _all: true } }),
+    sdb.lead.count({ where: { assignedToId: userId, deletedAt: null } }),
+    sdb.lead.count({ where: { assignedToId: userId, deletedAt: null, status: "ENROLLED", updatedAt: { gte: monthStart } } }),
+    getNearingEndEnrollments(),
+    // Phễu lead theo TUẦN (8 tuần) — lead CỦA TÔI: tổng mới vs chuyển đổi.
+    sdb.lead.findMany({
+      where: { assignedToId: userId, deletedAt: null, createdAt: { gte: eightWeeksAgo } },
+      select: { createdAt: true, status: true },
+    }),
+  ]);
+
+  const countByStatus: Record<string, number> = {};
+  for (const p of pipeline) countByStatus[p.status] = p._count._all;
+  const weeklyRecords: LeadReportRecord[] = leadsForWeekly.map((l) => ({
+    status: l.status,
+    source: null,
+    centerId: null,
+    commissionSource: null,
+    createdAt: l.createdAt,
+  }));
+  const weeklyBars = groupByWeek(weeklyRecords, 8, now).map((w) => ({
+    week: w.label,
+    total: w.total,
+    converted: w.converted,
+  }));
+  const closeRate = totalMine > 0 ? Math.round(((countByStatus["ENROLLED"] ?? 0) / totalMine) * 100) : 0;
+
+  return { totalMine, enrolledMonth, closeRate, countByStatus, weeklyBars, nearingEndCount: nearingEnd.length };
+}
 
 // Đợt 3C — Dashboard SALES_CSM. Chỉ lead/việc CỦA TÔI. KHÔNG tài chính/quản trị.
 export async function SalesDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
@@ -15,28 +57,14 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const eightWeeksAgo = new Date(now.getTime() - 8 * 7 * 86_400_000);
 
-  // Cách ly cơ sở: Lead/TrialClass ∈ SCOPED_MODELS → sdb tự inject centerId. LeadTask
-  // KHÔNG scoped (không có centerId) → scope tay qua lead.centerId, đồng bộ đúng tập
-  // center mà sdb cho phép trên model Lead (AC7 — nested/dependent model không auto-scope).
+  // Live (KHÔNG cache — có Date so sánh/hiển thị): việc cần làm (dueAt) + học thử sắp tới.
   const actor = await resolveActor(userId);
   const sdb = scopedDb(actor);
   const visibleLeadCenters = getModelVisibleCenterIds("Lead", actor);
   const leadTaskScope =
     visibleLeadCenters === "ALL" ? {} : { lead: { centerId: { in: visibleLeadCenters } } };
-
-  const [pipeline, totalMine, enrolledMonth, openTasks, trials, nearingEnd, leadsForWeekly] = await Promise.all([
-    sdb.lead.groupBy({
-      by: ["status"],
-      where: { assignedToId: userId, deletedAt: null },
-      _count: { _all: true },
-    }),
-    sdb.lead.count({ where: { assignedToId: userId, deletedAt: null } }),
-    sdb.lead.count({
-      where: { assignedToId: userId, deletedAt: null, status: "ENROLLED", updatedAt: { gte: monthStart } },
-    }),
+  const [openTasks, trials] = await Promise.all([
     sdb.leadTask.findMany({
       where: { assignedToId: userId, status: "OPEN", ...leadTaskScope },
       orderBy: { dueAt: "asc" },
@@ -53,34 +81,17 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
       take: 6,
       select: { id: true, scheduledAt: true, lead: { select: { id: true, parentName: true, childName: true } } },
     }),
-    getNearingEndEnrollments(),
-    // Phễu lead theo TUẦN (8 tuần) — lead CỦA TÔI: tổng mới vs chuyển đổi.
-    sdb.lead.findMany({
-      where: { assignedToId: userId, deletedAt: null, createdAt: { gte: eightWeeksAgo } },
-      select: { createdAt: true, status: true },
-    }),
   ]);
-
-  const countByStatus = new Map<LeadStatus, number>(
-    pipeline.map((p) => [p.status, p._count._all]),
-  );
-  const weeklyRecords: LeadReportRecord[] = leadsForWeekly.map((l) => ({
-    status: l.status,
-    source: null,
-    centerId: null,
-    commissionSource: null,
-    createdAt: l.createdAt,
-  }));
-  const weeklyBars = groupByWeek(weeklyRecords, 8, now).map((w) => ({
-    week: w.label,
-    total: w.total,
-    converted: w.converted,
-  }));
   const overdue = openTasks.filter((t) => t.dueAt < now);
   const dueToday = openTasks.filter((t) => t.dueAt >= now && t.dueAt < dayEnd);
-  const closeRate = totalMine > 0
-    ? Math.round(((countByStatus.get("ENROLLED") ?? 0) / totalMine) * 100)
-    : 0;
+
+  // REQ-04: cache số liệu tổng hợp theo USER (userId), TTL 60s.
+  const { totalMine, enrolledMonth, closeRate, countByStatus, weeklyBars, nearingEndCount } =
+    await unstable_cache(
+      () => getSalesStats(userId),
+      ["sales-dashboard-stats", userId],
+      { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
+    )();
 
   return (
     <div className="space-y-6">
@@ -93,14 +104,14 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
         <DashStat label="Việc quá hạn" value={overdue.length} href="/leads?view=kanban" tone={overdue.length > 0 ? "danger" : "ok"} icon={<CheckSquare className="h-5 w-5" />} />
       </div>
 
-      {nearingEnd.length > 0 && (
+      {nearingEndCount > 0 && (
         <Link
           href="/students/sap-het-khoa"
           className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400"
         >
           <GraduationCap className="h-5 w-5 shrink-0" />
           <span>
-            <b>{nearingEnd.length}</b> học viên sắp hết khoá (≤ 5 buổi) — nhắc phụ huynh tái tục.
+            <b>{nearingEndCount}</b> học viên sắp hết khoá (≤ 5 buổi) — nhắc phụ huynh tái tục.
           </span>
         </Link>
       )}
@@ -111,7 +122,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
         <div className="flex flex-wrap gap-2">
           {KANBAN_COLUMNS.map((s) => (
             <Link key={s} href={`/leads?status=${s}`} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${LEAD_STATUS_BADGE[s]}`}>
-              {LEAD_STATUS_LABEL[s]}: <strong>{countByStatus.get(s) ?? 0}</strong>
+              {LEAD_STATUS_LABEL[s]}: <strong>{countByStatus[s] ?? 0}</strong>
             </Link>
           ))}
         </div>
