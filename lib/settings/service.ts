@@ -7,9 +7,11 @@
  *   chỉ cho key centerOverridable.
  * Mọi mutation: validate (AC4) + reason bắt buộc + ghi AuditLog (AC3) + clear cache.
  */
+import { unstable_cache, updateTag } from "next/cache";
 import { db } from "@/lib/db";
 import type { Actor } from "@/lib/auth/actor";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { CACHE_TAGS } from "@/lib/cache/tags";
 import {
   getSettingDef,
   validateSettingValue,
@@ -22,17 +24,33 @@ import { resolveSettingValue } from "./resolve";
 /** Kiểu giá trị resolve được cho mỗi key (suy từ default trong registry). */
 export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]["default"];
 
-// ── Cache (per-process, TTL 60s) ──────────────────────────────────────────
-const TTL_MS = 60_000;
-const CACHE = new Map<string, { value: unknown; exp: number }>();
+// ── Cache (REQ-12) ─────────────────────────────────────────────────────────
+// unstable_cache cross-request/instance + invalidate qua tag (thay Map per-process cũ
+// — clearSettingsCache trước chỉ xoá 1 instance serverless → instance khác stale ≤60s).
+// Cache GIÁ TRỊ ĐÃ RESOLVE (JSON-serializable) để tránh serialize row có Date.
+const getResolvedSettingCached = unstable_cache(
+  async (key: string, orgUnitId: string | null): Promise<unknown> => {
+    const def = getSettingDef(key) as SettingDef | undefined;
+    if (!def) throw new Error(`Unknown setting key: ${key}`);
+    const [centerRow, globalRow] = await Promise.all([
+      orgUnitId && def.centerOverridable
+        ? db.centerSetting.findUnique({ where: { orgUnitId_key: { orgUnitId, key } } })
+        : Promise.resolve(null),
+      db.systemSetting.findUnique({ where: { key } }),
+    ]);
+    return resolveSettingValue({ def, centerRow, globalRow });
+  },
+  ["setting-resolve"],
+  { tags: [CACHE_TAGS.settings], revalidate: 300 },
+);
 
-/** Xoá cache (sau mutation + cho test). */
+/** Xoá cache settings (sau mutation + cho test) — invalidate tag toàn hệ thống. */
 export function clearSettingsCache(): void {
-  CACHE.clear();
-}
-
-function cacheKey(key: string, orgUnitId: string | null): string {
-  return `${orgUnitId ?? "_"}:${key}`;
+  try {
+    updateTag(CACHE_TAGS.settings);
+  } catch {
+    // Ngoài request scope (vd test in-process) → no-op; unstable_cache pass-through ở đó.
+  }
 }
 
 // ── Đọc ───────────────────────────────────────────────────────────────────
@@ -47,21 +65,7 @@ export async function getSetting<K extends SettingKey>(
   const def = getSettingDef(key) as SettingDef | undefined;
   if (!def) throw new Error(`Unknown setting key: ${key}`);
   const orgUnitId = opts?.orgUnitId ?? null;
-  const ck = cacheKey(key, orgUnitId);
-  const now = Date.now();
-  const hit = CACHE.get(ck);
-  if (hit && hit.exp > now) return hit.value as never;
-
-  const [centerRow, globalRow] = await Promise.all([
-    orgUnitId && def.centerOverridable
-      ? db.centerSetting.findUnique({ where: { orgUnitId_key: { orgUnitId, key } } })
-      : Promise.resolve(null),
-    db.systemSetting.findUnique({ where: { key } }),
-  ]);
-
-  const value = resolveSettingValue({ def, centerRow, globalRow });
-  CACHE.set(ck, { value, exp: now + TTL_MS });
-  return value as never;
+  return (await getResolvedSettingCached(key, orgUnitId)) as never;
 }
 
 /** Lấy nhiều key cùng lúc (cho trang admin). */

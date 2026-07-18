@@ -6,6 +6,12 @@
 export const CACHE_TAGS = {
   /** Cây OrgUnit (global, read-mostly). Invalidate khi tạo/sửa/xoá OrgUnit. REQ-02. */
   orgTree: "org-tree",
+  /** Cấu hình hệ thống/cơ sở (read-mostly). Invalidate khi set setting. REQ-12. */
+  settings: "settings",
+  /** Số liệu dashboard theo actor-scope. Invalidate khi dữ liệu nguồn đổi. REQ-04. */
+  dashboard: "dashboard",
+  /** Số liệu báo cáo theo actor-scope. Invalidate khi dữ liệu nguồn đổi. REQ-05. */
+  report: "report",
 } as const;
 
 export type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];
