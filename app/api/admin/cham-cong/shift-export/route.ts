@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { auth } from "@/lib/auth";
+import { requireLiveSession } from "@/lib/auth/live-session";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
 // GET /api/admin/cham-cong/shift-export?centerId=&month=YYYY-MM
 // Xuất lịch ca ĐỀ XUẤT (REGISTERED) của cơ sở trong tháng — 1 sheet, cột chuẩn.
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await requireLiveSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sp = new URL(req.url).searchParams;
   let centerId = sp.get("centerId") ?? "";

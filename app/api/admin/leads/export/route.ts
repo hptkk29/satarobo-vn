@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { requireLiveSession } from '@/lib/auth/live-session'
 import { canViewLeadPii } from '@/lib/auth/permissions'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { resolveActor } from '@/lib/auth/actor'
@@ -24,8 +24,8 @@ function escapeCsv(value: string | null | undefined): string {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await requireLiveSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!(await checkPermission('leads:view-all'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = req.nextUrl

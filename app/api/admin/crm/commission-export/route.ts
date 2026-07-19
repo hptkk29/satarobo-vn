@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as XLSX from "xlsx";
-import { auth } from "@/lib/auth";
+import { requireLiveSession } from "@/lib/auth/live-session";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
@@ -14,8 +14,8 @@ export const dynamic = "force-dynamic";
 
 // R1-12 — Export Excel bảng hoa hồng theo kỳ. Gate quyền tài chính.
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ ok: false, error: "Chưa đăng nhập" }, { status: 401 });
+  const session = await requireLiveSession();
+  if (!session) return NextResponse.json({ ok: false, error: "Chưa đăng nhập" }, { status: 401 });
   if (!(await checkPermission("payments:manage"))) {
     return NextResponse.json({ ok: false, error: "Không có quyền" }, { status: 403 });
   }
