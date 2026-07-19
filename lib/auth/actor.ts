@@ -2,36 +2,28 @@
 // Tách 2 lớp: buildActor() THUẦN (test không cần DB) + resolveActor() DB-backed
 // (React.cache → 1 query/request). Quyền resolve per-request từ DB, KHÔNG nằm trong JWT.
 import { cache } from "react";
-import { safeCache } from "@/lib/cache/safe-cache";
 import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
 import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
 import type { OrgUnitNode } from "@/lib/org/types";
-import { CACHE_TAGS } from "@/lib/cache/tags";
 
-// REQ-02 — Cây OrgUnit là dữ liệu GLOBAL, read-mostly, nhưng resolveActor nạp nó ở
-// MỖI request đã xác thực (hot path 4 site). Cache cross-request qua unstable_cache
-// (tag "org-tree" invalidate khi mutation OrgUnit; TTL 300s = trần staleness nếu org
-// bị sửa NGOÀI app qua SQL/seed). AN TOÀN scope: chỉ cache CẤU TRÚC cây (global) —
-// quyền/role (visibleCenterIds) vẫn tính per-request từ UserOrgRole nạp mới, KHÔNG cache.
-// Cache SAU map, chỉ field primitive; deletedAt luôn null (query đã lọc) → hardcode null,
-// tránh serialize Date qua cache.
-const getOrgTree = safeCache(
-  async (): Promise<OrgUnitNode[]> => {
-    const orgUnits = await db.orgUnit.findMany({ where: { deletedAt: null } });
-    return orgUnits.map((o) => ({
-      id: o.id,
-      code: o.code,
-      type: o.type as OrgUnitNode["type"],
-      parentId: o.parentId,
-      centerId: o.centerId,
-      isActive: o.isActive,
-      deletedAt: null,
-    }));
-  },
-  ["org-tree"],
-  { tags: [CACHE_TAGS.orgTree], revalidate: 300 },
-);
+// REQ-02 (REVERTED) — cây OrgUnit đọc TRẦN mỗi request. Trước đây bọc unstable_cache
+// (TTL 300s) nhưng: (a) bảng OrgUnit RẤT NHỎ (HO+CS1+CS2…) → full-scan không đáng kể,
+// lợi ích cache ~0; (b) mutation NGOÀI app (SQL/seed e2e) không invalidate được cache
+// trong server → resolveActor trả cây STALE → sai visibleCenterIds → scope rỗng (đã làm
+// smoke mobile-chrome đỏ: inbox rỗng do actor thấy center cũ). Bỏ cache = an toàn đúng đắn.
+async function getOrgTree(): Promise<OrgUnitNode[]> {
+  const orgUnits = await db.orgUnit.findMany({ where: { deletedAt: null } });
+  return orgUnits.map((o) => ({
+    id: o.id,
+    code: o.code,
+    type: o.type as OrgUnitNode["type"],
+    parentId: o.parentId,
+    centerId: o.centerId,
+    isActive: o.isActive,
+    deletedAt: null,
+  }));
+}
 
 export type ScopeType =
   | "GLOBAL"

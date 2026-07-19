@@ -2,9 +2,7 @@
 // Gọi lại rule THUẦN trong orgunit-rules.ts / org-tree.ts (không lặp logic).
 // Lỗi nghiệp vụ → OrgRuleError (code EN + message VI). Doc 15 §2.1, OI-1.
 import { Prisma, type OrgUnit } from "@prisma/client";
-import { safeUpdateTag } from "@/lib/cache/safe-cache";
 import { db } from "@/lib/db";
-import { CACHE_TAGS } from "@/lib/cache/tags";
 import { OrgRuleError, type OrgUnitNode, type OrgUnitType } from "./types";
 import {
   validateCode,
@@ -101,7 +99,6 @@ export async function createOrgUnit(input: CreateOrgUnitInput): Promise<OrgUnit>
     const created = await db.orgUnit.create({
       data: { type: input.type, code, name, address: input.address ?? null, parentId, centerId },
     });
-    safeUpdateTag(CACHE_TAGS.orgTree); // REQ-02: cây org đổi → làm mới cache resolveActor.
     return created;
   } catch (e) {
     // Race T6-01: 2 request cùng code → DB unique bắt (P2002) → CONFLICT, không 500.
@@ -159,7 +156,6 @@ export async function updateOrgUnit(id: string, input: UpdateOrgUnitInput): Prom
   }
 
   const updated = await db.orgUnit.update({ where: { id }, data });
-  safeUpdateTag(CACHE_TAGS.orgTree); // REQ-02
   return updated;
 }
 
@@ -183,7 +179,6 @@ export async function softDeleteOrgUnit(id: string): Promise<OrgUnit> {
     where: { id },
     data: { deletedAt: new Date(), isActive: false },
   });
-  safeUpdateTag(CACHE_TAGS.orgTree); // REQ-02
   return deleted;
 }
 
