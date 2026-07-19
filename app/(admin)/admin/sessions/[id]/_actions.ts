@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { enqueueNewFeedback } from "@/lib/email/triggers";
@@ -77,7 +78,8 @@ export async function saveSessionEval(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const sess = await sdb.classSession.findUnique({
     where: { id: sessionId },
     select: {
@@ -93,6 +95,13 @@ export async function saveSessionEval(input: unknown): Promise<Result> {
     sess.class,
   );
   if (!allowed) return { ok: false, error: "Không có quyền nhận xét buổi học này" };
+
+  // SEC-M02: studentId PHẢI thuộc roster hợp lệ của buổi (enrolled ∪ học bù SCHEDULED) —
+  // chống ghi phiếu giả cho HV lớp/cơ sở khác rồi gửi thông báo tới phụ huynh họ.
+  const rosterIds = await getSessionRosterStudentIds(actor, sessionId);
+  if (!rosterIds.has(studentId)) {
+    return { ok: false, error: "Học viên không thuộc danh sách buổi này" };
+  }
 
   // comment tương thích cũ = 4 mục nối lại (rỗng hết → null, phiếu rubric-only vẫn lưu).
   const comment =
@@ -191,7 +200,8 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
   // Loại B (Nhóm 01 L1) — ClassSession scoped auto; StudentSessionFeedback/Attendance
   // chưa scoped → cách ly qua buổi (sdb.findUnique IDOR-filter) + gate GV/CM bên dưới.
   // ⚠️ select kèm centerId — findUnique trên model scoped lọc hậu kỳ theo field này.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const sess = await sdb.classSession.findUnique({
     where: { id: sessionId },
     select: {
@@ -207,6 +217,13 @@ export async function saveSessionFeedback(input: unknown): Promise<Result> {
     sess.class,
   );
   if (!allowed) return { ok: false, error: "Không có quyền nhận xét buổi học này" };
+
+  // SEC-M02: mỗi studentId PHẢI thuộc roster hợp lệ của buổi (enrolled ∪ học bù SCHEDULED)
+  // — chống ghi phiếu giả cho HV lớp/cơ sở khác rồi gửi thông báo tới phụ huynh họ.
+  const rosterIds = await getSessionRosterStudentIds(actor, sessionId);
+  if (items.some((it) => !rosterIds.has(it.studentId))) {
+    return { ok: false, error: "Có học viên không thuộc danh sách buổi này" };
+  }
 
   let txResults: Array<{ id: string } | { count: number }>;
   try {

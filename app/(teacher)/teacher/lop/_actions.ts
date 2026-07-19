@@ -16,6 +16,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { withMakeupException } from "@/lib/db-scope";
+import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -108,6 +109,14 @@ export async function saveClassAttendanceAction(
   // (3) Role có quyền điểm danh không (CLASS scope — seed TEACHER:attendance:mark[CLASS]).
   const allowed = await checkPermission("attendance:mark", { classId: sess.classId, centerId });
   if (!allowed) return { ok: false, error: "Không có quyền điểm danh lớp này" };
+
+  // (4) SEC-M02: mỗi studentId từ client PHẢI thuộc ROSTER hợp lệ của buổi (enrolled active
+  // trong lớp ∪ học bù SCHEDULED, kể cả liên cơ sở) — chống ghi attendance giả cho HV
+  // lớp/cơ sở khác rồi gửi thông báo giả tới phụ huynh. Tái dùng roster hiển thị (không lệch).
+  const rosterIds = await getSessionRosterStudentIds(actor, data.sessionId);
+  if (data.records.some((r) => !rosterIds.has(r.studentId))) {
+    return { ok: false, error: "Có học viên không thuộc danh sách buổi này" };
+  }
 
   // Write — upsert theo khoá composite sessionId_studentId; $transaction để lỗi giữa
   // chừng rollback trọn lô (GV bấm Lưu 1 lần cho cả lớp).
