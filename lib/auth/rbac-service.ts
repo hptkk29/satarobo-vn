@@ -179,8 +179,20 @@ export async function assignUserOrgRole(
   if (!org || org.deletedAt) {
     throw new RbacError("ORG_INVALID", "Đơn vị không tồn tại hoặc đã bị xoá.", "orgUnitId");
   }
-  const role = await db.roleDef.findUnique({ where: { id: parsed.roleId }, select: { id: true } });
+  const role = await db.roleDef.findUnique({ where: { id: parsed.roleId }, select: { id: true, code: true } });
   if (!role) throw new RbacError("ROLE_NOT_FOUND", "Không tìm thấy role.", "roleId");
+  // SEC-M13: chống leo thang quyền — chỉ SUPER_ADMIN mới được gán vai trò SUPER_ADMIN.
+  // (Nếu ai đó có roles:assign qua grant nhưng KHÔNG phải SUPER_ADMIN thì không thể tự
+  // nâng người khác/mình lên SUPER_ADMIN.)
+  const actorIsSuper =
+    actor.role === "SUPER_ADMIN" || (actor.roles?.includes("SUPER_ADMIN") ?? false);
+  if (role.code === "SUPER_ADMIN" && !actorIsSuper) {
+    throw new RbacError(
+      "FORBIDDEN_ROLE",
+      "Chỉ SUPER_ADMIN mới được gán vai trò SUPER_ADMIN.",
+      "roleId",
+    );
+  }
   const user = await db.user.findUnique({ where: { id: parsed.userId }, select: { id: true } });
   if (!user) throw new RbacError("USER_NOT_FOUND", "Không tìm thấy người dùng.", "userId");
 

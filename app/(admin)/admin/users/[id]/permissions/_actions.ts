@@ -62,6 +62,21 @@ export async function addGrantAction(userId: string, formData: FormData) {
     };
   }
 
+  // SEC-M13: chặn leo thang quyền qua grant. KHÔNG cho ALLOW các action quản trị-quyền
+  // (roles:* → có thể tự gán SUPER_ADMIN; users:manage → quản user) qua override từng
+  // người — những quyền này chỉ đến từ vai trò. LƯU Ý: *:view-pii CỐ Ý cho grant per-user
+  // (OI-4, Kiệt ký 10/07 — MARKETING xem PII lead) nên KHÔNG chặn ở đây.
+  if (
+    parsed.data.grant === "ALLOW" &&
+    (parsed.data.action.startsWith("roles:") || parsed.data.action === "users:manage")
+  ) {
+    return {
+      ok: false as const,
+      error:
+        "Không thể cấp quyền quản trị-quyền (vai trò / quản lý user) qua override từng người — dùng gán vai trò.",
+    };
+  }
+
   // Duplicate check (composite unique sẽ throw, nhưng UX tốt hơn nếu báo trước)
   const existing = await sdb.userPermissionGrant.findUnique({
     where: { userId_action: { userId, action: parsed.data.action } },
