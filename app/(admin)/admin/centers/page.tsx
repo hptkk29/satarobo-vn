@@ -13,7 +13,10 @@ export default async function CentersAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // SEC-M01: gate quyền tường minh (trước đây chỉ auth()) + lọc cơ sở theo tầm nhìn.
-  if (!(await checkPermission("centers:view"))) redirect("/dashboard");
+  // Truyền centerId của user vào target → role CENTER-scope (CENTER_HR/SALES_CSM có
+  // centers:view[CENTER]) KHÔNG bị khoá trang (nếu gọi TRẦN thì can() cần target → false).
+  if (!(await checkPermission("centers:view", { centerId: session.user.centerId ?? null })))
+    redirect("/dashboard");
   // Center ∈ SCOPE_EXEMPT (ranh giới tenant) → sdb pass-through KHÔNG tự lọc → lọc TAY:
   // SUPER_ADMIN/HO-level thấy tất cả; role cơ sở chỉ thấy center trong visibleCenterIds
   // (không lộ tên/địa chỉ/SĐT/email + count của cơ sở khác).
