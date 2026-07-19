@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
@@ -64,7 +64,7 @@ export default async function TrainingReportPage() {
   const actor = await resolveActor(session.user.id);
 
   // REQ-05: cache phần nặng (nhiều query + reduce) theo scope. TTL 120s. Output primitive.
-  const report = await unstable_cache(
+  const report = await safeCache(
     () => loadTrainingReport(actor),
     ["dao-tao-report", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.report], revalidate: 120 },

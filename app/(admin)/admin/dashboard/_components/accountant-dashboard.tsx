@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { Wallet, AlertTriangle, TrendingUp } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
@@ -67,7 +67,7 @@ async function getAccountantStats(actor: Actor) {
 
 export async function AccountantDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
   // REQ-04: cache theo scope, TTL 60s. Output primitive (tên resolve sẵn).
-  const { paid, debt, revenueMonth, debtByCenter, overdueOrders } = await unstable_cache(
+  const { paid, debt, revenueMonth, debtByCenter, overdueOrders } = await safeCache(
     () => getAccountantStats(actor),
     ["accountant-dashboard-stats", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.dashboard], revalidate: 60 },

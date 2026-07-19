@@ -7,7 +7,7 @@
  *   chỉ cho key centerOverridable.
  * Mọi mutation: validate (AC4) + reason bắt buộc + ghi AuditLog (AC3) + clear cache.
  */
-import { unstable_cache, updateTag } from "next/cache";
+import { safeCache, safeUpdateTag } from "@/lib/cache/safe-cache";
 import { db } from "@/lib/db";
 import type { Actor } from "@/lib/auth/actor";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -25,10 +25,11 @@ import { resolveSettingValue } from "./resolve";
 export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]["default"];
 
 // ── Cache (REQ-12) ─────────────────────────────────────────────────────────
-// unstable_cache cross-request/instance + invalidate qua tag (thay Map per-process cũ
-// — clearSettingsCache trước chỉ xoá 1 instance serverless → instance khác stale ≤60s).
-// Cache GIÁ TRỊ ĐÃ RESOLVE (JSON-serializable) để tránh serialize row có Date.
-const getResolvedSettingCached = unstable_cache(
+// safeCache = unstable_cache cross-request/instance + invalidate qua tag (thay Map
+// per-process cũ — clearSettingsCache trước chỉ xoá 1 instance serverless → instance
+// khác stale ≤60s). safeCache fallback gọi thẳng khi ngoài request context (test/script)
+// → không ném incrementalCache. Cache GIÁ TRỊ ĐÃ RESOLVE (JSON) để tránh serialize Date.
+const getResolvedSettingCached = safeCache(
   async (key: string, orgUnitId: string | null): Promise<unknown> => {
     const def = getSettingDef(key) as SettingDef | undefined;
     if (!def) throw new Error(`Unknown setting key: ${key}`);
@@ -46,11 +47,7 @@ const getResolvedSettingCached = unstable_cache(
 
 /** Xoá cache settings (sau mutation + cho test) — invalidate tag toàn hệ thống. */
 export function clearSettingsCache(): void {
-  try {
-    updateTag(CACHE_TAGS.settings);
-  } catch {
-    // Ngoài request scope (vd test in-process) → no-op; unstable_cache pass-through ở đó.
-  }
+  safeUpdateTag(CACHE_TAGS.settings);
 }
 
 // ── Đọc ───────────────────────────────────────────────────────────────────

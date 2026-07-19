@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
@@ -109,7 +109,7 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
 
   // REQ-05: cache số liệu doanh thu theo (scope, cơ sở đã chọn). effectiveCenterId đã
   // được validate IDOR ở trên → an toàn đưa vào key. TTL 120s. Output rows PRIMITIVE.
-  const rows = await unstable_cache(
+  const rows = await safeCache(
     () => computeRevenueRows(actor, effectiveCenterId),
     ["revenue-report", actorScopeKey(actor), effectiveCenterId ?? "ALL"],
     { tags: [CACHE_TAGS.report], revalidate: 120 },

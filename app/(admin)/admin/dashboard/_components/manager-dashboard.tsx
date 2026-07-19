@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { Users, UserPlus, BookOpen, FileText, TrendingUp, Target, FlaskConical, GraduationCap, Wallet } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
@@ -190,7 +190,7 @@ export async function ManagerDashboard({
     totalLeads, newLeadsThisMonth, enrolledLeads, totalStudents, totalPosts,
     monthDelta, conversionRate, dailyLeadsChart, statusBars,
     revenueActual, revenueAchieved, trialsToday, teachersToday, totalDebt, debtCount, weeklyBars,
-  } = await unstable_cache(
+  } = await safeCache(
     () => getManagerStats(actor),
     ["manager-dashboard-stats", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.dashboard], revalidate: 60 },

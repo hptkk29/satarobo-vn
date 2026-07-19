@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { Users, CheckSquare, FlaskConical, TrendingUp, GraduationCap } from "lucide-react";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
@@ -87,7 +87,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
 
   // REQ-04: cache số liệu tổng hợp theo USER (userId), TTL 60s.
   const { totalMine, enrolledMonth, closeRate, countByStatus, weeklyBars, nearingEndCount } =
-    await unstable_cache(
+    await safeCache(
       () => getSalesStats(userId),
       ["sales-dashboard-stats", userId],
       { tags: [CACHE_TAGS.dashboard], revalidate: 60 },

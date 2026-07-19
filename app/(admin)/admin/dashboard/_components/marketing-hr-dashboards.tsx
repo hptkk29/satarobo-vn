@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { BarChart3, Briefcase, Users, CalendarClock } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
@@ -41,7 +41,7 @@ async function getMarketingStats(actor: Actor) {
 // Đợt 3C #5 — Dashboard MARKETING (nguồn lead, hiệu quả kênh tóm tắt).
 export async function MarketingDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
   // REQ-04: cache theo scope, TTL 60s. Output primitive.
-  const { bySource, newThisWeek, total, enrolledTotal } = await unstable_cache(
+  const { bySource, newThisWeek, total, enrolledTotal } = await safeCache(
     () => getMarketingStats(actor),
     ["marketing-dashboard-stats", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
@@ -106,7 +106,7 @@ async function getHrStats(actor: Actor) {
 // Đợt 3C #5 — Dashboard HR (nhân sự, tuyển dụng, đăng ký ca).
 export async function HrDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
   // REQ-04: cache theo scope, TTL 60s.
-  const { activeStaff, openJobs, shiftRegsWeek, leaveReqs } = await unstable_cache(
+  const { activeStaff, openJobs, shiftRegsWeek, leaveReqs } = await safeCache(
     () => getHrStats(actor),
     ["hr-dashboard-stats", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.dashboard], revalidate: 60 },

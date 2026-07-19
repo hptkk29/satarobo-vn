@@ -2,7 +2,7 @@
 // Tách 2 lớp: buildActor() THUẦN (test không cần DB) + resolveActor() DB-backed
 // (React.cache → 1 query/request). Quyền resolve per-request từ DB, KHÔNG nằm trong JWT.
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
 import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
@@ -16,7 +16,7 @@ import { CACHE_TAGS } from "@/lib/cache/tags";
 // quyền/role (visibleCenterIds) vẫn tính per-request từ UserOrgRole nạp mới, KHÔNG cache.
 // Cache SAU map, chỉ field primitive; deletedAt luôn null (query đã lọc) → hardcode null,
 // tránh serialize Date qua cache.
-const getOrgTree = unstable_cache(
+const getOrgTree = safeCache(
   async (): Promise<OrgUnitNode[]> => {
     const orgUnits = await db.orgUnit.findMany({ where: { deletedAt: null } });
     return orgUnits.map((o) => ({

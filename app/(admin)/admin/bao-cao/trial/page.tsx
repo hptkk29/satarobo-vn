@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
@@ -93,7 +93,7 @@ export default async function TrialReportPage() {
   const actor = await resolveActor(session.user.id);
 
   // REQ-05: cache phần nặng (query + reduce) theo scope. TTL 120s. Output primitive.
-  const report = await unstable_cache(
+  const report = await safeCache(
     () => computeTrialReport(actor),
     ["trial-report", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.report], revalidate: 120 },

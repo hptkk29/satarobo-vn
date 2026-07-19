@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
@@ -92,7 +92,7 @@ export default async function CohortReportPage() {
   const actor = await resolveActor(session.user.id);
 
   // REQ-05: cache cross-request keyed THEO SCOPE (không leak giữa cơ sở). TTL 120s.
-  const report = await unstable_cache(
+  const report = await safeCache(
     () => computeCohortReport(actor),
     ["cohort-report", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.report], revalidate: 120 },

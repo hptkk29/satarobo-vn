@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
@@ -65,7 +65,7 @@ export default async function CenterReportPage() {
 
   // REQ-05: cache số liệu (finance/trend/byCenter/satisfaction/retention) theo scope.
   // TTL 120s. Tất cả PRIMITIVE nên serialize an toàn.
-  const { finance, trend, byCenter, satisfaction, retention } = await unstable_cache(
+  const { finance, trend, byCenter, satisfaction, retention } = await safeCache(
     () => computeTrungTamReport(actor),
     ["trung-tam-report", actorScopeKey(actor)],
     { tags: [CACHE_TAGS.report], revalidate: 120 },

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { unstable_cache } from "next/cache";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { CalendarDays, ClipboardCheck, FileWarning, AlertTriangle } from "lucide-react";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
@@ -68,7 +68,7 @@ async function getTeacherStats(userId: string) {
 // Đợt 3C — Dashboard GIÁO VIÊN. KHÔNG doanh thu/lead/quản trị.
 export async function TeacherDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
   // REQ-04: cache theo USER (userId), TTL 60s.
-  const { todayClasses, incompleteCount, toGrade, conflicts } = await unstable_cache(
+  const { todayClasses, incompleteCount, toGrade, conflicts } = await safeCache(
     () => getTeacherStats(userId),
     ["teacher-dashboard-stats", userId],
     { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
