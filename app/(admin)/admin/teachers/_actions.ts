@@ -152,7 +152,8 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
 const reviewSchema = z.object({
   userId: z.string().min(1),
   score: z.coerce.number().int().min(1).max(5),
-  note: z.string().trim().max(2000).optional().or(z.literal("")),
+  // Bắt buộc nội dung → chống tạo nhầm đánh giá rỗng (chỉ có sao).
+  note: z.string().trim().min(5, "Nhập nội dung nhận xét (tối thiểu 5 ký tự)").max(2000),
 });
 
 /** Ghi 1 đánh giá nội bộ/dự giờ cho GV. */

@@ -44,6 +44,11 @@ export function TeacherEvaluations({
   const [note, setNote] = useState("");
 
   function submit() {
+    // Bắt buộc có nội dung nhận xét → tránh tạo nhầm đánh giá rỗng chỉ vì bấm nút.
+    if (note.trim().length < 5) {
+      toast.error("Nhập nội dung nhận xét (tối thiểu 5 ký tự) trước khi ghi đánh giá");
+      return;
+    }
     startTransition(async () => {
       const res = await addTeacherReview({ userId, score, note: note.trim() });
       if (res.ok) {
@@ -135,7 +140,7 @@ export function TeacherEvaluations({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               disabled={pending}
-              placeholder="Nhận xét dự giờ (tùy chọn)…"
+              placeholder="Nhận xét dự giờ (bắt buộc)…"
               className="min-w-[16rem] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
             />
             <button

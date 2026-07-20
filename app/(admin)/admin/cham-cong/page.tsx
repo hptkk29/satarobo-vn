@@ -7,6 +7,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { ymdLocal } from "@/lib/classes/schedule";
+import { DateNavInput } from "./_components/date-nav-input";
 import type { WorkShift } from "@prisma/client";
 import {
   computeShiftAttendance,
@@ -136,14 +137,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
       </div>
 
       <div className="mb-4 flex items-center gap-3">
-        <form>
-          <input
-            type="date"
-            name="date"
-            defaultValue={dateStr}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-          />
-        </form>
+        <DateNavInput value={dateStr} />
         {missingOut > 0 && (
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
             <AlertTriangle className="h-3.5 w-3.5" /> {missingOut} người chưa check-out
