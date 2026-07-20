@@ -2,7 +2,7 @@
 
 > ## ✅ ĐÃ CHỐT 20/07
 > - **Q1 = A — ĐÃ LÀM** (commit `65eaa60`): chia tiền theo `finalPrice` từng ghi danh (`allocateByWeight` bất biến tổng), Payment con + Receipt riêng per-Enrollment. e2e `[FIN-01-Q1A]` xanh.
-> - **Q2 = KHÔNG auto-confirm mù** → tách thành **[[FIN-02-doi-soat-ngan-hang]]**: trang Đối soát ngân hàng + auto-match + **người có quyền bấm ✓** (đúng số tiền + đúng người gửi). Hiện tại bước ✓ đã có ở `/admin/payments` (thủ công). **CHẶN: chốt nguồn dữ liệu bank** (Casso/SePay / import sao kê / MISA / thủ công) — xem FIN-02 §2.
+> - **Q2 = KHÔNG auto-confirm mù** → **[[FIN-02-doi-soat-ngan-hang]]**: trang Đối soát ngân hàng + auto-match + **người có quyền bấm ✓** (đúng tiền + đúng người). **Nguồn bank ĐÃ CHỐT 20/07: hiện tại = D thủ công** (đã chạy ở `/admin/payments`); **tương lai = A**, admin **tự cấu hình cổng thu theo từng ngân hàng** (data-driven `PaymentGatewayConfig` + trang settings, KHÔNG hardcode). Chưa build A — dùng D.
 > - **Q3 = để sau** — khi làm tính năng **đăng ký tài khoản**: bắt buộc đăng ký + nhập đủ thông tin mới cho mua/thuê thiết bị; lưu hồ sơ nếu mua/thuê. Chưa build giờ.
 > - **Q4 = ĐÃ LÀM** — đổi nhãn `Đã xác nhận TT` → **`Đã xác nhận đơn`** (commit `cbea86f`).
 
