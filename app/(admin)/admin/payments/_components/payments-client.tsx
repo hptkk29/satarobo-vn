@@ -263,7 +263,17 @@ export function PaymentsClient({
                 {canConfirm && (
                   <TableCell className="text-right">
                     {p.accountantStatus === "PENDING" ? (
-                      <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                      p.enrollmentId ? (
+                        <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                      ) : (
+                        // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
+                        <span
+                          className="text-xs text-neutral-400"
+                          title="Khoản chưa gắn ghi danh — xác nhận được sau khi convert lead thành học viên"
+                        >
+                          Chờ convert
+                        </span>
+                      )
                     ) : (
                       <span className="text-xs text-neutral-400">—</span>
                     )}
