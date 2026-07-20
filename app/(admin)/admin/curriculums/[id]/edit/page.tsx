@@ -18,6 +18,7 @@ import {
 } from "../../_components/lesson-resources";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
+import { isScormProcessingStale, SCORM_STALE_ERROR } from "@/lib/scorm/stale";
 import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
@@ -130,6 +131,7 @@ export default async function EditCurriculumPage({ params }: Props) {
             status: true,
             isActiveForLesson: true,
             error: true,
+            createdAt: true,
           },
         })
       : Promise.resolve([]),
@@ -210,14 +212,13 @@ export default async function EditCurriculumPage({ params }: Props) {
     lessonId: l.id,
     order: l.order,
     title: l.title,
-    scorm: (scormByLesson.get(l.id) ?? []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      version: p.version,
-      status: p.status,
-      isActiveForLesson: p.isActiveForLesson,
-      error: p.error,
-    })),
+    // QA 20/07 — bản UPLOADING/PROCESSING kẹt >15 phút hiển thị như bản LỖI (nút
+    // "Dọn") thay vì "Đang xử lý…" vĩnh viễn.
+    scorm: (scormByLesson.get(l.id) ?? []).map((p) =>
+      isScormProcessingStale(p.status, p.createdAt)
+        ? { id: p.id, name: p.name, version: p.version, status: "FAILED", isActiveForLesson: p.isActiveForLesson, error: SCORM_STALE_ERROR }
+        : { id: p.id, name: p.name, version: p.version, status: p.status, isActiveForLesson: p.isActiveForLesson, error: p.error },
+    ),
     assignments: assignmentsByLesson.get(l.id) ?? [],
   }));
 

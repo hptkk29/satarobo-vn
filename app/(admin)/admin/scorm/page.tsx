@@ -5,6 +5,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
+import { isScormProcessingStale, SCORM_STALE_ERROR } from "@/lib/scorm/stale";
 import { ScormManager, type CourseNode } from "./_components/scorm-manager";
 
 export const metadata = { title: "SCORM / Học liệu tương tác | Admin" };
@@ -63,6 +64,7 @@ export default async function ScormPage() {
           fileCount: true,
           scormVersion: true,
           error: true,
+          createdAt: true,
         },
       })
     : [];
@@ -87,9 +89,19 @@ export default async function ScormPage() {
       lessons: (cur?.lessons ?? []).map((l) => {
         const pkgs = byLesson.get(l.id) ?? [];
         const active = pkgs.find((p) => p.isActiveForLesson && p.status === "PUBLISHED") ?? null;
+        // QA 20/07 — bản UPLOADING/PROCESSING quá 15 phút = KẸT (upload đứt/process
+        // treo): không hiện "Đang xử lý…" vĩnh viễn nữa mà đưa sang khối bản lỗi
+        // để admin bấm "Dọn" và đẩy lại.
+        const processing = pkgs.filter(
+          (p) => p.status === "UPLOADING" || p.status === "PROCESSING",
+        );
         const pending =
-          pkgs.find((p) => p.status === "UPLOADING" || p.status === "PROCESSING") ?? null;
-        const failed = pkgs.find((p) => p.status === "FAILED") ?? null;
+          processing.find((p) => !isScormProcessingStale(p.status, p.createdAt)) ?? null;
+        const stale =
+          processing.find((p) => isScormProcessingStale(p.status, p.createdAt)) ?? null;
+        const failedPkg = pkgs.find((p) => p.status === "FAILED") ?? null;
+        const failed =
+          failedPkg ?? (stale ? { id: stale.id, name: stale.name, error: SCORM_STALE_ERROR } : null);
         return {
           lessonId: l.id,
           order: l.order,

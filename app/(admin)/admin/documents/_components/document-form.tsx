@@ -63,10 +63,15 @@ export function DocumentForm({
   const [pending, startTransition] = useTransition();
 
   // Auto-fill title from file name once on new uploads (only when title is empty).
+  // QA 20/07 — nhớ giá trị auto-fill: khi user focus mà tiêu đề VẪN là tên file
+  // tự điền thì bôi đen toàn bộ, gõ là THAY THẾ (trước đây gõ bị nối chuỗi
+  // "qa-test-documentQA Test...").
+  const [autoTitle, setAutoTitle] = useState<string | null>(null);
   useEffect(() => {
     if (!title && file?.fileName) {
       const base = file.fileName.replace(/\.[^.]+$/, "");
       setTitle(base);
+      setAutoTitle(base);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file?.fileName]);
@@ -150,6 +155,9 @@ export function DocumentForm({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              onFocus={(e) => {
+                if (autoTitle && title === autoTitle) e.currentTarget.select();
+              }}
               required
               disabled={pending}
               placeholder="VD: Slide bài 1 — Giới thiệu Robot"
