@@ -17,7 +17,9 @@ export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   DRAFT: "Nháp",
   PENDING_PAYMENT: "Chờ thanh toán",
-  CONFIRMED: "Đã xác nhận TT",
+  CONFIRMED: "Đã xác nhận đơn", // Q4: KHÔNG dùng "TT" — đây là trạng thái ĐƠN (sale chốt),
+  // KHÔNG phải kế toán xác nhận tiền vào ngân hàng (Payment.accountantStatus). Tiến độ trả
+  // góp hiển thị riêng qua deriveInstallmentBadge ("Đã đóng đợt 1"), thu tiền qua /payments.
   COMPLETED: "Hoàn tất",
   CANCELLED: "Đã huỷ",
   REFUNDED: "Đã hoàn tiền",
