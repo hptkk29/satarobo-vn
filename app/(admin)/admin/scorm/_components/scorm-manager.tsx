@@ -314,7 +314,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
               </div>
               <div className="flex items-center gap-1.5">
                 <Link
-                  href={`/admin/scorm/play/${lesson.giaoAn.id}`}
+                  href={`/scorm/play/${lesson.giaoAn.id}`}
                   className="inline-flex items-center gap-1 rounded-md border border-orange-200 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
                 >
                   <Play className="h-3.5 w-3.5" /> Xem thử

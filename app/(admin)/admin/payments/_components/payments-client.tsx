@@ -244,7 +244,7 @@ export function PaymentsClient({
                 <TableCell className="text-xs font-mono">
                   {p.hasActiveReceipt ? (
                     <a
-                      href={`/admin/payments/${p.id}/phieu-thu`}
+                      href={`/payments/${p.id}/phieu-thu`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-[#7C3AED] hover:underline"
