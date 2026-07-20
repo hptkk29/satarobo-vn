@@ -27,6 +27,8 @@ type SP = {
   dateTo?: string
 }
 
+export const metadata = { title: 'Leads | Admin' }
+
 export default async function LeadsPage({
   searchParams,
 }: {

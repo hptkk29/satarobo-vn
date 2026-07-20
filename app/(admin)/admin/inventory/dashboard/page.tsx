@@ -15,6 +15,7 @@ import { getInventoryStats } from "@/lib/inventory-stats";
 import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Kho — Tổng quan | Admin" };
 
 function formatVnd(value: number): string {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(

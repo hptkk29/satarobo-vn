@@ -21,6 +21,7 @@ import { isScormEnabled } from "@/lib/flags";
 import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Sửa chương trình | Admin" };
 
 interface Props {
   params: Promise<{ id: string }>;
