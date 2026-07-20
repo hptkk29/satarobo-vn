@@ -56,6 +56,9 @@ export function ReportCardEditor(props: {
 
   const { editable, status, canManage, canReview, metrics } = props;
   const att = metrics.attendance;
+  // Khoá chưa cấu hình tiêu chí → không lưu/nộp được (server cũng chặn). Vô hiệu nút
+  // để không bấm nhầm ra lỗi khó hiểu ("Chưa có học bạ…").
+  const hasCriteria = props.criteria.length > 0;
 
   function setScore(criterionId: string, patch: Partial<ScoreState>) {
     setScores((prev) => prev.map((s) => (s.criterionId === criterionId ? { ...s, ...patch } : s)));
@@ -292,11 +295,16 @@ export function ReportCardEditor(props: {
       ) : null}
 
       {/* Hành động */}
+      {editable && !hasCriteria ? (
+        <p className="text-sm text-amber-700">
+          Cần cấu hình tiêu chí năng lực cho khoá trước khi lưu / nộp học bạ.
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {editable ? (
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || !hasCriteria}
             onClick={save}
             className="rounded-md bg-neutral-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
@@ -307,7 +315,7 @@ export function ReportCardEditor(props: {
         {canManage && (status === "DRAFT" || status === "RECALLED") ? (
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || !hasCriteria}
             onClick={() => transition("PENDING_REVIEW", false)}
             className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >

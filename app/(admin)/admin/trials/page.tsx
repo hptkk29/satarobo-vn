@@ -84,7 +84,7 @@ export default async function TrialsPage({ searchParams }: Props) {
     }),
     sdb.room.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, name: true, code: true },
+      select: { id: true, name: true, code: true, centerId: true },
       orderBy: { displayOrder: "asc" },
     }),
     (await checkPermission("trials:manage"))
@@ -150,7 +150,11 @@ export default async function TrialsPage({ searchParams }: Props) {
       <TrialsList
         items={items}
         teachers={teachers.map((u) => ({ id: u.id, name: u.name ?? "(chưa đặt tên)" }))}
-        rooms={rooms.map((r) => ({ id: r.id, label: `${r.name} (${r.code})` }))}
+        rooms={rooms.map((r) => ({
+          id: r.id,
+          label: `${r.name} (${r.code})`,
+          centerId: r.centerId,
+        }))}
         openTrialClasses={openTrialClasses}
         canManage={canManage}
         canOverride={(await checkPermission("trials:override-capacity"))}

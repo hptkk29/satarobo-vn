@@ -14,7 +14,8 @@ import { updateTrialAction, deleteTrialAction } from "../actions";
 import { enrollLeadChildAction } from "../../trial-classes/_actions";
 
 type Opt = { id: string; name: string };
-type LabelOpt = { id: string; label: string };
+// Phòng kèm cơ sở để lọc chéo cơ sở (buổi CS2 KHÔNG chọn được phòng CS1).
+type RoomOpt = { id: string; label: string; centerId: string | null };
 
 // Lớp trải nghiệm OPEN (cùng cơ sở) để xếp con trực tiếp tại tab Học thử.
 export type OpenTrialClass = {
@@ -53,7 +54,7 @@ export type TrialItem = {
 interface Props {
   items: TrialItem[];
   teachers: Opt[];
-  rooms: LabelOpt[];
+  rooms: RoomOpt[];
   openTrialClasses: OpenTrialClass[];
   canManage: boolean;
   canOverride: boolean;
@@ -186,7 +187,7 @@ function TrialCard({
 }: {
   item: TrialItem;
   teachers: Opt[];
-  rooms: LabelOpt[];
+  rooms: RoomOpt[];
   openTrialClasses: OpenTrialClass[];
   canManage: boolean;
   canOverride: boolean;
@@ -202,6 +203,15 @@ function TrialCard({
   const [teacherId, setTeacherId] = useState(item.teacherId ?? "");
   const [roomId, setRoomId] = useState(item.roomId ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
+
+  // Chỉ phòng CÙNG cơ sở buổi học (khớp form Tạo lớp trải nghiệm). Giữ luôn phòng
+  // đang gán (nếu lỡ khác cơ sở do data cũ) để không biến mất khỏi dropdown.
+  const roomOptions = useMemo(() => {
+    const center = item.effectiveCenterId;
+    return rooms.filter(
+      (r) => !center || r.centerId === center || r.id === item.roomId,
+    );
+  }, [rooms, item.effectiveCenterId, item.roomId]);
 
   function saveManage() {
     startTransition(async () => {
@@ -335,7 +345,7 @@ function TrialCard({
                   className={inputCls}
                 >
                   <option value="">— Không —</option>
-                  {rooms.map((r) => (
+                  {roomOptions.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.label}
                     </option>

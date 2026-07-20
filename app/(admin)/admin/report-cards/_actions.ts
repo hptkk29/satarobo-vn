@@ -216,6 +216,34 @@ export async function transitionReportCardAction(input: unknown): Promise<Result
   const guard = checkTransition({ from, to: to as ReportCardStatusValue, capabilities: ctx.capabilities, reason });
   if (!guard.ok) return { ok: false, error: guard.error ?? "Chuyển trạng thái không hợp lệ" };
 
+  // NỘP DUYỆT: học bạ phải HOÀN CHỈNH — khoá có tiêu chí + mọi tiêu chí đã chấm (1–4).
+  // Trước đây thiếu guard này → nộp được học bạ trống tiêu chí / chưa chấm.
+  if (to === "PENDING_REVIEW") {
+    const [criteria, scores] = await Promise.all([
+      getCourseCriteria(enr.courseId),
+      db.reportCardScore.findMany({
+        where: { reportCardId: rc.id },
+        select: { criterionId: true, level: true },
+      }),
+    ]);
+    if (criteria.length === 0) {
+      return {
+        ok: false,
+        error: "Khoá chưa có tiêu chí năng lực — cần cấu hình tiêu chí trước khi nộp duyệt.",
+      };
+    }
+    const scoredIds = new Set(
+      scores.filter((s) => s.level >= 1 && s.level <= 4).map((s) => s.criterionId),
+    );
+    const missing = criteria.filter((c) => !scoredIds.has(c.id)).length;
+    if (missing > 0) {
+      return {
+        ok: false,
+        error: `Còn ${missing} tiêu chí chưa chấm — cần chấm đủ trước khi nộp duyệt.`,
+      };
+    }
+  }
+
   // ── PHÁT HÀNH: đóng băng snapshot + emit event TRONG transaction ──
   if (to === "PUBLISHED") {
     const [metrics, criteria, scores] = await Promise.all([
