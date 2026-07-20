@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { canViewLeadPii } from "@/lib/auth/permissions";
+import { maskEmail } from "@/lib/utils";
 import { EmailLogStatus, type Prisma } from "@prisma/client";
 import {
   EMAIL_LOG_STATUS_LABEL,
@@ -30,6 +32,8 @@ export default async function EmailLogsPage({ searchParams }: Props) {
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("emails:view")))
     redirect("/dashboard?error=unauthorized");
+  // MARKETING có emails:view nhưng KHÔNG có quyền xem PII liên hệ → che email người nhận.
+  const canViewPii = canViewLeadPii(session.user);
 
   // EmailLog/EmailTemplate là model global (∉ SCOPED_MODELS) → sdb pass-through.
   const actor = await resolveActor(session.user.id);
@@ -176,7 +180,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
                 <td className="px-3 py-2">
                   <div className="text-sm">{log.toName ?? "—"}</div>
                   <div className="text-xs text-gray-500 font-mono">
-                    {log.toEmail}
+                    {canViewPii ? log.toEmail : maskEmail(log.toEmail)}
                   </div>
                 </td>
                 <td className="px-3 py-2 text-sm">{log.subject}</td>

@@ -10,6 +10,7 @@ import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import { getPaymentConfig, buildTransferContent, buildVietQrImageUrl } from "@/lib/payments/vietqr";
+import { maskPhone, maskEmail } from "@/lib/utils";
 import type { OrderStatus } from "@prisma/client";
 
 export const metadata = { title: "Chi tiết đơn hàng | Admin" };
@@ -80,6 +81,10 @@ export default async function OrderDetailPage({ params }: Props) {
 
   // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
   const canManage = await checkPermission("orders:manage");
+  // Che liên hệ khách trên PHẦN HIỂN THỊ nếu thiếu quyền. QR (nội dung CK) + gửi email
+  // vẫn dùng `order` GỐC ở server (chức năng), chỉ bản `displayOrder` xuống client bị che
+  // → không leak qua RSC payload.
+  const canViewPii = await checkPermission("orders:view-pii");
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
   // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
   const canApprove = await checkPermission("installments:approve", { centerId: order.centerId });
@@ -184,7 +189,17 @@ export default async function OrderDetailPage({ params }: Props) {
       </div>
 
       <OrderDetailClient
-        order={order}
+        order={
+          canViewPii
+            ? order
+            : {
+                ...order,
+                customerPhone: order.customerPhone ? maskPhone(order.customerPhone) : order.customerPhone,
+                customerEmail: order.customerEmail ? maskEmail(order.customerEmail) : order.customerEmail,
+                customerCccd: null,
+                customerAddress: null,
+              }
+        }
         canManage={canManage}
         canApprove={canApprove}
         qrUrl={qrUrl}

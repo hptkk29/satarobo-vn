@@ -249,6 +249,7 @@ export type Action =
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "orders:view"
   | "orders:manage"
+  | "orders:view-pii" // che SĐT/email/địa chỉ khách trên đơn hàng — vai CRM/kế toán mới xem đầy đủ
 
   // --- Phase 5.7 — Vouchers ---
   | "vouchers:view"
@@ -558,6 +559,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "installments:approve": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // Xem đầy đủ liên hệ khách trên đơn (CRM + kế toán); vai khác thấy bản che.
+  "orders:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
 
   // --- Phase 5.7 — Vouchers ---
   "vouchers:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT"],

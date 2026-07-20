@@ -55,6 +55,7 @@ export const ROLE_SEED: RoleSeed[] = [
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ ở màn thanh toán.
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "vouchers:view", scopeType: "GLOBAL" },
       { action: "vouchers:manage", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
@@ -358,6 +359,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "products:view", scopeType: "GLOBAL" },
       { action: "vouchers:view", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "honors:view", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "GLOBAL" },
       { action: "news:view", scopeType: "GLOBAL" },
@@ -438,6 +440,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "kits:view", scopeType: "CENTER" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "vouchers:view", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
     ],
@@ -525,6 +528,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "enrollments:view-all", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      { action: "orders:view-pii", scopeType: "GLOBAL" },
     ],
   },
   {
