@@ -9,7 +9,7 @@ import type {
   ParentRequestStatus,
   ParentRequestType,
 } from "@prisma/client";
-import { REQUEST_TYPE_LABEL } from "@/lib/portal/request-labels";
+import { REQUEST_TYPE_LABEL, REQUEST_STATUS_LABEL } from "@/lib/portal/request-labels";
 import { classifyAbsenceUrgency } from "@/lib/students/absence";
 import { getSetting } from "@/lib/settings/service";
 import { RequestRow } from "./_components/request-row";
@@ -23,11 +23,13 @@ const STATUS_FILTERS: {
   label: string;
   status?: ParentRequestStatus;
 }[] = [
+  // Nhãn tab lấy từ REQUEST_STATUS_LABEL (nguồn chung với thẻ) → không lệch
+  // "Đã duyệt" (thẻ) vs "Đã xử lý" (tab) như trước.
   { key: "all", label: "Tất cả" },
-  { key: "PENDING", label: "Chờ xử lý", status: "PENDING" },
-  { key: "APPROVED", label: "Đã xử lý", status: "APPROVED" },
-  { key: "REJECTED", label: "Từ chối", status: "REJECTED" },
-  { key: "CANCELLED", label: "Đã huỷ", status: "CANCELLED" },
+  { key: "PENDING", label: REQUEST_STATUS_LABEL.PENDING, status: "PENDING" },
+  { key: "APPROVED", label: REQUEST_STATUS_LABEL.APPROVED, status: "APPROVED" },
+  { key: "REJECTED", label: REQUEST_STATUS_LABEL.REJECTED, status: "REJECTED" },
+  { key: "CANCELLED", label: REQUEST_STATUS_LABEL.CANCELLED, status: "CANCELLED" },
 ];
 
 // Lọc theo LOẠI — mỗi tab là 1 giá trị enum ParentRequestType thật.

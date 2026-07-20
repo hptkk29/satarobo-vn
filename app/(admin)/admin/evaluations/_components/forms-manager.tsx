@@ -29,6 +29,11 @@ const STATUS_STYLE = {
   ACTIVE: "bg-emerald-100 text-emerald-700",
   ARCHIVED: "bg-amber-100 text-amber-700",
 } as const;
+const STATUS_LABEL: Record<keyof typeof STATUS_STYLE, string> = {
+  DRAFT: "Nháp",
+  ACTIVE: "Đang dùng",
+  ARCHIVED: "Lưu trữ",
+};
 
 export function FormsManager({ forms }: { forms: FormRow[] }) {
   const router = useRouter();
@@ -127,7 +132,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
                     {f.title}
                   </Link>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-                    <span className={`rounded px-1.5 py-0.5 ${STATUS_STYLE[f.status]}`}>{f.status}</span>
+                    <span className={`rounded px-1.5 py-0.5 ${STATUS_STYLE[f.status]}`}>{STATUS_LABEL[f.status] ?? f.status}</span>
                     <span>{SCOPE_LABEL[f.scope]}</span>
                     <span>· {f.questions} câu</span>
                     <span>· {f.rounds} đợt</span>

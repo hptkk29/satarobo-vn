@@ -225,8 +225,9 @@ function groupLabel(
         : "(Không rõ cơ sở)";
     case "enrollment":
     default:
+      // Tên HV + khoá (thay vì cuid thô "luancon · cmqz5if8").
       return row.studentName
-        ? `${row.studentName} · ${row.enrollmentId.slice(0, 8)}`
-        : row.enrollmentId;
+        ? `${row.studentName}${row.courseName ? ` · ${row.courseName}` : ""}`
+        : (row.courseName ?? "(Không rõ ghi danh)");
   }
 }

@@ -110,7 +110,7 @@ export default async function TrialReportPage() {
   const funnelData = [
     { name: "Đã xếp lịch", value: report.funnel.scheduled + report.funnel.inProgress + report.funnel.attended },
     { name: "Đang học thử", value: report.funnel.inProgress + report.funnel.attended },
-    { name: "Đã dự đủ (ATTENDED)", value: report.funnel.attended },
+    { name: "Đã dự đủ", value: report.funnel.attended },
     { name: "Đã đăng ký", value: report.conversion.registered },
   ];
 

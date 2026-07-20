@@ -32,6 +32,11 @@ const STATUS_STYLE = {
   OPEN: "bg-emerald-100 text-emerald-700",
   CLOSED: "bg-rose-100 text-rose-700",
 } as const;
+const STATUS_LABEL: Record<keyof typeof STATUS_STYLE, string> = {
+  DRAFT: "Nháp",
+  OPEN: "Đang mở",
+  CLOSED: "Đã đóng",
+};
 
 export function RoundsManager({
   rounds,
@@ -202,7 +207,7 @@ export function RoundsManager({
                 <div className="min-w-0">
                   <p className="font-medium text-gray-900">{r.name}</p>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-                    <span className={`rounded px-1.5 py-0.5 ${STATUS_STYLE[r.status]}`}>{r.status}</span>
+                    <span className={`rounded px-1.5 py-0.5 ${STATUS_STYLE[r.status]}`}>{STATUS_LABEL[r.status] ?? r.status}</span>
                     <span>{r.formTitle}</span>
                     {r.centerName && <span>· {r.centerName}</span>}
                     <span>· {r.responses} phản hồi</span>

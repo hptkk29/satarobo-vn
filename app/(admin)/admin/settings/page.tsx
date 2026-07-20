@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { resolveActor } from '@/lib/auth/actor'
 import { scopedDb } from '@/lib/db-scope'
 import { isSuperAdmin } from '@/lib/auth/permissions'
+import { roleLabel } from '@/lib/labels'
 import { ChangePasswordForm } from './_components/change-password-form'
 
 export default async function SettingsPage() {
@@ -38,7 +39,7 @@ export default async function SettingsPage() {
           </div>
           <div>
             <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Vai trò</dt>
-            <dd className="mt-1 text-sm font-medium text-gray-800">{session.user.role}</dd>
+            <dd className="mt-1 text-sm font-medium text-gray-800">{roleLabel(session.user.role)}</dd>
           </div>
         </dl>
       </section>

@@ -92,6 +92,7 @@ export type DebtRow = {
   enrollmentId: string;
   studentId: string | null;
   studentName: string | null;
+  courseName: string | null;
   centerId: string | null;
   finalPrice: number;
   confirmedPaid: number;
@@ -127,6 +128,7 @@ export async function getDebtRows(
       tuition: true,
       studentId: true,
       student: { select: { name: true } },
+      course: { select: { name: true } },
       class: { select: { centerId: true } },
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa.
       payments: { where: { accountantStatus: "CONFIRMED", deletedAt: null }, select: { amount: true } },
@@ -140,6 +142,7 @@ export async function getDebtRows(
       enrollmentId: e.id,
       studentId: e.studentId,
       studentName: e.student?.name ?? null,
+      courseName: e.course?.name ?? null,
       centerId: e.class?.centerId ?? null,
       finalPrice,
       confirmedPaid,

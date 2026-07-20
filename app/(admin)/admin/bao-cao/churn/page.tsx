@@ -99,8 +99,7 @@ export default async function ChurnReportPage() {
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Báo cáo churn / rời lớp</h1>
         <p className="text-sm text-neutral-500">
-          Tỉ lệ học viên rời lớp (WITHDREW) theo kỳ và theo cơ sở — mẫu số là số đang
-          học ở đầu kỳ.
+          Tỉ lệ học viên rời lớp theo kỳ và theo cơ sở — mẫu số là số đang học ở đầu kỳ.
         </p>
       </div>
 

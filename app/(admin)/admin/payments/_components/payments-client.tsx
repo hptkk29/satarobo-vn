@@ -94,6 +94,9 @@ const METHOD_OPTIONS = [
   { value: "TINGEE", label: "Tingee" },
   { value: "COD", label: "COD" },
 ];
+const METHOD_LABEL: Record<string, string> = Object.fromEntries(
+  METHOD_OPTIONS.map((m) => [m.value, m.label]),
+);
 
 function vnd(n: number): string {
   return n.toLocaleString("vi-VN") + " đ";
@@ -209,7 +212,7 @@ export function PaymentsClient({
                 <TableCell className="text-right font-semibold">
                   {vnd(p.amount)}
                 </TableCell>
-                <TableCell className="text-xs">{p.method}</TableCell>
+                <TableCell className="text-xs">{METHOD_LABEL[p.method] ?? p.method}</TableCell>
                 <TableCell className="text-xs">{fmtDate(p.paidDate)}</TableCell>
                 <TableCell className="text-xs">{p.collectedByName ?? "—"}</TableCell>
                 <TableCell className="text-xs">{p.leadSource ?? "—"}</TableCell>

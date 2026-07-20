@@ -4,6 +4,20 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createRule, toggleRule, grantCoins, reverseCoinTx } from "../_actions";
 
+const TX_TYPE_LABEL: Record<string, string> = {
+  EARN: "Cộng coin",
+  SPEND: "Trừ coin",
+  ADJUST: "Điều chỉnh",
+};
+// reason là mã tự do — dịch mã phổ biến, còn lại giữ nguyên.
+const TX_REASON_LABEL: Record<string, string> = {
+  ATTENDANCE: "Điểm danh",
+  REDEEM_GIFT: "Đổi quà",
+  MANUAL: "Thủ công",
+  ADJUSTMENT: "Điều chỉnh",
+  REVERSAL: "Hoàn tác",
+};
+
 type Rule = { id: string; code: string; label: string; amount: number; isActive: boolean };
 type Student = { id: string; name: string; studentCode: string | null };
 type Txn = {
@@ -155,8 +169,8 @@ export function SataCoinAdmin({
               recentTxns.map((t) => (
                 <tr key={t.id} className="border-t">
                   <td className="px-4 py-2 font-medium">{t.studentName}</td>
-                  <td className="px-4 py-2 text-xs text-neutral-500">{t.type}</td>
-                  <td className="px-4 py-2 text-neutral-500">{t.reason}</td>
+                  <td className="px-4 py-2 text-xs text-neutral-500">{TX_TYPE_LABEL[t.type] ?? t.type}</td>
+                  <td className="px-4 py-2 text-neutral-500">{TX_REASON_LABEL[t.reason] ?? t.reason}</td>
                   <td className={`px-4 py-2 text-right font-semibold ${t.amount >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
                     {t.amount >= 0 ? "+" : ""}
                     {t.amount}
