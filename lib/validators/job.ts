@@ -17,7 +17,7 @@ const optionalString = z
   .optional()
   .transform((v) => (v === '' || v == null ? null : v))
 
-export const jobCreateSchema = z.object({
+const jobBaseSchema = z.object({
   slug: z
     .string()
     .min(3)
@@ -43,8 +43,29 @@ export const jobCreateSchema = z.object({
   contactPhone: optionalString,
 })
 
-export type JobCreateInput = z.infer<typeof jobCreateSchema>
+// Lương max phải ≥ min (khi cả hai được nhập) — chặn "min 50tr > max 10tr".
+function checkSalaryRange(
+  data: { salaryMin?: number | null; salaryMax?: number | null },
+  ctx: z.RefinementCtx,
+) {
+  if (
+    data.salaryMin != null &&
+    data.salaryMax != null &&
+    data.salaryMin > data.salaryMax
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['salaryMax'],
+      message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
+    })
+  }
+}
 
-export const jobUpdateSchema = jobCreateSchema.partial().extend({
-  id: z.string().min(1),
-})
+export const jobCreateSchema = jobBaseSchema.superRefine(checkSalaryRange)
+
+export type JobCreateInput = z.infer<typeof jobBaseSchema>
+
+export const jobUpdateSchema = jobBaseSchema
+  .partial()
+  .extend({ id: z.string().min(1) })
+  .superRefine(checkSalaryRange)
