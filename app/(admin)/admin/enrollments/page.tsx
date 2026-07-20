@@ -8,6 +8,8 @@ import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
 import { formatDateVN } from "@/lib/format/date";
+import { canViewLeadPii } from "@/lib/auth/permissions";
+import { maskPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("enrollments:view-all"))) redirect("/dashboard");
   const canDelete = await checkPermission("enrollments:delete");
+  const canViewPii = canViewLeadPii(session.user); // che SĐT PH nếu thiếu quyền
 
   // Cách ly cơ sở (FL3-02): Enrollment giờ ∈ SCOPED_MODELS → scopedDb tự inject
   // `Enrollment.centerId IN visibleCenters`. KHÔNG còn scope tay qua class.centerId.
@@ -258,7 +261,9 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                       label: e.status,
                       color: "bg-gray-100 text-gray-500",
                     };
-                  const parentPhone = e.student.parentPhone ?? e.student.phone;
+                  const rawPhone = e.student.parentPhone ?? e.student.phone;
+                  const parentPhone =
+                    rawPhone && !canViewPii ? maskPhone(rawPhone) : rawPhone;
                   return (
                     <tr key={e.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3">

@@ -8,6 +8,8 @@ import { resolveActor } from "@/lib/auth/actor";
 import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { getSetting } from "@/lib/settings/service";
+import { canViewLeadPii } from "@/lib/auth/permissions";
+import { maskPhone } from "@/lib/utils";
 import { StudentStatus, type Prisma } from "@prisma/client";
 import {
   buildLifecycleWhere,
@@ -112,6 +114,9 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   const canUpdate = await checkPermission("students:edit");
   const canDelete = await checkPermission("students:delete");
   const showActions = canUpdate || canDelete;
+  // #11 — che SĐT phụ huynh mặc định (đồng nhất với leads/payments); chỉ role có
+  // quyền xem PII liên hệ (leads:view-pii) mới thấy đầy đủ.
+  const canViewPii = canViewLeadPii(session.user);
 
   // Cách ly cơ sở: Student ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject
   // `centerId IN visibleCenters`. Mọi đọc Student đi qua sdb. SUPER_ADMIN/HO bypass.
@@ -199,6 +204,14 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     ]);
     totalCount = count;
     students = rows as StudentRow[];
+  }
+
+  // Che SĐT phụ huynh ở SERVER cho actor thiếu quyền (chống leak qua RSC payload).
+  if (!canViewPii) {
+    students = students.map((s) => ({
+      ...s,
+      parentPhone: s.parentPhone ? maskPhone(s.parentPhone) : s.parentPhone,
+    }));
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
