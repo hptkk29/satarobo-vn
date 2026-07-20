@@ -4,6 +4,7 @@ import { checkAnyPermission } from '@/lib/auth/check-permission'
 import { PAGE_GATES } from '@/lib/auth/page-gates'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
+import { CONVERTED_STATUSES } from '@/lib/reports/lead'
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Lead mới',
@@ -15,7 +16,8 @@ const STATUS_LABELS: Record<string, string> = {
   TRIAL_ATTENDED: 'Đã học thử',
   AWAITING_DECISION: 'Chờ quyết định',
   DEMO_SCHEDULED: 'Đã hẹn demo',
-  ENROLLED: 'Đã đăng ký',
+  REGISTERED: 'Đã đăng ký',
+  ENROLLED: 'Đã ghi danh',
   NURTURING: 'Đang nuôi',
   LOST: 'Đã mất',
   DUPLICATE: 'Trùng lặp',
@@ -92,7 +94,11 @@ export default async function MarketingPage() {
   const leadsByUtmSource = [...rawUtmSource].sort((a, b) => b._count._all - a._count._all).slice(0, 8)
   const leadsByUtmCampaign = [...rawUtmCampaign].sort((a, b) => b._count._all - a._count._all).slice(0, 8)
 
-  const enrolledCount = leadsByStatus.find(s => s.status === 'ENROLLED')?._count._all ?? 0
+  // Đã chuyển đổi = ENROLLED + REGISTERED (nguồn chung CONVERTED_STATUSES, khớp Báo cáo
+  // Lead 92.2%). Trước đây chỉ đếm ENROLLED → bỏ sót REGISTERED → tỉ lệ 2% sai.
+  const enrolledCount = leadsByStatus
+    .filter((s) => CONVERTED_STATUSES.has(s.status))
+    .reduce((sum, s) => sum + s._count._all, 0)
   const conversionRate = pct(enrolledCount, totalLeads)
 
   return (
@@ -107,8 +113,8 @@ export default async function MarketingPage() {
         {[
           { label: 'Tổng lead', value: totalLeads.toLocaleString('vi-VN'), sub: 'Tất cả thời gian' },
           { label: 'Lead 30 ngày qua', value: recentTrend.toLocaleString('vi-VN'), sub: 'Tháng gần nhất' },
-          { label: 'Đã đăng ký', value: enrolledCount.toLocaleString('vi-VN'), sub: 'Converted' },
-          { label: 'Tỉ lệ chuyển đổi', value: conversionRate, sub: 'Enrolled / Total' },
+          { label: 'Đã chuyển đổi', value: enrolledCount.toLocaleString('vi-VN'), sub: 'Đã đăng ký + ghi danh' },
+          { label: 'Tỉ lệ chuyển đổi', value: conversionRate, sub: 'Đã chuyển đổi / Tổng lead' },
         ].map((card) => (
           <div key={card.label} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-medium text-gray-500">{card.label}</p>
