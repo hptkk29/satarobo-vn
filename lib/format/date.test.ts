@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDateVN, formatDateDMY, formatDateTimeVN } from "./date";
+import { formatDateVN, formatDateDMY, formatDateTimeVN, formatDateOrDash } from "./date";
 
 // Noon-UTC → cùng ngày lịch trên mọi TZ thực tế (UTC-8..UTC+9) nên assert
 // date-only ổn định, không phụ thuộc TZ máy CI.
@@ -23,5 +23,19 @@ describe("format/date", () => {
       d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }),
     );
     expect(formatDateTimeVN(d)).toBe(d.toLocaleString("vi-VN"));
+  });
+
+  it("formatDateOrDash: sentinel (null/rỗng/Invalid/epoch 1970) → '—'", () => {
+    expect(formatDateOrDash(null)).toBe("—");
+    expect(formatDateOrDash(undefined)).toBe("—");
+    expect(formatDateOrDash("")).toBe("—");
+    expect(formatDateOrDash("không-phải-ngày")).toBe("—");
+    expect(formatDateOrDash(0)).toBe("—"); // epoch 0
+    expect(formatDateOrDash(new Date(0))).toBe("—"); // 1970-01-01
+    expect(formatDateOrDash("1970-01-01T00:00:00.000Z")).toBe("—");
+  });
+
+  it("formatDateOrDash: ngày hợp lệ → như formatDateVN", () => {
+    expect(formatDateOrDash(NOON_UTC)).toBe(formatDateVN(NOON_UTC));
   });
 });

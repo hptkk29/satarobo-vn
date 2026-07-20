@@ -25,3 +25,18 @@ export function formatDateDMY(input: DateInput): string {
 export function formatDateTimeVN(input: DateInput): string {
   return new Date(input).toLocaleString("vi-VN");
 }
+
+/**
+ * Ngày cho HIỂN THỊ khi field có thể "không có ngày". Coi các giá trị sentinel là
+ * "—" thay vì in "1/1/1970":
+ *   - null / undefined / chuỗi rỗng
+ *   - Invalid Date (parse thất bại)
+ *   - mốc epoch 1970 (seed cũ set `new Date(0)` thay vì null → getTime()=0)
+ * Không có ngày vào làm / hạn nộp nào hợp lệ rơi vào năm 1970 nên cắt ở đây an toàn.
+ */
+export function formatDateOrDash(input: DateInput | null | undefined): string {
+  if (input == null || input === "") return "—";
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime()) || d.getUTCFullYear() <= 1970) return "—";
+  return formatDateVN(d);
+}

@@ -6,7 +6,7 @@ import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { AssignmentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
-import { formatDateVN } from "@/lib/format/date";
+import { formatDateOrDash } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +19,8 @@ const STATUS_INFO: Record<AssignmentStatus, { label: string; color: string }> = 
 
 const VALID_STATUSES = Object.values(AssignmentStatus);
 
-function fmtDate(d: Date | null) {
-  if (!d) return "—";
-  return formatDateVN(d);
-}
+// Bao cả mốc epoch 1970 (seed cũ) → "—", không chỉ null.
+const fmtDate = formatDateOrDash;
 
 interface SearchParams {
   searchParams: Promise<{
