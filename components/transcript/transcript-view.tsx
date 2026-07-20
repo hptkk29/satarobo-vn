@@ -1,4 +1,7 @@
 import type { StudentTranscript } from "@/lib/transcript/service";
+import type { RoboticsSkill, SkillLevel } from "@prisma/client";
+import { SKILL_LABEL, LEVEL_LABEL } from "@/lib/lms/skills";
+import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 
 // Presentational học bạ (server component, dùng chung portal + admin).
 export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: string }) {
@@ -67,7 +70,9 @@ export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: 
                       : `${c.attendedSessions}/${c.totalSessions} (${c.attendanceRate}%)`}
                   </td>
                   <td className="px-4 py-2 text-center">{c.averageScore ?? "—"}</td>
-                  <td className="px-4 py-2 text-center text-neutral-500">{c.status}</td>
+                  <td className="px-4 py-2 text-center text-neutral-500">
+                    {ENROLLMENT_STATUS.label(c.status)}
+                  </td>
                 </tr>
               ))
             )}
@@ -98,9 +103,10 @@ export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: 
           <ul className="divide-y text-sm">
             {t.skills.map((s, i) => (
               <li key={i} className="flex items-center justify-between px-4 py-2">
-                <span>{s.skill}</span>
+                <span>{SKILL_LABEL[s.skill as RoboticsSkill] ?? s.skill}</span>
                 <span className="text-neutral-500">
-                  {s.level} · {s.assessedAt.toISOString().slice(0, 10)}
+                  {LEVEL_LABEL[s.level as SkillLevel] ?? s.level} ·{" "}
+                  {s.assessedAt.toISOString().slice(0, 10)}
                 </span>
               </li>
             ))}

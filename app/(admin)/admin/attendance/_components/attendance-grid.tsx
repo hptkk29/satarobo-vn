@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, X, Clock, FileText, Save } from "lucide-react";
 import { markAttendance } from "../_actions";
+import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
 type MakeupStatus = "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
@@ -276,7 +277,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                       {r.studentPhone && <span className="font-mono">{r.studentPhone}</span>}
                       {!r.makeupFromCenter && r.enrollmentStatus !== "ACTIVE" && (
                         <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">
-                          {r.enrollmentStatus}
+                          {ENROLLMENT_STATUS.label(r.enrollmentStatus)}
                         </span>
                       )}
                     </div>
