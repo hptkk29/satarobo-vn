@@ -25,10 +25,42 @@ const TITLES = [
   "Tổng kết & trình diễn",
 ];
 
-function atMidday(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(12, 0, 0, 0);
-  return x;
+/**
+ * QA 20/07 (Lỗi 2 + Lỗi A) — bản cũ seed mỗi 3 ngày lúc 12:00 bất chấp lịch lớp
+ * → buổi rơi vào Chủ Nhật + giờ sai (lớp 15:38). Giờ sinh ngày theo ĐÚNG
+ * scheduleDays + startTime của lớp: `pastCount` buổi gần nhất đã qua + phần còn
+ * lại sắp tới, tính từ hôm nay.
+ */
+function sessionDatesAround(
+  scheduleDays: number[],
+  startTime: string,
+  pastCount: number,
+  futureCount: number,
+): Date[] {
+  const days = new Set(scheduleDays);
+  const [hh, mm] = startTime.split(":").map((x) => parseInt(x, 10));
+  const at = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh || 0, mm || 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const past: Date[] = [];
+  const back = new Date(today);
+  back.setDate(back.getDate() - 1);
+  let guard = 0;
+  while (past.length < pastCount && guard++ < 400) {
+    if (days.has(back.getDay())) past.unshift(at(back));
+    back.setDate(back.getDate() - 1);
+  }
+
+  const future: Date[] = [];
+  const fwd = new Date(today);
+  guard = 0;
+  while (future.length < futureCount && guard++ < 400) {
+    if (days.has(fwd.getDay())) future.push(at(fwd));
+    fwd.setDate(fwd.getDate() + 1);
+  }
+  return [...past, ...future];
 }
 
 async function main() {
@@ -37,6 +69,14 @@ async function main() {
     select: { id: true },
   });
   if (students.length === 0) throw new Error("Chưa có học viên test — chạy seed-test-parent trước.");
+
+  const cls = await db.class.findUnique({
+    where: { id: CLASS_ID },
+    select: { scheduleDays: true, startTime: true },
+  });
+  if (!cls) throw new Error("Chưa có lớp test — chạy seed-test-parent trước.");
+  const scheduleDays = cls.scheduleDays.length > 0 ? cls.scheduleDays : [1, 3];
+  const startTime = cls.startTime ?? "18:00";
 
   // 1) Lessons (upsert theo unique curriculumId+order)
   const lessons = [];
@@ -58,13 +98,13 @@ async function main() {
     await db.classSession.deleteMany({ where: { id: { in: oldIds } } });
   }
 
-  // 3) 14 buổi: i=0..6 đã qua (mỗi 3 ngày trước), i=7..13 sắp tới
-  const today = atMidday(new Date());
+  // 3) 14 buổi theo ĐÚNG lịch lớp (scheduleDays + startTime): 7 đã qua + 7 sắp tới
+  const dates = sessionDatesAround(scheduleDays, startTime, 7, 7);
+  const now = Date.now();
   const sessions: { id: string; idx: number; past: boolean }[] = [];
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + (i - 6) * 3); // i=6 ≈ hôm nay
-    const past = d.getTime() < today.getTime();
+  for (let i = 0; i < dates.length; i++) {
+    const d = dates[i];
+    const past = d.getTime() < now;
     const s = await db.classSession.create({
       data: {
         classId: CLASS_ID,

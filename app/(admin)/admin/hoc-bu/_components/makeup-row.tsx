@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarPlus, CheckCircle2, X } from "lucide-react";
+import { CalendarPlus, CheckCircle2, SearchX, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import {
   getMakeupSuggestions,
   scheduleMakeupAction,
@@ -50,12 +51,14 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [suggs, setSuggs] = useState<Sugg[] | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   function loadSuggestions() {
     startTransition(async () => {
       const res = await getMakeupSuggestions(item.id);
+      // QA 20/07 — kết quả rỗng hiển thị INLINE (khối bên dưới), không chỉ toast:
+      // người dùng từng tưởng nút hỏng vì "bấm không thấy gì".
       setSuggs(res);
-      if (res.length === 0) toast.message("Chưa có buổi bù phù hợp (cùng khoá/lesson, không vượt tiến độ).");
     });
   }
 
@@ -73,10 +76,18 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
       else toast.error(res.error ?? "Lỗi");
     });
   }
+  // QA 20/07 — Huỷ là hành động phá huỷ (mất yêu cầu bù, không có undo) → bắt buộc
+  // xác nhận qua dialog thay vì huỷ ngay 1 click.
   function cancel() {
     startTransition(async () => {
-      await cancelMakeupAction(item.id);
+      const res = await cancelMakeupAction(item.id);
+      if (!res.ok) {
+        toast.error(res.error ?? "Không huỷ được yêu cầu bù");
+        setConfirmCancel(false);
+        return;
+      }
       toast.success("Đã huỷ nhu cầu bù");
+      setConfirmCancel(false);
       router.refresh();
     });
   }
@@ -112,10 +123,35 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
               <CheckCircle2 className="h-4 w-4" /> Đánh dấu đã bù
             </button>
           )}
-          <button type="button" onClick={cancel} disabled={pending}
+          <button type="button" onClick={() => setConfirmCancel(true)} disabled={pending}
             className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
             <X className="h-4 w-4" /> Huỷ
           </button>
+          <ConfirmDialog
+            open={confirmCancel}
+            onOpenChange={setConfirmCancel}
+            pending={pending}
+            title={`Huỷ yêu cầu học bù của ${item.studentName}?`}
+            description={
+              <>
+                Yêu cầu bù cho buổi lỡ
+                {item.missedDate ? ` ngày ${formatDateVN(item.missedDate)}` : ""} (lớp{" "}
+                <strong>{item.className}</strong>) sẽ bị huỷ. Không có danh sách đã huỷ
+                và không hoàn tác được — nếu cần bù lại phải tạo yêu cầu mới từ điểm danh.
+              </>
+            }
+            confirmLabel="Huỷ yêu cầu bù"
+            onConfirm={cancel}
+          />
+        </div>
+      )}
+
+      {/* QA 20/07 — trạng thái rỗng inline khi bấm "Gợi ý buổi bù" không có kết quả. */}
+      {suggs && suggs.length === 0 && item.status === "PENDING" && (
+        <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
+          <SearchX className="h-4 w-4 shrink-0" />
+          Chưa tìm được buổi bù phù hợp (cần cùng khoá/bài học, chưa vượt tiến độ, còn
+          chỗ). Thử lại sau khi có lịch buổi mới.
         </div>
       )}
 

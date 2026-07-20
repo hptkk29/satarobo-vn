@@ -1,10 +1,16 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import { deleteHoliday } from "../_actions";
 
+/**
+ * QA 20/07 — bỏ window.confirm (block renderer, không đồng nhất UI)
+ * → ConfirmDialog dùng chung + toast kết quả.
+ */
 export function DeleteHolidayButton({
   id,
   name,
@@ -13,30 +19,43 @@ export function DeleteHolidayButton({
   name: string;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  function handle() {
-    if (!confirm(`Xoá ngày nghỉ "${name}"?`)) return;
+  function handleConfirm() {
     startTransition(async () => {
       const res = await deleteHoliday(id);
       if (res?.error) {
-        alert(res.error);
+        toast.error(res.error);
+        setOpen(false);
         return;
       }
+      toast.success(`Đã xoá ngày nghỉ "${name}"`);
+      setOpen(false);
       router.push("/holidays");
       router.refresh();
     });
   }
 
   return (
-    <button
-      type="button"
-      onClick={handle}
-      disabled={pending}
-      className="inline-flex items-center gap-2 rounded-xl border-2 border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
-    >
-      <Trash2 className="h-4 w-4" />
-      {pending ? "Đang xoá..." : "Xoá"}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-2 rounded-xl border-2 border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
+      >
+        <Trash2 className="h-4 w-4" />
+        Xoá
+      </button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        pending={pending}
+        title={`Xoá ngày nghỉ "${name}"?`}
+        description="Các buổi học đã được dời vì ngày nghỉ này sẽ KHÔNG tự quay lại lịch cũ. Hành động không thể hoàn tác."
+        confirmLabel="Xoá ngày nghỉ"
+        onConfirm={handleConfirm}
+      />
+    </>
   );
 }

@@ -1,70 +1,73 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import { deleteClass } from "../_actions";
 
 /**
- * Fix #7 — nút xoá lớp (dọn dữ liệu test) trên danh sách Lớp học.
- * Xoá mềm (set deletedAt) qua server action `deleteClass` — list đã lọc
- * `deletedAt: null` nên lớp biến mất khỏi danh sách. 2-click confirm theo
- * pattern bảng admin (click 1 → "Xác nhận?", click 2 trong 4s → xoá).
+ * Nút xoá lớp trên danh sách Lớp học. Xoá mềm (set deletedAt) qua server action
+ * `deleteClass` — list đã lọc `deletedAt: null` nên lớp biến mất khỏi danh sách.
+ * QA 20/07 Vấn đề 3: pattern 2-click cũ tự reset nhanh + không nêu hậu quả →
+ * chuyển sang ConfirmDialog kèm số học viên/buổi học của lớp.
  */
 export function ClassDeleteButton({
   classId,
   name,
+  enrollmentCount,
+  sessionCount,
 }: {
   classId: string;
   name: string;
+  enrollmentCount: number;
+  sessionCount: number;
 }) {
   const router = useRouter();
-  const [confirming, setConfirming] = useState(false);
+  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (!confirming) return;
-    const t = setTimeout(() => setConfirming(false), 4000);
-    return () => clearTimeout(t);
-  }, [confirming]);
-
-  function handleClick() {
-    if (!confirming) {
-      setConfirming(true);
-      return;
-    }
+  function handleConfirm() {
     startTransition(async () => {
       const res = await deleteClass(classId);
       if (res?.error) {
         toast.error(res.error);
-        setConfirming(false);
       } else {
-        toast.success("Đã xoá lớp");
-        setConfirming(false);
+        toast.success(`Đã xoá lớp "${name}"`);
         router.refresh();
       }
+      setOpen(false);
     });
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={pending}
-      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
-        confirming
-          ? "bg-red-600 text-white hover:bg-red-700"
-          : "border border-gray-200 text-red-600 hover:bg-red-50"
-      }`}
-      aria-label={confirming ? `Xác nhận xoá ${name}` : `Xoá ${name}`}
-    >
-      {pending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+        aria-label={`Xoá ${name}`}
+      >
         <Trash2 className="h-3.5 w-3.5" />
-      )}
-      {confirming ? "Xác nhận?" : "Xoá"}
-    </button>
+        Xoá
+      </button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        pending={pending}
+        title={`Xoá lớp "${name}"?`}
+        description={
+          <>
+            Lớp này có <strong>{enrollmentCount} học viên đang học</strong> và{" "}
+            <strong>{sessionCount} buổi học</strong>. Lớp sẽ bị ẩn khỏi danh sách
+            (xoá mềm) — điểm danh, buổi học và ghi danh vẫn được giữ nhưng không
+            còn truy cập từ giao diện.
+          </>
+        }
+        confirmLabel="Xoá lớp"
+        onConfirm={handleConfirm}
+      />
+    </>
   );
 }

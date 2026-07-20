@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { toast } from "sonner";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 import { createCenter, updateCenter } from "../_actions";
 
@@ -41,7 +42,13 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
     const res = isEdit
       ? await updateCenter(center!.id, formData)
       : await createCenter(formData);
-    if (res?.error) setError(res.error);
+    if (res?.error) {
+      setError(res.error);
+      return;
+    }
+    // QA 20/07 — toast thành công thay vì redirect âm thầm.
+    toast.success(isEdit ? "Đã cập nhật cơ sở" : "Đã tạo cơ sở mới");
+    router.push("/centers");
   }
 
   return (

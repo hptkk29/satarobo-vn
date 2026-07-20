@@ -136,12 +136,16 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
     setState((prev) => {
       const next: Record<string, RowState> = {};
       for (const [id, r] of Object.entries(prev)) {
+        const changed = r.status !== "PRESENT";
+        // QA 20/07 — dòng bị ĐỔI sang Có mặt thì xoá luôn ghi chú/lý do vắng cũ
+        // (tránh dữ liệu mâu thuẫn kiểu "Có mặt" + note "đi muộn 10 phút").
+        // Dòng vốn đã Có mặt giữ nguyên note.
         next[id] = {
           status: "PRESENT",
-          note: r.note,
-          makeupStatus: r.makeupStatus,
-          absenceReason: r.absenceReason,
-          dirty: r.status !== "PRESENT" || r.dirty,
+          note: changed ? "" : r.note,
+          makeupStatus: changed ? "NONE" : r.makeupStatus,
+          absenceReason: changed ? "" : r.absenceReason,
+          dirty: changed || r.dirty,
         };
       }
       return next;

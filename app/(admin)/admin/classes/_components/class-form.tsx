@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { createClass, updateClass } from "../_actions";
 import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
 import { filterTeachersByCenter } from "@/lib/teachers/center-filter";
@@ -172,8 +173,8 @@ export function ClassForm({
   }
 
   // Dùng onSubmit + preventDefault thay cho <form action> để React 19 KHÔNG tự
-  // reset các field khi submit lỗi validation (#7 Đợt 4). Server action vẫn
-  // redirect() khi thành công.
+  // reset các field khi submit lỗi validation (#7 Đợt 4). Thành công → toast +
+  // client điều hướng (QA 20/07 Vấn đề 4 — trước đây redirect âm thầm).
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -185,11 +186,13 @@ export function ClassForm({
     const res = isEdit
       ? await updateClass(cls!.id, formData)
       : await createClass(formData);
-    // Thành công → server action redirect (không tới đây). Lỗi → giữ nguyên form.
     if (res?.error) {
       setError(res.error);
       setPending(false);
+      return;
     }
+    toast.success(isEdit ? "Đã cập nhật lớp học" : "Đã tạo lớp học mới");
+    router.push("/classes");
   }
 
   function toggleDay(d: number, checked: boolean) {
@@ -423,6 +426,7 @@ export function ClassForm({
                         checked={checked}
                         disabled={!canEdit}
                         onChange={(e) => toggleDay(opt.value, e.target.checked)}
+                        aria-label={`Lịch học ${opt.label}`}
                         className="rounded border-neutral-300 text-[#7C3AED] focus:ring-[#7C3AED]"
                       />
                       {opt.label}

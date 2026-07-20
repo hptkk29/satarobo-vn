@@ -54,6 +54,14 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
     ...(Object.keys(classWhere).length > 0 ? { class: classWhere } : {}),
   };
 
+  // QA 20/07 Vấn đề C — URL hiện tại (kèm bộ lọc) để form Sửa quay về đúng ngữ cảnh.
+  const returnParams = new URLSearchParams();
+  if (scope !== "upcoming") returnParams.set("scope", scope);
+  if (classFilter) returnParams.set("classId", classFilter);
+  const returnTo = returnParams.toString()
+    ? `/sessions?${returnParams.toString()}`
+    : "/sessions";
+
   const sdb = scopedDb(actor);
   const [sessions, classes, holidays] = await Promise.all([
     sdb.classSession.findMany({
@@ -161,6 +169,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
               sessions.map((s) => (
                 <SessionListRow
                   key={s.id}
+                  returnTo={returnTo}
                   session={{
                     id: s.id,
                     date: s.date,

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { toast } from "sonner";
 import { createHoliday, updateHoliday } from "../_actions";
 import { TYPE_LABELS, toDateInput } from "./helpers";
 
@@ -45,7 +46,13 @@ export function HolidayForm({
     const res = isEdit
       ? await updateHoliday(holiday!.id, formData)
       : await createHoliday(formData);
-    if (res?.error) setError(res.error);
+    if (res?.error) {
+      setError(res.error);
+      return;
+    }
+    // QA 20/07 — toast thành công thay vì redirect âm thầm.
+    toast.success(isEdit ? "Đã cập nhật ngày nghỉ" : "Đã tạo ngày nghỉ mới");
+    router.push("/holidays");
   }
 
   return (

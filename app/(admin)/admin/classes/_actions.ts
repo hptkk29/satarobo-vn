@@ -379,7 +379,9 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   }
 
   revalidatePath("/classes");
-  redirect("/classes");
+  // Thành công → trả {} để client toast + điều hướng (QA 20/07 Vấn đề 4 — không
+  // redirect server-side âm thầm nữa).
+  return {};
 }
 
 export async function updateClass(
@@ -454,7 +456,7 @@ export async function updateClass(
 
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}/edit`);
-  redirect("/classes");
+  return {};
 }
 
 export async function deleteClass(id: string): Promise<ActionResult> {
