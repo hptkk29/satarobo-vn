@@ -105,7 +105,12 @@ export function ReportCardEditor(props: {
         </span>
         {props.publishedAt ? (
           <span className="text-xs text-neutral-400">
-            Phát hành: {new Date(props.publishedAt).toLocaleString("vi-VN")}
+            {/* Ghim timeZone VN: client component SSR trên server (UTC) rồi hydrate ở
+                trình duyệt (+7) — không ghim sẽ lệch HTML → lỗi hydration (trang trắng). */}
+            Phát hành:{" "}
+            {new Date(props.publishedAt).toLocaleString("vi-VN", {
+              timeZone: "Asia/Ho_Chi_Minh",
+            })}
           </span>
         ) : null}
       </div>
