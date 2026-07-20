@@ -70,7 +70,7 @@ Hệ thống có **HAI sổ nợ độc lập, không đối soát được**:
 | `confirmPayment` (kế toán ✓) | ✅ ok → Receipt `RCP-CS2-26-0001` (ACTIVE) |
 | `computeEnrollmentDebt` | **0** ✅ (giảm về 0 sau confirm đủ 6M) |
 
-> ⚠️ Test tạo record DEV có tiền tố `ZZTEST_FIN01_*` (lead/order/payment/enrollment/student + Receipt `RCP-CS2-26-0001`). Đây là record kiểm thử, dọn khi cần (xoá theo thứ tự Receipt→Payment→Enrollment→Student→Order→Lead để không phạm FK / sổ tiền).
+> ✅ Record test `ZZTEST_FIN01_*` **đã dọn sạch** ngay sau verify (lead/order/payment/enrollment/student + parent User + Receipt `RCP-CS2-26-0001` + 3 AuditLog + 3 DomainEvent + 1 LeadActivity) — xoá children→parents đúng thứ tự FK, DEV về 0 record. (Số Receipt `RCP-CS2-26-0001` có thể đã bị tiêu 1 lần nếu mã sinh từ counter; nếu mã sinh từ `count(*)` thì không để lại khoảng trống.)
 
 ## 5. Rủi ro
 - Thay đổi **sổ tiền** — sai split/confirm làm lệch công nợ nặng hơn. Bắt buộc test kỹ + rollout sau khi kế toán đối soát 1 kỳ.
