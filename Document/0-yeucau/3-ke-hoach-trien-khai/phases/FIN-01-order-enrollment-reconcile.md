@@ -58,7 +58,7 @@ Hệ thống có **HAI sổ nợ độc lập, không đối soát được**:
 - [x] Nút ✓ trên `/payments` chỉ hiện cho khoản có thể confirm (enrollmentId set); khoản chưa convert không hiện (thay bằng "Chờ convert"). **Done** commit `aee2c65` (gate `accountantStatus==="PENDING" && enrollmentId`).
 - [x] Happy-path: convert→link→confirm→Receipt→cong-no giảm. **Verified E2E 20/07**: Receipt `RCP-CS2-26-0001` ACTIVE sinh ra, debt về 0.
 - [ ] Idempotent: re-convert / double mark không sinh Receipt trùng, không link đôi. *(chưa test lại — chỉ chạy 1 convert theo phê duyệt)*
-- [ ] Đơn nhiều-enrollment: tổng khoản link = tổng finalPrice (không lệch tiền). *(CHƯA làm — Q1 chờ chốt, hiện chỉ link khi 1:1)*
+- [x] Đơn nhiều-enrollment: tổng khoản link = tổng finalPrice (không lệch tiền). **DONE 20/07 (Q1=A)** — `allocateByWeight` chia theo finalPrice (bất biến tổng), `linkRecordedPaymentsToEnrollments` tạo Payment con per-Enrollment. e2e `[FIN-01-Q1A]`: 9M chia 6M+3M → confirm → 2 Receipt + nợ=0 (r7 16/16 xanh). commit `65eaa60`.
 - [ ] Test: Vitest cho hàm link/split (thuần) + e2e convert→confirm→cong-no giảm tự động hoá trong CI. *(mới verify bằng script tay, chưa đưa vào suite)*
 
 ### Verify log 20/07 (script DEV, 1 convert được phê duyệt)

@@ -1,5 +1,12 @@
 # FIN-01 — 2 quyết định nghiệp vụ cần chốt (đơn giản, chọn A/B/C rồi báo)
 
+> ## ✅ ĐÃ CHỐT 20/07
+> - **Q1 = A — ĐÃ LÀM** (commit `65eaa60`): chia tiền theo `finalPrice` từng ghi danh (`allocateByWeight` bất biến tổng), Payment con + Receipt riêng per-Enrollment. e2e `[FIN-01-Q1A]` xanh.
+> - **Q2 = KHÔNG auto-confirm mù** → tách thành **[[FIN-02-doi-soat-ngan-hang]]**: trang Đối soát ngân hàng + auto-match + **người có quyền bấm ✓** (đúng số tiền + đúng người gửi). Hiện tại bước ✓ đã có ở `/admin/payments` (thủ công). **CHẶN: chốt nguồn dữ liệu bank** (Casso/SePay / import sao kê / MISA / thủ công) — xem FIN-02 §2.
+> - **Q3 = để sau** — khi làm tính năng **đăng ký tài khoản**: bắt buộc đăng ký + nhập đủ thông tin mới cho mua/thuê thiết bị; lưu hồ sơ nếu mua/thuê. Chưa build giờ.
+> - **Q4 = ĐÃ LÀM** — đổi nhãn `Đã xác nhận TT` → **`Đã xác nhận đơn`** (commit `cbea86f`).
+
+
 > Đọc mục **Bối cảnh** trước, rồi ở mỗi quyết định chỉ cần điền dòng **➡️ CHỐT: ___**.
 > Nền tảng: xem [[FIN-01-order-enrollment-reconcile]]. Trạng thái hiện tại đã verify E2E: convert **1 học viên/1 đơn** → tiền vào ghi danh → kế toán confirm → Receipt → công nợ giảm. ✅
 
