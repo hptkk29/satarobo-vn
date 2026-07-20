@@ -3,7 +3,7 @@ import type { Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
+import { ensureOrderPaymentRecorded, confirmPayment } from "@/lib/finance/payment";
 import { formatVndPlain } from "@/lib/format/money";
 
 // =============================================================================
@@ -125,6 +125,7 @@ export async function markInstallmentPaid(installmentId: string, actorId: string
     select: { centerId: true, leadId: true, installmentApprovalStatus: true },
   });
 
+  let autoPaymentId: string | null = null;
   await db.$transaction(async (tx) => {
     await tx.orderInstallment.update({ where: { id: installmentId }, data: { status: "PAID", paidAt: new Date(), recordedById: actorId } });
     // C4 — đợt 2 chỉ ghi Payment khi kế hoạch ĐÃ DUYỆT (APPROVED) hoặc không cần duyệt (null).
@@ -132,7 +133,7 @@ export async function markInstallmentPaid(installmentId: string, actorId: string
     const approvalOk =
       order?.installmentApprovalStatus == null || order.installmentApprovalStatus === "APPROVED";
     if (approvalOk) {
-      await ensureOrderPaymentRecorded(tx, {
+      const rec = await ensureOrderPaymentRecorded(tx, {
         orderId: inst.orderId,
         soDot: inst.soDot,
         amount: inst.amount,
@@ -140,9 +141,20 @@ export async function markInstallmentPaid(installmentId: string, actorId: string
         centerId: order?.centerId ?? null,
         actor: { id: actorId },
       });
+      if (rec.ok) autoPaymentId = rec.paymentId;
     }
   });
   await recomputeOrder(inst.orderId);
+  // "Hợp nhất" (chốt: mark-PAID → Payment CONFIRMED): người bấm "đã đóng" có quyền
+  // orders:manage (kế toán) nên XÁC NHẬN LUÔN khoản vừa ghi qua confirmPayment chuẩn
+  // (CONFIRMED + Receipt + audit + event; idempotent). → công nợ theo Payment CONFIRMED
+  // giảm ngay, khớp trạng thái đợt (hết "đã đóng nhưng chưa trừ nợ"). Best-effort: confirm
+  // lỗi thì khoản vẫn PENDING để kế toán duyệt tay, KHÔNG rollback trạng thái đợt.
+  // ⚠️ Nợ THEO GHI DANH (getDebtRows) không đổi ở đây: khoản auto gắn orderId, KHÔNG
+  // enrollmentId, và Order chưa link Enrollment — reconcile tầng ghi danh cần ticket riêng.
+  if (autoPaymentId && actorId) {
+    await confirmPayment({ paymentId: autoPaymentId, confirmedById: actorId });
+  }
   return { ok: true };
 }
 
