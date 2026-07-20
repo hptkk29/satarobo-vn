@@ -5,7 +5,7 @@ import { Filter, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import type { AuditFilters } from "../_actions";
+import type { AuditFilters } from "../_types";
 
 type Actor = { id: string; name: string | null; email: string };
 

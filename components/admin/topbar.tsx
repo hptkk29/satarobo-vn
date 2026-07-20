@@ -37,17 +37,19 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-6">
-      {/* Search bar */}
-      <div className="hidden md:flex flex-1 max-w-md">
+      {/* Search bar — Enter → trang kết quả /search?q= (tìm gộp lead/học viên/tin tức). */}
+      <form action="/search" method="GET" className="hidden md:flex flex-1 max-w-md">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
           <input
             type="search"
+            name="q"
             placeholder="Tìm leads, học viên, blog..."
+            aria-label="Tìm leads, học viên, tin tức"
             className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-neutral-200 bg-neutral-50 focus:bg-white focus:border-orange-300 focus:outline-none transition-colors"
           />
         </div>
-      </div>
+      </form>
 
       <div className="flex items-center gap-2">
         {/* Module nhắc việc — chuông thông báo việc cần xử lý */}

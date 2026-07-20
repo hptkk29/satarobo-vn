@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuditLogDetailModal } from "./audit-log-detail-modal";
-import type { UnifiedAuditRow } from "../_actions";
+import type { UnifiedAuditRow } from "../_types";
 
 interface Props {
   items: UnifiedAuditRow[];

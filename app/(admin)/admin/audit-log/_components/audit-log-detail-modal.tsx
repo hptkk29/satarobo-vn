@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Lock, Unlock } from "lucide-react";
-import type { UnifiedAuditRow } from "../_actions";
+import type { UnifiedAuditRow } from "../_types";
 
 interface Props {
   open: boolean;

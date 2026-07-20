@@ -8,11 +8,8 @@ import { AuditLogTable } from "./audit-log-table";
 import { ExportButton } from "./export-button";
 import { CleanupButton } from "./cleanup-button";
 import { BreakGlassButton } from "./break-glass-button";
-import {
-  queryAuditLogs,
-  type AuditFilters,
-  type UnifiedAuditRow,
-} from "../_actions";
+import { queryAuditLogs } from "../_actions";
+import type { AuditFilters, UnifiedAuditRow } from "../_types";
 
 type Actor = { id: string; name: string | null; email: string };
 
