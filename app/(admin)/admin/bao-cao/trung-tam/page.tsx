@@ -18,6 +18,13 @@ import {
   type EnrollmentRecord,
   type RatingRecord,
 } from "@/lib/reports/trung-tam";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 
 export const metadata = { title: "Báo cáo trung tâm | Admin" };
 export const dynamic = "force-dynamic";
@@ -53,7 +60,11 @@ function Stat({
   );
 }
 
-export default async function CenterReportPage() {
+export default async function CenterReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: báo cáo tài chính trung tâm → quản lý tài chính (Admin + quản lý cơ sở + Kế toán).
@@ -62,12 +73,14 @@ export default async function CenterReportPage() {
   }
 
   const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
 
-  // REQ-05: cache số liệu (finance/trend/byCenter/satisfaction/retention) theo scope.
+  // REQ-05: cache số liệu (finance/trend/byCenter/satisfaction/retention) theo scope + bộ lọc.
   // TTL 120s. Tất cả PRIMITIVE nên serialize an toàn.
   const { finance, trend, byCenter, satisfaction, retention } = await safeCache(
-    () => computeTrungTamReport(actor),
-    ["trung-tam-report", actorScopeKey(actor)],
+    () => computeTrungTamReport(actor, fc.filters),
+    ["trung-tam-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
     { tags: [CACHE_TAGS.report], revalidate: 120 },
   )();
 
@@ -97,6 +110,15 @@ export default async function CenterReportPage() {
           Tài chính (doanh thu xác nhận, công nợ), mức độ hài lòng và tỷ lệ tái tục — theo phạm vi cơ sở của bạn.
         </p>
       </div>
+
+      <ReportFilterBar
+        basePath="/bao-cao/trung-tam"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
 
       {/* Tài chính */}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -231,12 +253,19 @@ export default async function CenterReportPage() {
 }
 
 // REQ-05: tính số liệu báo cáo trung tâm (fetch scoped + reduce thuần → PRIMITIVE).
-async function computeTrungTamReport(actor: Actor) {
+async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
   const sdb = scopedDb(actor); // Payment + Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass).
   const bypass = actor.isSuperAdmin || actor.isHoLevel;
+  // Bộ lọc cơ sở (IDOR-safe từ resolveReportFilters) + khoảng ngày. null → no-op (giữ hành vi cũ).
+  // Ngày lọc theo paidDate — chính là trục "doanh thu theo tháng" (revenueByMonth gom theo paidDate).
+  const dateWhere = reportDateWhere(filters);
 
   // 1. Khoản thanh toán trong phạm vi cơ sở (Payment ∈ SCOPED_MODELS → auto-scope).
   const paymentRows = await sdb.payment.findMany({
+    where: {
+      ...(filters.centerId ? { centerId: filters.centerId } : {}),
+      ...(dateWhere ? { paidDate: dateWhere } : {}),
+    },
     select: { centerId: true, amount: true, accountantStatus: true, paidDate: true },
     take: 5000,
   });
@@ -250,7 +279,10 @@ async function computeTrungTamReport(actor: Actor) {
   // 2. Lớp trong phạm vi → map classId→centerId. Enrollment KHÔNG có centerId nên
   // lọc thủ công theo classIds đã scope (AC5: Enrollment không nằm trong SCOPED_MODELS).
   const classRows = await sdb.class.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(filters.centerId ? { centerId: filters.centerId } : {}),
+    },
     select: { id: true, centerId: true },
     take: 2000,
   });
@@ -258,7 +290,10 @@ async function computeTrungTamReport(actor: Actor) {
   const classIds = classRows.map((c) => c.id);
   const enrollmentRows = classIds.length
     ? await sdb.enrollment.findMany({
-        where: { classId: { in: classIds } },
+        where: {
+          classId: { in: classIds },
+          ...(dateWhere ? { enrolledAt: dateWhere } : {}),
+        },
         select: { studentId: true, classId: true, finalPrice: true, tuition: true, enrolledAt: true },
         take: 10000,
       })

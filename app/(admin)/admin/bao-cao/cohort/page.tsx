@@ -7,6 +7,13 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { CACHE_TAGS } from "@/lib/cache/tags";
 import { actorScopeKey } from "@/lib/cache/scope-key";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
 import {
@@ -30,14 +37,20 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 // REQ-05: tính báo cáo cohort (fetch scoped + reduce thuần → object PRIMITIVE).
-async function computeCohortReport(actor: Actor) {
+// filters: cơ sở (class.centerId) + khoảng ngày trên MỐC BẮT ĐẦU cohort
+// (startedAt ?? enrolledAt). Bộ lọc null → giữ nguyên hành vi cũ.
+async function computeCohortReport(actor: Actor, filters: ReportFilters) {
   // Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass). ClassSession/Enrollment
   // đi qua sdb pass-through nhưng LỌC THỦ CÔNG theo classIds đã scope (AC5).
   const sdb = scopedDb(actor);
+  const dateWhere = reportDateWhere(filters);
 
-  // 1. Lớp trong phạm vi cơ sở.
+  // 1. Lớp trong phạm vi cơ sở (thu hẹp thêm theo cơ sở đã chọn — đã validate IDOR).
   const classRows = await sdb.class.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(filters.centerId ? { centerId: filters.centerId } : {}),
+    },
     take: 1000,
     select: { id: true },
   });
@@ -59,10 +72,22 @@ async function computeCohortReport(actor: Actor) {
     classProgress.set(s.classId, cur);
   }
 
-  // 3. Ghi danh — nhóm theo kỳ bắt đầu (startedAt ?? enrolledAt).
+  // 3. Ghi danh — nhóm theo kỳ bắt đầu (startedAt ?? enrolledAt). Lọc ngày theo cùng
+  // mốc bắt đầu: startedAt trong khoảng, hoặc (startedAt null → dùng enrolledAt).
   const enrollmentRows = classIds.length
     ? await sdb.enrollment.findMany({
-        where: { classId: { in: classIds }, deletedAt: null },
+        where: {
+          classId: { in: classIds },
+          deletedAt: null,
+          ...(dateWhere
+            ? {
+                OR: [
+                  { startedAt: dateWhere },
+                  { startedAt: null, enrolledAt: dateWhere },
+                ],
+              }
+            : {}),
+        },
         select: { classId: true, status: true, enrolledAt: true, startedAt: true },
         take: 50_000,
       })
@@ -81,7 +106,11 @@ async function computeCohortReport(actor: Actor) {
   return buildCohortReport(records);
 }
 
-export default async function CohortReportPage() {
+type SearchParams = {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+};
+
+export default async function CohortReportPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
@@ -90,11 +119,13 @@ export default async function CohortReportPage() {
   }
 
   const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
 
-  // REQ-05: cache cross-request keyed THEO SCOPE (không leak giữa cơ sở). TTL 120s.
+  // REQ-05: cache cross-request keyed THEO SCOPE + BỘ LỌC (không leak giữa cơ sở). TTL 120s.
   const report = await safeCache(
-    () => computeCohortReport(actor),
-    ["cohort-report", actorScopeKey(actor)],
+    () => computeCohortReport(actor, fc.filters),
+    ["cohort-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
     { tags: [CACHE_TAGS.report], revalidate: 120 },
   )();
 
@@ -117,6 +148,15 @@ export default async function CohortReportPage() {
           Nhóm ghi danh theo kỳ bắt đầu — tiến độ trung bình và tỷ lệ hoàn thành / đang học / rút, theo phạm vi cơ sở của bạn.
         </p>
       </div>
+
+      <ReportFilterBar
+        basePath="/bao-cao/cohort"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
 
       {report.totalEnrollments === 0 ? (
         <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">

@@ -22,6 +22,13 @@ import type {
   MakeupStatusValue,
   SessionStatusValue,
 } from "@/lib/labels";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 
 export const metadata = { title: "Báo cáo hiệu suất GV | Admin" };
 export const dynamic = "force-dynamic";
@@ -37,7 +44,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default async function TeacherPerformanceReportPage() {
+export default async function TeacherPerformanceReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
@@ -46,11 +57,13 @@ export default async function TeacherPerformanceReportPage() {
   }
 
   const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
 
-  // REQ-05: cache phần nặng (nhiều query + reduce) theo scope. TTL 120s. Output primitive.
+  // REQ-05: cache phần nặng (nhiều query + reduce) theo scope + bộ lọc. TTL 120s. Output primitive.
   const report = await safeCache(
-    () => computeTeacherPerformanceReport(actor),
-    ["teacher-performance-report", actorScopeKey(actor)],
+    () => computeTeacherPerformanceReport(actor, fc.filters),
+    ["teacher-performance-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
     { tags: [CACHE_TAGS.report], revalidate: 120 },
   )();
 
@@ -67,6 +80,15 @@ export default async function TeacherPerformanceReportPage() {
           Số buổi đã dạy, chuyên cần lớp phụ trách, số học viên và điểm học bạ trung bình — theo phạm vi cơ sở của bạn.
         </p>
       </div>
+
+      <ReportFilterBar
+        basePath="/bao-cao/hieu-suat-gv"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
 
       <Card title="Số buổi đã dạy theo giáo viên">
         {chartData.length > 0 ? (
@@ -129,15 +151,21 @@ export default async function TeacherPerformanceReportPage() {
 }
 
 // REQ-05: tính báo cáo hiệu suất GV (fetch scoped + reduce thuần → object PRIMITIVE).
-async function computeTeacherPerformanceReport(actor: Actor) {
+async function computeTeacherPerformanceReport(actor: Actor, filters: ReportFilters) {
   // Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass). Các model KHÔNG scoped
   // (ClassSession/Attendance/ReportCard*) đi qua sdb pass-through nhưng LỌC THỦ CÔNG
   // theo classIds/enrollmentIds đã scope → giữ cách ly cơ sở (AC5).
   const sdb = scopedDb(actor);
+  // Bộ lọc cơ sở (IDOR-safe) áp vào Class (→ lan xuống buổi/điểm danh/ghi danh qua classIds);
+  // ngày áp vào ClassSession.date (trục "số buổi đã dạy"/chuyên cần). null → no-op (giữ hành vi cũ).
+  const dateWhere = reportDateWhere(filters);
 
   // 1. Lớp trong phạm vi cơ sở + GV phụ trách.
   const classRows = await sdb.class.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(filters.centerId ? { centerId: filters.centerId } : {}),
+    },
     take: 500,
     select: { id: true, teacherId: true },
   });
@@ -147,17 +175,25 @@ async function computeTeacherPerformanceReport(actor: Actor) {
 
   // QRY-16: 3 query dưới CHỈ phụ thuộc classIds → chạy song song (thay 3 await tuần tự).
   const [sessionRows, attendanceRows, enrollmentRows] = await Promise.all([
-    // 2. Buổi học của các lớp này (ClassSession không scoped → lọc theo classIds).
+    // 2. Buổi học của các lớp này (ClassSession không scoped → lọc theo classIds + ngày buổi).
     classIds.length
       ? sdb.classSession.findMany({
-          where: { classId: { in: classIds } },
+          where: {
+            classId: { in: classIds },
+            ...(dateWhere ? { date: dateWhere } : {}),
+          },
           select: { classId: true, status: true, actualTeacherId: true },
         })
       : Promise.resolve([]),
-    // 3. Điểm danh các buổi của những lớp này.
+    // 3. Điểm danh các buổi của những lớp này (lọc theo ngày buổi qua quan hệ session).
     classIds.length
       ? sdb.attendance.findMany({
-          where: { session: { classId: { in: classIds } } },
+          where: {
+            session: {
+              classId: { in: classIds },
+              ...(dateWhere ? { date: dateWhere } : {}),
+            },
+          },
           select: {
             status: true,
             makeupStatus: true,
