@@ -155,7 +155,11 @@ export default async function ChurnReportPage() {
                   <td className="px-3 py-2">{m.period}</td>
                   <td className="px-3 py-2 text-right">{num(m.activeAtStart)}</td>
                   <td className="px-3 py-2 text-right">{num(m.withdrew)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(m.churnRate)}</td>
+                  {/* Không có ai "đang học đầu kỳ" → tỉ lệ không xác định, hiện "—"
+                      thay vì "0.0%" (chia cho 0) gây hiểu nhầm là không có ai rời. */}
+                  <td className="px-3 py-2 text-right font-medium">
+                    {m.activeAtStart > 0 ? pct(m.churnRate) : "—"}
+                  </td>
                 </tr>
               ))}
               {report.byMonth.length === 0 ? (
