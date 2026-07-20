@@ -157,6 +157,15 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
                       <Archive className="h-3.5 w-3.5" /> Lưu trữ
                     </button>
                   )}
+                  {f.status === "ARCHIVED" && (
+                    <button
+                      type="button"
+                      onClick={() => act(() => setFormStatusAction(f.id, "DRAFT"), "Đã kích hoạt lại")}
+                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Kích hoạt lại
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => act(() => cloneFormAction(f.id), "Đã nhân bản")}

@@ -21,6 +21,7 @@ import {
 } from "@/lib/students/lifecycle";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Học viên | Admin" };
 
 const STATUS_INFO: Record<StudentStatus, { label: string; color: string }> = {
   ACTIVE: { label: "Đang học", color: "bg-green-100 text-green-700" },

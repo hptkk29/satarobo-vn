@@ -10,6 +10,7 @@ import { AttendanceGrid } from "./_components/attendance-grid";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Điểm danh | Admin" };
 
 interface SearchParams {
   searchParams: Promise<{ sessionId?: string; classId?: string }>;

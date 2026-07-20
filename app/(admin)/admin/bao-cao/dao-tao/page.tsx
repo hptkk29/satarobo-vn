@@ -125,9 +125,9 @@ export default async function TrainingReportPage({ searchParams }: SearchParams)
           tone={report.homeworkCompletionRate >= 80 ? "good" : "warn"}
         />
         <Stat
-          label="Buổi thiếu đề thi/bài tập"
+          label="Bài giảng thiếu đề thi"
           value={`${report.lessonsMissingExam}`}
-          hint={`trên ${report.lessonsTotal} bài giảng`}
+          hint={`trên ${report.lessonsTotal} bài giảng · toàn chương trình (không lọc theo cơ sở)`}
           tone={report.lessonsMissingExam > 0 ? "bad" : "good"}
         />
         <Stat

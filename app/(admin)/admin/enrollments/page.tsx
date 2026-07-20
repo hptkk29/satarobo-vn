@@ -12,6 +12,7 @@ import { canViewLeadPii } from "@/lib/auth/permissions";
 import { maskPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Đăng ký học | Admin" };
 
 const STATUS_INFO: Record<EnrollmentStatus, { label: string; color: string }> = {
   PENDING: { label: "Chờ xếp", color: "bg-gray-100 text-gray-700" },
