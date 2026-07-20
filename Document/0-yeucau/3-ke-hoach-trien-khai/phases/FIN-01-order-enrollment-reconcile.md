@@ -1,7 +1,15 @@
 # FIN-01 — Link Order ↔ Enrollment lúc convert (reconcile công nợ)
 
-> Trạng thái: **BACKLOG** (chưa làm) · Ưu tiên: **P0 tiền** · Loại: schema + luồng convert + kế toán
+> Trạng thái: **MVP ĐÃ LÀM (link-only, 1 ghi danh)** · Còn: multi-enrollment split + quyết định auto-confirm · Ưu tiên: **P0 tiền**
 > Bối cảnh phát hiện: test tay admin 20/07 (batch FixAdminSite). Xem [[project_admin_bug_batch_2007]].
+
+## ✅ ĐÃ LÀM (MVP — commit trên FixAdminSite)
+`convert-lead-v2.ts`: sau khi tạo Enrollment, **nếu ĐÚNG 1 ghi danh** → `updateMany` gắn `enrollmentId` cho các Payment `RECORDED` của đơn (theo `order.leadId`, chưa gắn). Nhờ đó `confirmPayment` chạy được → **kế toán bấm ✓ trên /payments → Receipt + `getDebtRows` giảm nợ**. Quyết định mặc định (chờ xác nhận):
+- **Q1 split:** chỉ tự gắn khi 1 ghi danh (1:1); **nhiều ghi danh → CHƯA gắn** (kế toán gắn tay) — tránh chia tiền sai.
+- **Q2:** **link-only, KHÔNG auto-confirm** — giữ tách vai (người convert thường ≠ kế toán). Kế toán confirm sau.
+- **Q3 kit/sản phẩm:** không đụng. **Q4 nhãn "Đã xác nhận TT":** giữ nguyên.
+
+### Còn phải làm (chờ chốt nghiệp vụ 4 câu dưới)
 
 ## 1. Vấn đề
 

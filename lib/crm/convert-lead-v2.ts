@@ -228,6 +228,24 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       }
     }
 
+    // FIN-01 (MVP link-only) — mắt xích còn thiếu: sau khi tạo Enrollment, GẮN các khoản
+    // RECORDED của đơn (theo leadId, chưa gắn ghi danh) vào ghi danh vừa tạo. Nhờ đó
+    // confirmPayment chạy được (đòi enrollmentId để sinh Receipt) → kế toán xác nhận →
+    // getDebtRows phản ánh. CHỈ tự gắn khi ĐÚNG 1 ghi danh (1:1 rõ ràng); nhiều ghi danh
+    // → split chưa chốt nghiệp vụ (xem FIN-01), để kế toán gắn tay. KHÔNG auto-confirm ở
+    // đây (giữ tách vai kế toán — người convert thường không phải kế toán).
+    if (enrollmentIds.length === 1) {
+      await tx.payment.updateMany({
+        where: {
+          saleStatus: "RECORDED",
+          enrollmentId: null,
+          deletedAt: null,
+          order: { leadId: lead.id },
+        },
+        data: { enrollmentId: enrollmentIds[0]! },
+      });
+    }
+
     await writeAudit({
       actor,
       module: "enrollment",
