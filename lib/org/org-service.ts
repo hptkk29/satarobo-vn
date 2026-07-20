@@ -214,7 +214,7 @@ export async function getSelectableOrgUnits(
     where: opts.includeDeleted ? {} : { deletedAt: null },
   });
   const nodes = rows.map((o) => ({ ...toNode(o), name: o.name }));
-  return selectableOrgUnits(
+  const selectable = selectableOrgUnits(
     nodes,
     {
       isSuperAdmin: actor.isSuperAdmin,
@@ -223,6 +223,24 @@ export async function getSelectableOrgUnits(
       roleOrgUnitIds: actor.orgRoles.map((r) => r.orgUnitId),
     },
     opts,
+  );
+
+  // Chuẩn hoá TÊN HIỂN THỊ: đơn vị CENTER dùng Center.name (vd "Trụ sở chính - Nguyễn
+  // Hữu Thọ") thay OrgUnit.name generic ("Cơ sở 1") → đồng nhất với các màn list/filter
+  // (vốn đọc từ bảng Center). Giá trị submit vẫn là orgUnitId; HO/ROOT giữ nguyên tên.
+  const centerIds = selectable
+    .map((s) => s.centerId)
+    .filter((id): id is string => id != null);
+  if (centerIds.length === 0) return selectable;
+  const centers = await db.center.findMany({
+    where: { id: { in: centerIds } },
+    select: { id: true, name: true },
+  });
+  const centerName = new Map(centers.map((c) => [c.id, c.name]));
+  return selectable.map((s) =>
+    s.centerId && centerName.has(s.centerId)
+      ? { ...s, name: centerName.get(s.centerId) as string }
+      : s,
   );
 }
 
@@ -252,4 +270,18 @@ export async function centerIdForOrgUnit(
     select: { centerId: true },
   });
   return ou?.centerId ?? null;
+}
+
+/**
+ * Center.id của các CƠ SỞ VẬN HÀNH (type=CENTER) — tức có phòng học/lịch dạy. Loại HO
+ * và Center "mồ côi" (không OrgUnit type=CENTER nào trỏ tới, vd row "Hội sở" cũ). Dùng
+ * cho picker cơ sở ở màn phòng/lịch nghỉ. KHÔNG hardcode danh sách — CS3/CS4 thêm là
+ * data (thêm OrgUnit type=CENTER) tự xuất hiện.
+ */
+export async function getTeachingCenterIds(): Promise<string[]> {
+  const rows = await db.orgUnit.findMany({
+    where: { type: "CENTER", deletedAt: null, centerId: { not: null } },
+    select: { centerId: true },
+  });
+  return rows.map((r) => r.centerId).filter((id): id is string => id != null);
 }

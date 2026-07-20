@@ -4,6 +4,7 @@ import { Plus, DoorOpen, FileSpreadsheet, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { getTeachingCenterIds } from "@/lib/org/org-service";
 import type { Prisma, RoomStatus } from "@prisma/client";
 import { StatusBadge } from "./_components/status-badge";
 
@@ -69,11 +70,14 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
         center: { select: { id: true, name: true } },
       },
     }),
-    sdb.center.findMany({
-      where: { isActive: true },
-      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true },
-    }),
+    // Chỉ cơ sở vận hành (có phòng) — loại HO/"Hội sở" mồ côi khỏi bộ lọc.
+    getTeachingCenterIds().then((ids) =>
+      sdb.center.findMany({
+        where: { isActive: true, id: { in: ids } },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+        select: { id: true, name: true },
+      }),
+    ),
   ]);
 
   return (
