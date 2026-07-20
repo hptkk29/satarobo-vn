@@ -10,6 +10,14 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { formatVndCompact } from "@/lib/format/money";
+
+// Bảng format trục Y (KHÔNG nhận function từ Server Component — RSC cấm truyền hàm qua
+// ranh giới client). Dùng key chuỗi rồi ánh xạ sang formatter ở client.
+const Y_FORMATTERS = {
+  "vnd-compact": (v: number) => formatVndCompact(v),
+} as const;
+type YFormat = keyof typeof Y_FORMATTERS;
 
 type ChartDatum = Record<string, string | number | null | undefined>;
 
@@ -25,6 +33,8 @@ interface BarChartProps {
   bars: BarSeries[];
   height?: number;
   layout?: "horizontal" | "vertical";
+  /** Rút gọn nhãn trục Y (vd tiền: 10000000 → "10tr") để không bị cắt. */
+  yFormat?: YFormat;
 }
 
 export function BarChart({
@@ -33,7 +43,9 @@ export function BarChart({
   bars,
   height = 300,
   layout = "horizontal",
+  yFormat,
 }: BarChartProps) {
+  const yTickFormatter = yFormat ? Y_FORMATTERS[yFormat] : undefined;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <RechartsBarChart
@@ -43,7 +55,13 @@ export function BarChart({
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
         <XAxis dataKey={xKey} tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} />
+        <YAxis
+          tick={{ fontSize: 12 }}
+          width={yTickFormatter ? 56 : undefined}
+          tickFormatter={
+            yTickFormatter ? (v) => yTickFormatter(Number(v)) : undefined
+          }
+        />
         <Tooltip
           contentStyle={{
             background: "white",

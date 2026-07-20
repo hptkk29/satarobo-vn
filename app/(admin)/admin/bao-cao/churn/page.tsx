@@ -56,6 +56,7 @@ async function computeChurnReport(actor: Actor) {
             startedAt: true,
             enrolledAt: true,
             endedAt: true,
+            updatedAt: true,
           },
           take: 50_000,
         })
@@ -68,7 +69,10 @@ async function computeChurnReport(actor: Actor) {
     status: e.status,
     centerId: classCenter.get(e.classId) ?? null,
     startedAt: e.startedAt ?? e.enrolledAt,
-    endedAt: e.endedAt,
+    // WITHDREW nhưng thiếu endedAt → KPI đếm (theo status) nhưng bảng theo tháng bỏ
+    // qua (cần mốc để xếp kỳ) ⇒ lệch "1 · 16.7%" vs bảng 0. Dùng updatedAt (≈ lúc
+    // đổi sang WITHDREW) làm mốc kết thúc dự phòng để 2 con số khớp nhau.
+    endedAt: e.endedAt ?? (e.status === "WITHDREW" ? e.updatedAt : null),
   }));
 
   return buildChurnReport(records, centerNames);

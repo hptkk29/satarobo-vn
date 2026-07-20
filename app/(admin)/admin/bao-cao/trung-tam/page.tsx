@@ -162,6 +162,7 @@ export default async function CenterReportPage() {
               { key: "Chờ xác nhận", name: "Chờ xác nhận", color: "#F59E0B" },
             ]}
             height={300}
+            yFormat="vnd-compact"
           />
         ) : (
           <p className="py-8 text-center text-sm text-neutral-400">Chưa có khoản thanh toán trong kỳ.</p>
@@ -180,6 +181,7 @@ export default async function CenterReportPage() {
               { key: "Công nợ", name: "Công nợ", color: "#F97316" },
             ]}
             height={300}
+            yFormat="vnd-compact"
           />
         ) : (
           <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu cơ sở trong kỳ.</p>
