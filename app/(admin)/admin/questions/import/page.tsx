@@ -61,12 +61,21 @@ export default function ImportQuestionsPage() {
           <code>questionCode</code> = khoá upsert. Tối đa <strong>4 choices/row</strong>;
           câu hỏi cần &gt;4 lựa chọn phải dùng admin form.
         </p>
+        {/* QA 21/07 — tester link khung CT TAY TỪNG CÂU sau import vì tưởng import
+            không hỗ trợ (chỉ lesson mới defer). Nêu rõ ngay đầu trang. */}
+        <p className="mt-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-800">
+          💡 Muốn gắn <strong>khung chương trình hàng loạt</strong> ngay khi import
+          (để lọc được khi soạn bài tập): điền cột <code>courseSlug</code> (vd{" "}
+          <code>laptrinhrobot</code>) + <code>curriculumVersion</code> (số) cho từng
+          dòng — không cần sửa tay từng câu sau import. Chỉ <em>bài học (lesson)</em>{" "}
+          mới phải gắn sau qua form.
+        </p>
       </div>
 
       <ExcelImporter<QuestionRow>
         title="Import Câu hỏi"
-        templateUrl="/templates/mau-ngan-hang-cau-hoi.xlsx"
-        templateFilename="mau-ngan-hang-cau-hoi.xlsx"
+        templateUrl="/templates/mau-ngan-hang-cau-hoi-v2.xlsx"
+        templateFilename="mau-ngan-hang-cau-hoi-v2.xlsx"
         columnHints={[
           { key: "questionCode", label: "Mã (upsert key)" },
           { key: "type", label: "Loại", required: true },
