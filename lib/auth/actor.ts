@@ -199,8 +199,10 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       where: { userId },
       select: { action: true, grant: true },
     }),
+    // QA 21/07 — lớp XOÁ MỀM không còn là "lớp được gán": thiếu filter này site GV
+    // vẫn hiện lớp đã xoá ở grid Ảnh lớp/Lớp của tôi + ownership vẫn nhận buổi của nó.
     db.class.findMany({
-      where: { OR: [{ teacherId: userId }, { assistantId: userId }] },
+      where: { deletedAt: null, OR: [{ teacherId: userId }, { assistantId: userId }] },
       select: { id: true },
     }),
   ]);

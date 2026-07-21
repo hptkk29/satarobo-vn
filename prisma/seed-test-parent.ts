@@ -56,8 +56,13 @@ async function main() {
     const existing = await db.enrollment.findFirst({ where: { studentId: st.id, classId: CLASS_ID }, select: { id: true } });
     if (!existing) {
       await db.enrollment.create({
-        data: { studentId: st.id, classId: CLASS_ID, courseId: COURSE_ID, finalPrice: FINAL_PRICE, status: "STUDYING" },
+        // QA 21/07 (#C7) — Enrollment ∈ SCOPED_MODELS: PHẢI set centerId, thiếu →
+        // GV (center-scope) không thấy roster (dialog đăng ảnh trống control).
+        data: { studentId: st.id, classId: CLASS_ID, courseId: COURSE_ID, finalPrice: FINAL_PRICE, status: "STUDYING", centerId: CENTER_ID },
       });
+    } else {
+      // Bản ghi cũ seed trước đây thiếu centerId → vá lại cho idempotent.
+      await db.enrollment.update({ where: { id: existing.id }, data: { centerId: CENTER_ID } });
     }
   }
 

@@ -72,11 +72,14 @@ async function main() {
 
   const cls = await db.class.findUnique({
     where: { id: CLASS_ID },
-    select: { scheduleDays: true, startTime: true },
+    select: { scheduleDays: true, startTime: true, centerId: true },
   });
   if (!cls) throw new Error("Chưa có lớp test — chạy seed-test-parent trước.");
   const scheduleDays = cls.scheduleDays.length > 0 ? cls.scheduleDays : [1, 3];
   const startTime = cls.startTime ?? "18:00";
+  // QA 21/07 (#C2/#C3) — ClassSession/Attendance ∈ SCOPED_MODELS: PHẢI set centerId,
+  // thiếu → GV (center-scope) không thấy buổi ("Buổi không thuộc bạn", tab điểm danh trống).
+  const centerId = cls.centerId;
 
   // 1) Lessons (upsert theo unique curriculumId+order)
   const lessons = [];
@@ -111,6 +114,7 @@ async function main() {
         date: d,
         lessonId: lessons[i],
         status: past ? "COMPLETED" : "SCHEDULED",
+        centerId,
       },
       select: { id: true },
     });
@@ -129,6 +133,7 @@ async function main() {
           studentId: st.id,
           status: absent ? "ABSENT" : "PRESENT",
           makeupStatus: absent ? "NEEDS_MAKEUP" : "NONE",
+          centerId,
         },
       });
       att++;
