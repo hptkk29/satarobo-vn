@@ -50,8 +50,11 @@ export function ParentAccountSection({
   function resend() {
     startTransition(async () => {
       const res = await resendParentActivationOtp(studentId);
-      if (res.ok) toast.success("Đã gửi lại mã kích hoạt qua email phụ huynh");
-      else toast.error(res.error ?? "Lỗi gửi lại mã");
+      if (res.ok) {
+        // warning = OTP đã tạo nhưng email chưa gửi được (vd dev thiếu API key).
+        if (res.warning) toast.warning(res.warning);
+        else toast.success("Đã gửi lại mã kích hoạt qua email phụ huynh");
+      } else toast.error(res.error ?? "Lỗi gửi lại mã");
     });
   }
 

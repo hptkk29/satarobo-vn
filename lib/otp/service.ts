@@ -46,7 +46,13 @@ const startOfToday = () => {
 
 export type RequestOtpResult =
   | { ok: true; otpId: string; expiresAt: Date; cooldownSec: number }
-  | { ok: false; error: string; cooldownSec?: number };
+  | {
+      ok: false;
+      error: string;
+      cooldownSec?: number;
+      /** OTP ĐÃ tạo (verify được) nhưng kênh gửi lỗi — caller quyết định cách báo (QA 21/07 #3). */
+      deliveryFailed?: boolean;
+    };
 
 /**
  * Tạo + gửi OTP. Áp cooldown 60s + giới hạn ngày. Trả về otpId + hạn.
@@ -128,7 +134,11 @@ export async function requestOtp(input: {
   });
 
   if (!sent.ok) {
-    return { ok: false, error: sent.error ?? "Không gửi được mã. Thử lại sau." };
+    return {
+      ok: false,
+      error: sent.error ?? "Không gửi được mã. Thử lại sau.",
+      deliveryFailed: true,
+    };
   }
 
   return { ok: true, otpId: otp.id, expiresAt, cooldownSec };

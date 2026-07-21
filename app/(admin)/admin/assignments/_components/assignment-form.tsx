@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import {
   changeAssignmentStatus,
   createAssignmentAndRedirect,
@@ -70,6 +71,10 @@ export function AssignmentForm({
   const [allowFile, setAllowFile] = useState(assignment?.allowFile ?? true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // QA 21/07 (#1) — window.confirm block renderer (treo với automation, không
+  // đồng nhất UI) → dialog xác nhận riêng cho Publish và Xoá.
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const status: Status = assignment?.status ?? "DRAFT";
@@ -102,22 +107,17 @@ export function AssignmentForm({
 
   function handlePublish() {
     if (!assignment) return;
-    if (
-      !confirm(
-        "Publish bài tập? Hệ thống sẽ tự tạo bản ghi nộp bài trống cho mọi HS đang học trong lớp.",
-      )
-    ) {
-      return;
-    }
     setError(null);
     setInfo(null);
     startTransition(async () => {
       const res = await publishAssignment(assignment.id);
       if (!res.ok) {
         setError(res.error);
+        setConfirmPublish(false);
         return;
       }
       setInfo(`Đã tạo ${res.data?.created ?? 0} bản nộp bài rỗng cho HS.`);
+      setConfirmPublish(false);
       router.refresh();
     });
   }
@@ -141,17 +141,13 @@ export function AssignmentForm({
 
   function handleDelete() {
     if (!assignment) return;
-    if (
-      !confirm(
-        `Xoá bài tập "${assignment.title}"? Hành động này xoá luôn các bản nộp chưa được chấm.`,
-      )
-    ) {
-      return;
-    }
     setError(null);
     startTransition(async () => {
       const res = await deleteAssignmentAndRedirect(assignment.id);
-      if (res && !res.ok) setError(res.error);
+      if (res && !res.ok) {
+        setError(res.error);
+        setConfirmDelete(false);
+      }
     });
   }
 
@@ -361,7 +357,7 @@ export function AssignmentForm({
         {isEdit && status === "DRAFT" && (
           <button
             type="button"
-            onClick={handlePublish}
+            onClick={() => setConfirmPublish(true)}
             disabled={pending}
             className="rounded-xl bg-green-600 px-6 py-3 font-bold text-white shadow-md hover:bg-green-700 disabled:opacity-60"
           >
@@ -392,7 +388,7 @@ export function AssignmentForm({
         {isEdit && (
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => setConfirmDelete(true)}
             disabled={pending}
             className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
           >
@@ -400,6 +396,26 @@ export function AssignmentForm({
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmPublish}
+        onOpenChange={setConfirmPublish}
+        pending={pending}
+        tone="primary"
+        title="Publish bài tập này?"
+        description="Hệ thống sẽ tạo bản ghi nộp bài trống cho mọi học viên đang học trong lớp và bài sẽ hiển thị trên portal phụ huynh."
+        confirmLabel="Publish"
+        onConfirm={handlePublish}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        pending={pending}
+        title={`Xoá bài tập "${assignment?.title ?? ""}"?`}
+        description="Các bản nộp chưa được chấm sẽ bị xoá theo. Hành động không thể hoàn tác."
+        confirmLabel="Xoá bài tập"
+        onConfirm={handleDelete}
+      />
     </form>
   );
 }
