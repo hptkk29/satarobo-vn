@@ -23,6 +23,9 @@ export default async function MakeupPage() {
   const needs = await sdb.makeupNeed.findMany({
     where: {
       status: { in: ["PENDING", "SCHEDULED"] },
+      // QA 21/07 (B12) — lớp đã xoá mềm thì yêu cầu bù không còn xử lý được
+      // trên UI → ẩn khỏi danh sách (hủy lớp đúng luồng đã tự CANCELLED các need).
+      class: { deletedAt: null },
     },
     orderBy: [{ status: "asc" }, { createdAt: "asc" }],
     take: 200,

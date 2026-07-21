@@ -62,15 +62,18 @@ export interface CurriculumOption {
 }
 
 // "Chờ duyệt" KHÔNG cho chọn tay — chỉ set tự động khi sale "Gửi duyệt".
+// QA 21/07 (B4): "Huỷ" cũng KHÔNG cho chọn tay — hủy lớp phải qua nút "Hủy lớp"
+// (cancelClassAction: rút ghi danh + hủy buổi + hoàn tiền); đổi cờ trần tạo
+// trạng thái mâu thuẫn (lớp Huỷ nhưng HS vẫn Đang học).
 const STATUS_OPTIONS = [
   { value: "PLANNED", label: "Đang lên KH" },
   { value: "RECRUITING", label: "Tuyển sinh" },
   { value: "ACTIVE", label: "Đang dạy" },
   { value: "COMPLETED", label: "Hoàn thành" },
-  { value: "CANCELLED", label: "Huỷ" },
 ] as const;
 
 const PENDING_OPTION = { value: "PENDING_APPROVAL", label: "Chờ duyệt" } as const;
+const CANCELLED_OPTION = { value: "CANCELLED", label: "Huỷ" } as const;
 
 const WEEKDAY_OPTIONS = [
   { value: 1, label: "T2" },
@@ -192,7 +195,9 @@ export function ClassForm({
       return;
     }
     toast.success(isEdit ? "Đã cập nhật lớp học" : "Đã tạo lớp học mới");
+    // QA 21/07 (B6) — refresh kèm push để danh sách chắc chắn hiện dữ liệu mới.
     router.push("/classes");
+    router.refresh();
   }
 
   function toggleDay(d: number, checked: boolean) {
@@ -279,7 +284,9 @@ export function ClassForm({
               options={
                 cls?.status === "PENDING_APPROVAL"
                   ? [PENDING_OPTION, ...STATUS_OPTIONS]
-                  : [...STATUS_OPTIONS]
+                  : cls?.status === "CANCELLED"
+                    ? [CANCELLED_OPTION, ...STATUS_OPTIONS]
+                    : [...STATUS_OPTIONS]
               }
             />
           </Grid>
@@ -437,7 +444,7 @@ export function ClassForm({
             </div>
           </Grid>
 
-          <Grid cols={3}>
+          <Grid cols={2}>
             <Field
               label="Giờ bắt đầu"
               name="startTime"
@@ -451,6 +458,20 @@ export function ClassForm({
               type="time"
               defaultValue={cls?.endTime ?? undefined}
               required
+            />
+          </Grid>
+
+          {/* QA 21/07 (B5) — trước đây thiếu ô "Số HS tối thiểu": server mặc định
+              min=5 rồi báo "min phải <= max" khi max nhỏ mà admin không có chỗ sửa. */}
+          <Grid cols={2}>
+            <Field
+              label="Số HS tối thiểu"
+              name="minStudents"
+              type="number"
+              min={1}
+              defaultValue={cls?.minStudents ?? 5}
+              required
+              helper="Dưới mức này lớp chưa đủ điều kiện khai giảng"
             />
             <Field
               label="Số HS tối đa"

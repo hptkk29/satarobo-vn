@@ -405,6 +405,16 @@ export async function updateClass(
   });
   if (!before) return { error: "Không tìm thấy lớp" };
 
+  // QA 21/07 (B4) — KHÔNG cho đổi cờ sang CANCELLED qua update trần: hủy lớp phải
+  // đi qua cancelClassAction (rút ghi danh + hủy buổi tương lai + hoàn tiền).
+  // Đổi cờ trần để lại HS "Đang học" + buổi "Sắp tới" trong lớp đã Huỷ.
+  if (parsed.data.status === "CANCELLED" && before.status !== "CANCELLED") {
+    return {
+      error:
+        'Không đổi trạng thái "Huỷ" trực tiếp — dùng nút "Hủy lớp" (có rút ghi danh, hủy buổi và hoàn tiền).',
+    };
+  }
+
   const { actorId, actorName } = getAuditActor(session);
 
   // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
@@ -879,6 +889,13 @@ export async function cancelClassAction(
           date: { gte: todayStart },
           status: { in: ["SCHEDULED", "IN_PROGRESS"] },
         },
+        data: { status: "CANCELLED" },
+      });
+
+      // c2) QA 21/07 (B12) — nhu cầu học bù đang mở của lớp cũng huỷ theo
+      //     (không để yêu cầu treo ở /hoc-bu sau khi lớp đã hủy).
+      await tx.makeupNeed.updateMany({
+        where: { classId, status: { in: ["PENDING", "SCHEDULED"] } },
         data: { status: "CANCELLED" },
       });
 

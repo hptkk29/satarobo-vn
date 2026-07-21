@@ -8,6 +8,7 @@ import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
 import { ClassApprovalActions } from "../_components/class-approval-actions";
+import { ClassCancel } from "../_components/class-cancel";
 import { ClassReschedule } from "../_components/class-reschedule";
 import { ClassCurriculum } from "../_components/class-curriculum";
 import { ClassSessionsManage } from "../_components/class-sessions-manage";
@@ -155,6 +156,15 @@ export default async function EditClassPage({ params }: Props) {
     .map((r) => ({ id: r.id, label: `${r.code} — ${r.name}` }));
 
   const canEdit = await checkPermission("classes:edit", { centerId: cls.centerId });
+  // QA 21/07 (B4) — số ghi danh còn học, hiện trong cảnh báo dialog Hủy lớp
+  // (cùng danh sách LIVE mà cancelClassAction sẽ rút về WITHDREW).
+  const liveEnrollmentCount = await sdb.enrollment.count({
+    where: {
+      classId: cls.id,
+      deletedAt: null,
+      status: { in: ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] },
+    },
+  });
   const canApproveClass =
     actor.isSuperAdmin ||
     (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
@@ -235,6 +245,16 @@ export default async function EditClassPage({ params }: Props) {
           rooms={roomOptions}
           canEdit={canEdit}
           lifecycleV2={isSessionLifecycleV2Enabled()}
+        />
+      </div>
+
+      <div className="mb-6">
+        <ClassCancel
+          classId={cls.id}
+          className={cls.name}
+          status={cls.status}
+          liveEnrollmentCount={liveEnrollmentCount}
+          canEdit={canEdit}
         />
       </div>
 
