@@ -39,7 +39,9 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
 
   const now = new Date();
 
-  const classWhere: Prisma.ClassWhereInput = {};
+  // QA 21/07 — LUÔN loại buổi của lớp đã xoá mềm khỏi listing chung (trước đây
+  // lớp biến khỏi /classes nhưng buổi vẫn hiện ở /sessions?scope=all).
+  const classWhere: Prisma.ClassWhereInput = { deletedAt: null };
   if (!isManager) {
     classWhere.OR = [
       { teacherId: session.user.id },
@@ -51,7 +53,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
     ...(scope === "upcoming" ? { date: { gte: now } } : {}),
     ...(scope === "past" ? { date: { lt: now } } : {}),
     ...(classFilter ? { classId: classFilter } : {}),
-    ...(Object.keys(classWhere).length > 0 ? { class: classWhere } : {}),
+    class: classWhere,
   };
 
   // QA 20/07 Vấn đề C — URL hiện tại (kèm bộ lọc) để form Sửa quay về đúng ngữ cảnh.

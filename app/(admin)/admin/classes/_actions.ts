@@ -652,7 +652,7 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   const sdb = scopedDb(actor);
   const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
-    select: { id: true, centerId: true, scheduleDays: true, startTime: true },
+    select: { id: true, centerId: true, scheduleDays: true, startTime: true, startDate: true },
   });
   if (!cls) return { ok: false as const, error: "Lớp không tồn tại" };
   if (cls.scheduleDays.length === 0) {
@@ -676,9 +676,16 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   });
   const holidays = expandHolidaySet(holidayRows);
 
+  // QA 21/07 — không dời buổi về TRƯỚC ngày khai giảng: mốc quét = max(ngày mai,
+  // startDate của lớp). Trước đây lớp khai giảng 28/07 đổi lịch là buổi đầu bị
+  // kéo về ngay ngày mai (22/07).
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const startDay = cls.startDate
+    ? new Date(cls.startDate.getFullYear(), cls.startDate.getMonth(), cls.startDate.getDate())
+    : tomorrow;
+  const from = startDay > tomorrow ? startDay : tomorrow;
   const newDates = computeSessionDates({
-    from: tomorrow,
+    from,
     scheduleDays: cls.scheduleDays,
     count: future.length,
     holidays,

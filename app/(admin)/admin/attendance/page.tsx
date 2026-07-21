@@ -53,10 +53,11 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   const sdb = scopedDb(actor);
 
   // Load list of sessions for selector (upcoming or recent past)
+  // QA 21/07 — loại buổi của lớp đã xoá mềm khỏi selector (đồng bộ /sessions).
   const sessions = await sdb.classSession.findMany({
     where: {
       ...(classFilter ? { classId: classFilter } : {}),
-      class: classScope,
+      class: { deletedAt: null, ...classScope },
     },
     orderBy: { date: "desc" },
     take: 100,
@@ -103,7 +104,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   if (sessionId) {
     // Scope theo selector: GV mở thẳng sessionId của lớp ngoài phạm vi → null (ẩn roster).
     const sess = await sdb.classSession.findFirst({
-      where: { id: sessionId, class: classScope },
+      where: { id: sessionId, class: { deletedAt: null, ...classScope } },
       include: {
         class: {
           select: {
