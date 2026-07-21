@@ -301,9 +301,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // (lib/auth/can.ts) — nếu thiếu, shadow-compare đẻ lệch v1=false/v2=true mỗi lần
   // admin chạm trang này. Behavior-neutral: call-site chỉ thu hẹp khi `!viewAll && viewOwn`.
   "leads:view-own": ["SUPER_ADMIN", "SALES_CSM"],
-  // #11 T2 — Q9: Sale/QL cơ sở (trực tiếp CSKH) mặc định ĐƯỢC xem PII lead;
-  // MARKETING (leads:view-all cross-center) KHÔNG mặc định — cấp per-user khi cần.
-  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // #11 T2 — Q9: Sale/QL cơ sở (trực tiếp CSKH) ĐƯỢC xem PII lead.
+  // 21/07 (user chốt): MARKETING XEM ĐƯỢC tên + SĐT lead (làm outreach/chiến dịch cần liên
+  // hệ) → thêm MARKETING (ĐẢO quyết định "che PII cho MARKETING" của a+b 20/07). Lưu ý:
+  // canViewLeadPii bao cả email (email-logs) + ghi chú tư vấn (lead detail) → MARKETING thấy
+  // luôn các mục này. Cách ly cơ sở vẫn do scopedDb.
+  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],

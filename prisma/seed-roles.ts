@@ -147,11 +147,13 @@ export const ROLE_SEED: RoleSeed[] = [
   {
     // Mapping MARKETING (v1) đã duyệt — Kiệt 06/07/2026, xem mapping-proposal.md §5.
     // BGĐ chỉ ghi "Ok" (không tách cơ sở) → toàn bộ 35 action GLOBAL, không split.
-    // ⚠️ Escalate riêng (OI-4, KHÔNG xử lý ở seed này): leads:view-all cho role này
-    // kèm PII (SĐT/tên) chưa có field-level tách riêng — xem mapping-proposal.md.
+    // OI-4 RESOLVED 21/07 (user chốt): MARKETING XEM PII lead (tên/SĐT/email/ghi chú) để
+    // outreach → thêm leads:view-pii. Parity với v1 permissions.ts. (RBAC_V2 OFF nên chỉ có
+    // hiệu lực khi re-seed + flip cờ; v1 đã áp runtime.) Cách ly cơ sở vẫn do scopedDb.
     code: "HO_MARKETING", name: "Marketing Hội sở",
     perms: [
       { action: "leads:view-all", scopeType: "GLOBAL" },
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "blog:edit", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "GLOBAL" },
       { action: "honors:view", scopeType: "GLOBAL" },
