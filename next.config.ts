@@ -29,6 +29,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // DEV-ONLY (Next 16 chặn cross-origin tới dev server theo mặc định): cho phép
+  // đăng nhập đa phiên khi QA — admin ở localhost, GV ở 127.0.0.1, PH ở IP LAN
+  // (cookie tách theo host). Không ảnh hưởng production build.
+  allowedDevOrigins: ["127.0.0.1", "192.168.98.183"],
+
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
