@@ -1,10 +1,19 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { monthKeyVN } from "@/lib/reports/lead";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import {
   buildRevenueTargetReport,
   revenueTargetSummary,
@@ -40,50 +49,31 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-type SearchParams = { searchParams: Promise<{ center?: string }> };
+type SearchParams = {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+};
 
-export default async function RevenueTargetReportPage({ searchParams }: SearchParams) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (!(await checkPermission("payments:manage"))) {
-    redirect("/dashboard?error=unauthorized");
-  }
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính rows doanh thu vs mục tiêu (fetch scoped theo cơ sở đã chọn → PRIMITIVE).
+// filters: cơ sở (Payment.centerId) + khoảng ngày trên NGÀY THANH TOÁN (Payment.paidDate).
+// Bộ lọc null → giữ nguyên hành vi cũ.
+async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
   const sdb = scopedDb(actor);
-  const isGlobalAllowed = actor.isSuperAdmin || actor.isHoLevel;
-
-  // Center (không scoped) → tự lọc theo tầm nhìn của actor để không lộ cơ sở khác.
-  const allCenters = await sdb.center.findMany({ select: { id: true, name: true } });
-  const visibleCenters = isGlobalAllowed
-    ? allCenters
-    : allCenters.filter((c) => actor.visibleCenterIds.includes(c.id));
-
-  const sp = await searchParams;
-  const requested = sp.center;
-  const defaultSelection = isGlobalAllowed ? "ALL" : (visibleCenters[0]?.id ?? "ALL");
-  // Chỉ chấp nhận "ALL" (nếu được phép) hoặc center trong tầm nhìn (chống IDOR qua URL).
-  let selection = defaultSelection;
-  if (requested === "ALL" && isGlobalAllowed) selection = "ALL";
-  else if (requested && visibleCenters.some((c) => c.id === requested)) selection = requested;
-
-  const effectiveCenterId: string | null = selection === "ALL" ? null : selection;
-
+  const dateWhere = reportDateWhere(filters);
   // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED, deletedAt:null) trong phạm vi.
-  // scopedDb tự cách ly cơ sở; thêm centerId khi chọn cụ thể.
   const [payments, targetRows] = await Promise.all([
     sdb.payment.findMany({
       where: {
         accountantStatus: "CONFIRMED",
         deletedAt: null,
-        ...(effectiveCenterId ? { centerId: effectiveCenterId } : {}),
+        ...(filters.centerId ? { centerId: filters.centerId } : {}),
+        ...(dateWhere ? { paidDate: dateWhere } : {}),
       },
       select: { amount: true, centerId: true, paidDate: true },
       take: 50_000,
     }),
     // RevenueTarget không scoped → tra theo đúng centerId đã chọn (null = toàn hệ thống).
     sdb.revenueTarget.findMany({
-      where: { centerId: effectiveCenterId },
+      where: { centerId: filters.centerId },
       select: { centerId: true, period: true, targetAmount: true },
     }),
   ]);
@@ -99,12 +89,34 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
     targetAmount: t.targetAmount,
   }));
 
-  const rows = buildRevenueTargetReport(paymentRecords, targets);
+  return buildRevenueTargetReport(paymentRecords, targets);
+}
+
+export default async function RevenueTargetReportPage({ searchParams }: SearchParams) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("payments:manage"))) {
+    redirect("/dashboard?error=unauthorized");
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  // Bộ lọc dùng chung: cơ sở (IDOR-safe theo tầm nhìn) + khoảng ngày.
+  const fc = await resolveReportFilters(actor, sp);
+  const effectiveCenterId = fc.filters.centerId;
+
+  // REQ-05: cache số liệu doanh thu theo (scope + bộ lọc). fc.filters đã được validate
+  // IDOR ở resolveReportFilters → an toàn đưa vào key. TTL 120s. Output rows PRIMITIVE.
+  const rows = await safeCache(
+    () => computeRevenueRows(actor, fc.filters),
+    ["revenue-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
   const summary = revenueTargetSummary(rows);
   const scopeLabel =
     effectiveCenterId === null
       ? "Toàn hệ thống"
-      : (visibleCenters.find((c) => c.id === effectiveCenterId)?.name ?? "Cơ sở");
+      : (fc.visibleCenters.find((c) => c.id === effectiveCenterId)?.name ?? "Cơ sở");
   const currentPeriod = monthKeyVN(new Date());
 
   return (
@@ -117,15 +129,15 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
         </p>
       </div>
 
-      {/* Bộ lọc cơ sở */}
-      <div className="flex flex-wrap gap-2">
-        {isGlobalAllowed ? (
-          <FilterLink active={selection === "ALL"} center="ALL" label="Toàn hệ thống" />
-        ) : null}
-        {visibleCenters.map((c) => (
-          <FilterLink key={c.id} active={selection === c.id} center={c.id} label={c.name} />
-        ))}
-      </div>
+      {/* Bộ lọc cơ sở + khoảng ngày */}
+      <ReportFilterBar
+        basePath="/bao-cao/doanh-thu"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
 
       {/* Thẻ tổng quan */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -142,9 +154,9 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
       {/* Đặt / sửa mục tiêu */}
       <Card title="Đặt / sửa mục tiêu doanh thu">
         <RevenueTargetForm
-          centers={visibleCenters}
-          canSetGlobal={isGlobalAllowed}
-          defaultCenterId={selection}
+          centers={fc.visibleCenters}
+          canSetGlobal={fc.isGlobalAllowed}
+          defaultCenterId={fc.selection}
           defaultPeriod={currentPeriod}
         />
         <p className="mt-2 text-xs text-neutral-400">
@@ -231,28 +243,5 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
         </div>
       </Card>
     </div>
-  );
-}
-
-function FilterLink({
-  active,
-  center,
-  label,
-}: {
-  active: boolean;
-  center: string;
-  label: string;
-}) {
-  return (
-    <Link
-      href={`/bao-cao/doanh-thu?center=${encodeURIComponent(center)}`}
-      className={
-        active
-          ? "rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white"
-          : "rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
-      }
-    >
-      {label}
-    </Link>
   );
 }

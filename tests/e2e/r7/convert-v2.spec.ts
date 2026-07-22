@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb, seedUser } from "../_helpers/seed";
 import { evaluatePaymentGuard, convertLeadV2 } from "../../../lib/crm/convert-lead-v2";
-import { ensureOrderPaymentRecorded } from "../../../lib/finance/payment";
+import { ensureOrderPaymentRecorded, confirmPayment } from "../../../lib/finance/payment";
 import {
   classifyParentMatch,
   normalizeName,
@@ -450,6 +450,75 @@ test.describe("[R7-05] Convert v2", () => {
     expect(enA!.id).not.toBe(enB!.id);
     // Không enrollment nào thiếu truy vết.
     expect(await db.enrollment.count({ where: { leadChildId: null } })).toBe(0);
+  });
+
+  // ── FIN-01 / Q1=A — convert nhiều con: CHIA khoản RECORDED theo finalPrice ──
+  test("[FIN-01-Q1A] convert 2 con → khoản đơn CHIA theo finalPrice (bất biến tổng) → confirm → 2 Receipt + nợ=0", async () => {
+    const center = await seedCenter();
+    const { course, cls } = await seedCourseClass(center.id);
+    const lead = await seedRegisteredLead(center.id, "0900000030");
+    // 1 khoản RECORDED = 9.000.000 cho đơn 2 con (chưa gắn ghi danh).
+    const order = await db.order.create({
+      data: {
+        code: `ORD-FIN-${uniq()}`, type: "COURSE", customerName: "PH FIN",
+        customerPhone: "0900000030", leadId: lead.id, centerId: center.id,
+      },
+    });
+    await db.payment.create({
+      data: {
+        orderId: order.id, amount: 9_000_000, method: "cash", paidDate: new Date(),
+        saleStatus: "RECORDED", accountantStatus: "PENDING", centerId: center.id,
+      },
+    });
+    const actorUser = await seedUser({ email: `sale-fin-${uniq()}@test.com`, role: "SALES_CSM", name: "Sale FIN" });
+
+    // 2 con: finalPrice 6M / 3M → tỉ lệ 2:1 → chia 9M = 6M + 3M.
+    const res = await convertLeadV2(
+      { id: actorUser.id, name: "Sale FIN" },
+      {
+        leadId: lead.id, parentEmail: "ph-fin@test.com", parentName: "PH FIN", parentPhone: "0905999888",
+        idempotencyKey: `fin-${uniq()}`,
+        students: [
+          { name: "Con Lớn", courseId: course.id, listPrice: 6_000_000, classId: cls.id, consentMedia: false },
+          { name: "Con Nhỏ", courseId: course.id, listPrice: 3_000_000, classId: cls.id, consentMedia: false },
+        ],
+      },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const [enr1, enr2] = res.enrollmentIds;
+
+    // Khoản 9M được CHIA 2:1 → 2 Payment gắn đúng từng ghi danh; TỔNG bất biến = 9M.
+    const pays = await db.payment.findMany({
+      where: { orderId: order.id, deletedAt: null },
+      select: { amount: true, enrollmentId: true, saleStatus: true },
+    });
+    expect(pays.length).toBe(2); // 1 gốc (cập nhật) + 1 con
+    expect(pays.reduce((s, p) => s + p.amount, 0)).toBe(9_000_000);
+    const byEnr = Object.fromEntries(pays.map((p) => [p.enrollmentId, p.amount]));
+    expect(byEnr[enr1!]).toBe(6_000_000);
+    expect(byEnr[enr2!]).toBe(3_000_000);
+    // KHÔNG auto-confirm — vẫn chờ kế toán.
+    expect(pays.every((p) => p.saleStatus === "RECORDED")).toBe(true);
+    expect(await db.receipt.count()).toBe(0);
+
+    // Kế toán xác nhận từng khoản → 2 Receipt riêng (scoped theo Enrollment).
+    const payRows = await db.payment.findMany({ where: { orderId: order.id }, select: { id: true } });
+    for (const p of payRows) {
+      const c = await confirmPayment({ paymentId: p.id, confirmedById: actorUser.id });
+      expect(c.ok).toBe(true);
+    }
+    expect(await db.receipt.count({ where: { enrollmentId: { in: [enr1!, enr2!] } } })).toBe(2);
+
+    // Công nợ mỗi ghi danh = finalPrice − Σ CONFIRMED = 0.
+    for (const [enrId, price] of [[enr1!, 6_000_000], [enr2!, 3_000_000]] as const) {
+      const enr = await db.enrollment.findUnique({
+        where: { id: enrId },
+        select: { finalPrice: true, payments: { where: { accountantStatus: "CONFIRMED" }, select: { amount: true } } },
+      });
+      const paid = enr!.payments.reduce((s, p) => s + p.amount, 0);
+      expect((enr!.finalPrice ?? price) - paid).toBe(0);
+    }
   });
 
   // ── AC6 / C10 — sửa mã HV (quyền + audit + reason) ────────────────────────

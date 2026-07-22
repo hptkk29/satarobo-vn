@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -15,11 +16,12 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { SATA_ROBO_CONTACT } from "@/lib/locations";
 import { HR_CONTACT } from "@/lib/data/job-options";
+import { formatDateVN } from "@/lib/format/date";
 
-export const revalidate = 60;
+export const revalidate = 300; // ISR_DETAIL — chi tiết tuyển dụng (convention list=60/detail=300, xem lib/isr.ts)
 
 const BASE_URL = "https://satarobo.vn";
 const DEFAULT_HR_EMAIL = SATA_ROBO_CONTACT.emails.recruitment;
@@ -41,6 +43,11 @@ export async function generateStaticParams() {
     .catch(() => []);
   return jobs.map((j) => ({ slug: j.slug }));
 }
+
+// PUB-08: dedup fetch giữa generateMetadata + page (cùng slug) trong 1 request.
+const getJobBySlug = cache((slug: string) =>
+  db.jobPosting.findUnique({ where: { slug } }).catch(() => null),
+);
 
 function summarize(text: string, max = 160): string {
   const stripped = text.replace(/\s+/g, " ").trim();
@@ -66,7 +73,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const job = await db.jobPosting.findUnique({ where: { slug } }).catch(() => null);
+  const job = await getJobBySlug(slug);
   if (!job || job.status !== "OPEN") return {};
 
   const description = summarize(job.description, 160);
@@ -90,7 +97,7 @@ export default async function JobDetailPage({
 }) {
   const { slug } = await params;
 
-  const job = await db.jobPosting.findUnique({ where: { slug } }).catch(() => null);
+  const job = await getJobBySlug(slug);
   if (!job || job.status !== "OPEN") notFound();
 
   const salaryLabel = formatSalary(job);
@@ -103,7 +110,7 @@ export default async function JobDetailPage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
+          __html: jsonLdScript(
             breadcrumbJsonLd([
               { name: "Trang chủ", url: "/" },
               { name: "Tuyển dụng", url: "/tuyen-dung" },
@@ -173,7 +180,7 @@ export default async function JobDetailPage({
                   <MetaRow
                     icon={CalendarClock}
                     label="Hạn nộp"
-                    value={new Date(job.closesAt).toLocaleDateString("vi-VN")}
+                    value={formatDateVN(job.closesAt)}
                   />
                 )}
               </div>

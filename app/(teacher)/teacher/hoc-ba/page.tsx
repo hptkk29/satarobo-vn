@@ -20,8 +20,7 @@
 //
 // ⚠️ Câu 46: KHÔNG SĐT/email/tên phụ huynh trong payload client — list chỉ tên HV
 // + lớp + trạng thái; editor không nhận contact PH (props chỉ metrics/tiêu chí/nhận xét).
-import Link from "next/link";
-import { ArrowLeft, FileText, Lock } from "lucide-react";
+import { FileText, Lock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -59,6 +58,7 @@ import {
   type MilestoneChip,
   type ReportCardRow,
 } from "./_components/report-cards-list";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Học bạ | Giáo viên Sata Robo" };
 
@@ -350,18 +350,6 @@ export default async function TeacherReportCardsPage({
         <ReportCardsList rows={rows} />
       )}
     </div>
-  );
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
   );
 }
 

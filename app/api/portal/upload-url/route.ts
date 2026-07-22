@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { getR2Client, getR2Bucket, getPublicUrl } from "@/lib/storage/r2-client";
 import { UPLOAD_CONFIG, validateFile } from "@/lib/storage/upload-config";
 import { getSetting } from "@/lib/settings/service";
+import { rateLimit } from "@/lib/rate-limit";
 
 // POST /api/portal/upload-url — Phase T2.4
 // Presigned URL cho PHỤ HUYNH (PARENT) nộp bài tập của con. Chỉ cho ảnh/tài
@@ -20,6 +21,20 @@ export async function POST(req: NextRequest) {
   }
   if (session.user.role !== "PARENT") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // SEC-M08: rate-limit presign theo parent (chống loop presign→PUT multi-GB cost-DoS).
+  // fail-soft (Upstash→memory). 30 presign/phút/parent rộng cho nộp vài file bài tập.
+  const rl = await rateLimit({
+    key: `upload-presign:parent:${session.user.id}`,
+    max: 30,
+    windowMs: 60_000,
+  });
+  if (!rl.success) {
+    return NextResponse.json(
+      { error: "Bạn thao tác quá nhanh — thử lại sau." },
+      { status: 429 },
+    );
   }
 
   let body: unknown;

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, X, Clock, FileText, Save } from "lucide-react";
 import { markAttendance } from "../_actions";
+import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
 type MakeupStatus = "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
@@ -135,12 +136,16 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
     setState((prev) => {
       const next: Record<string, RowState> = {};
       for (const [id, r] of Object.entries(prev)) {
+        const changed = r.status !== "PRESENT";
+        // QA 20/07 — dòng bị ĐỔI sang Có mặt thì xoá luôn ghi chú/lý do vắng cũ
+        // (tránh dữ liệu mâu thuẫn kiểu "Có mặt" + note "đi muộn 10 phút").
+        // Dòng vốn đã Có mặt giữ nguyên note.
         next[id] = {
           status: "PRESENT",
-          note: r.note,
-          makeupStatus: r.makeupStatus,
-          absenceReason: r.absenceReason,
-          dirty: r.status !== "PRESENT" || r.dirty,
+          note: changed ? "" : r.note,
+          makeupStatus: changed ? "NONE" : r.makeupStatus,
+          absenceReason: changed ? "" : r.absenceReason,
+          dirty: changed || r.dirty,
         };
       }
       return next;
@@ -276,7 +281,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                       {r.studentPhone && <span className="font-mono">{r.studentPhone}</span>}
                       {!r.makeupFromCenter && r.enrollmentStatus !== "ACTIVE" && (
                         <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">
-                          {r.enrollmentStatus}
+                          {ENROLLMENT_STATUS.label(r.enrollmentStatus)}
                         </span>
                       )}
                     </div>

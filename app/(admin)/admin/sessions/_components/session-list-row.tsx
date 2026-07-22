@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Pencil, Trash2, ClipboardCheck, ListChecks } from "lucide-react";
+import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import { deleteSession } from "../_actions";
 
 type Row = {
@@ -29,20 +32,35 @@ function isPast(d: Date): boolean {
   return new Date(d).getTime() < Date.now();
 }
 
-export function SessionListRow({ session }: { session: Row }) {
+export function SessionListRow({
+  session,
+  returnTo,
+}: {
+  session: Row;
+  /** QA 20/07 Vấn đề C — bộ lọc hiện tại, để form Sửa quay về đúng ngữ cảnh. */
+  returnTo?: string;
+}) {
+  const router = useRouter();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const past = isPast(session.date);
 
+  const editHref = returnTo
+    ? `/sessions/${session.id}/edit?returnTo=${encodeURIComponent(returnTo)}`
+    : `/sessions/${session.id}/edit`;
+
+  // QA 20/07 Lỗi B — bỏ window.confirm (block renderer, không đồng nhất UI)
+  // → ConfirmDialog dùng chung + toast kết quả.
   function handleDelete() {
-    if (
-      !confirm(
-        `Xoá buổi học "${session.topic ?? formatDateTime(session.date)}"?\nLưu ý: ${session.attendanceCount} bản ghi điểm danh sẽ bị xoá theo.`,
-      )
-    )
-      return;
     startTransition(async () => {
       const res = await deleteSession(session.id);
-      if (res?.error) alert(res.error);
+      if (res?.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("Đã xoá buổi học");
+        router.refresh();
+      }
+      setConfirmOpen(false);
     });
   }
 
@@ -90,7 +108,7 @@ export function SessionListRow({ session }: { session: Row }) {
             <ListChecks className="h-4 w-4" />
           </Link>
           <Link
-            href={`/sessions/${session.id}/edit`}
+            href={editHref}
             className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
             title="Sửa"
           >
@@ -98,13 +116,35 @@ export function SessionListRow({ session }: { session: Row }) {
           </Link>
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => setConfirmOpen(true)}
             disabled={pending}
             className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
             title="Xoá"
           >
             <Trash2 className="h-4 w-4" />
           </button>
+          <ConfirmDialog
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            pending={pending}
+            title={`Xoá buổi học "${session.topic ?? formatDateTime(session.date)}"?`}
+            description={
+              session.attendanceCount > 0 ? (
+                <>
+                  Buổi thuộc lớp <strong>{session.className}</strong>.{" "}
+                  <strong>{session.attendanceCount} bản ghi điểm danh</strong> của buổi
+                  này sẽ bị xoá theo. Hành động không thể hoàn tác.
+                </>
+              ) : (
+                <>
+                  Buổi thuộc lớp <strong>{session.className}</strong>, chưa có điểm
+                  danh. Hành động không thể hoàn tác.
+                </>
+              )
+            }
+            confirmLabel="Xoá buổi học"
+            onConfirm={handleDelete}
+          />
         </div>
       </td>
     </tr>

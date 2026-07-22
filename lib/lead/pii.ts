@@ -2,8 +2,8 @@
 //
 // Q7 — PII lead gồm: SĐT, email, tên PH, tên HS (LeadChild), nội dung tư vấn
 // (note/handoverNote/LeadActivity). Actor KHÔNG có `leads:view-pii` (v1 matrix:
-// SUPER_ADMIN/CENTER_MANAGER/SALES_CSM; MARKETING mặc định KHÔNG — cấp per-user
-// qua UserPermissionGrant ở /admin/users/[id]/permissions) → thấy bản mask.
+// SUPER_ADMIN/CENTER_MANAGER/SALES_CSM/MARKETING — MARKETING mở 21/07 cho
+// outreach, commit 69876d0; v2 seed tương ứng HO_MARKETING) → thấy bản mask.
 //
 // Check quyền: dùng `await canViewLeadPii()` (lib/auth/check-permission — qua
 // checkPermission, chấm CẢ v1 lẫn v2 theo cờ RBAC_V2_ENABLED). KHÔNG import

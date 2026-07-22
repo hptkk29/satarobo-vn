@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
@@ -73,11 +73,16 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
 
   const titleValue = form.watch('title')
 
+  // Auto-slug bám theo tiêu đề CHO ĐẾN KHI user tự sửa ô slug. Bản cũ chỉ điền khi
+  // slug rỗng → sau ký tự đầu ("k") slug hết rỗng nên KHÔNG cập nhật tiếp (đứng ở "k").
+  const [slugEdited, setSlugEdited] = useState(mode === 'edit')
+  const slugReg = form.register('slug')
+
   useEffect(() => {
-    if (mode === 'create' && titleValue && !form.getValues('slug')) {
-      form.setValue('slug', slugify(titleValue), { shouldValidate: false })
+    if (mode === 'create' && !slugEdited) {
+      form.setValue('slug', slugify(titleValue ?? ''), { shouldValidate: false })
     }
-  }, [titleValue, mode, form])
+  }, [titleValue, mode, slugEdited, form])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onSubmit = (data: any) => {
@@ -116,7 +121,15 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
 
           <div>
             <label className={labelClass}>Slug (URL) *</label>
-            <input className={fieldClass} {...form.register('slug')} placeholder="giao-vien-robotics-hai-chau" />
+            <input
+              className={fieldClass}
+              {...slugReg}
+              onChange={(e) => {
+                setSlugEdited(true) // user tự sửa → ngừng auto-slug
+                void slugReg.onChange(e)
+              }}
+              placeholder="giao-vien-robotics-hai-chau"
+            />
             {errors.slug && <p className={errorClass}>{errors.slug.message}</p>}
             <p className="mt-1 text-xs text-gray-400">URL: /tuyen-dung/{form.watch('slug') || '...'}</p>
           </div>
@@ -270,6 +283,7 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
                 placeholder="15000000"
                 {...form.register('salaryMax', { setValueAs: (v) => (v === '' ? null : Number(v)) })}
               />
+              {errors.salaryMax && <p className={errorClass}>{errors.salaryMax.message}</p>}
             </div>
             <div>
               <label className={labelClass}>Ghi chú lương</label>

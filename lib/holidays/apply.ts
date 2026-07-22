@@ -12,8 +12,16 @@ import { enqueueEmail } from "@/lib/email/queue";
 function expandRange(start: Date, end: Date | null): Set<string> {
   const set = new Set<string>();
   const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  const last = end ? new Date(end.getFullYear(), end.getMonth(), end.getDate()) : cur;
-  while (cur <= last) {
+  // QA 21/07 (B3 — root cause chính): `last = cur` (CÙNG object) khi end=null →
+  // vòng while tăng cur đồng thời tăng last → LẶP VÔ HẠN với mọi ngày nghỉ 1
+  // ngày (crash "Set maximum size exceeded", bị try/catch nuốt → không dời buổi
+  // nào bao giờ). PHẢI clone. Kèm guard 400 ngày như expandHolidaySet.
+  const last = end
+    ? new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    : new Date(cur);
+  let guard = 0;
+  while (cur <= last && guard < 400) {
+    guard++;
     set.add(ymdLocal(cur));
     cur.setDate(cur.getDate() + 1);
   }
@@ -29,11 +37,20 @@ export async function applyHolidayShift(holiday: {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+  // QA 21/07 (B3) — holiday.date lưu 00:00 UTC nên `lte: holiday.date` tạo cửa sổ
+  // RỖNG: buổi 09:00 VN (=02:00Z) đã bị loại ngay từ query → không buổi nào được
+  // dời. Nới cửa sổ ±1 ngày đệm múi giờ; khớp CHÍNH XÁC theo ngày-local do filter
+  // `range.has(ymdLocal(...))` bên dưới quyết định.
+  const windowStart = new Date(holiday.date);
+  windowStart.setDate(windowStart.getDate() - 1);
+  const windowEnd = new Date(holiday.endDate ?? holiday.date);
+  windowEnd.setDate(windowEnd.getDate() + 2);
+
   // Buổi tương lai rơi đúng ngày nghỉ (chỉ lớp đang hoạt động + đúng cơ sở nếu có).
   const sessions = await db.classSession.findMany({
     where: {
       status: "SCHEDULED",
-      date: { gte: holiday.date, lte: holiday.endDate ?? holiday.date },
+      date: { gte: windowStart, lt: windowEnd },
       class: {
         deletedAt: null,
         ...(holiday.centerId ? { centerId: holiday.centerId } : {}),

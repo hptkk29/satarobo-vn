@@ -22,13 +22,6 @@ const dateFmt = new Intl.DateTimeFormat("vi-VN", {
   year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-const sentFmt = new Intl.DateTimeFormat("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  timeZone: "Asia/Ho_Chi_Minh",
-});
-
 function startOfTodayUtc(): Date {
   const now = new Date();
   const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -87,7 +80,7 @@ export default async function DonTuPage({
     detail: r.detail,
     reason: r.reason,
     reviewNote: r.reviewNote,
-    createdAtLabel: sentFmt.format(r.createdAt),
+    createdAtLabel: dateFmt.format(r.createdAt),
   }));
 
   return (

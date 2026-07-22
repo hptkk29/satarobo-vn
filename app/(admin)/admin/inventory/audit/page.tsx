@@ -8,6 +8,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { InventoryAuditStatus, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Kho — Kiểm kê | Admin" };
 
 const STATUS_INFO: Record<
   InventoryAuditStatus,

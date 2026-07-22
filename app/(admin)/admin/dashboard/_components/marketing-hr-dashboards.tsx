@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { BarChart3, Briefcase, Users, CalendarClock } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 
 function startOfWeek(now: Date): Date {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -9,11 +12,10 @@ function startOfWeek(now: Date): Date {
   return d;
 }
 
-// Đợt 3C #5 — Dashboard MARKETING (nguồn lead, hiệu quả kênh tóm tắt).
-export async function MarketingDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
+// REQ-04: số liệu dashboard marketing (aggregate theo scope → PRIMITIVE, bySource phẳng).
+async function getMarketingStats(actor: Actor) {
   const now = new Date();
   const weekStart = startOfWeek(now);
-
   // FL0 — cách ly cơ sở: Lead ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn cơ sở.
   const sdb = scopedDb(actor);
   const [bySource, newThisWeek, total, enrolledTotal] = await Promise.all([
@@ -28,9 +30,25 @@ export async function MarketingDashboard({ name, actor, embedded = false }: { na
     sdb.lead.count({ where: { deletedAt: null } }),
     sdb.lead.count({ where: { deletedAt: null, status: "ENROLLED" } }),
   ]);
+  return {
+    bySource: bySource.map((s) => ({ source: s.source, count: s._count._all })),
+    newThisWeek,
+    total,
+    enrolledTotal,
+  };
+}
+
+// Đợt 3C #5 — Dashboard MARKETING (nguồn lead, hiệu quả kênh tóm tắt).
+export async function MarketingDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
+  // REQ-04: cache theo scope, TTL 60s. Output primitive.
+  const { bySource, newThisWeek, total, enrolledTotal } = await safeCache(
+    () => getMarketingStats(actor),
+    ["marketing-dashboard-stats", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
+  )();
 
   const convRate = total > 0 ? Math.round((enrolledTotal / total) * 100) : 0;
-  const maxCount = Math.max(1, ...bySource.map((s) => s._count._all));
+  const maxCount = Math.max(1, ...bySource.map((s) => s.count));
 
   return (
     <div className="space-y-6">
@@ -53,9 +71,9 @@ export async function MarketingDashboard({ name, actor, embedded = false }: { na
               <li key={i} className="flex items-center gap-3 text-sm">
                 <span className="w-40 truncate text-gray-700" title={s.source ?? "—"}>{s.source ?? "(không nguồn)"}</span>
                 <div className="h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
-                  <div className="h-full rounded-full bg-[#7C3AED]" style={{ width: `${(s._count._all / maxCount) * 100}%` }} />
+                  <div className="h-full rounded-full bg-[#7C3AED]" style={{ width: `${(s.count / maxCount) * 100}%` }} />
                 </div>
-                <span className="w-10 text-right font-semibold tabular-nums text-gray-700">{s._count._all}</span>
+                <span className="w-10 text-right font-semibold tabular-nums text-gray-700">{s.count}</span>
               </li>
             ))}
           </ul>
@@ -66,8 +84,8 @@ export async function MarketingDashboard({ name, actor, embedded = false }: { na
   );
 }
 
-// Đợt 3C #5 — Dashboard HR (nhân sự, tuyển dụng, đăng ký ca).
-export async function HrDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
+// REQ-04: số liệu dashboard HR (đếm theo scope → PRIMITIVE).
+async function getHrStats(actor: Actor) {
   const now = new Date();
   const weekStart = startOfWeek(now);
   const weekEnd = new Date(weekStart);
@@ -82,6 +100,17 @@ export async function HrDashboard({ name, actor, embedded = false }: { name: str
     sdb.shiftRegistration.count({ where: { date: { gte: weekStart, lt: weekEnd } } }),
     sdb.shiftRegistration.count({ where: { status: "LEAVE_REQUESTED", date: { gte: weekStart } } }),
   ]);
+  return { activeStaff, openJobs, shiftRegsWeek, leaveReqs };
+}
+
+// Đợt 3C #5 — Dashboard HR (nhân sự, tuyển dụng, đăng ký ca).
+export async function HrDashboard({ name, actor, embedded = false }: { name: string; actor: Actor; embedded?: boolean }) {
+  // REQ-04: cache theo scope, TTL 60s.
+  const { activeStaff, openJobs, shiftRegsWeek, leaveReqs } = await safeCache(
+    () => getHrStats(actor),
+    ["hr-dashboard-stats", actorScopeKey(actor)],
+    { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
+  )();
 
   return (
     <div className="space-y-6">

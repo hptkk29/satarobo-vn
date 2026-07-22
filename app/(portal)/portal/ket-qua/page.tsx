@@ -5,12 +5,13 @@ import {
   getStudentAssignmentResults,
   getLatestProgressReport,
 } from "@/lib/portal/learning";
-import { getStudentProgress } from "@/lib/progress";
+import { getStudentProgressForClasses } from "@/lib/progress";
 import { getStudentClassProgress } from "@/lib/students/progress";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Kết quả | Sata Robo" };
@@ -30,10 +31,15 @@ export default async function KetQuaPage() {
       getStudentAssignmentResults(studentId),
       getLatestProgressReport(studentId),
     ]);
+  // QRY-02: tiến độ mọi lớp batch 1 lượt (thay getStudentProgress N+1 trong map).
+  const classProgress = await getStudentProgressForClasses(
+    studentId,
+    classes.map((c) => c.id),
+  );
   const results = await Promise.all(
     classes.map(async (c) => ({
       cls: c,
-      p: await getStudentProgress(studentId, c.id),
+      p: classProgress.get(c.id)!,
       sessions: await getStudentClassProgress(studentId, c.id),
     })),
   );
@@ -82,7 +88,7 @@ export default async function KetQuaPage() {
           <p className="text-xs text-purple-600">
             {latestReport.className ? `${latestReport.className} · ` : ""}
             Lập ngày{" "}
-            {new Date(latestReport.generatedAt).toLocaleDateString("vi-VN")}
+            {formatDateVN(latestReport.generatedAt)}
           </p>
         </div>
       )}

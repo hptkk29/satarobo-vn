@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, MapPin, FileSpreadsheet } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { CenterListRow } from "./_components/center-list-row";
@@ -11,11 +12,22 @@ export const dynamic = "force-dynamic";
 export default async function CentersAdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // RBAC-DECISION #5: Center ∈ SCOPE_EXEMPT (ranh giới tenant) → sdb pass-through,
-  // hành vi y nguyên. Chặn CM xem center ngoài tầm nhìn = permission tường minh (follow-up).
+  // SEC-M01: gate quyền tường minh (trước đây chỉ auth()) + lọc cơ sở theo tầm nhìn.
+  // Truyền centerId của user vào target → role CENTER-scope (CENTER_HR/SALES_CSM có
+  // centers:view[CENTER]) KHÔNG bị khoá trang (nếu gọi TRẦN thì can() cần target → false).
+  if (!(await checkPermission("centers:view", { centerId: session.user.centerId ?? null })))
+    redirect("/dashboard");
+  // Center ∈ SCOPE_EXEMPT (ranh giới tenant) → sdb pass-through KHÔNG tự lọc → lọc TAY:
+  // SUPER_ADMIN/HO-level thấy tất cả; role cơ sở chỉ thấy center trong visibleCenterIds
+  // (không lộ tên/địa chỉ/SĐT/email + count của cơ sở khác).
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+  const centerScope =
+    actor.isSuperAdmin || actor.isHoLevel
+      ? {}
+      : { id: { in: actor.visibleCenterIds } };
   const centers = await sdb.center.findMany({
+    where: centerScope,
     orderBy: [{ isActive: "desc" }, { displayOrder: "asc" }, { name: "asc" }],
     select: {
       id: true,

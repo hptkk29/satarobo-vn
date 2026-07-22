@@ -7,6 +7,7 @@ import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ChangeStatusDialog } from "../../_components/change-status-dialog";
 import { TransferDialog } from "../../_components/transfer-dialog";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ function fmtDateTime(d: Date | null) {
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("vi-VN");
+  return formatDateVN(d);
 }
 
 interface Props {

@@ -5,12 +5,13 @@ import { ClipboardCheck } from "lucide-react";
 import { AttendanceGrid } from "../../../attendance/_components/attendance-grid";
 import { loadClassSessionRoster } from "../_attendance-actions";
 import type { AttendanceRosterRow } from "@/lib/attendance/roster";
+import { formatDateDMY } from "@/lib/format/date";
 
 type SessionOpt = { id: string; date: string; topic: string | null; status: string };
 
 function fmt(dateIso: string): string {
   const d = new Date(dateIso);
-  const day = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const day = formatDateDMY(d);
   const time = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
   return `${day} · ${time}`;
 }

@@ -1,7 +1,7 @@
 // tests/fixtures/docx/build-docx.mjs — R7-13
 // Tạo file .docx HỢP LỆ bằng Node thuần (KHÔNG cần jszip/dependency): viết ZIP
 // store-only (method 0) với CRC32 tự tính. Dùng sinh:
-//   - public/templates/exam-import-template.docx  (file mẫu tải về — AC5/AC8)
+//   - (đã bỏ) file mẫu tải về nay là bản v2 soạn tay: public/templates/mau-de-thi-word-v2.docx
 //   - tests/fixtures/docx/chuan-2-cau.docx          (fixture e2e — không ảnh)
 //
 // Chạy: `node tests/fixtures/docx/build-docx.mjs` (an toàn — chỉ ghi file local).
@@ -151,8 +151,9 @@ const TEMPLATE_LINES = [
 
 const FIXTURE_2_LINES = TEMPLATE_LINES;
 
+// Template cong khai da chuyen sang ban v2 soan tay: public/templates/mau-de-thi-word-v2.docx
+// (script nay CHI con build fixture test — dung ghi de file mau v2).
 const outputs = [
-  { rel: "public/templates/exam-import-template.docx", lines: TEMPLATE_LINES },
   { rel: "tests/fixtures/docx/chuan-2-cau.docx", lines: FIXTURE_2_LINES },
 ];
 

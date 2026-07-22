@@ -49,7 +49,9 @@ export function TransferForm({
     setFromClassId("");
     setEligible(null);
     startNav(() => {
-      router.push(value ? `/admin/chuyen-lop?fromCenterId=${encodeURIComponent(value)}` : "/admin/chuyen-lop");
+      // URL sạch (không tiền tố /admin) như mọi link nội bộ khác — tránh thanh địa chỉ
+      // nhảy sang /admin/chuyen-lop rồi bị proxy redirect trên host admin.
+      router.push(value ? `/chuyen-lop?fromCenterId=${encodeURIComponent(value)}` : "/chuyen-lop");
     });
   }
 

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { toast } from "sonner";
 import { createSession, updateSession } from "../_actions";
 
 export type SessionFormValue = {
@@ -36,6 +37,8 @@ interface Props {
   classes: ClassOption[];
   lessons?: LessonOption[];
   defaultClassId?: string;
+  /** QA 20/07 Vấn đề C — URL quay về sau khi lưu/huỷ (giữ bộ lọc trang danh sách). */
+  returnTo?: string;
 }
 
 function toDateTimeLocal(d: Date | null): string {
@@ -61,9 +64,12 @@ export function SessionForm({
   classes,
   lessons = [],
   defaultClassId,
+  returnTo,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(session);
+  // Chống open-redirect: chỉ nhận đường dẫn nội bộ về trang danh sách buổi học.
+  const backUrl = returnTo && returnTo.startsWith("/sessions") ? returnTo : "/sessions";
   const [error, setError] = useState<string | null>(null);
   const [classId, setClassId] = useState<string>(
     session?.classId ?? defaultClassId ?? "",
@@ -99,7 +105,13 @@ export function SessionForm({
     const res = isEdit
       ? await updateSession(session!.id, formData)
       : await createSession(formData);
-    if (res?.error) setError(res.error);
+    if (res?.error) {
+      setError(res.error);
+      return;
+    }
+    // QA 20/07 Vấn đề C/D — toast thành công + quay về đúng bộ lọc trước đó.
+    toast.success(isEdit ? "Đã cập nhật buổi học" : "Đã tạo buổi học mới");
+    router.push(backUrl);
   }
 
   return (
@@ -144,8 +156,7 @@ export function SessionForm({
             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
           />
           <p className="mt-1 text-xs text-neutral-500">
-            Schema chỉ có 1 field <code>date</code> (DateTime) — không có start/end time tách biệt.
-            Dùng datetime-local để chọn ngày + giờ.
+            Chọn ngày + giờ bắt đầu buổi học. Giờ kết thúc tính theo khung giờ của lớp.
           </p>
         </label>
 
@@ -217,7 +228,7 @@ export function SessionForm({
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
-          onClick={() => router.push("/sessions")}
+          onClick={() => router.push(backUrl)}
           className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
         >
           Huỷ

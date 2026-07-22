@@ -6,6 +6,8 @@ import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { ymdLocal } from "@/lib/classes/schedule";
+import { DateNavInput } from "./_components/date-nav-input";
 import type { WorkShift } from "@prisma/client";
 import {
   computeShiftAttendance,
@@ -45,7 +47,10 @@ export default async function ChamCongPage({ searchParams }: Props) {
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
-  const dateStr = start.toISOString().slice(0, 10);
+  // `start` là NỬA ĐÊM GIỜ ĐỊA PHƯƠNG → đọc lại nhãn theo ngày ĐỊA PHƯƠNG (ymdLocal),
+  // KHÔNG qua toISOString() (UTC) — trên máy +7 sẽ lệch -1 ngày (18/7 thay vì 19/7)
+  // và ngày người dùng tự chọn cũng bị hiển thị lùi 1 ngày.
+  const dateStr = ymdLocal(start);
 
   // Cách ly cơ sở (A0-04): EmployeeCheckin/ShiftRegistration ∈ SCOPED_MODELS → scopedDb.
   const sdb = scopedDb(await resolveActor(session.user.id));
@@ -132,14 +137,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
       </div>
 
       <div className="mb-4 flex items-center gap-3">
-        <form>
-          <input
-            type="date"
-            name="date"
-            defaultValue={dateStr}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-          />
-        </form>
+        <DateNavInput value={dateStr} />
         {missingOut > 0 && (
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
             <AlertTriangle className="h-3.5 w-3.5" /> {missingOut} người chưa check-out

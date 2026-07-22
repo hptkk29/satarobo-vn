@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTransition } from "react";
 import { Pencil, Trash2, Eye } from "lucide-react";
 import { deleteNews, toggleNewsPublished } from "../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 type Row = {
   id: string;
@@ -68,7 +69,7 @@ export function NewsListRow({ news }: { news: Row }) {
         )}
       </td>
       <td className="p-4 text-sm text-neutral-600">
-        {news.publishedAt ? new Date(news.publishedAt).toLocaleDateString("vi-VN") : "—"}
+        {news.publishedAt ? formatDateVN(news.publishedAt) : "—"}
       </td>
       <td className="p-4 text-right">
         <div className="inline-flex items-center gap-1">

@@ -4,7 +4,8 @@ import { useTransition } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { exportAuditLogsCSV, type AuditFilters } from "../_actions";
+import { exportAuditLogsCSV } from "../_actions";
+import type { AuditFilters } from "../_types";
 
 export function ExportButton({ filters }: { filters: AuditFilters }) {
   const [pending, startTransition] = useTransition();

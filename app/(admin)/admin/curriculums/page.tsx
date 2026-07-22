@@ -8,6 +8,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Chương trình học | Admin" };
 
 interface SearchParams {
   searchParams: Promise<{

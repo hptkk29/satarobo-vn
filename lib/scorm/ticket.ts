@@ -4,6 +4,7 @@
 // dependency JWT — dùng node:crypto như lib/attendance/qr-token.ts.
 import "server-only";
 import { createHmac, timingSafeEqual } from "crypto";
+import { getSigningSecret } from "@/lib/security/signing-key";
 
 export type ScormTicketPayload = {
   /** Gói SCORM được phép truy cập (asset resolver chỉ ký key trong prefix gói này). */
@@ -17,7 +18,7 @@ export type ScormTicketPayload = {
 };
 
 function secret(): string {
-  return process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
+  return getSigningSecret(); // SEC-H05: bỏ fallback "" (forge được vé SCORM).
 }
 
 /** HMAC base64url trên body (đã đóng gói) — prefix "scorm:" tách không gian khoá. */

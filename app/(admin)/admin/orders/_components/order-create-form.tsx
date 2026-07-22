@@ -127,7 +127,7 @@ export function OrderCreateForm({
     COURSE: "Khoá học",
     PRODUCT: "Sản phẩm",
   };
-  const ORDER_STATUS_ITEMS = { DRAFT: "Nháp", PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận TT" };
+  const ORDER_STATUS_ITEMS = { DRAFT: "Nháp", PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận đơn" };
   const pmItems = useMemo(
     () => Object.fromEntries(availablePMs.map((pm) => [pm.id, pm.name])),
     [availablePMs],
@@ -347,7 +347,7 @@ export function OrderCreateForm({
               <SelectContent>
                 <SelectItem value="DRAFT">Nháp</SelectItem>
                 <SelectItem value="PENDING_PAYMENT">Chờ thanh toán</SelectItem>
-                <SelectItem value="CONFIRMED">Đã xác nhận TT</SelectItem>
+                <SelectItem value="CONFIRMED">Đã xác nhận đơn</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -12,6 +12,7 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { getNonConsentStudents } from "@/lib/lms/media-consent";
 import { resolveActor } from "@/lib/auth/actor";
 import { canManageClass } from "@/lib/auth/lms-scope";
+import { formatDateDMY } from "@/lib/format/date";
 
 // Cách ly cơ sở (chống IDOR ghi): ClassSessionMedia relation-scoped qua class.centerId.
 // Duyệt/xoá theo mediaId từ client phải xác minh lớp thuộc tầm nhìn actor.
@@ -132,7 +133,7 @@ export async function getClassUploadContext(
     sessions: sessions.map((s) => ({
       id: s.id,
       date: s.date.toISOString(),
-      label: `${s.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}${s.topic ? ` · ${s.topic}` : ""}`,
+      label: `${formatDateDMY(s.date)}${s.topic ? ` · ${s.topic}` : ""}`,
     })),
   };
 }

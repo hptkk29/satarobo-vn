@@ -86,8 +86,8 @@ export default function ImportStudentsPage() {
 
       <ExcelImporter<StudentImportRow>
         title="Import Học viên"
-        templateUrl="/templates/mau-hoc-vien.xlsx"
-        templateFilename="mau-hoc-vien.xlsx"
+        templateUrl="/templates/mau-hoc-vien-v2.xlsx"
+        templateFilename="mau-hoc-vien-v2.xlsx"
         columnHints={[
           { key: "studentCode", label: "Mã HS (upsert key)" },
           { key: "fullName", label: "Họ tên HS", required: true },

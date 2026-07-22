@@ -45,8 +45,8 @@ export default function ImportRoomsPage() {
 
       <ExcelImporter<RoomImportRow>
         title="Import Phòng học"
-        templateUrl="/templates/mau-phong-hoc.xlsx"
-        templateFilename="mau-phong-hoc.xlsx"
+        templateUrl="/templates/mau-phong-hoc-v2.xlsx"
+        templateFilename="mau-phong-hoc-v2.xlsx"
         columnHints={[
           { key: "name", label: "Tên phòng", required: true },
           { key: "code", label: "Mã phòng", required: true },

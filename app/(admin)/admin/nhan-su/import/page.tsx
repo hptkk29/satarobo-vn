@@ -93,8 +93,8 @@ export default function ImportEmployeesPage() {
 
       <ExcelImporter<EmployeeImportRow>
         title="Import Nhân viên"
-        templateUrl="/templates/mau-nhan-vien.xlsx"
-        templateFilename="mau-nhan-vien.xlsx"
+        templateUrl="/templates/mau-nhan-vien-v2.xlsx"
+        templateFilename="mau-nhan-vien-v2.xlsx"
         columnHints={[
           { key: "employeeCode", label: "Mã NV", required: true },
           { key: "fullName", label: "Họ tên", required: true },

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Star } from "lucide-react";
 import { addTeacherReview } from "../../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 type ParentFb = { rating: number; content: string; studentName: string | null; createdAt: string };
 type Review = { score: number; note: string | null; reviewerName: string; createdAt: string };
@@ -43,6 +44,11 @@ export function TeacherEvaluations({
   const [note, setNote] = useState("");
 
   function submit() {
+    // Bắt buộc có nội dung nhận xét → tránh tạo nhầm đánh giá rỗng chỉ vì bấm nút.
+    if (note.trim().length < 5) {
+      toast.error("Nhập nội dung nhận xét (tối thiểu 5 ký tự) trước khi ghi đánh giá");
+      return;
+    }
     startTransition(async () => {
       const res = await addTeacherReview({ userId, score, note: note.trim() });
       if (res.ok) {
@@ -81,7 +87,7 @@ export function TeacherEvaluations({
                   <Stars value={f.rating} />
                   <span className="text-xs text-gray-400">
                     {f.studentName ?? "PH"} ·{" "}
-                    {new Date(f.createdAt).toLocaleDateString("vi-VN")}
+                    {formatDateVN(f.createdAt)}
                   </span>
                 </div>
                 <p className="mt-1 text-gray-700">{f.content}</p>
@@ -103,7 +109,7 @@ export function TeacherEvaluations({
                 <div className="flex items-center gap-2">
                   <Stars value={r.score} />
                   <span className="text-xs text-gray-400">
-                    {r.reviewerName} · {new Date(r.createdAt).toLocaleDateString("vi-VN")}
+                    {r.reviewerName} · {formatDateVN(r.createdAt)}
                   </span>
                 </div>
                 {r.note && <p className="mt-1 text-gray-700">{r.note}</p>}
@@ -134,7 +140,7 @@ export function TeacherEvaluations({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               disabled={pending}
-              placeholder="Nhận xét dự giờ (tùy chọn)…"
+              placeholder="Nhận xét dự giờ (bắt buộc)…"
               className="min-w-[16rem] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
             />
             <button

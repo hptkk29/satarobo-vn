@@ -4,6 +4,7 @@ import { verifyCronAuth } from "@/lib/cron/auth";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { getSetting } from "@/lib/settings/service";
 import { effectiveReminderDays, isReminderDue, overdueBucket, remindOverdueInstallments } from "@/lib/finance/debt";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
       stats.skippedNoChannel++;
       continue;
     }
-    const due = inst.dueDate ? new Date(inst.dueDate).toLocaleDateString("vi-VN") : "";
+    const due = inst.dueDate ? formatDateVN(inst.dueDate) : "";
     const courseName = inst.order.items[0]?.itemName ?? "khoá học";
     const amountStr = inst.amount.toLocaleString("vi-VN");
     const bodyText = `Kính gửi ${inst.order.customerName ?? "Quý phụ huynh"},\nĐơn ${inst.order.code} (${courseName}) còn ${amountStr}đ học phí đợt 2, hạn đóng ${due}.\nQuý phụ huynh vui lòng hoàn tất trước hạn. Xin cảm ơn.\n— Sata Robo`;

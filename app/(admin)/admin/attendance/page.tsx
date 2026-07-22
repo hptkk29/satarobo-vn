@@ -7,9 +7,11 @@ import { hasRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
+import { AttendanceSelector } from "./_components/attendance-selector";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Điểm danh | Admin" };
 
 interface SearchParams {
   searchParams: Promise<{ sessionId?: string; classId?: string }>;
@@ -51,10 +53,11 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   const sdb = scopedDb(actor);
 
   // Load list of sessions for selector (upcoming or recent past)
+  // QA 21/07 — loại buổi của lớp đã xoá mềm khỏi selector (đồng bộ /sessions).
   const sessions = await sdb.classSession.findMany({
     where: {
       ...(classFilter ? { classId: classFilter } : {}),
-      class: classScope,
+      class: { deletedAt: null, ...classScope },
     },
     orderBy: { date: "desc" },
     take: 100,
@@ -101,7 +104,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   if (sessionId) {
     // Scope theo selector: GV mở thẳng sessionId của lớp ngoài phạm vi → null (ẩn roster).
     const sess = await sdb.classSession.findFirst({
-      where: { id: sessionId, class: classScope },
+      where: { id: sessionId, class: { deletedAt: null, ...classScope } },
       include: {
         class: {
           select: {
@@ -215,41 +218,19 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
         </p>
       </div>
 
-      {/* Session selector */}
-      <form method="GET" className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <select
-          name="classId"
-          defaultValue={classFilter ?? ""}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
-        >
-          <option value="">Tất cả lớp</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
-          name="sessionId"
-          defaultValue={sessionId ?? ""}
-          className="flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 sm:max-w-md"
-        >
-          <option value="">— Chọn buổi học —</option>
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {formatDateTime(s.date)} · {s.class.name}
-              {s.topic ? ` — ${s.topic}` : ""}
-              {s._count.attendances > 0 && ` (đã điểm danh)`}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
-        >
-          Mở
-        </button>
-      </form>
+      {/* Session selector — client-side nav + pending "Đang mở…" (Lỗi 2-click QA 20/07) */}
+      <AttendanceSelector
+        key={classFilter ?? ""}
+        classId={classFilter ?? ""}
+        sessionId={sessionId ?? ""}
+        classes={classes.map((c) => ({ id: c.id, label: c.name }))}
+        sessions={sessions.map((s) => ({
+          id: s.id,
+          label: `${formatDateTime(s.date)} · ${s.class.name}${s.topic ? ` — ${s.topic}` : ""}${
+            s._count.attendances > 0 ? " (đã điểm danh)" : ""
+          }`,
+        }))}
+      />
 
       {!selectedSession && (
         <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-12 text-center">

@@ -5,8 +5,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UserPlus, Users, AlertTriangle } from "lucide-react";
-import { assignSelectedAction, assignAllFilteredAction } from "../_actions";
+import { UserPlus, Users, AlertTriangle, GraduationCap } from "lucide-react";
+import {
+  assignSelectedAction,
+  assignAllFilteredAction,
+  promoteConfirmedAction,
+} from "../_actions";
 
 type Row = {
   id: string;
@@ -34,6 +38,37 @@ export function AssignStudents({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // (a) PA-B — tick chọn các ghi danh "Đã xếp" để chuyển gộp sang "Đang học".
+  // Lưu danh sách BỎ TICK (mặc định chọn hết — 1 cú bấm cho cả lớp; em mới thành
+  // "Đã xếp" sau refresh cũng tự được chọn); bỏ tick em chưa đóng đủ tiền.
+  const [promoteOff, setPromoteOff] = useState<Set<string>>(new Set());
+  const confirmedRows = current.filter((s) => s.status === "CONFIRMED");
+
+  function togglePromote(id: string) {
+    setPromoteOff((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function promote() {
+    const ids = confirmedRows.filter((s) => !promoteOff.has(s.id)).map((s) => s.id);
+    if (ids.length === 0) {
+      toast.error("Chưa tick học viên nào (cột Đã xếp)");
+      return;
+    }
+    startTransition(async () => {
+      const res = await promoteConfirmedAction(classId, ids);
+      if (res.ok) {
+        toast.success(`Đã chuyển ${res.promoted ?? 0} học viên sang "Đang học"`);
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Không chuyển được");
+      }
+    });
+  }
   // Khi vượt sức chứa, action trả needsOverride → giữ lại payload chờ xác nhận.
   const [pendingOverride, setPendingOverride] = useState<
     | { kind: "selected"; ids: string[] }
@@ -105,9 +140,25 @@ export function AssignStudents({
     <div className="space-y-6">
       {/* Sĩ số hiện tại */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
-          <Users className="h-4 w-4" /> Học sinh trong lớp ({activeCount}/{maxStudents})
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+            <Users className="h-4 w-4" /> Học sinh trong lớp ({activeCount}/{maxStudents})
+          </h2>
+          {/* (a) PA-B — nút gộp: chỉ hiện khi lớp còn em "Đã xếp" */}
+          {confirmedRows.length > 0 && (
+            <button
+              type="button"
+              onClick={promote}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <GraduationCap className="h-4 w-4" />
+              {pending
+                ? "Đang chuyển…"
+                : `Chuyển sang Đang học (${confirmedRows.filter((s) => !promoteOff.has(s.id)).length}/${confirmedRows.length})`}
+            </button>
+          )}
+        </div>
         {current.length === 0 ? (
           <p className="text-sm text-gray-400">Lớp chưa có học sinh.</p>
         ) : (
@@ -115,17 +166,36 @@ export function AssignStudents({
             {current.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center justify-between py-2 text-sm"
+                className="flex items-center justify-between gap-3 py-2 text-sm"
               >
-                <span className="font-medium text-gray-900">
+                <span className="flex items-center gap-3 font-medium text-gray-900">
+                  {/* tick chọn chỉ cho em "Đã xếp" — em khác giữ nguyên hàng tĩnh */}
+                  {s.status === "CONFIRMED" ? (
+                    <input
+                      type="checkbox"
+                      checked={!promoteOff.has(s.id)}
+                      onChange={() => togglePromote(s.id)}
+                      aria-label={`Chọn ${s.name} để chuyển sang Đang học`}
+                      className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-600"
+                    />
+                  ) : (
+                    <span className="h-4 w-4" aria-hidden />
+                  )}
                   {s.name}
                   {s.studentCode ? (
-                    <span className="ml-2 text-xs text-gray-400">
+                    <span className="text-xs font-normal text-gray-400">
                       {s.studentCode}
                     </span>
                   ) : null}
                 </span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
+                <span
+                  className={
+                    "rounded-full px-2.5 py-0.5 text-xs font-semibold " +
+                    (s.status === "CONFIRMED"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-gray-100 text-gray-600")
+                  }
+                >
                   {s.statusLabel}
                 </span>
               </li>

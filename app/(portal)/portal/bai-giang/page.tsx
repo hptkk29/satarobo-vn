@@ -2,6 +2,7 @@ import { FileText, Download } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentLessons } from "@/lib/portal/learning";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Bài giảng | Sata Robo" };
@@ -43,7 +44,7 @@ export default async function BaiGiangPage() {
                 <h2 className="font-semibold text-neutral-900">{l.title}</h2>
                 {l.taughtAt && (
                   <span className="shrink-0 text-xs text-neutral-400">
-                    {new Date(l.taughtAt).toLocaleDateString("vi-VN")}
+                    {formatDateVN(l.taughtAt)}
                   </span>
                 )}
               </div>

@@ -48,8 +48,8 @@ export default function ImportCentersPage() {
 
       <ExcelImporter<CenterImportRow>
         title="Import Cơ sở"
-        templateUrl="/templates/mau-co-so.xlsx"
-        templateFilename="mau-co-so.xlsx"
+        templateUrl="/templates/mau-co-so-v2.xlsx"
+        templateFilename="mau-co-so-v2.xlsx"
         columnHints={[
           { key: "name", label: "Tên chi nhánh", required: true },
           { key: "slug", label: "Slug", required: true },

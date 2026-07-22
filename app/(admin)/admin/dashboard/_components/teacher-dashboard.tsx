@@ -1,12 +1,16 @@
 import Link from "next/link";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { CalendarDays, ClipboardCheck, FileWarning, AlertTriangle } from "lucide-react";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { buildWeeklySchedule, WEEKDAY_LABELS, type TeacherClassSlot } from "@/lib/teachers/schedule";
 
-// Đợt 3C — Dashboard GIÁO VIÊN. KHÔNG doanh thu/lead/quản trị.
-export async function TeacherDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
+// REQ-04: số liệu dashboard giáo viên. Data THEO USER (teacherId=userId) nên cache key =
+// userId (không phải scope). Output PRIMITIVE (startTime/endTime là string, scheduleDays
+// int[], conflicts {day,a,b} — không Date/Map) → serialize an toàn.
+async function getTeacherStats(userId: string) {
   const now = new Date();
   const todayWd = now.getDay(); // 0=CN..6=T7
   const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -14,8 +18,7 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
   dayEnd.setDate(dayEnd.getDate() + 1);
 
   // Cách ly cơ sở: Class/ClassSession ∈ SCOPED_MODELS → sdb tự inject centerId.
-  // AssignmentSubmission KHÔNG scoped → scope tay qua assignment.class.centerId,
-  // đồng bộ đúng tập center mà sdb cho phép trên model Class (AC7).
+  // AssignmentSubmission KHÔNG scoped → scope tay qua assignment.class.centerId (AC7).
   const actor = await resolveActor(userId);
   const sdb = scopedDb(actor);
   const visibleClassCenters = getModelVisibleCenterIds("Class", actor);
@@ -47,7 +50,7 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
   ]);
 
   const todayClasses = myClasses.filter((c) => c.scheduleDays.includes(todayWd));
-  const incompleteToday = sessionsToday.filter((s) => s.status !== "COMPLETED");
+  const incompleteCount = sessionsToday.filter((s) => s.status !== "COMPLETED").length;
 
   const slots: TeacherClassSlot[] = myClasses.map((c) => ({
     id: c.id,
@@ -58,6 +61,18 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
     role: "teacher",
   }));
   const { conflicts } = buildWeeklySchedule(slots);
+
+  return { todayClasses, incompleteCount, toGrade, conflicts };
+}
+
+// Đợt 3C — Dashboard GIÁO VIÊN. KHÔNG doanh thu/lead/quản trị.
+export async function TeacherDashboard({ userId, name, embedded = false }: { userId: string; name: string; embedded?: boolean }) {
+  // REQ-04: cache theo USER (userId), TTL 60s.
+  const { todayClasses, incompleteCount, toGrade, conflicts } = await safeCache(
+    () => getTeacherStats(userId),
+    ["teacher-dashboard-stats", userId],
+    { tags: [CACHE_TAGS.dashboard], revalidate: 60 },
+  )();
 
   return (
     <div className="space-y-6">
@@ -91,7 +106,7 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
       </section>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <DashStat label="Buổi hôm nay chưa hoàn tất" value={incompleteToday.length} href="/sessions" tone={incompleteToday.length > 0 ? "warn" : "ok"} icon={<ClipboardCheck className="h-5 w-5" />} />
+        <DashStat label="Buổi hôm nay chưa hoàn tất" value={incompleteCount} href="/sessions" tone={incompleteCount > 0 ? "warn" : "ok"} icon={<ClipboardCheck className="h-5 w-5" />} />
         <DashStat label="Bài đã nộp cần chấm" value={toGrade} href="/assignments" tone={toGrade > 0 ? "warn" : "ok"} icon={<FileWarning className="h-5 w-5" />} />
         <DashStat label="Xung đột giờ trong tuần" value={conflicts.length} href="#" tone={conflicts.length > 0 ? "danger" : "ok"} icon={<AlertTriangle className="h-5 w-5" />} />
       </div>

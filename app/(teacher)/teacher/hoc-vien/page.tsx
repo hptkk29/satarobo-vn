@@ -14,19 +14,7 @@
 // ⚠️ Câu 46: KHÔNG SĐT/email/tên phụ huynh — reference header có parentName/phone,
 // KHÔNG port. Student CHỈ {id, name, studentCode, avatarUrl, dateOfBirth, currentGrade, school}.
 import Link from "next/link";
-import {
-  ArrowLeft,
-  CalendarCheck,
-  ChevronRight,
-  ClipboardList,
-  ClipboardPen,
-  CircleCheck,
-  FileDown,
-  GraduationCap,
-  Lock,
-  NotebookPen,
-  type LucideIcon,
-} from "lucide-react";
+import { CalendarCheck, ChevronRight, ClipboardList, ClipboardPen, CircleCheck, FileDown, GraduationCap, Lock, NotebookPen, type LucideIcon } from "lucide-react";
 import type { AttendanceStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -42,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { StudentList, type StudentRow } from "./_components/student-list";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Hồ sơ học viên | Giáo viên Sata Robo" };
 
@@ -693,18 +682,6 @@ function CompetencyBar({ label, level }: { label: string; level: number | null }
         <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
       </div>
     </div>
-  );
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
   );
 }
 

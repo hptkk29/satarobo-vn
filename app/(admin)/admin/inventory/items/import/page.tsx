@@ -60,8 +60,8 @@ export default function ImportInventoryItemsPage() {
 
       <ExcelImporter<ItemRow>
         title="Import Học cụ"
-        templateUrl="/templates/mau-hoc-cu.xlsx"
-        templateFilename="mau-hoc-cu.xlsx"
+        templateUrl="/templates/mau-hoc-cu-v2.xlsx"
+        templateFilename="mau-hoc-cu-v2.xlsx"
         columnHints={[
           { key: "itemCode", label: "Mã hàng (upsert key)", required: true },
           { key: "name", label: "Tên hàng", required: true },

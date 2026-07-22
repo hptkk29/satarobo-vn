@@ -6,15 +6,17 @@ import { SessionForm } from "../../_components/session-form";
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }
 
 export const dynamic = "force-dynamic";
 
-export default async function EditSessionPage({ params }: Props) {
+export default async function EditSessionPage({ params, searchParams }: Props) {
   const auth_ = await auth();
   if (!auth_?.user) redirect("/login");
 
   const { id } = await params;
+  const { returnTo } = await searchParams;
 
   // Cách ly cơ sở: ClassSession KHÔNG ∈ SCOPED_MODELS (không có centerId trực tiếp)
   // → scopedDb không auto-scope findUnique. Scope THỦ CÔNG qua class.centerId theo
@@ -65,6 +67,7 @@ export default async function EditSessionPage({ params }: Props) {
         Sửa buổi học: <span className="font-bold text-orange-600">{session.class.name}</span>
       </h1>
       <SessionForm
+        returnTo={returnTo}
         session={{
           id: session.id,
           classId: session.classId,

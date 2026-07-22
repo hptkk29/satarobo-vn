@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MessageCircle } from "lucide-react";
 import { respondToFeedback } from "../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 // P1-g — ô phản hồi của admin cho 1 đánh giá.
 export function FeedbackReply({
@@ -41,7 +42,7 @@ export function FeedbackReply({
       <div className="mt-2 rounded-lg bg-purple-50 p-2 text-sm text-purple-800">
         <p className="mb-0.5 flex items-center gap-1 text-xs font-semibold">
           <MessageCircle className="h-3.5 w-3.5" /> Phản hồi của trung tâm
-          {respondedAt ? ` · ${new Date(respondedAt).toLocaleDateString("vi-VN")}` : ""}
+          {respondedAt ? ` · ${formatDateVN(respondedAt)}` : ""}
         </p>
         <p className="whitespace-pre-wrap">{existing}</p>
         <button onClick={() => setOpen(true)} className="mt-1 text-xs font-semibold text-purple-600 hover:underline">

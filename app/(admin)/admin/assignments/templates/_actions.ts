@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -267,6 +268,20 @@ export async function generateAssignmentFromTemplate(
   });
   if (!cls) return { ok: false, error: "Không tìm thấy lớp hoặc lớp đã xoá" };
 
+  // QA 21/07 (#2) — mỗi mẫu chỉ sinh 1 bài/lớp (unique classId+templateId). Chặn
+  // sớm với thông báo thân thiện thay vì để lộ stack Prisma ra banner đỏ.
+  const already = await sdb.assignment.findFirst({
+    where: { classId, templateId },
+    select: { id: true },
+  });
+  if (already) {
+    return {
+      ok: false,
+      error:
+        "Lớp này đã được sinh bài từ mẫu này rồi (mỗi mẫu chỉ sinh 1 bài/lớp). Sửa bài đã sinh ở trang Bài tập.",
+    };
+  }
+
   const createdById = await resolveEmployeeId(sdb, gate.userId);
   const data = templateToAssignmentData(template, { classId, createdById, dueAt });
 
@@ -342,6 +357,13 @@ export async function generateAssignmentFromTemplate(
     revalidatePath(`/assignments/templates/${templateId}/edit`);
     return { ok: true, data: { assignmentId: a.id } };
   } catch (err) {
+    // Race 2 người cùng sinh: unique (classId, templateId) → cùng thông báo thân thiện.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return {
+        ok: false,
+        error: "Lớp này đã được sinh bài từ mẫu này rồi (mỗi mẫu chỉ sinh 1 bài/lớp).",
+      };
+    }
     return {
       ok: false,
       error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,

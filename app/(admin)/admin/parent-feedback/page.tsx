@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { FeedbackReply } from "./_components/feedback-reply";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Đánh giá phụ huynh | Admin" };
 export const dynamic = "force-dynamic";
@@ -85,7 +86,7 @@ export default async function AdminParentFeedbackPage() {
                   ))}
                 </div>
                 <span className="text-xs text-gray-400">
-                  {f.createdAt.toLocaleDateString("vi-VN")}
+                  {formatDateVN(f.createdAt)}
                 </span>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">

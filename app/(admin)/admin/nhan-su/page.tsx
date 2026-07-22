@@ -5,6 +5,10 @@ import { Plus, Search, FileSpreadsheet } from "lucide-react";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
+import {
+  getEmployeeFieldVisibility,
+  redactEmployeeFields,
+} from "@/lib/auth/permissions";
 import { EmployeesAdminTable } from "@/components/admin/nhan-su/employees-admin-table";
 import type { Department, EmploymentStatus, Prisma } from "@prisma/client";
 
@@ -140,6 +144,17 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
 
   const hoEmployeeIds = hoAssignments.map((a) => a.employeeId);
 
+  // SEC-H04: redact salary/personal ngoài quyền TRƯỚC khi serialize xuống client table.
+  // contact (email/phone) GIỮ vì bảng hiển thị 2 cột này (view-all) → không đổi giao diện;
+  // chỉ chặn rò các field bảng KHÔNG hiện nhưng vẫn nằm trong payload.
+  const listVisibility = {
+    ...getEmployeeFieldVisibility(session.user.role),
+    contact: true,
+  };
+  const redactedEmployees = employees.map((e) =>
+    redactEmployeeFields(e, listVisibility),
+  );
+
   const canCreate = await checkPermission("employees:create");
   const canDelete = await checkPermission("employees:delete");
 
@@ -263,7 +278,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
       </div>
 
       <EmployeesAdminTable
-        employees={employees}
+        employees={redactedEmployees}
         canDelete={canDelete}
         hoEmployeeIds={hoEmployeeIds}
       />

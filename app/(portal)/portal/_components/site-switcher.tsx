@@ -1,11 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { logoutToGate } from "@/lib/auth/logout-client";
 import { ChevronDown, LogOut } from "lucide-react";
-import { toast } from "sonner";
-import { setActiveSite } from "../actions";
+import { useSetActiveSite } from "@/components/portal/use-set-active-site";
 
 type Child = { id: string; name: string; studentCode: string | null };
 
@@ -16,19 +13,11 @@ export function SiteSwitcher({
   kids: Child[];
   activeId: string | null;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const { pending, switchTo } = useSetActiveSite();
 
   function onChange(id: string) {
     if (id === activeId) return;
-    startTransition(async () => {
-      const res = await setActiveSite(id);
-      if (res.ok) {
-        router.refresh();
-      } else {
-        toast.error(res.error ?? "Không đổi được học viên");
-      }
-    });
+    switchTo(id);
   }
 
   return (

@@ -4,6 +4,7 @@ import { Plus, CalendarOff, FileSpreadsheet, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { getTeachingCenterIds } from "@/lib/org/org-service";
 import type { Prisma, HolidayType } from "@prisma/client";
 import { TypeBadge, ScopeBadge, DateRange, TYPE_LABELS } from "./_components/helpers";
 
@@ -51,10 +52,14 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
       orderBy: { date: "asc" },
       include: { center: { select: { id: true, name: true } } },
     }),
-    sdb.center.findMany({
-      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true },
-    }),
+    // Chỉ cơ sở vận hành — loại HO/"Hội sở" mồ côi khỏi bộ lọc lịch nghỉ.
+    getTeachingCenterIds().then((ids) =>
+      sdb.center.findMany({
+        where: { id: { in: ids } },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+        select: { id: true, name: true },
+      }),
+    ),
   ]);
 
   const yearOptions = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];

@@ -17,6 +17,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { DocumentType, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Tài liệu giảng dạy | Admin" };
 
 const TYPE_INFO: Record<DocumentType, { label: string; color: string }> = {
   PDF: { label: "PDF", color: "bg-red-100 text-red-700" },

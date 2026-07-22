@@ -1,9 +1,19 @@
 import { redirect } from "next/navigation";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { buildChurnReport, type ChurnEnrollmentRecord } from "@/lib/reports/churn";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
 
@@ -32,33 +42,37 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default async function ChurnReportPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (!(await checkPermission("enrollments:view-all"))) {
-    redirect("/dashboard?error=unauthorized");
-  }
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính báo cáo churn (fetch scoped + reduce thuần → object PRIMITIVE).
+async function computeChurnReport(actor: Actor, filters: ReportFilters) {
   const sdb = scopedDb(actor);
+  const dateWhere = reportDateWhere(filters); // lọc theo Enrollment.startedAt.
 
-  // Class LÀ model scoped → trả về CHỈ lớp trong tầm nhìn cơ sở. Enrollment KHÔNG
-  // có centerId (không auto-scope) → cách ly bằng cách giới hạn theo classId của
-  // các lớp đã scoped + suy centerId từ map class→center (AC: cách ly cơ sở).
-  const classes = await sdb.class.findMany({ select: { id: true, centerId: true } });
+  // Class LÀ model scoped → trả về CHỈ lớp trong tầm nhìn cơ sở. Bộ lọc cơ sở giới
+  // hạn thêm tập lớp về đúng 1 cơ sở đã chọn. Enrollment KHÔNG có centerId (không
+  // auto-scope) → cách ly bằng cách giới hạn theo classId của các lớp đã scoped +
+  // suy centerId từ map class→center (AC: cách ly cơ sở).
+  const classes = await sdb.class.findMany({
+    where: filters.centerId ? { centerId: filters.centerId } : undefined,
+    select: { id: true, centerId: true },
+  });
   const classIds = classes.map((c) => c.id);
   const classCenter = new Map(classes.map((c) => [c.id, c.centerId]));
 
   const [enrollments, centers] = await Promise.all([
     classIds.length
       ? sdb.enrollment.findMany({
-          where: { classId: { in: classIds }, deletedAt: null },
+          where: {
+            classId: { in: classIds },
+            deletedAt: null,
+            ...(dateWhere ? { startedAt: dateWhere } : {}),
+          },
           select: {
             status: true,
             classId: true,
             startedAt: true,
             enrolledAt: true,
             endedAt: true,
+            updatedAt: true,
           },
           take: 50_000,
         })
@@ -71,20 +85,54 @@ export default async function ChurnReportPage() {
     status: e.status,
     centerId: classCenter.get(e.classId) ?? null,
     startedAt: e.startedAt ?? e.enrolledAt,
-    endedAt: e.endedAt,
+    // WITHDREW nhưng thiếu endedAt → KPI đếm (theo status) nhưng bảng theo tháng bỏ
+    // qua (cần mốc để xếp kỳ) ⇒ lệch "1 · 16.7%" vs bảng 0. Dùng updatedAt (≈ lúc
+    // đổi sang WITHDREW) làm mốc kết thúc dự phòng để 2 con số khớp nhau.
+    endedAt: e.endedAt ?? (e.status === "WITHDREW" ? e.updatedAt : null),
   }));
 
-  const report = buildChurnReport(records, centerNames);
+  return buildChurnReport(records, centerNames);
+}
+
+export default async function ChurnReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("enrollments:view-all"))) {
+    redirect("/dashboard?error=unauthorized");
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
+
+  // REQ-05: cache cross-request keyed THEO SCOPE (không leak giữa cơ sở) + bộ lọc. TTL 120s.
+  const report = await safeCache(
+    () => computeChurnReport(actor, fc.filters),
+    ["churn-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
 
   return (
     <div className="space-y-5 p-4">
       <div>
         <h1 className="text-xl font-bold text-neutral-900">Báo cáo churn / rời lớp</h1>
         <p className="text-sm text-neutral-500">
-          Tỉ lệ học viên rời lớp (WITHDREW) theo kỳ và theo cơ sở — mẫu số là số đang
-          học ở đầu kỳ.
+          Tỉ lệ học viên rời lớp theo kỳ và theo cơ sở — mẫu số là số đang học ở đầu kỳ.
         </p>
       </div>
+
+      <ReportFilterBar
+        basePath="/bao-cao/churn"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Tổng ghi danh" value={num(report.summary.total)} />
@@ -138,7 +186,11 @@ export default async function ChurnReportPage() {
                   <td className="px-3 py-2">{m.period}</td>
                   <td className="px-3 py-2 text-right">{num(m.activeAtStart)}</td>
                   <td className="px-3 py-2 text-right">{num(m.withdrew)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(m.churnRate)}</td>
+                  {/* Không có ai "đang học đầu kỳ" → tỉ lệ không xác định, hiện "—"
+                      thay vì "0.0%" (chia cho 0) gây hiểu nhầm là không có ai rời. */}
+                  <td className="px-3 py-2 text-right font-medium">
+                    {m.activeAtStart > 0 ? pct(m.churnRate) : "—"}
+                  </td>
                 </tr>
               ))}
               {report.byMonth.length === 0 ? (

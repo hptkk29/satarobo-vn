@@ -20,6 +20,7 @@ import {
 import { getParentNotifications } from "@/lib/portal/notifications";
 import { isPortalV2Enabled } from "@/lib/flags";
 import { ParentDashboardV2 } from "@/components/portal/parent-dashboard";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +85,7 @@ export default async function PortalHome() {
             href="/portal/hoc-phi"
             sub={
               parent.nearestDueDate
-                ? `Đến hạn: ${new Date(parent.nearestDueDate).toLocaleDateString("vi-VN")}`
+                ? `Đến hạn: ${formatDateVN(parent.nearestDueDate)}`
                 : undefined
             }
             subIcon={parent.nearestDueDate ? <CalendarClock className="h-3 w-3" /> : undefined}

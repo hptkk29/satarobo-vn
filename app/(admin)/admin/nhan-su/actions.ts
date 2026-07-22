@@ -4,7 +4,11 @@ import { z } from "zod";
 import type { Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { hasRole } from "@/lib/auth/permissions";
+import {
+  hasRole,
+  getEmployeeFieldVisibility,
+  stripHiddenEmployeeFields,
+} from "@/lib/auth/permissions";
 import { assertPermission } from "@/lib/auth/check-permission";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ASSIGNABLE_ROLES } from "@/lib/labels";
@@ -116,6 +120,34 @@ function revalidateAll() {
   revalidatePath("/ve-chung-toi");
 }
 
+// SEC-M06 — snapshot field cho audit before/after (chỉ primitive để so sánh sạch,
+// tránh false-positive khi diff Date). Không gồm PII quá nhạy (nationalId/address/notes).
+const EMPLOYEE_AUDIT_SELECT = {
+  fullName: true,
+  employeeCode: true,
+  jobTitle: true,
+  department: true,
+  status: true,
+  centerId: true,
+  isActive: true,
+  isPublic: true,
+  salaryRank: true,
+  salaryLevel: true,
+  bhxhBase: true,
+  contractType: true,
+  gender: true,
+  managerId: true,
+} as const;
+
+function auditActorOf(session: {
+  user: { id?: string | null; name?: string | null; email?: string | null };
+}) {
+  return {
+    id: session.user.id ?? null,
+    name: session.user.name ?? session.user.email ?? "Unknown",
+  };
+}
+
 export async function createEmployeeAction(
   input: unknown,
   isHO = false,
@@ -167,8 +199,11 @@ export async function createEmployeeAction(
     }
   }
 
+  // SEC-M15: cờ CEO là danh nghĩa đơn nhất toàn hệ thống → chỉ SUPER_ADMIN được đặt.
+  const canSetPrivileged = hasRole(session.user, "SUPER_ADMIN");
+
   // Ensure chỉ 1 CEO
-  if (parsed.data.isCEO) {
+  if (parsed.data.isCEO && canSetPrivileged) {
     await sdb.employee.updateMany({
       where: { isCEO: true },
       data: { isCEO: false },
@@ -178,6 +213,12 @@ export async function createEmployeeAction(
   // NV HO → không gán Center (centerId null); chỗ làm xác định qua assignment HO.
   const createData = { ...parsed.data };
   if (isHO) createData.centerId = null;
+  // SEC-M15: chống mass-assignment khi CREATE (write path song song với update:265-270).
+  // Non-SUPER_ADMIN không được tự đặt cờ CEO; CENTER_MANAGER thuần không được đặt bậc/mức lương.
+  if (!canSetPrivileged) createData.isCEO = false;
+  // SEC-H04: strip field ngoài quyền (khớp update + redact-khi-đọc). Bao trùm strip
+  // salary CM cũ + chặn set nhóm personal/contact ngoài quyền lúc tạo.
+  stripHiddenEmployeeFields(createData, getEmployeeFieldVisibility(session.user.role));
 
   // Cách ly cơ sở: chỉ tạo NV cho cơ sở trong tầm nhìn actor (NV HO/centerId=null → super/HO).
   if (!actorCanUseCenter(actor, createData.centerId ?? null)) {
@@ -214,6 +255,22 @@ export async function createEmployeeAction(
     created.id,
     isHO,
   );
+
+  // SEC-M06: audit tạo nhân sự.
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: created.id,
+    action: "CREATE",
+    newValues: {
+      employeeCode: createData.employeeCode,
+      fullName: createData.fullName,
+      department: createData.department,
+      centerId: createData.centerId ?? null,
+    },
+    orgUnitId: createData.centerId ?? null,
+  });
 
   revalidateAll();
   return { ok: true, data: { id: created.id } };
@@ -262,12 +319,10 @@ export async function updateEmployeeAction(
     return { ok: false, error: "Không tìm thấy nhân sự" };
   }
 
-  // CENTER_MANAGER role không được edit salary fields
+  // SEC-H04: strip field ngoài quyền (khớp redact-khi-đọc bên page) — chống mất data khi
+  // client gửi null do đã redact + chặn set field ngoài quyền. Bao trùm strip salary CM cũ.
   const data = { ...parsed.data };
-  if (hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")) {
-    delete data.salaryRank;
-    delete data.salaryLevel;
-  }
+  stripHiddenEmployeeFields(data, getEmployeeFieldVisibility(session.user.role));
   // NV HO → không gán Center.
   if (isHO === true) data.centerId = null;
 
@@ -285,7 +340,26 @@ export async function updateEmployeeAction(
     });
   }
 
+  // SEC-M06: audit before/after (snapshot primitive để diff sạch).
+  const auditBefore = await sdb.employee.findUnique({
+    where: { id },
+    select: EMPLOYEE_AUDIT_SELECT,
+  });
   await sdb.employee.update({ where: { id }, data });
+  const auditAfter = await sdb.employee.findUnique({
+    where: { id },
+    select: EMPLOYEE_AUDIT_SELECT,
+  });
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "UPDATE",
+    oldValues: auditBefore,
+    newValues: auditAfter,
+    orgUnitId: auditAfter?.centerId ?? auditBefore?.centerId ?? null,
+  });
 
   if (typeof isHO === "boolean") {
     await syncHoAssignment(
@@ -335,7 +409,21 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
     };
   }
 
+  // SEC-M06: snapshot TRƯỚC khi xoá để audit (hard-delete → mất record).
+  const auditSnapshot = await sdb.employee.findUnique({
+    where: { id },
+    select: EMPLOYEE_AUDIT_SELECT,
+  });
   await sdb.employee.delete({ where: { id } });
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "DELETE",
+    oldValues: auditSnapshot,
+    orgUnitId: auditSnapshot?.centerId ?? null,
+  });
   revalidateAll();
   return { ok: true };
 }
@@ -361,6 +449,18 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
     where: { id },
     data: { isActive: !emp.isActive },
   });
+  // SEC-M06: audit bật/tắt hoạt động.
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "UPDATE",
+    oldValues: { isActive: emp.isActive },
+    newValues: { isActive: !emp.isActive },
+    changedFields: ["isActive"],
+    orgUnitId: emp.centerId,
+  });
   revalidateAll();
   return { ok: true };
 }
@@ -385,6 +485,18 @@ export async function toggleEmployeePublicAction(id: string): Promise<ActionResu
   await sdb.employee.update({
     where: { id },
     data: { isPublic: !emp.isPublic },
+  });
+  // SEC-M06: audit bật/tắt hiển thị public.
+  await writeAudit({
+    actor: auditActorOf(session),
+    module: "employees",
+    entityType: "Employee",
+    entityId: id,
+    action: "UPDATE",
+    oldValues: { isPublic: emp.isPublic },
+    newValues: { isPublic: !emp.isPublic },
+    changedFields: ["isPublic"],
+    orgUnitId: emp.centerId,
   });
   revalidateAll();
   return { ok: true };

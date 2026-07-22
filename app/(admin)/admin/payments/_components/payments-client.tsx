@@ -94,6 +94,9 @@ const METHOD_OPTIONS = [
   { value: "TINGEE", label: "Tingee" },
   { value: "COD", label: "COD" },
 ];
+const METHOD_LABEL: Record<string, string> = Object.fromEntries(
+  METHOD_OPTIONS.map((m) => [m.value, m.label]),
+);
 
 function vnd(n: number): string {
   return n.toLocaleString("vi-VN") + " đ";
@@ -209,7 +212,7 @@ export function PaymentsClient({
                 <TableCell className="text-right font-semibold">
                   {vnd(p.amount)}
                 </TableCell>
-                <TableCell className="text-xs">{p.method}</TableCell>
+                <TableCell className="text-xs">{METHOD_LABEL[p.method] ?? p.method}</TableCell>
                 <TableCell className="text-xs">{fmtDate(p.paidDate)}</TableCell>
                 <TableCell className="text-xs">{p.collectedByName ?? "—"}</TableCell>
                 <TableCell className="text-xs">{p.leadSource ?? "—"}</TableCell>
@@ -244,7 +247,7 @@ export function PaymentsClient({
                 <TableCell className="text-xs font-mono">
                   {p.hasActiveReceipt ? (
                     <a
-                      href={`/admin/payments/${p.id}/phieu-thu`}
+                      href={`/payments/${p.id}/phieu-thu`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-[#7C3AED] hover:underline"
@@ -260,7 +263,17 @@ export function PaymentsClient({
                 {canConfirm && (
                   <TableCell className="text-right">
                     {p.accountantStatus === "PENDING" ? (
-                      <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                      p.enrollmentId ? (
+                        <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                      ) : (
+                        // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
+                        <span
+                          className="text-xs text-neutral-400"
+                          title="Khoản chưa gắn ghi danh — xác nhận được sau khi convert lead thành học viên"
+                        >
+                          Chờ convert
+                        </span>
+                      )
                     ) : (
                       <span className="text-xs text-neutral-400">—</span>
                     )}

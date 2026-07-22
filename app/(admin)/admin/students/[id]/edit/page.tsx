@@ -7,7 +7,7 @@ import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
-import { getStudentProgress } from "@/lib/progress";
+import { getStudentProgressForClasses } from "@/lib/progress";
 import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
 import { StudentForm, type StudentFormValue } from "../../_components/student-form";
 import { GeneratePdfButton } from "./_pdf-button";
@@ -17,6 +17,7 @@ import { ParentAccountSection } from "../../_components/parent-account-section";
 import { ParentChildrenManager } from "../../_components/parent-children-manager";
 import { SkillEditor } from "../_components/skill-editor";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
+import { formatDateVN } from "@/lib/format/date";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -199,10 +200,15 @@ export default async function EditStudentPage({ params }: Props) {
     }),
   ]);
 
+  // QRY-07: tiến độ mọi lớp active batch 1 lượt (thay getStudentProgress N+1 trong map).
+  const activeProgress = await getStudentProgressForClasses(
+    id,
+    activeEnrollments.map((e) => e.class.id),
+  );
   const progressByClass = await Promise.all(
     activeEnrollments.map(async (e) => ({
       enrollment: e,
-      progress: await getStudentProgress(id, e.class.id),
+      progress: activeProgress.get(e.class.id)!,
       sessions: await getStudentClassProgress(id, e.class.id),
     })),
   );
@@ -367,7 +373,7 @@ export default async function EditStudentPage({ params }: Props) {
                 {absences.map((a, i) => (
                   <tr key={i} className="border-b border-neutral-100 last:border-0">
                     <td className="px-4 py-2 tabular-nums text-neutral-700">
-                      {new Date(a.date).toLocaleDateString("vi-VN")}
+                      {formatDateVN(a.date)}
                     </td>
                     <td className="px-4 py-2 text-neutral-700">{a.className}</td>
                     <td className="px-4 py-2 text-neutral-600">{a.absenceReason ?? "—"}</td>
@@ -432,10 +438,10 @@ export default async function EditStudentPage({ params }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2 tabular-nums text-neutral-600">
-                      {h.enrolledAt ? new Date(h.enrolledAt).toLocaleDateString("vi-VN") : "—"}
+                      {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
                     </td>
                     <td className="px-4 py-2 tabular-nums text-neutral-600">
-                      {h.endedAt ? new Date(h.endedAt).toLocaleDateString("vi-VN") : "—"}
+                      {h.endedAt ? formatDateVN(h.endedAt) : "—"}
                     </td>
                   </tr>
                 ))}

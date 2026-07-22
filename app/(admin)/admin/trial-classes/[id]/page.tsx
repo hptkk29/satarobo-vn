@@ -8,6 +8,7 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { TrialClassDetail } from "../_components/trial-class-detail";
 import { TrialSessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/trial-session-eval-fill";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Chi tiết lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -158,7 +159,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
           </div>
           <div className="mt-1 text-sm text-gray-600">
             {cls.code}
-            {cls.startDate ? ` · ${cls.startDate.toLocaleDateString("vi-VN")}` : ""} ·{" "}
+            {cls.startDate ? ` · ${formatDateVN(cls.startDate)}` : ""} ·{" "}
             {cls.startTime}–{cls.endTime} · {cls.sessionCount} buổi
           </div>
           <div className="mt-1 text-sm text-gray-500">

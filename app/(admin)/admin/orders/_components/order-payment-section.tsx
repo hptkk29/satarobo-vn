@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { QrCode, BadgeCheck, CalendarClock } from "lucide-react";
 import { recordOrderInstallmentsAction, markOrderInstallmentPaidAction } from "../_actions";
+import { formatDateVN } from "@/lib/format/date";
 
 type Installment = {
   id: string;
@@ -29,11 +30,15 @@ export function OrderInstallmentPlan({
   totalAmount,
   canManage,
   installments,
+  accounting,
 }: {
   orderId: string;
   totalAmount: number;
   canManage: boolean;
   installments: Installment[];
+  // (b) PA-A 22/07 — tổng theo sổ kế toán (Payment): tiền chỉ "xong" khi kế toán
+  // CONFIRMED ở /payments. Đợt PAID nghĩa là SALE đã thu, không phải kế toán đã ✓.
+  accounting: { confirmed: number; pending: number };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -93,12 +98,20 @@ export function OrderInstallmentPlan({
           <div key={i.id} className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2 text-sm">
             <span>
               <b>Đợt {i.soDot}</b> · {vnd(i.amount)}
-              {i.soDot === 2 && i.dueDate ? ` · hẹn ${new Date(i.dueDate).toLocaleDateString("vi-VN")}` : ""}
+              {i.soDot === 2 && i.dueDate ? ` · hẹn ${formatDateVN(i.dueDate)}` : ""}
             </span>
             {i.status === "PAID" ? (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                <BadgeCheck className="h-4 w-4" /> Đã đóng
-              </span>
+              // PA-A: PAID = Sale đã thu; chỉ ghi "KT đã xác nhận" khi đơn không còn
+              // khoản PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN, không per-đợt).
+              accounting.pending === 0 && accounting.confirmed > 0 ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                  <BadgeCheck className="h-4 w-4" /> Sale đã thu · KT đã xác nhận
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
+                  <BadgeCheck className="h-4 w-4" /> Sale đã thu — chờ kế toán
+                </span>
+              )
             ) : canManage ? (
               <button onClick={() => markPaid(i.id)} disabled={pending} className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white disabled:opacity-50">
                 Đánh dấu đã đóng
@@ -109,6 +122,24 @@ export function OrderInstallmentPlan({
           </div>
         ))}
         {installments.length === 0 && <p className="text-sm text-neutral-400">Chưa thiết lập kế hoạch.</p>}
+
+        {/* PA-A — trạng thái sổ kế toán (read-only): nguồn sự thật tiền là /payments. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs">
+          <span className="font-semibold uppercase tracking-wider text-neutral-500">Sổ kế toán</span>
+          {accounting.confirmed === 0 && accounting.pending === 0 ? (
+            <span className="text-neutral-400">Chưa có khoản thu nào được ghi nhận.</span>
+          ) : (
+            <>
+              <span className="font-semibold text-emerald-600">Đã xác nhận: {vnd(accounting.confirmed)}</span>
+              <span className={accounting.pending > 0 ? "font-semibold text-amber-600" : "text-neutral-400"}>
+                Chờ xác nhận: {vnd(accounting.pending)}
+              </span>
+            </>
+          )}
+          <a href="/payments" className="ml-auto font-semibold text-purple-700 underline">
+            Mở sổ Khoản thu →
+          </a>
+        </div>
       </div>
 
       {canManage && (

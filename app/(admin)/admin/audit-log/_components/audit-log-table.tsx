@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuditLogDetailModal } from "./audit-log-detail-modal";
-import type { UnifiedAuditRow } from "../_actions";
+import type { UnifiedAuditRow } from "../_types";
 
 interface Props {
   items: UnifiedAuditRow[];
@@ -30,13 +30,31 @@ const ACTION_COLORS: Record<string, string> = {
   "audit.pii-unmasked": "bg-amber-100 text-amber-800",
 };
 
+// Nhãn hành động (mã tự do — dịch mã phổ biến, còn lại giữ nguyên để không mất thông tin).
+const ACTION_LABEL: Record<string, string> = {
+  CREATE: "Tạo mới",
+  ADD: "Thêm",
+  ENABLE: "Bật",
+  UPDATE: "Cập nhật",
+  STATUS_CHANGE: "Đổi trạng thái",
+  ASSIGN: "Phân công",
+  DELETE: "Xoá",
+  REMOVE: "Gỡ",
+  DISABLE: "Vô hiệu",
+  EXPORT: "Xuất dữ liệu",
+  PASSWORD_RESET: "Đặt lại mật khẩu",
+  ROLE_CHANGE: "Đổi vai trò",
+  INSTALLMENT_APPROVED: "Duyệt đợt thanh toán",
+  "audit.pii-unmasked": "Mở xem PII",
+};
+
 function ActionBadge({ action }: { action: string }) {
   const cls = ACTION_COLORS[action] ?? "bg-gray-100 text-gray-700";
   return (
     <span
       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}
     >
-      {action}
+      {ACTION_LABEL[action] ?? action}
     </span>
   );
 }

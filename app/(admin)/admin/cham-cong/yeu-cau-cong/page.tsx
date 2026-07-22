@@ -6,6 +6,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { isWeekendEditWindow } from "@/lib/shifts";
 import { AdjustRequestForm } from "./_components/request-form";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Yêu cầu chỉnh công | Admin" };
 export const dynamic = "force-dynamic";
@@ -67,7 +68,7 @@ export default async function YeuCauCongPage() {
               <li key={r.id} className="rounded-xl border border-gray-200 bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-gray-900">
-                    {new Date(r.date).toLocaleDateString("vi-VN")}
+                    {formatDateVN(r.date)}
                   </span>
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[r.status]}`}>
                     {STATUS_LABEL[r.status]}

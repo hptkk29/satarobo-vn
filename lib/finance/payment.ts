@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
+import { allocateByWeight } from "@/lib/finance/allocate";
 
 type Tx = Prisma.TransactionClient;
 
@@ -164,6 +165,90 @@ export async function maybeAdvanceLeadToRegistered(
     },
   });
   return true;
+}
+
+// ─── FIN-01 (Q1=A) — Gắn/chia khoản RECORDED của đơn vào Enrollment lúc convert ───
+/**
+ * Sau khi convert tạo Enrollment(s), GẮN các khoản `RECORDED` chưa gắn ghi danh của đơn
+ * (theo order.leadId) vào ghi danh → `confirmPayment` sinh Receipt (scoped theo Enrollment)
+ * chạy được, `getDebtRows` phản ánh đúng.
+ *  - **1 ghi danh** → gắn nguyên khoản.
+ *  - **Nhiều ghi danh (Q1=A)** → CHIA mỗi khoản theo `weights` (finalPrice từng ghi danh),
+ *    bất biến tổng (allocateByWeight). Giữ id khoản gốc cho phần dương ĐẦU TIÊN, tạo Payment
+ *    con cho các phần còn lại; phần = 0 (học bổng toàn phần) → bỏ qua (ghi danh đó không nợ).
+ * KHÔNG auto-confirm — giữ tách vai kế toán (xác nhận tiền vào ngân hàng ở /payments, hoặc
+ * trang Đối soát ngân hàng FIN-02). `enrollmentIds[i]` PHẢI tương ứng `weights[i]` (cùng thứ
+ * tự students lúc convert). Chạy TRONG tx call-site cấp. Idempotent nhờ cổng convert
+ * (atomic claim + idempotencyKey) — chỉ chạy 1 lần / lead.
+ */
+export async function linkRecordedPaymentsToEnrollments(
+  tx: Tx,
+  params: { leadId: string; enrollmentIds: string[]; weights: number[]; actor: AuditActor },
+): Promise<{ linked: number; splitCreated: number }> {
+  const { leadId, enrollmentIds, weights, actor } = params;
+  if (enrollmentIds.length === 0) return { linked: 0, splitCreated: 0 };
+
+  const recorded = await tx.payment.findMany({
+    where: { saleStatus: "RECORDED", enrollmentId: null, deletedAt: null, order: { leadId } },
+    select: {
+      id: true, amount: true, orderId: true, method: true, paidDate: true,
+      note: true, evidenceUrl: true, recordedById: true, centerId: true,
+    },
+  });
+  if (recorded.length === 0) return { linked: 0, splitCreated: 0 };
+
+  // 1 ghi danh → gắn nguyên khoản (không tách).
+  if (enrollmentIds.length === 1) {
+    const r = await tx.payment.updateMany({
+      where: { id: { in: recorded.map((p) => p.id) } },
+      data: { enrollmentId: enrollmentIds[0]! },
+    });
+    return { linked: r.count, splitCreated: 0 };
+  }
+
+  // Nhiều ghi danh → chia theo finalPrice (bất biến tổng).
+  const n = enrollmentIds.length;
+  let splitCreated = 0;
+  for (const p of recorded) {
+    const parts = allocateByWeight(p.amount, weights);
+    let reusedOriginal = false;
+    for (let j = 0; j < n; j++) {
+      const part = parts[j]!;
+      if (part <= 0) continue; // ghi danh không được chia phần nào (finalPrice 0) → bỏ
+      const note = `${(p.note ?? "").trim()} [tách ${j + 1}/${n}]`.trim();
+      if (!reusedOriginal) {
+        await tx.payment.update({
+          where: { id: p.id },
+          data: { enrollmentId: enrollmentIds[j]!, amount: part, note },
+        });
+        await writeAudit({
+          actor, module: "finance", entityType: "Payment", entityId: p.id, action: "UPDATE",
+          changedFields: ["amount", "enrollmentId"],
+          oldValues: { amount: p.amount, enrollmentId: null },
+          newValues: { amount: part, enrollmentId: enrollmentIds[j]!, source: "convert-split" },
+          orgUnitId: p.centerId, tx,
+        });
+        reusedOriginal = true;
+      } else {
+        const created = await tx.payment.create({
+          data: {
+            orderId: p.orderId, enrollmentId: enrollmentIds[j]!, amount: part,
+            method: p.method, paidDate: p.paidDate, evidenceUrl: p.evidenceUrl ?? null, note,
+            saleStatus: "RECORDED", accountantStatus: "PENDING",
+            recordedById: p.recordedById, centerId: p.centerId,
+          },
+          select: { id: true },
+        });
+        splitCreated++;
+        await writeAudit({
+          actor, module: "finance", entityType: "Payment", entityId: created.id, action: "CREATE",
+          newValues: { amount: part, enrollmentId: enrollmentIds[j]!, source: "convert-split", splitFrom: p.id },
+          orgUnitId: p.centerId, tx,
+        });
+      }
+    }
+  }
+  return { linked: recorded.length, splitCreated };
 }
 
 // ─── AC1 — Sale ghi nhận khoản ────────────────────────────────────────────────

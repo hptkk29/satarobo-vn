@@ -7,6 +7,7 @@ import {
   getPortalView,
 } from "@/lib/portal/learning";
 import { ViewToggle } from "./_components/view-toggle";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Bài tập | Sata Robo" };
@@ -69,7 +70,7 @@ async function ParentView({ studentId }: { studentId: string }) {
                   <p className="font-medium text-neutral-900">{it.examTitle}</p>
                   <p className="text-xs text-neutral-500">
                     {it.className}
-                    {it.dueAt && ` · Hạn ${new Date(it.dueAt).toLocaleDateString("vi-VN")}`}
+                    {it.dueAt && ` · Hạn ${formatDateVN(it.dueAt)}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -127,7 +128,7 @@ async function StudentView({ studentId }: { studentId: string }) {
                       <p className="text-xs text-neutral-500">
                         {it.className}
                         {it.dueAt &&
-                          ` · Hạn ${new Date(it.dueAt).toLocaleDateString("vi-VN")}`}
+                          ` · Hạn ${formatDateVN(it.dueAt)}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -174,7 +175,7 @@ async function StudentView({ studentId }: { studentId: string }) {
                       <p className="text-xs text-neutral-500">
                         {a.className}
                         {a.dueAt &&
-                          ` · Hạn ${new Date(a.dueAt).toLocaleDateString("vi-VN")}`}
+                          ` · Hạn ${formatDateVN(a.dueAt)}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

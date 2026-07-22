@@ -3,6 +3,7 @@ import { createHmac, randomInt, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import { getPrimaryOtpProvider } from "./provider";
 import { getSetting } from "@/lib/settings/service";
+import { getSigningSecret } from "@/lib/security/signing-key";
 
 // =============================================================================
 // Cụm A1 — OTP service (request + verify).
@@ -19,7 +20,7 @@ export const OTP_DAILY_LIMIT = 8; // tối đa số OTP / target / ngày
 export type OtpPurposeKey = "ACTIVATION" | "RESET" | "CHANGE_CONTACT";
 
 function secret(): string {
-  return process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "otp-dev-secret";
+  return getSigningSecret(); // SEC-H05: bỏ fallback hằng số công khai (brute-force OTP hash).
 }
 
 function hashCode(code: string): string {
@@ -45,7 +46,13 @@ const startOfToday = () => {
 
 export type RequestOtpResult =
   | { ok: true; otpId: string; expiresAt: Date; cooldownSec: number }
-  | { ok: false; error: string; cooldownSec?: number };
+  | {
+      ok: false;
+      error: string;
+      cooldownSec?: number;
+      /** OTP ĐÃ tạo (verify được) nhưng kênh gửi lỗi — caller quyết định cách báo (QA 21/07 #3). */
+      deliveryFailed?: boolean;
+    };
 
 /**
  * Tạo + gửi OTP. Áp cooldown 60s + giới hạn ngày. Trả về otpId + hạn.
@@ -127,7 +134,11 @@ export async function requestOtp(input: {
   });
 
   if (!sent.ok) {
-    return { ok: false, error: sent.error ?? "Không gửi được mã. Thử lại sau." };
+    return {
+      ok: false,
+      error: sent.error ?? "Không gửi được mã. Thử lại sau.",
+      deliveryFailed: true,
+    };
   }
 
   return { ok: true, otpId: otp.id, expiresAt, cooldownSec };

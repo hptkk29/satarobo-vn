@@ -12,8 +12,10 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
 import { getInventoryStats } from "@/lib/inventory-stats";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Kho — Tổng quan | Admin" };
 
 function formatVnd(value: number): string {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(
@@ -27,7 +29,7 @@ function formatRelative(d: Date | null): string {
   if (diffDays < 1) return "Hôm nay";
   if (diffDays < 7) return `${Math.floor(diffDays)} ngày trước`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)} tuần trước`;
-  return new Date(d).toLocaleDateString("vi-VN");
+  return formatDateVN(d);
 }
 
 export default async function InventoryDashboardPage() {

@@ -1,9 +1,19 @@
 import { redirect } from "next/navigation";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { buildTrialReport, type TrialEnrollmentRec } from "@/lib/reports/trial";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { BarChart } from "@/components/charts/bar-chart";
 import { FunnelChart } from "@/components/charts/funnel-chart";
 
@@ -28,16 +38,18 @@ function Stat({
   );
 }
 
-export default async function TrialReportPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính báo cáo trial (fetch scoped + reduce thuần → object PRIMITIVE).
+async function computeTrialReport(actor: Actor, filters: ReportFilters) {
   const sdb = scopedDb(actor); // TrialClassV2 auto-scope theo cơ sở (HO/SUPER_ADMIN bypass)
+  const dateWhere = reportDateWhere(filters); // lọc theo TrialClassV2.createdAt.
 
-  // 1) Lớp trải nghiệm trong phạm vi cơ sở.
+  // 1) Lớp trải nghiệm trong phạm vi cơ sở (+ bộ lọc cơ sở/ngày). Giới hạn lớp ở đây
+  //    kéo theo giới hạn enrollment/điểm danh bên dưới (đều suy từ classIds).
   const classes = await sdb.trialClassV2.findMany({
+    where: {
+      ...(filters.centerId ? { centerId: filters.centerId } : {}),
+      ...(dateWhere ? { createdAt: dateWhere } : {}),
+    },
     select: { id: true, centerId: true, capacity: true, status: true, sessionCount: true },
     take: 1000,
   });
@@ -83,25 +95,41 @@ export default async function TrialReportPage() {
           take: 20000,
         });
 
-  // 4) Tên cơ sở để hiển thị.
-  const centerIds = [...new Set(classes.map((c) => c.centerId))];
-  const centerRows =
-    centerIds.length === 0
-      ? []
-      : await sdb.center.findMany({
-          where: { id: { in: centerIds } },
-          select: { id: true, name: true, code: true },
-        });
+  return buildTrialReport({ classes, enrollments, attendances });
+}
+
+export default async function TrialReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
+
+  const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
+
+  // REQ-05: cache phần nặng (query + reduce) theo scope + bộ lọc. TTL 120s. Output primitive.
+  const report = await safeCache(
+    () => computeTrialReport(actor, fc.filters),
+    ["trial-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
+
+  // Tên cơ sở để gắn nhãn — query nhỏ, giữ LIVE (Map không serialize được nên không cache).
+  const centerRows = await scopedDb(actor).center.findMany({
+    select: { id: true, name: true, code: true },
+  });
   const centerName = new Map(
     centerRows.map((c) => [c.id, c.code ? `${c.code} · ${c.name}` : c.name]),
   );
 
-  const report = buildTrialReport({ classes, enrollments, attendances });
-
   const funnelData = [
     { name: "Đã xếp lịch", value: report.funnel.scheduled + report.funnel.inProgress + report.funnel.attended },
     { name: "Đang học thử", value: report.funnel.inProgress + report.funnel.attended },
-    { name: "Đã dự đủ (ATTENDED)", value: report.funnel.attended },
+    { name: "Đã dự đủ", value: report.funnel.attended },
     { name: "Đã đăng ký", value: report.conversion.registered },
   ];
 
@@ -120,6 +148,15 @@ export default async function TrialReportPage() {
           Sĩ số lấp đầy, tỷ lệ dự đủ buổi, chuyển đổi học thử → đăng ký, theo cơ sở.
         </p>
       </div>
+
+      <ReportFilterBar
+        basePath="/bao-cao/trial"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
 
       {/* Thẻ số liệu */}
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">

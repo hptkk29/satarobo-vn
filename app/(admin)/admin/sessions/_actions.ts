@@ -160,7 +160,8 @@ export async function createSession(formData: FormData): Promise<ActionResult> {
 
   revalidatePath("/sessions");
   revalidatePath("/attendance");
-  redirect("/sessions");
+  // Thành công → trả {} để client toast + điều hướng giữ bộ lọc (QA 20/07 Vấn đề C/D).
+  return {};
 }
 
 export async function updateSession(id: string, formData: FormData): Promise<ActionResult> {
@@ -203,7 +204,7 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
   revalidatePath("/sessions");
   revalidatePath(`/sessions/${id}/edit`);
   revalidatePath("/attendance");
-  redirect("/sessions");
+  return {};
 }
 
 export async function deleteSession(id: string): Promise<ActionResult> {

@@ -21,7 +21,7 @@
 // (không tin client) — giống admin hoan-thanh-khoa/_actions.ts.
 // ⚠️ Câu 46: payload chỉ TÊN học viên — KHÔNG SĐT/email/tên phụ huynh.
 import Link from "next/link";
-import { ArrowLeft, GraduationCap, Lock, Users } from "lucide-react";
+import { GraduationCap, Lock, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -39,6 +39,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { CompletionTable, type CompletionTableRow } from "./_components/completion-table";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Hoàn thành khoá | Giáo viên Sata Robo" };
 
@@ -304,18 +305,6 @@ function ProgressBar({ pct }: { pct: number }) {
         style={{ width: `${width}%` }}
       />
     </div>
-  );
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
   );
 }
 

@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { TrialConfigSection } from "./_components/config-section";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -114,7 +115,7 @@ export default async function TrialClassesPage() {
                     <div className="text-xs text-gray-400">{c.code}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-700">
-                    {c.startDate ? c.startDate.toLocaleDateString("vi-VN") : "Theo lịch hẹn"}
+                    {c.startDate ? formatDateVN(c.startDate) : "Theo lịch hẹn"}
                   </td>
                   <td className="px-4 py-3 text-gray-700">
                     {c.startTime}–{c.endTime}

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
+import { formatVndPlain } from "@/lib/format/money";
 
 // =============================================================================
 // Commit 4 — thanh toán TỐI ĐA 2 ĐỢT cho 1 Order.
@@ -61,7 +62,7 @@ export async function recordInstallmentPlan(params: {
   });
   if (!order) return { ok: false, error: "Không tìm thấy đơn" };
   if (dot1Amount + dot2Amount !== order.totalAmount) {
-    return { ok: false, error: `Tổng 2 đợt phải bằng học phí (${order.totalAmount.toLocaleString("vi-VN")}đ)` };
+    return { ok: false, error: `Tổng 2 đợt phải bằng học phí (${formatVndPlain(order.totalAmount, false)})` };
   }
   if (dot2Amount > 0 && !dot2DueDate) return { ok: false, error: "Cần ngày hẹn đóng đợt 2" };
 
@@ -131,6 +132,9 @@ export async function markInstallmentPaid(installmentId: string, actorId: string
     const approvalOk =
       order?.installmentApprovalStatus == null || order.installmentApprovalStatus === "APPROVED";
     if (approvalOk) {
+      // Khoản ghi ở mức RECORDED (Ledger-A pending). CONFIRMED + Receipt CHỈ sinh SAU convert
+      // (Receipt scoped theo Enrollment; đòi CONFIRMED trước convert = deadlock — xem
+      // lib/crm/convert-lead-v2.ts). KHÔNG auto-confirm ở đây.
       await ensureOrderPaymentRecorded(tx, {
         orderId: inst.orderId,
         soDot: inst.soDot,

@@ -11,7 +11,7 @@ import {
   Phone,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { itemListJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { itemListJsonLd, breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { BorderBeam } from "@/components/magic/border-beam";
 import { Particles } from "@/components/magic/particles";
 import { FadeIn } from "@/components/motion/fade-in";
@@ -122,11 +122,11 @@ export default async function CoursesPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd(itemListData)) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(itemListJsonLd(itemListData)) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
       />
 
       <div className="bg-white border-b border-neutral-200 py-3">

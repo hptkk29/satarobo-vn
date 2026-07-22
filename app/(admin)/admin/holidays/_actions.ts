@@ -177,7 +177,8 @@ export async function createHoliday(formData: FormData): Promise<ActionResult> {
 
   revalidatePath("/holidays");
   revalidatePath("/sessions");
-  redirect("/holidays");
+  // Thành công → trả {} để client toast + điều hướng (QA 20/07 — không redirect âm thầm).
+  return {};
 }
 
 export async function updateHoliday(
@@ -227,7 +228,7 @@ export async function updateHoliday(
   revalidatePath("/holidays");
   revalidatePath(`/holidays/${id}/edit`);
   revalidatePath("/sessions");
-  redirect("/holidays");
+  return {};
 }
 
 export async function deleteHoliday(id: string): Promise<ActionResult> {

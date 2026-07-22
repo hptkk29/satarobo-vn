@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { AssignmentKind, AssignmentStatus, ScormPackageStatus } from "@prisma/client";
 // 1 giáo án/buổi — đẩy bản mới (LessonScormUpload) tự phát hành + thay bản cũ; gỡ hẳn
-// bằng deleteScormPackage. Quản lý đầy đủ ở /admin/scorm (Khoá học → Buổi → giáo án).
+// bằng deleteScormPackage. Quản lý đầy đủ ở /scorm (Khoá học → Buổi → giáo án).
 import { deleteScormPackage } from "@/app/(admin)/admin/scorm/_actions";
 import { attachAssignmentToLesson, detachAssignmentFromLesson } from "../_actions";
 import { LessonScormUpload } from "./lesson-scorm-upload";
@@ -152,7 +152,7 @@ export function LessonResources({
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                           <span className="font-medium text-neutral-800">{giaoAn.name}</span>
                           <Link
-                            href={`/admin/scorm/play/${giaoAn.id}`}
+                            href={`/scorm/play/${giaoAn.id}`}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:underline"
                           >
                             <Play className="h-3.5 w-3.5" /> Xem thử
@@ -188,7 +188,7 @@ export function LessonResources({
                         <p className="mt-2 text-xs text-neutral-500">
                           Chưa có giáo án cho buổi. Đẩy tệp .zip bên dưới hoặc{" "}
                           <Link
-                            href="/admin/scorm"
+                            href="/scorm"
                             className="inline-flex items-center gap-0.5 font-semibold text-[#7C3AED] hover:underline"
                           >
                             quản lý ở trang SCORM <ExternalLink className="h-3 w-3" />
@@ -215,7 +215,7 @@ export function LessonResources({
                       {/* R2-LMS-3 — upload gói SCORM inline (chỉ Đào tạo: training:manage). */}
                       {canActivateScorm && <LessonScormUpload lessonId={lesson.lessonId} />}
                       <Link
-                        href="/admin/scorm"
+                        href="/scorm"
                         className="mt-2 inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-[#7C3AED]"
                       >
                         Quản lý gói SCORM <ExternalLink className="h-3 w-3" />
@@ -308,7 +308,7 @@ export function LessonResources({
                       Chỉ liệt kê bài tập cùng khoá học, chưa gắn buổi nào. Tạo bài
                       tập mới ở{" "}
                       <Link
-                        href="/admin/assignments"
+                        href="/assignments"
                         className="font-semibold text-neutral-500 hover:text-[#7C3AED]"
                       >
                         Quản lý bài tập

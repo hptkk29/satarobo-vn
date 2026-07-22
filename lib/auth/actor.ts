@@ -7,6 +7,24 @@ import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
 import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
 import type { OrgUnitNode } from "@/lib/org/types";
 
+// REQ-02 (REVERTED) — cây OrgUnit đọc TRẦN mỗi request. Trước đây bọc unstable_cache
+// (TTL 300s) nhưng: (a) bảng OrgUnit RẤT NHỎ (HO+CS1+CS2…) → full-scan không đáng kể,
+// lợi ích cache ~0; (b) mutation NGOÀI app (SQL/seed e2e) không invalidate được cache
+// trong server → resolveActor trả cây STALE → sai visibleCenterIds → scope rỗng (đã làm
+// smoke mobile-chrome đỏ: inbox rỗng do actor thấy center cũ). Bỏ cache = an toàn đúng đắn.
+async function getOrgTree(): Promise<OrgUnitNode[]> {
+  const orgUnits = await db.orgUnit.findMany({ where: { deletedAt: null } });
+  return orgUnits.map((o) => ({
+    id: o.id,
+    code: o.code,
+    type: o.type as OrgUnitNode["type"],
+    parentId: o.parentId,
+    centerId: o.centerId,
+    isActive: o.isActive,
+    deletedAt: null,
+  }));
+}
+
 export type ScopeType =
   | "GLOBAL"
   | "CENTER"
@@ -166,7 +184,7 @@ export function buildActor(input: {
 
 export async function resolveActorUncached(userId: string): Promise<Actor> {
   const now = new Date();
-  const [rows, orgUnits, grants, classes] = await Promise.all([
+  const [rows, orgNodes, grants, classes] = await Promise.all([
     db.userOrgRole.findMany({
       where: {
         userId,
@@ -176,26 +194,18 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       },
       include: { role: { include: { permissions: true } } },
     }),
-    db.orgUnit.findMany({ where: { deletedAt: null } }),
+    getOrgTree(), // REQ-02: cây OrgUnit cache cross-request (thay findMany mỗi request).
     db.userPermissionGrant.findMany({
       where: { userId },
       select: { action: true, grant: true },
     }),
+    // QA 21/07 — lớp XOÁ MỀM không còn là "lớp được gán": thiếu filter này site GV
+    // vẫn hiện lớp đã xoá ở grid Ảnh lớp/Lớp của tôi + ownership vẫn nhận buổi của nó.
     db.class.findMany({
-      where: { OR: [{ teacherId: userId }, { assistantId: userId }] },
+      where: { deletedAt: null, OR: [{ teacherId: userId }, { assistantId: userId }] },
       select: { id: true },
     }),
   ]);
-
-  const orgNodes: OrgUnitNode[] = orgUnits.map((o) => ({
-    id: o.id,
-    code: o.code,
-    type: o.type as OrgUnitNode["type"],
-    parentId: o.parentId,
-    centerId: o.centerId,
-    isActive: o.isActive,
-    deletedAt: o.deletedAt,
-  }));
 
   return buildActor({
     userId,

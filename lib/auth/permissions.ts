@@ -249,6 +249,7 @@ export type Action =
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "orders:view"
   | "orders:manage"
+  | "orders:view-pii" // che SĐT/email/địa chỉ khách trên đơn hàng — vai CRM/kế toán mới xem đầy đủ
 
   // --- Phase 5.7 — Vouchers ---
   | "vouchers:view"
@@ -300,9 +301,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // (lib/auth/can.ts) — nếu thiếu, shadow-compare đẻ lệch v1=false/v2=true mỗi lần
   // admin chạm trang này. Behavior-neutral: call-site chỉ thu hẹp khi `!viewAll && viewOwn`.
   "leads:view-own": ["SUPER_ADMIN", "SALES_CSM"],
-  // #11 T2 — Q9: Sale/QL cơ sở (trực tiếp CSKH) mặc định ĐƯỢC xem PII lead;
-  // MARKETING (leads:view-all cross-center) KHÔNG mặc định — cấp per-user khi cần.
-  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // #11 T2 — Q9: Sale/QL cơ sở (trực tiếp CSKH) ĐƯỢC xem PII lead.
+  // 21/07 (user chốt): MARKETING XEM ĐƯỢC tên + SĐT lead (làm outreach/chiến dịch cần liên
+  // hệ) → thêm MARKETING (ĐẢO quyết định "che PII cho MARKETING" của a+b 20/07). Lưu ý:
+  // canViewLeadPii bao cả email (email-logs) + ghi chú tư vấn (lead detail) → MARKETING thấy
+  // luôn các mục này. Cách ly cơ sở vẫn do scopedDb.
+  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -558,6 +562,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "installments:approve": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // Xem đầy đủ liên hệ khách trên đơn (CRM + kế toán); vai khác thấy bản che.
+  "orders:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
 
   // --- Phase 5.7 — Vouchers ---
   "vouchers:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT"],
@@ -698,6 +704,62 @@ export function getEmployeeFieldVisibility(
   };
 }
 
+export type EmployeeFieldVisibility = ReturnType<typeof getEmployeeFieldVisibility>;
+
+// SEC-H04 — nguồn DUY NHẤT map nhóm visibility → field Employee. Khớp CHÍNH XÁC với
+// các input gate trong employee-form.tsx (visibility.contact/salary/personal). Dùng cho
+// CẢ redact-khi-đọc (không serialize PII xuống client) LẪN strip-khi-ghi (client không
+// set/xoá được field ngoài quyền). isCEO KHÔNG nằm đây: non-nullable + đã chặn ở M15.
+export const EMPLOYEE_GATED_FIELDS = {
+  contact: ["email", "phone"],
+  salary: ["salaryRank", "salaryLevel", "bhxhBase"],
+  personal: [
+    "dateOfBirth",
+    "gender",
+    "contractType",
+    "managerId",
+    "endDate",
+    "nationalId",
+    "address",
+    "emergencyContact",
+    "notes",
+  ],
+} as const;
+
+/**
+ * Redact-khi-đọc (H04): set field thuộc nhóm bị ẩn → null TRƯỚC khi serialize xuống
+ * bất kỳ client component. Giữ nguyên shape (field vẫn có, giá trị null) nên type ổn
+ * định + UI (đã ẩn theo cùng visibility) không đổi. Trả về BẢN SAO, không mutate input.
+ */
+export function redactEmployeeFields<T extends Record<string, unknown>>(
+  employee: T,
+  visibility: EmployeeFieldVisibility,
+): T {
+  const out: Record<string, unknown> = { ...employee };
+  for (const group of ["contact", "salary", "personal"] as const) {
+    if (visibility[group]) continue;
+    for (const field of EMPLOYEE_GATED_FIELDS[group]) {
+      if (field in out) out[field] = null;
+    }
+  }
+  return out as T;
+}
+
+/**
+ * Strip-khi-ghi: XOÁ key thuộc nhóm bị ẩn khỏi payload create/update (mutate tại chỗ).
+ * Prisma bỏ qua key vắng → DB giữ nguyên giá trị cũ (chống mất data khi client gửi null
+ * do đã bị redact) + chặn client set field ngoài quyền (write-side hardening).
+ */
+export function stripHiddenEmployeeFields(
+  data: Record<string, unknown>,
+  visibility: EmployeeFieldVisibility,
+): void {
+  for (const group of ["contact", "salary", "personal"] as const) {
+    if (visibility[group]) continue;
+    for (const field of EMPLOYEE_GATED_FIELDS[group]) delete data[field];
+  }
+}
+
 // =============================================================================
 // HELPERS — convenience for common patterns
 // =============================================================================
@@ -759,6 +821,6 @@ export function canViewParentContact(user: RoleHolder): boolean {
   return hasAnyRole(user, PARENT_CONTACT_ROLES);
 }
 
-// #11: canViewLeadPii đã chuyển sang lib/lead/pii.ts (async, qua checkPermission —
+// #11: canViewLeadPii đã chuyển sang lib/auth/check-permission.ts (async, qua checkPermission —
 // sau flip #09). Không import check-permission vào file này: permission-eval import
 // ngược permissions.ts, sẽ tạo vòng.

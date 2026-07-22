@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type { ParentChildOverview } from "@/lib/portal/dashboard";
 import type { NotificationRow } from "@/lib/portal/notifications";
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
+import { formatDateVN } from "@/lib/format/date";
 
 // Portal v2 (merge SataUI) — Dashboard phụ huynh, port trung thực giao diện SataUI
 // (accent coral phụ huynh qua .portal-v2). RSC, data THẬT (getParentChildrenOverview
@@ -200,7 +201,7 @@ export function ParentDashboardV2({
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <p className="line-clamp-1 text-sm font-bold text-foreground">{n.title}</p>
                       <p className="line-clamp-2 text-xs font-medium text-muted-foreground">{n.body}</p>
-                      <p className="pt-0.5 text-xs font-medium text-muted-foreground/80">{new Date(n.publishedAt).toLocaleDateString("vi-VN")}</p>
+                      <p className="pt-0.5 text-xs font-medium text-muted-foreground/80">{formatDateVN(n.publishedAt)}</p>
                     </div>
                   </Link>
                 ))}

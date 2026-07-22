@@ -10,7 +10,7 @@
 // (guard ở caller + kiểm lại sub.assignment.classId===classId chống IDOR).
 // ⚠️ Câu 46: payload client CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 import Link from "next/link";
-import { ArrowLeft, Ban, Eye, FileX2, Library, PencilLine, Plus } from "lucide-react";
+import { Ban, Eye, FileX2, Library, PencilLine, Plus } from "lucide-react";
 import type { SubmissionStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { GradeForm } from "../../cham-bai/_components/grade-form";
+import { BackLink } from "../../_components/ui/back-link";
 
 const SUBMITTED_STATUSES: SubmissionStatus[] = ["SUBMITTED", "LATE", "GRADED"];
 
@@ -60,17 +61,6 @@ const submitFmt = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden /> {label}
-    </Link>
-  );
-}
-
 export async function HubAssignmentsTab({
   actor,
   classId,
@@ -110,7 +100,7 @@ export async function HubAssignmentsTab({
     if (!sub || sub.assignment.classId !== classId) {
       return (
         <div>
-          <BackLink href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
+          <BackLink className="mb-4" href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
           <EmptyState icon={Ban} title="Bài nộp không thuộc lớp bạn phụ trách." />
         </div>
       );
@@ -119,14 +109,14 @@ export async function HubAssignmentsTab({
     if (sub.status === "NOT_SUBMITTED") {
       return (
         <div>
-          <BackLink href={backToDetail} label="Chi tiết bài tập" />
+          <BackLink className="mb-4" href={backToDetail} label="Chi tiết bài tập" />
           <EmptyState icon={FileX2} title="Học viên chưa nộp bài — chưa thể chấm." />
         </div>
       );
     }
     return (
       <div>
-        <BackLink href={backToDetail} label="Chi tiết bài tập" />
+        <BackLink className="mb-4" href={backToDetail} label="Chi tiết bài tập" />
         <div className="mb-4">
           <h2 className="text-lg font-bold text-foreground">Chấm bài — {sub.student.name}</h2>
           <p className="text-sm text-muted-foreground">
@@ -178,7 +168,7 @@ export async function HubAssignmentsTab({
     if (!asg || asg.classId !== classId) {
       return (
         <div>
-          <BackLink href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
+          <BackLink className="mb-4" href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
           <EmptyState icon={Ban} title="Bài tập không thuộc lớp bạn phụ trách." />
         </div>
       );
@@ -191,7 +181,7 @@ export async function HubAssignmentsTab({
 
     return (
       <div>
-        <BackLink href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
+        <BackLink className="mb-4" href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
         <div className="mb-4">
           <h2 className="text-lg font-bold text-foreground">{asg.title}</h2>
           <p className="text-sm text-muted-foreground">

@@ -96,9 +96,10 @@ export async function createOrgUnit(input: CreateOrgUnitInput): Promise<OrgUnit>
   }
 
   try {
-    return await db.orgUnit.create({
+    const created = await db.orgUnit.create({
       data: { type: input.type, code, name, address: input.address ?? null, parentId, centerId },
     });
+    return created;
   } catch (e) {
     // Race T6-01: 2 request cùng code → DB unique bắt (P2002) → CONFLICT, không 500.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -154,7 +155,8 @@ export async function updateOrgUnit(id: string, input: UpdateOrgUnitInput): Prom
       : { disconnect: true };
   }
 
-  return db.orgUnit.update({ where: { id }, data });
+  const updated = await db.orgUnit.update({ where: { id }, data });
+  return updated;
 }
 
 /** Soft-delete (V8: chặn nếu còn con đang sống — vd xoá ROOT khi còn HO/CS). */
@@ -173,10 +175,11 @@ export async function softDeleteOrgUnit(id: string): Promise<OrgUnit> {
       "id",
     );
   }
-  return db.orgUnit.update({
+  const deleted = await db.orgUnit.update({
     where: { id },
     data: { deletedAt: new Date(), isActive: false },
   });
+  return deleted;
 }
 
 // ─── Tree helpers (DB-backed wrap thuật toán thuần) ───
@@ -211,7 +214,7 @@ export async function getSelectableOrgUnits(
     where: opts.includeDeleted ? {} : { deletedAt: null },
   });
   const nodes = rows.map((o) => ({ ...toNode(o), name: o.name }));
-  return selectableOrgUnits(
+  const selectable = selectableOrgUnits(
     nodes,
     {
       isSuperAdmin: actor.isSuperAdmin,
@@ -220,6 +223,24 @@ export async function getSelectableOrgUnits(
       roleOrgUnitIds: actor.orgRoles.map((r) => r.orgUnitId),
     },
     opts,
+  );
+
+  // Chuẩn hoá TÊN HIỂN THỊ: đơn vị CENTER dùng Center.name (vd "Trụ sở chính - Nguyễn
+  // Hữu Thọ") thay OrgUnit.name generic ("Cơ sở 1") → đồng nhất với các màn list/filter
+  // (vốn đọc từ bảng Center). Giá trị submit vẫn là orgUnitId; HO/ROOT giữ nguyên tên.
+  const centerIds = selectable
+    .map((s) => s.centerId)
+    .filter((id): id is string => id != null);
+  if (centerIds.length === 0) return selectable;
+  const centers = await db.center.findMany({
+    where: { id: { in: centerIds } },
+    select: { id: true, name: true },
+  });
+  const centerName = new Map(centers.map((c) => [c.id, c.name]));
+  return selectable.map((s) =>
+    s.centerId && centerName.has(s.centerId)
+      ? { ...s, name: centerName.get(s.centerId) as string }
+      : s,
   );
 }
 
@@ -249,4 +270,18 @@ export async function centerIdForOrgUnit(
     select: { centerId: true },
   });
   return ou?.centerId ?? null;
+}
+
+/**
+ * Center.id của các CƠ SỞ VẬN HÀNH (type=CENTER) — tức có phòng học/lịch dạy. Loại HO
+ * và Center "mồ côi" (không OrgUnit type=CENTER nào trỏ tới, vd row "Hội sở" cũ). Dùng
+ * cho picker cơ sở ở màn phòng/lịch nghỉ. KHÔNG hardcode danh sách — CS3/CS4 thêm là
+ * data (thêm OrgUnit type=CENTER) tự xuất hiện.
+ */
+export async function getTeachingCenterIds(): Promise<string[]> {
+  const rows = await db.orgUnit.findMany({
+    where: { type: "CENTER", deletedAt: null, centerId: { not: null } },
+    select: { centerId: true },
+  });
+  return rows.map((r) => r.centerId).filter((id): id is string => id != null);
 }

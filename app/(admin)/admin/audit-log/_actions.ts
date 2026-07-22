@@ -44,8 +44,9 @@ async function requireAuditCleanup(): Promise<Session> {
   return session;
 }
 
-export type AuditFilters = UnifiedAuditFilters;
-export type { UnifiedAuditRow };
+// LOCAL only — KHÔNG export (file 'use server' chỉ được export async function). Kiểu
+// cho UI ở `./_types.ts`.
+type AuditFilters = UnifiedAuditFilters;
 
 // ─── QUERY (mask mặc định + break-glass) ─────────────────────────────────────
 /**

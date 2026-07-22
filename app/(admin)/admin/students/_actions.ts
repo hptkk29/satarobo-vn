@@ -25,6 +25,7 @@ import { canTransition } from "@/lib/enrollments/status";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { formatDateVN } from "@/lib/format/date";
 
 type ActionResult = { error?: string };
 
@@ -444,7 +445,7 @@ export async function reserveStudentAction(input: {
   if (existing) {
     return {
       ok: false as const,
-      error: `Học viên đã đang bảo lưu (từ ${existing.startedAt.toLocaleDateString("vi-VN")})`,
+      error: `Học viên đã đang bảo lưu (từ ${formatDateVN(existing.startedAt)})`,
     };
   }
 
@@ -1023,7 +1024,7 @@ export async function createParentAccount(input: {
 // P0-2: gửi LẠI mã kích hoạt cho phụ huynh đang chờ kích hoạt.
 export async function resendParentActivationOtp(
   studentId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; warning?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("students:edit"))) return { ok: false, error: "Không có quyền" };
@@ -1042,6 +1043,16 @@ export async function resendParentActivationOtp(
 
   const res = await requestOtp({ target: parent.email, purpose: "ACTIVATION" });
   if (!res.ok) {
+    // QA 21/07 (#3) — kênh email lỗi (vd dev thiếu API key) nhưng OTP ĐÃ tạo và
+    // verify được → báo thành công kèm chú thích thay vì toast đỏ gây hiểu nhầm
+    // (thống nhất với luồng cấp tài khoản lần đầu). Mã xem ở /email-logs.
+    if (res.deliveryFailed) {
+      return {
+        ok: true,
+        warning:
+          "Đã tạo mã kích hoạt mới nhưng email CHƯA gửi được (dịch vụ email không khả dụng) — xem mã trong Email logs.",
+      };
+    }
     return { ok: false, error: res.error ?? "Không gửi được mã (thử lại sau ít phút)" };
   }
   return { ok: true };

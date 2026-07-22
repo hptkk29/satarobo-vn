@@ -3,12 +3,21 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { HonorUniformGrid } from "@/components/honors/uniform-grid";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 
 export const metadata: Metadata = {
   title: "Tất cả nhân sự được vinh danh | Sata Robo",
   description: "Danh sách đầy đủ các nhân sự xuất sắc của Sata Robo qua các năm.",
   alternates: { canonical: "https://satarobo.vn/vinh-danh/tat-ca" },
+  // PUB-22: bổ sung openGraph khớp các trang sibling.
+  openGraph: {
+    title: "Tất cả nhân sự được vinh danh | Sata Robo",
+    description: "Danh sách đầy đủ các nhân sự xuất sắc của Sata Robo qua các năm.",
+    url: "https://satarobo.vn/vinh-danh/tat-ca",
+    siteName: "Sata Robo",
+    locale: "vi_VN",
+    type: "website",
+  },
 };
 
 export const revalidate = 60;
@@ -40,7 +49,7 @@ export default async function AllHonorsPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
       />
 
       <div className="bg-gray-50 py-4">

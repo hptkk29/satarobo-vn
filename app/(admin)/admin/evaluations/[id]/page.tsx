@@ -9,6 +9,12 @@ import { FormEditor } from "./_edit";
 export const metadata = { title: "Sửa form | Admin" };
 export const dynamic = "force-dynamic";
 
+const FORM_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Nháp",
+  ACTIVE: "Đang dùng",
+  ARCHIVED: "Lưu trữ",
+};
+
 export default async function FormEditPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -42,7 +48,7 @@ export default async function FormEditPage({ params }: { params: Promise<{ id: s
             : form.scope === "CENTER_SURVEY"
               ? "Khảo sát cơ sở (phụ huynh)"
               : "Đánh giá buổi học (GV chấm HS)"}{" "}
-          · {form.status}
+          · {FORM_STATUS_LABEL[form.status] ?? form.status}
         </p>
       </div>
       <FormEditor formId={id} initial={initial} locked={locked} allowPhoto={form.scope === "SESSION_EVAL"} />

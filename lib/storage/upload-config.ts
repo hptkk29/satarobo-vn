@@ -12,15 +12,16 @@ export const UPLOAD_CONFIG: Record<UploadCategory, CategoryConfig> = {
   image: {
     folder: "uploads/images",
     maxSize: 10 * 1024 * 1024,
+    // SVG cố tình KHÔNG cho phép: file lưu R2 public + serve inline theo Content-Type,
+    // một SVG chứa <script> sẽ chạy JS trên origin CDN (stored XSS). Xem SEC-H03.
     allowedMimes: [
       "image/jpeg",
       "image/png",
       "image/webp",
       "image/gif",
-      "image/svg+xml",
     ],
-    allowedExtensions: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"],
-    description: "Ảnh (JPG/PNG/WEBP/GIF/SVG, tối đa 10MB)",
+    allowedExtensions: [".jpg", ".jpeg", ".png", ".webp", ".gif"],
+    description: "Ảnh (JPG/PNG/WEBP/GIF, tối đa 10MB)",
   },
   document: {
     folder: "uploads/documents",

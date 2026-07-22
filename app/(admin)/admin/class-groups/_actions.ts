@@ -105,7 +105,8 @@ export async function createClassGroup(
   }
 
   revalidatePath("/class-groups");
-  redirect("/class-groups");
+  // Thành công → trả {} để client toast + điều hướng (QA 20/07 — không redirect âm thầm).
+  return {};
 }
 
 export async function updateClassGroup(
@@ -158,7 +159,7 @@ export async function updateClassGroup(
 
   revalidatePath("/class-groups");
   revalidatePath(`/class-groups/${id}`);
-  redirect("/class-groups");
+  return {};
 }
 
 export async function deleteClassGroup(id: string): Promise<ActionResult> {

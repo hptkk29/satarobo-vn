@@ -115,6 +115,7 @@ export function OrderDetailClient({
   transferContent,
   installments,
   paymentMethods,
+  accounting,
 }: {
   order: OrderWithIncludes;
   canManage: boolean;
@@ -125,6 +126,8 @@ export function OrderDetailClient({
   transferContent: string;
   installments: InstallmentView[];
   paymentMethods: PaymentMethodOption[];
+  // (b) PA-A — tổng theo sổ kế toán (Payment) của đơn: CONFIRMED vs PENDING (chờ ✓).
+  accounting: { confirmed: number; pending: number };
 }) {
   const router = useRouter();
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -497,6 +500,7 @@ export function OrderDetailClient({
         totalAmount={order.totalAmount}
         canManage={canManage}
         installments={installments}
+        accounting={accounting}
       />
 
       {/* OD1b — Duyệt kế hoạch trả góp 2 đợt (chỉ hiện khi có kế hoạch cần duyệt) */}

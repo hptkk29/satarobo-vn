@@ -7,8 +7,12 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
+import { formatDateVN } from "@/lib/format/date";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Đăng ký học | Admin" };
 
 const STATUS_INFO: Record<EnrollmentStatus, { label: string; color: string }> = {
   PENDING: { label: "Chờ xếp", color: "bg-gray-100 text-gray-700" },
@@ -34,7 +38,7 @@ const VALID_STATUSES = Object.values(EnrollmentStatus);
 
 function formatDate(d: Date | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("vi-VN");
+  return formatDateVN(d);
 }
 
 interface SearchParams {
@@ -52,6 +56,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("enrollments:view-all"))) redirect("/dashboard");
   const canDelete = await checkPermission("enrollments:delete");
+  const canViewPii = await canViewLeadPii(); // che SĐT PH nếu thiếu quyền
 
   // Cách ly cơ sở (FL3-02): Enrollment giờ ∈ SCOPED_MODELS → scopedDb tự inject
   // `Enrollment.centerId IN visibleCenters`. KHÔNG còn scope tay qua class.centerId.
@@ -257,7 +262,9 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                       label: e.status,
                       color: "bg-gray-100 text-gray-500",
                     };
-                  const parentPhone = e.student.parentPhone ?? e.student.phone;
+                  const rawPhone = e.student.parentPhone ?? e.student.phone;
+                  const parentPhone =
+                    rawPhone && !canViewPii ? maskPhone(rawPhone) : rawPhone;
                   return (
                     <tr key={e.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3">

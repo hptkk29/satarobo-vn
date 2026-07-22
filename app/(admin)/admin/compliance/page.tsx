@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { findStudentsDueForRetention, RETENTION_DAYS } from "@/lib/compliance/retention";
 import { StudentComplianceActions } from "./_components/student-compliance-actions";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export default async function CompliancePage() {
             {due.map((s) => (
               <tr key={s.id} className="border-b">
                 <td className="py-2">{s.studentCode ?? s.id.slice(0, 8)}</td>
-                <td className="py-2">{new Date(s.updatedAt).toLocaleDateString("vi-VN")}</td>
+                <td className="py-2">{formatDateVN(s.updatedAt)}</td>
                 <td className="py-2">
                   <StudentComplianceActions studentId={s.id} />
                 </td>

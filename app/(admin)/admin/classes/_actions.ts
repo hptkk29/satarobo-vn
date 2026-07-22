@@ -26,6 +26,7 @@ import { publishEvent } from "@/lib/events/publish";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
+import { formatDateVN } from "@/lib/format/date";
 
 type ActionResult = { error?: string };
 
@@ -378,7 +379,9 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   }
 
   revalidatePath("/classes");
-  redirect("/classes");
+  // Thành công → trả {} để client toast + điều hướng (QA 20/07 Vấn đề 4 — không
+  // redirect server-side âm thầm nữa).
+  return {};
 }
 
 export async function updateClass(
@@ -401,6 +404,16 @@ export async function updateClass(
     select: CLASS_SNAPSHOT_SELECT,
   });
   if (!before) return { error: "Không tìm thấy lớp" };
+
+  // QA 21/07 (B4) — KHÔNG cho đổi cờ sang CANCELLED qua update trần: hủy lớp phải
+  // đi qua cancelClassAction (rút ghi danh + hủy buổi tương lai + hoàn tiền).
+  // Đổi cờ trần để lại HS "Đang học" + buổi "Sắp tới" trong lớp đã Huỷ.
+  if (parsed.data.status === "CANCELLED" && before.status !== "CANCELLED") {
+    return {
+      error:
+        'Không đổi trạng thái "Huỷ" trực tiếp — dùng nút "Hủy lớp" (có rút ghi danh, hủy buổi và hoàn tiền).',
+    };
+  }
 
   const { actorId, actorName } = getAuditActor(session);
 
@@ -453,7 +466,7 @@ export async function updateClass(
 
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}/edit`);
-  redirect("/classes");
+  return {};
 }
 
 export async function deleteClass(id: string): Promise<ActionResult> {
@@ -618,7 +631,7 @@ export async function rejectClass(classId: string, reason: string): Promise<WfRe
   }
   const trimmed = reason.trim();
   if (trimmed.length < 5) return { ok: false, error: "Nhập lý do trả lại (≥5 ký tự)" };
-  const stamp = new Date().toLocaleDateString("vi-VN");
+  const stamp = formatDateVN(new Date());
   await gate.sdb.class.update({
     where: { id: classId },
     data: {
@@ -639,7 +652,7 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   const sdb = scopedDb(actor);
   const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
-    select: { id: true, centerId: true, scheduleDays: true, startTime: true },
+    select: { id: true, centerId: true, scheduleDays: true, startTime: true, startDate: true },
   });
   if (!cls) return { ok: false as const, error: "Lớp không tồn tại" };
   if (cls.scheduleDays.length === 0) {
@@ -663,9 +676,16 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   });
   const holidays = expandHolidaySet(holidayRows);
 
+  // QA 21/07 — không dời buổi về TRƯỚC ngày khai giảng: mốc quét = max(ngày mai,
+  // startDate của lớp). Trước đây lớp khai giảng 28/07 đổi lịch là buổi đầu bị
+  // kéo về ngay ngày mai (22/07).
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const startDay = cls.startDate
+    ? new Date(cls.startDate.getFullYear(), cls.startDate.getMonth(), cls.startDate.getDate())
+    : tomorrow;
+  const from = startDay > tomorrow ? startDay : tomorrow;
   const newDates = computeSessionDates({
-    from: tomorrow,
+    from,
     scheduleDays: cls.scheduleDays,
     count: future.length,
     holidays,
@@ -876,6 +896,13 @@ export async function cancelClassAction(
           date: { gte: todayStart },
           status: { in: ["SCHEDULED", "IN_PROGRESS"] },
         },
+        data: { status: "CANCELLED" },
+      });
+
+      // c2) QA 21/07 (B12) — nhu cầu học bù đang mở của lớp cũng huỷ theo
+      //     (không để yêu cầu treo ở /hoc-bu sau khi lớp đã hủy).
+      await tx.makeupNeed.updateMany({
+        where: { classId, status: { in: ["PENDING", "SCHEDULED"] } },
         data: { status: "CANCELLED" },
       });
 

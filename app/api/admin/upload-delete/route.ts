@@ -6,6 +6,8 @@ import {
   getR2Bucket,
   getR2PublicUrl,
 } from "@/lib/storage/r2-client";
+import { writeAudit } from "@/lib/audit/audit-log";
+import { getAuditActor } from "@/lib/audit/log";
 
 // DELETE /api/admin/upload-delete
 // Xoá file khỏi R2. Chỉ cho phép xoá file dưới prefix "uploads/" để tránh
@@ -64,6 +66,19 @@ export async function DELETE(req: NextRequest) {
         Key: key,
       }),
     );
+    // SEC-M07: audit xoá object R2 (truy vết ai xoá key nào). Lưu ý: key R2 phân theo
+    // LOẠI file (uploads/images|documents|…), KHÔNG theo cơ sở — asset admin dùng chung
+    // (honors/news…), không phải submission center-scoped → không suy được owner-center
+    // từ key. Audit là lớp truy vết khả thi ở mô hình key hiện tại.
+    const { actorId, actorName } = getAuditActor(session);
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "storage",
+      entityType: "R2Object",
+      entityId: key,
+      action: "DELETE",
+      oldValues: { key },
+    });
     return NextResponse.json({ success: true, key });
   } catch (err) {
     console.error("Failed to delete from R2:", err);

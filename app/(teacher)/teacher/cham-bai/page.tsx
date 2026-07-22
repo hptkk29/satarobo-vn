@@ -12,7 +12,7 @@
 // ⚠️ Câu 46: payload client CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 import Link from "next/link";
 import type { SubmissionStatus } from "@prisma/client";
-import { ArrowLeft, Ban, ClipboardCheck, FileX2, Plus } from "lucide-react";
+import { Ban, ClipboardCheck, FileX2, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -25,6 +25,7 @@ import { AssignmentList, type AssignmentRow } from "./_components/assignment-lis
 import { AssignForm } from "./_components/assign-form";
 import { BatchGrade } from "./_components/batch-grade";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Bài tập & kiểm tra | Giáo viên Sata Robo" };
 
@@ -118,7 +119,7 @@ export default async function TeacherAssignmentsPage({
     if (sub.status === "NOT_SUBMITTED") {
       return (
         <div>
-          <BackLink href={`?assignmentId=${sub.assignment.id}`} label="Chi tiết bài tập" />
+          <BackLink className="mb-4" href={`?assignmentId=${sub.assignment.id}`} label="Chi tiết bài tập" />
           <EmptyState icon={FileX2} title="Học viên chưa nộp bài — chưa thể chấm." />
         </div>
       );
@@ -126,7 +127,7 @@ export default async function TeacherAssignmentsPage({
 
     return (
       <div>
-        <BackLink href={`?assignmentId=${sub.assignment.id}`} label="Chi tiết bài tập" />
+        <BackLink className="mb-4" href={`?assignmentId=${sub.assignment.id}`} label="Chi tiết bài tập" />
         <PageHeader
           title={`Chấm bài — ${sub.student.name}`}
           subtitle={`${sub.assignment.title} · Lớp ${sub.assignment.class.name}`}
@@ -203,7 +204,7 @@ export default async function TeacherAssignmentsPage({
 
     return (
       <div>
-        <BackLink href="?" label="Bài tập & kiểm tra" />
+        <BackLink className="mb-4" href="?" label="Bài tập & kiểm tra" />
         <PageHeader
           title={asg.title}
           subtitle={`Lớp ${asg.class.name} · Thang điểm ${asg.totalPoints} · Đã nộp ${submittedCount}/${roster.length}`}
@@ -282,7 +283,7 @@ export default async function TeacherAssignmentsPage({
     if (classIds.length === 0) {
       return (
         <div>
-          <BackLink href={backHref} label="Bài tập & kiểm tra" />
+          <BackLink className="mb-4" href={backHref} label="Bài tập & kiểm tra" />
           <EmptyState icon={ClipboardCheck} title="Bạn chưa được phân công lớp nào." />
         </div>
       );
@@ -318,7 +319,7 @@ export default async function TeacherAssignmentsPage({
 
     return (
       <div>
-        <BackLink href={backHref} label="Bài tập & kiểm tra" />
+        <BackLink className="mb-4" href={backHref} label="Bài tập & kiểm tra" />
         <PageHeader
           title="Giao bài cho lớp"
           subtitle="Chọn nguồn đầu bài, lớp bạn phụ trách và hạn nộp. Bài giao xong sẽ mở ngay cho học viên."
@@ -417,22 +418,10 @@ export default async function TeacherAssignmentsPage({
   );
 }
 
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
-  );
-}
-
 function NotYours() {
   return (
     <div>
-      <BackLink href="?" label="Bài tập & kiểm tra" />
+      <BackLink className="mb-4" href="?" label="Bài tập & kiểm tra" />
       <EmptyState icon={Ban} title="Bài tập không thuộc lớp bạn phụ trách." />
     </div>
   );

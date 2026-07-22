@@ -15,7 +15,7 @@ import {
   Phone,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { SectionBase } from "@/components/design-system/sections/section-base";
 import { CTAPrimary } from "@/components/design-system/ctas/cta-primary";
 import { GlowOrb } from "@/components/design-system/effects/glow-orb";
@@ -51,27 +51,29 @@ const PERKS = [
 ];
 
 export default async function TuyenDungPage() {
-  const heroImage = await getPageImage("tuyen-dung", pageImages.careers);
-
-  const jobs = await db.jobPosting
-    .findMany({
-      where: { status: "OPEN" },
-      orderBy: [{ updatedAt: "desc" }],
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        department: true,
-        location: true,
-        type: true,
-        salary: true,
-        salaryMin: true,
-        salaryMax: true,
-        salaryNote: true,
-        description: true,
-      },
-    })
-    .catch(() => []);
+  // PUB-17: hero image + danh sách job độc lập → fetch song song.
+  const [heroImage, jobs] = await Promise.all([
+    getPageImage("tuyen-dung", pageImages.careers),
+    db.jobPosting
+      .findMany({
+        where: { status: "OPEN" },
+        orderBy: [{ updatedAt: "desc" }],
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          department: true,
+          location: true,
+          type: true,
+          salary: true,
+          salaryMin: true,
+          salaryMax: true,
+          salaryNote: true,
+          description: true,
+        },
+      })
+      .catch(() => []),
+  ]);
 
   const formatSalary = (j: {
     salary: string | null;
@@ -100,7 +102,7 @@ export default async function TuyenDungPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
       />
 
       <div className="bg-white border-b border-neutral-200 py-3">

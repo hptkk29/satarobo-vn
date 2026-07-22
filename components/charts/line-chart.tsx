@@ -10,6 +10,13 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { formatVndCompact } from "@/lib/format/money";
+
+// KHÔNG nhận function từ Server Component (RSC cấm) — dùng key chuỗi rồi map ở client.
+const Y_FORMATTERS = {
+  "vnd-compact": (v: number) => formatVndCompact(v),
+} as const;
+type YFormat = keyof typeof Y_FORMATTERS;
 
 type ChartDatum = Record<string, string | number | null | undefined>;
 
@@ -25,6 +32,8 @@ interface LineChartProps {
   lines: LineSeries[];
   height?: number;
   showLegend?: boolean;
+  /** Rút gọn nhãn trục Y (vd tiền: 10000000 → "10tr") để không bị cắt. */
+  yFormat?: YFormat;
 }
 
 // Wrapper Recharts LineChart cho admin dashboard.
@@ -35,13 +44,21 @@ export function LineChart({
   lines,
   height = 300,
   showLegend = true,
+  yFormat,
 }: LineChartProps) {
+  const yTickFormatter = yFormat ? Y_FORMATTERS[yFormat] : undefined;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <RechartsLineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
         <XAxis dataKey={xKey} tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} />
+        <YAxis
+          tick={{ fontSize: 12 }}
+          width={yTickFormatter ? 56 : undefined}
+          tickFormatter={
+            yTickFormatter ? (v) => yTickFormatter(Number(v)) : undefined
+          }
+        />
         <Tooltip
           contentStyle={{
             background: "white",

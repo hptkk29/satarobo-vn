@@ -29,7 +29,7 @@ export default async function HonorsAdminPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Hall of Fame</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Vinh danh</h1>
           <p className="mt-1 text-sm text-gray-500">{honors.length} nhân sự được vinh danh</p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -61,6 +61,4 @@ export const CATEGORY_SLUG_MAP: Record<string, HonorCategory> = {
   "grand-champion": "GRAND_CHAMPION",
 };
 
-export function categoryToSlug(category: HonorCategory): string {
-  return CATEGORY_META[category].slug;
-}
+// categoryToSlug đã xóa (dead export, 0 usage — LIB-15).

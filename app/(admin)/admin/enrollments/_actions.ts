@@ -222,12 +222,17 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
 
   let classRow: { courseId: string; centerId: string | null } | null;
   let existing: { id: string } | null;
+  let studentRow: { centerId: string | null } | null;
   try {
-    [classRow, existing] = await Promise.all([
+    [classRow, existing, studentRow] = await Promise.all([
       sdb.class.findUnique({ where: { id: e.classId }, select: { courseId: true, centerId: true } }),
       sdb.enrollment.findFirst({
         where: { studentId: e.studentId, classId: e.classId },
         select: { id: true },
+      }),
+      sdb.student.findFirst({
+        where: { id: e.studentId, deletedAt: null },
+        select: { centerId: true },
       }),
     ]);
   } catch {
@@ -235,6 +240,27 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
   }
   if (!classRow) return { error: "Lớp học không tồn tại" };
   if (existing) return { error: "Học viên này đã đăng ký lớp này rồi" };
+  if (!studentRow) return { error: "Không tìm thấy học viên" };
+  // QA 21/07 (B1) — legacy action vẫn là endpoint exposed: áp cùng guard cơ sở
+  // như enrollStudent (rule §15.1(2) lib/lms/assign).
+  if (classRow.centerId && studentRow.centerId !== classRow.centerId) {
+    return { error: "Học viên thuộc cơ sở khác với lớp — không thể đăng ký chéo cơ sở." };
+  }
+  // QA 21/07 (B2 đợt 2) — cùng guard "đang học lớp khác" như enrollStudent.
+  const liveElsewhere = await sdb.enrollment.findFirst({
+    where: {
+      studentId: e.studentId,
+      classId: { not: e.classId },
+      status: { in: ["STUDYING", "ACTIVE"] },
+      class: { deletedAt: null },
+    },
+    select: { class: { select: { name: true } } },
+  });
+  if (liveElsewhere) {
+    return {
+      error: `Học viên đang học lớp "${liveElsewhere.class?.name ?? "khác"}" — hoàn thành hoặc rút khỏi lớp đó trước khi ghi danh lớp mới.`,
+    };
+  }
 
   const data: Prisma.EnrollmentCreateInput = {
     student: { connect: { id: e.studentId } },
@@ -501,7 +527,7 @@ export async function enrollStudent(
     _count: { enrollments: number };
   } | null;
   let existing: { status: string } | null;
-  let student: { id: string } | null;
+  let student: { id: string; centerId: string | null } | null;
   try {
     [cls, existing, student] = await Promise.all([
       sdb.class.findFirst({
@@ -533,7 +559,7 @@ export async function enrollStudent(
       }),
       sdb.student.findFirst({
         where: { id: studentId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, centerId: true },
       }),
     ]);
   } catch (err) {
@@ -563,6 +589,41 @@ export async function enrollStudent(
     };
   }
   if (!student) return { ok: false, error: "Không tìm thấy học viên" };
+
+  // QA 21/07 (B1) — mirror rule §15.1(2) của luồng gán chuẩn (lib/lms/assign):
+  // học viên phải CÙNG CƠ SỞ với lớp. Trước đây /enrollments/new là "cửa sau"
+  // cho HS CS2 vào lớp CS1 (đổi trạng thái sau đó fail im lặng vì cross-center).
+  if (cls.centerId && student.centerId !== cls.centerId) {
+    return {
+      ok: false,
+      error:
+        "Học viên thuộc cơ sở khác với lớp — chọn lớp cùng cơ sở hoặc chuyển cơ sở học viên trước.",
+    };
+  }
+
+  // QA 21/07 (B2, siết đợt 2 theo QĐ user) — chặn khi HS đang có BẤT KỲ ghi danh
+  // còn học (STUDYING/ACTIVE) ở lớp khác, KHÔNG chỉ cùng khoá (đợt 1 chỉ chặn
+  // cùng khoá → HS đang học lớp khoá khác vẫn lọt). Lớp cũ đã xoá mềm không tính
+  // (tránh khoá vĩnh viễn HS vì rác test). Cùng khoá → gợi ý Chuyển lớp.
+  const liveElsewhere = await sdb.enrollment.findFirst({
+    where: {
+      studentId,
+      classId: { not: classId },
+      status: { in: ["STUDYING", "ACTIVE"] },
+      class: { deletedAt: null },
+    },
+    select: { courseId: true, class: { select: { name: true } } },
+  });
+  if (liveElsewhere) {
+    const clsName = liveElsewhere.class?.name ?? "khác";
+    return {
+      ok: false,
+      error:
+        liveElsewhere.courseId === cls.courseId
+          ? `Học viên đang học khoá này ở lớp "${clsName}" — dùng chức năng Chuyển lớp thay vì tạo ghi danh mới.`
+          : `Học viên đang học lớp "${clsName}" — hoàn thành hoặc rút khỏi lớp đó trước khi ghi danh lớp mới.`,
+    };
+  }
 
   // FIX 7 — kiểm tra khoá tiên quyết: khoá của lớp có yêu cầu khoá trước không,
   // và học viên đã hoàn thành (Enrollment COMPLETED) chưa.

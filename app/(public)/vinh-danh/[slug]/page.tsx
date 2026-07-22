@@ -9,7 +9,7 @@ import { ShareButtons } from "@/components/blog/share-buttons";
 import { HonorMasonryGrid } from "@/components/honors/masonry-grid";
 import { CATEGORY_META, CATEGORY_SLUG_MAP } from "@/lib/honors/category-meta";
 import { getHonorView } from "@/lib/honors/honor-view";
-import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { PersonSchema } from "@/components/seo/person-schema";
 
 interface Props {
@@ -70,20 +70,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export async function generateStaticParams() {
-  const honors = await db.honor
-    .findMany({
-      where: { isPublished: true },
-      select: { slug: true },
-    })
-    .catch(() => []);
-
-  return [
-    ...Object.keys(CATEGORY_SLUG_MAP).map((slug) => ({ slug })),
-    ...honors.map((h) => ({ slug: h.slug })),
-  ];
+  // PUB-03: /vinh-danh đang bị ẩn cứng (app/(public)/vinh-danh/layout.tsx gọi notFound()).
+  // Trả [] để KHÔNG query DB lúc build cho trang không bao giờ render. Khi mở lại section
+  // (xóa layout ẩn), khôi phục đoạn bên dưới.
+  return [];
+  // const honors = await db.honor
+  //   .findMany({ where: { isPublished: true }, select: { slug: true } })
+  //   .catch(() => []);
+  // return [
+  //   ...Object.keys(CATEGORY_SLUG_MAP).map((slug) => ({ slug })),
+  //   ...honors.map((h) => ({ slug: h.slug })),
+  // ];
 }
 
-export const revalidate = 300;
+export const revalidate = 300; // ISR_DETAIL (convention list=60/detail=300, xem lib/isr.ts)
 
 export default async function VinhDanhSlugPage({ params }: Props) {
   const { slug } = await params;
@@ -120,7 +120,7 @@ export default async function VinhDanhSlugPage({ params }: Props) {
       <>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(categoryBreadcrumb) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(categoryBreadcrumb) }}
         />
 
         <div className="bg-gray-50 py-4">
@@ -203,7 +203,7 @@ export default async function VinhDanhSlugPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(personBreadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(personBreadcrumb) }}
       />
       <PersonSchema honor={honor} />
 

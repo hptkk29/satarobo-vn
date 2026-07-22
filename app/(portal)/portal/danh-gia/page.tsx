@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { FeedbackForm } from "./_components/feedback-form";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Đánh giá | Sata Robo", robots: { index: false } };
@@ -54,7 +55,7 @@ export default async function DanhGiaPage() {
                   {f.content}
                 </p>
                 <p className="mt-1 text-xs text-neutral-400">
-                  {f.createdAt.toLocaleDateString("vi-VN")}
+                  {formatDateVN(f.createdAt)}
                 </p>
               </li>
             ))}

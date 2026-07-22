@@ -20,7 +20,7 @@
 // (GV dạy bù liên cơ sở vẫn thấy đúng lớp/buổi mình phụ trách).
 // ⚠️ Câu 46: tag chỉ hiện TÊN học viên — KHÔNG SĐT/email/tên phụ huynh trong payload.
 import Link from "next/link";
-import { ArrowLeft, Calendar, ChevronRight, Images } from "lucide-react";
+import { Calendar, ChevronRight, Images } from "lucide-react";
 import type { MediaStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { UploadPhotoDialog } from "./_components/upload-photo-dialog";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Ảnh lớp | Giáo viên Sata Robo" };
 
@@ -335,18 +336,6 @@ export default async function TeacherClassPhotosPage({
         </div>
       )}
     </div>
-  );
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
   );
 }
 

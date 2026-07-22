@@ -10,6 +10,7 @@ import {
   toggleEmployeeActiveAction,
   toggleEmployeePublicAction,
 } from "@/app/(admin)/admin/nhan-su/actions";
+import { formatDateOrDash } from "@/lib/format/date";
 
 interface EmployeeRow extends Employee {
   center: { name: string } | null;
@@ -75,10 +76,8 @@ const DEPARTMENT_LABELS: Record<Department, string> = {
   GIANG_DAY: "Giảng dạy",
 };
 
-function fmtDate(d: Date | null): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("vi-VN");
-}
+// Bao cả mốc epoch 1970 (seed cũ set new Date(0)) → "—", không chỉ null.
+const fmtDate = formatDateOrDash;
 
 export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }: Props) {
   const [isPending, startTransition] = useTransition();

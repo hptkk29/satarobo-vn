@@ -74,8 +74,8 @@ export default function ImportClassesPage() {
 
       <ExcelImporter<ClassImportRow>
         title="Import Lớp học"
-        templateUrl="/templates/mau-lop-hoc.xlsx"
-        templateFilename="mau-lop-hoc.xlsx"
+        templateUrl="/templates/mau-lop-hoc-v2.xlsx"
+        templateFilename="mau-lop-hoc-v2.xlsx"
         columnHints={[
           { key: "classCode", label: "Mã lớp (upsert key)" },
           { key: "name", label: "Tên lớp", required: true },

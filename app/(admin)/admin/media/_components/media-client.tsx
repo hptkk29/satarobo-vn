@@ -4,12 +4,43 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Loader2, Check, X, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import {
   uploadClassMedia,
   reviewMedia,
   deleteMedia,
   getClassUploadContext,
 } from "../actions";
+import { formatDateVN } from "@/lib/format/date";
+
+// QA 20/07 — ảnh seed (seed-placeholder://) hoặc URL hỏng không resolve được →
+// hiển thị placeholder thay vì icon ảnh vỡ của trình duyệt.
+const FALLBACK_IMG =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="#f3f4f6"/><text x="50%" y="50%" font-family="sans-serif" font-size="14" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle">Ảnh không tải được</text></svg>',
+  );
+
+function swapToFallback(e: React.SyntheticEvent<HTMLImageElement>) {
+  const img = e.currentTarget;
+  if (img.src !== FALLBACK_IMG) img.src = FALLBACK_IMG;
+}
+
+/**
+ * <img> kèm fallback 2 lớp: onError cho lỗi sau hydration + ref callback bắt ảnh
+ * ĐÃ hỏng từ lúc SSR (error event bắn trước khi React gắn handler nên onError
+ * một mình không đủ — 12 ảnh seed-placeholder:// vẫn vỡ).
+ */
+function MediaImg({ src, alt, className }: { src: string; alt: string; className: string }) {
+  const checkBroken = (img: HTMLImageElement | null) => {
+    if (img && img.complete && img.naturalWidth === 0 && img.src !== FALLBACK_IMG) {
+      img.src = FALLBACK_IMG;
+    }
+  };
+  return (
+    <img src={src} alt={alt} ref={checkBroken} onError={swapToFallback} className={className} />
+  );
+}
 
 type Opt = { id: string; label: string };
 type SessionOpt = { id: string; label: string; date: string };
@@ -53,6 +84,24 @@ export function MediaClient({
   const [fileName, setFileName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  // QA 20/07 — xoá ảnh phải qua xác nhận (trước đây xoá ngay 1 click, không confirm).
+  const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null);
+
+  function handleDeleteConfirm() {
+    const target = deleteTarget;
+    if (!target) return;
+    startTransition(async () => {
+      const res = await deleteMedia(target.id);
+      if (!res.ok) {
+        toast.error(res.error ?? "Không xoá được ảnh");
+        setDeleteTarget(null);
+        return;
+      }
+      toast.success("Đã xoá ảnh");
+      setDeleteTarget(null);
+      router.refresh();
+    });
+  }
 
   const nonConsentIds = new Set(nonConsent.map((s) => s.id));
 
@@ -216,7 +265,11 @@ export function MediaClient({
           )}
 
           {fileUrl ? (
-            <img src={fileUrl} alt="preview" className="h-40 w-full rounded-lg object-cover" />
+            <MediaImg
+              src={fileUrl}
+              alt="preview"
+              className="h-40 w-full rounded-lg object-cover"
+            />
           ) : (
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 text-sm text-gray-500 hover:bg-gray-50">
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -305,7 +358,11 @@ export function MediaClient({
           <div className="grid grid-cols-2 gap-3">
             {items.map((m) => (
               <div key={m.id} className="overflow-hidden rounded-lg border border-gray-100">
-                <img src={m.fileUrl} alt={m.caption ?? ""} className="h-28 w-full object-cover" />
+                <MediaImg
+                  src={m.fileUrl}
+                  alt={m.caption ?? ""}
+                  className="h-28 w-full object-cover"
+                />
                 <div className="p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-gray-400">{m.className}</span>
@@ -323,7 +380,7 @@ export function MediaClient({
                   </div>
                   {m.takenAt && (
                     <p className="mt-0.5 text-[10px] text-gray-400">
-                      Buổi {new Date(m.takenAt).toLocaleDateString("vi-VN")}
+                      Buổi {formatDateVN(m.takenAt)}
                     </p>
                   )}
                   {m.caption && <p className="mt-1 line-clamp-2 text-xs text-gray-600">{m.caption}</p>}
@@ -364,12 +421,7 @@ export function MediaClient({
                       )}
                       <button
                         type="button"
-                        onClick={() =>
-                          startTransition(async () => {
-                            await deleteMedia(m.id);
-                            router.refresh();
-                          })
-                        }
+                        onClick={() => setDeleteTarget(m)}
                         className="text-rose-600 hover:text-rose-700"
                         aria-label="Xoá"
                       >
@@ -383,6 +435,26 @@ export function MediaClient({
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+        pending={pending}
+        title="Xoá ảnh này?"
+        description={
+          deleteTarget ? (
+            <>
+              Ảnh của lớp <strong>{deleteTarget.className}</strong>
+              {deleteTarget.caption ? ` — "${deleteTarget.caption}"` : ""} sẽ bị xoá
+              vĩnh viễn (phụ huynh cũng không còn thấy). Hành động không thể hoàn tác.
+            </>
+          ) : undefined
+        }
+        confirmLabel="Xoá ảnh"
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   );
 }

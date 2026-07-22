@@ -17,6 +17,13 @@ import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { Toaster } from "@/components/ui/sonner";
 
+// Default title cho MỌI trang admin chưa tự khai metadata (86/199 trang) → không rơi về
+// title public "Sata Robo – Trung tâm…". Trang tự khai `title: "X | Admin"` giữ nguyên
+// (không set template ở đây để tránh nhân đôi "| Admin").
+export const metadata = {
+  title: { default: "Quản trị" },
+};
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
 

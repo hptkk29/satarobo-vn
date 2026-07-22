@@ -134,3 +134,18 @@ export async function buildSessionAttendanceRows(
     rows,
   };
 }
+
+/**
+ * SEC-M02 — Tập studentId HỢP LỆ của buổi = ROSTER hiển thị (enrolled active trong lớp
+ * ∪ HS học bù có MakeupNeed SCHEDULED vào buổi này, kể cả liên cơ sở). TÁI DÙNG
+ * buildSessionAttendanceRows để không lệch với roster đang hiển thị. Dùng để chặn
+ * upsert attendance/feedback với studentId ngoài roster (chống inject thông báo giả).
+ * Trả về set RỖNG nếu session không tồn tại.
+ */
+export async function getSessionRosterStudentIds(
+  actor: Actor,
+  sessionId: string,
+): Promise<Set<string>> {
+  const { rows } = await buildSessionAttendanceRows(actor, sessionId);
+  return new Set(rows.map((r) => r.studentId));
+}

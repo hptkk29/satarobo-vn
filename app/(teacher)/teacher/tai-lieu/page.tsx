@@ -12,9 +12,8 @@
 //   (a) không tham số → bảng khoá GV dạy.
 //   (b) ?courseId=…   → bài giảng khung CT (Curriculum ACTIVE) của khoá: tài liệu
 //                       (Document, mở tab mới) + SCORM (viewer site GV, watermark #14).
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, BookOpen, FileText } from "lucide-react";
+import { BookOpen, FileText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -27,6 +26,7 @@ import {
   type CourseMaterialRow,
 } from "./_components/course-materials-list";
 import { LessonFilterList, type LessonView } from "./_components/lesson-filter-list";
+import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Thư viện tài liệu | Giáo viên Sata Robo" };
 
@@ -278,18 +278,6 @@ export default async function TeacherMaterialsPage({
         <CourseMaterialsList rows={rows} />
       )}
     </div>
-  );
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      {label}
-    </Link>
   );
 }
 

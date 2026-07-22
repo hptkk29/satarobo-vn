@@ -3,7 +3,11 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
-import { hasRole } from "@/lib/auth/permissions";
+import {
+  hasRole,
+  getEmployeeFieldVisibility,
+  redactEmployeeFields,
+} from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -134,7 +138,12 @@ export default async function EditEmployeePage({ params }: Props) {
 
       <EmployeeForm
         mode="edit"
-        initial={employee}
+        // SEC-H04: redact field ngoài quyền TRƯỚC khi serialize xuống client form
+        // (dùng cùng role với gate input bên dưới → payload không chứa PII bị ẩn).
+        initial={redactEmployeeFields(
+          employee,
+          getEmployeeFieldVisibility(session.user.role),
+        )}
         orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
         managers={managers}
         departments={departments}

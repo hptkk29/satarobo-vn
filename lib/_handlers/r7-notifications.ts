@@ -4,6 +4,7 @@
 // portal feed) và nhân viên (StaffNotification — inbox admin).
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
+import { formatVndPlain } from "@/lib/format/money";
 
 const str = (v: unknown): string => (v == null ? "" : String(v));
 
@@ -22,7 +23,7 @@ export async function onPaymentConfirmed(event: DomainEventLite): Promise<void> 
   if (!enr?.studentId) return;
 
   const body =
-    `Trung tâm đã xác nhận khoản thanh toán ${amount.toLocaleString("vi-VN")}đ.` +
+    `Trung tâm đã xác nhận khoản thanh toán ${formatVndPlain(amount, false)}.` +
     (receiptCode ? ` Phiếu thu: ${receiptCode}.` : "");
   await db.notification.upsert({
     where: { dedupeKey: `payment.confirmed:${paymentId}` },
@@ -54,7 +55,7 @@ export async function onPaymentRejected(event: DomainEventLite): Promise<void> {
   if (!enr?.studentId) return;
 
   const body =
-    `Khoản thanh toán ${amount.toLocaleString("vi-VN")}đ chưa được xác nhận.` +
+    `Khoản thanh toán ${formatVndPlain(amount, false)} chưa được xác nhận.` +
     (reason ? ` Lý do: ${reason}.` : "") +
     " Vui lòng liên hệ trung tâm để được hỗ trợ.";
   await db.notification.upsert({

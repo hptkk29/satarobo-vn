@@ -5,7 +5,7 @@ import type { HonorCategory } from "@prisma/client";
 import { CATEGORY_META } from "@/lib/honors/category-meta";
 import type { HonorWithEmployee } from "@/lib/honors/honor-view";
 import { ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 interface HonorCategoryGridProps {
   stats: Record<string, number>;

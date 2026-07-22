@@ -1,9 +1,19 @@
 import { redirect } from "next/navigation";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { buildLeadReport, type LeadReportRecord } from "@/lib/reports/lead";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
@@ -33,22 +43,17 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default async function LeadReportPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (
-    !(await checkPermission("leads:view-all")) &&
-    !(await checkPermission("leads:view-own"))
-  ) {
-    redirect("/dashboard");
-  }
-
-  const actor = await resolveActor(session.user.id);
+// REQ-05: tính báo cáo lead (fetch scoped + reduce thuần → object PRIMITIVE, không Date).
+async function computeLeadReport(actor: Actor, filters: ReportFilters) {
   const sdb = scopedDb(actor); // Lead auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass).
-
+  const dateWhere = reportDateWhere(filters); // lọc theo Lead.createdAt.
   const [rows, centers] = await Promise.all([
     sdb.lead.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        ...(filters.centerId ? { centerId: filters.centerId } : {}),
+        ...(dateWhere ? { createdAt: dateWhere } : {}),
+      },
       select: {
         status: true,
         source: true,
@@ -72,8 +77,34 @@ export default async function LeadReportPage() {
     createdAt: r.createdAt,
     convertedAt: r.convertedAt,
   }));
+  return buildLeadReport(records, centerNames);
+}
 
-  const report = buildLeadReport(records, centerNames);
+export default async function LeadReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (
+    !(await checkPermission("leads:view-all")) &&
+    !(await checkPermission("leads:view-own"))
+  ) {
+    redirect("/dashboard");
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
+
+  // REQ-05: cache cross-request keyed THEO SCOPE (actorScopeKey bắt buộc → không leak
+  // số liệu giữa cơ sở) + bộ lọc cơ sở/ngày. TTL 120s; output primitive nên serialize an toàn.
+  const report = await safeCache(
+    () => computeLeadReport(actor, fc.filters),
+    ["lead-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
 
   return (
     <div className="space-y-5 p-4">
@@ -83,6 +114,15 @@ export default async function LeadReportPage() {
           Phễu SR.QD.217 mở rộng — phân tích chuyển đổi theo bước, nguồn, cơ sở và tháng.
         </p>
       </div>
+
+      <ReportFilterBar
+        basePath="/bao-cao/lead"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
 
       {/* Thẻ số liệu tổng quan */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

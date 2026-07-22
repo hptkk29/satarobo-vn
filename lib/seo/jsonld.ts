@@ -4,6 +4,22 @@ import { SATA_ROBO_CONTACT, SATA_ROBO_LOCATIONS } from '@/lib/locations'
 
 const BASE_URL = 'https://satarobo.vn'
 
+/**
+ * Serialize a JSON-LD object for inline injection into a <script type="application/ld+json">.
+ * JSON.stringify does NOT escape `<`, `>` or `&`, so a DB-authored field containing the literal
+ * `</script>` would break out of the script tag (stored XSS). Escaping these as unicode escapes
+ * keeps the JSON valid while making a `</script>` breakout impossible. Also escapes the U+2028/2029
+ * line separators which are valid in JSON but illegal in JS string literals.
+ */
+export function jsonLdScript(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 export function organizationJsonLd() {
   return {
     '@context': 'https://schema.org',

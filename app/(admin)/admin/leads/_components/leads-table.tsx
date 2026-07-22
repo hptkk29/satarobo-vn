@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransition, useRef, useState, useEffect } from 'react'
-import { Search, ChevronLeft, ChevronRight, Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
+import { useTransition, useState, useEffect } from 'react'
+import { ChevronLeft, ChevronRight, Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 import {
   LEAD_STATUS_LABEL as STATUS_LABELS,
@@ -321,7 +321,6 @@ export function LeadsTable({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const searchRef = useRef<HTMLInputElement>(null)
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null)
   const totalPages = Math.ceil(total / pageSize)
   // Nút "Xem chi tiết lead" hiện cho mọi role xem được lead → luôn render cột thao tác.
@@ -346,26 +345,10 @@ export function LeadsTable({
     router.push(`/leads?${params.toString()}`)
   }
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    navigate({ q: searchRef.current?.value.trim() ?? '' })
-  }
-
   return (
     <div className="space-y-4">
-      {/* Filters */}
+      {/* Filters — tìm kiếm dùng chung ô "Tìm" ở thanh lọc phía trên (tránh 2 ô trùng nhau). */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <form onSubmit={handleSearch} className="relative flex-1 sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            ref={searchRef}
-            type="search"
-            defaultValue={currentQ ?? ''}
-            placeholder="Tìm theo tên, số điện thoại..."
-            className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20"
-          />
-        </form>
-
         <select
           value={currentStatus ?? ''}
           onChange={e => navigate({ status: e.target.value || undefined })}

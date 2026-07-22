@@ -103,6 +103,7 @@ export type PaymentListRow = {
   customerName: string | null;
   studentName: string | null; // tên bé
   className: string | null; // lớp
+  enrollmentId: string | null; // null = chưa gắn ghi danh (đơn chưa convert) → chưa confirm được
   collectedByName: string | null; // người thu (recordedBy)
   leadSource: string | null; // nguồn học viên
   parentName: string | null; // tên PH
@@ -199,6 +200,9 @@ async function fetchPaymentRows(
       customerName: p.order?.customerName ?? null,
       studentName: p.order?.student?.name ?? null,
       className: p.enrollment?.class?.name ?? null,
+      // Khoản chưa gắn ghi danh (đơn chưa convert) → KHÔNG confirm được (confirmPayment
+      // đòi enrollmentId để sinh Receipt). UI ẩn nút ✓ để không bấm ra lỗi. Xem FIN-01.
+      enrollmentId: p.enrollment?.id ?? null,
       collectedByName: p.recordedById
         ? (nameById.get(p.recordedById) ?? null)
         : null,

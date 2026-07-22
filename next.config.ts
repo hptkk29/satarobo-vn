@@ -1,7 +1,43 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+// SEC-H02 — security headers (áp cho MỌI response).
+// X-Frame-Options = SAMEORIGIN (KHÔNG DENY): SCORM player nhúng /api/scorm/asset trong iframe cùng origin.
+// Permissions-Policy: geolocation=(self) BẮT BUỘC giữ — QR điểm danh GV dùng GPS.
+// CSP để Content-Security-Policy-Report-Only (chỉ thu vi phạm, KHÔNG chặn) — tune + enforce ở đợt S2.
+const CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://connect.facebook.net",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://cdn.satarobo.vn https://*.r2.cloudflarestorage.com https://images.unsplash.com https://img.youtube.com https://www.google-analytics.com https://www.facebook.com",
+  "font-src 'self' data:",
+  "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com",
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+  "media-src 'self' https://cdn.satarobo.vn https://*.r2.cloudflarestorage.com",
+].join("; ");
+
+const securityHeaders = [
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), browsing-topics=()" },
+  { key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY },
+];
+
 const nextConfig: NextConfig = {
+  // DEV-ONLY (Next 16 chặn cross-origin tới dev server theo mặc định): cho phép
+  // đăng nhập đa phiên khi QA — admin ở localhost, GV ở 127.0.0.1, PH ở IP LAN
+  // (cookie tách theo host). Không ảnh hưởng production build.
+  allowedDevOrigins: ["127.0.0.1", "192.168.98.183"],
+
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
+
   images: {
     remotePatterns: [
       {

@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import type { WebhookStatus } from "@prisma/client";
 import { ingestLead } from "./ingest";
+import { rateLimit } from "@/lib/rate-limit";
 
 // =============================================================================
 // WEBHOOK INGEST HELPERS — Phase T1.4
@@ -238,6 +239,23 @@ export async function processLeadWebhook(
   source: string,
   req: Request,
 ): Promise<WebhookResult> {
+  // SEC-M04: rate-limit theo source+IP TRƯỚC mọi xử lý (chống flood Lead/WebhookDelivery/
+  // LeadActivity + consent forgery). fail-soft (Upstash→memory). 60 POST/phút/IP rất rộng
+  // so với webhook thật (vài lead/phút, mỗi POST có thể gộp nhiều lead).
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
+  const rl = await rateLimit({ key: `webhook:${source}:${ip}`, max: 60, windowMs: 60_000 });
+  if (!rl.success) {
+    return { httpStatus: 429, body: { ok: false, error: "Quá nhiều request — thử lại sau" } };
+  }
+  // SEC-M04: cap body size (chống payload khổng lồ) — check Content-Length trước khi đọc.
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > 100_000) {
+    return { httpStatus: 413, body: { ok: false, error: "Payload quá lớn" } };
+  }
+
   // AC3: thiếu secret trên production → 503 (server misconfig, không tạo record);
   // token sai → 401 (request không hợp lệ).
   const secretCheck = verifyWebhookSecret(source, req);

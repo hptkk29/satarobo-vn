@@ -8,6 +8,7 @@ import { ReserveModal } from "./reserve-modal";
 import { ResumeReserveModal } from "./resume-reserve-modal";
 import { WithdrawModal } from "./withdraw-modal";
 import { ReactivateModal } from "./reactivate-modal";
+import { formatDateVN } from "@/lib/format/date";
 
 const STATUS_LABEL: Record<StudentStatus, string> = {
   ACTIVE: "Đang học",
@@ -63,9 +64,9 @@ export function LifecycleActions({
         <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm">
           <div className="font-medium text-yellow-900">🟡 Đang bảo lưu</div>
           <div className="mt-1 text-xs text-yellow-800">
-            Từ {activeReserve.startedAt.toLocaleDateString("vi-VN")}
+            Từ {formatDateVN(activeReserve.startedAt)}
             {activeReserve.expectedEndAt &&
-              ` → dự kiến trở lại ${activeReserve.expectedEndAt.toLocaleDateString("vi-VN")}`}
+              ` → dự kiến trở lại ${formatDateVN(activeReserve.expectedEndAt)}`}
           </div>
           <div className="mt-1 text-xs italic text-yellow-900">
             Lý do: {activeReserve.reason}

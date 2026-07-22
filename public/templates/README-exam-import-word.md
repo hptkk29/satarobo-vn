@@ -1,6 +1,6 @@
 # Mẫu import câu hỏi từ Word (.docx) — R7-13
 
-File mẫu: **`exam-import-template.docx`** (cùng thư mục). KHÔNG đổi tên field — cấu
+File mẫu: **`mau-de-thi-word-v2.docx`** (cùng thư mục). KHÔNG đổi tên field — cấu
 trúc field bị khoá để đồng bộ với skill AI sinh đề (`tao-bai-tap-trac-nghiem-satarobo`).
 
 ## Cấu trúc 1 câu hỏi (1 block)

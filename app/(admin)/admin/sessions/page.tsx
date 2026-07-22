@@ -8,6 +8,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { type Prisma } from "@prisma/client";
 import { SessionListRow } from "./_components/session-list-row";
 import { SessionFilters } from "./_components/session-filters";
+import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,9 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
 
   const now = new Date();
 
-  const classWhere: Prisma.ClassWhereInput = {};
+  // QA 21/07 — LUÔN loại buổi của lớp đã xoá mềm khỏi listing chung (trước đây
+  // lớp biến khỏi /classes nhưng buổi vẫn hiện ở /sessions?scope=all).
+  const classWhere: Prisma.ClassWhereInput = { deletedAt: null };
   if (!isManager) {
     classWhere.OR = [
       { teacherId: session.user.id },
@@ -50,8 +53,16 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
     ...(scope === "upcoming" ? { date: { gte: now } } : {}),
     ...(scope === "past" ? { date: { lt: now } } : {}),
     ...(classFilter ? { classId: classFilter } : {}),
-    ...(Object.keys(classWhere).length > 0 ? { class: classWhere } : {}),
+    class: classWhere,
   };
+
+  // QA 20/07 Vấn đề C — URL hiện tại (kèm bộ lọc) để form Sửa quay về đúng ngữ cảnh.
+  const returnParams = new URLSearchParams();
+  if (scope !== "upcoming") returnParams.set("scope", scope);
+  if (classFilter) returnParams.set("classId", classFilter);
+  const returnTo = returnParams.toString()
+    ? `/sessions?${returnParams.toString()}`
+    : "/sessions";
 
   const sdb = scopedDb(actor);
   const [sessions, classes, holidays] = await Promise.all([
@@ -127,8 +138,8 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
           <div className="flex flex-wrap gap-2 text-xs text-amber-800">
             {holidays.map((h) => (
               <span key={h.id} className="rounded-full bg-white px-2.5 py-1">
-                {h.name}: {new Date(h.date).toLocaleDateString("vi-VN")}
-                {h.endDate ? `–${new Date(h.endDate).toLocaleDateString("vi-VN")}` : ""}
+                {h.name}: {formatDateVN(h.date)}
+                {h.endDate ? `–${formatDateVN(h.endDate)}` : ""}
                 {h.center?.name ? ` · ${h.center.name}` : " · Toàn hệ thống"}
               </span>
             ))}
@@ -160,6 +171,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
               sessions.map((s) => (
                 <SessionListRow
                   key={s.id}
+                  returnTo={returnTo}
                   session={{
                     id: s.id,
                     date: s.date,

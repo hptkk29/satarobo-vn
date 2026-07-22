@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processLeadWebhook } from "@/lib/lead/webhook";
+import { safeEqual } from "@/lib/security/safe-equal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   const challenge = url.searchParams.get("hub.challenge");
   const expected = process.env.WEBHOOK_FACEBOOK_VERIFY_TOKEN;
 
-  if (mode === "subscribe" && expected && token === expected && challenge) {
+  if (mode === "subscribe" && expected && token && safeEqual(token, expected) && challenge) {
     return new NextResponse(challenge, { status: 200 });
   }
   return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });

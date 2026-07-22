@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { toast } from "sonner";
 import { createClassGroup, updateClassGroup } from "../_actions";
 
 type OrgUnitOption = { id: string; name: string; code: string | null };
@@ -38,7 +39,13 @@ export function ClassGroupForm({
     const res = group
       ? await updateClassGroup(group.id!, formData)
       : await createClassGroup(formData);
-    if (res?.error) setError(res.error);
+    if (res?.error) {
+      setError(res.error);
+      return;
+    }
+    // QA 20/07 — toast thành công thay vì redirect âm thầm.
+    toast.success(isEdit ? "Đã cập nhật nhóm lớp" : "Đã tạo nhóm lớp mới");
+    router.push("/class-groups");
   }
 
   return (

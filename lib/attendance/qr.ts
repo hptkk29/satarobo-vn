@@ -1,6 +1,7 @@
 import "server-only";
 import { makeCenterToken, verifyCenterToken } from "@/lib/attendance/qr-token";
 import { distanceMeters } from "@/lib/attendance/geofence";
+import { getSigningSecret } from "@/lib/security/signing-key";
 
 // =============================================================================
 // QR ATTENDANCE — Phase NHÓM 4 (Module Chấm công PHẦN 1)
@@ -12,7 +13,7 @@ import { distanceMeters } from "@/lib/attendance/geofence";
 export const GEOFENCE_RADIUS_METERS = 100;
 
 function secret(): string {
-  return process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
+  return getSigningSecret(); // SEC-H05: bỏ fallback "" (HMAC key rỗng → QR forge được).
 }
 
 /** Token QR CỐ ĐỊNH cho cơ sở (không hết hạn). */

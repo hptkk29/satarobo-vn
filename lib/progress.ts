@@ -31,94 +31,59 @@ export interface StudentProgress {
 // Active enrollment statuses (D5 + legacy ACTIVE).
 const ACTIVE_ENROLLMENT_STATUSES = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
-export async function getStudentProgress(
-  studentId: string,
-  classId: string,
-): Promise<StudentProgress> {
-  const now = new Date();
+// ── Dữ liệu tiến độ đã fetch cho 1 HV (dùng cho compute THUẦN) ────────────────
+export interface StudentProgressInput {
+  studentId: string;
+  classId: string;
+  /** Buổi đã diễn ra (date <= now) của lớp. Dùng chung cả lớp trong batch. */
+  sessions: { id: string; lessonId: string | null }[];
+  /** Bản ghi điểm danh CỦA HV này trong các buổi trên. */
+  attendances: { status: string; makeupStatus: string | null }[];
+  /** Tổng lesson của curriculum active — hằng số cấp lớp. */
+  totalLessons: number;
+  /** Bài tập đã nộp CỦA HV này trong lớp. */
+  submissions: { status: string; score: number | null; totalPoints: number }[];
+  /** Lượt thi (SUBMITTED/GRADED/REVIEWED) CỦA HV này trong lớp. */
+  attempts: { passed: boolean | null }[];
+}
 
-  // 1) Sessions (past = "held")
-  const sessions = await db.classSession.findMany({
-    where: { classId, date: { lte: now } },
-    select: { id: true, lessonId: true },
-  });
-  const totalSessions = sessions.length;
+/**
+ * Tính StudentProgress THUẦN từ dữ liệu đã fetch (không chạm DB) — 1 nguồn công thức
+ * dùng chung getStudentProgress (1 HV) và getClassProgress (batch cả lớp), tránh lệch
+ * số liệu + diệt N+1. Công thức GIỮ NGUYÊN như bản cũ.
+ */
+export function computeStudentProgress(input: StudentProgressInput): StudentProgress {
+  const totalSessions = input.sessions.length;
 
-  const attendances =
-    totalSessions > 0
-      ? await db.attendance.findMany({
-          where: {
-            sessionId: { in: sessions.map((s) => s.id) },
-            studentId,
-          },
-          select: { status: true, makeupStatus: true },
-        })
-      : [];
-  // P1-1: thống nhất với lib/students/progress — buổi tính có mặt = PRESENT/LATE
-  // HOẶC vắng đã học bù (makeupStatus MADE_UP). Tránh lệch chuyên cần giữa các trang.
-  const attendedSessions = attendances.filter(
+  // P1-1: có mặt = PRESENT/LATE HOẶC vắng đã học bù (makeupStatus MADE_UP).
+  const attendedSessions = input.attendances.filter(
     (a) =>
       a.status === "PRESENT" || a.status === "LATE" || a.makeupStatus === "MADE_UP",
   ).length;
   const attendanceRate =
-    totalSessions > 0
-      ? Math.round((attendedSessions / totalSessions) * 100)
-      : 0;
+    totalSessions > 0 ? Math.round((attendedSessions / totalSessions) * 100) : 0;
 
-  // 2) Lesson coverage from active curriculum of this class's course
-  const cls = await db.class.findUnique({
-    where: { id: classId },
-    select: { courseId: true },
-  });
-  let totalLessons = 0;
-  if (cls?.courseId) {
-    const activeCurriculum = await db.curriculum.findFirst({
-      where: { courseId: cls.courseId, isActive: true },
-      orderBy: { version: "desc" },
-      select: { _count: { select: { lessons: true } } },
-    });
-    totalLessons = activeCurriculum?._count.lessons ?? 0;
-  }
   const coveredLessonIds = new Set(
-    sessions.filter((s) => s.lessonId).map((s) => s.lessonId as string),
+    input.sessions.filter((s) => s.lessonId).map((s) => s.lessonId as string),
   );
   const coveredLessons = coveredLessonIds.size;
   const lessonCoverageRate =
-    totalLessons > 0
-      ? Math.round((coveredLessons / totalLessons) * 100)
+    input.totalLessons > 0
+      ? Math.round((coveredLessons / input.totalLessons) * 100)
       : 0;
 
-  // 3) Assignments
-  const submissions = await db.assignmentSubmission.findMany({
-    where: {
-      studentId,
-      assignment: { classId },
-    },
-    select: {
-      status: true,
-      score: true,
-      assignment: { select: { totalPoints: true } },
-    },
-  });
-  const totalAssignments = submissions.length;
-  const submittedAssignments = submissions.filter(
-    (s) =>
-      s.status === "SUBMITTED" ||
-      s.status === "LATE" ||
-      s.status === "GRADED",
+  const totalAssignments = input.submissions.length;
+  const submittedAssignments = input.submissions.filter(
+    (s) => s.status === "SUBMITTED" || s.status === "LATE" || s.status === "GRADED",
   ).length;
-  const gradedSubs = submissions.filter(
+  const gradedSubs = input.submissions.filter(
     (s) => s.status === "GRADED" && s.score !== null,
   );
   const gradedAssignments = gradedSubs.length;
   const averageScore =
     gradedAssignments > 0
       ? gradedSubs.reduce(
-          (sum, s) =>
-            sum +
-            ((s.score as number) /
-              (s.assignment.totalPoints || 1)) *
-              10,
+          (sum, s) => sum + ((s.score as number) / (s.totalPoints || 1)) * 10,
           0,
         ) / gradedAssignments
       : null;
@@ -127,36 +92,207 @@ export async function getStudentProgress(
       ? Math.round((submittedAssignments / totalAssignments) * 100)
       : 0;
 
-  // 4) Exam attempts
-  const attempts = await db.examAttempt.findMany({
-    where: {
-      studentId,
-      exam: { classId },
-      status: { in: ["SUBMITTED", "GRADED", "REVIEWED"] },
-    },
-    select: { passed: true },
-  });
-  const examAttempts = attempts.length;
-  const passedExams = attempts.filter((a) => a.passed === true).length;
+  const examAttempts = input.attempts.length;
+  const passedExams = input.attempts.filter((a) => a.passed === true).length;
 
   return {
-    studentId,
-    classId,
+    studentId: input.studentId,
+    classId: input.classId,
     totalSessions,
     attendedSessions,
     attendanceRate,
-    totalLessons,
+    totalLessons: input.totalLessons,
     coveredLessons,
     lessonCoverageRate,
     totalAssignments,
     submittedAssignments,
     gradedAssignments,
-    averageScore:
-      averageScore !== null ? Math.round(averageScore * 10) / 10 : null,
+    averageScore: averageScore !== null ? Math.round(averageScore * 10) / 10 : null,
     submissionRate,
     examAttempts,
     passedExams,
   };
+}
+
+export async function getStudentProgress(
+  studentId: string,
+  classId: string,
+): Promise<StudentProgress> {
+  const now = new Date();
+
+  // QRY-01: 6 query tuần tự → 2 wave. Wave 1: các read độc lập.
+  const [sessions, cls, submissions, attempts] = await Promise.all([
+    db.classSession.findMany({
+      where: { classId, date: { lte: now } },
+      select: { id: true, lessonId: true },
+    }),
+    db.class.findUnique({ where: { id: classId }, select: { courseId: true } }),
+    db.assignmentSubmission.findMany({
+      where: { studentId, assignment: { classId } },
+      select: { status: true, score: true, assignment: { select: { totalPoints: true } } },
+    }),
+    db.examAttempt.findMany({
+      where: { studentId, exam: { classId }, status: { in: ["SUBMITTED", "GRADED", "REVIEWED"] } },
+      select: { passed: true },
+    }),
+  ]);
+
+  // Wave 2: phụ thuộc wave 1 (attendance cần sessionIds; curriculum cần courseId).
+  const [attendances, totalLessons] = await Promise.all([
+    sessions.length > 0
+      ? db.attendance.findMany({
+          where: { sessionId: { in: sessions.map((s) => s.id) }, studentId },
+          select: { status: true, makeupStatus: true },
+        })
+      : Promise.resolve([]),
+    getTotalLessons(cls?.courseId ?? null),
+  ]);
+
+  return computeStudentProgress({
+    studentId,
+    classId,
+    sessions,
+    attendances,
+    totalLessons,
+    submissions: submissions.map((s) => ({
+      status: s.status,
+      score: s.score,
+      totalPoints: s.assignment.totalPoints,
+    })),
+    attempts,
+  });
+}
+
+/** Tổng lesson của curriculum active cho 1 course (null-safe). Dùng chung 1 HV + batch. */
+async function getTotalLessons(courseId: string | null): Promise<number> {
+  if (!courseId) return 0;
+  const activeCurriculum = await db.curriculum.findFirst({
+    where: { courseId, isActive: true },
+    orderBy: { version: "desc" },
+    select: { _count: { select: { lessons: true } } },
+  });
+  return activeCurriculum?._count.lessons ?? 0;
+}
+
+/** Tổng lesson theo NHIỀU course trong 1 query → Map<courseId, count>. Lấy curriculum
+ * active version cao nhất mỗi course (khớp getTotalLessons orderBy version desc). */
+async function getTotalLessonsForCourses(courseIds: string[]): Promise<Map<string, number>> {
+  const byCourse = new Map<string, number>();
+  if (courseIds.length === 0) return byCourse;
+  const currs = await db.curriculum.findMany({
+    where: { courseId: { in: courseIds }, isActive: true },
+    orderBy: { version: "desc" },
+    select: { courseId: true, _count: { select: { lessons: true } } },
+  });
+  for (const c of currs) {
+    // orderBy version desc → bản đầu tiên gặp mỗi course = version cao nhất.
+    if (!byCourse.has(c.courseId)) byCourse.set(c.courseId, c._count.lessons);
+  }
+  return byCourse;
+}
+
+/**
+ * QRY-07/14/02 — Tiến độ của 1 HV trên NHIỀU lớp trong ~7 query (thay N×getStudentProgress).
+ * Dùng cho transcript, students/edit, portal ket-qua (1 HV × nhiều enrollment).
+ * Trả Map<classId, StudentProgress>. computeStudentProgress dùng chung → số liệu y hệt.
+ */
+export async function getStudentProgressForClasses(
+  studentId: string,
+  classIds: string[],
+): Promise<Map<string, StudentProgress>> {
+  const result = new Map<string, StudentProgress>();
+  if (classIds.length === 0) return result;
+  const now = new Date();
+
+  const [sessions, classes, submissions, attempts] = await Promise.all([
+    db.classSession.findMany({
+      where: { classId: { in: classIds }, date: { lte: now } },
+      select: { id: true, classId: true, lessonId: true },
+    }),
+    db.class.findMany({
+      where: { id: { in: classIds } },
+      select: { id: true, courseId: true },
+    }),
+    db.assignmentSubmission.findMany({
+      where: { studentId, assignment: { classId: { in: classIds } } },
+      select: {
+        status: true,
+        score: true,
+        assignment: { select: { classId: true, totalPoints: true } },
+      },
+    }),
+    db.examAttempt.findMany({
+      where: {
+        studentId,
+        exam: { classId: { in: classIds } },
+        status: { in: ["SUBMITTED", "GRADED", "REVIEWED"] },
+      },
+      select: { passed: true, exam: { select: { classId: true } } },
+    }),
+  ]);
+
+  const sessionIds = sessions.map((s) => s.id);
+  const sessionClassById = new Map(sessions.map((s) => [s.id, s.classId]));
+  const courseIds = [...new Set(classes.map((c) => c.courseId).filter(Boolean) as string[])];
+
+  const [attendances, lessonsByCourse] = await Promise.all([
+    sessionIds.length > 0
+      ? db.attendance.findMany({
+          where: { sessionId: { in: sessionIds }, studentId },
+          select: { sessionId: true, status: true, makeupStatus: true },
+        })
+      : Promise.resolve([]),
+    getTotalLessonsForCourses(courseIds),
+  ]);
+
+  // Gom theo classId.
+  const sessionsByClass = new Map<string, { id: string; lessonId: string | null }[]>();
+  for (const s of sessions) {
+    const list = sessionsByClass.get(s.classId) ?? [];
+    list.push({ id: s.id, lessonId: s.lessonId });
+    sessionsByClass.set(s.classId, list);
+  }
+  const attByClass = new Map<string, { status: string; makeupStatus: string | null }[]>();
+  for (const a of attendances) {
+    const classId = sessionClassById.get(a.sessionId);
+    if (!classId) continue;
+    const list = attByClass.get(classId) ?? [];
+    list.push({ status: a.status, makeupStatus: a.makeupStatus });
+    attByClass.set(classId, list);
+  }
+  const subByClass = new Map<string, { status: string; score: number | null; totalPoints: number }[]>();
+  for (const s of submissions) {
+    const classId = s.assignment.classId;
+    const list = subByClass.get(classId) ?? [];
+    list.push({ status: s.status, score: s.score, totalPoints: s.assignment.totalPoints });
+    subByClass.set(classId, list);
+  }
+  const attemptByClass = new Map<string, { passed: boolean | null }[]>();
+  for (const a of attempts) {
+    const classId = a.exam.classId;
+    if (!classId) continue; // WHERE đã lọc classId ∈ classIds; guard cho TS narrow.
+    const list = attemptByClass.get(classId) ?? [];
+    list.push({ passed: a.passed });
+    attemptByClass.set(classId, list);
+  }
+  const courseByClass = new Map(classes.map((c) => [c.id, c.courseId]));
+
+  for (const classId of classIds) {
+    const courseId = courseByClass.get(classId) ?? null;
+    result.set(
+      classId,
+      computeStudentProgress({
+        studentId,
+        classId,
+        sessions: sessionsByClass.get(classId) ?? [],
+        attendances: attByClass.get(classId) ?? [],
+        totalLessons: courseId ? (lessonsByCourse.get(courseId) ?? 0) : 0,
+        submissions: subByClass.get(classId) ?? [],
+        attempts: attemptByClass.get(classId) ?? [],
+      }),
+    );
+  }
+  return result;
 }
 
 export interface ClassStudentProgress {
@@ -178,37 +314,109 @@ export async function getClassProgress(
   // luôn null trong kết quả → KHÔNG gửi xuống client cho GV.
   includeParentContact = false,
 ): Promise<ClassStudentProgress[]> {
-  const enrollments = await db.enrollment.findMany({
-    where: {
-      classId,
-      status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
-      deletedAt: null, // FIX-C3
-    },
-    select: {
-      id: true,
-      student: {
-        select: {
-          id: true,
-          name: true,
-          avatarUrl: true,
-          parentPhone: true,
-          studentCode: true,
+  const now = new Date();
+
+  // QRY-08: trước đây gọi getStudentProgress() PER HV → N×6 query (lớp 20 HV = 120).
+  // Nay fetch dữ liệu CẢ LỚP 1 lần rồi computeStudentProgress() thuần từng HV → ~7 query.
+  const [enrollments, sessions, cls] = await Promise.all([
+    db.enrollment.findMany({
+      where: {
+        classId,
+        status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+        deletedAt: null, // FIX-C3
+      },
+      select: {
+        id: true,
+        student: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            parentPhone: true,
+            studentCode: true,
+          },
         },
       },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+      orderBy: { createdAt: "asc" },
+    }),
+    db.classSession.findMany({
+      where: { classId, date: { lte: now } },
+      select: { id: true, lessonId: true },
+    }),
+    db.class.findUnique({ where: { id: classId }, select: { courseId: true } }),
+  ]);
 
-  return Promise.all(
-    enrollments.map(async (e) => ({
-      enrollmentId: e.id,
-      student: {
-        ...e.student,
-        parentPhone: includeParentContact ? e.student.parentPhone : null,
+  if (enrollments.length === 0) return [];
+  const studentIds = enrollments.map((e) => e.student.id);
+  const sessionIds = sessions.map((s) => s.id);
+
+  // Dữ liệu per-HV của TOÀN LỚP trong 1 query mỗi loại (studentId IN [...]).
+  const [totalLessons, attendances, submissions, attempts] = await Promise.all([
+    getTotalLessons(cls?.courseId ?? null),
+    sessionIds.length > 0
+      ? db.attendance.findMany({
+          where: { sessionId: { in: sessionIds }, studentId: { in: studentIds } },
+          select: { studentId: true, status: true, makeupStatus: true },
+        })
+      : Promise.resolve([]),
+    db.assignmentSubmission.findMany({
+      where: { studentId: { in: studentIds }, assignment: { classId } },
+      select: {
+        studentId: true,
+        status: true,
+        score: true,
+        assignment: { select: { totalPoints: true } },
       },
-      progress: await getStudentProgress(e.student.id, classId),
-    })),
-  );
+    }),
+    db.examAttempt.findMany({
+      where: {
+        studentId: { in: studentIds },
+        exam: { classId },
+        status: { in: ["SUBMITTED", "GRADED", "REVIEWED"] },
+      },
+      select: { studentId: true, passed: true },
+    }),
+  ]);
+
+  // Gom theo studentId để compute per-HV không lặp query.
+  const attBy = groupByStudent(attendances);
+  const subBy = groupByStudent(submissions);
+  const attemptBy = groupByStudent(attempts);
+
+  return enrollments.map((e) => ({
+    enrollmentId: e.id,
+    student: {
+      ...e.student,
+      parentPhone: includeParentContact ? e.student.parentPhone : null,
+    },
+    progress: computeStudentProgress({
+      studentId: e.student.id,
+      classId,
+      sessions,
+      totalLessons,
+      attendances: (attBy.get(e.student.id) ?? []).map((a) => ({
+        status: a.status,
+        makeupStatus: a.makeupStatus,
+      })),
+      submissions: (subBy.get(e.student.id) ?? []).map((s) => ({
+        status: s.status,
+        score: s.score,
+        totalPoints: s.assignment.totalPoints,
+      })),
+      attempts: (attemptBy.get(e.student.id) ?? []).map((a) => ({ passed: a.passed })),
+    }),
+  }));
+}
+
+/** Gom mảng row có studentId thành Map<studentId, row[]>. */
+function groupByStudent<T extends { studentId: string }>(rows: T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const r of rows) {
+    const list = map.get(r.studentId);
+    if (list) list.push(r);
+    else map.set(r.studentId, [r]);
+  }
+  return map;
 }
 
 // =============================================================================

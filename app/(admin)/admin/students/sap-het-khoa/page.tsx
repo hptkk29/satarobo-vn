@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
+import { formatDateVN } from "@/lib/format/date";
 
 export const metadata = { title: "Sắp hết khoá | Admin" };
 export const dynamic = "force-dynamic";
@@ -72,7 +73,7 @@ export default async function NearingEndPage() {
                   </td>
                   <td className="px-4 py-2 tabular-nums text-gray-700">
                     {it.expectedEndDate
-                      ? new Date(it.expectedEndDate).toLocaleDateString("vi-VN")
+                      ? formatDateVN(it.expectedEndDate)
                       : "—"}
                   </td>
                   <td className="px-4 py-2">

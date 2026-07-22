@@ -27,6 +27,8 @@ type SP = {
   dateTo?: string
 }
 
+export const metadata = { title: 'Leads | Admin' }
+
 export default async function LeadsPage({
   searchParams,
 }: {
@@ -172,6 +174,11 @@ export default async function LeadsPage({
       take: KANBAN_LIMIT,
     })
 
+    // Tổng thật để nhãn "Tổng N lead" khớp với view bảng. Chỉ đếm thêm khi đã chạm trần
+    // (dưới trần thì số card hiển thị = tổng, khỏi query dư).
+    const kanbanTotal =
+      rawLeads.length < KANBAN_LIMIT ? rawLeads.length : await sdb.lead.count({ where })
+
     const canUpdate = (await checkPermission('leads:edit'))
     const kanbanLeads: KanbanLead[] = rawLeads.map((raw) => {
       // #11 T2 — mask PII (tên PH/SĐT/tên con) trước khi build payload client.
@@ -201,7 +208,13 @@ export default async function LeadsPage({
 
     return (
       <div>
-        <Header total={rawLeads.length} view={view} params={params} canCreate={canCreate} />
+        <Header
+          total={kanbanTotal}
+          shown={rawLeads.length}
+          view={view}
+          params={params}
+          canCreate={canCreate}
+        />
         <StatusTabs params={params} view={view} registeredCount={registeredCount} />
         <FilterBar
           params={params}
@@ -301,11 +314,14 @@ export default async function LeadsPage({
 // ─── Header + view toggle ────────────────────────────────────────────────────
 function Header({
   total,
+  shown,
   view,
   params,
   canCreate,
 }: {
   total: number
+  /** Số card thực sự hiển thị ở kanban (để chú thích khi đã chạm trần). */
+  shown?: number
   view: string
   params: SP
   canCreate?: boolean
@@ -327,7 +343,11 @@ function Header({
         <h1 className="text-2xl font-bold text-gray-900">Danh sách Lead</h1>
         <p className="mt-1 text-sm text-gray-500">
           {total > 0
-            ? `${view === 'kanban' ? 'Hiển thị' : 'Tổng'} ${total} lead`
+            ? `Tổng ${total} lead${
+                view === 'kanban' && shown != null && shown < total
+                  ? ` (hiển thị ${shown} mới nhất)`
+                  : ''
+              }`
             : 'Chưa có lead nào'}
         </p>
       </div>
@@ -356,7 +376,7 @@ function Header({
       {canCreate && (
         <div className="flex items-center gap-2">
           <a
-            href="/templates/mau-lead.xlsx"
+            href="/templates/mau-lead-v2.xlsx"
             download
             className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
@@ -442,8 +462,22 @@ function FilterBar({
   canViewAll: boolean
   view: string
 }) {
+  // Các input dùng `defaultValue` (uncontrolled) → React KHÔNG reset value khi điều hướng
+  // client-side (vd bấm "Xoá lọc"). Đặt `key` theo bộ lọc hiện tại để form remount →
+  // mọi ô nhập trả về defaultValue mới (rỗng khi đã xoá lọc). (bug: Xoá lọc còn chữ cũ)
+  const filterKey = [
+    params.q,
+    params.centerId,
+    params.assignedToId,
+    params.source,
+    params.dateFrom,
+    params.dateTo,
+  ]
+    .map((v) => v ?? '')
+    .join('|')
   return (
     <form
+      key={filterKey}
       method="GET"
       className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-gray-50 p-3"
     >

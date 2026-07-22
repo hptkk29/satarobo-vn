@@ -1,9 +1,11 @@
-import { auth } from '@/lib/auth'
-import { checkPermission } from '@/lib/auth/check-permission'
+import { requireLiveSession } from '@/lib/auth/live-session'
+import { checkPermission, canViewLeadPii } from '@/lib/auth/check-permission'
 import { resolveActor } from '@/lib/auth/actor'
 import { scopedDb } from '@/lib/db-scope'
 import { maskPhone, maskEmail, maskPersonName, maskFreeText } from '@/lib/lead/pii'
-import { canViewLeadPii } from '@/lib/auth/check-permission'
+import { writeAudit } from '@/lib/audit/audit-log'
+import { getAuditActor } from '@/lib/audit/log'
+import { exportWatermark } from '@/lib/export/watermark'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { LeadStatus } from '@prisma/client'
@@ -21,8 +23,8 @@ function escapeCsv(value: string | null | undefined): string {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await requireLiveSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!(await checkPermission('leads:view-all'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = req.nextUrl
@@ -98,10 +100,28 @@ export async function GET(req: NextRequest) {
     lead.createdAt.toLocaleDateString('vi-VN'),
   ].map(escapeCsv).join(','))
 
-  const csv = [headers.join(','), ...rows].join('\r\n')
+  const now = new Date()
+  const { actorId, actorName } = getAuditActor(session)
+  // SEC-M05: watermark dòng cuối (truy vết) + audit EXPORT.
+  const watermark = exportWatermark(actorName, actorId, leads.length, now)
+  const csv = [headers.join(','), ...rows, '', escapeCsv(watermark)].join('\r\n')
   const bom = '﻿' // UTF-8 BOM for Excel
 
-  const date = new Date().toISOString().slice(0, 10)
+  const date = now.toISOString().slice(0, 10)
+
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: 'leads',
+    entityType: 'Lead',
+    entityId: 'export',
+    action: 'EXPORT',
+    newValues: {
+      count: leads.length,
+      status: statusFilter ?? 'ALL',
+      q: q ?? null,
+      piiMasked: !canViewPii,
+    },
+  })
 
   return new NextResponse(bom + csv, {
     headers: {

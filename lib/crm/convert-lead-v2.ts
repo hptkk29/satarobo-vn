@@ -6,6 +6,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { genStudentCodeV2 } from "@/lib/codegen";
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
+import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import type { CourseDiscountType } from "@prisma/client";
 
@@ -227,6 +228,17 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
         });
       }
     }
+
+    // FIN-01 (Q1=A) — mắt xích còn thiếu: sau khi tạo Enrollment(s), GẮN (và CHIA khi nhiều
+    // ghi danh) các khoản RECORDED của đơn vào ghi danh → confirmPayment sinh Receipt được →
+    // getDebtRows phản ánh. Nhiều ghi danh: chia theo finalPrice (bất biến tổng). KHÔNG
+    // auto-confirm ở đây (giữ tách vai kế toán). weights ↔ enrollmentIds cùng thứ tự students.
+    await linkRecordedPaymentsToEnrollments(tx, {
+      leadId: lead.id,
+      enrollmentIds,
+      weights: prices.map((p) => p.finalPrice),
+      actor,
+    });
 
     await writeAudit({
       actor,

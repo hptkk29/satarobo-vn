@@ -1,9 +1,19 @@
 import { redirect } from "next/navigation";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { BarChart } from "@/components/charts/bar-chart";
 import {
   computeTrainingReport,
@@ -50,7 +60,11 @@ function Stat({
   );
 }
 
-export default async function TrainingReportPage() {
+type SearchParams = {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+};
+
+export default async function TrainingReportPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
@@ -59,81 +73,15 @@ export default async function TrainingReportPage() {
   }
 
   const actor = await resolveActor(session.user.id);
-  // Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass). Các model KHÔNG scoped
-  // (Attendance/ClassSession/HomeworkAssignment/Lesson) đi qua sdb pass-through —
-  // tránh import @/lib/db trần (R6-F1); cách ly cơ sở đảm bảo bằng lọc classIds.
-  const sdb = scopedDb(actor);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
 
-  // 1. Lớp trong phạm vi cơ sở.
-  const classRows = await sdb.class.findMany({
-    where: { deletedAt: null },
-    orderBy: { createdAt: "desc" },
-    take: 300,
-    select: { id: true, name: true, classCode: true },
-  });
-  const classIds = classRows.map((c) => c.id);
-  const classes: ClassRecord[] = classRows.map((c) => ({
-    id: c.id,
-    name: c.name,
-    classCode: c.classCode,
-  }));
-
-  // 2. Điểm danh các buổi của những lớp này (qua session.classId — ClassSession
-  // không scoped, nên LỌC THỦ CÔNG theo classIds đã scope ở trên — AC5).
-  const attendanceRows = classIds.length
-    ? await sdb.attendance.findMany({
-        where: { session: { classId: { in: classIds } } },
-        select: {
-          status: true,
-          makeupStatus: true,
-          session: { select: { classId: true, status: true } },
-        },
-      })
-    : [];
-  const attendances: AttendanceRecord[] = attendanceRows.map((a) => ({
-    classId: a.session.classId,
-    status: a.status as AttendanceStatusValue,
-    makeupStatus: a.makeupStatus as MakeupStatusValue,
-    sessionStatus: a.session.status as SessionStatusValue,
-  }));
-
-  // 3. Bài tập giao. HomeworkAssignment KHÔNG có relation tới ClassSession (chỉ cột
-  // phẳng classSessionId) → lấy map sessionId→classId từ ClassSession của các lớp,
-  // rồi lọc homework theo sessionIds. ClassSession không scoped → lọc theo classIds.
-  const sessionRows = classIds.length
-    ? await sdb.classSession.findMany({
-        where: { classId: { in: classIds } },
-        select: { id: true, classId: true },
-      })
-    : [];
-  const sessionToClass = new Map(sessionRows.map((s) => [s.id, s.classId]));
-  const sessionIds = sessionRows.map((s) => s.id);
-  const homeworkRows = sessionIds.length
-    ? await sdb.homeworkAssignment.findMany({
-        where: { classSessionId: { in: sessionIds } },
-        select: { status: true, classSessionId: true },
-      })
-    : [];
-  const homework: HomeworkRecord[] = homeworkRows.map((h) => ({
-    classId: sessionToClass.get(h.classSessionId) ?? "",
-    status: h.status as HomeworkAssignmentStatusValue,
-  }));
-
-  // 4. Bài giảng (Lesson) + cờ thiếu đề thi (không có Exam liên kết). Lesson không
-  // scoped theo cơ sở (thuộc Curriculum dùng chung) → lấy toàn bộ chưa archive.
-  const lessonRows = await sdb.lesson.findMany({
-    where: { archivedAt: null },
-    orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
-    take: 1000,
-    select: { id: true, title: true, _count: { select: { exams: true } } },
-  });
-  const lessons: LessonRecord[] = lessonRows.map((l) => ({
-    id: l.id,
-    title: l.title,
-    hasExam: l._count.exams > 0,
-  }));
-
-  const report = computeTrainingReport({ classes, attendances, homework, lessons });
+  // REQ-05: cache phần nặng (nhiều query + reduce) theo scope + BỘ LỌC. TTL 120s. Output primitive.
+  const report = await safeCache(
+    () => loadTrainingReport(actor, fc.filters),
+    ["dao-tao-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
 
   // Top lớp theo chuyên cần (sắp giảm dần) cho bar-chart — giới hạn 12 để mobile gọn.
   const chartData = [...report.perClass]
@@ -154,6 +102,15 @@ export default async function TrainingReportPage() {
         </p>
       </div>
 
+      <ReportFilterBar
+        basePath="/bao-cao/dao-tao"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
+
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Tỷ lệ chuyên cần"
@@ -168,9 +125,9 @@ export default async function TrainingReportPage() {
           tone={report.homeworkCompletionRate >= 80 ? "good" : "warn"}
         />
         <Stat
-          label="Buổi thiếu đề thi/bài tập"
+          label="Bài giảng thiếu đề thi"
           value={`${report.lessonsMissingExam}`}
-          hint={`trên ${report.lessonsTotal} bài giảng`}
+          hint={`trên ${report.lessonsTotal} bài giảng · toàn chương trình (không lọc theo cơ sở)`}
           tone={report.lessonsMissingExam > 0 ? "bad" : "good"}
         />
         <Stat
@@ -247,4 +204,98 @@ export default async function TrainingReportPage() {
       </section>
     </div>
   );
+}
+
+// REQ-05: tính báo cáo đào tạo (fetch scoped + reduce thuần → object PRIMITIVE).
+// filters: cơ sở (class.centerId) + khoảng ngày trên NGÀY BUỔI HỌC (ClassSession.date)
+// — buổi là thực thể mang mốc thời gian của báo cáo (điểm danh/bài tập gắn theo buổi).
+// Bộ lọc null → giữ nguyên hành vi cũ.
+async function loadTrainingReport(actor: Actor, filters: ReportFilters) {
+  // Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass). Các model KHÔNG scoped
+  // (Attendance/ClassSession/HomeworkAssignment/Lesson) đi qua sdb pass-through —
+  // tránh import @/lib/db trần (R6-F1); cách ly cơ sở đảm bảo bằng lọc classIds.
+  const sdb = scopedDb(actor);
+  const dateWhere = reportDateWhere(filters);
+
+  // 1. Lớp trong phạm vi cơ sở (thu hẹp thêm theo cơ sở đã chọn — đã validate IDOR).
+  const classRows = await sdb.class.findMany({
+    where: {
+      deletedAt: null,
+      ...(filters.centerId ? { centerId: filters.centerId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: 300,
+    select: { id: true, name: true, classCode: true },
+  });
+  const classIds = classRows.map((c) => c.id);
+  const classes: ClassRecord[] = classRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    classCode: c.classCode,
+  }));
+
+  // 2. Điểm danh các buổi của những lớp này (qua session.classId — ClassSession
+  // không scoped, nên LỌC THỦ CÔNG theo classIds đã scope ở trên — AC5).
+  const attendanceRows = classIds.length
+    ? await sdb.attendance.findMany({
+        where: {
+          session: {
+            classId: { in: classIds },
+            ...(dateWhere ? { date: dateWhere } : {}),
+          },
+        },
+        select: {
+          status: true,
+          makeupStatus: true,
+          session: { select: { classId: true, status: true } },
+        },
+      })
+    : [];
+  const attendances: AttendanceRecord[] = attendanceRows.map((a) => ({
+    classId: a.session.classId,
+    status: a.status as AttendanceStatusValue,
+    makeupStatus: a.makeupStatus as MakeupStatusValue,
+    sessionStatus: a.session.status as SessionStatusValue,
+  }));
+
+  // 3. Bài tập giao. HomeworkAssignment KHÔNG có relation tới ClassSession (chỉ cột
+  // phẳng classSessionId) → lấy map sessionId→classId từ ClassSession của các lớp,
+  // rồi lọc homework theo sessionIds. ClassSession không scoped → lọc theo classIds.
+  const sessionRows = classIds.length
+    ? await sdb.classSession.findMany({
+        where: {
+          classId: { in: classIds },
+          ...(dateWhere ? { date: dateWhere } : {}),
+        },
+        select: { id: true, classId: true },
+      })
+    : [];
+  const sessionToClass = new Map(sessionRows.map((s) => [s.id, s.classId]));
+  const sessionIds = sessionRows.map((s) => s.id);
+  const homeworkRows = sessionIds.length
+    ? await sdb.homeworkAssignment.findMany({
+        where: { classSessionId: { in: sessionIds } },
+        select: { status: true, classSessionId: true },
+      })
+    : [];
+  const homework: HomeworkRecord[] = homeworkRows.map((h) => ({
+    classId: sessionToClass.get(h.classSessionId) ?? "",
+    status: h.status as HomeworkAssignmentStatusValue,
+  }));
+
+  // 4. Bài giảng (Lesson) + cờ thiếu đề thi (không có Exam liên kết). Lesson không
+  // scoped theo cơ sở (thuộc Curriculum dùng chung) → lấy toàn bộ chưa archive.
+  const lessonRows = await sdb.lesson.findMany({
+    where: { archivedAt: null },
+    orderBy: [{ curriculumId: "asc" }, { order: "asc" }],
+    take: 1000,
+    select: { id: true, title: true, _count: { select: { exams: true } } },
+  });
+  const lessons: LessonRecord[] = lessonRows.map((l) => ({
+    id: l.id,
+    title: l.title,
+    hasExam: l._count.exams > 0,
+  }));
+
+  return computeTrainingReport({ classes, attendances, homework, lessons });
 }

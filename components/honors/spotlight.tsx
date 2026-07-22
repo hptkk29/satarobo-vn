@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { CATEGORY_META } from "@/lib/honors/category-meta";
 import { getHonorView, type HonorWithEmployee } from "@/lib/honors/honor-view";
 

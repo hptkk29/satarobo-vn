@@ -9,6 +9,7 @@ import { ClassStatus, type Prisma } from '@prisma/client'
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 import { getAssignableTeachers } from '@/lib/teachers/assignable'
 import { ClassDeleteButton } from './_components/class-delete-button'
+import { ClassFilters } from './_components/class-filters'
 
 const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
   PLANNED: { label: 'Đang lên KH', color: 'bg-gray-100 text-gray-700' },
@@ -139,6 +140,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
           _count: {
             select: {
               enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST }, deletedAt: null } },
+              sessions: true,
             },
           },
         },
@@ -194,72 +196,26 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
         )}
       </div>
 
-      {/* Filters */}
-      <form
-        method="GET"
-        className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6"
-      >
-        <input
-          name="q"
-          defaultValue={q}
-          placeholder="Tìm tên / mã lớp..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
-        />
-        <select
-          name="status"
-          defaultValue={statusFilter ?? ''}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
-        >
-          <option value="">Mọi trạng thái</option>
-          {Object.entries(STATUS_INFO).map(([v, { label }]) => (
-            <option key={v} value={v}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
-          name="centerId"
-          defaultValue={centerFilter ?? ''}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
-        >
-          <option value="">Tất cả cơ sở</option>
-          {centers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
-          name="courseId"
-          defaultValue={courseFilter ?? ''}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
-        >
-          <option value="">Tất cả khoá</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
-          name="teacherId"
-          defaultValue={teacherFilter ?? ''}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
-        >
-          <option value="">Tất cả GV</option>
-          {teachers.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name ?? '(chưa đặt tên)'}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-6"
-        >
-          Áp dụng bộ lọc
-        </button>
-      </form>
+      {/* Filters — client-side nav + pending indicator (Lỗi 1 QA 20/07) */}
+      <ClassFilters
+        initial={{
+          q,
+          status: statusFilter,
+          centerId: centerFilter,
+          courseId: courseFilter,
+          teacherId: teacherFilter,
+        }}
+        statuses={Object.entries(STATUS_INFO).map(([v, { label }]) => ({
+          value: v,
+          label,
+        }))}
+        centers={centers.map((c) => ({ value: c.id, label: c.name }))}
+        courses={courses.map((c) => ({ value: c.id, label: c.name }))}
+        teachers={teachers.map((t) => ({
+          value: t.id,
+          label: t.name ?? '(chưa đặt tên)',
+        }))}
+      />
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -374,7 +330,12 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                               </Link>
                             )}
                             {canDelete && (
-                              <ClassDeleteButton classId={cls.id} name={cls.name} />
+                              <ClassDeleteButton
+                                classId={cls.id}
+                                name={cls.name}
+                                enrollmentCount={cls._count.enrollments}
+                                sessionCount={cls._count.sessions}
+                              />
                             )}
                           </div>
                         </td>

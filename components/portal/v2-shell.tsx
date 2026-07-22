@@ -4,9 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { logoutToGate } from "@/lib/auth/logout-client";
-import { useTransition } from "react";
-import { toast } from "sonner";
-import { setActiveSite } from "@/app/(portal)/portal/actions";
+import { useSetActiveSite } from "@/components/portal/use-set-active-site";
 import type { SwitcherChild } from "@/lib/portal/child-switcher-data";
 import {
   Home,
@@ -356,17 +354,16 @@ function ProfileSwitcher({
   activeStudentName: string | null;
 }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
+  const { pending, switchTo } = useSetActiveSite();
   const isStudent = mode === "student";
 
   // Đổi con → vào Cổng học sinh của con đó (setActiveSite + điều hướng student mode).
   const enterStudent = (id: string) =>
-    start(async () => {
-      const res = await setActiveSite(id);
-      if (res.ok) {
-        router.push(STUDENT_ROOT);
-        router.refresh();
-      } else toast.error(res.error ?? "Không đổi được học viên");
+    switchTo(id, {
+      onSuccess: (r) => {
+        r.push(STUDENT_ROOT);
+        r.refresh();
+      },
     });
   const goParent = () => router.push("/portal");
 

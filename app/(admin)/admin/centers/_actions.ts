@@ -152,7 +152,8 @@ export async function createCenter(formData: FormData): Promise<ActionResult> {
 
   revalidatePath("/centers");
   revalidatePath("/lien-he");
-  redirect("/centers");
+  // Thành công → trả {} để client toast + điều hướng (QA 20/07 — không redirect âm thầm).
+  return {};
 }
 
 export async function updateCenter(id: string, formData: FormData): Promise<ActionResult> {
@@ -175,7 +176,7 @@ export async function updateCenter(id: string, formData: FormData): Promise<Acti
   revalidatePath("/centers");
   revalidatePath(`/centers/${id}/edit`);
   revalidatePath("/lien-he");
-  redirect("/centers");
+  return {};
 }
 
 export async function deleteCenter(id: string): Promise<ActionResult> {

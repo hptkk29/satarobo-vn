@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
-import { resolveActor } from "@/lib/auth/actor";
+import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { actorScopeKey } from "@/lib/cache/scope-key";
 import { BarChart } from "@/components/charts/bar-chart";
 import {
   buildTeacherPerformanceReport,
@@ -19,6 +22,13 @@ import type {
   MakeupStatusValue,
   SessionStatusValue,
 } from "@/lib/labels";
+import {
+  resolveReportFilters,
+  reportFilterCacheKey,
+  reportDateWhere,
+  type ReportFilters,
+} from "@/lib/reports/filters";
+import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 
 export const metadata = { title: "Báo cáo hiệu suất GV | Admin" };
 export const dynamic = "force-dynamic";
@@ -34,7 +44,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default async function TeacherPerformanceReportPage() {
+export default async function TeacherPerformanceReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
@@ -43,14 +57,115 @@ export default async function TeacherPerformanceReportPage() {
   }
 
   const actor = await resolveActor(session.user.id);
+  const sp = await searchParams;
+  const fc = await resolveReportFilters(actor, sp);
+
+  // REQ-05: cache phần nặng (nhiều query + reduce) theo scope + bộ lọc. TTL 120s. Output primitive.
+  const report = await safeCache(
+    () => computeTeacherPerformanceReport(actor, fc.filters),
+    ["teacher-performance-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
+    { tags: [CACHE_TAGS.report], revalidate: 120 },
+  )();
+
+  const chartData = report.rows
+    .filter((r) => r.sessionsTaught > 0)
+    .slice(0, 12)
+    .map((r) => ({ name: r.teacherName, "Buổi đã dạy": r.sessionsTaught }));
+
+  return (
+    <div className="space-y-5 p-4">
+      <div>
+        <h1 className="text-xl font-bold text-neutral-900">Báo cáo hiệu suất giáo viên</h1>
+        <p className="text-sm text-neutral-500">
+          Số buổi đã dạy, chuyên cần lớp phụ trách, số học viên và điểm học bạ trung bình — theo phạm vi cơ sở của bạn.
+        </p>
+      </div>
+
+      <ReportFilterBar
+        basePath="/bao-cao/hieu-suat-gv"
+        centers={fc.visibleCenters}
+        selection={fc.selection}
+        dateFrom={fc.dateFromStr}
+        dateTo={fc.dateToStr}
+        allowAll={fc.isGlobalAllowed}
+      />
+
+      <Card title="Số buổi đã dạy theo giáo viên">
+        {chartData.length > 0 ? (
+          <BarChart
+            data={chartData}
+            xKey="name"
+            bars={[{ key: "Buổi đã dạy", name: "Buổi đã dạy", color: "#F97316" }]}
+            height={300}
+          />
+        ) : (
+          <p className="py-8 text-center text-sm text-neutral-400">
+            Chưa có buổi học hoàn tất trong phạm vi.
+          </p>
+        )}
+      </Card>
+
+      <section className="rounded-xl border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-100 px-4 py-3">
+          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo giáo viên</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs text-neutral-400">
+              <tr>
+                <th className="px-4 py-2">Giáo viên</th>
+                <th className="px-4 py-2 text-right">Buổi đã dạy</th>
+                <th className="px-4 py-2 text-right">Chuyên cần</th>
+                <th className="px-4 py-2 text-right">Học viên</th>
+                <th className="px-4 py-2 text-right">Điểm học bạ TB</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
+                    Không có giáo viên phụ trách lớp trong phạm vi cơ sở.
+                  </td>
+                </tr>
+              ) : (
+                report.rows.map((r) => (
+                  <tr key={r.teacherId} className="border-t">
+                    <td className="px-4 py-2 font-medium">{r.teacherName}</td>
+                    <td className="px-4 py-2 text-right">{num(r.sessionsTaught)}</td>
+                    <td className="px-4 py-2 text-right font-semibold">
+                      {r.attendanceCounted > 0 ? `${r.attendanceRate}%` : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right">{num(r.studentCount)}</td>
+                    <td className="px-4 py-2 text-right">
+                      {r.avgReportScore != null ? `${r.avgReportScore}/4` : "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// REQ-05: tính báo cáo hiệu suất GV (fetch scoped + reduce thuần → object PRIMITIVE).
+async function computeTeacherPerformanceReport(actor: Actor, filters: ReportFilters) {
   // Class auto-scoped theo cơ sở (HO/SUPER_ADMIN bypass). Các model KHÔNG scoped
   // (ClassSession/Attendance/ReportCard*) đi qua sdb pass-through nhưng LỌC THỦ CÔNG
   // theo classIds/enrollmentIds đã scope → giữ cách ly cơ sở (AC5).
   const sdb = scopedDb(actor);
+  // Bộ lọc cơ sở (IDOR-safe) áp vào Class (→ lan xuống buổi/điểm danh/ghi danh qua classIds);
+  // ngày áp vào ClassSession.date (trục "số buổi đã dạy"/chuyên cần). null → no-op (giữ hành vi cũ).
+  const dateWhere = reportDateWhere(filters);
 
   // 1. Lớp trong phạm vi cơ sở + GV phụ trách.
   const classRows = await sdb.class.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(filters.centerId ? { centerId: filters.centerId } : {}),
+    },
     take: 500,
     select: { id: true, teacherId: true },
   });
@@ -58,33 +173,42 @@ export default async function TeacherPerformanceReportPage() {
   const classToTeacher = new Map<string, string>();
   for (const c of classRows) if (c.teacherId) classToTeacher.set(c.id, c.teacherId);
 
-  // 2. Buổi học của các lớp này (ClassSession không scoped → lọc theo classIds).
-  const sessionRows = classIds.length
-    ? await sdb.classSession.findMany({
-        where: { classId: { in: classIds } },
-        select: { classId: true, status: true, actualTeacherId: true },
-      })
-    : [];
-
-  // 3. Điểm danh các buổi của những lớp này.
-  const attendanceRows = classIds.length
-    ? await sdb.attendance.findMany({
-        where: { session: { classId: { in: classIds } } },
-        select: {
-          status: true,
-          makeupStatus: true,
-          session: { select: { classId: true, status: true } },
-        },
-      })
-    : [];
-
-  // 4. Ghi danh thuộc các lớp này (đếm HV + bắc cầu tới học bạ).
-  const enrollmentRows = classIds.length
-    ? await sdb.enrollment.findMany({
-        where: { classId: { in: classIds }, deletedAt: null },
-        select: { id: true, studentId: true, classId: true, status: true },
-      })
-    : [];
+  // QRY-16: 3 query dưới CHỈ phụ thuộc classIds → chạy song song (thay 3 await tuần tự).
+  const [sessionRows, attendanceRows, enrollmentRows] = await Promise.all([
+    // 2. Buổi học của các lớp này (ClassSession không scoped → lọc theo classIds + ngày buổi).
+    classIds.length
+      ? sdb.classSession.findMany({
+          where: {
+            classId: { in: classIds },
+            ...(dateWhere ? { date: dateWhere } : {}),
+          },
+          select: { classId: true, status: true, actualTeacherId: true },
+        })
+      : Promise.resolve([]),
+    // 3. Điểm danh các buổi của những lớp này (lọc theo ngày buổi qua quan hệ session).
+    classIds.length
+      ? sdb.attendance.findMany({
+          where: {
+            session: {
+              classId: { in: classIds },
+              ...(dateWhere ? { date: dateWhere } : {}),
+            },
+          },
+          select: {
+            status: true,
+            makeupStatus: true,
+            session: { select: { classId: true, status: true } },
+          },
+        })
+      : Promise.resolve([]),
+    // 4. Ghi danh thuộc các lớp này (đếm HV + bắc cầu tới học bạ).
+    classIds.length
+      ? sdb.enrollment.findMany({
+          where: { classId: { in: classIds }, deletedAt: null },
+          select: { id: true, studentId: true, classId: true, status: true },
+        })
+      : Promise.resolve([]),
+  ]);
   const enrollmentToClass = new Map(enrollmentRows.map((e) => [e.id, e.classId]));
   const enrollmentIds = enrollmentRows.map((e) => e.id);
 
@@ -164,84 +288,11 @@ export default async function TeacherPerformanceReportPage() {
     if (teacherId) scores.push({ teacherId, level: sc.level });
   }
 
-  const report = buildTeacherPerformanceReport({
+  return buildTeacherPerformanceReport({
     teachers,
     sessions,
     attendances,
     enrollments,
     scores,
   });
-
-  const chartData = report.rows
-    .filter((r) => r.sessionsTaught > 0)
-    .slice(0, 12)
-    .map((r) => ({ name: r.teacherName, "Buổi đã dạy": r.sessionsTaught }));
-
-  return (
-    <div className="space-y-5 p-4">
-      <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo hiệu suất giáo viên</h1>
-        <p className="text-sm text-neutral-500">
-          Số buổi đã dạy, chuyên cần lớp phụ trách, số học viên và điểm học bạ trung bình — theo phạm vi cơ sở của bạn.
-        </p>
-      </div>
-
-      <Card title="Số buổi đã dạy theo giáo viên">
-        {chartData.length > 0 ? (
-          <BarChart
-            data={chartData}
-            xKey="name"
-            bars={[{ key: "Buổi đã dạy", name: "Buổi đã dạy", color: "#F97316" }]}
-            height={300}
-          />
-        ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">
-            Chưa có buổi học hoàn tất trong phạm vi.
-          </p>
-        )}
-      </Card>
-
-      <section className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo giáo viên</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-4 py-2">Giáo viên</th>
-                <th className="px-4 py-2 text-right">Buổi đã dạy</th>
-                <th className="px-4 py-2 text-right">Chuyên cần</th>
-                <th className="px-4 py-2 text-right">Học viên</th>
-                <th className="px-4 py-2 text-right">Điểm học bạ TB</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.rows.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
-                    Không có giáo viên phụ trách lớp trong phạm vi cơ sở.
-                  </td>
-                </tr>
-              ) : (
-                report.rows.map((r) => (
-                  <tr key={r.teacherId} className="border-t">
-                    <td className="px-4 py-2 font-medium">{r.teacherName}</td>
-                    <td className="px-4 py-2 text-right">{num(r.sessionsTaught)}</td>
-                    <td className="px-4 py-2 text-right font-semibold">
-                      {r.attendanceCounted > 0 ? `${r.attendanceRate}%` : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-right">{num(r.studentCount)}</td>
-                    <td className="px-4 py-2 text-right">
-                      {r.avgReportScore != null ? `${r.avgReportScore}/4` : "—"}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  );
 }

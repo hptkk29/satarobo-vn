@@ -8,7 +8,7 @@ import type { Role } from "@prisma/client";
 export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin",
   CENTER_MANAGER: "Quản lý cơ sở",
-  HR: "Nhân sự (HR)",
+  HR: "Nhân sự",
   SALES_CSM: "Tư vấn & Chăm sóc",
   TEACHER: "Giáo viên",
   TRAINING: "Đào tạo",
