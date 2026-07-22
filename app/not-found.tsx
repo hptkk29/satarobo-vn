@@ -15,8 +15,11 @@ export default async function NotFound() {
         ? { href: "/dashboard", label: "Về Dashboard" }
         : { href: "/", label: "Về trang chủ" };
 
+  // <div> chứ KHÔNG <main>: 404 render BÊN TRONG layout route group (public đã có
+  // <main class="flex-1"> bao ngoài) — 2 <main> lồng nhau là HTML sai chuẩn và làm
+  // locator('main') của e2e smoke trúng 2 phần tử (strict mode).
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
+    <div className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-md text-center">
         <p className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-7xl font-extrabold tracking-tight text-transparent">
           404
@@ -43,6 +46,6 @@ export default async function NotFound() {
           )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }
