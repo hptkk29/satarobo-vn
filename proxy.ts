@@ -6,10 +6,12 @@ import {
   decideRoute,
   isAdminRoute,
   isLegacyAdminPrefixed,
+  isTeacherPath,
   sanitizeCallbackUrl,
   type HostKind,
   type RouteDecision,
 } from "@/lib/auth/route-policy";
+import { isTeacherSiteEnabled } from "@/lib/flags";
 
 const PUBLIC_HOST = "satarobo.vn";
 const ADMIN_HOST = "admin.satarobo.vn";
@@ -165,6 +167,25 @@ export default auth((req: NextAuthRequest) => {
         : [];
   const isStaff = effectiveRoles.some((r) => r !== "PARENT");
   const isParentOnly = !isStaff && effectiveRoles.includes("PARENT");
+  // L6 — GV THUẦN (role nhân sự DUY NHẤT là TEACHER) khi flag ON. Localhost không
+  // có subdomain nên decideRoute trả "next" cho unknown host: phải xử lý ở đây,
+  // ĐỐI XỨNG với cách PARENT được đưa về /portal bên dưới. Nếu không, GV thuần
+  // đăng nhập trên localhost sẽ rơi vào /dashboard (admin) và không bao giờ thấy
+  // site GV mới — khác hành vi host thật (admin-host redirect GV thuần → giaovien).
+  // GV kiêm vai trò admin (CM/HR...) KHÔNG tính là teacher-only → vẫn ở admin.
+  const isTeacherOnly =
+    isTeacherSiteEnabled() &&
+    effectiveRoles.includes("TEACHER") &&
+    effectiveRoles.filter((r) => r !== "PARENT").every((r) => r === "TEACHER");
+
+  // Site GV dùng path thật /teacher/* trên localhost (không rewrite). Gác login;
+  // gate role do layout app/(teacher) tự lo (defense-in-depth như admin).
+  if (isTeacherPath(pathname)) {
+    if (!session?.user) {
+      return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
+    }
+    return NextResponse.next();
+  }
 
   if (isLegacyAdminPrefixed(pathname)) {
     if (!session?.user) {
@@ -172,6 +193,9 @@ export default auth((req: NextAuthRequest) => {
     }
     if (isParentOnly) {
       return redirectTo(req, "/portal");
+    }
+    if (isTeacherOnly) {
+      return redirectTo(req, "/teacher");
     }
     if (pathname === "/admin" || pathname === "/admin/") {
       return redirectTo(req, "/admin/dashboard");
@@ -187,11 +211,17 @@ export default auth((req: NextAuthRequest) => {
     if (isParentOnly) {
       return redirectTo(req, "/portal");
     }
+    if (isTeacherOnly) {
+      return redirectTo(req, "/teacher");
+    }
     return rewriteTo(req, "/admin" + pathname);
   }
 
   if (pathname === "/login" && session?.user) {
-    return redirectTo(req, isParentOnly ? "/portal" : "/dashboard");
+    return redirectTo(
+      req,
+      isParentOnly ? "/portal" : isTeacherOnly ? "/teacher" : "/dashboard",
+    );
   }
 
   return NextResponse.next();

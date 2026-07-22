@@ -197,6 +197,69 @@ describe("A. public host × role — ai cũng vào", () => {
   });
 });
 
+describe("A. public host × /login — F4 cổng login chung (Q41)", () => {
+  it("mặc định (OFF): public /login → 307 admin/login (dồn về admin, không cache vĩnh viễn)", () => {
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/login", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/login", status: 307 });
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/login", ...authed("SUPER_ADMIN") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/login", status: 307 });
+  });
+
+  it("ON: ẩn danh public /login → next (serve form ngay tại satarobo.vn)", () => {
+    expect(
+      decideRoute({
+        hostKind: "public",
+        pathname: "/login",
+        role: null,
+        sessionValid: false,
+        commonLoginAtRoot: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("ON: đã login mở public /login → về đúng host (staff→admin, PARENT→portal, GV thuần→teacher)", () => {
+    expect(
+      decideRoute({
+        hostKind: "public",
+        pathname: "/login",
+        ...authed("SUPER_ADMIN"),
+        commonLoginAtRoot: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/dashboard", status: 307 });
+    expect(
+      decideRoute({
+        hostKind: "public",
+        pathname: "/login",
+        ...authed("PARENT"),
+        commonLoginAtRoot: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+    expect(
+      decideRoute({
+        hostKind: "public",
+        pathname: "/login",
+        ...authed("TEACHER"),
+        commonLoginAtRoot: true,
+        teacherSiteEnabled: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "teacher", path: "/", status: 307 });
+  });
+
+  it("ON: /login → admin route KHÁC vẫn 308 admin (không đổi)", () => {
+    expect(
+      decideRoute({
+        hostKind: "public",
+        pathname: "/dashboard",
+        role: null,
+        sessionValid: false,
+        commonLoginAtRoot: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/dashboard", status: 308 });
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // B. Edge cases
 // ─────────────────────────────────────────────────────────────────────────

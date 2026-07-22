@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { logoutToGate } from "@/lib/auth/logout-client";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { setActiveSite } from "@/app/(portal)/portal/actions";
@@ -250,7 +250,7 @@ export function PortalV2Shell({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  onClick={() => logoutToGate()}
                   className="cursor-pointer gap-2.5 text-destructive focus:text-destructive"
                 >
                   <LogOut className="size-4" /> Đăng xuất

@@ -12,7 +12,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, Save } from "lucide-react";
+import { Check, Save, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ATTENDANCE_LABELS, type AttendanceLabelTone } from "@/lib/labels";
@@ -25,6 +25,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { EmptyState } from "../../_components/ui/empty-state";
 import { saveClassAttendanceAction } from "../_actions";
 
 // 4 status GV được đánh (2 makeup còn lại NEEDS_MAKEUP/MADE_UP là hệ suy) → 6 nhãn SRS.
@@ -37,16 +38,18 @@ const TONE_ACTIVE: Record<AttendanceLabelTone, string> = {
   amber: "border-amber-500 bg-amber-500 text-white",
   blue: "border-blue-500 bg-blue-500 text-white",
   red: "border-red-500 bg-red-500 text-white",
-  purple: "border-purple-600 bg-purple-600 text-white",
-  neutral: "border-neutral-400 bg-neutral-400 text-white",
+  // Site GV bỏ tông tím → tone "purple" (nhãn MADE_UP, không hiển thị ở panel này
+  // vì chỉ render MARKABLE) dùng cam thương hiệu để không lệch khỏi hệ màu.
+  purple: "border-orange-600 bg-orange-600 text-white",
+  neutral: "border-muted-foreground bg-muted-foreground text-white",
 };
 const TONE_DOT: Record<AttendanceLabelTone, string> = {
   green: "bg-emerald-500",
   amber: "bg-amber-500",
   blue: "bg-blue-500",
   red: "bg-red-500",
-  purple: "bg-purple-500",
-  neutral: "bg-neutral-400",
+  purple: "bg-orange-500",
+  neutral: "bg-muted-foreground",
 };
 
 const initials = (name: string) =>
@@ -129,11 +132,7 @@ export function AttendancePanel({
   }
 
   if (rows.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
-        Lớp chưa có học viên đang học.
-      </p>
-    );
+    return <EmptyState icon={Users} title="Lớp chưa có học viên đang học." />;
   }
 
   return (
@@ -141,15 +140,15 @@ export function AttendancePanel({
       {/* Tổng hợp gọn + thao tác nhanh (port từ attendance-board) */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm">
-          <span className="font-semibold text-neutral-900">{rows.length} học viên</span>
+          <span className="font-semibold text-foreground">{rows.length} học viên</span>
           {MARKABLE.map((k) => (
             <span
               key={k}
-              className="inline-flex items-center gap-1.5 rounded-md bg-neutral-100 px-2 py-1 text-xs"
+              className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs"
             >
               <span className={cn("h-2 w-2 rounded-full", TONE_DOT[ATTENDANCE_LABELS[k].tone])} />
-              <span className="text-neutral-500">{ATTENDANCE_LABELS[k].label}</span>
-              <span className="font-bold text-neutral-900">{counts[k]}</span>
+              <span className="text-muted-foreground">{ATTENDANCE_LABELS[k].label}</span>
+              <span className="font-bold text-foreground">{counts[k]}</span>
             </span>
           ))}
         </div>
@@ -158,17 +157,17 @@ export function AttendancePanel({
             type="button"
             onClick={setAllPresent}
             disabled={pending}
-            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-purple-700 hover:text-purple-800 disabled:cursor-not-allowed disabled:text-neutral-400"
+            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-orange-700 hover:text-orange-800 disabled:cursor-not-allowed disabled:text-muted-foreground dark:text-orange-300 dark:hover:text-orange-200"
           >
-            <Check className="h-4 w-4" /> Đánh dấu tất cả có mặt
+            <Check className="h-4 w-4" aria-hidden /> Đánh dấu tất cả có mặt
           </button>
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <Table>
           <TableHeader>
-            <TableRow className="bg-neutral-50 hover:bg-neutral-50">
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
               <TableHead>Học viên</TableHead>
               <TableHead>Trạng thái điểm danh</TableHead>
               <TableHead className="w-[220px]">Ghi chú</TableHead>
@@ -179,19 +178,19 @@ export function AttendancePanel({
               <TableRow key={r.studentId}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-purple-700 text-xs font-bold text-white">
+                    <span className="brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
                       {initials(r.studentName)}
                     </span>
                     <div className="min-w-0">
                       <Link
                         href={`/teacher/hoc-vien?s=${r.studentId}`}
-                        className="block truncate text-sm font-semibold text-neutral-900 hover:text-purple-700 hover:underline"
+                        className="block truncate text-sm font-semibold text-foreground hover:text-orange-700 hover:underline dark:hover:text-orange-300"
                         title="Mở hồ sơ học viên"
                       >
                         {r.studentName}
                       </Link>
                       {r.makeupFromCenter && (
-                        <span className="mt-0.5 inline-block rounded bg-purple-100 px-1.5 py-0.5 text-[11px] text-purple-700">
+                        <span className="mt-0.5 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[11px] text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
                           Học bù từ {r.makeupFromCenter}
                         </span>
                       )}
@@ -215,7 +214,7 @@ export function AttendancePanel({
                             "rounded-md border px-2.5 py-1 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                             active
                               ? TONE_ACTIVE[info.tone]
-                              : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50",
+                              : "border-border bg-card text-muted-foreground hover:bg-muted",
                           )}
                         >
                           {info.label}
@@ -227,7 +226,7 @@ export function AttendancePanel({
                 <TableCell>
                   <input
                     type="text"
-                    className="w-full rounded-md border border-neutral-300 px-2 py-1 text-sm disabled:opacity-50"
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground disabled:opacity-50"
                     placeholder="—"
                     value={state[r.studentId]?.note ?? ""}
                     disabled={!editable || pending}
@@ -243,7 +242,7 @@ export function AttendancePanel({
       {editable && (
         <div className="flex justify-end">
           <Button onClick={save} disabled={pending}>
-            <Save className="mr-1.5 h-4 w-4" />
+            <Save className="mr-1.5 h-4 w-4" aria-hidden />
             {pending ? "Đang lưu…" : "Lưu điểm danh"}
           </Button>
         </div>

@@ -21,6 +21,7 @@
 // (không tin client) — giống admin hoan-thanh-khoa/_actions.ts.
 // ⚠️ Câu 46: payload chỉ TÊN học viên — KHÔNG SĐT/email/tên phụ huynh.
 import Link from "next/link";
+import { ArrowLeft, GraduationCap, Lock, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
@@ -35,7 +36,9 @@ import type {
   SessionStatusValue,
 } from "@/lib/labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "../_components/ui/empty-state";
+import { PageHeader } from "../_components/ui/page-header";
+import { CompletionTable, type CompletionTableRow } from "./_components/completion-table";
 
 export const metadata = { title: "Hoàn thành khoá | Giáo viên Sata Robo" };
 
@@ -45,15 +48,6 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-
-/** Initials avatar (đồng bộ hoc-ba — không thêm dependency). */
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 /** Gom kết quả groupBy buổi học → { tổng (loại CANCELLED), đã dạy, % }. */
 function tallySessions(rows: { status: string; _count: { _all: number } }[]) {
@@ -87,7 +81,12 @@ export default async function TeacherCompletionsPage({
 
     const cls = await sdb.class.findUnique({
       where: { id: classId },
-      select: { id: true, name: true, courseId: true, course: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        courseId: true,
+        course: { select: { name: true, nextCourse: { select: { name: true } } } },
+      },
     });
     if (!cls) return <NotYours />; // ngoài scope cơ sở / đã xoá
 
@@ -97,15 +96,24 @@ export default async function TeacherCompletionsPage({
         where: { classId },
         _count: { _all: true },
       }),
-      sdb.enrollment.findMany({
-        where: { classId, deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-        select: {
-          id: true,
-          studentId: true,
-          student: { select: { name: true } }, // câu 46: CHỈ tên HV, KHÔNG contact PH
-        },
-        orderBy: { student: { name: "asc" } },
-      }),
+      // Đọc QUA quan hệ class (enrollment dev centerId=null bị scopedDb lọc nếu query
+      // thẳng → bảng rỗng). Pattern hub-students-tab / hoc-vien.
+      sdb.class
+        .findUnique({
+          where: { id: classId },
+          select: {
+            enrollments: {
+              where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              select: {
+                id: true,
+                studentId: true,
+                student: { select: { name: true } }, // câu 46: CHỈ tên HV, KHÔNG contact PH
+              },
+              orderBy: { student: { name: "asc" } },
+            },
+          },
+        })
+        .then((c) => c?.enrollments ?? []),
     ]);
     const progress = tallySessions(sessionRows);
     const studentIds = enrollments.map((e) => e.studentId);
@@ -123,12 +131,22 @@ export default async function TeacherCompletionsPage({
         })
       : [];
     // CourseCompletion theo unique (studentId, courseId) — courseId suy từ lớp.
-    const completions = studentIds.length
-      ? await sdb.courseCompletion.findMany({
-          where: { courseId: cls.courseId, studentId: { in: studentIds } },
-          select: { studentId: true, certificateCode: true, completedAt: true },
-        })
-      : [];
+    const [completions, pendingReqs] = await Promise.all([
+      studentIds.length
+        ? sdb.courseCompletion.findMany({
+            where: { courseId: cls.courseId, studentId: { in: studentIds } },
+            select: { studentId: true, certificateCode: true, completedAt: true, finalGrade: true },
+          })
+        : Promise.resolve([] as { studentId: string; certificateCode: string; completedAt: Date; finalGrade: string | null }[]),
+      // Đề xuất hoàn thành đang CHỜ DUYỆT của các ghi danh này (trạng thái "Chờ duyệt").
+      enrollments.length
+        ? sdb.courseCompletionRequest.findMany({
+            where: { enrollmentId: { in: enrollments.map((e) => e.id) }, status: "PENDING" },
+            select: { enrollmentId: true },
+          })
+        : Promise.resolve([] as { enrollmentId: string }[]),
+    ]);
+    const pendingSet = new Set(pendingReqs.map((r) => r.enrollmentId));
 
     const attByStudent = new Map<string, AttendanceSummaryItem[]>();
     for (const a of attRows) {
@@ -142,12 +160,34 @@ export default async function TeacherCompletionsPage({
     }
     const completionByStudent = new Map(completions.map((c) => [c.studentId, c]));
 
+    // Rows PLAIN cho client table (search + cột Kết quả). Câu 46: chỉ tên HV.
+    const rows: CompletionTableRow[] = enrollments.map((e) => {
+      const s = computeAttendanceSummary({
+        totalLessons: progress.total,
+        attendances: attByStudent.get(e.studentId) ?? [],
+      });
+      const done = completionByStudent.get(e.studentId);
+      return {
+        id: e.id,
+        name: e.student.name,
+        attended: s.attended,
+        absent: s.absent,
+        needMakeup: s.needMakeup,
+        passed: Boolean(done),
+        certificateCode: done?.certificateCode ?? null,
+        completedAtLabel: done ? dayFmt.format(done.completedAt) : null,
+        finalGrade: done?.finalGrade ?? null,
+        nextCourseName: cls.course.nextCourse?.name ?? null,
+        requestPending: pendingSet.has(e.id),
+      };
+    });
+
     return (
       <div className="space-y-4">
-        <BackLink href="?" label="← Hoàn thành khoá" />
+        <BackLink href="?" label="Hoàn thành khoá" />
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">{cls.name}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h1 className="text-2xl font-bold text-foreground">{cls.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {cls.course.name} · tiến độ và trạng thái hoàn thành khoá — chỉ xem.
           </p>
         </div>
@@ -156,8 +196,8 @@ export default async function TeacherCompletionsPage({
         <Card>
           <CardContent className="space-y-2 py-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-neutral-800">Tiến độ lớp</span>
-              <span className="text-neutral-500">
+              <span className="font-medium text-foreground">Tiến độ lớp</span>
+              <span className="text-muted-foreground">
                 {progress.completed}/{progress.total} buổi · {progress.pct}%
               </span>
             </div>
@@ -166,81 +206,9 @@ export default async function TeacherCompletionsPage({
         </Card>
 
         {enrollments.length === 0 ? (
-          <EmptyBox text="Lớp chưa có học viên đang học." />
+          <EmptyState icon={Users} title="Lớp chưa có học viên đang học." />
         ) : (
-          <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    <th scope="col" className="px-4 py-3">Học viên</th>
-                    <th scope="col" className="px-4 py-3">Chuyên cần</th>
-                    <th scope="col" className="px-4 py-3">Hoàn thành khoá</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {enrollments.map((e) => {
-                    const s = computeAttendanceSummary({
-                      totalLessons: progress.total,
-                      attendances: attByStudent.get(e.studentId) ?? [],
-                    });
-                    const done = completionByStudent.get(e.studentId);
-                    return (
-                      <tr
-                        key={e.id}
-                        className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-neutral-50"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
-                              {initials(e.student.name)}
-                            </span>
-                            <span className="font-medium text-neutral-900">
-                              {e.student.name}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {progress.completed === 0 ? (
-                            <span className="text-xs text-neutral-400">Chưa có buổi nào</span>
-                          ) : (
-                            <div>
-                              <p className="font-medium text-neutral-800">
-                                {s.attended}/{progress.completed} buổi
-                              </p>
-                              {s.absent > 0 || s.needMakeup > 0 ? (
-                                <p className="text-xs text-neutral-500">
-                                  Vắng {s.absent}
-                                  {s.needMakeup > 0 ? ` · chờ bù ${s.needMakeup}` : ""}
-                                </p>
-                              ) : null}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {done ? (
-                            <div className="flex flex-col gap-0.5">
-                              <Badge
-                                variant="outline"
-                                className="w-fit border-emerald-300 bg-emerald-50 text-emerald-700"
-                              >
-                                Đã hoàn thành · {done.certificateCode}
-                              </Badge>
-                              <span className="text-xs text-neutral-500">
-                                {dayFmt.format(done.completedAt)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-neutral-400">Chưa hoàn thành</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <CompletionTable rows={rows} completedSessions={progress.completed} />
         )}
       </div>
     );
@@ -261,16 +229,19 @@ export default async function TeacherCompletionsPage({
         _count: { _all: true },
       })
     : [];
-  // Sĩ số đang học (groupBy 1 query — _count lồng where không dùng để khỏi lệch active).
-  const enrollRows = classIds.length
-    ? await sdb.enrollment.groupBy({
-        by: ["classId"],
-        where: {
-          classId: { in: classIds },
-          deletedAt: null,
-          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+  // Sĩ số đang học — đọc qua _count LỒNG quan hệ class (KHÔNG bị scopedDb lọc như
+  // groupBy/findMany enrollment trực tiếp khi enrollment dev centerId=null).
+  const enrollCounts = classIds.length
+    ? await sdb.class.findMany({
+        where: { id: { in: classIds } },
+        select: {
+          id: true,
+          _count: {
+            select: {
+              enrollments: { where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+            },
+          },
         },
-        _count: { _all: true },
       })
     : [];
 
@@ -280,20 +251,17 @@ export default async function TeacherCompletionsPage({
     list.push(r);
     sessionsByClass.set(r.classId, list);
   }
-  const studentCountByClass = new Map(enrollRows.map((r) => [r.classId, r._count._all]));
+  const studentCountByClass = new Map(enrollCounts.map((c) => [c.id, c._count.enrollments]));
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Hoàn thành khoá</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Tiến độ khoá học và trạng thái hoàn thành của học viên các lớp bạn phụ trách —
-          chỉ xem; xác nhận hoàn thành do trung tâm thao tác trên trang quản trị.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Hoàn thành khoá"
+        subtitle="Tiến độ khoá học và trạng thái hoàn thành của học viên các lớp bạn phụ trách — chỉ xem; xác nhận hoàn thành do trung tâm thao tác trên trang quản trị."
+      />
 
       {classes.length === 0 ? (
-        <EmptyBox text="Bạn chưa được phân công lớp nào." />
+        <EmptyState icon={GraduationCap} title="Bạn chưa được phân công lớp nào." />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {classes.map((c) => {
@@ -302,17 +270,17 @@ export default async function TeacherCompletionsPage({
               // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
               // (clean URL /hoan-thanh) LẪN localhost/preview (path /teacher/hoan-thanh).
               <Link key={c.id} href={`?classId=${c.id}`} className="block">
-                <Card className="h-full transition-colors hover:border-neutral-400">
+                <Card className="t-card-hover h-full">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">{c.name}</CardTitle>
-                    <p className="text-xs text-neutral-500">{c.course.name}</p>
+                    <p className="text-xs text-muted-foreground">{c.course.name}</p>
                   </CardHeader>
                   <CardContent className="space-y-2 pt-0">
-                    <div className="flex items-center justify-between text-xs text-neutral-500">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>
                         {p.completed}/{p.total} buổi · {studentCountByClass.get(c.id) ?? 0} học viên
                       </span>
-                      <span className="font-medium text-neutral-700">{p.pct}%</span>
+                      <span className="font-medium text-foreground">{p.pct}%</span>
                     </div>
                     <ProgressBar pct={p.pct} />
                   </CardContent>
@@ -330,9 +298,9 @@ export default async function TeacherCompletionsPage({
 function ProgressBar({ pct }: { pct: number }) {
   const width = Math.min(100, Math.max(0, pct));
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
       <div
-        className="h-full rounded-full bg-purple-600"
+        className="h-full rounded-full bg-orange-500"
         style={{ width: `${width}%` }}
       />
     </div>
@@ -341,25 +309,21 @@ function ProgressBar({ pct }: { pct: number }) {
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
-  );
-}
-
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
   );
 }
 
 function NotYours() {
   return (
     <div className="space-y-4">
-      <BackLink href="?" label="← Hoàn thành khoá" />
-      <EmptyBox text="Lớp không thuộc danh sách bạn phụ trách." />
+      <BackLink href="?" label="Hoàn thành khoá" />
+      <EmptyState icon={Lock} title="Lớp không thuộc danh sách bạn phụ trách." />
     </div>
   );
 }

@@ -46,6 +46,137 @@ const feedbackSchema = z.object({
     .max(100),
 });
 
+// Phiếu nhận xét buổi (site GV) — 1 HV/lần: Dự án + 4 mục văn xuôi + rubric 9 tiêu chí.
+const sessionEvalSchema = z.object({
+  sessionId: z.string().min(1),
+  studentId: z.string().min(1),
+  projectName: z.string().trim().max(200).nullable().optional(),
+  notes: z.object({
+    knowledge: z.string().trim().max(3000),
+    skill: z.string().trim().max(3000),
+    attitude: z.string().trim().max(3000),
+    proposal: z.string().trim().max(3000),
+  }),
+  // { criterionId: level 1-5 } — chấp nhận mọi key (9 tiêu chí lib/lms/session-eval-rubric).
+  rubric: z.record(z.string(), z.coerce.number().int().min(1).max(5)),
+});
+
+/**
+ * Site GV — lưu PHIẾU nhận xét buổi học của MỘT học viên (khớp reference TeachUI
+ * StudentEvalDialog). Ghi projectName/notes/rubric; comment (nay nullable) = gộp 4 mục
+ * để badge "đã nhận xét" + portal PH + email vẫn chạy. Gate own-class như
+ * saveSessionFeedback; thông báo PH qua event comment.added + email (khi có văn xuôi).
+ */
+export async function saveSessionEval(input: unknown): Promise<Result> {
+  const parsed = sessionEvalSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { sessionId, studentId, projectName, notes, rubric } = parsed.data;
+
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const sess = await sdb.classSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      centerId: true, // model scoped — findUnique lọc hậu kỳ theo field này
+      class: { select: { teacherId: true, assistantId: true, centerId: true } },
+    },
+  });
+  if (!sess) return { ok: false, error: "Buổi học không tồn tại" };
+
+  const allowed = await canManageSessionClass(
+    { id: session.user.id, role: session.user.role, centerId: session.user.centerId },
+    sess.class,
+  );
+  if (!allowed) return { ok: false, error: "Không có quyền nhận xét buổi học này" };
+
+  // comment tương thích cũ = 4 mục nối lại (rỗng hết → null, phiếu rubric-only vẫn lưu).
+  const comment =
+    [notes.knowledge, notes.skill, notes.attitude, notes.proposal]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join("\n") || null;
+
+  let saved: { id: string };
+  try {
+    saved = await sdb.studentSessionFeedback.upsert({
+      where: { classSessionId_studentId: { classSessionId: sessionId, studentId } },
+      update: {
+        projectName: projectName ?? null,
+        notes,
+        rubric,
+        comment,
+        createdById: session.user.id,
+      },
+      create: {
+        classSessionId: sessionId,
+        studentId,
+        projectName: projectName ?? null,
+        notes,
+        rubric,
+        comment,
+        createdById: session.user.id,
+      },
+      select: { id: true },
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi lưu phiếu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  // Thông báo PH — in-app (event) + email (khi có văn xuôi), như saveSessionFeedback.
+  try {
+    await publishEvent(
+      "comment.added",
+      { studentId, sessionId, commentId: saved.id, byUserId: session.user.id },
+      { dedupeKey: `comment.added:${saved.id}` },
+    );
+  } catch (err) {
+    console.error("[saveSessionEval] publish comment.added error:", err);
+  }
+  if (comment) {
+    try {
+      const [student, cls] = await Promise.all([
+        sdb.student.findFirst({
+          where: { id: studentId, parentUserId: { not: null } },
+          select: {
+            name: true,
+            parentName: true,
+            parentUser: { select: { email: true, name: true } },
+          },
+        }),
+        sdb.classSession.findUnique({
+          where: { id: sessionId },
+          select: { centerId: true, class: { select: { name: true } } },
+        }),
+      ]);
+      const email = student?.parentUser?.email;
+      if (email) {
+        await enqueueNewFeedback({
+          to: email,
+          parentName: student.parentUser?.name ?? student.parentName,
+          studentName: student.name,
+          className: cls?.class.name ?? "",
+          comment,
+          rating: null,
+        });
+      }
+    } catch (err) {
+      console.error("[saveSessionEval] enqueue email error:", err);
+    }
+  }
+
+  revalidatePath("/teacher/nhan-xet");
+  revalidatePath("/teacher/lop");
+  return { ok: true };
+}
+
 /** LMS-2 — lưu hàng loạt nhận xét từng HS cho 1 buổi. */
 export async function saveSessionFeedback(input: unknown): Promise<Result> {
   const parsed = feedbackSchema.safeParse(input);

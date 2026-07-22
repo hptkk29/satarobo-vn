@@ -9,14 +9,30 @@
 // thấy đúng buổi/lớp ở cơ sở khác; quyền sở hữu thật do assignedClassIds / ownership gác.
 // ⚠️ Câu 46: roster từ server đã strip studentPhone — client CHỈ nhận tên HV.
 import Link from "next/link";
+import { ArrowLeft, CalendarX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { EmptyState } from "../_components/ui/empty-state";
+import { PageHeader } from "../_components/ui/page-header";
+import { SessionStatusPill } from "../_components/ui/session-status-pill";
 import { AttendancePanel, type AttendancePanelRow } from "./_components/attendance-panel";
+import {
+  ClassList,
+  ClassListEmpty,
+  ClassStatusPill,
+  type ClassRow,
+} from "./_components/class-list";
+import { HubTabBar, parseHubTab } from "./_components/hub-tab-bar";
+import { HubSessionsTab } from "./_components/hub-sessions-tab";
+import { HubStudentsTab } from "./_components/hub-students-tab";
+import { HubReviewsTab } from "./_components/hub-reviews-tab";
+import { HubAssignmentsTab } from "./_components/hub-assignments-tab";
+import { HubMaterialsTab } from "./_components/hub-materials-tab";
+import { HubGalleryTab } from "./_components/hub-gallery-tab";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
 
@@ -27,22 +43,45 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
-const SESSION_STATUS_LABEL: Record<string, string> = {
-  SCHEDULED: "Đã lên lịch",
-  IN_PROGRESS: "Đang diễn ra",
-  COMPLETED: "Đã dạy",
-  CANCELLED: "Đã hủy",
-};
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7, không DST)
+
+/** Mốc hết ngày hôm nay (giờ VN) dạng UTC — để đếm buổi "đã tới ngày". */
+function vnTodayEnd(now = new Date()): Date {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  const startUtc =
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+  return new Date(startUtc + 24 * 60 * 60 * 1000);
+}
+
+/** scheduleDays: 0=CN … 6=T7 → nhãn tiếng Việt. */
+const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+
+/** "T7 · 08:00-10:00" từ scheduleDays + giờ lớp. */
+function scheduleText(days: number[], start: string | null, end: string | null): string {
+  const d = days
+    .map((x) => DAY_LABELS[x])
+    .filter((x): x is string => Boolean(x))
+    .join(" ");
+  const t = start && end ? `${start}-${end}` : "";
+  return [d, t].filter(Boolean).join(" · ");
+}
 
 export default async function TeacherClassesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string; sessionId?: string }>;
+  searchParams: Promise<{
+    classId?: string;
+    sessionId?: string;
+    tab?: string;
+    rvSession?: string; // Nhận xét deep — buổi cần nhận xét
+    asgId?: string; // Bài tập deep — bài cần xem chi tiết
+    subId?: string; // Bài tập deep — bài nộp cần chấm
+  }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
-  const { classId, sessionId } = await searchParams;
+  const { classId, sessionId, tab, rvSession, asgId, subId } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
@@ -55,10 +94,12 @@ export default async function TeacherClassesPage({
         id: true,
         classId: true,
         date: true,
+        topic: true,
         status: true,
         substituteTeacherId: true,
         actualTeacherId: true,
-        class: { select: { name: true } },
+        room: { select: { code: true, name: true } },
+        class: { select: { name: true, startTime: true, endTime: true } },
       },
     });
     const owned =
@@ -88,14 +129,22 @@ export default async function TeacherClassesPage({
     }));
 
     return (
-      <div className="space-y-4">
-        <BackLink href={`?classId=${classId}`} label="← Buổi học của lớp" />
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Điểm danh — {sess.class.name}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            {dayFmt.format(sess.date)} · {SESSION_STATUS_LABEL[sess.status] ?? sess.status}
-          </p>
-        </div>
+      <div>
+        <BackLink href={`?classId=${classId}&tab=diem-danh`} label="Điểm danh của lớp" />
+        <PageHeader
+          title={`Điểm danh — ${sess.topic ?? sess.class.name}`}
+          subtitle={[
+            dayFmt.format(sess.date),
+            sess.class.startTime && sess.class.endTime
+              ? `${sess.class.startTime}-${sess.class.endTime}`
+              : null,
+            sess.room ? `Phòng ${sess.room.code ?? sess.room.name}` : null,
+            sess.topic ? sess.class.name : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          actions={<SessionStatusPill status={sess.status} />}
+        />
         <AttendancePanel
           sessionId={sessionId}
           rows={panelRows}
@@ -105,108 +154,191 @@ export default async function TeacherClassesPage({
     );
   }
 
-  // ── (b) Các buổi của 1 lớp ────────────────────────────────────────────────────
+  // ── (b) Class Hub: 1 lớp, 6 tab (Học viên / Điểm danh / Nhận xét / Bài tập /
+  //        Tài liệu / Ảnh lớp) qua ?tab=. Header + tab bar do page dựng; nội dung
+  //        tab đọc scoped riêng trong từng HubXxxTab (chỉ tab đang mở fetch data).
   if (classId && actor.assignedClassIds.has(classId)) {
-    const cls = await xdb.class.findUnique({ where: { id: classId }, select: { name: true } });
-    const sessions = await xdb.classSession.findMany({
-      where: { classId },
-      select: { id: true, date: true, topic: true, status: true },
-      orderBy: { date: "desc" },
-      take: 40,
+    const activeTab = parseHubTab(tab);
+    const cls = await xdb.class.findUnique({
+      where: { id: classId },
+      select: {
+        name: true,
+        classCode: true,
+        status: true,
+        scheduleDays: true,
+        startTime: true,
+        endTime: true,
+        course: { select: { name: true } },
+        center: { select: { name: true } },
+      },
     });
+    if (!cls) return <NotYours />;
+
+    // Badge tab Điểm danh: buổi (60 ngày gần, đã tới hết hôm nay, chưa hủy) chưa có
+    // bản ghi điểm danh — cùng tín hiệu "Cần xử lý" ở danh sách lớp.
+    const todayEnd = vnTodayEnd();
+    const pendFrom = new Date(todayEnd.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const pendSessions = await xdb.classSession.findMany({
+      where: { classId, status: { not: "CANCELLED" }, date: { gte: pendFrom, lte: todayEnd } },
+      select: { id: true },
+    });
+    const attendedSet = new Set(
+      pendSessions.length
+        ? (
+            await xdb.attendance.findMany({
+              where: { sessionId: { in: pendSessions.map((s) => s.id) } },
+              select: { sessionId: true },
+            })
+          ).map((a) => a.sessionId)
+        : [],
+    );
+    const attendancePending = pendSessions.filter((s) => !attendedSet.has(s.id)).length;
+
+    const timeLabel =
+      cls.startTime && cls.endTime ? `${cls.startTime}-${cls.endTime}` : "";
+    const subtitle = [
+      cls.classCode,
+      cls.course.name,
+      scheduleText(cls.scheduleDays, cls.startTime, cls.endTime),
+      cls.center?.name,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
     return (
-      <div className="space-y-4">
-        <BackLink href="?" label="← Lớp của tôi" />
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">{cls?.name ?? "Lớp"}</h1>
-          <p className="mt-1 text-sm text-neutral-500">Chọn buổi để điểm danh.</p>
-        </div>
-        {sessions.length === 0 ? (
-          <EmptyBox text="Lớp chưa có buổi học nào." />
-        ) : (
-          <div className="space-y-2">
-            {sessions.map((s) => (
-              // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
-              // (clean URL /lop) LẪN localhost/preview (path thật /teacher/lop).
-              <Link key={s.id} href={`?classId=${classId}&sessionId=${s.id}`} className="block">
-                <Card className="transition-colors hover:border-neutral-400">
-                  <CardContent className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="text-sm font-medium text-neutral-800">{dayFmt.format(s.date)}</p>
-                      {s.topic && <p className="text-xs text-neutral-500">{s.topic}</p>}
-                    </div>
-                    <Badge variant="outline">{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+      <div>
+        <BackLink href="?" label="Lớp của tôi" />
+
+        {/* Header lớp — tên + trạng thái + mã/khoá/lịch/cơ sở (khớp reference) */}
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">{cls.name}</h1>
+            <ClassStatusPill status={cls.status} />
           </div>
+          {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+        </div>
+
+        <HubTabBar classId={classId} active={activeTab} attendancePending={attendancePending} />
+
+        {activeTab === "hoc-vien" && <HubStudentsTab actor={actor} classId={classId} />}
+        {activeTab === "diem-danh" && (
+          <HubSessionsTab actor={actor} classId={classId} timeLabel={timeLabel} />
         )}
+        {activeTab === "nhan-xet" && (
+          <HubReviewsTab actor={actor} classId={classId} reviewSessionId={rvSession} />
+        )}
+        {activeTab === "bai-tap" && (
+          <HubAssignmentsTab
+            actor={actor}
+            classId={classId}
+            className={cls.name}
+            assignmentId={asgId}
+            submissionId={subId}
+          />
+        )}
+        {activeTab === "tai-lieu" && <HubMaterialsTab actor={actor} classId={classId} />}
+        {activeTab === "anh-lop" && <HubGalleryTab actor={actor} classId={classId} />}
       </div>
     );
   }
 
   // ── (a) Danh sách lớp được phân ───────────────────────────────────────────────
-  const classes = classIds.length
+  const rawClasses = classIds.length
     ? await xdb.class.findMany({
         where: { id: { in: classIds } },
-        select: { id: true, name: true, _count: { select: { enrollments: true } } },
+        select: {
+          id: true,
+          name: true,
+          classCode: true,
+          status: true,
+          scheduleDays: true,
+          startTime: true,
+          endTime: true,
+          maxStudents: true,
+          course: { select: { name: true } },
+          center: { select: { name: true } },
+          _count: {
+            select: {
+              enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+            },
+          },
+        },
         orderBy: { name: "asc" },
       })
     : [];
 
+  // Cột "Cần xử lý": đếm buổi (60 ngày gần, đã tới hết hôm nay, chưa hủy) chưa có
+  // bản ghi điểm danh — theo từng lớp. Cùng tín hiệu "chưa điểm danh" với dashboard.
+  const todayEnd = vnTodayEnd();
+  const pendFrom = new Date(todayEnd.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const pendSessions = classIds.length
+    ? await xdb.classSession.findMany({
+        where: {
+          classId: { in: classIds },
+          status: { not: "CANCELLED" },
+          date: { gte: pendFrom, lte: todayEnd },
+        },
+        select: { id: true, classId: true },
+      })
+    : [];
+  const attendedSet = new Set(
+    pendSessions.length
+      ? (
+          await xdb.attendance.findMany({
+            where: { sessionId: { in: pendSessions.map((s) => s.id) } },
+            select: { sessionId: true },
+          })
+        ).map((a) => a.sessionId)
+      : [],
+  );
+  const pendingByClass = new Map<string, number>();
+  for (const s of pendSessions) {
+    if (!attendedSet.has(s.id)) {
+      pendingByClass.set(s.classId, (pendingByClass.get(s.classId) ?? 0) + 1);
+    }
+  }
+
+  const rows: ClassRow[] = rawClasses.map((c) => ({
+    id: c.id,
+    name: c.name,
+    code: c.classCode,
+    center: c.center?.name ?? null,
+    course: c.course.name,
+    schedule: scheduleText(c.scheduleDays, c.startTime, c.endTime),
+    enrolled: c._count.enrollments,
+    capacity: c.maxStudents,
+    status: c.status,
+    pending: pendingByClass.get(c.id) ?? 0,
+  }));
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Lớp của tôi</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Các lớp bạn được phân công — chọn lớp để điểm danh 6 nhãn.
-        </p>
-      </div>
-      {classes.length === 0 ? (
-        <EmptyBox text="Bạn chưa được phân công lớp nào." />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {classes.map((c) => (
-            // href chỉ-query — xem ghi chú ở link buổi học.
-            <Link key={c.id} href={`?classId=${c.id}`} className="block">
-              <Card className="h-full transition-colors hover:border-neutral-400">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{c.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <p className="text-sm text-neutral-500">{c._count.enrollments} học viên</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
+    <div>
+      <PageHeader
+        title="Lớp học của tôi"
+        subtitle="Các lớp bạn đang phụ trách. Bấm vào một lớp để điểm danh, nhận xét, giao bài và xem học viên."
+      />
+      {rows.length === 0 ? <ClassListEmpty /> : <ClassList rows={rows} />}
     </div>
   );
 }
 
 function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-neutral-500 hover:text-neutral-800">
+    <Link
+      href={href}
+      className="mb-4 inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
       {label}
     </Link>
   );
 }
 
-function EmptyBox({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-      <p className="text-sm text-neutral-500">{text}</p>
-    </div>
-  );
-}
-
 function NotYours() {
   return (
-    <div className="space-y-4">
-      <BackLink href="?" label="← Lớp của tôi" />
-      <EmptyBox text="Buổi học không thuộc lớp bạn phụ trách." />
+    <div>
+      <BackLink href="?" label="Lớp của tôi" />
+      <EmptyState icon={CalendarX2} title="Buổi học không thuộc lớp bạn phụ trách." />
     </div>
   );
 }

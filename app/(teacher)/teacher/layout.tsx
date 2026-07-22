@@ -4,15 +4,23 @@
 // chưa mở, về khu hiện tại (GV vẫn dùng admin — 2-phase, KHÔNG đá GV khỏi admin);
 // (3) login nhưng KHÔNG có role TEACHER → về khu đúng của họ (staff → admin,
 // PARENT → portal). UI: shadcn thuần — KHÔNG Magic UI/Framer/Recharts (ESLint chặn).
-import Link from "next/link";
+//
+// Giao diện port từ TeachUI: shell sidebar + topbar (thay top-nav ngang), tone
+// cam-only + Sáng/Tối. Token scoped trong ./teacher.css dưới `.teacher-root` →
+// admin/portal/public giữ nguyên nhận diện cam+tím.
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasRole, hasStaffRole } from "@/lib/auth/permissions";
 import { isTeacherSiteEnabled } from "@/lib/flags";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { Toaster } from "@/components/ui/sonner";
-import { TeacherNav } from "./_components/teacher-nav";
+import { adminHomeUrl } from "@/lib/auth/hosts";
+import { AppShell } from "./_components/app-shell";
+import "./teacher.css";
+
+// F2 (Q41) — SSO đa subdomain bật khi env set. Mặc định không → không hiện lối
+// "Về trang quản trị" (nhảy host cần shared cookie, không có thì văng login).
+const ssoEnabled = Boolean(process.env.AUTH_COOKIE_DOMAIN?.trim());
 
 export const dynamic = "force-dynamic";
 
@@ -56,36 +64,17 @@ export default async function TeacherLayout({
     redirect("/login?reason=session-invalidated");
   }
 
+  // F3 (Q41) — GV kiêm nhiệm (có thêm vai staff) được lối quay về admin. Chỉ khi SSO
+  // bật (mặc định off → undefined → UserMenu không hiện mục này → hành vi hiện tại).
+  const adminReturnUrl =
+    ssoEnabled && hasStaffRole(session.user) ? adminHomeUrl() : undefined;
+
   return (
-    <div className="flex min-h-screen flex-col bg-neutral-50">
-      <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-baseline gap-1 text-lg font-bold">
-            <span className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-transparent">
-              Sata
-            </span>
-            <span className="bg-gradient-to-r from-purple-700 to-orange-500 bg-clip-text text-transparent">
-              Robo
-            </span>
-            <span className="ml-1 text-xs font-normal text-neutral-400">
-              Giáo viên
-            </span>
-          </div>
-          {/* Batch 4 — bấm tên mở Hồ sơ cá nhân (/teacher/ho-so). */}
-          <Link
-            href="/teacher/ho-so"
-            className="truncate text-sm text-neutral-500 hover:text-neutral-800 hover:underline"
-            title="Hồ sơ cá nhân"
-          >
-            {session.user.name ?? session.user.email}
-          </Link>
-        </div>
-        <TeacherNav />
-      </header>
-
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
-
-      <Toaster richColors position="top-right" />
-    </div>
+    <AppShell
+      userName={session.user.name ?? session.user.email ?? "Giáo viên"}
+      adminReturnUrl={adminReturnUrl}
+    >
+      {children}
+    </AppShell>
   );
 }
