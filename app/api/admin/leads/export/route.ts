@@ -1,9 +1,9 @@
 import { auth } from '@/lib/auth'
-import { canViewLeadPii } from '@/lib/auth/permissions'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { resolveActor } from '@/lib/auth/actor'
 import { scopedDb } from '@/lib/db-scope'
 import { maskPhone, maskEmail, maskPersonName, maskFreeText } from '@/lib/lead/pii'
+import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { LeadStatus } from '@prisma/client'
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
 
   // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) NGAY TẠI SERVER trước khi
   // ghi CSV cho actor không có quyền leads:view-pii (vd MARKETING).
-  const canViewPii = canViewLeadPii(session.user)
+  const canViewPii = await canViewLeadPii()
 
   const headers = [
     'ID', 'Phụ huynh', 'SĐT', 'Email', 'Tên con', 'Tuổi',

@@ -2,7 +2,8 @@
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { hasRole, canViewLeadPii } from '@/lib/auth/permissions'
+import { hasRole } from '@/lib/auth/permissions'
+import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -604,7 +605,7 @@ export async function createLeadManual(
     // chỉ lộ khi VỪA trong scope (view-all theo cơ sở HOẶC cùng cơ sở) VỪA có quyền
     // leads:view-pii. Non-holder (vd MARKETING) chỉ nhận thông báo chung, không chi tiết.
     const canSeeDetail =
-      canViewLeadPii(session.user) &&
+      (await canViewLeadPii()) &&
       ((await checkPermission('leads:view-all', { centerId: dup.centerId })) ||
         (!!dup.centerId && dup.centerId === session.user.centerId))
     if (canSeeDetail) {

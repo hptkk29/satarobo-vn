@@ -83,3 +83,15 @@ export async function assertAnyPermission(
 ): Promise<void> {
   if (!(await checkAnyPermission(actions, target))) throw new PermissionError();
 }
+
+/**
+ * #11 follow-up SAU flip #09 — quyền xem PII lead (Q7), thay bản can() v1 trần cũ ở
+ * lib/auth/permissions. Qua checkPermission nên grant per-user (UserPermissionGrant
+ * ALLOW) vẫn ăn ở cả v1 lẫn v2; KHÔNG truyền target vì leads:view-pii seed GLOBAL
+ * (cách ly cơ sở đã do scopedDb ở tầng query). Đặt ở đây (không phải lib/lead/pii —
+ * module thuần) và không phải permissions.ts (permission-eval import ngược → vòng).
+ * ⚠️ Chỉ merge SAU flip #09 + seed-prod-roles — merge trước sẽ đẻ lệch shadow.
+ */
+export async function canViewLeadPii(): Promise<boolean> {
+  return checkPermission("leads:view-pii");
+}

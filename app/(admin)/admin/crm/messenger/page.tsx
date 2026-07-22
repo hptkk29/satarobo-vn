@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { canViewLeadPii } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { maskPhone } from "@/lib/lead/pii";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { Badge } from "@/components/ui/badge";
 import { ReplyBox } from "./_components/reply-box";
 
@@ -29,7 +29,7 @@ export default async function MessengerInboxPage() {
 
   // #11 T2 — SĐT là PII lead: mask ở SERVER cho actor không có leads:view-pii
   // (vd MARKETING). Nội dung tin nhắn cuối GIỮ nguyên — nghiệp vụ inbox cần đọc.
-  const canViewPii = canViewLeadPii(session.user);
+  const canViewPii = await canViewLeadPii();
 
   return (
     <div>

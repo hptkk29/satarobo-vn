@@ -6,7 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
-import { canViewLeadPii } from "@/lib/auth/permissions";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { LeadForm } from "../../_components/lead-form";
 import { LeadChildrenManager } from "../../_components/lead-children";
 
@@ -75,7 +75,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
   if (!canViewAll && lead.assignedToId !== session.user.id) redirect(`/leads/${id}`);
   // (b) PII (Q7): non-holder leads:view-pii (vd MARKETING) vào form sẽ thấy PII raw
   //     + nguy cơ bấm Lưu đè bản mask ngược vào DB → chặn hẳn, về chi tiết (đã mask).
-  if (!canViewLeadPii(session.user)) redirect(`/leads/${id}`);
+  if (!(await canViewLeadPii())) redirect(`/leads/${id}`);
 
   return (
     <div className="p-6">
