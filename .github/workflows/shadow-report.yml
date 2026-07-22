@@ -25,6 +25,11 @@ on:
         description: "Cửa sổ đếm lệch (ngày) — cổng flip dùng 7"
         required: false
         default: "7"
+  # #01 — tự động hằng ngày 08:00 VN (01:00 UTC): thay hẳn việc người mở SQL Editor
+  # mỗi sáng. Schedule chỉ chạy khi file nằm trên NHÁNH MẶC ĐỊNH (main).
+  # Sau flip #09 + 1 tuần shadow đảo chiều sạch → gỡ schedule này (ticket cắt v1).
+  schedule:
+    - cron: "0 1 * * *"
 
 concurrency:
   group: shadow-report
@@ -64,6 +69,7 @@ jobs:
           set -euo pipefail
           pnpm exec tsx scripts/shadow-report.ts | tee -a "$GITHUB_STEP_SUMMARY"
         env:
-          SHADOW_WINDOW_DAYS: ${{ inputs.days }}
+          # inputs.days rỗng khi chạy theo schedule → mặc định 7 (cổng flip).
+          SHADOW_WINDOW_DAYS: ${{ inputs.days || '7' }}
           DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
