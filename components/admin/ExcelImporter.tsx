@@ -38,6 +38,15 @@ export interface ExcelImporterProps<T> {
   duplicateKey?: (raw: Record<string, unknown>) => string | null | undefined;
   /** Nhãn cột dùng trong thông báo trùng (vd "SĐT"). */
   duplicateLabel?: string;
+  /**
+   * Đối chiếu với dữ liệu ĐÃ CÓ trong hệ thống (gọi API sau khi parse xong).
+   * Trả về Map<số dòng Excel, thông báo lỗi> cho các dòng trùng dữ liệu cũ.
+   * Lỗi network → trả Map rỗng (server import vẫn tự chặn — đây chỉ là UX).
+   */
+  checkExisting?: (
+    raws: Record<string, unknown>[],
+    excelRows: number[],
+  ) => Promise<Map<number, string>>;
 }
 
 type Step = "idle" | "preview" | "importing" | "done";
@@ -55,6 +64,7 @@ export function ExcelImporter<T>({
   title = "Import từ Excel",
   duplicateKey,
   duplicateLabel = "dữ liệu",
+  checkExisting,
 }: ExcelImporterProps<T>) {
   const [step, setStep] = useState<Step>("idle");
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
@@ -62,6 +72,10 @@ export function ExcelImporter<T>({
   // Số dòng Excel GỐC của từng row (bắt đầu 2 vì dòng 1 là header) — giữ nguyên
   // sau khi xoá bớt dòng, để người nhập tra ngược lại file của họ.
   const [excelRows, setExcelRows] = useState<number[]>([]);
+  // Trùng với dữ liệu ĐÃ CÓ trong hệ thống — key theo SỐ DÒNG EXCEL (ổn định
+  // khi xoá bớt dòng, không lệch index).
+  const [dbDup, setDbDup] = useState<Map<number, string>>(new Map());
+  const [checkingDb, setCheckingDb] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [filename, setFilename] = useState("");
 
@@ -90,13 +104,25 @@ export function ExcelImporter<T>({
         }
         setRawRows(rows);
         setParsedRows(rows.map((row, idx) => parseRow(row, idx)));
-        setExcelRows(rows.map((_, idx) => idx + 2));
+        const excelNos = rows.map((_, idx) => idx + 2);
+        setExcelRows(excelNos);
+        setDbDup(new Map());
         setStep("preview");
+        if (checkExisting) {
+          setCheckingDb(true);
+          checkExisting(rows, excelNos)
+            .then((m) => setDbDup(m))
+            .catch((err) => {
+              // Không chặn import — server vẫn tự dedupe; chỉ mất phần báo sớm.
+              console.error("[ExcelImporter] checkExisting lỗi:", err);
+            })
+            .finally(() => setCheckingDb(false));
+        }
       } catch (err) {
         alert(`Lỗi đọc file: ${err instanceof Error ? err.message : "Unknown"}`);
       }
     },
-    [parseRow],
+    [parseRow, checkExisting],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -134,7 +160,8 @@ export function ExcelImporter<T>({
   }, [duplicateKey, duplicateLabel, parsedRows, rawRows, excelRows]);
 
   const validRows = parsedRows.filter(
-    (r, i): r is T => !isErrorRow(r) && !dupErrors.has(i),
+    (r, i): r is T =>
+      !isErrorRow(r) && !dupErrors.has(i) && !dbDup.has(excelRows[i] ?? -1),
   );
   const errorCount = parsedRows.length - validRows.length;
 
@@ -155,6 +182,8 @@ export function ExcelImporter<T>({
     setRawRows([]);
     setParsedRows([]);
     setExcelRows([]);
+    setDbDup(new Map());
+    setCheckingDb(false);
     setResult(null);
     setFilename("");
   };
@@ -174,7 +203,11 @@ export function ExcelImporter<T>({
     removeRows(
       new Set(
         parsedRows
-          .map((row, i) => (isErrorRow(row) || dupErrors.has(i) ? i : -1))
+          .map((row, i) =>
+            isErrorRow(row) || dupErrors.has(i) || dbDup.has(excelRows[i] ?? -1)
+              ? i
+              : -1,
+          )
           .filter((i) => i >= 0),
       ),
     );
@@ -221,6 +254,11 @@ export function ExcelImporter<T>({
               File: <strong>{filename}</strong> — {rawRows.length} rows | ✅ Hợp lệ:{" "}
               <strong className="text-green-600">{validRows.length}</strong> | ❌ Lỗi:{" "}
               <strong className="text-red-600">{errorCount}</strong>
+              {checkingDb && (
+                <span className="ml-2 inline-flex items-center gap-1 text-xs text-gray-500">
+                  <Loader2 className="h-3 w-3 animate-spin" /> đang đối chiếu dữ liệu có sẵn…
+                </span>
+              )}
             </AlertDescription>
           </Alert>
           <div className="border rounded-lg overflow-x-auto max-h-[400px]">
@@ -240,7 +278,8 @@ export function ExcelImporter<T>({
               </thead>
               <tbody>
                 {parsedRows.slice(0, 100).map((row, idx) => {
-                  const dupError = dupErrors.get(idx);
+                  const dupError =
+                    dupErrors.get(idx) ?? dbDup.get(excelRows[idx] ?? -1);
                   const errored = isErrorRow(row) || dupError !== undefined;
                   return (
                     <tr key={`${excelRows[idx] ?? idx}`} className={cn("border-t", errored && "bg-red-50")}>
@@ -282,9 +321,9 @@ export function ExcelImporter<T>({
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={handleImport} disabled={validRows.length === 0}>
+            <Button onClick={handleImport} disabled={validRows.length === 0 || checkingDb}>
               <Upload className="h-4 w-4 mr-1" />
-              Import {validRows.length} rows
+              {checkingDb ? "Đang đối chiếu…" : `Import ${validRows.length} rows`}
             </Button>
             {errorCount > 0 && (
               <Button

@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
-import { parseLeadImportRow, LEAD_IMPORT_COLUMNS } from "@/lib/lead/import";
+import { parseLeadImportRow, normalizePhone, LEAD_IMPORT_COLUMNS } from "@/lib/lead/import";
+import { leadStatusLabel } from "@/lib/leads/status";
 
 interface LeadImportRow {
   [key: string]: string | number | null | undefined;
@@ -36,11 +37,33 @@ export default function ImportLeadsPage() {
         templateUrl="/templates/mau-lead-v2.xlsx"
         templateFilename="mau-lead-v2.xlsx"
         duplicateLabel="SĐT"
-        duplicateKey={(raw) => {
-          // Chuẩn hoá SĐT VN: bỏ ký tự lạ, +84/84 đầu → 0 (khớp cách server so trùng).
-          const d = String(raw["SĐT"] ?? "").replace(/\D/g, "");
-          if (!d) return null;
-          return d.startsWith("84") ? `0${d.slice(2)}` : d;
+        duplicateKey={(raw) => normalizePhone(raw["SĐT"]) || null}
+        checkExisting={async (raws, excelNos) => {
+          // Đối chiếu SĐT với lead ĐÃ CÓ trong CRM — báo rõ trùng với PH nào,
+          // đã có con tên gì để Sale kiểm tra rồi xoá dòng / sửa SĐT.
+          const res = await fetch("/api/admin/import/leads/precheck", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phones: raws.map((r) => String(r["SĐT"] ?? "")) }),
+          });
+          if (!res.ok) return new Map();
+          const { matches } = (await res.json()) as {
+            matches: { phone: string; parentName: string; childName: string | null; status: string }[];
+          };
+          const byPhone = new Map(matches.map((m) => [m.phone, m]));
+          const map = new Map<number, string>();
+          raws.forEach((r, i) => {
+            const m = byPhone.get(normalizePhone(r["SĐT"]));
+            if (m) {
+              map.set(
+                excelNos[i],
+                `SĐT ${m.phone} ĐÃ CÓ trong CRM: PH "${m.parentName}"` +
+                  ` — con: ${m.childName?.trim() || "(chưa ghi tên con)"}` +
+                  ` — trạng thái: ${leadStatusLabel(m.status)}. Kiểm tra rồi xoá dòng hoặc sửa SĐT.`,
+              );
+            }
+          });
+          return map;
         }}
         columnHints={LEAD_IMPORT_COLUMNS.map((c) => ({
           key: c,
