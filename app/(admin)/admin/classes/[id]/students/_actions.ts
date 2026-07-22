@@ -108,3 +108,40 @@ export async function assignAllFilteredAction(
   }
   return res;
 }
+
+/**
+ * (a) PA-B 22/07 — nút gộp "Chuyển sang Đang học": các ghi danh ĐÃ XẾP (CONFIRMED)
+ * được tick chọn chuyển hàng loạt sang STUDYING (bỏ tick em chưa đóng đủ tiền).
+ * KHÔNG tự động khi duyệt lớp (quyết định PA-B): giữ bước kiểm soát của giáo vụ.
+ */
+export async function promoteConfirmedAction(
+  classId: string,
+  enrollmentIds: string[],
+): Promise<{ ok: boolean; promoted?: number; error?: string }> {
+  const g = await gate();
+  if (!g.ok) return { ok: false, error: g.error };
+  if (!(await assertClassInScope(g.gate.actor, classId))) {
+    return { ok: false, error: "Lớp không thuộc cơ sở bạn quản lý" };
+  }
+  const ids = [...new Set(enrollmentIds)].filter(Boolean);
+  if (ids.length === 0) return { ok: false, error: "Chưa chọn học viên nào" };
+
+  const sdb = scopedDb(g.gate.actor);
+  // Chỉ CONFIRMED của ĐÚNG lớp này → STUDYING (id lạ / trạng thái khác bị lọc im lặng).
+  const res = await sdb.enrollment.updateMany({
+    where: { id: { in: ids }, classId, status: "CONFIRMED" },
+    data: { status: "STUDYING" },
+  });
+  // Mốc bắt đầu học: chỉ đặt cho em chưa có (không ghi đè lịch sử).
+  await sdb.enrollment.updateMany({
+    where: { id: { in: ids }, classId, status: "STUDYING", startedAt: null },
+    data: { startedAt: new Date() },
+  });
+
+  if (res.count > 0) {
+    revalidatePath(`/classes/${classId}/students`);
+    revalidatePath(`/classes/${classId}/edit`);
+    revalidatePath("/enrollments");
+  }
+  return { ok: true, promoted: res.count };
+}

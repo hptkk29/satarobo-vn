@@ -17,12 +17,14 @@ interface Props {
 
 export const dynamic = "force-dynamic";
 
+// Nhãn khớp màn /enrollments (trước đây STUDYING ghi "Đã xếp lớp" gây hiểu nhầm
+// với nút "Chuyển sang Đang học").
 const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Chờ xác nhận",
-  CONFIRMED: "Đã xác nhận",
-  STUDYING: "Đã xếp lớp",
-  ACTIVE: "Đang học",
-  PAUSED: "Tạm dừng",
+  PENDING: "Chờ xếp",
+  CONFIRMED: "Đã xếp",
+  STUDYING: "Đang học",
+  ACTIVE: "Đang học (legacy)",
+  PAUSED: "Bảo lưu",
 };
 
 export default async function ClassStudentsPage({ params }: Props) {
