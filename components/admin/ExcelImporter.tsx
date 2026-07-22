@@ -10,6 +10,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  X,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -46,6 +48,9 @@ export function ExcelImporter<T>({
   const [step, setStep] = useState<Step>("idle");
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
   const [parsedRows, setParsedRows] = useState<(T | { error: string })[]>([]);
+  // Số dòng Excel GỐC của từng row (bắt đầu 2 vì dòng 1 là header) — giữ nguyên
+  // sau khi xoá bớt dòng, để người nhập tra ngược lại file của họ.
+  const [excelRows, setExcelRows] = useState<number[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [filename, setFilename] = useState("");
 
@@ -74,6 +79,7 @@ export function ExcelImporter<T>({
         }
         setRawRows(rows);
         setParsedRows(rows.map((row, idx) => parseRow(row, idx)));
+        setExcelRows(rows.map((_, idx) => idx + 2));
         setStep("preview");
       } catch (err) {
         alert(`Lỗi đọc file: ${err instanceof Error ? err.message : "Unknown"}`);
@@ -115,8 +121,30 @@ export function ExcelImporter<T>({
     setStep("idle");
     setRawRows([]);
     setParsedRows([]);
+    setExcelRows([]);
     setResult(null);
     setFilename("");
+  };
+
+  /** Xoá các dòng theo index hiện tại (3 mảng song song đi cùng nhau); hết dòng → về idle. */
+  const removeRows = (indexes: Set<number>) => {
+    if (parsedRows.length - indexes.size <= 0) {
+      reset();
+      return;
+    }
+    setRawRows((prev) => prev.filter((_, i) => !indexes.has(i)));
+    setParsedRows((prev) => prev.filter((_, i) => !indexes.has(i)));
+    setExcelRows((prev) => prev.filter((_, i) => !indexes.has(i)));
+  };
+
+  const removeErrorRows = () => {
+    removeRows(
+      new Set(
+        parsedRows
+          .map((row, i) => (isErrorRow(row) ? i : -1))
+          .filter((i) => i >= 0),
+      ),
+    );
   };
 
   return (
@@ -174,14 +202,15 @@ export function ExcelImporter<T>({
                     </th>
                   ))}
                   <th className="px-2 py-1 text-left">Status</th>
+                  <th className="px-2 py-1 w-8" aria-label="Xoá dòng"></th>
                 </tr>
               </thead>
               <tbody>
                 {parsedRows.slice(0, 100).map((row, idx) => {
                   const errored = isErrorRow(row);
                   return (
-                    <tr key={idx} className={cn("border-t", errored && "bg-red-50")}>
-                      <td className="px-2 py-1">{idx + 2}</td>
+                    <tr key={`${excelRows[idx] ?? idx}`} className={cn("border-t", errored && "bg-red-50")}>
+                      <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
                       {columnHints.map((c) => (
                         <td key={c.key} className="px-2 py-1 truncate max-w-[200px]">
                           {String(rawRows[idx]?.[c.key] ?? "—")}
@@ -194,6 +223,16 @@ export function ExcelImporter<T>({
                           <span className="text-green-600">✓</span>
                         )}
                       </td>
+                      <td className="px-2 py-1 text-center">
+                        <button
+                          type="button"
+                          title={`Xoá dòng ${excelRows[idx] ?? idx + 2} khỏi danh sách import`}
+                          onClick={() => removeRows(new Set([idx]))}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-red-100 hover:text-red-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -202,14 +241,25 @@ export function ExcelImporter<T>({
             {parsedRows.length > 100 && (
               <p className="p-2 text-xs text-center text-gray-500 bg-gray-50">
                 Hiển thị 100/{parsedRows.length} rows. Toàn bộ sẽ được import nếu hợp lệ.
+                Nút ✕ chỉ hiện cho 100 dòng đầu — dùng &quot;Xoá dòng lỗi&quot; để dọn mọi dòng lỗi.
               </p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button onClick={handleImport} disabled={validRows.length === 0}>
               <Upload className="h-4 w-4 mr-1" />
               Import {validRows.length} rows
             </Button>
+            {errorCount > 0 && (
+              <Button
+                variant="outline"
+                onClick={removeErrorRows}
+                className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Xoá {errorCount} dòng lỗi
+              </Button>
+            )}
             <Button variant="outline" onClick={reset}>
               Huỷ
             </Button>
