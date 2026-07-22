@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { KeyRound } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
@@ -17,7 +18,7 @@ export default async function UserOrgRolesPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("roles:assign"))) {
-    redirect("/admin/dashboard");
+    redirect("/dashboard?error=unauthorized");
   }
 
   // User + OrgUnit đều SCOPE_EXEMPT (identity/hạ tầng tổ chức) → sdb pass-through.
@@ -54,6 +55,13 @@ export default async function UserOrgRolesPage({ params }: Props) {
 
   return (
     <div>
+      <Link
+        href={`/users/${user.id}/edit`}
+        className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-gray-500 hover:text-gray-800"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Về hồ sơ tài khoản
+      </Link>
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
           <KeyRound className="h-7 w-7 text-orange-500" />

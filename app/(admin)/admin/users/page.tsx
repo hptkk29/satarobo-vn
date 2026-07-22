@@ -54,6 +54,8 @@ export default async function UsersAdminPage() {
   if (!(await checkPermission("users:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
+  // Nút "Vai trò theo đơn vị" (org-roles, RBAC v2) chỉ hiện cho người gán được.
+  const canAssignRoles = await checkPermission("roles:assign");
 
   // User là SCOPE_EXEMPT (identity toàn cục) → sdb pass-through, hành vi y nguyên.
   const sdb = scopedDb(await resolveActor(session.user.id));
@@ -239,6 +241,7 @@ export default async function UsersAdminPage() {
                           userId={u.id}
                           isActive={u.isActive}
                           isSelf={isSelf}
+                          canOrgRoles={canAssignRoles}
                         />
                       </td>
                     </tr>

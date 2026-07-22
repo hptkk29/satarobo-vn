@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, KeyRound, Power, Shield, ArrowRight } from "lucide-react";
+import { ChevronLeft, KeyRound, Power, Shield, ArrowRight, Building2 } from "lucide-react";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
@@ -69,6 +69,13 @@ export default async function EditUserPage({ params }: Props) {
     : unlinkedEmployees;
 
   const isSelf = user.id === session.user.id;
+
+  // Org-roles (RBAC v2) — nguồn quyền chính khi cờ ON; chỉ người có roles:assign
+  // thấy lối vào. Đếm vai đang ACTIVE để hiện trạng thái ngay trên card.
+  const canAssignRoles = await checkPermission("roles:assign");
+  const activeOrgRoleCount = canAssignRoles
+    ? await sdb.userOrgRole.count({ where: { userId: user.id, status: "ACTIVE" } })
+    : 0;
 
   // Last active SUPER_ADMIN protection mirror với list page (xét union roles).
   const activeSuperAdminCount = await sdb.user.count({
@@ -192,6 +199,45 @@ export default async function EditUserPage({ params }: Props) {
           </Link>
         </div>
       </div>
+
+      {/* Vai trò theo đơn vị (RBAC v2) — nguồn quyền chính khi cờ RBAC_V2 bật */}
+      {canAssignRoles && (
+        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/30 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-emerald-700">
+                <Building2 className="h-4 w-4" />
+                Vai trò theo đơn vị (RBAC v2)
+              </h2>
+              <p className="mt-2 text-sm text-gray-700">
+                Gán vai trò (RoleDef) theo từng cơ sở/Hội sở — đây là nguồn quyền
+                chính khi hệ phân quyền v2 bật.
+                {activeOrgRoleCount > 0 ? (
+                  <>
+                    {" "}User này đang giữ{" "}
+                    <strong className="text-emerald-700">
+                      {activeOrgRoleCount} vai trò
+                    </strong>{" "}
+                    đang hiệu lực.
+                  </>
+                ) : (
+                  <>
+                    {" "}User này <strong className="text-red-600">chưa có vai trò v2 nào</strong>{" "}
+                    — khi v2 bật sẽ không có quyền gì.
+                  </>
+                )}
+              </p>
+            </div>
+            <Link
+              href={`/users/${user.id}/org-roles`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+            >
+              Quản lý
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Nguy hiểm: reset password + toggle disable */}
       <div className="mt-6 rounded-xl border-2 border-red-200 bg-red-50/40 p-5">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, KeyRound, Loader2, Shield, Trash2 } from "lucide-react";
+import { Pencil, KeyRound, Loader2, Shield, Trash2, Building2 } from "lucide-react";
 import { toggleUserActiveAction, deleteUserAction } from "../_actions";
 
 export function UserStatusToggle({
@@ -107,10 +107,13 @@ export function UserRowActions({
   userId,
   isActive,
   isSelf,
+  canOrgRoles = false,
 }: {
   userId: string;
   isActive: boolean;
   isSelf: boolean;
+  /** Người xem có roles:assign → hiện lối vào org-roles (nguồn quyền chính khi RBAC v2 ON). */
+  canOrgRoles?: boolean;
 }) {
   return (
     <div className="flex items-center justify-end gap-1">
@@ -121,6 +124,15 @@ export function UserRowActions({
       >
         <Pencil className="h-4 w-4" />
       </Link>
+      {canOrgRoles && (
+        <Link
+          href={`/users/${userId}/org-roles`}
+          title="Vai trò theo đơn vị (RBAC v2)"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-emerald-100 hover:text-emerald-700"
+        >
+          <Building2 className="h-4 w-4" />
+        </Link>
+      )}
       <Link
         href={`/users/${userId}/permissions`}
         title="Phân quyền nâng cao"
