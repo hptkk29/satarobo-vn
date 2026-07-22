@@ -75,6 +75,12 @@ export default async function OrderDetailPage({ params }: Props) {
           reminderDays: true,
         },
       },
+      // (b) PA-A 22/07 — trạng thái sổ kế toán (Payment.accountantStatus) hiển thị
+      // read-only cạnh kế hoạch đợt: installment PAID = "Sale đã thu", tiền chỉ
+      // "xong" khi kế toán CONFIRMED bên /payments.
+      payments: {
+        select: { amount: true, accountantStatus: true },
+      },
     },
   });
   if (!order) notFound();
@@ -205,6 +211,14 @@ export default async function OrderDetailPage({ params }: Props) {
         qrUrl={qrUrl}
         transferContent={transferContent}
         paymentMethods={paymentMethods}
+        accounting={{
+          confirmed: order.payments
+            .filter((p) => p.accountantStatus === "CONFIRMED")
+            .reduce((s, p) => s + p.amount, 0),
+          pending: order.payments
+            .filter((p) => p.accountantStatus === "PENDING")
+            .reduce((s, p) => s + p.amount, 0),
+        }}
         installments={order.installments.map((i) => ({
           id: i.id,
           soDot: i.soDot,
