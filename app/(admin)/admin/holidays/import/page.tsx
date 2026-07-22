@@ -57,8 +57,8 @@ export default function ImportHolidaysPage() {
 
       <ExcelImporter<HolidayImportRow>
         title="Import Lịch nghỉ"
-        templateUrl="/templates/mau-lich-nghi.xlsx"
-        templateFilename="mau-lich-nghi.xlsx"
+        templateUrl="/templates/mau-lich-nghi-v2.xlsx"
+        templateFilename="mau-lich-nghi-v2.xlsx"
         columnHints={[
           { key: "name", label: "Tên", required: true },
           { key: "date", label: "Ngày bắt đầu", required: true },

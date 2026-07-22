@@ -52,7 +52,7 @@ export default async function ImportWordPage({ searchParams }: Props) {
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         <a
-          href="/templates/exam-import-template.docx"
+          href="/templates/mau-de-thi-word-v2.docx"
           download
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3 py-1.5 font-semibold text-white hover:opacity-90"
         >

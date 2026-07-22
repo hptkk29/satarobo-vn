@@ -33,8 +33,8 @@ export default function ImportLeadsPage() {
 
       <ExcelImporter<LeadImportRow>
         title="Import lead"
-        templateUrl="/templates/mau-lead.xlsx"
-        templateFilename="mau-lead.xlsx"
+        templateUrl="/templates/mau-lead-v2.xlsx"
+        templateFilename="mau-lead-v2.xlsx"
         columnHints={LEAD_IMPORT_COLUMNS.map((c) => ({
           key: c,
           label: c,

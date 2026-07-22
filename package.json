@@ -8,7 +8,6 @@
     "start": "next start",
     "lint": "eslint app components lib --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "build:templates": "tsx scripts/build-templates.ts",
     "db:seed:jobs": "tsx scripts/seed-job-postings.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
