@@ -38,6 +38,7 @@ export default function ImportLeadsPage() {
         templateFilename="mau-lead-v2.xlsx"
         duplicateLabel="SĐT"
         duplicateKey={(raw) => normalizePhone(raw["SĐT"]) || null}
+        confirmDuplicates={{ label: "Xác nhận gộp con" }}
         checkExisting={async (raws, excelNos) => {
           // Đối chiếu SĐT với lead ĐÃ CÓ trong CRM — báo rõ trùng với PH nào,
           // đã có con tên gì để Sale kiểm tra rồi xoá dòng / sửa SĐT.
@@ -59,7 +60,8 @@ export default function ImportLeadsPage() {
                 excelNos[i],
                 `SĐT ${m.phone} ĐÃ CÓ trong CRM: PH "${m.parentName}"` +
                   ` — con: ${m.childName?.trim() || "(chưa ghi tên con)"}` +
-                  ` — trạng thái: ${leadStatusLabel(m.status)}. Kiểm tra rồi xoá dòng hoặc sửa SĐT.`,
+                  ` — trạng thái: ${leadStatusLabel(m.status)}.` +
+                  ` Cùng PH? Bấm "Xác nhận gộp con" để thêm con này vào lead có sẵn; khác người → sửa SĐT hoặc xoá dòng.`,
               );
             }
           });
@@ -76,11 +78,18 @@ export default function ImportLeadsPage() {
           // Giữ nguyên ô gốc để server resolve cơ sở/khoá + chống trùng.
           return row as LeadImportRow;
         }}
-        onImport={async (rows) => {
+        onImport={async (rows, ctx) => {
+          // Dòng Sale đã bấm "Xác nhận gộp con" → gắn cờ để server gộp con vào
+          // lead cùng SĐT (trong file hoặc lead có sẵn) thay vì bỏ qua.
+          const payload = rows.map((r, i) =>
+            ctx && ctx.confirmed.has(ctx.excelRowOf[i])
+              ? { ...r, __confirmMerge: true }
+              : r,
+          );
           const res = await fetch("/api/admin/import/leads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rows }),
+            body: JSON.stringify({ rows: payload }),
           });
           if (!res.ok) {
             const err = (await res.json().catch(() => ({ error: "Unknown" }))) as { error?: string };

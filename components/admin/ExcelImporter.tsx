@@ -22,11 +22,19 @@ export interface ImportResult {
   errors: { row: number; error: string }[];
 }
 
+/** Ngữ cảnh kèm theo khi Import: dòng Excel gốc của từng row + tập dòng đã "Xác nhận gộp". */
+export interface ImportContext {
+  /** excelRowOf[i] = số dòng Excel gốc của rows[i]. */
+  excelRowOf: number[];
+  /** Các số dòng Excel đã được bấm nút xác nhận (confirmDuplicates). */
+  confirmed: Set<number>;
+}
+
 export interface ExcelImporterProps<T> {
   templateUrl: string;
   templateFilename: string;
   parseRow: (row: Record<string, unknown>, rowIndex: number) => T | { error: string };
-  onImport: (rows: T[]) => Promise<ImportResult>;
+  onImport: (rows: T[], ctx?: ImportContext) => Promise<ImportResult>;
   columnHints: { key: string; label: string; required?: boolean }[];
   title?: string;
   /**
@@ -51,6 +59,13 @@ export interface ExcelImporterProps<T> {
     | Map<number, string>
     | { errors?: Map<number, string>; warnings?: Map<number, string> }
   >;
+  /**
+   * Cho phép NGƯỜI DÙNG XÁC NHẬN từng dòng trùng (trong-file + trùng DB) để vẫn
+   * import theo nghĩa GỘP/GHI ĐÈ thay vì bị bỏ qua (vd lead: 1 PH 2 con — gộp con
+   * vào cùng SĐT). Dòng đã xác nhận → hợp lệ (amber); trang nhận biết qua
+   * ctx.confirmed trong onImport để gắn cờ cho server xử lý gộp.
+   */
+  confirmDuplicates?: { label: string };
 }
 
 type Step = "idle" | "preview" | "importing" | "done";
@@ -69,6 +84,7 @@ export function ExcelImporter<T>({
   duplicateKey,
   duplicateLabel = "dữ liệu",
   checkExisting,
+  confirmDuplicates,
 }: ExcelImporterProps<T>) {
   const [step, setStep] = useState<Step>("idle");
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
@@ -81,6 +97,8 @@ export function ExcelImporter<T>({
   const [dbDup, setDbDup] = useState<Map<number, string>>(new Map());
   // Cảnh báo GHI ĐÈ (màn upsert): vàng, dòng VẪN import được — key theo dòng Excel.
   const [dbWarn, setDbWarn] = useState<Map<number, string>>(new Map());
+  // Các dòng trùng đã được bấm "Xác nhận gộp" — key theo số dòng Excel.
+  const [confirmedDups, setConfirmedDups] = useState<Set<number>>(new Set());
   const [checkingDb, setCheckingDb] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [filename, setFilename] = useState("");
@@ -114,6 +132,7 @@ export function ExcelImporter<T>({
         setExcelRows(excelNos);
         setDbDup(new Map());
         setDbWarn(new Map());
+        setConfirmedDups(new Set());
         setStep("preview");
         if (checkExisting) {
           setCheckingDb(true);
@@ -173,24 +192,34 @@ export function ExcelImporter<T>({
     return map;
   }, [duplicateKey, duplicateLabel, parsedRows, rawRows, excelRows]);
 
-  const validRows = parsedRows.filter(
-    (r, i): r is T =>
-      !isErrorRow(r) && !dupErrors.has(i) && !dbDup.has(excelRows[i] ?? -1),
-  );
+  // Một dòng "trùng" (in-file hoặc DB) đi kèm confirmDuplicates + đã bấm xác nhận
+  // → vẫn hợp lệ (server sẽ xử lý theo nghĩa gộp).
+  const isDupRow = (i: number) => dupErrors.has(i) || dbDup.has(excelRows[i] ?? -1);
+  const isConfirmedRow = (i: number) => confirmedDups.has(excelRows[i] ?? -1);
+  const validIdx: number[] = [];
+  parsedRows.forEach((r, i) => {
+    if (isErrorRow(r)) return;
+    if (isDupRow(i)) {
+      if (confirmDuplicates && isConfirmedRow(i)) validIdx.push(i);
+      return;
+    }
+    validIdx.push(i);
+  });
+  const validRows = validIdx.map((i) => parsedRows[i] as T);
   const errorCount = parsedRows.length - validRows.length;
   // Số dòng bị cảnh báo ghi đè (chỉ đếm dòng còn sống + không lỗi).
-  const warnCount = parsedRows.filter(
-    (r, i) =>
-      !isErrorRow(r) &&
-      !dupErrors.has(i) &&
-      !dbDup.has(excelRows[i] ?? -1) &&
-      dbWarn.has(excelRows[i] ?? -1),
+  const warnCount = validIdx.filter(
+    (i) => !isDupRow(i) && dbWarn.has(excelRows[i] ?? -1),
   ).length;
+  const confirmedCount = validIdx.filter((i) => isDupRow(i)).length;
 
   const handleImport = async () => {
     setStep("importing");
     try {
-      const res = await onImport(validRows);
+      const res = await onImport(validRows, {
+        excelRowOf: validIdx.map((i) => excelRows[i] ?? i + 2),
+        confirmed: confirmedDups,
+      });
       setResult(res);
       setStep("done");
     } catch (err) {
@@ -206,6 +235,7 @@ export function ExcelImporter<T>({
     setExcelRows([]);
     setDbDup(new Map());
     setDbWarn(new Map());
+    setConfirmedDups(new Set());
     setCheckingDb(false);
     setResult(null);
     setFilename("");
@@ -227,13 +257,23 @@ export function ExcelImporter<T>({
       new Set(
         parsedRows
           .map((row, i) =>
-            isErrorRow(row) || dupErrors.has(i) || dbDup.has(excelRows[i] ?? -1)
+            isErrorRow(row) ||
+            (isDupRow(i) && !(confirmDuplicates && isConfirmedRow(i)))
               ? i
               : -1,
           )
           .filter((i) => i >= 0),
       ),
     );
+  };
+
+  const toggleConfirm = (excelRow: number) => {
+    setConfirmedDups((prev) => {
+      const next = new Set(prev);
+      if (next.has(excelRow)) next.delete(excelRow);
+      else next.add(excelRow);
+      return next;
+    });
   };
 
   return (
@@ -283,6 +323,12 @@ export function ExcelImporter<T>({
                   <strong className="text-amber-600">{warnCount}</strong>
                 </>
               )}
+              {confirmedCount > 0 && (
+                <>
+                  {" "}| 🔀 Đã xác nhận gộp:{" "}
+                  <strong className="text-amber-600">{confirmedCount}</strong>
+                </>
+              )}
               {checkingDb && (
                 <span className="ml-2 inline-flex items-center gap-1 text-xs text-gray-500">
                   <Loader2 className="h-3 w-3 animate-spin" /> đang đối chiếu dữ liệu có sẵn…
@@ -309,12 +355,21 @@ export function ExcelImporter<T>({
                 {parsedRows.slice(0, 100).map((row, idx) => {
                   const dupError =
                     dupErrors.get(idx) ?? dbDup.get(excelRows[idx] ?? -1);
-                  const errored = isErrorRow(row) || dupError !== undefined;
+                  const confirmed =
+                    dupError !== undefined &&
+                    confirmDuplicates !== undefined &&
+                    isConfirmedRow(idx);
+                  const errored =
+                    isErrorRow(row) || (dupError !== undefined && !confirmed);
                   const warn = errored ? undefined : dbWarn.get(excelRows[idx] ?? -1);
                   return (
                     <tr
                       key={`${excelRows[idx] ?? idx}`}
-                      className={cn("border-t", errored && "bg-red-50", warn && "bg-amber-50")}
+                      className={cn(
+                        "border-t",
+                        errored && "bg-red-50",
+                        (warn || confirmed) && "bg-amber-50",
+                      )}
                     >
                       <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
                       {columnHints.map((c) => (
@@ -325,8 +380,30 @@ export function ExcelImporter<T>({
                       <td className="px-2 py-1">
                         {isErrorRow(row) ? (
                           <span className="text-red-600 text-xs">{row.error}</span>
+                        ) : confirmed ? (
+                          <span className="text-amber-700 text-xs">
+                            🔀 Đã xác nhận gộp — sẽ xử lý khi Import.{" "}
+                            <button
+                              type="button"
+                              onClick={() => toggleConfirm(excelRows[idx] ?? -1)}
+                              className="underline hover:text-amber-900"
+                            >
+                              Hoàn tác
+                            </button>
+                          </span>
                         ) : dupError ? (
-                          <span className="text-red-600 text-xs">{dupError}</span>
+                          <span className="text-red-600 text-xs">
+                            {dupError}
+                            {confirmDuplicates && (
+                              <button
+                                type="button"
+                                onClick={() => toggleConfirm(excelRows[idx] ?? -1)}
+                                className="ml-1.5 rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+                              >
+                                {confirmDuplicates.label}
+                              </button>
+                            )}
+                          </span>
                         ) : warn ? (
                           <span className="text-amber-600 text-xs">⚠️ {warn}</span>
                         ) : (
