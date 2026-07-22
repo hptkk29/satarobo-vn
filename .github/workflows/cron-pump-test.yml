@@ -2,7 +2,8 @@
 # Workflow này bơm 2 cron SỐNG CÒN cho UAT: dispatch-events (DomainEvent outbox —
 # thiếu nó mọi side-effect đứng im) + email-queue (worker gửi mail).
 # /api/cron/* được miễn basic-auth trong proxy.ts — route tự verify Bearer CRON_SECRET.
-# SAU UAT (25/07): disable workflow này (Actions → Disable workflow).
+# TỰ TẮT từ 01/08/2026 (guard ngày trong step đầu — chốt 22/07); sau đó có thể
+# disable/xoá workflow lúc rảnh (Actions → Disable workflow).
 name: cron-pump-test
 on:
   schedule:
@@ -12,7 +13,17 @@ jobs:
   pump:
     runs-on: ubuntu-latest
     steps:
+      - name: Hết hạn 01/08/2026 thì thôi bơm (UAT đã xong)
+        id: expiry
+        run: |
+          if [ "$(date -u +%Y%m%d)" -ge 20260801 ]; then
+            echo "expired=true" >> "$GITHUB_OUTPUT"
+            echo "Đã qua 01/08/2026 — ngừng bơm cron test (workflow có thể disable/xoá)."
+          else
+            echo "expired=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Pump cron endpoints on test.satarobo.vn
+        if: steps.expiry.outputs.expired != 'true'
         run: |
           set -e
           [ -n "${{ secrets.TEST_CRON_SECRET }}" ] || { echo "::error::Thiếu secret TEST_CRON_SECRET"; exit 1; }
