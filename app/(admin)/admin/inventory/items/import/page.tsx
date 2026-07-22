@@ -62,6 +62,8 @@ export default function ImportInventoryItemsPage() {
         title="Import Học cụ"
         templateUrl="/templates/mau-hoc-cu-v2.xlsx"
         templateFilename="mau-hoc-cu-v2.xlsx"
+        duplicateLabel="Mã học cụ"
+        duplicateKey={(raw) => String(raw.itemCode ?? "").trim() || null}
         columnHints={[
           { key: "itemCode", label: "Mã hàng (upsert key)", required: true },
           { key: "name", label: "Tên hàng", required: true },

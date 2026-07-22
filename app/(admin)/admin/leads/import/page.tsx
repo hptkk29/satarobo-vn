@@ -35,6 +35,13 @@ export default function ImportLeadsPage() {
         title="Import lead"
         templateUrl="/templates/mau-lead-v2.xlsx"
         templateFilename="mau-lead-v2.xlsx"
+        duplicateLabel="SĐT"
+        duplicateKey={(raw) => {
+          // Chuẩn hoá SĐT VN: bỏ ký tự lạ, +84/84 đầu → 0 (khớp cách server so trùng).
+          const d = String(raw["SĐT"] ?? "").replace(/\D/g, "");
+          if (!d) return null;
+          return d.startsWith("84") ? `0${d.slice(2)}` : d;
+        }}
         columnHints={LEAD_IMPORT_COLUMNS.map((c) => ({
           key: c,
           label: c,

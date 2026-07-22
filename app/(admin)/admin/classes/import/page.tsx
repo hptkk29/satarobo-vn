@@ -76,6 +76,8 @@ export default function ImportClassesPage() {
         title="Import Lớp học"
         templateUrl="/templates/mau-lop-hoc-v2.xlsx"
         templateFilename="mau-lop-hoc-v2.xlsx"
+        duplicateLabel="Mã lớp"
+        duplicateKey={(raw) => String(raw.classCode ?? "").trim() || null}
         columnHints={[
           { key: "classCode", label: "Mã lớp (upsert key)" },
           { key: "name", label: "Tên lớp", required: true },

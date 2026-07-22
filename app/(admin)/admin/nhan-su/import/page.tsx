@@ -95,6 +95,8 @@ export default function ImportEmployeesPage() {
         title="Import Nhân viên"
         templateUrl="/templates/mau-nhan-vien-v2.xlsx"
         templateFilename="mau-nhan-vien-v2.xlsx"
+        duplicateLabel="Mã NV"
+        duplicateKey={(raw) => String(raw.employeeCode ?? "").trim() || null}
         columnHints={[
           { key: "employeeCode", label: "Mã NV", required: true },
           { key: "fullName", label: "Họ tên", required: true },

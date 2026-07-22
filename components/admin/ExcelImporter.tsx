@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { useDropzone } from "react-dropzone";
 import {
@@ -29,6 +29,15 @@ export interface ExcelImporterProps<T> {
   onImport: (rows: T[]) => Promise<ImportResult>;
   columnHints: { key: string; label: string; required?: boolean }[];
   title?: string;
+  /**
+   * Khoá chống trùng TRONG FILE, hiện ngay ở preview (server vẫn là chốt chặn
+   * cuối). Trả về key chuẩn hoá từ dòng raw (vd SĐT bỏ ký tự lạ); null/"" = bỏ
+   * qua dòng đó. Dòng TRÙNG (xuất hiện sau) bị đánh lỗi "Trùng với dòng N" —
+   * xoá dòng gốc thì dòng sau tự hết lỗi (tính lại động).
+   */
+  duplicateKey?: (raw: Record<string, unknown>) => string | null | undefined;
+  /** Nhãn cột dùng trong thông báo trùng (vd "SĐT"). */
+  duplicateLabel?: string;
 }
 
 type Step = "idle" | "preview" | "importing" | "done";
@@ -44,6 +53,8 @@ export function ExcelImporter<T>({
   onImport,
   columnHints,
   title = "Import từ Excel",
+  duplicateKey,
+  duplicateLabel = "dữ liệu",
 }: ExcelImporterProps<T>) {
   const [step, setStep] = useState<Step>("idle");
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
@@ -102,7 +113,29 @@ export function ExcelImporter<T>({
     },
   });
 
-  const validRows = parsedRows.filter((r): r is T => !isErrorRow(r));
+  // Lỗi trùng-trong-file tính ĐỘNG theo trạng thái hiện tại (không lưu vào
+  // parsedRows) → xoá dòng gốc là dòng sau tự hết lỗi trùng.
+  const dupErrors = useMemo(() => {
+    const map = new Map<number, string>();
+    if (!duplicateKey) return map;
+    const firstSeen = new Map<string, number>(); // key → excelRow đầu tiên
+    for (let i = 0; i < parsedRows.length; i++) {
+      if (isErrorRow(parsedRows[i])) continue; // dòng đã lỗi parse thì thôi
+      const key = duplicateKey(rawRows[i] ?? {});
+      if (!key) continue;
+      const firstRow = firstSeen.get(key);
+      if (firstRow === undefined) {
+        firstSeen.set(key, excelRows[i] ?? i + 2);
+      } else {
+        map.set(i, `Trùng ${duplicateLabel} với dòng ${firstRow} trong file`);
+      }
+    }
+    return map;
+  }, [duplicateKey, duplicateLabel, parsedRows, rawRows, excelRows]);
+
+  const validRows = parsedRows.filter(
+    (r, i): r is T => !isErrorRow(r) && !dupErrors.has(i),
+  );
   const errorCount = parsedRows.length - validRows.length;
 
   const handleImport = async () => {
@@ -141,7 +174,7 @@ export function ExcelImporter<T>({
     removeRows(
       new Set(
         parsedRows
-          .map((row, i) => (isErrorRow(row) ? i : -1))
+          .map((row, i) => (isErrorRow(row) || dupErrors.has(i) ? i : -1))
           .filter((i) => i >= 0),
       ),
     );
@@ -207,7 +240,8 @@ export function ExcelImporter<T>({
               </thead>
               <tbody>
                 {parsedRows.slice(0, 100).map((row, idx) => {
-                  const errored = isErrorRow(row);
+                  const dupError = dupErrors.get(idx);
+                  const errored = isErrorRow(row) || dupError !== undefined;
                   return (
                     <tr key={`${excelRows[idx] ?? idx}`} className={cn("border-t", errored && "bg-red-50")}>
                       <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
@@ -217,8 +251,10 @@ export function ExcelImporter<T>({
                         </td>
                       ))}
                       <td className="px-2 py-1">
-                        {errored ? (
+                        {isErrorRow(row) ? (
                           <span className="text-red-600 text-xs">{row.error}</span>
+                        ) : dupError ? (
+                          <span className="text-red-600 text-xs">{dupError}</span>
                         ) : (
                           <span className="text-green-600">✓</span>
                         )}

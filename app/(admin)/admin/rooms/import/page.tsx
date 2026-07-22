@@ -47,6 +47,12 @@ export default function ImportRoomsPage() {
         title="Import Phòng học"
         templateUrl="/templates/mau-phong-hoc-v2.xlsx"
         templateFilename="mau-phong-hoc-v2.xlsx"
+        duplicateLabel="mã phòng (trong cùng cơ sở)"
+        duplicateKey={(raw) => {
+          const code = String(raw.code ?? "").trim();
+          if (!code) return null;
+          return `${String(raw.centerSlug ?? "").trim()}::${code}`;
+        }}
         columnHints={[
           { key: "name", label: "Tên phòng", required: true },
           { key: "code", label: "Mã phòng", required: true },

@@ -76,6 +76,8 @@ export default function ImportQuestionsPage() {
         title="Import Câu hỏi"
         templateUrl="/templates/mau-ngan-hang-cau-hoi-v2.xlsx"
         templateFilename="mau-ngan-hang-cau-hoi-v2.xlsx"
+        duplicateLabel="Mã câu hỏi"
+        duplicateKey={(raw) => String(raw.questionCode ?? "").trim() || null}
         columnHints={[
           { key: "questionCode", label: "Mã (upsert key)" },
           { key: "type", label: "Loại", required: true },

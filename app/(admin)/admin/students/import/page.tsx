@@ -88,6 +88,8 @@ export default function ImportStudentsPage() {
         title="Import Học viên"
         templateUrl="/templates/mau-hoc-vien-v2.xlsx"
         templateFilename="mau-hoc-vien-v2.xlsx"
+        duplicateLabel="Mã HS"
+        duplicateKey={(raw) => String(raw.studentCode ?? "").trim() || null}
         columnHints={[
           { key: "studentCode", label: "Mã HS (upsert key)" },
           { key: "fullName", label: "Họ tên HS", required: true },

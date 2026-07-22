@@ -50,6 +50,8 @@ export default function ImportCentersPage() {
         title="Import Cơ sở"
         templateUrl="/templates/mau-co-so-v2.xlsx"
         templateFilename="mau-co-so-v2.xlsx"
+        duplicateLabel="slug"
+        duplicateKey={(raw) => String(raw.slug ?? "").trim().toLowerCase() || null}
         columnHints={[
           { key: "name", label: "Tên chi nhánh", required: true },
           { key: "slug", label: "Slug", required: true },
