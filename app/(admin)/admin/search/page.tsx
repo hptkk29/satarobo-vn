@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { canViewLeadPii } from "@/lib/auth/permissions";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
 
@@ -43,7 +43,7 @@ export default async function GlobalSearchPage({
   ]);
   const canLeads = canLeadsAll || canLeadsOwn;
   const scopeToSelf = !canLeadsAll && canLeadsOwn;
-  const canViewPii = canViewLeadPii(session.user);
+  const canViewPii = await canViewLeadPii();
 
   const [leads, students, news] = doSearch
     ? await Promise.all([

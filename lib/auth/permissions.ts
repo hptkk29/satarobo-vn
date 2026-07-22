@@ -821,13 +821,6 @@ export function canViewParentContact(user: RoleHolder): boolean {
   return hasAnyRole(user, PARENT_CONTACT_ROLES);
 }
 
-/**
- * #11 T2 — user có được xem PII lead (SĐT/email/tên PH-HS/nội dung tư vấn) không.
- * ⚠️ CỐ Ý dùng can() v1 TRỰC TIẾP (không checkPermission): action mới chưa seed v2
- * trên prod (seed-prod-roles bị khoá tới sau flip #09) — checkPermission sẽ đẻ lệch
- * shadow v1≠v2 làm bẩn đồng hồ #01. Sau flip + seed → đổi sang checkPermission.
- * Grant per-user (UserPermissionGrant ALLOW leads:view-pii) đi qua can() nên vẫn ăn.
- */
-export function canViewLeadPii(user: CanUser): boolean {
-  return can(user, "leads:view-pii");
-}
+// #11: canViewLeadPii đã chuyển sang lib/auth/check-permission.ts (async, qua checkPermission —
+// sau flip #09). Không import check-permission vào file này: permission-eval import
+// ngược permissions.ts, sẽ tạo vòng.

@@ -17,8 +17,8 @@ import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
 import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
-import { canViewLeadPii } from "@/lib/auth/permissions";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateVN } from "@/lib/format/date";
 
@@ -92,8 +92,8 @@ export default async function LeadDetailPage({ params }: Props) {
 
   // #11 T2 — mask PII ở SERVER trước khi render/truyền client (chặn leak qua RSC
   // payload, không chỉ che ở UI). Non-holder `leads:view-pii` (vd MARKETING) thấy
-  // bản mask; dùng canViewLeadPii (v1-only, xem comment tại helper).
-  const canViewPii = canViewLeadPii(session.user);
+  // bản mask; canViewLeadPii qua checkPermission (v1+v2 theo cờ) từ sau flip #09.
+  const canViewPii = await canViewLeadPii();
   const piiLead = maskLeadPiiFields(
     {
       parentName: lead.parentName,

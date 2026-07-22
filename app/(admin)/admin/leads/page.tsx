@@ -3,9 +3,9 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
-import { canViewLeadPii } from '@/lib/auth/permissions'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
+import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
@@ -124,7 +124,7 @@ export default async function LeadsPage({
 
   // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) ở SERVER cho actor không có
   // quyền leads:view-pii (vd MARKETING) — chặn leak qua RSC payload, không chỉ che UI.
-  const canViewPii = canViewLeadPii(session.user)
+  const canViewPii = await canViewLeadPii()
   const canCloseDeal =
     (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
   const canAssign = (await checkPermission('leads:assign'))

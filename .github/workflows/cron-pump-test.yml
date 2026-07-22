@@ -1,0 +1,25 @@
+# Q18d — Vercel Cron KHÔNG chạy trên custom environment → site test không có cron.
+# Workflow này bơm 2 cron SỐNG CÒN cho UAT: dispatch-events (DomainEvent outbox —
+# thiếu nó mọi side-effect đứng im) + email-queue (worker gửi mail).
+# /api/cron/* được miễn basic-auth trong proxy.ts — route tự verify Bearer CRON_SECRET.
+# SAU UAT (25/07): disable workflow này (Actions → Disable workflow).
+name: cron-pump-test
+on:
+  schedule:
+    - cron: "*/5 * * * *" # GitHub cron tối thiểu ~5 phút, có thể trễ — đủ cho UAT
+  workflow_dispatch:
+jobs:
+  pump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pump cron endpoints on test.satarobo.vn
+        run: |
+          set -e
+          [ -n "${{ secrets.TEST_CRON_SECRET }}" ] || { echo "::error::Thiếu secret TEST_CRON_SECRET"; exit 1; }
+          for p in dispatch-events email-queue; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
+              "https://test.satarobo.vn/api/cron/$p")
+            echo "$p → HTTP $code"
+            [ "$code" = "200" ] || exit 1
+          done

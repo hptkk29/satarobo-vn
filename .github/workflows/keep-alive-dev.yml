@@ -1,0 +1,22 @@
+# Q18d — giữ Supabase DEV (free tier, không backup tự động) không bị pause vì idle.
+# KHÔNG dùng Vercel Cron cho việc này: Vercel Cron chỉ chạy trên production
+# deployment → phải sửa vercel.json prod trong cửa sổ nhạy cảm (Q20).
+name: keep-alive-dev
+on:
+  schedule:
+    - cron: "0 3 */2 * *" # 2 ngày/lần 03:00 UTC
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase DEV REST endpoint
+        run: |
+          set -e
+          [ -n "${{ secrets.DEV_SUPABASE_URL }}" ] || { echo "::error::Thiếu secret DEV_SUPABASE_URL"; exit 1; }
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${{ secrets.DEV_SUPABASE_ANON_KEY }}" \
+            "${{ secrets.DEV_SUPABASE_URL }}/rest/v1/")
+          echo "Supabase DEV → HTTP $code"
+          # 200 = OK; 401 cũng chứng tỏ instance đang thức (key sai vẫn tính sống)
+          [ "$code" = "200" ] || [ "$code" = "401" ] || exit 1

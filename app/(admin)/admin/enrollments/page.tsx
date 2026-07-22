@@ -8,7 +8,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
 import { formatDateVN } from "@/lib/format/date";
-import { canViewLeadPii } from "@/lib/auth/permissions";
+import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +56,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("enrollments:view-all"))) redirect("/dashboard");
   const canDelete = await checkPermission("enrollments:delete");
-  const canViewPii = canViewLeadPii(session.user); // che SĐT PH nếu thiếu quyền
+  const canViewPii = await canViewLeadPii(); // che SĐT PH nếu thiếu quyền
 
   // Cách ly cơ sở (FL3-02): Enrollment giờ ∈ SCOPED_MODELS → scopedDb tự inject
   // `Enrollment.centerId IN visibleCenters`. KHÔNG còn scope tay qua class.centerId.

@@ -2,13 +2,14 @@
 //
 // Q7 — PII lead gồm: SĐT, email, tên PH, tên HS (LeadChild), nội dung tư vấn
 // (note/handoverNote/LeadActivity). Actor KHÔNG có `leads:view-pii` (v1 matrix:
-// SUPER_ADMIN/CENTER_MANAGER/SALES_CSM; MARKETING mặc định KHÔNG — cấp per-user
-// qua UserPermissionGrant ở /admin/users/[id]/permissions) → thấy bản mask.
+// SUPER_ADMIN/CENTER_MANAGER/SALES_CSM/MARKETING — MARKETING mở 21/07 cho
+// outreach, commit 69876d0; v2 seed tương ứng HO_MARKETING) → thấy bản mask.
 //
-// Check quyền: dùng `canViewLeadPii(session.user)` (lib/auth/permissions — v1-only,
-// CỐ Ý không checkPermission để không đẻ lệch shadow trước khi seed v2 prod; xem
-// comment tại helper). Mask ở SERVER trước khi truyền xuống client (chặn leak qua
-// RSC payload, không chỉ che ở UI).
+// Check quyền: dùng `await canViewLeadPii()` (lib/auth/check-permission — qua
+// checkPermission, chấm CẢ v1 lẫn v2 theo cờ RBAC_V2_ENABLED). KHÔNG import
+// check-permission vào file này: pii.ts là module THUẦN có unit test riêng
+// (pii.test.ts) — dính chuỗi next-auth là vỡ môi trường vitest. Mask ở SERVER
+// trước khi truyền xuống client (chặn leak qua RSC payload, không chỉ che ở UI).
 import { maskPhone, maskEmail } from "@/lib/utils";
 
 export { maskPhone, maskEmail };
