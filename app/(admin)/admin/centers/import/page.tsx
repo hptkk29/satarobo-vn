@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { precheckUpsert } from "@/components/admin/import-precheck";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
 
 interface CenterImportRow {
@@ -52,6 +53,14 @@ export default function ImportCentersPage() {
         templateFilename="mau-co-so-v2.xlsx"
         duplicateLabel="slug"
         duplicateKey={(raw) => String(raw.slug ?? "").trim().toLowerCase() || null}
+        checkExisting={(raws, nos) =>
+          precheckUpsert(
+            "centers",
+            raws.map((r) => String(r.slug ?? "").trim().toLowerCase() || null),
+            nos,
+            "Slug cơ sở",
+          )
+        }
         columnHints={[
           { key: "name", label: "Tên chi nhánh", required: true },
           { key: "slug", label: "Slug", required: true },

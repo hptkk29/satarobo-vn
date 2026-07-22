@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { precheckUpsert } from "@/components/admin/import-precheck";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
 
 interface EmployeeImportRow {
@@ -97,6 +98,14 @@ export default function ImportEmployeesPage() {
         templateFilename="mau-nhan-vien-v2.xlsx"
         duplicateLabel="Mã NV"
         duplicateKey={(raw) => String(raw.employeeCode ?? "").trim() || null}
+        checkExisting={(raws, nos) =>
+          precheckUpsert(
+            "employees",
+            raws.map((r) => String(r.employeeCode ?? "").trim() || null),
+            nos,
+            "Mã NV",
+          )
+        }
         columnHints={[
           { key: "employeeCode", label: "Mã NV", required: true },
           { key: "fullName", label: "Họ tên", required: true },

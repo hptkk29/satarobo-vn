@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { precheckUpsert } from "@/components/admin/import-precheck";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
 
 interface RoomImportRow {
@@ -53,6 +54,14 @@ export default function ImportRoomsPage() {
           if (!code) return null;
           return `${String(raw.centerSlug ?? "").trim()}::${code}`;
         }}
+        checkExisting={(raws, nos) =>
+          precheckUpsert(
+            "rooms",
+            raws.map((r) => String(r.code ?? "").trim() || null),
+            nos,
+            "Mã phòng",
+          )
+        }
         columnHints={[
           { key: "name", label: "Tên phòng", required: true },
           { key: "code", label: "Mã phòng", required: true },

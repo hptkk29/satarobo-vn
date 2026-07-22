@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { precheckUpsert } from "@/components/admin/import-precheck";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
 
 const VALID_TYPES = new Set([
@@ -78,6 +79,14 @@ export default function ImportQuestionsPage() {
         templateFilename="mau-ngan-hang-cau-hoi-v2.xlsx"
         duplicateLabel="Mã câu hỏi"
         duplicateKey={(raw) => String(raw.questionCode ?? "").trim() || null}
+        checkExisting={(raws, nos) =>
+          precheckUpsert(
+            "questions",
+            raws.map((r) => String(r.questionCode ?? "").trim() || null),
+            nos,
+            "Mã câu hỏi",
+          )
+        }
         columnHints={[
           { key: "questionCode", label: "Mã (upsert key)" },
           { key: "type", label: "Loại", required: true },

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { precheckUpsert } from "@/components/admin/import-precheck";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
 
 interface ClassImportRow {
@@ -78,6 +79,14 @@ export default function ImportClassesPage() {
         templateFilename="mau-lop-hoc-v2.xlsx"
         duplicateLabel="Mã lớp"
         duplicateKey={(raw) => String(raw.classCode ?? "").trim() || null}
+        checkExisting={(raws, nos) =>
+          precheckUpsert(
+            "classes",
+            raws.map((r) => String(r.classCode ?? "").trim() || null),
+            nos,
+            "Mã lớp",
+          )
+        }
         columnHints={[
           { key: "classCode", label: "Mã lớp (upsert key)" },
           { key: "name", label: "Tên lớp", required: true },

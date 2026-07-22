@@ -40,13 +40,17 @@ export interface ExcelImporterProps<T> {
   duplicateLabel?: string;
   /**
    * Đối chiếu với dữ liệu ĐÃ CÓ trong hệ thống (gọi API sau khi parse xong).
-   * Trả về Map<số dòng Excel, thông báo lỗi> cho các dòng trùng dữ liệu cũ.
-   * Lỗi network → trả Map rỗng (server import vẫn tự chặn — đây chỉ là UX).
+   * Trả về Map<số dòng Excel, msg> (coi là LỖI — vd lead trùng SĐT) hoặc
+   * {errors?, warnings?}: warnings hiện VÀNG, dòng VẪN import được (màn upsert
+   * — import sẽ ghi đè bản ghi cũ). Lỗi network → rỗng (server vẫn tự chặn).
    */
   checkExisting?: (
     raws: Record<string, unknown>[],
     excelRows: number[],
-  ) => Promise<Map<number, string>>;
+  ) => Promise<
+    | Map<number, string>
+    | { errors?: Map<number, string>; warnings?: Map<number, string> }
+  >;
 }
 
 type Step = "idle" | "preview" | "importing" | "done";
@@ -75,6 +79,8 @@ export function ExcelImporter<T>({
   // Trùng với dữ liệu ĐÃ CÓ trong hệ thống — key theo SỐ DÒNG EXCEL (ổn định
   // khi xoá bớt dòng, không lệch index).
   const [dbDup, setDbDup] = useState<Map<number, string>>(new Map());
+  // Cảnh báo GHI ĐÈ (màn upsert): vàng, dòng VẪN import được — key theo dòng Excel.
+  const [dbWarn, setDbWarn] = useState<Map<number, string>>(new Map());
   const [checkingDb, setCheckingDb] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [filename, setFilename] = useState("");
@@ -107,11 +113,19 @@ export function ExcelImporter<T>({
         const excelNos = rows.map((_, idx) => idx + 2);
         setExcelRows(excelNos);
         setDbDup(new Map());
+        setDbWarn(new Map());
         setStep("preview");
         if (checkExisting) {
           setCheckingDb(true);
           checkExisting(rows, excelNos)
-            .then((m) => setDbDup(m))
+            .then((res) => {
+              if (res instanceof Map) {
+                setDbDup(res);
+              } else {
+                setDbDup(res.errors ?? new Map());
+                setDbWarn(res.warnings ?? new Map());
+              }
+            })
             .catch((err) => {
               // Không chặn import — server vẫn tự dedupe; chỉ mất phần báo sớm.
               console.error("[ExcelImporter] checkExisting lỗi:", err);
@@ -164,6 +178,14 @@ export function ExcelImporter<T>({
       !isErrorRow(r) && !dupErrors.has(i) && !dbDup.has(excelRows[i] ?? -1),
   );
   const errorCount = parsedRows.length - validRows.length;
+  // Số dòng bị cảnh báo ghi đè (chỉ đếm dòng còn sống + không lỗi).
+  const warnCount = parsedRows.filter(
+    (r, i) =>
+      !isErrorRow(r) &&
+      !dupErrors.has(i) &&
+      !dbDup.has(excelRows[i] ?? -1) &&
+      dbWarn.has(excelRows[i] ?? -1),
+  ).length;
 
   const handleImport = async () => {
     setStep("importing");
@@ -183,6 +205,7 @@ export function ExcelImporter<T>({
     setParsedRows([]);
     setExcelRows([]);
     setDbDup(new Map());
+    setDbWarn(new Map());
     setCheckingDb(false);
     setResult(null);
     setFilename("");
@@ -254,6 +277,12 @@ export function ExcelImporter<T>({
               File: <strong>{filename}</strong> — {rawRows.length} rows | ✅ Hợp lệ:{" "}
               <strong className="text-green-600">{validRows.length}</strong> | ❌ Lỗi:{" "}
               <strong className="text-red-600">{errorCount}</strong>
+              {warnCount > 0 && (
+                <>
+                  {" "}| ⚠️ Ghi đè:{" "}
+                  <strong className="text-amber-600">{warnCount}</strong>
+                </>
+              )}
               {checkingDb && (
                 <span className="ml-2 inline-flex items-center gap-1 text-xs text-gray-500">
                   <Loader2 className="h-3 w-3 animate-spin" /> đang đối chiếu dữ liệu có sẵn…
@@ -281,8 +310,12 @@ export function ExcelImporter<T>({
                   const dupError =
                     dupErrors.get(idx) ?? dbDup.get(excelRows[idx] ?? -1);
                   const errored = isErrorRow(row) || dupError !== undefined;
+                  const warn = errored ? undefined : dbWarn.get(excelRows[idx] ?? -1);
                   return (
-                    <tr key={`${excelRows[idx] ?? idx}`} className={cn("border-t", errored && "bg-red-50")}>
+                    <tr
+                      key={`${excelRows[idx] ?? idx}`}
+                      className={cn("border-t", errored && "bg-red-50", warn && "bg-amber-50")}
+                    >
                       <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
                       {columnHints.map((c) => (
                         <td key={c.key} className="px-2 py-1 truncate max-w-[200px]">
@@ -294,6 +327,8 @@ export function ExcelImporter<T>({
                           <span className="text-red-600 text-xs">{row.error}</span>
                         ) : dupError ? (
                           <span className="text-red-600 text-xs">{dupError}</span>
+                        ) : warn ? (
+                          <span className="text-amber-600 text-xs">⚠️ {warn}</span>
                         ) : (
                           <span className="text-green-600">✓</span>
                         )}

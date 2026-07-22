@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { precheckUpsert } from "@/components/admin/import-precheck";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
 
 const VALID_CATEGORIES = new Set([
@@ -64,6 +65,14 @@ export default function ImportInventoryItemsPage() {
         templateFilename="mau-hoc-cu-v2.xlsx"
         duplicateLabel="Mã học cụ"
         duplicateKey={(raw) => String(raw.itemCode ?? "").trim() || null}
+        checkExisting={(raws, nos) =>
+          precheckUpsert(
+            "inventory-items",
+            raws.map((r) => String(r.itemCode ?? "").trim() || null),
+            nos,
+            "Mã học cụ",
+          )
+        }
         columnHints={[
           { key: "itemCode", label: "Mã hàng (upsert key)", required: true },
           { key: "name", label: "Tên hàng", required: true },
