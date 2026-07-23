@@ -12,6 +12,8 @@ import { signOut } from "next-auth/react";
  * `/login` tương đối GIỮ host hiện tại — TƯƠNG ĐƯƠNG hành vi cũ `signOut({callbackUrl:"/login"})`,
  * nên deploy trong tuần flip KHÔNG đổi behavior.
  * - `NEXT_PUBLIC_LOGIN_URL` set → override thẳng (staging/preview).
+ * - Site test (`test.satarobo.vn`) → `/login` tương đối (cổng login RIÊNG, KHÔNG
+ *   đẩy về prod dù host cũng kết thúc `.satarobo.vn`).
  * - Bật cổng chung + đang ở domain prod thật (`*.satarobo.vn`) → `https://satarobo.vn/login`.
  * - Còn lại (chưa bật, localhost, `*.vercel.app`) → `/login` tương đối (giữ host).
  */
@@ -19,10 +21,16 @@ function resolveLoginGateUrl(): string {
   const configured = process.env.NEXT_PUBLIC_LOGIN_URL?.trim();
   if (configured) return configured;
 
+  const host = window.location.hostname;
+
+  // Site test có cổng login riêng — logout GIỮ NGUYÊN host (test.satarobo.vn/login),
+  // không gộp về prod. Đặt TRƯỚC nhánh `.satarobo.vn` (test cũng khớp đuôi đó) và
+  // trước cả gate-off để đúng kể cả khi NEXT_PUBLIC_COMMON_LOGIN được set nhầm ở env test.
+  if (host === "test.satarobo.vn") return "/login";
+
   // Gate-off: cổng chung chưa bật → giữ host hiện tại (hành vi cũ).
   if (process.env.NEXT_PUBLIC_COMMON_LOGIN !== "true") return "/login";
 
-  const host = window.location.hostname;
   if (host === "satarobo.vn" || host.endsWith(".satarobo.vn")) {
     return "https://satarobo.vn/login";
   }
