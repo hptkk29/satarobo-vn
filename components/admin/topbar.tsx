@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { logoutToGate } from "@/lib/auth/logout-client";
-import { LogOut, ChevronDown, User, Search } from "lucide-react";
+import { BookOpenText, LogOut, ChevronDown, User, Search } from "lucide-react";
 import { NotificationBell } from "@/components/admin/notification-bell";
 import { RoleSwitcher } from "@/components/admin/role-switcher";
 import {
@@ -73,8 +73,13 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
             <ChevronDown className="h-4 w-4 text-neutral-400" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
+            {/* /settings/profile không tồn tại (link chết cũ) → trỏ trang Cài đặt
+                (có đổi mật khẩu). */}
+            <DropdownMenuItem onClick={() => router.push("/settings")}>
               <User className="mr-2 h-4 w-4" /> Hồ sơ cá nhân
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/huong-dan")}>
+              <BookOpenText className="mr-2 h-4 w-4" /> Hướng dẫn sử dụng
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
