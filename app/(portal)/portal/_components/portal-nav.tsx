@@ -45,6 +45,7 @@ const ITEMS = [
   { label: "SataCoin", href: "/portal/satacoin", icon: Coins },
   { label: "Hồ sơ con", href: "/portal/ho-so-con", icon: GraduationCap },
   { label: "Hồ sơ", href: "/portal/ho-so", icon: User },
+  { label: "Hướng dẫn", href: "/portal/huong-dan", icon: BookOpen },
 ];
 
 // Sidebar DỌC (commit 2): desktop hiển thị cố định bên trái; mobile thu gọn thành
