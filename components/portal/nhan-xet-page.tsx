@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MessageSquareText, Search, Calendar, User, School } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FeedbackItem } from "@/lib/portal/feedback";
@@ -45,7 +45,36 @@ export function NhanXetPageV2({
   items: FeedbackItem[];
 }) {
   const [selId, setSelId] = useState(items[0]?.id ?? "");
-  const sel = items.find((it) => it.id === selId) ?? items[0] ?? null;
+  const [q, setQ] = useState("");
+  const [range, setRange] = useState("all"); // all | 7 | 30 | 90 (ngày)
+  const [teacher, setTeacher] = useState("all");
+  const [klass, setKlass] = useState("all");
+
+  const teachers = useMemo(
+    () => [...new Set(items.map((it) => it.teacher).filter((t): t is string => !!t))],
+    [items],
+  );
+  const classes = useMemo(
+    () => [...new Set(items.map((it) => it.className).filter((c): c is string => !!c))],
+    [items],
+  );
+
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const minTime =
+      range === "all" ? null : Date.now() - Number(range) * 24 * 60 * 60 * 1000;
+    return items.filter((it) => {
+      if (needle && !`${it.title}\n${it.comment}`.toLowerCase().includes(needle)) return false;
+      if (minTime !== null && new Date(it.dateISO).getTime() < minTime) return false;
+      if (teacher !== "all" && it.teacher !== teacher) return false;
+      if (klass !== "all" && it.className !== klass) return false;
+      return true;
+    });
+  }, [items, q, range, teacher, klass]);
+
+  // Mục đang chọn phải nằm trong danh sách sau lọc — nếu bị lọc mất, lấy mục đầu.
+  const sel = shown.find((it) => it.id === selId) ?? shown[0] ?? null;
+  const selectCls = "rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary/40";
 
   return (
     <div className="portal-v2 mx-auto w-full max-w-6xl space-y-6">
@@ -57,24 +86,48 @@ export function NhanXetPageV2({
         subtitle={`Nhận xét chi tiết của giáo viên dành cho ${studentName} · ${items.length} nhận xét`}
       />
 
-      {/* Search + filters (hiển thị giống SataUI) */}
+      {/* Search + filters */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input placeholder="Tìm tên bài học / nội dung nhận xét..." className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-3 text-sm outline-none focus:border-primary/40" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Tìm tên bài học / nội dung nhận xét..."
+            className="w-full rounded-xl border border-border bg-card py-2 pl-9 pr-3 text-sm outline-none focus:border-primary/40"
+          />
         </div>
-        <select className="rounded-xl border border-border bg-card px-3 py-2 text-sm"><option>Mọi lúc</option></select>
-        <select className="rounded-xl border border-border bg-card px-3 py-2 text-sm"><option>Mọi GV</option></select>
-        <select className="rounded-xl border border-border bg-card px-3 py-2 text-sm"><option>Tất cả</option></select>
+        <select value={range} onChange={(e) => setRange(e.target.value)} className={selectCls} aria-label="Lọc theo thời gian">
+          <option value="all">Mọi lúc</option>
+          <option value="7">7 ngày qua</option>
+          <option value="30">30 ngày qua</option>
+          <option value="90">90 ngày qua</option>
+        </select>
+        <select value={teacher} onChange={(e) => setTeacher(e.target.value)} className={selectCls} aria-label="Lọc theo giáo viên">
+          <option value="all">Mọi GV</option>
+          {teachers.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <select value={klass} onChange={(e) => setKlass(e.target.value)} className={selectCls} aria-label="Lọc theo lớp">
+          <option value="all">Tất cả lớp</option>
+          {classes.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
       </div>
 
       {items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">Chưa có nhận xét nào.</div>
+      ) : shown.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Không có nhận xét khớp bộ lọc — thử đổi từ khóa hoặc bộ lọc.
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,20rem)_1fr]">
           {/* List */}
           <div className="space-y-2">
-            {items.map((it) => {
+            {shown.map((it) => {
               const active = it.id === sel?.id;
               return (
                 <button
