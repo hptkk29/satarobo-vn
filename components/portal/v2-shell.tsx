@@ -238,6 +238,12 @@ export function PortalV2Shell({
                   <Settings className="size-4 text-muted-foreground" /> Hồ sơ liên lạc
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  onClick={() => router.push("/portal/huong-dan")}
+                  className="cursor-pointer gap-2.5"
+                >
+                  <BookOpen className="size-4 text-muted-foreground" /> Hướng dẫn sử dụng
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => router.push("/portal/giao-dien")}
                   className="cursor-pointer gap-2.5"
                 >

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { ArrowRight, BookOpenText } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { resolveActor } from '@/lib/auth/actor'
@@ -49,6 +51,25 @@ export default async function SettingsPage() {
         <h2 className="mb-1 text-base font-bold text-gray-900">Đổi mật khẩu</h2>
         <p className="mb-5 text-sm text-gray-500">Mật khẩu tối thiểu 8 ký tự, bao gồm chữ hoa và số</p>
         <ChangePasswordForm />
+      </section>
+
+      {/* Hướng dẫn sử dụng — lối vào bộ tài liệu hướng dẫn theo khối chức năng */}
+      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-gray-900">
+          <BookOpenText className="h-4 w-4 text-orange-500" aria-hidden /> Hướng dẫn sử dụng
+        </h2>
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-500">
+            Tài liệu hướng dẫn trang quản trị theo từng khối chức năng — kèm các bước
+            thao tác và đường dẫn mở thẳng trang.
+          </p>
+          <Link
+            href="/huong-dan"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            Mở hướng dẫn <ArrowRight className="h-4 w-4 text-gray-400" aria-hidden />
+          </Link>
+        </div>
       </section>
 
       {/* Centers — super admin only */}

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Users, ArrowRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -85,9 +84,16 @@ export function ChildrenPageV2({ kids }: { kids: ParentChildOverview[] }) {
                 <ChildDetailLink studentId={c.id} className="min-w-0 flex-1 truncate rounded-xl border border-border bg-card py-2 text-center text-sm font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-60">
                   Xem hồ sơ
                 </ChildDetailLink>
-                <Link href="/portal/hoc-ba" className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90">
+                {/* Vào Cổng học sinh của ĐÚNG con này: đổi active student rồi mới
+                    điều hướng — trước đây link tĩnh trỏ nhầm /portal/hoc-ba. */}
+                <ChildDetailLink
+                  studentId={c.id}
+                  href="/portal/hoc-sinh"
+                  errorMessage="Không vào được Cổng học sinh"
+                  className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+                >
                   <span className="truncate">Cổng học sinh</span> <ArrowRight className="size-4 shrink-0" />
-                </Link>
+                </ChildDetailLink>
               </div>
             </div>
           ))}

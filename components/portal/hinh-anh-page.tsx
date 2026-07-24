@@ -4,7 +4,6 @@ import type { StudentPhotos } from "@/lib/portal/photos";
 import { PageHero } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
 
-const COLORS = ["#F5871E", "#3B82F6", "#22C55E", "#F59E0B", "#8B5CF6", "#EC4899"];
 function fmt(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -22,7 +21,6 @@ export function HinhAnhPageV2({
   studentName: string;
   data: StudentPhotos;
 }) {
-  let color = 0;
   return (
     <div className="portal-v2 mx-auto w-full max-w-6xl space-y-6">
       <ChildSwitcher kids={kids} activeId={activeId} />
@@ -61,17 +59,23 @@ export function HinhAnhPageV2({
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                {g.photos.map((p) => {
-                  const bg = COLORS[color++ % COLORS.length];
-                  return (
-                    <div key={p.id} className="overflow-hidden rounded-2xl border border-border bg-card">
-                      <div className="grid h-40 place-items-center" style={{ backgroundColor: bg }}>
-                        <Camera className="size-8 text-white/70" />
-                      </div>
-                      <p className="truncate p-3 text-sm font-bold text-foreground">{p.caption ?? "Ảnh lớp"}</p>
-                    </div>
-                  );
-                })}
+                {/* Ảnh thật (signed URL khi bật MEDIA_SIGNED_URL) — bấm mở bản đầy đủ ở tab mới.
+                    Dùng <img> như bản v1: URL R2 ký động không khai báo được remotePatterns. */}
+                {g.photos.map((p) => (
+                  <figure key={p.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="block">
+                      <img
+                        src={p.url}
+                        alt={p.caption ?? "Ảnh lớp"}
+                        loading="lazy"
+                        className="h-40 w-full bg-muted object-cover transition-opacity hover:opacity-90"
+                      />
+                    </a>
+                    <figcaption className="truncate p-3 text-sm font-bold text-foreground">
+                      {p.caption ?? "Ảnh lớp"}
+                    </figcaption>
+                  </figure>
+                ))}
               </div>
             </section>
           ))}

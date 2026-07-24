@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { logoutToGate } from "@/lib/auth/logout-client";
-import { ChevronDown, LayoutGrid, LogOut, User } from "lucide-react";
+import { BookOpenText, ChevronDown, LayoutGrid, LogOut, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,6 +68,11 @@ export function UserMenu({
         <DropdownMenuItem render={<Link href="/teacher/ho-so" />}>
           <User className="h-4 w-4" aria-hidden />
           Hồ sơ cá nhân
+        </DropdownMenuItem>
+
+        <DropdownMenuItem render={<Link href="/teacher/huong-dan" />}>
+          <BookOpenText className="h-4 w-4" aria-hidden />
+          Hướng dẫn sử dụng
         </DropdownMenuItem>
 
         {adminReturnUrl ? (

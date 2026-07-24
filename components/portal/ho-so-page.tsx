@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   UserRound, Phone, Mail, MapPin, Save, KeyRound, ShieldCheck,
-  TriangleAlert, ChevronRight, UsersRound, type LucideIcon,
+  TriangleAlert, ChevronRight, UsersRound, BookOpenText, type LucideIcon,
 } from "lucide-react";
 import type { ParentProfile, ProfileChild } from "@/lib/portal/parent-profile";
 import { updateParentProfile, changeParentPassword } from "@/app/(portal)/portal/ho-so/actions";
@@ -138,6 +138,25 @@ export function HoSoPageV2({ profile }: { profile: ParentProfile }) {
             >
               <KeyRound className="size-4" /> {savingPw ? "Đang cập nhật…" : "Cập nhật mật khẩu"}
             </button>
+          </section>
+
+          {/* Hướng dẫn sử dụng — lối vào bộ tài liệu hướng dẫn từng trang của cổng */}
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground">
+              <BookOpenText className="size-4 text-primary" /> Hướng dẫn sử dụng
+            </h2>
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-md text-sm text-muted-foreground">
+                Tài liệu hướng dẫn chi tiết từng trang của cổng phụ huynh — chia theo
+                nhóm chức năng, kèm các bước thao tác và đường dẫn mở thẳng trang.
+              </p>
+              <Link
+                href="/portal/huong-dan"
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted"
+              >
+                Mở hướng dẫn <ChevronRight className="size-4" />
+              </Link>
+            </div>
           </section>
         </div>
 

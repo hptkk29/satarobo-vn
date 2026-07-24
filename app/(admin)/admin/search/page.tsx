@@ -101,7 +101,7 @@ export default async function GlobalSearchPage({
         canNews
           ? sdb.news.findMany({
               where: { title: { contains: q, mode: "insensitive" } },
-              select: { id: true, title: true, isPublished: true, category: true },
+              select: { id: true, slug: true, title: true, isPublished: true, category: true },
               orderBy: { updatedAt: "desc" },
               take: RESULT_LIMIT,
             })
@@ -152,7 +152,7 @@ export default async function GlobalSearchPage({
               {maskedLeads.map((l) => (
                 <Link
                   key={l.id}
-                  href={`/leads?q=${encodeURIComponent(q)}`}
+                  href={`/leads/${l.id}`}
                   className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 hover:bg-gray-50"
                 >
                   <span className="text-sm font-medium text-gray-900">
@@ -197,10 +197,13 @@ export default async function GlobalSearchPage({
               title="Tin tức"
               moreHref="/news"
             >
+              {/* Bài đã đăng → mở bài public (mọi role có news:view đọc được);
+                  bản nháp → trang sửa (route /news/{id} không tồn tại). */}
               {news.map((n) => (
                 <Link
                   key={n.id}
-                  href={`/news/${n.id}`}
+                  href={n.isPublished ? `/tin-tuc/${n.slug}` : `/news/${n.id}/edit`}
+                  target={n.isPublished ? "_blank" : undefined}
                   className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 hover:bg-gray-50"
                 >
                   <span className="text-sm font-medium text-gray-900">{n.title}</span>

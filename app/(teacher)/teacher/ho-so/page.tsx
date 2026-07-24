@@ -16,7 +16,16 @@
 // ⚠️ Câu 46: màn này KHÔNG đụng học viên/phụ huynh — chỉ tên lớp + sĩ số (con số).
 import Link from "next/link";
 import type { ClassStatus, Role } from "@prisma/client";
-import { BookOpen, CalendarDays, Lock, Mail, MapPin, Phone } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  BookOpenText,
+  CalendarDays,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
@@ -281,6 +290,34 @@ export default async function TeacherProfilePage() {
               </p>
             </div>
             <ChangePasswordDialog />
+          </CardContent>
+        </Card>
+
+        {/* Hướng dẫn sử dụng — lối vào bộ tài liệu hướng dẫn từng trang của site GV */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpenText className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+              Hướng dẫn sử dụng
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Tài liệu hướng dẫn từng trang của site giáo viên
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Chia theo nhóm chức năng — mỗi bài có các bước thao tác chi tiết và
+                đường dẫn mở thẳng trang tương ứng.
+              </p>
+            </div>
+            <Link
+              href="/teacher/huong-dan"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring outline-none"
+            >
+              Mở hướng dẫn
+              <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+            </Link>
           </CardContent>
         </Card>
       </div>

@@ -2,14 +2,19 @@
 
 import { useSetActiveSite } from "@/components/portal/use-set-active-site";
 
-// "Xem hồ sơ chi tiết" — đổi con đang chọn (setActiveSite) rồi mở trang chi tiết
-// (KHÔNG lộ studentId trên URL — PHƯƠNG ÁN A).
+// Đổi con đang chọn (setActiveSite) rồi mở trang đích (KHÔNG lộ studentId trên
+// URL — PHƯƠNG ÁN A). Mặc định mở hồ sơ chi tiết; truyền `href` để vào nơi khác
+// theo đúng con vừa chọn (vd Cổng học sinh /portal/hoc-sinh).
 export function ChildDetailLink({
   studentId,
+  href = "/portal/ho-so-con/chi-tiet",
+  errorMessage = "Không mở được hồ sơ con",
   className,
   children,
 }: {
   studentId: string;
+  href?: string;
+  errorMessage?: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -20,8 +25,8 @@ export function ChildDetailLink({
       disabled={pending}
       onClick={() =>
         switchTo(studentId, {
-          onSuccess: (router) => router.push("/portal/ho-so-con/chi-tiet"),
-          errorMessage: "Không mở được hồ sơ con",
+          onSuccess: (router) => router.push(href),
+          errorMessage,
         })
       }
       className={className}
