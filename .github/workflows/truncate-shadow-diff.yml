@@ -1,0 +1,52 @@
+# "Bấm đồng hồ" shadow-compare — TRUNCATE "RbacShadowDiff" trên prod để đếm lại
+# ngày sạch từ đầu sau khi ĐỔI MAPPING QUYỀN (seed-roles / can.ts / gán-rút
+# UserOrgRole). Quy tắc vàng: docs/ke-hoach-go-live-2607/shadow-log.md.
+# RbacShadowDiff là dữ liệu CHẨN ĐOÁN (traffic tự sinh lại) — truncate an toàn.
+# Chạy SAU seed-prod-roles (seed đổi mapping → mới reset đồng hồ).
+name: Reset đồng hồ shadow (TRUNCATE RbacShadowDiff prod)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Gõ đúng "RESET DONG HO SHADOW" để chạy'
+        required: true
+        default: ""
+
+concurrency:
+  group: truncate-shadow-diff
+  cancel-in-progress: false
+
+jobs:
+  truncate:
+    name: TRUNCATE RbacShadowDiff (prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Xác nhận + kiểm secret prod (fail sớm)
+        run: |
+          if [ "${{ inputs.confirm }}" != "RESET DONG HO SHADOW" ]; then
+            echo "::error::Chuỗi xác nhận sai — dừng, không truncate gì."; exit 1
+          fi
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL"; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: TRUNCATE "RbacShadowDiff" (prod)
+        run: pnpm exec tsx scripts/truncate-shadow-diff.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
