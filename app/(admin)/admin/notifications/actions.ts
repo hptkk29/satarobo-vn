@@ -59,9 +59,11 @@ export async function createNotification(
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   if (d.audience === "CENTER" && d.centerId) {
-    const canUse =
-      actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(d.centerId);
-    if (!canUse) return { ok: false, error: "Không có quyền với cơ sở này" };
+    // GHI đối xứng ĐỌC (vá 24/07): scope per-model — role HO không có quyền
+    // notifications: không được gửi thông báo nhắm cơ sở ngoài scope.
+    if (!passesScope("Notification", { centerId: d.centerId }, actor)) {
+      return { ok: false, error: "Không có quyền với cơ sở này" };
+    }
   }
   if (d.audience === "CLASS" && d.classId) {
     const cls = await sdb.class.findUnique({ where: { id: d.classId }, select: { centerId: true } });

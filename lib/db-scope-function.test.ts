@@ -9,7 +9,12 @@
 // CHỈ CS1 (như một QL cơ sở). CHỈ HỌC BẠ (ReportCard) cross-center để DUYỆT học bạ CS2.
 // LEAD/DOANH THU/NHÂN SỰ CS2 vẫn không thấy.
 import { describe, it, expect } from "vitest";
-import { SCOPED_MODELS, getModelPrefixes, getModelVisibleCenterIds } from "@/lib/db-scope";
+import {
+  SCOPED_MODELS,
+  getModelPrefixes,
+  getModelVisibleCenterIds,
+  passesScope,
+} from "@/lib/db-scope";
 import type { Actor, PermEntry } from "@/lib/auth/actor";
 
 const CS1 = "center-cs1";
@@ -45,6 +50,9 @@ const toai: Actor = {
     perm("orders:view", [CS1]),
     perm("employees:view-all", [CS1]),
     perm("enrollments:view-all", [CS1]),
+    // CM@CS1 vận hành cơ sở (seed-roles) — cần cho guard GHI per-model (Room/Holiday).
+    perm("rooms:edit", [CS1]),
+    perm("holidays:view", [CS1]),
   ],
   visibleCenterIds: [CS1, CS2], // blanket (HO) — KHÔNG được dùng cho model đã map prefix
   visibleOrgUnitIds: ["org-ho", "org-cs1"],
@@ -85,6 +93,43 @@ describe("scopedDb — cross-center theo chức năng (ca Toại — 24/07 khoá
 
   it("KHÔNG thấy nhân sự cơ sở khác", () => {
     expect(getModelVisibleCenterIds("Employee", toai)).toEqual([CS1]);
+  });
+});
+
+// Vá 24/07 — bug thật: Toại (TRAINING@HO, isHoLevel=true) TẠO được lớp cho CS2 vì
+// guard ghi `actorCanUseCenter` trong app/(admin)/**/_actions bypass theo cờ isHoLevel
+// trần. Guard nay đi qua passesScope(model, { centerId }, actor) → GHI đối xứng ĐỌC.
+describe("passesScope — guard GHI theo scope per-model (tạo/chuyển cơ sở, ca Toại)", () => {
+  it("KHÔNG tạo/chuyển lớp sang CS2; lớp HO (centerId null) đòi scope ALL — chỉ CS1 qua", () => {
+    expect(passesScope("Class", { centerId: CS2 }, toai)).toBe(false); // bug gốc 24/07
+    expect(passesScope("Class", { centerId: CS1 }, toai)).toBe(true);
+    expect(passesScope("Class", { centerId: null }, toai)).toBe(false);
+  });
+
+  it("cùng ngữ nghĩa cho nhóm lớp / lớp trải nghiệm / phòng / ngày nghỉ / HV / NV", () => {
+    for (const m of ["ClassGroup", "TrialClassV2", "Room", "Holiday", "Student", "Employee"]) {
+      expect(passesScope(m, { centerId: CS2 }, toai), `${m} CS2 phải bị chặn`).toBe(false);
+      expect(passesScope(m, { centerId: CS1 }, toai), `${m} CS1 phải qua`).toBe(true);
+    }
+    // Ngày nghỉ TOÀN HỆ THỐNG / NV HO (centerId null) — cần scope ALL, Toại không có.
+    expect(passesScope("Holiday", { centerId: null }, toai)).toBe(false);
+    expect(passesScope("Employee", { centerId: null }, toai)).toBe(false);
+  });
+
+  it("duyệt học bạ CS2 GIỮ NGUYÊN (ReportCard = ALL — câu 55)", () => {
+    expect(passesScope("ReportCard", { centerId: CS2 }, toai)).toBe(true);
+  });
+
+  it("SUPER_ADMIN không bị siết", () => {
+    const sa: Actor = { ...toai, isSuperAdmin: true };
+    expect(passesScope("Class", { centerId: CS2 }, sa)).toBe(true);
+    expect(passesScope("Class", { centerId: null }, sa)).toBe(true);
+  });
+
+  it("role HO CÓ chức năng module vẫn cross-center (HO_HR ghi Employee mọi CS + NV HO)", () => {
+    const hoHr: Actor = { ...toai, permissions: [perm("employees:edit", "ALL")] };
+    expect(passesScope("Employee", { centerId: CS2 }, hoHr)).toBe(true);
+    expect(passesScope("Employee", { centerId: null }, hoHr)).toBe(true);
   });
 });
 

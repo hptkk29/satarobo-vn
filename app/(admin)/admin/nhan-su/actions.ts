@@ -27,15 +27,18 @@ type Sdb = ReturnType<typeof scopedDb>;
 
 // Cách ly cơ sở (chống IDOR ghi): Employee ∈ SCOPED_MODELS. NV HO có centerId=null
 // (cross-center) → chỉ SUPER_ADMIN/HO thao tác. CENTER_MANAGER chỉ NV cơ sở mình.
+// GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — NV HO (centerId
+// null) đòi scope ALL (role HO có quyền employees:), không còn mở cho mọi role @HO.
 function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  return centerId != null && actor.visibleCenterIds.includes(centerId);
+  return passesScope("Employee", { centerId }, actor);
 }
-/** NV `id` có thuộc tầm nhìn cơ sở actor không (sdb null-filter + passesScope). */
+/** NV `id` có thuộc tầm nhìn cơ sở actor không (sdb null-filter + passesScope).
+ * Vá 24/07: bỏ bypass isHoLevel trần — scoped read + passesScope đã per-model
+ * (role HO có quyền employees: → ALL vẫn qua; role HO khác chức năng → theo scope). */
 async function employeeInScope(userId: string | undefined, id: string): Promise<boolean> {
   if (!userId) return false;
   const actor = await resolveActor(userId);
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  if (actor.isSuperAdmin) return true;
   const sdb = scopedDb(actor);
   const e = await sdb.employee.findUnique({ where: { id }, select: { centerId: true } });
   return !!e && passesScope("Employee", e, actor);

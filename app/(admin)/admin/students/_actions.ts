@@ -34,9 +34,10 @@ const INVALID_RESUME_TRANSITION = "__INVALID_RESUME_TRANSITION__";
 
 // Cách ly cơ sở (chống IDOR ghi): Student ∈ SCOPED_MODELS. Mọi mutation theo
 // studentId từ client phải xác minh HV thuộc tầm nhìn cơ sở của actor.
+// GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — role HO không
+// có quyền students:* (Toại TRAINING@HO) không được tạo/chuyển HV cơ sở khác.
 function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  return centerId != null && actor.visibleCenterIds.includes(centerId);
+  return passesScope("Student", { centerId }, actor);
 }
 
 /** Trả về true nếu HV `studentId` nằm trong tầm nhìn cơ sở của user. */
@@ -46,7 +47,9 @@ async function studentInScope(
 ): Promise<boolean> {
   if (!userId) return false;
   const actor = await resolveActor(userId);
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
+  // Vá 24/07: bỏ bypass isHoLevel trần — scoped read đã per-model (role HO có quyền
+  // students: → ALL vẫn qua; role HO khác chức năng, vd TRAINING, → theo scope).
+  if (actor.isSuperAdmin) return true;
   const sdb = scopedDb(actor);
   const s = await sdb.student.findUnique({ where: { id: studentId }, select: { centerId: true } });
   return !!s && passesScope("Student", s, actor);

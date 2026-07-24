@@ -12,8 +12,10 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 
 // Cách ly cơ sở: Room ∈ SCOPED_MODELS. CENTER_MANAGER chỉ thao tác phòng thuộc
 // cơ sở mình; không re-home phòng sang cơ sở ngoài tầm nhìn (chống IDOR ghi).
+// GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — role HO không
+// có quyền rooms:/centers: không được tạo/chuyển phòng cơ sở khác.
 function actorCanUseCenter(actor: Actor, centerId: string): boolean {
-  return actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(centerId);
+  return passesScope("Room", { centerId }, actor);
 }
 
 type ActionResult = { error?: string };

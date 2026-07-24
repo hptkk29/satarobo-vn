@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -50,12 +50,20 @@ export default async function NewClassPage() {
     }),
   ]);
 
+  // Picker "Đơn vị" theo scope GHI của Class (đối xứng guard createClass — vá 24/07):
+  // role HO không có quyền classes:* không được mời chọn cơ sở ngoài scope.
+  const classCenters = getModelVisibleCenterIds("Class", actor);
+  const orgUnitsInScope =
+    classCenters === "ALL"
+      ? orgUnits
+      : orgUnits.filter((o) => o.centerId != null && classCenters.includes(o.centerId));
+
   return (
     <div>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm lớp học mới</h1>
       <ClassForm
         courses={courses}
-        orgUnits={orgUnits.map((o) => ({
+        orgUnits={orgUnitsInScope.map((o) => ({
           id: o.orgUnitId,
           name: o.name,
           centerId: o.centerId,

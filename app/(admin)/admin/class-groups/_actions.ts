@@ -16,9 +16,10 @@ type ActionResult = { error?: string };
 // Cách ly cơ sở (chống IDOR ghi): ClassGroup/Student/Class ∈ SCOPED_MODELS;
 // Enrollment relation-scoped qua class.centerId. Mutation theo id từ client phải
 // xác minh record thuộc tầm nhìn cơ sở của actor trước khi ghi.
+// GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — role HO không
+// có quyền classes:/class_group: không được ghi cross-center. KHÔNG dùng isHoLevel trần.
 function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  return centerId != null && actor.visibleCenterIds.includes(centerId);
+  return passesScope("ClassGroup", { centerId }, actor);
 }
 
 async function requireWrite(action: "create" | "edit" | "delete") {

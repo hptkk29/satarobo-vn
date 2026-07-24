@@ -16,10 +16,11 @@ type ActionResult = { error?: string };
 // Cách ly cơ sở: Holiday ∈ SCOPED_MODELS. centerId=null = ngày nghỉ TOÀN HỆ THỐNG
 // → chỉ SUPER_ADMIN/HO được tạo/sửa/xoá. CENTER_MANAGER chỉ thao tác ngày nghỉ
 // thuộc cơ sở mình (chống IDOR ghi liên cơ sở).
+// GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — ngày nghỉ TOÀN HỆ
+// THỐNG (centerId null) đòi scope ALL (role HO có quyền holidays:/centers:), không còn
+// mở cho mọi role @HO; center-level chỉ nhắm cơ sở trong scope.
 function actorCanUseCenterTarget(actor: Actor, centerId: string | null): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  // Center-level: chỉ được nhắm tới 1 cơ sở trong tầm nhìn (không được nhắm toàn hệ thống).
-  return centerId != null && actor.visibleCenterIds.includes(centerId);
+  return passesScope("Holiday", { centerId }, actor);
 }
 
 const HOLIDAY_TYPES = ["HOLIDAY", "MAINTENANCE", "EVENT", "OTHER"] as const;

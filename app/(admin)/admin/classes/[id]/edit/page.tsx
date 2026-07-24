@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
@@ -170,6 +170,14 @@ export default async function EditClassPage({ params }: Props) {
     (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
       (await checkPermission("classes:edit", { centerId: cls.centerId })));
 
+  // Picker "Đơn vị" theo scope GHI của Class (đối xứng guard updateClass — vá 24/07):
+  // role HO không có quyền classes:* không được mời chuyển lớp sang cơ sở ngoài scope.
+  const classCenters = getModelVisibleCenterIds("Class", actor);
+  const orgUnitsInScope =
+    classCenters === "ALL"
+      ? orgUnits
+      : orgUnits.filter((o) => o.centerId != null && classCenters.includes(o.centerId));
+
   const formValue: ClassFormValue = {
     id: cls.id,
     classCode: cls.classCode,
@@ -262,7 +270,7 @@ export default async function EditClassPage({ params }: Props) {
         cls={formValue}
         courses={courses}
         canEdit={canEdit}
-        orgUnits={orgUnits.map((o) => ({
+        orgUnits={orgUnitsInScope.map((o) => ({
           id: o.orgUnitId,
           name: o.name,
           centerId: o.centerId,

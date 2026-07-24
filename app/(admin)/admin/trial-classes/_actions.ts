@@ -33,9 +33,11 @@ async function requireSession() {
   return session;
 }
 
-/** Actor có được phép thao tác trên cơ sở `centerId` không (cách ly cơ sở). */
+/** Actor có được phép thao tác trên cơ sở `centerId` không (cách ly cơ sở).
+ * GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — role HO không
+ * có quyền trials:/classes: không được tạo lớp trải nghiệm cơ sở khác. */
 function actorCanUseCenter(actor: Actor, centerId: string): boolean {
-  return actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(centerId);
+  return passesScope("TrialClassV2", { centerId }, actor);
 }
 
 /** Lấy class V2 trong tầm scope của actor (chống IDOR). Trả null nếu out-of-scope. */
