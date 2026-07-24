@@ -330,10 +330,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // tạo trước đây gác bằng `classes:view-all` ⇒ HR/Kế toán/Marketing mở được bằng URL.
   // Không tái dùng `training:manage` (QL cơ sở sẽ mất báo cáo lớp của chính mình) cũng
   // không dùng `curriculum:view` (kéo cả GV vào xem hiệu suất đồng nghiệp).
-  "reports:training": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "reports:training": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0-NAV-2 (QĐ-T3b): trả lại cho CM 2 việc vận hành qua action riêng — KHÔNG mở lại training:manage.
   // CM cần cấu hình số buổi lớp trải nghiệm + duyệt đề xuất chỉnh bài của GV.
-  "trials:config": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "trials:config": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "lesson-change:approve": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
 
   // --- Notifications (Phase NHÓM 3) ---
@@ -380,7 +380,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "payroll:edit": ["SUPER_ADMIN", "ACCOUNTANT"],
 
   // --- Students ---
-  "students:view-all": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT", "HR"],
+  "students:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT", "HR"],
   "students:view-own-class": ["SUPER_ADMIN", "TEACHER"],
   "students:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // FL W0 (QĐ-T4): kế toán KHÔNG sửa hồ sơ học viên (gỡ ACCOUNTANT).
@@ -390,7 +390,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "students:import": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Classes ---
-  "classes:view-all": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING"],
+  "classes:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING"],
   "classes:view-own": ["SUPER_ADMIN", "TEACHER"],
   "classes:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -413,7 +413,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "completions:propose-own": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
 
   // --- Evaluations / surveys (R7-16) ---
-  "evaluations:manage": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "evaluations:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "evaluations:view-aggregate": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "evaluations:view-detail": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
@@ -424,7 +424,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // phát hành/thu hồi). GIỮ TEACHER ở manage (GV vẫn viết DRAFT + đánh giá buổi). Việc
   // "siết sửa-sau-thu-hồi về đúng review-havers (QL/Đào tạo/Admin), chặn GV" làm ở tầng
   // action (saveReportCardAction → canEditReportCardContent), KHÔNG gỡ TEACHER ở đây.
-  "report-cards:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "TRAINING"],
+  "report-cards:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "report-cards:review": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   "satacoin:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "enrollments:cancel": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -447,8 +447,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "courses:view": [
     "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "HR", "TEACHER", "MARKETING",
   ],
-  "courses:create": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
-  "courses:edit": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "MARKETING"],
+  // Chỉnh chương trình học (curriculum + khóa học + gói combo) CHỈ Đào tạo + SUPER_ADMIN
+  // (user chốt 24/07): gỡ khỏi CENTER_MANAGER + MARKETING.
+  "courses:create": ["SUPER_ADMIN", "TRAINING"],
+  "courses:edit": ["SUPER_ADMIN", "TRAINING"],
   "courses:delete": ["SUPER_ADMIN", "TRAINING"],
   "course-packages:view": [
     "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "SALES_CSM", "MARKETING",
@@ -456,7 +458,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // FL-R2 W5 — course-packages = GIÁ/BÁN (tiền) → siết về [SUPER_ADMIN, CENTER_MANAGER]
   // cho khớp action requireAdmin (course-packages/_actions.ts). Trước đây matrix nới
   // TRAINING/MARKETING nhưng action chặn → mở form được mà submit fail (mất công nhập).
-  "course-packages:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "course-packages:edit": ["SUPER_ADMIN", "TRAINING"],
 
   // --- Curriculum + Lessons ---
   // FL W0 (QĐ-T1): biên soạn nội dung LMS = TRAINING (Đào tạo). TEACHER + CENTER_MANAGER chỉ XEM.

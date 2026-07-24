@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { hasAnyRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
@@ -100,7 +100,9 @@ async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  if (!hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER"])) {
+  // 24/07: chỉnh gói combo CHỈ Đào tạo + SUPER_ADMIN → gác theo permission thay vì
+  // hard-code role (khớp course-packages:edit ở matrix + trang list).
+  if (!(await checkPermission("course-packages:edit"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
