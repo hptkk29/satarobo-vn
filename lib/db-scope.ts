@@ -122,10 +122,13 @@ export function getModelPrefixes(model: string): string[] {
     case "EvaluationRound":
       return ["evaluations:"];
     case "Enrollment":
-      // report-cards: cũng map vào đây — học bạ gắn với enrollment. Nhờ vậy TRAINING@HO
-      // (report-cards:* + students/classes:view-all) đọc được ghi danh cả 2 cơ sở để làm
-      // học bạ, còn CENTER_MANAGER@CS1 (enrollments:* @CS1) vẫn chỉ thấy CS1.
-      return ["enrollments:", "report-cards:"];
+      // 24/07 (user chốt): TÁCH report-cards: khỏi đây → /ghi danh khoá đúng theo
+      // enrollments: (Toại = CS1). Duyệt học bạ CS2 KHÔNG cần Enrollment cross-center:
+      // trang chi tiết/action học bạ dùng checkEnrollmentScope (isHoLevel → ok) + db trần;
+      // trang list học bạ lọc theo lớp đã-trong-scope. ReportCard vẫn giữ report-cards:
+      // (cross-center cho Đào tạo). Đào tạo THUẦN (chỉ report-cards:review, không
+      // enrollments:) rơi về fallback isHoLevel → ALL — vẫn đọc được để duyệt.
+      return ["enrollments:"];
     case "Attendance":
       // #04 flip EXEMPT→SCOPED nhưng QUÊN map prefix → rơi vào fallback `isHoLevel ? ALL`,
       // tức bất kỳ ai có 1 role HO đều thấy điểm danh toàn hệ thống bất kể chức năng.

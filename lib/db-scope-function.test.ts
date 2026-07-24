@@ -4,8 +4,10 @@
 // khớp prefix action của model. Nhờ đó một người kiêm nhiều role ở nhiều cấp thấy
 // đúng phần dữ liệu của từng chức năng, thay vì "có 1 role HO ⇒ thấy tất".
 //
-// Ca thật (09/07/2026): Phan Thành Toại = TRAINING @ HO + CENTER_MANAGER @ CS1 + TEACHER @ CS1.
-// Yêu cầu: thấy HỌC VIÊN/LỚP cả 2 cơ sở (để đánh giá học bạ), KHÔNG thấy LEAD/DOANH THU CS2.
+// Ca thật (24/07/2026): Phan Thành Toại = TRAINING @ HO + CENTER_MANAGER @ CS1 + TEACHER @ CS1.
+// Yêu cầu (user chốt 24/07): Đào tạo KHOÁ CHẶT — Toại thấy HỌC VIÊN/LỚP/BUỔI/GHI DANH/ĐIỂM DANH
+// CHỈ CS1 (như một QL cơ sở). CHỈ HỌC BẠ (ReportCard) cross-center để DUYỆT học bạ CS2.
+// LEAD/DOANH THU/NHÂN SỰ CS2 vẫn không thấy.
 import { describe, it, expect } from "vitest";
 import { SCOPED_MODELS, getModelPrefixes, getModelVisibleCenterIds } from "@/lib/db-scope";
 import type { Actor, PermEntry } from "@/lib/auth/actor";
@@ -31,12 +33,12 @@ const toai: Actor = {
     { orgUnitId: "org-cs1", roleCode: "CENTER_MANAGER" },
   ],
   permissions: [
-    // TRAINING @ HO — chức năng đào tạo, cross-center
-    perm("students:view-all", "ALL"),
-    perm("classes:view-all", "ALL"),
-    perm("report-cards:manage", "ALL"),
+    // TRAINING @ HO — 24/07 khoá chặt: chỉ DUYỆT học bạ cross-center (report-cards:review).
+    // KHÔNG còn students/classes:view-all, KHÔNG report-cards:manage.
     perm("report-cards:review", "ALL"),
-    // CENTER_MANAGER @ CS1 — vận hành cơ sở, chỉ CS1
+    // CENTER_MANAGER @ CS1 — vận hành cơ sở, chỉ CS1 (gồm cả xem HV/lớp/ghi danh).
+    perm("students:view-all", [CS1]),
+    perm("classes:view-all", [CS1]),
     perm("leads:view-all", [CS1]),
     perm("leads:edit", [CS1]),
     perm("payments:record", [CS1]),
@@ -50,19 +52,23 @@ const toai: Actor = {
   assignedClassIds: new Set<string>(),
 };
 
-describe("scopedDb — cross-center theo chức năng (ca Toại)", () => {
-  it("THẤY học viên + lớp cả 2 cơ sở (đào tạo @ HO)", () => {
-    expect(getModelVisibleCenterIds("Student", toai)).toBe("ALL");
-    expect(getModelVisibleCenterIds("Class", toai)).toBe("ALL");
-    expect(getModelVisibleCenterIds("ClassSession", toai)).toBe("ALL");
+describe("scopedDb — cross-center theo chức năng (ca Toại — 24/07 khoá chặt Đào tạo)", () => {
+  it("CHỈ THẤY học viên + lớp + buổi học CS1 (Đào tạo hết view-all; chỉ còn CM@CS1)", () => {
+    expect(getModelVisibleCenterIds("Student", toai)).toEqual([CS1]);
+    expect(getModelVisibleCenterIds("Class", toai)).toEqual([CS1]);
+    expect(getModelVisibleCenterIds("ClassSession", toai)).toEqual([CS1]);
   });
 
-  it("THẤY ghi danh cả 2 cơ sở — học bạ gắn enrollment (report-cards: map vào Enrollment)", () => {
-    expect(getModelVisibleCenterIds("Enrollment", toai)).toBe("ALL");
+  it("CHỈ THẤY ghi danh CS1 — /ghi danh khoá theo enrollments: (tách report-cards: 24/07)", () => {
+    expect(getModelVisibleCenterIds("Enrollment", toai)).toEqual([CS1]);
   });
 
-  it("THẤY điểm danh cả 2 cơ sở — dữ liệu đào tạo", () => {
-    expect(getModelVisibleCenterIds("Attendance", toai)).toBe("ALL");
+  it("VẪN duyệt được HỌC BẠ cả 2 cơ sở — ReportCard giữ report-cards: (report-cards:review GLOBAL)", () => {
+    expect(getModelVisibleCenterIds("ReportCard", toai)).toBe("ALL");
+  });
+
+  it("CHỈ THẤY điểm danh CS1 (bám classes: — Toại chỉ CS1)", () => {
+    expect(getModelVisibleCenterIds("Attendance", toai)).toEqual([CS1]);
   });
 
   it("KHÔNG thấy lead cơ sở khác (leads:* chỉ gắn CS1)", () => {
