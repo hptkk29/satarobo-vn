@@ -10,7 +10,8 @@
 //   dù vẫn là ca của GV. WHERE userId = mình là own-rows, không rò dữ liệu ai khác.
 // • Holiday ∈ SCOPED_MODELS và ∉ NULL_IS_GLOBAL_MODELS → scopedDb inject
 //   `centerId IN (...)` sẽ ẩn NHẦM ngày nghỉ TOÀN HỆ THỐNG (centerId null). Tự lọc
-//   OR-null theo visibleCenterIds của actor (đúng semantics "null = toàn hệ thống").
+//   OR-null theo per-model scope của actor (vá 24/07: getModelVisibleCenterIds
+//   "Holiday" thay blanket visibleCenterIds — HO-role khác chức năng hết thấy CS2).
 //
 // ⚠️ Câu 46: các hàm chỉ trả tên lớp/giờ/ngày — KHÔNG đụng học viên/phụ huynh.
 // ⚠️ @db.Date: tham số from/to là mốc UTC 00:00 của NGÀY VN, khoảng nửa mở [from, to).
@@ -23,6 +24,8 @@ import type {
   HolidayType,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getModelVisibleCenterIds } from "@/lib/db-scope";
+import type { Actor } from "@/lib/auth/actor";
 
 /** Buổi Trial GV phụ trách trong [from, to) — bỏ buổi đã hủy. */
 export type TeacherTrialSessionRow = {
@@ -90,8 +93,8 @@ export async function getOwnShiftRegistrations(
   });
 }
 
-/** Ngày nghỉ hiển thị cho GV: TOÀN HỆ THỐNG (centerId null) HOẶC thuộc cơ sở actor
- * nhìn thấy. Range-overlap với [from, to): holiday [date, endDate ?? date] giao khoảng. */
+/** Ngày nghỉ hiển thị cho GV: TOÀN HỆ THỐNG (centerId null) HOẶC thuộc scope Holiday
+ * của actor. Range-overlap với [from, to): holiday [date, endDate ?? date] giao khoảng. */
 export type TeacherHolidayRow = {
   name: string;
   date: Date; // @db.Date
@@ -100,10 +103,14 @@ export type TeacherHolidayRow = {
 };
 
 export async function getVisibleHolidays(
-  visibleCenterIds: string[],
+  actor: Actor,
   from: Date,
   to: Date,
 ): Promise<TeacherHolidayRow[]> {
+  // Vá 24/07 — per-model scope thay blanket visibleCenterIds: cross-center chỉ khi
+  // actor có quyền holidays:/centers: scope ALL. GV thuần không đổi (fallback về
+  // visibleCenterIds). Ngày nghỉ TOÀN HỆ THỐNG (centerId null) luôn hiển thị như cũ.
+  const scope = getModelVisibleCenterIds("Holiday", actor);
   return db.holiday.findMany({
     where: {
       AND: [
@@ -112,7 +119,9 @@ export async function getVisibleHolidays(
           // kết thúc (endDate, hoặc chính date nếu nghỉ 1 ngày) sau khi khoảng bắt đầu
           OR: [{ endDate: { gte: from } }, { endDate: null, date: { gte: from } }],
         },
-        { OR: [{ centerId: null }, { centerId: { in: visibleCenterIds } }] },
+        ...(scope === "ALL"
+          ? []
+          : [{ OR: [{ centerId: null }, { centerId: { in: scope } }] }]),
       ],
     },
     select: { name: true, date: true, endDate: true, type: true },

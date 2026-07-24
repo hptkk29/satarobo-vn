@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import {
   ExamBuilder,
@@ -34,18 +34,20 @@ export default async function ExamBuilderPage({ params }: Props) {
   // qua class.centerId); đề ngân hàng (classId null) dùng chung. HO/SUPER bypass.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
+  // Vá 24/07: bỏ isHoLevel trần — scope per-model của Class (đối xứng gói chấm về
+  // CS1: Toại hết XEM builder đề lớp CS2; đề ngân hàng classId null dùng chung).
+  const classScope = getModelVisibleCenterIds("Class", actor);
 
   const [exam, classes, lessons, bank] = await Promise.all([
     sdb.exam.findFirst({
       where: {
         id,
-        ...(isGlobal
+        ...(classScope === "ALL"
           ? {}
           : {
               OR: [
                 { classId: null },
-                { class: { centerId: { in: actor.visibleCenterIds } } },
+                { class: { centerId: { in: classScope } } },
               ],
             }),
       },

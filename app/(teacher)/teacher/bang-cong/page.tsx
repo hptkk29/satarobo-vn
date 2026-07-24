@@ -189,7 +189,8 @@ export default async function TeacherTimesheetPage({
     }),
     getTeacherTrialSessions(session.user.id, monthStart, nextMonth),
     getOwnShiftRegistrations(session.user.id, monthStart, nextMonth),
-    getVisibleHolidays(actor.visibleCenterIds, monthStart, nextMonth),
+    // Vá 24/07 — getVisibleHolidays nhận actor, tự tính per-model scope Holiday.
+    getVisibleHolidays(actor, monthStart, nextMonth),
     getOwnAdjustmentRequests(session.user.id, monthStart, nextMonth),
   ]);
 

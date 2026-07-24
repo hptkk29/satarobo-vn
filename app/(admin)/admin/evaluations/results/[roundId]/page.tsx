@@ -4,7 +4,7 @@ import { ArrowLeft, Star, EyeOff } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { passesScope, scopedDb } from "@/lib/db-scope";
 import { getRound } from "@/lib/eval/rounds";
 import { aggregateRound, getRoundDetail, type RoundAggregate } from "@/lib/eval/aggregate";
 import { parseOptions } from "@/lib/eval/forms";
@@ -30,13 +30,11 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
 
   // Cách ly cơ sở cho MỌI người xem (A1-LOW 10/07 — trước đây chỉ áp canDetail:
   // GV view-aggregate cầm roundId CENTER_SURVEY cơ sở khác vẫn đọc được tổng hợp
-  // góp ý TEXTBOX nguyên văn). Đợt toàn hệ thống (centerId=null) không bị chặn.
-  if (
-    !actor.isSuperAdmin &&
-    !actor.isHoLevel &&
-    round.centerId &&
-    !actor.visibleCenterIds.includes(round.centerId)
-  ) {
+  // góp ý TEXTBOX nguyên văn). Vá 24/07: bỏ bypass isHoLevel trần → passesScope
+  // per-model — role HO không có evaluations:* scope ALL (Toại TRAINING@HO) hết xem
+  // kết quả đợt CS2; đợt CS1 + SYSTEM (centerId=null, đúng semantics NULL_IS_GLOBAL
+  // cho ĐỌC) vẫn xem như cũ. SUPER_ADMIN / role HO có quyền không đổi.
+  if (!passesScope("EvaluationRound", { centerId: round.centerId }, actor)) {
     redirect("/evaluations");
   }
 

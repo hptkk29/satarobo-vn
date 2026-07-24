@@ -278,7 +278,8 @@ export default async function TeacherSchedulePage({
     }),
     getTeacherTrialSessions(session.user.id, fromDay, toDay),
     getOwnShiftRegistrations(session.user.id, fromDay, toDay),
-    getVisibleHolidays(actor.visibleCenterIds, fromDay, toDay),
+    // Vá 24/07 — getVisibleHolidays nhận actor, tự tính per-model scope Holiday.
+    getVisibleHolidays(actor, fromDay, toDay),
   ]);
 
   // #06 — gate "Hoàn tất buổi" (lifecycle v2). Đọc 1 lần, truyền xuống card.

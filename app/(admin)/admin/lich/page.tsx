@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { monthGridRange, shiftMonth } from "@/lib/lms/calendar";
 import { getAdminCalendarEvents } from "@/lib/lms/calendar-data";
@@ -20,6 +21,14 @@ export default async function AdminCalendarPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  // Vá 24/07 — trang trước đây KHÔNG gate quyền ngoài login. Cho qua nếu có ≥1 quyền
+  // xem buổi/lớp (GV giữ sessions:view + classes:view-own nên vẫn vào được; cả 3
+  // action đều GLOBAL trong seed → gọi trần an toàn theo R1 rbac-scope.test).
+  if (
+    !(await checkAnyPermission(["sessions:view", "classes:view-all", "classes:view-own"]))
+  ) {
+    redirect("/admin/dashboard");
+  }
   const sp = await searchParams;
   const now = new Date();
   const year = parseInt10(sp.y, now.getFullYear());

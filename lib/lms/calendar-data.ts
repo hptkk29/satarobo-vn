@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
 import { dayKey } from "@/lib/lms/calendar";
 import type { CalEvent } from "@/components/lms/month-calendar";
@@ -8,7 +9,11 @@ import type { CalEvent } from "@/components/lms/month-calendar";
 
 /** Buổi trong [from,to) thuộc cơ sở actor nhìn thấy (admin). */
 export async function getAdminCalendarEvents(actor: Actor, from: Date, to: Date): Promise<CalEvent[]> {
-  const cw = actor.isSuperAdmin || actor.isHoLevel ? undefined : { in: actor.visibleCenterIds };
+  // Vá 24/07 — per-model scope thay isHoLevel trần: role HO chỉ nhìn xuyên cơ sở khi
+  // CÓ quyền sessions:/classes: scope ALL (SUPER_ADMIN luôn ALL). HO-role khác chức
+  // năng (vd TRAINING@HO sau lock 24/07) → lịch chỉ cơ sở mình.
+  const scope = getModelVisibleCenterIds("ClassSession", actor);
+  const cw = scope === "ALL" ? undefined : { in: scope };
   const sessions = await db.classSession.findMany({
     where: { date: { gte: from, lt: to }, status: { not: "CANCELLED" }, ...(cw ? { class: { centerId: cw } } : {}) },
     select: { date: true, class: { select: { name: true, startTime: true } } },

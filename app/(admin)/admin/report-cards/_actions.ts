@@ -14,6 +14,7 @@ import {
   buildPublishedSnapshot,
   canEditReportCardContent,
   checkEnrollmentScope,
+  checkManageWriteScope,
   checkTransition,
   computeReportCardMetrics,
   getCourseCriteria,
@@ -93,6 +94,12 @@ export async function saveReportCardAction(input: unknown): Promise<Result> {
     capabilities: ctx.capabilities,
   });
   if (!scope.ok) return { ok: false, error: scope.error ?? "Ngoài phạm vi" };
+
+  // Vá 24/07 (Gói E, user chốt câu 55 siết): GHI nội dung phải theo cơ sở của quyền
+  // manage — checkEnrollmentScope nuốt HO-level (cần cho đường DUYỆT) nên không đủ.
+  // Toại (TRAINING@HO chỉ review + CM/TEACHER@CS1): hết ghi học bạ CS2, vẫn duyệt CS2.
+  const writeScope = checkManageWriteScope({ actor: ctx.actor, centerId: enr.centerId });
+  if (!writeScope.ok) return { ok: false, error: writeScope.error ?? "Ngoài phạm vi" };
 
   // Tiêu chí phải đã cấu hình (cảnh báo Đào tạo cấu hình trước).
   const criteria = await getCourseCriteria(enr.courseId);
@@ -215,6 +222,15 @@ export async function transitionReportCardAction(input: unknown): Promise<Result
   const from = rc.status as ReportCardStatusValue;
   const guard = checkTransition({ from, to: to as ReportCardStatusValue, capabilities: ctx.capabilities, reason });
   if (!guard.ok) return { ok: false, error: guard.error ?? "Chuyển trạng thái không hợp lệ" };
+
+  // Vá 24/07 (Gói E): transition capability=manage (nộp DRAFT→PENDING_REVIEW, nộp lại
+  // RECALLED→PENDING_REVIEW) cũng là đường GHI — theo cơ sở của quyền manage. Các cạnh
+  // capability=review (phát hành/trả lại/thu hồi) GIỮ NGUYÊN → Toại (TRAINING@HO) vẫn
+  // duyệt học bạ CS2 (câu 55).
+  if (guard.rule?.capability === "manage") {
+    const writeScope = checkManageWriteScope({ actor: ctx.actor, centerId: enr.centerId });
+    if (!writeScope.ok) return { ok: false, error: writeScope.error ?? "Ngoài phạm vi" };
+  }
 
   // NỘP DUYỆT: học bạ phải HOÀN CHỈNH — khoá có tiêu chí + mọi tiêu chí đã chấm (1–4).
   // Trước đây thiếu guard này → nộp được học bạ trống tiêu chí / chưa chấm.
