@@ -24,24 +24,33 @@ describe("permissions matrix — FL W0 TRAINING role", () => {
     expect(can("TRAINING", "exams:edit")).toBe(true);
     expect(can("TRAINING", "exams:delete")).toBe(true);
     expect(can("TRAINING", "exams:grade")).toBe(true);
+    // Chỉnh chương trình học (curriculum + khóa học + gói combo) = CHỈ Đào tạo + SUPER_ADMIN (24/07).
     expect(can("TRAINING", "courses:create")).toBe(true);
     expect(can("TRAINING", "courses:edit")).toBe(true);
     expect(can("TRAINING", "courses:delete")).toBe(true);
-    expect(can("TRAINING", "evaluations:manage")).toBe(true);
+    expect(can("TRAINING", "curriculum:edit")).toBe(true);
+    expect(can("TRAINING", "course-packages:edit")).toBe(true);
     expect(can("TRAINING", "teaching-materials:view-own-class")).toBe(true);
   });
 
-  it("TRAINING có quyền xem cơ bản để vào admin nhưng KHÔNG có quyền tài chính/HR/lead", () => {
-    expect(can("TRAINING", "students:view-all")).toBe(true);
-    expect(can("TRAINING", "classes:view-all")).toBe(true);
+  it("TRAINING KHOÁ CHẶT 24/07: chỉ curriculum+LMS+duyệt học bạ — KHÔNG xem HV/lớp toàn hệ thống, KHÔNG tài chính/HR/lead", () => {
+    // Bỏ 24/07 — Đào tạo hết thấy học viên/lớp cả 2 cơ sở (Toại về đúng CS1).
+    expect(can("TRAINING", "students:view-all")).toBe(false);
+    expect(can("TRAINING", "classes:view-all")).toBe(false);
+    // Bỏ 24/07 — báo cáo đào tạo / đánh giá GV / cấu hình học thử / sửa học bạ.
+    expect(can("TRAINING", "reports:training")).toBe(false);
+    expect(can("TRAINING", "evaluations:manage")).toBe(false);
+    expect(can("TRAINING", "trials:config")).toBe(false);
+    expect(can("TRAINING", "report-cards:manage")).toBe(false);
+    // GIỮ — duyệt học bạ + chìa khoá LMS (training:manage gác SCORM/curriculum-edit).
+    expect(can("TRAINING", "report-cards:review")).toBe(true);
+    expect(can("TRAINING", "training:manage")).toBe(true);
     // không tài chính / HR / lead
     expect(can("TRAINING", "payments:manage")).toBe(false);
     expect(can("TRAINING", "payroll:view")).toBe(false);
     expect(can("TRAINING", "employees:create")).toBe(false);
     expect(can("TRAINING", "leads:view-all")).toBe(false);
     expect(can("TRAINING", "students:edit")).toBe(false);
-    // FL-R2 W5 — course-packages = giá/bán (tiền) → KHÔNG cho TRAINING sửa (chỉ SUPER_ADMIN/CENTER_MANAGER).
-    expect(can("TRAINING", "course-packages:edit")).toBe(false);
   });
 });
 
@@ -113,7 +122,10 @@ describe("permissions matrix — CENTER_MANAGER chỉ XEM LMS", () => {
     // quyền ngoài LMS giữ nguyên
     expect(can("CENTER_MANAGER", "classes:create")).toBe(true);
     expect(can("CENTER_MANAGER", "payments:manage")).toBe(true);
-    expect(can("CENTER_MANAGER", "courses:create")).toBe(true);
+    // 24/07 — CM KHÔNG còn CHỈNH chương trình (chỉ Đào tạo + SUPER_ADMIN); vẫn XEM được.
+    expect(can("CENTER_MANAGER", "courses:create")).toBe(false);
+    expect(can("CENTER_MANAGER", "courses:edit")).toBe(false);
+    expect(can("CENTER_MANAGER", "course-packages:edit")).toBe(false);
   });
 });
 
@@ -135,7 +147,8 @@ describe("permissions matrix — ACCOUNTANT (QĐ-T4)", () => {
 describe("permissions matrix — FL W0-NAV-2 QĐ-T3b (CM giữ trial-config + duyệt sửa bài qua action RIÊNG)", () => {
   it("trials:config — Super/Training/CM = true; KHÔNG trả qua training:manage", () => {
     expect(can("SUPER_ADMIN", "trials:config")).toBe(true);
-    expect(can("TRAINING", "trials:config")).toBe(true);
+    // 24/07 — cấu hình học thử gỡ khỏi Đào tạo (chỉ LMS), giữ ở QL cơ sở.
+    expect(can("TRAINING", "trials:config")).toBe(false);
     expect(can("CENTER_MANAGER", "trials:config")).toBe(true);
     // CM vẫn KHÔNG có training:manage (W0 đã gỡ) — chỉ trả lại qua action riêng.
     expect(can("CENTER_MANAGER", "training:manage")).toBe(false);
@@ -197,8 +210,8 @@ describe("permissions matrix — FL W0-NAV-2 role hygiene (BA #07 3.C)", () => {
 });
 
 describe("permissions matrix — #17 học bạ sau phát hành (câu 55, Toại 06/07)", () => {
-  it("TRAINING (Đào tạo/Toại) có CẢ report-cards:manage + review (recall/duyệt/phát hành/sửa lại)", () => {
-    expect(can("TRAINING", "report-cards:manage")).toBe(true);
+  it("TRAINING (Đào tạo) CHỈ duyệt học bạ (report-cards:review) — 24/07 gỡ manage (không sửa/tạo)", () => {
+    expect(can("TRAINING", "report-cards:manage")).toBe(false);
     expect(can("TRAINING", "report-cards:review")).toBe(true);
   });
 

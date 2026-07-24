@@ -4,7 +4,7 @@
  *
  * - computeEnrollmentPrice: thuần (pure) + tích hợp đọc CourseDiscount THẬT từ DB.
  * - CRUD CourseDiscount: model tồn tại (migration applied); quyền sửa giá khoá =
- *   courses:edit (SUPER_ADMIN/CENTER_MANAGER/MARKETING; KHÔNG: SALES_CSM/TEACHER).
+ *   courses:edit — 24/07 khoá chỉnh chương trình: CHỈ SUPER_ADMIN + TRAINING.
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
@@ -63,10 +63,12 @@ test.describe("[R7-03] Pricing + CourseDiscount", () => {
     expect(await db.courseDiscount.findUnique({ where: { id: d.id } })).toBeNull();
   });
 
-  test("[R7-03-06] quyền courses:edit: SUPER_ADMIN/CENTER_MANAGER/MARKETING ĐƯỢC; SALES_CSM/TEACHER KHÔNG", () => {
+  test("[R7-03-06] quyền courses:edit: chỉ SUPER_ADMIN + TRAINING (Đào tạo) — 24/07 khoá chỉnh chương trình", () => {
     expect(can("SUPER_ADMIN", "courses:edit")).toBe(true);
-    expect(can("CENTER_MANAGER", "courses:edit")).toBe(true);
-    expect(can("MARKETING", "courses:edit")).toBe(true);
+    expect(can("TRAINING", "courses:edit")).toBe(true);
+    // 24/07 (user chốt): gỡ chỉnh chương trình khỏi QL cơ sở + Marketing.
+    expect(can("CENTER_MANAGER", "courses:edit")).toBe(false);
+    expect(can("MARKETING", "courses:edit")).toBe(false);
     expect(can("SALES_CSM", "courses:edit")).toBe(false);
     expect(can("TEACHER", "courses:edit")).toBe(false);
   });

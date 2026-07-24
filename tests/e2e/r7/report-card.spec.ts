@@ -221,10 +221,14 @@ test.describe("[#17] Học bạ — siết quyền sửa sau phát hành (câu 5
     await seedRoles();
   });
 
-  test("[#17-C55a] TRAINING (Toại) sửa được học bạ ĐÃ THU HỒI (v2 seed cấp manage+review)", async () => {
+  test("[#17-C55a] TRAINING (Đào tạo) — 24/07 gỡ manage (không tạo/sửa DRAFT); GIỮ review nên vẫn sửa bản THU HỒI", async () => {
     const training = await makeActor("toai17", "HO", "TRAINING");
-    expect(canV2(training, "report-cards:manage")).toBe(true);
+    // 24/07 (user chốt khoá chặt): gỡ report-cards:manage (không tạo/sửa học bạ DRAFT),
+    // GIỮ report-cards:review (duyệt/phát hành/thu hồi).
+    expect(canV2(training, "report-cards:manage")).toBe(false);
     expect(canV2(training, "report-cards:review")).toBe(true);
+    // Sửa bản ĐÃ THU HỒI (RECALLED) key theo "review" — workflow thu-hồi-sửa-lại của
+    // người DUYỆT → Đào tạo vẫn làm được (không cần manage).
     expect(canEditReportCardContent("RECALLED", caps(training))).toBe(true);
   });
 

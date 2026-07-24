@@ -179,7 +179,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "classes:view-all", scopeType: "GLOBAL" },
       { action: "courses:view", scopeType: "GLOBAL" },
-      { action: "courses:edit", scopeType: "GLOBAL" },
+      // 24/07: chỉnh khóa học CHỈ Đào tạo + SUPER_ADMIN → gỡ courses:edit khỏi Marketing.
       { action: "course-packages:view", scopeType: "GLOBAL" },
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },
@@ -205,14 +205,14 @@ export const ROLE_SEED: RoleSeed[] = [
     // đã có UserOrgRole(TRAINING@HO) từ trước, chỉ thiếu permission — đây là phần bổ
     // sung permission cho role đã gán, KHÔNG cần gán UserOrgRole mới).
     code: "TRAINING", name: "Đào tạo (toàn LMS)",
+    // 24/07 (user chốt): KHOÁ CHẶT về chỉ curriculum + LMS + DUYỆT học bạ. Gỡ:
+    // students/classes:view-all (hết xem HV/lớp toàn hệ thống — Toại về đúng CS1),
+    // reports:training, evaluations:manage, trials:config, report-cards:manage
+    // (chỉ còn report-cards:review = duyệt). GIỮ training:manage (chìa khoá LMS:
+    // gác SCORM + mở khoá curriculum + soạn đề/câu hỏi — bỏ là hỏng LMS).
     perms: [
       { action: "training:manage", scopeType: "GLOBAL" },
-      { action: "reports:training", scopeType: "GLOBAL" },
-      { action: "trials:config", scopeType: "GLOBAL" },
       { action: "lesson-change:approve", scopeType: "GLOBAL" },
-      { action: "students:view-all", scopeType: "GLOBAL" },
-      { action: "classes:view-all", scopeType: "GLOBAL" },
-      { action: "evaluations:manage", scopeType: "GLOBAL" },
       { action: "courses:view", scopeType: "GLOBAL" },
       { action: "courses:create", scopeType: "GLOBAL" },
       { action: "courses:edit", scopeType: "GLOBAL" },
@@ -243,9 +243,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "documents:upload", scopeType: "GLOBAL" },
       { action: "documents:delete", scopeType: "GLOBAL" },
       { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
-      // #17 (câu 55, Toại 06/07): Đào tạo (Phan Thành Toại) duyệt/phát hành/thu hồi +
-      // sửa lại học bạ đã thu hồi — cross-center (nội dung dùng chung, actor HO-level).
-      { action: "report-cards:manage", scopeType: "GLOBAL" },
+      // Duyệt học bạ (câu 55, Toại): report-cards:review CHO PHÉP đọc học bạ + ghi danh
+      // cross-center để duyệt (report-cards: prefix → ReportCard/Enrollment). Bỏ manage
+      // (sửa/tạo học bạ) — Đào tạo chỉ duyệt (24/07).
       { action: "report-cards:review", scopeType: "GLOBAL" },
     ],
   },
@@ -353,6 +353,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "curriculum:view", scopeType: "GLOBAL" },
       // 10/07 — báo cáo đào tạo theo chức năng (xem lib/auth/page-gates.ts).
       { action: "reports:training", scopeType: "GLOBAL" },
+      // 24/07 — cấu hình lớp học thử: gỡ khỏi Đào tạo (chỉ LMS) → về QL cơ sở (khớp v1).
+      { action: "trials:config", scopeType: "GLOBAL" },
       { action: "questions:view", scopeType: "GLOBAL" },
       { action: "courses:view", scopeType: "GLOBAL" },
       { action: "course-packages:view", scopeType: "GLOBAL" },

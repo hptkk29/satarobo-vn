@@ -37,9 +37,10 @@ export const INTENTIONAL: Partial<Record<Role, readonly string[]>> = {
     "site-content:view", "site-content:edit",
     "honors:create", "honors:edit", "honors:settings",
     "emails:view", "emails:manage",
-    // Chương trình & giáo án → TRAINING
-    "courses:create", "courses:edit", "course-packages:edit",
-    "lesson-change:approve", "trials:config",
+    // Chương trình & giáo án → TRAINING. courses:create/edit + course-packages:edit
+    // nay GỠ HẲN khỏi CM ở CẢ v1 lẫn v2 (24/07). trials:config TRẢ VỀ CM (v1+v2) khi
+    // gỡ khỏi Đào tạo → không còn diff. Chỉ lesson-change:approve còn v1-only.
+    "lesson-change:approve",
     // Tiền & kho tập trung → HO_ACCOUNTANT
     "payments:manage", "orders:manage", "installments:approve",
     "vouchers:manage", "products:manage",
