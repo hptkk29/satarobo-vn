@@ -4,7 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { CreateTrialClassForm } from "../_components/create-form";
 
@@ -18,6 +18,9 @@ export default async function NewTrialClassPage() {
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+  // Scope per-model của Class cho picker GV (vá 24/07) — actor kiểu Toại
+  // (TRAINING@HO + CM@CS1) chỉ thấy GV CS1, hết bày GV CS2.
+  const classCenters = getModelVisibleCenterIds("Class", actor);
 
   // Cơ sở actor được phép tạo lớp (cách ly cơ sở).
   // GV dùng nguồn DUY NHẤT getAssignableTeachers (fix #9 — trước đây query strict
@@ -33,9 +36,11 @@ export default async function NewTrialClassPage() {
       orderBy: { displayOrder: "asc" },
       select: { id: true, name: true, code: true, centerId: true },
     }),
-    // R2-RBAC-3 — chỉ GV thuộc cơ sở actor nhìn thấy (CS1 không lọt GV CS2); form lọc
-    // tiếp theo cơ sở đang chọn ở client.
-    getAssignableTeachers({ centerIds: actor.visibleCenterIds }),
+    // R2-RBAC-3 + vá 24/07 — GV theo scope per-model của Class ("ALL" → như cũ theo
+    // visibleCenterIds); form lọc tiếp theo cơ sở đang chọn ở client.
+    getAssignableTeachers({
+      centerIds: classCenters === "ALL" ? actor.visibleCenterIds : classCenters,
+    }),
     // FL-R2: số buổi nhập trong form; chỉ lấy 1 config active làm gợi ý mặc định (nếu có).
     sdb.trialProgramConfig.findFirst({
       where: { active: true },

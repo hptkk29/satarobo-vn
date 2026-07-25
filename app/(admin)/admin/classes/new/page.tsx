@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
@@ -18,6 +18,9 @@ export default async function NewClassPage() {
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+  // Scope GHI per-model của Class (vá 24/07) — dùng cho CẢ picker GV lẫn picker "Đơn vị"
+  // bên dưới: actor kiểu Toại (TRAINING@HO + CM@CS1) chỉ thấy CS1, hết bày GV CS2.
+  const classCenters = getModelVisibleCenterIds("Class", actor);
   const [courses, orgUnits, classGroups, rooms, teachers, curricula] = await Promise.all([
     sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
@@ -36,9 +39,11 @@ export default async function NewClassPage() {
       select: { id: true, code: true, name: true, centerId: true },
     }),
     // Fix #9 — nguồn DUY NHẤT cho GV có thể phân lớp (không lọt quản lý/sale thuần).
-    // R2-RBAC-3 — chỉ GV thuộc cơ sở actor nhìn thấy (CS1 không thấy GV CS2); form
-    // còn lọc tiếp theo đơn vị đang chọn ở client.
-    getAssignableTeachers({ centerIds: actor.visibleCenterIds }),
+    // R2-RBAC-3 + vá 24/07 — GV theo scope per-model của Class ("ALL" → như cũ theo
+    // visibleCenterIds); form còn lọc tiếp theo đơn vị đang chọn ở client.
+    getAssignableTeachers({
+      centerIds: classCenters === "ALL" ? actor.visibleCenterIds : classCenters,
+    }),
     sdb.curriculum.findMany({
       where: {
         isActive: true,
@@ -50,12 +55,19 @@ export default async function NewClassPage() {
     }),
   ]);
 
+  // Picker "Đơn vị" theo scope GHI của Class (đối xứng guard createClass — vá 24/07):
+  // role HO không có quyền classes:* không được mời chọn cơ sở ngoài scope.
+  const orgUnitsInScope =
+    classCenters === "ALL"
+      ? orgUnits
+      : orgUnits.filter((o) => o.centerId != null && classCenters.includes(o.centerId));
+
   return (
     <div>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm lớp học mới</h1>
       <ClassForm
         courses={courses}
-        orgUnits={orgUnits.map((o) => ({
+        orgUnits={orgUnitsInScope.map((o) => ({
           id: o.orgUnitId,
           name: o.name,
           centerId: o.centerId,

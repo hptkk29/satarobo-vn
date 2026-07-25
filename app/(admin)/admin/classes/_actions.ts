@@ -32,9 +32,11 @@ type ActionResult = { error?: string };
 
 // Cách ly cơ sở (chống IDOR ghi): Class ∈ SCOPED_MODELS. Mutation theo classId từ
 // client phải xác minh lớp thuộc tầm nhìn cơ sở của actor trước khi ghi.
+// GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — role HO chỉ
+// cross-center khi CÓ quyền classes:* (Toại TRAINING@HO không còn → hết tạo/chuyển
+// lớp CS2). Lớp HO (centerId null) đòi scope ALL. KHÔNG dùng cờ isHoLevel trần.
 function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  return centerId != null && actor.visibleCenterIds.includes(centerId);
+  return passesScope("Class", { centerId }, actor);
 }
 /** Lớp `classId` có thuộc tầm nhìn cơ sở actor không (đọc centerId rồi passesScope). */
 async function classInScope(actor: Actor, classId: string): Promise<boolean> {

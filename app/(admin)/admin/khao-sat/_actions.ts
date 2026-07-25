@@ -40,9 +40,11 @@ export async function createSurvey(input: unknown): Promise<{ ok: boolean; error
   const actor = await resolveActor(session.user.id);
   const centerId = d.centerId || null;
   if (centerId) {
-    const canUse =
-      actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.includes(centerId);
-    if (!canUse) return { ok: false, error: "Không có quyền với cơ sở này" };
+    // GHI đối xứng ĐỌC (vá 24/07): scope per-model — role HO không có quyền
+    // parent-feedback:/khao-sat: không được gán khảo sát cho cơ sở ngoài scope.
+    if (!passesScope("Survey", { centerId }, actor)) {
+      return { ok: false, error: "Không có quyền với cơ sở này" };
+    }
   }
 
   // Write không bị scopedDb can thiệp (chỉ đọc bị scope) — sdb để sạch import db trần.

@@ -232,6 +232,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "exams:view", scopeType: "GLOBAL" },
       { action: "exams:create", scopeType: "GLOBAL" },
       { action: "exams:edit", scopeType: "GLOBAL" },
+      // ⚠️ exams:grade — perm chưa có call-site (chết); GIỮ để khỏi re-seed prod, gỡ đợt seed sau (24/07).
       { action: "exams:grade", scopeType: "GLOBAL" },
       { action: "exams:delete", scopeType: "GLOBAL" },
       { action: "assignments:view", scopeType: "GLOBAL" },
@@ -243,8 +244,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "documents:upload", scopeType: "GLOBAL" },
       { action: "documents:delete", scopeType: "GLOBAL" },
       { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
-      // Duyệt học bạ (câu 55, Toại): report-cards:review CHO PHÉP đọc học bạ + ghi danh
-      // cross-center để duyệt (report-cards: prefix → ReportCard/Enrollment). Bỏ manage
+      // Duyệt học bạ (câu 55, Toại): report-cards:review CHO PHÉP đọc + duyệt học bạ
+      // cross-center (report-cards: prefix → CHỈ ReportCard). Enrollment đã TÁCH khỏi
+      // prefix này 24/07 — chỉ map enrollments: → /ghi danh của Toại về CS1; trang học
+      // bạ đọc ghi danh cross-center qua checkEnrollmentScope (isHoLevel). Bỏ manage
       // (sửa/tạo học bạ) — Đào tạo chỉ duyệt (24/07).
       { action: "report-cards:review", scopeType: "GLOBAL" },
     ],

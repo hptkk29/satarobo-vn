@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { canReadLegacyAudit, queryLegacyAuditLogs } from "@/lib/audit/legacy-log";
+import {
+  canReadLegacyAudit,
+  canViewLegacyPii,
+  queryLegacyAuditLogs,
+} from "@/lib/audit/legacy-log";
 
 export const metadata = { title: "Lịch sử cũ (đọc-only) | Admin" };
 export const dynamic = "force-dynamic";
@@ -30,7 +34,9 @@ export default async function LegacyAuditLogPage() {
     redirect("/audit-log?error=legacy-restricted");
   }
 
-  const canViewPii = await checkPermission("audit-logs:view-pii");
+  // Vá 24/07 — legacy all-or-nothing: unmask PII cần view-pii tầm "ALL" (đồng bộ
+  // canReadLegacyAudit), KHÔNG dùng checkPermission phẳng (true được nhờ perm 1 cơ sở).
+  const canViewPii = canViewLegacyPii(actor);
   const rows = await queryLegacyAuditLogs(actor, { take: 100, canViewPii });
 
   return (

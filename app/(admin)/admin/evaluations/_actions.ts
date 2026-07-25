@@ -14,19 +14,28 @@ import {
 } from "@/lib/eval/forms";
 import { roundInputSchema, createRound, setRoundStatus, getRound } from "@/lib/eval/rounds";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { passesScope } from "@/lib/db-scope";
 import { z } from "zod";
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
 // Cách ly cơ sở cho EvaluationRound (∈ SCOPED_MODELS + NULL_IS_GLOBAL từ #03 Pha B;
-// filter tay dưới đây vẫn giữ làm defense-in-depth, nên
-// scope THỦ CÔNG ở đây). Đợt gắn cơ sở (CENTER_SURVEY, hoặc TEACHER_EVAL có centerId)
-// → center-level chỉ thao tác trong tầm nhìn của mình. Đợt toàn hệ thống (centerId
-// null) → chỉ SUPER_ADMIN/HO. setRoundStatus/createRound trong lib KHÔNG ép center.
+// setRoundStatus/createRound trong lib KHÔNG ép center nên guard THỦ CÔNG ở đây).
+// Vá 24/07: bỏ bypass isHoLevel trần → passesScope per-model — role HO chỉ cross-center
+// khi CÓ quyền evaluations:* centerScope ALL (Toại TRAINING@HO không còn → hết
+// tạo/mở/đóng đợt CS2; đợt CS1 theo CM@CS1 như cũ). Đợt TOÀN HỆ THỐNG (centerId null):
+// passesScope trả true cho MỌI actor (semantics NULL_IS_GLOBAL cho ĐỌC) → KHÔNG dùng
+// làm guard ghi; đòi SUPER_ADMIN hoặc evaluations:manage centerScope ALL (per-user
+// grant ALLOW = ngoại lệ toàn cục, đồng bộ getModelVisibleCenterIds).
 function roundCenterInScope(actor: Actor, centerId: string | null): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  if (!centerId) return false;
-  return actor.visibleCenterIds.includes(centerId);
+  if (!centerId) {
+    return (
+      actor.isSuperAdmin ||
+      actor.grantsAllow.has("evaluations:manage") ||
+      actor.permissions.some((p) => p.action === "evaluations:manage" && p.centerScope === "ALL")
+    );
+  }
+  return passesScope("EvaluationRound", { centerId }, actor);
 }
 
 async function gate(): Promise<{ ok: true; userId: string; name: string } | { ok: false; error: string }> {
@@ -123,8 +132,8 @@ export async function createRoundAction(input: unknown): Promise<Result<{ id: st
   const parsed = roundInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
 
-  // Cách ly cơ sở: center-level chỉ tạo đợt cho cơ sở trong tầm nhìn (đợt toàn hệ
-  // thống centerId=null → SUPER_ADMIN/HO).
+  // Cách ly cơ sở (vá 24/07): tạo đợt cho cơ sở chỉ khi cơ sở thuộc scope per-model
+  // (đợt toàn hệ thống centerId=null → SUPER_ADMIN / evaluations:manage scope ALL).
   const actor = await resolveActor(g.userId);
   if (!roundCenterInScope(actor, parsed.data.centerId?.trim() || null)) {
     return { ok: false, error: "Không có quyền tạo đợt cho cơ sở này" };
@@ -151,7 +160,8 @@ export async function setRoundStatusAction(
   if (!g.ok) return g;
   if (!["DRAFT", "OPEN", "CLOSED"].includes(status)) return { ok: false, error: "Trạng thái không hợp lệ" };
 
-  // Cách ly cơ sở: đổi trạng thái đợt gắn cơ sở chỉ khi cơ sở thuộc tầm nhìn actor.
+  // Cách ly cơ sở (vá 24/07): đổi trạng thái đợt gắn cơ sở chỉ khi cơ sở thuộc scope
+  // per-model của actor (đợt SYSTEM → SUPER_ADMIN / evaluations:manage scope ALL).
   const round = await getRound(roundId);
   if (!round) return { ok: false, error: "Không tìm thấy đợt đánh giá" };
   const actor = await resolveActor(g.userId);

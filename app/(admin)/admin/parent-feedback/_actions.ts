@@ -30,9 +30,11 @@ export async function respondToFeedback(input: unknown): Promise<{ ok: boolean; 
     select: { studentId: true },
   });
   if (!fb) return { ok: false, error: "Không tìm thấy đánh giá" };
-  if (fb.studentId && !actor.isSuperAdmin && !actor.isHoLevel) {
+  if (fb.studentId && !actor.isSuperAdmin) {
     // Student ∈ SCOPED_MODELS: sdb.findUnique trả null nếu HV ngoài tầm nhìn (hoặc đã
     // xoá) → deny. Khớp trang list (chỉ hiện feedback của HV trong tầm nhìn).
+    // Vá 24/07: bỏ bypass isHoLevel trần — scoped read đã per-model (HO đúng chức năng
+    // vẫn ALL; role HO khác chức năng theo scope).
     const st = await sdb.student.findUnique({
       where: { id: fb.studentId },
       select: { id: true },

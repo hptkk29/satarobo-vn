@@ -81,9 +81,24 @@ export function maskAuditValues(
 }
 
 // ─── Scoped viewer query ──────────────────────────────────────────────────────
-/** orgUnitId actor được xem log: SUPER_ADMIN/HO → tất cả; còn lại → org của role mình. */
+/**
+ * orgUnitId actor được xem log — scope theo QUYỀN audit thật (vá 24/07: trước đây
+ * `isHoLevel → ALL` làm người kiêm role HO KHÁC chức năng — vd TRAINING@HO + CM@CS1 —
+ * thấy audit MỌI cơ sở dù quyền `audit-logs:*` chỉ gắn ở CS1):
+ * - SUPER_ADMIN → "ALL".
+ * - Có entry `audit-logs:*` centerScope "ALL" (role HO/ROOT có chức năng audit) → "ALL".
+ * - Có entry `audit-logs:*` gắn ở cơ sở → union orgUnitId của các entry đó.
+ * - Không có entry nào (vd vào viewer qua per-user grant) → org của role mình (như cũ).
+ */
 export function visibleOrgUnitIds(actor: Actor): string[] | "ALL" {
-  if (actor.isSuperAdmin || actor.isHoLevel) return "ALL";
+  if (actor.isSuperAdmin) return "ALL";
+  const auditPerms = actor.permissions.filter((p) =>
+    p.action.startsWith("audit-logs:"),
+  );
+  if (auditPerms.some((p) => p.centerScope === "ALL")) return "ALL";
+  if (auditPerms.length > 0) {
+    return [...new Set(auditPerms.map((p) => p.orgUnitId))];
+  }
   return [...new Set(actor.orgRoles.map((r) => r.orgUnitId))];
 }
 

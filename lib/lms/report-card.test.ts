@@ -3,11 +3,14 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  actionCenterScope,
   actorCapabilities,
   buildPublishedSnapshot,
   canEditReportCardContent,
   checkEnrollmentScope,
+  checkManageWriteScope,
   checkTransition,
+  type ActionScopeActor,
   computeAssignmentSummary,
   attendanceRatePercent,
   computeExamAverage,
@@ -331,5 +334,89 @@ describe("[R7-15] T5 scope (C6)", () => {
         capabilities: ["review"],
       }).ok,
     ).toBe(true);
+  });
+});
+
+describe("[Gói E vá 24/07] học bạ CHỈ DUYỆT cross-center — ghi theo cơ sở quyền manage", () => {
+  // PermEntry rút gọn cho test THUẦN (shape khớp Actor.permissions).
+  const perm = (action: string, centerScope: "ALL" | string[]) => ({
+    action,
+    scopeType: "GLOBAL" as const,
+    orgUnitId: "ou",
+    roleCode: "X",
+    centerScope,
+  });
+  const mk = (over: Partial<ActionScopeActor> = {}): ActionScopeActor => ({
+    isSuperAdmin: false,
+    permissions: [],
+    grantsAllow: new Set<string>(),
+    ...over,
+  });
+
+  // Ca Toại: TRAINING@HO (chỉ review, ALL) + CM@CS1 (manage+review [CS1]) + TEACHER@CS1 (manage [CS1]).
+  const toai = mk({
+    permissions: [
+      perm("report-cards:review", "ALL"), // TRAINING@HO
+      perm("report-cards:manage", ["CS1"]), // CM@CS1
+      perm("report-cards:review", ["CS1"]), // CM@CS1
+      perm("report-cards:manage", ["CS1"]), // TEACHER@CS1
+    ],
+  });
+
+  it("actionCenterScope: manage của Toại = [CS1] (union CM+TEACHER), review = ALL (TRAINING@HO)", () => {
+    expect(actionCenterScope(toai, "report-cards:manage")).toEqual(["CS1"]);
+    expect(actionCenterScope(toai, "report-cards:review")).toBe("ALL");
+  });
+
+  it("actionCenterScope: union nhiều cơ sở + không có action → []", () => {
+    const a = mk({
+      permissions: [perm("report-cards:manage", ["CS1"]), perm("report-cards:manage", ["CS2"])],
+    });
+    expect(actionCenterScope(a, "report-cards:manage")).toEqual(["CS1", "CS2"]);
+    expect(actionCenterScope(mk(), "report-cards:manage")).toEqual([]);
+  });
+
+  it("actionCenterScope: grantsAllow chứa action / SUPER_ADMIN → ALL", () => {
+    expect(
+      actionCenterScope(mk({ grantsAllow: new Set(["report-cards:manage"]) }), "report-cards:manage"),
+    ).toBe("ALL");
+    expect(actionCenterScope(mk({ isSuperAdmin: true }), "report-cards:manage")).toBe("ALL");
+  });
+
+  it("Toại GHI học bạ CS2 → CHẶN (manage chỉ [CS1])", () => {
+    expect(checkManageWriteScope({ actor: toai, centerId: "CS2" }).ok).toBe(false);
+  });
+
+  it("Toại GHI học bạ CS1 → OK (manage từ CM/TEACHER@CS1)", () => {
+    expect(checkManageWriteScope({ actor: toai, centerId: "CS1" }).ok).toBe(true);
+  });
+
+  it("Toại DUYỆT học bạ CS2 vẫn OK (câu 55 — checkEnrollmentScope isHoLevel giữ nguyên)", () => {
+    const r = checkEnrollmentScope({
+      actor: {
+        isSuperAdmin: false,
+        isHoLevel: true, // TRAINING@HO
+        visibleCenterIds: ["CS1", "CS2"],
+        assignedClassIds: new Set<string>(),
+      },
+      centerId: "CS2",
+      classId: "CLS_CS2",
+      capabilities: ["review", "manage"],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("centerId null (lớp HO/legacy) → đòi scope ALL (đối xứng pattern Class PR #65)", () => {
+    expect(checkManageWriteScope({ actor: toai, centerId: null }).ok).toBe(false);
+    expect(checkManageWriteScope({ actor: mk({ isSuperAdmin: true }), centerId: null }).ok).toBe(true);
+  });
+
+  it("Role HO CÓ manage (centerScope ALL) → không đổi hành vi (ghi mọi cơ sở)", () => {
+    const hoManage = mk({ permissions: [perm("report-cards:manage", "ALL")] });
+    expect(checkManageWriteScope({ actor: hoManage, centerId: "CS2" }).ok).toBe(true);
+  });
+
+  it("SUPER_ADMIN ghi mọi cơ sở như cũ", () => {
+    expect(checkManageWriteScope({ actor: mk({ isSuperAdmin: true }), centerId: "CS2" }).ok).toBe(true);
   });
 });

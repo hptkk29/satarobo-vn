@@ -70,10 +70,12 @@ export async function setRoundStatus(roundId: string, status: EvaluationRoundSta
 }
 
 export async function listRounds(opts?: { centerIds?: string[] | null }) {
-  const where =
-    opts?.centerIds && opts.centerIds.length > 0
-      ? { OR: [{ centerId: null }, { centerId: { in: opts.centerIds } }] }
-      : {};
+  // Vá 24/07: mảng RỖNG ≠ null — caller truyền scope per-model, [] nghĩa là "không cơ sở
+  // nào" → chỉ thấy đợt SYSTEM (centerId null). Trước đây [] rơi về "không filter" =
+  // thấy tất cả. null/undefined = ALL, không filter như cũ.
+  const where = opts?.centerIds
+    ? { OR: [{ centerId: null }, { centerId: { in: opts.centerIds } }] }
+    : {};
   return db.evaluationRound.findMany({
     where,
     orderBy: { createdAt: "desc" },

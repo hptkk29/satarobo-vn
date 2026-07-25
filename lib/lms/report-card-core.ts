@@ -247,6 +247,53 @@ export function checkEnrollmentScope(input: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Vá 24/07 (Gói E — user chốt): Đào tạo/HO-level chỉ DUYỆT cross-center;
+// GHI nội dung học bạ phải theo cơ sở của quyền manage.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type ActionScopeActor = Pick<Actor, "isSuperAdmin" | "permissions" | "grantsAllow">;
+
+/**
+ * Center-scope của MỘT action cụ thể từ actor.permissions (THUẦN — vá 24/07):
+ * union centerScope các entry có ĐÚNG action đó; "ALL" nếu ≥1 entry ALL, hoặc
+ * grantsAllow chứa action (per-user grant = ngoại lệ toàn cục), hoặc SUPER_ADMIN.
+ * KHÁC getModelVisibleCenterIds (gom theo PREFIX model) — đây là scope theo TỪNG
+ * action, để tách "duyệt cross-center" (review ALL từ TRAINING@HO) khỏi "ghi theo
+ * cơ sở" (manage [CS1] từ CM/TEACHER@CS1) cho actor kiêm nhiệm kiểu Toại.
+ */
+export function actionCenterScope(actor: ActionScopeActor, action: string): "ALL" | string[] {
+  if (actor.isSuperAdmin) return "ALL";
+  if (actor.grantsAllow.has(action)) return "ALL";
+  const centers = new Set<string>();
+  for (const p of actor.permissions) {
+    if (p.action !== action) continue;
+    if (p.centerScope === "ALL") return "ALL";
+    if (Array.isArray(p.centerScope)) for (const c of p.centerScope) centers.add(c);
+  }
+  return [...centers];
+}
+
+/**
+ * Guard đường GHI nội dung học bạ (save + transition capability=manage) — vá 24/07:
+ * center của enrollment PHẢI ∈ actionCenterScope(actor, "report-cards:manage").
+ * checkEnrollmentScope nuốt HO-level (cần cho đường DUYỆT câu 55) nên KHÔNG đủ cho
+ * đường ghi — Toại (TRAINING@HO chỉ review + CM/TEACHER@CS1) hết ghi học bạ CS2
+ * nhưng vẫn duyệt CS2. Role HO CÓ manage (centerScope ALL) không đổi hành vi.
+ * centerId null (lớp HO/legacy) → đòi scope ALL (đối xứng pattern Class PR #65).
+ */
+export function checkManageWriteScope(input: {
+  actor: ActionScopeActor;
+  centerId: string | null;
+}): { ok: boolean; error?: string } {
+  const scope = actionCenterScope(input.actor, "report-cards:manage");
+  if (scope === "ALL") return { ok: true };
+  if (!input.centerId || !scope.includes(input.centerId)) {
+    return { ok: false, error: "Ghi học bạ ngoài phạm vi cơ sở của quyền nhập — bạn chỉ được duyệt" };
+  }
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SNAPSHOT — đóng băng số liệu lúc phát hành.
 // ═══════════════════════════════════════════════════════════════════════════
 

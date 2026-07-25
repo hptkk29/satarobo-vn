@@ -3,6 +3,7 @@ import { TrendingUp } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import { getFunnelCounts } from "@/lib/crm/funnel-query";
 import { computeFunnelMetrics } from "@/lib/crm/marketing-metrics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,9 +17,12 @@ export default async function MarketingFunnelPage() {
   const session = await auth();
   if (!(await checkPermission("leads:view-all"))) redirect("/admin/dashboard");
 
-  // C8.3 — SUPER_ADMIN/HO xem toàn hệ thống; role cơ sở chỉ thấy cơ sở mình.
+  // C8.3 + vá 24/07 — per-model scope thay isHoLevel trần: cross-center chỉ khi actor
+  // có quyền leads:* scope ALL (SUPER_ADMIN/HO-marketing giữ nguyên; HO-role khác
+  // chức năng — vd TRAINING@HO — về đúng cơ sở mình).
   const actor = await resolveActor(session!.user.id);
-  const centerIds = actor.isSuperAdmin || actor.isHoLevel ? undefined : actor.visibleCenterIds;
+  const scope = getModelVisibleCenterIds("Lead", actor);
+  const centerIds = scope === "ALL" ? undefined : scope;
   const counts = await getFunnelCounts({ centerIds });
   const m = computeFunnelMetrics(counts);
 

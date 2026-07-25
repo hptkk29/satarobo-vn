@@ -4,7 +4,7 @@ import { Star } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { FeedbackReply } from "./_components/feedback-reply";
 import { formatDateVN } from "@/lib/format/date";
 
@@ -20,10 +20,14 @@ export default async function AdminParentFeedbackPage() {
   // schema) → không thể lọc `where: { student: { centerId: ... } }`. Cách ly 2 bước:
   // lấy id HV trong tầm nhìn actor (qua scopedDb, tái dùng cổng cách ly chuẩn), rồi
   // lọc feedback theo studentId IN [...]. Feedback studentId=null (góp ý chung) chỉ
-  // actor global (SUPER_ADMIN/HO) mới thấy — tự rớt khỏi kết quả non-global.
+  // actor global mới thấy — tự rớt khỏi kết quả non-global.
+  // Vá 24/07 — "global" theo per-model scope thay isHoLevel trần: chỉ khi actor thấy
+  // Student scope ALL (SUPER_ADMIN / HO có quyền students:* toàn hệ thống). HO-role
+  // khác chức năng (vd TRAINING@HO) đi nhánh cách ly 2 bước → chỉ feedback HV cơ sở
+  // mình (sdb.student đã tự scope per-model), góp ý chung tự rớt theo rule hiện có.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
+  const isGlobal = getModelVisibleCenterIds("Student", actor) === "ALL";
 
   let where: Prisma.ParentFeedbackWhereInput = {};
   if (!isGlobal) {

@@ -28,9 +28,29 @@ export type LegacyAuditRow = {
   createdAt: Date;
 };
 
-/** Chỉ SUPER_ADMIN / HO-level được đọc lịch sử cũ (không scope được theo cơ sở). */
+/**
+ * Bảng cũ KHÔNG có orgUnitId → all-or-nothing. Vá 24/07: gate theo QUYỀN audit thật —
+ * SUPER_ADMIN hoặc có `audit-logs:view` centerScope "ALL" (role HO có chức năng audit).
+ * `isHoLevel` trần KHÔNG đủ: người kiêm role HO khác chức năng (vd TRAINING@HO + CM@CS1)
+ * sẽ thấy log mọi cơ sở dù quyền audit chỉ gắn CS1 → nhóm này MẤT legacy viewer
+ * (chấp nhận — dữ liệu đóng băng từ 09/07, cần thì SUPER_ADMIN tra).
+ */
 export function canReadLegacyAudit(actor: Actor): boolean {
-  return actor.isSuperAdmin || actor.isHoLevel;
+  if (actor.isSuperAdmin) return true;
+  return actor.permissions.some(
+    (p) => p.action === "audit-logs:view" && p.centerScope === "ALL",
+  );
+}
+
+/**
+ * Đồng bộ vá 24/07: unmask PII legacy (all-or-nothing) cần `audit-logs:view-pii`
+ * tầm "ALL" — cờ checkPermission phẳng có thể true nhờ perm chỉ gắn ở 1 cơ sở.
+ */
+export function canViewLegacyPii(actor: Actor): boolean {
+  if (actor.isSuperAdmin) return true;
+  return actor.permissions.some(
+    (p) => p.action === "audit-logs:view-pii" && p.centerScope === "ALL",
+  );
 }
 
 const asRecord = (v: unknown): Record<string, unknown> | null =>

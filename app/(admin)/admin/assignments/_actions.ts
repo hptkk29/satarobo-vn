@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { passesScope, scopedDb } from "@/lib/db-scope";
 import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 import { z } from "zod";
@@ -32,14 +32,18 @@ type GradeActor = {
 };
 
 // Loại B (Nhóm 01 L1) — Assignment/AssignmentSubmission/AssignmentDocument KHÔNG
-// ∈ SCOPED_MODELS (không centerId) → scopedDb pass-through. Cách ly tay qua
-// class.centerId ∈ actor.visibleCenterIds (HO/SUPER bypass, pattern parent-feedback).
+// ∈ SCOPED_MODELS (không centerId) → scopedDb pass-through. Cách ly tay qua lớp
+// của bài.
+// Vá 24/07 — GHI/CHẤM đối xứng ĐỌC: scope per-model qua passesScope("Class"),
+// role HO chỉ cross-center khi CÓ quyền classes:* scope ALL (Toại TRAINING@HO
+// hết sửa/chấm bài tập lớp CS2). KHÔNG dùng cờ isHoLevel trần. classId của
+// Assignment là bắt buộc — nhánh cls null (quan hệ hỏng) giữ rule cũ HO/SUPER.
 function classCenterVisible(
   actor: Actor,
   cls: { centerId: string | null } | null | undefined,
 ): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  return !!cls && cls.centerId != null && actor.visibleCenterIds.includes(cls.centerId);
+  if (!cls) return actor.isSuperAdmin || actor.isHoLevel;
+  return passesScope("Class", cls, actor);
 }
 
 async function requireRole(

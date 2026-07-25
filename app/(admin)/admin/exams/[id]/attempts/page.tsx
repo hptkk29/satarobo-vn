@@ -3,7 +3,7 @@ import { ChevronLeft, ClipboardList } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { getModelVisibleCenterIds, scopedDb } from "@/lib/db-scope";
 import { AttemptStatus } from "@prisma/client";
 import { GradeButton } from "../../_components/grade-button";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -45,30 +45,33 @@ export default async function ExamAttemptsPage({ params }: Props) {
   const { id } = await params;
 
   // Loại B (Nhóm 01 L1) — Exam/ExamAttempt KHÔNG ∈ SCOPED_MODELS → lọc tay:
-  // đề gắn lớp cơ sở khác → 404; đề ngân hàng (classId null) xem được nhưng
-  // attempts lọc theo student.centerId (nested include KHÔNG auto-scope, AC7).
-  // HO/SUPER bypass (pattern parent-feedback).
+  // đề gắn lớp cơ sở khác → 404 (notFound); đề ngân hàng (classId null) xem được
+  // nhưng attempts lọc theo student.centerId (nested include KHÔNG auto-scope, AC7).
+  // Vá 24/07 — scope per-model thay isHoLevel trần: role HO chỉ cross-center khi
+  // CÓ quyền module scope ALL (Toại TRAINING@HO: Class/Student = [CS1] → đề lớp
+  // CS2 mở URL trực tiếp = 404, attempts HV CS2 = ẩn). SUPER_ADMIN = "ALL".
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const isGlobal = actor.isSuperAdmin || actor.isHoLevel;
+  const classScope = getModelVisibleCenterIds("Class", actor);
+  const studentScope = getModelVisibleCenterIds("Student", actor);
 
   const exam = await sdb.exam.findFirst({
     where: {
       id,
-      ...(isGlobal
+      ...(classScope === "ALL"
         ? {}
         : {
             OR: [
               { classId: null },
-              { class: { centerId: { in: actor.visibleCenterIds } } },
+              { class: { centerId: { in: classScope } } },
             ],
           }),
     },
     include: {
       attempts: {
-        ...(isGlobal
+        ...(studentScope === "ALL"
           ? {}
-          : { where: { student: { centerId: { in: actor.visibleCenterIds } } } }),
+          : { where: { student: { centerId: { in: studentScope } } } }),
         orderBy: [{ status: "asc" }, { submittedAt: "desc" }],
         include: {
           student: {

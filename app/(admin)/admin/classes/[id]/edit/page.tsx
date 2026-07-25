@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
@@ -96,6 +96,9 @@ export default async function EditClassPage({ params }: Props) {
   // Fix #9 — `teachers` = GV có thể phân lớp + LUÔN kèm GV/trợ giảng đang gán cho lớp
   // này (kể cả khi họ được gán từ trang Giáo viên và không còn match điều kiện lọc)
   // để <Select> không tự rớt giá trị đang chọn → gốc của bug "Lớp học hiện trống".
+  // Scope GHI per-model của Class (vá 24/07) — dùng cho CẢ picker GV lẫn picker
+  // "Đơn vị" bên dưới: actor kiểu Toại (TRAINING@HO + CM@CS1) hết bày GV CS2.
+  const classCenters = getModelVisibleCenterIds("Class", actor);
   const [plans, sessions, curricula, teachers] = await Promise.all([
     sdb.classSessionPlan.findMany({
       where: { classId: cls.id },
@@ -112,10 +115,11 @@ export default async function EditClassPage({ params }: Props) {
       orderBy: { version: "desc" },
       select: { version: true, name: true },
     }),
-    // R2-RBAC-3 — GV cùng cơ sở actor nhìn thấy + LUÔN kèm GV/TA đang gán (includeIds)
-    // để <Select> không rớt value; form lọc tiếp theo đơn vị đang chọn ở client.
+    // R2-RBAC-3 + vá 24/07 — GV theo scope per-model của Class ("ALL" → như cũ theo
+    // visibleCenterIds) + LUÔN kèm GV/TA đang gán (includeIds) để <Select> không rớt
+    // value; form lọc tiếp theo đơn vị đang chọn ở client.
     getAssignableTeachers({
-      centerIds: actor.visibleCenterIds,
+      centerIds: classCenters === "ALL" ? actor.visibleCenterIds : classCenters,
       includeIds: [cls.teacherId, cls.assistantId],
     }),
   ]);
@@ -169,6 +173,13 @@ export default async function EditClassPage({ params }: Props) {
     actor.isSuperAdmin ||
     (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
       (await checkPermission("classes:edit", { centerId: cls.centerId })));
+
+  // Picker "Đơn vị" theo scope GHI của Class (đối xứng guard updateClass — vá 24/07):
+  // role HO không có quyền classes:* không được mời chuyển lớp sang cơ sở ngoài scope.
+  const orgUnitsInScope =
+    classCenters === "ALL"
+      ? orgUnits
+      : orgUnits.filter((o) => o.centerId != null && classCenters.includes(o.centerId));
 
   const formValue: ClassFormValue = {
     id: cls.id,
@@ -262,7 +273,7 @@ export default async function EditClassPage({ params }: Props) {
         cls={formValue}
         courses={courses}
         canEdit={canEdit}
-        orgUnits={orgUnits.map((o) => ({
+        orgUnits={orgUnitsInScope.map((o) => ({
           id: o.orgUnitId,
           name: o.name,
           centerId: o.centerId,

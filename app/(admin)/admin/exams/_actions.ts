@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { passesScope, scopedDb } from "@/lib/db-scope";
 import { getEffectiveRoles } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
@@ -78,16 +78,18 @@ async function requireRole(): Promise<
 }
 
 // Loại B (Nhóm 01 L1) — Exam/ExamQuestion/ExamAttempt/ExamAnswer KHÔNG ∈
-// SCOPED_MODELS → scopedDb pass-through. Cách ly tay qua class.centerId ∈
-// actor.visibleCenterIds (HO/SUPER bypass). Đề NGÂN HÀNG (classId null) là nội
-// dung dùng chung 2 cơ sở (câu 74a) → không chặn theo cơ sở, gate quyền riêng lo.
+// SCOPED_MODELS → scopedDb pass-through. Cách ly tay qua lớp gắn đề. Đề NGÂN
+// HÀNG (classId null) là nội dung dùng chung 2 cơ sở (câu 74a) → không chặn
+// theo cơ sở, gate quyền riêng lo.
+// Vá 24/07 — GHI/CHẤM đối xứng ĐỌC: scope per-model qua passesScope("Class"),
+// role HO chỉ cross-center khi CÓ quyền classes:* scope ALL (Toại TRAINING@HO
+// hết sửa đề/chấm lượt thi lớp CS2). KHÔNG dùng cờ isHoLevel trần.
 function classCenterVisible(
   actor: Actor,
   cls: { centerId: string | null } | null | undefined,
 ): boolean {
-  if (actor.isSuperAdmin || actor.isHoLevel) return true;
-  if (!cls) return true; // đề không gắn lớp — exam bank toàn cục
-  return cls.centerId != null && actor.visibleCenterIds.includes(cls.centerId);
+  if (!cls) return true; // đề không gắn lớp — exam bank toàn cục (content chủ đích)
+  return passesScope("Class", cls, actor);
 }
 
 /** Loại B — đề thi theo id từ client: lớp gắn đề (nếu có) phải trong tầm nhìn actor. */

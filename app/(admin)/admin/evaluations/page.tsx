@@ -3,7 +3,7 @@ import { ClipboardList } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { getModelVisibleCenterIds, scopedDb } from "@/lib/db-scope";
 import { listForms } from "@/lib/eval/forms";
 import { listRounds } from "@/lib/eval/rounds";
 import type { EvalScopeValue } from "@/lib/eval/schema";
@@ -20,7 +20,11 @@ export default async function EvaluationsPage() {
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const centerScope = actor.isSuperAdmin || actor.isHoLevel ? null : actor.visibleCenterIds;
+  // Vá 24/07: bỏ isHoLevel trần → scope per-model EvaluationRound — role HO không có
+  // evaluations:* scope ALL (Toại TRAINING@HO) chỉ thấy đợt CS mình + SYSTEM; role HO
+  // có quyền / SUPER_ADMIN → "ALL" = null (không filter, như cũ).
+  const roundScope = getModelVisibleCenterIds("EvaluationRound", actor);
+  const centerScope = roundScope === "ALL" ? null : roundScope;
 
   const [forms, rounds, centers, courses] = await Promise.all([
     listForms(),
