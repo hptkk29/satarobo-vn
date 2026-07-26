@@ -68,7 +68,7 @@ export default async function EditClassPage({ params }: Props) {
     sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, category: true },
+      select: { id: true, name: true, category: true, code: true, slug: true }, // T3.4 — code/slug để gợi ý tên lớp
     }),
     getSelectableOrgUnits(actor),
     sdb.classGroup.findMany({

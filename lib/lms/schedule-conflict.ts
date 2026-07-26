@@ -4,10 +4,13 @@ import { detectScheduleConflict, type Slot } from "@/lib/lms/scheduling";
 
 // =============================================================================
 // LMS-6 — nối detectScheduleConflict vào write-path: 1 buổi candidate có trùng
-// PHÒNG / GIÁO VIÊN với buổi khác cùng ngày (cùng cơ sở) không.
+// PHÒNG / GIÁO VIÊN với buổi khác cùng ngày không.
 //   • cửa sổ buổi = [date, date + (endTime-startTime của lớp)] (fallback 90').
-//   • phòng/GV hiệu lực = actualRoomId/actualTeacherId ?? class.roomId/teacherId
-//     (ClassSession không có cột phòng/GV riêng — dùng của lớp + override "actual").
+//   • phòng/GV hiệu lực của buổi ĐỐI CHIẾU = substitute ?? actual ?? cấp buổi ?? lớp.
+//
+// T4.2 — module conflict DUY NHẤT: mọi write-path (sinh / đổi 1 buổi / dời cả lớp /
+// xếp bù) đi qua đây. Bản cũ `findScheduleConflicts` (lib/classes/generate.ts) chỉ so
+// GV/phòng CẤP LỚP nên bỏ sót lớp khác có dạy-thay / đổi phòng ⇒ ĐÃ GỠ BỎ.
 // =============================================================================
 
 function parseHHmm(t: string | null | undefined): number | null {
@@ -33,6 +36,7 @@ export function sessionWindow(
 type SessionRow = {
   id: string;
   date: Date;
+  roomId?: string | null;
   actualRoomId: string | null;
   actualTeacherId: string | null;
   substituteRoomId?: string | null;
@@ -45,13 +49,18 @@ type SessionRow = {
   } | null;
 };
 
-/** PURE — quy đổi các buổi (kèm lớp) thành Slot. Ưu tiên substitute ?? actual ?? lớp. */
+/**
+ * PURE — quy đổi các buổi (kèm lớp) thành Slot.
+ * Phòng: substitute ?? actual ?? phòng CỦA BUỔI (ClassSession.roomId — W2-4b) ?? lớp.
+ * GV:    substitute ?? actual ?? lớp.
+ */
 export function rowsToSlots(rows: SessionRow[]): Slot[] {
   return rows.map((o) => {
     const win = sessionWindow(o.date, o.class?.startTime, o.class?.endTime);
     return {
       id: o.id,
-      roomId: o.substituteRoomId ?? o.actualRoomId ?? o.class?.roomId ?? null,
+      roomId:
+        o.substituteRoomId ?? o.actualRoomId ?? o.roomId ?? o.class?.roomId ?? null,
       teacherId: o.substituteTeacherId ?? o.actualTeacherId ?? o.class?.teacherId ?? null,
       startAt: win.startAt,
       endAt: win.endAt,
@@ -62,6 +71,7 @@ export function rowsToSlots(rows: SessionRow[]): Slot[] {
 const SESSION_SELECT = {
   id: true,
   date: true,
+  roomId: true,
   actualRoomId: true,
   actualTeacherId: true,
   substituteRoomId: true,
@@ -94,9 +104,45 @@ function toResult(r: {
   return { ...r, messages };
 }
 
-/** Dò trùng cho 1 buổi candidate so với các buổi khác CÙNG NGÀY trong cùng cơ sở. */
+/** Câu cảnh báo VI gộp (null nếu không trùng). */
+export function conflictMessage(c: {
+  roomConflict: boolean;
+  teacherConflict: boolean;
+}): string | null {
+  const parts: string[] = [];
+  if (c.teacherConflict) parts.push("trùng lịch giáo viên");
+  if (c.roomConflict) parts.push("trùng phòng");
+  if (parts.length === 0) return null;
+  return `Cảnh báo xếp lịch: ${parts.join(" và ")} với lớp khác.`;
+}
+
+/**
+ * WHERE cho các buổi "đối chiếu": bỏ buổi đã huỷ, bỏ lớp đã xoá mềm, tuỳ chọn giới
+ * hạn theo cơ sở, và LOẠI buổi của chính lớp đang xét (`excludeClassId`) — double-book
+ * chỉ có nghĩa GIỮA 2 LỚP; buổi cùng lớp dùng chung phòng/GV là bình thường.
+ */
+function othersWhere(opts: {
+  centerId?: string | null;
+  excludeClassId?: string | null;
+  excludeSessionId?: string | null;
+}) {
+  return {
+    status: { not: "CANCELLED" as const },
+    ...(opts.excludeSessionId ? { id: { not: opts.excludeSessionId } } : {}),
+    ...(opts.excludeClassId ? { classId: { not: opts.excludeClassId } } : {}),
+    class: {
+      deletedAt: null,
+      ...(opts.centerId ? { centerId: opts.centerId } : {}),
+    },
+  };
+}
+
+/** Dò trùng cho 1 buổi candidate so với các buổi khác CÙNG NGÀY. */
 export async function detectSessionConflicts(input: {
   sessionId?: string;
+  /** Loại buổi của chính lớp này khỏi phép so (double-book chỉ tính giữa 2 lớp). */
+  excludeClassId?: string | null;
+  /** null = soát TOÀN HỆ THỐNG (GV có thể dạy 2 cơ sở → trùng liên cơ sở vẫn bắt). */
   centerId: string | null;
   roomId: string | null;
   teacherId: string | null;
@@ -110,10 +156,12 @@ export async function detectSessionConflicts(input: {
 
   const others = await db.classSession.findMany({
     where: {
-      status: { not: "CANCELLED" },
+      ...othersWhere({
+        centerId: input.centerId,
+        excludeClassId: input.excludeClassId,
+        excludeSessionId: input.sessionId,
+      }),
       date: { gte: dayStart, lt: dayEnd },
-      ...(input.sessionId ? { id: { not: input.sessionId } } : {}),
-      ...(input.centerId ? { class: { centerId: input.centerId } } : {}),
     },
     select: SESSION_SELECT,
   });
@@ -129,12 +177,15 @@ export async function detectSessionConflicts(input: {
 }
 
 /**
- * Dò trùng cho 1 LOẠT ngày (sinh buổi hàng loạt). 1 query lấy buổi hiện có cùng
- * cơ sở trong khoảng ngày, rồi kiểm tra in-memory từng ngày candidate (báo cáo,
- * KHÔNG chặn). Trả về danh sách ngày trùng + thông điệp.
+ * Dò trùng cho 1 LOẠT ngày (sinh buổi / dời cả lớp hàng loạt). 1 query lấy buổi hiện
+ * có trong khoảng ngày, rồi kiểm tra in-memory từng ngày candidate. Trả về danh sách
+ * ngày trùng + thông điệp (caller quyết định WARN hay BLOCK).
  */
 export async function detectBatchConflicts(input: {
   centerId: string | null;
+  excludeClassId?: string | null;
+  /** Buổi của chính lớp đang dời — loại khỏi phép so (đang được gán ngày mới). */
+  excludeSessionIds?: string[];
   classStartTime: string | null;
   classEndTime: string | null;
   roomId: string | null;
@@ -152,15 +203,15 @@ export async function detectBatchConflicts(input: {
     maxDay.getDate() + 1,
   );
 
+  const skip = new Set(input.excludeSessionIds ?? []);
   const others = await db.classSession.findMany({
     where: {
-      status: { not: "CANCELLED" },
+      ...othersWhere({ centerId: input.centerId, excludeClassId: input.excludeClassId }),
       date: { gte: rangeStart, lt: rangeEnd },
-      ...(input.centerId ? { class: { centerId: input.centerId } } : {}),
     },
     select: SESSION_SELECT,
   });
-  const slots = rowsToSlots(others);
+  const slots = rowsToSlots(others.filter((o) => !skip.has(o.id)));
 
   const out: { date: Date; messages: string[] }[] = [];
   for (const d of input.dates) {
@@ -176,4 +227,31 @@ export async function detectBatchConflicts(input: {
     }
   }
   return out;
+}
+
+/**
+ * T4.1 — dò trùng cho 1 buổi ĐÃ TỒN TẠI (dùng khi xếp học bù: buổi đích thuộc lớp
+ * khác, có thể khác cơ sở). Buổi không tồn tại / thiếu dữ liệu → không kết luận trùng.
+ */
+export async function detectConflictsForExistingSession(
+  sessionId: string,
+): Promise<ConflictResult> {
+  const s = await db.classSession.findUnique({
+    where: { id: sessionId },
+    select: { ...SESSION_SELECT, classId: true },
+  });
+  if (!s?.class?.startTime) return EMPTY;
+
+  const [slot] = rowsToSlots([s]);
+  if (!slot) return EMPTY;
+
+  return detectSessionConflicts({
+    sessionId: s.id,
+    excludeClassId: s.classId,
+    centerId: null,
+    roomId: slot.roomId ?? null,
+    teacherId: slot.teacherId ?? null,
+    startAt: slot.startAt,
+    endAt: slot.endAt,
+  });
 }

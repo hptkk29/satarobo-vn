@@ -11,36 +11,16 @@ import {
   toggleEmployeePublicAction,
 } from "@/app/(admin)/admin/nhan-su/actions";
 import { formatDateOrDash } from "@/lib/format/date";
+// T8.2 — nhãn/màu vai trò lấy từ nguồn DUY NHẤT `lib/labels.ts` (trước đây bảng này
+// khai báo bản cục bộ lệch chữ: "Quản lý" vs "Quản lý cơ sở", "Tư vấn" vs
+// "Tư vấn & Chăm sóc"). Đừng khai lại ở component — sửa chữ ở lib/labels.ts.
+import { roleLabel, roleColor } from "@/lib/labels";
 
 interface EmployeeRow extends Employee {
   center: { name: string } | null;
   manager: { fullName: string } | null;
   userAccount: { role: Role; roles: Role[] } | null;
 }
-
-const ROLE_LABEL: Record<Role, string> = {
-  SUPER_ADMIN: "Super Admin",
-  CENTER_MANAGER: "Quản lý",
-  HR: "Nhân sự",
-  SALES_CSM: "Tư vấn",
-  TEACHER: "Giáo viên",
-  TRAINING: "Đào tạo",
-  MARKETING: "Marketing",
-  ACCOUNTANT: "Kế toán",
-  PARENT: "Phụ huynh",
-};
-
-const ROLE_COLOR: Record<Role, string> = {
-  SUPER_ADMIN: "bg-red-100 text-red-700",
-  CENTER_MANAGER: "bg-purple-100 text-purple-700",
-  HR: "bg-pink-100 text-pink-700",
-  SALES_CSM: "bg-blue-100 text-blue-700",
-  TEACHER: "bg-green-100 text-green-700",
-  TRAINING: "bg-indigo-100 text-indigo-700",
-  MARKETING: "bg-orange-100 text-orange-700",
-  ACCOUNTANT: "bg-gray-100 text-gray-600",
-  PARENT: "bg-teal-100 text-teal-700",
-};
 
 const STATUS_LABEL: Record<EmploymentStatus, string> = {
   ACTIVE: "Đang làm",
@@ -198,7 +178,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                         {ordered.map((r) => (
                           <span
                             key={r}
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${ROLE_COLOR[r]} ${
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleColor(r)} ${
                               r === acc.role
                                 ? "ring-2 ring-amber-400 ring-offset-1"
                                 : ""
@@ -209,7 +189,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                                 : "Đổi vai trò: bấm Sửa → nút Đổi vai trò"
                             }
                           >
-                            {ROLE_LABEL[r]}
+                            {roleLabel(r)}
                           </span>
                         ))}
                       </div>

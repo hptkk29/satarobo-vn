@@ -10,6 +10,7 @@ import {
   assignSelectedAction,
   assignAllFilteredAction,
   promoteConfirmedAction,
+  setEnrollmentSaleAction,
 } from "../_actions";
 
 type Row = {
@@ -18,7 +19,11 @@ type Row = {
   statusLabel: string;
   name: string;
   studentCode: string | null;
+  /** T3.2 — chỉ hàng "đang trong lớp" mới có sale phụ trách. */
+  saleId?: string | null;
 };
+
+type SaleOption = { id: string; name: string };
 
 export function AssignStudents({
   classId,
@@ -27,6 +32,7 @@ export function AssignStudents({
   current,
   assignable,
   canOverride,
+  sales = [],
 }: {
   classId: string;
   maxStudents: number;
@@ -34,6 +40,8 @@ export function AssignStudents({
   current: Row[];
   assignable: Row[];
   canOverride: boolean;
+  /** T3.2 — sale cùng cơ sở với lớp (đã lọc ở server). */
+  sales?: SaleOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -50,6 +58,28 @@ export function AssignStudents({
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
+    });
+  }
+
+  // T3.2 — đổi sale phụ trách ngay tại dòng học viên (giữ optimistic để select không
+  // nháy về giá trị cũ trước khi router.refresh() xong).
+  const [saleDraft, setSaleDraft] = useState<Record<string, string>>({});
+
+  function changeSale(enrollmentId: string, value: string) {
+    setSaleDraft((prev) => ({ ...prev, [enrollmentId]: value }));
+    startTransition(async () => {
+      const res = await setEnrollmentSaleAction(classId, enrollmentId, value || null);
+      if (res.ok) {
+        toast.success("Đã cập nhật sale phụ trách");
+        router.refresh();
+      } else {
+        setSaleDraft((prev) => {
+          const next = { ...prev };
+          delete next[enrollmentId];
+          return next;
+        });
+        toast.error(res.error ?? "Không đổi được sale phụ trách");
+      }
     });
   }
 
@@ -188,15 +218,37 @@ export function AssignStudents({
                     </span>
                   ) : null}
                 </span>
-                <span
-                  className={
-                    "rounded-full px-2.5 py-0.5 text-xs font-semibold " +
-                    (s.status === "CONFIRMED"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-gray-100 text-gray-600")
-                  }
-                >
-                  {s.statusLabel}
+                <span className="flex items-center gap-3">
+                  {/* T3.2 — Sale phụ trách (vị trí như cột CSKH). */}
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <span className="hidden sm:inline">Sale phụ trách</span>
+                    <select
+                      value={saleDraft[s.id] ?? s.saleId ?? ""}
+                      onChange={(e) => changeSale(s.id, e.target.value)}
+                      disabled={pending || sales.length === 0}
+                      aria-label={`Sale phụ trách của ${s.name}`}
+                      className="max-w-[11rem] rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#7C3AED] disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="">
+                        {sales.length === 0 ? "— Cơ sở chưa có sale —" : "— Chưa gán —"}
+                      </option>
+                      {sales.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span
+                    className={
+                      "rounded-full px-2.5 py-0.5 text-xs font-semibold " +
+                      (s.status === "CONFIRMED"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-gray-100 text-gray-600")
+                    }
+                  >
+                    {s.statusLabel}
+                  </span>
                 </span>
               </li>
             ))}

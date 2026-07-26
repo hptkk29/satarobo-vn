@@ -74,7 +74,6 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
 
   const [courseId, setCourseId] = useState("");
   const [lessonId, setLessonId] = useState("");
-  const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -106,14 +105,13 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
   }, [pendingId, router]);
 
   function resetUploadForm() {
-    setName("");
     setFile(null);
     if (fileRef.current) fileRef.current.value = "";
   }
 
   async function handleUpload() {
+    // T5.1 — bỏ ô "tên giáo án": server đặt tên theo buổi/tệp (createScormPackage).
     if (!lessonId) return toast.error("Chọn buổi học");
-    if (!name.trim()) return toast.error("Nhập tên giáo án");
     if (!file) return toast.error("Chọn tệp .pdf hoặc .zip");
     const lower = file.name.toLowerCase();
     const isPdf = lower.endsWith(".pdf");
@@ -129,7 +127,6 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
     try {
       const created = await createScormPackage({
         lessonId,
-        name: name.trim(),
         fileName: file.name,
         mimeType: file.type || (isPdf ? "application/pdf" : "application/zip"),
         sizeBytes: file.size,
@@ -391,13 +388,6 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
                 Đẩy bản mới sẽ tự thay &amp; xoá giáo án hiện tại sau khi xử lý xong.
               </p>
             )}
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Tên giáo án (vd: Bài 1 — Robot cơ bản)"
-              disabled={uploading}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
-            />
             <input
               ref={fileRef}
               type="file"

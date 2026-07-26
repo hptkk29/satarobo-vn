@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { createClass, updateClass } from "../_actions";
 import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
 import { filterTeachersByCenter } from "@/lib/teachers/center-filter";
+import { buildClassDisplayName } from "@/lib/classes/naming";
 
 export type ClassFormValue = {
   id: string;
@@ -29,7 +30,8 @@ export type ClassFormValue = {
   notes: string | null;
 };
 
-type CourseOption = TeachableCourse;
+// T3.4 — cần code/slug khoá để dựng tên lớp theo quy ước (`sata4.17h30-T2.P302`).
+type CourseOption = TeachableCourse & { code?: string | null; slug?: string | null };
 
 interface OrgUnitOption {
   id: string;
@@ -128,6 +130,11 @@ export function ClassForm({
   const [teacherId, setTeacherId] = useState<string>(cls?.teacherId ?? "");
   const [assistantId, setAssistantId] = useState<string>(cls?.assistantId ?? "");
   const [scheduleDays, setScheduleDays] = useState<number[]>(cls?.scheduleDays ?? []);
+  const [startTime, setStartTime] = useState<string>(cls?.startTime ?? "");
+  // T3.4 — tên lớp: khi TẠO MỚI và chưa gõ tay thì bám theo gợi ý quy ước (tự đổi
+  // khi chọn khoá/giờ/thứ/phòng). Gõ tay 1 chữ là dừng bám (tên là free-text).
+  const [name, setName] = useState<string>(cls?.name ?? "");
+  const [nameTouched, setNameTouched] = useState<boolean>(Boolean(cls?.name));
 
   // Cơ sở của đơn vị đang chọn — dùng để lọc phòng học (HO → null → không có phòng cơ sở).
   const selectedCenterId = useMemo(
@@ -166,6 +173,21 @@ export function ClassForm({
         .sort((a, b) => b.version - a.version),
     [curricula, courseId],
   );
+
+  // T3.4 — gợi ý tên lớp theo quy ước `tênkhoá.giờ-thứ.phòng`.
+  const suggestedName = useMemo(() => {
+    const course = courses.find((c) => c.id === courseId);
+    const room = rooms.find((r) => r.id === roomId);
+    return buildClassDisplayName({
+      courseCode: course?.code ?? null,
+      courseSlug: course?.slug ?? null,
+      scheduleDays,
+      startTime,
+      roomCode: room?.code ?? null,
+    });
+  }, [courses, courseId, rooms, roomId, scheduleDays, startTime]);
+  // Chưa gõ tay → ô tên bám gợi ý (rỗng thì để trống cho người dùng tự nhập).
+  const nameValue = nameTouched ? name : suggestedName;
 
   function onCourseChange(value: string) {
     setCourseId(value);
@@ -239,13 +261,32 @@ export function ClassForm({
         {/* 1. Identity */}
         <Section title="Thông tin lớp học">
           <Grid cols={2}>
-            <Field
-              label="Tên lớp"
-              name="name"
-              defaultValue={cls?.name}
-              placeholder="Lập trình Robot K1 - Đà Nẵng"
-              required
-            />
+            <div>
+              <Field
+                label="Tên lớp"
+                name="name"
+                value={nameValue}
+                onChange={(v) => {
+                  setName(v);
+                  setNameTouched(true);
+                }}
+                placeholder="sata4.17h30-T2&17h30-T6.P302"
+                required
+                helper="Quy ước: tênkhoá.giờ-thứ.phòng — tự gợi ý theo khoá/giờ/lịch/phòng, sửa được"
+              />
+              {suggestedName && suggestedName !== nameValue && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setName(suggestedName);
+                    setNameTouched(true);
+                  }}
+                  className="mt-1 text-xs font-semibold text-[#7C3AED] hover:underline"
+                >
+                  Dùng tên gợi ý: {suggestedName}
+                </button>
+              )}
+            </div>
             <Field
               label="Mã lớp"
               name="classCode"
@@ -334,7 +375,7 @@ export function ClassForm({
                   ) : (
                     courseCurricula.map((c) => (
                       <option key={c.id} value={c.id}>
-                        v{c.version} · {c.name}
+                        {c.name}
                       </option>
                     ))
                   )}
@@ -358,13 +399,15 @@ export function ClassForm({
         {/* 2. Assignment */}
         <Section title="Phân công">
           <Grid cols={3}>
+            {/* T3.1 — Phòng học + GV chính BẮT BUỘC (bỏ option "— Chưa phân —"). */}
             <SelectField
               label="Phòng học"
               name="roomId"
               value={roomId}
               onChange={setRoomId}
+              required
               options={[
-                { value: "", label: "— Chưa phân —" },
+                { value: "", label: "— Chọn phòng học —" },
                 ...filteredRooms.map((r) => ({
                   value: r.id,
                   label: `${r.code} — ${r.name}`,
@@ -381,8 +424,9 @@ export function ClassForm({
               name="teacherId"
               value={teacherId}
               onChange={onTeacherChange}
+              required
               options={[
-                { value: "", label: "— Chưa phân GV —" },
+                { value: "", label: "— Chọn GV chính —" },
                 ...filteredTeachers.map((t) => ({ value: t.id, label: t.name })),
               ]}
               helper={
@@ -412,11 +456,14 @@ export function ClassForm({
               defaultValue={toDateInput(cls?.startDate ?? null)}
               required
             />
+            {/* T3.3 — bỏ trống thì server tự tính buổi cuối (computeSessionDates,
+                đã trừ ngày nghỉ); nhập tay vẫn được ưu tiên. */}
             <Field
-              label="Ngày bế giảng (tuỳ chọn)"
+              label="Ngày bế giảng"
               name="endDate"
               type="date"
               defaultValue={toDateInput(cls?.endDate ?? null)}
+              helper="Bỏ trống = tự tính từ lịch học + số buổi (trừ ngày nghỉ)"
             />
             <div>
               <span className="mb-2 block text-sm font-semibold text-neutral-700">
@@ -449,7 +496,8 @@ export function ClassForm({
               label="Giờ bắt đầu"
               name="startTime"
               type="time"
-              defaultValue={cls?.startTime ?? undefined}
+              value={startTime}
+              onChange={setStartTime}
               required
             />
             <Field
@@ -544,6 +592,9 @@ type FieldProps = {
   min?: number;
   max?: number;
   defaultValue?: string | number | null;
+  /** Có `value` → field CONTROLLED (dùng cho tên lớp gợi ý / giờ bắt đầu). */
+  value?: string;
+  onChange?: (v: string) => void;
   placeholder?: string;
   required?: boolean;
   helper?: string;
@@ -557,11 +608,16 @@ function Field({
   min,
   max,
   defaultValue,
+  value,
+  onChange,
   placeholder,
   required,
   helper,
 }: FieldProps) {
-  const value = defaultValue ?? "";
+  const isControlled = value !== undefined;
+  const bind = isControlled
+    ? { value, onChange: (e: { target: { value: string } }) => onChange?.(e.target.value) }
+    : { defaultValue: defaultValue ?? "" };
   const baseClass =
     "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
   return (
@@ -574,7 +630,7 @@ function Field({
         <textarea
           name={name}
           rows={rows}
-          defaultValue={value}
+          {...bind}
           placeholder={placeholder}
           required={required}
           className={`${baseClass} resize-y`}
@@ -585,7 +641,7 @@ function Field({
           name={name}
           min={min}
           max={max}
-          defaultValue={value}
+          {...bind}
           placeholder={placeholder}
           required={required}
           className={baseClass}

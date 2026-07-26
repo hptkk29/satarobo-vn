@@ -16,7 +16,7 @@ import {
 
 // B1 — server actions cho trang Học bù. Gate parent-requests:manage (tư vấn/CM).
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string; warning?: string };
 
 async function gate() {
   const session = await auth();

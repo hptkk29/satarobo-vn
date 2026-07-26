@@ -18,9 +18,12 @@ const stringArrayClean = z
 export const curriculumSchema = z.object({
   courseId: z.string().trim().min(1, "Chọn khoá học"),
   name: z.string().trim().min(1, "Tên giáo trình bắt buộc").max(200),
-  version: z.coerce.number().int().min(1, "Version >= 1").default(1),
+  // T5.2 — form KHÔNG còn ô "Version". Optional: server tự gán max(version)+1 cho
+  // khoá (giữ @@unique([courseId, version]) nên vẫn cần 1 giá trị khi ghi DB).
+  version: z.coerce.number().int().min(1, "Version >= 1").optional(),
   description: nullableStr,
   isActive: z.coerce.boolean().default(true),
+  // T5.3 — enum còn 2 giá trị: DRAFT (Nháp) / ACTIVE (Đang dùng).
   status: z.nativeEnum(CurriculumStatus).default("ACTIVE"),
 });
 

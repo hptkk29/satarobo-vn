@@ -18,6 +18,23 @@ const nullableStr = z
     return s.length > 0 ? s : null;
   });
 
+/**
+ * T3.1 — id BẮT BUỘC (phòng học / GV chính). Khác `nullableStr` ở chỗ chuỗi rỗng
+ * (option "— Chọn … —" của <select>) bị coi là THIẾU và báo lỗi theo field.
+ */
+const requiredRefStr = (message: string) =>
+  z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v, ctx) => {
+      const s = typeof v === "string" ? v.trim() : "";
+      if (!s) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+        return z.NEVER;
+      }
+      return s;
+    });
+
 const nullableDate = z
   .union([z.coerce.date(), z.literal(""), z.null()])
   .optional()
@@ -51,8 +68,10 @@ export const classCreateSchema = z
     centerId: nullableStr,
     orgUnitId: nullableStr,
     classGroupId: nullableStr,
-    roomId: nullableStr,
-    teacherId: nullableStr,
+    // T3.1 — Phòng học + GV chính là TRƯỜNG BẮT BUỘC khi tạo/sửa lớp (không còn
+    // "— Chưa phân —"). Trợ giảng vẫn tuỳ chọn.
+    roomId: requiredRefStr("Chọn phòng học cho lớp"),
+    teacherId: requiredRefStr("Chọn giáo viên chính cho lớp"),
     assistantId: nullableStr,
 
     startDate: nullableDate,

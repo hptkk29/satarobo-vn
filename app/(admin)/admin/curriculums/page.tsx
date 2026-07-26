@@ -144,9 +144,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Khoá học
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Version
-                  </th>
+                  {/* T5.2 — bỏ cột "Version" (bản giáo trình nay là số ẩn, không hiển thị). */}
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Trạng thái
                   </th>
@@ -162,7 +160,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
                 {curriculums.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="px-4 py-12 text-center text-sm text-gray-400"
                     >
                       Chưa có giáo trình nào khớp bộ lọc.{" "}
@@ -179,9 +177,6 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
                     <tr key={c.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.course.name}</td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-gray-700">
-                        v{c.version}
-                      </td>
                       <td className="px-4 py-3">
                         {c.isActive ? (
                           <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">

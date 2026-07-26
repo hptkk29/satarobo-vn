@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
-import { findScheduleConflicts } from "@/lib/classes/generate";
+import { detectSessionConflicts } from "@/lib/lms/schedule-conflict";
 import { sessionEndAt } from "@/lib/lms/scheduling";
 
 // =============================================================================
@@ -154,7 +154,7 @@ export async function adjustSession(opts: {
     return { ok: false, error: "Không có thay đổi nào" };
   }
 
-  // W2-4 (LMS-6) — chặn đổi buổi gây trùng GV/phòng với LỚP KHÁC.
+  // W2-4 (LMS-6) / T4.2 — chặn đổi buổi gây trùng GV/phòng với LỚP KHÁC.
   // GV/phòng hiệu lực = substitute (nếu đổi) ⊕ GV/phòng cấp lớp. Date hiệu lực =
   // ngày mới (nếu đổi) ⊕ ngày cũ. Thiếu dữ liệu (không GV & không phòng, hoặc lớp
   // chưa có startTime) → KHÔNG chặn (default an toàn).
@@ -164,15 +164,16 @@ export async function adjustSession(opts: {
   });
   if (cls?.startTime) {
     const effTeacherId = hasTeacher ? teacherId ?? null : cls.teacherId;
-    const effRoomId = hasRoom ? roomId ?? null : cls.roomId;
+    const effRoomId = hasRoom ? roomId ?? null : session.roomId ?? cls.roomId;
     const candDate = hasDate ? date! : session.date;
-    const conflict = await findScheduleConflicts({
-      classId: session.classId,
+    const conflict = await detectSessionConflicts({
+      sessionId,
+      excludeClassId: session.classId,
+      centerId: null, // soát toàn hệ thống: GV có thể dạy 2 cơ sở
       teacherId: effTeacherId,
       roomId: effRoomId,
-      candidates: [
-        { id: sessionId, startAt: candDate, endAt: sessionEndAt(candDate, cls.startTime, cls.endTime) },
-      ],
+      startAt: candDate,
+      endAt: sessionEndAt(candDate, cls.startTime, cls.endTime),
     });
     if (conflict.teacherConflict) {
       return { ok: false, error: "Trùng lịch giáo viên: GV đã có buổi dạy lớp khác vào khung giờ này." };

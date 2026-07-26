@@ -9,6 +9,7 @@ import {
   buildAssignableWhere,
   CAPACITY_COUNT_STATUSES,
 } from "@/lib/lms/assign";
+import { getAssignableSales } from "@/lib/sales/assignable";
 import { AssignStudents } from "./_components/assign-students";
 
 interface Props {
@@ -58,6 +59,7 @@ export default async function ClassStudentsPage({ params }: Props) {
       select: {
         id: true,
         status: true,
+        saleId: true, // T3.2 — sale phụ trách hiển thị/sửa ngay trong lớp
         student: { select: { name: true, studentCode: true } },
       },
     }),
@@ -76,12 +78,21 @@ export default async function ClassStudentsPage({ params }: Props) {
     (CAPACITY_COUNT_STATUSES as readonly string[]).includes(e.status),
   ).length;
 
+  // T3.2 — picker sale LỌC THEO CƠ SỞ CỦA LỚP (không gán chéo CS1↔CS2); luôn kèm
+  // sale đang gán để <select> không tự rớt giá trị khi họ đổi vai/chuyển cơ sở.
+  const sales = await getAssignableSales({
+    centerIds: cls.centerId ? [cls.centerId] : [],
+    includeIds: current.map((e) => e.saleId),
+  });
+  const saleOptions = sales.map((s) => ({ id: s.id, name: s.name ?? "(chưa đặt tên)" }));
+
   const currentRows = current.map((e) => ({
     id: e.id,
     status: e.status,
     statusLabel: STATUS_LABEL[e.status] ?? e.status,
     name: e.student?.name ?? "(không tên)",
     studentCode: e.student?.studentCode ?? null,
+    saleId: e.saleId,
   }));
   const assignableRows = assignable.map((e) => ({
     id: e.id,
@@ -116,6 +127,7 @@ export default async function ClassStudentsPage({ params }: Props) {
         current={currentRows}
         assignable={assignableRows}
         canOverride={canOverride}
+        sales={saleOptions}
       />
     </div>
   );

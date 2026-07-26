@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { hasRole } from '@/lib/auth/permissions'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
+import { roleLabel } from '@/lib/labels'
 import { ConflictResolver } from './conflict-resolver'
 
 export const metadata = { title: 'Xung đột chuyển đổi | Admin' }
@@ -123,7 +124,8 @@ function ParentCard({
           <p className="font-medium">{user.name || '(chưa có tên)'}</p>
           <p className="text-gray-600">{user.email}</p>
           <p className="mt-1 text-xs text-gray-500">
-            Vai trò: {user.role} · Trạng thái: {user.accountStatus} · {user._count.children} học viên
+            Vai trò: {roleLabel(user.role)} · Trạng thái: {user.accountStatus} ·{' '}
+            {user._count.children} học viên
           </p>
         </div>
       ) : (
