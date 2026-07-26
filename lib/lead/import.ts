@@ -57,6 +57,22 @@ export function normalizeCenterCode(raw: unknown): { code: string | null } | { e
   return { code: s };
 }
 
+/**
+ * Cơ sở MẶC ĐỊNH khi ô "Cơ sở" để trống (26/07). Người chỉ nhìn thấy 1 cơ sở (QL cơ
+ * sở / sale cơ sở) → lead tự về cơ sở đó; nhìn thấy nhiều cơ sở mà có cơ sở gốc trong
+ * danh sách → dùng cơ sở gốc; HO/SUPER_ADMIN ("ALL") → null như cũ (lead không gắn cơ sở).
+ * THUẦN để test không cần DB.
+ */
+export function resolveDefaultCenterId(
+  visibleCenterIds: "ALL" | readonly string[],
+  ownCenterId: string | null | undefined,
+): string | null {
+  if (visibleCenterIds === "ALL") return null;
+  if (visibleCenterIds.length === 1) return visibleCenterIds[0] ?? null;
+  if (ownCenterId && visibleCenterIds.includes(ownCenterId)) return ownCenterId;
+  return null;
+}
+
 export interface ParsedLeadRow {
   parentName: string;
   phone: string;

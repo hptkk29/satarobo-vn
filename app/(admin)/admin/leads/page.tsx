@@ -376,8 +376,8 @@ function Header({
       {canCreate && (
         <div className="flex items-center gap-2">
           <a
-            href="/templates/mau-lead-v2.xlsx"
-            download
+            href="/api/admin/templates/leads"
+            download="mau-lead.xlsx"
             className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Tải file mẫu

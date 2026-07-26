@@ -29,6 +29,12 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Route tải file mẫu import lead ĐỌC file soạn tay trong public/ bằng fs → phải ép
+  // đóng gói file đó vào bundle serverless (public/ mặc định chỉ lên CDN, lambda không có).
+  outputFileTracingIncludes: {
+    "/api/admin/templates/leads": ["./public/templates/mau-lead-v2.xlsx"],
+  },
+
   // DEV-ONLY (Next 16 chặn cross-origin tới dev server theo mặc định): cho phép
   // đăng nhập đa phiên khi QA — admin ở localhost, GV ở 127.0.0.1, PH ở IP LAN
   // (cookie tách theo host). Không ảnh hưởng production build.
