@@ -66,6 +66,12 @@ export interface ExcelImporterProps<T> {
    * ctx.confirmed trong onImport để gắn cờ cho server xử lý gộp.
    */
   confirmDuplicates?: { label: string };
+  /**
+   * Dòng trùng KHÔNG phải lỗi và KHÔNG cần bấm xác nhận — server tự gộp (vd lead:
+   * cùng SĐT = cùng nhà → con dồn vào 1 lead). Dòng trùng hiện nhãn amber `label`
+   * nhưng vẫn nằm trong danh sách import. Ưu tiên hơn `confirmDuplicates`.
+   */
+  mergeDuplicates?: { label: string };
 }
 
 type Step = "idle" | "preview" | "importing" | "done";
@@ -85,6 +91,7 @@ export function ExcelImporter<T>({
   duplicateLabel = "dữ liệu",
   checkExisting,
   confirmDuplicates,
+  mergeDuplicates,
 }: ExcelImporterProps<T>) {
   const [step, setStep] = useState<Step>("idle");
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
@@ -200,7 +207,8 @@ export function ExcelImporter<T>({
   parsedRows.forEach((r, i) => {
     if (isErrorRow(r)) return;
     if (isDupRow(i)) {
-      if (confirmDuplicates && isConfirmedRow(i)) validIdx.push(i);
+      // mergeDuplicates: trùng = hợp lệ (server gộp), không cần thao tác của người nhập.
+      if (mergeDuplicates || (confirmDuplicates && isConfirmedRow(i))) validIdx.push(i);
       return;
     }
     validIdx.push(i);
@@ -258,7 +266,9 @@ export function ExcelImporter<T>({
         parsedRows
           .map((row, i) =>
             isErrorRow(row) ||
-            (isDupRow(i) && !(confirmDuplicates && isConfirmedRow(i)))
+            (isDupRow(i) &&
+              !mergeDuplicates &&
+              !(confirmDuplicates && isConfirmedRow(i)))
               ? i
               : -1,
           )
@@ -325,7 +335,7 @@ export function ExcelImporter<T>({
               )}
               {confirmedCount > 0 && (
                 <>
-                  {" "}| 🔀 Đã xác nhận gộp:{" "}
+                  {" "}| 🔀 {mergeDuplicates ? "Sẽ gộp" : "Đã xác nhận gộp"}:{" "}
                   <strong className="text-amber-600">{confirmedCount}</strong>
                 </>
               )}
@@ -355,12 +365,14 @@ export function ExcelImporter<T>({
                 {parsedRows.slice(0, 100).map((row, idx) => {
                   const dupError =
                     dupErrors.get(idx) ?? dbDup.get(excelRows[idx] ?? -1);
+                  const willMerge = dupError !== undefined && mergeDuplicates !== undefined;
                   const confirmed =
                     dupError !== undefined &&
                     confirmDuplicates !== undefined &&
                     isConfirmedRow(idx);
                   const errored =
-                    isErrorRow(row) || (dupError !== undefined && !confirmed);
+                    isErrorRow(row) ||
+                    (dupError !== undefined && !confirmed && !willMerge);
                   const warn = errored ? undefined : dbWarn.get(excelRows[idx] ?? -1);
                   return (
                     <tr
@@ -368,7 +380,7 @@ export function ExcelImporter<T>({
                       className={cn(
                         "border-t",
                         errored && "bg-red-50",
-                        (warn || confirmed) && "bg-amber-50",
+                        (warn || confirmed || willMerge) && "bg-amber-50",
                       )}
                     >
                       <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
@@ -380,6 +392,10 @@ export function ExcelImporter<T>({
                       <td className="px-2 py-1">
                         {isErrorRow(row) ? (
                           <span className="text-red-600 text-xs">{row.error}</span>
+                        ) : willMerge ? (
+                          <span className="text-amber-700 text-xs">
+                            🔀 {mergeDuplicates!.label} — {dupError}
+                          </span>
                         ) : confirmed ? (
                           <span className="text-amber-700 text-xs">
                             🔀 Đã xác nhận gộp — sẽ xử lý khi Import.{" "}

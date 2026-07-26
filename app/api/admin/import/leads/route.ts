@@ -9,10 +9,11 @@ import {
 } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
-import { parseLeadImportRow } from "@/lib/lead/import";
+import { parseLeadImportRow, resolveDefaultCenterId } from "@/lib/lead/import";
 import { normalizeVi } from "@/lib/lead/import-registered";
 import { autoAssignNewLead } from "@/lib/lead/auto-assign";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 type ImportError = { row: number; error: string };
 
@@ -58,6 +59,16 @@ export async function POST(req: NextRequest) {
   ]);
   const centerByCode = new Map(centers.map((c) => [c.code, c.id]));
   const orgUnitByCode = new Map(orgUnits.map((o) => [o.code, o.id]));
+
+  // 26/07 — QL cơ sở BỎ TRỐNG cột "Cơ sở" → lead tự về cơ sở của họ. Trước đây dòng
+  // không có mã CS bị chặn ("cần quyền HO/SUPER_ADMIN") nên QL cơ sở vừa không import
+  // được, vừa không có lead nào để chia. Người nhìn thấy NHIỀU cơ sở (HO/SUPER_ADMIN)
+  // giữ nguyên hành vi cũ: để trống = lead không gắn cơ sở.
+  const defaultCenterId = resolveDefaultCenterId(
+    getModelVisibleCenterIds("Lead", actor),
+    session.user.centerId,
+  );
+  const defaultOrgUnitId = defaultCenterId ? await orgUnitIdForCenter(defaultCenterId) : null;
   const courseByKey = new Map<string, string>();
   for (const c of courses) {
     courseByKey.set(c.name.trim().toLowerCase(), c.id);
@@ -77,11 +88,12 @@ export async function POST(req: NextRequest) {
     source: string;
     note: string | null;
   };
-  // Gộp con (1 PH nhiều con): nhóm theo SĐT. Dòng trùng SĐT trong file CHỈ được
-  // nhận khi client gắn cờ __confirmMerge (Sale bấm "Xác nhận gộp con" ở preview)
-  // — con của dòng đó nhập chung vào lead của nhóm thay vì bị bỏ.
+  // Gộp con (1 PH nhiều con): nhóm theo SĐT. 26/07 — GỘP TỰ ĐỘNG, không cần bấm
+  // "Xác nhận gộp con" nữa: các dòng cùng SĐT (kể cả ghi KHÁC tên phụ huynh — bố/mẹ
+  // ghi khác nhau) coi như CÙNG MỘT NHÀ, con dồn vào 1 lead. Tên PH khác được ghi lại
+  // trong hoạt động lead để sale đối chiếu, KHÔNG ghi đè tên đang có.
   type Child = { name: string | null; age: number | null };
-  type Group = { base: Valid; children: Child[]; anyConfirm: boolean };
+  type Group = { base: Valid; children: Child[]; otherParentNames: string[] };
   const groups = new Map<string, Group>();
 
   for (let i = 0; i < parsed.length; i++) {
@@ -93,8 +105,8 @@ export async function POST(req: NextRequest) {
     }
     const d = p.data;
 
-    let centerId: string | null = null;
-    let orgUnitId: string | null = null;
+    let centerId: string | null = defaultCenterId;
+    let orgUnitId: string | null = defaultOrgUnitId;
     if (d.centerCode) {
       centerId = centerByCode.get(d.centerCode) ?? null;
       orgUnitId = orgUnitByCode.get(d.centerCode) ?? null;
@@ -124,18 +136,13 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const confirmMerge = Boolean(
-      (rows[i] as Record<string, unknown> | null)?.["__confirmMerge"],
-    );
     const g = groups.get(d.phone);
     if (g) {
-      // Trùng SĐT trong file: chưa xác nhận gộp → bỏ qua như cũ.
-      if (!confirmMerge) {
-        errors.push({ row: rowNo, error: `Trùng SĐT trong file: ${d.phone} — chưa xác nhận gộp` });
-        continue;
-      }
+      // Trùng SĐT trong file → gộp con vào lead của nhóm (tự động).
       g.children.push({ name: d.childName, age: d.childAge });
-      g.anyConfirm = true;
+      if (normalizeVi(d.parentName) !== normalizeVi(g.base.parentName)) {
+        g.otherParentNames.push(d.parentName);
+      }
       continue;
     }
     groups.set(d.phone, {
@@ -152,20 +159,22 @@ export async function POST(req: NextRequest) {
         note: d.note,
       },
       children: [{ name: d.childName, age: d.childAge }],
-      anyConfirm: confirmMerge,
+      otherParentNames: [],
     });
   }
 
   // Đối chiếu lead đã tồn tại (theo SĐT) — dedupe TOÀN HỆ THỐNG. sdb ẩn lead cơ sở
-  // khác → bypass HẸP (id/phone/centerId + tên con để dedupe khi GỘP, không lộ
-  // note/email) + ghi audit AC10. Nhóm có __confirmMerge → GỘP con vào lead cũ;
-  // không xác nhận → bỏ qua như cũ.
+  // khác → bypass HẸP (id/phone/centerId + tên PH/tên con để dedupe khi GỘP, không lộ
+  // note/email) + ghi audit AC10. 26/07 — SĐT đã có trong CRM thì LUÔN gộp con vào lead
+  // cũ (không tạo lead trùng số, không cần xác nhận), kể cả khi file ghi khác tên PH.
   type MergeOp = {
     leadId: string;
     phone: string;
     children: Child[];
     legacyChild: Child | null; // childName cũ (backfill thành LeadChild khi children[] rỗng)
     existingNames: string[];
+    /** Tên PH trong file khác tên PH của lead cũ → ghi chú lại, không ghi đè. */
+    otherParentNames: string[];
   };
   const mergeOps: MergeOp[] = [];
   if (groups.size > 0) {
@@ -178,6 +187,7 @@ export async function POST(req: NextRequest) {
         id: true,
         phone: true,
         centerId: true,
+        parentName: true,
         childName: true,
         childAge: true,
         children: { select: { fullName: true } },
@@ -187,10 +197,6 @@ export async function POST(req: NextRequest) {
       const g = groups.get(ex.phone);
       if (!g) continue;
       groups.delete(ex.phone);
-      if (!g.anyConfirm) {
-        errors.push({ row: 0, error: `SĐT đã tồn tại trong CRM — bỏ qua: ${ex.phone}` });
-        continue;
-      }
       // Gộp = GHI vào lead cũ → phải trong phạm vi quyền (không gộp chéo cơ sở).
       if (!passesScope("Lead", { centerId: ex.centerId }, actor)) {
         errors.push({
@@ -199,12 +205,16 @@ export async function POST(req: NextRequest) {
         });
         continue;
       }
+      const fileNames = [g.base.parentName, ...g.otherParentNames];
       mergeOps.push({
         leadId: ex.id,
         phone: ex.phone,
         children: g.children,
         legacyChild: ex.childName ? { name: ex.childName, age: ex.childAge } : null,
         existingNames: ex.children.map((c) => c.fullName),
+        otherParentNames: [
+          ...new Set(fileNames.filter((n) => normalizeVi(n) !== normalizeVi(ex.parentName))),
+        ],
       });
     }
   }
@@ -257,9 +267,12 @@ export async function POST(req: NextRequest) {
                 actorName,
                 type: "NOTE",
                 content:
-                  g.children.length > 1
+                  (g.children.length > 1
                     ? `Nhập lead từ Excel (sự kiện) — gộp ${g.children.length} con cùng SĐT`
-                    : "Nhập lead từ Excel (sự kiện)",
+                    : "Nhập lead từ Excel (sự kiện)") +
+                  (g.otherParentNames.length > 0
+                    ? ` · file còn ghi tên PH khác cùng số: ${g.otherParentNames.join(", ")}`
+                    : ""),
                 metadata: { system: true },
               },
             },
@@ -291,10 +304,14 @@ export async function POST(req: NextRequest) {
         if (added === 0) {
           errors.push({
             row: 0,
-            error: `SĐT ${m.phone}: con trùng tên/không có tên — không thêm gì vào lead có sẵn`,
+            error: `ℹ️ SĐT ${m.phone}: con trong file đã có sẵn trong lead (hoặc dòng không ghi tên con) — không thêm gì`,
           });
           continue;
         }
+        const otherNamesNote =
+          m.otherParentNames.length > 0
+            ? ` · file ghi tên PH khác cùng số: ${m.otherParentNames.join(", ")} (giữ nguyên tên PH hiện tại)`
+            : "";
         await tx.lead.update({
           where: { id: m.leadId },
           data: {
@@ -309,7 +326,7 @@ export async function POST(req: NextRequest) {
                 actorId,
                 actorName,
                 type: "NOTE",
-                content: `Gộp thêm ${added} con từ import Excel (sự kiện) — Sale xác nhận ở preview`,
+                content: `Gộp thêm ${added} con từ import Excel (sự kiện) — trùng SĐT với lead có sẵn${otherNamesNote}`,
                 metadata: { system: true, import: "event-excel", merge: true },
               },
             },
@@ -336,7 +353,7 @@ export async function POST(req: NextRequest) {
   if (mergedLeads > 0) {
     errors.push({
       row: 0,
-      error: `ℹ️ Đã gộp ${mergedChildren} con vào ${mergedLeads} lead có sẵn (không tạo lead mới cho các dòng này)`,
+      error: `ℹ️ Đã gộp ${mergedChildren} con vào ${mergedLeads} lead có sẵn cùng SĐT (không tạo lead trùng số)`,
     });
   }
   revalidatePath("/leads");

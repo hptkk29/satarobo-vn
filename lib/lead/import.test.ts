@@ -5,9 +5,27 @@ import {
   parseChildAge,
   normalizeCenterCode,
   parseLeadImportRow,
+  resolveDefaultCenterId,
   LEAD_IMPORT_COLUMNS,
   LEAD_IMPORT_CENTER_HEADER,
 } from "./import";
+
+describe("resolveDefaultCenterId — ô Cơ sở để trống (26/07)", () => {
+  it("[IMP-C1] QL/sale 1 cơ sở → lead tự về cơ sở đó (trước đây bị chặn 'cần HO/SUPER_ADMIN')", () => {
+    expect(resolveDefaultCenterId(["cs1"], "cs1")).toBe("cs1");
+    expect(resolveDefaultCenterId(["cs1"], null)).toBe("cs1");
+  });
+
+  it("[IMP-C2] HO/SUPER_ADMIN (ALL) → giữ nguyên: để trống = lead không gắn cơ sở", () => {
+    expect(resolveDefaultCenterId("ALL", "cs1")).toBeNull();
+  });
+
+  it("[IMP-C3] thấy nhiều cơ sở → lấy cơ sở gốc nếu nằm trong tầm nhìn, không thì null", () => {
+    expect(resolveDefaultCenterId(["cs1", "cs2"], "cs2")).toBe("cs2");
+    expect(resolveDefaultCenterId(["cs1", "cs2"], "cs9")).toBeNull();
+    expect(resolveDefaultCenterId([], "cs1")).toBeNull();
+  });
+});
 
 describe("lead import helpers", () => {
   it("normalizePhone chuẩn hoá +84/khoảng trắng", () => {

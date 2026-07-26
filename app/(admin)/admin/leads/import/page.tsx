@@ -34,14 +34,16 @@ export default function ImportLeadsPage() {
 
       <ExcelImporter<LeadImportRow>
         title="Import lead"
-        templateUrl="/templates/mau-lead-v2.xlsx"
-        templateFilename="mau-lead-v2.xlsx"
+        /* Mẫu SINH ĐỘNG: dropdown khoá đúng tên khoá đang có, SĐT kiểu text,
+           tuổi con kiểu số — xem app/api/admin/templates/leads/route.ts. */
+        templateUrl="/api/admin/templates/leads"
+        templateFilename="mau-lead.xlsx"
         duplicateLabel="SĐT"
         duplicateKey={(raw) => normalizePhone(raw["SĐT"]) || null}
-        confirmDuplicates={{ label: "Xác nhận gộp con" }}
+        mergeDuplicates={{ label: "Cùng SĐT — con sẽ gộp vào 1 lead" }}
         checkExisting={async (raws, excelNos) => {
           // Đối chiếu SĐT với lead ĐÃ CÓ trong CRM — báo rõ trùng với PH nào,
-          // đã có con tên gì để Sale kiểm tra rồi xoá dòng / sửa SĐT.
+          // đã có con tên gì để Sale biết dòng này sẽ gộp vào lead nào.
           const res = await fetch("/api/admin/import/leads/precheck", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -61,7 +63,8 @@ export default function ImportLeadsPage() {
                 `SĐT ${m.phone} ĐÃ CÓ trong CRM: PH "${m.parentName}"` +
                   ` — con: ${m.childName?.trim() || "(chưa ghi tên con)"}` +
                   ` — trạng thái: ${leadStatusLabel(m.status)}.` +
-                  ` Cùng PH? Bấm "Xác nhận gộp con" để thêm con này vào lead có sẵn; khác người → sửa SĐT hoặc xoá dòng.`,
+                  ` Con ở dòng này sẽ được THÊM vào lead đó (không tạo lead trùng số).` +
+                  ` Nếu đúng là người khác → sửa SĐT hoặc xoá dòng.`,
               );
             }
           });
@@ -78,18 +81,13 @@ export default function ImportLeadsPage() {
           // Giữ nguyên ô gốc để server resolve cơ sở/khoá + chống trùng.
           return row as LeadImportRow;
         }}
-        onImport={async (rows, ctx) => {
-          // Dòng Sale đã bấm "Xác nhận gộp con" → gắn cờ để server gộp con vào
-          // lead cùng SĐT (trong file hoặc lead có sẵn) thay vì bỏ qua.
-          const payload = rows.map((r, i) =>
-            ctx && ctx.confirmed.has(ctx.excelRowOf[i])
-              ? { ...r, __confirmMerge: true }
-              : r,
-          );
+        onImport={async (rows) => {
+          // Trùng SĐT (trong file hoặc với lead có sẵn) → server tự gộp con vào 1 lead,
+          // không cần cờ xác nhận nữa.
           const res = await fetch("/api/admin/import/leads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rows: payload }),
+            body: JSON.stringify({ rows }),
           });
           if (!res.ok) {
             const err = (await res.json().catch(() => ({ error: "Unknown" }))) as { error?: string };
@@ -109,9 +107,19 @@ export default function ImportLeadsPage() {
           ))}
         </ol>
         <ul className="mt-2 list-disc list-inside space-y-0.5">
-          <li><b>SĐT</b> bắt buộc + hợp lệ (09xx / +84). Trùng SĐT → bỏ qua, không tạo mới.</li>
-          <li><b>Cơ sở</b>: để trống hoặc mã cơ sở (vd CS1) — phải khớp cơ sở đang hoạt động. <b>Khoá quan tâm</b>: nếu điền phải khớp khoá có thật.</li>
-          <li><b>Tuổi con</b>: 3–18 (hoặc trống).</li>
+          <li><b>SĐT</b> bắt buộc + hợp lệ (09xx / +84), ô kiểu <b>text</b> nên giữ số 0 đầu.</li>
+          <li>
+            <b>Trùng SĐT = cùng một nhà</b>: các dòng cùng số (trong file hoặc trùng lead
+            có sẵn) được gộp thành <b>1 lead nhiều con</b> — không tạo lead trùng số. Tên
+            phụ huynh ghi khác nhau vẫn gộp; tên đang có được giữ nguyên, tên khác chỉ ghi
+            vào lịch sử lead.
+          </li>
+          <li>
+            <b>Cơ sở</b>: quản lý cơ sở <b>để trống</b> → lead tự về cơ sở của mình. Điền mã
+            (vd CS1) khi cần nhập hộ cơ sở khác — cần quyền HO/Super Admin.
+          </li>
+          <li><b>Khoá quan tâm</b>: chọn trong danh sách của file mẫu (đúng tên khoá trong hệ thống).</li>
+          <li><b>Tuổi con</b>: số nguyên 3–18 (hoặc trống).</li>
         </ul>
       </div>
     </div>
