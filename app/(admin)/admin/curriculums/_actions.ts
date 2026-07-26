@@ -81,6 +81,23 @@ async function requireLessonChangeApprove(): Promise<Gate> {
 // Curriculum CRUD
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * T5.2 — version ẩn: bản kế tiếp của khoá = max(version)+1 (khoá chưa có bản → 1).
+ * Giữ @@unique([courseId, version]) nên vẫn phải sinh giá trị, chỉ là người dùng
+ * không nhập nữa.
+ */
+async function nextCurriculumVersion(
+  sdb: ReturnType<typeof scopedDb>,
+  courseId: string,
+): Promise<number> {
+  const last = await sdb.curriculum.findFirst({
+    where: { courseId },
+    orderBy: { version: "desc" },
+    select: { version: true },
+  });
+  return (last?.version ?? 0) + 1;
+}
+
 export async function createCurriculum(
   input: CurriculumInput,
 ): Promise<Result<{ curriculumId: string }>> {
@@ -93,19 +110,20 @@ export async function createCurriculum(
   }
   const data = parsed.data;
 
+  // T5.2 — form không gửi version → tự tăng. (Client cũ còn gửi thì vẫn tôn trọng,
+  // nhưng đụng bản đã có sẽ tự đẩy lên bản kế tiếp thay vì báo lỗi "v1 đã tồn tại".)
+  let version = data.version ?? (await nextCurriculumVersion(gate.sdb, data.courseId));
   const dup = await gate.sdb.curriculum.findUnique({
-    where: { courseId_version: { courseId: data.courseId, version: data.version } },
+    where: { courseId_version: { courseId: data.courseId, version } },
     select: { id: true },
   });
-  if (dup) {
-    return {
-      ok: false,
-      error: `Giáo trình v${data.version} đã tồn tại cho khoá học này`,
-    };
-  }
+  if (dup) version = await nextCurriculumVersion(gate.sdb, data.courseId);
 
   try {
-    const c = await gate.sdb.curriculum.create({ data, select: { id: true } });
+    const c = await gate.sdb.curriculum.create({
+      data: { ...data, version },
+      select: { id: true },
+    });
     revalidatePath("/curriculums");
     return { ok: true, data: { curriculumId: c.id } };
   } catch (err) {
@@ -141,23 +159,21 @@ export async function updateCurriculum(
   });
   if (!current) return { ok: false, error: "Giáo trình không tồn tại" };
 
-  if (current.courseId !== data.courseId || current.version !== data.version) {
+  // T5.2 — form không gửi version → GIỮ NGUYÊN bản hiện tại. Chỉ khi đổi sang khoá
+  // khác mà bản đó đã có version trùng thì tự đẩy lên bản kế tiếp (không báo lỗi).
+  let version = data.version ?? current.version;
+  if (current.courseId !== data.courseId || current.version !== version) {
     const dup = await gate.sdb.curriculum.findUnique({
-      where: {
-        courseId_version: { courseId: data.courseId, version: data.version },
-      },
+      where: { courseId_version: { courseId: data.courseId, version } },
       select: { id: true },
     });
     if (dup && dup.id !== id) {
-      return {
-        ok: false,
-        error: `Giáo trình v${data.version} đã tồn tại cho khoá học này`,
-      };
+      version = await nextCurriculumVersion(gate.sdb, data.courseId);
     }
   }
 
   try {
-    await gate.sdb.curriculum.update({ where: { id }, data });
+    await gate.sdb.curriculum.update({ where: { id }, data: { ...data, version } });
   } catch (err) {
     return {
       ok: false,

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
-import { findScheduleConflicts } from "@/lib/classes/generate";
+import { detectSessionConflicts } from "@/lib/lms/schedule-conflict";
 import { sessionEndAt } from "@/lib/lms/scheduling";
 
 type ActionResult = { error?: string };
@@ -39,15 +39,16 @@ async function sessionClassInScope(
 }
 
 /**
- * W2-4 (LMS-6) — soát trùng GV/phòng cho 1 buổi (tạo/sửa). GV/phòng lấy ở cấp lớp
- * chứa buổi. Trả message VI nếu trùng; null nếu không trùng / thiếu dữ liệu
+ * W2-4 (LMS-6) / T4.2 — soát trùng GV/phòng cho 1 buổi (tạo/sửa). GV/phòng lấy ở cấp
+ * lớp chứa buổi. Trả message VI nếu trùng; null nếu không trùng / thiếu dữ liệu
  * (lớp không tồn tại, không GV & không phòng, hoặc lớp chưa có startTime → default
- * an toàn KHÔNG chặn). `excludeSessionId` không cần — query đã loại buổi cùng lớp.
+ * an toàn KHÔNG chặn). Buổi cùng lớp đã bị loại qua `excludeClassId`.
  */
 async function checkSessionScheduleConflict(
   sdb: Sdb,
   classId: string,
   date: Date,
+  sessionId?: string,
 ): Promise<string | null> {
   // ⚠️ Class ∈ SCOPED_MODELS: findUnique lọc hậu kỳ theo centerId → select kèm centerId.
   const cls = await sdb.class.findUnique({
@@ -55,11 +56,14 @@ async function checkSessionScheduleConflict(
     select: { centerId: true, teacherId: true, roomId: true, startTime: true, endTime: true },
   });
   if (!cls?.startTime || (!cls.teacherId && !cls.roomId)) return null;
-  const conflict = await findScheduleConflicts({
-    classId,
+  const conflict = await detectSessionConflicts({
+    sessionId,
+    excludeClassId: classId,
+    centerId: null, // soát toàn hệ thống: GV có thể dạy 2 cơ sở
     teacherId: cls.teacherId,
     roomId: cls.roomId,
-    candidates: [{ startAt: date, endAt: sessionEndAt(date, cls.startTime, cls.endTime) }],
+    startAt: date,
+    endAt: sessionEndAt(date, cls.startTime, cls.endTime),
   });
   if (conflict.teacherConflict) {
     return "Trùng lịch giáo viên: GV của lớp này đã có buổi dạy lớp khác vào khung giờ đó.";
@@ -181,7 +185,7 @@ export async function updateSession(id: string, formData: FormData): Promise<Act
   if (!(await classInScope(sdb, actor, s.classId))) return { error: "Lớp đích ngoài phạm vi cơ sở" };
 
   // W2-4 — chặn cập nhật buổi (đổi ngày/giờ) gây trùng GV/phòng với lớp khác.
-  const conflictMsg = await checkSessionScheduleConflict(sdb, s.classId, s.date);
+  const conflictMsg = await checkSessionScheduleConflict(sdb, s.classId, s.date, id);
   if (conflictMsg) return { error: conflictMsg };
 
   const data: Prisma.ClassSessionUpdateInput = {

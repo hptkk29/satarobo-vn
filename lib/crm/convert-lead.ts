@@ -97,7 +97,13 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
     });
 
     const enrollment = await tx.enrollment.create({
-      data: { studentId: student.id, classId: input.classId, courseId: input.courseId, centerId: lead.centerId },
+      data: {
+        studentId: student.id,
+        classId: input.classId,
+        courseId: input.courseId,
+        centerId: lead.centerId,
+        saleId: lead.assignedToId ?? null, // T3.2 — sale phụ trách theo sang ghi danh
+      },
     });
 
     const paid = (input.paidAmount ?? 0) > 0;

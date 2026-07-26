@@ -65,8 +65,12 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
   function schedule(sessionId: string) {
     startTransition(async () => {
       const res = await scheduleMakeupAction(item.id, sessionId);
-      if (res.ok) { toast.success("Đã xếp buổi bù"); router.refresh(); }
-      else toast.error(res.error ?? "Lỗi");
+      if (res.ok) {
+        toast.success("Đã xếp buổi bù");
+        // T4.1 — buổi đích đang trùng phòng/GV với lớp khác → báo để theo dõi.
+        if (res.warning) toast.warning(res.warning);
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
     });
   }
   function complete() {

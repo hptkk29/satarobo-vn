@@ -37,13 +37,12 @@ function putWithProgress(url: string, file: File, onProgress: (pct: number) => v
 export function LessonScormUpload({ lessonId }: { lessonId: string }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
   async function handleUpload() {
-    if (!name.trim()) return toast.error("Nhập tên gói");
+    // T5.1 — bỏ ô "tên gói": server tự đặt tên theo buổi/tệp (createScormPackage).
     if (!file) return toast.error("Chọn tệp .zip");
 
     setUploading(true);
@@ -51,7 +50,6 @@ export function LessonScormUpload({ lessonId }: { lessonId: string }) {
     try {
       const created = await createScormPackage({
         lessonId,
-        name: name.trim(),
         fileName: file.name,
         mimeType: file.type || "application/zip",
         sizeBytes: file.size,
@@ -69,7 +67,6 @@ export function LessonScormUpload({ lessonId }: { lessonId: string }) {
       // Giải nén ngay → tự phát hành + thay giáo án cũ của buổi (cron là fallback).
       await processScormNow(created.data!.id);
       toast.success("Đã đẩy giáo án — đang xử lý & thay bản cũ (nếu có)");
-      setName("");
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";
       router.refresh();
@@ -84,13 +81,6 @@ export function LessonScormUpload({ lessonId }: { lessonId: string }) {
   return (
     <div className="mt-2 space-y-2 rounded-md border border-dashed border-neutral-300 bg-white p-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Tên gói (vd: Bài 1 — Robot cơ bản)"
-          disabled={uploading}
-          className="min-w-0 flex-1 rounded-md border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-[#7C3AED]"
-        />
         <input
           ref={fileRef}
           type="file"

@@ -257,7 +257,6 @@ export default async function EditCurriculumPage({ params }: Props) {
           id: curriculum.id,
           courseId: curriculum.courseId,
           name: curriculum.name,
-          version: curriculum.version,
           description: curriculum.description,
           isActive: curriculum.isActive,
           status: curriculum.status,

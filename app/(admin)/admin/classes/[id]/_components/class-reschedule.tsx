@@ -3,10 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarClock, CalendarPlus } from "lucide-react";
+import { CalendarClock, CalendarPlus, AlertTriangle } from "lucide-react";
 import { previewClassReschedule, applyClassReschedule, generateSessionsAction } from "../../_actions";
 
 type Item = { id: string; topic: string | null; oldDate: string; newDate: string };
+/** T4.1 — buổi ở lịch mới bị trùng phòng/GV với lớp khác (chặn apply). */
+type Conflict = { date: string; messages: string[] };
 
 function fmt(iso: string): string {
   return new Date(iso).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -16,6 +18,7 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [items, setItems] = useState<Item[] | null>(null);
+  const [conflicts, setConflicts] = useState<Conflict[]>([]);
 
   if (!canEdit) return null;
 
@@ -24,7 +27,11 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
       const res = await previewClassReschedule(classId);
       if (res.ok) {
         setItems(res.items);
+        setConflicts(res.conflicts);
         if (res.items.length === 0) toast.info("Không có buổi tương lai để dời");
+        else if (res.conflicts.length > 0) {
+          toast.warning(`${res.conflicts.length} buổi ở lịch mới bị trùng phòng/GV`);
+        }
       } else {
         toast.error(res.error);
       }
@@ -37,6 +44,7 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
       if (res.ok) {
         toast.success("Đã dời buổi tương lai theo lịch mới + lịch nghỉ");
         setItems(null);
+        setConflicts([]);
         router.refresh();
       } else {
         toast.error(res.error);
@@ -51,6 +59,8 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
       const res = await generateSessionsAction(classId);
       if (res.ok) {
         toast.success(res.generated ? `Đã sinh ${res.generated} buổi học` : "Lớp đã có buổi học");
+        // T4.1 — buổi vừa sinh trùng phòng/GV với lớp khác (cảnh báo, không chặn).
+        if (res.warning) toast.warning(res.warning);
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
     });
@@ -108,10 +118,31 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
                 })}
               </ul>
               <p className="mt-2 text-xs text-gray-500">{changed.length} buổi sẽ đổi ngày.</p>
+
+              {/* T4.1 — trùng phòng/GV là lỗi CHẶN: nêu rõ ngày để đổi phòng/GV/lịch. */}
+              {conflicts.length > 0 && (
+                <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-red-800">
+                    <AlertTriangle className="h-4 w-4" /> Lịch mới trùng phòng/giáo viên —
+                    không áp dụng được
+                  </p>
+                  <ul className="mt-1 space-y-0.5 text-xs text-red-700">
+                    {conflicts.map((c) => (
+                      <li key={c.date}>
+                        {fmt(c.date)} — {c.messages.join("; ")}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-red-600">
+                    Đổi phòng/GV của lớp hoặc chọn lịch khác rồi xem lại.
+                  </p>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={apply}
-                disabled={pending}
+                disabled={pending || conflicts.length > 0}
                 className="mt-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 {pending ? "Đang áp dụng…" : "Áp dụng dời buổi"}

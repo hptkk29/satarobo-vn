@@ -49,15 +49,39 @@ async function gate(): Promise<
   };
 }
 
+/**
+ * T5.1 — `name` KHÔNG còn nhập tay (đã bỏ ô "tên gói"/"tên giáo án" ở cả 2 form).
+ * Optional ở đây để tương thích ngược; server tự sinh qua buildPackageName khi trống.
+ * Cột ScormPackage.name vẫn NOT NULL → luôn phải có giá trị.
+ */
 const createInputSchema = z.object({
   lessonId: z.string().min(1, "Thiếu buổi học"),
-  name: z.string().trim().min(1, "Tên gói không được trống").max(200),
+  name: z.string().trim().max(200).optional(),
   fileName: z.string().trim().min(1, "Thiếu tên tệp"),
   mimeType: z.string().trim().min(1, "Thiếu kiểu tệp"),
   sizeBytes: z.number().int().positive("Kích thước tệp không hợp lệ"),
   // Loại giáo án: SCORM (.zip) hoặc PDF (.pdf). Mặc định SCORM (tương thích ngược).
   kind: z.enum(["SCORM", "PDF"]).default("SCORM"),
 });
+
+/**
+ * T5.1 (THUẦN) — tên gói tự sinh: ưu tiên "Buổi {order} — {title}", lùi về tên tệp
+ * (bỏ đuôi), cuối cùng "Giáo án". Cắt 200 ký tự cho khớp cột. Không bao giờ trả rỗng.
+ * KHÔNG export: file "use server" chỉ được export hàm async.
+ */
+function buildPackageName(input: {
+  lessonOrder?: number | null;
+  lessonTitle?: string | null;
+  fileName: string;
+}): string {
+  const title = input.lessonTitle?.trim();
+  const fromLesson =
+    input.lessonOrder != null && title
+      ? `Buổi ${input.lessonOrder} — ${title}`
+      : title || null;
+  const fromFile = input.fileName.replace(/\.[^.]+$/, "").trim();
+  return (fromLesson || fromFile || "Giáo án").slice(0, 200);
+}
 
 /**
  * Tạo bản ghi ScormPackage trạng thái UPLOADING + presign PUT để browser upload
@@ -74,7 +98,7 @@ export async function createScormPackage(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { lessonId, name, fileName, mimeType, sizeBytes, kind } = parsed.data;
+  const { lessonId, fileName, mimeType, sizeBytes, kind } = parsed.data;
 
   // Khớp loại file với kind (chặn nhầm .zip vào PDF & ngược lại).
   const lower = fileName.toLowerCase();
@@ -85,8 +109,17 @@ export async function createScormPackage(
     return { ok: false, error: "Gói SCORM cần tệp .zip" };
   }
 
-  const lesson = await g.sdb.lesson.findUnique({ where: { id: lessonId }, select: { id: true } });
+  const lesson = await g.sdb.lesson.findUnique({
+    where: { id: lessonId },
+    select: { id: true, order: true, title: true },
+  });
   if (!lesson) return { ok: false, error: "Không tìm thấy buổi học" };
+
+  // T5.1 — tên gói do server đặt (form không còn ô nhập). Client cũ vẫn gửi `name`
+  // thì tôn trọng, để không vỡ tương thích ngược.
+  const name =
+    parsed.data.name?.trim() ||
+    buildPackageName({ lessonOrder: lesson.order, lessonTitle: lesson.title, fileName });
 
   const last = await g.sdb.scormPackage.findFirst({
     where: { lessonId },

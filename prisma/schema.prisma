@@ -742,6 +742,9 @@ model User {
   accounts           Account[]
   children           Student[]           @relation("ParentChildren")
   assignedLeads      Lead[]              @relation("AssignedLeads")
+  // T3.2 — Sale phụ trách học viên, gắn ở cấp GHI DANH (theo lớp) chứ không phải
+  // Student: 1 HV học nhiều khoá/lớp có thể do sale khác chăm (QĐ-7).
+  saleEnrollments    Enrollment[]        @relation("EnrollmentSale")
   notes              Note[]
   teacherClass       Class[]             @relation("TeacherClasses")
   assistantClass     Class[]             @relation("AssistantClasses")
@@ -1350,6 +1353,9 @@ model Enrollment {
   // R7-06 — truy vết enrollment ⇽ LeadChild nguồn khi convert per-child (additive,
   // nullable; SetNull để không chặn xoá lead). Enrollment tạo trực tiếp → null.
   leadChildId String?
+  // T3.2 (QĐ-7) — SALE PHỤ TRÁCH học viên trong lớp này. Backfill từ
+  // Lead.assignedToId khi convert; sửa tay ở màn HS của lớp. SetNull khi user nghỉ.
+  saleId      String?
 
   // Financial (legacy)
   tuition Int?
@@ -1389,6 +1395,7 @@ model Enrollment {
   class     Class      @relation(fields: [classId], references: [id])
   course    Course     @relation(fields: [courseId], references: [id])
   leadChild LeadChild? @relation(fields: [leadChildId], references: [id], onDelete: SetNull)
+  sale      User?      @relation("EnrollmentSale", fields: [saleId], references: [id], onDelete: SetNull)
 
   auditLogs EnrollmentAuditLog[]
 
@@ -1414,6 +1421,7 @@ model Enrollment {
   @@index([classId, status])
   @@index([studentId, status])
   @@index([status, enrolledAt])
+  @@index([saleId]) // T3.2 — lọc "học viên của sale X"
   @@index([centerId])
   @@index([leadChildId])
 }
@@ -2104,11 +2112,12 @@ model Curriculum {
   @@index([courseId, isActive])
 }
 
+// T5.3 — rút gọn còn 2 trạng thái theo yêu cầu vận hành: Nháp / Đang dùng.
+// ARCHIVED + UNPUBLISHED đã map về DRAFT trong migration
+// 20260726000000_curriculum_status_draft_active (QĐ-11: KHÔNG tự kích hoạt lại).
 enum CurriculumStatus {
   DRAFT
   ACTIVE
-  ARCHIVED
-  UNPUBLISHED
 }
 
 // R7-10 — trạng thái từng buổi (5 mức) + khóa sửa.

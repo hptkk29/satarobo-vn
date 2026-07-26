@@ -4,6 +4,10 @@ import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { getSetting } from "@/lib/settings/service";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import {
+  detectConflictsForExistingSession,
+  conflictMessage,
+} from "@/lib/lms/schedule-conflict";
 import type { Actor } from "@/lib/auth/actor";
 
 // =============================================================================
@@ -200,6 +204,10 @@ export async function suggestMakeupSessions(
 /**
  * R7-08 — Xếp buổi bù → SCHEDULED. Re-check sức chứa TRONG transaction (chống
  * giành chỗ cuối). Bù CHÉO cơ sở → ghi AuditLog MAKEUP_CROSS_CENTER.
+ *
+ * T4.1 — soát trùng PHÒNG/GV của BUỔI ĐÍCH và trả về `warning` (KHÔNG chặn): buổi
+ * đích thuộc lớp khác và đã tồn tại, nên trùng ở đây là dấu hiệu buổi đó sắp phải
+ * dời — người xếp cần biết trước khi hẹn phụ huynh.
  */
 export async function scheduleMakeup(params: {
   makeupNeedId: string;
@@ -209,7 +217,7 @@ export async function scheduleMakeup(params: {
   actor: Actor;
   /** Lý do/đối chiếu — dùng làm reason audit (= requestId của yêu cầu PH). */
   requestId?: string | null;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; warning?: string }> {
   const xdb = withMakeupException(params.actor);
 
   const need = await xdb.makeupNeed.findUnique({
@@ -288,6 +296,13 @@ export async function scheduleMakeup(params: {
     return { ok: false, error: "Lỗi cơ sở dữ liệu — không xếp được buổi bù" };
   }
 
+  // T4.1 — cảnh báo (không chặn) nếu buổi đích đang trùng phòng/GV với lớp khác.
+  // Best-effort: lỗi soát trùng không làm hỏng việc xếp bù đã commit.
+  const conflict = await detectConflictsForExistingSession(params.makeupSessionId).catch(
+    () => null,
+  );
+  const warning = conflict ? conflictMessage(conflict) : null;
+
   // Bù CHÉO cơ sở → audit đủ trường (AC3). reason = requestId.
   if (fromCenterId && toCenterId && fromCenterId !== toCenterId) {
     await writeAudit({
@@ -308,7 +323,7 @@ export async function scheduleMakeup(params: {
     }).catch((e) => console.error("[scheduleMakeup] audit", e));
   }
 
-  return { ok: true };
+  return { ok: true, ...(warning ? { warning } : {}) };
 }
 
 /** Hoàn tất bù → COMPLETED + đồng bộ Attendance.makeupStatus=MADE_UP (đếm số buổi đúng). */

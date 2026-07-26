@@ -85,7 +85,15 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, status: true, centerId: true, parentName: true, phone: true },
+    // T3.2 — assignedToId = sale đang phụ trách lead → thành Enrollment.saleId.
+    select: {
+      id: true,
+      status: true,
+      centerId: true,
+      parentName: true,
+      phone: true,
+      assignedToId: true,
+    },
   });
   if (!lead) return { ok: false, error: { code: "LEAD_NOT_FOUND", message: "Không tìm thấy lead" } };
   if (!lead.centerId) return { ok: false, error: { code: "LEAD_NO_CENTER", message: "Lead chưa thuộc cơ sở" } };
@@ -199,6 +207,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           courseId: s.courseId,
           centerId: lead.centerId, // FL3-02 — denormalize từ lead/class (cùng cơ sở) cho scopedDb
           leadChildId: s.leadChildId ?? null, // R7-06 — truy vết về con nguồn
+          saleId: lead.assignedToId ?? null, // T3.2 — sale phụ trách theo sang ghi danh
           listPrice: price.listPrice,
           discountType: price.discountType,
           discountAmount: price.discountAmount,

@@ -14,18 +14,16 @@ interface CourseOption {
   name: string;
 }
 
+// T5.3 — chỉ còn 2 trạng thái: Nháp / Đang dùng (enum DB đã rút gọn tương ứng).
 const STATUS_LABEL: Record<CurriculumStatus, string> = {
   DRAFT: "Nháp",
   ACTIVE: "Đang dùng",
-  UNPUBLISHED: "Ngưng xuất bản",
-  ARCHIVED: "Lưu trữ",
 };
 
 export type CurriculumFormValue = {
   id: string;
   courseId: string;
   name: string;
-  version: number;
   description: string | null;
   isActive: boolean;
   status: CurriculumStatus;
@@ -42,7 +40,6 @@ export function CurriculumForm({
   const isEdit = Boolean(curriculum);
   const [courseId, setCourseId] = useState(curriculum?.courseId ?? "");
   const [name, setName] = useState(curriculum?.name ?? "");
-  const [version, setVersion] = useState<number>(curriculum?.version ?? 1);
   const [description, setDescription] = useState(curriculum?.description ?? "");
   const [isActive, setIsActive] = useState(curriculum?.isActive ?? true);
   const [status, setStatus] = useState<CurriculumStatus>(curriculum?.status ?? "ACTIVE");
@@ -52,10 +49,10 @@ export function CurriculumForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // T5.2 — KHÔNG gửi `version`: server giữ bản hiện tại (sửa) / tự tăng (tạo mới).
     const payload = {
       courseId,
       name,
-      version,
       description: description.trim() || null,
       isActive,
       status,
@@ -73,7 +70,7 @@ export function CurriculumForm({
     if (!curriculum) return;
     if (
       !confirm(
-        `Xoá giáo trình "${curriculum.name} v${curriculum.version}"? Hành động này không thể hoàn tác.`,
+        `Xoá giáo trình "${curriculum.name}"? Hành động này không thể hoàn tác.`,
       )
     ) {
       return;
@@ -96,47 +93,26 @@ export function CurriculumForm({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Khoá học <span className="text-red-500">*</span>
-          </span>
-          <select
-            value={courseId}
-            onChange={(e) => setCourseId(e.target.value)}
-            required
-            disabled={pending}
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
-          >
-            <option value="">— Chọn khoá học —</option>
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Version <span className="text-red-500">*</span>
-          </span>
-          <input
-            type="number"
-            min={1}
-            value={version}
-            onChange={(e) =>
-              setVersion(Math.max(1, parseInt(e.target.value, 10) || 1))
-            }
-            required
-            disabled={pending}
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
-          />
-          <span className="mt-1 block text-xs text-neutral-500">
-            Tăng version khi cập nhật lớn — duy nhất per khoá học
-          </span>
-        </label>
-      </div>
+      {/* T5.2 — ô "Version" đã bỏ: hệ thống tự đánh bản (ẩn) cho từng khoá. */}
+      <label className="block">
+        <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          Khoá học <span className="text-red-500">*</span>
+        </span>
+        <select
+          value={courseId}
+          onChange={(e) => setCourseId(e.target.value)}
+          required
+          disabled={pending}
+          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+        >
+          <option value="">— Chọn khoá học —</option>
+          {courses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <label className="block">
         <span className="mb-1 block text-sm font-semibold text-neutral-700">

@@ -110,6 +110,51 @@ export async function assignAllFilteredAction(
 }
 
 /**
+ * T3.2 — gán / đổi SALE PHỤ TRÁCH của 1 ghi danh trong lớp.
+ * Cách ly cơ sở 2 chiều: (1) lớp phải trong tầm nhìn actor, (2) sale được gán phải
+ * CÙNG cơ sở với lớp (chống gán chéo CS1↔CS2 bằng POST tay). `saleId = null` = gỡ.
+ */
+export async function setEnrollmentSaleAction(
+  classId: string,
+  enrollmentId: string,
+  saleId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const g = await gate();
+  if (!g.ok) return { ok: false, error: g.error };
+  if (!(await assertClassInScope(g.gate.actor, classId))) {
+    return { ok: false, error: "Lớp không thuộc cơ sở bạn quản lý" };
+  }
+
+  const sdb = scopedDb(g.gate.actor);
+  const cls = await sdb.class.findFirst({
+    where: { id: classId, deletedAt: null },
+    select: { centerId: true },
+  });
+  if (!cls) return { ok: false, error: "Lớp không tồn tại" };
+
+  if (saleId) {
+    const sale = await sdb.user.findUnique({
+      where: { id: saleId },
+      select: { id: true, centerId: true, deletedAt: true },
+    });
+    if (!sale || sale.deletedAt) return { ok: false, error: "Không tìm thấy nhân sự này" };
+    // Lớp có cơ sở → sale phải cùng cơ sở. Lớp HO (centerId null) → không ràng buộc.
+    if (cls.centerId && sale.centerId !== cls.centerId) {
+      return { ok: false, error: "Sale phụ trách phải thuộc cùng cơ sở với lớp" };
+    }
+  }
+
+  const res = await sdb.enrollment.updateMany({
+    where: { id: enrollmentId, classId },
+    data: { saleId },
+  });
+  if (res.count === 0) return { ok: false, error: "Ghi danh không thuộc lớp này" };
+
+  revalidatePath(`/classes/${classId}/students`);
+  return { ok: true };
+}
+
+/**
  * (a) PA-B 22/07 — nút gộp "Chuyển sang Đang học": các ghi danh ĐÃ XẾP (CONFIRMED)
  * được tick chọn chuyển hàng loạt sang STUDYING (bỏ tick em chưa đóng đủ tiền).
  * KHÔNG tự động khi duyệt lớp (quyết định PA-B): giữ bước kiểm soát của giáo vụ.

@@ -18,7 +18,9 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { canTransition } from "@/lib/enrollments/status";
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { suggestClassEndDate } from "@/lib/classes/end-date";
 import { generateClassSessions } from "@/lib/classes/generate";
+import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
 import { courseHasActiveCurriculum } from "@/lib/courses/activation-guard";
 import { createSessionPlansForClass } from "@/lib/classes/snapshot";
 import { generateAssignmentsFromTemplates } from "@/lib/lms/assignment";
@@ -306,6 +308,21 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
     return { error: "Khoá học chưa có giáo trình ACTIVE — không thể tạo lớp." };
   }
 
+  // T3.3 — bỏ trống "Ngày bế giảng" → gợi ý = ngày buổi cuối theo lịch (trừ ngày
+  // nghỉ). Nhập tay luôn thắng. Lỗi tính toán KHÔNG chặn tạo lớp.
+  const dataWithEndDate = {
+    ...data,
+    endDate:
+      data.endDate ??
+      (await suggestClassEndDate({
+        centerId,
+        startDate: data.startDate,
+        scheduleDays: data.scheduleDays,
+        courseId: data.courseId,
+        curriculumId: curriculum.id,
+      }).catch(() => null)),
+  };
+
   let createdId = "";
   try {
     await sdb.$transaction(async (txRaw) => {
@@ -332,7 +349,7 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
 
       const created = await tx.class.create({
         data: {
-          ...toCreateData(data, classCode, centerId, orgUnitId),
+          ...toCreateData(dataWithEndDate, classCode, centerId, orgUnitId),
           curriculumId: curriculum.id,
           curriculumVersion: curriculum.version,
         },
@@ -439,12 +456,32 @@ export async function updateClass(
   );
   if (teacherCenterErr) return { error: teacherCenterErr };
 
+  // T3.3 — như createClass: bỏ trống bế giảng thì tự tính lại từ lịch hiện tại.
+  // ⚠️ Class ∈ SCOPED_MODELS: findUnique lọc hậu kỳ theo record.centerId → select
+  // PHẢI kèm centerId (thiếu → trả null cho lớp actor VẪN xem được).
+  const current = await sdb.class.findUnique({
+    where: { id },
+    select: { centerId: true, curriculumId: true },
+  });
+  const dataWithEndDate = {
+    ...parsed.data,
+    endDate:
+      parsed.data.endDate ??
+      (await suggestClassEndDate({
+        centerId,
+        startDate: parsed.data.startDate,
+        scheduleDays: parsed.data.scheduleDays,
+        courseId: parsed.data.courseId,
+        curriculumId: current?.curriculumId ?? null,
+      }).catch(() => null)),
+  };
+
   try {
     await sdb.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient;
       const updated = await tx.class.update({
         where: { id },
-        data: toUpdateData(parsed.data, centerId, orgUnitId),
+        data: toUpdateData(dataWithEndDate, centerId, orgUnitId),
         select: CLASS_SNAPSHOT_SELECT,
       });
 
@@ -610,7 +647,9 @@ export async function approveClass(classId: string): Promise<WfResult> {
 }
 
 /** P2 — nút sinh buổi học thủ công cho 1 lớp (khi cần sinh lại / lớp cũ chưa có buổi). */
-export async function generateSessionsAction(classId: string): Promise<WfResult & { generated?: number }> {
+export async function generateSessionsAction(
+  classId: string,
+): Promise<WfResult & { generated?: number; warning?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
@@ -621,7 +660,9 @@ export async function generateSessionsAction(classId: string): Promise<WfResult 
   if (!res.ok) return { ok: false, error: res.error ?? "Không sinh được buổi học" };
   revalidatePath(`/classes/${classId}/edit`);
   revalidatePath("/sessions");
-  return { ok: true, generated: res.generated };
+  // T4.1/T4.2 — báo cáo trùng lô: generateClassSessions CHỈ cảnh báo (không chặn),
+  // trước đây warning bị nuốt ở action nên người dùng không hề biết.
+  return { ok: true, generated: res.generated, ...(res.warning ? { warning: res.warning } : {}) };
 }
 
 /** Quản lý trả lại lớp (PENDING_APPROVAL → RECRUITING) kèm lý do. */
@@ -654,7 +695,17 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   const sdb = scopedDb(actor);
   const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
-    select: { id: true, centerId: true, scheduleDays: true, startTime: true, startDate: true },
+    select: {
+      id: true,
+      centerId: true,
+      scheduleDays: true,
+      startTime: true,
+      startDate: true,
+      // T4.1 — cần GV/phòng/giờ kết thúc để soát trùng cho lô ngày mới.
+      endTime: true,
+      teacherId: true,
+      roomId: true,
+    },
   });
   if (!cls) return { ok: false as const, error: "Lớp không tồn tại" };
   if (cls.scheduleDays.length === 0) {
@@ -700,12 +751,33 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
     const nd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh || 0, mm || 0);
     return { id: s.id, topic: s.topic, oldDate: s.date, newDate: nd };
   });
-  return { ok: true as const, items };
+
+  // T4.1 — soát trùng PHÒNG/GV cho lô ngày MỚI trước khi dời cả lớp (trước đây
+  // applyClassReschedule update date thẳng → double-book âm thầm). Loại chính các
+  // buổi đang được dời khỏi phép so (chúng đang nhận ngày mới).
+  const conflicts = cls.startTime
+    ? await detectBatchConflicts({
+        centerId: null, // toàn hệ thống: GV có thể dạy 2 cơ sở
+        excludeClassId: classId,
+        excludeSessionIds: items.map((it) => it.id),
+        classStartTime: cls.startTime,
+        classEndTime: cls.endTime,
+        teacherId: cls.teacherId,
+        roomId: cls.roomId,
+        dates: items.map((it) => it.newDate),
+      }).catch(() => [])
+    : [];
+
+  return { ok: true as const, items, conflicts };
 }
 
-/** Xem trước dời buổi tương lai (không lưu). */
+/** Xem trước dời buổi tương lai (không lưu) — kèm cảnh báo trùng phòng/GV (T4.1). */
 export async function previewClassReschedule(classId: string): Promise<
-  | { ok: true; items: { id: string; topic: string | null; oldDate: string; newDate: string }[] }
+  | {
+      ok: true;
+      items: { id: string; topic: string | null; oldDate: string; newDate: string }[];
+      conflicts: { date: string; messages: string[] }[];
+    }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -722,6 +794,10 @@ export async function previewClassReschedule(classId: string): Promise<
       oldDate: it.oldDate.toISOString(),
       newDate: it.newDate.toISOString(),
     })),
+    conflicts: res.conflicts.map((c) => ({
+      date: c.date.toISOString(),
+      messages: c.messages,
+    })),
   };
 }
 
@@ -737,11 +813,38 @@ export async function applyClassReschedule(classId: string): Promise<WfResult> {
   const res = await computeFutureReschedule(classId, actor);
   if (!res.ok) return res;
 
+  // T4.1 — CHẶN khi lịch mới đụng phòng/GV của lớp khác (trùng cứng). Cùng chuẩn với
+  // adjustSession (đổi 1 buổi cũng chặn) — đừng để dời cả lớp lách qua.
+  if (res.conflicts.length > 0) {
+    const days = res.conflicts.slice(0, 3).map((c) => formatDateVN(c.date));
+    const more =
+      res.conflicts.length > days.length ? ` (+${res.conflicts.length - days.length} buổi nữa)` : "";
+    return {
+      ok: false,
+      error: `Không dời được: lịch mới trùng phòng/giáo viên với lớp khác vào ${days.join(", ")}${more}. Đổi phòng/GV hoặc chọn lịch khác rồi thử lại.`,
+    };
+  }
+
+  // T3.3 — buổi cuối dời thì NGÀY BẾ GIẢNG phải đi theo (items đã sort theo ngày).
+  const lastNewDate = res.items[res.items.length - 1]?.newDate ?? null;
+
   try {
     await sdb.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient;
       for (const it of res.items) {
         await tx.classSession.update({ where: { id: it.id }, data: { date: it.newDate } });
+      }
+      if (lastNewDate) {
+        await tx.class.update({
+          where: { id: classId },
+          data: {
+            endDate: new Date(
+              lastNewDate.getFullYear(),
+              lastNewDate.getMonth(),
+              lastNewDate.getDate(),
+            ),
+          },
+        });
       }
       // R7-06 AC6 — phát event để PH/GV được thông báo (handler ở R7-17).
       await publishEvent(
