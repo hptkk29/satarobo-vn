@@ -18,6 +18,8 @@
  * Backfill vì thế là việc **dọn dẹp**, chạy lúc nào cũng được, và chạy lại nhiều
  * lần cũng vô hại (idempotent).
  */
+// PHẢI đứng TRƯỚC import lib/db — Prisma đọc DATABASE_URL lúc khởi tạo module.
+import { currentDbHost } from "./_load-env";
 import { db } from "../lib/db";
 import { canonicalPhone } from "../lib/phone";
 
@@ -34,9 +36,8 @@ function planChange(id: string, field: string, value: string | null): Change | n
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "";
   console.log(`\n═══ PHONE BACKFILL ${APPLY ? "(GHI THẬT)" : "(DRY-RUN — không ghi gì)"} ═══`);
-  console.log(`DB host: ${url.replace(/^.*@/, "").replace(/\/.*$/, "") || "(?)"}\n`);
+  console.log(`DB host: ${currentDbHost()}\n`);
 
   const [leads, students, employees] = await Promise.all([
     db.lead.findMany({ where: { deletedAt: null }, select: { id: true, phone: true } }),

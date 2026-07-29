@@ -12,6 +12,8 @@
  * KHÔNG đọc/đụng Order.customerPhone và VoucherRedemption.customerPhone —
  * chúng là **snapshot hoá đơn**, cố ý giữ nguyên văn lịch sử.
  */
+// PHẢI đứng TRƯỚC import lib/db — Prisma đọc DATABASE_URL lúc khởi tạo module.
+import { currentDbHost } from "./_load-env";
 import { db } from "../lib/db";
 import { canonicalPhone } from "../lib/phone";
 
@@ -49,10 +51,9 @@ function normName(s: string | null): string {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "";
-  const host = url.replace(/^.*@/, "").replace(/\/.*$/, "");
+  const host = currentDbHost();
   console.log(`\n═══ PHONE AUDIT (CHỈ ĐỌC) ═══`);
-  console.log(`DB host: ${host || "(không đọc được DATABASE_URL)"}\n`);
+  console.log(`DB host: ${host}\n`);
 
   const [leads, students, employees] = await Promise.all([
     db.lead.findMany({
