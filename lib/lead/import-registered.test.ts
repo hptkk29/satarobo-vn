@@ -84,9 +84,9 @@ function fixture(): SheetAoA[] {
 
 describe("helpers", () => {
   it("normalizeRegisteredPhone — trailing space / +84 / number mất số 0 đầu", () => {
-    expect(normalizeRegisteredPhone("0915942357 ")).toBe("0915942357");
-    expect(normalizeRegisteredPhone("+84 905 000 001")).toBe("0905000001");
-    expect(normalizeRegisteredPhone(938000005)).toBe("0938000005");
+    expect(normalizeRegisteredPhone("0915942357 ")).toBe("84915942357");
+    expect(normalizeRegisteredPhone("+84 905 000 001")).toBe("84905000001");
+    expect(normalizeRegisteredPhone(938000005)).toBe("84938000005");
   });
 
   it("normalizeStudentCode — vá thiếu dấu chấm, format lạ giữ raw", () => {
@@ -155,7 +155,7 @@ describe("parseRegisteredSheets — fixture mô phỏng file thật", () => {
 
   it("dedupe cross-sheet: sheet Tháng 6 lặp Tháng 5 → gộp, đắp field trống", () => {
     expect(parsed.mergedDuplicateRows).toBe(2); // HV MỘT + HV HAI lặp lại ở T6
-    const p1 = parsed.parents.find((p) => p.phone === "0905000001");
+    const p1 = parsed.parents.find((p) => p.phone === "84905000001");
     expect(p1).toBeDefined();
     // Tên PH thiếu ở T5, bổ sung từ T6.
     expect(p1?.parentName).toBe("PH MỘT HAI");
@@ -168,21 +168,21 @@ describe("parseRegisteredSheets — fixture mô phỏng file thật", () => {
   });
 
   it("1 PH nhiều con: cùng SĐT + khác tên → 1 parent 2 children", () => {
-    const p1 = parsed.parents.find((p) => p.phone === "0905000001");
+    const p1 = parsed.parents.find((p) => p.phone === "84905000001");
     expect(p1?.children.map((c) => c.fullName).sort()).toEqual(["HV HAI", "HV MỘT"]);
     // Tổng: 0905000001 (2 con), 0915000002 (HV BA), 0905000004 (HV BỐN), 0938000005 (HV NĂM).
     expect(parsed.parents).toHaveLength(4);
   });
 
   it("data bẩn: mã HV vá dấu chấm, học phí giữ NGUYÊN chuỗi (kể cả typo), CCCD PH ghi chữ giữ raw", () => {
-    const p4 = parsed.parents.find((p) => p.phone === "0905000004");
+    const p4 = parsed.parents.find((p) => p.phone === "84905000004");
     expect(p4?.children[0].studentCodeOld).toBe("CS1.HV.0032");
     expect(p4?.children[0].tuitionRaw).toBe("4.640.000đ");
     expect(p4?.parentCccd).toBe("không xin được thông tin");
-    const p5 = parsed.parents.find((p) => p.phone === "0938000005");
+    const p5 = parsed.parents.find((p) => p.phone === "84938000005");
     expect(p5?.children[0].tuitionRaw).toBe("1.000.0000Đ"); // KHÔNG tự sửa tiền
     expect(p5?.children[0].centerCode).toBe("CS2"); // suy từ mã HV khi cột Cơ sở trống
-    const p1 = parsed.parents.find((p) => p.phone === "0905000001");
+    const p1 = parsed.parents.find((p) => p.phone === "84905000001");
     expect(p1?.children[0].tuitionRaw).toBe("3986000"); // number → chuỗi số nguyên
   });
 
@@ -223,7 +223,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
     ctx.courseByKey = map;
     const plan = planRegisteredImport(parsed, ctx);
     expect(plan.unmatchedCourses).toEqual([]); // "Sata 4"/"Combo luyện thi" đều khớp qua compactKey
-    const c1 = plan.creates.find((c) => c.phone === "0905000001");
+    const c1 = plan.creates.find((c) => c.phone === "84905000001");
     expect(c1?.children.map((ch) => ch.interestedCourseId).sort()).toEqual([
       "c-combo",
       "c-sata4",
@@ -235,7 +235,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
     expect(plan.creates).toHaveLength(4);
     expect(plan.merges).toHaveLength(0);
 
-    const c1 = plan.creates.find((c) => c.phone === "0905000001");
+    const c1 = plan.creates.find((c) => c.phone === "84905000001");
     expect(c1?.parentName).toBe("PH MỘT HAI");
     expect(c1?.centerId).toBe("co-so-hoang-dieu");
     expect(c1?.orgUnitId).toBe("org-cs2");
@@ -254,7 +254,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
     expect(c1?.children[0].note).toContain("Tình trạng TT: Đã thanh toán");
 
     // Sales "Vân"/"My" không khớp → assignee trống + tên giữ trong note.
-    const p3 = plan.creates.find((c) => c.phone === "0915000002");
+    const p3 = plan.creates.find((c) => c.phone === "84915000002");
     expect(p3?.assignedToId).toBeNull();
     expect(p3?.note).toContain("Sales: Vân");
     expect(plan.unmatchedSales.sort()).toEqual(["My", "Vân"]);
@@ -262,10 +262,10 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
 
   it("gộp lead có sẵn: đắp field trống, nâng status → REGISTERED, thêm con thiếu", () => {
     const ctx = baseCtx();
-    ctx.existingByPhone.set("0905000001", {
+    ctx.existingByPhone.set("84905000001", {
       id: "lead-1",
       parentName: "PH Cũ",
-      phone: "0905000001",
+      phone: "84905000001",
       status: "CONSULTING",
       note: "Ghi chú cũ",
       centerId: null,
@@ -277,7 +277,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
       ],
     });
     const plan = planRegisteredImport(parsed, ctx);
-    const m = plan.merges.find((x) => x.phone === "0905000001");
+    const m = plan.merges.find((x) => x.phone === "84905000001");
     expect(m?.changed).toBe(true);
     expect(m?.set.status).toBe("REGISTERED");
     expect(m?.set.centerId).toBe("co-so-hoang-dieu");
@@ -293,10 +293,10 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
   it("idempotent: import lại (record đã mang đủ data + note import) → changed=false", () => {
     const ctx = baseCtx();
     const first = planRegisteredImport(parsed, ctx);
-    const c1 = first.creates.find((c) => c.phone === "0905000001");
+    const c1 = first.creates.find((c) => c.phone === "84905000001");
     if (!c1) throw new Error("missing create plan");
     // Mô phỏng DB sau lần import 1: lead đã tồn tại đúng như create plan.
-    ctx.existingByPhone.set("0905000001", {
+    ctx.existingByPhone.set("84905000001", {
       id: "lead-1",
       parentName: c1.parentName,
       phone: c1.phone,
@@ -316,7 +316,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
       })),
     });
     const second = planRegisteredImport(parsed, ctx);
-    const m = second.merges.find((x) => x.phone === "0905000001");
+    const m = second.merges.find((x) => x.phone === "84905000001");
     expect(m?.changed).toBe(false); // 0 record mới, 0 note lặp
     expect(m?.newChildren).toHaveLength(0);
     expect(m?.noteAppend).toBeNull();
@@ -325,10 +325,10 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
 
   it("ENROLLED/DUPLICATE không bị hạ/nâng status", () => {
     const ctx = baseCtx();
-    ctx.existingByPhone.set("0905000004", {
+    ctx.existingByPhone.set("84905000004", {
       id: "lead-4",
       parentName: "PH Bốn",
-      phone: "0905000004",
+      phone: "84905000004",
       status: "ENROLLED",
       note: null,
       centerId: "co-so-nguyen-huu-tho",
@@ -338,7 +338,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
       children: [],
     });
     const plan = planRegisteredImport(parsed, ctx);
-    const m = plan.merges.find((x) => x.phone === "0905000004");
+    const m = plan.merges.find((x) => x.phone === "84905000004");
     expect(m?.set.status).toBeUndefined();
   });
 

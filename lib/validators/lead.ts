@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import { LeadChildTrialStatus } from '@prisma/client'
+import { phoneVn } from '@/lib/validators/phone'
 
-export const PHONE_VN = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/
+// AUTH-SĐT P1 — regex riêng đã bị gỡ; nguồn duy nhất là `PHONE_VN_RE` trong
+// `lib/phone.ts`. Re-export để call-site cũ còn import được.
+export { PHONE_VN_RE as PHONE_VN } from '@/lib/phone'
 
 // Helpers — convert empty string → null, preserve type (R7-01 LeadChild).
 const nullableStr = z
@@ -29,7 +32,7 @@ export const leadCreateSchema = z.object({
   parentName: z.string().min(2, 'Họ tên tối thiểu 2 ký tự').max(100),
   childName: z.string().max(100).optional(),
   childAge: z.number().int().min(3).max(18).optional(),
-  phone: z.string().regex(PHONE_VN, 'SĐT không hợp lệ'),
+  phone: phoneVn,
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
   centerId: z.string().min(1).optional(),
   orgUnitId: z.string().min(1).optional(), // PR-C: đơn vị (OrgUnit) — nguồn chính; centerId suy ra (HO→null)

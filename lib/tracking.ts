@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { canonicalPhone } from '@/lib/phone'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,12 +32,10 @@ function sha256(value: string): string {
   return createHash('sha256').update(value.trim().toLowerCase()).digest('hex')
 }
 
-function normalizePhone(phone: string): string {
-  // Strip all non-digit chars, add country code for VN (+84)
-  const digits = phone.replace(/\D/g, '')
-  if (digits.startsWith('0')) return '84' + digits.slice(1)
-  return digits
-}
+// AUTH-SĐT P1 — Meta CAPI đòi E.164 không dấu `+`, tức đúng canonical `84…` của
+// repo. Chuẩn hoá sai ⇒ hash sai ⇒ Meta không match được người dùng, và lỗi này
+// hoàn toàn câm: API vẫn trả 200, chỉ có tỉ lệ match tụt dần.
+const toCapiPhone = (phone: string) => canonicalPhone(phone) ?? phone.replace(/\D/g, '')
 
 // ─── Meta Conversions API ─────────────────────────────────────────────────────
 
@@ -55,7 +54,7 @@ export async function sendMetaCapi(event: MetaCapiEvent): Promise<void> {
 
   if (ud.fbp) userData.fbp = ud.fbp
   if (ud.fbc) userData.fbc = ud.fbc
-  if (ud.phone) userData.ph = sha256(normalizePhone(ud.phone))
+  if (ud.phone) userData.ph = sha256(toCapiPhone(ud.phone))
   if (ud.email) userData.em = sha256(ud.email)
 
   const payload = {

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { phoneVn } from '@/lib/validators/phone'
 import { toast } from 'sonner'
 import { Loader2, Send } from 'lucide-react'
 import {
@@ -24,8 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-const PHONE_VN = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/
 
 const SUBJECTS = [
   { value: 'tu-van-khoa-hoc', label: 'Tư vấn khoá học' },
@@ -56,7 +55,7 @@ const SUBJECT_VALUES = [
 
 const contactSchema = z.object({
   parentName: z.string().min(2, 'Họ tên tối thiểu 2 ký tự').max(100),
-  phone: z.string().regex(PHONE_VN, 'SĐT Việt Nam không hợp lệ (VD: 0912345678)'),
+  phone: phoneVn,
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
   // Zod v4 dùng 'error' thay vì 'required_error'
   subject: z.enum(SUBJECT_VALUES, { error: 'Vui lòng chọn chủ đề' }),

@@ -1,5 +1,7 @@
 "use client";
 
+import { canonicalPhone, isValidPhoneVN } from "@/lib/phone";
+
 import { useState, useEffect, useRef } from "react";
 import { X, Phone, Loader2 } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
@@ -64,8 +66,11 @@ export function ConsultModal({
       toast.error("Vui lòng nhập tên phụ huynh");
       return;
     }
-    if (!/^[0-9+\s-]{9,15}$/.test(phone.trim())) {
-      toast.error("Số điện thoại không hợp lệ");
+    // AUTH-SĐT P1 — kiểm bằng đúng luật của server (`lib/phone.ts`). Luật client
+    // cũ `/^[0-9+\s-]{9,15}$/` lỏng hơn server rất nhiều: `"+++++++++"` qua được
+    // ở đây rồi bị server chặn 400 — người dùng chỉ thấy "Lỗi hệ thống".
+    if (!isValidPhoneVN(phone)) {
+      toast.error("Số điện thoại không hợp lệ (VD: 0912345678)");
       return;
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -91,7 +96,7 @@ export function ConsultModal({
 
     const payload = {
       parentName: parentName.trim(),
-      phone: phone.trim(),
+      phone: canonicalPhone(phone) ?? phone.trim(),
       email: email.trim() || undefined,
       childName: childName.trim() || undefined,
       source: courseSlug,

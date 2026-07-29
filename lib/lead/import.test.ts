@@ -28,14 +28,14 @@ describe("resolveDefaultCenterId — ô Cơ sở để trống (26/07)", () => {
 });
 
 describe("lead import helpers", () => {
-  it("normalizePhone chuẩn hoá +84/khoảng trắng", () => {
-    expect(normalizePhone("+84 901 234 567")).toBe("0901234567");
-    expect(normalizePhone("0901.234.567")).toBe("0901234567");
-    expect(normalizePhone("84901234567")).toBe("0901234567");
+  it("normalizePhone chuẩn hoá mọi cách gõ về canonical 84XXXXXXXXX", () => {
+    expect(normalizePhone("+84 901 234 567")).toBe("84901234567");
+    expect(normalizePhone("0901.234.567")).toBe("84901234567");
+    expect(normalizePhone("84901234567")).toBe("84901234567");
   });
 
   it("isValidPhone", () => {
-    expect(isValidPhone("0901234567")).toBe(true);
+    expect(isValidPhone("84901234567")).toBe(true);
     expect(isValidPhone("0123456789")).toBe(false); // đầu số 1 không hợp lệ
     expect(isValidPhone("12345")).toBe(false);
   });
@@ -71,7 +71,7 @@ describe("lead import helpers", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.data.phone).toBe("0901234567");
+      expect(r.data.phone).toBe("84901234567");
       expect(r.data.centerCode).toBe("CS1");
       expect(r.data.childAge).toBe(8);
       expect(r.data.source).toBe("Sự kiện");

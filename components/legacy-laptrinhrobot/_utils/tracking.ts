@@ -1,5 +1,7 @@
 "use client";
 
+import { canonicalPhone, isValidPhoneVN } from "@/lib/phone";
+
 // gtag/fbq global types declared in components/public/{ga4,meta-pixel}.tsx
 
 export const GOOGLE_SHEET_URL =
@@ -101,7 +103,9 @@ async function submitLeadToApi(formData: LeadData): Promise<void> {
 
   const payload = {
     parentName: formData.name || "",
-    phone: formData.phone || "",
+    // AUTH-SĐT P1 — chuẩn hoá TRƯỚC khi gửi: người dùng gõ "0905 123 456"
+    // từng bị server trả 400 rồi client nuốt lỗi ⇒ lead bốc hơi không ai biết.
+    phone: canonicalPhone(formData.phone) ?? formData.phone ?? "",
     email: formData.email || "",
     source: "laptrinhrobot-landing",
     eventId,
@@ -150,9 +154,9 @@ export async function handleLeadSubmission(formData: LeadData) {
   return sheetResult;
 }
 
+// AUTH-SĐT P1 — bản regex viết tay thứ 3 đã gỡ; dùng chung `lib/phone.ts`.
 export function validateVietnamPhone(phone: string): boolean {
-  const cleaned = phone.replace(/\s|-|\./g, "");
-  return /^(0|\+84)[35789]\d{8}$/.test(cleaned);
+  return isValidPhoneVN(phone);
 }
 
 export function validateEmail(email: string): boolean {

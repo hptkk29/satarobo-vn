@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
+import { phoneVariants } from "@/lib/phone";
 
 // =============================================================================
 // LEAD DEDUP — chống trùng SĐT trong cửa sổ cấu hình được (Phase T1.3)
@@ -12,8 +13,12 @@ export async function findRecentDuplicate(
 ): Promise<{ id: string } | null> {
   const windowDays = await getSetting("crm.dedupWindowDays");
   const since = new Date(Date.now() - windowDays * 86400 * 1000);
+  // AUTH-SĐT P1 — so khớp cả canonical `84…` (đường ghi mới) lẫn `0…` (dữ liệu
+  // cũ chưa backfill). So khớp đúng-bằng ở đây là chỗ dedup gãy âm thầm nhất.
+  const variants = phoneVariants(phone);
+  if (!variants.length) return null;
   return db.lead.findFirst({
-    where: { phone, deletedAt: null, createdAt: { gte: since } },
+    where: { phone: { in: variants }, deletedAt: null, createdAt: { gte: since } },
     orderBy: { createdAt: "desc" },
     select: { id: true },
   });

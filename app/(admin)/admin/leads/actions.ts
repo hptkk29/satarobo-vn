@@ -7,6 +7,7 @@ import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { phoneVn } from '@/lib/validators/phone'
 import type { Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { resolveActor } from '@/lib/auth/actor'
@@ -560,11 +561,9 @@ export async function reassignLeadsFromAction(
 
 // ─── Module CRM & Lead PHẦN 1 — CRUD lead thủ công ───────────────────────────
 
-const PHONE_VN_RE = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/
-
 const manualLeadSchema = z.object({
   parentName: z.string().trim().min(2, 'Tên phụ huynh tối thiểu 2 ký tự').max(100),
-  phone: z.string().trim().regex(PHONE_VN_RE, 'SĐT không hợp lệ'),
+  phone: phoneVn,
   email: z.string().trim().email('Email không hợp lệ').optional().or(z.literal('')),
   childName: z.string().trim().max(100).optional().or(z.literal('')),
   childAge: z.coerce.number().int().min(3).max(18).optional().nullable(),

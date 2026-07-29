@@ -2,6 +2,7 @@
 // (parent + tên chuẩn hoá + DOB). Logic phân loại THUẦN (test được); lookup DB tách riêng.
 import { db } from "@/lib/db";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { canonicalPhone, phoneVariants } from "@/lib/phone";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -10,9 +11,13 @@ export function normalizeName(s: string | null | undefined): string {
   return (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-/** Chuẩn hoá SĐT: chỉ giữ chữ số. THUẦN. */
+/**
+ * Chuẩn hoá SĐT → canonical `84XXXXXXXXX`. THUẦN.
+ * AUTH-SĐT P1 — trước đây chỉ giữ chữ số nên `0905…` và `84905…` là 2 khoá khác
+ * nhau, tức dedupe phụ huynh bỏ sót đúng những cặp trùng thật.
+ */
 export function normalizePhone(s: string | null | undefined): string {
-  return (s ?? "").replace(/\D/g, "");
+  return canonicalPhone(s) ?? (s ?? "").replace(/\D/g, "");
 }
 
 export type ParentMatch =
@@ -45,12 +50,17 @@ export async function findParentMatch(
   client: DbClient = db,
 ): Promise<ParentMatch> {
   const email = (input.email ?? "").trim().toLowerCase();
-  const phone = normalizePhone(input.phone);
+  // AUTH-SĐT P1 — tra cả dạng canonical mới lẫn `0…` cũ (xem `phoneVariants`).
+  const variants = phoneVariants(input.phone);
   const [byEmail, byPhoneStudent] = await Promise.all([
     email ? client.user.findFirst({ where: { email }, select: { id: true } }) : null,
-    phone
+    variants.length
       ? client.student.findFirst({
-          where: { parentPhone: phone, parentUserId: { not: null }, deletedAt: null },
+          where: {
+            parentPhone: { in: variants },
+            parentUserId: { not: null },
+            deletedAt: null,
+          },
           select: { parentUserId: true },
         })
       : null,

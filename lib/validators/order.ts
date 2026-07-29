@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { OrderType, OrderStatus, OrderItemType } from "@prisma/client";
+import { phoneVn } from "@/lib/validators/phone";
 
-export const PHONE_VN = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/;
+// AUTH-SĐT P1 — regex riêng đã gỡ; nguồn duy nhất ở `lib/phone.ts`.
+export { PHONE_VN_RE as PHONE_VN } from "@/lib/phone";
+
+
 
 const orderItemSchema = z.object({
   type: z.nativeEnum(OrderItemType),
@@ -23,7 +27,7 @@ export const orderCreateManualSchema = z.object({
 
   // Customer snapshot
   customerName: z.string().min(2).max(200),
-  customerPhone: z.string().regex(PHONE_VN, "SĐT không hợp lệ"),
+  customerPhone: phoneVn,
   // O2 — email bắt buộc cho đơn thủ công (dùng gửi xác nhận/biên nhận).
   customerEmail: z.string().email("Email không hợp lệ"),
   // O2 — CCCD/CMND người mua (snapshot trên đơn): 9 hoặc 12 chữ số, optional.

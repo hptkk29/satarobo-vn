@@ -6,6 +6,8 @@
 // Pure — không "use server", testable. Mã cơ sở chỉ chuẩn hoá format; tính hợp lệ
 // (CS1/CS2/CS3…) do call-site validate động theo Center active (không hardcode).
 
+import { canonicalPhone, isValidPhoneVN } from "@/lib/phone";
+
 export const LEAD_IMPORT_CENTER_HEADER = "Cơ sở (mã CS, để trống)";
 
 export const LEAD_IMPORT_COLUMNS = [
@@ -20,19 +22,23 @@ export const LEAD_IMPORT_COLUMNS = [
   "Ghi chú",
 ] as const;
 
-/** SĐT VN hợp lệ (0 hoặc +84, đầu số 3/5/7/8/9 + 8 số). */
-export const PHONE_VN = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/;
+// AUTH-SĐT P1 — 3 hàm dưới đây từng là bản chuẩn hoá RIÊNG của luồng import
+// (cho ra `0…`, đối nghịch với `lib/crm/lead-qualify.ts` cho ra `84…`). Nay chỉ
+// còn là lớp mỏng bọc `lib/phone.ts`. Giữ tên cũ để 4 call-site import/precheck
+// không phải đổi, nhưng **đầu ra đã là canonical `84XXXXXXXXX`**.
+export { PHONE_VN_RE as PHONE_VN } from "@/lib/phone";
 
-/** Chuẩn hoá SĐT: bỏ khoảng trắng/dấu chấm/gạch; +84 → 0. */
+/**
+ * Chuẩn hoá SĐT về canonical. Chuỗi không hợp lệ trả về **dạng đã bỏ ký tự
+ * trình bày** (không phải rỗng) để `parseLeadImportRow` phân biệt được
+ * "thiếu SĐT" với "SĐT sai định dạng" khi báo lỗi cho người import.
+ */
 export function normalizePhone(raw: unknown): string {
-  let s = String(raw ?? "").replace(/[\s.\-()]/g, "").trim();
-  if (s.startsWith("+84")) s = "0" + s.slice(3);
-  else if (s.startsWith("84") && s.length === 11) s = "0" + s.slice(2);
-  return s;
+  return canonicalPhone(raw) ?? String(raw ?? "").replace(/[\s .\-()]/g, "").trim();
 }
 
 export function isValidPhone(phone: string): boolean {
-  return PHONE_VN.test(phone);
+  return isValidPhoneVN(phone);
 }
 
 /** Tuổi con: số nguyên 3–18 hoặc null (rỗng). */

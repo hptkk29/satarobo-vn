@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getPrimaryOtpProvider } from "./provider";
 import { getSetting } from "@/lib/settings/service";
 import { getSigningSecret } from "@/lib/security/signing-key";
+import { canonicalPhone } from "@/lib/phone";
 
 // =============================================================================
 // Cụm A1 — OTP service (request + verify).
@@ -48,6 +49,25 @@ function genCode(): string {
   return String(randomInt(100000, 1000000));
 }
 
+/**
+ * AUTH-SĐT P1 — chuẩn hoá `OtpRequest.target` NGAY TẠI TẦNG NÀY, không chỉ ở
+ * validator đầu vào.
+ *
+ * `target` vừa là khoá tra cứu lúc verify, vừa là khoá của cooldown và hạn mức
+ * ngày. Trước đây chỉ `.trim().toLowerCase()` — với SĐT đó là **no-op**, kéo theo
+ * hai hỏng hóc câm:
+ * - **Verify không bao giờ khớp:** lưu `84905…` lúc cấp tài khoản nhưng
+ *   `/kich-hoat` gửi lên `0905…` ⇒ `findFirst({where:{target}})` không thấy gì,
+ *   phụ huynh nhận được mã nhưng nhập vào báo "chưa có mã".
+ * - **Thủng lá chắn chi phí §3.2:** hai cách gõ = hai bộ đếm = gấp đôi hạn mức
+ *   8 tin/ngày, và cooldown 60s vượt được chỉ bằng cách đổi cách gõ số.
+ *
+ * Email vẫn đi nhánh lowercase như cũ.
+ */
+export function normalizeOtpTarget(raw: string): string {
+  return canonicalPhone(raw) ?? raw.trim().toLowerCase();
+}
+
 const startOfToday = () => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -80,7 +100,7 @@ export async function requestOtp(input: {
   purpose: OtpPurposeKey;
   userId?: string | null;
 }): Promise<RequestOtpResult> {
-  const target = input.target.trim().toLowerCase();
+  const target = normalizeOtpTarget(input.target);
   if (!target) return { ok: false, error: "Thiếu email/SĐT" };
 
   // Tham số động (SystemSetting "otp.*"); default = hằng số cũ nếu chưa cấu hình.
@@ -225,7 +245,7 @@ export async function verifyAndConsumeOtp(input: {
   purpose: OtpPurposeKey;
   code: string;
 }): Promise<VerifyOtpResult> {
-  const target = input.target.trim().toLowerCase();
+  const target = normalizeOtpTarget(input.target);
   const code = input.code.trim();
 
   const otp = await db.otpRequest.findFirst({

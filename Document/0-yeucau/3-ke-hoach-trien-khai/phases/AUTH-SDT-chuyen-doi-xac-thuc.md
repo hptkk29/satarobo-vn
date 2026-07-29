@@ -84,7 +84,9 @@ Chọn `84…` (không phải `+84…`, không phải `0…`) vì: (a) khớp th
 >
 > ⇒ `requestOtp`/`verifyOtp` phải `canonicalPhone(target) ?? target.toLowerCase()` **ngay đầu hàm** (nhánh email giữ nguyên lowercase). Việc này thuộc P1 (cùng lúc ra đời `lib/phone.ts`), **không** để tới P4/P5.
 
-> ⚠️ **Thứ tự bắt buộc:** đổi đường GHI sang `84…` mà **chưa backfill** dữ liệu cũ (`0…`) sẽ **phá dedupe ngay ngày deploy** — `findRecentDuplicate` hết bắt trùng 90 ngày, tính năng **gộp con theo SĐT vừa ship ở `f39b94d` ngừng match lead cũ**, `findParentMatch` không tìm ra phụ huynh. Âm thầm, không test nào bắt. **Backfill phải nằm trong CÙNG deploy.**
+> ✅ **CẬP NHẬT 29/07 — ràng buộc "backfill cùng deploy" ĐÃ ĐƯỢC GỠ (P1 đã làm).** Thay vì bắt hai việc phải đi cùng nhau (rủi ro: quên một cái là hỏng im lặng trên PROD), mọi đường **ĐỌC** theo SĐT nay tra bằng `phoneVariants()` → `{ phone: { in: ["84…", "0…"] } }`, tức khớp được **cả hai dạng**. Backfill trở thành việc **dọn dẹp, chạy lúc nào cũng được, chạy lại vô hại**. Đây là đúng mẫu 2-phase migration mà `.claude/rules/prisma-db.md` quy định. Cảnh báo bên dưới giữ lại làm **lý do lịch sử** — nó mô tả chính xác điều gì sẽ xảy ra nếu ai đó gỡ `phoneVariants` trước khi `phone-audit` xác nhận PROD sạch.
+>
+> ⚠️ **(Ràng buộc gốc — nay chỉ còn hiệu lực nếu bỏ `phoneVariants`)** Đổi đường GHI sang `84…` mà **chưa backfill** dữ liệu cũ (`0…`) sẽ **phá dedupe ngay ngày deploy** — `findRecentDuplicate` hết bắt trùng 90 ngày, tính năng **gộp con theo SĐT vừa ship ở `f39b94d` ngừng match lead cũ**, `findParentMatch` không tìm ra phụ huynh. Âm thầm, không test nào bắt. **Backfill phải nằm trong CÙNG deploy.**
 
 ### QĐ-5 · OTP qua Zalo đi **provider riêng**, `SIMULATED` = **FAILED** ở production
 
@@ -198,8 +200,9 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 - **Canonical hoá `target` trong `lib/otp/service.ts:65,160`** (xem cảnh báo đỏ ở QĐ-4). Làm ở P1 vì đây là điều kiện đúng-đắn của cả cooldown/daily-limit lẫn verify — để tới P5 thì lỗi chỉ lộ ra khi phụ huynh thật không kích hoạt được.
 - **Sửa 2 test đang khoá cứng 2 dạng đối nghịch** (`lib/lead/import.test.ts:31-35`, `lib/crm/lead-qualify.test.ts:6-9`).
 - **Vá lỗi đang mất lead thật:** client gửi SĐT có khoảng trắng → server chặn 400 → **nuốt lỗi im lặng** (`components/legacy-laptrinhrobot/_utils/tracking.ts:104,123-129` · `components/khoa-hoc/consult-modal.tsx:67,94`). Sau khi SĐT thành khoá đăng nhập, cùng lỗi này thành *"phụ huynh không tạo được tài khoản"* mà không ai biết.
-- **`scripts/phone-audit.ts` (CHỈ ĐỌC)** chạy trên **PROD**: đếm số bản ghi lệch dạng + **số nhóm trùng sau canonical** trên `Lead.phone`, `Student.parentPhone/parent2Phone`, `Employee.phone`, `Order.customerPhone`; liệt kê cặp *"1 SĐT → nhiều User"*; đếm `ConvertConflict status=OPEN`.
-- **Backfill trong CÙNG deploy** (xem cảnh báo QĐ-4): `Lead.phone`, `Student.parentPhone/parent2Phone/phone`, `Employee.phone`. **Không backfill** `Order.customerPhone`/`VoucherRedemption.customerPhone` (snapshot hoá đơn, cố ý giữ lịch sử) và các cột log.
+- **`scripts/phone-audit.ts` (CHỈ ĐỌC — `pnpm phone:audit`)** chạy trên **PROD**: 5 mục — phân bố định dạng từng cột · số nhóm trùng sau canonical · **cặp "1 SĐT → nhiều User"** (mỗi cái CHẶN `User.phone @unique` ở P3) · **nhóm "cùng SĐT khác tên phụ huynh"** (§8 — mỗi nhóm là một cặp gia đình sẽ thấy con của nhau nếu gộp nhầm) · `ConvertConflict status=OPEN`.
+- **`scripts/phone-backfill.ts` (`pnpm phone:backfill`, mặc định DRY-RUN, `--apply` mới ghi)**: `Lead.phone`, `Student.parentPhone/parent2Phone/phone`, `Employee.phone` — theo lô 500, idempotent. **Không backfill** `Order.customerPhone`/`VoucherRedemption.customerPhone` (snapshot hoá đơn — sửa lại là sửa chứng từ) và các cột log (`ZaloMessageLog.toPhone`, `OtpRequest.target` — ghi lại sự việc đã xảy ra).
+  > Không còn bắt buộc cùng deploy (xem cập nhật ở QĐ-4). `Employee.phone` là trường tự do có thể chứa số bàn cơ sở — script chỉ đổi khi nhận ra là **di động**, số cố định giữ nguyên.
 
 **DoD:** grep toàn repo còn **đúng 1** định nghĩa `normalizePhone` và **1** regex `PHONE_VN` · `lib/phone.test.ts` xanh (phủ case `"+84 0905 123 456"` hiện đang cho ra `"00905123456"` sai) · **báo cáo phone-audit trên PROD có số liệu thật, không phải ước lượng** · dedupe lead vẫn bắt trùng sau backfill · test khẳng định `requestOtp("0905…")` và `requestOtp("84905…")` **dùng CHUNG một bộ đếm cooldown/daily-limit**.
 
