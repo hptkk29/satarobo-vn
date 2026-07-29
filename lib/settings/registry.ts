@@ -344,6 +344,33 @@ export const SETTINGS = {
     default: 8,
     centerOverridable: false,
   }),
+  // AUTH-SĐT P0 §3.2 (chốt 29/07) — hạn mức CHI PHÍ, không phải hằng số kỹ thuật.
+  // Mỗi tin ZNS = 300đ ⇒ trần 300 tin/ngày ≈ 90.000đ/ngày. Kill-switch là lưới
+  // cuối: vượt ngưỡng này thì NGỪNG gửi hoàn toàn cho tới hết ngày.
+  "otp.ipMaxPerHour": def({
+    key: "otp.ipMaxPerHour",
+    group: "otp",
+    label: "Số lần xin mã tối đa / IP / giờ (đường công khai)",
+    schema: z.number().int().min(1).max(100),
+    default: 5,
+    centerOverridable: false,
+  }),
+  "otp.globalDailyCap": def({
+    key: "otp.globalDailyCap",
+    group: "otp",
+    label: "Trần số tin OTP gửi/ngày (toàn hệ thống)",
+    schema: z.number().int().min(10).max(10000),
+    default: 300,
+    centerOverridable: false,
+  }),
+  "otp.globalKillSwitch": def({
+    key: "otp.globalKillSwitch",
+    group: "otp",
+    label: "Ngưỡng tự ngắt gửi OTP (toàn hệ thống/ngày)",
+    schema: z.number().int().min(10).max(20000),
+    default: 500,
+    centerOverridable: false,
+  }),
   "teacher.overloadHoursPerWeek": def({
     key: "teacher.overloadHoursPerWeek",
     group: "teacher",

@@ -17,6 +17,16 @@ export const OTP_MAX_ATTEMPTS = 5;
 export const OTP_RESEND_COOLDOWN_SEC = 60;
 export const OTP_DAILY_LIMIT = 8; // tối đa số OTP / target / ngày
 
+/**
+ * AUTH-SĐT P0 §3.5 — CHỈ bản ghi ĐÃ GỬI ĐƯỢC mới bị tính vào cooldown/hạn mức.
+ *
+ * `OtpRequest` được tạo TRƯỚC khi gọi provider, nên trước đây một lần gửi hỏng
+ * (Resend lỗi, ZNS `-118`/`-139`, hết quota) vẫn trừ 1 trong 8 lượt/ngày và khoá
+ * resend 60s — chặn người dùng đúng lúc họ cần resend nhất. Lọc qua quan hệ
+ * `deliveries` giữ được ngữ nghĩa mà KHÔNG phải đổi schema.
+ */
+const DELIVERED = { deliveries: { some: { status: "SENT" } } } as const;
+
 export type OtpPurposeKey = "ACTIVATION" | "RESET" | "CHANGE_CONTACT";
 
 function secret(): string {
@@ -52,6 +62,14 @@ export type RequestOtpResult =
       cooldownSec?: number;
       /** OTP ĐÃ tạo (verify được) nhưng kênh gửi lỗi — caller quyết định cách báo (QA 21/07 #3). */
       deliveryFailed?: boolean;
+      /**
+       * Từ chối vì lý do TOÀN HỆ THỐNG (trần ngày / kill-switch), KHÔNG phụ thuộc
+       * target. Đường công khai được phép báo thật lỗi này mà không tạo oracle
+       * liệt kê — mọi lý do còn lại (không tồn tại / cooldown / vượt hạn mức của
+       * riêng số này / gửi hỏng) đều chỉ xảy ra với target CÓ THẬT nên phải nuốt
+       * về thông điệp chung. Xem §3.4.
+       */
+      systemHalt?: boolean;
     };
 
 /**
@@ -66,16 +84,43 @@ export async function requestOtp(input: {
   if (!target) return { ok: false, error: "Thiếu email/SĐT" };
 
   // Tham số động (SystemSetting "otp.*"); default = hằng số cũ nếu chưa cấu hình.
-  const [ttlMinutes, cooldownSec, dailyLimit, maxAttempts] = await Promise.all([
-    getSetting("otp.ttlMinutes"),
-    getSetting("otp.resendCooldownSec"),
-    getSetting("otp.dailyLimit"),
-    getSetting("otp.maxAttempts"),
-  ]);
+  const [ttlMinutes, cooldownSec, dailyLimit, maxAttempts, globalCap, killSwitch] =
+    await Promise.all([
+      getSetting("otp.ttlMinutes"),
+      getSetting("otp.resendCooldownSec"),
+      getSetting("otp.dailyLimit"),
+      getSetting("otp.maxAttempts"),
+      getSetting("otp.globalDailyCap"),
+      getSetting("otp.globalKillSwitch"),
+    ]);
 
-  // Cooldown: lần gửi gần nhất < cooldownSec.
+  // AUTH-SĐT P0 §3.2 — trần CHI PHÍ toàn hệ thống. Đặt ở đây (không ở Server
+  // Action) để mọi đường xin mã đều đi qua, kể cả admin gửi lại hàng loạt.
+  const sentToday = await db.otpDeliveryLog.count({
+    where: { status: "SENT", createdAt: { gte: startOfToday() } },
+  });
+  if (sentToday >= killSwitch) {
+    console.error(
+      `[otp] KILL-SWITCH: đã gửi ${sentToday} tin hôm nay (ngưỡng ${killSwitch}) — NGỪNG gửi tới hết ngày.`,
+    );
+    return {
+      ok: false,
+      error: "Hệ thống tạm ngừng gửi mã. Vui lòng liên hệ trung tâm.",
+      systemHalt: true,
+    };
+  }
+  if (sentToday >= globalCap) {
+    console.warn(`[otp] Chạm trần ngày: ${sentToday}/${globalCap} tin.`);
+    return {
+      ok: false,
+      error: "Hệ thống tạm ngừng gửi mã. Vui lòng liên hệ trung tâm.",
+      systemHalt: true,
+    };
+  }
+
+  // Cooldown: lần gửi THÀNH CÔNG gần nhất < cooldownSec.
   const last = await db.otpRequest.findFirst({
-    where: { target, purpose: input.purpose },
+    where: { target, purpose: input.purpose, ...DELIVERED },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });
@@ -90,9 +135,14 @@ export async function requestOtp(input: {
     }
   }
 
-  // Giới hạn theo ngày.
+  // Giới hạn theo ngày — chỉ đếm lần gửi THÀNH CÔNG (§3.5).
   const todayCount = await db.otpRequest.count({
-    where: { target, purpose: input.purpose, createdAt: { gte: startOfToday() } },
+    where: {
+      target,
+      purpose: input.purpose,
+      createdAt: { gte: startOfToday() },
+      ...DELIVERED,
+    },
   });
   if (todayCount >= dailyLimit) {
     return { ok: false, error: "Đã vượt số lần gửi mã trong ngày. Vui lòng thử lại sau." };
@@ -149,10 +199,28 @@ export type VerifyOtpResult =
   | { ok: false; error: string; attemptsLeft?: number };
 
 /**
- * Verify OTP mới nhất chưa dùng cho target+purpose. Tăng attempts; khoá sau 5 lần.
- * Thành công → set verifiedAt (chưa consume — nghiệp vụ gọi consumeOtp sau).
+ * Verify OTP mới nhất chưa dùng cho target+purpose — VÀ TIÊU LUÔN trong cùng một
+ * thao tác nguyên tử. Tăng attempts khi sai; khoá sau `maxAttempts` lần.
+ *
+ * ⚠️ AUTH-SĐT P0 §3.1 (phương án A, chốt 29/07) — vá lỗ hổng chiếm tài khoản.
+ * Bản cũ tách verify (set `verifiedAt`) khỏi consume (set `consumedAt`) và mở đầu
+ * bằng `if (otp.verifiedAt) return { ok: true }` — đặt TRƯỚC cả kiểm hạn dùng lẫn
+ * so mã. Một OTP đã verify mà chưa consume (người dùng bỏ dở giữa chừng) vì thế
+ * trở thành vé vào cửa vĩnh viễn: mọi lần verify sau đó trả `ok` với BẤT KỲ mã
+ * nào, bỏ qua cả `expiresAt`. Luồng `/kich-hoat` thoát nạn do tình cờ — nó chặn
+ * lại bằng `accountStatus !== "PENDING_ACTIVATION"`, không phải nhờ thiết kế.
+ *
+ * Nay không còn trạng thái trung gian để khai thác: đường thành công DUY NHẤT là
+ * so khớp mã rồi CAS `consumedAt: null → now()`. `updateMany` + guard
+ * `consumedAt: null` là compare-and-swap ở tầng DB nên 2 request đồng thời chỉ
+ * một cái thắng, không cần bọc transaction.
+ *
+ * ⚠️ Hệ quả UX đã biết (chấp nhận khi chốt A): nghiệp vụ bước 2 phải nằm CÙNG
+ * MỘT màn với ô nhập mã. `/quen-mat-khau` (P6) vì thế nhập mã + mật khẩu mới
+ * trong 1 form — không tách 2 bước được. Nếu sau này cần tách, chuyển sang
+ * phương án B (token 1 lần có hạn riêng), đừng khôi phục `verifiedAt` 2 pha.
  */
-export async function verifyOtp(input: {
+export async function verifyAndConsumeOtp(input: {
   target: string;
   purpose: OtpPurposeKey;
   code: string;
@@ -165,7 +233,6 @@ export async function verifyOtp(input: {
     orderBy: { createdAt: "desc" },
   });
   if (!otp) return { ok: false, error: "Chưa có mã hoặc mã đã dùng. Vui lòng gửi lại." };
-  if (otp.verifiedAt) return { ok: true, otpId: otp.id, userId: otp.userId };
 
   if (otp.expiresAt.getTime() < Date.now()) {
     return { ok: false, error: "Mã đã hết hạn. Vui lòng gửi lại." };
@@ -189,11 +256,16 @@ export async function verifyOtp(input: {
     };
   }
 
-  await db.otpRequest.update({ where: { id: otp.id }, data: { verifiedAt: new Date() } });
-  return { ok: true, otpId: otp.id, userId: otp.userId };
-}
+  // CAS: chỉ request đầu tiên tiêu được mã. `count === 0` ⇒ có request khác đã
+  // tiêu xong giữa lúc ta đọc và ghi.
+  const now = new Date();
+  const claimed = await db.otpRequest.updateMany({
+    where: { id: otp.id, consumedAt: null },
+    data: { verifiedAt: now, consumedAt: now },
+  });
+  if (claimed.count !== 1) {
+    return { ok: false, error: "Mã đã được dùng. Vui lòng gửi lại." };
+  }
 
-/** Đánh dấu OTP đã dùng xong (sau khi hoàn tất nghiệp vụ). */
-export async function consumeOtp(otpId: string): Promise<void> {
-  await db.otpRequest.update({ where: { id: otpId }, data: { consumedAt: new Date() } }).catch(() => {});
+  return { ok: true, otpId: otp.id, userId: otp.userId };
 }

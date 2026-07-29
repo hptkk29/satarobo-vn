@@ -55,7 +55,11 @@ export async function writeAudit(params: {
 }
 
 // ─── Mask PII ───────────────────────────────────────────────────────────────
-const PII_KEY_RE = /(phone|sdt|mobile|email|tel)/i;
+// AUTH-SĐT P0 §3.7 — thêm identifier|target|username|otp: khi SĐT thành khoá
+// đăng nhập, PII bắt đầu đi qua những tên field này (`identifier` ở loginSchema,
+// `target` ở OtpRequest/OtpDeliveryLog) mà regex cũ không khớp — tức lọt nguyên
+// văn vào oldValues/newValues của audit.
+const PII_KEY_RE = /(phone|sdt|mobile|email|tel|identifier|target|username|otp)/i;
 
 function maskValue(v: unknown): unknown {
   if (typeof v !== "string" || v.length === 0) return v;

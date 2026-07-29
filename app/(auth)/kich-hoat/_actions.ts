@@ -3,10 +3,13 @@
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requestOtp, verifyOtp, consumeOtp } from "@/lib/otp/service";
+import { requestOtp, verifyAndConsumeOtp } from "@/lib/otp/service";
 import { logUserAudit } from "@/lib/audit/log";
 import { enqueueAccountActivated } from "@/lib/email/triggers";
 import { publishEvent } from "@/lib/events/publish";
+import { rateLimit } from "@/lib/rate-limit";
+import { getRequestMetadata } from "@/lib/audit/headers";
+import { getSetting } from "@/lib/settings/service";
 
 // Cụm A1 — kích hoạt tài khoản phụ huynh qua OTP email. Public (chưa đăng nhập).
 
@@ -14,28 +17,92 @@ type Result = { ok: boolean; error?: string; cooldownSec?: number };
 
 const emailSchema = z.string().trim().toLowerCase().email("Email không hợp lệ");
 
-/** Bước 1 — gửi OTP kích hoạt tới email tài khoản PENDING_ACTIVATION. */
+/**
+ * AUTH-SĐT P0 §3.4 — sàn thời gian phản hồi.
+ *
+ * Bịt oracle bằng cách trả cùng một thông điệp là chưa đủ: nhánh "có tài khoản"
+ * còn phải ghi DB + gọi provider (vài trăm ms), nhánh "không tồn tại" trả về gần
+ * như tức thì. Chênh lệch đó tự nó là một oracle đo được. Kéo mọi nhánh về cùng
+ * một sàn thì phép đo hết ý nghĩa.
+ */
+const MIN_RESPONSE_MS = 900;
+
+async function padTiming(startedAt: number): Promise<void> {
+  const remaining = MIN_RESPONSE_MS - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
+}
+
+/**
+ * Bước 1 — gửi OTP kích hoạt tới email tài khoản PENDING_ACTIVATION.
+ *
+ * ⚠️ AUTH-SĐT P0 §3.2 + §3.4 (chốt 29/07). Đây là Server Action CÔNG KHAI
+ * (chưa đăng nhập) nên phải tự gánh 2 việc mà tầng dưới không làm thay được:
+ * - **Rate-limit theo IP.** Trước đây chặn duy nhất là cooldown DB theo
+ *   (target, purpose) — không cản được 1 IP quét cả danh sách. Khi target là
+ *   SĐT (đoán được, liệt kê được) mỗi lần gửi là 300đ tiền thật.
+ * - **Phản hồi đồng nhất.** Mọi kết quả phụ thuộc target đều trả CÙNG một
+ *   thông điệp: tồn tại / không tồn tại / đã ACTIVE / đang cooldown / gửi hỏng.
+ *   Chỉ lỗi KHÔNG phụ thuộc target (sai định dạng, quá tần suất, hệ thống ngắt)
+ *   mới được nói thật. Form bù lại bằng dòng hướng dẫn tĩnh
+ *   ("nếu đã kích hoạt, dùng Quên mật khẩu") — chốt 29/07.
+ */
 export async function requestActivationOtp(rawEmail: string): Promise<Result> {
+  const startedAt = Date.now();
+
   const parsed = emailSchema.safeParse(rawEmail);
+  // Sai định dạng: không phụ thuộc target → nói thật được.
   if (!parsed.success) return { ok: false, error: "Email không hợp lệ" };
   const email = parsed.data;
+
+  const [cooldownSec, ipMaxPerHour] = await Promise.all([
+    getSetting("otp.resendCooldownSec"),
+    getSetting("otp.ipMaxPerHour"),
+  ]);
+
+  const { ip } = await getRequestMetadata();
+  const rl = await rateLimit({
+    key: `otp:activation:ip:${ip ?? "unknown"}`,
+    max: ipMaxPerHour,
+    windowMs: 60 * 60_000,
+  });
+  if (!rl.success) {
+    await padTiming(startedAt);
+    return { ok: false, error: "Bạn đã yêu cầu mã quá nhiều lần. Vui lòng thử lại sau 1 giờ." };
+  }
+
+  // Phản hồi đồng nhất cho MỌI nhánh phụ thuộc target — kể cả cooldown, vì
+  // "đang cooldown" chỉ xảy ra với target có thật nên tự nó là một oracle.
+  const generic: Result = { ok: true, cooldownSec };
 
   const user = await db.user.findUnique({
     where: { email },
     select: { id: true, accountStatus: true, deletedAt: true },
   });
 
-  // Đã kích hoạt → hướng dẫn đăng nhập (không reset mật khẩu).
-  if (user && user.accountStatus === "ACTIVE") {
-    return { ok: false, error: "Tài khoản đã kích hoạt — vui lòng đăng nhập bằng mật khẩu." };
-  }
-  // Không tồn tại / đã xoá → trả generic để tránh dò email; không gửi gì.
   if (!user || user.deletedAt || user.accountStatus !== "PENDING_ACTIVATION") {
-    return { ok: true }; // im lặng: "nếu email hợp lệ, mã đã được gửi"
+    await padTiming(startedAt);
+    return generic;
   }
 
   const res = await requestOtp({ target: email, purpose: "ACTIVATION", userId: user.id });
-  if (!res.ok) return { ok: false, error: res.error, cooldownSec: res.cooldownSec };
+
+  // Ngắt toàn hệ thống (trần ngày / kill-switch) KHÔNG phụ thuộc target → báo thật
+  // để phụ huynh biết đường gọi trung tâm thay vì ngồi đợi mã không bao giờ tới.
+  // ⚠️ Phải nhận diện bằng cờ `systemHalt`, KHÔNG suy từ hình dạng kết quả: nhánh
+  // "vượt hạn mức ngày của riêng số này" cũng trả `{ok:false, error}` trần y hệt
+  // nhưng CHỈ xảy ra với target có thật — nói thật nhánh đó là dựng lại oracle.
+  if (!res.ok && res.systemHalt) {
+    await padTiming(startedAt);
+    return { ok: false, error: res.error };
+  }
+
+  if (!res.ok) {
+    // Cooldown / vượt hạn mức ngày / gửi hỏng → về generic. Ghi log để nhân viên
+    // còn tra được (§P4 sẽ dựng /admin/otp-logs cho việc này).
+    console.warn(`[otp:activation] không gửi được cho user ${user.id}: ${res.error}`);
+    await padTiming(startedAt);
+    return generic;
+  }
 
   await logUserAudit({
     userId: user.id,
@@ -46,7 +113,8 @@ export async function requestActivationOtp(rawEmail: string): Promise<Result> {
     reason: "Gửi OTP kích hoạt tài khoản",
   }).catch(() => {});
 
-  return { ok: true, cooldownSec: res.cooldownSec };
+  await padTiming(startedAt);
+  return generic;
 }
 
 const activateSchema = z.object({
@@ -61,7 +129,10 @@ export async function activateAccount(input: unknown): Promise<Result> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   const { email, code, password } = parsed.data;
 
-  const v = await verifyOtp({ target: email, purpose: "ACTIVATION", code });
+  // Verify + tiêu mã trong CÙNG một thao tác nguyên tử (P0 §3.1 phương án A).
+  // Đặt TRƯỚC mọi câu trả lời về tài khoản: muốn chạm tới các thông điệp bên dưới
+  // thì phải có mã đúng trong tay, nên chúng không còn là oracle liệt kê.
+  const v = await verifyAndConsumeOtp({ target: email, purpose: "ACTIVATION", code });
   if (!v.ok) return { ok: false, error: v.error };
 
   const user = await db.user.findUnique({
@@ -79,7 +150,6 @@ export async function activateAccount(input: unknown): Promise<Result> {
     where: { id: user.id },
     data: { password: hashed, accountStatus: "ACTIVE", isActive: true, emailVerified: new Date() },
   });
-  await consumeOtp(v.otpId);
 
   // A2 — email chào mừng kích hoạt (qua queue).
   await enqueueAccountActivated({

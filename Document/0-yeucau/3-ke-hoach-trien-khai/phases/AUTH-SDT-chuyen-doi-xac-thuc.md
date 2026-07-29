@@ -352,20 +352,16 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 
 > QĐ-C **giảm rủi ro đáng kể**: kịch bản tệ nhất của cả kế hoạch — *"ZBS chết → cả trung tâm không đăng nhập được"* — không còn xảy ra, vì toàn bộ nhân sự vận hành không đi qua Zalo. Phạm vi ảnh hưởng của sự cố ZNS thu hẹp về **riêng cổng phụ huynh**.
 
-### 🔴 Chốt TRƯỚC khi gõ dòng code P0 đầu tiên
+### ✅ Đã chốt cho P0 (29/07/2026) — ĐÃ TRIỂN KHAI
 
-QĐ-D nói "P0 bắt đầu được ngay", nhưng 4 điểm dưới đây **đổi hình dạng của bản vá** — chốt sau nghĩa là làm lại.
-
-| # | Cần chốt | Khuyến nghị | Vì sao không tự quyết được |
-|---|---|---|---|
-| **P0-a** | Cách vá lỗ hổng `:168` — **(A)** gộp verify+consume vào 1 giao dịch, hay **(B)** phát token 1 lần có hạn riêng cho bước 2 | **(B)** | (A) rẻ hơn nhưng ép `/quen-mat-khau` (P6) phải nhập mã + mật khẩu mới **trên cùng 1 màn**; (B) đắt hơn 1 bảng/1 cột nhưng giữ được UX 2 bước. Chọn (A) rồi đổi ý ở P6 = viết lại cả 3 luồng OTP |
-| **P0-b** | Ngưỡng rate-limit OTP: req/IP/giờ · trần tin/ngày toàn hệ thống · ngưỡng kill-switch | 5 req/IP/giờ · 300 tin/ngày · tự tắt ở 500 | Đây là **hạn mức tiền**, không phải hằng số kỹ thuật. Đặt thấp → phụ huynh thật bị chặn; đặt cao → §3.2 vẫn hở |
-| **P0-c** | §3.4 đồng nhất phản hồi ⇒ **mất** thông báo *"Tài khoản đã kích hoạt — vui lòng đăng nhập"* | Đồng nhất (bịt lỗ liệt kê) + bù bằng dòng hướng dẫn tĩnh trên form | Đánh đổi **bảo mật ↔ CSKH**. Sau khi bịt, nhân viên không còn phân biệt được "sai số" với "đã kích hoạt rồi" khi phụ huynh gọi lên |
-| **P0-d** | Upstash Redis: **điều kiện bắt buộc** hay vẫn fail-soft? | Bắt buộc trước khi SĐT thành khoá (P3), P0 vẫn chạy được không cần | Cần **anh tạo tài khoản Upstash + set 2 env trên Vercel** — không code thay được. Nếu không có, rate-limit ở P0-b gần như vô hiệu trên serverless |
-
-**Hai việc trong P0 §3.7 làm đổi thứ nhân viên đang nhìn thấy — cần anh biết trước, không cần chốt nếu anh không phản đối:**
-- `maskPhone` siết 3+3 → 2+2: admin sẽ thấy `09***20` thay vì `090xxxxx520`. Nhân viên đang dùng 6 số đó để nhận diện khách khi gọi lại.
-- Cron dọn `OtpRequest`/`OtpDeliveryLog` giữ **90 ngày** rồi xoá (hiện giữ vĩnh viễn). Muốn giữ lâu hơn để đối soát chi phí ZNS thì nói con số khác.
+| # | Quyết định | Hệ quả đã ghi vào code |
+|---|---|---|
+| **P0-a** | **Phương án (A)** — gộp verify+consume thành một thao tác nguyên tử. | `verifyOtp` + `consumeOtp` **bị thay bằng `verifyAndConsumeOtp`**; không còn trạng thái verified-chưa-consume để khai thác. Thực hiện bằng CAS (`updateMany` guard `consumedAt: null`) nên 2 request đồng thời chỉ 1 cái thắng. **Ghi nợ UX:** `/quen-mat-khau` (P6) BẮT BUỘC nhập mã + mật khẩu mới trên **cùng 1 màn**. Cần tách 2 bước ⇒ phải chuyển sang (B), **không** khôi phục `verifiedAt` 2 pha. |
+| **P0-b** | **5 req/IP/giờ · trần 300 tin/ngày · kill-switch 500.** | 3 key SystemSetting mới (`otp.ipMaxPerHour`, `otp.globalDailyCap`, `otp.globalKillSwitch`) — đổi ngưỡng **không cần deploy**. Trần ngày đặt trong `requestOtp` (mọi đường đi qua, kể cả admin gửi lại); rate-limit IP đặt ở Server Action công khai. |
+| **P0-c** | **Bịt oracle + bù bằng dòng hướng dẫn tĩnh trên form.** | Mọi kết quả phụ thuộc target (không tồn tại / đã ACTIVE / cooldown / vượt hạn mức của số đó / gửi hỏng) trả **cùng một** phản hồi, kèm **sàn thời gian 900ms** để chênh lệch độ trễ không thành oracle. Chỉ lỗi không phụ thuộc target mới nói thật, nhận diện bằng cờ `systemHalt` — **không** suy từ hình dạng kết quả (bẫy: "vượt hạn mức ngày" có hình dạng y hệt "trần hệ thống" nhưng chỉ xảy ra với target có thật). |
+| **P0-d** | **Bắt buộc trước P3, P0 chạy trước không cần chờ.** | Env đã có sẵn giá trị — chỉ cần add vào Vercel (xem §9). `rateLimit()` tự nhận `UPSTASH_REDIS_REST_*` hoặc `KV_REST_API_*`, fail-soft về memory nếu thiếu. |
+| **P0-e** | **`maskPhone` GIỮ NGUYÊN 3+3** — không siết 2+2. | Xem §9: sale + quản lý cơ sở **không hề bị mask** (có `leads:view-pii`), nên việc siết không giải quyết vấn đề gì mà chỉ siết thêm GV/HR — đúng nhóm chính sách đã cố ý chặn. Nút "hiện số" cho GV là **đổi chính sách so với Doc 15**, tách ra chốt riêng. |
+| **P0-f** | **Retention dấu vết OTP = 90 ngày.** | Cron `/api/cron/otp-cleanup` chạy 08:00 hằng ngày; `OtpDeliveryLog` cascade theo `OtpRequest` nên 1 lệnh xoá là đủ. |
 
 ### ⏳ Còn mở (không chặn P0–P2)
 
@@ -388,3 +384,32 @@ Toàn bộ kế hoạch trên có **3 ẩn số chưa đo được từ code** �
 3. ~~Bao nhiêu tài khoản nhân sự không có SĐT~~ — **đã hết ý nghĩa sau QĐ-C**: nhân sự giữ email + mật khẩu, `User.phone` để `null`. *(Số liệu tham khảo: DEV có 24/53 tài khoản staff không có SĐT ở bất kỳ đâu — chính con số này biện minh cho QĐ-C.)*
 
 Thay vào đó, con số thứ 3 cần đo là: **bao nhiêu nhóm "cùng SĐT nhưng khác tên phụ huynh"** trong dữ liệu lead/học viên. QĐ-A chốt *1 SĐT = 1 hộ*, nên mỗi nhóm như vậy là một **cặp gia đình sẽ nhìn thấy con của nhau** nếu gộp nhầm. Báo cáo `phone-audit` (P1) phải liệt kê riêng nhóm này để duyệt tay.
+
+---
+
+## 9. Đính chính hiện trạng che SĐT (29/07) — vì sao P0-e giữ 3+3
+
+Có một hiểu lầm dễ mắc khi đọc §3.7: rằng **mọi** nhân viên đang thấy SĐT bị che, nên siết mask sẽ làm sale/quản lý lớp không liên hệ được phụ huynh. **Không phải vậy** — hệ thống đã có tầng quyền PII đầy đủ:
+
+| | |
+|---|---|
+| Ai **thấy số đầy đủ, không mask** | `SUPER_ADMIN` · `CENTER_MANAGER` · `SALES_CSM` · `MARKETING` — tức có `leads:view-pii` (`permissions.ts:309`). Đơn hàng dùng `orders:view-pii` (thêm `ACCOUNTANT`) |
+| Ai **bị mask 3+3** | Các vai còn lại — thực tế là `TEACHER`, `HR`, và `ACCOUNTANT` ở màn lead |
+| Ai **không thấy gì cả** | `TEACHER` ở trang tiến độ lớp — `canViewParentContact()` (`permissions.ts:822`) loại thẳng, không phải mask |
+| Che ở đâu | **Ở SERVER**, trước khi trả RSC payload (`students/page.tsx:210-215`) — actor thiếu quyền không bao giờ nhận được số thật xuống client. Đây là thiết kế đúng, đừng đổi |
+
+**Hệ quả:** siết `maskPhone` 3+3 → 2+2 **không** ảnh hưởng sale hay quản lý cơ sở (họ không bị mask), mà chỉ siết thêm GV/HR — đúng nhóm mà Doc 15 §PII (*"TEACHER không mặc định xem SĐT phụ huynh"*) đã cố ý chặn. Lợi ích an ninh nhỏ, rủi ro hiểu nhầm lớn ⇒ **P0-e giữ 3+3**.
+
+> ⏳ **Câu hỏi còn mở tách riêng:** nếu muốn **giáo viên / trợ giảng** tự liên hệ phụ huynh, đó là **đổi chính sách PII so với Doc 15**, không phải sửa hàm mask. Việc cần làm khi đó là nút *"Hiện số"* gọi Server Action có `assertCan` + **bắt buộc nhập lý do + ghi audit** (mẫu break-glass y như `payments:view-pii` đang có), chứ không phải bỏ mask. Chưa chốt ⇒ chưa làm.
+
+### Thêm Upstash vào đâu (P0-d)
+
+Hai giá trị đã có sẵn — **không paste vào chat, không commit vào repo**:
+
+1. **Vercel** → Project `satarobo-vn` → Settings → Environment Variables → thêm 2 biến, chọn **Production** (và **Preview** nếu muốn chặn cả bản thử):
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+2. **Redeploy** — env chỉ nạp lúc build/khởi động, không có redeploy thì code vẫn chạy nhánh memory.
+3. **Local dev** (tuỳ chọn): đặt trong `.env.local` — file này đã `.gitignore`. **KHÔNG** đặt vào `.env.example`.
+
+> `lib/rate-limit.ts:49-52` đọc `UPSTASH_REDIS_REST_*` trước, fallback `KV_REST_API_*` (tên do tích hợp Upstash trên Vercel Marketplace tự đặt) — dùng bộ nào cũng chạy, **đừng đặt cả hai** kẻo không biết bộ nào đang có hiệu lực. Kiểm chứng đã ăn: bấm "Gửi mã kích hoạt" quá `otp.ipMaxPerHour` lần trong 1 giờ từ cùng một máy phải bị chặn **kể cả khi tải trang lại nhiều lần** (bộ đếm memory sẽ reset theo instance, Redis thì không).
