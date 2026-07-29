@@ -16,9 +16,10 @@ Brand hub + admin CMS + portal phụ huynh + site giáo viên cho Sata Robo (Đ�
 
 1. **Server-first** — default Server Component. `'use client'` chỉ khi cần state/effect/handler. Data fetch trong RSC (`async`), mutations qua Server Actions (`'use server'`).
 2. **Strict TS** — không `any` (dùng `unknown` + narrow). Zod schema là source of truth → suy ra type qua `z.infer`.
-3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, teacher: `app/(teacher)/teacher/...` (L5 — flag `TEACHER_SITE_ENABLED` default OFF; host `giaovien.` chưa wire trong proxy.ts, xem ghi chú L5 WIRING trong route-policy.ts), auth: `app/(auth)/login/...`. Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
-4. **Imports** — `@/lib/db` (Prisma), `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Target (sau A0-04):** code đọc nghiệp vụ trong `app/**` đi qua `scopedDb(actor)` — KHÔNG import `@/lib/db` trần (ESLint sẽ chặn).
-5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Hiện tại: `can(role, action)` từ `@/lib/auth/permissions`. **Target (A0-03):** `can(actor, action, target)` đọc role động từ DB. Portal actions thêm ownership check `assertOwnsStudent`.
+3. **Route groups** — public: `app/(public)/...`, legacy: `app/(legacy)/...`, admin: `app/(admin)/admin/...`, portal: `app/(portal)/portal/...`, teacher: `app/(teacher)/teacher/...` (L5 — site GV **ĐÃ LIVE**: flag `TEACHER_SITE_ENABLED` mặc định **ON** từ 10/07/2026 (`lib/flags.ts:86`), host `giaovien.satarobo.vn` **đã wire** trong `proxy.ts:18`; rollback = set env `TEACHER_SITE_ENABLED="false"`), auth: `app/(auth)/login/...`. Không tạo `/admin/*` ngoài route group. Host-based routing qua `proxy.ts` + `lib/auth/route-policy.ts` (sửa rule host×role CHỈ ở `decideRoute()` + test, không sửa proxy.ts).
+4. **Imports** — `@/lib/auth` (Auth.js), `@/lib/utils` (cn helper), `@/components/blog/markdown-renderer` (NOT `<Markdown>`). ⚠️ **Cổng DB ĐÃ ĐÓNG** (không còn là "target"): import `@/lib/db` trần trong `app/(admin|portal|teacher)/**` = ESLint **error**. Đi qua `scopedDb(actor)` (admin/teacher) hoặc `portalDb` (portal). Allowlist còn đúng 3 file exception (`lib/eslint/db-import-allowlist.mjs`) — code mới KHÔNG xin thêm vào.
+5. **Auth gate** — admin/portal layout đã redirect `/login`. Server Actions/API route VẪN phải `auth()` + `assertCan(...)` ngay đầu function (layout gate là chưa đủ). Portal actions thêm ownership check `assertOwnsStudent`. **RBAC 2 tầng:** quyền action = `can()` v2 động từ DB (`@/lib/auth/can`) — **đang enforce trên prod** vì `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026); v1 matrix tĩnh (`@/lib/auth/permissions`) chỉ còn chạy song song để so lệch, và là thứ chạy ở local/dev (mặc định trong code vẫn OFF — `lib/flags.ts:8`).
+   ⚠️ **`scopedDb` KHÔNG che write** — chỉ auto-scope 7 method đọc. Mọi `update/delete` phải tự `passesScope()`; mọi `create` trên model thuộc `SCOPED_MODELS` phải set `centerId` (quên = record vô hình với actor cấp cơ sở).
 6. **Prisma migrations** — KHÔNG raw SQL trừ khi cần. Mỗi schema change: `pnpm db:migrate` + tên rõ nghĩa. Sau migration: restart dev server (Prisma Client cache stale trong memory).
 7. **UI library split** (Phase 4.X.1): admin = shadcn/ui + Recharts; client = shadcn/ui + Magic UI + Framer Motion. ESLint chặn cross-import — đừng workaround.
 8. **Security (ENFORCED by hooks):**
@@ -54,18 +55,21 @@ components/
 └── seo/               # JSON-LD schemas
 
 lib/
-├── db.ts              # Prisma singleton (target: dùng qua scopedDb cho app/**)
+├── db.ts              # Prisma singleton — KHÔNG import trần trong app/(admin|portal|teacher) (ESLint error)
+├── db-scope.ts        # scopedDb(actor) + passesScope() — ⚠️ chỉ auto-scope READ, write phải tự guard
+├── org/               # OrgUnit tree
 ├── auth.ts            # Auth.js config
-├── auth/permissions.ts # can(), assertCan(), getEmployeeFieldVisibility()  (hiện trạng: matrix tĩnh)
+├── auth/permissions.ts # can() v1 matrix TĨNH — đang enforce trên prod
+├── auth/actor.ts · can.ts # can() v2 động (DB) — cờ RBAC_V2_ENABLED: code mặc định OFF, PROD đang ON
 ├── auth/route-policy.ts # decideRoute() host×role (unit-tested)
+├── events/            # DomainEvent outbox + dispatcher — publishEvent(type, payload, {tx, dedupeKey})
+├── actions/factory.ts # ActionResult + ActionError + pipeline auth→actor→zod→can→scopedDb→audit
 ├── audit/             # log helpers (target: AuditLog hợp nhất 1 bảng)
 ├── email/             # Resend client, queue, triggers
 ├── storage/           # R2 client + upload-config
 ├── pdf/               # certificate / transcript / progress-report (@react-pdf)
 ├── honors/ · validators/ · seo/ · utils.ts
-# Target (Doc 15) — sẽ thêm khi A0 chạy:
-# lib/org/ (OrgUnit tree) · lib/auth/actor.ts + can.ts (can() v2) · lib/db-scope.ts (scopedDb)
-# lib/events/ (DomainEvent outbox + dispatcher) · modules/* (modular monolith boundary)
+# ❌ `modules/*` (modular monolith boundary) CHƯA TỒN TẠI — đừng import `modules/integration`.
 
 prisma/
 ├── schema.prisma      # (target: tách multi-file prisma/schema/*.prisma — Doc 15 Q5)
@@ -76,7 +80,9 @@ prisma/
 ## Permission & tổ chức
 
 **Hiện trạng (`lib/auth/permissions.ts`):**
-- 8 roles (enum): `SUPER_ADMIN`, `CENTER_MANAGER`, `HR`, `SALES_CSM`, `TEACHER`, `MARKETING`, `ACCOUNTANT`, `PARENT`. (Đã rename `MANAGER→CENTER_MANAGER`, `SALES→SALES_CSM` — legacy shim trong JWT callback.)
+- **9 roles** (enum `Role`): `SUPER_ADMIN`, `CENTER_MANAGER`, `HR`, `SALES_CSM`, `TEACHER`, `TRAINING`, `MARKETING`, `ACCOUNTANT`, `PARENT`. (Đã rename `MANAGER→CENTER_MANAGER`, `SALES→SALES_CSM` — legacy shim trong JWT callback. `TRAINING` thêm ở FL W0 (QĐ-T1) — Đào tạo: quản lý TOÀN BỘ LMS, KHÁC `TEACHER` chỉ lớp được giao.)
+- ⚠️ **RBAC v2 ĐÃ BẬT TRÊN PROD** — `RBAC_V2_ENABLED="true"` trên Vercel Production (xác minh 29/07/2026 bằng `vercel env pull --environment=production`). Prod enforce **v2 động** (`lib/auth/can.ts`); `lib/auth/shadow-compare.ts:27` trả `flagOn ? v2 : v1`. **Mặc định trong code vẫn OFF** (`lib/flags.ts:8`) ⇒ local/dev/CI chạy **v1**, khác prod — đừng kết luận hành vi quyền từ máy local. Rollback: set env `false` + redeploy.
+- ⚠️ **Nợ đi kèm việc flip: `can()` v2 KHÔNG có nhánh DENY.** `lib/auth/can.ts:36-44` là ALLOW-wins thuần, `grantsDeny` không tồn tại ⇒ `UserPermissionGrant` có `grant=DENY` sẽ **bị bỏ qua im lặng**. Đây là 1 trong 3 việc chặn cứng của QĐ-B (`docs/taicautruc/QUYET-DINH.md:52-58`) mà cờ đã bật trước khi làm xong. **Chưa gây thiệt hại:** đo prod 29/07/2026 → bảng `UserPermissionGrant` **rỗng** (0 ALLOW, 0 DENY). **Luật tạm cho tới khi vá:** KHÔNG tạo grant `DENY` — nó không có tác dụng và không báo lỗi. Cần chặn quyền thì gỡ `UserOrgRole` tương ứng.
 - Multi-role: `User.roles[]` (quyền = union). Per-user grant ALLOW/DENY: `UserPermissionGrant` (Sprint 5.3). `User.centerId` scope theo cơ sở.
 - Field-level visibility (Employee): `basic` (all), `contact` (SUPER_ADMIN/CENTER_MANAGER/HR), `salary` (SUPER_ADMIN/HR/ACCOUNTANT), `personal` (SUPER_ADMIN/HR). `canViewParentContact` chặn TEACHER.
 - Pattern: `can(session.user, 'employees:edit')` → boolean; `assertCan(...)` throw trong Server Actions/API.
@@ -120,14 +126,18 @@ prisma/
 
 - Công ty Cổ phần Công nghệ Giáo dục Sata Robo (Đà Nẵng), CEO Hồ Đắc Phúc.
 - 2 khoá học chủ lực: **Lập trình Robot** (offline K-9, slug `laptrinhrobot`) và **Luyện thi RoboSim** (slug `luyenthirobosim`).
-- **Scope core (Doc 15):** vận hành đào tạo **offline Sata 1–8 + Combo 1&2**; online course trỏ Sataworld (không build video LMS). Lead **Messenger-first** (Page HO) theo phễu SR.QD.217 L1→L2→L3.
+- **Scope core (Doc 15):** vận hành đào tạo **offline Sata 1–8 + Combo 1&2**; online course trỏ Sataworld (không build video LMS cho HV tự học). Lead **Messenger-first** (Page HO) theo phễu SR.QD.217 L1→L2→L3.
+- **SCORM ≠ "video LMS"** — SCORM là courseware giảng dạy, **TRONG core** (SRS LMS v3.1, TGĐ chốt 12/06/2026) và **đã live prod từ 03/07**. Ràng buộc: học viên **KHÔNG** xem SCORM; GV không tải được file nguồn; blur khi quay/chụp màn hình + watermark động.
 - Tổ chức thật: HO (Hội sở) + CS1 (211 Nguyễn Hữu Thọ) + CS2 (114 Hoàng Diệu).
 - B2C: phụ huynh con lớp 1-8.
 - 2 domain cũ redirect qua middleware (`proxy.ts`): `laptrinhrobot.vn` → `/khoa-hoc/laptrinhrobot`; `luyenthirobosim.vn` → `/khoa-hoc/luyenthirobosim`.
 
-## Kiến trúc đích (Doc 15) — đang chuyển dịch A0 → R5
+## Kiến trúc đích (Doc 15) — A0→R5 đã đóng (10/06/2026), nay là R6/R7/FL + sprint go-live 26/07
 
-> Khi xây tính năng MỚI, theo blueprint Doc 15. Hệ thống nâng cấp **dần, additive trước — drop sau khi ổn định** (2-phase); hệ thống không dừng. Đừng import thứ chưa tồn tại (scopedDb/can() v2/OrgUnit chỉ có sau khi A0 chạy — kiểm tra trước khi dùng).
+> Khi xây tính năng MỚI, theo blueprint Doc 15 — **nhưng đọc kèm phần ~~gạch ngang~~ + `[ĐẢO ...]`** (Doc 15 đã bị sửa tại chỗ; vd site giáo viên từ "đã loại" → **in-scope** 04/07/2026). Quyết định ký SAU (phiếu BGĐ · biên bản chốt · SRS bản mới) **thắng** Doc 15.
+> Hệ thống nâng cấp **dần, additive trước — drop sau khi ổn định** (2-phase); hệ thống không dừng.
+> ⚠️ **Đã tồn tại** (đừng coi là "sắp có"): `scopedDb` · `can()` v2 · OrgUnit · `lib/events`. **Chưa tồn tại:** `modules/*`.
+> ⚠️ **Yêu cầu MỚI không gán vào "Phase A0–R5"** — khung đang lập lịch là GĐ0→GĐ4 (deadline **26/07/2026**) + ticket K\*/L\*/V\* + lane #NN. Chi tiết: `docs/ke-hoach-go-live-2607/`.
 
 - **6 trụ kiến trúc:** OrgUnit tree · RBAC động (DB) · scopedDb (cách ly cơ sở) · DomainEvent outbox (tách side-effect) · modular monolith (`modules/*` + ESLint boundary) · login chung + portal.
 - **Quy tắc atomic vs event:** tiền/invoice/enrollment/kho → trong **transaction**; thông báo/stats/đồng bộ ngoài → **DomainEvent** (handler idempotent). External call (Resend/Zalo/MISA/Meta/CAPI/GA4) CHỈ qua `modules/integration`.
