@@ -178,7 +178,7 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 ### P0′ · Thủ tục ZBS/ZNS (hành chính, **không phải việc code**)
 
 - Xác thực OA Sata Robo **loại doanh nghiệp** → tạo App + ZCA → liên kết OA–ZCA → **nạp tiền trả trước**. Cần **GPKD + MST** Công ty CP Công nghệ Giáo dục Sata Robo.
-- Nộp duyệt **3 mẫu tin** (1–3 ngày làm việc mỗi lần, bị từ chối là làm lại): ① Xác thực (OTP) · ② Cấp tài khoản · ③ Xác nhận đã thu học phí.
+- Nộp duyệt **2 mẫu tin** (1–3 ngày làm việc mỗi lần, bị từ chối là làm lại) theo QĐ-G §7: **A · Xác thực (OTP)** · **B · Xác nhận học phí + cấp tài khoản** (gộp).
 - **Gửi `support@zalo.cloud` hỏi 4 điểm không có nguồn công khai** — 4 điểm này ảnh hưởng trực tiếp tới thiết kế, **không được suy đoán**:
   1. Tin OTP có được **miễn khung cấm 22:00–06:00** (mã `-133`) không? *(Nếu không → không đăng nhập được ban đêm.)*
   2. **Rate limit req/s** của API gửi ZNS? *(Không biết trần thì không thiết kế được retry/burst giờ cao điểm.)*
@@ -187,7 +187,7 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 - Xin **báo giá SMS brandname dự phòng** từ ≥2 nhà cung cấp (eSMS, VietGuys/Infobip). Zalo **không có fallback SMS gốc**; chi phí/độ trễ fallback không có nguồn public nào.
 - Đặt env Vercel: `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_REFRESH_TOKEN`. **Chưa bật `ZALO_LIVE`.**
 
-**DoD:** có 3 `template_id` đã duyệt trong tay + ZCA có số dư + **văn bản trả lời 4 câu hỏi**. Verify bằng: gửi thử ở *development mode* tới SĐT admin OA, thấy tin thật về máy. *(Development mode **chỉ gửi được cho admin OA** — mã `-127`; không test được với SĐT phụ huynh thật trước khi mẫu được duyệt.)*
+**DoD:** có **2** `template_id` đã duyệt trong tay (QĐ-G) + ZCA có số dư + **văn bản trả lời 4 câu hỏi**. Verify bằng: gửi thử ở *development mode* tới SĐT admin OA, thấy tin thật về máy. *(Development mode **chỉ gửi được cho admin OA** — mã `-127`; không test được với SĐT phụ huynh thật trước khi mẫu được duyệt.)*
 
 ---
 
@@ -369,11 +369,21 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 
 **QĐ-F · Tách đúng 3 mẫu, KHÔNG gộp.** Bản nháp nội dung do BGĐ soạn 29/07 (cảm ơn + link đăng nhập + tên đăng nhập là SĐT + hotline + emoji) **rất tốt cho email/chat nhưng sẽ bị kiểm duyệt ZNS từ chối**, vì gộp 3 mẫu vào 1 và vi phạm cùng lúc 3 điều cấm: **có link** · **có số hotline** · **in SĐT phụ huynh ra chữ**. Riêng mẫu **Xác thực** còn không cho nút CTA / ảnh / emoji — mà đây lại là loại **DUY NHẤT gửi được cho người chưa từng tương tác với OA**, tức đúng thứ cần cho phụ huynh mới. Nhồi nội dung dài vào đó = mất luôn khả năng gửi cho người chưa follow OA.
 
-| Mẫu | Nội dung nộp duyệt | Ghi chú |
+**QĐ-G · Rút xuống 2 mẫu (chốt 29/07)** — gộp *cấp tài khoản* vào *xác nhận học phí*. **Gộp được, và về kỹ thuật còn hợp lý hơn 3 mẫu:**
+
+| Mẫu | Nội dung nộp duyệt | Bắn khi nào |
 |---|---|---|
-| ① **Xác thực (OTP)** | *Mã xác thực Sata Robo của quý phụ huynh là `{code}`. Tài khoản đăng nhập chính là số điện thoại nhận tin này. Mã có hiệu lực `{minutes}` phút, vui lòng không chia sẻ.* | Tối giản tối đa. "số điện thoại nhận tin này" thay cho việc in số ra chữ |
-| ② **Cấp tài khoản** | *Sata Robo đã tạo tài khoản theo dõi học tập cho bé `{studentName}`. Quý phụ huynh đăng nhập bằng số điện thoại nhận tin này để xem lịch học, điểm danh và nhận xét của thầy cô.* | Loại giao dịch. Nếu Zalo cho nút → đặt **nút "Đăng nhập"**, KHÔNG dán link vào thân tin |
-| ③ **Xác nhận học phí** (Nhánh B) | *Sata Robo xác nhận đã nhận học phí khóa `{courseName}` của bé `{studentName}`, số tiền `{amount}`đ. Phiếu thu `{receiptCode}` ngày `{date}`.* | 200đ/tin |
+| **A · Xác thực (OTP)** | *Mã xác thực Sata Robo của quý phụ huynh là `{code}`. Tài khoản đăng nhập chính là số điện thoại nhận tin này. Mã có hiệu lực `{minutes}` phút, vui lòng không chia sẻ.* | Lúc phụ huynh xin mã kích hoạt / quên mật khẩu. **Đây là tin CHẠM ĐẦU TIÊN** |
+| **B · Học phí + tài khoản** *(gộp)* | *Sata Robo xác nhận đã nhận học phí khóa `{courseName}` của bé `{studentName}`, số tiền `{amount}`đ, phiếu thu `{receiptCode}`. Quý phụ huynh đăng nhập bằng chính số điện thoại nhận tin này để theo dõi lịch học, điểm danh và nhận xét của thầy cô.* | Sự kiện `payment.confirmed`. Loại giao dịch — nếu Zalo cho nút thì đặt **nút "Đăng nhập"**, KHÔNG dán link vào thân tin |
+
+**Vì sao gộp được:**
+- `confirmPayment` **chặn nếu khoản chưa gắn `enrollmentId`** (`payment.ts:359-361`) ⇒ ghi danh (và tài khoản) **luôn có trước** lúc xác nhận học phí. Thời điểm `payment.confirmed` là lúc **cả hai dữ kiện đều đã đúng** — không phải ghép gượng.
+- Mẫu Xác thực là **loại DUY NHẤT gửi được cho người chưa từng tương tác với OA**. Nghĩa là mẫu "cấp tài khoản" (loại giao dịch) **vốn dĩ đã không thể là tin chạm đầu tiên** cho phụ huynh mới. Gộp nó vào tin học phí **không mất gì**, vì cả hai đều là tin "đến sau".
+- Tiết kiệm **200đ/phụ huynh mới** (500đ thay vì 700đ) và **bớt 1 lần chờ duyệt 1–3 ngày**.
+
+**Hai điều phải chấp nhận khi gộp — ghi ra để sau không bất ngờ:**
+1. **Trả góp:** tin B bắn mỗi lần kế toán xác nhận một đợt ⇒ câu "đăng nhập bằng số điện thoại này" **lặp lại ở mọi đợt**. Câu chữ trên đã viết trung tính để đọc như lời nhắc, không như lỗi. Muốn tránh hẳn thì phải quay lại 3 mẫu.
+2. **Cấp tài khoản KHÔNG kèm học phí** (admin cấp tay từ `/admin/students`, học thử) ⇒ **không có tin B**. Phụ huynh chỉ nhận mẫu A — nhưng A đã nói *"tài khoản đăng nhập chính là số điện thoại này"* nên vẫn đủ nghĩa, không cần mẫu thứ ba.
 
 **Phần cảm ơn + hotline + link** trong bản nháp → chuyển sang **email chào mừng** (đã có sẵn `enqueueAccountActivated`) hoặc tin Zalo/Messenger do sale gửi tay. Ở hai kênh đó không bị kiểm duyệt, và đó mới là chỗ đặt giọng văn ấm áp.
 
@@ -416,9 +426,13 @@ Việc che SĐT phải đọc theo **2 tầng**: tầng route (`PAGE_GATES` — 
 
 ⇒ **Mask 3+3 hiện chỉ áp cho HR và Kế toán, ở màn học viên/ghi danh.** Siết xuống 2+2 vì thế chỉ làm khó đúng 2 vai đó, không đụng gì tới sale/quản lý cơ sở (họ vốn thấy số đầy đủ) và cũng không liên quan GV. Lợi ích an ninh nhỏ, rủi ro hiểu nhầm lớn ⇒ **P0-e giữ 3+3**.
 
-> 🔴 **Hai lỗ hở lộ ra khi rà bảng này — KHÔNG thuộc AUTH-SĐT, cần ticket riêng:**
-> 1. **`MARKETING` đang xem được PII lead trái với quyết định đã ký.** Comment `permissions.ts:66` ghi *"MARKETING mặc định KHÔNG có, cấp per-user qua grant"* (OI-4, Kiệt ký 10/07) và comment `leads/page.tsx:126` cũng lấy MARKETING làm ví dụ vai bị che — **nhưng ma trận `:309` lại cấp cho MARKETING**, và seed v2 `HO_MARKETING` (`seed-roles.ts:156`) cấp theo, ghi chú "Parity với v1". Tức quyết định được ghi trong comment nhưng **chưa bao giờ được thi hành**. Sửa = bỏ MARKETING khỏi `:309` + seed, cấp lại per-user qua `UserPermissionGrant` đúng như đã ký.
-> 2. **Nhánh mask ở `/admin/leads` và `/admin/orders/[id]` là code chết** vì danh sách `view` và `view-pii` trùng nhau. Không phải lỗi bảo mật, nhưng nó tạo ảo giác "đã có che" khi đọc code — chính là thứ làm bản đánh giá đầu tiên của tài liệu này sai.
+> ⚠️ **ĐÍNH CHÍNH (29/07) — KHÔNG có lỗ hở quyền ở đây.** Bản trước của mục này kết luận *"MARKETING đang xem PII lead trái quyết định đã ký"* và đề xuất gỡ quyền. **Sai.** Quyết định 10/07 (che PII cho MARKETING) **đã bị ĐẢO ngày 21/07**: `permissions.ts:305-308` ghi rõ *"21/07 (user chốt): MARKETING XEM ĐƯỢC tên + SĐT lead (làm outreach/chiến dịch cần liên hệ) → thêm MARKETING (ĐẢO quyết định 'che PII cho MARKETING' của a+b 20/07)"*, và `seed-roles.ts:150` chép lại đúng lý do đó cho `HO_MARKETING`. **Ma trận `:309` là hiện trạng ĐÚNG; gỡ MARKETING khỏi đó là đảo ngược quyết định của BGĐ.**
+>
+> Thứ thật sự sai chỉ là **2 comment lạc hậu** vẫn mô tả quyết định 10/07 đã bị thay thế — và chính chúng đã làm bản đánh giá đầu tiên của tài liệu này kết luận sai **hai lần**:
+> - `permissions.ts:66` — *"MARKETING mặc định KHÔNG có, cấp per-user qua grant"*.
+> - `leads/page.tsx:126` — lấy *"(vd MARKETING)"* làm ví dụ vai bị che.
+>
+> Và **nhánh mask KHÔNG phải code chết** như bản trước viết: `UserPermissionGrant` cho phép **DENY per-user**, nên admin thu quyền `leads:view-pii`/`orders:view-pii` của một người cụ thể là nhánh mask có tác dụng ngay. Nó là lớp phòng thủ còn sống, đừng gỡ.
 
 ### GV/trợ giảng + chat–call real-time: cấp *năng lực liên hệ*, KHÔNG cấp *định danh* (định hướng 29/07)
 
