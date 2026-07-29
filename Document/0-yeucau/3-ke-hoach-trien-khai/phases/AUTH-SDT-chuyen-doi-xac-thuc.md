@@ -1,6 +1,12 @@
 # AUTH-SĐT — Kế hoạch chuyển mô hình xác thực Email → Số điện thoại (Zalo ZNS)
 
-> Ngày lập: 28/07/2026 · Trạng thái: **DỰ THẢO — chờ chốt 6 câu ở §7**
+| | | | | | |
+|---|---|---|---|---|---|
+| **Phase** | AUTH-SĐT | **Ưu tiên** | P0 (mục §3) | **Ước lượng** | P0 2–3 ngày · P1–P6 chưa chốt (phụ thuộc §7) |
+| **Phụ thuộc** | A0-05 (login chung, DONE) · R2-04 (activation OTP, DONE) | **Feature flag** | `AUTH_PHONE_PROVISIONING` · `AUTH_ZNS_DEGRADED` | **Trạng thái** | 🟡 DỰ THẢO — đã verify code 29/07, chờ chốt §7 |
+| **Nguồn** | Doc 15 **Q9** (`parent (phone/email) → hocvien`) · Q13 (OTP provider abstraction) | **Test ID** | `[AUTH-SDT-<task>-C<n>]` | **Liên quan** | R2-05 Duplicate phone UX |
+
+> Ngày lập: 28/07/2026 · Verify lại toàn bộ file:dòng 29/07/2026.
 > Phạm vi tài liệu này: **tầng xác thực**. Việc gửi ZNS xác nhận học phí tách thành **Nhánh B** (§6) vì nó KHÔNG phụ thuộc tầng auth.
 
 ---
@@ -16,6 +22,8 @@
 3. **ZNS không thể là đường đăng nhập DUY NHẤT.** Số không có Zalo → lỗi `-118`, tin mất vĩnh viễn; user tự tắt nhận tin OA (`-139/-141`) thì CSKH **không bật hộ được**; và Zalo **không có fallback SMS gốc**. Nếu bỏ email, một tỉ lệ phụ huynh sẽ bị khoá ngoài hệ thống không có đường vào.
 
 **Khuyến nghị:** đi theo mô hình **"cộng thêm khoá SĐT, hạ email xuống kênh dự phòng vĩnh viễn"** — KHÔNG phải "thay email bằng SĐT". Hệ thống chấp nhận đăng nhập bằng **SĐT hoặc email**, mọi tài khoản mới cấp bằng SĐT, email chỉ còn là phao cứu sinh. Đây là cách duy nhất đạt được yêu cầu nghiệp vụ mà không tạo ra rủi ro "cả trung tâm không đăng nhập được".
+
+> ✅ **Khuyến nghị này KHÔNG chệch blueprint — nó chính là điều Doc 15 đã chốt.** Doc 15 §1 **Q9** ghi nguyên văn: *"parent (**phone/email**) → hocvien"*. Tức "đăng nhập bằng SĐT **hoặc** email" là thiết kế gốc đã duyệt, không phải nhượng bộ kỹ thuật phát sinh. Ngược lại **Q13** (*"Core: activation qua **Resend email**, OTP provider abstraction để cắm SMS/Zalo sau"*) và §7 (`lead.converted → Gửi email/OTP activation`) mô tả kênh mặc định là email — **P5 làm xong phải amend Doc 15 Q13** để blueprint không còn mâu thuẫn với code (Doc 15 là nguồn đúng nhất theo CLAUDE.md; PR nào đảo Q13 thì PR đó cập nhật Q13).
 
 **Đường găng không nằm ở code:** thủ tục ZBS (xác thực OA doanh nghiệp → ZCA → nạp tiền → duyệt mẫu **1–3 ngày làm việc mỗi lần**) phải khởi động **ngày 1, song song**, nếu không toàn bộ P4–P6 nằm chờ.
 
@@ -69,6 +77,12 @@ Mỗi tin ZNS mẫu Xác thực = **300đ chưa VAT** ([bảng giá chính thứ
 ### QĐ-4 · Canonical SĐT = `84XXXXXXXXX`, **một hàm duy nhất** `lib/phone.ts`
 
 Chọn `84…` (không phải `+84…`, không phải `0…`) vì: (a) khớp thẳng payload ZNS nên không phải convert lúc gửi; (b) ký tự `+` bị Excel hiểu là công thức — repo import/export Excel rất nhiều; (c) 2/9 điểm chuẩn hoá hiện tại đã ra dạng này.
+
+> 🔴 **Canonical phải áp XUỐNG TẬN `lib/otp/service.ts`, không dừng ở validator.** `requestOtp`/`verifyOtp` hiện chỉ `.trim().toLowerCase()` target (`service.ts:65,160`) — với SĐT đó là **no-op**. Hai hệ quả, cả hai đều câm:
+> - **Verify không bao giờ khớp:** lúc cấp tài khoản lưu `84905…` nhưng `/kich-hoat` gửi lên `0905…` → `findFirst({where:{target}})` không thấy bản ghi → phụ huynh nhận được mã nhưng nhập vào báo *"Chưa có mã hoặc mã đã dùng"*.
+> - **Thủng chính lá chắn chống đốt tiền của §3.2:** cooldown (`:77`) và daily-limit (`:94`) đếm theo chuỗi `target`. Hai định dạng = **hai bộ đếm** = gấp đôi hạn mức 8 tin/ngày, và cooldown 60s bị vượt chỉ bằng cách đổi cách gõ số.
+>
+> ⇒ `requestOtp`/`verifyOtp` phải `canonicalPhone(target) ?? target.toLowerCase()` **ngay đầu hàm** (nhánh email giữ nguyên lowercase). Việc này thuộc P1 (cùng lúc ra đời `lib/phone.ts`), **không** để tới P4/P5.
 
 > ⚠️ **Thứ tự bắt buộc:** đổi đường GHI sang `84…` mà **chưa backfill** dữ liệu cũ (`0…`) sẽ **phá dedupe ngay ngày deploy** — `findRecentDuplicate` hết bắt trùng 90 ngày, tính năng **gộp con theo SĐT vừa ship ở `f39b94d` ngừng match lead cũ**, `findParentMatch` không tìm ra phụ huynh. Âm thầm, không test nào bắt. **Backfill phải nằm trong CÙNG deploy.**
 
@@ -181,12 +195,13 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 
 - **Tạo `lib/phone.ts`** (chưa tồn tại): `canonicalPhone(raw) → "84XXXXXXXXX" | null` · `formatPhoneVN(canonical) → "0XXXXXXXXX"` · `isValidPhoneVN()`. Xử lý: bỏ `[\s.\-()]`, `+84→84`, `0084→84`, `+840…→84`, `0XXXXXXXXX→84…`, 9 chữ số mất số 0 đầu (Excel) `→84…`, chặn đầu số ngoài `3/5/7/8/9`.
 - **Gộp 6 helper + 3 chỗ inline + 5 bản regex `PHONE_VN` về đây.** Validator đổi sang `.transform(canonicalPhone)` — **chuẩn hoá** chứ không chỉ chấp nhận.
+- **Canonical hoá `target` trong `lib/otp/service.ts:65,160`** (xem cảnh báo đỏ ở QĐ-4). Làm ở P1 vì đây là điều kiện đúng-đắn của cả cooldown/daily-limit lẫn verify — để tới P5 thì lỗi chỉ lộ ra khi phụ huynh thật không kích hoạt được.
 - **Sửa 2 test đang khoá cứng 2 dạng đối nghịch** (`lib/lead/import.test.ts:31-35`, `lib/crm/lead-qualify.test.ts:6-9`).
 - **Vá lỗi đang mất lead thật:** client gửi SĐT có khoảng trắng → server chặn 400 → **nuốt lỗi im lặng** (`components/legacy-laptrinhrobot/_utils/tracking.ts:104,123-129` · `components/khoa-hoc/consult-modal.tsx:67,94`). Sau khi SĐT thành khoá đăng nhập, cùng lỗi này thành *"phụ huynh không tạo được tài khoản"* mà không ai biết.
 - **`scripts/phone-audit.ts` (CHỈ ĐỌC)** chạy trên **PROD**: đếm số bản ghi lệch dạng + **số nhóm trùng sau canonical** trên `Lead.phone`, `Student.parentPhone/parent2Phone`, `Employee.phone`, `Order.customerPhone`; liệt kê cặp *"1 SĐT → nhiều User"*; đếm `ConvertConflict status=OPEN`.
 - **Backfill trong CÙNG deploy** (xem cảnh báo QĐ-4): `Lead.phone`, `Student.parentPhone/parent2Phone/phone`, `Employee.phone`. **Không backfill** `Order.customerPhone`/`VoucherRedemption.customerPhone` (snapshot hoá đơn, cố ý giữ lịch sử) và các cột log.
 
-**DoD:** grep toàn repo còn **đúng 1** định nghĩa `normalizePhone` và **1** regex `PHONE_VN` · `lib/phone.test.ts` xanh (phủ case `"+84 0905 123 456"` hiện đang cho ra `"00905123456"` sai) · **báo cáo phone-audit trên PROD có số liệu thật, không phải ước lượng** · dedupe lead vẫn bắt trùng sau backfill.
+**DoD:** grep toàn repo còn **đúng 1** định nghĩa `normalizePhone` và **1** regex `PHONE_VN` · `lib/phone.test.ts` xanh (phủ case `"+84 0905 123 456"` hiện đang cho ra `"00905123456"` sai) · **báo cáo phone-audit trên PROD có số liệu thật, không phải ước lượng** · dedupe lead vẫn bắt trùng sau backfill · test khẳng định `requestOtp("0905…")` và `requestOtp("84905…")` **dùng CHUNG một bộ đếm cooldown/daily-limit**.
 
 **Rollback:** revert PR — chưa migration, chưa đụng auth.
 
@@ -198,7 +213,8 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 - **Chốt cơ chế cửa test cho OTP TRƯỚC khi viết helper login** (nếu chốt sau sẽ phải làm helper 2 lần): `codeHash` là HMAC một chiều (`schema:4120`) nên e2e không đọc ngược được mã. Đề xuất `OTP_TEST_FIXED_CODE` — chỉ hoạt động khi `NODE_ENV !== "production"`, và **production khởi động mà thấy biến này thì THROW**.
 - **Gộp 12 bản sao logic login** về `tests/e2e/_helpers/auth.ts` (10 file `tests/manual/*` + `teacher-site-pii.spec.ts`). Giữ nguyên pattern `toPass()` chống **hydration-wipe của form Waves**.
 - **`seedUser` giữ nguyên field `email`**, tự sinh `phone` duy nhất bên trong helper → **90 call-site không phải sửa dòng nào**.
-- Chạy tay **39 spec không có job CI** (`test:e2e:r1..r6` + `:crm`) lấy **đường cơ sở xanh** trước khi đụng identity.
+- Chạy tay **32 spec không có job CI** (`test:e2e:r1..r6` + `:crm` — r1=12, r2=2, r3=3, r4=2, r5=1, r6=10, crm=2) lấy **đường cơ sở xanh** trước khi đụng identity. Cộng **10 file `tests/manual/`** (nằm ngoài `testDir` của mọi config → không lệnh nào chạy được cả cụm) là **42 spec** ngoài tầm CI.
+  > CI thật có **7 job** (`quality`, `unit-tests`, `e2e`, `e2e-a0`, `e2e-r7`, `e2e-fl`, `e2e-teacher`). Job `e2e` chạy config mặc định với `testIgnore: a0|r[0-9]*|fl|crm|teacher` → chỉ còn `smoke.spec.ts` + `smoke-lms/`. Nghĩa là **toàn bộ r1–r6 + crm không ai gác**.
 
 ---
 
@@ -215,9 +231,21 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 - `login-form.tsx`: label *"Số điện thoại hoặc Email"*, `inputMode="tel"`, `autoComplete="username"`. Thông báo lỗi đổi thành *"Thông tin đăng nhập hoặc mật khẩu không đúng"*.
 - **Khai báo rõ 1 thay đổi hành vi:** login hiện **phân biệt hoa/thường ở email** (`lib/auth.ts:109` dùng nguyên chuỗi). Chuẩn hoá về lowercase là **thay đổi ngữ nghĩa thật** — phải đo `SELECT lower(email), count(*) … HAVING count(*)>1` trên PROD trước.
 
-**DoD:** tài khoản cũ đăng nhập bằng email **vẫn vào được y hệt** · tài khoản test set phone thủ công đăng nhập bằng SĐT vào được · `0905…` và `84905…` cùng một bucket cooldown · 7 job CI xanh + 39 spec chạy tay không hồi quy.
+**DoD:** tài khoản cũ đăng nhập bằng email **vẫn vào được y hệt** · tài khoản test set phone thủ công đăng nhập bằng SĐT vào được · `0905…` và `84905…` cùng một bucket cooldown · 7 job CI xanh + 32 spec chạy tay không hồi quy.
 
 > ❌ **Đừng trông cậy vào typecheck ở phase này.** Có một niềm tin sai phổ biến rằng "nới `email` thành nullable sẽ làm vỡ typecheck các `findUnique({where:{email}})`". **Không.** Prisma giữ nguyên trường nullable-unique trong `WhereUniqueInput` — bằng chứng: `User.employeeId String? @unique` (`schema:738`) vẫn sinh ra `employeeId?: string`. Typecheck sẽ **PASS và không cảnh báo gì**. Phải kiểm bằng grep + test dữ liệu.
+
+**Danh sách grep phải rà — 15 call-site khoá theo email** (`grep -rn "where: { email" app lib scripts prisma`). Không có bảng này thì "kiểm bằng grep" là câu nói suông:
+
+| Call-site | Loại | Xử lý |
+|---|---|---|
+| `lib/auth.ts:109` | login | **P3** — đổi sang `findFirst` + `OR` |
+| `app/(auth)/kich-hoat/_actions.ts:24,68` | kích hoạt | **P5** — đổi target sang phone |
+| `app/(admin)/admin/students/_actions.ts:968` | cấp TK phụ huynh | **P5** — kiểm trùng theo phone |
+| `lib/crm/convert-lead-v2.ts:161` · `lib/crm/convert-lead.ts:76` | convert lead (`user.upsert`) | **P5** — ⚠️ `upsert` với `where:{email: undefined}` **ném lỗi runtime**, không phải trả null. Đây là điểm vỡ nặng nhất khi lead không có email |
+| `lib/crm/dedupe.ts:50` | dedupe parent | **P5** — thêm nhánh tra `User.phone` |
+| `app/(admin)/admin/users/_actions.ts:64,213` · `app/(admin)/admin/nhan-su/actions.ts:198` | tạo/sửa TK nhân sự | **Không đổi** (QĐ-C: nhân sự giữ email) — nhưng phải khẳng định bằng test là email vẫn **bắt buộc** ở nhánh staff, nếu không sẽ tạo được staff `email = null` rồi vỡ ở `upsert` sau |
+| `prisma/seed.ts:374` · `seed-test-{admin,parent,teacher,profile}.ts` (5 chỗ) | seed | **P2** — giữ email, `seedUser` tự sinh phone (đã nêu ở P2) |
 
 **Rollback:** revert code — migration additive, email còn nguyên dữ liệu, mọi tài khoản cũ login như cũ. **Đây chính là lý do không backfill ở bước này.**
 
@@ -226,7 +254,7 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 ### P4 · Kênh ZALO cho OTP + khả năng quan sát
 
 - **`lib/zalo/otp-provider.ts`** theo QĐ-5. Map `-118/-119/-139/-141/-133/-147` thành error code riêng để tầng trên hiển thị đúng.
-- `getPrimaryOtpProvider()` chọn **theo loại target** (SĐT → zalo, email → resend), không theo env. Sửa `.env.example:110` và `docs/otp-service.md:17-20` (cả hai đang mô tả **sai** so với code).
+- `getPrimaryOtpProvider()` chọn **theo loại target** (SĐT → zalo, email → resend), không theo env. Sửa `.env.example:110` (`OTP_PRIMARY_PROVIDER="zalo"` đang bị code nuốt im lặng) và **viết lại `docs/otp-service.md`** — file này sai ở **3 chỗ, không phải 1**: `:3` (*"Giai đoạn đầu chỉ dùng EMAIL"*), `:9` (*"`getPrimaryOtpProvider()` đọc env `OTP_PRIMARY_PROVIDER`"* — code hardcode email), và `:17-20` (bảng ghi tên env `OTP_TTL_MINUTES`/`OTP_MAX_ATTEMPTS`/… trong khi code đọc động từ `SystemSetting` qua `getSetting("otp.*")`). Sửa lẻ 4 dòng sẽ để lại tài liệu vẫn sai.
 - **Fallback có điều kiện:** ZNS fail + user **có email đã verify** → thử email, ghi `OtpDeliveryLog` thứ 2 (mô hình 2 delivery/1 request **đã hỗ trợ sẵn**, `schema:4137-4155`). Không có email → trả `deliveryFailed=true`, **không giả vờ thành công**.
 - Template id đọc từ `SystemSetting` (`zalo.znsTemplateOtp`) chứ không chỉ env — **để đổi template không cần deploy** khi Zalo bắt sửa mẫu.
 - **Dựng `/admin/otp-logs`** — hiện có **0 UI nào đọc `OtpRequest`/`OtpDeliveryLog`**. Không có màn này thì sau khi chuyển sang Zalo, nhân viên **mất hoàn toàn** khả năng trả lời *"phụ huynh báo không nhận được mã"*. Nhớ thêm segment vào `ADMIN_ROUTE_SEGMENTS` (`lib/auth/route-policy.ts`) **+ test** — gotcha đã biết của dự án.
@@ -241,10 +269,12 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 *(Đây là phần đáp đúng yêu cầu gốc.)*
 
 - **Điều kiện vào phase:** đã dọn trùng SĐT theo báo cáo P1 + **đóng hết `ConvertConflict status=OPEN`**.
+  > Trùng phạm vi trực tiếp với **R2-05 "Duplicate phone UX"** trong lộ trình Doc 15 (§lộ trình R2). Nếu R2-05 chưa làm thì P5 **nuốt luôn** nó (SĐT thành khoá ⇒ UX trùng SĐT không còn là tuỳ chọn); nếu đã làm thì P5 chỉ mở rộng, không dựng lại. Kiểm tra trạng thái R2-05 trước khi ước lượng phase này.
 - `app/(admin)/admin/students/_actions.ts:925-1025`: `parentAccountSchema` đổi email bắt buộc → **phone bắt buộc**, email tuỳ chọn; kiểm trùng theo phone; `requestOtp({target: phone})`.
   > Tin tốt: `scopedDb` **không** scope model `User` → kiểm trùng SĐT không bị mù chéo cơ sở.
 - `app/(auth)/kich-hoat/`: `emailSchema` → `phoneSchema`; `emailVerified` → `phoneVerifiedAt`; form đổi `type="tel"`, label *"Số điện thoại phụ huynh"*, *"Mã OTP (6 số gửi qua Zalo)"*.
-  > ⚠️ **Bẫy dễ sót:** dòng `:85` `enqueueAccountActivated({ to: email })` — khi target thành SĐT, chuỗi `84…` sẽ bị đẩy vào `EmailQueue.toEmail` rồi worker gửi Resend → rác hàng đợi + lỗi lặp mỗi lần có người kích hoạt. **Typecheck không bắt** (kiểu vẫn là `string`). Cùng lỗi ở `lib/crm/_handlers/lead-converted.ts:23-26`.
+  > ⚠️ **Bẫy dễ sót:** dòng `:85` `enqueueAccountActivated({ to: email })` — khi target thành SĐT, chuỗi `84…` sẽ bị đẩy vào `EmailQueue.toEmail` rồi worker gửi Resend → rác hàng đợi + lỗi lặp mỗi lần có người kích hoạt. **Typecheck không bắt** (kiểu vẫn là `string`).
+  > `lib/crm/_handlers/lead-converted.ts:23-26` có **rủi ro NGƯỢC LẠI, cách vá khác hẳn** — đừng gộp chung: file này đọc `parent.email` từ DB và đã có guard `if (!parent?.email || !student) return`, nên **không** đẩy rác vào queue. Cái hỏng của nó là **im lặng bỏ qua email xác nhận ghi danh** cho mọi phụ huynh không có email — hôm nay là ngoại lệ hiếm, sau P5 thành **trường hợp phổ biến**. Vá = chuyển sang gửi ZNS khi thiếu email (hoặc ít nhất log/đếm được số lần bỏ qua), không phải chặn chuỗi `84…`.
 - **Convert lead:** `lib/crm/convert-lead-v2.ts` + `app/(admin)/admin/leads/[id]/convert/actions.ts` — gỡ ràng buộc `.email()` bắt buộc ở **cả 3 tầng type → zod → form**; sót 1 tầng là lỗi runtime mà typecheck không bắt. Xử lý luôn đường legacy `convert-lead.ts` (dùng khi `CONVERT_V2_ENABLED=false`) hoặc khai tử nó.
 - `lib/crm/dedupe.ts:42-59`: `findParentMatch` tra `User.phone` **trực tiếp** thay vì đi vòng qua `Student.parentPhone`. Đổi nghĩa `ConvertConflict` thành *"trùng SĐT giữa 2 hồ sơ"*.
 - **Backfill `User.phone`** (script riêng, **không nhét vào migration**), chạy theo lô, log case trùng để xử lý tay. Nhân sự chưa có SĐT → để `null`, **họ vẫn đăng nhập bằng email**.
@@ -321,6 +351,21 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 | **QĐ-D** | **P0 (vá bảo mật OTP) làm ngay, PR riêng.** | Tách khỏi mọi thứ còn lại. Không phụ thuộc ZBS, không phụ thuộc câu trả lời nào. Bắt đầu được ngay hôm nay. |
 
 > QĐ-C **giảm rủi ro đáng kể**: kịch bản tệ nhất của cả kế hoạch — *"ZBS chết → cả trung tâm không đăng nhập được"* — không còn xảy ra, vì toàn bộ nhân sự vận hành không đi qua Zalo. Phạm vi ảnh hưởng của sự cố ZNS thu hẹp về **riêng cổng phụ huynh**.
+
+### 🔴 Chốt TRƯỚC khi gõ dòng code P0 đầu tiên
+
+QĐ-D nói "P0 bắt đầu được ngay", nhưng 4 điểm dưới đây **đổi hình dạng của bản vá** — chốt sau nghĩa là làm lại.
+
+| # | Cần chốt | Khuyến nghị | Vì sao không tự quyết được |
+|---|---|---|---|
+| **P0-a** | Cách vá lỗ hổng `:168` — **(A)** gộp verify+consume vào 1 giao dịch, hay **(B)** phát token 1 lần có hạn riêng cho bước 2 | **(B)** | (A) rẻ hơn nhưng ép `/quen-mat-khau` (P6) phải nhập mã + mật khẩu mới **trên cùng 1 màn**; (B) đắt hơn 1 bảng/1 cột nhưng giữ được UX 2 bước. Chọn (A) rồi đổi ý ở P6 = viết lại cả 3 luồng OTP |
+| **P0-b** | Ngưỡng rate-limit OTP: req/IP/giờ · trần tin/ngày toàn hệ thống · ngưỡng kill-switch | 5 req/IP/giờ · 300 tin/ngày · tự tắt ở 500 | Đây là **hạn mức tiền**, không phải hằng số kỹ thuật. Đặt thấp → phụ huynh thật bị chặn; đặt cao → §3.2 vẫn hở |
+| **P0-c** | §3.4 đồng nhất phản hồi ⇒ **mất** thông báo *"Tài khoản đã kích hoạt — vui lòng đăng nhập"* | Đồng nhất (bịt lỗ liệt kê) + bù bằng dòng hướng dẫn tĩnh trên form | Đánh đổi **bảo mật ↔ CSKH**. Sau khi bịt, nhân viên không còn phân biệt được "sai số" với "đã kích hoạt rồi" khi phụ huynh gọi lên |
+| **P0-d** | Upstash Redis: **điều kiện bắt buộc** hay vẫn fail-soft? | Bắt buộc trước khi SĐT thành khoá (P3), P0 vẫn chạy được không cần | Cần **anh tạo tài khoản Upstash + set 2 env trên Vercel** — không code thay được. Nếu không có, rate-limit ở P0-b gần như vô hiệu trên serverless |
+
+**Hai việc trong P0 §3.7 làm đổi thứ nhân viên đang nhìn thấy — cần anh biết trước, không cần chốt nếu anh không phản đối:**
+- `maskPhone` siết 3+3 → 2+2: admin sẽ thấy `09***20` thay vì `090xxxxx520`. Nhân viên đang dùng 6 số đó để nhận diện khách khi gọi lại.
+- Cron dọn `OtpRequest`/`OtpDeliveryLog` giữ **90 ngày** rồi xoá (hiện giữ vĩnh viễn). Muốn giữ lâu hơn để đối soát chi phí ZNS thì nói con số khác.
 
 ### ⏳ Còn mở (không chặn P0–P2)
 

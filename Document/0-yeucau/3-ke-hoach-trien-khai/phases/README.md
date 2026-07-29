@@ -13,6 +13,7 @@
 7. [R5-hr.md](R5-hr.md) — Chấm công QR + geofence (chỉ nhân viên) + DoD toàn core.
 8. **R6 — Flexibility & Hardening** — spec tại BA #04 (`../../2-ba-phan-tich/04-ba-r6-flexibility-hardening.md`, baseline 11/06 + cập nhật 12/06); kế hoạch phase sẽ bung từ BA #04 (chưa lập ticket).
 9. **[R7-lms-v3.1.md](R7-lms-v3.1.md)** + **[R7/](R7/README.md)** — LMS v3.1 (SRS chốt cuối 12/06): 18 ticket đầy đủ 11 mục, đợt R7a/R7b. 🟢 kế hoạch DUYỆT 12/06 — khởi động từ R7-00.
+10. **[AUTH-SDT-chuyen-doi-xac-thuc.md](AUTH-SDT-chuyen-doi-xac-thuc.md)** — chuyển khoá đăng nhập Email → SĐT (Zalo ZNS), P0→P7. 🟡 DỰ THẢO 28/07 — **P0 (vá 2 lỗ hổng OTP) tách PR riêng, không phụ thuộc gì**; P1→P7 chờ chốt §7.
 
 ## Bảng tổng phase
 
@@ -26,6 +27,7 @@
 | **R5** ✅ | HR nhân viên | ~1.5 tuần | `tests/e2e/r5` | DoD toàn core 18 điểm |
 | **R6** 🟡 | Flexibility & Hardening (settings động, B1–B4, **vá C1–C3**) | ~3 tuần (ước) | `tests/e2e/r6` | C1–C3 CLOSED + audit cập nhật |
 | **R7** 🟢 kế hoạch duyệt 12/06 | LMS v3.1 — R7a lõi vận hành / R7b nội dung đào tạo (18 ticket) | ~8 tuần (4+4) | `tests/e2e/r7` | Exit Criteria + demo D1–D10 ([chi tiết](R7-lms-v3.1.md)) |
+| **AUTH-SĐT** 🟡 dự thảo 28/07 | Khoá đăng nhập Email → SĐT qua Zalo ZNS (P0 vá bảo mật OTP → P7) | P0 2–3 ngày · còn lại chờ chốt | `lib/otp/service.test.ts` + `lib/phone.test.ts` (chưa có) | Phụ huynh nhận 1 tin ZNS → đăng nhập bằng SĐT ([chi tiết](AUTH-SDT-chuyen-doi-xac-thuc.md)) |
 
 > Core A0→R5 đã đóng 2026-06-10. R6/R7 theo QĐ-O1 (TGĐ 12/06): R6 đi trước làm điều kiện tiên quyết; R7-00 là gate kiểm tra C1–C3 trước khi code LMS v3.1.
 
