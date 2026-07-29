@@ -363,13 +363,26 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 | **P0-e** | **`maskPhone` GIỮ NGUYÊN 3+3** — không siết 2+2. | Xem §9: sale + quản lý cơ sở **không hề bị mask** (có `leads:view-pii`), nên việc siết không giải quyết vấn đề gì mà chỉ siết thêm GV/HR — đúng nhóm chính sách đã cố ý chặn. Nút "hiện số" cho GV là **đổi chính sách so với Doc 15**, tách ra chốt riêng. |
 | **P0-f** | **Retention dấu vết OTP = 90 ngày.** | Cron `/api/cron/otp-cleanup` chạy 08:00 hằng ngày; `OtpDeliveryLog` cascade theo `OtpRequest` nên 1 lệnh xoá là đủ. |
 
+### ✅ Chốt tiếp 29/07 — ngân sách + nội dung 3 mẫu
+
+**QĐ-E · Ngân sách ZNS = 300 tin/ngày** (≈ 90.000đ/ngày ở đơn giá 300đ/tin mã xác thực). Khớp đúng default `otp.globalDailyCap` đã cài ở P0 ⇒ không phải chỉnh gì. **SMS brandname dự phòng vẫn chưa duyệt** — nghĩa là ở v1, phụ huynh không có Zalo (`-118`) hoặc tắt nhận tin OA (`-139/-141`) **chỉ còn đường email/mật khẩu**. Đây chính là chỗ QĐ-3 (giữ email vĩnh viễn) gánh rủi ro; đừng bỏ email khi chưa có SMS.
+
+**QĐ-F · Tách đúng 3 mẫu, KHÔNG gộp.** Bản nháp nội dung do BGĐ soạn 29/07 (cảm ơn + link đăng nhập + tên đăng nhập là SĐT + hotline + emoji) **rất tốt cho email/chat nhưng sẽ bị kiểm duyệt ZNS từ chối**, vì gộp 3 mẫu vào 1 và vi phạm cùng lúc 3 điều cấm: **có link** · **có số hotline** · **in SĐT phụ huynh ra chữ**. Riêng mẫu **Xác thực** còn không cho nút CTA / ảnh / emoji — mà đây lại là loại **DUY NHẤT gửi được cho người chưa từng tương tác với OA**, tức đúng thứ cần cho phụ huynh mới. Nhồi nội dung dài vào đó = mất luôn khả năng gửi cho người chưa follow OA.
+
+| Mẫu | Nội dung nộp duyệt | Ghi chú |
+|---|---|---|
+| ① **Xác thực (OTP)** | *Mã xác thực Sata Robo của quý phụ huynh là `{code}`. Tài khoản đăng nhập chính là số điện thoại nhận tin này. Mã có hiệu lực `{minutes}` phút, vui lòng không chia sẻ.* | Tối giản tối đa. "số điện thoại nhận tin này" thay cho việc in số ra chữ |
+| ② **Cấp tài khoản** | *Sata Robo đã tạo tài khoản theo dõi học tập cho bé `{studentName}`. Quý phụ huynh đăng nhập bằng số điện thoại nhận tin này để xem lịch học, điểm danh và nhận xét của thầy cô.* | Loại giao dịch. Nếu Zalo cho nút → đặt **nút "Đăng nhập"**, KHÔNG dán link vào thân tin |
+| ③ **Xác nhận học phí** (Nhánh B) | *Sata Robo xác nhận đã nhận học phí khóa `{courseName}` của bé `{studentName}`, số tiền `{amount}`đ. Phiếu thu `{receiptCode}` ngày `{date}`.* | 200đ/tin |
+
+**Phần cảm ơn + hotline + link** trong bản nháp → chuyển sang **email chào mừng** (đã có sẵn `enqueueAccountActivated`) hoặc tin Zalo/Messenger do sale gửi tay. Ở hai kênh đó không bị kiểm duyệt, và đó mới là chỗ đặt giọng văn ấm áp.
+
+> ⚠️ Ba mẫu trên dựa vào quy định ZNS ghi tại §2 QĐ-6 (nguồn zalo.solutions) — **chưa xác minh lại tại thời điểm nộp**. Quy định Zalo có thay đổi. Vẫn phải gửi `support@zalo.cloud` 4 câu ở P0′ TRƯỚC khi nộp, đặc biệt câu **OTP có được miễn khung cấm 22:00–06:00 (`-133`)** — nếu không thì ban đêm không ai kích hoạt/đăng nhập được.
+
 ### ⏳ Còn mở (không chặn P0–P2)
 
-5. **Ngân sách ZNS.** 300đ/tin chưa VAT cho mã xác thực, 200đ/tin cho xác nhận học phí. Có duyệt không? Và có duyệt **ký thêm SMS brandname dự phòng** (chưa có báo giá) không?
-   > Chặn: **P0′** (nạp tiền ZCA) và **P4**.
-
-6. **Cách diễn đạt tin "cấp tài khoản".** Quy định ZNS **cấm chèn số điện thoại vào nội dung tin**. Chấp nhận *"Tài khoản đăng nhập chính là số điện thoại này + mã `<otp>`"* (không in số ra chữ) chứ ạ?
-   > Chặn: **P0′** (nộp mẫu duyệt). Cần chốt sớm vì mỗi lần từ chối mất 1–3 ngày làm việc.
+5. **SMS brandname dự phòng** — xin báo giá ≥2 nhà cung cấp (eSMS, VietGuys/Infobip), có ký hay không.
+   > Chặn: **P4** (fallback khi ZNS chết). Không chặn P0–P3.
 
 **Câu hỏi phụ nên chuẩn bị sẵn câu trả lời:** phụ huynh bấm gửi lại mã 10 lần thì ai trả tiền? · ông bà đưa đón có xem được lịch học không? · phụ huynh đổi số **và đã mất số cũ** thì lấy lại tài khoản kiểu gì?
 
@@ -389,27 +402,53 @@ Thay vào đó, con số thứ 3 cần đo là: **bao nhiêu nhóm "cùng SĐT n
 
 ## 9. Đính chính hiện trạng che SĐT (29/07) — vì sao P0-e giữ 3+3
 
-Có một hiểu lầm dễ mắc khi đọc §3.7: rằng **mọi** nhân viên đang thấy SĐT bị che, nên siết mask sẽ làm sale/quản lý lớp không liên hệ được phụ huynh. **Không phải vậy** — hệ thống đã có tầng quyền PII đầy đủ:
+Việc che SĐT phải đọc theo **2 tầng**: tầng route (`PAGE_GATES` — ai vào được trang) rồi mới tới tầng PII (`*:view-pii` — vào rồi thì thấy đầy đủ hay bị che). Bỏ tầng 1 sẽ kết luận sai. Bảng dưới đây đã đối chiếu cả hai (29/07):
 
-| | |
-|---|---|
-| Ai **thấy số đầy đủ, không mask** | `SUPER_ADMIN` · `CENTER_MANAGER` · `SALES_CSM` · `MARKETING` — tức có `leads:view-pii` (`permissions.ts:309`). Đơn hàng dùng `orders:view-pii` (thêm `ACCOUNTANT`) |
-| Ai **bị mask 3+3** | Các vai còn lại — thực tế là `TEACHER`, `HR`, và `ACCOUNTANT` ở màn lead |
-| Ai **không thấy gì cả** | `TEACHER` ở trang tiến độ lớp — `canViewParentContact()` (`permissions.ts:822`) loại thẳng, không phải mask |
-| Che ở đâu | **Ở SERVER**, trước khi trả RSC payload (`students/page.tsx:210-215`) — actor thiếu quyền không bao giờ nhận được số thật xuống client. Đây là thiết kế đúng, đừng đổi |
+| Trang | Ai vào được (PAGE_GATES / gate trong page) | Trong số đó ai BỊ mask |
+|---|---|---|
+| `/admin/leads` | `leads:view-all` (SUPER_ADMIN · CENTER_MANAGER · MARKETING) **hoặc** `leads:view-own` (SUPER_ADMIN · SALES_CSM) — `leads/page.tsx:40-43` | **KHÔNG AI.** Cả 4 vai vào được đều có `leads:view-pii` (`:309`) ⇒ nhánh mask là **code chết** |
+| `/admin/students` | `students:view-all` = SUPER_ADMIN · CENTER_MANAGER · SALES_CSM · MARKETING · **ACCOUNTANT · HR** (`:383`) | **HR + Kế toán** (không có `leads:view-pii`) — đây là chỗ mask thực sự có tác dụng |
+| `/admin/enrollments` | `enrollments:view-all` = SUPER_ADMIN · CENTER_MANAGER · SALES_CSM · **ACCOUNTANT** (`:406`) | **Kế toán** |
+| `/admin/orders/[id]` | `orders:view` = SUPER_ADMIN · CENTER_MANAGER · SALES_CSM · ACCOUNTANT (`:565`) | **KHÔNG AI** — `orders:view-pii` (`:568`) trùng y hệt danh sách `orders:view` ⇒ **code chết** |
+| `/admin/classes/[id]/progress` | GV vào được | GV **không thấy gì cả** — `canViewParentContact()` (`:822`) ẩn hẳn cột, không phải mask |
 
-**Hệ quả:** siết `maskPhone` 3+3 → 2+2 **không** ảnh hưởng sale hay quản lý cơ sở (họ không bị mask), mà chỉ siết thêm GV/HR — đúng nhóm mà Doc 15 §PII (*"TEACHER không mặc định xem SĐT phụ huynh"*) đã cố ý chặn. Lợi ích an ninh nhỏ, rủi ro hiểu nhầm lớn ⇒ **P0-e giữ 3+3**.
+**`TEACHER` không có mặt ở bất kỳ dòng nào bên trên** — GV bị chặn từ tầng route (`PAGE_GATES` ghi rõ *"Danh sách HV toàn cơ sở. GV KHÔNG vào"*), không phải từ tầng mask.
 
-> ⏳ **Câu hỏi còn mở tách riêng:** nếu muốn **giáo viên / trợ giảng** tự liên hệ phụ huynh, đó là **đổi chính sách PII so với Doc 15**, không phải sửa hàm mask. Việc cần làm khi đó là nút *"Hiện số"* gọi Server Action có `assertCan` + **bắt buộc nhập lý do + ghi audit** (mẫu break-glass y như `payments:view-pii` đang có), chứ không phải bỏ mask. Chưa chốt ⇒ chưa làm.
+⇒ **Mask 3+3 hiện chỉ áp cho HR và Kế toán, ở màn học viên/ghi danh.** Siết xuống 2+2 vì thế chỉ làm khó đúng 2 vai đó, không đụng gì tới sale/quản lý cơ sở (họ vốn thấy số đầy đủ) và cũng không liên quan GV. Lợi ích an ninh nhỏ, rủi ro hiểu nhầm lớn ⇒ **P0-e giữ 3+3**.
 
-### Thêm Upstash vào đâu (P0-d)
+> 🔴 **Hai lỗ hở lộ ra khi rà bảng này — KHÔNG thuộc AUTH-SĐT, cần ticket riêng:**
+> 1. **`MARKETING` đang xem được PII lead trái với quyết định đã ký.** Comment `permissions.ts:66` ghi *"MARKETING mặc định KHÔNG có, cấp per-user qua grant"* (OI-4, Kiệt ký 10/07) và comment `leads/page.tsx:126` cũng lấy MARKETING làm ví dụ vai bị che — **nhưng ma trận `:309` lại cấp cho MARKETING**, và seed v2 `HO_MARKETING` (`seed-roles.ts:156`) cấp theo, ghi chú "Parity với v1". Tức quyết định được ghi trong comment nhưng **chưa bao giờ được thi hành**. Sửa = bỏ MARKETING khỏi `:309` + seed, cấp lại per-user qua `UserPermissionGrant` đúng như đã ký.
+> 2. **Nhánh mask ở `/admin/leads` và `/admin/orders/[id]` là code chết** vì danh sách `view` và `view-pii` trùng nhau. Không phải lỗi bảo mật, nhưng nó tạo ảo giác "đã có che" khi đọc code — chính là thứ làm bản đánh giá đầu tiên của tài liệu này sai.
 
-Hai giá trị đã có sẵn — **không paste vào chat, không commit vào repo**:
+### GV/trợ giảng + chat–call real-time: cấp *năng lực liên hệ*, KHÔNG cấp *định danh* (định hướng 29/07)
 
-1. **Vercel** → Project `satarobo-vn` → Settings → Environment Variables → thêm 2 biến, chọn **Production** (và **Preview** nếu muốn chặn cả bản thử):
-   - `UPSTASH_REDIS_REST_URL`
-   - `UPSTASH_REDIS_REST_TOKEN`
-2. **Redeploy** — env chỉ nạp lúc build/khởi động, không có redeploy thì code vẫn chạy nhánh memory.
-3. **Local dev** (tuỳ chọn): đặt trong `.env.local` — file này đã `.gitignore`. **KHÔNG** đặt vào `.env.example`.
+Kế hoạch tương lai: tích hợp chat real-time và gọi điện GV ↔ phụ huynh. Câu hỏi kèm theo — *"vậy có nên để lộ SĐT cho GV không?"* — **khuyến nghị: KHÔNG**, và chính tính năng đó là lý do không cần lộ.
+
+- Chat/call trong app cho GV **đúng thứ họ cần** (liên hệ được phụ huynh) mà **không cần** thứ họ không cần (chuỗi 10 chữ số mang đi được). Đây là mô hình *masked calling* — hệ thống ghép cuộc, hai đầu không thấy số nhau, có log.
+- Sau AUTH-SĐT, SĐT **không còn là thông tin liên lạc — nó là tên đăng nhập**. Phát username của toàn bộ phụ huynh cho nhóm nhân sự biến động cao nhất là mở rộng bề mặt tấn công đúng vào cái khoá vừa dựng.
+- Doc 15 §PII đã chốt *"TEACHER không mặc định xem SĐT phụ huynh"*; đảo lại cần phiếu BGĐ (như đã làm với site GV 04/07).
+- NĐ 13/2023 + rủi ro cạnh tranh: GV nghỉ việc mang theo danh bạ phụ huynh.
+- **Hạ tầng đã có sẵn:** `/admin/tin-nhan` là hội thoại PH ↔ GV, gate `["parent-requests:manage", "classes:view-own"]` — GV vào được **vì trang có lọc theo lớp phân công**. Kênh chat không phải dựng mới, chỉ cần gắn call lên trên.
+
+**Vẫn phải có đường cứu hộ:** nút *"Hiện số"* break-glass cho tình huống khẩn (bé ốm, gọi trong app không được) — Server Action có `assertCan` + **bắt buộc nhập lý do + ghi audit**, đúng mẫu `payments:view-pii` đang chạy. Như vậy GV liên hệ được 100% trường hợp mà **không ai cầm được danh bạ**.
+
+> Đây là **định hướng**, chưa phải quyết định thi hành: phần call cần chọn nhà cung cấp (proxy số nhà mạng hay VoIP) và có chi phí riêng. Ghi ở đây để khi làm chat/call không mặc định "cứ hiện SĐT cho tiện".
+
+### Thêm Upstash vào đâu (P0-d) — kể cả site test
+
+Hai giá trị **không paste vào chat, không commit vào repo**.
+
+| Môi trường | Đặt ở đâu | Dùng Upstash DB nào |
+|---|---|---|
+| **Production** | Vercel → Project → Settings → Environment Variables → scope **Production** | DB prod |
+| **Site test / Preview** | Cùng chỗ, scope **Preview** (hoặc Branch cụ thể nếu muốn riêng 1 nhánh) | ⚠️ **DB KHÁC prod.** Key rate-limit (`otp:activation:ip:*`) là chuỗi chung — dùng chung DB thì traffic test đốt bộ đếm của prod và ngược lại |
+| **Local dev** | `.env.local` (đã `.gitignore`) | DB test hoặc bỏ trống |
+| **Chạy test** (vitest / Playwright) | **ĐỪNG SET** | — |
+
+**Vì sao test không set:** `rateLimit()` fail-soft về bộ đếm in-memory, mỗi lần chạy đếm lại từ 0 → test tất định. Trỏ vào Redis dùng chung thì chạy suite 2 lần liên tiếp sẽ **đỏ giả** vì bộ đếm còn dư từ lần trước. Nếu bắt buộc kiểm chính hành vi Redis thì tạo DB thứ ba và xoá sạch trước mỗi lần chạy.
+
+**Sau khi thêm phải REDEPLOY** — env chỉ nạp lúc build/khởi động; không redeploy thì code vẫn chạy nhánh memory dù đã điền đúng.
+
+**KHÔNG** đặt vào `.env.example`, và **đừng set cả 2 bộ tên** (`UPSTASH_*` lẫn `KV_*`) — xem ghi chú dưới.
 
 > `lib/rate-limit.ts:49-52` đọc `UPSTASH_REDIS_REST_*` trước, fallback `KV_REST_API_*` (tên do tích hợp Upstash trên Vercel Marketplace tự đặt) — dùng bộ nào cũng chạy, **đừng đặt cả hai** kẻo không biết bộ nào đang có hiệu lực. Kiểm chứng đã ăn: bấm "Gửi mã kích hoạt" quá `otp.ipMaxPerHour` lần trong 1 giờ từ cùng một máy phải bị chặn **kể cả khi tải trang lại nhiều lần** (bộ đếm memory sẽ reset theo instance, Redis thì không).
