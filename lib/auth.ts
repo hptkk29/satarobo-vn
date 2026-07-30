@@ -117,12 +117,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             centerId: true,
             isActive: true,
             deletedAt: true,
+            accountStatus: true,
           },
         });
 
         if (!user || !user.password || user.deletedAt || !user.isActive) {
           return null;
         }
+        // AUTH-SĐT P0 §3.6 — chặn tường minh theo accountStatus.
+        // PENDING_ACTIVATION/DISABLED trước đây bị chặn TÌNH CỜ vì các tài khoản
+        // đó có `password = null`. Hàng rào ấy biến mất ngay khi có bất kỳ đường
+        // đăng nhập nào không dựa vào mật khẩu, hoặc khi ai đó đặt mật khẩu cho
+        // một tài khoản chưa kích hoạt.
+        if (user.accountStatus !== "ACTIVE") return null;
 
         const valid = await bcrypt.compare(parsed.data.password, user.password);
         if (!valid) return null;

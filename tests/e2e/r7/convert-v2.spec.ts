@@ -61,7 +61,8 @@ test.describe("[R7-05] Convert v2", () => {
   // ── AC4 / C7 — dedupe student (tên chuẩn hoá + DOB) ───────────────────────
   test("[R7-05-C7] student trùng theo tên chuẩn hoá + DOB", () => {
     expect(normalizeName("  Nguyễn  Văn A ")).toBe("nguyễn văn a");
-    expect(normalizePhone("0905.123.456")).toBe("0905123456");
+    expect(normalizePhone("0905.123.456")).toBe("84905123456");
+    expect(normalizePhone("+84 905 123 456")).toBe("84905123456");
     const dob = new Date("2015-05-01");
     expect(studentMatches({ name: " nguyễn  văn a ", dob }, { name: "Nguyễn Văn A", dob })).toBe(true);
     expect(studentMatches({ name: "Nguyễn Văn A", dob }, { name: "Nguyễn Văn B", dob })).toBe(false);

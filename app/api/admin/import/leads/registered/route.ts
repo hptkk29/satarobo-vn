@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
+import { expandPhoneVariants, phoneKey } from "@/lib/phone";
 import { resolveActor } from "@/lib/auth/actor";
 import {
   scopedDb,
@@ -101,7 +102,9 @@ export async function POST(req: NextRequest) {
     }),
     phones.length > 0
       ? scopedDb(actor, { bypass: true }).lead.findMany({
-          where: { phone: { in: phones }, deletedAt: null },
+          // AUTH-SĐT P1 — tìm cả bản ghi `0…` cũ chưa backfill, nếu không thì
+          // đường GỘP ngừng thấy lead cũ và import sẽ tạo lead trùng.
+          where: { phone: { in: expandPhoneVariants(phones) }, deletedAt: null },
           orderBy: { createdAt: "asc" },
           select: {
             id: true,
@@ -131,7 +134,9 @@ export async function POST(req: NextRequest) {
   // DB có thể chứa lead trùng SĐT (data cũ) → GỘP vào lead CŨ NHẤT (câu 34: giữ record cũ).
   const existingByPhone = new Map<string, ExistingLead>();
   for (const l of existingLeads) {
-    if (!existingByPhone.has(l.phone)) existingByPhone.set(l.phone, l as ExistingLead);
+    // Key theo canonical: query trên trả về cả 2 dạng, key thô sẽ tra trượt.
+    const k = phoneKey(l.phone);
+    if (!existingByPhone.has(k)) existingByPhone.set(k, l as ExistingLead);
   }
 
   const plan = planRegisteredImport(parsed, {

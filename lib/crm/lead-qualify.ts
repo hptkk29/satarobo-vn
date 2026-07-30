@@ -3,6 +3,7 @@
 import type { CommissionSource, Lead } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
+import { canonicalPhone, isValidPhoneVN, phoneVariants } from "@/lib/phone";
 
 export class LeadQualifyError extends Error {
   readonly code: string;
@@ -13,14 +14,26 @@ export class LeadQualifyError extends Error {
   }
 }
 
-/** Chuẩn hóa SĐT VN: giữ chữ số. THUẦN. */
+/**
+ * Chuẩn hoá SĐT VN → canonical `84XXXXXXXXX`. THUẦN.
+ * AUTH-SĐT P1 — trước đây chỉ `replace(/\D/g,"")` nên `090 123 4567` ra `0901234567`
+ * còn `+84 90-123-4567` ra `84901234567`: **cùng một số, hai khoá khác nhau**.
+ */
 export function normalizePhone(raw: string | null | undefined): string {
-  return (raw ?? "").replace(/\D/g, "");
+  return canonicalPhone(raw) ?? (raw ?? "").replace(/\D/g, "");
 }
 
-/** C4.2 — đạt L2 cần SĐT hợp lệ (≥8 chữ số). THUẦN. */
+/**
+ * C4.2 — đạt L2 cần SĐT hợp lệ. THUẦN.
+ *
+ * ⚠️ **ĐỔI HÀNH VI (AUTH-SĐT P1):** trước đây chỉ đếm "≥8 chữ số", nên
+ * `12345678` hay số cố định `02363…` cũng qua được, rồi được ghi thẳng vào
+ * `Lead.phone`. Khi `Lead.phone` sắp thành nguồn của khoá đăng nhập thì đó là
+ * đường đưa rác vào cột định danh — và tạo ra lead **không bao giờ convert nổi**
+ * thành tài khoản. Nay yêu cầu đúng SĐT DI ĐỘNG VN.
+ */
 export function canQualify(phone: string | null | undefined): boolean {
-  return normalizePhone(phone).length >= 8;
+  return isValidPhoneVN(phone);
 }
 
 /** C4.4 — suy commissionSource (THUẦN). */
@@ -58,8 +71,10 @@ export async function qualifyConversationToLead(input: {
   // Dedup phone trong cửa sổ cấu hình (C4.3) — SystemSetting "crm.dedupWindowDays" (default 90).
   const dedupWindowDays = await getSetting("crm.dedupWindowDays");
   const cutoff = new Date(now.getTime() - dedupWindowDays * 86_400_000);
+  // AUTH-SĐT P1 — tra theo CẢ dạng canonical mới lẫn dạng `0…` cũ còn trong DB,
+  // nếu không thì ngày đổi đường ghi là ngày dedup 90 ngày ngừng bắt trùng.
   const existing = await db.lead.findFirst({
-    where: { phone, deletedAt: null, createdAt: { gte: cutoff } },
+    where: { phone: { in: phoneVariants(phone) }, deletedAt: null, createdAt: { gte: cutoff } },
     orderBy: { createdAt: "desc" },
   });
 

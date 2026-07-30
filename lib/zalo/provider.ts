@@ -1,5 +1,6 @@
 import "server-only";
 import { getValidZaloAccessToken, forceRefreshZaloToken } from "@/lib/zalo/token";
+import { canonicalPhone } from "@/lib/phone";
 
 // =============================================================================
 // Cụm C5 + commit 5 — Zalo OA/ZNS provider.
@@ -43,13 +44,11 @@ function hasCredentials(): boolean {
   );
 }
 
-/** SĐT VN → định dạng 84xxxxxxxxx mà ZNS yêu cầu. */
-function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("84")) return digits;
-  if (digits.startsWith("0")) return "84" + digits.slice(1);
-  return digits;
-}
+// AUTH-SĐT P1 — bản chuẩn hoá riêng đã gỡ. ZNS đòi đúng `84xxxxxxxxx`, cũng
+// chính là canonical của repo (QĐ-4): không phải convert lúc gửi thì không có
+// chỗ để lệch. Dữ liệu rác không chuẩn hoá được thì cứ gửi chữ số thô cho ZNS
+// từ chối, đừng tự bịa số.
+const toZnsPhone = (phone: string) => canonicalPhone(phone) ?? phone.replace(/\D/g, "");
 
 type ZnsPostResult = ZaloSendResult & { authError?: boolean };
 
@@ -62,7 +61,7 @@ async function postZns(accessToken: string, input: ZaloSendInput): Promise<ZnsPo
       method: "POST",
       headers: { "Content-Type": "application/json", access_token: accessToken },
       body: JSON.stringify({
-        phone: normalizePhone(input.toPhone),
+        phone: toZnsPhone(input.toPhone),
         template_id: input.templateKey,
         template_data: input.params ?? {},
       }),

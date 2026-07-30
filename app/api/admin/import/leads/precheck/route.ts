@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { expandPhoneVariants } from "@/lib/phone";
 import { resolveActor } from "@/lib/auth/actor";
 import {
   scopedDb,
@@ -42,7 +43,9 @@ export async function POST(req: NextRequest) {
     await logScopeBypass(actor, "import/leads/precheck: đối chiếu SĐT lead toàn hệ thống");
   }
   const matches = await scopedDb(actor, { bypass: true }).lead.findMany({
-    where: { phone: { in: phones }, deletedAt: null },
+    // AUTH-SĐT P1 — preview phải thấy cả lead lưu dạng `0…` cũ, nếu không thì
+    // màn xem trước báo "không trùng" rồi import thật lại gộp.
+    where: { phone: { in: expandPhoneVariants(phones) }, deletedAt: null },
     select: { phone: true, parentName: true, childName: true, status: true },
   });
   return NextResponse.json({ matches });

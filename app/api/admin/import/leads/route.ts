@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { expandPhoneVariants, phoneKey } from "@/lib/phone";
 import { resolveActor } from "@/lib/auth/actor";
 import {
   scopedDb,
@@ -182,7 +183,8 @@ export async function POST(req: NextRequest) {
       await logScopeBypass(actor, "import/leads: dedupe SĐT lead toàn hệ thống");
     }
     const existing = await scopedDb(actor, { bypass: true }).lead.findMany({
-      where: { phone: { in: [...groups.keys()] }, deletedAt: null },
+      // AUTH-SĐT P1 — xem "phoneVariants" trong lib/phone.ts.
+      where: { phone: { in: expandPhoneVariants([...groups.keys()]) }, deletedAt: null },
       select: {
         id: true,
         phone: true,
@@ -194,9 +196,9 @@ export async function POST(req: NextRequest) {
       },
     });
     for (const ex of existing) {
-      const g = groups.get(ex.phone);
+      const g = groups.get(phoneKey(ex.phone));
       if (!g) continue;
-      groups.delete(ex.phone);
+      groups.delete(phoneKey(ex.phone));
       // Gộp = GHI vào lead cũ → phải trong phạm vi quyền (không gộp chéo cơ sở).
       if (!passesScope("Lead", { centerId: ex.centerId }, actor)) {
         errors.push({

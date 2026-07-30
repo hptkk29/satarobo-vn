@@ -123,7 +123,10 @@ export default async function LeadsPage({
   })
 
   // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) ở SERVER cho actor không có
-  // quyền leads:view-pii (vd MARKETING) — chặn leak qua RSC payload, không chỉ che UI.
+  // quyền leads:view-pii — chặn leak qua RSC payload, không chỉ che UI.
+  // ⚠️ Không lấy MARKETING làm ví dụ nữa: từ 21/07 MARKETING CÓ leads:view-pii.
+  // Hiện mọi vai vào được trang này đều có quyền, nên nhánh mask chỉ chạy khi
+  // admin thu quyền của một người cụ thể qua UserPermissionGrant (DENY).
   const canViewPii = await canViewLeadPii()
   const canCloseDeal =
     (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))

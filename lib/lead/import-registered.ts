@@ -97,11 +97,13 @@ export function normalizeVi(raw: unknown): string {
     .trim();
 }
 
-/** SĐT: normalizePhone chuẩn + vá case Excel lưu number làm mất số 0 đầu. */
+/**
+ * SĐT cho luồng import "khách đã đăng ký".
+ * AUTH-SĐT P1 — case "Excel lưu number làm mất số 0 đầu" nay nằm trong
+ * `canonicalPhone` (nhánh 9 chữ số trần), nên hàm này chỉ còn là alias giữ tên.
+ */
 export function normalizeRegisteredPhone(raw: unknown): string {
-  let s = normalizePhone(raw);
-  if (/^[35789][0-9]{8}$/.test(s)) s = "0" + s; // 9 số, mất số 0 đầu (cell kiểu number)
-  return s;
+  return normalizePhone(raw);
 }
 
 /** Mã HV cũ: "CS1.HV0032" / "cs1.hv.0032" → "CS1.HV.0032"; format lạ giữ raw. */

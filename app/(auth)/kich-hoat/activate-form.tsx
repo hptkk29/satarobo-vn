@@ -85,14 +85,24 @@ export function ActivateForm() {
       </label>
 
       {step === "email" && (
-        <button
-          type="button"
-          onClick={sendOtp}
-          disabled={pending || !email}
-          className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
-        >
-          {pending ? "Đang gửi…" : "Gửi mã kích hoạt"}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={sendOtp}
+            disabled={pending || !email}
+            className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+          >
+            {pending ? "Đang gửi…" : "Gửi mã kích hoạt"}
+          </button>
+          {/* AUTH-SĐT P0 §3.4 — bù cho việc bịt oracle liệt kê tài khoản: hệ thống
+              luôn trả cùng một câu nên không còn nói được "tài khoản đã kích hoạt".
+              Dòng tĩnh này thay thế thông điệp đó (chốt 29/07). */}
+          <p className="text-xs leading-relaxed text-gray-500">
+            Vì lý do bảo mật, hệ thống luôn báo đã gửi mã. Nếu tài khoản của quý phụ huynh{" "}
+            <strong className="font-medium text-gray-600">đã kích hoạt trước đó</strong>, vui lòng đăng
+            nhập bằng mật khẩu đã đặt. Không nhận được mã sau vài phút, xin liên hệ trung tâm.
+          </p>
+        </>
       )}
 
       {step === "verify" && (

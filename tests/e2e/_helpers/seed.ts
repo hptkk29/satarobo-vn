@@ -115,7 +115,7 @@ export async function seedOrg(codes: string[]): Promise<void> {
   await seedOrgUnits(db, codes);
 }
 
-/** Seed 11 RoleDef + RolePermission mẫu (Doc 15 §2.3), idempotent. (A0-02) */
+/** Seed 14 RoleDef + RolePermission mẫu (Doc 15 §2.3), idempotent + nguyên tử. (A0-02) */
 export async function seedRoles(): Promise<void> {
   assertTestDb();
   await seedRoleDefs(db);

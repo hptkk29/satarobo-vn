@@ -63,7 +63,12 @@ export type Action =
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
-  | "leads:view-pii" // #11 T2 (OI-4, Kiệt ký 10/07) — xem PII lead (SĐT/email/tên PH-HS/tư vấn); MARKETING mặc định KHÔNG có, cấp per-user qua grant
+  // #11 T2 (OI-4) — xem PII lead: SĐT/email/tên PH-HS/ghi chú tư vấn.
+  // ⚠️ MARKETING **CÓ** quyền này (user chốt 21/07, ĐẢO quyết định "che PII cho
+  // MARKETING" ngày 10-20/07 — lý do đầy đủ ở ma trận bên dưới). Comment cũ ghi
+  // ngược đã khiến 2 lần rà soát kết luận nhầm là "lỗ hở quyền"; danh sách vai
+  // là nguồn đúng duy nhất, đừng suy từ comment.
+  | "leads:view-pii"
 
   // --- Trial classes (Phase T1.4) ---
   | "trials:view"
