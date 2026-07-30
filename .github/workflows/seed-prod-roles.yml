@@ -7,10 +7,22 @@ name: Seed Production RolePermission (Supabase)
 # (prisma/seed-roles.ts): upsert RoleDef theo code + reset RolePermission mỗi lần
 # chạy → idempotent, chạy lại an toàn.
 #
-# KHI NÀO CHẠY: trước khi flip RBAC_V2_ENABLED (#09). Runtime hiện chạy v1 matrix
-# (RBAC_V2 OFF) nên seed này KHÔNG đổi hành vi cho tới khi flip — chỉ để prod v2
-# sẵn sàng (payments:view-pii, attendance:edit, CENTER_CLASS_MANAGER,
-# report-cards:*@TEACHER/TRAINING/CENTER_MANAGER, audit-logs:view-pii, ...).
+# ⚠️ ĐÍNH CHÍNH 29/07/2026 — câu cũ dưới đây ĐÃ HẾT HẠN, đừng tin bản trước:
+#   ~~"Runtime hiện chạy v1 matrix (RBAC_V2 OFF) nên seed này KHÔNG đổi hành vi
+#     cho tới khi flip — chỉ để prod v2 sẵn sàng."~~
+# `RBAC_V2_ENABLED="true"` trên Vercel **Production** (xác minh 29/07/2026) ⇒ prod
+# enforce v2 ⇒ **seed này ĐỔI HÀNH VI QUYỀN NGAY** khi chạy. Không còn là bước
+# "chuẩn bị sẵn" nữa.
+#
+# KHI NÀO CHẠY: mỗi khi `ROLE_SEED` trong prisma/seed-roles.ts đổi. Vì nó đổi hành vi
+# thật, hãy báo trước cho người trực và tránh giờ cao điểm.
+#
+# AN TOÀN: `seedRoles()` chạy toàn bộ trong MỘT `$transaction` (vá 29/07, xem KB-06 ở
+# docs/taicautruc/05-premortem.md) ⇒ không còn khoảng nào `RolePermission` rỗng. TRƯỚC
+# bản vá đó, chạy workflow này khi cờ v2 đang bật = mất quyền toàn hệ thống trong lúc seed.
+#
+# SAU KHI CHẠY: seed reset toàn bộ RolePermission ⇒ mapping v1↔v2 đổi ⇒ cân nhắc
+# TRUNCATE lại đồng hồ shadow, vì nền so sánh cũ không còn nghĩa.
 #
 # ⚠️ Ghi đè RolePermission bằng ĐỊNH NGHĨA TRONG CODE (seed-roles.ts). Nếu prod có
 # chỉnh role runtime qua UI mà KHÔNG đưa vào seed-roles.ts, chỉnh đó sẽ bị reset.

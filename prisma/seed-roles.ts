@@ -1,6 +1,8 @@
 // prisma/seed-roles.ts — A0-02: seed danh mục RoleDef + RolePermission mẫu (Doc 15 §2.3).
-// 11 role; KHÔNG có HO_MANAGER. SUPER_ADMIN/PARENT = isSystem (không xóa/đổi code).
+// 14 role; KHÔNG có HO_MANAGER. SUPER_ADMIN/PARENT = isSystem (không xóa/đổi code).
 // Idempotent: upsert RoleDef theo code + reset permission của role mỗi lần chạy.
+// ⚠️ NGUYÊN TỬ: cả vòng lặp nằm trong một `$transaction` — đọc chú thích ở `seedRoles()`
+// trước khi sửa. Tách ra = mất quyền toàn hệ thống giữa lúc seed (cờ v2 đang BẬT trên prod).
 import { PrismaClient, type ScopeType } from "@prisma/client";
 
 type Perm = { action: string; scopeType: ScopeType };
@@ -544,21 +546,48 @@ export const ROLE_SEED: RoleSeed[] = [
   },
 ];
 
+/**
+ * Seed `RoleDef` + `RolePermission`.
+ *
+ * ⚠️ **TOÀN BỘ nằm trong MỘT `$transaction` — KHÔNG được tách ra.**
+ *
+ * `deleteMany` rồi `createMany` khi để rời nhau tạo một khoảng mà `RolePermission`
+ * của role đang seed là **RỖNG**. Khi `RBAC_V2_ENABLED` còn OFF thì vô hại — runtime
+ * đọc ma trận tĩnh v1 (`lib/auth/permissions.ts`), không đọc bảng này. Nhưng cờ **đã
+ * BẬT trên Production** ⇒ trong khoảng đó `can()` v2 trả `false` cho **mọi action của
+ * mọi người đang giữ role đó** (trừ `SUPER_ADMIN`, thoát sớm ở `lib/auth/can.ts:39`)
+ * = **mất quyền toàn hệ thống giữa lúc seed**.
+ *
+ * Chi tiết: `docs/taicautruc/05-premortem.md` **KB-06**.
+ *
+ * `timeout` nâng lên 30s (mặc định Prisma là 5s): 14 role × 3 lệnh = 42 lượt
+ * round-trip, chạy từ CI vào Supabase qua session pooler thì 5s không đủ.
+ * `maxWait` 10s cho lúc pool đang bận.
+ */
 export async function seedRoles(db: PrismaClient): Promise<void> {
-  for (const r of ROLE_SEED) {
-    const role = await db.roleDef.upsert({
-      where: { code: r.code },
-      update: { name: r.name, isSystem: r.isSystem ?? false, isActive: true },
-      create: { code: r.code, name: r.name, isSystem: r.isSystem ?? false },
-    });
-    await db.rolePermission.deleteMany({ where: { roleId: role.id } });
-    if (r.perms.length > 0) {
-      await db.rolePermission.createMany({
-        data: r.perms.map((p) => ({ roleId: role.id, action: p.action, scopeType: p.scopeType })),
-        skipDuplicates: true,
-      });
-    }
-  }
+  await db.$transaction(
+    async (tx) => {
+      for (const r of ROLE_SEED) {
+        const role = await tx.roleDef.upsert({
+          where: { code: r.code },
+          update: { name: r.name, isSystem: r.isSystem ?? false, isActive: true },
+          create: { code: r.code, name: r.name, isSystem: r.isSystem ?? false },
+        });
+        await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
+        if (r.perms.length > 0) {
+          await tx.rolePermission.createMany({
+            data: r.perms.map((p) => ({
+              roleId: role.id,
+              action: p.action,
+              scopeType: p.scopeType,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    },
+    { timeout: 30_000, maxWait: 10_000 },
+  );
 }
 
 // Chạy trực tiếp: `tsx prisma/seed-roles.ts`
