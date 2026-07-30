@@ -27,8 +27,18 @@
 -- Logic canonical bám `lib/phone.ts:54-76` — giống hệt `phone-audit.sql`.
 -- Sửa `lib/phone.ts` thì phải sửa cả hai file SQL theo.
 --
--- Hiện trạng PROD 29/07/2026: 44 trường cần đổi (41 Lead · 2 Student.parentPhone
--- · 1 Employee), 0 bản ghi rác, 0 trùng ⇒ đợt backfill này không có ca phải xử tay.
+-- ── ĐÃ CHẠY XONG TRÊN PROD 29/07/2026 ──
+-- Đo lúc audit:  44 trường cần đổi (41 Lead · **2** Student.parentPhone · 1 Employee).
+-- Thực ghi:      **43** trường (`lead_phone` 41 · `student_3_cot` **1** · `employee_phone` 1).
+-- Nghiệm thu:    "Dạng cũ" = 0 ở cả 3 cột.
+--
+-- ⚠️ **Chênh 44 vs 43 — đã truy, không phải lỗi của lệnh này.** Giữa lúc audit và lúc
+-- chạy, một bản ghi `Student` rời khỏi phạm vi `deletedAt IS NULL AND parentPhone <> ''`
+-- (bị xoá mềm, hoặc `parentPhone` bị xoá trắng). Chính CÂU 1 lúc chạy đã chỉ liệt kê
+-- **1** dòng `Student.parentPhone`, nên lệnh ghi đúng bằng số nó thấy.
+-- **Bài học cho lần sau:** con số của audit chỉ đúng tại **thời điểm đo**. Luôn lấy số
+-- của CÂU 1 (xem trước) làm mốc đối chiếu cho CÂU 2, KHÔNG lấy số của audit cũ.
+-- Kiểm bản ghi đã xoá mềm còn giữ dạng cũ: **CÂU E** của `phone-audit.sql`.
 -- =============================================================================
 
 

@@ -16,8 +16,21 @@
 --   · CHỈ nhận di động, đầu số 3/5/7/8/9 — số cố định trả NULL
 -- Sửa `lib/phone.ts` thì phải sửa file này theo, nếu không hai bên lệch nhau.
 --
--- Kết quả gần nhất (PROD, 29/07/2026): backfill 44 · rác 0 · 1 SĐT→nhiều User 0
--- · cùng SĐT khác tên PH 0 · ConvertConflict OPEN 0.
+-- ── Lịch sử chạy trên PROD ──
+-- 29/07/2026 (trước backfill): cần backfill 44 · rác 0 · 1 SĐT→nhiều User 0
+--   · cùng SĐT khác tên PH 0 · ConvertConflict OPEN 0.
+-- 29/07/2026 (sau `phone-backfill.sql`): **"Dạng cũ" = 0 ở cả 3 cột** —
+--   Employee.phone 1/1 · Lead.phone 41/41 · Student.parentPhone 1/1 đã canonical.
+--
+-- ⚠️ HAI ĐIỀU PHẢI BIẾT KHI ĐỌC CON SỐ "0" NÀY:
+-- (1) **Chỉ phủ bản ghi CHƯA xoá mềm.** Cả CÂU A và `phone-backfill.sql` đều lọc
+--     `deletedAt IS NULL` cho `Lead`/`Student` (`Employee` **không có** cột `deletedAt`).
+--     Bản ghi đã xoá mềm **giữ nguyên dạng `0…`**. Không sao cho việc đọc — mọi đường
+--     tra đi qua `phoneVariants()` (`lib/phone.ts:105-113`) nên khớp cả hai dạng —
+--     nhưng nếu **phục hồi** một bản ghi thì SĐT của nó trở lại dạng cũ.
+--     Truy vấn kiểm khoảng hở này ở cuối file (CÂU E).
+-- (2) **Mẫu số rất nhỏ.** 43 trường trên toàn prod. "0 dạng cũ" ở đây nghĩa là
+--     *"đã dọn hết những gì đang có"*, KHÔNG phải *"đã kiểm trên tập lớn"*.
 -- =============================================================================
 
 
@@ -174,3 +187,19 @@ FROM "RbacShadowDiff"
 GROUP BY action, v1, v2
 ORDER BY so_dong DESC
 LIMIT 40;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- CÂU E — khoảng hở soft-delete: bản ghi ĐÃ XOÁ MỀM còn giữ SĐT dạng cũ.
+-- `phone-backfill.sql` cố ý KHÔNG chạm chúng (lọc `deletedAt IS NULL`).
+-- `Employee` không có cột `deletedAt` nên không xuất hiện ở đây.
+-- Đọc: > 0 KHÔNG phải lỗi — chỉ là "nếu phục hồi bản ghi này thì SĐT về dạng cũ".
+-- ─────────────────────────────────────────────────────────────────────────────
+SELECT 'Lead.phone (đã xoá mềm)'            AS chi_tieu, count(*)::bigint AS so_luong
+  FROM "Lead"    WHERE "deletedAt" IS NOT NULL AND btrim(coalesce(phone,''))          LIKE '0%'
+UNION ALL SELECT 'Student.parentPhone (đã xoá mềm)',  count(*)
+  FROM "Student" WHERE "deletedAt" IS NOT NULL AND btrim(coalesce("parentPhone",''))  LIKE '0%'
+UNION ALL SELECT 'Student.parent2Phone (đã xoá mềm)', count(*)
+  FROM "Student" WHERE "deletedAt" IS NOT NULL AND btrim(coalesce("parent2Phone",'')) LIKE '0%'
+UNION ALL SELECT 'Student.phone (đã xoá mềm)',        count(*)
+  FROM "Student" WHERE "deletedAt" IS NOT NULL AND btrim(coalesce(phone,''))          LIKE '0%';
