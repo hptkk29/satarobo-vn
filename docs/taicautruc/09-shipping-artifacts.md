@@ -118,15 +118,15 @@ Một PR chỉ được merge khi **tất cả** dòng dưới đây đúng. Đ�
 | **M2** | QĐ-A.1 treo vào *"chờ cửa sổ shadow đóng"* — điều kiện nay không định nghĩa được | Ban + chủ đợt | ⬜ | **Điều kiện khởi động cả làn B** |
 | **M4 / c42** | 3 người hay 4–5 dev? Nếu cùng đội go-live thì cắt việc nào? | Ban | ⬜ | Mới nói được chặng 1 dài bao lâu |
 | **M5** | `R-D10-13` fail-closed đi ngược mục tiêu giám sát của D10 | Ban + Đội Đào tạo HO | ⬜ | Phần tính phí của KQ-1 (TS-11-4) |
-| **M3** | Điều kiện ra pha A3 mâu thuẫn bằng chứng mã | Kiệt + Luân | ⬜ | KQ-3 *(tự gỡ được)* |
-| **M6** | `R-QDC-01` nghiệm thu không phủ cơ sở đã cấu hình | Kiệt + Luân | ⬜ | KQ-3 *(tự gỡ được)* |
+| **M3** | Điều kiện ra pha A3 mâu thuẫn bằng chứng mã | Kiệt + Luân | ✅ **đóng 29/07/2026** | KQ-3 — tiêu chí `R-QDC-03` và pha A3 đã đổi sang *"bộ test mới khẳng định chéo cơ sở bị CHẶN"* |
+| **M6** | `R-QDC-01` nghiệm thu không phủ cơ sở đã cấu hình | Kiệt + Luân | ✅ **đóng 29/07/2026** | KQ-3 — `R-QDC-01` nay đòi **xoá override cấp cơ sở** + mẫu số, không chỉ đổi hằng `default` |
 | **M7** | Số dòng trong QĐ-C đã trôi khỏi mã | người giữ sổ quyết định | ⬜ | KQ-0.5 việc thứ 7 |
 | **M8** | `R-D2-09/10` nằm ở **cả** pha A8 lẫn nhánh B4 | người giữ PRD | ⬜ | Phần `R-D2-09/10` của KQ-4 |
 | **§9 câu 8** | Vai trò pháp lý về dữ liệu | Ban + pháp chế | ⬜ | Nhóm `R-DP-01..07` (9 yêu cầu) **có làn** |
 
-**Chỉ số duy nhất đáng báo cáo lên Ban hàng tuần:** *"đã đóng **N/11** chốt"*. `[SĐ]` Mọi chỉ số tiến độ kỹ thuật khác đều gây hiểu nhầm khi 11 chốt còn treo — chương trình đang bị chặn bởi **chữ ký**, không bởi code.
+**Chỉ số duy nhất đáng báo cáo lên Ban hàng tuần:** *"đã đóng **N/11** chốt"* — hiện **2/11** (M3, M6 đóng 29/07/2026). `[SĐ]` Mọi chỉ số tiến độ kỹ thuật khác đều gây hiểu nhầm khi 9 chốt còn treo — chương trình đang bị chặn bởi **chữ ký**, không bởi code.
 
-**Hai chốt tự gỡ được (M3, M6) nên đóng trong tuần này** — chúng chỉ cần Kiệt + Luân đồng ý sửa tiêu chí nghiệm thu, không cần ai ký.
+**9 chốt còn lại đều cần người ngoài đội kỹ thuật.** Hai chốt tự gỡ được đã gỡ; từ đây trở đi không còn chốt nào Kiệt + Luân đóng được một mình.
 
 ---
 
@@ -279,11 +279,13 @@ Dùng cho BGĐ, kế toán, quản lý cơ sở. Nguyên tắc: **nói cái gì 
 | 8 | `08-test-scenarios.md` | 72 kịch bản (42 phủ định) |
 | 9 | *(tài liệu này)* | Định nghĩa XONG · khuôn PR · 4 luật phát hành · 4 runbook · bảng theo dõi chốt |
 
-**Ba việc phải làm ngay, không chờ ai duyệt:**
+**Ba việc phải làm ngay, không chờ ai duyệt — ✅ ĐÃ XONG 29/07/2026:**
 
-1. **Bọc `prisma/seed-roles.ts` trong `$transaction`** — cỡ S, chặn kịch bản nặng nhất, và quả mìn này **đang cài sẵn trên prod**.
-2. **Sửa header `.github/workflows/seed-prod-roles.yml:10-13`** — runbook nói sai còn nguy hơn không có runbook.
-3. **Đóng M3 và M6** — chỉ cần Kiệt + Luân đồng ý sửa tiêu chí nghiệm thu.
+1. ✅ **Bọc `prisma/seed-roles.ts` trong `$transaction`** (`timeout` 30s / `maxWait` 10s). Kèm test vĩnh viễn `tests/e2e/a0/seed-roles-atomic.spec.ts` — 4 ca, chạy trong job CI `e2e-a0`. **Đã chứng minh test gác được hồi quy:** gỡ transaction ra thì `A0-02-T1-10` **đỏ** (`Expected: 4, Received: 0`), bọc lại thì xanh.
+2. ✅ **Sửa header `.github/workflows/seed-prod-roles.yml`** — ghi rõ seed **đổi hành vi quyền ngay** (câu cũ *"RBAC_V2 OFF nên không đổi hành vi"* đã hết hạn lúc cờ được bật), phải báo trước, và sau khi chạy thì cân nhắc TRUNCATE lại đồng hồ shadow.
+3. ✅ **Đóng M3 và M6** — `R-QDC-03` + pha A3 đổi sang *"bộ test mới khẳng định chéo cơ sở bị CHẶN"*; `R-QDC-01` nay đòi **xoá override cấp cơ sở** kèm mẫu số.
+
+**Việc tiếp theo không chờ ai duyệt được nữa** — 9 chốt còn lại đều cần Ban, pháp chế, chủ đợt go-live RBAC, hoặc người giữ sổ quyết định/PRD.
 
 **Một câu cho Ban:** chương trình có 12 kết quả sẵn sàng thi công và **11 chốt đang chờ chữ ký**. Trong 11 chốt đó, **c43** đắt nhất — nó đang chặn đúng việc mà PRD gọi là *"chặn cứng số một của toàn chương trình"*. Mọi con số tiến độ kỹ thuật báo lên trước khi c43 được cắt đều sẽ **lạc quan hơn sự thật**.
 
