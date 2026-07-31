@@ -111,6 +111,9 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "crm",
   "curriculums",
   "dashboard",
+  // BGĐ 31/07 — màn duyệt đơn GV + hộp thư đề xuất sửa giáo án.
+  "de-xuat-giao-an",
+  "don-tu",
   "design-system-preview",
   "design-system-preview-v2",
   "documents",

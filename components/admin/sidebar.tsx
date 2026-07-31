@@ -132,6 +132,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: "LMS / Học liệu",
     items: [
       { label: "Chương trình học", href: "/curriculums", icon: BookMarked, perm: ["curriculum:view"] },
+      // BGĐ 31/07 — hộp thư đề xuất sửa giáo án của GV (trước chỉ nằm trong trang
+      // sửa từng giáo trình → Đào tạo không thấy đề xuất mới).
+      { label: "Đề xuất sửa giáo án", href: "/de-xuat-giao-an", icon: ClipboardEdit, perm: ["lesson-change:approve"] },
       // FL-R2-W5 (R2-LMS-1): 1 entry "Khoá học" → /courses (khoá dạy); gói bán quản lý
       // ngay trong chi tiết khoá. Gộp DB Course/Package + xoá /course-packages = 2-phase
       // deferred (Order đa hình, KHÔNG drop packageId giờ) — route /course-packages GIỮ tạm.
@@ -168,6 +171,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
       { label: "Duyệt chỉnh công", href: "/cham-cong/chinh-cong", icon: ClipboardEdit, perm: ["hr_attendance:adjust"] },
+      // BGĐ 31/07 — duyệt đơn GV (nghỉ dạy / dạy thay) — duyệt là cập nhật lịch thật.
+      { label: "Đơn từ giáo viên", href: "/don-tu", icon: ClipboardList, perm: ["hr_attendance:adjust"] },
       // FL W0-NAV-2 hygiene: Tổng hợp công ca = view tổng hợp (quản lý/HR), ẩn khỏi Sale/KT (BA #07 3.C).
       { label: "Tổng hợp công ca", href: "/cham-cong/lich-ca-nhan-vien", icon: Users, perm: ["hr_attendance:view"] },
       { label: "Duyệt ca (Excel)", href: "/cham-cong/duyet-ca", icon: CalendarCheck, perm: ["hr_attendance:view"] },
