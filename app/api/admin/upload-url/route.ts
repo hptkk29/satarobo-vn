@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
 
   // TEACHER added in Phase E4 so teachers can upload teaching materials
   // (documents/videos/audio for their lessons).
-  const allowedRoles = ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "TEACHER"];
+  // TRAINING added 31/07 — Đào tạo quản lý toàn bộ LMS nên phải upload được học liệu.
+  const allowedRoles = ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "TEACHER", "TRAINING"];
   if (!allowedRoles.includes(session.user.role)) {
     return NextResponse.json(
       { error: "Forbidden: insufficient permissions" },

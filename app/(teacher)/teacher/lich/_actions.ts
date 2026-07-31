@@ -33,6 +33,8 @@ type OwnedSession = {
   substituteTeacherId: string | null;
   actualTeacherId: string | null;
   class: { teacherId: string | null; name: string };
+  // Buổi sinh từ kế hoạch (R7-06) có thể không set lessonId trực tiếp — bài giảng nằm ở plan.
+  plan: { lessonId: string | null } | null;
 };
 
 type LoadResult =
@@ -71,6 +73,7 @@ async function loadOwnedSession(sessionId: string): Promise<LoadResult> {
       substituteTeacherId: true,
       actualTeacherId: true,
       class: { select: { teacherId: true, name: true } },
+      plan: { select: { lessonId: true } },
     },
   })) as OwnedSession | null;
 
@@ -154,7 +157,8 @@ export async function requestLessonChangeAction(
   const loaded = await loadOwnedSession(sessionId);
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
-  const lessonId = loaded.session.lessonId;
+  // Fallback plan.lessonId — cùng pattern lib/lms/assignment.ts (buổi sinh từ kế hoạch).
+  const lessonId = loaded.session.lessonId ?? loaded.session.plan?.lessonId ?? null;
   if (lessonId == null) return { ok: false, error: "Buổi chưa gắn bài giảng" };
 
   // create KHÔNG bị scopedDb chặn (extension chỉ can thiệp read) — dùng sdb để tuân
