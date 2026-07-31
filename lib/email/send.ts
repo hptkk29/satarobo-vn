@@ -16,6 +16,12 @@ export type SendEmailParams = {
   triggeredByUserId?: string | null;
   triggeredByName?: string | null;
   triggerType?: "USER_ACTION" | "SYSTEM" | "MANUAL";
+
+  // BGĐ 31/07 — email chứa bí mật dùng-1-lần (mật khẩu cấp tài khoản): bản gửi
+  // Resend là bodyText/bodyHtml thật, bản LƯU EmailLog dùng 2 field này (đã mask)
+  // để mật khẩu không nằm plaintext trong DB / màn /admin/email-logs.
+  logBodyText?: string;
+  logBodyHtml?: string;
 };
 
 export type SendEmailResult =
@@ -34,8 +40,8 @@ export async function sendEmail(
       toEmail: params.to,
       toName: params.toName ?? null,
       subject: params.subject,
-      bodyText: params.bodyText,
-      bodyHtml: params.bodyHtml,
+      bodyText: params.logBodyText ?? params.bodyText,
+      bodyHtml: params.logBodyHtml ?? params.bodyHtml,
       status: "PENDING",
       contextType: params.contextType ?? null,
       contextId: params.contextId ?? null,

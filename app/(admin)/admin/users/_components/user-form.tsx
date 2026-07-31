@@ -139,6 +139,23 @@ export function UserForm({
 
       {mode === "create" && (
         <div className="space-y-1.5">
+          <Label htmlFor="phone">Số điện thoại (tài khoản đăng nhập)</Label>
+          <Input
+            id="phone"
+            name="phone"
+            type="tel"
+            maxLength={20}
+            placeholder="0901234567"
+          />
+          <p className="text-xs text-gray-500">
+            Nhân sự đăng nhập bằng SĐT (hoặc email). Thông tin tài khoản sẽ được
+            gửi qua email + Zalo sau khi tạo.
+          </p>
+        </div>
+      )}
+
+      {mode === "create" && (
+        <div className="space-y-1.5">
           <Label htmlFor="password">Mật khẩu *</Label>
           <Input
             id="password"

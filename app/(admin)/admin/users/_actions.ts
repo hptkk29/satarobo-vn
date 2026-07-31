@@ -15,6 +15,7 @@ import {
   passwordResetSchema,
 } from "@/lib/validators/user";
 import { reassignOpenLeads } from "@/lib/lead/assign";
+import { notifyStaffAccountGranted } from "@/lib/email/staff-account";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import {
   logUserAudit,
@@ -45,6 +46,7 @@ export async function createUserAction(formData: FormData) {
   const parsed = userCreateSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
+    phone: formData.get("phone") || null,
     password: formData.get("password"),
     roles: formData.getAll("roles"),
     primaryRole: formData.get("primaryRole"),
@@ -67,6 +69,17 @@ export async function createUserAction(formData: FormData) {
   });
   if (existing) {
     return { ok: false, error: "Email đã được sử dụng" };
+  }
+
+  // SĐT unique (khoá đăng nhập — AUTH-SĐT P3).
+  if (parsed.data.phone) {
+    const phoneUsed = await sdb.user.findUnique({
+      where: { phone: parsed.data.phone },
+      select: { id: true },
+    });
+    if (phoneUsed) {
+      return { ok: false, error: "Số điện thoại đã được sử dụng" };
+    }
   }
 
   // Employee chưa link User khác
@@ -93,6 +106,7 @@ export async function createUserAction(formData: FormData) {
       data: {
         name: parsed.data.name,
         email: parsed.data.email,
+        phone: parsed.data.phone ?? null,
         password: hashed,
         // Đợt 3B — role = vai trò chính (primary), roles = toàn bộ (union quyền).
         role: parsed.data.primaryRole,
@@ -102,10 +116,14 @@ export async function createUserAction(formData: FormData) {
         employeeId: parsed.data.employeeId ?? null,
         isActive: true,
         tokenVersion: 0,
+        // BGĐ 31/07 — MK do admin đặt → bắt đổi ngay lần đăng nhập đầu.
+        mustChangePassword: true,
       },
       select: {
         id: true,
+        name: true,
         email: true,
+        phone: true,
         role: true,
         roles: true,
         centerId: true,
@@ -121,6 +139,7 @@ export async function createUserAction(formData: FormData) {
       actorName,
       newValues: {
         email: created.email,
+        phone: created.phone,
         role: created.role,
         roles: created.roles,
         centerId: created.centerId,
@@ -132,6 +151,16 @@ export async function createUserAction(formData: FormData) {
 
     return created;
   });
+
+  // BGĐ 31/07 — gửi thông tin đăng nhập (email kèm MK — log mask; ZNS không MK).
+  // Fire-and-forget: lỗi gửi không chặn việc tạo tài khoản.
+  notifyStaffAccountGranted({
+    email: user.email,
+    phone: user.phone,
+    name: user.name,
+    roles: user.roles.length > 0 ? user.roles : [user.role],
+    password: parsed.data.password,
+  }).catch(() => {});
 
   revalidatePath("/users");
   return { ok: true as const, id: user.id };
@@ -468,7 +497,10 @@ export async function resetUserPasswordAction(id: string, formData: FormData) {
     };
   }
 
-  const user = await sdb.user.findUnique({ where: { id }, select: { id: true } });
+  const user = await sdb.user.findUnique({
+    where: { id },
+    select: { id: true, name: true, email: true, phone: true, role: true, roles: true },
+  });
   if (!user) return { ok: false, error: "Không tìm thấy user" };
 
   const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
@@ -481,6 +513,8 @@ export async function resetUserPasswordAction(id: string, formData: FormData) {
       data: {
         password: hashed,
         tokenVersion: { increment: 1 }, // force logout
+        // BGĐ 31/07 — MK do admin đặt lại → bắt đổi ngay lần đăng nhập kế tiếp.
+        mustChangePassword: true,
       },
     });
 
@@ -493,6 +527,15 @@ export async function resetUserPasswordAction(id: string, formData: FormData) {
       tx,
     });
   });
+
+  // BGĐ 31/07 — báo user mật khẩu mới (email kèm MK — log mask; ZNS không MK).
+  notifyStaffAccountGranted({
+    email: user.email,
+    phone: user.phone,
+    name: user.name,
+    roles: user.roles.length > 0 ? user.roles : [user.role],
+    password: parsed.data.newPassword,
+  }).catch(() => {});
 
   revalidatePath("/users");
   return { ok: true as const };

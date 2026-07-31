@@ -48,7 +48,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const sdb = scopedDb(actor);
   const dbUser = await sdb.user.findUnique({
     where: { id: session.user.id },
-    select: { isActive: true, tokenVersion: true, deletedAt: true },
+    select: { isActive: true, tokenVersion: true, deletedAt: true, mustChangePassword: true },
   });
 
   if (!dbUser || dbUser.deletedAt) {
@@ -59,6 +59,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
   if (dbUser.tokenVersion !== session.user.tokenVersion) {
     redirect("/login?reason=session-invalidated");
+  }
+  // BGĐ 31/07 — MK do admin cấp/reset: chặn toàn bộ admin cho tới khi đổi MK.
+  // Trang /doi-mat-khau nằm ở app/(auth) (ngoài layout này) → không loop.
+  if (dbUser.mustChangePassword) {
+    redirect("/doi-mat-khau");
   }
 
   // #13 (câu 11) — vai trò đang dùng, chỉ lọc MENU. Quyền không đổi: resolveActor vẫn

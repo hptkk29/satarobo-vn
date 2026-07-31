@@ -735,6 +735,10 @@ model User {
   // Cụm A1 — trạng thái kích hoạt tài khoản (phụ huynh tạo qua chuyển lead).
   accountStatus AccountStatus @default(ACTIVE)
 
+  // BGĐ 31/07 — cấp/reset MK bởi admin → bắt đổi MK ngay lần đăng nhập kế tiếp
+  // (layout admin/teacher redirect /doi-mat-khau khi cờ bật).
+  mustChangePassword Boolean @default(false)
+
   // FIX lead→payment→enroll (M0) — CCCD + địa chỉ phụ huynh (lưu trên User, KHÔNG trên Student).
   cccd    String? // CCCD/CMND phụ huynh
   address String?

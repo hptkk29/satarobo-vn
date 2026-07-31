@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Role } from "@prisma/client";
+import { canonicalPhone } from "@/lib/phone";
 
 // Đợt 3B — đa vai trò: form gửi roles[] (union quyền) + primaryRole (vai trò
 // chính, dùng cho dashboard mặc định + back-compat User.role). primaryRole PHẢI
@@ -28,6 +29,26 @@ export const userCreateSchema = userFields
       .string()
       .min(8, "Mật khẩu tối thiểu 8 ký tự")
       .max(72, "Mật khẩu tối đa 72 ký tự"),
+    // BGĐ 31/07 — SĐT làm tài khoản đăng nhập chính của nhân sự (AUTH-SĐT P3).
+    // Lưu canonical 84XXXXXXXXX; rỗng → null (nhân sự cũ chưa có SĐT vẫn tạo được).
+    phone: z
+      .string()
+      .trim()
+      .max(20, "SĐT tối đa 20 ký tự")
+      .optional()
+      .nullable()
+      .transform((v, ctx) => {
+        if (!v) return null;
+        const c = canonicalPhone(v);
+        if (!c) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Số điện thoại không hợp lệ",
+          });
+          return z.NEVER;
+        }
+        return c;
+      }),
   })
   .refine(primaryInRoles, primaryRefine);
 

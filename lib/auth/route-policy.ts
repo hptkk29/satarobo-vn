@@ -383,6 +383,16 @@ export function decideRoute(input: RouteInput): RouteDecision {
       return { type: "next" };
     }
 
+    // BGĐ 31/07 — trang đổi MK bắt buộc (app/(auth)/doi-mat-khau): cần login,
+    // phục vụ tại chỗ (KHÔNG rewrite /teacher/*) — layout các khu redirect về đây
+    // khi User.mustChangePassword bật.
+    if (pathname === "/doi-mat-khau") {
+      if (!authed) {
+        return { type: "redirectPath", path: "/login", reason: invalidReason };
+      }
+      return { type: "next" };
+    }
+
     if (!authed) {
       return {
         type: "redirectPath",
@@ -477,6 +487,17 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (pathname === "/kich-hoat") {
       if (isStaff) return { type: "redirectPath", path: STAFF_HOME };
       if (isParent) return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      return { type: "next" };
+    }
+
+    // BGĐ 31/07 — trang đổi MK bắt buộc: cần login, phục vụ tại admin host.
+    if (pathname === "/doi-mat-khau") {
+      if (!authed) {
+        return { type: "redirectPath", path: "/login", reason: invalidReason };
+      }
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
       return { type: "next" };
     }
 
