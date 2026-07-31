@@ -106,6 +106,8 @@ export default async function OrderDetailPage({ params }: Props) {
     order.student?.name ?? order.customerName,
     order.customerPhone,
     order.items[0]?.itemName,
+    // BGĐ 31/07 — mã đơn trong nội dung CK để webhook SePay tự khớp & xác nhận.
+    order.code,
   );
   const qrUrl = buildVietQrImageUrl(payCfg, order.totalAmount, transferContent);
 

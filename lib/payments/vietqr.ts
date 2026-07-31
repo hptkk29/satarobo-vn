@@ -87,13 +87,23 @@ function sanitize(s: string): string {
     .trim();
 }
 
-/** Nội dung CK: "<Họ tên học viên> <SĐT phụ huynh> <Tên khoá>". */
+/**
+ * Nội dung CK: "<MÃ ĐƠN> <Họ tên học viên> <SĐT phụ huynh> <Tên khoá>".
+ *
+ * BGĐ 31/07 — MÃ ĐƠN đứng ĐẦU để webhook SePay khớp được giao dịch với đơn
+ * (lib/payments/sepay.ts extractOrderCode). Ngân hàng thường xoá dấu gạch nối nên
+ * sanitize() bỏ luôn "-" ở đây cho khớp cách hiển thị của bank ("ORD260521000001").
+ */
 export function buildTransferContent(
   studentName: string,
   parentPhone: string | null | undefined,
   courseName: string | null | undefined,
+  orderCode?: string | null,
 ): string {
-  return sanitize([studentName, parentPhone ?? "", courseName ?? ""].filter(Boolean).join(" ")).slice(0, 80);
+  const ref = orderCode ? orderCode.replace(/-/g, "") : "";
+  return sanitize(
+    [ref, studentName, parentPhone ?? "", courseName ?? ""].filter(Boolean).join(" "),
+  ).slice(0, 80);
 }
 
 /** URL ảnh VietQR động (compact2 — có logo + số tiền + nội dung). null nếu chưa cấu hình. */
