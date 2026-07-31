@@ -371,6 +371,18 @@ export const SETTINGS = {
     default: 500,
     centerOverridable: false,
   }),
+  // AUTH-SĐT P4 — template ZNS đọc từ SystemSetting để ĐỔI MẪU KHÔNG CẦN DEPLOY
+  // (Zalo bắt sửa mẫu là chuyện thường). Default = mẫu A "Xác thực" đã duyệt
+  // 31/07 (QĐ-G). Tên tham số trong mẫu phải là `code` + `minutes` — lệch tên
+  // là ZNS từ chối template_data (lộ ngay ở smoke dev-mode).
+  "zalo.znsTemplateOtp": def({
+    key: "zalo.znsTemplateOtp",
+    group: "otp",
+    label: "Template ID ZNS cho mã OTP (mẫu Xác thực đã duyệt)",
+    schema: z.string().regex(/^[0-9]*$/, "Template ID chỉ gồm chữ số"),
+    default: "616128",
+    centerOverridable: false,
+  }),
   "teacher.overloadHoursPerWeek": def({
     key: "teacher.overloadHoursPerWeek",
     group: "teacher",

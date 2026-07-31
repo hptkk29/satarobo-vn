@@ -1,33 +1,22 @@
 import "server-only";
 import { sendEmail } from "@/lib/email/send";
+import { canonicalPhone } from "@/lib/phone";
+import { isZnsDegraded } from "@/lib/flags";
+import { zaloOtpProvider } from "@/lib/zalo/otp-provider";
 
 // =============================================================================
-// Cụm A1 — OTP provider abstraction.
-// GIAI ĐOẠN ĐẦU chỉ dùng EMAIL (Resend). SMS (SpeedSMS) sẽ cắm sau khi đăng ký
-// brandname — KHÔNG build SMS bây giờ, chỉ chừa interface + TODO.
-// Provider chính cấu hình qua env OTP_PRIMARY_PROVIDER=email (mặc định email).
+// Cụm A1 → AUTH-SĐT P4 — OTP provider abstraction.
+// Provider chọn theo LOẠI TARGET (QĐ-5), KHÔNG theo env: SĐT → Zalo ZNS,
+// email → Resend. SMS đã BỎ HẲN theo QĐ-H 30/07 (không có nhà cung cấp nào
+// được ký) — email là kênh dự phòng vĩnh viễn (QĐ-3).
 // =============================================================================
 
-export type OtpChannelKey = "EMAIL" | "SMS";
+import type { OtpProvider, OtpSendInput } from "./provider-types";
 
-export interface OtpSendInput {
-  target: string; // email hoặc SĐT
-  code: string; // mã 6 số (plain — chỉ để gửi, KHÔNG lưu plain)
-  purpose: "ACTIVATION" | "RESET" | "CHANGE_CONTACT";
-  minutesValid: number;
-}
-
-export interface OtpSendResult {
-  ok: boolean;
-  provider: string;
-  error?: string;
-}
-
-export interface OtpProvider {
-  channel: OtpChannelKey;
-  name: string;
-  send(input: OtpSendInput): Promise<OtpSendResult>;
-}
+// Types ở ./provider-types — tách để cắt vòng import với lib/zalo/otp-provider
+// (dependency-cruiser no-circular tính cả import type). Re-export để call-site
+// cũ import từ đây vẫn chạy.
+export type { OtpChannelKey, OtpProvider, OtpSendInput, OtpSendResult } from "./provider-types";
 
 const PURPOSE_LABEL: Record<OtpSendInput["purpose"], string> = {
   ACTIVATION: "kích hoạt tài khoản",
@@ -63,15 +52,22 @@ export const emailOtpProvider: OtpProvider = {
   },
 };
 
-// TODO (sau khi có brandname): SmsOtpProvider qua SpeedSMS.
-// export const smsOtpProvider: OtpProvider = { channel: "SMS", name: "speedsms", send: ... }
-
-/** Chọn provider theo OTP_PRIMARY_PROVIDER (mặc định email). */
-export function getPrimaryOtpProvider(): OtpProvider {
-  const pref = (process.env.OTP_PRIMARY_PROVIDER ?? "email").toLowerCase();
-  // SMS chưa sẵn sàng → luôn fallback email.
-  if (pref === "sms") {
-    console.warn("[otp] OTP_PRIMARY_PROVIDER=sms nhưng SMS chưa build — dùng email.");
+/**
+ * AUTH-SĐT P4 (QĐ-5) — chọn provider theo LOẠI target:
+ * - SĐT (canonical hoá được) → Zalo ZNS. Trả `null` khi cờ break-glass
+ *   `AUTH_ZNS_DEGRADED` bật — service sẽ đi thẳng đường email dự phòng.
+ * - Email → Resend.
+ * Env `OTP_PRIMARY_PROVIDER` đã GỠ — trước đây bị code nuốt im lặng
+ * (`"zalo"` trong .env.example không có tác dụng), nay chọn theo target nên
+ * không còn chỗ cho env này.
+ */
+export function getOtpProviderFor(target: string): OtpProvider | null {
+  if (canonicalPhone(target) !== null) {
+    if (isZnsDegraded()) {
+      console.warn("[otp] AUTH_ZNS_DEGRADED đang bật — bỏ qua ZNS, dùng email dự phòng.");
+      return null;
+    }
+    return zaloOtpProvider;
   }
   return emailOtpProvider;
 }

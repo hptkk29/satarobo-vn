@@ -8,6 +8,16 @@ export function isRbacV2Enabled(): boolean {
   return process.env.RBAC_V2_ENABLED === "true";
 }
 
+/**
+ * AUTH-SĐT P4 — cờ break-glass khi ZBS/ZNS sự cố hàng loạt: OTP tới SĐT BỎ QUA
+ * kênh Zalo, đi thẳng email dự phòng (chỉ user có email đã verify). Bật bằng env
+ * `AUTH_ZNS_DEGRADED="true"` + redeploy; mặc định OFF. Phụ huynh không có email
+ * sẽ KHÔNG nhận được mã khi cờ bật — cân nhắc trước khi kéo.
+ */
+export function isZnsDegraded(): boolean {
+  return process.env.AUTH_ZNS_DEGRADED === "true";
+}
+
 /** A0-05 — login chung satarobo.vn/login + redirect theo role. OFF → giữ login theo host. */
 export function isCommonLoginEnabled(): boolean {
   return process.env.COMMON_LOGIN_ENABLED !== "false"; // mặc định ON (hành vi đã triển khai)

@@ -16,7 +16,16 @@ type OtpRow = {
   userId: string | null;
   createdAt: Date;
 };
-type DeliveryRow = { id: string; otpRequestId: string; status: string; createdAt: Date };
+type DeliveryRow = {
+  id: string;
+  otpRequestId: string;
+  status: string;
+  channel: string;
+  target: string;
+  provider: string;
+  error: string | null;
+  createdAt: Date;
+};
 
 const store = { otps: [] as OtpRow[], deliveries: [] as DeliveryRow[] };
 let seq = 0;
@@ -96,16 +105,33 @@ vi.mock("@/lib/db", () => ({
       ),
     },
     otpDeliveryLog: {
-      create: vi.fn(async ({ data }: { data: { otpRequestId: string; status: string } }) => {
-        const row = {
-          id: `d${++seq}`,
-          otpRequestId: data.otpRequestId,
-          status: data.status,
-          createdAt: new Date(),
-        };
-        store.deliveries.push(row);
-        return row;
-      }),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: {
+            otpRequestId: string;
+            status: string;
+            channel: string;
+            target: string;
+            provider: string;
+            error?: string | null;
+          };
+        }) => {
+          const row: DeliveryRow = {
+            id: `d${++seq}`,
+            otpRequestId: data.otpRequestId,
+            status: data.status,
+            channel: data.channel,
+            target: data.target,
+            provider: data.provider,
+            error: data.error ?? null,
+            createdAt: new Date(),
+          };
+          store.deliveries.push(row);
+          return row;
+        },
+      ),
       count: vi.fn(
         async ({ where }: { where?: { status?: string; createdAt?: { gte?: Date } } }) =>
           store.deliveries.filter((d) => {
@@ -114,6 +140,11 @@ vi.mock("@/lib/db", () => ({
             return true;
           }).length,
       ),
+    },
+    // AUTH-SĐT P4 — tra email dự phòng (findVerifiedFallbackEmail).
+    user: {
+      findUnique: vi.fn(async () => fallbackUser),
+      findFirst: vi.fn(async () => fallbackUser),
     },
   },
 }));
@@ -134,11 +165,30 @@ vi.mock("@/lib/security/signing-key", () => ({
   getSigningSecret: () => "test-secret-key-for-otp-hmac-0123456789",
 }));
 
-// Provider giả — điều khiển được thành/bại để test §3.5.
+// Provider giả — điều khiển được thành/bại để test §3.5 + P4.
+// Service canonical hoá target trước khi gọi getOtpProviderFor → phân nhánh
+// bằng "toàn chữ số" là đủ (SĐT canonical = 84…, email luôn có ký tự khác số).
 let sendOk = true;
+let znsDegraded = false; // P4 — mô phỏng AUTH_ZNS_DEGRADED
+let fallbackOk = true;
+let fallbackUser: { email: string; emailVerified: Date | null } | null = null;
 const sendSpy = vi.fn(async () => ({ ok: sendOk, provider: "test", error: sendOk ? undefined : "BOOM" }));
+const fallbackSendSpy = vi.fn(async () => ({
+  ok: fallbackOk,
+  provider: "resend-test",
+  error: fallbackOk ? undefined : "EMAIL_BOOM",
+}));
 vi.mock("./provider", () => ({
-  getPrimaryOtpProvider: () => ({ channel: "EMAIL", name: "test", send: sendSpy }),
+  getOtpProviderFor: (target: string) => {
+    if (!/^[0-9]+$/.test(target)) return { channel: "EMAIL", name: "test", send: sendSpy };
+    if (znsDegraded) return null;
+    return { channel: "ZALO", name: "zalo-test", send: sendSpy };
+  },
+  emailOtpProvider: {
+    channel: "EMAIL",
+    name: "resend-test",
+    send: (...args: unknown[]) => fallbackSendSpy(...(args as [])),
+  },
 }));
 
 import { requestOtp, verifyAndConsumeOtp } from "./service";
@@ -157,7 +207,11 @@ beforeEach(() => {
   store.deliveries = [];
   seq = 0;
   sendOk = true;
+  znsDegraded = false;
+  fallbackOk = true;
+  fallbackUser = null;
   sendSpy.mockClear();
+  fallbackSendSpy.mockClear();
   for (const k of Object.keys(SETTINGS)) {
     SETTINGS[k] = { "otp.ttlMinutes": 5, "otp.maxAttempts": 5, "otp.resendCooldownSec": 60, "otp.dailyLimit": 8, "otp.globalDailyCap": 300, "otp.globalKillSwitch": 500 }[k]!;
   }
@@ -369,5 +423,70 @@ describe("[AUTH-SDT-P2-C2] P1 DoD — 0905… và 84905… là CÙNG một targe
       code: lastSentCode(),
     });
     expect(v.ok).toBe(true);
+  });
+});
+
+describe("[AUTH-SDT-P4-C1] provider theo loại target + fallback email 2-delivery", () => {
+  const PHONE = "0905123456"; // service canonical hoá thành 84905123456
+
+  it("target SĐT → đi kênh ZALO; email → kênh EMAIL (QĐ-5)", async () => {
+    await requestOtp({ target: PHONE, purpose: "ACTIVATION" });
+    expect(store.deliveries.at(-1)?.channel).toBe("ZALO");
+
+    await requestOtp({ target: "ph@example.com", purpose: "ACTIVATION" });
+    expect(store.deliveries.at(-1)?.channel).toBe("EMAIL");
+  });
+
+  it("ZNS fail + user có email VERIFIED → gửi email dự phòng, 2 delivery/1 request, kết quả ok", async () => {
+    sendOk = false;
+    fallbackUser = { email: "ph@example.com", emailVerified: new Date() };
+
+    const r = await requestOtp({ target: PHONE, purpose: "ACTIVATION" });
+    expect(r.ok).toBe(true);
+
+    const rows = store.deliveries.filter((d) => d.otpRequestId === store.otps[0]!.id);
+    expect(rows.map((d) => [d.channel, d.status])).toEqual([
+      ["ZALO", "FAILED"],
+      ["EMAIL", "SENT"],
+    ]);
+    // Delivery email ghi ĐÚNG địa chỉ đã gửi tới, còn OtpRequest.target vẫn là SĐT.
+    expect(rows[1]!.target).toBe("ph@example.com");
+    expect(store.otps[0]!.target).toBe("84905123456");
+
+    // Verify vẫn bằng SĐT — mã lấy từ lần gửi email dự phòng.
+    const call = fallbackSendSpy.mock.calls.at(-1) as unknown as [{ code: string }];
+    const v = await verifyAndConsumeOtp({ target: PHONE, purpose: "ACTIVATION", code: call[0].code });
+    expect(v.ok).toBe(true);
+  });
+
+  it("ZNS fail + email CHƯA verify → KHÔNG gửi email, deliveryFailed (không giả vờ thành công)", async () => {
+    sendOk = false;
+    fallbackUser = { email: "ph@example.com", emailVerified: null };
+
+    const r = await requestOtp({ target: PHONE, purpose: "ACTIVATION" });
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.deliveryFailed).toBe(true);
+    expect(fallbackSendSpy).not.toHaveBeenCalled();
+    // §3.5 vẫn giữ: cả 2 kênh đều không SENT → không đốt cooldown/hạn mức.
+    expect(store.deliveries.every((d) => d.status !== "SENT")).toBe(true);
+  });
+
+  it("AUTH_ZNS_DEGRADED + có email verified → bỏ qua ZNS, chỉ 1 delivery EMAIL", async () => {
+    znsDegraded = true;
+    fallbackUser = { email: "ph@example.com", emailVerified: new Date() };
+
+    const r = await requestOtp({ target: PHONE, purpose: "ACTIVATION" });
+    expect(r.ok).toBe(true);
+    expect(sendSpy).not.toHaveBeenCalled(); // ZNS không được gọi
+    expect(store.deliveries.map((d) => [d.channel, d.status])).toEqual([["EMAIL", "SENT"]]);
+  });
+
+  it("AUTH_ZNS_DEGRADED + KHÔNG có email dự phòng → từ chối, KHÔNG tạo OtpRequest rác", async () => {
+    znsDegraded = true;
+    fallbackUser = null;
+
+    const r = await requestOtp({ target: PHONE, purpose: "ACTIVATION" });
+    expect(r.ok).toBe(false);
+    expect(store.otps).toHaveLength(0);
   });
 });
