@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
+import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import {
   decideSepayAction,
   extractOrderCode,
@@ -154,6 +155,12 @@ export async function POST(req: NextRequest) {
       { status: alreadyHandled ? 200 : 500 },
     );
   }
+
+  // BGĐ 31/07 — tiền về + đơn xác nhận → cấp tài khoản phụ huynh theo SĐT + ZNS.
+  // Await (không fire-and-forget) vì serverless có thể kết thúc process sau response.
+  await ensureParentAccountForOrder(decision.orderId).catch((err) =>
+    console.error("[sepay] provision parent:", err),
+  );
 
   await logIntegration({ action: "CONFIRM_ORDER", status: "SUCCESS", payload });
   return NextResponse.json({ success: true, handled: true, orderCode });

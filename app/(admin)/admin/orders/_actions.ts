@@ -15,6 +15,7 @@ import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { discountFromPercent, needsDiscountApproval } from "@/lib/orders/discount";
+import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
@@ -648,6 +649,14 @@ export async function changeOrderStatusAction(
   if (order.leadId) {
     revalidatePath(`/leads/${order.leadId}`);
     revalidatePath(`/leads/${order.leadId}/convert`);
+  }
+
+  // BGĐ 31/07 — xác nhận thanh toán → tự cấp tài khoản phụ huynh theo SĐT + báo ZNS.
+  // Fire-and-forget, idempotent (đã có tài khoản → không tạo/gửi lại).
+  if (parsed.data.toStatus === "CONFIRMED") {
+    ensureParentAccountForOrder(orderId).catch((err) =>
+      console.error("[order-confirm] provision parent:", err),
+    );
   }
 
   // Fire PAYMENT_RECEIPT when order transitions to CONFIRMED (paidAt set).
