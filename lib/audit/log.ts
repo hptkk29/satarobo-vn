@@ -377,6 +377,6 @@ export function getAuditActor(session: Session | null | undefined): {
   }
   return {
     actorId: session.user.id,
-    actorName: session.user.name ?? session.user.email ?? "Unknown",
+    actorName: session.user.name ?? session.user.email ?? session.user.id,
   };
 }

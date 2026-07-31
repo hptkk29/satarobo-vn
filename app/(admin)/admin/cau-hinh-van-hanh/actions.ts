@@ -5,8 +5,8 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { setGlobalSetting, setCenterSetting, type SetResult } from "@/lib/settings/service";
 
-function actorName(user: { name?: string | null; email?: string | null }): string {
-  return user.name ?? user.email ?? "Unknown";
+function actorName(user: { id: string; name?: string | null; email?: string | null }): string {
+  return user.name ?? user.email ?? user.id;
 }
 
 /** R6-A — Lưu cấu hình GLOBAL (chỉ SUPER_ADMIN). */

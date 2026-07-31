@@ -15,7 +15,7 @@ type Result = { ok: true } | { ok: false; error: string };
 function actorFromSession(s: { id: string; name?: string | null; email?: string | null; role: string; roles?: string[] }) {
   return {
     id: s.id,
-    name: s.name ?? s.email ?? "Unknown",
+    name: s.name ?? s.email ?? s.id,
     isSuperAdmin: hasRole(s, "SUPER_ADMIN"),
   };
 }

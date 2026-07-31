@@ -43,7 +43,7 @@ export default async function AdminJobsPage({ searchParams }: SearchParams) {
     openings: number
     closesAt: Date | null
     updatedAt: Date
-    author: { name: string | null; email: string } | null
+    author: { name: string | null; email: string | null } | null
   }> = []
 
   try {

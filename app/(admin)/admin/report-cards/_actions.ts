@@ -66,7 +66,7 @@ async function authContext() {
   if (!canManage && !canReview) return { error: "Không có quyền" as const };
   const actor = await resolveActor(session.user.id);
   const capabilities = actorCapabilities({ manage: canManage, review: canReview });
-  const auditActor = { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" };
+  const auditActor = { id: session.user.id, name: session.user.name ?? session.user.email ?? session.user.id };
   return { session, actor, capabilities, auditActor };
 }
 

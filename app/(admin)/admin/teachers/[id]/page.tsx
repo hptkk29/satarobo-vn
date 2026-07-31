@@ -222,7 +222,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
           Thông tin cơ bản
         </h2>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
-          <Info label="Email" value={teacher.email} />
+          <Info label="Email" value={teacher.email ?? "—"} />
           <Info label="Mã NV" value={teacher.employee?.employeeCode ?? "—"} />
           <Info label="Chức danh" value={teacher.employee?.jobTitle ?? "—"} />
           <Info label="SĐT" value={teacher.employee?.phone ?? "—"} />

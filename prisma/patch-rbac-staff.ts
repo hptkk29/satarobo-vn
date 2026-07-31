@@ -94,7 +94,7 @@ async function main() {
 
       // Suy OrgUnit đích.
       let target = null as { id: string; code: string } | null;
-      const emailCenter = /\.cs([12])@/.exec(u.email)?.[1];
+      const emailCenter = /\.cs([12])@/.exec(u.email ?? "")?.[1];
       const centerOrg =
         (u.centerId && orgByCenterId.get(u.centerId)) ||
         (emailCenter ? orgByCode.get(`CS${emailCenter}`) : undefined);

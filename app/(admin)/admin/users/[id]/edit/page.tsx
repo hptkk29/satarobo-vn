@@ -115,7 +115,7 @@ export default async function EditUserPage({ params }: Props) {
           initialData={{
             id: user.id,
             name: user.name,
-            email: user.email,
+            email: user.email ?? undefined,
             role: user.role,
             roles: user.roles,
             orgUnitId: user.orgUnitId,

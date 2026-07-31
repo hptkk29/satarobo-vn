@@ -18,7 +18,7 @@ export function defineAction<I, T>(cfg: ActionConfig<I, T>) {
     const session = await auth();
     if (!session?.user?.id) return actionFail("AUTH", "Chưa đăng nhập");
     const actor = await resolveActor(session.user.id);
-    const actorName = session.user.name ?? session.user.email ?? "Unknown";
+    const actorName = session.user.name ?? session.user.email ?? session.user.id;
     const { res, paths } = await runAction(cfg, actor, rawInput, {
       actorName,
       reason: opts?.reason,

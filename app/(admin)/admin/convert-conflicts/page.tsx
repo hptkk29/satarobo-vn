@@ -108,7 +108,7 @@ function ParentCard({
   user:
     | {
         name: string | null
-        email: string
+        email: string | null
         accountStatus: string
         role: string
         _count: { children: number }
@@ -122,7 +122,7 @@ function ParentCard({
       {user ? (
         <div className="mt-1 text-sm text-gray-800">
           <p className="font-medium">{user.name || '(chưa có tên)'}</p>
-          <p className="text-gray-600">{user.email}</p>
+          <p className="text-gray-600">{user.email ?? "(chưa có email)"}</p>
           <p className="mt-1 text-xs text-gray-500">
             Vai trò: {roleLabel(user.role)} · Trạng thái: {user.accountStatus} ·{' '}
             {user._count.children} học viên
