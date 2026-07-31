@@ -2526,6 +2526,8 @@ model Assignment {
   submissions AssignmentSubmission[]
   documents   AssignmentDocument[]
   questions   Question[]             @relation("AssignmentQuestions")
+  // BGĐ 31/07 — file GV upload trực tiếp khi giao bài (khác documents = ngân hàng).
+  attachments AssignmentAttachment[]
 
   // FL-R2 W5 (R2-LMS-4) — idempotent tự sinh từ template: 1 template → tối đa 1
   // Assignment/lớp. templateId nullable → bài tạo tay (templateId NULL) KHÔNG bị ràng.
@@ -2563,6 +2565,8 @@ model AssignmentTemplate {
   instances         Assignment[]
   // FL1-06 (R2) — câu hỏi gắn vào template (từ ngân hàng) để khi sinh bài giao thì CLONE sang Assignment.
   templateQuestions AssignmentTemplateQuestion[]
+  // BGĐ 31/07 — file GV upload khi soạn đề; khi giao bài được copy tham chiếu sang Assignment.
+  attachments       AssignmentAttachment[]
 
   @@index([lessonId])
   @@index([curriculumId])
@@ -2622,10 +2626,53 @@ model AssignmentSubmission {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   rubricScores SubmissionRubricScore[]
+  // BGĐ 31/07 — HV nộp NHIỀU file+ảnh (2-phase: cột fileUrl đơn ở trên GIỮ NGUYÊN,
+  // luôn = file đầu tiên để màn cũ không vỡ).
+  files        AssignmentSubmissionFile[]
 
   @@unique([assignmentId, studentId])
   @@index([status, assignmentId])
   @@index([studentId])
+}
+
+// BGĐ 31/07 — file GV đính kèm trực tiếp (upload R2) khi soạn đề (templateId) hoặc
+// khi giao bài cho lớp (assignmentId) — đúng 1 trong 2 được set. Khác AssignmentDocument
+// (ngân hàng Document dùng lại): attachment là file 1-lần gắn chặt với đề/bài.
+model AssignmentAttachment {
+  id String @id @default(cuid())
+
+  templateId   String?
+  template     AssignmentTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  assignmentId String?
+  assignment   Assignment?         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  fileUrl  String
+  fileName String
+  fileSize Int?
+  mimeType String?
+
+  // User.id người upload — audit flat, không relation.
+  uploadedById String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([templateId])
+  @@index([assignmentId])
+}
+
+// BGĐ 31/07 — nhiều file/ảnh cho MỘT bài nộp của HV.
+model AssignmentSubmissionFile {
+  id           String               @id @default(cuid())
+  submissionId String
+  submission   AssignmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  fileUrl  String
+  fileName String
+  fileSize Int?
+  mimeType String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([submissionId])
 }
 
 // ─── Phase E7 — Audit log for generated PDF reports ──────────────────────

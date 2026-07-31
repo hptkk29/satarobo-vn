@@ -61,6 +61,8 @@ export type GradeFormProps = {
   fileUrl: string | null;
   fileName: string | null;
   fileSize: number | null;
+  /** BGĐ 31/07 — nhiều file/bài nộp; có phần tử → thay thế hiển thị fileUrl đơn cũ. */
+  files?: { id: string; url: string; name: string; size: number | null }[];
   initialScore: number | null;
   initialFeedback: string | null;
   /** Query suffix (bắt đầu bằng "?") để quay về sau khi chấm xong — GHÉP với pathname
@@ -80,6 +82,7 @@ export function GradeForm({
   fileUrl,
   fileName,
   fileSize,
+  files,
   initialScore,
   initialFeedback,
   backHref,
@@ -201,21 +204,43 @@ export function GradeForm({
               <p className="whitespace-pre-wrap text-sm text-foreground">{textAnswer}</p>
             </div>
           )}
-          {fileUrl && (
-            <a
-              href={fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
-            >
-              <ExternalLink className="h-4 w-4" aria-hidden />
-              {fileName ?? "Tệp đính kèm"}
-              {formatSize(fileSize) && (
-                <span className="font-normal text-muted-foreground">({formatSize(fileSize)})</span>
-              )}
-            </a>
+          {files && files.length > 0 ? (
+            // BGĐ 31/07 — bài nộp nhiều file: liệt kê từng file.
+            <ul className="space-y-1.5">
+              {files.map((f) => (
+                <li key={f.id}>
+                  <a
+                    href={f.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+                  >
+                    <ExternalLink className="h-4 w-4" aria-hidden />
+                    {f.name}
+                    {formatSize(f.size) && (
+                      <span className="font-normal text-muted-foreground">({formatSize(f.size)})</span>
+                    )}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            fileUrl && (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden />
+                {fileName ?? "Tệp đính kèm"}
+                {formatSize(fileSize) && (
+                  <span className="font-normal text-muted-foreground">({formatSize(fileSize)})</span>
+                )}
+              </a>
+            )
           )}
-          {!textAnswer && !fileUrl && (
+          {!textAnswer && !fileUrl && (!files || files.length === 0) && (
             <p className="text-sm text-muted-foreground">Không có nội dung đính kèm.</p>
           )}
         </CardContent>

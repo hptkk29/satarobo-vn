@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AttachmentUpload, type UploadedFile } from "@/components/assignments/attachment-upload";
 import { assignTemplateAction } from "../_actions";
 
 export interface AssignClass {
@@ -54,6 +55,8 @@ export function AssignForm({
   const [classId, setClassId] = useState(classes[0]?.id ?? "");
   const [templateId, setTemplateId] = useState("");
   const [due, setDue] = useState("");
+  // BGĐ 31/07 — GV đính kèm thêm file+ảnh riêng cho lần giao này (ngoài file có sẵn của đề).
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [pending, start] = useTransition();
 
   const mineCount = useMemo(() => templates.filter((t) => t.isMine).length, [templates]);
@@ -78,7 +81,17 @@ export function AssignForm({
     if (!classId) return toast.error("Hãy chọn lớp");
     if (!templateId) return toast.error("Hãy chọn một đầu bài");
     start(async () => {
-      const res = await assignTemplateAction({ templateId, classId, due: due || null });
+      const res = await assignTemplateAction({
+        templateId,
+        classId,
+        due: due || null,
+        attachments: attachments.map((f) => ({
+          fileUrl: f.url,
+          fileName: f.name,
+          fileSize: f.size || null,
+          mimeType: f.mime || null,
+        })),
+      });
       if (res.ok) {
         toast.success("Đã giao bài cho lớp");
         router.push(back);
@@ -165,6 +178,15 @@ export function AssignForm({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Đính kèm thêm cho lần giao này (BGĐ 31/07) */}
+      <div className="space-y-1.5">
+        <Label>Tệp đính kèm thêm (không bắt buộc)</Label>
+        <AttachmentUpload value={attachments} onChange={setAttachments} disabled={pending} />
+        <p className="text-xs text-muted-foreground">
+          File có sẵn trong đề sẽ tự đính kèm; ở đây thêm file riêng cho lớp này.
+        </p>
       </div>
 
       {/* Hạn nộp */}

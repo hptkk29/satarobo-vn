@@ -55,12 +55,21 @@ const questionSchema = z
     }
   });
 
+// BGĐ 31/07 — file+ảnh GV upload trực tiếp (đã PUT lên R2 qua /api/admin/upload-url).
+const attachmentSchema = z.object({
+  fileUrl: z.string().url("URL tệp không hợp lệ"),
+  fileName: z.string().trim().min(1).max(255),
+  fileSize: z.number().int().positive().nullable().optional(),
+  mimeType: z.string().max(100).nullable().optional(),
+});
+
 const createSchema = z.object({
   title: z.string().trim().min(1, "Tiêu đề bắt buộc").max(200),
   description: z.string().trim().min(1, "Mô tả bắt buộc"),
   kind: z.enum(["HOMEWORK", "CLASSWORK"]).default("HOMEWORK"),
   totalPoints: z.coerce.number().min(0.1, "Tổng điểm phải lớn hơn 0").default(10),
   questions: z.array(questionSchema).min(1, "Cần ít nhất 1 câu hỏi"),
+  attachments: z.array(attachmentSchema).max(10, "Tối đa 10 tệp đính kèm").default([]),
 });
 
 type CreateResult = { ok: true; templateId: string } | { ok: false; error: string };
@@ -103,6 +112,20 @@ export async function createOwnTemplateAction(input: unknown): Promise<CreateRes
         },
         select: { id: true },
       });
+
+      // BGĐ 31/07 — file+ảnh đề bài GV upload trực tiếp.
+      if (data.attachments.length > 0) {
+        await tx.assignmentAttachment.createMany({
+          data: data.attachments.map((f) => ({
+            templateId: tpl.id,
+            fileUrl: f.fileUrl,
+            fileName: f.fileName,
+            fileSize: f.fileSize ?? null,
+            mimeType: f.mimeType ?? null,
+            uploadedById: session.user.id,
+          })),
+        });
+      }
 
       for (let i = 0; i < data.questions.length; i++) {
         const q = data.questions[i]!;

@@ -88,6 +88,11 @@ export async function HubAssignmentsTab({
         fileUrl: true,
         fileName: true,
         fileSize: true,
+        // BGĐ 31/07 — bài nộp nhiều file.
+        files: {
+          select: { id: true, fileUrl: true, fileName: true, fileSize: true },
+          orderBy: { createdAt: "asc" },
+        },
         score: true,
         feedback: true,
         student: { select: { name: true } }, // câu 46: CHỈ tên HV
@@ -134,6 +139,12 @@ export async function HubAssignmentsTab({
           fileUrl={sub.fileUrl}
           fileName={sub.fileName}
           fileSize={sub.fileSize}
+          files={sub.files.map((f) => ({
+            id: f.id,
+            url: f.fileUrl,
+            name: f.fileName,
+            size: f.fileSize,
+          }))}
           initialScore={sub.score}
           initialFeedback={sub.feedback}
           backHref={backToDetail}

@@ -24,11 +24,20 @@ import { templateToAssignmentData } from "@/lib/assignments/template";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 
+// BGĐ 31/07 — file+ảnh GV đính kèm thêm khi giao (đã PUT lên R2).
+const attachmentSchema = z.object({
+  fileUrl: z.string().url("URL tệp không hợp lệ"),
+  fileName: z.string().trim().min(1).max(255),
+  fileSize: z.number().int().positive().nullable().optional(),
+  mimeType: z.string().max(100).nullable().optional(),
+});
+
 const schema = z.object({
   templateId: z.string().min(1, "Hãy chọn một đầu bài"),
   classId: z.string().min(1, "Hãy chọn lớp"),
   // "YYYY-MM-DD" từ input date, hoặc rỗng = không hạn.
   due: z.string().trim().optional().nullable(),
+  attachments: z.array(attachmentSchema).max(10, "Tối đa 10 tệp đính kèm").default([]),
 });
 
 type AssignResult = { ok: true; assignmentId: string } | { ok: false; error: string };
@@ -44,6 +53,12 @@ export async function assignTemplateAction(input: {
   templateId: string;
   classId: string;
   due?: string | null;
+  attachments?: {
+    fileUrl: string;
+    fileName: string;
+    fileSize?: number | null;
+    mimeType?: string | null;
+  }[];
 }): Promise<AssignResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -80,6 +95,10 @@ export async function assignTemplateAction(input: {
       totalPoints: true,
       allowText: true,
       allowFile: true,
+      // BGĐ 31/07 — file đề bài có sẵn: copy tham chiếu sang bài giao.
+      attachments: {
+        select: { fileUrl: true, fileName: true, fileSize: true, mimeType: true, uploadedById: true },
+      },
     },
   });
   if (!template) return { ok: false, error: "Không tìm thấy đầu bài" };
@@ -150,6 +169,29 @@ export async function assignTemplateAction(input: {
   try {
     assignmentId = await sdb.$transaction(async (tx) => {
       const created = await tx.assignment.create({ data, select: { id: true } });
+
+      // BGĐ 31/07 — đính kèm: file có sẵn của đề (copy tham chiếu) + file GV thêm khi giao.
+      const attachRows = [
+        ...template.attachments.map((f) => ({
+          assignmentId: created.id,
+          fileUrl: f.fileUrl,
+          fileName: f.fileName,
+          fileSize: f.fileSize,
+          mimeType: f.mimeType,
+          uploadedById: f.uploadedById,
+        })),
+        ...parsed.data.attachments.map((f) => ({
+          assignmentId: created.id,
+          fileUrl: f.fileUrl,
+          fileName: f.fileName,
+          fileSize: f.fileSize ?? null,
+          mimeType: f.mimeType ?? null,
+          uploadedById: session.user.id,
+        })),
+      ];
+      if (attachRows.length > 0) {
+        await tx.assignmentAttachment.createMany({ data: attachRows });
+      }
 
       // Clone câu hỏi template → Question sở hữu của bài giao (isPublic=false).
       for (const { question: q } of links) {
