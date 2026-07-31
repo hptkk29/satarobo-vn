@@ -44,7 +44,28 @@ function safeEqualHex(a: string, b: string): boolean {
   return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
+// AUTH-SĐT P2 — cửa test: production khởi động mà thấy biến này thì NỔ NGAY,
+// không chờ tới lần xin mã đầu tiên (fail-loud, chặn cấu hình nhầm từ lúc deploy).
+if (process.env.NODE_ENV === "production" && process.env.OTP_TEST_FIXED_CODE) {
+  throw new Error(
+    "OTP_TEST_FIXED_CODE đang được set trên production — cửa test này làm mọi mã OTP thành hằng số công khai. Gỡ biến env rồi deploy lại.",
+  );
+}
+
+/**
+ * AUTH-SĐT P2 — cửa test cho e2e. `codeHash` là HMAC một chiều nên test không
+ * đọc ngược được mã từ DB; đặt `OTP_TEST_FIXED_CODE` (đúng 6 chữ số) thì mã sinh
+ * ra luôn bằng giá trị đó. CHỈ can thiệp vào nguồn ngẫu nhiên — hash, cooldown,
+ * hạn mức, attempts, CAS vẫn đi đường thật nên e2e test đúng luồng sản xuất.
+ */
 function genCode(): string {
+  const fixed = process.env.OTP_TEST_FIXED_CODE;
+  if (fixed && process.env.NODE_ENV !== "production") {
+    if (!/^[0-9]{6}$/.test(fixed)) {
+      throw new Error("OTP_TEST_FIXED_CODE phải là đúng 6 chữ số.");
+    }
+    return fixed;
+  }
   // 6 chữ số, không bắt đầu bằng 0 để luôn đủ 6 ký tự.
   return String(randomInt(100000, 1000000));
 }
