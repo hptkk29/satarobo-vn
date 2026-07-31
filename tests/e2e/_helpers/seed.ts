@@ -62,7 +62,20 @@ export type SeedUserInput = {
   roles?: Role[];
   centerId?: string | null;
   isActive?: boolean;
+  /**
+   * AUTH-SĐT P3 — SĐT canonical `84XXXXXXXXX`. Không truyền → tự suy từ email
+   * (deterministic nên upsert idempotent, 90 call-site cũ không phải sửa).
+   * Truyền `null` → user KHÔNG có phone.
+   */
+  phone?: string | null;
 };
+
+/** SĐT test `849########` suy deterministic từ email — cùng email luôn cùng số. */
+function phoneFromEmail(email: string): string {
+  let h = 0;
+  for (let i = 0; i < email.length; i++) h = (h * 31 + email.charCodeAt(i)) >>> 0;
+  return `849${String(h % 100_000_000).padStart(8, "0")}`;
+}
 
 /**
  * Tạo user test với password đã hash. Idempotent theo email (upsert).
@@ -73,10 +86,11 @@ export type SeedUserInput = {
  */
 export async function seedUser(
   input: SeedUserInput,
-): Promise<{ id: string; email: string }> {
+): Promise<{ id: string; email: string; phone: string | null }> {
   assertTestDb();
   const password = await bcrypt.hash(input.password ?? TEST_PASSWORD, 10);
   const roles = input.roles && input.roles.length > 0 ? input.roles : [input.role];
+  const phone = input.phone === undefined ? phoneFromEmail(input.email) : input.phone;
   const user = await db.user.upsert({
     where: { email: input.email },
     update: {
@@ -86,6 +100,7 @@ export async function seedUser(
       isActive: input.isActive ?? true,
       deletedAt: null,
       password,
+      phone,
     },
     create: {
       email: input.email,
@@ -95,10 +110,11 @@ export async function seedUser(
       centerId: input.centerId ?? null,
       isActive: input.isActive ?? true,
       password,
+      phone,
     },
-    select: { id: true, email: true },
+    select: { id: true, email: true, phone: true },
   });
-  return user;
+  return { id: user.id, email: user.email ?? input.email, phone: user.phone };
 }
 
 /** Đóng kết nối Prisma (gọi ở cuối spec/global-teardown nếu cần). */
