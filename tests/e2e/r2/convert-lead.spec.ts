@@ -68,6 +68,28 @@ test.describe("[R2-02] Convert lead (transaction)", () => {
     expect(dup.students.length).toBe(1);
   });
 
+  // AUTH-SĐT P1 (gom tồn dư 31/07) — ca PHỦ ĐỊNH cho lỗi ĐANG SỐNG trên prod.
+  // Backfill 29/07 đưa mọi Lead.phone về canonical `84…`, trong khi form nhập của
+  // sale gõ `0…`. Bản cũ so khớp ĐÚNG-BẰNG sau digit-strip ⇒ tra `0907…` KHÔNG khớp
+  // `84907…` và hàm trả RỖNG trong im lặng — cảnh báo trùng "chạy" mà không cảnh báo.
+  // Ca này ĐỎ trước khi vá.
+  test("[R2-05-C5.1b] findConvertDuplicates khớp CHÉO dạng (DB canonical 84…, tra bằng 0…)", async () => {
+    const { cs1 } = await setup();
+    // DB lưu canonical — đúng hiện trạng prod sau backfill.
+    await db.lead.create({ data: { parentName: "Trùng-84", phone: "84907777888", centerId: cs1, status: "NEW" } });
+    await db.student.create({ data: { name: "Bé 84", parentPhone: "84907777888" } });
+
+    // Sale gõ dạng nội địa.
+    const byLocal = await findConvertDuplicates("0907777888");
+    expect(byLocal.leads.length, "tra 0… không thấy lead lưu dạng 84…").toBeGreaterThanOrEqual(1);
+    expect(byLocal.students.length, "tra 0… không thấy student lưu dạng 84…").toBe(1);
+
+    // Và chiều ngược lại, kể cả khi người dùng gõ có khoảng trắng.
+    const byCanonical = await findConvertDuplicates("+84 907 777 888");
+    expect(byCanonical.leads.length).toBeGreaterThanOrEqual(1);
+    expect(byCanonical.students.length).toBe(1);
+  });
+
   test("[R2-02-C2.2] 1 bước lỗi → ROLLBACK toàn bộ (không student/order mồ côi)", async () => {
     const { course, lead } = await setup();
     await expect(

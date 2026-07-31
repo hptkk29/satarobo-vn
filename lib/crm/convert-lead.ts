@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { nextInvoiceCode } from "@/lib/finance/invoice-code";
+import { phoneVariants } from "@/lib/phone";
 
 export class ConvertError extends Error {
   readonly code: string;
@@ -19,20 +20,27 @@ export class ConvertError extends Error {
 /**
  * C5.1 — kiểm tra trùng SĐT trước khi convert: trả lead/student cũ (90 ngày) để UI cảnh báo.
  * Không chặn — chỉ cung cấp dữ liệu để hiển thị (quyết định do người dùng).
+ *
+ * AUTH-SĐT P1 (gom tồn dư 31/07) — tra bằng `phoneVariants`, KHÔNG so khớp đúng-bằng.
+ * Trước đây `phone.replace(/\D/g,"")` giữ nguyên `0905…` rồi so `=` với cột DB. Sau
+ * backfill 29/07 prod lưu **canonical `84905…`** ⇒ gõ `0905…` là **không khớp gì cả**,
+ * và hàm im lặng trả rỗng — cảnh báo trùng "chạy" mà không bao giờ cảnh báo.
+ * `phoneVariants` khớp CẢ hai dạng nên đúng trong lẫn sau giai đoạn chuyển tiếp.
  */
 export async function findConvertDuplicates(
   phone: string,
   now: Date = new Date(),
 ): Promise<{ leads: { id: string; status: string }[]; students: { id: string; name: string }[] }> {
-  const norm = phone.replace(/\D/g, "");
+  const variants = phoneVariants(phone);
+  if (variants.length === 0) return { leads: [], students: [] };
   const cutoff = new Date(now.getTime() - 90 * 86_400_000);
   const [leads, students] = await Promise.all([
     db.lead.findMany({
-      where: { phone: norm, deletedAt: null, createdAt: { gte: cutoff } },
+      where: { phone: { in: variants }, deletedAt: null, createdAt: { gte: cutoff } },
       select: { id: true, status: true },
     }),
     db.student.findMany({
-      where: { parentPhone: norm },
+      where: { parentPhone: { in: variants } },
       select: { id: true, name: true },
     }),
   ]);
