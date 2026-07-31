@@ -7,6 +7,7 @@
  *   corepack pnpm@11 exec playwright test -c playwright.manual.config.ts lms-r7-flows
  */
 import { test, expect, type Page } from "@playwright/test";
+import { login as sharedLogin } from "../e2e/_helpers/auth";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "test-admin@example.com";
 const ADMIN_PW = process.env.ADMIN_PW ?? "Test@1234!";
@@ -14,11 +15,7 @@ const PARENT_EMAIL = process.env.PARENT_EMAIL ?? "test-convert@example.com";
 const PARENT_PW = process.env.PARENT_PW ?? "Test@1234!";
 
 async function login(page: Page, email: string, pw: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Mật khẩu").fill(pw);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 120_000 });
+  await sharedLogin(page, { email, password: pw, timeout: 120_000 });
 }
 
 // ─── F.2 — Kế toán xác nhận khoản PENDING → sinh phiếu thu ──────────────────

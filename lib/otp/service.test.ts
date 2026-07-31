@@ -152,6 +152,7 @@ function lastSentCode(): string {
 }
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   store.otps = [];
   store.deliveries = [];
   seq = 0;
@@ -297,5 +298,76 @@ describe("[AUTH-SDT-P0-C3] §3.2 — trần chi phí toàn hệ thống", () => 
     await requestOtp({ target: "a@x.com", purpose: "ACTIVATION" });
     const blocked = await requestOtp({ target: "b@x.com", purpose: "ACTIVATION" });
     expect(blocked.ok).toBe(false);
+  });
+});
+
+describe("[AUTH-SDT-P2-C1] cửa test OTP_TEST_FIXED_CODE", () => {
+  it("set biến (non-prod) → mã sinh ra đúng bằng giá trị cố định, verify đi đường thật", async () => {
+    vi.stubEnv("OTP_TEST_FIXED_CODE", "424242");
+
+    await requestOtp({ target: TARGET, purpose: "ACTIVATION" });
+    expect(lastSentCode()).toBe("424242");
+
+    const v = await verifyAndConsumeOtp({ target: TARGET, purpose: "ACTIVATION", code: "424242" });
+    expect(v.ok).toBe(true);
+    // Cửa test không được nới lỏng CAS: mã đã tiêu thì nhập lại phải bị từ chối.
+    const again = await verifyAndConsumeOtp({
+      target: TARGET,
+      purpose: "ACTIVATION",
+      code: "424242",
+    });
+    expect(again.ok).toBe(false);
+  });
+
+  it("không set biến → mã vẫn ngẫu nhiên 6 chữ số", async () => {
+    await requestOtp({ target: TARGET, purpose: "ACTIVATION" });
+    expect(lastSentCode()).toMatch(/^[1-9][0-9]{5}$/);
+  });
+
+  it("giá trị sai định dạng (không phải 6 chữ số) → requestOtp nổ, không im lặng", async () => {
+    vi.stubEnv("OTP_TEST_FIXED_CODE", "12ab56");
+    await expect(requestOtp({ target: TARGET, purpose: "ACTIVATION" })).rejects.toThrow(
+      /6 chữ số/,
+    );
+  });
+
+  it("production khởi động mà thấy biến này → THROW ngay khi nạp module", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OTP_TEST_FIXED_CODE", "424242");
+    vi.resetModules();
+    await expect(import("./service")).rejects.toThrow(/OTP_TEST_FIXED_CODE/);
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+});
+
+describe("[AUTH-SDT-P2-C2] P1 DoD — 0905… và 84905… là CÙNG một target", () => {
+  it("xin mã bằng 0905… rồi xin lại bằng +84905… → dính CHUNG cooldown", async () => {
+    const r1 = await requestOtp({ target: "0905 123 456", purpose: "ACTIVATION" });
+    expect(r1.ok).toBe(true);
+
+    const r2 = await requestOtp({ target: "+84905123456", purpose: "ACTIVATION" });
+    expect(r2.ok).toBe(false);
+    expect(r2.ok === false && r2.cooldownSec).toBeGreaterThan(0);
+  });
+
+  it("hai cách gõ dùng CHUNG hạn mức ngày (không nhân đôi được 8 tin/ngày)", async () => {
+    SETTINGS["otp.resendCooldownSec"] = 0;
+    SETTINGS["otp.dailyLimit"] = 1;
+
+    await requestOtp({ target: "0905123456", purpose: "ACTIVATION" });
+    const over = await requestOtp({ target: "84905123456", purpose: "ACTIVATION" });
+    expect(over.ok).toBe(false);
+    expect(over.ok === false && over.error).toMatch(/vượt số lần/i);
+  });
+
+  it("xin mã bằng 0905… nhưng verify bằng +84 905… vẫn khớp", async () => {
+    await requestOtp({ target: "0905123456", purpose: "ACTIVATION" });
+    const v = await verifyAndConsumeOtp({
+      target: "+84 905 123 456",
+      purpose: "ACTIVATION",
+      code: lastSentCode(),
+    });
+    expect(v.ok).toBe(true);
   });
 });

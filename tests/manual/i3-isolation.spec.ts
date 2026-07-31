@@ -3,7 +3,8 @@
  *   CS1_EMAIL=test-cs1@example.com CS1_PW='Test@1234!' \
  *   corepack pnpm@11 exec playwright test -c playwright.manual.config.ts i3-isolation
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
+import { login as sharedLogin } from "../e2e/_helpers/auth";
 
 const CS1_EMAIL = process.env.CS1_EMAIL ?? "test-cs1@example.com";
 const CS1_PW = process.env.CS1_PW ?? "Test@1234!";
@@ -17,11 +18,7 @@ const BE_A = "CS2-26-K9J7X8";
 const BE_B = "CS2-26-2F55FQ";
 
 async function login(page: Page, email: string, pw: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Mật khẩu").fill(pw);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 120_000 });
+  await sharedLogin(page, { email, password: pw, timeout: 120_000 });
 }
 
 test("I.3 QL CS1 không thấy data CS2", async ({ page }, testInfo) => {

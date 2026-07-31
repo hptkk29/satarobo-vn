@@ -157,7 +157,7 @@ test.describe("[#07-ISO] Import 'đã đăng ký' + xếp trải nghiệm — c�
     // CS1 giữ, CS2 loại.
     expect(kept.map((c) => c.centerId)).toEqual([cs1]);
     expect(rejected.map((c) => c.centerId)).toEqual([cs2]);
-    expect(rejected.map((c) => c.phone)).toEqual(["0900000022"]);
+    expect(rejected.map((c) => c.phone)).toEqual(["84900000022"]);
 
     // Mô phỏng mode=confirm: chỉ ghi phần GIỮ LẠI → không có lead CS2 nào ra đời.
     await writeCreates(kept);

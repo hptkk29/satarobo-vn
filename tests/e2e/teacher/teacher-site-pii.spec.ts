@@ -16,7 +16,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb, seedOrg, seedRoles, seedUser } from "../_helpers/seed";
-import { testEmail, TEST_PASSWORD } from "../_helpers/fixtures";
+import { testEmail } from "../_helpers/fixtures";
+import { login } from "../_helpers/auth";
 import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
 
 const SA: RbacActor = { id: "seed-sa", name: "SA", role: "SUPER_ADMIN" };
@@ -41,22 +42,9 @@ async function centerIdOf(code: string) {
   return (await db.orgUnit.findUnique({ where: { code }, select: { centerId: true } }))!.centerId!;
 }
 
-/** Login TEACHER qua form thật; chịu được cold-compile của `next dev`. */
+/** Login TEACHER qua form thật — logic (kể cả chống hydration-wipe) ở helper chung. */
 async function loginTeacher(page: Page) {
-  // KHÔNG dùng waitUntil "domcontentloaded": form Waves là controlled input —
-  // fill trước khi React hydrate xong sẽ bị hydration XOÁ TRẮNG giá trị →
-  // validation "Email không hợp lệ" chặn, signIn không bao giờ bắn (fail câm).
-  await page.goto(`/login?callbackUrl=${encodeURIComponent("/teacher/lop")}`);
-  const email = page.getByLabel("Email");
-  // Điền rồi xác nhận giá trị CÒN DÍNH (hydration muộn vẫn có thể wipe sau "load")
-  // — bị wipe thì toPass() điền lại tới khi ổn định.
-  await expect(async () => {
-    await email.fill(teacherEmail);
-    await page.getByLabel("Mật khẩu").fill(TEST_PASSWORD);
-    await expect(email).toHaveValue(teacherEmail, { timeout: 1_000 });
-  }).toPass({ timeout: 20_000 });
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 30_000 });
+  await login(page, { email: teacherEmail, callbackUrl: "/teacher/lop" });
 }
 
 /** Mọi chuỗi PH + SĐT HV KHÔNG được xuất hiện trong HTML render (kể cả flight RSC). */

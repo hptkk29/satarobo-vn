@@ -220,6 +220,8 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 
 ### P2 · Lưới test + chốt cửa test OTP
 
+> **✅ P2 HOÀN THÀNH 31/07** (nhánh `feat/auth-sdt-p2`): cửa test `OTP_TEST_FIXED_CODE` vào `lib/otp/service.ts` đúng thiết kế dưới (non-prod only; production khởi động thấy biến → throw ngay khi nạp module) · lưới OTP 18 unit test (C1–C3 của P0 + P2-C1 cửa test + P2-C2 chung bucket `0905…`/`84905…`) · 11 bản sao login gộp về `tests/e2e/_helpers/auth.ts` (bản duy nhất, có `toPass()` chống hydration-wipe; `seed` nạp lười nên `tests/manual` import an toàn) · **baseline 32 spec ngoài CI XANH 100%** (r1 35 · r2 11 · r3 12 · r4 8 · r5 1 · r6 57 · crm 7 = 131 test) sau khi vá 3 expectation lỗi thời theo canonical 84… (`r1/lead-qualify.spec.ts` ×2, `crm/import-registered-isolation.spec.ts` ×1 — cùng loại spec R7 đã vá 30/07; dedup vẫn bắt trùng, chỉ expectation cũ).
+
 - **Viết `lib/otp/service.test.ts`** — `lib/otp` hiện có **0 file test**. Pattern mock copy từ `lib/zalo/token.test.ts:7-25`.
 - **Chốt cơ chế cửa test cho OTP TRƯỚC khi viết helper login** (nếu chốt sau sẽ phải làm helper 2 lần): `codeHash` là HMAC một chiều (`schema:4120`) nên e2e không đọc ngược được mã. Đề xuất `OTP_TEST_FIXED_CODE` — chỉ hoạt động khi `NODE_ENV !== "production"`, và **production khởi động mà thấy biến này thì THROW**.
 - **Gộp 12 bản sao logic login** về `tests/e2e/_helpers/auth.ts` (10 file `tests/manual/*` + `teacher-site-pii.spec.ts`). Giữ nguyên pattern `toPass()` chống **hydration-wipe của form Waves**.
