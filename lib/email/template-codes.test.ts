@@ -7,6 +7,13 @@ import { renderTemplate } from "./render";
 // giữ nguyên placeholder khi var null ⇒ sót = email tới PH có "{{...}}" thô.
 
 const SAMPLE_VARS: Record<string, Record<string, string | number>> = {
+  // BGĐ 31/07 — email cấp tài khoản nhân sự (SĐT đăng nhập + MK + link theo vai trò).
+  STAFF_ACCOUNT_GRANTED: {
+    staffName: "Thầy Nam",
+    loginId: "84901234567",
+    password: "MatKhau@2026",
+    loginUrl: "https://admin.satarobo.vn/login",
+  },
   ACCOUNT_ACTIVATED: {
     parentName: "Chị Lan",
     childPart: " của bé An",

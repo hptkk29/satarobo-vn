@@ -87,6 +87,12 @@ export const SCOPE_EXEMPT = new Set<string>([
   // auto-filter tầng query. TODO: audit các nơi `db.center.findMany` để đảm bảo
   // non-HO/non-SUPER_ADMIN actor không list được center ngoài visibleCenterIds.
   "Center",
+  // BGĐ 31/07 — Affiliate là DANH MỤC nguồn giới thiệu dùng chung: centerId chỉ là
+  // "cơ sở theo dõi" và thường NULL (người giới thiệu toàn hệ thống). Inject
+  // `centerId IN [...]` sẽ ẩn mất mã toàn hệ thống khỏi nhân sự cơ sở ⇒ link ?ref=
+  // hợp lệ lại không tra được. Cách ly nằm ở gate quyền (leads:view-all/assign);
+  // dữ liệu nghiệp vụ gắn theo nó (Lead) vẫn scoped bình thường.
+  "Affiliate",
 ]);
 
 function bypassesScope(actor: Actor): boolean {
