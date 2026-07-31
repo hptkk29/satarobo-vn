@@ -179,6 +179,14 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 
 ### P0′ · Thủ tục ZBS/ZNS (hành chính, **không phải việc code**)
 
+> **✅ P0′ HOÀN THÀNH 31/07** — đủ DoD: 2 mẫu QĐ-G **đã duyệt**, **mẫu A (Xác thực/OTP) = `616128` · mẫu B (Học phí + tài khoản) = `616258`** (chủ dự án xác nhận 31/07; P4 dự kiến khai qua env `ZALO_ZNS_TEMPLATE_OTP=616128` + `ZALO_ZNS_TEMPLATE_PAYMENT=616258` — chốt env hay SystemSetting khi code P4) · văn bản trả lời 4 câu đã nhận (tóm tắt dưới) · OA xác thực + App/ZCA/nạp tiền + env `ZALO_APP_ID`/`ZALO_APP_SECRET`/`ZALO_OA_REFRESH_TOKEN` xong 30/07 · `ZALO_LIVE` cố ý CHƯA bật — bật ở cuối P4 sau khi smoke dev-mode (gửi thử tới SĐT admin OA) đạt · SMS brandname: bỏ hẳn (QĐ-H).
+>
+> **Trả lời chính thức của ZBS (email 31/07) cho 4 câu hỏi:**
+> 1. **Khung giờ:** mẫu Xác thực OTP thuộc nhóm Tin Giao dịch (Tag 1) → gửi **24/7**, KHÔNG dính khung cấm 22:00–06:00 — nỗi lo `-133` được gỡ, đăng nhập ban đêm OK. Ràng buộc mới phát hiện: **timeout gửi chỉ 15 giây** — tin không tới thiết bị trong 15s coi như fail (và không tính phí) → UX chờ mã nên đợi ~15–30s là biết kết quả, fail thì gợi ý đường email ngay, đừng bắt phụ huynh đợi vô định.
+> 2. **Rate limit API:** 4000 request/phút/app — dư xa trần 300 tin/ngày (QĐ-E), không cần thiết kế burst/queue đặc biệt cho P4.
+> 3. **Gửi lại mã:** Zalo KHÔNG giới hạn số tin Tag 1 mỗi người/ngày — nút "Gửi lại mã" hoàn toàn hợp lệ. Cooldown 60s + 8 mã/ngày/số + trần 300 tin/ngày của TA VẪN GIỮ NGUYÊN — đó là kiểm soát chi phí nội bộ (QĐ-E), không phải quy định Zalo.
+> 4. **Tính phí:** chỉ tính tin gửi thành công tới thiết bị trong timeout; tin fail (`-118` không có Zalo, `-139` từ chối nhận) **không bị trừ tiền** — giả định ngân sách QĐ-E đứng vững, và logic "gửi fail không đốt hạn mức" (P0 §3.5) khớp luôn với cách Zalo tính tiền.
+
 - Xác thực OA Sata Robo **loại doanh nghiệp** → tạo App + ZCA → liên kết OA–ZCA → **nạp tiền trả trước**. Cần **GPKD + MST** Công ty CP Công nghệ Giáo dục Sata Robo.
 - Nộp duyệt **2 mẫu tin** (1–3 ngày làm việc mỗi lần, bị từ chối là làm lại) theo QĐ-G §7: **A · Xác thực (OTP)** · **B · Xác nhận học phí + cấp tài khoản** (gộp).
 - **Gửi `support@zalo.cloud` hỏi 4 điểm không có nguồn công khai** — 4 điểm này ảnh hưởng trực tiếp tới thiết kế, **không được suy đoán**:
@@ -362,7 +370,7 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 | **P0-a** | **Phương án (A)** — gộp verify+consume thành một thao tác nguyên tử. | `verifyOtp` + `consumeOtp` **bị thay bằng `verifyAndConsumeOtp`**; không còn trạng thái verified-chưa-consume để khai thác. Thực hiện bằng CAS (`updateMany` guard `consumedAt: null`) nên 2 request đồng thời chỉ 1 cái thắng. **Ghi nợ UX:** `/quen-mat-khau` (P6) BẮT BUỘC nhập mã + mật khẩu mới trên **cùng 1 màn**. Cần tách 2 bước ⇒ phải chuyển sang (B), **không** khôi phục `verifiedAt` 2 pha. |
 | **P0-b** | **5 req/IP/giờ · trần 300 tin/ngày · kill-switch 500.** | 3 key SystemSetting mới (`otp.ipMaxPerHour`, `otp.globalDailyCap`, `otp.globalKillSwitch`) — đổi ngưỡng **không cần deploy**. Trần ngày đặt trong `requestOtp` (mọi đường đi qua, kể cả admin gửi lại); rate-limit IP đặt ở Server Action công khai. |
 | **P0-c** | **Bịt oracle + bù bằng dòng hướng dẫn tĩnh trên form.** | Mọi kết quả phụ thuộc target (không tồn tại / đã ACTIVE / cooldown / vượt hạn mức của số đó / gửi hỏng) trả **cùng một** phản hồi, kèm **sàn thời gian 900ms** để chênh lệch độ trễ không thành oracle. Chỉ lỗi không phụ thuộc target mới nói thật, nhận diện bằng cờ `systemHalt` — **không** suy từ hình dạng kết quả (bẫy: "vượt hạn mức ngày" có hình dạng y hệt "trần hệ thống" nhưng chỉ xảy ra với target có thật). |
-| **P0-d** | **Bắt buộc trước P3, P0 chạy trước không cần chờ.** | Env đã có sẵn giá trị — chỉ cần add vào Vercel (xem §9). `rateLimit()` tự nhận `UPSTASH_REDIS_REST_*` hoặc `KV_REST_API_*`, fail-soft về memory nếu thiếu. |
+| **P0-d** | **Bắt buộc trước P3, P0 chạy trước không cần chờ.** | Env đã có sẵn giá trị — chỉ cần add vào Vercel (xem §9). `rateLimit()` tự nhận `UPSTASH_REDIS_REST_*` hoặc `KV_REST_API_*`, fail-soft về memory nếu thiếu. **✅ 30/07: env đã add Prod + Preview (2 DB riêng)** — có hiệu lực sau redeploy; kiểm chứng theo §9. |
 | **P0-e** | **`maskPhone` GIỮ NGUYÊN 3+3** — không siết 2+2. | Xem §9: sale + quản lý cơ sở **không hề bị mask** (có `leads:view-pii`), nên việc siết không giải quyết vấn đề gì mà chỉ siết thêm GV/HR — đúng nhóm chính sách đã cố ý chặn. Nút "hiện số" cho GV là **đổi chính sách so với Doc 15**, tách ra chốt riêng. |
 | **P0-f** | **Retention dấu vết OTP = 90 ngày.** | Cron `/api/cron/otp-cleanup` chạy 08:00 hằng ngày; `OtpDeliveryLog` cascade theo `OtpRequest` nên 1 lệnh xoá là đủ. |
 
@@ -390,12 +398,14 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 
 **Phần cảm ơn + hotline + link** trong bản nháp → chuyển sang **email chào mừng** (đã có sẵn `enqueueAccountActivated`) hoặc tin Zalo/Messenger do sale gửi tay. Ở hai kênh đó không bị kiểm duyệt, và đó mới là chỗ đặt giọng văn ấm áp.
 
-> ⚠️ Ba mẫu trên dựa vào quy định ZNS ghi tại §2 QĐ-6 (nguồn zalo.solutions) — **chưa xác minh lại tại thời điểm nộp**. Quy định Zalo có thay đổi. Vẫn phải gửi `support@zalo.cloud` 4 câu ở P0′ TRƯỚC khi nộp, đặc biệt câu **OTP có được miễn khung cấm 22:00–06:00 (`-133`)** — nếu không thì ban đêm không ai kích hoạt/đăng nhập được.
+> ~~⚠️ Ba mẫu trên dựa vào quy định ZNS ghi tại §2 QĐ-6 (nguồn zalo.solutions) — **chưa xác minh lại tại thời điểm nộp**.~~ **[ĐÃ XÁC MINH + DUYỆT 31/07]** — cả 2 mẫu được duyệt (mẫu A/OTP = `616128` · mẫu B/học phí = `616258`), ZBS xác nhận bằng văn bản: OTP Tag 1 gửi 24/7 không dính `-133`. Chi tiết 4 câu trả lời: xem khung "P0′ HOÀN THÀNH" ở §4.
 
-### ⏳ Còn mở (không chặn P0–P2)
+**QĐ-H · Bỏ hẳn SMS brandname (chốt 30/07)** — không xin báo giá, không ký nhà cung cấp SMS nào. Thông báo + OTP chỉ đi **Zalo (ZNS)**; email là kênh dự phòng vĩnh viễn (QĐ-3). Hệ quả chấp nhận: phụ huynh không dùng Zalo hoặc ZNS lỗi (`-118`/`-139`/`-141`) chỉ còn đường email/mật khẩu; không có cả email lẫn Zalo → cấp mã kích hoạt tạm tại quầy (P6). **P4 hết bị chặn bởi SMS** — chỉ còn chờ 2 `template_id` được duyệt.
 
-5. **SMS brandname dự phòng** — xin báo giá ≥2 nhà cung cấp (eSMS, VietGuys/Infobip), có ký hay không.
-   > Chặn: **P4** (fallback khi ZNS chết). Không chặn P0–P3.
+### ⏳ Còn mở *(đã đóng hết 30/07 — không còn mục nào)*
+
+5. ~~**SMS brandname dự phòng** — xin báo giá ≥2 nhà cung cấp (eSMS, VietGuys/Infobip), có ký hay không.~~ **[ĐẢO 30/07 — QĐ-H: bỏ hẳn SMS.]**
+   > ~~Chặn: **P4** (fallback khi ZNS chết). Không chặn P0–P3.~~ P4 chỉ còn chờ template duyệt.
 
 **Câu hỏi phụ nên chuẩn bị sẵn câu trả lời:** phụ huynh bấm gửi lại mã 10 lần thì ai trả tiền? · ông bà đưa đón có xem được lịch học không? · phụ huynh đổi số **và đã mất số cũ** thì lấy lại tài khoản kiểu gì?
 
