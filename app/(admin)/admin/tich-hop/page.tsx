@@ -9,6 +9,7 @@ import { isMisaConfigured, isMisaLive, getMisaConfig } from "@/lib/misa/service"
 import { getPaymentConfig } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
 import { VietQrConfig } from "./_components/vietqr-config";
+import { ZnsTest } from "./_components/zns-test";
 
 export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
@@ -97,6 +98,8 @@ export default async function IntegrationsPage() {
             ? "Có ZALO_APP_ID + ZALO_OA_ACCESS_TOKEN. Bật ZALO_LIVE=true để gửi thật."
             : "Chưa có credential → tin nhắn Zalo bị bỏ qua, tự gửi email dự phòng."}
         </p>
+
+        <ZnsTest canEdit={canEdit} />
 
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
