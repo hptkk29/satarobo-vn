@@ -4,6 +4,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { znsProvider } from "@/lib/zalo/provider";
+import { getRateLimitBackend } from "@/lib/rate-limit";
 import { isMisaConfigured, isMisaLive, getMisaConfig } from "@/lib/misa/service";
 import { getPaymentConfig } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
@@ -55,6 +56,28 @@ export default async function IntegrationsPage() {
         <h1 className="text-xl font-bold text-neutral-900">Tích hợp ngoài</h1>
         <p className="text-sm text-neutral-500">Trạng thái các adapter. Khi thiếu credential, hệ thống tự fallback an toàn.</p>
       </div>
+
+      {/* AUTH-SĐT P4 — soi nhanh backend rate-limit (P0-d): memory = bộ đếm reset
+          theo instance serverless, không chặn được brute-force trải đều instance. */}
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-neutral-800">Rate limit (Upstash Redis)</h2>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+              getRateLimitBackend() === "upstash"
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-red-100 text-red-700"
+            }`}
+          >
+            {getRateLimitBackend() === "upstash" ? "Redis (bền vững)" : "Memory (per-instance!)"}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-neutral-500">
+          {getRateLimitBackend() === "upstash"
+            ? "Env Upstash đã nạp. Lưu ý: lỗi runtime (URL sai, DB đã xoá) vẫn tự rơi về memory từng request — thấy log [rate-limit] Upstash error thì kiểm console.upstash.com."
+            : "Chưa nạp env UPSTASH_REDIS_REST_URL/TOKEN (hoặc chưa redeploy sau khi thêm) → bộ đếm chống brute-force reset theo instance."}
+        </p>
+      </section>
 
       <VietQrConfig canEdit={canEdit} current={payCfg} />
 
