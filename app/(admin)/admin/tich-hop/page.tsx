@@ -6,9 +6,9 @@ import { scopedDb } from "@/lib/db-scope";
 import { znsProvider } from "@/lib/zalo/provider";
 import { getRateLimitBackend } from "@/lib/rate-limit";
 import { isMisaConfigured, isMisaLive, getMisaConfig } from "@/lib/misa/service";
-import { getPaymentConfig } from "@/lib/payments/vietqr";
+import { getPaymentConfigExact } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
-import { VietQrConfig } from "./_components/vietqr-config";
+import { VietQrConfig, type VietQrCenterRow } from "./_components/vietqr-config";
 import { ZnsTest } from "./_components/zns-test";
 
 export const metadata = { title: "Tích hợp | Admin" };
@@ -49,7 +49,24 @@ export default async function IntegrationsPage() {
   ]);
   const misaConfigured = isMisaConfigured();
   const misaLive = isMisaLive();
-  const payCfg = await getPaymentConfig();
+  // BGĐ 31/07 — tài khoản nhận tiền theo TỪNG CƠ SỞ + 1 dòng cấu hình chung (fallback).
+  const centers = await sdb.center.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const vietqrRows: VietQrCenterRow[] = await Promise.all([
+    getPaymentConfigExact(null).then((current) => ({
+      centerId: null,
+      centerName: "Cấu hình chung (dùng khi cơ sở chưa đặt)",
+      current,
+    })),
+    ...centers.map(async (c) => ({
+      centerId: c.id,
+      centerName: c.name,
+      current: await getPaymentConfigExact(c.id),
+    })),
+  ]);
 
   return (
     <div className="space-y-6 p-4">
@@ -80,7 +97,8 @@ export default async function IntegrationsPage() {
         </p>
       </section>
 
-      <VietQrConfig canEdit={canEdit} current={payCfg} />
+      {/* BGĐ 31/07 — tài khoản nhận tiền theo TỪNG CƠ SỞ (fallback cấu hình chung). */}
+      <VietQrConfig canEdit={canEdit} rows={vietqrRows} />
 
       <section className="rounded-xl border border-neutral-200 bg-white p-4">
         <div className="flex items-center justify-between">

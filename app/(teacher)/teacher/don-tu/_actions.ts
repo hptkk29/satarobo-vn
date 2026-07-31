@@ -16,8 +16,11 @@ import {
   isClassKind,
   isRangeKind,
 } from "@/lib/work-request";
+import { applyApprovedWorkRequest } from "@/lib/work-request-apply";
 
 type Result = { ok: true } | { ok: false; error: string };
+/** Duyệt đơn: kèm thông báo phụ về việc áp dụng lên lịch (BGĐ 31/07). */
+type ReviewResult = { ok: true; note?: string } | { ok: false; error: string };
 
 const submitSchema = z.object({
   kind: z.enum(WORK_REQUEST_KINDS),
@@ -87,8 +90,13 @@ const reviewSchema = z.object({
   note: z.string().max(1000).optional().nullable(),
 });
 
-/** CENTER_MANAGER duyệt/từ chối đơn cùng cơ sở (SUPER_ADMIN: mọi cơ sở). */
-export async function reviewWorkRequest(input: unknown): Promise<Result> {
+/**
+ * CENTER_MANAGER duyệt/từ chối đơn cùng cơ sở (SUPER_ADMIN: mọi cơ sở).
+ *
+ * BGĐ 31/07 — DUYỆT CÓ HIỆU LỰC THẬT: đơn nghỉ dạy/dạy thay được duyệt sẽ cập nhật
+ * luôn ClassSession (huỷ buổi / gán GV dạy thay) qua lib/work-request-apply.ts.
+ */
+export async function reviewWorkRequest(input: unknown): Promise<ReviewResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   const isManager = hasRole(session.user, "CENTER_MANAGER");
@@ -103,7 +111,20 @@ export async function reviewWorkRequest(input: unknown): Promise<Result> {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
-  const req = await sdb.workRequest.findUnique({ where: { id }, select: { centerId: true, status: true } });
+  const req = await sdb.workRequest.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      centerId: true,
+      status: true,
+      kind: true,
+      classId: true,
+      fromDate: true,
+      targetUserId: true,
+      reason: true,
+      requesterId: true,
+    },
+  });
   if (!req) return { ok: false, error: "Không tìm thấy đơn" };
   if (!isSuper && req.centerId !== (session.user.centerId ?? null)) {
     return { ok: false, error: "Đơn thuộc cơ sở khác" };
@@ -124,6 +145,34 @@ export async function reviewWorkRequest(input: unknown): Promise<Result> {
   } catch (err) {
     return { ok: false, error: `Lỗi duyệt đơn: ${err instanceof Error ? err.message : "Unknown"}` };
   }
+
+  // BGĐ 31/07 — duyệt xong thì ÁP LÊN LỊCH THẬT (huỷ buổi / gán GV dạy thay).
+  // Lỗi áp dụng KHÔNG lật lại quyết định duyệt — báo để quản lý xử lý tay.
+  let applyNote: string | undefined;
+  if (decision === "APPROVED") {
+    try {
+      const res = await applyApprovedWorkRequest({
+        request: {
+          id: req.id,
+          kind: req.kind,
+          classId: req.classId,
+          fromDate: req.fromDate,
+          targetUserId: req.targetUserId,
+          reason: req.reason,
+          requesterId: req.requesterId,
+        },
+        actorId: session.user.id,
+        actorName: session.user.name ?? "Quản lý",
+      });
+      applyNote = res.message;
+    } catch (err) {
+      console.error("[reviewWorkRequest] apply:", err);
+      applyNote = "Đã duyệt đơn nhưng CHƯA cập nhật được lịch — vui lòng chỉnh buổi học thủ công.";
+    }
+  }
+
   revalidatePath("/teacher/don-tu");
-  return { ok: true };
+  revalidatePath("/don-tu");
+  revalidatePath("/lich");
+  return { ok: true, ...(applyNote ? { note: applyNote } : {}) };
 }

@@ -735,6 +735,10 @@ model User {
   // Cụm A1 — trạng thái kích hoạt tài khoản (phụ huynh tạo qua chuyển lead).
   accountStatus AccountStatus @default(ACTIVE)
 
+  // BGĐ 31/07 — cấp/reset MK bởi admin → bắt đổi MK ngay lần đăng nhập kế tiếp
+  // (layout admin/teacher redirect /doi-mat-khau khi cờ bật).
+  mustChangePassword Boolean @default(false)
+
   // FIX lead→payment→enroll (M0) — CCCD + địa chỉ phụ huynh (lưu trên User, KHÔNG trên Student).
   cccd    String? // CCCD/CMND phụ huynh
   address String?
@@ -1014,6 +1018,11 @@ model Lead {
   commissionSource    CommissionSource? // nguồn để chia hoa hồng
   adminId             String? // Sale Admin xử lý L1→L2
 
+  // BGĐ 31/07 — NGUỒN GIỚI THIỆU (affiliate): ai giới thiệu ra lead này.
+  // Gán tự động khi khách vào site qua link `?ref=<code>`, hoặc admin chọn tay.
+  affiliateId String?
+  affiliate   Affiliate? @relation("AffiliateLeads", fields: [affiliateId], references: [id], onDelete: SetNull)
+
   // FIX lead→payment→enroll (M0/LD1) — loại đơn dự kiến (gợi ý nguồn item khi tạo đơn).
   orderKind OrderKind?
 
@@ -1064,9 +1073,44 @@ model Lead {
   @@index([orgUnitId])
   @@index([expectedCourseId])
   @@index([expectedProductId])
+  @@index([affiliateId]) // BGĐ 31/07 — báo cáo lead theo người giới thiệu
   // IDX-2: trang leads (Kanban + table) page/order theo createdAt DESC dưới scope centerId
   // → composite cho index-ordered rows (bỏ sort + OFFSET scan). Bảng high-growth.
   @@index([centerId, status, createdAt])
+}
+
+// BGĐ 31/07 — NGƯỜI/ĐỐI TÁC GIỚI THIỆU (affiliate).
+//
+// Mỗi affiliate có 1 MÃ duy nhất; link `satarobo.vn/...?ref=<code>` đưa khách vào
+// site sẽ gắn lead về đúng người. Cũng gán tay được ở màn Lead.
+//
+// ⚠️ Hoa hồng affiliate: mức % + thời điểm chốt trả CHƯA có quy chế (chờ BGĐ) —
+// model này chỉ ghi NGUỒN + tỉ lệ tham chiếu; KHÔNG tự sinh phiếu chi.
+model Affiliate {
+  id   String @id @default(cuid())
+  /// Mã giới thiệu dùng trong link `?ref=` — chữ HOA + số, không dấu.
+  code String @unique
+  name String
+  /// Liên hệ để đối soát (không bắt buộc).
+  phone String?
+  email String?
+  /// Phụ huynh/HV giới thiệu có thể gắn về tài khoản User (không bắt buộc).
+  userId String?
+  /// Cơ sở phụ trách theo dõi (null = toàn hệ thống).
+  centerId String?
+  /// Tỉ lệ hoa hồng tham chiếu (%) — dùng để đối soát tay tới khi có quy chế.
+  commissionPercent Float?
+  isActive Boolean @default(true)
+  note     String? @db.Text
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  leads Lead[] @relation("AffiliateLeads")
+
+  @@index([isActive])
+  @@index([centerId])
 }
 
 /// R7-01 — 1 Lead có N con. Nền cho lớp trải nghiệm (R7-02). Field phẳng cũ
@@ -1293,6 +1337,9 @@ model Class {
   startDate    DateTime? @db.Timestamptz(6)
   endDate      DateTime? @db.Timestamptz(6)
   scheduleDays Int[]     @default([]) // 0=CN, 1=T2, ..., 6=T7
+  // BGĐ 31/07 — 2-phase: startTime/endTime là giờ CHUNG cả tuần (giữ nguyên cho lớp
+  // cũ + làm fallback). Lớp có ca KHÁC GIỜ theo thứ (vd 17h30-T2 & 08h-T6) dùng
+  // scheduleSlots; đọc qua helper lib/classes/slots.ts (KHÔNG đọc trực tiếp 2 field này).
   startTime    String? // "HH:mm"
   endTime      String? // "HH:mm"
 
@@ -1329,6 +1376,7 @@ model Class {
   enrollments     Enrollment[]
   sessions        ClassSession[]
   sessionPlans    ClassSessionPlan[] // R7-06
+  scheduleSlots   ClassScheduleSlot[] // BGĐ 31/07 — giờ học riêng theo từng thứ
   exams           Exam[]
   assignments     Assignment[]
   progressReports ProgressReportLog[]
@@ -1347,6 +1395,25 @@ model Class {
   @@index([courseId, status])
   @@index([roomId])
   @@index([orgUnitId])
+}
+
+// BGĐ 31/07 — GIỜ HỌC RIÊNG THEO TỪNG THỨ (lớp 2 ca khác giờ: 17h30-T2 & 08h-T6).
+// 2-phase: lớp KHÔNG có slot → dùng Class.startTime/endTime chung như trước.
+// Mỗi thứ tối đa 1 ca (lớp không học 2 ca cùng 1 thứ).
+model ClassScheduleSlot {
+  id      String @id @default(cuid())
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  weekday   Int // 0=CN, 1=T2, ..., 6=T7
+  startTime String // "HH:mm"
+  endTime   String? // "HH:mm"
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([classId, weekday])
+  @@index([classId])
 }
 
 model Enrollment {
@@ -1392,6 +1459,12 @@ model Enrollment {
   transferredFrom Enrollment[] @relation("EnrollmentTransfer")
   transferReason  String?      @db.Text
 
+  // BGĐ 31/07 — TÁI TỤC: ghi danh mới trỏ về ghi danh KHOÁ TRƯỚC của cùng HV.
+  // isRenewal (hoa hồng C10.3: tái tục KHÔNG hưởng 4 tầng) suy từ field này ≠ null.
+  renewedFromEnrollmentId String?
+  renewedFrom             Enrollment?  @relation("EnrollmentRenewal", fields: [renewedFromEnrollmentId], references: [id], onDelete: SetNull)
+  renewals                Enrollment[] @relation("EnrollmentRenewal")
+
   // Other
   notes String? @db.Text
 
@@ -1432,6 +1505,7 @@ model Enrollment {
   @@index([saleId]) // T3.2 — lọc "học viên của sale X"
   @@index([centerId])
   @@index([leadChildId])
+  @@index([renewedFromEnrollmentId])
 }
 
 model EnrollmentAuditLog {
@@ -2522,6 +2596,8 @@ model Assignment {
   submissions AssignmentSubmission[]
   documents   AssignmentDocument[]
   questions   Question[]             @relation("AssignmentQuestions")
+  // BGĐ 31/07 — file GV upload trực tiếp khi giao bài (khác documents = ngân hàng).
+  attachments AssignmentAttachment[]
 
   // FL-R2 W5 (R2-LMS-4) — idempotent tự sinh từ template: 1 template → tối đa 1
   // Assignment/lớp. templateId nullable → bài tạo tay (templateId NULL) KHÔNG bị ràng.
@@ -2559,6 +2635,8 @@ model AssignmentTemplate {
   instances         Assignment[]
   // FL1-06 (R2) — câu hỏi gắn vào template (từ ngân hàng) để khi sinh bài giao thì CLONE sang Assignment.
   templateQuestions AssignmentTemplateQuestion[]
+  // BGĐ 31/07 — file GV upload khi soạn đề; khi giao bài được copy tham chiếu sang Assignment.
+  attachments       AssignmentAttachment[]
 
   @@index([lessonId])
   @@index([curriculumId])
@@ -2618,10 +2696,53 @@ model AssignmentSubmission {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   rubricScores SubmissionRubricScore[]
+  // BGĐ 31/07 — HV nộp NHIỀU file+ảnh (2-phase: cột fileUrl đơn ở trên GIỮ NGUYÊN,
+  // luôn = file đầu tiên để màn cũ không vỡ).
+  files        AssignmentSubmissionFile[]
 
   @@unique([assignmentId, studentId])
   @@index([status, assignmentId])
   @@index([studentId])
+}
+
+// BGĐ 31/07 — file GV đính kèm trực tiếp (upload R2) khi soạn đề (templateId) hoặc
+// khi giao bài cho lớp (assignmentId) — đúng 1 trong 2 được set. Khác AssignmentDocument
+// (ngân hàng Document dùng lại): attachment là file 1-lần gắn chặt với đề/bài.
+model AssignmentAttachment {
+  id String @id @default(cuid())
+
+  templateId   String?
+  template     AssignmentTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  assignmentId String?
+  assignment   Assignment?         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  fileUrl  String
+  fileName String
+  fileSize Int?
+  mimeType String?
+
+  // User.id người upload — audit flat, không relation.
+  uploadedById String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([templateId])
+  @@index([assignmentId])
+}
+
+// BGĐ 31/07 — nhiều file/ảnh cho MỘT bài nộp của HV.
+model AssignmentSubmissionFile {
+  id           String               @id @default(cuid())
+  submissionId String
+  submission   AssignmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  fileUrl  String
+  fileName String
+  fileSize Int?
+  mimeType String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([submissionId])
 }
 
 // ─── Phase E7 — Audit log for generated PDF reports ──────────────────────
@@ -3154,6 +3275,17 @@ model Order {
   installmentApprovedAt     DateTime?                  @db.Timestamptz(6)
   installmentRejectReason   String?                    @db.Text
 
+  // BGĐ 31/07 — GIẢM GIÁ do nhân viên nhập tay: nhập theo % hoặc số tiền, BẮT BUỘC
+  // giải trình, Quản lý cơ sở duyệt trước khi đơn được xác nhận. Giảm giá từ VOUCHER
+  // (chính sách đã duyệt sẵn) KHÔNG đi qua luồng này → discountApprovalStatus = null.
+  discountPercent        Int? // 1..100 khi nhập theo %; null = nhập số tiền tuyệt đối
+  discountReason         String?                 @db.Text
+  discountApprovalStatus DiscountApprovalStatus?
+  discountRequestedById  String?
+  discountApprovedById   String?
+  discountApprovedAt     DateTime?               @db.Timestamptz(6)
+  discountRejectReason   String?                 @db.Text
+
   customerNote String? @db.Text
   internalNote String? @db.Text
 
@@ -3193,6 +3325,13 @@ enum InstallmentStatus {
 
 // FIX lead→payment→enroll (M0/C4) — trạng thái duyệt kế hoạch thanh toán 2 đợt.
 enum InstallmentApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+// BGĐ 31/07 — trạng thái duyệt GIẢM GIÁ nhập tay (Quản lý cơ sở duyệt).
+enum DiscountApprovalStatus {
   PENDING_APPROVAL
   APPROVED
   REJECTED

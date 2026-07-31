@@ -6,7 +6,7 @@ import type { Role } from "@prisma/client";
 
 // Phase T0.1 — nhãn role tiếng Việt (8 roles).
 export const ROLE_LABELS: Record<Role, string> = {
-  SUPER_ADMIN: "Super Admin",
+  SUPER_ADMIN: "Quản trị tối cao",
   CENTER_MANAGER: "Quản lý cơ sở",
   HR: "Nhân sự",
   SALES_CSM: "Tư vấn & Chăm sóc",

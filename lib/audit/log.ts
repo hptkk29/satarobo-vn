@@ -47,6 +47,7 @@ export type UserAuditAction =
   | "DISABLE"
   | "ENABLE"
   | "PASSWORD_RESET"
+  | "PASSWORD_CHANGE"
   | "ROLE_CHANGE";
 
 export async function logUserAudit(params: {

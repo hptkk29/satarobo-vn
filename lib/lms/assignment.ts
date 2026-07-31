@@ -277,6 +277,10 @@ export async function generateAssignmentsFromTemplates(opts: {
       totalPoints: true,
       allowText: true,
       allowFile: true,
+      // BGĐ 31/07 — file đề bài đính kèm: copy tham chiếu sang bài giao.
+      attachments: {
+        select: { fileUrl: true, fileName: true, fileSize: true, mimeType: true, uploadedById: true },
+      },
       templateQuestions: {
         orderBy: { order: "asc" },
         select: {
@@ -338,6 +342,15 @@ export async function generateAssignmentsFromTemplates(opts: {
           status: "DRAFT",
           questions: {
             create: t.templateQuestions.map((tq) => cloneQuestionForAssignment(tq.question)),
+          },
+          attachments: {
+            create: t.attachments.map((f) => ({
+              fileUrl: f.fileUrl,
+              fileName: f.fileName,
+              fileSize: f.fileSize,
+              mimeType: f.mimeType,
+              uploadedById: f.uploadedById,
+            })),
           },
         },
       });

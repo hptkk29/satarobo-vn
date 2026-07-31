@@ -94,13 +94,20 @@ export default async function OrderDetailPage({ params }: Props) {
   // OD1b — duyệt kế hoạch trả góp 2 đợt tách khỏi orders:manage (ACCOUNTANT không có quyền duyệt).
   // order đã fetch có centerId → truyền target để scope-aware (CENTER nếu có role seed sau này).
   const canApprove = await checkPermission("installments:approve", { centerId: order.centerId });
+  // BGĐ 31/07 — duyệt giảm giá nhập tay (Quản lý cơ sở).
+  const canApproveDiscount = await checkPermission("discounts:approve", {
+    centerId: order.centerId,
+  });
 
   // Commit 4 — thanh toán 2 đợt + QR (nội dung CK: tên HV + SĐT PH + tên khoá).
-  const payCfg = await getPaymentConfig();
+  // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN THEO CƠ SỞ của đơn (fallback cấu hình chung).
+  const payCfg = await getPaymentConfig(order.centerId);
   const transferContent = buildTransferContent(
     order.student?.name ?? order.customerName,
     order.customerPhone,
     order.items[0]?.itemName,
+    // BGĐ 31/07 — mã đơn trong nội dung CK để webhook SePay tự khớp & xác nhận.
+    order.code,
   );
   const qrUrl = buildVietQrImageUrl(payCfg, order.totalAmount, transferContent);
 
@@ -208,6 +215,7 @@ export default async function OrderDetailPage({ params }: Props) {
         }
         canManage={canManage}
         canApprove={canApprove}
+        canApproveDiscount={canApproveDiscount}
         qrUrl={qrUrl}
         transferContent={transferContent}
         paymentMethods={paymentMethods}

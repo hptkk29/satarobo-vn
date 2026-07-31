@@ -97,6 +97,8 @@ const vietqrSchema = z.object({
   bankBin: z.string().trim().regex(/^\d{6}$/, "Mã ngân hàng (BIN) gồm 6 chữ số"),
   accountNumber: z.string().trim().min(6, "Số tài khoản không hợp lệ").max(30),
   accountName: z.string().trim().min(2, "Tên chủ TK quá ngắn").max(120),
+  // BGĐ 31/07 — cấu hình cho TỪNG CƠ SỞ (null/rỗng = cấu hình chung, fallback).
+  centerId: z.string().trim().optional().nullable(),
 });
 
 export async function setVietQrConfig(input: unknown): Promise<{ ok: boolean; error?: string }> {
@@ -107,7 +109,9 @@ export async function setVietQrConfig(input: unknown): Promise<{ ok: boolean; er
   const parsed = vietqrSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
 
-  await setPaymentConfig(parsed.data);
+  const { centerId, ...cfg } = parsed.data;
+  await setPaymentConfig(cfg, centerId || null);
   revalidatePath("/admin/tich-hop");
+  revalidatePath("/tich-hop");
   return { ok: true };
 }

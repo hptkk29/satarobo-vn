@@ -8,6 +8,7 @@ import { genStudentCodeV2 } from "@/lib/codegen";
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
+import { canonicalPhone } from "@/lib/phone";
 import type { CourseDiscountType } from "@prisma/client";
 
 export type ConvertV2Result =
@@ -192,7 +193,11 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
               parentUserId: parent.id,
               centerId: lead.centerId,
               parentName: input.parentName,
-              parentPhone: input.parentPhone.replace(/\D/g, ""),
+              // AUTH-SĐT P1 (gom tồn dư 31/07) — ĐƯỜNG GHI phải ra canonical `84…`.
+              // `replace(/\D/g,"")` cũ giữ nguyên `0905…` ⇒ mỗi lần convert lại bào mòn
+              // kết quả backfill 29/07. Giữ nguyên fallback digit-strip cho đầu vào không
+              // chuẩn hoá được (số cố định gọi thẳng từ lib) — không đổi hành vi ca đó.
+              parentPhone: canonicalPhone(input.parentPhone) ?? input.parentPhone.replace(/\D/g, ""),
               parentEmail: input.parentEmail.trim().toLowerCase(),
             },
             select: { id: true },

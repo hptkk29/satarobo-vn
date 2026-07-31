@@ -24,6 +24,8 @@ export type ClassFormValue = {
   scheduleDays: number[];
   startTime: string | null;
   endTime: string | null;
+  // BGĐ 31/07 — giờ riêng theo thứ (lớp 2 ca khác giờ).
+  scheduleSlots?: { weekday: number; startTime: string; endTime: string | null }[];
   maxStudents: number;
   minStudents: number;
   status: "PLANNED" | "RECRUITING" | "PENDING_APPROVAL" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -131,6 +133,17 @@ export function ClassForm({
   const [assistantId, setAssistantId] = useState<string>(cls?.assistantId ?? "");
   const [scheduleDays, setScheduleDays] = useState<number[]>(cls?.scheduleDays ?? []);
   const [startTime, setStartTime] = useState<string>(cls?.startTime ?? "");
+  // BGĐ 31/07 — giờ RIÊNG theo từng thứ (lớp 2 ca khác giờ, vd 17h30-T2 & 08h-T6).
+  // Bỏ trống 1 thứ = dùng giờ chung bên dưới. Key = weekday.
+  const [daySlots, setDaySlots] = useState<Record<number, { start: string; end: string }>>(
+    () => {
+      const init: Record<number, { start: string; end: string }> = {};
+      for (const s of cls?.scheduleSlots ?? []) {
+        init[s.weekday] = { start: s.startTime, end: s.endTime ?? "" };
+      }
+      return init;
+    },
+  );
   // T3.4 — tên lớp: khi TẠO MỚI và chưa gõ tay thì bám theo gợi ý quy ước (tự đổi
   // khi chọn khoá/giờ/thứ/phòng). Gõ tay 1 chữ là dừng bám (tên là free-text).
   const [name, setName] = useState<string>(cls?.name ?? "");
@@ -183,9 +196,13 @@ export function ClassForm({
       courseSlug: course?.slug ?? null,
       scheduleDays,
       startTime,
+      // BGĐ 31/07 — giờ riêng theo thứ vào thẳng tên gợi ý (sata4.17h30-T2&08h-T6.P302).
+      slots: scheduleDays
+        .filter((d) => daySlots[d]?.start)
+        .map((d) => ({ weekday: d, startTime: daySlots[d]!.start })),
       roomCode: room?.code ?? null,
     });
-  }, [courses, courseId, rooms, roomId, scheduleDays, startTime]);
+  }, [courses, courseId, rooms, roomId, scheduleDays, startTime, daySlots]);
   // Chưa gõ tay → ô tên bám gợi ý (rỗng thì để trống cho người dùng tự nhập).
   const nameValue = nameTouched ? name : suggestedName;
 
@@ -207,6 +224,19 @@ export function ClassForm({
     const formData = new FormData(e.currentTarget);
     formData.delete("scheduleDays");
     for (const d of scheduleDays) formData.append("scheduleDays", String(d));
+    // BGĐ 31/07 — giờ riêng theo thứ (chỉ gửi thứ đang học + có nhập giờ).
+    formData.set(
+      "scheduleSlots",
+      JSON.stringify(
+        scheduleDays
+          .filter((d) => daySlots[d]?.start)
+          .map((d) => ({
+            weekday: d,
+            startTime: daySlots[d]!.start,
+            endTime: daySlots[d]!.end || null,
+          })),
+      ),
+    );
 
     const res = isEdit
       ? await updateClass(cls!.id, formData)
@@ -508,6 +538,76 @@ export function ClassForm({
               required
             />
           </Grid>
+
+          {/* BGĐ 31/07 — lớp có ca KHÁC GIỜ theo thứ (vd 17h30-T2 & 08h-T6).
+              Bỏ trống 1 thứ = dùng giờ chung ở trên. */}
+          {scheduleDays.length > 0 && (
+            <div>
+              <span className="mb-2 block text-sm font-semibold text-neutral-700">
+                Giờ riêng theo thứ (nếu lớp có ca khác giờ)
+              </span>
+              <div className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50/50 p-2.5">
+                {[...scheduleDays]
+                  .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+                  .map((d) => {
+                    const label =
+                      WEEKDAY_OPTIONS.find((o) => o.value === d)?.label ?? String(d);
+                    const slot = daySlots[d] ?? { start: "", end: "" };
+                    return (
+                      <div key={d} className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="w-10 font-medium text-neutral-700">{label}</span>
+                        <input
+                          type="time"
+                          value={slot.start}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            setDaySlots((prev) => ({
+                              ...prev,
+                              [d]: { ...slot, start: e.target.value },
+                            }))
+                          }
+                          aria-label={`Giờ bắt đầu ${label}`}
+                          className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-[#7C3AED]"
+                        />
+                        <span className="text-neutral-400">→</span>
+                        <input
+                          type="time"
+                          value={slot.end}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            setDaySlots((prev) => ({
+                              ...prev,
+                              [d]: { ...slot, end: e.target.value },
+                            }))
+                          }
+                          aria-label={`Giờ kết thúc ${label}`}
+                          className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-[#7C3AED]"
+                        />
+                        {slot.start && canEdit && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDaySlots((prev) => {
+                                const next = { ...prev };
+                                delete next[d];
+                                return next;
+                              })
+                            }
+                            className="text-xs font-semibold text-neutral-500 hover:text-red-600"
+                          >
+                            Dùng giờ chung
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+              <p className="mt-1 text-xs text-neutral-500">
+                Bỏ trống = dùng giờ chung ở trên. Điền khi lớp học 2 ca khác giờ (vd
+                17:30 thứ 2 và 08:00 thứ 6).
+              </p>
+            </div>
+          )}
 
           {/* QA 21/07 (B5) — trước đây thiếu ô "Số HS tối thiểu": server mặc định
               min=5 rồi báo "min phải <= max" khi max nhỏ mà admin không có chỗ sửa. */}

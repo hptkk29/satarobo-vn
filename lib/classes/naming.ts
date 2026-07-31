@@ -34,8 +34,13 @@ export interface BuildClassDisplayNameInput {
   courseSlug?: string | null;
   /** 0=CN … 6=T7 */
   scheduleDays: number[];
-  /** Giờ bắt đầu "HH:mm" — model chỉ có 1 giờ chung cho mọi thứ trong tuần. */
+  /** Giờ bắt đầu "HH:mm" chung cả tuần (dùng khi lớp KHÔNG có slot riêng theo thứ). */
   startTime?: string | null;
+  /**
+   * BGĐ 31/07 — giờ RIÊNG theo từng thứ (lớp 2 ca khác giờ). Có phần tử thì THẮNG
+   * `startTime` chung → tên ra đúng dạng `sata4.17h30-T2&08h-T6.P302`.
+   */
+  slots?: { weekday: number; startTime: string }[] | null;
   /** Room.code, vd "P302" */
   roomCode?: string | null;
 }
@@ -43,9 +48,6 @@ export interface BuildClassDisplayNameInput {
 /**
  * Gợi ý tên lớp theo convention. Thiếu dữ liệu thì BỎ đoạn đó (không chèn dấu chấm
  * thừa); thiếu hết → chuỗi rỗng (form giữ tên người dùng tự nhập).
- *
- * ⚠️ Model hiện chỉ có MỘT `startTime` cho cả tuần → mọi thứ dùng chung giờ đó
- * (`17h30-T2&17h30-T6`). Lớp thật có 2 ca khác giờ thì sửa tay — tên là free-text.
  */
 export function buildClassDisplayName(input: BuildClassDisplayNameInput): string {
   const parts: string[] = [];
@@ -53,14 +55,31 @@ export function buildClassDisplayName(input: BuildClassDisplayNameInput): string
   const course = classCourseToken(input.courseCode, input.courseSlug);
   if (course) parts.push(course);
 
-  const time = formatClassTimeToken(input.startTime);
-  const days = [...new Set(input.scheduleDays)]
+  // Giờ theo từng thứ: ưu tiên slot riêng, lùi về giờ chung.
+  const slotTime = new Map<number, string>();
+  for (const s of input.slots ?? []) {
+    if (Number.isInteger(s.weekday) && s.weekday >= 0 && s.weekday <= 6 && s.startTime) {
+      if (!slotTime.has(s.weekday)) slotTime.set(s.weekday, s.startTime);
+    }
+  }
+  const commonTime = formatClassTimeToken(input.startTime);
+
+  // Tập thứ: scheduleDays là nguồn chính (đặt giờ riêng cho 1 thứ KHÔNG làm mất
+  // các thứ còn lại); chưa chọn thứ nào thì suy từ slot.
+  const declared = [...new Set(input.scheduleDays)].filter(
+    (d) => Number.isInteger(d) && d >= 0 && d <= 6,
+  );
+  const days = (declared.length > 0 ? declared : [...slotTime.keys()])
     .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
     // T2..T7 trước, CN cuối (đọc theo tuần học thay vì 0..6).
     .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b));
+
   if (days.length > 0) {
     const token = days
-      .map((d) => (time ? `${time}-${WEEKDAY_LABEL[d]}` : WEEKDAY_LABEL[d]))
+      .map((d) => {
+        const time = formatClassTimeToken(slotTime.get(d)) ?? commonTime;
+        return time ? `${time}-${WEEKDAY_LABEL[d]}` : WEEKDAY_LABEL[d];
+      })
       .join("&");
     parts.push(token);
   }

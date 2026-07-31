@@ -252,6 +252,7 @@ export type Action =
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
+  | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
   | "orders:manage"
   | "orders:view-pii" // che SĐT/email/địa chỉ khách trên đơn hàng — vai CRM/kế toán mới xem đầy đủ
@@ -567,6 +568,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // gate v2 ở wrapper rồi bị chính lib chặn. CENTER_MANAGER giữ ở v1 cho tới khi flip:
   // gate thật nằm ở `checkPermission` trong _installment-approval-actions.ts.
   "installments:approve": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // BGĐ 31/07 — duyệt giảm giá: Quản lý cơ sở (người đệ trình là Sale/CSKH cơ sở).
+  // ACCOUNTANT giữ như installments:approve để kế toán Hội sở không bị lib chặn sau flip v2.
+  "discounts:approve": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   // Xem đầy đủ liên hệ khách trên đơn (CRM + kế toán); vai khác thấy bản che.

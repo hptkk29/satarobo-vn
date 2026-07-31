@@ -43,7 +43,8 @@ export function OrderInstallmentPlan({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [dot1, setDot1] = useState(installments.find((i) => i.soDot === 1)?.amount ?? totalAmount);
-  const [dot2, setDot2] = useState(installments.find((i) => i.soDot === 2)?.amount ?? 0);
+  // BGĐ 31/07 — đợt 2 tự tính = Tổng − đợt 1, không nhập tay (server vẫn validate tổng 2 đợt).
+  const dot2 = Math.max(0, totalAmount - dot1);
   const [dot2Due, setDot2Due] = useState(
     installments.find((i) => i.soDot === 2)?.dueDate?.slice(0, 10) ?? "",
   );
@@ -147,12 +148,12 @@ export function OrderInstallmentPlan({
           <p className="text-xs font-semibold text-neutral-500">Thiết lập tối đa 2 đợt (tổng = {vnd(totalAmount)})</p>
           <label className="block text-sm">
             <span className="text-xs text-neutral-500">Đợt 1 — đã thu (đ)</span>
-            <input type="number" min={0} value={dot1} onChange={(e) => setDot1(Number(e.target.value) || 0)} className="mt-0.5 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <input type="number" min={0} max={totalAmount} value={dot1} onChange={(e) => setDot1(Math.min(totalAmount, Math.max(0, Number(e.target.value) || 0)))} className="mt-0.5 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-sm">
-              <span className="text-xs text-neutral-500">Đợt 2 — còn lại (đ)</span>
-              <input type="number" min={0} value={dot2} onChange={(e) => setDot2(Number(e.target.value) || 0)} className="mt-0.5 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+              <span className="text-xs text-neutral-500">Đợt 2 — tự tính (đ)</span>
+              <input type="number" value={dot2} readOnly aria-readonly className="mt-0.5 w-full rounded-md border border-neutral-300 bg-neutral-50 px-2 py-1.5 text-sm text-neutral-600" />
             </label>
             <label className="block text-sm">
               <span className="text-xs text-neutral-500">Hẹn đóng đợt 2</span>

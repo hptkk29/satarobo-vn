@@ -88,6 +88,8 @@ export interface RouteInput {
  * root path (không prefix `/admin`). Thêm route admin mới? Thêm segment vào đây.
  */
 export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
+  // BGĐ 31/07 — nguồn giới thiệu (affiliate).
+  "affiliates",
   "assignments",
   "attendance",
   "audit-log",
@@ -111,6 +113,9 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "crm",
   "curriculums",
   "dashboard",
+  // BGĐ 31/07 — màn duyệt đơn GV + hộp thư đề xuất sửa giáo án.
+  "de-xuat-giao-an",
+  "don-tu",
   "design-system-preview",
   "design-system-preview-v2",
   "documents",
@@ -384,6 +389,16 @@ export function decideRoute(input: RouteInput): RouteDecision {
       return { type: "next" };
     }
 
+    // BGĐ 31/07 — trang đổi MK bắt buộc (app/(auth)/doi-mat-khau): cần login,
+    // phục vụ tại chỗ (KHÔNG rewrite /teacher/*) — layout các khu redirect về đây
+    // khi User.mustChangePassword bật.
+    if (pathname === "/doi-mat-khau") {
+      if (!authed) {
+        return { type: "redirectPath", path: "/login", reason: invalidReason };
+      }
+      return { type: "next" };
+    }
+
     if (!authed) {
       return {
         type: "redirectPath",
@@ -478,6 +493,17 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (pathname === "/kich-hoat") {
       if (isStaff) return { type: "redirectPath", path: STAFF_HOME };
       if (isParent) return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      return { type: "next" };
+    }
+
+    // BGĐ 31/07 — trang đổi MK bắt buộc: cần login, phục vụ tại admin host.
+    if (pathname === "/doi-mat-khau") {
+      if (!authed) {
+        return { type: "redirectPath", path: "/login", reason: invalidReason };
+      }
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
       return { type: "next" };
     }
 

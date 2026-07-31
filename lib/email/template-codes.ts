@@ -28,6 +28,25 @@ const html = (title: string, lines: string[]) =>
   </div>`;
 
 export const EMAIL_TEMPLATE_DEFS: Record<string, EmailTemplateDef> = {
+  // BGĐ 31/07 — gửi khi admin CẤP tài khoản nhân sự / reset mật khẩu.
+  // ⚠️ Email này gửi TRỰC TIẾP qua lib/email/staff-account.ts (KHÔNG qua EmailQueue —
+  // password không được nằm trong payload/bodyText DB; EmailLog lưu bản đã mask).
+  STAFF_ACCOUNT_GRANTED: {
+    name: "Cấp tài khoản nhân sự",
+    description:
+      "Gửi nhân sự khi được cấp tài khoản mới hoặc reset mật khẩu. Chứa thông tin đăng nhập + yêu cầu đổi mật khẩu ngay.",
+    availableVariables: ["staffName", "loginId", "password", "loginUrl"],
+    subject: "Cấp tài khoản từ Sata Robo",
+    bodyText: `Chào {{staffName}},\nBạn được cấp tài khoản hệ thống Sata Robo:\n- Tài khoản đăng nhập: {{loginId}}\n- Mật khẩu: {{password}}\n- Đăng nhập tại: {{loginUrl}}\nVì lý do bảo mật, hệ thống sẽ YÊU CẦU BẠN ĐỔI MẬT KHẨU ngay lần đăng nhập đầu tiên. Không chia sẻ email này cho người khác.${FOOT_TEXT}`,
+    bodyHtml: html("Cấp tài khoản từ Sata Robo", [
+      "Chào <b>{{staffName}}</b>,",
+      "Bạn được cấp tài khoản hệ thống Sata Robo:",
+      "Tài khoản đăng nhập: <b>{{loginId}}</b>",
+      "Mật khẩu: <b>{{password}}</b>",
+      'Đăng nhập tại: <a href="{{loginUrl}}">{{loginUrl}}</a>',
+      "Vì lý do bảo mật, hệ thống sẽ <b>yêu cầu bạn đổi mật khẩu</b> ngay lần đăng nhập đầu tiên. Không chia sẻ email này cho người khác.",
+    ]),
+  },
   ACCOUNT_ACTIVATED: {
     name: "Tài khoản phụ huynh kích hoạt",
     description: "Gửi khi tài khoản portal của phụ huynh được kích hoạt.",

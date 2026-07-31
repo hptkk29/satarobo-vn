@@ -36,7 +36,20 @@ export default async function AssignmentDetailPage({ params }: Props) {
   const documents = await Promise.all(
     a.documents.map(async (d) => ({ ...d, fileUrl: await resolveMediaUrl(d.fileUrl) })),
   );
-  const initialFileUrl = sub?.fileUrl ? await resolveMediaUrl(sub.fileUrl) : null;
+  // BGĐ 31/07 — file GV upload trực tiếp khi giao bài.
+  const attachments = await Promise.all(
+    a.attachments.map(async (f) => ({ ...f, fileUrl: await resolveMediaUrl(f.fileUrl) })),
+  );
+  // BGĐ 31/07 — bài nộp nhiều file; fallback cột đơn cũ khi chưa có bản ghi files.
+  const subFiles =
+    sub && sub.files.length > 0
+      ? sub.files.map((f) => ({ url: f.fileUrl, name: f.fileName, size: f.fileSize ?? 0, mime: f.mimeType ?? "" }))
+      : sub?.fileUrl
+        ? [{ url: sub.fileUrl, name: sub.fileName ?? "Tệp đã nộp", size: 0, mime: "" }]
+        : [];
+  const initialFiles = await Promise.all(
+    subFiles.map(async (f) => ({ ...f, url: await resolveMediaUrl(f.url) })),
+  );
 
   return (
     <div className="space-y-5">
@@ -70,7 +83,7 @@ export default async function AssignmentDetailPage({ params }: Props) {
             <p className="whitespace-pre-wrap">{a.instructions}</p>
           </div>
         )}
-        {documents.length > 0 && (
+        {(documents.length > 0 || attachments.length > 0) && (
           <div className="mt-3 flex flex-wrap gap-2">
             {documents.map((d) => (
               <a
@@ -81,6 +94,17 @@ export default async function AssignmentDetailPage({ params }: Props) {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
               >
                 <FileText className="h-3.5 w-3.5" /> {d.title}
+              </a>
+            ))}
+            {attachments.map((f) => (
+              <a
+                key={f.id}
+                href={f.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100"
+              >
+                <FileText className="h-3.5 w-3.5" /> {f.fileName}
               </a>
             ))}
           </div>
@@ -132,8 +156,7 @@ export default async function AssignmentDetailPage({ params }: Props) {
           allowText={a.allowText}
           allowFile={a.allowFile}
           initialText={sub?.textAnswer ?? null}
-          initialFileUrl={initialFileUrl}
-          initialFileName={sub?.fileName ?? null}
+          initialFiles={initialFiles}
           graded={graded}
         />
       </section>

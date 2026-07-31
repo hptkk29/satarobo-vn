@@ -256,6 +256,10 @@ export async function generateAssignmentFromTemplate(
       totalPoints: true,
       allowText: true,
       allowFile: true,
+      // BGĐ 31/07 — file đề bài đính kèm: copy tham chiếu sang bài giao.
+      attachments: {
+        select: { fileUrl: true, fileName: true, fileSize: true, mimeType: true, uploadedById: true },
+      },
     },
   });
   if (!template) return { ok: false, error: "Không tìm thấy mẫu bài tập" };
@@ -317,6 +321,20 @@ export async function generateAssignmentFromTemplate(
   try {
     const a = await sdb.$transaction(async (tx) => {
       const created = await tx.assignment.create({ data, select: { id: true } });
+
+      // BGĐ 31/07 — copy tham chiếu file đề bài của template sang bài giao.
+      if (template.attachments.length > 0) {
+        await tx.assignmentAttachment.createMany({
+          data: template.attachments.map((f) => ({
+            assignmentId: created.id,
+            fileUrl: f.fileUrl,
+            fileName: f.fileName,
+            fileSize: f.fileSize,
+            mimeType: f.mimeType,
+            uploadedById: f.uploadedById,
+          })),
+        });
+      }
 
       // Clone từng câu hỏi ngân hàng → Question mới gắn assignmentId, isPublic=false
       // (bản sở hữu, không chia sẻ). KHÔNG copy questionCode (unique) → để null.

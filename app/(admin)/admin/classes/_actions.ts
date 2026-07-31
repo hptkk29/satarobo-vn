@@ -18,6 +18,7 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { canTransition } from "@/lib/enrollments/status";
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { resolveClassSlots, applySlotTimeToDate } from "@/lib/classes/slots";
 import { suggestClassEndDate } from "@/lib/classes/end-date";
 import { generateClassSessions } from "@/lib/classes/generate";
 import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
@@ -185,6 +186,45 @@ async function resolveClassOrg(
   return { centerId, orgUnitId };
 }
 
+/**
+ * BGĐ 31/07 — đọc giờ riêng theo thứ từ form (JSON ở field `scheduleSlots`).
+ * Dữ liệu hỏng → [] (lớp dùng giờ chung như trước, không chặn lưu).
+ */
+function readScheduleSlots(
+  formData: FormData,
+  scheduleDays: number[],
+): { weekday: number; startTime: string; endTime: string | null }[] {
+  const raw = formData.get("scheduleSlots");
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const allowed = new Set(scheduleDays);
+  const seen = new Set<number>();
+  const out: { weekday: number; startTime: string; endTime: string | null }[] = [];
+  for (const item of parsed) {
+    if (typeof item !== "object" || item === null) continue;
+    const o = item as { weekday?: unknown; startTime?: unknown; endTime?: unknown };
+    const weekday = typeof o.weekday === "number" ? o.weekday : NaN;
+    const startTime = typeof o.startTime === "string" ? o.startTime.trim() : "";
+    // Chỉ nhận thứ ĐANG học + giờ hợp lệ + không trùng thứ (unique classId+weekday).
+    if (!Number.isInteger(weekday) || !allowed.has(weekday) || seen.has(weekday)) continue;
+    if (!/^\d{2}:\d{2}$/.test(startTime)) continue;
+    const endRaw = typeof o.endTime === "string" ? o.endTime.trim() : "";
+    seen.add(weekday);
+    out.push({
+      weekday,
+      startTime,
+      endTime: /^\d{2}:\d{2}$/.test(endRaw) ? endRaw : null,
+    });
+  }
+  return out;
+}
+
 function readForm(formData: FormData) {
   const scheduleDaysRaw = formData.getAll("scheduleDays");
   const scheduleDays = scheduleDaysRaw
@@ -250,6 +290,8 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
 
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
+  // BGĐ 31/07 — giờ riêng theo thứ (chỉ nhận thứ đang học).
+  const scheduleSlots = readScheduleSlots(formData, data.scheduleDays);
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
@@ -352,6 +394,10 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
           ...toCreateData(dataWithEndDate, classCode, centerId, orgUnitId),
           curriculumId: curriculum.id,
           curriculumVersion: curriculum.version,
+          // BGĐ 31/07 — giờ riêng theo thứ (rỗng → lớp dùng giờ chung như trước).
+          ...(scheduleSlots.length > 0
+            ? { scheduleSlots: { create: scheduleSlots } }
+            : {}),
         },
         select: { id: true, ...CLASS_SNAPSHOT_SELECT },
       });
@@ -476,6 +522,9 @@ export async function updateClass(
       }).catch(() => null)),
   };
 
+  // BGĐ 31/07 — giờ riêng theo thứ (chỉ nhận thứ đang học sau khi sửa lịch).
+  const scheduleSlots = readScheduleSlots(formData, parsed.data.scheduleDays);
+
   try {
     await sdb.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -484,6 +533,14 @@ export async function updateClass(
         data: toUpdateData(dataWithEndDate, centerId, orgUnitId),
         select: CLASS_SNAPSHOT_SELECT,
       });
+
+      // Thay TOÀN BỘ slot theo form: bỏ hết rồi ghi lại (rỗng = quay về giờ chung).
+      await tx.classScheduleSlot.deleteMany({ where: { classId: id } });
+      if (scheduleSlots.length > 0) {
+        await tx.classScheduleSlot.createMany({
+          data: scheduleSlots.map((s) => ({ classId: id, ...s })),
+        });
+      }
 
       await logClassAudit({
         classId: id,
@@ -705,10 +762,21 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
       endTime: true,
       teacherId: true,
       roomId: true,
+      // BGĐ 31/07 — giờ riêng theo thứ (lớp 2 ca khác giờ).
+      scheduleSlots: { select: { weekday: true, startTime: true, endTime: true } },
     },
   });
   if (!cls) return { ok: false as const, error: "Lớp không tồn tại" };
-  if (cls.scheduleDays.length === 0) {
+
+  // Lịch hiệu lực: slot riêng theo thứ (nếu có), lùi về scheduleDays + giờ chung.
+  const slots = resolveClassSlots({
+    scheduleDays: cls.scheduleDays,
+    startTime: cls.startTime,
+    endTime: cls.endTime,
+    slots: cls.scheduleSlots,
+  });
+  const scheduleDays = slots.map((s) => s.weekday);
+  if (scheduleDays.length === 0) {
     return { ok: false as const, error: "Lớp chưa có lịch (scheduleDays) để dời buổi" };
   }
 
@@ -739,34 +807,42 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   const from = startDay > tomorrow ? startDay : tomorrow;
   const newDates = computeSessionDates({
     from,
-    scheduleDays: cls.scheduleDays,
+    scheduleDays,
     count: future.length,
     holidays,
   });
 
-  // Giờ buổi = startTime của lớp (nếu có), giữ ngày mới.
-  const [hh, mm] = (cls.startTime ?? "00:00").split(":").map((x) => parseInt(x, 10));
+  // BGĐ 31/07 — giờ buổi lấy theo ĐÚNG THỨ của ngày mới (lớp 2 ca khác giờ).
   const items = future.map((s, i) => {
     const d = newDates[i] ?? new Date(s.date);
-    const nd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh || 0, mm || 0);
+    const nd = applySlotTimeToDate(d, slots);
     return { id: s.id, topic: s.topic, oldDate: s.date, newDate: nd };
   });
 
   // T4.1 — soát trùng PHÒNG/GV cho lô ngày MỚI trước khi dời cả lớp (trước đây
   // applyClassReschedule update date thẳng → double-book âm thầm). Loại chính các
   // buổi đang được dời khỏi phép so (chúng đang nhận ngày mới).
-  const conflicts = cls.startTime
-    ? await detectBatchConflicts({
-        centerId: null, // toàn hệ thống: GV có thể dạy 2 cơ sở
-        excludeClassId: classId,
-        excludeSessionIds: items.map((it) => it.id),
-        classStartTime: cls.startTime,
-        classEndTime: cls.endTime,
-        teacherId: cls.teacherId,
-        roomId: cls.roomId,
-        dates: items.map((it) => it.newDate),
-      }).catch(() => [])
-    : [];
+  // BGĐ 31/07 — soát theo TỪNG NHÓM THỨ với giờ của chính thứ đó (lớp 2 ca khác giờ).
+  const conflicts: { date: Date; messages: string[] }[] = [];
+  for (const slot of slots) {
+    if (!slot.startTime) continue;
+    const dates = items
+      .map((it) => it.newDate)
+      .filter((d) => d.getDay() === slot.weekday);
+    if (dates.length === 0) continue;
+    const found = await detectBatchConflicts({
+      centerId: null, // toàn hệ thống: GV có thể dạy 2 cơ sở
+      excludeClassId: classId,
+      excludeSessionIds: items.map((it) => it.id),
+      classStartTime: slot.startTime,
+      classEndTime: slot.endTime,
+      teacherId: cls.teacherId,
+      roomId: cls.roomId,
+      dates,
+    }).catch(() => []);
+    conflicts.push(...found);
+  }
+  conflicts.sort((a, b) => a.date.getTime() - b.date.getTime());
 
   return { ok: true as const, items, conflicts };
 }

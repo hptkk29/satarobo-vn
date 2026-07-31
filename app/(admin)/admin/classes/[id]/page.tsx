@@ -7,6 +7,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
+import { resolveClassSlots } from "@/lib/classes/slots";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ClassForm, type ClassFormValue } from "../_components/class-form";
 import { ClassApprovalActions } from "./_components/class-approval-actions";
@@ -92,6 +93,11 @@ export default async function ClassDetailPage({ params }: Props) {
         scheduleDays: true,
         startTime: true,
         endTime: true,
+        // BGĐ 31/07 — giờ riêng theo thứ (lớp 2 ca khác giờ).
+        scheduleSlots: {
+          select: { weekday: true, startTime: true, endTime: true },
+          orderBy: { weekday: "asc" },
+        },
         maxStudents: true,
         minStudents: true,
         status: true,
@@ -248,6 +254,7 @@ export default async function ClassDetailPage({ params }: Props) {
     scheduleDays: cls.scheduleDays ?? [],
     startTime: cls.startTime,
     endTime: cls.endTime,
+    scheduleSlots: cls.scheduleSlots ?? [],
     maxStudents: cls.maxStudents,
     minStudents: cls.minStudents,
     status: cls.status,
@@ -257,9 +264,21 @@ export default async function ClassDetailPage({ params }: Props) {
   const teacherName =
     teachers.find((t) => t.id === cls.teacherId)?.name ?? null;
   const badge = STATUS_BADGE[cls.status] ?? STATUS_BADGE.PLANNED;
-  const scheduleLabel = (cls.scheduleDays ?? [])
-    .map((d) => WEEKDAY_LABEL[d] ?? d)
+  // BGĐ 31/07 — hiển thị lịch kèm giờ CỦA TỪNG THỨ (lớp 2 ca khác giờ).
+  const effectiveSlots = resolveClassSlots({
+    scheduleDays: cls.scheduleDays ?? [],
+    startTime: cls.startTime,
+    endTime: cls.endTime,
+    slots: cls.scheduleSlots,
+  });
+  const scheduleLabel = effectiveSlots
+    .map((s) => {
+      const day = WEEKDAY_LABEL[s.weekday] ?? s.weekday;
+      return s.startTime ? `${day} ${s.startTime}` : `${day}`;
+    })
     .join(" · ");
+  // Có ca lệch giờ → ô "Giờ" chung không còn ý nghĩa, ghi rõ "theo từng thứ".
+  const hasPerDayTimes = new Set(effectiveSlots.map((s) => s.startTime)).size > 1;
 
   return (
     <div className="space-y-6">
@@ -297,7 +316,13 @@ export default async function ClassDetailPage({ params }: Props) {
           <HeaderItem label="Lịch học" value={scheduleLabel || "—"} />
           <HeaderItem
             label="Giờ"
-            value={cls.startTime ? `${cls.startTime}${cls.endTime ? `–${cls.endTime}` : ""}` : "—"}
+            value={
+              hasPerDayTimes
+                ? "Theo từng thứ"
+                : cls.startTime
+                  ? `${cls.startTime}${cls.endTime ? `–${cls.endTime}` : ""}`
+                  : "—"
+            }
           />
           <HeaderItem label="GV chính" value={teacherName ?? "Chưa phân"} />
           <HeaderItem label="Sĩ số" value={`${cls._count.enrollments}/${cls.maxStudents}`} />

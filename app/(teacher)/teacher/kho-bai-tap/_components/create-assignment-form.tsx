@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AttachmentUpload, type UploadedFile } from "@/components/assignments/attachment-upload";
 import { createOwnTemplateAction } from "../_actions";
 
 type QType = "MULTIPLE_CHOICE" | "ESSAY";
@@ -63,6 +64,8 @@ export function CreateAssignmentForm() {
   const [description, setDescription] = useState("");
   const [totalPoints, setTotalPoints] = useState("10");
   const [questions, setQuestions] = useState<DraftQuestion[]>([makeMcq()]);
+  // BGĐ 31/07 — GV đính kèm file+ảnh đề bài (upload trực tiếp R2).
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [pending, start] = useTransition();
 
   // ── mutators (immutable) ──────────────────────────────────────────────────
@@ -134,6 +137,12 @@ export function CreateAssignmentForm() {
       kind,
       description: description.trim(),
       totalPoints: Number(totalPoints),
+      attachments: attachments.map((f) => ({
+        fileUrl: f.url,
+        fileName: f.name,
+        fileSize: f.size || null,
+        mimeType: f.mime || null,
+      })),
       questions: questions.map((q) =>
         q.type === "MULTIPLE_CHOICE"
           ? {
@@ -210,6 +219,12 @@ export function CreateAssignmentForm() {
             onChange={(e) => setTotalPoints(e.target.value)}
           />
         </div>
+      </div>
+
+      {/* Đính kèm file+ảnh đề bài (BGĐ 31/07) */}
+      <div className="space-y-1.5">
+        <Label>Tệp đính kèm đề bài (không bắt buộc)</Label>
+        <AttachmentUpload value={attachments} onChange={setAttachments} disabled={pending} />
       </div>
 
       {/* Danh sách câu hỏi */}

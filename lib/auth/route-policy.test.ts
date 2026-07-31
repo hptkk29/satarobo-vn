@@ -850,3 +850,57 @@ describe("Invariants bảo mật", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// H. /doi-mat-khau — trang đổi MK bắt buộc (BGĐ 31/07, mustChangePassword)
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("H. /doi-mat-khau (đổi mật khẩu bắt buộc)", () => {
+  it("admin host: staff đã login → next (phục vụ app/(auth)/doi-mat-khau)", () => {
+    for (const role of STAFF_ROLES.filter((r) => r !== "TEACHER")) {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: "/doi-mat-khau", ...authed(role) }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("admin host: chưa login → /login (không leak trang)", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/doi-mat-khau",
+        role: null,
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/login", reason: undefined });
+  });
+
+  it("admin host: PARENT → đá về portal", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/doi-mat-khau", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+  });
+
+  it("teacher host (flag ON): TEACHER đã login → next, KHÔNG rewrite /teacher/*", () => {
+    expect(
+      decideRoute({
+        hostKind: "teacher",
+        pathname: "/doi-mat-khau",
+        ...authed("TEACHER"),
+        teacherSiteEnabled: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("teacher host (flag ON): chưa login → /login", () => {
+    expect(
+      decideRoute({
+        hostKind: "teacher",
+        pathname: "/doi-mat-khau",
+        role: null,
+        sessionValid: false,
+        teacherSiteEnabled: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/login", reason: undefined });
+  });
+});

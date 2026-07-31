@@ -27,8 +27,13 @@ import { resetDb, seedRoles } from "../_helpers/seed";
 /** Role dùng làm mẫu đo — chọn role chắc chắn có perm sau khi seed. */
 const ROLE = "SUPER_ADMIN";
 
-/** Số lượt đếm tối thiểu để kết luận — dưới mức này là bộ đo chưa kịp chạy. */
-const MIN_POLLS = 5;
+/**
+ * Ngưỡng số lượt đếm — **CHỈ dùng cho ca có cửa sổ ĐẢM BẢO** (T1-11, có `GAP_MS`).
+ * ⚠️ KHÔNG áp cho T1-10: ở đó độ dài cửa sổ = thời gian chạy transaction, tuỳ tải máy.
+ * Đặt ngưỡng theo tốc độ máy ở T1-10 chính là nguyên nhân flake 31/07 (`polls = 1`
+ * khi chạy full suite trên máy nhanh, dù khẳng định thật `min === before` vẫn đúng).
+ */
+const MIN_POLLS_WITH_GAP = 5;
 
 /** Khoảng hở cố ý ở T1-11, đủ rộng để bộ đo bắt được cả khi CI chậm. */
 const GAP_MS = 250;
@@ -38,22 +43,34 @@ type PollResult = { min: number; polls: number };
 /**
  * Đếm liên tục `RolePermission` của một role trên **kết nối RIÊNG** — mô phỏng
  * request của người dùng khác đang chạy song song với lệnh seed.
+ *
+ * Trả về `firstPoll` để ca gọi **bắt tay**: chờ mẫu đầu tiên xong rồi mới bắt đầu
+ * việc cần quan sát ⇒ `min` luôn xác định, không phải đặt ngưỡng `polls` theo tốc độ máy.
+ * Mẫu trước-khi-seed KHÔNG làm yếu khẳng định: `min` là **cực tiểu trên MỌI mẫu**, nên
+ * một khoảng rỗng phát sinh sau đó vẫn kéo `min` về 0.
  */
 function startPoller(
   reader: PrismaClient,
   roleId: string,
   stop: { now: boolean },
-): Promise<PollResult> {
-  return (async () => {
+): { done: Promise<PollResult>; firstPoll: Promise<void> } {
+  let resolveFirst!: () => void;
+  const firstPoll = new Promise<void>((r) => {
+    resolveFirst = r;
+  });
+  const done = (async () => {
     let min = Number.POSITIVE_INFINITY;
     let polls = 0;
     while (!stop.now) {
       const c = await reader.rolePermission.count({ where: { roleId } });
       if (c < min) min = c;
       polls++;
+      if (polls === 1) resolveFirst();
     }
+    resolveFirst(); // stop ngay lập tức → không vòng nào chạy; đừng treo ca gọi
     return { min, polls };
   })();
+  return { done, firstPoll };
 }
 
 async function roleIdOf(code: string): Promise<string> {
@@ -85,12 +102,15 @@ test.describe("[A0-02] seedRoles nguyên tử (KB-06)", () => {
     expect(before, "role mẫu phải có ít nhất 1 RolePermission").toBeGreaterThan(0);
 
     const stop = { now: false };
-    const poller = startPoller(reader, rid, stop);
+    const { done, firstPoll } = startPoller(reader, rid, stop);
+    await firstPoll; // bắt tay: bộ đo đã có mẫu → khỏi phụ thuộc tốc độ máy
     await seedRoles(); // đường thật — đã bọc $transaction
     stop.now = true;
-    const { min, polls } = await poller;
+    const { min, polls } = await done;
 
-    expect(polls, "bộ đo phải chạy được ít nhất vài lượt").toBeGreaterThan(MIN_POLLS);
+    // KHÔNG đặt ngưỡng theo số lượt: độ dài transaction tuỳ tải máy (nguồn flake 31/07).
+    // Bắt tay `firstPoll` đã bảo đảm ≥ 1 mẫu, nên `min` luôn xác định.
+    expect(polls, "bộ đo không chạy được lượt nào").toBeGreaterThanOrEqual(1);
     // Điều được bảo vệ: kết nối khác KHÔNG BAO GIỜ thấy trạng thái trung gian.
     expect(min, "kết nối khác thấy RolePermission rỗng giữa lúc seed").toBe(before);
   });
@@ -104,7 +124,8 @@ test.describe("[A0-02] seedRoles nguyên tử (KB-06)", () => {
     expect(perms.length).toBeGreaterThan(0);
 
     const stop = { now: false };
-    const poller = startPoller(reader, rid, stop);
+    const { done, firstPoll } = startPoller(reader, rid, stop);
+    await firstPoll;
 
     // Tái hiện ĐÚNG đường cũ: hai lệnh rời nhau, không transaction.
     await db.rolePermission.deleteMany({ where: { roleId: rid } });
@@ -115,9 +136,10 @@ test.describe("[A0-02] seedRoles nguyên tử (KB-06)", () => {
     });
 
     stop.now = true;
-    const { min, polls } = await poller;
+    const { min, polls } = await done;
 
-    expect(polls).toBeGreaterThan(MIN_POLLS);
+    // Ở ĐÂY ngưỡng hợp lệ: cửa sổ dài GAP_MS cố định, không phụ thuộc tốc độ máy.
+    expect(polls).toBeGreaterThan(MIN_POLLS_WITH_GAP);
     // Nếu dòng này đỏ: bộ đo đã ngừng bắt được khoảng rỗng ⇒ T1-10 xanh là VÔ NGHĨA.
     expect(min, "bộ đo không bắt được khoảng rỗng của đường cũ ⇒ T1-10 mất giá trị").toBe(0);
 

@@ -10,12 +10,19 @@ export const dynamic = "force-dynamic";
 
 const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"];
 
-export default async function NewEnrollmentPage() {
+export default async function NewEnrollmentPage({
+  searchParams,
+}: {
+  // BGĐ 31/07 — TÁI TỤC: nút "Tái tục" ở /students/sap-het-khoa truyền
+  // ?studentId=…&renewedFrom=<enrollmentId> để pre-fill form.
+  searchParams: Promise<{ studentId?: string; renewedFrom?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!(await checkPermission("enrollments:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
+  const { studentId: prefillStudentId, renewedFrom } = await searchParams;
 
   // Cách ly cơ sở: Student + Class ∈ SCOPED_MODELS → sdb auto inject centerId,
   // CENTER_MANAGER@CS1 không thấy/đăng ký HS hay lớp của CS2.
@@ -64,6 +71,22 @@ export default async function NewEnrollmentPage() {
     }),
   ]);
 
+  // BGĐ 31/07 — TÁI TỤC: danh sách ghi danh cũ của HV pre-fill (chọn "khoá trước").
+  const previousEnrollments = prefillStudentId
+    ? await sdb.enrollment.findMany({
+        where: { studentId: prefillStudentId },
+        orderBy: { enrolledAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          centerId: true, // Enrollment ∈ SCOPED_MODELS — passesScope cần field này
+          course: { select: { name: true } },
+          class: { select: { name: true } },
+        },
+        take: 20,
+      })
+    : [];
+
   return (
     <div>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">
@@ -71,6 +94,12 @@ export default async function NewEnrollmentPage() {
       </h1>
       <EnrollForm
         students={students}
+        initialStudentId={prefillStudentId ?? null}
+        initialRenewedFrom={renewedFrom ?? null}
+        previousEnrollments={previousEnrollments.map((p) => ({
+          id: p.id,
+          label: `${p.course.name} — lớp ${p.class.name} (${p.status})`,
+        }))}
         classes={classes.map((c) => ({
           id: c.id,
           classCode: c.classCode,

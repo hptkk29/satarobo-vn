@@ -16,8 +16,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { assignUserOrgRoleAction, revokeUserOrgRoleAction } from "../actions";
+import { roleCodeLabel } from "@/lib/labels";
 
 type Opt = { id: string; code: string; name: string };
+
+// BGĐ 31/07 — Việt hoá trạng thái phân quyền (enum AssignStatus).
+const ASSIGN_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Hiệu lực",
+  SUSPENDED: "Tạm ngưng",
+  EXPIRED: "Hết hạn",
+};
 type Assignment = {
   orgUnitId: string;
   roleId: string;
@@ -105,7 +113,7 @@ export function OrgRolesManager({
             >
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.code}
+                  {r.name || roleCodeLabel(r.code)}
                 </option>
               ))}
             </select>
@@ -152,13 +160,17 @@ export function OrgRolesManager({
             ) : (
               assignments.map((a) => (
                 <TableRow key={`${a.orgUnitId}:${a.roleId}`}>
-                  <TableCell className="font-mono">{a.orgCode}</TableCell>
-                  <TableCell className="font-mono">{a.roleCode}</TableCell>
+                  <TableCell>
+                    {orgUnits.find((o) => o.id === a.orgUnitId)?.name ?? a.orgCode}
+                  </TableCell>
+                  <TableCell>
+                    {roles.find((r) => r.id === a.roleId)?.name ?? roleCodeLabel(a.roleCode)}
+                  </TableCell>
                   <TableCell>
                     {a.status === "ACTIVE" ? (
                       <Badge>Hiệu lực</Badge>
                     ) : (
-                      <Badge variant="outline">{a.status}</Badge>
+                      <Badge variant="outline">{ASSIGN_STATUS_LABELS[a.status] ?? a.status}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-neutral-500">

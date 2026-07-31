@@ -468,6 +468,8 @@ export type AssignmentDetail = {
   allowText: boolean;
   allowFile: boolean;
   documents: { id: string; title: string; fileUrl: string }[];
+  // BGĐ 31/07 — file GV upload trực tiếp khi giao bài (khác documents = ngân hàng).
+  attachments: { id: string; fileName: string; fileUrl: string; mimeType: string | null }[];
   submission: {
     status: string;
     textAnswer: string | null;
@@ -476,6 +478,8 @@ export type AssignmentDetail = {
     score: number | null;
     feedback: string | null;
     rubricScores: { criterion: RubricCriterion; level: RubricLevel }[];
+    // BGĐ 31/07 — nhiều file/ảnh mỗi bài nộp.
+    files: { id: string; fileUrl: string; fileName: string; fileSize: number | null; mimeType: string | null }[];
   } | null;
 };
 
@@ -499,6 +503,10 @@ export async function getAssignmentDetail(
       documents: {
         select: { document: { select: { id: true, title: true, fileUrl: true } } },
       },
+      attachments: {
+        select: { id: true, fileName: true, fileUrl: true, mimeType: true },
+        orderBy: { createdAt: "asc" },
+      },
       submissions: {
         where: { studentId },
         select: {
@@ -509,6 +517,10 @@ export async function getAssignmentDetail(
           score: true,
           feedback: true,
           rubricScores: { select: { criterion: true, level: true } },
+          files: {
+            select: { id: true, fileUrl: true, fileName: true, fileSize: true, mimeType: true },
+            orderBy: { createdAt: "asc" },
+          },
         },
         take: 1,
       },
@@ -526,6 +538,7 @@ export async function getAssignmentDetail(
     allowText: a.allowText,
     allowFile: a.allowFile,
     documents: a.documents.map((d) => d.document),
+    attachments: a.attachments,
     submission: a.submissions[0] ?? null,
   };
 }

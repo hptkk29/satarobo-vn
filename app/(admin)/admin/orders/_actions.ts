@@ -14,6 +14,8 @@ import {
 import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
+import { discountFromPercent, needsDiscountApproval } from "@/lib/orders/discount";
+import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
@@ -199,9 +201,25 @@ export async function createOrderManualAction(input: unknown) {
     data.discountAmount = voucherResult.discountAmount;
   }
 
+  // BGĐ 31/07 — giảm giá theo %: server tự quy ra số tiền (nguồn sự thật), chỉ áp
+  // khi KHÔNG dùng voucher (voucher đã tự tính discountAmount ở trên).
+  if (!voucherInfo && data.discountPercent && data.discountPercent > 0) {
+    data.discountAmount = discountFromPercent(subtotal, data.discountPercent);
+  }
+
   const totalAmount = subtotal - data.discountAmount + data.shippingFee;
   if (totalAmount < 0) {
     return { ok: false as const, error: "Tổng tiền không thể âm" };
+  }
+
+  // BGĐ 31/07 — giảm giá nhập tay phải qua duyệt của Quản lý cơ sở trước khi đơn
+  // được xác nhận (đơn tạo ra ở trạng thái chờ duyệt giảm giá).
+  const discountNeedsApproval = needsDiscountApproval({
+    discountAmount: data.discountAmount,
+    voucherCode: voucherInfo?.voucherCode ?? data.voucherCode,
+  });
+  if (discountNeedsApproval && !data.discountReason?.trim()) {
+    return { ok: false as const, error: "Nhập giải trình giảm giá" };
   }
 
   // PaymentMethod/Product là catalog toàn cục (không scoped) — scopedDb pass-through.
@@ -323,6 +341,11 @@ export async function createOrderManualAction(input: unknown) {
         paymentMethodId: data.paymentMethodId,
         subtotal,
         discountAmount: data.discountAmount,
+        // BGĐ 31/07 — snapshot cách nhập giảm giá + giải trình + cờ chờ duyệt.
+        discountPercent: !voucherInfo ? (data.discountPercent ?? null) : null,
+        discountReason: discountNeedsApproval ? (data.discountReason?.trim() ?? null) : null,
+        discountApprovalStatus: discountNeedsApproval ? "PENDING_APPROVAL" : null,
+        discountRequestedById: discountNeedsApproval ? actorId : null,
         shippingFee: data.shippingFee,
         totalAmount,
         voucherCode: voucherInfo?.voucherCode ?? data.voucherCode?.trim() ?? null,
@@ -514,10 +537,33 @@ export async function changeOrderStatusAction(
   // findUnique qua scopedDb đã chống IDOR (ngoài scope → null); giữ passesScope làm belt-and-suspenders.
   const order = await sdb.order.findUnique({
     where: { id: orderId },
-    select: { id: true, status: true, centerId: true, leadId: true, totalAmount: true },
+    select: {
+      id: true,
+      status: true,
+      centerId: true,
+      leadId: true,
+      totalAmount: true,
+      discountApprovalStatus: true,
+    },
   });
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+
+  // BGĐ 31/07 — đơn có giảm giá nhập tay chỉ được xác nhận sau khi QL cơ sở duyệt.
+  if (parsed.data.toStatus === "CONFIRMED" && order.discountApprovalStatus != null) {
+    if (order.discountApprovalStatus === "PENDING_APPROVAL") {
+      return {
+        ok: false as const,
+        error: "Giảm giá đang chờ Quản lý cơ sở duyệt — chưa thể xác nhận đơn",
+      };
+    }
+    if (order.discountApprovalStatus === "REJECTED") {
+      return {
+        ok: false as const,
+        error: "Giảm giá đã bị từ chối — sửa lại đơn trước khi xác nhận",
+      };
+    }
   }
 
   if (order.status === parsed.data.toStatus) {
@@ -603,6 +649,14 @@ export async function changeOrderStatusAction(
   if (order.leadId) {
     revalidatePath(`/leads/${order.leadId}`);
     revalidatePath(`/leads/${order.leadId}/convert`);
+  }
+
+  // BGĐ 31/07 — xác nhận thanh toán → tự cấp tài khoản phụ huynh theo SĐT + báo ZNS.
+  // Fire-and-forget, idempotent (đã có tài khoản → không tạo/gửi lại).
+  if (parsed.data.toStatus === "CONFIRMED") {
+    ensureParentAccountForOrder(orderId).catch((err) =>
+      console.error("[order-confirm] provision parent:", err),
+    );
   }
 
   // Fire PAYMENT_RECEIPT when order transitions to CONFIRMED (paidAt set).

@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { resolveClassSlots, applySlotTimeToDate, type ClassTimeSlot } from "@/lib/classes/slots";
 import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
 import { formatDateVN } from "@/lib/format/date";
 
@@ -37,6 +38,8 @@ export async function generateClassSessions(
       startTime: true,
       endTime: true,
       curriculumId: true,
+      // BGĐ 31/07 — giờ riêng theo thứ (lớp 2 ca khác giờ); trống → dùng giờ chung.
+      scheduleSlots: { select: { weekday: true, startTime: true, endTime: true } },
       course: { select: { id: true, totalSessions: true } },
       // R7-06 — kế hoạch buổi của RIÊNG lớp (nếu đã pin curriculum/snapshot).
       sessionPlans: {
@@ -46,7 +49,16 @@ export async function generateClassSessions(
     },
   });
   if (!cls) return { ok: false, generated: 0, error: "Lớp không tồn tại" };
-  if (!cls.scheduleDays || cls.scheduleDays.length === 0) {
+
+  // BGĐ 31/07 — lịch hiệu lực: slot riêng theo thứ (nếu có), lùi về scheduleDays + giờ chung.
+  const slots = resolveClassSlots({
+    scheduleDays: cls.scheduleDays,
+    startTime: cls.startTime,
+    endTime: cls.endTime,
+    slots: cls.scheduleSlots,
+  });
+  const scheduleDays = slots.map((s) => s.weekday);
+  if (scheduleDays.length === 0) {
     return { ok: false, generated: 0, error: "Lớp chưa có lịch học (scheduleDays)" };
   }
 
@@ -67,7 +79,7 @@ export async function generateClassSessions(
     const from = cls.startDate ?? new Date();
     const dates = computeSessionDates({
       from,
-      scheduleDays: cls.scheduleDays,
+      scheduleDays,
       count: plans.length,
       holidays,
     });
@@ -75,10 +87,10 @@ export async function generateClassSessions(
       return { ok: false, generated: 0, error: "Không tính được ngày buổi học" };
     }
 
-    const [ph, pm] = (cls.startTime ?? "00:00").split(":").map((x) => parseInt(x, 10));
     const data = dates.map((d, i) => ({
       classId,
-      date: new Date(d.getFullYear(), d.getMonth(), d.getDate(), ph || 0, pm || 0),
+      // BGĐ 31/07 — giờ buổi lấy theo ĐÚNG THỨ của ngày đó (lớp 2 ca khác giờ).
+      date: applySlotTimeToDate(d, slots),
       planId: plans[i]?.id ?? null,
       lessonId: plans[i]?.lessonId ?? null,
       // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
@@ -87,7 +99,7 @@ export async function generateClassSessions(
     }));
 
     // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
-    const warning = await warnIfConflict(cls, data);
+    const warning = await warnIfConflict(cls, slots, data);
     await db.classSession.createMany({ data });
     return { ok: true, generated: data.length, ...(warning ? { warning } : {}) };
   }
@@ -116,13 +128,13 @@ export async function generateClassSessions(
   const holidays = expandHolidaySet(holidayRows);
 
   const from = cls.startDate ?? new Date();
-  const dates = computeSessionDates({ from, scheduleDays: cls.scheduleDays, count, holidays });
+  const dates = computeSessionDates({ from, scheduleDays, count, holidays });
   if (dates.length === 0) return { ok: false, generated: 0, error: "Không tính được ngày buổi học" };
 
-  const [hh, mm] = (cls.startTime ?? "00:00").split(":").map((x) => parseInt(x, 10));
   const data = dates.map((d, i) => ({
     classId,
-    date: new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh || 0, mm || 0),
+    // BGĐ 31/07 — giờ buổi theo ĐÚNG THỨ của ngày đó.
+    date: applySlotTimeToDate(d, slots),
     lessonId: lessonIds[i] ?? null,
     // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
     roomId: cls.roomId ?? null,
@@ -130,15 +142,18 @@ export async function generateClassSessions(
   }));
 
   // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
-  const warning = await warnIfConflict(cls, data);
+  const warning = await warnIfConflict(cls, slots, data);
   await db.classSession.createMany({ data });
   return { ok: true, generated: data.length, ...(warning ? { warning } : {}) };
 }
 
 /**
  * W2-4 / T4.2 — soát trùng GV/phòng cho lô buổi sắp sinh. KHÔNG chặn (chỉ cảnh báo)
- * để không khoá vận hành lớp. Bỏ qua khi lớp chưa có startTime (date 00:00 → không
- * đủ dữ liệu kết luận trùng). Liệt kê tối đa 3 ngày trùng cho dễ xử lý.
+ * để không khoá vận hành lớp. Bỏ qua khi lớp chưa có giờ (date 00:00 → không đủ dữ
+ * liệu kết luận trùng). Liệt kê tối đa 3 ngày trùng cho dễ xử lý.
+ *
+ * BGĐ 31/07 — lớp có giờ KHÁC NHAU theo thứ ⇒ soát theo TỪNG NHÓM THỨ với giờ của
+ * chính thứ đó (trước đây áp 1 giờ chung cho mọi ngày → sai khi 2 ca lệch giờ).
  */
 async function warnIfConflict(
   cls: {
@@ -146,24 +161,31 @@ async function warnIfConflict(
     centerId: string | null;
     teacherId: string | null;
     roomId: string | null;
-    startTime: string | null;
-    endTime: string | null;
   },
+  slots: ClassTimeSlot[],
   data: { date: Date }[],
 ): Promise<string | undefined> {
-  if (!cls.startTime || (!cls.teacherId && !cls.roomId)) return undefined;
+  if (!cls.teacherId && !cls.roomId) return undefined;
   try {
-    const conflicts = await detectBatchConflicts({
-      // centerId = null → soát toàn hệ thống: GV có thể dạy 2 cơ sở.
-      centerId: null,
-      excludeClassId: cls.id,
-      classStartTime: cls.startTime,
-      classEndTime: cls.endTime,
-      teacherId: cls.teacherId,
-      roomId: cls.roomId,
-      dates: data.map((d) => d.date),
-    });
-    return summarizeConflicts(conflicts);
+    const all: { date: Date; messages: string[] }[] = [];
+    for (const slot of slots) {
+      if (!slot.startTime) continue;
+      const dates = data.filter((d) => d.date.getDay() === slot.weekday).map((d) => d.date);
+      if (dates.length === 0) continue;
+      const conflicts = await detectBatchConflicts({
+        // centerId = null → soát toàn hệ thống: GV có thể dạy 2 cơ sở.
+        centerId: null,
+        excludeClassId: cls.id,
+        classStartTime: slot.startTime,
+        classEndTime: slot.endTime,
+        teacherId: cls.teacherId,
+        roomId: cls.roomId,
+        dates,
+      });
+      all.push(...conflicts);
+    }
+    all.sort((a, b) => a.date.getTime() - b.date.getTime());
+    return summarizeConflicts(all);
   } catch {
     return undefined; // best-effort: lỗi soát trùng không chặn sinh buổi
   }

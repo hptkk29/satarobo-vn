@@ -57,6 +57,11 @@ export default async function EditClassPage({ params }: Props) {
         scheduleDays: true,
         startTime: true,
         endTime: true,
+        // BGĐ 31/07 — giờ riêng theo thứ (lớp 2 ca khác giờ).
+        scheduleSlots: {
+          select: { weekday: true, startTime: true, endTime: true },
+          orderBy: { weekday: "asc" },
+        },
         maxStudents: true,
         minStudents: true,
         status: true,
@@ -197,6 +202,7 @@ export default async function EditClassPage({ params }: Props) {
     scheduleDays: cls.scheduleDays ?? [],
     startTime: cls.startTime,
     endTime: cls.endTime,
+    scheduleSlots: cls.scheduleSlots ?? [],
     maxStudents: cls.maxStudents,
     minStudents: cls.minStudents,
     status: cls.status,

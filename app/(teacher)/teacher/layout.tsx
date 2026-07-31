@@ -56,12 +56,17 @@ export default async function TeacherLayout({
   const sdb = scopedDb(actor);
   const dbUser = await sdb.user.findUnique({
     where: { id: session.user.id },
-    select: { isActive: true, tokenVersion: true, deletedAt: true },
+    select: { isActive: true, tokenVersion: true, deletedAt: true, mustChangePassword: true },
   });
   if (!dbUser || dbUser.deletedAt) redirect("/login?reason=session-invalidated");
   if (!dbUser.isActive) redirect("/login?reason=session-disabled");
   if (dbUser.tokenVersion !== session.user.tokenVersion) {
     redirect("/login?reason=session-invalidated");
+  }
+  // BGĐ 31/07 — MK do admin cấp/reset: bắt đổi MK trước khi dùng site GV.
+  // /doi-mat-khau ở app/(auth) (ngoài layout này) → không loop.
+  if (dbUser.mustChangePassword) {
+    redirect("/doi-mat-khau");
   }
 
   // F3 (Q41) — GV kiêm nhiệm (có thêm vai staff) được lối quay về admin. Chỉ khi SSO

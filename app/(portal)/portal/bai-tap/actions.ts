@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { portalDb } from "@/lib/portal/db";
+import { portalDb, portalTx } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { PORTAL_VIEW_COOKIE, type PortalView } from "@/lib/portal/learning";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -30,10 +30,14 @@ export async function setPortalViewAction(view: PortalView): Promise<void> {
 export async function submitAssignment(input: {
   assignmentId: string;
   textAnswer?: string | null;
-  fileUrl?: string | null;
-  fileName?: string | null;
-  fileSize?: number | null;
-  mimeType?: string | null;
+  // BGĐ 31/07 — nộp NHIỀU file+ảnh. (2-phase: cột đơn fileUrl/fileName/... trên
+  // AssignmentSubmission vẫn được ghi = file ĐẦU TIÊN để màn cũ không vỡ.)
+  files?: {
+    fileUrl: string;
+    fileName: string;
+    fileSize?: number | null;
+    mimeType?: string | null;
+  }[];
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
   const { ctx, studentId } = await requireActiveStudent();
   const pdb = portalDb({
@@ -69,8 +73,9 @@ export async function submitAssignment(input: {
   if (!enrolled) return { ok: false, error: "Bài tập không thuộc lớp của con" };
 
   const textAnswer = assignment.allowText ? input.textAnswer?.trim() || null : null;
-  const fileUrl = assignment.allowFile ? input.fileUrl || null : null;
-  if (!textAnswer && !fileUrl) {
+  const files = assignment.allowFile ? (input.files ?? []).slice(0, 10) : [];
+  const first = files[0] ?? null;
+  if (!textAnswer && !first) {
     return { ok: false, error: "Vui lòng nhập nội dung hoặc đính kèm file" };
   }
 
@@ -91,25 +96,43 @@ export async function submitAssignment(input: {
   const late = !!assignment.dueAt && Date.now() > assignment.dueAt.getTime();
   const status = late ? ("LATE" as const) : ("SUBMITTED" as const);
 
+  // 2-phase: cột đơn = file đầu tiên (màn admin/GV cũ vẫn hiện được 1 file).
   const data = {
     textAnswer,
-    fileUrl,
-    fileName: fileUrl ? input.fileName || null : null,
-    fileSize: fileUrl ? input.fileSize ?? null : null,
-    mimeType: fileUrl ? input.mimeType || null : null,
+    fileUrl: first?.fileUrl ?? null,
+    fileName: first?.fileName ?? null,
+    fileSize: first?.fileSize ?? null,
+    mimeType: first?.mimeType ?? null,
     submittedAt: new Date(),
     status,
   };
 
-  await pdb.assignmentSubmission.upsert({
-    where: {
-      assignmentId_studentId: {
-        assignmentId: input.assignmentId,
-        studentId,
+  // Upsert bản nộp + THAY TOÀN BỘ danh sách file (nộp lại = danh sách mới).
+  // portalTx: tx là TransactionClient chuẩn; ownership đã hậu kiểm ở trên.
+  await portalTx(async (tx) => {
+    const sub = await tx.assignmentSubmission.upsert({
+      where: {
+        assignmentId_studentId: {
+          assignmentId: input.assignmentId,
+          studentId,
+        },
       },
-    },
-    create: { assignmentId: input.assignmentId, studentId, ...data },
-    update: data,
+      create: { assignmentId: input.assignmentId, studentId, ...data },
+      update: data,
+      select: { id: true },
+    });
+    await tx.assignmentSubmissionFile.deleteMany({ where: { submissionId: sub.id } });
+    if (files.length > 0) {
+      await tx.assignmentSubmissionFile.createMany({
+        data: files.map((f) => ({
+          submissionId: sub.id,
+          fileUrl: f.fileUrl,
+          fileName: f.fileName,
+          fileSize: f.fileSize ?? null,
+          mimeType: f.mimeType ?? null,
+        })),
+      });
+    }
   });
 
   revalidatePath("/portal/bai-tap");

@@ -11,6 +11,7 @@ import { getAuditActor } from '@/lib/audit/log'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { convertLeadV2, computeInstallmentSplit, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
 import { recordInstallmentPlan, requestInstallmentApproval } from '@/lib/orders/installments'
+import { phoneVn } from '@/lib/validators/phone'
 
 // ─── R7-05 — wiring Convert v2 vào Server Action (UI → service đã có) ──────────
 // KHÔNG nhân đôi logic convert: chỉ chuẩn hoá input từ form → gọi convertLeadV2.
@@ -38,7 +39,16 @@ const installmentSchema = z
 const convertSchema = z.object({
   parentName: z.string().trim().min(2, 'Tên phụ huynh tối thiểu 2 ký tự').max(120),
   parentEmail: z.string().trim().email('Email phụ huynh không hợp lệ'),
-  parentPhone: z.string().trim().min(8, 'SĐT phụ huynh không hợp lệ'),
+  // AUTH-SĐT P1 (gom tồn dư 31/07) — dùng field dùng chung: TRANSFORM ra canonical
+  // `84…` thay vì chỉ đo độ dài. Hai hệ quả có chủ đích:
+  //   · `d.parentPhone` từ đây trở đi LUÔN canonical ⇒ đường ghi ở convert-lead-v2
+  //     và khoá idempotency bên dưới không phải tự chuẩn hoá nữa;
+  //   · "0905 123 456" (có khoảng trắng) nay ĐƯỢC nhận thay vì 400 — đúng lỗi
+  //     "mất lead im lặng" mà P1 vá.
+  // ⚠️ ĐỔI HÀNH VI: số CỐ ĐỊNH (02363…) nay bị TỪ CHỐI. Cố ý — `User.phone` là
+  // định danh đăng nhập (@unique) và ZNS/OTP không gửi được vào số bàn, nên tài
+  // khoản phụ huynh tạo bằng số cố định sẽ không bao giờ đăng nhập được.
+  parentPhone: phoneVn,
   // C5 — CCCD + địa chỉ phụ huynh (lưu trên User, KHÔNG lưu trên Student). Optional/additive.
   parentCccd: z
     .string()
@@ -128,7 +138,10 @@ export async function submitConvertV2(
   // Idempotency key ổn định theo payload (chống double-submit / 2 sale song song).
   const fingerprint = JSON.stringify({
     parentEmail: d.parentEmail.trim().toLowerCase(),
-    parentPhone: d.parentPhone.replace(/\D/g, ''),
+    // Đã canonical từ `phoneVn` ở schema — KHÔNG chuẩn hoá lần hai.
+    // Lợi thêm: hai lần bấm gõ "0905123456" và "+84 905 123 456" nay cho CÙNG một
+    // khoá (digit-strip cũ cho hai khoá khác nhau ⇒ chống double-submit hụt).
+    parentPhone: d.parentPhone,
     students: students.map((s) => ({
       name: s.name.trim().toLowerCase(),
       classId: s.classId,

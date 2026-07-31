@@ -238,6 +238,11 @@ test.describe("[R7-05] Convert v2", () => {
     const parent = await db.user.findUnique({ where: { email: "ph-s4@test.com" }, select: { cccd: true, city: true } });
     expect(parent?.cccd).toBe("012345678901");
     expect(parent?.city).toBe("Đà Nẵng");
+    // AUTH-SĐT P1 (gom tồn dư 31/07) — ĐƯỜNG GHI phải ra canonical `84…`.
+    // Input là "0905222333"; bản cũ `replace(/\D/g,"")` giữ nguyên `0905…` ⇒ mỗi lần
+    // convert lại bào mòn kết quả backfill 29/07. Ca này ĐỎ trước khi vá.
+    const stu = await db.student.findFirst({ select: { parentPhone: true } });
+    expect(stu?.parentPhone, "convert ghi parentPhone không phải canonical").toBe("84905222333");
   });
 
   // ── AC2 / C4 — đa học viên ATOMIC: lỗi giữa chừng rollback CẢ 2 ───────────

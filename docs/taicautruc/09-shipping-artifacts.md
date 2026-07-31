@@ -112,21 +112,21 @@ Một PR chỉ được merge khi **tất cả** dòng dưới đây đúng. Đ�
 
 | Chốt | Nội dung một câu | Ai mở | Trạng thái | Mở ra cái gì |
 |---|---|---|---|---|
-| **c43** | Ai cho `R-D4-09` (hoặc riêng phần lọc `roleCode`) chạy trước pha A4 — và c43 phủ A1, A4, hay cả hai? | Ban + chủ đợt go-live RBAC + Luân | ⬜ | **Pha A1 + A4** — *"chặn cứng số một của toàn chương trình"* |
-| **c1** | Node FRANCHISEE là `type=CENTER` hay `type=FRANCHISE`? | Ban + Luân | ⬜ | UI chọn đơn vị của KQ-7; `R-D2-19/20` nghiệm thu được |
-| **M1** | QĐ-B chặn cứng *"không bật cờ cho tới khi 3 việc xong"* — cờ **đã bật**, 3 việc chưa có | Ban + chủ đợt + Luân | ⬜ | Nhánh QĐ-B · B1 |
-| **M2** | QĐ-A.1 treo vào *"chờ cửa sổ shadow đóng"* — điều kiện nay không định nghĩa được | Ban + chủ đợt | ⬜ | **Điều kiện khởi động cả làn B** |
-| **M4 / c42** | 3 người hay 4–5 dev? Nếu cùng đội go-live thì cắt việc nào? | Ban | ⬜ | Mới nói được chặng 1 dài bao lâu |
-| **M5** | `R-D10-13` fail-closed đi ngược mục tiêu giám sát của D10 | Ban + Đội Đào tạo HO | ⬜ | Phần tính phí của KQ-1 (TS-11-4) |
+| **c43** | Ai cho `R-D4-09` (hoặc riêng phần lọc `roleCode`) chạy trước pha A4 — và c43 phủ A1, A4, hay cả hai? | TGĐ | ✅ **đóng 31/07 — QĐ-E.4** | **Pha A1 + A4 MỞ** — phủ cả hai; điều kiện: cặp ảnh chụp `R-OPS-02` trước/sau, ô lệch không giải thích được = dừng |
+| **c1** | Node FRANCHISEE là `type=CENTER` hay `type=FRANCHISE`? | TGĐ | ✅ **đóng 31/07 — QĐ-E.1** | Chọn **`FRANCHISE`** ⇒ mở **gói việc mới "scope-FRANCHISE"** (cỡ L, Cờ 2 CÓ) — thành **điều kiện chặn** trước khi mở cơ sở bên nhận đầu tiên |
+| **M1** | QĐ-B chặn cứng — cờ **đã bật**, 3 việc chưa có | TGĐ | ✅ **đóng 31/07 — QĐ-E.2** | Giữ cờ bật; **vá 3 việc DENY ngay** (Kiệt + agent); luật cấm tạo DENY giữ tới khi test ma trận xanh |
+| **M2** | Điều kiện khởi động làn B không định nghĩa được | TGĐ | ✅ **đóng 31/07 — QĐ-E.3** | Cửa sổ tuyên bố **đã đóng tại ngày flip**; làn B mở khi: 3 việc QĐ-B xong **và** 7 ngày sạch ngoài `rbac-intentional` |
+| **M4 / c42** | Đội thi hành là ai? | TGĐ | ✅ **đóng 31/07 — QĐ-E.5** | **1 dev (Kiệt)** — Luân & Vy không còn. A7 đổi thành **"phải cắt phạm vi"**; ❓ treo mới: cắt việc nào của go-live |
+| **M5** | `R-D10-13` fail-closed đi ngược mục tiêu giám sát của D10 | TGĐ | ✅ **đóng 31/07 — QĐ-E.6** | Không giải được chương trình → **vẫn TÍNH PHÍ**, không mở chi tiết; bắt buộc `curriculumId` cho lớp FRANCHISEE |
 | **M3** | Điều kiện ra pha A3 mâu thuẫn bằng chứng mã | Kiệt + Luân | ✅ **đóng 29/07/2026** | KQ-3 — tiêu chí `R-QDC-03` và pha A3 đã đổi sang *"bộ test mới khẳng định chéo cơ sở bị CHẶN"* |
 | **M6** | `R-QDC-01` nghiệm thu không phủ cơ sở đã cấu hình | Kiệt + Luân | ✅ **đóng 29/07/2026** | KQ-3 — `R-QDC-01` nay đòi **xoá override cấp cơ sở** + mẫu số, không chỉ đổi hằng `default` |
-| **M7** | Số dòng trong QĐ-C đã trôi khỏi mã | người giữ sổ quyết định | ⬜ | KQ-0.5 việc thứ 7 |
-| **M8** | `R-D2-09/10` nằm ở **cả** pha A8 lẫn nhánh B4 | người giữ PRD | ⬜ | Phần `R-D2-09/10` của KQ-4 |
-| **§9 câu 8** | Vai trò pháp lý về dữ liệu | Ban + pháp chế | ⬜ | Nhóm `R-DP-01..07` (9 yêu cầu) **có làn** |
+| **M7** | Số dòng trong QĐ-C đã trôi khỏi mã | TGĐ | ✅ **đóng 31/07 — QĐ-E.7** | Đã đính chính tại chỗ trong `QUYET-DINH.md` |
+| **M8** | `R-D2-09/10` nằm ở **cả** pha A8 lẫn nhánh B4 | TGĐ | ✅ **đóng 31/07 — QĐ-E.8** | Tách theo bản chất: A8 = thêm cột + backfill (additive); B4 = chuyển phép đọc |
+| **§9 câu 8** | Vai trò pháp lý về dữ liệu | TGĐ + pháp chế | 🟡 **SƠ BỘ 31/07 — QĐ-E.9** | HO kiểm soát duy nhất + **một phụ lục mẫu chuẩn**/hợp đồng. Mở khoá **thiết kế** `R-DP-*`; Đ2 vẫn cần văn bản pháp chế trước khi mở cơ sở thật |
 
-**Chỉ số duy nhất đáng báo cáo lên Ban hàng tuần:** *"đã đóng **N/11** chốt"* — hiện **2/11** (M3, M6 đóng 29/07/2026). `[SĐ]` Mọi chỉ số tiến độ kỹ thuật khác đều gây hiểu nhầm khi 9 chốt còn treo — chương trình đang bị chặn bởi **chữ ký**, không bởi code.
+**Trạng thái 31/07/2026: 10/11 đóng + 1 sơ bộ (QĐ-E).** Chương trình **hết bị chặn bởi chữ ký** — nay bị chặn bởi **công suất**: đội còn **1 dev** (QĐ-E.5), nên câu hỏi hàng tuần đổi từ *"đã đóng mấy chốt"* sang *"Kiệt + agent đi được bao xa trên chặng 0"*.
 
-**9 chốt còn lại đều cần người ngoài đội kỹ thuật.** Hai chốt tự gỡ được đã gỡ; từ đây trở đi không còn chốt nào Kiệt + Luân đóng được một mình.
+**Thứ mở ra sau QĐ-E:** pha **A1 + A4** (từng là "chặn cứng số một") lập lịch được với điều kiện `R-OPS-02` trước/sau · làn B có điều kiện khởi động định nghĩa được (3 việc QĐ-B + 7 ngày sạch) · nhóm `R-DP-*` thiết kế được · TS-11-4 / TS-17-6 viết được kỳ vọng. **Thứ mới sinh ra:** gói **scope-FRANCHISE** (cỡ L — hệ quả của chọn `type=FRANCHISE`) và câu treo *"cắt việc nào của go-live"* (E.5).
 
 ---
 

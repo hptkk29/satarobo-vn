@@ -72,6 +72,8 @@ export const ROLE_SEED: RoleSeed[] = [
       // này mồ côi ở v2 (sau flip không role thường nào làm được). Xem test "không action mồ côi".
       { action: "inventory:edit", scopeType: "GLOBAL" },
       { action: "installments:approve", scopeType: "GLOBAL" },
+      // BGĐ 31/07 — kế toán Hội sở giám sát giảm giá cùng QL cơ sở (khớp v1 ACCOUNTANT).
+      { action: "discounts:approve", scopeType: "GLOBAL" },
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "GLOBAL" },
@@ -350,6 +352,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // ── Thu tiền tại quầy · xuất kit (user chốt 09/07 câu 4: "có, có") ──
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "inventory:movement", scopeType: "GLOBAL" },
+      // BGĐ 31/07 — duyệt giảm giá do Sale/CSKH cơ sở đệ trình ("đệ trình Qly CS duyệt").
+      // GLOBAL theo R1 (call-site gọi trần), cách ly cơ sở do scopedDb.
+      { action: "discounts:approve", scopeType: "GLOBAL" },
       // ── Đọc tham chiếu ──
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },

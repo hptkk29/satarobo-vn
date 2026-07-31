@@ -11,27 +11,67 @@ import { db } from "@/lib/db";
 
 const PROVIDER = "VIETQR";
 
+/**
+ * BGĐ 31/07 — mỗi CƠ SỞ có tài khoản nhận tiền riêng. Lưu cùng bảng IntegrationConfig
+ * với khoá `VIETQR:<centerId>`; khoá `VIETQR` trần là cấu hình CHUNG (fallback khi cơ
+ * sở chưa cấu hình / đơn không gắn cơ sở). Không đổi schema — provider vốn là unique key.
+ */
+export function providerKeyForCenter(centerId?: string | null): string {
+  return centerId ? `${PROVIDER}:${centerId}` : PROVIDER;
+}
+
 export interface PaymentConfig {
   bankBin: string; // mã ngân hàng (BIN) theo chuẩn VietQR, vd 970415 (Vietinbank)
   accountNumber: string;
   accountName: string;
 }
 
-export async function getPaymentConfig(): Promise<PaymentConfig | null> {
-  const cfg = await db.integrationConfig.findUnique({
-    where: { provider: PROVIDER },
-    select: { settings: true },
-  });
-  const s = (cfg?.settings ?? null) as Partial<PaymentConfig> | null;
+function parseConfig(settings: unknown): PaymentConfig | null {
+  const s = (settings ?? null) as Partial<PaymentConfig> | null;
   if (!s || !s.bankBin || !s.accountNumber || !s.accountName) return null;
   return { bankBin: s.bankBin, accountNumber: s.accountNumber, accountName: s.accountName };
 }
 
-export async function setPaymentConfig(input: PaymentConfig): Promise<void> {
-  await db.integrationConfig.upsert({
+/**
+ * Tài khoản nhận tiền: ưu tiên cấu hình CỦA CƠ SỞ, lùi về cấu hình chung.
+ * `centerId` null/không cấu hình → dùng cấu hình chung (hành vi cũ).
+ */
+export async function getPaymentConfig(centerId?: string | null): Promise<PaymentConfig | null> {
+  if (centerId) {
+    const perCenter = await db.integrationConfig.findUnique({
+      where: { provider: providerKeyForCenter(centerId) },
+      select: { settings: true },
+    });
+    const parsed = parseConfig(perCenter?.settings);
+    if (parsed) return parsed;
+  }
+  const cfg = await db.integrationConfig.findUnique({
     where: { provider: PROVIDER },
+    select: { settings: true },
+  });
+  return parseConfig(cfg?.settings);
+}
+
+/** Đọc cấu hình ĐÚNG cấp (không fallback) — dùng cho màn cấu hình để biết cơ sở nào đã đặt. */
+export async function getPaymentConfigExact(
+  centerId?: string | null,
+): Promise<PaymentConfig | null> {
+  const cfg = await db.integrationConfig.findUnique({
+    where: { provider: providerKeyForCenter(centerId) },
+    select: { settings: true },
+  });
+  return parseConfig(cfg?.settings);
+}
+
+export async function setPaymentConfig(
+  input: PaymentConfig,
+  centerId?: string | null,
+): Promise<void> {
+  const provider = providerKeyForCenter(centerId);
+  await db.integrationConfig.upsert({
+    where: { provider },
     update: { isEnabled: true, settings: input as unknown as object },
-    create: { provider: PROVIDER, isEnabled: true, settings: input as unknown as object },
+    create: { provider, isEnabled: true, settings: input as unknown as object },
   });
 }
 
@@ -47,13 +87,23 @@ function sanitize(s: string): string {
     .trim();
 }
 
-/** Nội dung CK: "<Họ tên học viên> <SĐT phụ huynh> <Tên khoá>". */
+/**
+ * Nội dung CK: "<MÃ ĐƠN> <Họ tên học viên> <SĐT phụ huynh> <Tên khoá>".
+ *
+ * BGĐ 31/07 — MÃ ĐƠN đứng ĐẦU để webhook SePay khớp được giao dịch với đơn
+ * (lib/payments/sepay.ts extractOrderCode). Ngân hàng thường xoá dấu gạch nối nên
+ * sanitize() bỏ luôn "-" ở đây cho khớp cách hiển thị của bank ("ORD260521000001").
+ */
 export function buildTransferContent(
   studentName: string,
   parentPhone: string | null | undefined,
   courseName: string | null | undefined,
+  orderCode?: string | null,
 ): string {
-  return sanitize([studentName, parentPhone ?? "", courseName ?? ""].filter(Boolean).join(" ")).slice(0, 80);
+  const ref = orderCode ? orderCode.replace(/-/g, "") : "";
+  return sanitize(
+    [ref, studentName, parentPhone ?? "", courseName ?? ""].filter(Boolean).join(" "),
+  ).slice(0, 80);
 }
 
 /** URL ảnh VietQR động (compact2 — có logo + số tiền + nội dung). null nếu chưa cấu hình. */

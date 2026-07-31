@@ -487,6 +487,8 @@ const EnrollStudentSchema = z.object({
   studentId: z.string().trim().min(1, "Chọn học viên"),
   classId: z.string().trim().min(1, "Chọn lớp"),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
+  // BGĐ 31/07 — TÁI TỤC: id ghi danh KHOÁ TRƯỚC của cùng HV (optional).
+  renewedFromEnrollmentId: z.string().trim().optional().or(z.literal("")),
 });
 
 export async function enrollStudent(
@@ -505,6 +507,10 @@ export async function enrollStudent(
 
   const { studentId, classId } = parsed.data;
   const notes = parsed.data.notes && parsed.data.notes !== "" ? parsed.data.notes : null;
+  const renewedFromEnrollmentId =
+    parsed.data.renewedFromEnrollmentId && parsed.data.renewedFromEnrollmentId !== ""
+      ? parsed.data.renewedFromEnrollmentId
+      : null;
 
   // Cách ly cơ sở: lớp ghi danh phải thuộc tầm nhìn cơ sở của actor.
   const uid = session.user.id;
@@ -630,6 +636,18 @@ export async function enrollStudent(
   const prereq = await checkPrerequisites(studentId, cls.courseId);
   if (!prereq.ok) return prereq;
 
+  // BGĐ 31/07 — TÁI TỤC: khoá trước phải là ghi danh CỦA CHÍNH học viên này
+  // (chống gắn nhầm/IDOR). scopedDb tự lọc theo cơ sở.
+  if (renewedFromEnrollmentId) {
+    const prev = await sdb.enrollment.findFirst({
+      where: { id: renewedFromEnrollmentId, studentId },
+      select: { id: true },
+    });
+    if (!prev) {
+      return { ok: false, error: "Ghi danh khoá trước không hợp lệ (không thuộc học viên này)" };
+    }
+  }
+
   const { actorId, actorName } = getAuditActor(session);
 
   // FIX-C4 — re-check sĩ số + create trong CÙNG tx (Serializable) chống TOCTOU.
@@ -654,6 +672,10 @@ export async function enrollStudent(
           centerId: cls!.centerId, // FL3-02 — denormalize từ class cho scopedDb
           status: "PENDING",
           notes,
+          // BGĐ 31/07 — liên kết tái tục (đã verify thuộc cùng HV ở trên).
+          ...(renewedFromEnrollmentId
+            ? { renewedFrom: { connect: { id: renewedFromEnrollmentId } } }
+            : {}),
         },
         select: { id: true },
       });
@@ -664,7 +686,13 @@ export async function enrollStudent(
         entityType: "Enrollment",
         entityId: created.id,
         action: "CREATE",
-        newValues: { studentId, classId, courseId: cls!.courseId, status: "PENDING" },
+        newValues: {
+          studentId,
+          classId,
+          courseId: cls!.courseId,
+          status: "PENDING",
+          ...(renewedFromEnrollmentId ? { renewedFromEnrollmentId } : {}),
+        },
         orgUnitId: cls!.centerId,
         tx,
       });

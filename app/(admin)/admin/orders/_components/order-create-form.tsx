@@ -100,6 +100,10 @@ export function OrderCreateForm({
 
   // Pricing
   const [discountAmount, setDiscountAmount] = useState(0);
+  // BGĐ 31/07 — giảm giá nhập theo % hoặc số tiền + giải trình bắt buộc.
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [discountReason, setDiscountReason] = useState("");
   const [voucherCode, setVoucherCode] = useState("");
   const [voucherStatus, setVoucherStatus] = useState<
     | { kind: "idle" }
@@ -187,7 +191,12 @@ export function OrderCreateForm({
 
   const subtotal = unitPrice * quantity;
   // O5 — bỏ phí vận chuyển: tổng = max(0, tạm tính − giảm giá).
-  const totalAmount = Math.max(0, subtotal - discountAmount);
+  // BGĐ 31/07 — chế độ %: số tiền giảm suy từ % (server tính lại — nguồn sự thật).
+  const effectiveDiscount =
+    discountMode === "percent"
+      ? Math.min(subtotal, Math.round((subtotal * Math.min(100, Math.max(0, discountPercent))) / 100))
+      : discountAmount;
+  const totalAmount = Math.max(0, subtotal - effectiveDiscount);
 
   function handlePreviewVoucher() {
     if (!voucherCode.trim()) {
@@ -286,7 +295,10 @@ export function OrderCreateForm({
       centerId: centerId === NO_CENTER ? null : centerId,
       paymentMethodId,
       items: [item],
-      discountAmount,
+      // Chế độ %: gửi cả % (server quy ra tiền) — chế độ tiền: gửi số tuyệt đối.
+      discountAmount: discountMode === "percent" ? 0 : discountAmount,
+      discountPercent: discountMode === "percent" ? discountPercent || null : null,
+      discountReason: discountReason.trim() || null,
       voucherCode: voucherCode || null,
       customerNote: customerNote || null,
       internalNote: internalNote || null,
@@ -618,16 +630,67 @@ export function OrderCreateForm({
               </div>
             )}
           </div>
+          {/* BGĐ 31/07 — giảm giá: chọn hình thức % hoặc số tiền. */}
           <div className="space-y-1.5">
-            <Label>Giảm giá (VND)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={discountAmount}
-              onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
-            />
+            <Label>Giảm giá</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={discountMode === "amount" ? "default" : "outline"}
+                onClick={() => setDiscountMode("amount")}
+              >
+                Theo số tiền
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={discountMode === "percent" ? "default" : "outline"}
+                onClick={() => setDiscountMode("percent")}
+              >
+                Theo %
+              </Button>
+            </div>
+            {discountMode === "amount" ? (
+              <Input
+                type="number"
+                min={0}
+                value={discountAmount}
+                onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
+                placeholder="Số tiền giảm (VND)"
+              />
+            ) : (
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={discountPercent}
+                onChange={(e) =>
+                  setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                }
+                placeholder="% giảm (1–100)"
+              />
+            )}
           </div>
         </div>
+
+        {/* BGĐ 31/07 — giải trình bắt buộc khi giảm giá tay; đơn sẽ chờ QLCS duyệt. */}
+        {effectiveDiscount > 0 && !voucherCode.trim() && (
+          <div className="space-y-1.5">
+            <Label>Giải trình giảm giá *</Label>
+            <Input
+              value={discountReason}
+              onChange={(e) => setDiscountReason(e.target.value)}
+              maxLength={1000}
+              placeholder="VD: HV cũ giới thiệu em ruột — ưu đãi theo chính sách anh chị em"
+            />
+            <p className="text-xs text-amber-700">
+              Đơn có giảm giá sẽ ở trạng thái <strong>chờ Quản lý cơ sở duyệt</strong> — chỉ
+              xác nhận được sau khi duyệt.
+            </p>
+          </div>
+        )}
+
         <div className="text-right">
           <div className="text-sm text-gray-600">
             Tạm tính:{" "}
@@ -636,6 +699,18 @@ export function OrderCreateForm({
             </span>{" "}
             đ
           </div>
+          {effectiveDiscount > 0 && (
+            <div className="text-sm text-gray-600">
+              Giảm giá:{" "}
+              <span className="tabular-nums">
+                −{effectiveDiscount.toLocaleString("vi-VN")}
+              </span>{" "}
+              đ
+              {discountMode === "percent" && discountPercent > 0
+                ? ` (${discountPercent}%)`
+                : ""}
+            </div>
+          )}
           <div className="text-2xl font-bold text-gray-900">
             Tổng:{" "}
             <span className="tabular-nums">

@@ -52,13 +52,26 @@ export const orderCreateManualSchema = z.object({
 
   // Pricing manual (computed final at server)
   discountAmount: z.number().int().min(0).default(0),
+  // BGĐ 31/07 — nhập giảm giá theo % (1..100); server tự quy ra discountAmount.
+  discountPercent: z.number().int().min(1).max(100).optional().nullable(),
+  // BGĐ 31/07 — giải trình giảm giá: BẮT BUỘC khi giảm tay > 0 (refine bên dưới).
+  discountReason: z.string().max(1000).optional().nullable(),
   shippingFee: z.number().int().min(0).default(0),
   voucherCode: z.string().max(50).optional().nullable(),
 
   // Notes
   customerNote: z.string().max(2000).optional().nullable(),
   internalNote: z.string().max(2000).optional().nullable(),
-});
+})
+  // BGĐ 31/07 — giảm giá do nhân viên tự nhập (KHÔNG phải voucher) phải có giải
+  // trình; giảm giá theo voucher lấy theo chính sách đã duyệt nên miễn.
+  .refine(
+    (d) =>
+      !!d.voucherCode?.trim() ||
+      !((d.discountPercent ?? 0) > 0 || d.discountAmount > 0) ||
+      !!d.discountReason?.trim(),
+    { message: "Nhập giải trình giảm giá", path: ["discountReason"] },
+  );
 
 export const orderStatusChangeSchema = z.object({
   toStatus: z.nativeEnum(OrderStatus),
