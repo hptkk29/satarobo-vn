@@ -37,16 +37,27 @@ const ERROR_MESSAGE: Record<string, string> = {
 export function EnrollForm({
   students,
   classes,
+  initialStudentId = null,
+  initialRenewedFrom = null,
+  previousEnrollments = [],
 }: {
   students: StudentOption[];
   classes: ClassOption[];
+  /** BGĐ 31/07 — pre-fill từ nút "Tái tục" (?studentId=&renewedFrom=). */
+  initialStudentId?: string | null;
+  initialRenewedFrom?: string | null;
+  previousEnrollments?: { id: string; label: string }[];
 }) {
   const router = useRouter();
-  const [studentId, setStudentId] = useState<string>("");
+  const [studentId, setStudentId] = useState<string>(initialStudentId ?? "");
   const [classId, setClassId] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [renewedFrom, setRenewedFrom] = useState<string>(initialRenewedFrom ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Picker "khoá trước" chỉ có nghĩa cho HV được pre-fill — đổi HV thì bỏ liên kết.
+  const showRenewal = previousEnrollments.length > 0 && studentId === initialStudentId;
 
   const selectedClass = useMemo(
     () => classes.find((c) => c.id === classId) ?? null,
@@ -70,6 +81,7 @@ export function EnrollForm({
         studentId,
         classId,
         notes: notes.trim() || undefined,
+        renewedFromEnrollmentId: showRenewal && renewedFrom ? renewedFrom : undefined,
       });
       if (!res.ok) {
         setError(ERROR_MESSAGE[res.error] ?? res.error);
@@ -168,6 +180,31 @@ export function EnrollForm({
             </div>
           )}
         </label>
+
+        {showRenewal && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-neutral-700">
+              Khoá trước (tái tục)
+            </span>
+            <select
+              value={renewedFrom}
+              onChange={(e) => setRenewedFrom(e.target.value)}
+              disabled={pending}
+              className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+            >
+              <option value="">— Không phải tái tục —</option>
+              {previousEnrollments.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-neutral-500">
+              Ghi danh tái tục sẽ nối về khoá trước của học viên (hoa hồng tái tục
+              không tính 4 tầng theo SR.QD.217).
+            </p>
+          </label>
+        )}
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">

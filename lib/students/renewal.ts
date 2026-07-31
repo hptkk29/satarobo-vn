@@ -266,3 +266,16 @@ export async function getNearingEndEnrollments(opts?: {
   items.sort((a, b) => a.remaining - b.remaining);
   return items;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BGĐ 31/07 — TÁI TỤC (renewal link).
+// Ghi danh tái tục = Enrollment.renewedFromEnrollmentId ≠ null (nối về ghi danh
+// khoá trước của CÙNG học viên — enrollStudent đã verify sở hữu khi tạo).
+// Hoa hồng: computeCommission({ isRenewal }) — C10.3: tái tục KHÔNG hưởng 4 tầng.
+// Khi sinh bảng hoa hồng từ dữ liệu thật, truyền isRenewalEnrollment(enrollment).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** THUẦN — ghi danh này có phải tái tục không (nguồn cho isRenewal của hoa hồng). */
+export function isRenewalEnrollment(e: { renewedFromEnrollmentId: string | null }): boolean {
+  return e.renewedFromEnrollmentId != null;
+}

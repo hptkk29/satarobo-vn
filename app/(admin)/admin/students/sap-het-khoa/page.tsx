@@ -77,12 +77,21 @@ export default async function NearingEndPage() {
                       : "—"}
                   </td>
                   <td className="px-4 py-2">
-                    <Link
-                      href={`/students/${it.studentId}/edit`}
-                      className="text-xs font-semibold text-[#7C3AED] hover:underline"
-                    >
-                      Hồ sơ →
-                    </Link>
+                    <div className="flex items-center justify-end gap-3">
+                      {/* BGĐ 31/07 — TÁI TỤC: pre-fill form ghi danh + nối khoá trước. */}
+                      <Link
+                        href={`/enrollments/new?studentId=${it.studentId}&renewedFrom=${it.enrollmentId}`}
+                        className="rounded-lg bg-[#7C3AED] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90"
+                      >
+                        Tái tục
+                      </Link>
+                      <Link
+                        href={`/students/${it.studentId}/edit`}
+                        className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                      >
+                        Hồ sơ →
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
