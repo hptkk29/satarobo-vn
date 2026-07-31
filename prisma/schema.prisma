@@ -708,8 +708,15 @@ model Holiday {
 model User {
   id            String    @id @default(cuid())
   name          String?
-  email         String    @unique
+  // AUTH-SĐT P3 — email nới nullable (P5 sẽ tạo phụ huynh chỉ có SĐT); GIỮ unique.
+  // Nhân sự vẫn BẮT BUỘC email ở tầng validator (QĐ-C) — không phải ở DB.
+  email         String?   @unique
   emailVerified DateTime? @db.Timestamptz(6)
+  // AUTH-SĐT P3 — SĐT làm khoá đăng nhập, LUÔN dạng canonical 84XXXXXXXXX
+  // (lib/phone.ts). KHÔNG backfill trong migration — unique index trên toàn
+  // NULL không thể fail trên prod; backfill là script riêng ở P5.
+  phone           String?   @unique
+  phoneVerifiedAt DateTime? @db.Timestamptz(6)
   password      String?
   image         String?
   role          Role      @default(SALES_CSM) // Đợt 3B — vai trò CHÍNH (primary)
@@ -766,6 +773,7 @@ model User {
   grantAuditLogs PermissionGrantAuditLog[] @relation("UserGrantAudits")
 
   @@index([email])
+  @@index([phone])
   @@index([centerId])
   @@index([role])
   @@index([deletedAt])
@@ -4102,7 +4110,8 @@ enum AccountStatus {
 
 enum OtpChannel {
   EMAIL
-  SMS // TODO: chưa dùng (chưa đăng ký brandname) — provider abstraction chừa sẵn
+  SMS // QĐ-H 30/07: bỏ hẳn SMS brandname — giữ value vì enum Postgres không xoá được, KHÔNG dùng
+  ZALO // AUTH-SĐT P3 — kênh ZNS (otp-provider cắm ở P4)
 }
 
 enum OtpPurpose {
