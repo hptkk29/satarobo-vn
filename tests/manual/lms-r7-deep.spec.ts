@@ -4,7 +4,8 @@
  *   ADMIN_EMAIL=test-admin@example.com ADMIN_PW='Test@1234!' \
  *   corepack pnpm@11 exec playwright test -c playwright.manual.config.ts lms-r7-deep
  */
-import { test, expect, type Page, type TestInfo } from "@playwright/test";
+import { test, type Page, type TestInfo } from "@playwright/test";
+import { login as sharedLogin } from "../e2e/_helpers/auth";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "test-admin@example.com";
 const ADMIN_PW = process.env.ADMIN_PW ?? "Test@1234!";
@@ -13,11 +14,7 @@ const STAMP = "T2";
 const log = (s: string) => console.log(s); // eslint-disable-line no-console
 
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ADMIN_EMAIL);
-  await page.getByLabel("Mật khẩu").fill(ADMIN_PW);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 120_000 });
+  await sharedLogin(page, { email: ADMIN_EMAIL, password: ADMIN_PW, timeout: 120_000 });
 }
 
 async function visit(page: Page, route: string, ti: TestInfo) {

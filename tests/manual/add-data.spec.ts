@@ -7,17 +7,14 @@
  *   corepack pnpm@11 exec playwright test -c playwright.manual.config.ts
  */
 import { test, expect, type Page } from "@playwright/test";
+import { login as sharedLogin } from "../e2e/_helpers/auth";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "phuc@satarobo.vn";
 const ADMIN_PW = process.env.ADMIN_PW ?? "ChangeMe@2026!";
 const STAMP = Date.now().toString().slice(-7);
 
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ADMIN_EMAIL);
-  await page.getByLabel("Mật khẩu").fill(ADMIN_PW);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 120_000 });
+  await sharedLogin(page, { email: ADMIN_EMAIL, password: ADMIN_PW, timeout: 120_000 });
 }
 
 test.beforeEach(async ({ page }) => {

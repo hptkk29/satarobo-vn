@@ -7,6 +7,7 @@
  *   corepack pnpm@11 exec playwright test -c playwright.manual.config.ts lms-r7-eval
  */
 import { test, expect, type Page } from "@playwright/test";
+import { login as sharedLogin } from "../e2e/_helpers/auth";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "test-admin@example.com";
 const ADMIN_PW = process.env.ADMIN_PW ?? "Test@1234!";
@@ -17,11 +18,7 @@ const SATA1_COURSE = "Sata1 — Robosim Master";
 const CRITERIA = ["__TEST__ Tư duy logic", "__TEST__ Kỹ năng lắp ráp", "__TEST__ Thái độ"];
 
 async function login(page: Page, email: string, pw: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Mật khẩu").fill(pw);
-  await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page).not.toHaveURL(/\/login(\?|$)/, { timeout: 120_000 });
+  await sharedLogin(page, { email, password: pw, timeout: 120_000 });
 }
 
 test("E.1 học bạ Bé A: criteria → draft → nộp → phát hành", async ({ page }, testInfo) => {
