@@ -179,7 +179,7 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 
 ### P0′ · Thủ tục ZBS/ZNS (hành chính, **không phải việc code**)
 
-> **✅ P0′ HOÀN THÀNH 31/07** — đủ DoD: 2 mẫu QĐ-G **đã duyệt**, `template_id` = `616258` và `616128` (⚠️ chưa xác định ID nào là mẫu A/OTP, ID nào là mẫu B/học phí — phải chốt mapping trước khi code P4) · văn bản trả lời 4 câu đã nhận (tóm tắt dưới) · OA xác thực + App/ZCA/nạp tiền + env `ZALO_APP_ID`/`ZALO_APP_SECRET`/`ZALO_OA_REFRESH_TOKEN` xong 30/07 · `ZALO_LIVE` cố ý CHƯA bật — bật ở cuối P4 sau khi smoke dev-mode (gửi thử tới SĐT admin OA) đạt · SMS brandname: bỏ hẳn (QĐ-H).
+> **✅ P0′ HOÀN THÀNH 31/07** — đủ DoD: 2 mẫu QĐ-G **đã duyệt**, **mẫu A (Xác thực/OTP) = `616128` · mẫu B (Học phí + tài khoản) = `616258`** (chủ dự án xác nhận 31/07; P4 dự kiến khai qua env `ZALO_ZNS_TEMPLATE_OTP=616128` + `ZALO_ZNS_TEMPLATE_PAYMENT=616258` — chốt env hay SystemSetting khi code P4) · văn bản trả lời 4 câu đã nhận (tóm tắt dưới) · OA xác thực + App/ZCA/nạp tiền + env `ZALO_APP_ID`/`ZALO_APP_SECRET`/`ZALO_OA_REFRESH_TOKEN` xong 30/07 · `ZALO_LIVE` cố ý CHƯA bật — bật ở cuối P4 sau khi smoke dev-mode (gửi thử tới SĐT admin OA) đạt · SMS brandname: bỏ hẳn (QĐ-H).
 >
 > **Trả lời chính thức của ZBS (email 31/07) cho 4 câu hỏi:**
 > 1. **Khung giờ:** mẫu Xác thực OTP thuộc nhóm Tin Giao dịch (Tag 1) → gửi **24/7**, KHÔNG dính khung cấm 22:00–06:00 — nỗi lo `-133` được gỡ, đăng nhập ban đêm OK. Ràng buộc mới phát hiện: **timeout gửi chỉ 15 giây** — tin không tới thiết bị trong 15s coi như fail (và không tính phí) → UX chờ mã nên đợi ~15–30s là biết kết quả, fail thì gợi ý đường email ngay, đừng bắt phụ huynh đợi vô định.
@@ -398,7 +398,7 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 
 **Phần cảm ơn + hotline + link** trong bản nháp → chuyển sang **email chào mừng** (đã có sẵn `enqueueAccountActivated`) hoặc tin Zalo/Messenger do sale gửi tay. Ở hai kênh đó không bị kiểm duyệt, và đó mới là chỗ đặt giọng văn ấm áp.
 
-> ~~⚠️ Ba mẫu trên dựa vào quy định ZNS ghi tại §2 QĐ-6 (nguồn zalo.solutions) — **chưa xác minh lại tại thời điểm nộp**.~~ **[ĐÃ XÁC MINH + DUYỆT 31/07]** — cả 2 mẫu được duyệt (`template_id` `616258`, `616128` — mapping A/B chốt ở P4), ZBS xác nhận bằng văn bản: OTP Tag 1 gửi 24/7 không dính `-133`. Chi tiết 4 câu trả lời: xem khung "P0′ HOÀN THÀNH" ở §4.
+> ~~⚠️ Ba mẫu trên dựa vào quy định ZNS ghi tại §2 QĐ-6 (nguồn zalo.solutions) — **chưa xác minh lại tại thời điểm nộp**.~~ **[ĐÃ XÁC MINH + DUYỆT 31/07]** — cả 2 mẫu được duyệt (mẫu A/OTP = `616128` · mẫu B/học phí = `616258`), ZBS xác nhận bằng văn bản: OTP Tag 1 gửi 24/7 không dính `-133`. Chi tiết 4 câu trả lời: xem khung "P0′ HOÀN THÀNH" ở §4.
 
 **QĐ-H · Bỏ hẳn SMS brandname (chốt 30/07)** — không xin báo giá, không ký nhà cung cấp SMS nào. Thông báo + OTP chỉ đi **Zalo (ZNS)**; email là kênh dự phòng vĩnh viễn (QĐ-3). Hệ quả chấp nhận: phụ huynh không dùng Zalo hoặc ZNS lỗi (`-118`/`-139`/`-141`) chỉ còn đường email/mật khẩu; không có cả email lẫn Zalo → cấp mã kích hoạt tạm tại quầy (P6). **P4 hết bị chặn bởi SMS** — chỉ còn chờ 2 `template_id` được duyệt.
 
