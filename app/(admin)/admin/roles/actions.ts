@@ -21,7 +21,7 @@ async function getActor(): Promise<RbacActor | null> {
   if (!session?.user) return null;
   return {
     id: session.user.id,
-    name: session.user.name ?? session.user.email ?? "Unknown",
+    name: session.user.name ?? session.user.email ?? session.user.id,
     role: session.user.role,
     roles: session.user.roles,
     grants: session.user.grants,

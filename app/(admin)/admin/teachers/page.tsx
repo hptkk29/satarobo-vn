@@ -70,7 +70,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
   let staff: Array<{
     id: string;
     name: string | null;
-    email: string;
+    email: string | null;
     center: { name: string } | null;
     teacherProfile: {
       rank: keyof typeof RANK_LABEL;
@@ -164,7 +164,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
                     <td className="px-4 py-3">
                       <Link href={`/teachers/${u.id}`} className="flex items-center gap-3 group">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#F97316] to-[#7C3AED] text-xs font-bold text-white">
-                          {(u.name ?? u.email)[0].toUpperCase()}
+                          {(u.name ?? u.email ?? "?")[0].toUpperCase()}
                         </div>
                         <div>
                           <div className="font-medium text-gray-900 group-hover:text-[#7C3AED]">

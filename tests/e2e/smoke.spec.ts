@@ -52,8 +52,8 @@ test.describe("Auth gate", () => {
 
   test("/login page load với form", async ({ page }) => {
     await page.goto("/login");
-    // Có input email và password
-    await expect(page.locator('input[type="email"], input[name="email"]')).toBeVisible();
+    // P3: ô định danh nhận cả SĐT lẫn email (type="text", id="identifier").
+    await expect(page.getByLabel("Số điện thoại hoặc Email")).toBeVisible();
     await expect(page.locator('input[type="password"]')).toBeVisible();
   });
 });

@@ -170,7 +170,7 @@ export async function markAttendance(
         orderBy: { studentId: "asc" },
       });
       await writeAudit({
-        actor: { id: user.id, name: user.name ?? user.email ?? "Unknown" },
+        actor: { id: user.id, name: user.name ?? user.email ?? user.id },
         module: "attendance",
         entityType: "ClassSession",
         entityId: data.sessionId,

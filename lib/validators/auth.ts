@@ -1,7 +1,22 @@
 import { z } from "zod";
+import { canonicalPhone } from "@/lib/phone";
 
+/**
+ * AUTH-SĐT P3 — login nhận CẢ SĐT lẫn email: `identifier` hợp lệ khi là email
+ * đúng dạng HOẶC SĐT di động VN canonical hoá được (lib/phone.ts). Hai tập
+ * không giao nhau (email luôn chứa ký tự ngoài chữ số) nên tầng authorize rẽ
+ * nhánh được bằng `canonicalPhone(identifier) !== null`.
+ * KHÔNG lowercase email ở đây — ngữ nghĩa hoa/thường của login giữ nguyên như
+ * trước P3 (đổi = phải đo trùng lower(email) trên PROD trước, xem PR P3).
+ */
 export const loginSchema = z.object({
-  email: z.string().email("Email không hợp lệ"),
+  identifier: z
+    .string()
+    .trim()
+    .min(1, "Nhập số điện thoại hoặc email")
+    .refine((v) => z.string().email().safeParse(v).success || canonicalPhone(v) !== null, {
+      message: "Số điện thoại hoặc email không hợp lệ",
+    }),
   password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
 });
 

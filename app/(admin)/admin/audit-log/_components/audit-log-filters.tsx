@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { AuditFilters } from "../_types";
 
-type Actor = { id: string; name: string | null; email: string };
+type Actor = { id: string; name: string | null; email: string | null };
 
 export function AuditLogFilters({
   filters,
@@ -82,7 +82,7 @@ export function AuditLogFilters({
             <option value="">— Tất cả —</option>
             {actors.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name ?? a.email}
+                {a.name ?? a.email ?? a.id}
               </option>
             ))}
           </select>

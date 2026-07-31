@@ -24,7 +24,7 @@ export interface GrantRow {
   grant: "ALLOW" | "DENY";
   reason: string | null;
   createdAt: Date;
-  grantor: { name: string | null; email: string };
+  grantor: { name: string | null; email: string | null };
 }
 
 function formatDate(date: Date): string {
@@ -98,7 +98,7 @@ export function GrantsTable({ grants }: { grants: GrantRow[] }) {
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600">
                       <div>{g.grantor.name ?? "—"}</div>
-                      <div className="text-gray-400">{g.grantor.email}</div>
+                      <div className="text-gray-400">{g.grantor.email ?? "—"}</div>
                     </td>
                     <td className="px-4 py-3 text-xs tabular-nums text-gray-500">
                       {formatDate(g.createdAt)}

@@ -11,7 +11,7 @@ import { BreakGlassButton } from "./break-glass-button";
 import { queryAuditLogs } from "../_actions";
 import type { AuditFilters, UnifiedAuditRow } from "../_types";
 
-type Actor = { id: string; name: string | null; email: string };
+type Actor = { id: string; name: string | null; email: string | null };
 
 export function AuditLogClient({
   actors,

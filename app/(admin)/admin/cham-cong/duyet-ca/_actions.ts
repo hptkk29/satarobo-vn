@@ -68,7 +68,9 @@ export async function importApprovedShifts(input: unknown): Promise<Result> {
     where: { centerId, role: { not: "PARENT" }, deletedAt: null },
     select: { id: true, email: true },
   });
-  const userByEmail = new Map(staff.map((u) => [u.email.toLowerCase(), u.id]));
+  const userByEmail = new Map(
+    staff.flatMap((u) => (u.email ? [[u.email.toLowerCase(), u.id] as const] : [])),
+  );
 
   const errors: { row: number; error: string }[] = [];
   const valid: { userId: string; date: Date; shifts: WorkShift[]; note: string | null }[] = [];

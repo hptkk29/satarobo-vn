@@ -17,7 +17,7 @@ import { RoleBadge } from "@/app/(admin)/admin/users/_components/role-badge";
 
 interface ExistingUser {
   id: string;
-  email: string;
+  email: string | null;
   role: Role;
   isActive: boolean;
   lastLoginAt: Date | null;

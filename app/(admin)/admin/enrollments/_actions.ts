@@ -798,7 +798,7 @@ export async function changeEnrollmentStatus(
           toStatus: data.newStatus,
           changedByUserId: session.user.id ?? null,
           changedByName:
-            session.user.name ?? session.user.email ?? "Unknown",
+            session.user.name ?? session.user.email ?? session.user.id,
           reason: data.reason,
         },
       });
@@ -940,7 +940,7 @@ export async function transferEnrollment(
 
   const auditor = {
     userId: session.user.id ?? null,
-    name: session.user.name ?? session.user.email ?? "Unknown",
+    name: session.user.name ?? session.user.email ?? session.user.id,
   };
   const { actorId, actorName } = getAuditActor(session);
 

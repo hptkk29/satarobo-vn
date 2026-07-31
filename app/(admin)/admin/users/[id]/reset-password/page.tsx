@@ -54,7 +54,7 @@ export default async function ResetPasswordPage({ params }: Props) {
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <ResetPasswordForm userId={user.id} userEmail={user.email} />
+        <ResetPasswordForm userId={user.id} userEmail={user.email ?? user.id} />
       </div>
     </div>
   );

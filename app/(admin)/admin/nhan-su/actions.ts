@@ -147,7 +147,7 @@ function auditActorOf(session: {
 }) {
   return {
     id: session.user.id ?? null,
-    name: session.user.name ?? session.user.email ?? "Unknown",
+    name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown",
   };
 }
 
@@ -246,7 +246,7 @@ export async function createEmployeeAction(
 
   await syncHoAssignment(
     sdb,
-    { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? "Unknown" },
+    { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
     created.id,
     isHO,
   );
@@ -254,7 +254,7 @@ export async function createEmployeeAction(
   // #10 — NV HO: gán phân công PRIMARY vào OrgUnit Hội sở (khi isHO, orgUnitId rỗng).
   await syncHoAssignment(
     sdb,
-    { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" },
+    { id: session.user.id, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
     created.id,
     isHO,
   );
@@ -367,7 +367,7 @@ export async function updateEmployeeAction(
   if (typeof isHO === "boolean") {
     await syncHoAssignment(
       sdb,
-      { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? "Unknown" },
+      { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
       id,
       isHO,
     );
@@ -377,7 +377,7 @@ export async function updateEmployeeAction(
   if (isHO !== undefined) {
     await syncHoAssignment(
       sdb,
-      { id: session.user.id, name: session.user.name ?? session.user.email ?? "Unknown" },
+      { id: session.user.id, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
       id,
       isHO,
     );
@@ -602,7 +602,7 @@ export async function changeEmployeeRoleAction(input: {
           fromRole,
           toRole: primaryRole,
           changedByUserId: session.user.id ?? null,
-          changedByName: session.user.name ?? session.user.email ?? "Unknown",
+          changedByName: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown",
           reason: `${parsed.data.reason} · vai trò: [${roles.join(", ")}] (chính: ${primaryRole})`,
         },
       }),

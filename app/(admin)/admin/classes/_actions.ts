@@ -932,7 +932,7 @@ export async function cancelClassAction(
 
   const { actorId, actorName } = getAuditActor(session);
   const changedByUserId = session.user.id ?? null;
-  const changedByName = session.user.name ?? session.user.email ?? "Unknown";
+  const changedByName = session.user.name ?? session.user.email ?? session.user.id;
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const withdrawReason = `[Hủy lớp] ${trimmedReason}`;

@@ -148,7 +148,7 @@ export default async function TeacherProfilePage() {
 
   if (!user) return null; // layout liveness đã chặn user xoá/disable
 
-  const displayName = user.name ?? user.email;
+  const displayName = user.name ?? user.email ?? "Giáo viên";
   // Vai trò = union role chính + roles[] (đa vai trò) — CHỈ ĐỌC, không cho sửa.
   const roleCodes: Role[] = [...new Set<Role>([user.role, ...user.roles])];
 
@@ -266,7 +266,7 @@ export default async function TeacherProfilePage() {
           <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
             <Field label="Họ và tên" value={displayName} />
             <Field label="Vai trò" value={roleCodes.map(roleLabel).join(", ")} />
-            <Field label="Email" value={user.email} />
+            <Field label="Email" value={user.email ?? "—"} />
             <Field label="Số điện thoại" value={phone ?? "Chưa cập nhật"} />
             <Field label="Cơ sở" value={user.center?.name ?? "Chưa gán cơ sở"} />
             <Field label={joinLabel} value={joinValue} />
