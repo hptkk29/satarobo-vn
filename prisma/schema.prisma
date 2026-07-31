@@ -3212,6 +3212,17 @@ model Order {
   installmentApprovedAt     DateTime?                  @db.Timestamptz(6)
   installmentRejectReason   String?                    @db.Text
 
+  // BGĐ 31/07 — GIẢM GIÁ do nhân viên nhập tay: nhập theo % hoặc số tiền, BẮT BUỘC
+  // giải trình, Quản lý cơ sở duyệt trước khi đơn được xác nhận. Giảm giá từ VOUCHER
+  // (chính sách đã duyệt sẵn) KHÔNG đi qua luồng này → discountApprovalStatus = null.
+  discountPercent        Int? // 1..100 khi nhập theo %; null = nhập số tiền tuyệt đối
+  discountReason         String?                 @db.Text
+  discountApprovalStatus DiscountApprovalStatus?
+  discountRequestedById  String?
+  discountApprovedById   String?
+  discountApprovedAt     DateTime?               @db.Timestamptz(6)
+  discountRejectReason   String?                 @db.Text
+
   customerNote String? @db.Text
   internalNote String? @db.Text
 
@@ -3251,6 +3262,13 @@ enum InstallmentStatus {
 
 // FIX lead→payment→enroll (M0/C4) — trạng thái duyệt kế hoạch thanh toán 2 đợt.
 enum InstallmentApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+// BGĐ 31/07 — trạng thái duyệt GIẢM GIÁ nhập tay (Quản lý cơ sở duyệt).
+enum DiscountApprovalStatus {
   PENDING_APPROVAL
   APPROVED
   REJECTED

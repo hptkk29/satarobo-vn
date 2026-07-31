@@ -33,6 +33,10 @@ import {
   approveInstallmentPlanAction,
   rejectInstallmentPlanAction,
 } from "./_installment-approval-actions";
+import {
+  approveOrderDiscountAction,
+  rejectOrderDiscountAction,
+} from "./_discount-approval-actions";
 import { OrderInstallmentPlan, OrderQrSection } from "./order-payment-section";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
 
@@ -111,6 +115,7 @@ export function OrderDetailClient({
   order,
   canManage,
   canApprove,
+  canApproveDiscount = false,
   qrUrl,
   transferContent,
   installments,
@@ -121,6 +126,8 @@ export function OrderDetailClient({
   canManage: boolean;
   // OD1b — quyền duyệt kế hoạch trả góp (installments:approve) tách khỏi orders:manage.
   canApprove: boolean;
+  // BGĐ 31/07 — quyền duyệt giảm giá nhập tay (discounts:approve).
+  canApproveDiscount?: boolean;
   // G4 — QR + kế hoạch 2 đợt render trong cùng component để kiểm soát thứ tự section.
   qrUrl: string | null;
   transferContent: string;
@@ -139,6 +146,36 @@ export function OrderDetailClient({
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const approvalStatus = order.installmentApprovalStatus;
+  // BGĐ 31/07 — duyệt giảm giá nhập tay (giải trình + QLCS duyệt).
+  const discountStatus = order.discountApprovalStatus;
+  const [discountRejectOpen, setDiscountRejectOpen] = useState(false);
+  const [discountRejectReason, setDiscountRejectReason] = useState("");
+
+  function handleApproveDiscount() {
+    startTransition(async () => {
+      const res = await approveOrderDiscountAction(order.id);
+      if (res.ok) {
+        toast.success("Đã duyệt giảm giá");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
+
+  function handleRejectDiscount() {
+    if (!discountRejectReason.trim()) {
+      toast.error("Nhập lý do từ chối");
+      return;
+    }
+    startTransition(async () => {
+      const res = await rejectOrderDiscountAction(order.id, discountRejectReason);
+      if (res.ok) {
+        toast.success("Đã từ chối giảm giá");
+        setDiscountRejectOpen(false);
+        setDiscountRejectReason("");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi");
+    });
+  }
   // G4 — lịch sử trạng thái dạng dropdown (mặc định đóng).
   const [historyOpen, setHistoryOpen] = useState(false);
   // G4 — sửa phương thức thanh toán (chỉ khi đơn chưa xác nhận).
@@ -493,6 +530,94 @@ export function OrderDetailClient({
           </div>
         </div>
       </section>
+
+      {/* BGĐ 31/07 — Duyệt giảm giá (chỉ hiện khi đơn có giảm giá nhập tay) */}
+      {discountStatus && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+            Duyệt giảm giá
+          </h2>
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-gray-500">Trạng thái:</span>
+              <Badge className={APPROVAL_BADGE_CLASS[discountStatus]}>
+                {APPROVAL_LABEL[discountStatus]}
+              </Badge>
+              <span className="text-gray-500">
+                Giảm {order.discountAmount.toLocaleString("vi-VN")} đ
+                {order.discountPercent ? ` (${order.discountPercent}%)` : ""}
+              </span>
+            </div>
+            {order.discountReason && (
+              <div className="rounded-lg bg-gray-50 p-3 text-gray-700">
+                <span className="font-semibold">Giải trình: </span>
+                {order.discountReason}
+              </div>
+            )}
+            {discountStatus === "APPROVED" && order.discountApprovedAt && (
+              <p className="text-xs text-gray-500">
+                Duyệt lúc {formatDateTime(order.discountApprovedAt)}
+              </p>
+            )}
+            {discountStatus === "REJECTED" && order.discountRejectReason && (
+              <div className="rounded-lg bg-red-50 p-3 text-red-700">
+                Lý do từ chối: {order.discountRejectReason}
+              </div>
+            )}
+            {canApproveDiscount && discountStatus === "PENDING_APPROVAL" && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={handleApproveDiscount} disabled={isPending}>
+                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Duyệt giảm giá
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDiscountRejectOpen(true)}
+                  disabled={isPending}
+                >
+                  Từ chối
+                </Button>
+              </div>
+            )}
+            {discountStatus === "PENDING_APPROVAL" && !canApproveDiscount && (
+              <p className="text-xs text-amber-700">
+                Đang chờ Quản lý cơ sở duyệt — đơn chưa thể xác nhận.
+              </p>
+            )}
+          </div>
+
+          {discountRejectOpen && (
+            <div className="mt-3 space-y-2 rounded-lg border border-red-200 bg-red-50 p-3">
+              <label className="text-sm font-medium" htmlFor="discount-reject">
+                Lý do từ chối (bắt buộc):
+              </label>
+              <Textarea
+                id="discount-reject"
+                value={discountRejectReason}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setDiscountRejectReason(e.target.value)
+                }
+                rows={2}
+                placeholder="VD: vượt khung ưu đãi cho phép"
+              />
+              <div className="flex gap-2">
+                <Button size="sm" variant="destructive" onClick={handleRejectDiscount} disabled={isPending}>
+                  Xác nhận từ chối
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDiscountRejectOpen(false)}
+                  disabled={isPending}
+                >
+                  Huỷ
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* G4 (3b) — Kế hoạch thanh toán 2 đợt: NGAY SAU phương thức thanh toán */}
       <OrderInstallmentPlan
