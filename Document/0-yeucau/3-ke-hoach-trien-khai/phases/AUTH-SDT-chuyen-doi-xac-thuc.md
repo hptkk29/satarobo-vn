@@ -179,7 +179,13 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 
 ### P0′ · Thủ tục ZBS/ZNS (hành chính, **không phải việc code**)
 
-> **Tiến độ 30/07:** ✅ xác thực OA doanh nghiệp · ✅ email 4 câu đã gửi (chờ trả lời) · ✅ App + ZCA + nạp tiền · ✅ env `ZALO_APP_ID`/`ZALO_APP_SECRET`/`ZALO_OA_REFRESH_TOKEN` trên Vercel (chưa bật `ZALO_LIVE` — đúng kế hoạch) · ⏳ **còn: nộp duyệt 2 mẫu QĐ-G + nhận văn bản trả lời 4 câu.** SMS brandname: **bỏ hẳn theo QĐ-H 30/07**.
+> **✅ P0′ HOÀN THÀNH 31/07** — đủ DoD: 2 mẫu QĐ-G **đã duyệt**, `template_id` = `616258` và `616128` (⚠️ chưa xác định ID nào là mẫu A/OTP, ID nào là mẫu B/học phí — phải chốt mapping trước khi code P4) · văn bản trả lời 4 câu đã nhận (tóm tắt dưới) · OA xác thực + App/ZCA/nạp tiền + env `ZALO_APP_ID`/`ZALO_APP_SECRET`/`ZALO_OA_REFRESH_TOKEN` xong 30/07 · `ZALO_LIVE` cố ý CHƯA bật — bật ở cuối P4 sau khi smoke dev-mode (gửi thử tới SĐT admin OA) đạt · SMS brandname: bỏ hẳn (QĐ-H).
+>
+> **Trả lời chính thức của ZBS (email 31/07) cho 4 câu hỏi:**
+> 1. **Khung giờ:** mẫu Xác thực OTP thuộc nhóm Tin Giao dịch (Tag 1) → gửi **24/7**, KHÔNG dính khung cấm 22:00–06:00 — nỗi lo `-133` được gỡ, đăng nhập ban đêm OK. Ràng buộc mới phát hiện: **timeout gửi chỉ 15 giây** — tin không tới thiết bị trong 15s coi như fail (và không tính phí) → UX chờ mã nên đợi ~15–30s là biết kết quả, fail thì gợi ý đường email ngay, đừng bắt phụ huynh đợi vô định.
+> 2. **Rate limit API:** 4000 request/phút/app — dư xa trần 300 tin/ngày (QĐ-E), không cần thiết kế burst/queue đặc biệt cho P4.
+> 3. **Gửi lại mã:** Zalo KHÔNG giới hạn số tin Tag 1 mỗi người/ngày — nút "Gửi lại mã" hoàn toàn hợp lệ. Cooldown 60s + 8 mã/ngày/số + trần 300 tin/ngày của TA VẪN GIỮ NGUYÊN — đó là kiểm soát chi phí nội bộ (QĐ-E), không phải quy định Zalo.
+> 4. **Tính phí:** chỉ tính tin gửi thành công tới thiết bị trong timeout; tin fail (`-118` không có Zalo, `-139` từ chối nhận) **không bị trừ tiền** — giả định ngân sách QĐ-E đứng vững, và logic "gửi fail không đốt hạn mức" (P0 §3.5) khớp luôn với cách Zalo tính tiền.
 
 - Xác thực OA Sata Robo **loại doanh nghiệp** → tạo App + ZCA → liên kết OA–ZCA → **nạp tiền trả trước**. Cần **GPKD + MST** Công ty CP Công nghệ Giáo dục Sata Robo.
 - Nộp duyệt **2 mẫu tin** (1–3 ngày làm việc mỗi lần, bị từ chối là làm lại) theo QĐ-G §7: **A · Xác thực (OTP)** · **B · Xác nhận học phí + cấp tài khoản** (gộp).
@@ -392,7 +398,7 @@ Theo QĐ-3, **khuyến nghị là không bao giờ drop email** — chỉ giữ 
 
 **Phần cảm ơn + hotline + link** trong bản nháp → chuyển sang **email chào mừng** (đã có sẵn `enqueueAccountActivated`) hoặc tin Zalo/Messenger do sale gửi tay. Ở hai kênh đó không bị kiểm duyệt, và đó mới là chỗ đặt giọng văn ấm áp.
 
-> ⚠️ Ba mẫu trên dựa vào quy định ZNS ghi tại §2 QĐ-6 (nguồn zalo.solutions) — **chưa xác minh lại tại thời điểm nộp**. Quy định Zalo có thay đổi. Vẫn phải gửi `support@zalo.cloud` 4 câu ở P0′ TRƯỚC khi nộp, đặc biệt câu **OTP có được miễn khung cấm 22:00–06:00 (`-133`)** — nếu không thì ban đêm không ai kích hoạt/đăng nhập được.
+> ~~⚠️ Ba mẫu trên dựa vào quy định ZNS ghi tại §2 QĐ-6 (nguồn zalo.solutions) — **chưa xác minh lại tại thời điểm nộp**.~~ **[ĐÃ XÁC MINH + DUYỆT 31/07]** — cả 2 mẫu được duyệt (`template_id` `616258`, `616128` — mapping A/B chốt ở P4), ZBS xác nhận bằng văn bản: OTP Tag 1 gửi 24/7 không dính `-133`. Chi tiết 4 câu trả lời: xem khung "P0′ HOÀN THÀNH" ở §4.
 
 **QĐ-H · Bỏ hẳn SMS brandname (chốt 30/07)** — không xin báo giá, không ký nhà cung cấp SMS nào. Thông báo + OTP chỉ đi **Zalo (ZNS)**; email là kênh dự phòng vĩnh viễn (QĐ-3). Hệ quả chấp nhận: phụ huynh không dùng Zalo hoặc ZNS lỗi (`-118`/`-139`/`-141`) chỉ còn đường email/mật khẩu; không có cả email lẫn Zalo → cấp mã kích hoạt tạm tại quầy (P6). **P4 hết bị chặn bởi SMS** — chỉ còn chờ 2 `template_id` được duyệt.
 
