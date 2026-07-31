@@ -88,6 +88,8 @@ export interface RouteInput {
  * root path (không prefix `/admin`). Thêm route admin mới? Thêm segment vào đây.
  */
 export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
+  // BGĐ 31/07 — nguồn giới thiệu (affiliate).
+  "affiliates",
   "assignments",
   "attendance",
   "audit-log",

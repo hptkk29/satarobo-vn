@@ -49,6 +49,8 @@ export default async function LeadDetailPage({ params }: Props) {
       center: { select: { name: true } },
       course: { select: { name: true } },
       assignedTo: { select: { id: true, name: true } },
+      // BGĐ 31/07 — người giới thiệu (affiliate) ra lead này.
+      affiliate: { select: { code: true, name: true } },
       activities: { orderBy: { createdAt: "desc" }, take: 100 },
       // LD6 — KHÔNG fetch `tasks` nữa (UI "Việc cần làm" đã gỡ; model LeadTask giữ nguyên).
       children: {
@@ -300,6 +302,13 @@ export default async function LeadDetailPage({ params }: Props) {
         <Info label="Khoá quan tâm" value={lead.course?.name ?? lead.source} />
         <Info label="Cơ sở" value={lead.center?.name ?? null} />
         <Info label="Nguồn" value={lead.source} />
+        {/* BGĐ 31/07 — nguồn giới thiệu (affiliate) khi lead vào qua link ?ref= */}
+        {lead.affiliate && (
+          <Info
+            label="Người giới thiệu"
+            value={`${lead.affiliate.name} (${lead.affiliate.code})`}
+          />
+        )}
         <Info label="Sale phụ trách" value={lead.assignedTo?.name ?? "Chưa gán"} />
         <Info
           label="Ngày tạo"

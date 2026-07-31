@@ -6,6 +6,7 @@ import { sendMetaCapi, sendGa4Event } from '@/lib/tracking'
 import { rateLimit } from '@/lib/rate-limit'
 import { findRecentDuplicate, logDuplicateAttempt } from '@/lib/lead/dedup'
 import { autoAssignNewLead } from '@/lib/lead/auto-assign'
+import { resolveAffiliateByCode } from '@/lib/affiliate'
 import { getSetting } from '@/lib/settings/service'
 
 // Rate limit — uses Upstash Redis when env vars set, in-memory fallback otherwise.
@@ -82,8 +83,13 @@ export async function POST(req: NextRequest) {
       courseId = course?.id
     }
 
+    // BGĐ 31/07 — link giới thiệu `?ref=<code>` → gắn lead về đúng người giới thiệu.
+    // Mã sai/đã tắt → null (vẫn tạo lead bình thường).
+    const affiliate = await resolveAffiliateByCode(data.ref)
+
     const lead = await db.lead.create({
       data: {
+        affiliateId: affiliate?.id,
         parentName: data.parentName.trim(),
         childName: data.childName?.trim(),
         childAge: data.childAge,

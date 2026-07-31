@@ -1018,6 +1018,11 @@ model Lead {
   commissionSource    CommissionSource? // nguồn để chia hoa hồng
   adminId             String? // Sale Admin xử lý L1→L2
 
+  // BGĐ 31/07 — NGUỒN GIỚI THIỆU (affiliate): ai giới thiệu ra lead này.
+  // Gán tự động khi khách vào site qua link `?ref=<code>`, hoặc admin chọn tay.
+  affiliateId String?
+  affiliate   Affiliate? @relation("AffiliateLeads", fields: [affiliateId], references: [id], onDelete: SetNull)
+
   // FIX lead→payment→enroll (M0/LD1) — loại đơn dự kiến (gợi ý nguồn item khi tạo đơn).
   orderKind OrderKind?
 
@@ -1068,9 +1073,44 @@ model Lead {
   @@index([orgUnitId])
   @@index([expectedCourseId])
   @@index([expectedProductId])
+  @@index([affiliateId]) // BGĐ 31/07 — báo cáo lead theo người giới thiệu
   // IDX-2: trang leads (Kanban + table) page/order theo createdAt DESC dưới scope centerId
   // → composite cho index-ordered rows (bỏ sort + OFFSET scan). Bảng high-growth.
   @@index([centerId, status, createdAt])
+}
+
+// BGĐ 31/07 — NGƯỜI/ĐỐI TÁC GIỚI THIỆU (affiliate).
+//
+// Mỗi affiliate có 1 MÃ duy nhất; link `satarobo.vn/...?ref=<code>` đưa khách vào
+// site sẽ gắn lead về đúng người. Cũng gán tay được ở màn Lead.
+//
+// ⚠️ Hoa hồng affiliate: mức % + thời điểm chốt trả CHƯA có quy chế (chờ BGĐ) —
+// model này chỉ ghi NGUỒN + tỉ lệ tham chiếu; KHÔNG tự sinh phiếu chi.
+model Affiliate {
+  id   String @id @default(cuid())
+  /// Mã giới thiệu dùng trong link `?ref=` — chữ HOA + số, không dấu.
+  code String @unique
+  name String
+  /// Liên hệ để đối soát (không bắt buộc).
+  phone String?
+  email String?
+  /// Phụ huynh/HV giới thiệu có thể gắn về tài khoản User (không bắt buộc).
+  userId String?
+  /// Cơ sở phụ trách theo dõi (null = toàn hệ thống).
+  centerId String?
+  /// Tỉ lệ hoa hồng tham chiếu (%) — dùng để đối soát tay tới khi có quy chế.
+  commissionPercent Float?
+  isActive Boolean @default(true)
+  note     String? @db.Text
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  leads Lead[] @relation("AffiliateLeads")
+
+  @@index([isActive])
+  @@index([centerId])
 }
 
 /// R7-01 — 1 Lead có N con. Nền cho lớp trải nghiệm (R7-02). Field phẳng cũ

@@ -49,6 +49,8 @@ export const leadCreateSchema = z.object({
   fbc: z.string().optional(),
   landingPage: z.string().url().optional(),
   referrer: z.string().optional(),
+  // BGĐ 31/07 — mã giới thiệu từ link `?ref=<code>` (affiliate). Mã sai → bỏ qua.
+  ref: z.string().max(32).optional(),
   eventId: z.string().min(8),
   consentMarketing: z.boolean().default(false),
   note: z.string().max(500).optional(),

@@ -54,6 +54,7 @@ import {
   Star,
   Clock,
   ChevronDown,
+  Share2,
   Workflow,
   Wallet,
   Undo2,
@@ -96,6 +97,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
+      // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
+      { label: "Nguồn giới thiệu", href: "/affiliates", icon: Share2, perm: ["leads:view-all"] },
       { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
       { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
     ],
