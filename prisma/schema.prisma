@@ -1297,6 +1297,9 @@ model Class {
   startDate    DateTime? @db.Timestamptz(6)
   endDate      DateTime? @db.Timestamptz(6)
   scheduleDays Int[]     @default([]) // 0=CN, 1=T2, ..., 6=T7
+  // BGĐ 31/07 — 2-phase: startTime/endTime là giờ CHUNG cả tuần (giữ nguyên cho lớp
+  // cũ + làm fallback). Lớp có ca KHÁC GIỜ theo thứ (vd 17h30-T2 & 08h-T6) dùng
+  // scheduleSlots; đọc qua helper lib/classes/slots.ts (KHÔNG đọc trực tiếp 2 field này).
   startTime    String? // "HH:mm"
   endTime      String? // "HH:mm"
 
@@ -1333,6 +1336,7 @@ model Class {
   enrollments     Enrollment[]
   sessions        ClassSession[]
   sessionPlans    ClassSessionPlan[] // R7-06
+  scheduleSlots   ClassScheduleSlot[] // BGĐ 31/07 — giờ học riêng theo từng thứ
   exams           Exam[]
   assignments     Assignment[]
   progressReports ProgressReportLog[]
@@ -1351,6 +1355,25 @@ model Class {
   @@index([courseId, status])
   @@index([roomId])
   @@index([orgUnitId])
+}
+
+// BGĐ 31/07 — GIỜ HỌC RIÊNG THEO TỪNG THỨ (lớp 2 ca khác giờ: 17h30-T2 & 08h-T6).
+// 2-phase: lớp KHÔNG có slot → dùng Class.startTime/endTime chung như trước.
+// Mỗi thứ tối đa 1 ca (lớp không học 2 ca cùng 1 thứ).
+model ClassScheduleSlot {
+  id      String @id @default(cuid())
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  weekday   Int // 0=CN, 1=T2, ..., 6=T7
+  startTime String // "HH:mm"
+  endTime   String? // "HH:mm"
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([classId, weekday])
+  @@index([classId])
 }
 
 model Enrollment {
