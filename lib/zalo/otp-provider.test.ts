@@ -29,13 +29,15 @@ beforeEach(() => {
 });
 
 describe("[AUTH-SDT-P4] zaloOtpProvider", () => {
-  it("gửi đúng template từ SystemSetting + params {code, minutes} khớp mẫu đã duyệt", async () => {
+  // Tên tham số là HỢP ĐỒNG với mẫu 616128 đã duyệt, không phải quy ước nội bộ:
+  // gửi `code` bị Zalo trả -1122 "missing a parameter otp" (đo trên prod 31/07).
+  it("gửi đúng template từ SystemSetting + params {otp, minutes} khớp mẫu đã duyệt", async () => {
     const r = await zaloOtpProvider.send(INPUT);
     expect(r.ok).toBe(true);
     expect(znsSendSpy).toHaveBeenCalledWith({
       toPhone: "84905123456",
       templateKey: "616128",
-      params: { code: "424242", minutes: 5 },
+      params: { otp: "424242", minutes: 5 },
     });
   });
 

@@ -15,7 +15,10 @@ email → **Resend**. SMS đã **bỏ hẳn** (QĐ-H 30/07); email là kênh d�
   Trả `null` cho SĐT khi cờ break-glass `AUTH_ZNS_DEGRADED` bật.
 - `lib/zalo/otp-provider.ts` — kênh ZALO: template đọc từ **SystemSetting
   `zalo.znsTemplateOtp`** (đổi mẫu không cần deploy; default = mẫu A `616128` duyệt 31/07),
-  params `{code, minutes}` **phải khớp tên tham số trong mẫu đã duyệt**. Map mã lỗi ZNS
+  params **`{otp, minutes}`** — tên tham số là **hợp đồng với mẫu đã duyệt**, không phải
+  quy ước nội bộ. Đo thật trên prod 31/07: gửi `code` bị trả `-1122 template data is
+  missing a parameter otp` (mẫu Xác thực của Zalo dùng tên cố định `otp`). Đổi mẫu ⇒
+  phải đối chiếu lại tên tham số. Map mã lỗi ZNS
   thành key ổn định (`ZNS_ERROR_KEY`): `-118` NO_ZALO_ACCOUNT · `-119` USER_UNREACHABLE ·
   `-133` QUIET_HOURS · `-139`/`-141` USER_REFUSED · `-147` USER_LIMIT.
 - `lib/otp/service.ts` — `requestOtp` + `verifyAndConsumeOtp` (nguyên tử, CAS — P0 §3.1).

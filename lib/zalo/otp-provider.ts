@@ -54,7 +54,12 @@ export const zaloOtpProvider: OtpProvider = {
     const res = await znsProvider.send({
       toPhone: target,
       templateKey: templateId,
-      params: { code, minutes: minutesValid },
+      // ⚠️ Tên tham số phải khớp ĐÚNG mẫu đã duyệt, không phải tên ta tự đặt.
+      // Đo thật trên prod 31/07 với mẫu 616128: gửi `code` → Zalo trả
+      // `-1122 template data is missing a parameter otp` ⇒ mẫu Xác thực của
+      // Zalo dùng tên cố định `otp`. Lần đó KHÔNG báo thừa `minutes` nên tham
+      // số thứ hai giữ nguyên tên. Đổi mẫu ⇒ phải đối chiếu lại tại đây.
+      params: { otp: code, minutes: minutesValid },
     });
     if (res.ok) return { ok: true, provider: "zalo-zns" };
     const { key } = classifyZnsError(res.error);
