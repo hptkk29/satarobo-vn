@@ -135,7 +135,11 @@ async function refreshLocked(opts: {
   try {
     return await db.$transaction(
       async (tx) => {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('zalo_oa_token'))`;
+        // ⚠️ PHẢI là $executeRaw, KHÔNG phải $queryRaw: `pg_advisory_xact_lock()`
+        // trả kiểu `void`, Prisma $queryRaw cố giải mã cột đó và ném "Failed to
+        // deserialize column of type 'void'" ⇒ mọi lần refresh token đều chết
+        // (đã xảy ra thật trên prod 31/07). $executeRaw không đọc cột nên an toàn.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('zalo_oa_token'))`;
         const cfg = await tx.integrationConfig.findUnique({ where: { provider: PROVIDER } });
         const stored = readStored(cfg?.settings);
 

@@ -28,7 +28,13 @@ vi.mock("@/lib/db", () => ({
     },
     $transaction: vi.fn(async (fn: (tx: never) => Promise<unknown>) =>
       fn({
-        $queryRaw: vi.fn(async () => [{}]), // pg_advisory_xact_lock — no-op trong test
+        // Khoá advisory. CỐ Ý chỉ mock $executeRaw: dùng $queryRaw cho
+        // `pg_advisory_xact_lock()` (trả `void`) làm Prisma ném "Failed to
+        // deserialize column of type 'void'" trên Postgres THẬT — bug prod
+        // 31/07. Mock cũ trả [{}] nên che mất; nay quay lại $queryRaw là test
+        // đỏ ngay ("not a function"). Ràng buộc thật nằm ở e2e a0
+        // zalo-token-lock.spec.ts (chạy trên Postgres local).
+        $executeRaw: vi.fn(async () => 1),
         integrationConfig: {
           findUnique: vi.fn(async () => txStoreOverride ?? store),
           upsert: vi.fn(async (args: never) => {
