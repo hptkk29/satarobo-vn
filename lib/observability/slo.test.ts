@@ -11,8 +11,17 @@ describe("[R6-G3] SLO metrics + alert", () => {
     expect(alerts.find((a) => a.key === "eventPending")!.threshold).toBe(50);
   });
 
-  it("[R6-G3-T1-02] nhiều metric vượt → nhiều alert", () => {
-    const alerts = evaluateSlo({ eventPending: 100, webhookFail: 20, emailQueueBacklog: 200, cronLagMinutes: 60 });
+  it("[R6-G3-T1-02] nhiều metric vượt → nhiều alert (phủ cả 4 metric OTP của P4)", () => {
+    const alerts = evaluateSlo({
+      eventPending: 100,
+      webhookFail: 20,
+      emailQueueBacklog: 200,
+      cronLagMinutes: 60,
+      otpSentToday: 301,
+      otpDeliveryFailToday: 21,
+      znsUserErrorToday: 31,
+      otpCostTodayVnd: 90_001,
+    });
     expect(alerts).toHaveLength(SLO_THRESHOLDS.length);
   });
 

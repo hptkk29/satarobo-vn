@@ -142,6 +142,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "nhan-su",
   "notifications",
   "orders",
+  "otp-logs",
   "parent-feedback",
   "parent-requests",
   "payment-methods",

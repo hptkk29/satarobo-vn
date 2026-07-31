@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac, randomInt, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
-import { getPrimaryOtpProvider } from "./provider";
+import { emailOtpProvider, getOtpProviderFor } from "./provider";
 import { getSetting } from "@/lib/settings/service";
 import { getSigningSecret } from "@/lib/security/signing-key";
 import { canonicalPhone } from "@/lib/phone";
@@ -189,14 +189,30 @@ export async function requestOtp(input: {
     return { ok: false, error: "Đã vượt số lần gửi mã trong ngày. Vui lòng thử lại sau." };
   }
 
+  // AUTH-SĐT P4 (QĐ-5) — provider theo LOẠI target: SĐT → Zalo ZNS, email → Resend.
+  // provider = null ⇔ cờ break-glass AUTH_ZNS_DEGRADED đang bật (bỏ qua ZNS).
+  const provider = getOtpProviderFor(target);
+  // Target SĐT (kể cả degraded) mới có đường email dự phòng; tra LƯỜI — chỉ
+  // khi thật sự cần, khỏi tốn query trên happy path.
+  const isPhoneTarget = provider?.channel !== "EMAIL";
+
+  let fallbackEmail: string | null = null;
+  if (!provider) {
+    fallbackEmail = await findVerifiedFallbackEmail(target, input.userId ?? null);
+    if (!fallbackEmail) {
+      // Degraded mà user không có email dự phòng → không còn kênh nào; đừng tạo
+      // OtpRequest rác (mã không ai nhận được nhưng vẫn verify được nếu lộ).
+      return { ok: false, error: "Không gửi được mã. Thử lại sau.", deliveryFailed: true };
+    }
+  }
+
   const code = genCode();
   const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
-  const provider = getPrimaryOtpProvider();
 
   const otp = await db.otpRequest.create({
     data: {
       target,
-      channel: provider.channel,
+      channel: provider?.channel ?? "EMAIL",
       purpose: input.purpose,
       codeHash: hashCode(code),
       expiresAt,
@@ -206,33 +222,84 @@ export async function requestOtp(input: {
     select: { id: true },
   });
 
-  const sent = await provider.send({
-    target,
-    code,
-    purpose: input.purpose,
-    minutesValid: ttlMinutes,
-  });
-
-  await db.otpDeliveryLog.create({
-    data: {
-      otpRequestId: otp.id,
-      channel: provider.channel,
+  // Lần gửi 1 — kênh chính theo target.
+  let sent: { ok: boolean; error?: string } | null = null;
+  if (provider) {
+    sent = await provider.send({
       target,
-      provider: provider.name,
-      status: sent.ok ? "SENT" : "FAILED",
-      error: sent.error ?? null,
-    },
-  });
+      code,
+      purpose: input.purpose,
+      minutesValid: ttlMinutes,
+    });
+    await db.otpDeliveryLog.create({
+      data: {
+        otpRequestId: otp.id,
+        channel: provider.channel,
+        target,
+        provider: provider.name,
+        status: sent.ok ? "SENT" : "FAILED",
+        error: sent.error ?? null,
+      },
+    });
+  }
 
-  if (!sent.ok) {
+  // Lần gửi 2 — email dự phòng khi ZNS hỏng/degraded (mô hình 2 delivery /
+  // 1 request đã có sẵn trong schema). target của delivery = địa chỉ email
+  // THẬT đã gửi tới; OtpRequest.target vẫn là SĐT nên verify không đổi.
+  // Đòi email ĐÃ VERIFY — không giả vờ gửi được cho địa chỉ chưa ai xác nhận.
+  if (!sent?.ok && isPhoneTarget && fallbackEmail === null) {
+    fallbackEmail = await findVerifiedFallbackEmail(target, input.userId ?? null);
+  }
+  if (!sent?.ok && fallbackEmail) {
+    const viaEmail = await emailOtpProvider.send({
+      target: fallbackEmail,
+      code,
+      purpose: input.purpose,
+      minutesValid: ttlMinutes,
+    });
+    await db.otpDeliveryLog.create({
+      data: {
+        otpRequestId: otp.id,
+        channel: "EMAIL",
+        target: fallbackEmail,
+        provider: emailOtpProvider.name,
+        status: viaEmail.ok ? "SENT" : "FAILED",
+        error: viaEmail.error ?? null,
+      },
+    });
+    if (viaEmail.ok) return { ok: true, otpId: otp.id, expiresAt, cooldownSec };
+  }
+
+  if (!sent?.ok) {
     return {
       ok: false,
-      error: sent.error ?? "Không gửi được mã. Thử lại sau.",
+      error: sent?.error ?? "Không gửi được mã. Thử lại sau.",
       deliveryFailed: true,
     };
   }
 
   return { ok: true, otpId: otp.id, expiresAt, cooldownSec };
+}
+
+/**
+ * AUTH-SĐT P4 — email dự phòng cho target SĐT: tra user theo `userId` (nếu
+ * caller biết) hoặc theo `User.phone` (canonical). Đòi `emailVerified` — email
+ * chưa verify không được nhận mã (kế hoạch §P4, "không giả vờ thành công").
+ */
+async function findVerifiedFallbackEmail(
+  target: string,
+  userId: string | null,
+): Promise<string | null> {
+  const user = userId
+    ? await db.user.findUnique({
+        where: { id: userId },
+        select: { email: true, emailVerified: true },
+      })
+    : await db.user.findFirst({
+        where: { phone: target },
+        select: { email: true, emailVerified: true },
+      });
+  return user?.email && user.emailVerified ? user.email : null;
 }
 
 export type VerifyOtpResult =
