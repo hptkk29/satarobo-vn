@@ -1,7 +1,7 @@
 import "server-only";
 import { znsProvider } from "@/lib/zalo/provider";
 import { getSetting } from "@/lib/settings/service";
-import type { OtpProvider } from "@/lib/otp/provider";
+import type { OtpProvider } from "@/lib/otp/provider-types";
 
 // =============================================================================
 // AUTH-SĐT P4 (QĐ-5) — OtpProvider kênh ZALO (ZNS mẫu Xác thực, Tag 1).

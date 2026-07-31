@@ -11,26 +11,12 @@ import { zaloOtpProvider } from "@/lib/zalo/otp-provider";
 // được ký) — email là kênh dự phòng vĩnh viễn (QĐ-3).
 // =============================================================================
 
-export type OtpChannelKey = "EMAIL" | "SMS" | "ZALO";
+import type { OtpProvider, OtpSendInput } from "./provider-types";
 
-export interface OtpSendInput {
-  target: string; // email hoặc SĐT
-  code: string; // mã 6 số (plain — chỉ để gửi, KHÔNG lưu plain)
-  purpose: "ACTIVATION" | "RESET" | "CHANGE_CONTACT";
-  minutesValid: number;
-}
-
-export interface OtpSendResult {
-  ok: boolean;
-  provider: string;
-  error?: string;
-}
-
-export interface OtpProvider {
-  channel: OtpChannelKey;
-  name: string;
-  send(input: OtpSendInput): Promise<OtpSendResult>;
-}
+// Types ở ./provider-types — tách để cắt vòng import với lib/zalo/otp-provider
+// (dependency-cruiser no-circular tính cả import type). Re-export để call-site
+// cũ import từ đây vẫn chạy.
+export type { OtpChannelKey, OtpProvider, OtpSendInput, OtpSendResult } from "./provider-types";
 
 const PURPOSE_LABEL: Record<OtpSendInput["purpose"], string> = {
   ACTIVATION: "kích hoạt tài khoản",
