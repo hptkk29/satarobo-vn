@@ -25,7 +25,7 @@ test.describe("[R1-04] L1→L2 qualify", () => {
     });
     expect(deduped).toBe(false);
     expect(lead.qualifiedAt).not.toBeNull();
-    expect(lead.phone).toBe("0901234567");
+    expect(lead.phone).toBe("84901234567");
     expect(lead.commissionSource).toBe("MARKETING_ADMIN");
     const after = await db.messengerConversation.findUnique({ where: { id: conv.id } });
     expect(after?.leadId).toBe(lead.id);
@@ -39,7 +39,7 @@ test.describe("[R1-04] L1→L2 qualify", () => {
     const r2 = await qualifyConversationToLead({ conversationId: c2.id, phone: "090-123-4567", commissionSource: "SALE_SELF" });
     expect(r2.deduped).toBe(true);
     expect(r2.lead.id).toBe(r1.lead.id);
-    expect(await db.lead.count({ where: { phone: "0901234567" } })).toBe(1);
+    expect(await db.lead.count({ where: { phone: "84901234567" } })).toBe(1);
   });
 
   test("[R1-04-C4.2] thiếu SĐT → không đạt L2 (throw)", async () => {
