@@ -10,6 +10,14 @@ import { db } from "@/lib/db";
 //
 // Seed lần đầu: lấy refresh_token từ env (ZALO_OA_REFRESH_TOKEN). Sau đó DB là
 // nguồn sự thật; env chỉ dùng để mồi + fallback khi DB chưa có.
+//
+// AUTH-SĐT P4 — refresh có KHOÁ chống đua (pg_advisory_xact_lock): vì
+// refresh_token xoay vòng, 2 instance serverless refresh song song = một bên
+// persist token rác → OA chết vĩnh viễn, phải OAuth lại tay. Khoá advisory theo
+// transaction serialize cả CUỘC GỌI Zalo giữa các instance (chung 1 DB); sau khi
+// giành khoá RE-READ trạng thái — instance khác có thể vừa refresh xong.
+// Refresh hiếm (cron 6h/lần + on-demand khi gần hạn) nên giữ 1 kết nối pooler
+// trong tối đa ~15s là chấp nhận được.
 // =============================================================================
 
 const PROVIDER = "ZALO_OA";
@@ -53,13 +61,10 @@ async function persist(state: ZaloTokenState): Promise<void> {
   });
 }
 
-/**
- * Gọi endpoint refresh của Zalo, lưu + trả token mới (đã tính expiresAt).
- * null nếu thiếu app creds / refresh_token hoặc Zalo trả lỗi.
- */
-export async function refreshZaloToken(
+/** Gọi endpoint refresh của Zalo — KHÔNG persist (caller lo, trong khoá). */
+async function callZaloRefreshApi(
   refreshToken: string,
-  now: number = Date.now(),
+  now: number,
 ): Promise<ZaloTokenState | null> {
   const appId = process.env.ZALO_APP_ID;
   const secret = process.env.ZALO_APP_SECRET;
@@ -79,7 +84,13 @@ export async function refreshZaloToken(
       signal: controller.signal,
     });
     const json = (await res.json().catch(() => null)) as
-      | { access_token?: string; refresh_token?: string; expires_in?: string | number; error?: number | string; message?: string }
+      | {
+          access_token?: string;
+          refresh_token?: string;
+          expires_in?: string | number;
+          error?: number | string;
+          message?: string;
+        }
       | null;
 
     if (!json || !json.access_token || !json.refresh_token) {
@@ -89,21 +100,102 @@ export async function refreshZaloToken(
 
     const expiresInSec =
       typeof json.expires_in === "string" ? parseInt(json.expires_in, 10) : json.expires_in;
-    const ttl = Number.isFinite(expiresInSec) && (expiresInSec as number) > 0 ? (expiresInSec as number) : FALLBACK_TTL_SEC;
+    const ttl =
+      Number.isFinite(expiresInSec) && (expiresInSec as number) > 0
+        ? (expiresInSec as number)
+        : FALLBACK_TTL_SEC;
 
-    const state: ZaloTokenState = {
+    return {
       accessToken: json.access_token,
       refreshToken: json.refresh_token,
       expiresAt: now + ttl * 1000,
     };
-    await persist(state);
-    return state;
   } catch (err) {
     console.warn(`[zalo:token] refresh lỗi: ${err instanceof Error ? err.message : "unknown"}`);
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Refresh dưới khoá advisory. `force=false` → nếu sau khi giành khoá thấy token
+ * còn hạn (instance khác vừa refresh) thì DÙNG LUÔN, không xoay thêm.
+ *
+ * Đường cứu khi Zalo ĐÃ xoay mà commit DB thất bại: persist lại NGOÀI
+ * transaction; vẫn hỏng → refresh_token mới mất, token cũ đã chết ⇒ log
+ * ❌ MẤT TOKEN + làm theo runbook `docs/otp-service.md` §Runbook.
+ */
+async function refreshLocked(opts: {
+  now: number;
+  seedRefreshToken: string | null;
+  force: boolean;
+}): Promise<ZaloTokenState | null> {
+  let rotated: ZaloTokenState | null = null;
+  try {
+    return await db.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('zalo_oa_token'))`;
+        const cfg = await tx.integrationConfig.findUnique({ where: { provider: PROVIDER } });
+        const stored = readStored(cfg?.settings);
+
+        // RE-READ sau khoá: còn hạn + không ép xoay → dùng của instance kia.
+        if (!opts.force && stored && stored.expiresAt - EXPIRY_BUFFER_MS > opts.now) {
+          return stored;
+        }
+
+        // Ưu tiên refresh_token ĐÃ LƯU (bản mới nhất sau xoay vòng); seed/env chỉ mồi lần đầu.
+        const refreshToken = stored?.refreshToken || opts.seedRefreshToken;
+        if (!refreshToken) return null;
+
+        const fresh = await callZaloRefreshApi(refreshToken, opts.now);
+        if (!fresh) return null;
+        rotated = fresh; // từ đây Zalo đã xoay — BẮT BUỘC persist được
+
+        await tx.integrationConfig.upsert({
+          where: { provider: PROVIDER },
+          update: { isEnabled: true, settings: fresh as object },
+          create: { provider: PROVIDER, isEnabled: true, settings: fresh as object },
+        });
+        return fresh;
+      },
+      { maxWait: 5_000, timeout: 20_000 },
+    );
+  } catch (err) {
+    if (rotated) {
+      console.error(
+        "[zalo:token] ❌ Zalo ĐÃ XOAY refresh_token nhưng ghi DB trong transaction thất bại — thử cứu bằng persist trực tiếp…",
+      );
+      try {
+        await persist(rotated);
+        console.error("[zalo:token] ✅ Đã cứu được token (persist ngoài transaction).");
+        return rotated;
+      } catch {
+        console.error(
+          "[zalo:token] ❌❌ MẤT REFRESH TOKEN: token mới không lưu được mà token cũ đã bị Zalo vô hiệu. " +
+            "OA sẽ ngừng gửi ZNS khi access_token hiện tại hết hạn. Làm theo runbook docs/otp-service.md §Runbook " +
+            "(OAuth lại OA lấy refresh_token mới → cập nhật env ZALO_OA_REFRESH_TOKEN → xoá row IntegrationConfig ZALO_OA → redeploy).",
+        );
+      }
+    } else {
+      console.warn(
+        `[zalo:token] refresh (locked) lỗi: ${err instanceof Error ? err.message : "unknown"}`,
+      );
+    }
+    return null;
+  }
+}
+
+/**
+ * Gọi refresh với refresh_token cho trước (mồi lần đầu / test), có khoá chống
+ * đua. Dưới khoá, bản refresh_token ĐÃ LƯU trong DB (nếu có) được ưu tiên hơn
+ * tham số — tham số chỉ là seed.
+ */
+export async function refreshZaloToken(
+  refreshToken: string,
+  now: number = Date.now(),
+): Promise<ZaloTokenState | null> {
+  return refreshLocked({ now, seedRefreshToken: refreshToken, force: true });
 }
 
 /**
@@ -118,25 +210,27 @@ export async function getValidZaloAccessToken(now: number = Date.now()): Promise
     return stored.accessToken;
   }
 
-  // Cần refresh: ưu tiên refresh_token đã lưu, fallback env (seed lần đầu).
-  const refreshToken = stored?.refreshToken || process.env.ZALO_OA_REFRESH_TOKEN;
-  if (refreshToken) {
-    const refreshed = await refreshZaloToken(refreshToken, now);
-    if (refreshed) return refreshed.accessToken;
-  }
+  // Cần refresh — force=false: instance khác vừa refresh xong thì dùng luôn.
+  const refreshed = await refreshLocked({
+    now,
+    seedRefreshToken: process.env.ZALO_OA_REFRESH_TOKEN ?? null,
+    force: false,
+  });
+  if (refreshed) return refreshed.accessToken;
 
   // Fallback cuối: token đã lưu / token tĩnh env (có thể đã hết hạn).
   return stored?.accessToken || process.env.ZALO_OA_ACCESS_TOKEN || null;
 }
 
 /**
- * Buộc refresh ngay (dùng cho cron keep-alive + retry khi gặp lỗi auth).
- * Trả access_token mới, null nếu refresh không thực hiện được.
+ * Buộc refresh ngay (cron keep-alive + retry khi gặp lỗi auth). Trả
+ * access_token mới, null nếu refresh không thực hiện được.
  */
 export async function forceRefreshZaloToken(now: number = Date.now()): Promise<string | null> {
-  const stored = await loadStored();
-  const refreshToken = stored?.refreshToken || process.env.ZALO_OA_REFRESH_TOKEN;
-  if (!refreshToken) return null;
-  const refreshed = await refreshZaloToken(refreshToken, now);
+  const refreshed = await refreshLocked({
+    now,
+    seedRefreshToken: process.env.ZALO_OA_REFRESH_TOKEN ?? null,
+    force: true,
+  });
   return refreshed?.accessToken ?? null;
 }
