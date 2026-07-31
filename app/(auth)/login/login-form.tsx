@@ -18,7 +18,7 @@ export function LoginForm() {
   const callbackUrl = sanitizeCallbackUrl(searchParams.get("callbackUrl") ?? "/dashboard");
   const reason = searchParams.get("reason");
 
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export function LoginForm() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = loginSchema.safeParse({ email, password });
+    const parsed = loginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Thông tin đăng nhập chưa hợp lệ.");
       return;
@@ -34,14 +34,14 @@ export function LoginForm() {
     setError("");
     setLoading(true);
     const result = await signIn("credentials", {
-      email: parsed.data.email,
+      identifier: parsed.data.identifier,
       password: parsed.data.password,
       redirect: false,
     });
     setLoading(false);
     if (result?.error) {
-      toast.error("Email hoặc mật khẩu không đúng");
-      setError("Email hoặc mật khẩu không đúng.");
+      toast.error("Thông tin đăng nhập hoặc mật khẩu không đúng");
+      setError("Thông tin đăng nhập hoặc mật khẩu không đúng.");
       return;
     }
     router.push(callbackUrl);
@@ -85,17 +85,20 @@ export function LoginForm() {
 
       <div className="input__wrapper">
         <AtSign className="input__icon" />
+        {/* inputMode="email" (không phải "tel" dù ưu tiên SĐT): bàn phím tel
+            trên mobile KHÔNG có chữ cái → nhân sự/GV không gõ nổi email. */}
         <input
-          type="email"
-          id="email"
+          type="text"
+          id="identifier"
+          inputMode="email"
           className="input__field"
           placeholder=" "
           required
           autoComplete="username"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
         />
-        <label htmlFor="email" className="input__label">Email</label>
+        <label htmlFor="identifier" className="input__label">Số điện thoại hoặc Email</label>
       </div>
 
       <div className="input__wrapper">

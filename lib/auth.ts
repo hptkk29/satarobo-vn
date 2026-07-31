@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { loginSchema } from "@/lib/validators/auth";
 import { rateLimit } from "@/lib/rate-limit";
+import { canonicalPhone } from "@/lib/phone";
 
 type SessionGrant = { action: string; grant: "ALLOW" | "DENY" };
 
@@ -44,6 +45,7 @@ declare module "next-auth" {
       centerId: string | null;
       grants: SessionGrant[];
       tokenVersion: number;
+      phone: string | null; // AUTH-SĐT P3 — canonical 84XXXXXXXXX
     } & DefaultSession["user"];
   }
   interface User {
@@ -52,6 +54,7 @@ declare module "next-auth" {
     centerId?: string | null;
     grants?: SessionGrant[];
     tokenVersion?: number;
+    phone?: string | null; // AUTH-SĐT P3
   }
 }
 
@@ -92,25 +95,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        // SEC-H01: chống brute-force / credential-stuffing — rate-limit theo IP + email.
-        // rateLimit() fail-soft (Upstash → memory khi lỗi) nên KHÔNG khóa login hàng loạt
-        // khi Redis sự cố. Break-glass: đặt env LOGIN_RATELIMIT_DISABLED=1 để tắt tạm.
+        // AUTH-SĐT P3 — identifier là SĐT (canonical được) hoặc email; hai tập
+        // không giao nhau nên RẼ NHÁNH thay vì OR — né hẳn bẫy `{ phone: null }`
+        // (Prisma dịch thành `phone IS NULL` → khớp user ngẫu nhiên).
+        const identifier = parsed.data.identifier;
+        const canonical = canonicalPhone(identifier);
+
+        // SEC-H01: chống brute-force / credential-stuffing — rate-limit theo IP + định danh.
+        // Key CHUẨN HOÁ TRƯỚC (canonical/lowercase) — không thì `0818…` và `84818…`
+        // là 2 key khác nhau = bypass. rateLimit() fail-soft (Upstash → memory khi
+        // lỗi) nên KHÔNG khóa login hàng loạt khi Redis sự cố. Break-glass: đặt env
+        // LOGIN_RATELIMIT_DISABLED=1 để tắt tạm.
         if (process.env.LOGIN_RATELIMIT_DISABLED !== "1") {
           const ip = getClientIp(request);
-          const email = parsed.data.email.toLowerCase();
-          const [byIp, byEmail] = await Promise.all([
+          const idKey = canonical ?? identifier.toLowerCase();
+          const [byIp, byId] = await Promise.all([
             rateLimit({ key: `login:ip:${ip}`, max: 10, windowMs: 60_000 }),
-            rateLimit({ key: `login:email:${email}`, max: 5, windowMs: 60_000 }),
+            rateLimit({ key: `login:id:${idKey}`, max: 5, windowMs: 60_000 }),
           ]);
-          if (!byIp.success || !byEmail.success) return null;
+          if (!byIp.success || !byId.success) return null;
         }
 
-        const user = await db.user.findUnique({
-          where: { email: parsed.data.email },
+        // Email giữ NGUYÊN ngữ nghĩa so khớp cũ (raw, phân biệt hoa/thường) —
+        // đổi sang lowercase là thay đổi hành vi, phải đo trùng lower(email)
+        // trên PROD trước (scripts/sql/login-email-case.sql).
+        const user = await db.user.findFirst({
+          where: canonical ? { phone: canonical } : { email: identifier },
           select: {
             id: true,
             name: true,
             email: true,
+            phone: true,
             password: true,
             role: true,
             roles: true,
@@ -155,6 +170,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           name: user.name,
           email: user.email,
+          phone: user.phone,
           role: user.role,
           // Đợt 3B — đảm bảo roles luôn chứa vai trò chính (back-compat user cũ).
           roles: user.roles.length > 0 ? user.roles : [user.role],
@@ -175,6 +191,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.centerId = user.centerId ?? null;
         token.grants = user.grants ?? [];
         token.tokenVersion = user.tokenVersion ?? 0;
+        token.phone = user.phone ?? null; // AUTH-SĐT P3
       }
       return token;
     },
@@ -199,6 +216,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.centerId = (token.centerId as string | null) ?? null;
         session.user.grants = (token.grants as SessionGrant[]) ?? [];
         session.user.tokenVersion = (token.tokenVersion as number) ?? 0;
+        session.user.phone = (token.phone as string | null) ?? null; // AUTH-SĐT P3
       }
       return session;
     },
