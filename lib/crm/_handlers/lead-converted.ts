@@ -4,12 +4,12 @@
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
 import { enqueueEnrollmentConfirmation } from "@/lib/email/triggers";
-import { sendZaloNotification } from "@/lib/zalo/service";
+import { sendTuitionZnsForOrder } from "@/lib/notify/order";
 
-// AUTH-SĐT P5 — mẫu ZNS xác nhận ghi danh. Dùng chung mẫu "Học phí + tài khoản"
+// AUTH-SĐT P5 — mẫu ZNS xác nhận ghi danh dùng chung mẫu học phí đã duyệt
 // (616258) với thông báo đơn hàng; chưa đặt env → SKIPPED an toàn.
-// ⚠️ Tên tham số phải khớp mẫu đã duyệt (bài học PR #77).
-const ZNS_TEMPLATE_PAYMENT = process.env.ZALO_ZNS_TEMPLATE_PAYMENT || null;
+// ⚠️ Tên tham số phải khớp mẫu đã duyệt (bài học PR #77) — vì vậy đi qua
+// `sendTuitionZnsForOrder` chứ không tự dựng params tại đây.
 
 export async function onLeadConverted(event: DomainEventLite): Promise<void> {
   const parentUserId = String(event.payload.parentUserId ?? "");
@@ -56,17 +56,22 @@ export async function onLeadConverted(event: DomainEventLite): Promise<void> {
     );
     return;
   }
-  await sendZaloNotification({
-    toPhone: parent.phone,
-    templateKey: ZNS_TEMPLATE_PAYMENT,
-    params: {
-      name: parent.name ?? "Quý phụ huynh",
-      student: student.name,
-      course: courseName,
-      class: className,
-    },
-    fallbackEmail: null,
-  }).catch(() => {});
+
+  // Mẫu 616258 đòi số tiền + tên học viên lấy từ ĐƠN, không dựng tay được từ
+  // event. Không thấy đơn thì im lặng còn hơn gửi tin sai tham số (Zalo trả
+  // -1122, tin không tới mà chỗ này vẫn "thành công" vì nuốt lỗi).
+  const order = await db.order.findFirst({
+    where: { studentId, deletedAt: null },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!order) {
+    console.warn(
+      `[lead.converted] học viên ${studentId} không có đơn nào — bỏ qua ZNS xác nhận ghi danh.`,
+    );
+    return;
+  }
+  await sendTuitionZnsForOrder(order.id, parent.phone);
 }
 
 export function registerLeadConvertedHandlers(): void {

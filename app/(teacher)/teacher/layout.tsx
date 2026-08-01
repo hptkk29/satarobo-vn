@@ -58,10 +58,10 @@ export default async function TeacherLayout({
     where: { id: session.user.id },
     select: { isActive: true, tokenVersion: true, deletedAt: true, mustChangePassword: true },
   });
-  if (!dbUser || dbUser.deletedAt) redirect("/login?reason=session-invalidated");
-  if (!dbUser.isActive) redirect("/login?reason=session-disabled");
+  if (!dbUser || dbUser.deletedAt) redirect("/dang-xuat?reason=session-invalidated");
+  if (!dbUser.isActive) redirect("/dang-xuat?reason=session-disabled");
   if (dbUser.tokenVersion !== session.user.tokenVersion) {
-    redirect("/login?reason=session-invalidated");
+    redirect("/dang-xuat?reason=session-invalidated");
   }
   // BGĐ 31/07 — MK do admin cấp/reset: bắt đổi MK trước khi dùng site GV.
   // /doi-mat-khau ở app/(auth) (ngoài layout này) → không loop.

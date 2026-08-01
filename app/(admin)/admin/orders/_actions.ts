@@ -463,13 +463,7 @@ export async function createOrderManualAction(input: unknown) {
   });
 
   // P5 — khách không có email thì email trigger ở trên tự bỏ qua; ZNS lo phần đó.
-  void notifyOrderByZnsIfNoEmail({
-    customerPhone: data.customerPhone,
-    customerEmail: data.customerEmail,
-    customerName: data.customerName,
-    orderCode: created.code,
-    amount: totalAmount,
-  });
+  void notifyOrderByZnsIfNoEmail(created.id);
 
   return { ok: true as const, id: created.id, code: created.code };
 }
@@ -698,13 +692,7 @@ export async function changeOrderStatusAction(
       });
 
       // P5 — biên nhận qua ZNS cho khách không có email (xem lib/notify/order.ts).
-      void notifyOrderByZnsIfNoEmail({
-        customerPhone: orderForEmail.customerPhone,
-        customerEmail: orderForEmail.customerEmail,
-        customerName: orderForEmail.customerName,
-        orderCode: orderForEmail.code,
-        amount: orderForEmail.totalAmount,
-      });
+      void notifyOrderByZnsIfNoEmail(orderForEmail.id);
     }
   }
 

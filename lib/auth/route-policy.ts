@@ -181,9 +181,29 @@ export function isAdminRoute(p: string): boolean {
 }
 
 // Cụm A1 — trang auth công khai (chưa đăng nhập vẫn vào): login + kích hoạt OTP.
-const PUBLIC_AUTH_PATHS = new Set<string>(["/login", "/kich-hoat"]);
+// AUTH-SĐT P6 — thêm quên mật khẩu (cùng tính chất: OTP, chưa login).
+// `/dang-xuat` PHẢI công khai: nó tồn tại để dọn cookie của phiên đã chết, mà
+// phiên đó theo định nghĩa là không hợp lệ — bắt nó "đăng nhập trước" là dựng lại
+// đúng vòng lặp mà nó sinh ra để phá.
+const PUBLIC_AUTH_PATHS = new Set<string>([
+  "/login",
+  "/kich-hoat",
+  "/quen-mat-khau",
+  "/dang-xuat",
+]);
 export function isPublicAuthPath(p: string): boolean {
   return PUBLIC_AUTH_PATHS.has(p);
+}
+
+/**
+ * Trang OTP công khai (`/kich-hoat`, `/quen-mat-khau`) — luật host×role giống hệt
+ * nhau: chưa login thì vào được, đã login thì đá về nhà của vai trò.
+ * Gom lại một chỗ để thêm màn OTP mới không phải sửa 3 nhánh host rời rạc rồi
+ * quên mất một nhánh (mỗi nhánh trước đây chép riêng `pathname === "/kich-hoat"`).
+ */
+const PUBLIC_OTP_PATHS = new Set<string>(["/kich-hoat", "/quen-mat-khau"]);
+export function isPublicOtpPath(p: string): boolean {
+  return PUBLIC_OTP_PATHS.has(p);
 }
 
 export function isInfraPath(p: string): boolean {
@@ -242,6 +262,12 @@ const SALE_THANKYOU_FILE = "/sale/thank-you.html";
  */
 export function decideRoute(input: RouteInput): RouteDecision {
   const { hostKind, pathname, role, sessionValid } = input;
+
+  // `/dang-xuat` phục vụ ở MỌI host, MỌI vai trò, không điều kiện — đặt trước hết
+  // thảy. Nó là đường dọn cookie cho phiên đã chết (xem app/(auth)/dang-xuat);
+  // để bất kỳ luật host×role nào chạm vào là mở lại vòng lặp redirect vô tận mà
+  // nó sinh ra để phá.
+  if (pathname === "/dang-xuat") return { type: "next" };
 
   // Đợt 3B — vai trò hữu hiệu (union). Trống roles → suy từ role chính.
   const effectiveRoles: MaybeRole[] =
@@ -321,8 +347,8 @@ export function decideRoute(input: RouteInput): RouteDecision {
       return { type: "next" }; // chưa login → form login
     }
 
-    // Trang kích hoạt OTP — công khai (chưa login vẫn vào).
-    if (pathname === "/kich-hoat") {
+    // Trang OTP công khai (kích hoạt / quên mật khẩu) — chưa login vẫn vào.
+    if (isPublicOtpPath(pathname)) {
       if (isParent) return { type: "redirectPath", path: PORTAL_HOME };
       return { type: "next" };
     }
@@ -377,8 +403,8 @@ export function decideRoute(input: RouteInput): RouteDecision {
       return { type: "next" }; // chưa login → form login
     }
 
-    // Trang kích hoạt OTP — công khai (chưa login vẫn vào).
-    if (pathname === "/kich-hoat") {
+    // Trang OTP công khai (kích hoạt / quên mật khẩu) — chưa login vẫn vào.
+    if (isPublicOtpPath(pathname)) {
       if (isTeacher) return { type: "redirectPath", path: TEACHER_HOME };
       if (isStaff) {
         return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
@@ -489,8 +515,8 @@ export function decideRoute(input: RouteInput): RouteDecision {
       return { type: "next" }; // chưa login → form login
     }
 
-    // Trang kích hoạt OTP — công khai (chưa login vẫn vào).
-    if (pathname === "/kich-hoat") {
+    // Trang OTP công khai (kích hoạt / quên mật khẩu) — chưa login vẫn vào.
+    if (isPublicOtpPath(pathname)) {
       if (isStaff) return { type: "redirectPath", path: STAFF_HOME };
       if (isParent) return { type: "redirectHost", host: "portal", path: "/", status: 307 };
       return { type: "next" };
