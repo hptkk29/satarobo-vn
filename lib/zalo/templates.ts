@@ -47,6 +47,24 @@ export const ZNS_OTP_PARAM_SPEC = {
   otp: { type: "string", max: 10 },
 } as const satisfies Record<string, ParamSpec>;
 
+/**
+ * Mẫu **"Cấp tài khoản"** — ZBS `616899`, Mẫu tuỳ chỉnh,
+ * 400đ/tin qua SĐT · 280đ/tin qua UID · Ztime 7200s, mục đích Giao dịch.
+ *
+ * ⚠️ **Tạo 14h10 01/08/2026, ĐANG CHỜ ZALO DUYỆT (2–3 ngày làm việc).** Trước
+ * khi được duyệt, đặt `ZALO_ZNS_TEMPLATE_ACCOUNT="616899"` thì mọi cú gửi đều
+ * hỏng — mà `lib/parents/provision.ts` nuốt lỗi nên sẽ im lặng. Duyệt xong PHẢI
+ * mở lại bảng tham số thật trên ZBS đối chiếu với bảng dưới rồi mới bật.
+ *
+ * Mẫu khai đúng 2 tham số. **Không có `login_url`** — đường dẫn kích hoạt nằm
+ * trong phần nội dung TĨNH của mẫu, không phải tham số; bản `provision.ts` đầu
+ * tiên gửi kèm `login_url` là thừa (chưa từng tới Zalo vì mẫu chưa duyệt).
+ */
+export const ZNS_ACCOUNT_PARAM_SPEC = {
+  name: { type: "string", max: 30 },
+  login_id: { type: "string", max: 15 },
+} as const satisfies Record<string, ParamSpec>;
+
 const VN_TZ = "Asia/Ho_Chi_Minh";
 
 /**
@@ -105,5 +123,23 @@ export function buildTuitionZnsParams(input: TuitionZnsInput): Record<string, st
     total_course_fee: money(input.totalFee),
     paid_fee: money(input.paidFee),
     studentName: clamp(input.studentName, ZNS_TUITION_PARAM_SPEC.studentName.max, "Quý phụ huynh"),
+  };
+}
+
+export type AccountZnsInput = {
+  /** Tên phụ huynh đứng đơn — mẫu giới hạn 30 ký tự, tên dài bị cắt chứ không bị từ chối. */
+  customerName: string | null;
+  /** SĐT đăng nhập (dạng nào cũng được, hàm tự đưa về `0XXXXXXXXX` để đọc). */
+  phone: string;
+};
+
+/**
+ * Dựng params cho mẫu cấp tài khoản `616899` — đúng 2 khoá mẫu khai.
+ * THUẦN: không chạm DB/mạng nên test được trực tiếp.
+ */
+export function buildAccountZnsParams(input: AccountZnsInput): Record<string, string | number> {
+  return {
+    name: clamp(input.customerName, ZNS_ACCOUNT_PARAM_SPEC.name.max, "Quý phụ huynh"),
+    login_id: clamp(formatPhoneVN(input.phone), ZNS_ACCOUNT_PARAM_SPEC.login_id.max, "—"),
   };
 }

@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   ZNS_TUITION_PARAM_SPEC,
+  ZNS_ACCOUNT_PARAM_SPEC,
   buildTuitionZnsParams,
+  buildAccountZnsParams,
   formatZnsDateTime,
   type TuitionZnsInput,
 } from "./templates";
@@ -67,6 +69,30 @@ describe("buildTuitionZnsParams — hợp đồng với mẫu 616258", () => {
     const params = buildTuitionZnsParams({ ...BASE, totalFee: Number.NaN, paidFee: -1 });
     expect(params.total_course_fee).toBe(0);
     expect(params.paid_fee).toBe(0);
+  });
+});
+
+describe("buildAccountZnsParams — hợp đồng với mẫu 616899", () => {
+  it("trả ĐÚNG bộ khoá mà mẫu khai — không thiếu, không thừa (login_url là nội dung tĩnh)", () => {
+    const params = buildAccountZnsParams({ customerName: "Nguyễn Văn A", phone: "84901234567" });
+    expect(Object.keys(params).sort()).toEqual(Object.keys(ZNS_ACCOUNT_PARAM_SPEC).sort());
+  });
+
+  it("không tham số nào vượt giới hạn ký tự của mẫu", () => {
+    const params = buildAccountZnsParams({ customerName: "T".repeat(200), phone: "84901234567" });
+    for (const [key, spec] of Object.entries(ZNS_ACCOUNT_PARAM_SPEC)) {
+      expect(String(params[key]).length, `tham số ${key}`).toBeLessThanOrEqual(spec.max);
+    }
+  });
+
+  it("login_id là SĐT dạng nội địa 0…, nhận vào dạng nào cũng được", () => {
+    expect(buildAccountZnsParams({ customerName: "A", phone: "84901234567" }).login_id).toBe("0901234567");
+    expect(buildAccountZnsParams({ customerName: "A", phone: "0901234567" }).login_id).toBe("0901234567");
+  });
+
+  it("thiếu tên thì thay bằng chữ đỡ, KHÔNG gửi chuỗi rỗng", () => {
+    expect(buildAccountZnsParams({ customerName: "  ", phone: "84901234567" }).name).toBe("Quý phụ huynh");
+    expect(buildAccountZnsParams({ customerName: null, phone: "84901234567" }).name).toBe("Quý phụ huynh");
   });
 });
 
