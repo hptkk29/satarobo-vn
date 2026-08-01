@@ -54,6 +54,12 @@ export default defineConfig({
           NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "",
           NEXTAUTH_URL: "http://localhost:3100",
           NEXT_PUBLIC_APP_URL: "http://localhost:3100",
+          // AUTH-SĐT P2 — cửa test OTP: mã sinh ra luôn là hằng số này nên spec
+          // kích hoạt biết trước mã mà KHÔNG cần đọc ngược `codeHash` (HMAC một
+          // chiều). Chỉ can thiệp nguồn ngẫu nhiên; hash/cooldown/hạn mức/CAS vẫn
+          // đi đường thật. `genCode()` tự throw nếu biến này xuất hiện ở
+          // NODE_ENV=production, nên không rò sang môi trường thật được.
+          OTP_TEST_FIXED_CODE: "424242",
         },
       },
 });

@@ -77,7 +77,7 @@ export default async function EditStudentPage({ params }: Props) {
         centerId: true,
         orgUnitId: true,
         parentUserId: true,
-        parentUser: { select: { email: true, name: true, accountStatus: true } },
+        parentUser: { select: { email: true, phone: true, name: true, accountStatus: true } },
       },
     }),
     // PR-C: picker đơn vị qua OrgUnit tree (gồm cả HO) — không dùng db.center.findMany.
@@ -263,6 +263,7 @@ export default async function EditStudentPage({ params }: Props) {
         parentEmail={student.parentUser?.email ?? null}
         parentName={student.parentUser?.name ?? student.parentName}
         defaultEmail={student.parentEmail}
+        defaultPhone={student.parentUser?.phone ?? student.parentPhone}
         pendingActivation={student.parentUser?.accountStatus === "PENDING_ACTIVATION"}
       />
 

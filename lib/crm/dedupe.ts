@@ -44,16 +44,34 @@ export function classifyParentMatch(
   return { kind: "reuse", userId: (byEmailId ?? byPhoneId) as string };
 }
 
-/** Tìm parent theo email (User.email) + phone (Student.parentPhone → parentUserId). */
+/**
+ * Tìm parent theo email (`User.email`) + phone.
+ *
+ * AUTH-SĐT P5 — nhánh phone tra **HAI nguồn, theo thứ tự ưu tiên**:
+ *   1. `User.phone` (canonical, @unique) — sau P5 đây là khoá ĐỊNH DANH thật của
+ *      tài khoản phụ huynh, nên nó thắng;
+ *   2. `Student.parentPhone → parentUserId` — nguồn cũ, giữ lại vì phần lớn hồ sơ
+ *      tạo trước P5 có `User.phone = null` (convert lead cũ không ghi cột này).
+ * Bỏ bước 1 thì phụ huynh cấp tài khoản bằng SĐT (đường `lib/parents/provision.ts`)
+ * sẽ vô hình với dedupe ⇒ convert lại đẻ tài khoản thứ hai trùng số, và `@unique`
+ * chặn ở tận đường ghi bằng một lỗi P2002 khó hiểu thay vì "reuse".
+ */
 export async function findParentMatch(
   input: { email?: string | null; phone?: string | null },
   client: DbClient = db,
 ): Promise<ParentMatch> {
   const email = (input.email ?? "").trim().toLowerCase();
+  const canonical = canonicalPhone(input.phone);
   // AUTH-SĐT P1 — tra cả dạng canonical mới lẫn `0…` cũ (xem `phoneVariants`).
   const variants = phoneVariants(input.phone);
-  const [byEmail, byPhoneStudent] = await Promise.all([
+  const [byEmail, byPhoneUser, byPhoneStudent] = await Promise.all([
     email ? client.user.findFirst({ where: { email }, select: { id: true } }) : null,
+    canonical
+      ? client.user.findFirst({
+          where: { phone: canonical, deletedAt: null },
+          select: { id: true },
+        })
+      : null,
     variants.length
       ? client.student.findFirst({
           where: {
@@ -65,7 +83,8 @@ export async function findParentMatch(
         })
       : null,
   ]);
-  return classifyParentMatch(byEmail?.id ?? null, byPhoneStudent?.parentUserId ?? null);
+  const byPhoneId = byPhoneUser?.id ?? byPhoneStudent?.parentUserId ?? null;
+  return classifyParentMatch(byEmail?.id ?? null, byPhoneId);
 }
 
 /** So khớp 1 student ứng viên với student cũ (THUẦN): cùng tên chuẩn hoá + DOB. */

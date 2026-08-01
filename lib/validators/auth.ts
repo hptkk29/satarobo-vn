@@ -20,6 +20,25 @@ export const loginSchema = z.object({
   password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
 });
 
+/**
+ * AUTH-SĐT P5 — `/kich-hoat` nhận SĐT hoặc email, cùng tập hợp lệ với login.
+ *
+ * Khác `loginSchema.identifier` ở đúng một điểm: **transform về dạng tra cứu**
+ * (SĐT → canonical `84…`, email → lowercase). Lý do phải lowercase ở đây trong
+ * khi login cố ý KHÔNG: schema cũ của màn kích hoạt (`z.string().email()
+ * .toLowerCase()`) đã lowercase từ trước, nên giữ nguyên để **không đổi tập tài
+ * khoản khớp được** — đổi ngữ nghĩa hoa/thường là việc riêng, phải đo trùng
+ * `lower(email)` trên PROD trước (scripts/sql/login-email-case.sql).
+ */
+export const activationIdentifierSchema = z
+  .string()
+  .trim()
+  .min(1, "Nhập số điện thoại hoặc email")
+  .refine((v) => z.string().email().safeParse(v).success || canonicalPhone(v) !== null, {
+    message: "Số điện thoại hoặc email không hợp lệ",
+  })
+  .transform((v) => canonicalPhone(v) ?? v.toLowerCase());
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(8),

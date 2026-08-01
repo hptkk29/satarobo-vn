@@ -247,10 +247,8 @@ export function OrderCreateForm({
       toast.error("Vui lòng chọn sản phẩm và nhập đơn giá > 0");
       return;
     }
-    if (!customer.email.trim()) {
-      toast.error("Vui lòng nhập email khách hàng");
-      return;
-    }
+    // AUTH-SĐT P5 — email khách hàng KHÔNG còn bắt buộc (xác nhận/nhắc nợ đi
+    // Zalo theo SĐT). SĐT đã được validator `phoneVn` bắt buộc ở server.
     if (!paymentMethodId) {
       toast.error("Vui lòng chọn phương thức thanh toán");
       return;
@@ -414,15 +412,14 @@ export function OrderCreateForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Email *</Label>
+            <Label>Email (không bắt buộc)</Label>
             <Input
               type="email"
               value={customer.email}
               onChange={(e) =>
                 setCustomer({ ...customer, email: e.target.value })
               }
-              required
-              placeholder="email@vidu.com"
+              placeholder="Kênh dự phòng — bỏ trống nếu khách không dùng"
             />
           </div>
           <div className="space-y-1.5">

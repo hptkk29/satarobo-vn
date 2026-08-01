@@ -26,6 +26,7 @@ import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
+import { canonicalPhone, phoneVariants } from "@/lib/phone";
 
 type ActionResult = { error?: string };
 
@@ -924,15 +925,26 @@ export async function withdrawStudentAction(input: {
 
 const parentAccountSchema = z.object({
   studentId: z.string().min(1),
-  email: z.string().email("Email không hợp lệ"),
+  // AUTH-SĐT P5 — SĐT là định danh (bắt buộc), email hạ xuống tuỳ chọn. Bỏ trống
+  // SĐT thì lấy `Student.parentPhone` làm mặc định (xử lý dưới thân hàm).
+  phone: z.string().trim().optional().or(z.literal("")),
+  email: z
+    .string()
+    .trim()
+    .email("Email không hợp lệ")
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v.toLowerCase() : null)),
   name: z.string().trim().max(120).optional(),
 });
 
 // P0-2: cấp tài khoản phụ huynh = PENDING_ACTIVATION + gửi OTP kích hoạt (KHÔNG
 // đặt mật khẩu tạm). Phụ huynh tự đặt mật khẩu khi kích hoạt (flow A1).
+// AUTH-SĐT P5: khoá đăng nhập = SĐT, mã kích hoạt đi Zalo ZNS.
 export async function createParentAccount(input: {
   studentId: string;
-  email: string;
+  phone?: string;
+  email?: string;
   name?: string;
 }): Promise<{ ok: boolean; linkedCount?: number; pendingActivation?: boolean; error?: string }> {
   const session = await auth();
@@ -945,8 +957,7 @@ export async function createParentAccount(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { studentId } = parsed.data;
-  const email = parsed.data.email.trim().toLowerCase();
+  const { studentId, email } = parsed.data;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
@@ -955,6 +966,16 @@ export async function createParentAccount(input: {
     select: { id: true, parentUserId: true, parentName: true, parentPhone: true },
   });
   if (!student) return { ok: false, error: "Không tìm thấy học viên" };
+
+  // Định danh = SĐT ô nhập, không có thì lấy SĐT phụ huynh trên hồ sơ học viên.
+  const phone = canonicalPhone(parsed.data.phone || student.parentPhone);
+  if (!phone) {
+    return {
+      ok: false,
+      error:
+        "Cần số điện thoại di động hợp lệ của phụ huynh — đây là tài khoản đăng nhập và là nơi nhận mã kích hoạt.",
+    };
+  }
   // Cách ly cơ sở: chỉ cấp tài khoản PH cho HV trong tầm nhìn actor.
   if (!(await studentInScope(session.user.id, studentId))) {
     return { ok: false, error: "Không tìm thấy học viên" };
@@ -963,13 +984,12 @@ export async function createParentAccount(input: {
     return { ok: false, error: "Học viên đã có tài khoản phụ huynh" };
   }
 
-  // Email đã dùng?
-  const existingUser = await sdb.user.findUnique({
-    where: { email },
-    select: { id: true, role: true },
-  });
+  // Định danh đã dùng? Tra SĐT TRƯỚC (khoá chính sau P5), rồi mới tới email.
+  const existingUser =
+    (await sdb.user.findUnique({ where: { phone }, select: { id: true, role: true } })) ??
+    (email ? await sdb.user.findUnique({ where: { email }, select: { id: true, role: true } }) : null);
   if (existingUser && existingUser.role !== "PARENT") {
-    return { ok: false, error: "Email đã dùng cho tài khoản nhân viên khác" };
+    return { ok: false, error: "Số điện thoại/email đã dùng cho tài khoản nhân viên khác" };
   }
 
   const parentName = parsed.data.name?.trim() || student.parentName || "Phụ huynh";
@@ -984,8 +1004,11 @@ export async function createParentAccount(input: {
         const created = await tx.user.create({
           data: {
             name: parentName,
+            // P5 — SĐT là khoá đăng nhập; email chỉ ghi khi có.
+            phone,
             email,
             role: "PARENT",
+            roles: ["PARENT"],
             isActive: true,
             accountStatus: "PENDING_ACTIVATION",
             tokenVersion: 0,
@@ -997,11 +1020,15 @@ export async function createParentAccount(input: {
       }
 
       // Link student hiện tại + anh chị em cùng SĐT phụ huynh (chưa có parent).
-      const siblingFilter: Prisma.StudentWhereInput = student.parentPhone
+      // P5 — so khớp qua `phoneVariants`: hồ sơ cũ còn lưu `0905…` trong khi hồ sơ
+      // mới đã canonical `84905…`, so khớp đúng-bằng sẽ bỏ sót đúng những anh chị
+      // em cần gộp (cùng lỗi mà P1 đã vá ở findConvertDuplicates).
+      const siblingPhones = phoneVariants(student.parentPhone);
+      const siblingFilter: Prisma.StudentWhereInput = siblingPhones.length
         ? {
             deletedAt: null,
             parentUserId: null,
-            OR: [{ id: studentId }, { parentPhone: student.parentPhone }],
+            OR: [{ id: studentId }, { parentPhone: { in: siblingPhones } }],
           }
         : { id: studentId };
 
@@ -1013,8 +1040,10 @@ export async function createParentAccount(input: {
     });
 
     // Tài khoản mới PENDING_ACTIVATION → gửi OTP kích hoạt (ngoài transaction).
+    // P5 — target là SĐT ⇒ `getOtpProviderFor` chọn Zalo ZNS; email chỉ còn là
+    // đường dự phòng do chính tầng OTP lo (P4), không phải việc của chỗ này.
     if (result.isNewPending) {
-      await requestOtp({ target: email, purpose: "ACTIVATION" }).catch(() => {});
+      await requestOtp({ target: phone, purpose: "ACTIVATION" }).catch(() => {});
     }
 
     revalidatePath(`/students/${studentId}/edit`);
@@ -1036,15 +1065,23 @@ export async function resendParentActivationOtp(
   const sdb = scopedDb(actor);
   const student = await sdb.student.findFirst({
     where: { id: studentId, deletedAt: null },
-    select: { parentUser: { select: { email: true, accountStatus: true } } },
+    select: { parentUser: { select: { phone: true, email: true, accountStatus: true } } },
   });
   const parent = student?.parentUser;
-  if (!parent?.email) return { ok: false, error: "Học viên chưa có tài khoản phụ huynh" };
+  if (!parent) return { ok: false, error: "Học viên chưa có tài khoản phụ huynh" };
   if (parent.accountStatus !== "PENDING_ACTIVATION") {
     return { ok: false, error: "Tài khoản đã kích hoạt — không cần gửi lại mã" };
   }
+  // P5 — ưu tiên SĐT (ZNS), lùi về email cho hồ sơ cũ chưa có `User.phone`.
+  const target = parent.phone ?? parent.email;
+  if (!target) {
+    return {
+      ok: false,
+      error: "Tài khoản phụ huynh chưa có số điện thoại lẫn email — cập nhật hồ sơ trước.",
+    };
+  }
 
-  const res = await requestOtp({ target: parent.email, purpose: "ACTIVATION" });
+  const res = await requestOtp({ target, purpose: "ACTIVATION" });
   if (!res.ok) {
     // QA 21/07 (#3) — kênh email lỗi (vd dev thiếu API key) nhưng OTP ĐÃ tạo và
     // verify được → báo thành công kèm chú thích thay vì toast đỏ gây hiểu nhầm
@@ -1053,7 +1090,7 @@ export async function resendParentActivationOtp(
       return {
         ok: true,
         warning:
-          "Đã tạo mã kích hoạt mới nhưng email CHƯA gửi được (dịch vụ email không khả dụng) — xem mã trong Email logs.",
+          "Đã tạo mã kích hoạt mới nhưng CHƯA gửi được (Zalo/email không khả dụng) — xem mã trong Nhật ký OTP.",
       };
     }
     return { ok: false, error: res.error ?? "Không gửi được mã (thử lại sau ít phút)" };
