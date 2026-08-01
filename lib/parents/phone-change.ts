@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { canonicalPhone } from "@/lib/phone";
 import { requestOtp, verifyAndConsumeOtp } from "@/lib/otp/service";
 import { logUserAudit } from "@/lib/audit/log";
+import { describeOtpSendError } from "@/lib/otp/messages";
 
 // =============================================================================
 // AUTH-SĐT P6 — ĐỔI SỐ ĐIỆN THOẠI ĐĂNG NHẬP (có kiểm soát).
@@ -45,7 +46,16 @@ export async function requestParentPhoneChange(
   if (taken) return { ok: false, error: "Số này đã dùng cho một tài khoản khác." };
 
   const res = await requestOtp({ target: newPhone, purpose: "CHANGE_CONTACT", userId });
-  if (!res.ok) return { ok: false, error: res.error ?? "Không gửi được mã. Thử lại sau." };
+  if (!res.ok) {
+    // P6-D — không ném chuỗi kỹ thuật (`ZNS_NO_ZALO_ACCOUNT:ZNS_ERR_-118:…`) vào
+    // mặt phụ huynh. Cooldown/hạn mức đã là câu tiếng Việt sẵn nên giữ nguyên;
+    // chỉ dịch nhóm lỗi của kênh gửi.
+    const raw = res.error ?? "";
+    const advice = raw.includes("ZNS_") || raw.includes("ZALO_")
+      ? describeOtpSendError(raw).message
+      : raw || "Không gửi được mã. Thử lại sau.";
+    return { ok: false, error: advice };
+  }
   return { ok: true, cooldownSec: res.cooldownSec };
 }
 

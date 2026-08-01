@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { requestOtp } from "@/lib/otp/service";
+import { requestOtp, issueOfflineOtp } from "@/lib/otp/service";
+import { describeOtpSendError } from "@/lib/otp/messages";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
@@ -17,6 +18,7 @@ import {
   logStudentAudit,
   detectChangedFields,
   getAuditActor,
+  logUserAudit,
 } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
@@ -1087,10 +1089,15 @@ export async function resendParentActivationOtp(
     // verify được → báo thành công kèm chú thích thay vì toast đỏ gây hiểu nhầm
     // (thống nhất với luồng cấp tài khoản lần đầu). Mã xem ở /email-logs.
     if (res.deliveryFailed) {
+      // P6-D — nói RÕ vì sao và nên làm gì. "Không gửi được" chung chung khiến
+      // nhân viên bấm gửi lại nhiều lần trong khi ba nhóm lỗi dưới đây KHÔNG tự
+      // hết: số chưa có Zalo / phụ huynh tắt nhận tin OA / chạm giới hạn nhận.
+      const advice = describeOtpSendError(res.error);
       return {
         ok: true,
-        warning:
-          "Đã tạo mã kích hoạt mới nhưng CHƯA gửi được (Zalo/email không khả dụng) — xem mã trong Nhật ký OTP.",
+        warning: advice.permanent
+          ? `Đã tạo mã nhưng KHÔNG gửi được và gửi lại cũng vô ích: ${advice.message} Dùng nút "Cấp mã tại quầy".`
+          : `Đã tạo mã kích hoạt mới nhưng chưa gửi được. ${advice.message}`,
       };
     }
     return { ok: false, error: res.error ?? "Không gửi được mã (thử lại sau ít phút)" };
@@ -1260,4 +1267,64 @@ export async function reactivateStudentAction(input: {
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
   return { ok: true as const };
+}
+
+/**
+ * AUTH-SĐT P6 — CẤP MÃ KÍCH HOẠT TẠM tại quầy (break-glass khi ZNS chết).
+ *
+ * Thay cho câu hướng dẫn cũ "xem mã trong Email logs" — sau P5 mã đi Zalo nên
+ * Email logs không còn gì để xem, và nhân viên mất hẳn đường xử lý khi phụ huynh
+ * đứng ngay trước mặt mà không nhận được tin.
+ *
+ * Mã trả về ở dạng CHỮ để nhân viên đọc cho phụ huynh. Vì thế đường này:
+ *   · đòi quyền `students:edit` + cách ly cơ sở như mọi thao tác trên học viên;
+ *   · BẮT BUỘC nhập lý do, và ghi AuditLog kèm lý do đó — cấp mã tay là hành vi
+ *     phải truy được người làm, không phải tiện ích thầm lặng.
+ */
+export async function issueOfflineActivationCode(input: {
+  studentId: string;
+  reason: string;
+}): Promise<{ ok: boolean; code?: string; expiresAt?: string; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("students:edit"))) return { ok: false, error: "Không có quyền" };
+
+  const reason = input.reason?.trim() ?? "";
+  if (reason.length < 10) {
+    return { ok: false, error: "Nhập lý do cấp mã tay (tối thiểu 10 ký tự) — bắt buộc để đối soát." };
+  }
+
+  if (!(await studentInScope(session.user.id, input.studentId))) {
+    return { ok: false, error: "Không tìm thấy học viên" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const student = await sdb.student.findFirst({
+    where: { id: input.studentId, deletedAt: null },
+    select: { parentUser: { select: { id: true, phone: true, email: true, accountStatus: true } } },
+  });
+  const parent = student?.parentUser;
+  if (!parent) return { ok: false, error: "Học viên chưa có tài khoản phụ huynh" };
+  if (parent.accountStatus !== "PENDING_ACTIVATION") {
+    return { ok: false, error: "Tài khoản đã kích hoạt — dùng Quên mật khẩu nếu cần." };
+  }
+  const target = parent.phone ?? parent.email;
+  if (!target) return { ok: false, error: "Tài khoản phụ huynh chưa có SĐT lẫn email." };
+
+  const res = await issueOfflineOtp({ target, purpose: "ACTIVATION", userId: parent.id });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  const { actorId, actorName } = getAuditActor(session);
+  await logUserAudit({
+    userId: parent.id,
+    action: "UPDATE",
+    actorId,
+    actorName,
+    changedFields: ["otpActivationOffline"],
+    // Lý do vào audit chứ KHÔNG phải mã — mã nằm trong audit là mã bị lộ.
+    reason: `Cấp mã kích hoạt TAY tại quầy: ${reason}`,
+  }).catch(() => {});
+
+  return { ok: true, code: res.code, expiresAt: res.expiresAt.toISOString() };
 }
