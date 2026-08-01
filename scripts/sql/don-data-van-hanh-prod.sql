@@ -40,17 +40,99 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- BƯỚC A — SAO LƯU. KHÔNG BỎ QUA.
 -- ═══════════════════════════════════════════════════════════════════════════
--- Không có SQL ở bước này. Làm tay TRƯỚC khi chạy bước C:
+-- ⚠️ Dự án đang dùng Supabase bản **FREE → KHÔNG có backup/PITR của Supabase**.
+-- Không có lưới an toàn sẵn. Phải tự dựng, bằng MỘT trong hai cách dưới (hoặc cả
+-- hai — A1 chống mất cả DB, A2 khôi phục nhanh khi lỡ xoá nhầm).
 --
---   Supabase Dashboard → project PROD → Database → Backups
---     · Có PITR: ghi lại MỐC THỜI GIAN hiện tại (đó là điểm khôi phục).
---     · Không có PITR: tạo backup thủ công, ĐỢI báo xong.
+-- ── A1. pg_dump ra máy (KHUYẾN NGHỊ — bản sao nằm NGOÀI Supabase) ───────────
+-- Công cụ đã có sẵn trên máy (cài qua scoop, xem .claude/rules/prisma-db.md):
+--     ~/scoop/apps/postgresql/current/bin/pg_dump.exe   → v18.4, dump được
+--     server Supabase (pg_dump mới hơn server thì OK, ngược lại thì không).
 --
--- Khuyến nghị thêm (backup Supabase khôi phục CẢ DB, không lấy lại riêng vài bảng):
---   pg_dump "<DIRECT_URL prod, session pooler :5432>" --data-only \
---     -f don-data-prod-backup-20260801.sql
+-- Chuỗi kết nối lấy Ở ĐÂU: **Supabase Dashboard → Project Settings → Database
+-- → Connection string → chọn "Session pooler" (cổng 5432)**. KHÔNG lấy từ
+-- Vercel — trên đó `DATABASE_URL` là Sensitive, đọc ra chỉ thấy `[SENSITIVE]`.
+-- Quên mật khẩu DB thì đặt lại ngay trang đó (đổi mật khẩu KHÔNG ảnh hưởng
+-- Vercel vì Vercel giữ chuỗi riêng — nhưng đổi xong nhớ cập nhật lại Vercel).
+-- Dùng session pooler :5432, ĐỪNG dùng transaction pooler :6543 (pg_dump cần
+-- prepared statement, cổng 6543 tắt cái đó).
 --
--- Ghi lại: backup lúc mấy giờ, bằng cách nào.
+--     pg_dump "postgresql://postgres.<ref>:<mat-khau>@aws-1-<region>.pooler.supabase.com:5432/postgres" \
+--       -Fc -f satarobo-prod-20260801.dump
+--
+--     # kiểm file có nội dung thật (vài MB trở lên, KHÔNG phải 0 byte):
+--     ls -lh satarobo-prod-20260801.dump
+--     pg_restore --list satarobo-prod-20260801.dump | head
+--
+-- Khôi phục sau này (chỉ 1 bảng, không phải cả DB):
+--     pg_restore -d "<chuoi-ket-noi>" --data-only -t '"Student"' satarobo-prod-20260801.dump
+--
+-- ── A2. Ảnh chụp NGAY TRONG DB (chạy được hoàn toàn ở SQL Editor) ───────────
+-- Chép 97 bảng sang schema `bak_20260801`. Nhanh, không cần công cụ, và khôi
+-- phục lại đúng bảng lỡ xoá nhầm chỉ bằng một câu INSERT.
+-- ⚠️ Hạn chế phải biết: bản sao nằm CÙNG database, nên nó KHÔNG cứu được nếu
+-- hỏng/mất cả project. Nó chỉ cứu tình huống "xoá nhầm" — mà đó đúng là rủi ro
+-- lớn nhất ở đây. Free tier giới hạn 500MB: chạy câu đo dung lượng ngay dưới
+-- trước, nếu tổng đã sát trần thì bỏ A2, dùng A1.
+
+-- Đo dung lượng phần sắp xoá (chỉ đọc):
+SELECT pg_size_pretty(sum(pg_total_relation_size(c.oid))) AS kich_thuoc_phan_se_xoa
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind = 'r'
+  AND c.relname IN (
+    'Lead','Student','Order','Class','Enrollment','Attendance','Payment',
+    'ClassSession','AuditLog','DomainEvent','EmailQueue','EmailLog','OtpRequest',
+    'OtpDeliveryLog','IntegrationLog','MessengerMessage','ZaloMessageLog'
+  );
+
+-- Tạo ảnh chụp (chạy 1 lần; lặp lại sẽ báo schema đã tồn tại — đó là chủ ý):
+DO $$
+DECLARE t text;
+BEGIN
+  EXECUTE 'CREATE SCHEMA bak_20260801';
+  FOREACH t IN ARRAY ARRAY[
+    'Affiliate','Assignment','AssignmentAttachment','AssignmentDocument',
+    'AssignmentSubmission','AssignmentSubmissionFile','Attendance','AuditLog',
+    'Class','ClassAuditLog','ClassGroup','ClassScheduleSlot','ClassSession',
+    'ClassSessionMedia','ClassSessionPlan','CommissionLine','CommissionStatement',
+    'ConversationMessage','ConvertConflict','CourseCompletion',
+    'CourseCompletionRequest','DomainEvent','EmailLog','EmailQueue','Enrollment',
+    'EnrollmentAuditLog','EvalAnswer','EvalResponse','Exam','ExamAnswer',
+    'ExamAttempt','ExamQuestion','HomeworkAssignment','IdempotencyKey',
+    'IntegrationLog','Lead','LeadActivity','LeadAssignmentHistory','LeadAuditLog',
+    'LeadChild','LeadDuplicate','LeadTask','LeadTransfer','LeadTrialHistory',
+    'MakeupNeed','MediaStudentTag','MessengerConversation','MessengerMessage',
+    'Note','Notification','Order','OrderInstallment','OrderItem',
+    'OrderStatusHistory','OtpDeliveryLog','OtpRequest','ParentFeedback',
+    'ParentRequest','Payment','PermissionGrantAuditLog','ProductMovement',
+    'ProgressReportLog','RbacAuditLog','RbacShadowDiff','Receipt','RefundRequest',
+    'ReportCard','ReportCardScore','RoleAuditLog','SataCoinTransaction',
+    'ScormAccessLog','ScormAttempt','StaffNotification','Student',
+    'StudentAuditLog','StudentCareTask','StudentCenterHistory','StudentConsent',
+    'StudentReserve','StudentRiskAlert','StudentSessionFeedback',
+    'StudentSkillAssessment','StudentTransferRequest','SubmissionRubricScore',
+    'SurveyResponse','TrialAttendance','TrialClass','TrialClassSession',
+    'TrialClassV2','TrialEnrollment','TrialFeedback','TrialProgramConfig',
+    'UserAuditLog','VoucherRedemption','WebhookDelivery','WorkRequest',
+    'ZaloMessageLog','User','Question','Choice'   -- + 3 bảng bị đụng một phần
+  ] LOOP
+    EXECUTE format('CREATE TABLE bak_20260801.%I AS TABLE public.%I', t, t);
+  END LOOP;
+END $$;
+
+-- Kiểm ảnh chụp có thật (số dòng phải khớp bước B):
+SELECT 'bak Lead' AS bang, count(*) FROM bak_20260801."Lead"
+UNION ALL SELECT 'bak Student', count(*) FROM bak_20260801."Student"
+UNION ALL SELECT 'bak Order',   count(*) FROM bak_20260801."Order"
+UNION ALL SELECT 'bak User',    count(*) FROM bak_20260801."User"
+ORDER BY 1;
+
+-- Khôi phục 1 bảng nếu lỡ xoá nhầm (ví dụ Student):
+--   INSERT INTO public."Student" SELECT * FROM bak_20260801."Student";
+-- Dọn ảnh chụp khi đã yên tâm (nhớ làm — nó chiếm chỗ trong 500MB free tier):
+--   DROP SCHEMA bak_20260801 CASCADE;
+--
+-- Ghi lại: đã backup bằng cách nào, lúc mấy giờ, file/schema tên gì.
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
