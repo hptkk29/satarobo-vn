@@ -71,7 +71,19 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17
+          # Runner ĐÃ CÓ SẴN client 16, và wrapper /usr/bin/pg_dump vẫn trỏ bản 16
+          # kể cả sau khi cài 17 → phải đẩy đường dẫn bản 17 lên đầu PATH.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      # Không có bước này thì bước cài ở trên vẫn "xanh" trong khi pg_dump là bản
+      # cũ, và lỗi chỉ lộ ra ở bước Dump với message khó lần. Đã dính đúng vậy.
+      - name: Xác nhận pg_dump đúng bản 17
+        run: |
           pg_dump --version
+          pg_dump --version | grep -qE ' 17\.' || {
+            echo "::error::pg_dump không phải bản 17 (server Supabase 17.6 — bản cũ hơn TỪ CHỐI dump)"
+            exit 1
+          }
 
       - name: Dump
         run: |
