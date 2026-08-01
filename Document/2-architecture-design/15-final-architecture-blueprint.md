@@ -23,7 +23,7 @@
 | Q10 | Portal | `hocvien.satarobo.vn` = phụ huynh + học sinh chung 1 tài khoản — **site phụ huynh + site từng con**; route đẹp **KHÔNG lộ `studentId`** (active profile trong signed cookie). KHÔNG student login riêng, ~~KHÔNG teacher domain riêng~~ **[ĐẢO 04/07/2026 — phiếu BGĐ câu 7: LÀM site giáo viên riêng `giaovien.satarobo.vn` (L5, route group `app/(teacher)/teacher/`, 2-phase flag `TEACHER_SITE_ENABLED`)]** |
 | Q11 | Lead | **Messenger Ads qua Page HO là kênh CHÍNH** (webhook → conversation → L1); phụ: GForm, landing, web form, import, giới thiệu |
 | Q12 | Khóa học | Core = **offline Sata 1–8 + Combo Sata 1&2**. Online course **trỏ Sataworld** — không build video LMS |
-| Q13 | OTP/Activation | KHÔNG mật khẩu mặc định. Core: activation qua **Resend email**, parent tự đặt mật khẩu; OTP provider abstraction để cắm SMS/Zalo sau |
+| Q13 | OTP/Activation | KHÔNG mật khẩu mặc định. Core: activation qua ~~**Resend email**~~ **[ĐẢO 01/08/2026 — AUTH-SĐT P4+P5 đã ship: kênh chính của phụ huynh là **Zalo ZNS** (template `616128`), email tụt xuống **dự phòng vĩnh viễn** (QĐ-3). ZNS live trên prod từ 01/08. `getOtpProviderFor(target)` chọn provider theo **loại target** (SĐT→zalo, email→resend), không theo env. **Nhân sự giữ nguyên email + mật khẩu (QĐ-C)** — chỉ phụ huynh dùng SĐT. SMS brandname **bỏ hẳn** (QĐ-H 30/07).]**, parent tự đặt mật khẩu; ~~OTP provider abstraction để cắm SMS/Zalo sau~~ **[ĐÃ CẮM XONG — `lib/zalo/otp-provider.ts`]** |
 | Q14 | Payment | Core: ghi nhận thanh toán **thủ công + kế toán xác nhận** — không cổng online |
 | Q15 | Roadmap | **A0 → R1 (CRM Messenger + Marketing + Commission) → R2 (SIS/Finance) → R3 (LMS offline) → R4 (Portal) → R5 (HR)** → backlog |
 

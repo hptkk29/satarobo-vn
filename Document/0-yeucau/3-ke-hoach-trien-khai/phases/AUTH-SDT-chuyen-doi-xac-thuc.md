@@ -2,8 +2,8 @@
 
 | | | | | | |
 |---|---|---|---|---|---|
-| **Phase** | AUTH-SĐT | **Ưu tiên** | P0 (mục §3) | **Ước lượng** | P0 2–3 ngày · P1–P6 chưa chốt (phụ thuộc §7) |
-| **Phụ thuộc** | A0-05 (login chung, DONE) · R2-04 (activation OTP, DONE) | **Feature flag** | `AUTH_PHONE_PROVISIONING` · `AUTH_ZNS_DEGRADED` | **Trạng thái** | 🟡 DỰ THẢO — đã verify code 29/07, chờ chốt §7 |
+| **Phase** | AUTH-SĐT | **Ưu tiên** | P0 (mục §3) | **Ước lượng** | Thực tế: **P0→P6 code xong trong 4 ngày** (28/07 → 01/08) |
+| **Phụ thuộc** | A0-05 (login chung, DONE) · R2-04 (activation OTP, DONE) | **Feature flag** | `AUTH_PHONE_PROVISIONING` · `AUTH_ZNS_DEGRADED` | **Trạng thái** | 🟢 **P0–P6 CODE XONG 01/08/2026, đang nghiệm thu trên nhánh `test`** — chưa lên prod. P7 có điều kiện, chưa mở |
 | **Nguồn** | Doc 15 **Q9** (`parent (phone/email) → hocvien`) · Q13 (OTP provider abstraction) | **Test ID** | `[AUTH-SDT-<task>-C<n>]` | **Liên quan** | R2-05 Duplicate phone UX |
 
 > Ngày lập: 28/07/2026 · Verify lại toàn bộ file:dòng 29/07/2026.
@@ -269,6 +269,8 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 ### P4 · Kênh ZALO cho OTP + khả năng quan sát
 
 > **✅ P4 HOÀN THÀNH (code) 31/07** (nhánh `feat/auth-sdt-p4`): `lib/zalo/otp-provider.ts` (template từ SystemSetting `zalo.znsTemplateOtp` default 616128; map đủ 6 mã lỗi thành key ổn định) · `getOtpProviderFor(target)` theo LOẠI target, env `OTP_PRIMARY_PROVIDER` đã GỠ · fallback email 2-delivery/1-request (đòi `emailVerified`) · cờ break-glass `AUTH_ZNS_DEGRADED` · vá đua refresh token bằng `pg_advisory_xact_lock` + re-read sau khoá + persist cứu ngoài transaction + runbook (docs/otp-service.md §Runbook) · `/admin/otp-logs` (quyền `emails:view`, mask theo `canViewLeadPii`, segment + test route-policy) · SLO +4 metric OTP · backend rate-limit hiện ở `/admin/tich-hop` · `docs/otp-service.md` viết lại toàn bộ (sửa cả 3 chỗ sai). **CÒN LẠI sau merge:** ① smoke dev-mode tới SĐT admin OA (kiểm tên tham số mẫu `code`/`minutes`) → ② set `ZALO_LIVE="true"` + redeploy (checklist §"Bật live" trong docs/otp-service.md) · ③ TODO metric quota ZNS qua API Zalo (chốt endpoint theo bảng tra cứu ZBS khi live).
+>
+> **✅ P4 ĐÓNG HOÀN TOÀN 01/08/2026 — ZNS live đã gửi và NHẬN ĐƯỢC TIN THẬT** (chủ dự án tự bấm "Gửi thử ZNS" ở `admin.satarobo.vn/admin/tich-hop`, tin về máy). Chốt xong ① và ② của danh sách trên. Đường tới đó đi qua **2 bug chỉ lộ ra khi gửi thật**, cả hai đã vá và deploy: **PR #76** — `pg_advisory_xact_lock()` trả `void` nên phải `$executeRaw`, dùng `$queryRaw` làm mọi lần refresh token ném "Failed to deserialize column of type 'void'" ⇒ `ZALO_NOT_CONFIGURED` **dù badge hiện "Đang bật (live)"** (unit mock `$queryRaw→[{}]` che mất — SQL thô từ nay phải có ca chạy Postgres thật: `tests/e2e/a0/zalo-token-lock.spec.ts`); **PR #77** — mẫu **Xác thực** dùng tên tham số **cố định `otp`**, không phải tên tự đặt lúc soạn nội dung (`-1122 template data is missing a parameter otp`); `minutes` không bị báo thừa nên giữ nguyên. **Luật rút ra: tên tham số ZNS là hợp đồng với mẫu đã duyệt — đổi mẫu phải đối chiếu lại `lib/zalo/otp-provider.ts`.** Hệ quả kèm theo: `ZALO_OA_REFRESH_TOKEN` (51 ngày tuổi) **còn sống**, token refresh chạy được, template `616128` hợp lệ. **Còn nợ đúng 1 việc: ③ metric quota ZNS** (không chặn P5) + theo dõi `/admin/otp-logs` ngày đầu (bước 4 checklist).
 
 - **`lib/zalo/otp-provider.ts`** theo QĐ-5. Map `-118/-119/-139/-141/-133/-147` thành error code riêng để tầng trên hiển thị đúng.
 - `getPrimaryOtpProvider()` chọn **theo loại target** (SĐT → zalo, email → resend), không theo env. Sửa `.env.example:110` (`OTP_PRIMARY_PROVIDER="zalo"` đang bị code nuốt im lặng) và **viết lại `docs/otp-service.md`** — file này sai ở **3 chỗ, không phải 1**: `:3` (*"Giai đoạn đầu chỉ dùng EMAIL"*), `:9` (*"`getPrimaryOtpProvider()` đọc env `OTP_PRIMARY_PROVIDER`"* — code hardcode email), và `:17-20` (bảng ghi tên env `OTP_TTL_MINUTES`/`OTP_MAX_ATTEMPTS`/… trong khi code đọc động từ `SystemSetting` qua `getSetting("otp.*")`). Sửa lẻ 4 dòng sẽ để lại tài liệu vẫn sai.
@@ -284,6 +286,16 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 ### P5 · Cấp tài khoản + kích hoạt bằng SĐT — **1 tin ZNS**
 
 *(Đây là phần đáp đúng yêu cầu gốc.)*
+
+> **✅ P5 CODE XONG 01/08/2026** (`782ba672` + vá e2e `9aba6b73`, PR #78, CI xanh) — **đã vào nhánh `test`, CHƯA lên prod.**
+>
+> **Điểm vỡ nặng nhất hoá ra không nằm trong danh sách dự kiến bên dưới:** `lib/parents/provision.ts` (sinh ra từ BGĐ batch E4 ngày 31/07) tạo tài khoản khoá bằng SĐT, không mật khẩu, rồi ZNS bảo phụ huynh vào `/kich-hoat` — nhưng màn đó validate `z.string().email()` nên **từ chối chính cái SĐT vừa gửi**. Đơn không có email = tài khoản **kẹt vĩnh viễn**. Hệ quả vận hành: **KHÔNG được bật SePay trước khi P5 lên prod** — mỗi đơn tiền về sẽ đẻ một tài khoản chết.
+>
+> Đã làm: `/kich-hoat` nhận SĐT **hoặc** email, **rẽ nhánh** thay vì `OR` (né bẫy `{phone:null}` khớp bừa); kích hoạt bằng SĐT set `phoneVerifiedAt` và **không** set `emailVerified` (cờ đó chi phối `findVerifiedFallbackEmail` — set bừa là gửi mã tới hòm thư chưa ai chứng minh sở hữu) · convert lead **v1+v2**: `parentEmail` optional, khoá `upsert` đổi email→phone (khoá theo email là bom hẹn giờ: Prisma gặp `where:{email:undefined}` thì **throw**, mỗi lead không email vỡ cả transaction) · `findParentMatch` tra `User.phone` **trước** `Student.parentPhone` · `Order.customerEmail` optional, xác nhận đơn/biên nhận cho khách không email đi ZNS · `lead.converted` nhánh không email trước đây `return` trống = im lặng nuốt xác nhận ghi danh.
+>
+> **CÒN NỢ (chặn DoD, chưa làm):** ① **backfill `User.phone`** — script riêng chạy theo lô, chưa viết chưa chạy; phụ huynh cũ chưa có `User.phone` thì **không đăng nhập bằng SĐT được** ② chạy `scripts/phone-audit.ts` trên **PROD** lấy số nhóm SĐT trùng (điều kiện *vào* phase, làm ngược thứ tự) ③ đóng hết `ConvertConflict status=OPEN` ④ **DoD "phụ huynh nhận đúng 1 tin ZNS trên máy" không nghiệm thu được trên `test`** (creds Zalo chỉ ở scope Production, cấm nhân bản `ZALO_OA_REFRESH_TOKEN`) → phải smoke trên prod ngay sau merge, đừng để trôi vì "test đã xanh".
+>
+> ✅ **Nghĩa vụ amend Doc 15 Q13 (nêu ở §1 dòng 26) — ĐÃ LÀM 01/08**: Q13 nay ghi ZNS là kênh chính, email là dự phòng vĩnh viễn.
 
 - **Điều kiện vào phase:** đã dọn trùng SĐT theo báo cáo P1 + **đóng hết `ConvertConflict status=OPEN`**.
   > Trùng phạm vi trực tiếp với **R2-05 "Duplicate phone UX"** trong lộ trình Doc 15 (§lộ trình R2). Nếu R2-05 chưa làm thì P5 **nuốt luôn** nó (SĐT thành khoá ⇒ UX trùng SĐT không còn là tuỳ chọn); nếu đã làm thì P5 chỉ mở rộng, không dựng lại. Kiểm tra trạng thái R2-05 trước khi ước lượng phase này.
@@ -304,6 +316,20 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 ---
 
 ### P6 · Quên mật khẩu + đổi SĐT có kiểm soát
+
+> **✅ P6 CODE XONG 01/08/2026** — 4 mảnh: `ce82ccd9` (P6-A) · `4cad83aa` (P6-B) · `02d1a638` (P6-C+D). Cùng PR #78, **đã vào `test`, CHƯA lên prod.**
+>
+> 🐛 **Thu hoạch lớn nhất của phase này là một bug CÓ SẴN mà e2e lôi ra, không phải tính năng mới:** bump `tokenVersion` đẩy người dùng vào **vòng lặp redirect vô tận** (`ERR_TOO_MANY_REDIRECTS`) — middleware thấy JWT còn hợp lệ (không biết `tokenVersion` vì không chạm DB) → cho qua → layout đọc DB thấy lệch → redirect `/login` → middleware thấy vẫn còn JWT ⇒ "đã đăng nhập" → đá về `/dashboard` → lặp. **Không ai xoá cookie.** *Đây chính là thứ đã đập vào mặt admin prod hôm 31/07 mà lúc đó chưa biết nguyên nhân.* Vá bằng `app/(auth)/dang-xuat` (dọn cookie rồi 303 về `/login`). Kèm theo: **portal layout trước nay KHÔNG kiểm `tokenVersion`** — với phụ huynh, `tokenVersion++` chưa từng đá được ai (JWT sống 30 ngày), mà phụ huynh lại đúng là đối tượng của luồng quên mật khẩu.
+>
+> - **P6-A** `/quen-mat-khau`: `OtpPurpose.RESET` trước đó **0 call-site**. Mã + mật khẩu mới **cùng 1 màn** (ràng buộc QĐ P0-a: `verifyAndConsumeOtp` nguyên tử). `tokenVersion++` đá mọi thiết bị, `mustChangePassword=false`.
+> - **P6-B** đổi SĐT nay đi qua OTP `CHANGE_CONTACT`, mã gửi tới **số MỚI** (bằng chứng đang cầm số đó); cập nhật `User.phone` + đồng bộ `Student.parentPhone` trong **cùng transaction**; kiểm trùng **2 lần** (trước khi gửi để khỏi tốn tin, và ngay trước khi ghi để bịt cửa sổ đua với đường cấp tài khoản chạy song song).
+> - **P6-C** `issueOfflineOtp()` tạo mã **không gửi đi đâu**, trả dạng chữ để nhân viên đọc qua điện thoại; đòi quyền + cách ly cơ sở + **lý do ≥10 ký tự** + AuditLog; **mã không vào audit**. Enum `OtpChannel += OFFLINE`; metric `otpSentToday` **loại** kênh này — không loại thì mã cấp tay thổi phồng "tin đã gửi" và làm cảnh báo kêu oan **đúng lúc ZNS đang hỏng**.
+>   ⚠️ `prisma migrate dev` sinh kèm **12 lệnh `ALTER COLUMN … TIMESTAMP(3)`** trên bảng LMS (drift DB test) — đã gỡ tay, migration cuối chỉ còn 1 dòng `ALTER TYPE`. Lần sau đọc kỹ migration sinh tự động trước khi commit.
+> - **P6-D** 4 nhóm lỗi ZNS **không tự hết** nên "thử lại sau" là lời khuyên sai: `-118` số chưa có Zalo · `-139/-141` tắt nhận tin OA (**trung tâm không bật hộ được**) · `-147` chạm giới hạn → nay dịch thành câu có đường thoát, lỗi vĩnh viễn nói thẳng *"gửi lại cũng vô ích, dùng Cấp mã tại quầy"*. Vá 2 phụ thuộc email ẩn typecheck không bắt: `scripts/shadow-report.ts` (raw SQL, cron 01:00) và `prisma/patch-rbac-staff.ts` (suy cơ sở từ đuôi email, có `--apply` chạy PROD).
+>
+> **Test:** e2e **đầu tiên** cho `/kich-hoat` (4 ca) + `/quen-mat-khau` (6 ca, gồm đá phiên thiết bị khác) + đổi SĐT (6 ca, gồm ca đua) + mã tại quầy (5 ca). Vá flake `[P4-LOCK-02]` (đỏ ~1/3 lần chạy — test giành khoá advisory với chính app; nay dùng khoá riêng) + thêm `[P4-LOCK-03]` khoá chống hồi quy #76. Verify ở **chế độ CI** (`pnpm start`, không phải dev): unit **1258/1258** · e2e a0 **103/103** · r7 **184/184**.
+>
+> **Không đổi có chủ đích:** QĐ-C giữ nguyên — **nhân sự vẫn bắt buộc email**, mật khẩu ban đầu chỉ đi email, **ZNS cấm mang mật khẩu**. Unit test khoá QĐ-C còn xanh.
 
 - **Dựng `/quen-mat-khau`** dùng `OtpPurpose.RESET` — enum đã khai nhưng **0 call-site**, đây là chỗ trống sạch. Sau khi đặt mật khẩu mới: **`tokenVersion++`** để ép logout mọi thiết bị. Cơ chế đã có sẵn (`lib/auth/live-session.ts:16-26`), mẫu có sẵn ở `admin/users/_actions.ts:454-498` — **chỉ thiếu 1 dòng ở luồng mới**. Không làm thì phiên cũ sống tới **30 ngày** (JWT mặc định, `lib/auth.ts:60` không đặt `maxAge`).
 - **Khoá đường đổi SĐT tự do:** `app/(portal)/portal/ho-so/actions.ts:113-121` hiện cho phụ huynh sửa SĐT `max(20)` không chuẩn hoá và **ghi đè xuống TẤT CẢ Student của họ**.
