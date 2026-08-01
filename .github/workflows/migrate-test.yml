@@ -10,16 +10,17 @@ name: Migrate TEST DB (Supabase dev)
 # chỉ chạy `prisma migrate deploy` TRƯỚC, để bản Vercel build ra không gọi
 # field/table chưa tồn tại — y hệt vai trò của deploy.yml với prod.
 #
-# ⚠️ DB của môi trường test hiện là **Supabase DEV** (dùng chung với máy local).
-# Hệ quả phải biết: mỗi lần push `test`, schema DB dev đổi theo. Migration
-# additive thì vô hại; migration DROP/RENAME sẽ đụng luôn dữ liệu đang làm việc
-# ở local. Muốn tách hẳn thì tạo Supabase project riêng rồi đổi 2 secret bên dưới
-# — workflow không phải sửa gì.
-#
 # ── SECRETS cần khai (GitHub → Settings → Secrets and variables → Actions):
 #     TEST_DATABASE_URL   → transaction pooler :6543 (runtime)
 #     TEST_DIRECT_URL     → session pooler     :5432 (migrate)
-#   Lấy đúng 2 giá trị mà Vercel environment `test` đang dùng.
+#
+# ⚠️ Lấy đúng 2 giá trị mà **Vercel environment `test`** đang dùng (Settings →
+# Environment Variables → scope `test`), đừng đoán. Đo bằng Vercel CLI 31/07:
+# env `test` có `DATABASE_URL` RIÊNG — khác DB dev (Development+Preview dùng
+# chung) và khác prod. Nếu hoá ra nó trỏ DB dev thì phải biết thêm: migration
+# DROP/RENAME sẽ đụng luôn dữ liệu đang làm việc ở máy local.
+# Muốn tách hẳn thì tạo Supabase project riêng rồi đổi 2 secret — workflow không
+# phải sửa gì.
 # =============================================================================
 
 on:

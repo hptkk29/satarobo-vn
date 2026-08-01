@@ -131,7 +131,7 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
 
 - **`test`** = nhánh tiền-prod thường trực. Vercel environment `test` bám nhánh này **vĩnh viễn** — KHÔNG trỏ tay sang nhánh feature nữa.
 - **`main`** = prod. Push/merge vào `main` là **prod đổi ngay** (Vercel Git integration) + `deploy.yml` chạy `prisma migrate deploy` lên Supabase prod. Chỉ merge từ `test` sau khi nghiệm thu xong.
-- **Migration**: `migrate-test.yml` chạy khi push `test` (secrets `TEST_DATABASE_URL`/`TEST_DIRECT_URL`, có bước chặn trỏ nhầm vào DB prod). ⚠️ DB test hiện là **Supabase DEV dùng chung với máy local** — migration DROP/RENAME sẽ đụng dữ liệu đang làm việc ở local.
+- **Migration**: `migrate-test.yml` chạy khi push `test` (secrets `TEST_DATABASE_URL`/`TEST_DIRECT_URL`, có bước chặn trỏ nhầm vào DB prod). ⚠️ **Lấy đúng 2 giá trị mà Vercel environment `test` đang dùng** — đo bằng Vercel CLI 31/07 thì env `test` có `DATABASE_URL` RIÊNG (không phải DB dev, không phải prod). Nếu hoá ra nó trỏ DB dev dùng chung với máy local thì phải biết: migration DROP/RENAME sẽ đụng dữ liệu đang làm việc ở local.
 - **Cron trên test**: Vercel Cron không chạy trên custom environment → `cron-pump-test.yml` bơm `dispatch-events` + `email-queue` mỗi 5 phút. Đỏ 401 = lệch `TEST_CRON_SECRET` với `CRON_SECRET` của env `test`.
 - ⚠️ **Điểm mù cố hữu: ZNS thật KHÔNG test được trên `test`.** Creds Zalo chỉ ở scope Production và **cấm nhân bản `ZALO_OA_REFRESH_TOKEN`** sang môi trường 2 (token xoay vòng mỗi lần refresh → hai môi trường giết token của nhau, OA chết phải OAuth lại tay). Trên test ZNS luôn `SIMULATED`; khâu gửi tin thật chỉ smoke được trên prod sau merge.
 - Preview `*.vercel.app` vô dụng: `proxy.ts:113` canonical-hoá về domain thật bằng 308.
