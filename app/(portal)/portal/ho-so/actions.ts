@@ -5,6 +5,11 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { portalDb } from "@/lib/portal/db";
+import { canonicalPhone } from "@/lib/phone";
+import {
+  requestParentPhoneChange,
+  confirmParentPhoneChange,
+} from "@/lib/parents/phone-change";
 
 // =============================================================================
 // PORTAL PROFILE — Phase NHÓM 3
@@ -81,6 +86,7 @@ export async function changeParentPassword(input: {
 // trên tất cả Student của phụ huynh này). Email = định danh đăng nhập, KHÔNG sửa ở đây.
 const profileSchema = z.object({
   name: z.string().trim().min(2, "Tên quá ngắn").max(120),
+  /** @deprecated P6 — bỏ qua: SĐT đăng nhập chỉ đổi được qua OTP (xem cuối file). */
   phone: z.string().trim().max(20).optional().default(""),
   address: z.string().trim().max(255).optional().default(""),
   parent2Name: z.string().trim().max(120).optional().default(""),
@@ -109,17 +115,58 @@ export async function updateParentProfile(input: {
     where: { id: user.id },
     data: { name: d.name, address: nz(d.address) },
   });
-  // Cập nhật SĐT PH + PH thứ hai cho toàn bộ con (denormalized theo hồ sơ hộ).
+
+  // AUTH-SĐT P6 — `Student.parentPhone` LẤY TỪ `User.phone`, KHÔNG lấy từ ô nhập.
+  //
+  // Trước P6 chỗ này ghi thẳng `d.phone` (max(20), không chuẩn hoá) xuống mọi
+  // Student của hộ. Sau P5 `User.phone` là ĐỊNH DANH ĐĂNG NHẬP, nên để hai nguồn
+  // trôi lệch nhau kéo theo hai hỏng hóc câm: gộp anh chị em so khớp theo
+  // `parentPhone` sẽ trượt, và ZNS điểm danh (lib/notify/attendance.ts) gửi tới
+  // số cũ. Đổi số ĐĂNG NHẬP phải đi qua OTP CHANGE_CONTACT ở dưới — không phải
+  // gõ tự do vào form hồ sơ.
+  const current = await pdb.user.findUnique({
+    where: { id: user.id },
+    select: { phone: true },
+  });
   await pdb.student.updateMany({
     where: { parentUserId: user.id, deletedAt: null },
     data: {
       parentName: d.name,
-      parentPhone: nz(d.phone),
+      parentPhone: current?.phone ?? null,
       parent2Name: nz(d.parent2Name),
-      parent2Phone: nz(d.parent2Phone),
+      // PH thứ hai KHÔNG phải định danh đăng nhập nên sửa tự do được, nhưng vẫn
+      // canonical hoá để mọi đường đọc/gửi ZNS thấy cùng một dạng.
+      parent2Phone: canonicalPhone(d.parent2Phone) ?? nz(d.parent2Phone),
     },
   });
 
+  revalidatePath("/portal/ho-so");
+  revalidatePath("/portal");
+  return { ok: true };
+}
+
+
+// ─── AUTH-SĐT P6 — đổi SĐT đăng nhập (2 bước, OTP gửi tới SỐ MỚI) ──────────
+// Phần chạm DB nằm ở lib/parents/phone-change.ts (portal không được import
+// @/lib/db trần, và việc này phải tra bảng User của người khác để kiểm trùng số).
+
+export async function requestParentPhoneChangeOtp(
+  rawPhone: string,
+): Promise<{ ok: boolean; error?: string; cooldownSec?: number }> {
+  const user = await requireParent();
+  if (!user) return { ok: false, error: "Chưa đăng nhập" };
+  const res = await requestParentPhoneChange(user.id, rawPhone);
+  return res.ok ? { ok: true, cooldownSec: res.cooldownSec } : { ok: false, error: res.error };
+}
+
+export async function confirmParentPhoneChangeAction(input: {
+  newPhone: string;
+  code: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireParent();
+  if (!user) return { ok: false, error: "Chưa đăng nhập" };
+  const res = await confirmParentPhoneChange(user.id, input.newPhone, input.code);
+  if (!res.ok) return { ok: false, error: res.error };
   revalidatePath("/portal/ho-so");
   revalidatePath("/portal");
   return { ok: true };

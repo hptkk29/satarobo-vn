@@ -45,7 +45,10 @@ export async function getParentProfile(
   activeStudentId: string | null,
 ): Promise<ParentProfile> {
   const [user, students] = await Promise.all([
-    db.user.findUnique({ where: { id: parentUserId }, select: { name: true, email: true, address: true } }),
+    db.user.findUnique({
+      where: { id: parentUserId },
+      select: { name: true, email: true, phone: true, address: true },
+    }),
     db.student.findMany({
       where: { parentUserId, deletedAt: null },
       orderBy: { createdAt: "asc" },
@@ -82,7 +85,10 @@ export async function getParentProfile(
   return {
     name: user?.name ?? "",
     email: user?.email ?? "",
-    phone: first?.parentPhone ?? null,
+    // AUTH-SĐT P6 — nguồn sự thật là `User.phone` (định danh đăng nhập). Lùi về
+    // `Student.parentPhone` cho hồ sơ CŨ chưa được đồng bộ; đọc mỗi Student thì
+    // phụ huynh chưa gắn con nào sẽ thấy trống dù tài khoản có SĐT hẳn hoi.
+    phone: user?.phone ?? first?.parentPhone ?? null,
     address: user?.address ?? null,
     familyCode: familyCodeOf(parentUserId),
     parent2Name: first?.parent2Name ?? null,
