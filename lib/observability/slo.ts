@@ -76,7 +76,16 @@ export async function collectSloMetrics(now: Date = new Date()): Promise<Record<
     db.domainEvent.count({ where: { status: "FAILED" } }),
     db.emailQueue.count({ where: { status: "PENDING" } }),
     db.domainEvent.findFirst({ where: { status: "DONE" }, orderBy: { processedAt: "desc" }, select: { processedAt: true } }),
-    db.otpDeliveryLog.count({ where: { status: "SENT", createdAt: { gte: startOfToday } } }),
+    // AUTH-SĐT P6 — LOẠI kênh OFFLINE: mã cấp tại quầy không đi qua nhà mạng nào,
+    // đếm vào đây là thổi phồng "tin đã gửi" so với ngưỡng 300 và làm cảnh báo kêu
+    // oan đúng lúc ZNS đang hỏng (chính là lúc kênh OFFLINE được dùng nhiều nhất).
+    db.otpDeliveryLog.count({
+      where: {
+        status: "SENT",
+        channel: { not: "OFFLINE" },
+        createdAt: { gte: startOfToday },
+      },
+    }),
     db.otpDeliveryLog.count({ where: { status: "FAILED", createdAt: { gte: startOfToday } } }),
     db.otpDeliveryLog.count({
       where: { status: "SENT", channel: "ZALO", createdAt: { gte: startOfToday } },

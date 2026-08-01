@@ -3,9 +3,9 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { requestActivationOtp, activateAccount } from "./_actions";
+import { requestPasswordResetOtp, resetPassword } from "./_actions";
 
-export function ActivateForm() {
+export function ResetForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [step, setStep] = useState<"identify" | "verify" | "done">("identify");
@@ -14,7 +14,6 @@ export function ActivateForm() {
   const [password, setPassword] = useState("");
   const [cooldown, setCooldown] = useState(0);
 
-  // Đếm ngược cooldown gửi lại.
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
@@ -23,9 +22,9 @@ export function ActivateForm() {
 
   function sendOtp() {
     startTransition(async () => {
-      const res = await requestActivationOtp(identifier);
+      const res = await requestPasswordResetOtp(identifier);
       if (res.ok) {
-        toast.success("Đã gửi mã kích hoạt qua Zalo hoặc email (nếu hợp lệ).");
+        toast.success("Đã gửi mã đặt lại qua Zalo hoặc email (nếu hợp lệ).");
         setStep("verify");
         setCooldown(res.cooldownSec ?? 60);
       } else {
@@ -40,13 +39,13 @@ export function ActivateForm() {
     sendOtp();
   }
 
-  function activate() {
+  function submit() {
     startTransition(async () => {
-      const res = await activateAccount({ identifier, code, password });
+      const res = await resetPassword({ identifier, code, password });
       if (res.ok) {
-        toast.success("Kích hoạt thành công! Bạn có thể đăng nhập.");
+        toast.success("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.");
         setStep("done");
-      } else toast.error(res.error ?? "Lỗi kích hoạt");
+      } else toast.error(res.error ?? "Lỗi đặt lại mật khẩu");
     });
   }
 
@@ -57,7 +56,8 @@ export function ActivateForm() {
     return (
       <div className="space-y-4 text-center">
         <p className="text-sm text-gray-600">
-          Tài khoản đã được kích hoạt. Đăng nhập bằng số điện thoại (hoặc email) và mật khẩu vừa đặt.
+          Mật khẩu đã được đặt lại. Mọi thiết bị đang đăng nhập đã bị đăng xuất — hãy đăng nhập
+          lại bằng mật khẩu mới.
         </p>
         <button
           type="button"
@@ -76,9 +76,7 @@ export function ActivateForm() {
         <span className="mb-1 block text-xs font-medium text-gray-500">
           Số điện thoại hoặc Email
         </span>
-        {/* AUTH-SĐT P5 — cùng lựa chọn với ô định danh ở /login (P3):
-            inputMode="email" chứ KHÔNG phải "tel". Bàn phím tel trên mobile
-            không có chữ cái nên phụ huynh dùng email sẽ không gõ nổi. */}
+        {/* inputMode="email" chứ không phải "tel" — xem ghi chú ở /login (P3). */}
         <input
           type="text"
           inputMode="email"
@@ -99,21 +97,25 @@ export function ActivateForm() {
             disabled={pending || !identifier}
             className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
           >
-            {pending ? "Đang gửi…" : "Gửi mã kích hoạt"}
+            {pending ? "Đang gửi…" : "Gửi mã đặt lại"}
           </button>
-          {/* AUTH-SĐT P0 §3.4 — bù cho việc bịt oracle liệt kê tài khoản: hệ thống
-              luôn trả cùng một câu nên không còn nói được "tài khoản đã kích hoạt".
-              Dòng tĩnh này thay thế thông điệp đó (chốt 29/07). */}
+          {/* Bù cho việc bịt oracle liệt kê (P0 §3.4): hệ thống luôn trả cùng một
+              câu nên không nói được "tài khoản không tồn tại / chưa kích hoạt". */}
           <p className="text-xs leading-relaxed text-gray-500">
-            Vì lý do bảo mật, hệ thống luôn báo đã gửi mã. Nếu tài khoản của quý phụ huynh{" "}
-            <strong className="font-medium text-gray-600">đã kích hoạt trước đó</strong>, vui lòng đăng
-            nhập bằng mật khẩu đã đặt. Không nhận được mã sau vài phút, xin liên hệ trung tâm.
+            Vì lý do bảo mật, hệ thống luôn báo đã gửi mã. Nếu tài khoản{" "}
+            <strong className="font-medium text-gray-600">chưa được kích hoạt</strong>, hãy dùng{" "}
+            <a href="/kich-hoat" className="underline" title="Kích hoạt tài khoản">
+              Kích hoạt tài khoản
+            </a>{" "}
+            thay vì màn này. Không nhận được mã sau vài phút, xin liên hệ trung tâm.
           </p>
         </>
       )}
 
       {step === "verify" && (
         <>
+          {/* Mã + mật khẩu mới nằm CÙNG màn — ràng buộc của QĐ P0-a
+              (verifyAndConsumeOtp nguyên tử, không có bước trung gian). */}
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-gray-500">
               Mã OTP (6 số gửi qua Zalo hoặc email)
@@ -127,9 +129,12 @@ export function ActivateForm() {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">Đặt mật khẩu (≥ 8 ký tự)</span>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              Mật khẩu mới (≥ 8 ký tự)
+            </span>
             <input
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={inputCls}
@@ -137,11 +142,11 @@ export function ActivateForm() {
           </label>
           <button
             type="button"
-            onClick={activate}
+            onClick={submit}
             disabled={pending || code.length !== 6 || password.length < 8}
             className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
           >
-            {pending ? "Đang kích hoạt…" : "Kích hoạt & đặt mật khẩu"}
+            {pending ? "Đang đặt lại…" : "Đặt lại mật khẩu"}
           </button>
           <button
             type="button"

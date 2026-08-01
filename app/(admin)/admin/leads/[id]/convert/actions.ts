@@ -38,7 +38,17 @@ const installmentSchema = z
 
 const convertSchema = z.object({
   parentName: z.string().trim().min(2, 'Tên phụ huynh tối thiểu 2 ký tự').max(120),
-  parentEmail: z.string().trim().email('Email phụ huynh không hợp lệ'),
+  // AUTH-SĐT P5 — email phụ huynh KHÔNG còn bắt buộc. Khoá định danh tài khoản
+  // nay là `parentPhone` (canonical, @unique); email chỉ là kênh dự phòng (QĐ-3).
+  // Ô trống gửi lên dạng `''` ⇒ chuẩn hoá về `null` ngay tại validator để đường
+  // ghi bên dưới không phải phân biệt "" với null.
+  parentEmail: z
+    .string()
+    .trim()
+    .email('Email phụ huynh không hợp lệ')
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? v.toLowerCase() : null)),
   // AUTH-SĐT P1 (gom tồn dư 31/07) — dùng field dùng chung: TRANSFORM ra canonical
   // `84…` thay vì chỉ đo độ dài. Hai hệ quả có chủ đích:
   //   · `d.parentPhone` từ đây trở đi LUÔN canonical ⇒ đường ghi ở convert-lead-v2
@@ -137,7 +147,10 @@ export async function submitConvertV2(
 
   // Idempotency key ổn định theo payload (chống double-submit / 2 sale song song).
   const fingerprint = JSON.stringify({
-    parentEmail: d.parentEmail.trim().toLowerCase(),
+    // P5 — email có thể null; đã lowercase ở validator. `null` là một giá trị
+    // fingerprint hợp lệ, KHÔNG được thay bằng "" (hai lần bấm "không email" và
+    // "email rỗng" phải cho cùng khoá, mà cả hai nay đều về null).
+    parentEmail: d.parentEmail,
     // Đã canonical từ `phoneVn` ở schema — KHÔNG chuẩn hoá lần hai.
     // Lợi thêm: hai lần bấm gõ "0905123456" và "+84 905 123 456" nay cho CÙNG một
     // khoá (digit-strip cũ cho hai khoá khác nhau ⇒ chống double-submit hụt).

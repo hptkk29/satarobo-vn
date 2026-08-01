@@ -108,8 +108,9 @@ export function ConvertForm({
   }
 
   function submit() {
-    if (!parentName.trim() || !parentEmail.trim() || !parentPhone.trim()) {
-      toast.error('Nhập đủ tên / email / SĐT phụ huynh')
+    // AUTH-SĐT P5 — SĐT là định danh bắt buộc, email tuỳ chọn (kênh dự phòng).
+    if (!parentName.trim() || !parentPhone.trim()) {
+      toast.error('Nhập đủ tên và SĐT phụ huynh')
       return
     }
     if (students.some((s) => !s.name.trim() || !s.classId)) {
@@ -193,16 +194,19 @@ export function ConvertForm({
             <input value={parentName} onChange={(e) => setParentName(e.target.value)} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">Email *</span>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              Email <span className="font-normal text-gray-400">(không bắt buộc)</span>
+            </span>
             <input
               type="email"
               value={parentEmail}
               onChange={(e) => setParentEmail(e.target.value)}
+              placeholder="Bỏ trống nếu phụ huynh không dùng email"
               className={inputCls}
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">SĐT *</span>
+            <span className="mb-1 block text-xs font-medium text-gray-500">SĐT * (tài khoản đăng nhập)</span>
             <input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} className={inputCls} />
           </label>
           <label className="block">

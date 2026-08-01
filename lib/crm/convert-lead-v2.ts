@@ -59,8 +59,10 @@ export type ConvertV2Student = {
 
 export type ConvertV2Input = {
   leadId: string;
-  parentEmail: string;
+  /** AUTH-SĐT P5 — KHÔNG còn bắt buộc; khoá định danh là `parentPhone`. */
+  parentEmail: string | null;
   parentName: string;
+  /** Canonical `84…` (validator `phoneVn` đã transform). Khoá định danh tài khoản. */
   parentPhone: string;
   // C5 — CCCD + địa chỉ phụ huynh (lưu trên User, KHÔNG lưu trên Student). Optional/additive.
   parentCccd?: string | null;
@@ -154,23 +156,55 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       ...(input.parentCity?.trim() ? { city: input.parentCity.trim() } : {}),
     };
 
-    // Parent: reuse hồ sơ cũ hoặc tạo mới (PENDING_ACTIVATION).
-    const parent =
-      parentMatch.kind === "reuse"
-        ? await tx.user.update({ where: { id: parentMatch.userId }, data: { centerId: lead.centerId, ...parentExtra } })
-        : await tx.user.upsert({
-            where: { email: input.parentEmail.trim().toLowerCase() },
-            update: { centerId: lead.centerId, ...parentExtra },
-            create: {
-              email: input.parentEmail.trim().toLowerCase(),
-              name: input.parentName,
-              role: "PARENT",
-              roles: ["PARENT"],
-              accountStatus: "PENDING_ACTIVATION",
-              centerId: lead.centerId,
-              ...parentExtra,
-            },
-          });
+    // AUTH-SĐT P5 — khoá định danh phụ huynh là SĐT canonical, email tuỳ chọn.
+    //
+    // Trước P5 chỗ này `upsert({ where: { email } })`. Với email nullable, đó là
+    // **bom hẹn giờ**: Prisma nhận `where: { email: undefined }` rồi ném lỗi runtime
+    // chứ không trả null — mỗi lead không có email sẽ làm vỡ cả transaction convert.
+    // Nay khoá theo `phone` (@unique, luôn có mặt vì `phoneVn` bắt buộc).
+    const parentPhone = canonicalPhone(input.parentPhone) ?? input.parentPhone;
+    const parentEmail = input.parentEmail?.trim().toLowerCase() || null;
+    let parent;
+    if (parentMatch.kind === "reuse") {
+      // Hồ sơ cũ (tạo trước P5) thường chưa có `phone` — bổ sung để lần sau đăng
+      // nhập/dedupe đi được bằng SĐT. CHỈ điền khi đang TRỐNG: ghi đè là đổi định
+      // danh đăng nhập của người ta. Cùng lý do với email.
+      const current = await tx.user.findUnique({
+        where: { id: parentMatch.userId },
+        select: { phone: true, email: true },
+      });
+      // SĐT đã thuộc user KHÁC → bỏ qua, để `@unique` không làm vỡ cả convert.
+      const phoneFree =
+        !current?.phone &&
+        !(await tx.user.findFirst({
+          where: { phone: parentPhone, id: { not: parentMatch.userId } },
+          select: { id: true },
+        }));
+      parent = await tx.user.update({
+        where: { id: parentMatch.userId },
+        data: {
+          centerId: lead.centerId,
+          ...parentExtra,
+          ...(phoneFree ? { phone: parentPhone } : {}),
+          ...(parentEmail && !current?.email ? { email: parentEmail } : {}),
+        },
+      });
+    } else {
+      parent = await tx.user.upsert({
+        where: { phone: parentPhone },
+        update: { centerId: lead.centerId, ...parentExtra },
+        create: {
+          phone: parentPhone,
+          email: parentEmail,
+          name: input.parentName,
+          role: "PARENT",
+          roles: ["PARENT"],
+          accountStatus: "PENDING_ACTIVATION",
+          centerId: lead.centerId,
+          ...parentExtra,
+        },
+      });
+    }
 
     const studentIds: string[] = [];
     const enrollmentIds: string[] = [];
@@ -198,7 +232,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
               // kết quả backfill 29/07. Giữ nguyên fallback digit-strip cho đầu vào không
               // chuẩn hoá được (số cố định gọi thẳng từ lib) — không đổi hành vi ca đó.
               parentPhone: canonicalPhone(input.parentPhone) ?? input.parentPhone.replace(/\D/g, ""),
-              parentEmail: input.parentEmail.trim().toLowerCase(),
+              parentEmail,
             },
             select: { id: true },
           })

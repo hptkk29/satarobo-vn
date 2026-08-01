@@ -904,3 +904,40 @@ describe("H. /doi-mat-khau (đổi mật khẩu bắt buộc)", () => {
     ).toEqual<RouteDecision>({ type: "redirectPath", path: "/login", reason: undefined });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// AUTH-SĐT P6 — /quen-mat-khau là trang OTP CÔNG KHAI, luật y hệt /kich-hoat.
+//
+// Ba nhánh host trước đây chép riêng `pathname === "/kich-hoat"`; P6 gom vào
+// `isPublicOtpPath()`. Bảng dưới chạy CẢ HAI path qua cùng bộ kỳ vọng — thêm màn
+// OTP mới mà quên nối một nhánh host thì ca này đỏ ngay.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("P6. trang OTP công khai (/kich-hoat + /quen-mat-khau) — cùng một luật", () => {
+  const OTP_PATHS = ["/kich-hoat", "/quen-mat-khau"] as const;
+
+  for (const pathname of OTP_PATHS) {
+    it(`${pathname}: ẩn danh vào được ở mọi host (không đá về /login)`, () => {
+      for (const hostKind of ["public", "admin", "portal"] as const) {
+        expect(
+          decideRoute({ hostKind, pathname, role: null, sessionValid: false }),
+        ).toEqual<RouteDecision>({ type: "next" });
+      }
+    });
+
+    it(`${pathname}: PARENT đã login → về portal, không ở lại màn OTP`, () => {
+      expect(
+        decideRoute({ hostKind: "portal", pathname, ...authed("PARENT") }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+      expect(
+        decideRoute({ hostKind: "admin", pathname, ...authed("PARENT") }),
+      ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+    });
+
+    it(`${pathname}: staff đã login → về nhà admin`, () => {
+      expect(
+        decideRoute({ hostKind: "admin", pathname, ...authed("SUPER_ADMIN") }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/dashboard" });
+    });
+  }
+});

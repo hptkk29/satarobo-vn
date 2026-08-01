@@ -52,13 +52,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   });
 
   if (!dbUser || dbUser.deletedAt) {
-    redirect("/login?reason=session-invalidated");
+    redirect("/dang-xuat?reason=session-invalidated");
   }
   if (!dbUser.isActive) {
-    redirect("/login?reason=session-disabled");
+    redirect("/dang-xuat?reason=session-disabled");
   }
   if (dbUser.tokenVersion !== session.user.tokenVersion) {
-    redirect("/login?reason=session-invalidated");
+    redirect("/dang-xuat?reason=session-invalidated");
   }
   // BGĐ 31/07 — MK do admin cấp/reset: chặn toàn bộ admin cho tới khi đổi MK.
   // Trang /doi-mat-khau nằm ở app/(auth) (ngoài layout này) → không loop.

@@ -94,10 +94,21 @@ async function main() {
 
       // Suy OrgUnit đích.
       let target = null as { id: string; code: string } | null;
+      // AUTH-SĐT P5/P6 — suy cơ sở từ ĐUÔI EMAIL là đường dự phòng của thời email
+      // còn bắt buộc. Nay `User.email` nullable: `?? ""` giữ script không nổ, nhưng
+      // với tài khoản không email thì nhánh này im lặng không suy được gì —
+      // `u.centerId` mới là nguồn đáng tin. Cảnh báo bên dưới để lần chạy `--apply`
+      // không âm thầm bỏ sót người.
       const emailCenter = /\.cs([12])@/.exec(u.email ?? "")?.[1];
       const centerOrg =
         (u.centerId && orgByCenterId.get(u.centerId)) ||
         (emailCenter ? orgByCode.get(`CS${emailCenter}`) : undefined);
+      if (!u.centerId && !u.email && m.org !== "HO") {
+        skipped.push(
+          `${u.id}: không có centerId lẫn email → không suy được cơ sở (gán UserOrgRole tay)`,
+        );
+        continue;
+      }
       if (m.org === "HO") target = hoOrg;
       else if (m.org === "CENTER") target = centerOrg ?? null;
       else target = centerOrg ?? hoOrg; // CENTER_OR_HO: kế toán không gắn cơ sở → Hội sở

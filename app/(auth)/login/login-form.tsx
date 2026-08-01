@@ -138,6 +138,12 @@ export function LoginForm() {
             <a href="/kich-hoat" title="Kích hoạt tài khoản">Kích hoạt tài khoản</a>
           </span>
         </div>
+        <div className="my-form__row">
+          {/* AUTH-SĐT P6 — lối vào duy nhất của /quen-mat-khau. */}
+          <span>
+            <a href="/quen-mat-khau" title="Quên mật khẩu">Quên mật khẩu?</a>
+          </span>
+        </div>
       </div>
     </form>
   );

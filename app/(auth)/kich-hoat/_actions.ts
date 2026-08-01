@@ -10,12 +10,25 @@ import { publishEvent } from "@/lib/events/publish";
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getSetting } from "@/lib/settings/service";
+import { activationIdentifierSchema } from "@/lib/validators/auth";
+import { canonicalPhone } from "@/lib/phone";
 
-// Cụm A1 — kích hoạt tài khoản phụ huynh qua OTP email. Public (chưa đăng nhập).
+// Cụm A1 — kích hoạt tài khoản phụ huynh qua OTP.
+// AUTH-SĐT P5: định danh là **SĐT hoặc email** (trước P5 chỉ email). Kênh gửi
+// tự chọn theo loại target ở `getOtpProviderFor` — SĐT đi Zalo ZNS, email đi
+// Resend. Public (chưa đăng nhập).
 
 type Result = { ok: boolean; error?: string; cooldownSec?: number };
 
-const emailSchema = z.string().trim().toLowerCase().email("Email không hợp lệ");
+/**
+ * Rẽ nhánh tra cứu theo LOẠI định danh — cùng khuôn với `authorize` (P3):
+ * KHÔNG dùng `OR: [{phone}, {email}]` vì nhánh nil sẽ dịch thành `phone IS NULL`
+ * và khớp một user ngẫu nhiên bất kỳ trong đám tài khoản chưa có SĐT.
+ */
+function identityWhere(identifier: string): { phone: string } | { email: string } {
+  const canonical = canonicalPhone(identifier);
+  return canonical ? { phone: canonical } : { email: identifier };
+}
 
 /**
  * AUTH-SĐT P0 §3.4 — sàn thời gian phản hồi.
@@ -46,13 +59,13 @@ async function padTiming(startedAt: number): Promise<void> {
  *   mới được nói thật. Form bù lại bằng dòng hướng dẫn tĩnh
  *   ("nếu đã kích hoạt, dùng Quên mật khẩu") — chốt 29/07.
  */
-export async function requestActivationOtp(rawEmail: string): Promise<Result> {
+export async function requestActivationOtp(rawIdentifier: string): Promise<Result> {
   const startedAt = Date.now();
 
-  const parsed = emailSchema.safeParse(rawEmail);
+  const parsed = activationIdentifierSchema.safeParse(rawIdentifier);
   // Sai định dạng: không phụ thuộc target → nói thật được.
-  if (!parsed.success) return { ok: false, error: "Email không hợp lệ" };
-  const email = parsed.data;
+  if (!parsed.success) return { ok: false, error: "Số điện thoại hoặc email không hợp lệ" };
+  const identifier = parsed.data;
 
   const [cooldownSec, ipMaxPerHour] = await Promise.all([
     getSetting("otp.resendCooldownSec"),
@@ -75,7 +88,7 @@ export async function requestActivationOtp(rawEmail: string): Promise<Result> {
   const generic: Result = { ok: true, cooldownSec };
 
   const user = await db.user.findUnique({
-    where: { email },
+    where: identityWhere(identifier),
     select: { id: true, accountStatus: true, deletedAt: true },
   });
 
@@ -84,7 +97,7 @@ export async function requestActivationOtp(rawEmail: string): Promise<Result> {
     return generic;
   }
 
-  const res = await requestOtp({ target: email, purpose: "ACTIVATION", userId: user.id });
+  const res = await requestOtp({ target: identifier, purpose: "ACTIVATION", userId: user.id });
 
   // Ngắt toàn hệ thống (trần ngày / kill-switch) KHÔNG phụ thuộc target → báo thật
   // để phụ huynh biết đường gọi trung tâm thay vì ngồi đợi mã không bao giờ tới.
@@ -118,7 +131,7 @@ export async function requestActivationOtp(rawEmail: string): Promise<Result> {
 }
 
 const activateSchema = z.object({
-  email: emailSchema,
+  identifier: activationIdentifierSchema,
   code: z.string().trim().regex(/^\d{6}$/, "Mã gồm 6 chữ số"),
   password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
 });
@@ -127,17 +140,24 @@ const activateSchema = z.object({
 export async function activateAccount(input: unknown): Promise<Result> {
   const parsed = activateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
-  const { email, code, password } = parsed.data;
+  const { identifier, code, password } = parsed.data;
+  const viaPhone = canonicalPhone(identifier) !== null;
 
   // Verify + tiêu mã trong CÙNG một thao tác nguyên tử (P0 §3.1 phương án A).
   // Đặt TRƯỚC mọi câu trả lời về tài khoản: muốn chạm tới các thông điệp bên dưới
   // thì phải có mã đúng trong tay, nên chúng không còn là oracle liệt kê.
-  const v = await verifyAndConsumeOtp({ target: email, purpose: "ACTIVATION", code });
+  const v = await verifyAndConsumeOtp({ target: identifier, purpose: "ACTIVATION", code });
   if (!v.ok) return { ok: false, error: v.error };
 
   const user = await db.user.findUnique({
-    where: { email },
-    select: { id: true, accountStatus: true, name: true, children: { select: { name: true }, take: 1 } },
+    where: identityWhere(identifier),
+    select: {
+      id: true,
+      accountStatus: true,
+      name: true,
+      email: true,
+      children: { select: { name: true }, take: 1 },
+    },
   });
   if (!user) return { ok: false, error: "Không tìm thấy tài khoản" };
   // Phụ huynh đã ACTIVE → KHÔNG đặt lại mật khẩu.
@@ -148,15 +168,28 @@ export async function activateAccount(input: unknown): Promise<Result> {
   const hashed = await bcrypt.hash(password, 10);
   await db.user.update({
     where: { id: user.id },
-    data: { password: hashed, accountStatus: "ACTIVE", isActive: true, emailVerified: new Date() },
+    data: {
+      password: hashed,
+      accountStatus: "ACTIVE",
+      isActive: true,
+      // P5 — đánh dấu ĐÚNG kênh vừa chứng minh quyền sở hữu. Trước P5 luôn set
+      // `emailVerified` vì chỉ có một đường; nay kích hoạt bằng SĐT mà vẫn set
+      // emailVerified là **nói dối dữ liệu**: `findVerifiedFallbackEmail` (P4)
+      // dựa vào cờ đó để chọn email dự phòng, sẽ gửi mã tới hòm thư chưa ai
+      // chứng minh là của mình.
+      ...(viaPhone ? { phoneVerifiedAt: new Date() } : { emailVerified: new Date() }),
+    },
   });
 
-  // A2 — email chào mừng kích hoạt (qua queue).
-  await enqueueAccountActivated({
-    to: email,
-    parentName: user.name,
-    childName: user.children[0]?.name ?? null,
-  }).catch(() => {});
+  // A2 — email chào mừng kích hoạt (qua queue). Sau P5 phụ huynh có thể KHÔNG
+  // có email — bỏ qua, không phải lỗi.
+  if (user.email) {
+    await enqueueAccountActivated({
+      to: user.email,
+      parentName: user.name,
+      childName: user.children[0]?.name ?? null,
+    }).catch(() => {});
+  }
 
   // R7-17 — DomainEvent: tài khoản phụ huynh đã usable (portal access). Handler
   // (lib/_handlers/account-notif.ts) tạo Notification chào mừng vào feed học viên.
@@ -173,7 +206,7 @@ export async function activateAccount(input: unknown): Promise<Result> {
     actorId: user.id,
     actorName: "Phụ huynh (kích hoạt)",
     changedFields: ["accountStatus", "password"],
-    reason: "Kích hoạt tài khoản phụ huynh qua OTP email",
+    reason: `Kích hoạt tài khoản phụ huynh qua OTP ${viaPhone ? "Zalo (SĐT)" : "email"}`,
   }).catch(() => {});
 
   return { ok: true };

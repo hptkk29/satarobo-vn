@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loginSchema } from "./auth";
+import { activationIdentifierSchema, loginSchema } from "./auth";
 import { userCreateSchema } from "./user";
 
 const PW = "Test@12345";
@@ -28,6 +28,31 @@ describe("[AUTH-SDT-P3-C1] loginSchema — identifier nhận cả SĐT lẫn ema
     expect(loginSchema.safeParse({ identifier: "0905123456", password: "ngắn" }).success).toBe(
       false,
     );
+  });
+});
+
+describe("[AUTH-SDT-P5-C1] activationIdentifierSchema — /kich-hoat nhận SĐT hoặc email", () => {
+  it("SĐT mọi cách gõ → TRANSFORM về canonical 84… (khoá tra cứu + khoá OTP)", () => {
+    // Quan trọng hơn việc 'pass': giá trị trả về phải là DẠNG TRA CỨU. Trả nguyên
+    // chuỗi user gõ thì `where:{phone}` không khớp và `verifyAndConsumeOtp` tra
+    // target khác lúc `requestOtp` đã lưu ⇒ mã đúng vẫn báo sai.
+    for (const v of ["0905123456", "84905123456", "+84 905 123 456", "0905.123.456"]) {
+      const r = activationIdentifierSchema.safeParse(v);
+      expect(r.success).toBe(true);
+      expect(r.success && r.data).toBe("84905123456");
+    }
+  });
+
+  it("email → lowercase (GIỮ ngữ nghĩa của màn kích hoạt trước P5)", () => {
+    const r = activationIdentifierSchema.safeParse("  Phuc@SataRobo.VN ");
+    expect(r.success).toBe(true);
+    expect(r.success && r.data).toBe("phuc@satarobo.vn");
+  });
+
+  it("số bàn / rác → fail (số cố định không nhận được ZNS, không làm định danh được)", () => {
+    for (const v of ["abc", "02363123456", "123", "phuc@", ""]) {
+      expect(activationIdentifierSchema.safeParse(v).success).toBe(false);
+    }
   });
 });
 

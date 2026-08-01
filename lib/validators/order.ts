@@ -28,8 +28,17 @@ export const orderCreateManualSchema = z.object({
   // Customer snapshot
   customerName: z.string().min(2).max(200),
   customerPhone: phoneVn,
-  // O2 — email bắt buộc cho đơn thủ công (dùng gửi xác nhận/biên nhận).
-  customerEmail: z.string().email("Email không hợp lệ"),
+  // O2 — email dùng gửi xác nhận/biên nhận.
+  // AUTH-SĐT P5: KHÔNG còn bắt buộc. Xác nhận/nhắc nợ nay đi Zalo ZNS theo
+  // `customerPhone` (đằng nào cũng bắt buộc), email chỉ là kênh dự phòng — giữ
+  // bắt buộc thì mọi khách không có email lại không lên được đơn.
+  customerEmail: z
+    .string()
+    .email("Email không hợp lệ")
+    .optional()
+    .or(z.literal(""))
+    .nullable()
+    .transform((v) => (v ? v.toLowerCase() : null)),
   // O2 — CCCD/CMND người mua (snapshot trên đơn): 9 hoặc 12 chữ số, optional.
   customerCccd: z
     .string()
