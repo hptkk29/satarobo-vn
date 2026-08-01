@@ -313,7 +313,11 @@ Với email đây là oracle vô hại. Với SĐT — **không gian liệt kê 
 
 **DoD:** cấp tài khoản cho 1 học viên thật → phụ huynh nhận **đúng 1 tin ZNS** trên máy → vào `hocvien.satarobo.vn`, nhập SĐT + mã, đặt mật khẩu, đăng nhập thành công. Convert 1 lead **không có email** → tạo được tài khoản.
 
-**Rollback:** cờ `AUTH_PHONE_PROVISIONING=false` → 3 luồng cấp tài khoản quay lại nhánh email cũ.
+**Rollback:** cờ `AUTH_PHONE_PROVISIONING=false` + redeploy → ngắt **đường TỰ ĐỘNG** cấp tài khoản (`ensureParentAccountForOrder`: xác nhận đơn CONFIRMED + webhook SePay). Xây thật 01/08 (`lib/flags.ts` + `lib/flags.test.ts`).
+
+> ⚠️ **Đính chính lời hứa cũ.** Dòng này trước đây ghi *"3 luồng cấp tài khoản quay lại nhánh email cũ"* và cờ được liệt ở hàng "Feature flag" đầu file — nhưng **không có dòng code nào đọc nó**, đường lùi chỉ tồn tại trên giấy (phát hiện 01/08 khi rà đường SePay). Nay cờ có thật, nhưng **phạm vi hẹp hơn lời hứa và cố ý như vậy**: nó KHÔNG chắn các form nhân viên tự bấm (`/admin/students`, convert lead). Sau P5, SĐT **là** khoá đăng nhập của phụ huynh — bắt các form đó "quay về email" chính là dựng lại cái bế tắc mà P5 sinh ra để phá, đồng thời đẻ nhánh code không ai chạy nên không ai test. Cái đáng chắn là đường chạy **không có người duyệt** và `.catch()` nuốt lỗi.
+>
+> Đây không phải rủi ro giả định: `provision.ts` (BGĐ batch E4) lên prod **trước** P5 nên từ 31/07 mỗi đơn xác nhận trên prod đều lặng lẽ tạo một tài khoản khoá SĐT mà `/kich-hoat` (còn đòi email) không kích hoạt được — và SĐT thì đã bị chiếm chỗ vì `User.phone @unique`.
 
 ---
 
