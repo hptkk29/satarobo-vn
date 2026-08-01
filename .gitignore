@@ -32,15 +32,10 @@ yarn-error.log*
 appdev.log
 *.dev.log
 
-# env files — .env.example được commit, còn lại không
-.env
-.env.local
-.env*.local
-.env.development
-.env.production
-.env.staging
-.env.test
-.env.r2test
+# env files — chặn TẤT CẢ biến thể (.env.vercel, .env.bak, .env.cs2…),
+# chỉ .env.example được commit. Liệt kê tay từng tên là bỏ sót file mới.
+.env*
+!.env.example
 
 # vercel
 .vercel
