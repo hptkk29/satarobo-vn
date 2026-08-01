@@ -2,8 +2,11 @@
 # Workflow này bơm 2 cron SỐNG CÒN cho UAT: dispatch-events (DomainEvent outbox —
 # thiếu nó mọi side-effect đứng im) + email-queue (worker gửi mail).
 # /api/cron/* được miễn basic-auth trong proxy.ts — route tự verify Bearer CRON_SECRET.
-# TỰ TẮT từ 01/08/2026 (guard ngày trong step đầu — chốt 22/07); sau đó có thể
-# disable/xoá workflow lúc rảnh (Actions → Disable workflow).
+#
+# 01/08/2026 — BỎ GUARD HẾT HẠN. Guard cũ (tắt từ 01/08) đặt hồi 22/07 khi site
+# test còn là chỗ UAT tạm. Nay `test.satarobo.vn` là MÔI TRƯỜNG TIỀN-PROD THƯỜNG
+# TRỰC (nhánh `test`), nên cron phải chạy lâu dài — hết cron thì outbox đứng im và
+# UAT sẽ "thấy" những lỗi không có thật.
 name: cron-pump-test
 on:
   schedule:
@@ -13,24 +16,23 @@ jobs:
   pump:
     runs-on: ubuntu-latest
     steps:
-      - name: Hết hạn 01/08/2026 thì thôi bơm (UAT đã xong)
-        id: expiry
-        run: |
-          if [ "$(date -u +%Y%m%d)" -ge 20260801 ]; then
-            echo "expired=true" >> "$GITHUB_OUTPUT"
-            echo "Đã qua 01/08/2026 — ngừng bơm cron test (workflow có thể disable/xoá)."
-          else
-            echo "expired=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Pump cron endpoints on test.satarobo.vn
-        if: steps.expiry.outputs.expired != 'true'
         run: |
           set -e
           [ -n "${{ secrets.TEST_CRON_SECRET }}" ] || { echo "::error::Thiếu secret TEST_CRON_SECRET"; exit 1; }
+          fail=0
           for p in dispatch-events email-queue; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")
             echo "$p → HTTP $code"
-            [ "$code" = "200" ] || exit 1
+            if [ "$code" = "401" ]; then
+              # Đã xảy ra 31/07: đỏ suốt cả ngày vì lệch secret, không ai đọc log.
+              echo "::error::401 — TEST_CRON_SECRET (GitHub) không khớp CRON_SECRET của environment 'test' trên Vercel. Đồng bộ lại 2 giá trị."
+              fail=1
+            elif [ "$code" != "200" ]; then
+              echo "::error::$p trả HTTP $code (mong đợi 200)."
+              fail=1
+            fi
           done
+          exit $fail

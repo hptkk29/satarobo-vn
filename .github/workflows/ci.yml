@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    # `test` = nhánh tiền-prod (chốt 01/08/2026), Vercel environment `test` bám
+    # nhánh này. CI phải chạy ở đây, không thì cổng nghiệm thu chỉ có UAT tay.
+    # (`develop` là tàn dư, giữ để không phá nhánh cũ nếu ai đó còn dùng.)
+    branches: [main, test, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main, test, develop]
 
 # Cancel in-progress runs when new commits land on the same branch
 concurrency:
