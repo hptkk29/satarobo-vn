@@ -13,6 +13,29 @@ import { db } from "@/lib/db";
  * ⚠️ Thêm 1 DB query/call → chỉ dùng cho route NHẠY CẢM (export PII, tài chính, asset nội
  * bộ), KHÔNG rải lên mọi API. (Rút ngắn maxAge JWT = Q26, tách riêng.)
  */
+export type SessionLiveness =
+  | { live: true }
+  | { live: false; reason: "session-invalidated" | "session-disabled" };
+
+/**
+ * AUTH-SĐT P6 — như `requireLiveSession` nhưng TRẢ VỀ LÝ DO, để layout redirect
+ * kèm thông báo đúng ("tài khoản bị vô hiệu hoá" khác "phiên đã hết hiệu lực").
+ *
+ * Sống ở `lib/` vì layout trong `app/(portal)` KHÔNG được import `@/lib/db` trần
+ * (ESLint chặn), mà việc đọc chính user của mình cũng không thuộc phạm vi
+ * `portalDb` (nó lo cách ly dữ liệu học viên, không phải bảng User).
+ */
+export async function checkSessionLiveness(userId: string, tokenVersion: number | undefined): Promise<SessionLiveness> {
+  const dbUser = await db.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, tokenVersion: true, deletedAt: true },
+  });
+  if (!dbUser || dbUser.deletedAt) return { live: false, reason: "session-invalidated" };
+  if (!dbUser.isActive) return { live: false, reason: "session-disabled" };
+  if (dbUser.tokenVersion !== tokenVersion) return { live: false, reason: "session-invalidated" };
+  return { live: true };
+}
+
 export async function requireLiveSession(): Promise<Session | null> {
   const session = await auth();
   if (!session?.user?.id) return null;

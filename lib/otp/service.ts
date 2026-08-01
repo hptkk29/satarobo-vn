@@ -377,3 +377,85 @@ export async function verifyAndConsumeOtp(input: {
 
   return { ok: true, otpId: otp.id, userId: otp.userId };
 }
+
+/**
+ * AUTH-SĐT P6 — CẤP MÃ TẠI QUẦY (break-glass khi ZNS chết).
+ *
+ * Khác `requestOtp` ở đúng hai điểm, và cả hai đều có chủ đích:
+ *   · KHÔNG gửi đi đâu cả — nhân viên đọc mã cho phụ huynh nghe. Vì vậy ghi
+ *     `channel: OFFLINE` để `/admin/otp-logs` và SLO không đếm nhầm là tin đã gửi.
+ *   · TRẢ VỀ mã ở dạng chữ. Đây là ngoại lệ duy nhất của nguyên tắc "mã chỉ tồn
+ *     tại ở dạng hash" — nên nó KHÔNG được để lộ ra đường công khai. Nơi gọi bắt
+ *     buộc là Server Action đã `assertCan` + ghi audit kèm LÝ DO (xem
+ *     students/_actions.ts). Hàm này cố tình không tự kiểm quyền: kiểm ở đây thì
+ *     người đọc dễ tưởng đã an toàn rồi và bỏ qua audit.
+ *
+ * Vẫn đi qua cooldown + hạn mức ngày như đường thường: cấp tay không phải là cớ
+ * để phát mã không giới hạn. KHÔNG chạm trần chi phí toàn hệ thống (không tốn tin).
+ */
+export async function issueOfflineOtp(input: {
+  target: string;
+  purpose: OtpPurposeKey;
+  userId?: string | null;
+}): Promise<{ ok: true; code: string; expiresAt: Date } | { ok: false; error: string }> {
+  const target = normalizeOtpTarget(input.target);
+  if (!target) return { ok: false, error: "Thiếu email/SĐT" };
+
+  const [ttlMinutes, cooldownSec, dailyLimit, maxAttempts] = await Promise.all([
+    getSetting("otp.ttlMinutes"),
+    getSetting("otp.resendCooldownSec"),
+    getSetting("otp.dailyLimit"),
+    getSetting("otp.maxAttempts"),
+  ]);
+
+  const last = await db.otpRequest.findFirst({
+    where: { target, purpose: input.purpose },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (last) {
+    const elapsed = (Date.now() - last.createdAt.getTime()) / 1000;
+    if (elapsed < cooldownSec) {
+      return { ok: false, error: `Vui lòng chờ ${Math.ceil(cooldownSec - elapsed)}s trước khi cấp mã mới.` };
+    }
+  }
+
+  const todayCount = await db.otpRequest.count({
+    where: { target, purpose: input.purpose, createdAt: { gte: startOfToday() } },
+  });
+  if (todayCount >= dailyLimit) {
+    return { ok: false, error: "Số này đã vượt số lần cấp mã trong ngày." };
+  }
+
+  const code = genCode();
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
+
+  const otp = await db.otpRequest.create({
+    data: {
+      target,
+      channel: "OFFLINE",
+      purpose: input.purpose,
+      codeHash: hashCode(code),
+      expiresAt,
+      maxAttempts,
+      userId: input.userId ?? null,
+    },
+    select: { id: true },
+  });
+
+  // Ghi delivery log để màn OTP tra cứu thấy đủ vòng đời; status SENT ở đây nghĩa
+  // là "đã trao tận tay", không phải "đã gửi qua kênh nào".
+  await db.otpDeliveryLog
+    .create({
+      data: {
+        otpRequestId: otp.id,
+        channel: "OFFLINE",
+        target,
+        provider: "counter-staff",
+        status: "SENT",
+      },
+    })
+    .catch(() => {});
+
+  return { ok: true, code, expiresAt };
+}

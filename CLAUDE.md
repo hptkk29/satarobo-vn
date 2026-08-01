@@ -122,6 +122,20 @@ prisma/
 4. **Verify mỗi 3-5 files** — `pnpm typecheck` để bắt lỗi sớm.
 5. **Report** — liệt kê file thay đổi + cách test.
 
+### Nhánh & môi trường (chốt 01/08/2026) — `main` KHÔNG còn là nơi nhận code mới
+
+```
+feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm thu
+                             → PR `test` → `main` → PROD đổi
+```
+
+- **`test`** = nhánh tiền-prod thường trực. Vercel environment `test` bám nhánh này **vĩnh viễn** — KHÔNG trỏ tay sang nhánh feature nữa.
+- **`main`** = prod. Push/merge vào `main` là **prod đổi ngay** (Vercel Git integration) + `deploy.yml` chạy `prisma migrate deploy` lên Supabase prod. Chỉ merge từ `test` sau khi nghiệm thu xong.
+- **Migration**: `migrate-test.yml` chạy khi push `test` (secrets `TEST_DATABASE_URL`/`TEST_DIRECT_URL`, có bước chặn trỏ nhầm vào DB prod). ⚠️ **DB của env `test` CHÍNH LÀ DB dev** — chủ dự án xác nhận 01/08 là **cố ý** (dựng vậy từ đầu). Bằng chứng khớp: lần `migrate-test` xanh đầu tiên báo *"176 migrations found — No pending migrations to apply"*, tức migration vừa sinh ở máy local đã có sẵn ở đó. **Hệ quả phải nhớ: `test.satarobo.vn` và máy local DÙNG CHUNG một DB** — data nghịch ở local hiện trên test và ngược lại, và **migration DROP/RENAME sẽ xoá thẳng dữ liệu đang làm việc ở local**. Muốn tách thì tạo Supabase project riêng rồi đổi 2 secret; workflow không phải sửa. (Chỉ chắc chắn 1 điều: test ≠ prod — bước "Chặn trỏ nhầm vào DB PROD" trong workflow đã xanh.)
+- **Cron trên test**: Vercel Cron không chạy trên custom environment → `cron-pump-test.yml` bơm `dispatch-events` + `email-queue` mỗi 5 phút. Đỏ 401 = lệch `TEST_CRON_SECRET` với `CRON_SECRET` của env `test`.
+- ⚠️ **Điểm mù cố hữu: ZNS thật KHÔNG test được trên `test`.** Creds Zalo chỉ ở scope Production và **cấm nhân bản `ZALO_OA_REFRESH_TOKEN`** sang môi trường 2 (token xoay vòng mỗi lần refresh → hai môi trường giết token của nhau, OA chết phải OAuth lại tay). Trên test ZNS luôn `SIMULATED`; khâu gửi tin thật chỉ smoke được trên prod sau merge.
+- Preview `*.vercel.app` vô dụng: `proxy.ts:113` canonical-hoá về domain thật bằng 308.
+
 ## Business context
 
 - Công ty Cổ phần Công nghệ Giáo dục Sata Robo (Đà Nẵng), CEO Hồ Đắc Phúc.

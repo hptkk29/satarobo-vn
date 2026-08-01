@@ -108,3 +108,25 @@ export function isTeacherSiteEnabled(): boolean {
   // TEACHER_SITE_ENABLED="false" trên Vercel + redeploy (không cần revert code).
   return process.env.TEACHER_SITE_ENABLED !== "false";
 }
+
+/**
+ * AUTH-SĐT P5 — công tắc ngắt **đường TỰ ĐỘNG cấp tài khoản phụ huynh theo SĐT**
+ * (`ensureParentAccountForOrder`): xác nhận đơn sang CONFIRMED và webhook SePay.
+ * Mặc định ON; ngắt bằng env `AUTH_PHONE_PROVISIONING="false"` + redeploy.
+ *
+ * ⚠️ CỜ NÀY CHỈ CHẮN ĐƯỜNG TỰ ĐỘNG, KHÔNG chắn các form nhân viên tự bấm
+ * (`/admin/students` cấp tài khoản, convert lead). Cố ý: sau P5 thì SĐT LÀ khoá
+ * đăng nhập của phụ huynh — bắt các form đó "quay về email" là dựng lại đúng cái
+ * bế tắc P5 sinh ra để phá, và tạo nhánh code không ai chạy nên không ai test.
+ * Doc phase từng hứa "3 luồng quay lại nhánh email cũ"; hứa vậy là sai hướng, đã
+ * sửa lại doc theo đúng cái cờ này làm.
+ *
+ * VÌ SAO CẦN: đường tự động chạy KHÔNG có người duyệt và `.catch()` nuốt lỗi, nên
+ * hỏng thì hỏng im lặng và mỗi đơn đẻ một tài khoản. Đúng kịch bản đã xảy ra trên
+ * prod từ 31/07: `provision.ts` (batch E4) lên trước P5, tạo tài khoản khoá SĐT
+ * trong khi `/kich-hoat` còn đòi email ⇒ tài khoản không kích hoạt được, mà SĐT
+ * thì đã bị chiếm chỗ (`User.phone @unique`).
+ */
+export function isAuthPhoneProvisioningEnabled(): boolean {
+  return process.env.AUTH_PHONE_PROVISIONING !== "false";
+}

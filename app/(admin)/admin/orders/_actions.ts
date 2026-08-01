@@ -21,6 +21,7 @@ import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { validateAndComputeDiscount } from "@/lib/vouchers/compute";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
+import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { renderTemplate } from "@/lib/email/render";
 import { sendEmail } from "@/lib/email/send";
 
@@ -330,7 +331,8 @@ export async function createOrderManualAction(input: unknown) {
         status: data.status,
         customerName: data.customerName.trim(),
         customerPhone: data.customerPhone.trim(),
-        customerEmail: data.customerEmail.trim(),
+        // P5 — validator đã trim + lowercase + đưa ô trống về null.
+        customerEmail: data.customerEmail,
         customerCccd: data.customerCccd?.trim() || null,
         customerAddress: data.customerAddress?.trim() || null,
         customerWard: data.customerWard?.trim() || null,
@@ -459,6 +461,9 @@ export async function createOrderManualAction(input: unknown) {
   }).catch((err) => {
     console.error("[email] ORDER_CONFIRMATION trigger error:", err);
   });
+
+  // P5 — khách không có email thì email trigger ở trên tự bỏ qua; ZNS lo phần đó.
+  void notifyOrderByZnsIfNoEmail(created.id);
 
   return { ok: true as const, id: created.id, code: created.code };
 }
@@ -685,6 +690,9 @@ export async function changeOrderStatusAction(
       }).catch((err) => {
         console.error("[email] PAYMENT_RECEIPT trigger error:", err);
       });
+
+      // P5 — biên nhận qua ZNS cho khách không có email (xem lib/notify/order.ts).
+      void notifyOrderByZnsIfNoEmail(orderForEmail.id);
     }
   }
 

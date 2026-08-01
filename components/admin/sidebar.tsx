@@ -220,6 +220,10 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
       { label: "Email Templates", href: "/email-templates", icon: Mail, perm: ["emails:view"] },
       { label: "Email Logs", href: "/email-logs", icon: Send, perm: ["emails:view"] },
+      // AUTH-SĐT P4 dựng /otp-logs nhưng quên link — màn trả lời "phụ huynh báo
+      // không nhận được mã" mà nhân viên trực phải gõ tay URL thì coi như không có.
+      // Cùng quyền `emails:view` với Email Logs (chủ ý của P4: không đẻ action RBAC mới).
+      { label: "OTP Logs", href: "/otp-logs", icon: MessageCircle, perm: ["emails:view"] },
       { label: "Audit Log", href: "/audit-log", icon: ScrollText, perm: ["audit-logs:view"] },
       { label: "Tích hợp", href: "/tich-hop", icon: Plug, perm: ["settings:view"] },
       { label: "Cấu hình vận hành", href: "/cau-hinh-van-hanh", icon: SlidersHorizontal, perm: ["settings:view"] },

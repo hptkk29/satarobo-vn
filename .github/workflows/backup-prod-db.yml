@@ -1,0 +1,141 @@
+name: Backup PROD DB (hằng đêm)
+
+# =============================================================================
+# Supabase bản FREE KHÔNG có backup/PITR → prod chạy không lưới an toàn.
+# Workflow này dump toàn bộ DB prod mỗi đêm và đẩy lên Cloudflare R2.
+#
+# ⚠️⚠️ TUYỆT ĐỐI KHÔNG dùng actions/upload-artifact cho file dump.
+# Repo `hptkk29/satarobo-vn` là **PUBLIC** ⇒ artifact tải được bởi bất kỳ ai trên
+# Internet. Dump chứa họ tên / SĐT / email phụ huynh và học viên. Đẩy lên artifact
+# là công bố dữ liệu cá nhân của khách hàng.
+#
+# ⚠️ Bucket đích PHẢI là bucket RIÊNG, KHÔNG phải `satarobo-uploads` — bucket đó
+# gắn với `cdn.satarobo.vn` nên nội dung phục vụ công khai.
+#
+# ── SECRETS cần khai (Settings → Secrets and variables → Actions) ────────────
+#     PROD_DIRECT_URL       ✅ ĐÃ CÓ (session pooler :5432 — deploy.yml đang dùng)
+#     R2_ACCOUNT_ID         ⬜ Cloudflare → R2 → Account ID
+#     R2_ACCESS_KEY_ID      ⬜ R2 → Manage API Tokens → tạo token quyền Object R/W
+#     R2_SECRET_ACCESS_KEY  ⬜ (chỉ hiện 1 lần lúc tạo token)
+#     R2_BACKUP_BUCKET      ⬜ tên bucket RIÊNG, ví dụ `satarobo-backups`
+#                              (tạo mới, KHÔNG bật Public access, KHÔNG gắn domain)
+# =============================================================================
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # 18:00 UTC = 01:00 giờ VN
+  workflow_dispatch: {} # chạy tay khi cần bản dump ngay
+
+concurrency:
+  group: backup-prod-db
+  cancel-in-progress: false
+
+env:
+  RETENTION_DAYS: 30
+
+jobs:
+  dump:
+    name: pg_dump PROD → R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Kiểm secrets (fail sớm, message rõ ràng)
+        run: |
+          missing=0
+          check() { [ -n "$2" ] || { echo "::error::Thiếu secret $1"; missing=1; }; }
+          check PROD_DIRECT_URL      "${{ secrets.PROD_DIRECT_URL }}"
+          check R2_ACCOUNT_ID        "${{ secrets.R2_ACCOUNT_ID }}"
+          check R2_ACCESS_KEY_ID     "${{ secrets.R2_ACCESS_KEY_ID }}"
+          check R2_SECRET_ACCESS_KEY "${{ secrets.R2_SECRET_ACCESS_KEY }}"
+          check R2_BACKUP_BUCKET     "${{ secrets.R2_BACKUP_BUCKET }}"
+          exit $missing
+
+      # Bucket uploads phục vụ qua cdn.satarobo.vn ⇒ đẩy dump vào đó là công khai
+      # dữ liệu khách hàng. Chặn cứng, không để lỡ tay cấu hình.
+      - name: Chặn đẩy vào bucket công khai
+        run: |
+          if [ "${{ secrets.R2_BACKUP_BUCKET }}" = "satarobo-uploads" ]; then
+            echo "::error::R2_BACKUP_BUCKET đang trỏ bucket CÔNG KHAI (satarobo-uploads). Tạo bucket riêng."
+            exit 1
+          fi
+
+      # Server Supabase là PostgreSQL 17.6; ubuntu-24.04 chỉ sẵn client 16, mà
+      # pg_dump cũ hơn server thì TỪ CHỐI chạy ("server version mismatch").
+      - name: Cài postgresql-client-17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      - name: Dump
+        run: |
+          STAMP=$(date -u +%Y%m%d-%H%M)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          echo "FILE=satarobo-prod-$STAMP.dump" >> "$GITHUB_ENV"
+          # -Fc: định dạng custom, nén sẵn, cho phép pg_restore CHỌN TỪNG BẢNG.
+          pg_dump "${{ secrets.PROD_DIRECT_URL }}" -Fc -f "satarobo-prod-$STAMP.dump"
+
+      # Dump hỏng thường ra file rỗng/vài trăm byte. Không chặn ở đây thì mỗi đêm
+      # đẩy lên một file vô dụng, và ngày cần dùng mới biết — quá muộn.
+      - name: Kiểm dump có nội dung thật
+        run: |
+          SIZE=$(stat -c%s "$FILE")
+          echo "Kích thước: $SIZE bytes"
+          if [ "$SIZE" -lt 102400 ]; then
+            echo "::error::Dump chỉ $SIZE bytes (<100KB) — nhiều khả năng hỏng. Không đẩy lên."
+            exit 1
+          fi
+          # Đọc được mục lục = file toàn vẹn, không phải rác.
+          pg_restore --list "$FILE" > /dev/null
+          echo "TOC đọc được: $(pg_restore --list "$FILE" | grep -c 'TABLE DATA') bảng có dữ liệu"
+
+      - name: Đẩy lên R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          EP: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+        run: |
+          aws s3 cp "$FILE" "s3://$BUCKET/db/$FILE" --endpoint-url "$EP"
+          aws s3 ls "s3://$BUCKET/db/$FILE" --endpoint-url "$EP"
+
+      - name: Xoá bản cũ hơn RETENTION_DAYS ngày
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          EP: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+        run: |
+          CUTOFF=$(date -u -d "$RETENTION_DAYS days ago" +%Y-%m-%d)
+          echo "Xoá bản trước $CUTOFF"
+          aws s3 ls "s3://$BUCKET/db/" --endpoint-url "$EP" | while read -r d _t _sz key; do
+            [ -z "$key" ] && continue
+            if [[ "$d" < "$CUTOFF" ]]; then
+              echo "  xoá $key ($d)"
+              aws s3 rm "s3://$BUCKET/db/$key" --endpoint-url "$EP"
+            fi
+          done
+
+      - name: Tóm tắt
+        run: |
+          {
+            echo "### Backup PROD DB"
+            echo ""
+            echo "- File: \`$FILE\`"
+            echo "- Kích thước: $(du -h "$FILE" | cut -f1)"
+            echo "- Đích: \`s3://${{ secrets.R2_BACKUP_BUCKET }}/db/\` (R2, bucket riêng)"
+            echo "- Giữ lại: $RETENTION_DAYS ngày"
+            echo ""
+            echo "Khôi phục 1 bảng:"
+            echo '```'
+            echo "pg_restore -d \"<PROD_DIRECT_URL>\" --data-only -t '\"Student\"' $FILE"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

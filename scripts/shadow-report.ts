@@ -66,8 +66,11 @@ async function main() {
   // v2 (lib/auth/actor.ts) lấy quyền DUY NHẤT từ UserOrgRole → RoleDef →
   // RolePermission. Thiếu dòng này ⇒ v2 = false mọi action ⇒ lệch giả tràn bảng,
   // và sau flip #09 người đó mất sạch quyền.
+  // AUTH-SĐT P5/P6 — `User.email` nay NULLABLE. Raw SQL không được typecheck bắt,
+  // nên nếu cứ `SELECT u.email` thì báo cáo in ra dòng trống và người đọc không
+  // biết đang nói về ai. COALESCE sang SĐT rồi id để LUÔN định danh được.
   const coverage = await db.$queryRaw<CoverageRow[]>`
-    SELECT u.id, u.email, u.role::text AS role, u.roles::text[] AS roles
+    SELECT u.id, COALESCE(u.email, u.phone, u.id) AS email, u.role::text AS role, u.roles::text[] AS roles
     FROM "User" u
     WHERE u."deletedAt" IS NULL
       AND u."isActive" = true
@@ -112,7 +115,7 @@ async function main() {
   const byUser = await db.$queryRaw<
     { userId: string; email: string | null; so_lech: number; actions: string }[]
   >`
-    SELECT d."userId", u.email,
+    SELECT d."userId", COALESCE(u.email, u.phone, d."userId") AS email,
            COUNT(*)::int AS so_lech,
            string_agg(DISTINCT d.action, ', ') AS actions
     FROM "RbacShadowDiff" d

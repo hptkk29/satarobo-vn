@@ -4251,6 +4251,10 @@ enum OtpChannel {
   EMAIL
   SMS // QĐ-H 30/07: bỏ hẳn SMS brandname — giữ value vì enum Postgres không xoá được, KHÔNG dùng
   ZALO // AUTH-SĐT P3 — kênh ZNS (otp-provider cắm ở P4)
+  // AUTH-SĐT P6 — mã cấp TẠI QUẦY khi ZNS chết: hệ thống KHÔNG gửi đi đâu cả,
+  // nhân viên đọc mã cho phụ huynh. Tách riêng để /admin/otp-logs và SLO không
+  // đếm nhầm nó là tin đã gửi (và để soát được ai cấp tay, bao nhiêu lần).
+  OFFLINE
 }
 
 enum OtpPurpose {

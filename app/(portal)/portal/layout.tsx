@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { hasStaffRole } from "@/lib/auth/permissions";
+import { checkSessionLiveness } from "@/lib/auth/live-session";
 import { getPortalContext } from "@/lib/portal/session";
 import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
@@ -30,6 +31,14 @@ export default async function PortalLayout({
   // Defense-in-depth: portal chỉ cho PARENT. Có BẤT KỲ vai trò nhân viên nào
   // (đa vai trò 3B) → đẩy về admin dashboard.
   if (hasStaffRole(session.user)) redirect("/dashboard");
+
+  // AUTH-SĐT P6 — kiểm phiên còn SỐNG so với DB, y như layout admin/teacher.
+  // Portal trước đây KHÔNG kiểm: `tokenVersion++` (đặt lại mật khẩu, admin vô
+  // hiệu hoá tài khoản) hoàn toàn không đá được phụ huynh nào — JWT sống tới 30
+  // ngày. Mà phụ huynh CHÍNH LÀ đối tượng của luồng quên mật khẩu, nên thiếu
+  // đoạn này thì "đổi mật khẩu để đuổi kẻ đang chiếm tài khoản" là lời hứa suông.
+  const liveness = await checkSessionLiveness(session.user.id, session.user.tokenVersion);
+  if (!liveness.live) redirect(`/dang-xuat?reason=${liveness.reason}`);
 
   const ctx = await getPortalContext();
   // ctx luôn khác null vì role PARENT, nhưng guard cho chắc.

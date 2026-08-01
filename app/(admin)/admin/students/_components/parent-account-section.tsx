@@ -4,7 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, CheckCircle2, Send } from "lucide-react";
 import { toast } from "sonner";
-import { createParentAccount, resendParentActivationOtp } from "../_actions";
+import {
+  createParentAccount,
+  resendParentActivationOtp,
+  issueOfflineActivationCode,
+} from "../_actions";
 
 type Props = {
   studentId: string;
@@ -12,6 +16,8 @@ type Props = {
   parentEmail: string | null;
   parentName: string | null;
   defaultEmail: string | null;
+  /** AUTH-SĐT P5 — SĐT phụ huynh trên hồ sơ HV, dùng làm tài khoản đăng nhập. */
+  defaultPhone: string | null;
   pendingActivation?: boolean;
 };
 
@@ -21,29 +27,53 @@ export function ParentAccountSection({
   parentEmail,
   parentName,
   defaultEmail,
+  defaultPhone,
   pendingActivation,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [phone, setPhone] = useState(defaultPhone ?? "");
   const [email, setEmail] = useState(defaultEmail ?? "");
   const [name, setName] = useState(parentName ?? "");
 
   function submit() {
-    if (!email) {
-      toast.error("Nhập email đăng nhập của phụ huynh");
+    if (!phone.trim()) {
+      toast.error("Nhập số điện thoại đăng nhập của phụ huynh");
       return;
     }
     startTransition(async () => {
-      const res = await createParentAccount({ studentId, email, name: name || undefined });
+      const res = await createParentAccount({
+        studentId,
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        name: name || undefined,
+      });
       if (res.ok) {
         toast.success(
           `Đã cấp tài khoản phụ huynh · liên kết ${res.linkedCount} con` +
-            (res.pendingActivation ? " · đã gửi email kích hoạt" : ""),
+            (res.pendingActivation ? " · đã gửi mã kích hoạt qua Zalo" : ""),
         );
         router.refresh();
       } else {
         toast.error(res.error ?? "Lỗi cấp tài khoản");
       }
+    });
+  }
+
+  // AUTH-SĐT P6-C — break-glass khi ZNS chết: mã hiện TRÊN MÀN HÌNH để nhân viên
+  // đọc cho phụ huynh. Bắt buộc lý do; mã chỉ nằm trong state, không lưu ở đâu.
+  const [offlineReason, setOfflineReason] = useState("");
+  const [offlineCode, setOfflineCode] = useState<string | null>(null);
+  const [offlineOpen, setOfflineOpen] = useState(false);
+
+  function issueOffline() {
+    startTransition(async () => {
+      const res = await issueOfflineActivationCode({ studentId, reason: offlineReason });
+      if (res.ok && res.code) {
+        setOfflineCode(res.code);
+        setOfflineReason("");
+        toast.success("Đã cấp mã tay — đọc cho phụ huynh, mã chỉ hiện một lần.");
+      } else toast.error(res.error ?? "Không cấp được mã");
     });
   }
 
@@ -53,7 +83,7 @@ export function ParentAccountSection({
       if (res.ok) {
         // warning = OTP đã tạo nhưng email chưa gửi được (vd dev thiếu API key).
         if (res.warning) toast.warning(res.warning);
-        else toast.success("Đã gửi lại mã kích hoạt qua email phụ huynh");
+        else toast.success("Đã gửi lại mã kích hoạt cho phụ huynh (Zalo hoặc email)");
       } else toast.error(res.error ?? "Lỗi gửi lại mã");
     });
   }
@@ -79,7 +109,10 @@ export function ParentAccountSection({
               Đã liên kết tài khoản phụ huynh
               {parentEmail && <span className="font-semibold"> ({parentEmail})</span>}.{" "}
               {pendingActivation ? (
-                <>Tài khoản <b>đang chờ kích hoạt</b> — phụ huynh cần mở email + nhập mã để đặt mật khẩu.</>
+                <>
+                  Tài khoản <b>đang chờ kích hoạt</b> — phụ huynh nhập mã nhận qua Zalo (hoặc
+                  email) để đặt mật khẩu.
+                </>
               ) : (
                 <>
                   Phụ huynh đăng nhập tại{" "}
@@ -89,35 +122,104 @@ export function ParentAccountSection({
             </div>
           </div>
           {pendingActivation && (
-            <button
-              type="button"
-              onClick={resend}
-              disabled={pending}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-            >
-              <Send className="h-3.5 w-3.5" />
-              {pending ? "Đang gửi…" : "Gửi lại mã kích hoạt"}
-            </button>
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={resend}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {pending ? "Đang gửi…" : "Gửi lại mã kích hoạt"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOfflineOpen((v) => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Cấp mã tại quầy
+                </button>
+              </div>
+
+              {offlineOpen && (
+                <div className="rounded-lg border border-amber-300 bg-white p-3">
+                  <p className="mb-2 text-xs leading-relaxed text-amber-800">
+                    Dùng khi <b>Zalo không gửi được</b> và phụ huynh đang ở quầy. Mã hiện{" "}
+                    <b>một lần trên màn hình</b> để đọc trực tiếp — hệ thống không gửi đi đâu và
+                    không lưu lại mã. Thao tác này <b>được ghi nhật ký kèm lý do</b>.
+                  </p>
+                  <textarea
+                    value={offlineReason}
+                    onChange={(e) => setOfflineReason(e.target.value)}
+                    rows={2}
+                    placeholder="Lý do cấp mã tay (bắt buộc, ≥ 10 ký tự) — vd: phụ huynh không dùng Zalo, đang ở quầy CS1"
+                    className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs focus:border-amber-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={issueOffline}
+                    disabled={pending || offlineReason.trim().length < 10}
+                    className="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {pending ? "Đang cấp…" : "Cấp mã"}
+                  </button>
+
+                  {offlineCode && (
+                    <div className="mt-3 rounded-lg bg-amber-100 p-3 text-center">
+                      <div className="text-xs font-medium text-amber-800">
+                        Đọc mã này cho phụ huynh (hết hạn theo cấu hình OTP):
+                      </div>
+                      <div className="mt-1 font-mono text-2xl font-bold tracking-[0.3em] text-amber-900">
+                        {offlineCode}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOfflineCode(null)}
+                        className="mt-2 text-xs font-semibold text-amber-700 underline"
+                      >
+                        Ẩn mã
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       ) : (
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <p className="mb-3 text-sm text-neutral-500">
-            Tạo tài khoản đăng nhập portal cho phụ huynh. Hệ thống gửi email mã kích
-            hoạt để phụ huynh tự đặt mật khẩu (không đặt mật khẩu tạm). Các con cùng số
-            điện thoại phụ huynh sẽ được liên kết tự động.
+            Tạo tài khoản đăng nhập portal cho phụ huynh. Tài khoản là{" "}
+            <b>số điện thoại</b>; hệ thống gửi mã kích hoạt qua <b>Zalo</b> để phụ huynh tự đặt
+            mật khẩu (không đặt mật khẩu tạm). Các con cùng số điện thoại phụ huynh sẽ được
+            liên kết tự động.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-neutral-500">
-                Email đăng nhập (nhận mã kích hoạt)
+                Số điện thoại đăng nhập (nhận mã kích hoạt) *
+              </span>
+              <input
+                type="text"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className={inputCls}
+                placeholder="0905123456"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">
+                Email <span className="font-normal text-neutral-400">(không bắt buộc)</span>
               </span>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputCls}
-                placeholder="phuhuynh@email.com"
+                placeholder="Kênh dự phòng khi Zalo không tới"
               />
             </label>
             <label className="block">

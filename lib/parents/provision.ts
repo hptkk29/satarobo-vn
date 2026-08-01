@@ -2,6 +2,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { canonicalPhone } from "@/lib/phone";
 import { sendZaloNotification } from "@/lib/zalo/service";
+import { buildAccountZnsParams } from "@/lib/zalo/templates";
+import { isAuthPhoneProvisioningEnabled } from "@/lib/flags";
 
 // =============================================================================
 // BGĐ 31/07 — SAU KHI XÁC NHẬN THANH TOÁN: tự cấp tài khoản PHỤ HUYNH theo SĐT
@@ -32,6 +34,15 @@ export type ProvisionParentResult =
 export async function ensureParentAccountForOrder(
   orderId: string,
 ): Promise<ProvisionParentResult> {
+  // AUTH-SĐT P5 — công tắc ngắt. Đặt TRƯỚC mọi truy vấn: khi kéo cờ là lúc đang
+  // có sự cố, đường này phải im hoàn toàn chứ không phải "chạy nhưng không ghi".
+  // Cả 2 chỗ gọi đều fire-and-forget nên không ai đọc `reason` — vì vậy log lại,
+  // nếu không thì tắt xong sẽ không có dấu vết nào cho biết đã bỏ qua bao nhiêu đơn.
+  if (!isAuthPhoneProvisioningEnabled()) {
+    console.warn(`[parent-provision] BỎ QUA đơn ${orderId} — AUTH_PHONE_PROVISIONING=false`);
+    return { ok: false, reason: "Đường tự cấp tài khoản đang tắt (AUTH_PHONE_PROVISIONING=false)" };
+  }
+
   const order = await db.order.findUnique({
     where: { id: orderId },
     select: {
@@ -93,14 +104,16 @@ export async function ensureParentAccountForOrder(
   await linkStudentToParent(order.studentId, created.id);
 
   // Báo phụ huynh qua ZNS (fallback email nếu đơn có email). KHÔNG kèm mật khẩu.
+  //
+  // ⚠️ Tham số dựng qua `buildAccountZnsParams` để khớp bảng khai của mẫu 616899
+  // (chỉ `name` ≤30 + `login_id` ≤15 — đường dẫn kích hoạt nằm trong nội dung
+  // TĨNH của mẫu, không phải tham số). Bản trước gửi thêm `login_url` và không
+  // cắt `name`: tên dài >30 là Zalo từ chối, mà `.catch(() => {})` dưới nuốt
+  // sạch nên không ai biết. Bài học PR #77.
   await sendZaloNotification({
     toPhone: phone,
     templateKey: ZNS_ACCOUNT_TEMPLATE,
-    params: {
-      name: order.customerName,
-      login_id: phone,
-      login_url: PORTAL_ACTIVATE_URL,
-    },
+    params: buildAccountZnsParams({ customerName: order.customerName, phone }),
     fallbackEmail: email
       ? {
           to: email,

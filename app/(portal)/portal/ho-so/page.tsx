@@ -24,8 +24,11 @@ export default async function HoSoPage() {
     <div className="space-y-5">
       <h1 className="text-xl font-bold text-neutral-900">Hồ sơ phụ huynh</h1>
 
+      {/* AUTH-SĐT P6 — truyền cả SĐT: sau P5 phần lớn phụ huynh KHÔNG có email,
+          hiển thị mỗi ô Email rỗng thì màn hồ sơ không cho biết họ đăng nhập bằng gì. */}
       <ProfileForm
         email={session.user.email ?? ""}
+        phone={session.user.phone ?? ""}
         initialName={session.user.name ?? ""}
       />
 

@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { nextInvoiceCode } from "@/lib/finance/invoice-code";
-import { phoneVariants } from "@/lib/phone";
+import { canonicalPhone, phoneVariants } from "@/lib/phone";
 
 export class ConvertError extends Error {
   readonly code: string;
@@ -51,7 +51,8 @@ export type ConvertLeadInput = {
   leadId: string;
   classId: string;
   courseId: string;
-  parentEmail: string;
+  /** AUTH-SĐT P5 — không còn bắt buộc; khoá định danh là SĐT của lead. */
+  parentEmail?: string | null;
   childName?: string;
   amount: number;
   paidAmount?: number;
@@ -80,18 +81,44 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
     const centerCode = center?.code ?? "CS";
 
     // Parent: KHÔNG mật khẩu mặc định (C4.1) — PENDING_ACTIVATION.
-    const parent = await tx.user.upsert({
-      where: { email: input.parentEmail },
-      update: { centerId: lead.centerId },
-      create: {
-        email: input.parentEmail,
-        name: lead.parentName,
-        role: "PARENT",
-        roles: ["PARENT"],
-        accountStatus: "PENDING_ACTIVATION",
-        centerId: lead.centerId,
-      },
-    });
+    //
+    // AUTH-SĐT P5 — khoá định danh là SĐT canonical; email tuỳ chọn. Khoá theo
+    // email như trước sẽ ném lỗi runtime ngay khi `parentEmail` null
+    // (`where: { email: undefined }` không trả null, nó throw).
+    const parentEmail = input.parentEmail?.trim().toLowerCase() || null;
+    const parentPhone = canonicalPhone(lead.phone);
+    if (!parentPhone && !parentEmail) {
+      throw new ConvertError(
+        "NO_PARENT_IDENTITY",
+        "Lead không có SĐT di động hợp lệ lẫn email — không tạo được tài khoản phụ huynh.",
+      );
+    }
+    const parent = parentPhone
+      ? await tx.user.upsert({
+          where: { phone: parentPhone },
+          update: { centerId: lead.centerId },
+          create: {
+            phone: parentPhone,
+            email: parentEmail,
+            name: lead.parentName,
+            role: "PARENT",
+            roles: ["PARENT"],
+            accountStatus: "PENDING_ACTIVATION",
+            centerId: lead.centerId,
+          },
+        })
+      : await tx.user.upsert({
+          where: { email: parentEmail! },
+          update: { centerId: lead.centerId },
+          create: {
+            email: parentEmail,
+            name: lead.parentName,
+            role: "PARENT",
+            roles: ["PARENT"],
+            accountStatus: "PENDING_ACTIVATION",
+            centerId: lead.centerId,
+          },
+        });
 
     const student = await tx.student.create({
       data: {
@@ -99,8 +126,9 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
         parentUserId: parent.id,
         centerId: lead.centerId,
         parentName: lead.parentName,
-        parentPhone: lead.phone,
-        parentEmail: input.parentEmail,
+        // Đường GHI phải ra canonical — xem ghi chú cùng nội dung ở convert-lead-v2.
+        parentPhone: parentPhone ?? lead.phone,
+        parentEmail,
       },
     });
 

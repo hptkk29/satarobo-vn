@@ -69,6 +69,14 @@ nuốt im lặng; nay provider chọn theo target, env này không còn chỗ đ
 
 ## Bật live (checklist — làm ĐÚNG THỨ TỰ)
 
+> ✅ **ĐÃ CHẠY XONG bước 1–3 (01/08/2026): ZNS live gửi và nhận được tin thật.**
+> Giữ checklist làm quy trình cho lần đổi mẫu / đổi OA sau. Hai bẫy đã gặp thật ở
+> bước 2, đọc trước khi làm lại: (a) badge "Đang bật (live)" **không chứng minh gửi
+> được** — lỗi khoá advisory (`$queryRaw` trên `pg_advisory_xact_lock()`) làm token
+> refresh chết âm thầm, provider trả `ZALO_NOT_CONFIGURED`; (b) mẫu **Xác thực** dùng
+> tên tham số **cố định `otp`**, không phải tên đặt lúc soạn nội dung.
+> Còn nợ: metric quota ZNS (mục SLO ở trên) + theo dõi ngày đầu (bước 4).
+
 1. Merge P4 + deploy (ZALO_LIVE chưa set → vẫn mô phỏng, an toàn).
 2. Smoke **development mode**: gửi thử tới SĐT admin OA (dev mode chỉ gửi được cho
    admin OA — số khác trả `-127`, là bình thường). Nếu ZNS chê `template_data`:

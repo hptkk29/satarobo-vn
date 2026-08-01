@@ -8,8 +8,8 @@ import { requestActivationOtp, activateAccount } from "./_actions";
 export function ActivateForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [step, setStep] = useState<"email" | "verify" | "done">("email");
-  const [email, setEmail] = useState("");
+  const [step, setStep] = useState<"identify" | "verify" | "done">("identify");
+  const [identifier, setIdentifier] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [cooldown, setCooldown] = useState(0);
@@ -23,9 +23,9 @@ export function ActivateForm() {
 
   function sendOtp() {
     startTransition(async () => {
-      const res = await requestActivationOtp(email);
+      const res = await requestActivationOtp(identifier);
       if (res.ok) {
-        toast.success("Đã gửi mã kích hoạt tới email (nếu hợp lệ).");
+        toast.success("Đã gửi mã kích hoạt qua Zalo hoặc email (nếu hợp lệ).");
         setStep("verify");
         setCooldown(res.cooldownSec ?? 60);
       } else {
@@ -42,7 +42,7 @@ export function ActivateForm() {
 
   function activate() {
     startTransition(async () => {
-      const res = await activateAccount({ email, code, password });
+      const res = await activateAccount({ identifier, code, password });
       if (res.ok) {
         toast.success("Kích hoạt thành công! Bạn có thể đăng nhập.");
         setStep("done");
@@ -57,7 +57,7 @@ export function ActivateForm() {
     return (
       <div className="space-y-4 text-center">
         <p className="text-sm text-gray-600">
-          Tài khoản đã được kích hoạt. Đăng nhập bằng email và mật khẩu vừa đặt.
+          Tài khoản đã được kích hoạt. Đăng nhập bằng số điện thoại (hoặc email) và mật khẩu vừa đặt.
         </p>
         <button
           type="button"
@@ -73,23 +73,30 @@ export function ActivateForm() {
   return (
     <div className="space-y-4">
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Email phụ huynh</span>
+        <span className="mb-1 block text-xs font-medium text-gray-500">
+          Số điện thoại hoặc Email
+        </span>
+        {/* AUTH-SĐT P5 — cùng lựa chọn với ô định danh ở /login (P3):
+            inputMode="email" chứ KHÔNG phải "tel". Bàn phím tel trên mobile
+            không có chữ cái nên phụ huynh dùng email sẽ không gõ nổi. */}
         <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="text"
+          inputMode="email"
+          autoComplete="username"
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
           disabled={step === "verify" || pending}
-          placeholder="email@example.com"
+          placeholder="0905123456"
           className={inputCls}
         />
       </label>
 
-      {step === "email" && (
+      {step === "identify" && (
         <>
           <button
             type="button"
             onClick={sendOtp}
-            disabled={pending || !email}
+            disabled={pending || !identifier}
             className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
           >
             {pending ? "Đang gửi…" : "Gửi mã kích hoạt"}
@@ -108,7 +115,9 @@ export function ActivateForm() {
       {step === "verify" && (
         <>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">Mã OTP (6 số trong email)</span>
+            <span className="mb-1 block text-xs font-medium text-gray-500">
+              Mã OTP (6 số gửi qua Zalo hoặc email)
+            </span>
             <input
               inputMode="numeric"
               value={code}
