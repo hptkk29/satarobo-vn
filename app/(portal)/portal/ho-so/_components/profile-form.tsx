@@ -78,10 +78,13 @@ export function ProfileForm({
         confirmPassword: cf,
       });
       if (res.ok) {
-        toast.success("Đã đổi mật khẩu");
-        setCur("");
-        setNw("");
-        setCf("");
+        // tokenVersion đã tăng — mọi phiên (kể cả phiên này) sẽ bị đá ở lần
+        // request sau. Chủ động đưa qua /dang-xuat để dọn cookie sạch rồi đăng
+        // nhập lại bằng mật khẩu mới, thay vì để văng giữa chừng khó hiểu.
+        toast.success("Đã đổi mật khẩu — đăng nhập lại bằng mật khẩu mới");
+        setTimeout(() => {
+          window.location.assign("/dang-xuat?reason=password-changed");
+        }, 1200);
       } else toast.error(res.error ?? "Lỗi đổi mật khẩu");
     });
   }

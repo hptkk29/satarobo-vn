@@ -1002,7 +1002,9 @@ export async function markOrderInstallmentPaidAction(
     return { ok: false, error: "Không tìm thấy đơn hàng" };
   }
 
-  const res = await markInstallmentPaid(installmentId, session.user.id ?? null);
+  // Truyền orderId ĐÃ scope-check để lib đối chiếu installment thuộc đúng đơn
+  // (chống IDOR: installmentId của đơn khác cơ sở).
+  const res = await markInstallmentPaid(installmentId, session.user.id ?? null, order.id);
   if (res.ok) {
     revalidatePath(`/orders/${orderId}`);
     // S6 — đóng đợt sinh Payment(RECORDED, nếu đã duyệt) → đồng bộ trang lead/convert.
