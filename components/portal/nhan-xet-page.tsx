@@ -4,8 +4,16 @@ import { useMemo, useState } from "react";
 import { MessageSquareText, Search, Calendar, User, School } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FeedbackItem } from "@/lib/portal/feedback";
+import {
+  EVAL_NOTE_FIELDS,
+  evalLevelText,
+  groupedEvalCriteria,
+  type EvalNotes,
+} from "@/lib/lms/session-eval-rubric";
 import { PageHero } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
+
+const GROUPS = groupedEvalCriteria();
 
 function fmt(iso: string): string {
   if (!iso) return "";
@@ -30,6 +38,61 @@ function CommentBody({ text }: { text: string }) {
         );
       })}
     </div>
+  );
+}
+
+// Phiếu mở rộng: 4 mục văn xuôi (Kiến thức/Kỹ năng/Thái độ/Đề xuất) — nhãn cam, bỏ mục trống.
+function NotesBody({ notes }: { notes: EvalNotes }) {
+  const rows = EVAL_NOTE_FIELDS.map((f) => ({ ...f, text: notes[f.key].trim() })).filter(
+    (r) => r.text.length > 0,
+  );
+  if (rows.length === 0) return null;
+  return (
+    <div className="rounded-xl bg-muted/40 p-4 space-y-2">
+      {rows.map((r) => (
+        <p key={r.key} className="text-sm leading-relaxed text-muted-foreground">
+          <span className="font-bold text-primary">{r.label}:</span> {r.text}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// Phiếu mở rộng: rubric năng lực theo nhóm — chỉ render tiêu chí phiếu có chấm.
+function RubricBody({ rubric }: { rubric: Record<string, number> }) {
+  return (
+    <div className="space-y-3">
+      {GROUPS.map(([group, items]) => {
+        const rows = items.filter((c) => rubric[c.id] != null);
+        if (rows.length === 0) return null;
+        return (
+          <div key={group} className="rounded-xl bg-muted/40 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{group}</p>
+            <div className="mt-2 space-y-2">
+              {rows.map((c) => (
+                <div key={c.id}>
+                  <p className="text-sm font-bold text-foreground">{c.name}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {evalLevelText(c.id, rubric[c.id]) || `Mức ${rubric[c.id]}/5`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Sao đánh giá chung (đường cũ /teacher/nhan-xet) — clamp 0-5 phòng data lệch.
+function RatingStars({ rating }: { rating: number }) {
+  const r = Math.min(5, Math.max(0, Math.trunc(rating)));
+  return (
+    <p className="text-sm text-amber-500" aria-label={`Đánh giá ${r}/5 sao`}>
+      {"★".repeat(r)}
+      {"☆".repeat(5 - r)}
+    </p>
   );
 }
 
@@ -64,7 +127,11 @@ export function NhanXetPageV2({
     const minTime =
       range === "all" ? null : Date.now() - Number(range) * 24 * 60 * 60 * 1000;
     return items.filter((it) => {
-      if (needle && !`${it.title}\n${it.comment}`.toLowerCase().includes(needle)) return false;
+      if (needle) {
+        const notesText = it.notes ? Object.values(it.notes).join("\n") : "";
+        const hay = `${it.title}\n${it.comment}\n${it.projectName ?? ""}\n${notesText}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
       if (minTime !== null && new Date(it.dateISO).getTime() < minTime) return false;
       if (teacher !== "all" && it.teacher !== teacher) return false;
       if (klass !== "all" && it.className !== klass) return false;
@@ -161,13 +228,43 @@ export function NhanXetPageV2({
                 </div>
               </div>
 
+              {sel.projectName && (
+                <p className="pt-2 text-sm text-muted-foreground">
+                  <span className="font-bold text-foreground">Dự án:</span> {sel.projectName}
+                </p>
+              )}
+
+              {/* ① Văn xuôi: phiếu mở rộng ưu tiên 4 mục notes (có nhãn); comment cũ là
+                  fallback (phiếu mới lưu comment = notes nối lại, render cả 2 sẽ lặp). */}
               <div className="space-y-3 pt-2">
                 <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
                   <span className="grid size-6 place-items-center rounded-md bg-primary/10 text-primary">1</span>
                   Nhận xét của giáo viên
                 </h3>
-                <CommentBody text={sel.comment} />
+                {sel.rating != null && <RatingStars rating={sel.rating} />}
+                {sel.notes ? (
+                  <NotesBody notes={sel.notes} />
+                ) : sel.comment.trim() ? (
+                  <CommentBody text={sel.comment} />
+                ) : (
+                  <p className="rounded-xl bg-muted/40 p-4 text-sm text-muted-foreground">
+                    {sel.rubric
+                      ? "Buổi này giáo viên đánh giá qua bảng năng lực bên dưới."
+                      : "Chưa có nội dung nhận xét chi tiết cho buổi này."}
+                  </p>
+                )}
               </div>
+
+              {/* ② Rubric năng lực (phiếu mở rộng — lib/lms/session-eval-rubric) */}
+              {sel.rubric && (
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
+                    <span className="grid size-6 place-items-center rounded-md bg-primary/10 text-primary">2</span>
+                    Đánh giá chi tiết năng lực
+                  </h3>
+                  <RubricBody rubric={sel.rubric} />
+                </div>
+              )}
             </div>
           )}
         </div>

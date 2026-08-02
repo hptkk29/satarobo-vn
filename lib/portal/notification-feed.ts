@@ -92,7 +92,9 @@ export const getParentNotificationFeed = cache(async (
           id: `fb-${f.id}`,
           category: "NHAN_XET",
           title: `Nhận xét mới từ ${f.teacher ?? "giáo viên"}`,
-          body: firstLine(f.comment),
+          // Phiếu rubric-only (comment null từ khi comment thành nullable) → body
+          // rỗng nhìn như card hỏng; thay bằng câu dẫn sang trang Nhận xét.
+          body: firstLine(f.comment) || "Giáo viên đã gửi phiếu đánh giá năng lực buổi học.",
           childName: child.name,
           at: f.dateISO || new Date(now).toISOString(),
           read: f.dateISO ? now - new Date(f.dateISO).getTime() > READ_AFTER_MS : false,
