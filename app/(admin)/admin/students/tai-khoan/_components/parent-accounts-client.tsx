@@ -77,11 +77,13 @@ export function ParentAccountsClient({
         toast.error(res.error)
         return
       }
-      toast[res.failed > 0 ? 'warning' : 'success'](
+      // "còn lại" (vượt cap 100/lượt) tách khỏi "đã nhận trước đó" — gộp chung
+      // làm người vận hành tưởng đã phủ hết, không bấm gửi tiếp.
+      toast[res.failed > 0 || res.remaining > 0 ? 'warning' : 'success'](
         `ZNS hàng loạt: ${res.sent} gửi · ${res.failed} lỗi · ${res.skipped} đã nhận trước đó${
-          res.simulated ? ' — CHẾ ĐỘ MÔ PHỎNG (ZALO_LIVE chưa bật)' : ''
-        }`,
-        { duration: 9000 },
+          res.remaining > 0 ? ` · CÒN ${res.remaining} CHƯA GỬI — bấm lại để gửi tiếp` : ''
+        }${res.simulated ? ' — CHẾ ĐỘ MÔ PHỎNG (ZALO_LIVE chưa bật)' : ''}`,
+        { duration: 12000 },
       )
     })
   }
@@ -212,18 +214,21 @@ export function ParentAccountsClient({
                 <td className="px-3 py-2 align-top">
                   {p.status === 'PENDING_ACTIVATION' && (
                     <div className="flex flex-wrap gap-1.5">
+                      {/* Khoá TẤT CẢ nút khi đang có transition (không chỉ dòng busy):
+                          busyId reset sớm hơn transition → double-click/bấm dòng khác
+                          khi đang gửi sẽ bắn trùng OTP/ZNS cho phụ huynh (review 02/08). */}
                       <button
                         type="button"
                         onClick={() => resendOtp(p.id)}
-                        disabled={pending && busyId === p.id}
+                        disabled={pending}
                         className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                       >
-                        Gửi lại OTP
+                        {pending && busyId === p.id ? 'Đang gửi…' : 'Gửi lại OTP'}
                       </button>
                       <button
                         type="button"
                         onClick={() => sendZns(p.id)}
-                        disabled={!znsConfigured || !p.phone || (pending && busyId === p.id)}
+                        disabled={!znsConfigured || !p.phone || pending}
                         title={znsConfigured ? undefined : 'Chưa cấu hình mẫu ZNS (chờ 616899 duyệt)'}
                         className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                       >

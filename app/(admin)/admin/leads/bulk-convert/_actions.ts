@@ -1,9 +1,10 @@
 'use server'
 
 // Chốt hàng loạt lead ĐÃ ĐĂNG KÝ (nhập liệu ban đầu CS1/CS2) — wiring Server Action
-// → lib/crm/bulk-convert. Quyền: leads:import (chặt hơn convert thường vì có nhánh
-// bỏ qua guard tiền) + students:create + enrollments:create. Cách ly cơ sở bằng
-// passesScope per-lead trên đường ghi (mẫu import registered).
+// → lib/crm/bulk-convert. Quyền: leads:view-all (chặn Sale — màn này thấy MỌI lead
+// của cơ sở + có nhánh bỏ qua guard tiền, review 02/08: leads:import một mình KHÔNG
+// đủ vì Sale cũng có) + leads:import + students:create + enrollments:create.
+// Cách ly cơ sở: đọc lô qua scopedDb (Lead ∈ SCOPED_MODELS).
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -43,8 +44,10 @@ const leadItemSchema = z.object({
     .nullable(),
 })
 
+// Vỏ ngoài chỉ kiểm mảng — TỪNG item validate riêng bên dưới để 1 lead dữ liệu
+// hỏng không đánh fail nhầm cả chunk (review 02/08).
 const bulkSchema = z.object({
-  items: z.array(leadItemSchema).min(1).max(MAX_LEADS_PER_CALL),
+  items: z.array(z.unknown()).min(1).max(MAX_LEADS_PER_CALL),
 })
 
 export type BulkConvertActionResult =
@@ -55,14 +58,16 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
 
-  // leads:import = quyền của SUPER_ADMIN/CENTER_MANAGER (đường nhập liệu); kèm 2
-  // quyền của convert thường (tạo học viên + ghi danh).
+  // leads:view-all chặn Sale (chỉ SUPER_ADMIN/CENTER_MANAGER/HO-level): màn bulk
+  // liệt kê mọi lead của cơ sở và có nhánh bỏ qua guard tiền — Sale vẫn convert
+  // lead CỦA MÌNH ở đường đơn lẻ /leads/[id]/convert (có guard ownership + tiền).
   if (
+    !(await checkPermission('leads:view-all')) ||
     !(await checkPermission('leads:import')) ||
     !(await checkPermission('students:create')) ||
     !(await checkPermission('enrollments:create'))
   ) {
-    return { ok: false, error: 'Không có quyền chốt hàng loạt (cần leads:import + students:create + enrollments:create)' }
+    return { ok: false, error: 'Không có quyền chốt hàng loạt (cần leads:view-all + leads:import + students:create + enrollments:create)' }
   }
 
   const parsed = bulkSchema.safeParse(input)
@@ -74,18 +79,38 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
   const { actorId, actorName } = getAuditActor(session)
   const auditActor = { id: actorId, name: actorName }
 
+  // Validate TỪNG item riêng — item hỏng thành lỗi dòng, không kéo cả chunk.
+  type ParsedItem = z.infer<typeof leadItemSchema>
+  const itemStates = parsed.data.items.map((raw) => {
+    const p = leadItemSchema.safeParse(raw)
+    const rawLeadId =
+      typeof raw === 'object' && raw !== null && 'leadId' in raw && typeof raw.leadId === 'string'
+        ? raw.leadId
+        : '(không rõ)'
+    return p.success
+      ? { leadId: p.data.leadId, item: p.data as ParsedItem, error: null }
+      : { leadId: rawLeadId, item: null, error: p.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  })
+
   // Cách ly cơ sở TRƯỚC khi ghi: đọc lô lead qua scopedDb (auto-scope) — lead ngoài
   // cơ sở của actor không hiện trong kết quả ⇒ chặn ngay tại đây, service không chạy.
   const sdb = scopedDb(actor)
-  const leadIds = parsed.data.items.map((it) => it.leadId)
-  const visibleLeads = await sdb.lead.findMany({
-    where: { id: { in: leadIds }, deletedAt: null },
-    select: { id: true },
-  })
+  const leadIds = itemStates.filter((s) => s.item).map((s) => s.leadId)
+  const visibleLeads = leadIds.length
+    ? await sdb.lead.findMany({
+        where: { id: { in: leadIds }, deletedAt: null },
+        select: { id: true },
+      })
+    : []
   const visible = new Set(visibleLeads.map((l) => l.id))
 
   const results: BulkConvertLeadResult[] = []
-  for (const item of parsed.data.items) {
+  for (const state of itemStates) {
+    if (!state.item) {
+      results.push({ leadId: state.leadId, ok: false, code: 'INVALID', message: state.error ?? 'Dữ liệu không hợp lệ' })
+      continue
+    }
+    const item = state.item
     if (!visible.has(item.leadId)) {
       results.push({
         leadId: item.leadId,

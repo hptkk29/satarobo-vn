@@ -12,9 +12,10 @@ import { db } from "../../../lib/db";
 import { resetDb, seedUser } from "../_helpers/seed";
 import {
   convertOneLeadBackfill,
-  ensureBackfillOrderPayment,
+  bulkConvertIdempotencyKey,
   BACKFILL_PAYMENT_MARKER,
 } from "../../../lib/crm/bulk-convert";
+import { convertLeadV2 } from "../../../lib/crm/convert-lead-v2";
 
 test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
   test.beforeEach(async () => {
@@ -253,32 +254,100 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     expect(await db.payment.count()).toBe(1);
   });
 
-  test("[BULK-07] ensureBackfillOrderPayment idempotent theo marker (gọi 2 lần → 1 khoản)", async () => {
+  test("[BULK-07] tiền backfill NẰM TRONG tx convert — convert vỡ giữa chừng là Order/Payment rollback theo (không có khoản ma)", async () => {
+    // Review 02/08: bản đầu tạo Order CONFIRMED + Payment RECORDED TRƯỚC rồi mới
+    // convert — convert fail để lại khoản tiền treo vĩnh viễn. Nay tiền tạo trong
+    // chính transaction convert. Ca này ép fail Ở TRONG tx (FK classId không tồn
+    // tại — gọi thẳng convertLeadV2, lách validate của service) và khẳng định
+    // KHÔNG còn Order/Payment/Student nào sót lại.
     const center = await seedCenter();
+    const { cls } = await seedCourseClass(center.id);
     const { lead } = await seedRegisteredLeadWithChildren(center.id, "0905000007", ["Bé Tám"]);
     const actor = await seedActor();
-    const leadRow = {
-      id: lead.id,
-      status: lead.status,
-      centerId: lead.centerId,
-      parentName: lead.parentName,
-      phone: lead.phone,
-      email: lead.email,
-    };
-    const params = {
-      actor,
-      lead: leadRow,
-      items: [{ itemName: "Sata X — Bé Tám", unitPrice: 3_000_000 }],
-      paid: { amount: 3_000_000, paidDate: new Date("2026-04-01T05:00:00Z") },
-    };
 
-    const first = await ensureBackfillOrderPayment(params);
-    const second = await ensureBackfillOrderPayment(params);
+    await expect(
+      convertLeadV2(actor, {
+        leadId: lead.id,
+        parentEmail: null,
+        parentName: "PH Bulk",
+        parentPhone: "84905000007",
+        idempotencyKey: bulkConvertIdempotencyKey(lead.id, [
+          { name: "Bé Tám", classId: cls.id },
+          { name: "Bé Chín", classId: "class-khong-ton-tai" },
+        ]),
+        students: [
+          { name: "Bé Tám", courseId: cls.courseId, listPrice: 5_000_000, classId: cls.id, consentMedia: false },
+          { name: "Bé Chín", courseId: cls.courseId, listPrice: 5_000_000, classId: "class-khong-ton-tai", consentMedia: false },
+        ],
+        backfillPayment: {
+          amount: 10_000_000,
+          paidDate: new Date("2026-04-01T05:00:00Z"),
+          items: [{ itemName: "Sata X — Bé Tám", unitPrice: 5_000_000 }],
+        },
+      }),
+    ).rejects.toThrow();
 
-    expect(first.created).toBe(true);
-    expect(second.created).toBe(false);
-    expect(second.paymentId).toBe(first.paymentId);
-    expect(await db.order.count({ where: { leadId: lead.id } })).toBe(1);
-    expect(await db.payment.count()).toBe(1);
+    // Rollback SẠCH: không tiền ma, không học viên mồ côi, lead còn nguyên REGISTERED.
+    expect(await db.order.count()).toBe(0);
+    expect(await db.payment.count()).toBe(0);
+    expect(await db.student.count()).toBe(0);
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("REGISTERED");
+  });
+
+  test("[BULK-08] khoá học chưa cấu hình giá (null/0) → COURSE_NO_PRICE, không chốt", async () => {
+    const center = await seedCenter();
+    const course = await db.course.create({ data: { name: "Sata rỗng giá", slug: `sata-nogia-${uniq()}` } });
+    const cls = await db.class.create({ data: { name: `Lớp ${uniq()}`, courseId: course.id, centerId: center.id } });
+    const { lead, children } = await seedRegisteredLeadWithChildren(center.id, "0905000008", ["Bé Mười"]);
+    const actor = await seedActor();
+
+    const res = await convertOneLeadBackfill(actor, {
+      leadId: lead.id,
+      students: [{ leadChildId: children[0]!.id, name: "Bé Mười", classId: cls.id, consentMedia: false }],
+      paid: null,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("COURSE_NO_PRICE");
+    expect(await db.enrollment.count()).toBe(0);
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("REGISTERED");
+  });
+
+  test("[BULK-09] consent ảnh đã THU HỒI của học viên dedupe KHÔNG bị lật lại khi chốt", async () => {
+    const center = await seedCenter();
+    const { cls } = await seedCourseClass(center.id);
+    const actor = await seedActor();
+
+    // Học viên cũ cùng phụ huynh (dedupe theo tên + parentUserId), consent REVOKED.
+    const parent = await db.user.create({
+      data: { phone: "84905000009", name: "PH Cũ", role: "PARENT", roles: ["PARENT"], centerId: center.id },
+    });
+    const student = await db.student.create({
+      data: {
+        name: "Bé Cũ",
+        studentCode: `CS1-26-${uniq().slice(0, 6).toUpperCase()}`,
+        parentUserId: parent.id,
+        centerId: center.id,
+        parentName: "PH Cũ",
+        parentPhone: "84905000009",
+      },
+    });
+    await db.studentConsent.create({
+      data: { studentId: student.id, type: "CLASS_MEDIA", status: "REVOKED", revokedAt: new Date() },
+    });
+
+    const { lead, children } = await seedRegisteredLeadWithChildren(center.id, "0905000009", ["Bé Cũ"]);
+    const res = await convertOneLeadBackfill(actor, {
+      leadId: lead.id,
+      students: [{ leadChildId: children[0]!.id, name: "Bé Cũ", classId: cls.id, consentMedia: true }],
+      paid: null,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.studentIds).toEqual([student.id]); // dedupe dùng lại hồ sơ cũ
+    const consent = await db.studentConsent.findUniqueOrThrow({
+      where: { studentId_type: { studentId: student.id, type: "CLASS_MEDIA" } },
+    });
+    expect(consent.status).toBe("REVOKED"); // tick ở bulk KHÔNG phải re-grant tường minh
   });
 });

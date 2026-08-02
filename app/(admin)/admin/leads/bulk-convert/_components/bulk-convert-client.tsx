@@ -84,7 +84,10 @@ export function BulkConvertClient({
   // Helper gán lớp hàng loạt.
   const [bulkClassId, setBulkClassId] = useState('')
 
-  const today = new Date().toISOString().slice(0, 10)
+  // Ngày "hôm nay" theo GIỜ VIỆT NAM (dịch UTC+7 rồi mới cắt chuỗi): toISOString
+  // trần là ngày UTC — khung 00:00–06:59 giờ VN nó lùi 1 ngày, default paidDate
+  // sai và max chặn không cho chọn đúng hôm nay (review 02/08).
+  const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10)
 
   const visibleLeads = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -130,20 +133,20 @@ export function BulkConvertClient({
   const applyBulkClass = () => {
     const cls = bulkClassId ? classById.get(bulkClassId) : null
     if (!cls) return
+    // Tính map mới NGOÀI setState (đếm trong updater chạy lúc render → toast báo
+    // sai số / StrictMode đếm đôi — review 02/08).
+    const next = { ...childClass }
     let applied = 0
-    setChildClass((prev) => {
-      const next = { ...prev }
-      for (const lead of visibleLeads) {
-        if (lead.centerId !== cls.centerId) continue
-        for (const ch of lead.children) {
-          if (next[ch.id]) continue // không ghi đè lựa chọn đã có
-          if (ch.interestedCourseId && ch.interestedCourseId !== cls.courseId) continue
-          next[ch.id] = cls.id
-          applied++
-        }
+    for (const lead of visibleLeads) {
+      if (lead.centerId !== cls.centerId) continue
+      for (const ch of lead.children) {
+        if (next[ch.id]) continue // không ghi đè lựa chọn đã có
+        if (ch.interestedCourseId && ch.interestedCourseId !== cls.courseId) continue
+        next[ch.id] = cls.id
+        applied++
       }
-      return next
-    })
+    }
+    setChildClass(next)
     toast.success(`Đã gán lớp cho ${applied} học viên (chưa gán, cùng khoá & cơ sở)`)
   }
 
@@ -185,8 +188,11 @@ export function BulkConvertClient({
     }
     setRunning(true)
     setProgress({ done: 0, total: readyLeads.length })
+    // Đếm bằng biến cục bộ + build map kết quả NGOÀI setState updater (updater
+    // chạy lúc render nên đếm trong đó ra số sai / StrictMode đếm đôi — review 02/08).
     let okCount = 0
     let failCount = 0
+    let aborted = false
     try {
       const CHUNK = 20
       for (let i = 0; i < readyLeads.length; i += CHUNK) {
@@ -211,27 +217,36 @@ export function BulkConvertClient({
                 : null,
           })),
         }
-        const res = await bulkConvertLeadsAction(payload)
-        if (!res.ok) {
-          toast.error(res.error)
-          for (const lead of chunk) {
-            setResults((prev) => ({ ...prev, [lead.id]: { ok: false, message: res.error } }))
-            failCount++
-          }
-        } else {
-          setResults((prev) => {
-            const next = { ...prev }
+        const chunkResults: Record<string, RowResult> = {}
+        try {
+          const res = await bulkConvertLeadsAction(payload)
+          if (!res.ok) {
+            for (const lead of chunk) {
+              chunkResults[lead.id] = { ok: false, message: res.error }
+              failCount++
+            }
+          } else {
             for (const r of res.results) {
-              next[r.leadId] = { ok: r.ok, message: r.message, warning: r.warning }
+              chunkResults[r.leadId] = { ok: r.ok, message: r.message, warning: r.warning }
               if (r.ok) okCount++
               else failCount++
             }
-            return next
-          })
+          }
+        } catch {
+          // Mất kết nối / action ném — đánh dấu chunk này lỗi rồi DỪNG (không âm
+          // thầm bỏ dở giữa chừng; các chunk trước đã chốt vẫn giữ nguyên kết quả).
+          for (const lead of chunk) {
+            chunkResults[lead.id] = { ok: false, message: 'Mất kết nối hoặc lỗi hệ thống — bấm chốt lại (an toàn, không tạo trùng)' }
+            failCount++
+          }
+          aborted = true
         }
+        setResults((prev) => ({ ...prev, ...chunkResults }))
         setProgress({ done: Math.min(i + CHUNK, readyLeads.length), total: readyLeads.length })
+        if (aborted) break
       }
-      if (failCount === 0) toast.success(`Đã chốt ${okCount} lead`)
+      if (aborted) toast.error(`Bị gián đoạn: ${okCount} đã chốt · ${failCount} chưa xong — kiểm tra mạng rồi bấm chốt lại`)
+      else if (failCount === 0) toast.success(`Đã chốt ${okCount} lead`)
       else toast.warning(`Xong: ${okCount} thành công · ${failCount} lỗi — xem cột kết quả`)
     } finally {
       setRunning(false)

@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { checkPermission } from '@/lib/auth/check-permission'
-import { hasRole } from '@/lib/auth/permissions'
 import { resolveActor } from '@/lib/auth/actor'
 import { scopedDb } from '@/lib/db-scope'
 import { ParentAccountsClient } from './_components/parent-accounts-client'
@@ -28,20 +27,21 @@ export default async function ParentAccountsPage({
   const { status } = await searchParams
   const showAll = status === 'all'
 
-  // User KHÔNG thuộc SCOPED_MODELS → cách ly cơ sở thủ công (mẫu searchLinkableStudents).
-  const centerScope =
-    hasRole(session.user, 'CENTER_MANAGER') && !hasRole(session.user, 'SUPER_ADMIN')
-      ? (session.user.centerId ?? null)
-      : null
+  // User KHÔNG thuộc SCOPED_MODELS (scopedDb pass-through) → cách ly cơ sở TAY theo
+  // actor.visibleCenterIds (mẫu /admin/centers). Review 02/08: bản đầu chỉ chặn đúng
+  // role CENTER_MANAGER — Sale/role khác thấy TK phụ huynh mọi cơ sở (kèm CSV PII).
+  const actor = await resolveActor(session.user.id)
+  const centerWhere =
+    actor.isSuperAdmin || actor.isHoLevel ? {} : { centerId: { in: actor.visibleCenterIds } }
 
-  const sdb = scopedDb(await resolveActor(session.user.id))
+  const sdb = scopedDb(actor)
 
   const parents = await sdb.user.findMany({
     where: {
       role: 'PARENT',
       deletedAt: null,
       ...(showAll ? {} : { accountStatus: 'PENDING_ACTIVATION' }),
-      ...(centerScope ? { centerId: centerScope } : {}),
+      ...centerWhere,
     },
     orderBy: { createdAt: 'desc' },
     take: 500,
@@ -66,7 +66,7 @@ export default async function ParentAccountsPage({
         role: 'PARENT',
         deletedAt: null,
         accountStatus: 'PENDING_ACTIVATION',
-        ...(centerScope ? { centerId: centerScope } : {}),
+        ...centerWhere,
       },
     }),
     sdb.user.count({
@@ -74,7 +74,7 @@ export default async function ParentAccountsPage({
         role: 'PARENT',
         deletedAt: null,
         accountStatus: 'ACTIVE',
-        ...(centerScope ? { centerId: centerScope } : {}),
+        ...centerWhere,
       },
     }),
   ])

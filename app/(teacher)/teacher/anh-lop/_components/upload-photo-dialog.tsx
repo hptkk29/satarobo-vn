@@ -141,6 +141,13 @@ export function UploadPhotoDialog({
     const list = e.target.files ? [...e.target.files] : [];
     if (e.target) e.target.value = "";
     if (list.length === 0) return;
+    // Đang tải lô → chặn lượt chọn mới (input hidden trong label vẫn bấm được dù
+    // nút submit đã khoá): 2 lượt chồng nhau làm vượt trần lô + cờ uploading của
+    // lượt trước tắt sớm + ảnh "ma" chen vào sau khi reset form (review 02/08).
+    if (uploading) {
+      toast.error("Đang tải lô ảnh — chờ xong rồi chọn thêm");
+      return;
+    }
 
     const images = list.filter((f) => f.type.startsWith("image/"));
     if (images.length < list.length) toast.error("Bỏ qua file không phải ảnh");
@@ -417,6 +424,7 @@ export function UploadPhotoDialog({
                       accept="image/*"
                       multiple
                       onChange={onFiles}
+                      disabled={uploading}
                       className="hidden"
                     />
                   </label>
@@ -438,7 +446,7 @@ export function UploadPhotoDialog({
                         <Upload className="h-4 w-4" aria-hidden />
                       )}
                       {uploading ? "Đang tải…" : "Chọn ảnh"}
-                      <input type="file" accept="image/*" onChange={onFiles} className="hidden" />
+                      <input type="file" accept="image/*" onChange={onFiles} disabled={uploading} className="hidden" />
                     </label>
                   )}
 

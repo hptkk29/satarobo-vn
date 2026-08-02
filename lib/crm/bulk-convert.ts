@@ -6,22 +6,21 @@
 // PENDING_ACTIVATION, Enrollment vào lớp, consent, idempotency).
 //
 // Tiền (backfill — khách đã đóng TRƯỚC khi có hệ thống):
-//  - Nhập "đã đóng X, ngày Y" → tạo Order tối thiểu + Payment saleStatus=RECORDED
-//    (paidDate lùi ngày thật) TRƯỚC khi convert ⇒ qua guard PAYMENT_REQUIRED tự
-//    nhiên, và linkRecordedPaymentsToEnrollments (FIN-01) gắn khoản vào ghi danh
-//    → công nợ (getDebtRows) phản ánh đúng phần còn thiếu.
-//  - Không nhập tiền → convertLeadV2 với allowNoPayment (audit BACKFILL_IMPORT);
-//    KHÔNG bịa khoản thu.
-// Idempotent per-lead: payment đánh dấu BACKFILL_PAYMENT_MARKER trong note (gọi
-// lại không tạo trùng); convert dùng idempotencyKey ổn định theo payload.
+//  - Nhập "đã đóng X, ngày Y" → truyền `backfillPayment` vào convertLeadV2: Order
+//    tối thiểu + Payment RECORDED (paidDate lùi ngày thật) tạo TRONG transaction
+//    convert ⇒ convert fail là tiền rollback theo (không để khoản ma), race 2 lượt
+//    song song do atomic-claim giải; FIN-01 link khoản vào enrollment cùng tx nên
+//    công nợ (getDebtRows) phản ánh đúng phần còn thiếu.
+//  - Không nhập tiền → allowNoPayment (audit BACKFILL_IMPORT); KHÔNG bịa khoản thu.
+// Idempotent per-lead: idempotencyKey ổn định theo payload + atomic-claim của convert.
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
-import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
-import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
+import type { AuditActor } from "@/lib/audit/audit-log";
 import { convertLeadV2, type ConvertV2Student } from "@/lib/crm/convert-lead-v2";
+import { BACKFILL_PAYMENT_MARKER, type BackfillPaymentInput } from "@/lib/crm/backfill-order";
 import { canonicalPhone } from "@/lib/phone";
 
-export const BACKFILL_PAYMENT_MARKER = "[backfill-import]";
+export { BACKFILL_PAYMENT_MARKER };
 export const BACKFILL_AUDIT_REASON = "BACKFILL_IMPORT: nhập liệu ban đầu, chưa ghi nhận khoản thu trong hệ thống";
 
 export type BulkConvertStudentInput = {
@@ -51,15 +50,6 @@ export type BulkConvertLeadResult = {
   warning?: string;
 };
 
-type LeadRow = {
-  id: string;
-  status: string;
-  centerId: string | null;
-  parentName: string;
-  phone: string;
-  email: string | null;
-};
-
 type ClassRow = {
   id: string;
   centerId: string | null;
@@ -67,101 +57,6 @@ type ClassRow = {
   name: string;
   course: { name: string; price: number | null } | null;
 };
-
-/**
- * Tạo Order tối thiểu + Payment RECORDED cho khoản khách đã đóng trước hệ thống.
- * IDEMPOTENT theo marker trong Payment.note (per lead) — gọi lại không tạo trùng.
- * Order tạo thẳng CONFIRMED (tiền đã về từ trước, không cần vòng xác nhận):
- * KHÔNG đi changeOrderStatusAction nên không kích side-effect provision — convert
- * ngay sau đó mới là chỗ tạo tài khoản phụ huynh.
- */
-export async function ensureBackfillOrderPayment(params: {
-  actor: AuditActor;
-  lead: LeadRow;
-  items: Array<{ itemName: string; unitPrice: number }>;
-  paid: { amount: number; paidDate: Date; note?: string | null };
-}): Promise<{ created: boolean; paymentId: string | null }> {
-  const { actor, lead, items, paid } = params;
-
-  const existing = await db.payment.findFirst({
-    where: { deletedAt: null, note: { contains: BACKFILL_PAYMENT_MARKER }, order: { leadId: lead.id } },
-    select: { id: true },
-  });
-  if (existing) return { created: false, paymentId: existing.id };
-
-  const totalAmount = items.reduce((s, it) => s + Math.max(0, Math.round(it.unitPrice)), 0);
-  const amount = Math.round(paid.amount);
-
-  const paymentId = await withUniqueRetry(() =>
-    db.$transaction(async (tx) => {
-      const order = await tx.order.create({
-        data: {
-          code: await generateOrderCode(tx),
-          type: "COURSE",
-          status: "CONFIRMED",
-          customerName: lead.parentName,
-          customerPhone: lead.phone,
-          customerEmail: lead.email,
-          leadId: lead.id,
-          centerId: lead.centerId,
-          subtotal: totalAmount,
-          totalAmount,
-          paidAt: paid.paidDate,
-          confirmedByUserId: actor.id,
-          confirmedAt: paid.paidDate,
-          items: {
-            create: items.map((it) => ({
-              type: "COURSE_ENROLLMENT" as const,
-              itemName: it.itemName,
-              quantity: 1,
-              unitPrice: Math.max(0, Math.round(it.unitPrice)),
-              totalPrice: Math.max(0, Math.round(it.unitPrice)),
-            })),
-          },
-        },
-        select: { id: true, code: true },
-      });
-
-      const payment = await tx.payment.create({
-        data: {
-          orderId: order.id,
-          amount,
-          method: "backfill",
-          paidDate: paid.paidDate,
-          note: `Nhập liệu ban đầu — khoản đã thu trước khi lên hệ thống${
-            paid.note?.trim() ? ` (${paid.note.trim()})` : ""
-          } ${BACKFILL_PAYMENT_MARKER}`,
-          saleStatus: "RECORDED",
-          accountantStatus: "PENDING",
-          recordedById: actor.id,
-          centerId: lead.centerId,
-        },
-        select: { id: true },
-      });
-
-      await writeAudit({
-        actor,
-        module: "finance",
-        entityType: "Payment",
-        entityId: payment.id,
-        action: "CREATE",
-        newValues: {
-          amount,
-          saleStatus: "RECORDED",
-          source: "bulk-convert-backfill",
-          orderCode: order.code,
-          paidDate: paid.paidDate.toISOString(),
-        },
-        orgUnitId: lead.centerId,
-        tx,
-      });
-
-      return payment.id;
-    }),
-  );
-
-  return { created: true, paymentId };
-}
 
 /** Khoá idempotency ổn định theo payload (mirror submitConvertV2). */
 export function bulkConvertIdempotencyKey(
@@ -176,7 +71,8 @@ export function bulkConvertIdempotencyKey(
 
 /**
  * Chốt 1 lead trong lô. KHÔNG check quyền/scope ở đây — caller (Server Action)
- * đã assertCan + passesScope theo centerId của lead trước khi gọi.
+ * đã gate leads:view-all + leads:import + passesScope (đọc lô qua scopedDb)
+ * theo centerId của lead trước khi gọi.
  */
 export async function convertOneLeadBackfill(
   actor: AuditActor,
@@ -208,7 +104,10 @@ export async function convertOneLeadBackfill(
     return fail("PHONE_INVALID", `SĐT "${lead.phone}" không hợp lệ (số bàn?) — sửa SĐT lead rồi chạy lại`);
   }
 
-  // Lớp: phải tồn tại, chưa xoá, CÙNG CƠ SỞ với lead (chống ghi danh chéo cơ sở).
+  // Lớp: phải tồn tại, chưa xoá, CÙNG CƠ SỞ với lead (chống ghi danh chéo cơ sở),
+  // và khoá học PHẢI có giá > 0 — giá 0/null làm enrollment finalPrice=0 hàng loạt
+  // (công nợ biến mất + audit ghi nhầm SCHOLARSHIP_FULL). Học bổng toàn phần thật
+  // thì đi đường convert đơn lẻ có người nhìn từng ca.
   const classIds = [...new Set(input.students.map((s) => s.classId))];
   const classes = await db.class.findMany({
     where: { id: { in: classIds }, deletedAt: null },
@@ -226,6 +125,12 @@ export async function convertOneLeadBackfill(
     if (!cls) return fail("CLASS_NOT_FOUND", `Lớp không tồn tại cho học viên "${s.name}"`);
     if (cls.centerId !== lead.centerId) {
       return fail("CLASS_WRONG_CENTER", `Lớp "${cls.name}" khác cơ sở với lead — chọn lớp cùng cơ sở`);
+    }
+    if (!cls.course?.price || cls.course.price <= 0) {
+      return fail(
+        "COURSE_NO_PRICE",
+        `Khoá học của lớp "${cls.name}" chưa cấu hình giá — cập nhật giá khoá trước khi chốt hàng loạt`,
+      );
     }
   }
 
@@ -245,6 +150,7 @@ export async function convertOneLeadBackfill(
 
   // Tiền backfill: chỉ tạo khi CHƯA có khoản RECORDED nào của lead (tránh ghi đôi).
   let warning: string | undefined;
+  let backfillPayment: BackfillPaymentInput | null = null;
   const paidAmount = input.paid ? Math.round(input.paid.amount) : 0;
   if (input.paid && paidAmount > 0) {
     const recordedCount = await db.payment.count({
@@ -253,15 +159,15 @@ export async function convertOneLeadBackfill(
     if (recordedCount > 0) {
       warning = "Lead đã có khoản ghi nhận trong hệ thống — bỏ qua số tiền nhập ở lô này";
     } else {
-      await ensureBackfillOrderPayment({
-        actor,
-        lead,
+      backfillPayment = {
+        amount: paidAmount,
+        paidDate: input.paid.paidDate,
+        note: input.paid.note ?? null,
         items: students.map((s) => ({
           itemName: `${classMap.get(s.classId)!.course?.name ?? "Khoá học"} — ${s.name}`,
           unitPrice: s.listPrice,
         })),
-        paid: { amount: paidAmount, paidDate: input.paid.paidDate, note: input.paid.note ?? null },
-      });
+      };
     }
   }
 
@@ -274,8 +180,10 @@ export async function convertOneLeadBackfill(
       parentPhone,
       students,
       idempotencyKey: bulkConvertIdempotencyKey(lead.id, students),
-      // Không có tiền ghi nhận → đi nhánh backfill có audit (thay vì chặn PAYMENT_REQUIRED).
-      allowNoPayment: { reason: BACKFILL_AUDIT_REASON },
+      // Có tiền → Order+Payment tạo TRONG tx convert; không tiền → nhánh backfill
+      // có audit (thay vì chặn PAYMENT_REQUIRED).
+      backfillPayment,
+      allowNoPayment: backfillPayment ? null : { reason: BACKFILL_AUDIT_REASON },
     });
   } catch (err) {
     // convertLeadV2 ném (không trả ok:false) khi thua atomic-claim — map về lỗi dòng.

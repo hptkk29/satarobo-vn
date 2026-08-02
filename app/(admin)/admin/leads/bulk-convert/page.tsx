@@ -17,7 +17,10 @@ export default async function BulkConvertPage() {
   const session = await auth()
   if (!session?.user) redirect('/login')
 
+  // leads:view-all chặn Sale: màn này liệt kê MỌI lead REGISTERED của cơ sở (kèm
+  // PII) và có nhánh bỏ qua guard tiền — Sale convert lead của mình ở đường đơn lẻ.
   const allowed =
+    (await checkPermission('leads:view-all')) &&
     (await checkPermission('leads:import')) &&
     (await checkPermission('students:create')) &&
     (await checkPermission('enrollments:create'))

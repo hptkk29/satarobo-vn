@@ -6,14 +6,13 @@
 //  - Gửi ZNS "báo đã cấp TK" (mẫu 616899) per-user + hàng loạt: KHÔNG nuốt lỗi
 //    như provision.ts (.catch(()=>{})) — kết quả SENT/FAILED trả thẳng về UI.
 // Quyền: students:edit (cùng quyền với đường cấp TK per-student hiện có).
-// Cách ly cơ sở: User KHÔNG thuộc SCOPED_MODELS → tự lọc theo User.centerId
-// (mẫu searchLinkableStudents).
+// Cách ly cơ sở: User KHÔNG thuộc SCOPED_MODELS → tự lọc theo actor.visibleCenterIds
+// (parentCenterWhere — mẫu /admin/centers).
 
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
 import { checkPermission } from '@/lib/auth/check-permission'
-import { hasRole } from '@/lib/auth/permissions'
-import { resolveActor } from '@/lib/auth/actor'
+import { resolveActor, type Actor } from '@/lib/auth/actor'
 import { scopedDb } from '@/lib/db-scope'
 import type { ScopedDb } from '@/lib/actions/factory'
 import { requestOtp } from '@/lib/otp/service'
@@ -25,23 +24,24 @@ import { getAuditActor } from '@/lib/audit/log'
 
 const ZNS_ACCOUNT_TEMPLATE = process.env.ZALO_ZNS_TEMPLATE_ACCOUNT || null
 
-type SessionUser = Parameters<typeof hasRole>[0] & { centerId?: string | null }
-
-/** CENTER_MANAGER (không super) chỉ thao tác TK phụ huynh cơ sở mình. */
-function centerScopeOf(user: SessionUser): string | null {
-  return hasRole(user, 'CENTER_MANAGER') && !hasRole(user, 'SUPER_ADMIN')
-    ? (user.centerId ?? null)
-    : null
+/**
+ * User ∉ SCOPED_MODELS (scopedDb pass-through) → cách ly cơ sở TAY theo
+ * actor.visibleCenterIds (mẫu /admin/centers). Review 02/08: bản đầu chỉ chặn
+ * đúng role CENTER_MANAGER qua session.user.centerId — Sale/role khác fail-open
+ * thấy + thao tác TK phụ huynh MỌI cơ sở, và CM thiếu cột legacy centerId cũng
+ * lọt. visibleCenterIds đi từ UserOrgRole nên phủ cả hai lỗ.
+ */
+function parentCenterWhere(actor: Actor): { centerId?: { in: string[] } } {
+  return actor.isSuperAdmin || actor.isHoLevel ? {} : { centerId: { in: actor.visibleCenterIds } }
 }
 
-async function loadPendingParent(sdb: ScopedDb, userId: string, centerScope: string | null) {
-  // User KHÔNG thuộc SCOPED_MODELS → scopedDb passthrough; cách ly bằng centerScope thủ công.
+async function loadPendingParent(sdb: ScopedDb, userId: string, actor: Actor) {
   const parent = await sdb.user.findFirst({
     where: {
       id: userId,
       role: 'PARENT',
       deletedAt: null,
-      ...(centerScope ? { centerId: centerScope } : {}),
+      ...parentCenterWhere(actor),
     },
     select: { id: true, name: true, phone: true, email: true, accountStatus: true, centerId: true },
   })
@@ -60,8 +60,9 @@ export async function resendActivationOtpByUser(
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('students:edit'))) return { ok: false, error: 'Không có quyền' }
 
-  const sdb = scopedDb(await resolveActor(session.user.id))
-  const { parent, error } = await loadPendingParent(sdb, userId, centerScopeOf(session.user))
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
+  const { parent, error } = await loadPendingParent(sdb, userId, actor)
   if (!parent) return { ok: false, error: error ?? 'Không tìm thấy tài khoản' }
 
   const target = parent.phone ?? parent.email
@@ -130,8 +131,9 @@ export async function sendAccountZns(userId: string): Promise<SendZnsResult> {
     return { ok: false, error: 'Chưa cấu hình mẫu ZNS cấp tài khoản (ZALO_ZNS_TEMPLATE_ACCOUNT — chờ mẫu 616899 được duyệt)' }
   }
 
-  const sdb = scopedDb(await resolveActor(session.user.id))
-  const { parent, error } = await loadPendingParent(sdb, userId, centerScopeOf(session.user))
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
+  const { parent, error } = await loadPendingParent(sdb, userId, actor)
   if (!parent) return { ok: false, error: error ?? 'Không tìm thấy tài khoản' }
 
   const result = await sendAccountZnsTo(sdb, parent)
@@ -144,7 +146,8 @@ export async function sendAccountZns(userId: string): Promise<SendZnsResult> {
  * (chưa có ZaloMessageLog SENT với mẫu này). Cap 100/lượt — bấm lại để gửi tiếp.
  */
 export async function sendAccountZnsBulk(): Promise<
-  { ok: true; sent: number; failed: number; skipped: number; simulated: boolean } | { ok: false; error: string }
+  | { ok: true; sent: number; failed: number; skipped: number; remaining: number; simulated: boolean }
+  | { ok: false; error: string }
 > {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
@@ -153,32 +156,44 @@ export async function sendAccountZnsBulk(): Promise<
     return { ok: false, error: 'Chưa cấu hình mẫu ZNS cấp tài khoản (ZALO_ZNS_TEMPLATE_ACCOUNT — chờ mẫu 616899 được duyệt)' }
   }
 
-  const centerScope = centerScopeOf(session.user)
-  const sdb = scopedDb(await resolveActor(session.user.id))
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
   const pending = await sdb.user.findMany({
     where: {
       role: 'PARENT',
       accountStatus: 'PENDING_ACTIVATION',
       deletedAt: null,
       phone: { not: null },
-      ...(centerScope ? { centerId: centerScope } : {}),
+      ...parentCenterWhere(actor),
     },
     select: { id: true, name: true, phone: true },
     orderBy: { createdAt: 'asc' },
     take: 300,
   })
 
-  // Đã nhận SENT với mẫu này rồi → bỏ qua (không spam phụ huynh).
+  // Đã nhận SENT THẬT với mẫu này rồi → bỏ qua (không spam phụ huynh).
+  // ⚠️ LOẠI bản ghi mô phỏng (providerMessageId "SIMULATED-…" khi ZALO_LIVE chưa
+  // bật): tin đó chưa từng rời hệ thống — đếm nó là "đã gửi" thì sau khi bật live
+  // phụ huynh bị bỏ qua vĩnh viễn (review 02/08).
   const phones = pending.map((p) => p.phone!).filter(Boolean)
   const alreadySent = phones.length
     ? await sdb.zaloMessageLog.findMany({
-        where: { templateKey: ZNS_ACCOUNT_TEMPLATE, status: 'SENT', toPhone: { in: phones } },
+        where: {
+          templateKey: ZNS_ACCOUNT_TEMPLATE,
+          status: 'SENT',
+          toPhone: { in: phones },
+          NOT: { providerMessageId: { startsWith: 'SIMULATED-' } },
+        },
         select: { toPhone: true },
       })
     : []
   const sentSet = new Set(alreadySent.map((l) => l.toPhone))
 
-  const targets = pending.filter((p) => !sentSet.has(p.phone!)).slice(0, 100)
+  // Tách 2 con số cho toast (review 02/08): "đã nhận trước đó" ≠ "bị cắt bởi cap
+  // 100" — gộp chung làm người vận hành tưởng đã phủ hết, không bấm gửi tiếp.
+  const eligible = pending.filter((p) => !sentSet.has(p.phone!))
+  const targets = eligible.slice(0, 100)
+  const remaining = eligible.length - targets.length
   let sent = 0
   let failed = 0
   let simulated = false
@@ -199,10 +214,16 @@ export async function sendAccountZnsBulk(): Promise<
     entityType: 'User',
     entityId: 'bulk',
     action: 'ZNS_ACCOUNT_BULK_NOTIFY',
-    newValues: { sent, failed, skipped: pending.length - targets.length, template: ZNS_ACCOUNT_TEMPLATE },
-    orgUnitId: centerScope,
+    newValues: {
+      sent,
+      failed,
+      skipped: pending.length - eligible.length,
+      remaining,
+      template: ZNS_ACCOUNT_TEMPLATE,
+    },
+    orgUnitId: actor.isSuperAdmin || actor.isHoLevel ? null : (actor.visibleCenterIds[0] ?? null),
   }).catch(() => {})
 
   revalidatePath('/students/tai-khoan')
-  return { ok: true, sent, failed, skipped: pending.length - targets.length, simulated }
+  return { ok: true, sent, failed, skipped: pending.length - eligible.length, remaining, simulated }
 }

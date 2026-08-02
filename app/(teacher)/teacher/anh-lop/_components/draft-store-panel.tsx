@@ -61,24 +61,35 @@ export function DraftStorePanel({
       return;
     }
     startTransition(async () => {
-      const res = await publishClassMediaAction({
-        mediaIds: selected,
-        isClassWide: wholeClass,
-        studentIds: wholeClass ? [] : tagged,
-      });
-      if (res.ok) {
-        toast.success(
-          res.status === "APPROVED"
-            ? `Đã gửi ${res.count ?? selected.length} ảnh — phụ huynh xem được ngay`
-            : `Đã gửi ${res.count ?? selected.length} ảnh — chờ quản lý duyệt`,
-        );
-        setSelected([]);
-        setTagged([]);
-        setWholeClass(false);
-        router.refresh();
-      } else {
-        toast.error(res.error ?? "Lỗi gửi ảnh");
+      // Chia lô 60 (PUBLISH_BATCH_MAX phía server) — "Chọn tất cả" trên kho >60
+      // ảnh mà gửi nguyên mảng là fail cả lượt (review 02/08).
+      let sentCount = 0;
+      let lastStatus: string | undefined;
+      for (let i = 0; i < selected.length; i += 60) {
+        const res = await publishClassMediaAction({
+          mediaIds: selected.slice(i, i + 60),
+          isClassWide: wholeClass,
+          studentIds: wholeClass ? [] : tagged,
+        });
+        if (!res.ok) {
+          toast.error(
+            `${res.error ?? "Lỗi gửi ảnh"}${sentCount > 0 ? ` (đã gửi được ${sentCount} ảnh trước đó)` : ""}`,
+          );
+          router.refresh();
+          return;
+        }
+        sentCount += res.count ?? 0;
+        lastStatus = res.status;
       }
+      toast.success(
+        lastStatus === "APPROVED"
+          ? `Đã gửi ${sentCount} ảnh — phụ huynh xem được ngay`
+          : `Đã gửi ${sentCount} ảnh — chờ quản lý duyệt`,
+      );
+      setSelected([]);
+      setTagged([]);
+      setWholeClass(false);
+      router.refresh();
     });
   }
 
@@ -92,15 +103,23 @@ export function DraftStorePanel({
       return;
     }
     startTransition(async () => {
-      const res = await deleteDraftMediaAction({ mediaIds: selected });
       setConfirmDelete(false);
-      if (res.ok) {
-        toast.success(`Đã xoá ${res.deleted ?? selected.length} ảnh khỏi kho`);
-        setSelected([]);
-        router.refresh();
-      } else {
-        toast.error(res.error ?? "Lỗi xoá ảnh");
+      // Chia lô 60 như publish — cùng trần server.
+      let deletedCount = 0;
+      for (let i = 0; i < selected.length; i += 60) {
+        const res = await deleteDraftMediaAction({ mediaIds: selected.slice(i, i + 60) });
+        if (!res.ok) {
+          toast.error(
+            `${res.error ?? "Lỗi xoá ảnh"}${deletedCount > 0 ? ` (đã xoá ${deletedCount} ảnh trước đó)` : ""}`,
+          );
+          router.refresh();
+          return;
+        }
+        deletedCount += res.deleted ?? 0;
       }
+      toast.success(`Đã xoá ${deletedCount} ảnh khỏi kho`);
+      setSelected([]);
+      router.refresh();
     });
   }
 
