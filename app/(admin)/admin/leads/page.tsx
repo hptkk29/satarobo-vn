@@ -392,6 +392,12 @@ function Header({
             Import Excel
           </Link>
           <Link
+            href="/leads/bulk-convert"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Chốt hàng loạt
+          </Link>
+          <Link
             href="/leads/new"
             className="rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >

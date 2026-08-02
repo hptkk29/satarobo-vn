@@ -72,6 +72,13 @@ export type ConvertV2Input = {
   students: ConvertV2Student[];
   /** Khoá idempotency ổn định theo submit (chống double-submit / 2 Sale song song). */
   idempotencyKey: string;
+  /**
+   * BACKFILL (chốt hàng loạt lead nhập từ Excel cũ) — cho qua guard PAYMENT_REQUIRED
+   * khi lead lịch sử không có Payment RECORDED trong hệ thống. BẮT BUỘC kèm lý do
+   * (ghi vào AuditLog). Chỉ đường bulk-convert (quyền leads:import) được set — form
+   * convert thường KHÔNG truyền field này.
+   */
+  allowNoPayment?: { reason: string } | null;
 };
 
 export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): Promise<ConvertV2Result> {
@@ -114,9 +121,12 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     where: { saleStatus: "RECORDED", order: { leadId: lead.id } },
   });
   const guard = evaluatePaymentGuard({ hasRecordedPayment: recordedCount > 0, totalFinalPrice });
-  if (!guard.ok) {
+  // Backfill: guard fail nhưng caller đã khai lý do → cho qua, ghi audit bên dưới.
+  const backfillNoPayment = !guard.ok && Boolean(input.allowNoPayment?.reason?.trim());
+  if (!guard.ok && !backfillNoPayment) {
     return { ok: false, error: { code: "PAYMENT_REQUIRED", message: "Cần ghi nhận khoản thanh toán trước khi chốt" } };
   }
+  const scholarshipFull = guard.ok ? guard.scholarshipFull : false;
 
   // 3) Dedupe parent (3 nhánh). Conflict → tạo ConvertConflict + khoá convert (AC3).
   const parentMatch = await findParentMatch({ email: input.parentEmail, phone: input.parentPhone });
@@ -295,8 +305,12 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       entityId: lead.id,
       action: "STATUS_CHANGE",
       oldValues: { status: lead.status },
-      newValues: { status: "ENROLLED", studentIds, scholarshipFull: guard.scholarshipFull },
-      reason: guard.scholarshipFull ? "SCHOLARSHIP_FULL" : undefined,
+      newValues: { status: "ENROLLED", studentIds, scholarshipFull, backfillNoPayment },
+      reason: scholarshipFull
+        ? "SCHOLARSHIP_FULL"
+        : backfillNoPayment
+          ? input.allowNoPayment!.reason.trim()
+          : undefined,
       orgUnitId: lead.centerId,
       tx,
     });
