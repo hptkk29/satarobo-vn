@@ -253,6 +253,10 @@ export async function getStudentLessons(studentId: string): Promise<LessonRow[]>
       materials: true,
       order: true,
       documents: {
+        // CHỈ tài liệu đánh dấu Public — admin UI ghi rõ "Public (HS/PH xem được)";
+        // thiếu where này là phụ huynh thấy cả giáo án/tài liệu nội bộ của bài.
+        // (Tài liệu GV chủ động đính vào BÀI TẬP thì khác — đó là phân phối có chủ đích.)
+        where: { isPublic: true },
         select: { id: true, title: true, type: true, fileUrl: true },
         orderBy: { createdAt: "asc" },
       },

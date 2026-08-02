@@ -78,7 +78,14 @@ export async function changeParentPassword(input: {
   if (!valid) return { ok: false, error: "Mật khẩu hiện tại không đúng" };
 
   const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
-  await pdb.user.update({ where: { id: user.id }, data: { password: hashed } });
+  // tokenVersion++ đá MỌI phiên (kể cả phiên hiện tại — client đưa qua /dang-xuat
+  // để dọn cookie sạch sẽ rồi đăng nhập lại). Thiếu dòng này thì "đổi mật khẩu để
+  // đuổi kẻ đang chiếm tài khoản" là lời hứa suông: JWT cũ sống tới 30 ngày
+  // (đúng bài học của /quen-mat-khau P6-A — portal layout đã kiểm liveness).
+  await pdb.user.update({
+    where: { id: user.id },
+    data: { password: hashed, tokenVersion: { increment: 1 } },
+  });
   return { ok: true };
 }
 

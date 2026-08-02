@@ -151,7 +151,10 @@ export default function ImportRegisteredLeadsPage() {
           <AlertDescription>
             ✅ Đã ghi: <b>{result.daTaoLead}</b> lead mới · <b>{result.daTaoHocVien}</b> học viên ·
             gộp <b>{result.daGopLead}</b> lead có sẵn · <b>{result.khongDoi}</b> không đổi (đã
-            import trước đó).
+            import trước đó).{" "}
+            <Link href="/leads/bulk-convert" className="font-semibold text-green-700 underline">
+              Bước tiếp theo: chốt hàng loạt →
+            </Link>
           </AlertDescription>
         </Alert>
       )}

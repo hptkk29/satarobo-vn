@@ -111,13 +111,25 @@ export async function recordInstallmentPlan(params: {
   return { ok: true };
 }
 
-/** Đánh dấu 1 đợt đã đóng (đợt 2). */
-export async function markInstallmentPaid(installmentId: string, actorId: string | null): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Đánh dấu 1 đợt đã đóng (đợt 2).
+ * `expectedOrderId`: Server Action ĐÃ scope-check đơn nào thì truyền id đơn đó vào —
+ * thiếu đối chiếu này là IDOR ghi tiền: client gửi orderId (trong scope) kèm
+ * installmentId của ĐƠN KHÁC cơ sở → flip PAID + sinh Payment chéo cơ sở.
+ */
+export async function markInstallmentPaid(
+  installmentId: string,
+  actorId: string | null,
+  expectedOrderId?: string,
+): Promise<{ ok: boolean; error?: string }> {
   const inst = await db.orderInstallment.findUnique({
     where: { id: installmentId },
     select: { id: true, orderId: true, status: true, soDot: true, amount: true },
   });
   if (!inst) return { ok: false, error: "Không tìm thấy đợt" };
+  if (expectedOrderId && inst.orderId !== expectedOrderId) {
+    return { ok: false, error: "Đợt thu không thuộc đơn hàng này" };
+  }
   if (inst.status === "PAID") return { ok: true };
 
   const order = await db.order.findUnique({

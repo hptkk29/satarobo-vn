@@ -9,6 +9,10 @@ import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import { canonicalPhone } from "@/lib/phone";
+import {
+  createBackfillOrderPaymentInTx,
+  type BackfillPaymentInput,
+} from "@/lib/crm/backfill-order";
 import type { CourseDiscountType } from "@prisma/client";
 
 export type ConvertV2Result =
@@ -72,6 +76,20 @@ export type ConvertV2Input = {
   students: ConvertV2Student[];
   /** Khoá idempotency ổn định theo submit (chống double-submit / 2 Sale song song). */
   idempotencyKey: string;
+  /**
+   * BACKFILL (chốt hàng loạt lead nhập từ Excel cũ) — cho qua guard PAYMENT_REQUIRED
+   * khi lead lịch sử không có Payment RECORDED trong hệ thống. BẮT BUỘC kèm lý do
+   * (ghi vào AuditLog). Chỉ đường bulk-convert (gate leads:view-all + leads:import)
+   * được set — form convert thường KHÔNG truyền field này.
+   */
+  allowNoPayment?: { reason: string } | null;
+  /**
+   * BACKFILL có tiền: khoản khách đã đóng TRƯỚC hệ thống. Order + Payment RECORDED
+   * được tạo TRONG transaction convert (convert fail → tiền rollback theo, không
+   * để khoản ma; race 2 lượt song song do atomic-claim giải). Có field này thì
+   * guard PAYMENT_REQUIRED coi như thoả.
+   */
+  backfillPayment?: BackfillPaymentInput | null;
 };
 
 export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): Promise<ConvertV2Result> {
@@ -113,10 +131,17 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
   const recordedCount = await db.payment.count({
     where: { saleStatus: "RECORDED", order: { leadId: lead.id } },
   });
-  const guard = evaluatePaymentGuard({ hasRecordedPayment: recordedCount > 0, totalFinalPrice });
-  if (!guard.ok) {
+  const guard = evaluatePaymentGuard({
+    // backfillPayment sẽ tạo khoản RECORDED trong chính transaction bên dưới → coi như đã có.
+    hasRecordedPayment: recordedCount > 0 || Boolean(input.backfillPayment),
+    totalFinalPrice,
+  });
+  // Backfill KHÔNG tiền: guard fail nhưng caller đã khai lý do → cho qua, ghi audit bên dưới.
+  const backfillNoPayment = !guard.ok && Boolean(input.allowNoPayment?.reason?.trim());
+  if (!guard.ok && !backfillNoPayment) {
     return { ok: false, error: { code: "PAYMENT_REQUIRED", message: "Cần ghi nhận khoản thanh toán trước khi chốt" } };
   }
+  const scholarshipFull = guard.ok ? guard.scholarshipFull : false;
 
   // 3) Dedupe parent (3 nhánh). Conflict → tạo ConvertConflict + khoá convert (AC3).
   const parentMatch = await findParentMatch({ email: input.parentEmail, phone: input.parentPhone });
@@ -147,6 +172,24 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
 
     const center = await tx.center.findUnique({ where: { id: lead.centerId! }, select: { code: true } });
     const centerCode = center?.code ?? "CS";
+
+    // BACKFILL có tiền — tạo Order + Payment RECORDED TRONG tx (sau claim nên
+    // 2 lượt song song chỉ 1 lượt tạo được; fail chỗ nào sau đây là rollback cả
+    // tiền lẫn ghi danh). Đặt TRƯỚC linkRecordedPaymentsToEnrollments để khoản
+    // vừa tạo được gắn vào enrollment ngay trong cùng transaction.
+    if (input.backfillPayment) {
+      await createBackfillOrderPaymentInTx(tx, {
+        actor,
+        lead: {
+          id: lead.id,
+          centerId: lead.centerId,
+          parentName: lead.parentName,
+          phone: lead.phone,
+          email: input.parentEmail,
+        },
+        paid: input.backfillPayment,
+      });
+    }
 
     // C5 — CCCD + địa chỉ phụ huynh (chỉ ghi field có giá trị, không ghi đè bằng null).
     const parentExtra = {
@@ -258,7 +301,16 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       enrollmentIds.push(enrollment.id);
 
       // Consent ảnh per học viên + audit người tick (AC5).
-      if (s.consentMedia) {
+      // ⚠️ KHÔNG lật consent đã THU HỒI: học viên dedupe (dùng lại hồ sơ cũ) có thể
+      // mang REVOKED do phụ huynh rút — tick ở form convert/bulk không phải là lời
+      // re-grant tường minh (C6.4: thu hồi phải dính cho tới khi có luồng cấp lại riêng).
+      const existingConsent = s.consentMedia
+        ? await tx.studentConsent.findUnique({
+            where: { studentId_type: { studentId, type: "CLASS_MEDIA" } },
+            select: { status: true },
+          })
+        : null;
+      if (s.consentMedia && existingConsent?.status !== "REVOKED") {
         await tx.studentConsent.upsert({
           where: { studentId_type: { studentId, type: "CLASS_MEDIA" } },
           create: { studentId, type: "CLASS_MEDIA", status: "GRANTED" },
@@ -295,8 +347,12 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       entityId: lead.id,
       action: "STATUS_CHANGE",
       oldValues: { status: lead.status },
-      newValues: { status: "ENROLLED", studentIds, scholarshipFull: guard.scholarshipFull },
-      reason: guard.scholarshipFull ? "SCHOLARSHIP_FULL" : undefined,
+      newValues: { status: "ENROLLED", studentIds, scholarshipFull, backfillNoPayment },
+      reason: scholarshipFull
+        ? "SCHOLARSHIP_FULL"
+        : backfillNoPayment
+          ? input.allowNoPayment!.reason.trim()
+          : undefined,
       orgUnitId: lead.centerId,
       tx,
     });

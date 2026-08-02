@@ -37,7 +37,7 @@ export default async function IntegrationsPage() {
     sdb.zaloMessageLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 30,
-      select: { id: true, toPhone: true, templateKey: true, status: true, errorMessage: true, fallbackEmailed: true, createdAt: true },
+      select: { id: true, toPhone: true, templateKey: true, status: true, errorMessage: true, fallbackEmailed: true, createdAt: true, providerMessageId: true },
     }),
     getMisaConfig(),
     sdb.integrationLog.findMany({
@@ -144,7 +144,13 @@ export default async function IntegrationsPage() {
                     <td className="px-3 py-2">{l.toPhone ?? "—"}</td>
                     <td className="px-3 py-2 text-neutral-500">{l.templateKey ?? "—"}</td>
                     <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+                      {/* SENT + providerMessageId "SIMULATED-…" = ZALO_LIVE chưa bật: log xanh
+                          nhưng KHÔNG tin nào rời hệ thống — phải phân biệt kẻo tưởng đã gửi. */}
+                      {l.status === "SENT" && l.providerMessageId?.startsWith("SIMULATED-") ? (
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">SENT (mô phỏng)</span>
+                      ) : (
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-neutral-500">{l.fallbackEmailed ? "có" : "—"}</td>
                     <td className="px-3 py-2 text-xs text-neutral-400">{l.errorMessage ?? "—"}</td>

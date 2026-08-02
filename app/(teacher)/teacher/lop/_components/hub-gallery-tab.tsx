@@ -48,6 +48,11 @@ const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
     label: "Từ chối",
     cls: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
   },
+  // Kho ảnh (chưa gửi PH) — tab hub chỉ HIỆN badge; thao tác gửi/xoá ở trang Ảnh lớp.
+  DRAFT: {
+    label: "Trong kho",
+    cls: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+  },
 };
 
 type MediaView = {

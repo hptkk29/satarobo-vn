@@ -256,6 +256,12 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         {canCreate && (
           <div className="flex gap-2">
             <Link
+              href="/students/tai-khoan"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Tài khoản PH
+            </Link>
+            <Link
               href="/students/new"
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
             >

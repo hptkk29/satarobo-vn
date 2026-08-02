@@ -121,7 +121,7 @@ async function main() {
     FROM "RbacShadowDiff" d
     LEFT JOIN "User" u ON u.id = d."userId"
     WHERE d."createdAt" >= ${since}
-    GROUP BY d."userId", u.email
+    GROUP BY d."userId", u.email, u.phone
     ORDER BY so_lech DESC
     LIMIT 20
   `;

@@ -217,6 +217,7 @@ export default async function LeadsPage({
           view={view}
           params={params}
           canCreate={canCreate}
+          canBulkConvert={canViewAll && canCreate}
         />
         <StatusTabs params={params} view={view} registeredCount={registeredCount} />
         <FilterBar
@@ -290,7 +291,7 @@ export default async function LeadsPage({
 
   return (
     <div>
-      <Header total={total} view={view} params={params} canCreate={canCreate} />
+      <Header total={total} view={view} params={params} canCreate={canCreate} canBulkConvert={canViewAll && canCreate} />
       <StatusTabs params={params} view={view} registeredCount={registeredCount} />
       <FilterBar
         params={params}
@@ -321,6 +322,7 @@ function Header({
   view,
   params,
   canCreate,
+  canBulkConvert,
 }: {
   total: number
   /** Số card thực sự hiển thị ở kanban (để chú thích khi đã chạm trần). */
@@ -328,6 +330,8 @@ function Header({
   view: string
   params: SP
   canCreate?: boolean
+  /** Nút "Chốt hàng loạt" chỉ cho manager (leads:view-all) — màn đó thấy mọi lead cơ sở. */
+  canBulkConvert?: boolean
 }) {
   const qs = (v: 'table' | 'kanban') => {
     const u = new URLSearchParams()
@@ -391,6 +395,14 @@ function Header({
           >
             Import Excel
           </Link>
+          {canBulkConvert && (
+            <Link
+              href="/leads/bulk-convert"
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Chốt hàng loạt
+            </Link>
+          )}
           <Link
             href="/leads/new"
             className="rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
