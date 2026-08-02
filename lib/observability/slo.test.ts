@@ -21,6 +21,7 @@ describe("[R6-G3] SLO metrics + alert", () => {
       otpDeliveryFailToday: 21,
       znsUserErrorToday: 31,
       otpCostTodayVnd: 90_001,
+      znsNotifyFailedToday: 11,
     });
     expect(alerts).toHaveLength(SLO_THRESHOLDS.length);
   });

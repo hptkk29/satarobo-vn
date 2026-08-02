@@ -11,7 +11,8 @@ export type SloMetricKey =
   | "otpSentToday"
   | "otpDeliveryFailToday"
   | "znsUserErrorToday"
-  | "otpCostTodayVnd";
+  | "otpCostTodayVnd"
+  | "znsNotifyFailedToday";
 
 export type SloThreshold = { key: SloMetricKey; label: string; max: number };
 
@@ -28,6 +29,10 @@ export const SLO_THRESHOLDS: SloThreshold[] = [
   { key: "otpDeliveryFailToday", label: "OTP gửi hỏng hôm nay", max: 20 },
   { key: "znsUserErrorToday", label: "ZNS lỗi người nhận (-118/-139/-141) hôm nay", max: 30 },
   { key: "otpCostTodayVnd", label: "Chi phí ZNS hôm nay (đ, ước)", max: 90_000 },
+  // ZNS THÔNG BÁO (ZaloMessageLog — cấp TK/học phí/điểm danh/công nợ) trước đây
+  // ngoài vùng đo hoàn toàn: mọi caller `.catch(()=>{})` nên FAILED chất đống im
+  // lặng (vd đặt env template chưa duyệt → 100% hỏng mà không ai biết).
+  { key: "znsNotifyFailedToday", label: "ZNS thông báo FAILED hôm nay", max: 10 },
 ];
 
 export type SloAlert = { key: SloMetricKey; label: string; value: number; threshold: number };
@@ -71,6 +76,7 @@ export async function collectSloMetrics(now: Date = new Date()): Promise<Record<
     otpDeliveryFailToday,
     znsSentToday,
     znsUserErrorToday,
+    znsNotifyFailedToday,
   ] = await Promise.all([
     db.domainEvent.count({ where: { status: "PENDING" } }),
     db.domainEvent.count({ where: { status: "FAILED" } }),
@@ -103,6 +109,7 @@ export async function collectSloMetrics(now: Date = new Date()): Promise<Record<
         ],
       },
     }),
+    db.zaloMessageLog.count({ where: { status: "FAILED", createdAt: { gte: startOfToday } } }),
   ]);
   // Cron lag = phút kể từ event DONE gần nhất (proxy "dispatcher còn chạy"). Không có → 0.
   const lastProcessed = lastDone?.processedAt ?? null;
@@ -117,6 +124,7 @@ export async function collectSloMetrics(now: Date = new Date()): Promise<Record<
     znsUserErrorToday,
     // Chỉ tin ZNS gửi THÀNH CÔNG mới tính tiền (ZBS 31/07: tin fail không trừ phí).
     otpCostTodayVnd: znsSentToday * ZNS_COST_VND,
+    znsNotifyFailedToday,
   };
 }
 
