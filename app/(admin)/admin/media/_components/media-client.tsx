@@ -86,6 +86,12 @@ export function MediaClient({
   const [blocked, setBlocked] = useState(false);
   // QA 20/07 — xoá ảnh phải qua xác nhận (trước đây xoá ngay 1 click, không confirm).
   const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null);
+  // KHO ẢNH (DRAFT): mặc định thư viện GIỮ NHƯ CŨ (ẩn kho); chọn "Trong kho" để QL
+  // nhìn ảnh GV chưa gửi — VIEW-ONLY, không duyệt/xoá (đường rời kho là GV gửi).
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "DRAFT">("ACTIVE");
+  const visible = items.filter((m) =>
+    statusFilter === "DRAFT" ? m.status === "DRAFT" : m.status !== "DRAFT",
+  );
 
   function handleDeleteConfirm() {
     const target = deleteTarget;
@@ -349,14 +355,33 @@ export function MediaClient({
       </section>
 
       <section className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-700">
-          Thư viện ({items.length})
-        </h2>
-        {items.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-400">Chưa có ảnh.</p>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700">
+            Thư viện ({visible.length})
+          </h2>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "ACTIVE" | "DRAFT")}
+            className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-orange-400 focus:outline-none"
+            aria-label="Lọc trạng thái ảnh"
+          >
+            <option value="ACTIVE">Chờ duyệt / Đã duyệt / Từ chối</option>
+            <option value="DRAFT">Trong kho (GV chưa gửi)</option>
+          </select>
+        </div>
+        {statusFilter === "DRAFT" && visible.length > 0 && (
+          <p className="mb-2 rounded-lg bg-sky-50 p-2 text-xs text-sky-700">
+            Ảnh trong kho do giáo viên tải lên, CHƯA gửi phụ huynh — chỉ xem. Khi giáo
+            viên gửi, ảnh sẽ vào hàng chờ duyệt.
+          </p>
+        )}
+        {visible.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-400">
+            {statusFilter === "DRAFT" ? "Kho trống." : "Chưa có ảnh."}
+          </p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {items.map((m) => (
+            {visible.map((m) => (
               <div key={m.id} className="overflow-hidden rounded-lg border border-gray-100">
                 <MediaImg
                   src={m.fileUrl}
@@ -372,10 +397,18 @@ export function MediaClient({
                           ? "bg-emerald-100 text-emerald-700"
                           : m.status === "REJECTED"
                             ? "bg-rose-100 text-rose-700"
-                            : "bg-amber-100 text-amber-700"
+                            : m.status === "DRAFT"
+                              ? "bg-sky-100 text-sky-700"
+                              : "bg-amber-100 text-amber-700"
                       }`}
                     >
-                      {m.status === "APPROVED" ? "Duyệt" : m.status === "REJECTED" ? "Từ chối" : "Chờ"}
+                      {m.status === "APPROVED"
+                        ? "Duyệt"
+                        : m.status === "REJECTED"
+                          ? "Từ chối"
+                          : m.status === "DRAFT"
+                            ? "Trong kho"
+                            : "Chờ"}
                     </span>
                   </div>
                   {m.takenAt && (
@@ -387,7 +420,8 @@ export function MediaClient({
                   {m.tagNames.length > 0 && (
                     <p className="mt-0.5 text-[10px] text-gray-400">Tag: {m.tagNames.join(", ")}</p>
                   )}
-                  {canApprove && (
+                  {/* DRAFT = view-only với QL: không duyệt/từ chối/xoá (server cũng chặn reviewMedia DRAFT) */}
+                  {canApprove && m.status !== "DRAFT" && (
                     <div className="mt-1.5 flex gap-2">
                       {m.status !== "APPROVED" && (
                         <button

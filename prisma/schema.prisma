@@ -3965,6 +3965,9 @@ enum MediaStatus {
   PENDING
   APPROVED
   REJECTED
+  // DRAFT = kho ảnh — GV upload cả loạt, CHƯA chọn gửi PH; không hiện portal,
+  // không vào hàng duyệt (reviewMedia chặn). Đặt CUỐI khớp thứ tự ALTER TYPE ADD VALUE.
+  DRAFT
 }
 
 model ClassSessionMedia {
