@@ -278,8 +278,24 @@ Với **từng vai** (QLCS · Sale · GV · Đào tạo), đăng nhập và:
 > HO_ACCOUNTANT / CENTER_ACCOUNTANT (quyết định #09, Kiệt duyệt 09/07/2026 — ghi ngay
 > trong `prisma/seed-roles.ts`). Nên QLCS **vừa không thấy mục, vừa bị chặn khi gõ
 > thẳng URL** — hai thứ khớp nhau, không phải link chết.
-- [ ] Sale thấy: Tài khoản PH · Điểm danh (sửa hồi tố) — **không** thấy Chốt hàng loạt
-- [ ] Đào tạo mở được `/cham-cong/checkin` *(trước đây bị đá ra)*
+- [x] Sale thấy: Tài khoản PH ✅ · Điểm danh ✅ (sửa hồi tố ✅) — **không** thấy Chốt hàng loạt ✅
+- [ ] Đào tạo mở được `/cham-cong/checkin` *(chưa chạy — chưa có tài khoản Đào tạo riêng; `uat.quanly` mang KÈM role TRAINING nên sidebar là hợp của 2 vai, không tách ra kiểm được)*
+
+> **Sale — đã chạy 03/08 (`uat.sale@satarobo.vn`, vai thật `CENTER_SALES_CSM` +
+> `CENTER_CLASS_MANAGER`):** 26/26 mục sidebar mở được, 0 link chết. **[C]** không có
+> mục "Chốt hàng loạt", và gõ thẳng `/leads/bulk-convert` thì **bị đá về `/leads`** —
+> đúng yêu cầu. Không thấy Công nợ / Biến động số dư (tiền — đúng thiết kế).
+>
+> **Sửa hồi tố có cửa sổ 7 ngày (Task #16, Kiệt duyệt 07/07) — đừng nhầm là lỗi:**
+> · buổi 01/08 (2 ngày trước) → Sale sửa và lưu được: *"Đã lưu điểm danh cho 1 học viên"*.
+> · buổi 30/06 (34 ngày trước) → bị chặn, có câu giải thích **ngay trên màn**:
+>   *"Chỉ được sửa điểm danh trong vòng 7 ngày kể từ ngày học"*.
+> Lưu ý cho người nghiệm thu: thông báo này hiện **inline cạnh nút Lưu**, KHÔNG phải
+> toast góc màn — lần đầu tôi tìm nhầm chỗ và tưởng hệ thống nuốt lỗi.
+>
+> ⚠️ **`SALES_CSM` không tồn tại trong bảng RoleDef v2.** Cột `User.roles` vẫn ghi tên
+> cũ đó, nhưng quyền thật đến từ `UserOrgRole` → `CENTER_SALES_CSM` +
+> `CENTER_CLASS_MANAGER`. Khi soát quyền Sale phải tra theo 2 mã này.
 - [ ] **[P]** Đào tạo chỉ thấy ~12 mục (giáo trình + LMS + học bạ) — **đúng thiết kế** theo chốt 24/07, không phải lỗi
 
 > **Đã soi tĩnh 03/08 (không cần đăng nhập từng vai):** cả **84 mục** sidebar admin đều
