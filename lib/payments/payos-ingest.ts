@@ -5,6 +5,7 @@ import { getSetting } from "@/lib/settings/service";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
+import { extractOrderCode } from "@/lib/payments/sepay";
 import {
   planAllocation,
   deriveStatus,
@@ -162,7 +163,7 @@ function isUniqueViolation(err: unknown): boolean {
 export type MatchTarget = {
   paymentRequestId: string;
   orderId: string;
-  via: "matchKey" | "qrSession";
+  via: "matchKey" | "qrSession" | "orderCode";
   qrSessionId?: string;
 };
 
@@ -201,6 +202,31 @@ export async function resolvePaymentTarget(data: PayosWebhookData): Promise<Matc
       };
     }
   }
+
+  // (c) Chỉ ra được MÃ ĐƠN, không ra đợt — nội dung CK của khách chuyển tay, hoặc
+  // QR cũ in trước khi có định danh theo đợt. Vẫn phải nhận tiền: neo vào phiếu
+  // chưa đóng đủ sớm nhất của đơn rồi để waterfall lo phần còn lại. Không map
+  // được đợt KHÔNG phải lý do đẩy sang xử lý tay.
+  for (const c of collectMatchKeyCandidates(data)) {
+    const code = extractOrderCode(c);
+    if (!code) continue;
+    const order = await db.order.findUnique({
+      where: { code },
+      select: {
+        id: true,
+        paymentRequests: {
+          where: { status: { in: ["PENDING", "PARTIAL"] } },
+          orderBy: [{ sortOrder: "asc" }, { installmentNo: "asc" }],
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    const first = order?.paymentRequests[0];
+    if (order && first) {
+      return { paymentRequestId: first.id, orderId: order.id, via: "orderCode" };
+    }
+  }
   return null;
 }
 
@@ -216,10 +242,17 @@ type TxResult =
     };
 
 /**
- * Ghi nhận + phân bổ MỘT giao dịch payOS. Idempotent theo `providerTxnId`.
+ * Ghi nhận + phân bổ MỘT giao dịch tiền về. Idempotent theo `providerTxnId`.
  * Gọi được thẳng từ test (không cần HTTP) — route chỉ là vỏ.
+ *
+ * `provider` tham số hoá vì hai cổng dùng CHUNG đường này: payOS (khi đã xác thực
+ * doanh nghiệp xong) và SePay (đang chạy thật). Khác nhau chỉ ở khâu đọc payload
+ * — phần ghi sổ, phân bổ, chống đua, side-effect sau commit là một.
  */
-export async function ingestPayosWebhook(data: PayosWebhookData): Promise<IngestOutcome> {
+export async function ingestPayosWebhook(
+  data: PayosWebhookData,
+  provider: string = PAYOS_PROVIDER,
+): Promise<IngestOutcome> {
   if (isPayosVerificationPing(data)) {
     return { status: "IGNORED", reason: "Ping xác thực webhook của payOS" };
   }
@@ -246,7 +279,7 @@ export async function ingestPayosWebhook(data: PayosWebhookData): Promise<Ingest
     return { status: "IGNORED", reason: "Thiếu định danh giao dịch" };
   }
 
-  const where = { provider_providerTxnId: { provider: PAYOS_PROVIDER, providerTxnId } };
+  const where = { provider_providerTxnId: { provider, providerTxnId } };
 
   // ── Bước 2: upsert BankTransaction (khoá idempotency) ─────────────────────
   let txn = await db.bankTransaction.findUnique({ where });
@@ -257,7 +290,7 @@ export async function ingestPayosWebhook(data: PayosWebhookData): Promise<Ingest
   }
   if (!txn) {
     const createData = {
-      provider: PAYOS_PROVIDER,
+      provider,
       providerTxnId,
       amount,
       transferredAt: parseTransferredAt(data.transactionDateTime),
@@ -446,7 +479,7 @@ export async function ingestPayosWebhook(data: PayosWebhookData): Promise<Ingest
             bankTransactionId,
             centerId: order.centerId,
             amount: plan.credit,
-            note: `Tiền dư từ giao dịch payOS ${providerTxnId} (đơn ${order.code})`,
+            note: `Tiền dư từ giao dịch ${provider} ${providerTxnId} (đơn ${order.code})`,
           },
         });
       }
@@ -466,7 +499,7 @@ export async function ingestPayosWebhook(data: PayosWebhookData): Promise<Ingest
       // sổ cũ thiếu tiền. Neo theo mã giao dịch thì mỗi lần tiền về là một dòng,
       // và webhook retry vẫn idempotent vì cùng providerTxnId.
       if (allocated > 0) {
-        const marker = `[auto:payos:${providerTxnId}]`;
+        const marker = `[auto:${provider.toLowerCase()}:${providerTxnId}]`;
         const dup = await tx.payment.findFirst({
           where: { orderId: order.id, deletedAt: null, note: { contains: marker } },
           select: { id: true },
@@ -476,9 +509,9 @@ export async function ingestPayosWebhook(data: PayosWebhookData): Promise<Ingest
             data: {
               orderId: order.id,
               amount: allocated,
-              method: "payos",
+              method: provider.toLowerCase(),
               paidDate: new Date(),
-              note: `Tiền về qua payOS ${providerTxnId} ${marker}`,
+              note: `Tiền về qua ${provider} ${providerTxnId} ${marker}`,
               saleStatus: "RECORDED",
               accountantStatus: "PENDING",
               recordedById: null,
@@ -591,8 +624,23 @@ async function confirmSettledOrder(
   providerTxnId: string,
 ): Promise<boolean> {
   const now = new Date();
+  // Giảm giá do nhân viên nhập tay phải được QLCS duyệt TRƯỚC khi đơn được xác
+  // nhận (BGĐ 31/07). Tiền vẫn được ghi nhận và phân bổ bình thường — bất biến
+  // "không bao giờ từ chối vì lệch/điều kiện" chỉ nói về việc NHẬN tiền; chốt đơn
+  // là việc khác. Thiếu guard này thì quét QR trở thành đường lách duyệt giảm giá.
   const upd = await db.order.updateMany({
-    where: { id: orderId, status: "PENDING_PAYMENT" },
+    where: {
+      id: orderId,
+      status: "PENDING_PAYMENT",
+      // ⚠️ KHÔNG dùng `NOT: { in: [...] }`: cột này NULL ở ca BÌNH THƯỜNG (đơn
+      // không giảm giá), mà `NOT (col IN (...))` với NULL cho ra NULL — không
+      // phải true — nên sẽ loại luôn mọi đơn bình thường và KHÔNG đơn nào tự
+      // chốt được nữa. Phải liệt kê tường minh nhánh NULL.
+      OR: [
+        { discountApprovalStatus: null },
+        { discountApprovalStatus: { notIn: ["PENDING_APPROVAL", "REJECTED"] } },
+      ],
+    },
     data: {
       status: "CONFIRMED",
       confirmedAt: now,
@@ -609,7 +657,7 @@ async function confirmSettledOrder(
         fromStatus: "PENDING_PAYMENT",
         toStatus: "CONFIRMED",
         changedByUserId: null,
-        changedByName: "payOS webhook",
+        changedByName: "Cổng thanh toán (webhook)",
         reason: `Tự động xác nhận: đã thu đủ mọi đợt (giao dịch cuối ${amount.toLocaleString(
           "vi-VN",
         )}đ, ref ${providerTxnId})`,
