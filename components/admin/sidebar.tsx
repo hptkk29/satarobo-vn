@@ -211,8 +211,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage"] },
       { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage"] },
+      // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
+      { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
-      { label: "Mã khuyến mãi", href: "/vouchers", icon: Ticket, perm: ["vouchers:view"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
     ],
   },
