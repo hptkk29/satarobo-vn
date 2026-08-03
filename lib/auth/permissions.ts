@@ -60,6 +60,7 @@ export type Action =
   | "leads:create"
   | "leads:edit"
   | "leads:assign"
+  | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
@@ -248,6 +249,7 @@ export type Action =
 
   // --- Phase 5.6 — Financial (Payment + Order) ---
   | "payments:manage"
+  | "payments:view" // 03/08 — chỉ XEM đối soát (Công nợ, Biến động số dư); không thao tác
   | "payments:record" // R7-04 — Sale ghi nhận khoản
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
@@ -314,6 +316,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "leads:assign-config": ["SUPER_ADMIN"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   // Task #07 — theo pattern students:import. SALES_CSM được cấp theo quyết định
@@ -557,6 +560,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Phase 5.6 — Financial ---
   "payments:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "payments:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
   // #15 (câu 32) — CCCD PH + địa chỉ mask mặc định; break-glass "Xem đầy đủ" (reason

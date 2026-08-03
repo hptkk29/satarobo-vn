@@ -93,6 +93,11 @@ const SUPER_ADMIN_ONLY = new Set([
   "enrollments:delete",
   // Lịch nghỉ toàn hệ thống.
   "holidays:edit",
+  // Chủ dự án chốt 03/08/2026 — nhật ký hệ thống + cấu hình vận hành/tích hợp rút
+  // khỏi Quản lý cơ sở; không vai thường nào giữ nữa, chỉ SUPER_ADMIN.
+  "audit-logs:view",
+  "audit-logs:view-pii",
+  "settings:view",
 ]);
 
 describe("#09 — không action nào MỒ CÔI ở v2", () => {

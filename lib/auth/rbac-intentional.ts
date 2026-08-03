@@ -42,6 +42,15 @@ export const INTENTIONAL: Partial<Record<Role, readonly string[]>> = {
     // gỡ khỏi Đào tạo → không còn diff.
     // 03/08: lesson-change:approve cũng ĐÃ về v2 (seed-roles.ts) — QĐ-T3b trả CM CẢ
     // HAI việc, để sót một cái ở v1-only là bỏ quên chứ không phải quyết định.
+    // ── Chủ dự án chốt 03/08/2026 (chat): siết vai Quản lý cơ sở ──────────────
+    // Toàn bộ nhóm LMS/Học liệu → TRAINING. QLCS vận hành lớp, không soạn học liệu.
+    "curriculum:view", "courses:view", "course-packages:view",
+    "documents:view", "assignments:view", "teaching-materials:view-own-class",
+    "lesson-change:approve", "exams:view", "questions:view",
+    // Hồ sơ giáo viên / nhân sự → CENTER_HR & HO_HR. (Chấm công GIỮ cho QLCS.)
+    "employees:view-all",
+    // Nhật ký hệ thống + cấu hình vận hành/tích hợp → SUPER_ADMIN.
+    "audit-logs:view", "audit-logs:view-pii", "settings:view",
     // Tiền & kho tập trung → HO_ACCOUNTANT
     "payments:manage", "orders:manage", "installments:approve",
     "products:manage",

@@ -49,6 +49,7 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "HO_ACCOUNTANT", name: "Kế toán Hội sở",
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
+      { action: "payments:view", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
       { action: "payroll:view", scopeType: "GLOBAL" },
       { action: "payroll:edit", scopeType: "GLOBAL" },
@@ -328,9 +329,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "evaluations:manage", scopeType: "GLOBAL" },
       { action: "evaluations:view-aggregate", scopeType: "GLOBAL" },
       { action: "evaluations:view-detail", scopeType: "GLOBAL" },
-      { action: "exams:view", scopeType: "GLOBAL" },
       { action: "exams:grade", scopeType: "GLOBAL" },
-      { action: "assignments:view", scopeType: "GLOBAL" },
       { action: "assignments:grade", scopeType: "GLOBAL" },
       // L6 site GV — capability "own" (parity v1↔v2): soạn đề kho riêng + giao bài +
       // đề xuất hoàn thành (QL cơ sở cũng dùng được; xác nhận thật = completions:manage).
@@ -338,12 +337,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "assignments:author-own", scopeType: "GLOBAL" },
       { action: "assignments:assign-own", scopeType: "GLOBAL" },
       { action: "completions:propose-own", scopeType: "GLOBAL" },
-      { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
       { action: "completions:manage", scopeType: "GLOBAL" },
       { action: "satacoin:manage", scopeType: "GLOBAL" },
       { action: "notifications:manage", scopeType: "GLOBAL" },
       // ── Nhân sự · chấm công ──
-      { action: "employees:view-all", scopeType: "GLOBAL" },
       { action: "hr_attendance:view", scopeType: "CENTER" },
       // Shadow prod 10/07 (25+2 lệch): adjust bị pending-tasks cfg.can() gọi TRẦN → GLOBAL
       // (đúng R1); checkin call-site truyền {centerId} nhưng OWN đòi createdById → GLOBAL
@@ -366,23 +363,23 @@ export const ROLE_SEED: RoleSeed[] = [
       // QLCS CS1 không đụng được đơn/phiếu thu của CS2.
       { action: "installments:approve", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
+      // Chủ dự án chốt 03/08/2026 — QLCS cần ĐỐI SOÁT tiền về nhưng CHỈ XEM.
+      // `payments:view` mở Công nợ + Biến động số dư ở chế độ đọc; mọi thao tác tiền
+      // (sửa/hoàn/cấu hình) vẫn đòi payments:manage / payments:confirm mà vai này KHÔNG có.
+      { action: "payments:view", scopeType: "GLOBAL" },
+      // Giữ Học bạ hiển thị: màn đó gác [curriculum:view | students:view-own-class],
+      // mà curriculum:view vừa bị gỡ theo yêu cầu "chặn phần LMS".
+      { action: "students:view-own-class", scopeType: "GLOBAL" },
       // QĐ-T3b (FL W0-NAV-2) trả CM 2 việc vận hành: trials:config ĐÃ về ở cả v1+v2,
       // còn lesson-change:approve sót lại v1-only ⇒ trên prod (v2) chỉ Đào tạo duyệt
       // được đề xuất chỉnh bài của GV, người đó nghỉ là đề xuất treo. Đưa về khớp QĐ.
-      { action: "lesson-change:approve", scopeType: "GLOBAL" },
       // ── Đọc tham chiếu ──
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },
-      { action: "settings:view", scopeType: "GLOBAL" },
-      { action: "documents:view", scopeType: "GLOBAL" },
-      { action: "curriculum:view", scopeType: "GLOBAL" },
       // 10/07 — báo cáo đào tạo theo chức năng (xem lib/auth/page-gates.ts).
       { action: "reports:training", scopeType: "GLOBAL" },
       // 24/07 — cấu hình lớp học thử: gỡ khỏi Đào tạo (chỉ LMS) → về QL cơ sở (khớp v1).
       { action: "trials:config", scopeType: "GLOBAL" },
-      { action: "questions:view", scopeType: "GLOBAL" },
-      { action: "courses:view", scopeType: "GLOBAL" },
-      { action: "course-packages:view", scopeType: "GLOBAL" },
       { action: "kits:view", scopeType: "GLOBAL" },
       { action: "inventory:view", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
@@ -406,8 +403,6 @@ export const ROLE_SEED: RoleSeed[] = [
       // dạng target), nên CENTER-scope sẽ trả false sau flip #09. Cách ly cơ sở đã ép
       // TAY ở tầng query (queryUnifiedAuditLogs lọc orgUnitId ∈ visibleOrgUnitIds) →
       // GLOBAL an toàn: mỗi QL cơ sở vẫn chỉ thấy log cơ sở mình.
-      { action: "audit-logs:view", scopeType: "GLOBAL" },
-      { action: "audit-logs:view-pii", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -547,6 +542,7 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
+      { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).

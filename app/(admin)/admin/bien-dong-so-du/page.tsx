@@ -54,7 +54,13 @@ export default async function SepayLogPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Cùng quyền với sổ thu chi — người đối soát tiền mới cần trang này.
-  if (!(await checkPermission("payments:manage"))) redirect("/dashboard");
+  // 03/08 — thêm `payments:view` (chỉ xem) cho Quản lý cơ sở: màn này vốn CHỈ ĐỌC
+  // (đối soát tiền về từ SePay), không có thao tác ghi nào.
+  const [canManagePayments, canViewPayments] = await Promise.all([
+    checkPermission("payments:manage"),
+    checkPermission("payments:view"),
+  ]);
+  if (!canManagePayments && !canViewPayments) redirect("/dashboard");
 
   const { status } = await searchParams;
   const filter = status === "unmatched" || status === "matched" ? status : "all";

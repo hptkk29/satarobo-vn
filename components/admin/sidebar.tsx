@@ -98,7 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
       // để leads:import (Sale có leads:import nhưng KHÔNG có view-all → trang tự
       // redirect; đặt view-all ở đây để không hiện link chết cho Sale).
       { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
-      { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign"] },
+      { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign-config"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
@@ -211,9 +211,9 @@ const NAV_GROUPS: NavGroup[] = [
       // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
-      { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage"] },
+      { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
-      { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage"] },
+      { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
     ],
