@@ -7,7 +7,8 @@ import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { formatVndPlain } from "@/lib/format/money";
 // 03/08 — SỔ MỚI (PaymentRequest) chạy SONG SONG sổ cũ (OrderInstallment).
 // Sổ cũ giữ nguyên hành vi (đợt 1 = PAID) để không phá công nợ đang chạy; sổ mới
-// theo luật mới: phiếu theo đợt CHỈ sinh khi kế hoạch được DUYỆT, và sinh ở PENDING.
+// ⚠️ 03/08 luật ĐÃ ĐỔI: phiếu theo đợt sinh NGAY khi lưu kế hoạch (không chờ duyệt),
+// vẫn ở trạng thái PENDING. "Duyệt" nay chỉ có nghĩa KHOÁ kế hoạch.
 import {
   ensureFullOrderRequest,
   materializeInstallmentRequests,
@@ -69,6 +70,16 @@ export async function recordInstallmentPlan(params: {
     select: { code: true, totalAmount: true, centerId: true, leadId: true, installmentApprovalStatus: true },
   });
   if (!order) return { ok: false, error: "Không tìm thấy đơn" };
+  // Chủ dự án chốt 03/08 — DUYỆT = KHOÁ. Kế hoạch đã duyệt thì không sửa số tiền/
+  // số đợt được nữa: phiếu thu và mã QR đã phát cho khách bám theo nó, sửa sau lưng
+  // là tiền về một đằng sổ ghi một nẻo. Muốn đổi thì QLCS từ chối kế hoạch trước.
+  if (order.installmentApprovalStatus === "APPROVED") {
+    return {
+      ok: false,
+      error:
+        "Kế hoạch trả góp đã được duyệt — không sửa được nữa. Cần đổi thì quản lý cơ sở từ chối kế hoạch rồi lập lại.",
+    };
+  }
   if (dot1Amount + dot2Amount !== order.totalAmount) {
     return { ok: false, error: `Tổng 2 đợt phải bằng học phí (${formatVndPlain(order.totalAmount, false)})` };
   }
@@ -114,16 +125,24 @@ export async function recordInstallmentPlan(params: {
         actor: { id: actorId },
       });
     }
-    // QĐ-1 (03/08) — kế hoạch mới lập là BẢN NHÁP: KHÔNG sinh phiếu thu theo đợt ở
-    // đây. Chỉ đảm bảo đơn có phiếu "thu toàn đơn" để sale vẫn xuất được QR số
-    // tiền TỔNG trong lúc chờ QLCS duyệt. Phiếu theo đợt sinh ở approveInstallmentPlan.
-    // (Đơn đã duyệt rồi thì hàm này tự no-op — đã có phiếu đợt sống.)
-    await ensureFullOrderRequest(tx, {
-      id: orderId,
-      code: order.code,
-      totalAmount: order.totalAmount,
-      centerId: order.centerId,
-    });
+    // ⚠️ 03/08 — ĐẢO QĐ-1 (chủ dự án chốt trong chat). Trước đây chỗ này chỉ dựng
+    // phiếu "thu toàn đơn" và đợi QLCS duyệt mới sinh phiếu theo đợt ⇒ khách đứng ở
+    // quầy không quét được mã đúng số tiền đợt 1 cho tới khi có người duyệt.
+    // Nay: LƯU KẾ HOẠCH LÀ CÓ PHIẾU THU THEO ĐỢT NGAY (kèm QR đúng số tiền từng đợt).
+    // Duyệt chỉ còn là bước KHOÁ kế hoạch lại.
+    //
+    // Đơn trả 1 lần (không có đợt 2) giữ nguyên đường cũ: 1 phiếu "thu toàn đơn" —
+    // gọi nó là "Đợt 1/1" chỉ làm sale rối chứ không thêm thông tin gì.
+    if (dot2Amount > 0) {
+      await materializeInstallmentRequests(tx, orderId, { id: actorId, name: "" });
+    } else {
+      await ensureFullOrderRequest(tx, {
+        id: orderId,
+        code: order.code,
+        totalAmount: order.totalAmount,
+        centerId: order.centerId,
+      });
+    }
   });
   await recomputeOrder(orderId);
   return { ok: true };

@@ -2,11 +2,10 @@
  * VÒNG ĐỜI PHIẾU THU (PaymentRequest) — 03/08. Postgres LOCAL (.env.test).
  *
  * Hai quyết định của chủ dự án được kiểm ở đây:
- *  QĐ-1 — phiếu thu theo ĐỢT chỉ ra đời khi QLCS BẤM DUYỆT kế hoạch trả góp.
- *         Ca 10 của chủ dự án: "đơn chưa duyệt thì KHÔNG có cách nào sinh QR số
- *         tiền đợt 1" → ngoài việc assert không có phiếu đợt, ta còn gọi thẳng
- *         `materializeInstallmentRequests` trên đơn chưa duyệt và đòi nó NÉM LỖI
- *         (chốt nằm trong hàm, không phải `if` ở call-site).
+ *  QĐ-1 — ⚠️ ĐÃ ĐẢO 03/08 (chủ dự án chốt trong chat). Luật CŨ: "phiếu đợt chỉ ra
+ *         đời khi QLCS bấm DUYỆT". Luật MỚI: **bấm Lưu kế hoạch là có phiếu thu +
+ *         QR theo đợt NGAY**, vì khách đứng ở quầy không thể chờ người duyệt mới
+ *         quét được mã. "Duyệt" nay chỉ còn nghĩa **KHOÁ** kế hoạch lại.
  *  QĐ-2 — phiếu đợt 1 sinh ra ở PENDING, dù sổ CŨ (`OrderInstallment`) vẫn đánh
  *         đợt 1 = PAID. Chỉ tiền THẬT (PaymentAllocation) mới đẩy phiếu sang PAID.
  *
@@ -164,9 +163,9 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  test("[PR-02] lập kế hoạch 2 đợt CHƯA duyệt → KHÔNG có phiếu đợt nào; và không có đường nào sinh ra được", async () => {
-    const order = await createOrderWithRequest(10_000_000, cs1, 2);
-
+  test("[PR-02] lưu kế hoạch 2 đợt (CHƯA duyệt) → CÓ NGAY 2 phiếu đợt + phiếu toàn đơn VOID", async () => {
+    // Luật MỚI 03/08 (đảo QĐ-1): không bắt khách chờ duyệt mới quét được QR.
+    const order = await createOrderWithRequest(10_000_000, cs1, 20);
     const res = await recordInstallmentPlan({
       orderId: order.id,
       dot1Amount: 6_000_000,
@@ -176,32 +175,81 @@ test.describe("[PR] Vòng đời phiếu thu — duyệt trả góp mới sinh p
     });
     expect(res.ok).toBe(true);
 
-    // Sổ CŨ có 2 đợt + đơn chờ duyệt…
-    expect(await getOrderInstallments(order.id)).toHaveLength(2);
+    // Đơn vẫn CHỜ DUYỆT…
     const o = await db.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(o.installmentApprovalStatus).toBe("PENDING_APPROVAL");
 
-    // …nhưng sổ MỚI vẫn CHỈ có phiếu thu toàn đơn.
+    // …nhưng phiếu thu theo đợt đã có, đúng số tiền, và phiếu toàn đơn đã VOID.
     const rows = await requestsOf(order.id);
-    expect(rows).toHaveLength(1);
-    expect(rows.filter((r) => r.installmentNo > 0)).toHaveLength(0);
-    expect(rows[0].status).toBe("PENDING");
-    expect(rows[0].amountDue).toBe(10_000_000);
-
-    // Ca 10 — cửa duy nhất bị KHOÁ CỨNG: gọi thẳng hàm sinh phiếu đợt cũng chặn.
-    await expect(
-      db.$transaction(async (tx) =>
-        materializeInstallmentRequests(
-          tx as unknown as Prisma.TransactionClient,
-          order.id,
-          { id: approver.id, name: approver.name },
-        ),
-      ),
-    ).rejects.toThrow(/ĐÃ DUYỆT/);
-    expect(await requestsOf(order.id)).toHaveLength(1);
+    const dots = rows.filter((r) => r.installmentNo > 0);
+    expect(dots).toHaveLength(2);
+    expect(dots.map((d) => d.amountDue)).toEqual([6_000_000, 4_000_000]);
+    expect(dots.every((d) => d.status === "PENDING")).toBe(true);
+    expect(rows.find((r) => r.installmentNo === 0)!.status).toBe("VOID");
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  test("[PR-02b] sửa kế hoạch trước khi duyệt → phiếu đổi số tiền VÀ mã QR đang sống bị hết hạn", async () => {
+    // Lỗi chủ dự án báo 03/08: "sửa giá / sửa 2 đợt nhưng QR không nhảy theo".
+    // QrSession.amountShown là ảnh chụp số tiền lúc xuất mã ⇒ không hết hạn phiên cũ
+    // thì khách quét mã in số CŨ.
+    const order = await createOrderWithRequest(10_000_000, cs1, 21);
+    await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
+      dot2DueDate: new Date("2026-09-01"), actorId: approver.id,
+    });
+    const dot1 = (await requestsOf(order.id)).find((r) => r.installmentNo === 1)!;
+
+    // Sale đã xuất QR cho đợt 1 với số tiền 6tr.
+    await db.qrSession.create({
+      data: {
+        paymentRequestId: dot1.id,
+        centerId: cs1,
+        amountShown: 6_000_000,
+        qrContent: "https://img.vietqr.io/x.png",
+        expiresAt: new Date(Date.now() + 30 * 60_000),
+        status: "ACTIVE",
+      },
+    });
+
+    // Đổi kế hoạch: 6tr/4tr → 3tr/7tr.
+    const again = await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 3_000_000, dot2Amount: 7_000_000,
+      dot2DueDate: new Date("2026-10-01"), actorId: approver.id,
+    });
+    expect(again.ok).toBe(true);
+
+    const after = (await requestsOf(order.id)).filter((r) => r.installmentNo > 0);
+    expect(after.map((d) => d.amountDue)).toEqual([3_000_000, 7_000_000]);
+
+    // Mã cũ KHÔNG được còn sống.
+    const live = await db.qrSession.count({
+      where: { paymentRequestId: dot1.id, status: "ACTIVE" },
+    });
+    expect(live).toBe(0);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  test("[PR-02c] DUYỆT = KHOÁ: kế hoạch đã duyệt thì không sửa được nữa", async () => {
+    const order = await createOrderWithRequest(10_000_000, cs1, 22);
+    await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 6_000_000, dot2Amount: 4_000_000,
+      dot2DueDate: new Date("2026-09-01"), actorId: approver.id,
+    });
+    expect((await approveInstallmentPlan({ orderId: order.id, actor: approver })).ok).toBe(true);
+
+    const locked = await recordInstallmentPlan({
+      orderId: order.id, dot1Amount: 1_000_000, dot2Amount: 9_000_000,
+      dot2DueDate: new Date("2026-11-01"), actorId: approver.id,
+    });
+    expect(locked.ok).toBe(false);
+    expect(locked.error).toMatch(/đã được duyệt/i);
+
+    // Số tiền phiếu KHÔNG đổi theo lần sửa bị chặn.
+    const dots = (await requestsOf(order.id)).filter((r) => r.installmentNo > 0);
+    expect(dots.map((d) => d.amountDue)).toEqual([6_000_000, 4_000_000]);
+  });
+
   test("[PR-03] duyệt kế hoạch → sinh đúng 2 phiếu đợt, phiếu toàn đơn VOID, matchKey ORD…D1/D2", async () => {
     const order = await createOrderWithRequest(10_000_000, cs1, 3);
     await recordInstallmentPlan({

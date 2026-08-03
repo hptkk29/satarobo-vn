@@ -75,6 +75,25 @@ async function allocatedByRequest(
 }
 
 /**
+ * Hết hạn mọi phiên QR ĐANG SỐNG của một phiếu thu.
+ *
+ * Vì sao cần: `QrSession.amountShown` là ẢNH CHỤP số tiền lúc xuất mã. Sửa kế hoạch
+ * (đổi số tiền đợt / đổi hạn / huỷ phiếu) mà không đụng tới phiên cũ thì mã đang
+ * dán ở quầy vẫn in số CŨ — khách quét, tiền về sai số, và phiếu thu không bao giờ
+ * đủ. Hết hạn phiên để lượt "Xuất QR" kế tiếp dựng mã theo số mới.
+ *
+ * KHÔNG đụng `matchKey` của phiếu (bất biến #3): tiền của mã cũ nếu đã chuyển vẫn
+ * rơi đúng đợt đó, chỉ là số tiền lệch và sẽ nằm ở PARTIAL — đúng cách xử lý.
+ */
+async function expireQrSessions(tx: TxClient, paymentRequestId: string): Promise<number> {
+  const res = await tx.qrSession.updateMany({
+    where: { paymentRequestId, status: "ACTIVE" },
+    data: { status: "EXPIRED" },
+  });
+  return res.count;
+}
+
+/**
  * Đảm bảo đơn có ĐÚNG MỘT phiếu "thu toàn đơn" (`installmentNo = 0`).
  * Gọi khi: tạo đơn, hoặc lập/sửa kế hoạch trả góp CHƯA duyệt — để sale vẫn xuất
  * được QR số tiền TỔNG ĐƠN trong lúc chờ duyệt.
@@ -176,15 +195,14 @@ export async function materializeInstallmentRequests(
   });
   if (!order) return noop;
 
-  if (order.installmentApprovalStatus !== "APPROVED") {
-    // Ném (không return) có chủ đích: hàm này chạy trong transaction duyệt, nên
-    // lỗi ở đây phải kéo đổ cả lượt ghi — không có "sinh phiếu nửa vời".
-    throw new Error(
-      `[payment-request] Phiếu thu theo đợt chỉ được sinh khi kế hoạch trả góp ĐÃ DUYỆT ` +
-        `(đơn ${order.code}, installmentApprovalStatus=${order.installmentApprovalStatus ?? "null"}). ` +
-        `Đi qua approveInstallmentPlan().`,
-    );
-  }
+  // ⚠️ 03/08/2026 — ĐẢO QĐ-1. Trước đây hàm này CHẶN khi kế hoạch chưa APPROVED
+  // ("phiếu đợt chỉ ra đời lúc duyệt"). Chủ dự án chốt lại: bấm "Lưu kế hoạch thanh
+  // toán" là phiếu thu + QR theo đợt phải có NGAY, không bắt khách đứng ở quầy chờ
+  // quản lý duyệt mới quét được mã. Duyệt nay chỉ còn nghĩa "KHOÁ kế hoạch".
+  //
+  // An toàn tiền không đổi: phiếu sinh ra ở trạng thái PENDING (chỉ PAID khi tiền
+  // thật về), và `confirmSettledOrder` vẫn từ chối tự chốt đơn khi giảm giá chưa
+  // duyệt — quét QR không thành đường lách duyệt.
 
   const plan = await tx.orderInstallment.findMany({
     where: { orderId },
@@ -244,6 +262,13 @@ export async function materializeInstallmentRequests(
     if (Object.keys(patch).length > 0) {
       await tx.paymentRequest.update({ where: { id: cur.id }, data: patch });
       updated += 1;
+      // Sửa số tiền/hạn của đợt ⇒ mã QR đang sống in số CŨ (số tiền được chụp lại
+      // trong QrSession.amountShown). Không hết hạn nó thì sale đưa khách quét mã
+      // cũ và tiền về sai số — đúng lỗi chủ dự án báo 03/08 ("sửa 2 đợt nhưng QR
+      // không nhảy theo"). Hết hạn phiên cũ để lượt "Xuất QR" sau in số mới.
+      if (patch.amountDue !== undefined || patch.dueDate !== undefined) {
+        await expireQrSessions(tx, cur.id);
+      }
     }
   }
 
@@ -253,6 +278,7 @@ export async function materializeInstallmentRequests(
     if (r.installmentNo <= 0 || planned.has(r.installmentNo)) continue;
     if (r.status === "VOID" || (allocated.get(r.id) ?? 0) > 0) continue;
     await tx.paymentRequest.update({ where: { id: r.id }, data: { status: "VOID" } });
+    await expireQrSessions(tx, r.id); // phiếu đã huỷ thì mã của nó không được sống
     updated += 1;
   }
 
@@ -263,6 +289,7 @@ export async function materializeInstallmentRequests(
   if (full && full.status !== "VOID") {
     fullOrderAllocated = allocated.get(full.id) ?? 0;
     await tx.paymentRequest.update({ where: { id: full.id }, data: { status: "VOID" } });
+    await expireQrSessions(tx, full.id); // QR "tổng đơn" không được sống cạnh QR theo đợt
     voidedFullOrder = true;
   }
 
