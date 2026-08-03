@@ -268,9 +268,11 @@ export const ROLE_SEED: RoleSeed[] = [
     // SIẾT có chủ đích (bỏ khỏi v1): nội dung marketing (blog/news/site-content/
     // honors/emails) → HO_MARKETING · chương trình (courses:create/edit,
     // course-packages:edit, lesson-change:approve, trials:config) → TRAINING ·
-    // tiền & kho quản lý tập trung (payments:manage, orders:manage,
-    // installments:approve, vouchers:manage, products:manage, inventory:edit/audit,
-    // kits:edit) → HO_ACCOUNTANT · employees:edit + jobs:create/edit → CENTER_HR ·
+    // tiền & kho quản lý tập trung (payments:manage, vouchers:manage,
+    // products:manage, inventory:edit/audit, kits:edit) → HO_ACCOUNTANT ·
+    // employees:edit + jobs:create/edit → CENTER_HR ·
+    // ⚠️ 03/08/2026 chủ dự án ĐẢO một phần: `orders:manage` + `installments:approve`
+    // TRẢ LẠI cho vai này để quầy tự xuất QR (xem ghi chú tại chỗ khai 2 quyền đó).
     // holidays:edit → SUPER_ADMIN · students:delete + enrollments:delete →
     // SUPER_ADMIN (QL dùng enrollments:cancel; CLAUDE.md cấm hard-delete).
     code: "CENTER_MANAGER", name: "Quản lý cơ sở",
@@ -354,6 +356,16 @@ export const ROLE_SEED: RoleSeed[] = [
       // BGĐ 31/07 — duyệt giảm giá do Sale/CSKH cơ sở đệ trình ("đệ trình Qly CS duyệt").
       // GLOBAL theo R1 (call-site gọi trần), cách ly cơ sở do scopedDb.
       { action: "discounts:approve", scopeType: "GLOBAL" },
+      // Chủ dự án chốt 03/08/2026 — ĐẢO một phần quyết định #09 (siết tiền về Hội sở).
+      // Lý do: luồng thu tại quầy là "Sale tạo đơn → QLCS duyệt → hiện QR cho khách
+      // quét NGAY TẠI QUẦY". Nghiệm thu 03/08 đo ra QLCS không có 2 quyền này ⇒ quầy
+      // tắc, phải gọi kế toán Hội sở mới xuất được QR. Cấp lại cho Quản lý cơ sở:
+      //   · installments:approve — duyệt kế hoạch trả góp 2 đợt (sinh phiếu thu)
+      //   · orders:manage       — gác của "Xuất QR / Tạo lại QR" (_qr-actions.ts)
+      // GLOBAL theo R1 (call-site gọi trần); cách ly cơ sở vẫn do scopedDb gác, nên
+      // QLCS CS1 không đụng được đơn/phiếu thu của CS2.
+      { action: "installments:approve", scopeType: "GLOBAL" },
+      { action: "orders:manage", scopeType: "GLOBAL" },
       // QĐ-T3b (FL W0-NAV-2) trả CM 2 việc vận hành: trials:config ĐÃ về ở cả v1+v2,
       // còn lesson-change:approve sót lại v1-only ⇒ trên prod (v2) chỉ Đào tạo duyệt
       // được đề xuất chỉnh bài của GV, người đó nghỉ là đề xuất treo. Đưa về khớp QĐ.

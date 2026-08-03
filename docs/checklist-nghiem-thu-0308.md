@@ -311,15 +311,17 @@ Hai việc khác nhau, đừng gộp:
    Hội sở làm. Việc này **va thẳng vào luồng đã mô tả** ("sale tạo đơn → QLCS duyệt →
    xuất QR cho khách quét tại quầy").
 
-**Cần chủ dự án chốt:** cấp thêm `installments:approve` + `orders:manage` cho
-CENTER_MANAGER, hay giữ tập trung ở Hội sở và chấp nhận quầy phải gọi kế toán?
-Tôi không tự sửa bảng quyền — đổi quyền là quyết định tổ chức, không phải lỗi code.
+**ĐÃ CHỐT 03/08/2026 — chủ dự án cấp thêm cho Quản lý cơ sở.** `seed-roles.ts` nay
+khai thêm `installments:approve` + `orders:manage` (scope GLOBAL theo R1; cách ly cơ
+sở vẫn do `scopedDb` gác nên QLCS CS1 không đụng đơn của CS2). Đã chạy seed trên DB
+test: CENTER_MANAGER từ 85 → **88 quyền**. **Trên prod phải chạy workflow ở mục F.1
+thì mới có hiệu lực.**
 
 ---
 
 ## F. Sau khi merge `test` → `main` (không phải nghiệm thu — việc bấm tay)
 
-1. [ ] Chạy workflow **Seed Production RolePermission** — **bắt buộc**. Đợt này đổi bảng quyền, và `discounts:approve` từ 31/07 tới giờ vẫn chưa lên prod (QLCS đang không duyệt được giảm giá trên prod).
+1. [ ] Chạy workflow **Seed Production RolePermission** — **bắt buộc**. Đợt này đổi bảng quyền. Sau khi chạy, Quản lý cơ sở mới có đủ **3 quyền**: `discounts:approve` (thiếu từ 31/07), và `installments:approve` + `orders:manage` (chủ dự án cấp thêm 03/08 để quầy tự duyệt trả góp + xuất QR). **Chưa chạy = QLCS trên prod không duyệt giảm giá, không duyệt kế hoạch 2 đợt, không bấm được Xuất QR.**
 2. [ ] Đặt lại `SEPAY_WEBHOOK_API_KEY` + **redeploy** → tiền mới chảy vào, trang Biến động mới có dữ liệu.
 3. [ ] Kiểm env `SESSION_LIFECYCLE_V2` — nút "Hoàn tất buổi" + auto giao bài về nhà nằm sau cờ này.
 4. [ ] Chạy `pnpm payments:backfill --apply` trên **DEV**, rồi `pnpm payments:shadow-compare`, đọc bảng chênh lệch. **Chưa lật cờ sổ mới.**
