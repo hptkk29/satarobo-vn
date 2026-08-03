@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
+import { computeDueNow } from "@/lib/payments/due-now";
+import { markInstallmentPaid } from "@/lib/orders/installments";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import {
   decideSepayAction,
@@ -78,11 +80,30 @@ export async function POST(req: NextRequest) {
           leadId: true,
           gatewayTxnId: true,
           discountApprovalStatus: true,
+          installmentApprovalStatus: true,
+          installments: { select: { soDot: true, amount: true, status: true } },
         },
       })
     : null;
 
-  const decision = decideSepayAction({ payload, order });
+  // Số phải thu NGAY: khách chọn 2 đợt thì là đợt 1, không phải tổng đơn — dùng
+  // đúng con số mà QR đã in ra (lib/payments/due-now.ts) để đối khớp.
+  const paidAgg = order
+    ? await db.payment.aggregate({
+        where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+        _sum: { amount: true },
+      })
+    : null;
+  const dueNow = order
+    ? computeDueNow({
+        totalAmount: order.totalAmount,
+        paidAmount: paidAgg?._sum.amount ?? 0,
+        installments: order.installments,
+        installmentApprovalStatus: order.installmentApprovalStatus,
+      })
+    : null;
+
+  const decision = decideSepayAction({ payload, order, dueNow: dueNow ?? undefined });
 
   if (decision.action !== "CONFIRM") {
     await logIntegration({
@@ -128,20 +149,43 @@ export async function POST(req: NextRequest) {
       });
 
       // Ghi sổ kế toán y như đường xác nhận tay (idempotent theo marker).
-      const recorded = await tx.payment.aggregate({
-        where: { orderId: decision.orderId, saleStatus: "RECORDED", deletedAt: null },
-        _count: { _all: true },
-      });
-      if (recorded._count._all === 0) {
-        await ensureOrderPaymentRecorded(tx, {
-          orderId: decision.orderId,
-          amount: order!.totalAmount,
-          leadId: order!.leadId,
-          centerId: order!.centerId,
-          actor: SYSTEM_ACTOR,
+      // ⚠️ Khách đóng theo ĐỢT: khoản phải ghi đúng số đợt vừa thu với marker
+      // [auto:order-installment:dotN] — ghi bằng tổng đơn qua đường
+      // [auto:order-confirm] là phá bất biến "2 nguồn auto-Payment loại trừ nhau"
+      // (đợt 2 sau đó sẽ cộng chồng lên). Đợt do markInstallmentPaid lo, ngoài tx.
+      if (decision.soDot == null) {
+        const recorded = await tx.payment.aggregate({
+          where: { orderId: decision.orderId, saleStatus: "RECORDED", deletedAt: null },
+          _count: { _all: true },
         });
+        if (recorded._count._all === 0) {
+          await ensureOrderPaymentRecorded(tx, {
+            orderId: decision.orderId,
+            amount: decision.amount,
+            leadId: order!.leadId,
+            centerId: order!.centerId,
+            actor: SYSTEM_ACTOR,
+          });
+        }
       }
     });
+
+    // Đóng theo đợt → đánh dấu đợt vừa thu là PAID (hàm này tự ghi Payment với
+    // marker theo soDot + tôn trọng trạng thái duyệt kế hoạch). Ngoài transaction
+    // trên vì nó tự mở transaction riêng.
+    if (decision.soDot != null) {
+      const inst = order!.installments.find((i) => i.soDot === decision.soDot);
+      const instRow = inst
+        ? await db.orderInstallment.findFirst({
+            where: { orderId: decision.orderId, soDot: decision.soDot },
+            select: { id: true },
+          })
+        : null;
+      if (instRow) {
+        const res = await markInstallmentPaid(instRow.id, null, decision.orderId);
+        if (!res.ok) console.error("[sepay] markInstallmentPaid:", res.error);
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown";
     const alreadyHandled = message === "ORDER_ALREADY_HANDLED";

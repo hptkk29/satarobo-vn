@@ -19,7 +19,6 @@ import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
-import { validateAndComputeDiscount } from "@/lib/vouchers/compute";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { renderTemplate } from "@/lib/email/render";
@@ -164,47 +163,8 @@ export async function createOrderManualAction(input: unknown) {
     0,
   );
 
-  // Voucher: validate + compute discount BEFORE total calculation.
-  // Server is source of truth — discountAmount sent from UI is overridden
-  // when a valid voucher code is provided.
-  let voucherInfo: {
-    voucherId: string;
-    voucherCode: string;
-    discountAmount: number;
-  } | null = null;
-
-  if (data.voucherCode?.trim()) {
-    // For PRODUCT orders, pass productId so KIT_ROBOT/SENSOR vouchers can
-    // verify category match.
-    const productIdForVoucher =
-      data.type === "PRODUCT" ? (data.items[0]?.productId ?? null) : null;
-
-    const voucherResult = await validateAndComputeDiscount({
-      code: data.voucherCode,
-      orderType: data.type,
-      subtotal,
-      customerPhone: data.customerPhone,
-      productId: productIdForVoucher,
-    });
-
-    if (!voucherResult.ok) {
-      return {
-        ok: false as const,
-        error: `Voucher: ${voucherResult.message}`,
-      };
-    }
-
-    voucherInfo = {
-      voucherId: voucherResult.voucherId,
-      voucherCode: voucherResult.voucherCode,
-      discountAmount: voucherResult.discountAmount,
-    };
-    data.discountAmount = voucherResult.discountAmount;
-  }
-
-  // BGĐ 31/07 — giảm giá theo %: server tự quy ra số tiền (nguồn sự thật), chỉ áp
-  // khi KHÔNG dùng voucher (voucher đã tự tính discountAmount ở trên).
-  if (!voucherInfo && data.discountPercent && data.discountPercent > 0) {
+  // BGĐ 31/07 — giảm giá theo %: server tự quy ra số tiền (nguồn sự thật).
+  if (data.discountPercent && data.discountPercent > 0) {
     data.discountAmount = discountFromPercent(subtotal, data.discountPercent);
   }
 
@@ -217,7 +177,6 @@ export async function createOrderManualAction(input: unknown) {
   // được xác nhận (đơn tạo ra ở trạng thái chờ duyệt giảm giá).
   const discountNeedsApproval = needsDiscountApproval({
     discountAmount: data.discountAmount,
-    voucherCode: voucherInfo?.voucherCode ?? data.voucherCode,
   });
   if (discountNeedsApproval && !data.discountReason?.trim()) {
     return { ok: false as const, error: "Nhập giải trình giảm giá" };
@@ -344,13 +303,12 @@ export async function createOrderManualAction(input: unknown) {
         subtotal,
         discountAmount: data.discountAmount,
         // BGĐ 31/07 — snapshot cách nhập giảm giá + giải trình + cờ chờ duyệt.
-        discountPercent: !voucherInfo ? (data.discountPercent ?? null) : null,
+        discountPercent: data.discountPercent ?? null,
         discountReason: discountNeedsApproval ? (data.discountReason?.trim() ?? null) : null,
         discountApprovalStatus: discountNeedsApproval ? "PENDING_APPROVAL" : null,
         discountRequestedById: discountNeedsApproval ? actorId : null,
         shippingFee: data.shippingFee,
         totalAmount,
-        voucherCode: voucherInfo?.voucherCode ?? data.voucherCode?.trim() ?? null,
         customerNote: data.customerNote?.trim() || null,
         internalNote: data.internalNote?.trim() || null,
         items: {
@@ -402,31 +360,6 @@ export async function createOrderManualAction(input: unknown) {
       });
     }
 
-    // Voucher redemption + atomic increment (Sprint 5.7.1).
-    if (voucherInfo) {
-      await tx.voucherRedemption.create({
-        data: {
-          voucherId: voucherInfo.voucherId,
-          orderId: order.id,
-          customerPhone: data.customerPhone.trim(),
-          customerId: null, // manual orders không có User account
-          discountApplied: voucherInfo.discountAmount,
-        },
-      });
-
-      // Atomic increment + race-condition guard. Nếu 2 đơn cùng vớt
-      // voucher cuối cùng, tx sẽ rollback nhánh thứ 2.
-      const updated = await tx.voucher.update({
-        where: { id: voucherInfo.voucherId },
-        data: { usedCount: { increment: 1 } },
-        select: { usedCount: true, quantity: true },
-      });
-
-      if (updated.quantity != null && updated.usedCount > updated.quantity) {
-        throw new Error("VOUCHER_QUANTITY_EXCEEDED_RACE");
-      }
-    }
-
       return order;
     }),
   );
@@ -435,10 +368,6 @@ export async function createOrderManualAction(input: unknown) {
   if (productSnapshot) {
     revalidatePath("/products");
     revalidatePath(`/products/${productSnapshot.productId}`);
-  }
-  if (voucherInfo) {
-    revalidatePath("/vouchers");
-    revalidatePath(`/vouchers/${voucherInfo.voucherId}`);
   }
 
   sendEmailForTrigger({
@@ -485,43 +414,6 @@ function escapeHtml(s: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-// ─── PREVIEW VOUCHER (no DB write) ──────────────────────────────────
-export async function previewVoucherAction(input: {
-  code: string;
-  orderType: OrderType;
-  subtotal: number;
-  customerPhone: string;
-  productId?: string | null;
-}) {
-  await requireOrdersManage();
-
-  if (!input.code?.trim()) {
-    return { ok: false as const, error: "Vui lòng nhập mã voucher" };
-  }
-  if (!input.customerPhone?.trim()) {
-    return { ok: false as const, error: "Vui lòng nhập SĐT khách trước" };
-  }
-  if (input.subtotal <= 0) {
-    return { ok: false as const, error: "Vui lòng chọn sản phẩm trước" };
-  }
-
-  const result = await validateAndComputeDiscount({
-    ...input,
-    productId: input.productId ?? null,
-  });
-  if (!result.ok) {
-    return { ok: false as const, error: result.message };
-  }
-
-  return {
-    ok: true as const,
-    voucherId: result.voucherId,
-    voucherCode: result.voucherCode,
-    voucherName: result.voucherName,
-    discountAmount: result.discountAmount,
-  };
 }
 
 // ─── CHANGE STATUS ──────────────────────────────────────────────────

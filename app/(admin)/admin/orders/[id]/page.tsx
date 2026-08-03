@@ -10,6 +10,7 @@ import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import { getPaymentConfig, buildTransferContent, buildVietQrImageUrl } from "@/lib/payments/vietqr";
+import { computeDueNow } from "@/lib/payments/due-now";
 import { maskPhone, maskEmail } from "@/lib/utils";
 import type { OrderStatus } from "@prisma/client";
 
@@ -55,13 +56,6 @@ export default async function OrderDetailPage({ params }: Props) {
       lead: { select: { id: true, parentName: true } },
       center: { select: { id: true, name: true } },
       history: { orderBy: { createdAt: "desc" } },
-      voucherRedemption: {
-        include: {
-          voucher: {
-            select: { id: true, code: true, name: true, type: true },
-          },
-        },
-      },
       // OD1 — kế hoạch 2 đợt kèm reminderDays (số ngày nhắc trước hạn đợt 2) để pre-fill.
       installments: {
         orderBy: { soDot: "asc" },
@@ -109,7 +103,21 @@ export default async function OrderDetailPage({ params }: Props) {
     // BGĐ 31/07 — mã đơn trong nội dung CK để webhook SePay tự khớp & xác nhận.
     order.code,
   );
-  const qrUrl = buildVietQrImageUrl(payCfg, order.totalAmount, transferContent);
+  // QR in SỐ PHẢI THU NGAY, không phải tổng đơn: khách chọn 2 đợt thì quét đóng
+  // đợt 1. Dùng chung `computeDueNow` với webhook SePay — hai bên phải cùng một
+  // con số, lệch là QR in một đằng máy đối khớp một nẻo (khách trả đúng vẫn bị
+  // xếp vào "trả thiếu → xử lý tay").
+  const paidSoFar = await sdb.payment.aggregate({
+    where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+    _sum: { amount: true },
+  });
+  const dueNow = computeDueNow({
+    totalAmount: order.totalAmount,
+    paidAmount: paidSoFar._sum.amount ?? 0,
+    installments: order.installments,
+    installmentApprovalStatus: order.installmentApprovalStatus,
+  });
+  const qrUrl = buildVietQrImageUrl(payCfg, dueNow.amount, transferContent);
 
   const emailTemplates = canManage
     ? await sdb.emailTemplate.findMany({
@@ -217,6 +225,7 @@ export default async function OrderDetailPage({ params }: Props) {
         canApprove={canApprove}
         canApproveDiscount={canApproveDiscount}
         qrUrl={qrUrl}
+        dueNow={dueNow}
         transferContent={transferContent}
         paymentMethods={paymentMethods}
         accounting={{

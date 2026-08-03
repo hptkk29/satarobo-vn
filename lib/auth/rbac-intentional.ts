@@ -44,7 +44,7 @@ export const INTENTIONAL: Partial<Record<Role, readonly string[]>> = {
     // HAI việc, để sót một cái ở v1-only là bỏ quên chứ không phải quyết định.
     // Tiền & kho tập trung → HO_ACCOUNTANT
     "payments:manage", "orders:manage", "installments:approve",
-    "vouchers:manage", "products:manage",
+    "products:manage",
     "inventory:edit", "inventory:audit", "kits:edit",
     // Nhân sự & tuyển dụng → CENTER_HR
     "employees:edit", "jobs:create", "jobs:edit",

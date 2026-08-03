@@ -258,8 +258,6 @@ export type Action =
   | "orders:view-pii" // che SĐT/email/địa chỉ khách trên đơn hàng — vai CRM/kế toán mới xem đầy đủ
 
   // --- Phase 5.7 — Vouchers ---
-  | "vouchers:view"
-  | "vouchers:manage"
 
   // --- Phase 5.10 — Products (sales/rental catalog) ---
   | "products:view"
@@ -581,8 +579,6 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "orders:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
 
   // --- Phase 5.7 — Vouchers ---
-  "vouchers:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT"],
-  "vouchers:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "ACCOUNTANT"],
 
   // --- Phase 5.10 — Products ---
   "products:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT"],

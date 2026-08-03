@@ -40,7 +40,27 @@ describe("decideSepayAction", () => {
       payload: { id: 1, transferType: "in", transferAmount: 5_000_000 },
       order: baseOrder,
     });
-    expect(r).toEqual({ action: "CONFIRM", orderId: "o1", amount: 5_000_000 });
+    expect(r).toEqual({ action: "CONFIRM", orderId: "o1", amount: 5_000_000, soDot: null });
+  });
+
+  // 03/08 — khách chọn đóng 2 đợt: ngưỡng đối khớp là ĐỢT 1, không phải tổng đơn.
+  // Không có ca này thì mọi giao dịch trả góp rơi vào "trả thiếu → xử lý tay".
+  it("đóng ĐỢT 1 (nhỏ hơn tổng đơn) → vẫn CONFIRM + trả kèm soDot", () => {
+    const r = decideSepayAction({
+      payload: { id: 1, transferType: "in", transferAmount: 3_000_000 },
+      order: baseOrder,
+      dueNow: { amount: 3_000_000, soDot: 1 },
+    });
+    expect(r).toEqual({ action: "CONFIRM", orderId: "o1", amount: 3_000_000, soDot: 1 });
+  });
+
+  it("đóng THIẾU cả so với đợt 1 → MANUAL", () => {
+    const r = decideSepayAction({
+      payload: { id: 1, transferType: "in", transferAmount: 1_000_000 },
+      order: baseOrder,
+      dueNow: { amount: 3_000_000, soDot: 1 },
+    });
+    expect(r.action).toBe("MANUAL");
   });
 
   it("trả DƯ vẫn xác nhận (chuyển thừa không chặn giao dịch)", () => {

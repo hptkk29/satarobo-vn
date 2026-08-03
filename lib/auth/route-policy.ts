@@ -106,6 +106,7 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "classes",
   "compliance",
   "cong-no",
+  "bien-dong-so-du",
   "convert-conflicts",
   "course-packages",
   "course-prerequisites",
@@ -167,7 +168,6 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "trial-classes",
   "trials",
   "users",
-  "vouchers",
 ]);
 
 /** First path segment, e.g. "/leads/123" → "leads". */
