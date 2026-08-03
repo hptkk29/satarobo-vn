@@ -5,6 +5,7 @@ import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { computeDueNow } from "@/lib/payments/due-now";
+import { ingestPayosWebhook } from "@/lib/payments/payos-ingest";
 import { markInstallmentPaid } from "@/lib/orders/installments";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import {
@@ -118,6 +119,38 @@ export async function POST(req: NextRequest) {
   }
 
   const txnId = payload.id != null ? String(payload.id) : null;
+
+  // ── SỔ MỚI trước ────────────────────────────────────────────────────────────
+  // payOS còn chờ xác thực doanh nghiệp (TGĐ ký), nên SePay là cổng ĐANG CHẠY
+  // THẬT — nó phải nuôi được sổ thu theo đợt, nếu không thì cả cơ chế phiếu thu
+  // chỉ là code chết. Dùng CHUNG `ingestPayosWebhook` (đã tham số hoá provider):
+  // ghi BankTransaction, phân bổ waterfall, ghi song song sổ cũ, side-effect sau
+  // commit — một đường duy nhất cho cả hai cổng.
+  //
+  // Không khớp được phiếu thu nào (đơn cũ chưa backfill) → LÙI về đường ghi sổ cũ
+  // bên dưới, giữ nguyên hành vi đang chạy. Đây là cầu chuyển tiếp, không phải
+  // nhánh chết: sau khi chạy backfill thì mọi đơn đều có phiếu thu.
+  const viaLedger = await ingestPayosWebhook(
+    {
+      orderCode: payload.referenceCode ?? undefined,
+      reference: payload.referenceCode ?? undefined,
+      description: payload.content ?? payload.description ?? undefined,
+      amount: decision.amount,
+      transactionDateTime: payload.transactionDate ?? undefined,
+      accountNumber: payload.accountNumber ?? undefined,
+      virtualAccountNumber: undefined,
+      paymentLinkId: txnId ?? undefined,
+    },
+    "SEPAY",
+  ).catch((err) => {
+    console.error("[sepay] ingest sổ mới lỗi, lùi về sổ cũ:", err);
+    return null;
+  });
+
+  if (viaLedger && (viaLedger.status === "MATCHED" || viaLedger.status === "DUPLICATE")) {
+    await logIntegration({ action: "CONFIRM_ORDER", status: "SUCCESS", payload });
+    return NextResponse.json({ success: true, handled: true, orderCode, ledger: "v2" });
+  }
 
   try {
     await db.$transaction(async (tx) => {
