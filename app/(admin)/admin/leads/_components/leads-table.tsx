@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 import {
   LEAD_STATUS_LABEL as STATUS_LABELS,
@@ -92,12 +93,21 @@ function StatusCell({
     <div className="relative flex items-center gap-1.5">
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
       <select
-        defaultValue={lead.status}
+        // `value` chứ không phải `defaultValue`: khi server TỪ CHỐI chuyển trạng thái,
+        // ô select phải quay về trạng thái thật. Trước 03/08 dùng defaultValue + bỏ
+        // qua kết quả action ⇒ chọn "Đã đăng ký" trên lead chưa đủ điều kiện thì ô
+        // vẫn hiện "Đã đăng ký" trong khi DB không đổi gì, không báo một chữ nào.
+        value={lead.status}
         disabled={pending}
         onClick={e => e.stopPropagation()}
         onChange={e => {
+          const next = e.target.value
           startTransition(async () => {
-            await updateLeadStatus(lead.id, e.target.value)
+            const res = await updateLeadStatus(lead.id, next)
+            if (!res.ok) {
+              // Guard pipeline (R7-01) chặn có lý do — nói rõ lý do cho sale.
+              toast.error(res.error ?? 'Không đổi được trạng thái')
+            }
           })
         }}
         className={`rounded-full border-0 py-0.5 pl-2.5 pr-6 text-xs font-semibold focus:ring-2 focus:ring-primary/20 ${STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS] ?? 'bg-gray-100 text-gray-500'}`}
