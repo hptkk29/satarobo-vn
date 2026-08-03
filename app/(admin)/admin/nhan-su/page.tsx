@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth/permissions";
 import { EmployeesAdminTable } from "@/components/admin/nhan-su/employees-admin-table";
 import type { Department, EmploymentStatus, Prisma } from "@prisma/client";
+import { phoneSearchTerm } from "@/lib/phone";
 
 export const metadata = { title: "Quản lý nhân sự | Admin" };
 
@@ -77,6 +78,8 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
   }
 
   const q = params.q?.trim() ?? "";
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = phoneSearchTerm(q) ?? q;
   const departmentParam =
     params.department && DEPARTMENTS.includes(params.department as Department)
       ? (params.department as Department)
@@ -96,7 +99,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
   if (q) {
     where.OR = [
       { fullName: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q } },
+      { phone: { contains: qPhone } },
       { email: { contains: q, mode: "insensitive" } },
       { employeeCode: { contains: q, mode: "insensitive" } },
     ];

@@ -10,6 +10,7 @@ import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
 import { formatDateVN } from "@/lib/format/date";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskPhone } from "@/lib/utils";
+import { phoneSearchTerm } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Đăng ký học | Admin" };
@@ -67,6 +68,8 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
 
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = q ? (phoneSearchTerm(q) ?? q) : q;
   const statusParam = sp.status;
   const classFilter = sp.classId?.trim() || undefined;
   const centerFilter = sp.centerId?.trim() || undefined;
@@ -93,8 +96,8 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (q) {
     where.OR = [
       { student: { name: { contains: q, mode: "insensitive" } } },
-      { student: { parentPhone: { contains: q } } },
-      { student: { phone: { contains: q } } },
+      { student: { parentPhone: { contains: qPhone } } },
+      { student: { phone: { contains: qPhone } } },
       { class: { name: { contains: q, mode: "insensitive" } } },
       { class: { classCode: { contains: q, mode: "insensitive" } } },
     ];

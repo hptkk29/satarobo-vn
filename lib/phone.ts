@@ -128,3 +128,25 @@ export function expandPhoneVariants(raws: readonly unknown[]): string[] {
 export function phoneKey(dbValue: string): string {
   return canonicalPhone(dbValue) ?? dbValue;
 }
+
+/**
+ * Chuỗi dùng cho ô TÌM KIẾM tự do (`{ phone: { contains: … } }`).
+ *
+ * Vì sao cần: đường GHI đã chuyển sang canonical `84…` nhưng dữ liệu cũ vẫn `0…`
+ * (đo 03/08 trên DEV: 99 lead dạng `0…` / 8 dạng `84…`). Nhân viên luôn gõ số theo
+ * kiểu phụ huynh đọc — `0328545229` — nên `contains` thô sẽ **im lặng bỏ sót** đúng
+ * những bản ghi mới. Đây là ca có thật: lead vừa tạo tay không tìm ra bằng số của
+ * chính nó.
+ *
+ * Cách xử lý: bỏ phần đầu (`84` hoặc `0`) rồi tìm theo phần lõi — `328545229` khớp
+ * CẢ hai dạng chỉ với một điều kiện, không phải nở OR. Gõ dở (`03285`) vẫn chạy vì
+ * lõi là tiền tố của lõi đầy đủ.
+ *
+ * Trả `null` khi chuỗi không phải dạng số → caller giữ nguyên `q` (tìm theo tên).
+ */
+export function phoneSearchTerm(raw: unknown): string | null {
+  const s = stripFormatting(raw).replace(/^\+/, "");
+  if (!/^\d{3,}$/.test(s)) return null;
+  const core = s.startsWith("84") ? s.slice(2) : s.startsWith("0") ? s.slice(1) : s;
+  return core.length >= 3 ? core : null;
+}

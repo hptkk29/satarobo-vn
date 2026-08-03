@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { canonicalPhone, formatPhoneVN, isValidPhoneVN, phoneVariants, PHONE_VN_RE } from "./phone";
+import {
+  canonicalPhone,
+  formatPhoneVN,
+  isValidPhoneVN,
+  phoneSearchTerm,
+  phoneVariants,
+  PHONE_VN_RE,
+} from "./phone";
 
 describe("[AUTH-SDT-P1-C1] canonicalPhone — gom 3 định dạng mâu thuẫn về 84XXXXXXXXX", () => {
   it.each([
@@ -89,5 +96,29 @@ describe("[AUTH-SDT-P1-C4] isValidPhoneVN", () => {
     expect(isValidPhoneVN("0905123456")).toBe(true);
     expect(isValidPhoneVN("+84 905 123 456")).toBe(true);
     expect(isValidPhoneVN("02363123456")).toBe(false);
+  });
+});
+
+describe("[AUTH-SDT-P1-C5] phoneSearchTerm — ô Tìm phải bắt được CẢ 0… lẫn 84…", () => {
+  // Ca thật 03/08: lead tạo tay lưu 84328545229, nhân viên gõ 0328545229 → không ra.
+  it("số đầy đủ dạng nội địa và dạng canonical cho CÙNG một lõi", () => {
+    expect(phoneSearchTerm("0328545229")).toBe("328545229");
+    expect(phoneSearchTerm("84328545229")).toBe("328545229");
+    expect(phoneSearchTerm("+84 328 545 229")).toBe("328545229");
+  });
+
+  it("lõi là tiền tố → gõ dở vẫn tìm được", () => {
+    expect("84328545229".includes(phoneSearchTerm("03285")!)).toBe(true);
+    expect("0328545229".includes(phoneSearchTerm("03285")!)).toBe(true);
+  });
+
+  it("không phải chuỗi số → null để caller tìm theo tên", () => {
+    expect(phoneSearchTerm("Nguyễn Văn A")).toBeNull();
+    expect(phoneSearchTerm("")).toBeNull();
+    expect(phoneSearchTerm("84")).toBeNull();
+  });
+
+  it("số cố định vẫn tra được (ô tìm không được kén như canonicalPhone)", () => {
+    expect(phoneSearchTerm("02363123456")).toBe("2363123456");
   });
 });

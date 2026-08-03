@@ -11,6 +11,7 @@ import { getSetting } from "@/lib/settings/service";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskPhone } from "@/lib/utils";
 import { StudentStatus, type Prisma } from "@prisma/client";
+import { phoneSearchTerm } from "@/lib/phone";
 import {
   buildLifecycleWhere,
   postFilterFrequentlyAbsent,
@@ -127,6 +128,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   const sp = await searchParams;
   const view: LifecycleView = isValidView(sp.view) ? sp.view : "all";
   const q = sp.q?.trim() ?? "";
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = phoneSearchTerm(q) ?? q;
   const centerId = sp.centerId?.trim() ?? "";
   const gradeRaw = sp.grade?.trim() ?? "";
   const grade =
@@ -148,8 +151,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
       { name: { contains: q, mode: "insensitive" } },
       { studentCode: { contains: q, mode: "insensitive" } },
       { parentName: { contains: q, mode: "insensitive" } },
-      { parentPhone: { contains: q } },
-      { phone: { contains: q } },
+      { parentPhone: { contains: qPhone } },
+      { phone: { contains: qPhone } },
     ];
   }
   if (centerId) baseFilters.preferredCenterId = centerId;

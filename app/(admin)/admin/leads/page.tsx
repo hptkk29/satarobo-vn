@@ -11,6 +11,7 @@ import type { LeadRow } from './_components/leads-table'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
 import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
+import { phoneSearchTerm } from '@/lib/phone'
 
 const PAGE_SIZE = 20
 const KANBAN_LIMIT = 500
@@ -56,6 +57,8 @@ export default async function LeadsPage({
   const page = Math.max(1, Number(params.page ?? 1))
   const statusParam = params.status as LeadStatus | undefined
   const q = params.q?.trim()
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót. Xem lib/phone.ts.
+  const qPhone = q ? (phoneSearchTerm(q) ?? q) : q
   const statusFilter =
     statusParam && ALL_LEAD_STATUSES.includes(statusParam)
       ? statusParam
@@ -104,7 +107,7 @@ export default async function LeadsPage({
       ? {
           OR: [
             { parentName: { contains: q, mode: 'insensitive' as const } },
-            { phone: { contains: q } },
+            { phone: { contains: qPhone } },
             { childName: { contains: q, mode: 'insensitive' as const } },
           ],
         }

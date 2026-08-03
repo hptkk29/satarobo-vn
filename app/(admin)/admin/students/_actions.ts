@@ -29,6 +29,7 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
+import { phoneSearchTerm } from "@/lib/phone";
 
 type ActionResult = { error?: string };
 
@@ -1117,6 +1118,8 @@ export async function searchLinkableStudents(
   if (!(await checkPermission("students:edit"))) return { ok: false, error: "Không có quyền" };
 
   const q = query.trim();
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = phoneSearchTerm(q) ?? q;
   if (q.length < 1) return { ok: true, items: [] };
 
   const actor = await resolveActor(session.user.id);
@@ -1136,7 +1139,7 @@ export async function searchLinkableStudents(
       OR: [
         { name: { contains: q, mode: "insensitive" } },
         { studentCode: { contains: q, mode: "insensitive" } },
-        { parentPhone: { contains: q } },
+        { parentPhone: { contains: qPhone } },
       ],
     },
     orderBy: { name: "asc" },

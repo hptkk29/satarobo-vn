@@ -9,6 +9,7 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
+import { phoneSearchTerm } from "@/lib/phone";
 // CONTRACT (R7-02) — lib/trial/service.ts do agent song song tạo; import theo tên.
 // Typecheck gộp cuối sẽ resolve. Mỗi action chỉ "inspect {ok}" + revalidate.
 import {
@@ -337,6 +338,8 @@ export async function searchTrialCandidatesAction(input: {
   if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
 
   const q = (input.query ?? "").trim();
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = phoneSearchTerm(q) ?? q;
   const sdb = scopedDb(actor);
   // con CHƯA ở lớp ACTIVE nào (giải phóng partial-unique 1 lớp ACTIVE/con).
   const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
@@ -349,7 +352,7 @@ export async function searchTrialCandidatesAction(input: {
         ? {
             OR: [
               { parentName: { contains: q, mode: "insensitive" as const } },
-              { phone: { contains: q } },
+              { phone: { contains: qPhone } },
               { children: { some: { fullName: { contains: q, mode: "insensitive" as const } } } },
             ],
           }

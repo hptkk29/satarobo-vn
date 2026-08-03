@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { LeadStatus } from '@prisma/client'
 import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
+import { phoneSearchTerm } from '@/lib/phone'
 
 const VALID_STATUSES: LeadStatus[] = ALL_LEAD_STATUSES
 
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const statusParam = searchParams.get('status') as LeadStatus | null
   const q = searchParams.get('q')?.trim()
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = q ? (phoneSearchTerm(q) ?? q) : q
 
   const statusFilter = statusParam && VALID_STATUSES.includes(statusParam) ? statusParam : undefined
 
@@ -39,7 +42,7 @@ export async function GET(req: NextRequest) {
     ...(q ? {
       OR: [
         { parentName: { contains: q, mode: 'insensitive' as const } },
-        { phone: { contains: q } },
+        { phone: { contains: qPhone } },
         { childName: { contains: q, mode: 'insensitive' as const } },
       ],
     } : {}),
