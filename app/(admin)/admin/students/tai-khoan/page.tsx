@@ -128,7 +128,7 @@ export default async function ParentAccountsPage({
           <p className="mt-1 text-sm text-gray-600">
             Theo dõi tài khoản chờ kích hoạt · gửi lại mã OTP · báo cấp tài khoản qua Zalo · xuất
             danh sách gọi điện. Phụ huynh tự kích hoạt tại{' '}
-            <span className="font-mono">hocvien.satarobo.vn/kich-hoat</span> (nhập SĐT → nhận OTP
+            <span className="font-mono">satarobo.vn/kich-hoat</span> (nhập SĐT → nhận OTP
             Zalo → đặt mật khẩu).
           </p>
         </div>

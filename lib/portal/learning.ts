@@ -111,7 +111,7 @@ export async function getStudentAttendanceSummaries(
   studentId: string,
 ): Promise<ClassAttendanceSummary[]> {
   const enrollments = await db.enrollment.findMany({
-    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] } },
+    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
     select: {
       id: true,
       class: { select: { id: true, name: true, course: { select: { name: true } } } },
@@ -222,16 +222,32 @@ export type LessonRow = {
   objectives: string[];
   materials: string[];
   taughtAt: string | null;
-  documents: { id: string; title: string; type: string; fileUrl: string }[];
+  // type: null với file GV upload trực tiếp (AssignmentAttachment không có DocumentType).
+  documents: { id: string; title: string; type: string | null; fileUrl: string }[];
 };
 
-/** Bài giảng = lesson đã được dạy (có ClassSession.lessonId) + tài liệu đính kèm. */
+/**
+ * Bài giảng = lesson đã được dạy (có ClassSession.lessonId) + tài liệu GV ĐÃ GIAO.
+ *
+ * LUẬT 02/08/2026 (chủ dự án chốt): PH CHỈ thấy bài tập/file hướng dẫn GV gửi cho
+ * CHÍNH LỚP của con vào buổi đó — TUYỆT ĐỐI KHÔNG thấy giáo án nội bộ. Vì vậy
+ * nguồn tài liệu = Assignment PUBLISHED/CLOSED của lớp gắn lesson (hành động giao
+ * bài), KHÔNG phải Document.isPublic — cờ đó là cờ TOÀN CỤC của ngân hàng tài liệu
+ * theo Lesson khung CT (admin bật 1 lần là PH mọi lớp từng học lesson đều thấy).
+ */
 export async function getStudentLessons(studentId: string): Promise<LessonRow[]> {
   const classIds = await classIdsFor(studentId);
   if (classIds.length === 0) return [];
 
   const taught = await db.classSession.findMany({
-    where: { classId: { in: classIds }, lessonId: { not: null }, date: { lte: new Date() } },
+    where: {
+      classId: { in: classIds },
+      lessonId: { not: null },
+      date: { lte: new Date() },
+      // Buổi HỦY giữ nguyên date+lessonId (R7-06) → không lọc là PH thấy bài của
+      // buổi chưa học. Cùng tiền lệ getStudentUpcomingSessions.
+      status: { not: "CANCELLED" },
+    },
     select: { lessonId: true, date: true },
     orderBy: { date: "asc" },
   });
@@ -242,27 +258,65 @@ export async function getStudentLessons(studentId: string): Promise<LessonRow[]>
   const lessonIds = [...lessonDate.keys()];
   if (lessonIds.length === 0) return [];
 
-  const lessons = await db.lesson.findMany({
-    where: { id: { in: lessonIds } },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      content: true,
-      objectives: true,
-      materials: true,
-      order: true,
-      documents: {
-        // CHỈ tài liệu đánh dấu Public — admin UI ghi rõ "Public (HS/PH xem được)";
-        // thiếu where này là phụ huynh thấy cả giáo án/tài liệu nội bộ của bài.
-        // (Tài liệu GV chủ động đính vào BÀI TẬP thì khác — đó là phân phối có chủ đích.)
-        where: { isPublic: true },
-        select: { id: true, title: true, type: true, fileUrl: true },
-        orderBy: { createdAt: "asc" },
+  // Tài liệu cho PH: gom từ bài GV ĐÃ GIAO (PUBLISHED/CLOSED — DRAFT auto-sinh từ
+  // template KHÔNG tính) cho chính lớp của con, gắn đúng lesson đang render.
+  // 2 nguồn file của 1 bài: AssignmentDocument→document (ngân hàng GV đính vào bài)
+  // + AssignmentAttachment (file GV upload trực tiếp — BGĐ 31/07).
+  const [lessons, publishedAssignments] = await Promise.all([
+    db.lesson.findMany({
+      where: { id: { in: lessonIds } },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        content: true,
+        objectives: true,
+        materials: true,
+        order: true,
       },
-    },
-    orderBy: { order: "asc" },
-  });
+      orderBy: { order: "asc" },
+    }),
+    db.assignment.findMany({
+      where: {
+        classId: { in: classIds },
+        lessonId: { in: lessonIds },
+        status: { in: ["PUBLISHED", "CLOSED"] },
+      },
+      select: {
+        lessonId: true,
+        documents: {
+          select: { document: { select: { id: true, title: true, type: true, fileUrl: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+        attachments: {
+          select: { id: true, fileName: true, fileUrl: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: { assignedAt: "asc" },
+    }),
+  ]);
+
+  const docsByLesson = new Map<string, LessonRow["documents"]>();
+  for (const a of publishedAssignments) {
+    if (!a.lessonId) continue;
+    const list = docsByLesson.get(a.lessonId) ?? [];
+    for (const d of a.documents) {
+      // Dedupe: cùng 1 Document ngân hàng có thể được đính vào nhiều bài của lesson.
+      if (!list.some((x) => x.id === d.document.id)) {
+        list.push({
+          id: d.document.id,
+          title: d.document.title,
+          type: d.document.type,
+          fileUrl: d.document.fileUrl,
+        });
+      }
+    }
+    for (const f of a.attachments) {
+      list.push({ id: f.id, title: f.fileName, type: null, fileUrl: f.fileUrl });
+    }
+    docsByLesson.set(a.lessonId, list);
+  }
 
   return lessons.map((l) => ({
     id: l.id,
@@ -272,7 +326,7 @@ export async function getStudentLessons(studentId: string): Promise<LessonRow[]>
     objectives: l.objectives,
     materials: l.materials,
     taughtAt: lessonDate.get(l.id)?.toISOString() ?? null,
-    documents: l.documents,
+    documents: docsByLesson.get(l.id) ?? [],
   }));
 }
 
@@ -340,8 +394,29 @@ export async function getStudentExams(studentId: string): Promise<ExamRow[]> {
   if (classIds.length === 0) return [];
   const now = Date.now();
 
+  // Đề DÙNG CHUNG (classId = null) cũng được giao về nhà qua HomeworkAssignment
+  // (lib/lms/assignment.ts: `OR [{classId: null}, {classId: session.classId}]`).
+  // Trước đây danh sách này chỉ lọc theo lớp ⇒ đề chung giao rồi mà HV không thấy
+  // ở mục Bài thi — ngõ cụt. Ownership của đề chung = có HomeworkAssignment của
+  // chính HV đó (cùng luật với `studentCanAccessExam` ở lib/lms/exam-access.ts).
+  // HomeworkAssignment.examId là cột PHẲNG (không có quan hệ Exam) → lấy id rồi
+  // để chính where của exam lọc `classId: null`, không tự suy ở tầng JS.
+  const assignedExamIds = (
+    await db.homeworkAssignment.findMany({
+      where: { studentId },
+      select: { examId: true },
+      distinct: ["examId"],
+    })
+  ).map((h) => h.examId);
+
   const exams = await db.exam.findMany({
-    where: { classId: { in: classIds }, status: "PUBLISHED" },
+    where: {
+      status: "PUBLISHED",
+      OR: [
+        { classId: { in: classIds } },
+        ...(assignedExamIds.length ? [{ classId: null, id: { in: assignedExamIds } }] : []),
+      ],
+    },
     select: {
       id: true,
       title: true,
@@ -494,7 +569,10 @@ export async function getAssignmentDetail(
 ): Promise<AssignmentDetail | null> {
   const classIds = await classIdsFor(studentId);
   const a = await db.assignment.findFirst({
-    where: { id: assignmentId, classId: { in: classIds } },
+    // status: cùng bộ lọc với list (getStudentAssignments) — thiếu là bài DRAFT
+    // auto-sinh từ template (generateAssignmentsFromTemplates, kèm attachment) đọc
+    // được qua URL trước khi GV giao.
+    where: { id: assignmentId, classId: { in: classIds }, status: { in: ["PUBLISHED", "CLOSED"] } },
     select: {
       id: true,
       title: true,

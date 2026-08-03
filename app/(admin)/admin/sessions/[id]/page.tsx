@@ -93,6 +93,12 @@ export default async function SessionDetailPage({ params }: Props) {
     sess.attendances.filter((a) => PRESENT_STATUSES.has(a.status)).map((a) => a.studentId),
   );
   const fbMap = new Map(sess.studentFeedbacks.map((f) => [f.studentId, f]));
+  // FIX #6 — tick "đã nhận xét" phải KHỚP deriveSteps (_actions.ts): tính theo SỰ TỒN TẠI
+  // phiếu (mọi HS present có row StudentSessionFeedback) — phiếu rubric-only (comment
+  // null) vẫn là ĐÃ nhận xét. So "comment ≠ rỗng" như cũ làm tick lệch với server.
+  const fbStudentIds = new Set(sess.studentFeedbacks.map((f) => f.studentId));
+  const ckFeedbackDerived =
+    presentSet.size > 0 && [...presentSet].every((id) => fbStudentIds.has(id));
 
   const studentRows = enrollments.map((e) => {
     const fb = fbMap.get(e.student.id);
@@ -225,9 +231,7 @@ export default async function SessionDetailPage({ params }: Props) {
         lessonLinked={!!sess.lessonId}
         derived={{
           ckAttendance: sess.attendances.length > 0,
-          ckFeedback:
-            studentRows.filter((s) => s.present).length > 0 &&
-            studentRows.filter((s) => s.present).every((s) => s.comment.trim().length > 0),
+          ckFeedback: ckFeedbackDerived,
         }}
         stored={{
           ckClean: sess.ckClean,

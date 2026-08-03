@@ -1,4 +1,4 @@
-import type { PublishedReportCardView } from "@/lib/lms/report-card";
+import { reportCardPeriodDisplay, type PublishedReportCardView } from "@/lib/lms/report-card";
 import { SKILL_LABEL, LEVEL_LABEL as SKILL_LEVEL_LABEL } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
@@ -98,7 +98,8 @@ export function ReportCardView({ card }: { card: PublishedReportCardView }) {
           <ul className="space-y-1 text-sm">
             {card.periodComments.map((p, i) => (
               <li key={i}>
-                <span className="font-medium">{p.period}: </span>
+                {/* A1: PH không được thấy mã kỹ thuật SESSION_5/SESSION_12 — map ra nhãn VN. */}
+                <span className="font-medium">{reportCardPeriodDisplay(p.period)}: </span>
                 <span className="text-neutral-600">{p.comment}</span>
               </li>
             ))}

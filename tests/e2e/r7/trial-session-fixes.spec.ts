@@ -1,0 +1,263 @@
+/**
+ * TRIAL-SESSION-FIXES — mở thông luồng BOOK LỊCH HỌC THỬ (Sale book → GV nhận & xem).
+ * Postgres LOCAL (.env.test). Test service-level (mẫu bulk-convert): gọi thẳng
+ * lib/trial/service + lib/lms/teacher-schedule, không dựng HTTP.
+ *
+ * Phủ:
+ *  1. Tạo lớp slot (không startDate) → addTrialSession tạo buổi đúng ngày/giờ/GV (#1).
+ *  2. enroll KHÔNG truyền sessionId → auto-gán buổi SCHEDULED gần nhất; lớp không
+ *     có buổi → lỗi rõ (#2).
+ *  3. Sau (1)+(2): getTeacherTrialRoster của GV TRẢ VỀ học viên (điều đang chết).
+ *  4. getTeacherTrialSessions ≡ getTeacherTrialRoster về tập buổi (chống lệch #5),
+ *     kể cả buổi teacherId null thuộc lớp GV chính + buổi gán riêng ở lớp người khác.
+ *  5. Thêm buổi với GV KHÁC cơ sở → bị từ chối (R2-RBAC-3).
+ *  6. Enrollment cũ scheduledSessionId null → hiện ở nhóm "Chưa xếp buổi" (không tàng hình).
+ */
+import { test, expect } from "@playwright/test";
+import { db } from "../../../lib/db";
+import { resetDb, seedUser } from "../_helpers/seed";
+import {
+  createTrialClass,
+  addTrialSession,
+  enrollLeadChild,
+  vnTodayUtc,
+} from "../../../lib/trial/service";
+import {
+  getTeacherTrialRoster,
+  getTeacherTrialSessions,
+} from "../../../lib/lms/teacher-schedule";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** UTC 00:00 của (hôm nay VN + n ngày) — khớp @db.Date của TrialClassSession. */
+const plusDays = (n: number) => new Date(vnTodayUtc().getTime() + n * DAY_MS);
+
+// Cửa sổ roster như trang /teacher/trial dùng thật.
+const FROM = () => plusDays(-30);
+const TO = () => plusDays(31);
+
+test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → GV thấy", () => {
+  test.beforeEach(async () => {
+    await resetDb();
+  });
+
+  let seq = 0;
+  const uniq = () => `${Date.now().toString(36)}-${seq++}`;
+
+  async function seedCenter(code = "CS1") {
+    return db.center.create({
+      data: { code, name: `Cơ sở ${code}`, slug: `cs-${code.toLowerCase()}-${uniq()}`, address: "x" },
+    });
+  }
+
+  async function seedTeacher(centerId: string, tag = "gv") {
+    return seedUser({
+      email: `${tag}-${uniq()}@test.com`,
+      role: "TEACHER",
+      name: `GV ${tag}`,
+      centerId,
+    });
+  }
+
+  async function seedSale(centerId: string) {
+    return seedUser({
+      email: `sale-${uniq()}@test.com`,
+      role: "SALES_CSM",
+      name: "Sale Trial",
+      centerId,
+    });
+  }
+
+  async function seedLeadChild(centerId: string, childName: string) {
+    const lead = await db.lead.create({
+      data: { parentName: "PH Trial", phone: `090${String(seq++).padStart(7, "0")}`, centerId },
+    });
+    const child = await db.leadChild.create({
+      data: { leadId: lead.id, fullName: childName },
+    });
+    return { lead, child };
+  }
+
+  /** Lớp trải nghiệm slot tái sử dụng (KHÔNG startDate → KHÔNG tự sinh buổi). */
+  async function seedTrialClass(centerId: string, teacherId: string | null, actorId: string) {
+    const res = await createTrialClass({
+      name: `Lớp trải nghiệm ${uniq()}`,
+      centerId,
+      startTime: "18:00",
+      endTime: "19:30",
+      capacity: 8,
+      teacherId,
+      sessionCount: 2,
+      actorId,
+    });
+    expect(res.ok).toBe(true);
+    return res.trialClassId!;
+  }
+
+  test("[TRIAL-01] thêm buổi cho lớp slot → TrialClassSession đúng ngày/giờ, GV mặc định = GV lớp, có báo GV", async () => {
+    const center = await seedCenter();
+    const teacher = await seedTeacher(center.id);
+    const sale = await seedSale(center.id);
+    const classId = await seedTrialClass(center.id, teacher.id, sale.id);
+
+    // Lớp slot: chưa có buổi nào (đây chính là blocker cũ).
+    expect(await db.trialClassSession.count({ where: { trialClassId: classId } })).toBe(0);
+
+    const date = plusDays(2);
+    const res = await addTrialSession({
+      trialClassId: classId,
+      date,
+      startTime: "18:00",
+      endTime: "19:30",
+      actorId: sale.id, // teacherId bỏ trống → mặc định GV phụ trách lớp
+    });
+    expect(res.ok).toBe(true);
+    expect(res.sessionId).toBeTruthy();
+
+    const sess = await db.trialClassSession.findUniqueOrThrow({ where: { id: res.sessionId! } });
+    expect(sess.trialClassId).toBe(classId);
+    expect(sess.seq).toBe(1);
+    expect(sess.date.getTime()).toBe(date.getTime());
+    expect(sess.startTime).toBe("18:00");
+    expect(sess.endTime).toBe("19:30");
+    expect(sess.teacherId).toBe(teacher.id);
+    expect(sess.status).toBe("SCHEDULED");
+
+    // #6 — GV được báo qua chuông StaffNotification (actor là sale ≠ GV).
+    const notif = await db.staffNotification.findFirst({
+      where: { userId: teacher.id, dedupeKey: `trial-session.assigned:${res.sessionId}` },
+    });
+    expect(notif).not.toBeNull();
+  });
+
+  test("[TRIAL-02] enroll KHÔNG sessionId → auto-gán buổi SCHEDULED gần nhất; lớp chưa có buổi → lỗi rõ", async () => {
+    const center = await seedCenter();
+    const teacher = await seedTeacher(center.id);
+    const sale = await seedSale(center.id);
+    const classId = await seedTrialClass(center.id, teacher.id, sale.id);
+
+    // Lớp CHƯA có buổi → enroll phải bị chặn với lỗi rõ ràng (không tạo HV tàng hình).
+    const { child: childBlocked } = await seedLeadChild(center.id, "Bé Bị Chặn");
+    const blocked = await enrollLeadChild({
+      trialClassId: classId,
+      leadChildId: childBlocked.id,
+      addedById: sale.id,
+    });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error ?? "").toContain("chưa có buổi");
+    expect(await db.trialEnrollment.count()).toBe(0);
+
+    // 2 buổi tương lai (+3d trước, +1d sau) → auto-gán phải chọn buổi GẦN NHẤT (+1d).
+    const far = await addTrialSession({
+      trialClassId: classId, date: plusDays(3), startTime: "18:00", endTime: "19:30", actorId: sale.id,
+    });
+    const near = await addTrialSession({
+      trialClassId: classId, date: plusDays(1), startTime: "18:00", endTime: "19:30", actorId: sale.id,
+    });
+    expect(far.ok && near.ok).toBe(true);
+
+    const { child } = await seedLeadChild(center.id, "Bé Auto");
+    const res = await enrollLeadChild({
+      trialClassId: classId,
+      leadChildId: child.id,
+      addedById: sale.id,
+    });
+    expect(res.ok).toBe(true);
+
+    const enr = await db.trialEnrollment.findFirstOrThrow({ where: { leadChildId: child.id } });
+    expect(enr.scheduledSessionId).toBe(near.sessionId);
+  });
+
+  test("[TRIAL-03] luồng đầy đủ Sale book → roster GV TRẢ VỀ học viên", async () => {
+    const center = await seedCenter();
+    const teacher = await seedTeacher(center.id);
+    const sale = await seedSale(center.id);
+    const classId = await seedTrialClass(center.id, teacher.id, sale.id);
+
+    const added = await addTrialSession({
+      trialClassId: classId, date: plusDays(1), startTime: "18:00", endTime: "19:30", actorId: sale.id,
+    });
+    expect(added.ok).toBe(true);
+
+    const { child } = await seedLeadChild(center.id, "Bé Roster");
+    const enrolled = await enrollLeadChild({
+      trialClassId: classId,
+      leadChildId: child.id,
+      addedById: sale.id,
+    });
+    expect(enrolled.ok).toBe(true);
+
+    const roster = await getTeacherTrialRoster(teacher.id, FROM(), TO());
+    expect(roster.slots.length).toBe(1);
+    expect(roster.slots[0]!.sessionId).toBe(added.sessionId);
+    expect(roster.slots[0]!.students.map((s) => s.studentName)).toContain("Bé Roster");
+    expect(roster.unassigned).toHaveLength(0);
+  });
+
+  test("[TRIAL-04] getTeacherTrialSessions ≡ getTeacherTrialRoster về tập buổi (kể cả buổi teacherId null / buổi gán riêng)", async () => {
+    const center = await seedCenter();
+    const teacher = await seedTeacher(center.id, "gv-chinh");
+    const other = await seedTeacher(center.id, "gv-khac");
+    const sale = await seedSale(center.id);
+
+    // Lớp A: GV chính = teacher; 1 buổi KHÔNG gán GV riêng (teacherId null) —
+    // trước fix: hiện ở roster (/teacher/trial) nhưng MẤT ở lịch (/teacher/lich).
+    const classA = await seedTrialClass(center.id, teacher.id, sale.id);
+    const sesNull = await addTrialSession({
+      trialClassId: classA, date: plusDays(1), startTime: "18:00", endTime: "19:30",
+      teacherId: null, actorId: sale.id,
+    });
+    expect(sesNull.ok).toBe(true);
+
+    // Lớp B: GV chính = other; 1 buổi gán RIÊNG cho teacher (dạy thay).
+    const classB = await seedTrialClass(center.id, other.id, sale.id);
+    const sesAssigned = await addTrialSession({
+      trialClassId: classB, date: plusDays(2), startTime: "09:00", endTime: "10:30",
+      teacherId: teacher.id, actorId: sale.id,
+    });
+    expect(sesAssigned.ok).toBe(true);
+
+    const lich = await getTeacherTrialSessions(teacher.id, FROM(), TO());
+    const roster = await getTeacherTrialRoster(teacher.id, FROM(), TO());
+
+    const lichIds = lich.map((s) => s.id).sort();
+    const rosterIds = roster.slots.map((s) => s.sessionId).sort();
+    expect(lichIds).toEqual(rosterIds);
+    expect(lichIds).toEqual([sesNull.sessionId, sesAssigned.sessionId].sort());
+  });
+
+  test("[TRIAL-05] thêm buổi với GV KHÁC cơ sở → bị từ chối", async () => {
+    const cs1 = await seedCenter("CS1");
+    const cs2 = await seedCenter("CS2");
+    const teacherCs2 = await seedTeacher(cs2.id, "gv-cs2");
+    const sale = await seedSale(cs1.id);
+    const classId = await seedTrialClass(cs1.id, null, sale.id);
+
+    const res = await addTrialSession({
+      trialClassId: classId,
+      date: plusDays(1),
+      startTime: "18:00",
+      endTime: "19:30",
+      teacherId: teacherCs2.id,
+      actorId: sale.id,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error ?? "").toContain("cùng cơ sở");
+    expect(await db.trialClassSession.count({ where: { trialClassId: classId } })).toBe(0);
+  });
+
+  test("[TRIAL-06] enrollment cũ scheduledSessionId null → hiện nhóm 'Chưa xếp buổi' của roster GV", async () => {
+    const center = await seedCenter();
+    const teacher = await seedTeacher(center.id);
+    const sale = await seedSale(center.id);
+    const classId = await seedTrialClass(center.id, teacher.id, sale.id);
+    const { child } = await seedLeadChild(center.id, "Bé Data Cũ");
+
+    // Mô phỏng data cũ (enroll trước khi có auto-gán): ghi danh thẳng, không buổi.
+    await db.trialEnrollment.create({
+      data: { trialClassId: classId, leadChildId: child.id, addedById: sale.id },
+    });
+
+    const roster = await getTeacherTrialRoster(teacher.id, FROM(), TO());
+    expect(roster.unassigned.map((s) => s.studentName)).toContain("Bé Data Cũ");
+  });
+});

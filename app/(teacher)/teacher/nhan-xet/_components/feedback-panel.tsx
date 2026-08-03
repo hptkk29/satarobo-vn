@@ -4,9 +4,11 @@
 // rút về đúng data contract thật: StudentSessionFeedback = comment + rating 1-5/HV.
 // Mỗi HV 1 khối: avatar initials + tên + 5 nút sao (bấm lại sao đang chọn = bỏ chấm)
 // + textarea nhận xét. Nút "Lưu tất cả" gọi saveSessionFeedback (TÁI DÙNG action
-// admin, self-gated canManageSessionClass) 1 LẦN với đủ mọi HV đang hiển thị —
-// comment rỗng = action XOÁ nhận xét đã lưu (deleteMany). Action tự lo notify PH
-// (event comment.added + email enqueueNewFeedback) — client không thêm gì.
+// admin, self-gated canManageSessionRecord) 1 LẦN — FIX #1: CHỈ gửi dòng THỰC SỰ ĐỔI
+// (so với dữ liệu đã lưu), không còn gửi cả lớp kèm dòng trống làm server đụng vào
+// phiếu rubric chưa ai chạm. Dòng bị XOÁ comment gửi comment rỗng = server gỡ nhận
+// xét nhanh (phiếu rubric mở rộng được server GIỮ nguyên phần rubric). Action tự lo
+// notify PH (event comment.added + email khi comment đổi) — client không thêm gì.
 //
 // ⚠️ Câu 46: rows CHỈ chứa tên HV — không SĐT/email/tên PH.
 "use client";
@@ -70,16 +72,29 @@ export function FeedbackPanel({
   }
 
   function saveAll() {
-    // Gửi ĐỦ mọi HV đang hiển thị (kể cả comment rỗng = xoá) — action upsert/xoá theo dòng.
-    const items = rows.map((r) => ({
-      studentId: r.studentId,
-      comment: state[r.studentId]?.comment ?? "",
-      rating: state[r.studentId]?.rating ?? null,
-    }));
+    // FIX #1 (client) — CHỈ gửi dòng dirty (comment/sao đổi so với đã lưu). Dòng không
+    // chạm KHÔNG gửi → server không nhầm phiếu rubric-only (comment rỗng) thành lệnh xoá.
+    const items = rows
+      .filter((r) => {
+        const cur = state[r.studentId] ?? { comment: r.existingComment, rating: r.existingRating };
+        return (
+          cur.comment.trim() !== r.existingComment.trim() ||
+          (cur.rating ?? null) !== (r.existingRating ?? null)
+        );
+      })
+      .map((r) => ({
+        studentId: r.studentId,
+        comment: state[r.studentId]?.comment ?? "",
+        rating: state[r.studentId]?.rating ?? null,
+      }));
+    if (items.length === 0) {
+      toast("Không có thay đổi để lưu");
+      return;
+    }
     startTransition(async () => {
       const res = await saveSessionFeedback({ sessionId, items });
       if (res.ok) {
-        toast.success(`Đã lưu nhận xét ${rows.length} học viên`);
+        toast.success(`Đã lưu nhận xét ${items.length} học viên`);
         router.refresh();
       } else {
         toast.error(res.error);
@@ -150,8 +165,8 @@ export function FeedbackPanel({
             {pending ? "Đang lưu…" : "Lưu tất cả"}
           </Button>
           <p className="text-xs text-muted-foreground">
-            Ô nhận xét để trống khi lưu = xoá nhận xét đã lưu của học viên đó (sao chỉ được lưu
-            kèm nhận xét).
+            Xoá nội dung ô nhận xét rồi lưu = gỡ nhận xét nhanh của học viên đó (sao chỉ được
+            lưu kèm nhận xét; phiếu rubric đã chấm ở hub lớp vẫn được giữ nguyên).
           </p>
         </div>
       )}

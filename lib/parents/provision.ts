@@ -21,7 +21,10 @@ import { isAuthPhoneProvisioningEnabled } from "@/lib/flags";
 // =============================================================================
 
 const ZNS_ACCOUNT_TEMPLATE = process.env.ZALO_ZNS_TEMPLATE_ACCOUNT || null;
-const PORTAL_ACTIVATE_URL = "https://hocvien.satarobo.vn/kich-hoat";
+// Domain CHÍNH (không phải hocvien.*) — /kich-hoat mở trên mọi host (route-policy
+// PUBLIC_OTP_PATHS), và người được cấp TK không chỉ phụ huynh: nhân viên, cơ sở
+// nhượng quyền cũng đi link này (chốt chủ dự án 02/08).
+const PORTAL_ACTIVATE_URL = "https://satarobo.vn/kich-hoat";
 
 export type ProvisionParentResult =
   | { ok: true; created: boolean; userId: string }

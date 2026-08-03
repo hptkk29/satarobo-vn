@@ -20,6 +20,7 @@ import {
   getCourseCriteria,
   getEnrollmentContext,
   isReportCardEditable,
+  orderScoresByCriteria,
   type ReportCardStatusValue,
 } from "@/lib/lms/report-card";
 
@@ -271,10 +272,13 @@ export async function transitionReportCardAction(input: unknown): Promise<Result
       }),
     ]);
     const publishedAt = new Date();
+    // FIX A3: findMany scores không orderBy → snapshot đóng băng theo thứ tự DB tuỳ ý,
+    // PDF/portal đảo tiêu chí so với editor. orderScoresByCriteria xếp lại theo criteria.
+    const orderedScores = orderScoresByCriteria(scores, criteria);
     const snapshot = buildPublishedSnapshot({
       metrics,
       reportCard: { finalComment: rc.finalComment, completionStatus: rc.completionStatus, periodComments: rc.periodComments },
-      scores,
+      scores: orderedScores,
       criteria,
       student: { name: enr.studentName, studentCode: enr.studentCode },
       course: { name: enr.courseName },

@@ -45,6 +45,14 @@ export function isOverCapacity(activeCount: number, capacity: number, allowOverr
   return !allowOverride && activeCount >= capacity;
 }
 
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** Mốc UTC 00:00 của NGÀY hôm nay theo giờ VN — khớp cột @db.Date của buổi Trial. */
+export function vnTodayUtc(now = new Date()): Date {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+}
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 type DbClient = Prisma.TransactionClient | typeof db;
@@ -236,6 +244,115 @@ export async function createTrialClass(params: {
   }
 }
 
+// ─── Buổi ad-hoc (QĐ-R2-1: slot tái sử dụng — lớp không gắn ngày, buổi thêm tay) ──
+
+/**
+ * #6 — báo GV qua chuông StaffNotification khi được gán buổi/lớp trải nghiệm
+ * (mẫu notifyTeacherAttendanceEdited). Non-fatal: lỗi notify không phá nghiệp vụ.
+ */
+export async function notifyTrialTeacherAssigned(params: {
+  teacherId: string;
+  title: string;
+  body: string;
+  dedupeKey: string;
+  href?: string;
+}): Promise<void> {
+  try {
+    await db.staffNotification.upsert({
+      where: { userId_dedupeKey: { userId: params.teacherId, dedupeKey: params.dedupeKey } },
+      create: {
+        userId: params.teacherId,
+        category: "CLASS",
+        title: params.title,
+        body: params.body,
+        href: params.href ?? "/teacher/trial",
+        dedupeKey: params.dedupeKey,
+      },
+      // Gán lại/đổi nội dung → làm mới + đưa về CHƯA đọc để GV thấy.
+      update: { body: params.body, readAt: null },
+    });
+  } catch {
+    // nuốt lỗi notify — không chặn luồng chính.
+  }
+}
+
+/**
+ * #1 (BLOCKER go-live) — thêm 1 buổi ad-hoc cho lớp trải nghiệm slot-tái-sử-dụng
+ * (startDate null → createTrialClass KHÔNG sinh buổi; trước đây KHÔNG có đường nào
+ * tạo TrialClassSession ⇒ roster/lịch GV trống trơn). Buổi nhận GV/phòng của lớp
+ * làm mặc định; GV (nếu có) phải CÙNG cơ sở lớp (R2-RBAC-3).
+ */
+export async function addTrialSession(params: {
+  trialClassId: string;
+  date: Date; // UTC 00:00 của ngày VN (@db.Date)
+  startTime: string;
+  endTime: string;
+  /** undefined → mặc định GV của lớp; null → buổi chưa gán GV. */
+  teacherId?: string | null;
+  /** undefined → mặc định phòng của lớp; null → không phòng. */
+  roomId?: string | null;
+  actorId: string;
+}): Promise<{ ok: boolean; error?: string; sessionId?: string }> {
+  try {
+    const cls = await db.trialClassV2.findUnique({
+      where: { id: params.trialClassId },
+      select: { id: true, name: true, centerId: true, teacherId: true, roomId: true, status: true },
+    });
+    if (!cls) return { ok: false, error: "Lớp trải nghiệm không tồn tại" };
+    if (cls.status === "CANCELLED" || cls.status === "COMPLETED") {
+      return { ok: false, error: "Lớp đã kết thúc/đã huỷ — không thể thêm buổi" };
+    }
+
+    const teacherId = params.teacherId === undefined ? cls.teacherId : params.teacherId;
+    // R2-RBAC-3 — GV của buổi phải CÙNG cơ sở lớp (chặn gán chéo CS1↔CS2).
+    if (teacherId) {
+      const t = await db.user.findUnique({
+        where: { id: teacherId },
+        select: { centerId: true },
+      });
+      const err = teacherCenterAssignmentError(cls.centerId, [
+        { id: teacherId, centerId: t?.centerId },
+      ]);
+      if (err) return { ok: false, error: err };
+    }
+    const roomId = params.roomId === undefined ? cls.roomId : params.roomId;
+
+    const sessionId = await db.$transaction(async (tx) => {
+      const agg = await tx.trialClassSession.aggregate({
+        where: { trialClassId: params.trialClassId },
+        _max: { seq: true },
+      });
+      const created = await tx.trialClassSession.create({
+        data: {
+          trialClassId: params.trialClassId,
+          seq: (agg._max.seq ?? 0) + 1,
+          date: params.date,
+          startTime: params.startTime,
+          endTime: params.endTime,
+          roomId,
+          teacherId,
+        },
+        select: { id: true },
+      });
+      return created.id;
+    });
+
+    // #6 — báo GV được gán buổi (không tự báo mình).
+    if (teacherId && teacherId !== params.actorId) {
+      const dateStr = params.date.toLocaleDateString("vi-VN", { timeZone: "UTC" });
+      await notifyTrialTeacherAssigned({
+        teacherId,
+        title: "Bạn được phân công buổi trải nghiệm",
+        body: `Buổi ${dateStr} ${params.startTime}–${params.endTime} · lớp ${cls.name}.`,
+        dedupeKey: `trial-session.assigned:${sessionId}`,
+      });
+    }
+    return { ok: true, sessionId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Lỗi thêm buổi trải nghiệm" };
+  }
+}
+
 // ─── Ghi danh ─────────────────────────────────────────────────────────────────
 
 export async function enrollLeadChild(params: {
@@ -246,6 +363,9 @@ export async function enrollLeadChild(params: {
   // FL-R2 (QĐ-R2-W3): ngưỡng "đủ buổi" cấu hình RIÊNG từng lead (không lấy sessionCount lớp).
   // Bỏ trống → fallback sessionCount của lớp.
   totalSessions?: number;
+  // #2 — buổi (TrialClassSession) cụ thể. Bỏ trống → AUTO-GÁN buổi SCHEDULED gần nhất
+  // (roster GV ghép HV CHỈ qua scheduledSessionId — enroll không buổi = HV tàng hình).
+  sessionId?: string | null;
 }): Promise<{ ok: boolean; error?: string; overCapacity?: boolean }> {
   const allowOverride = params.allowOverride ?? false;
   try {
@@ -263,11 +383,48 @@ export async function enrollLeadChild(params: {
         return { ok: false, overCapacity: true, error: "Vượt sĩ số" };
       }
 
+      // #2 — chốt buổi cho ghi danh NGAY khi tạo (GV chỉ thấy HV qua scheduledSessionId).
+      let scheduledSessionId: string | null = params.sessionId ?? null;
+      if (scheduledSessionId) {
+        // Buổi truyền vào phải thuộc đúng lớp đang xếp (chống chọn buổi lớp khác).
+        const ses = await tx.trialClassSession.findUnique({
+          where: { id: scheduledSessionId },
+          select: { trialClassId: true },
+        });
+        if (!ses || ses.trialClassId !== params.trialClassId) {
+          return { ok: false, error: "Buổi học không thuộc lớp đã chọn" };
+        }
+      } else {
+        // Auto-gán buổi SCHEDULED gần nhất: ưu tiên buổi SẮP TỚI (ngày ≥ hôm nay VN),
+        // hết buổi tương lai → buổi SCHEDULED mới nhất. Không có buổi nào → lỗi rõ.
+        const today = vnTodayUtc();
+        const upcoming = await tx.trialClassSession.findFirst({
+          where: { trialClassId: params.trialClassId, status: "SCHEDULED", date: { gte: today } },
+          orderBy: [{ date: "asc" }, { seq: "asc" }],
+          select: { id: true },
+        });
+        const fallback = upcoming
+          ? null
+          : await tx.trialClassSession.findFirst({
+              where: { trialClassId: params.trialClassId, status: "SCHEDULED" },
+              orderBy: [{ date: "desc" }, { seq: "desc" }],
+              select: { id: true },
+            });
+        scheduledSessionId = upcoming?.id ?? fallback?.id ?? null;
+        if (!scheduledSessionId) {
+          return {
+            ok: false,
+            error: "Lớp trải nghiệm chưa có buổi học — thêm buổi trước khi xếp học viên",
+          };
+        }
+      }
+
       const enrollment = await tx.trialEnrollment.create({
         data: {
           trialClassId: params.trialClassId,
           leadChildId: params.leadChildId,
           addedById: params.addedById,
+          scheduledSessionId,
         },
       });
       await tx.leadChild.update({

@@ -11,6 +11,7 @@
 //
 // ⚠️ Câu 46 (chốt với chủ nhiệm): site GV ẨN HẲN phụ huynh cho lớp Trial — chỉ hiện
 // tên HV + năm sinh + khoá quan tâm. Helper đã strip lead.parentName/phone/email.
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ban } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -97,7 +98,7 @@ export default async function TeacherTrialPage({
   const to = new Date(today.getTime() + 31 * DAY_MS);
   const roster = await getTeacherTrialRoster(session.user.id, from, to);
 
-  const slots: TrialSlotView[] = roster.map((s) => ({
+  const slots: TrialSlotView[] = roster.slots.map((s) => ({
     sessionId: s.sessionId,
     trialClassName: s.trialClassName,
     dateKey: isoKey(s.date),
@@ -120,6 +121,42 @@ export default async function TeacherTrialPage({
         title="Học viên Trial"
         subtitle="Buổi Trial chia theo ngày và khung giờ. Sau buổi, nhập phiếu đánh giá cho từng học viên."
       />
+
+      {/* #2 — HV chưa gắn buổi cụ thể (data cũ): hiển thị riêng để không ai tàng hình. */}
+      {roster.unassigned.length > 0 && (
+        <section className="t-card mb-6 overflow-hidden">
+          <header className="border-b border-border bg-muted/40 px-5 py-3">
+            <h2 className="text-sm font-bold text-foreground">
+              Chưa xếp buổi ({roster.unassigned.length})
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Học viên đã ghi danh lớp Trial của bạn nhưng chưa gắn vào buổi cụ thể —
+              nhờ quản lý xếp buổi, hoặc nhập phiếu đánh giá trực tiếp.
+            </p>
+          </header>
+          <ul className="divide-y divide-border/60">
+            {roster.unassigned.map((st) => (
+              <li key={st.enrollmentId} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{st.studentName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {st.trialClassName}
+                    {st.birthYear ? ` · ${st.birthYear}` : ""}
+                    {st.courseName ? ` · ${st.courseName}` : ""}
+                  </p>
+                </div>
+                <Link
+                  href={`?enrollmentId=${st.enrollmentId}`}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
+                >
+                  {st.evaluated ? "Xem phiếu" : "Nhập phiếu"}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <TrialList slots={slots} />
     </div>
   );

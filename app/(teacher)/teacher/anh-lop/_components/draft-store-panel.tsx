@@ -30,16 +30,25 @@ export function DraftStorePanel({
   drafts,
   students,
   nonConsentIds,
+  sessions,
+  defaultSessionId,
 }: {
   drafts: DraftItem[];
   students: { id: string; name: string }[];
   nonConsentIds: string[];
+  /** B3: buổi của lớp (mới → cũ) để gán buổi lúc gửi — server đã hỗ trợ classSessionId. */
+  sessions: { id: string; label: string }[];
+  /** Buổi gần nhất ĐÃ diễn ra (mặc định chọn sẵn); "" = không gắn buổi. */
+  defaultSessionId: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<string[]>([]);
   const [tagged, setTagged] = useState<string[]>([]);
   const [wholeClass, setWholeClass] = useState(false);
+  // B3: buổi gắn cho cả lô lúc gửi — trước đây panel KHÔNG truyền classSessionId nên ảnh
+  // "không gắn buổi" vĩnh viễn nằm nhóm chưa phân loại, PH không xem được theo buổi.
+  const [sessionId, setSessionId] = useState(defaultSessionId);
   // Xoá 2-click: click 1 = "chắc chưa?", click 2 = xoá thật (pattern confirm-delete).
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -70,6 +79,8 @@ export function DraftStorePanel({
           mediaIds: selected.slice(i, i + 60),
           isClassWide: wholeClass,
           studentIds: wholeClass ? [] : tagged,
+          // B3: gán buổi cho cả lô lúc gửi (null = giữ nguyên/không gắn buổi).
+          classSessionId: sessionId || null,
         });
         if (!res.ok) {
           toast.error(
@@ -191,6 +202,36 @@ export function DraftStorePanel({
 
       {/* Panel hành động — chỉ có nghĩa khi đã chọn ảnh */}
       <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+        {/* B3: select buổi học — gắn buổi cho ảnh ngay lúc gửi (ghi đè nếu ảnh đã gắn
+            buổi khác; chọn "Không gắn buổi" thì giữ nguyên hiện trạng từng ảnh). */}
+        {sessions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              htmlFor="draft-session-select"
+              className="text-xs font-medium text-foreground"
+            >
+              Buổi học
+            </label>
+            <select
+              id="draft-session-select"
+              value={sessionId}
+              disabled={pending}
+              onChange={(e) => setSessionId(e.target.value)}
+              className="rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground"
+            >
+              <option value="">— Không gắn buổi —</option>
+              {sessions.map((sn) => (
+                <option key={sn.id} value={sn.id}>
+                  {sn.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-[11px] text-muted-foreground">
+              Ảnh gửi đi sẽ gắn vào buổi này (phụ huynh xem album theo buổi).
+            </span>
+          </div>
+        )}
+
         <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
           <input
             type="checkbox"

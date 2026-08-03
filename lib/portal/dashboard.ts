@@ -47,12 +47,17 @@ export async function getParentDashboard(parentUserId: string): Promise<ParentDa
   const [enrollments, nearestInstallment, openMakeupRequests, notificationCount] =
     await Promise.all([
       // Công nợ: chỉ ghi danh đã chốt giá (finalPrice/tuition) + Payment CONFIRMED (AC1).
+      // FIX-C3: ghi danh/khoản đã xóa mềm không được tính — thiếu là card "Công nợ
+      // còn lại" đếm nợ ma, lệch trang Học phí (billing.ts đã lọc).
       db.enrollment.findMany({
-        where: { studentId: { in: childIds } },
+        where: { studentId: { in: childIds }, deletedAt: null }, // FIX-C3
         select: {
           finalPrice: true,
           tuition: true,
-          payments: { where: { accountantStatus: "CONFIRMED" }, select: { amount: true } },
+          payments: {
+            where: { accountantStatus: "CONFIRMED", deletedAt: null }, // FIX-C3
+            select: { amount: true },
+          },
         },
       }),
       // Ngày đến hạn gần nhất từ đợt thanh toán CHƯA trả của các đơn của con.
@@ -176,18 +181,18 @@ export async function getParentChildrenOverview(
           select: { status: true },
         }),
         db.enrollment.findMany({
-          where: { studentId: c.id },
+          where: { studentId: c.id, deletedAt: null }, // FIX-C3 — chống "nợ ma" từ ghi danh xóa mềm
           select: {
             finalPrice: true,
             tuition: true,
             payments: {
-              where: { accountantStatus: "CONFIRMED" },
+              where: { accountantStatus: "CONFIRMED", deletedAt: null }, // FIX-C3
               select: { amount: true },
             },
           },
         }),
         db.enrollment.findFirst({
-          where: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } },
+          where: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null }, // FIX-C3
           orderBy: { createdAt: "desc" },
           select: {
             class: { select: { classCode: true } },
@@ -196,7 +201,7 @@ export async function getParentChildrenOverview(
         }),
         db.classSession.findFirst({
           where: {
-            class: { enrollments: { some: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } } } },
+            class: { enrollments: { some: { studentId: c.id, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null } } }, // FIX-C3
             date: { gte: new Date() },
             status: { not: "CANCELLED" },
           },

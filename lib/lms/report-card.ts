@@ -7,6 +7,11 @@ import "server-only";
 import { db } from "@/lib/db";
 import { attendanceSummary } from "@/lib/attendance/summary";
 import {
+  REPORT_CARD_MILESTONES,
+  milestoneLabel,
+  milestonePeriodKey,
+} from "@/lib/lms/report-card-milestone";
+import {
   attendanceRatePercent,
   computeAssignmentSummary,
   computeExamAverage,
@@ -19,6 +24,38 @@ import {
 } from "@/lib/lms/report-card-core";
 
 export * from "@/lib/lms/report-card-core";
+
+/**
+ * Nhãn hiển thị cho `periodComments[].period` phía NGƯỜI ĐỌC (portal web + PDF):
+ * khoá kỳ chuẩn SESSION_5/SESSION_12 → nhãn tiếng Việt ("Kỳ 1 — buổi 5"); period
+ * tự do cũ giữ nguyên văn. KHÔNG đổi dữ liệu snapshot (bản phát hành cũ vẫn parse
+ * nguyên trạng) — chỉ map lúc render, cùng quy tắc periodDisplayLabel của editor.
+ */
+export function reportCardPeriodDisplay(period: string): string {
+  const m = REPORT_CARD_MILESTONES.find((x) => milestonePeriodKey(x) === period.trim());
+  return m ? milestoneLabel(m) : period;
+}
+
+/**
+ * FIX A3 (THUẦN): xếp scores theo THỨ TỰ criteria (getCourseCriteria đã sort
+ * [order asc, createdAt asc]) trước khi đóng băng snapshot phát hành — findMany
+ * scores không orderBy nên thứ tự DB tuỳ ý làm PDF/portal đảo tiêu chí so với
+ * editor. Điểm của tiêu chí đã TẮT (không còn active) giữ ở cuối, không rơi mất.
+ */
+export function orderScoresByCriteria<T extends { criterionId: string }>(
+  scores: T[],
+  criteria: { id: string }[],
+): T[] {
+  const byCriterion = new Map(scores.map((s) => [s.criterionId, s]));
+  const activeIds = new Set(criteria.map((c) => c.id));
+  return [
+    ...criteria.flatMap((c) => {
+      const s = byCriterion.get(c.id);
+      return s ? [s] : [];
+    }),
+    ...scores.filter((s) => !activeIds.has(s.criterionId)),
+  ];
+}
 
 const EXAM_DONE_STATUSES = ["SUBMITTED", "GRADED", "REVIEWED"] as const;
 
@@ -113,8 +150,11 @@ export interface EnrollmentContext {
 }
 
 export async function getEnrollmentContext(enrollmentId: string): Promise<EnrollmentContext | null> {
-  const enr = await db.enrollment.findUnique({
-    where: { id: enrollmentId },
+  // FIX A2 (02/08): ghi danh XOÁ MỀM không được lọt luồng học bạ — soft-delete chỉ set
+  // deletedAt (status giữ nguyên) nên thiếu filter là HV đã xoá vẫn nhập/duyệt/PHÁT HÀNH
+  // được. Đây là cổng chung của save/transition/editor page → chặn 1 chỗ chặn cả luồng.
+  const enr = await db.enrollment.findFirst({
+    where: { id: enrollmentId, deletedAt: null },
     select: {
       id: true,
       classId: true,

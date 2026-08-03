@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { portalDb, portalTx } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
+import { studentCanAccessExam, markHomeworkAfterAttempt } from "@/lib/lms/exam-access";
 
 // =============================================================================
 // PORTAL EXAM ACTIONS — Phase T2.3
@@ -10,8 +11,6 @@ import { requireActiveStudent } from "@/lib/portal/session";
 // activeSite.studentId (con đang chọn). LMS-12: cho thi lại tới exam.maxAttempts
 // (mỗi lần = 1 ExamAttempt với attemptNo tăng dần).
 // =============================================================================
-
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 type ActionResult<T = unknown> =
   | ({ ok: true } & T)
@@ -28,24 +27,10 @@ function attemptDeadline(
   return byDuration;
 }
 
-/** HS có đang học lớp được giao đề này không. */
-async function studentOwnsExam(
-  pdb: ReturnType<typeof portalDb>,
-  studentId: string,
-  examClassId: string | null,
-): Promise<boolean> {
-  if (!examClassId) return false;
-  const enr = await pdb.enrollment.findFirst({
-    where: {
-      studentId,
-      classId: examClassId,
-      status: { in: [...ACTIVE_ENROLLMENT] },
-      deletedAt: null, // FIX-C3
-    },
-    select: { id: true },
-  });
-  return !!enr;
-}
+// Ownership đề thi: đề gắn lớp → enrollment active; đề DÙNG CHUNG (classId=null) →
+// phải có HomeworkAssignment {studentId, examId} (trước đây chặn cứng `!classId →
+// false` = ngõ cụt cho bài về nhà gắn exam dùng chung). Logic tách ra
+// lib/lms/exam-access.ts (studentCanAccessExam) để test service-level.
 
 export async function startAttempt(
   examId: string,
@@ -69,8 +54,10 @@ export async function startAttempt(
     },
   });
   if (!exam) return { ok: false, error: "Không tìm thấy đề thi" };
-  if (!(await studentOwnsExam(pdb, studentId, exam.classId))) {
-    return { ok: false, error: "Đề thi không thuộc lớp của con" };
+  if (
+    !(await studentCanAccessExam({ studentId, examId: exam.id, classId: exam.classId }))
+  ) {
+    return { ok: false, error: "Đề thi không thuộc lớp hoặc chưa được giao cho con" };
   }
   if (exam.status !== "PUBLISHED") {
     return { ok: false, error: "Đề thi chưa mở" };
@@ -277,6 +264,15 @@ export async function submitAttempt(
               passed: totalScore >= attempt.exam.passingScore,
               gradedAt: new Date(),
             },
+      });
+
+      // Bài về nhà (HomeworkAssignment) gắn đề này: ASSIGNED → SUBMITTED/GRADED,
+      // cùng transaction nộp bài. Trước đây status đứng im vĩnh viễn → PH thấy
+      // "Đã làm 0/N" dù HV đã nộp xong (lib/portal/learning + dashboard đọc h.status).
+      await markHomeworkAfterAttempt(tx, {
+        studentId,
+        examId: attempt.exam.id,
+        graded: !hasSubjective,
       });
     });
   } catch (err) {

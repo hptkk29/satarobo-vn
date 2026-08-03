@@ -39,8 +39,9 @@ export const INTENTIONAL: Partial<Record<Role, readonly string[]>> = {
     "emails:view", "emails:manage",
     // Chương trình & giáo án → TRAINING. courses:create/edit + course-packages:edit
     // nay GỠ HẲN khỏi CM ở CẢ v1 lẫn v2 (24/07). trials:config TRẢ VỀ CM (v1+v2) khi
-    // gỡ khỏi Đào tạo → không còn diff. Chỉ lesson-change:approve còn v1-only.
-    "lesson-change:approve",
+    // gỡ khỏi Đào tạo → không còn diff.
+    // 03/08: lesson-change:approve cũng ĐÃ về v2 (seed-roles.ts) — QĐ-T3b trả CM CẢ
+    // HAI việc, để sót một cái ở v1-only là bỏ quên chứ không phải quyết định.
     // Tiền & kho tập trung → HO_ACCOUNTANT
     "payments:manage", "orders:manage", "installments:approve",
     "vouchers:manage", "products:manage",

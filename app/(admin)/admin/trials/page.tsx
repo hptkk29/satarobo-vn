@@ -7,6 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma, TrialClassStatus } from "@prisma/client";
 import { TrialsList } from "./_components/trials-list";
 import { TRIAL_STATUS_LABEL, ALL_TRIAL_STATUSES } from "@/lib/trials/status";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
 
 export const metadata = { title: "Học thử | Admin" };
 export const dynamic = "force-dynamic";
@@ -47,8 +48,9 @@ export default async function TrialsPage({ searchParams }: Props) {
       status: { notIn: ["ENROLLED", "LOST", "REGISTERED", "DUPLICATE"] },
     };
   }
-  // Teacher chỉ thấy buổi được phân công cho mình.
-  if (isTeacher) where.teacherId = session.user.id;
+  // #3 — GV THUẦN mới bị ép own-rows. User đa vai trò có quyền quản lý (CM kiêm GV)
+  // phải thấy cả buổi của người khác + buổi CHƯA gán GV (teacherId null) để xếp lịch.
+  if (isTeacher && !canManage) where.teacherId = session.user.id;
 
   // Cách ly cơ sở: TrialClass/Room/Class đều thuộc SCOPED_MODELS (có centerId) → scopedDb
   // tự inject `centerId IN visible`. User/Course không scope (global) → sdb pass-through.
@@ -57,7 +59,7 @@ export default async function TrialsPage({ searchParams }: Props) {
 
   // FL2-04 / US-LEAD-4: thay picker "lớp CHÍNH THỨC (Class)" SAI bằng lớp TRẢI NGHIỆM
   // (TrialClassV2 OPEN, cùng cơ sở). TrialClassV2 ∈ SCOPED_MODELS → sdb tự lọc cách ly cơ sở.
-  const [trials, teachers, rooms, openTrialClassesRaw] = await Promise.all([
+  const [trials, rooms, openTrialClassesRaw] = await Promise.all([
     sdb.trialClass.findMany({
       where,
       orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
@@ -77,17 +79,12 @@ export default async function TrialsPage({ searchParams }: Props) {
         teacher: { select: { id: true, name: true } },
       },
     }),
-    sdb.user.findMany({
-      where: { roles: { has: "TEACHER" }, isActive: true, deletedAt: null },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
     sdb.room.findMany({
       where: { status: "ACTIVE" },
       select: { id: true, name: true, code: true, centerId: true },
       orderBy: { displayOrder: "asc" },
     }),
-    (await checkPermission("trials:manage"))
+    canManage
       ? sdb.trialClassV2.findMany({
           where: { status: "OPEN" },
           orderBy: { startDate: "asc" },
@@ -103,6 +100,14 @@ export default async function TrialsPage({ searchParams }: Props) {
         })
       : Promise.resolve([]),
   ]);
+
+  // #4 — dropdown GV: nguồn DUY NHẤT getAssignableTeachers (User không scoped →
+  // query `roles has TEACHER` cũ trả GV MỌI cơ sở). Lọc theo cơ sở actor thấy được;
+  // includeIds giữ GV đang gán (kể cả khác cơ sở do data cũ) để <Select> không rớt.
+  const teachers = await getAssignableTeachers({
+    centerIds: actor.visibleCenterIds,
+    includeIds: trials.map((t) => t.teacherId),
+  });
 
   const openTrialClasses = openTrialClassesRaw.map((cl) => ({
     id: cl.id,
@@ -149,7 +154,11 @@ export default async function TrialsPage({ searchParams }: Props) {
 
       <TrialsList
         items={items}
-        teachers={teachers.map((u) => ({ id: u.id, name: u.name ?? "(chưa đặt tên)" }))}
+        teachers={teachers.map((u) => ({
+          id: u.id,
+          name: u.name ?? "(chưa đặt tên)",
+          centerId: u.centerId,
+        }))}
         rooms={rooms.map((r) => ({
           id: r.id,
           label: `${r.name} (${r.code})`,

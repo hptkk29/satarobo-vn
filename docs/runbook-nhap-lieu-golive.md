@@ -34,7 +34,8 @@
   khoá SĐT, trạng thái CHỜ KÍCH HOẠT**. Lead → "Đã chốt".
 
 ### Bước 3 — Phụ huynh kích hoạt tài khoản
-- PH vào `hocvien.satarobo.vn/kich-hoat` → nhập **SĐT** → nhận mã OTP qua Zalo
+- PH vào `satarobo.vn/kich-hoat` (link dùng chung — nhân viên/cơ sở nhượng quyền
+  được cấp TK cũng đi link này) → nhập **SĐT** → nhận mã OTP qua Zalo
   (mẫu 616128 — ĐÃ live) → đặt mật khẩu → đăng nhập portal.
 - **Không cần chờ mẫu ZNS 616899**: OTP kích hoạt đi mẫu Xác thực đã duyệt. Mẫu
   616899 chỉ là tin *chủ động báo* "đã cấp TK".

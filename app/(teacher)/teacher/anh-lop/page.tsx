@@ -212,19 +212,36 @@ export default async function TeacherClassPhotosPage({
 
     // Roster cho panel kho (chip chọn HS + disable chưa consent) — CÙNG nguồn dữ liệu
     // getClassUploadContext của dialog upload. Câu 46: chỉ id + TÊN học viên.
+    // B3: kèm danh sách BUỔI của lớp để GV gán buổi ngay lúc gửi (publishClassMedia đã
+    // nhận classSessionId từ trước — chỉ nối UI); mặc định buổi gần nhất ĐÃ diễn ra.
     let rosterStudents: { id: string; name: string }[] = [];
     let nonConsentIds: string[] = [];
+    let sessionOptions: { id: string; label: string }[] = [];
+    let defaultSessionId = "";
     if (draftItems.length > 0) {
-      const [enrRows, nonConsent] = await Promise.all([
+      const [enrRows, nonConsent, sessionRows] = await Promise.all([
         xdb.enrollment.findMany({
           where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
           select: { student: { select: { id: true, name: true } } },
           orderBy: { createdAt: "asc" },
         }),
         getNonConsentStudents(classId),
+        // ClassSession ∈ MAKEUP_EXCEPTION_MODELS — cùng đường đọc sessionMap ở trên.
+        xdb.classSession.findMany({
+          where: { classId, status: { not: "CANCELLED" } },
+          select: { id: true, date: true, topic: true },
+          orderBy: { date: "desc" },
+          take: 200,
+        }),
       ]);
       rosterStudents = enrRows.map((e) => e.student);
       nonConsentIds = nonConsent.map((s) => s.id);
+      sessionOptions = sessionRows.map((sn) => ({
+        id: sn.id,
+        label: `${dayFmt.format(sn.date)}${sn.topic ? ` · ${sn.topic}` : ""}`,
+      }));
+      const now = new Date();
+      defaultSessionId = sessionRows.find((sn) => sn.date <= now)?.id ?? "";
     }
 
     return (
@@ -242,6 +259,8 @@ export default async function TeacherClassPhotosPage({
             drafts={draftItems}
             students={rosterStudents}
             nonConsentIds={nonConsentIds}
+            sessions={sessionOptions}
+            defaultSessionId={defaultSessionId}
           />
         )}
 
