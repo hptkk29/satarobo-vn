@@ -35,7 +35,6 @@ import {
   ScrollText,
   CreditCard,
   ShoppingBag,
-  Ticket,
   Package2,
   Mail,
   Send,

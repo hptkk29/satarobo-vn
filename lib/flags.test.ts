@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { isAuthPhoneProvisioningEnabled } from "./flags";
+import { isAuthPhoneProvisioningEnabled, isPaymentLedgerV2Enabled } from "./flags";
 
 // AUTH-SĐT P5 — cờ ngắt đường TỰ ĐỘNG cấp tài khoản phụ huynh theo SĐT.
 // Doc phase đã từng ghi cờ `AUTH_PHONE_PROVISIONING` ở hàng "Feature flag" và ở
@@ -37,6 +37,41 @@ describe("isAuthPhoneProvisioningEnabled", () => {
     for (const v of ["False", "FALSE", " false "]) {
       process.env[KEY] = v;
       expect(isAuthPhoneProvisioningEnabled(), `giá trị ${JSON.stringify(v)}`).toBe(true);
+    }
+  });
+});
+
+// 03/08 — cờ cutover sổ thu mới. Ngữ nghĩa NGƯỢC với cờ trên: mặc định TẮT, chỉ
+// đúng chuỗi "true" mới bật. Khoá lại để không ai vô tình lật sổ tiền bằng một
+// giá trị env "gần đúng" (TRUE/1/yes) rồi tưởng là chưa bật.
+const LEDGER_KEY = "PAYMENT_LEDGER_V2";
+
+describe("isPaymentLedgerV2Enabled", () => {
+  afterEach(() => {
+    delete process.env[LEDGER_KEY];
+  });
+
+  it("mặc định TẮT khi không khai env — sổ mới chạy song song, chưa cutover", () => {
+    delete process.env[LEDGER_KEY];
+    expect(isPaymentLedgerV2Enabled()).toBe(false);
+  });
+
+  it('CHỈ đúng chuỗi "true" mới bật', () => {
+    process.env[LEDGER_KEY] = "true";
+    expect(isPaymentLedgerV2Enabled()).toBe(true);
+  });
+
+  it('KHÔNG bật với "TRUE"/"True"/"1"/"yes"/" true " — cutover tiền phải gõ chính xác', () => {
+    for (const v of ["TRUE", "True", "1", "yes", "on", " true "]) {
+      process.env[LEDGER_KEY] = v;
+      expect(isPaymentLedgerV2Enabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
+    }
+  });
+
+  it('chuỗi rỗng / "false" → TẮT', () => {
+    for (const v of ["", "false"]) {
+      process.env[LEDGER_KEY] = v;
+      expect(isPaymentLedgerV2Enabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
     }
   });
 });
