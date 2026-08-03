@@ -226,12 +226,43 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 
 ## D. Portal phụ huynh (`hocvien.satarobo.vn`)
 
-- [ ] **[C] Tài liệu**: mục Bài giảng chỉ hiện **file GV đã giao cho lớp** — **không** thấy giáo án nội bộ *(luật chốt 02/08)*
-- [ ] Hồ sơ con: thấy lớp, lịch học, tiến độ buổi
-- [ ] Chuyên cần khớp với số GV đã điểm danh
-- [ ] Học phí: công nợ khớp với `/admin/cong-no`
-- [ ] **[C]** Đổi mật khẩu ở Hồ sơ → **bị đưa ra đăng nhập lại**; mật khẩu cũ không dùng được nữa
-- [ ] **[P]** Có 2 con → chuyển đổi giữa các con hoạt động đúng
+> **Đã chạy 03/08 bằng `uat.phuhuynh@satarobo.vn`.** Con *Trần UAT Minh*, lớp
+> `ZZTEST-S2-01`. Lớp này **chưa có buổi nào lên lịch** nên ban đầu mọi màn đều rỗng;
+> phải dựng fixture: 2 buổi (28/07 + 01/08), điểm danh 1 có mặt / 1 vắng, 1 phiếu
+> nhận xét đủ rubric, và 3 tài liệu + 2 bài tập để thử luật hiển thị.
+> ⚠️ Dữ liệu của tài khoản PH này đã bị sửa như vậy.
+
+- [x] **[C] Tài liệu**: mục Bài giảng chỉ hiện **file GV đã giao cho lớp** — **không** thấy giáo án nội bộ *(luật chốt 02/08)*
+- [x] Hồ sơ con: thấy lớp, lịch học, tiến độ buổi
+- [x] Chuyên cần khớp với số GV đã điểm danh
+- [x] Học phí: công nợ khớp với dữ liệu ghi danh
+- [ ] **[C]** Đổi mật khẩu ở Hồ sơ → **bị đưa ra đăng nhập lại**; mật khẩu cũ không dùng được nữa *(người dùng tự làm — tôi không đặt mật khẩu hộ)*
+- [ ] **[P]** Có 2 con → chuyển đổi giữa các con hoạt động đúng *(tài khoản này chỉ có 1 con)*
+
+> 🔒 **Ca chốt chặn 02/08 — đã thử bằng MỒI NHỬ, đạt.** Dựng 3 tài liệu cùng gắn vào
+> lesson của buổi đã dạy:
+> | Tài liệu | Đường vào | Kỳ vọng | Thực tế |
+> |---|---|---|---|
+> | "GIÁO ÁN NỘI BỘ" `isPublic=true`, **không giao bài** | ngân hàng tài liệu | KHÔNG được thấy | ✅ không thấy |
+> | "Phiếu bài tập buổi 1" đính vào bài **PUBLISHED** của đúng lớp | GV giao bài | PHẢI thấy | ✅ thấy |
+> | "Đề nháp auto-sinh" đính vào bài **DRAFT** | auto-sinh từ template | KHÔNG được thấy | ✅ không thấy |
+>
+> Nguồn tài liệu trong code là Assignment PUBLISHED/CLOSED của chính lớp + đúng lesson
+> (`lib/portal/learning.ts:228`), **không dùng `Document.isPublic`** — đúng luật đã chốt.
+
+> **Các mốc khác đã xác minh:**
+> · Lịch học: 32 tổng buổi, **1 đã học / 1 vắng** — khớp đúng điểm danh đã tạo.
+> · Nhận xét: hiện **tên dự án + 4 mục + đủ 9 tiêu chí rubric** (4 nhóm Kiến thức /
+>   Kỹ năng / Sản phẩm / Thái độ), không phải card trống. Thang rubric là
+>   **1 = tốt nhất → 5 = cần cố gắng**, portal hiển thị đúng mức GV chấm.
+> · Học phí: công nợ **2.400.000đ** = `finalPrice` của ghi danh ĐANG HỌC; ghi danh đã
+>   nghỉ (WITHDREW) bị loại đúng. Màn nói rõ "chỉ hiện khoản kế toán đã xác nhận".
+> · Bài tập: bài GV giao hiện ở tab **"Học viên (làm bài)"** (tab phụ huynh chỉ xem
+>   tiến độ — đúng thiết kế); bài **DRAFT không lộ**.
+> · 12/12 mục sidebar portal đều mở được (200), không link chết.
+>
+> **Chưa chạy được:** nộp file bài tập và xem ảnh lớp — cả hai cần tải tệp thật, mà
+> điều khiển tự động không nhét được file vào ô chọn (đã thử 3 lần ở mục C4).
 
 ---
 
