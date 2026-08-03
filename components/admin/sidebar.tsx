@@ -208,7 +208,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
-      { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage"] },
+      // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
+      // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
+      { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
       { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage"] },
       // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage"] },
