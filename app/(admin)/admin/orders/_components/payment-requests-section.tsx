@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { QrCode, RefreshCw, Loader2, Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { QrZoom } from "./qr-zoom";
 import { issueQrForRequest, regenerateQr } from "../_qr-actions";
 import type { QrIssueResult, QrSessionView } from "../_qr-core";
 import { formatDateVN } from "@/lib/format/date";
@@ -112,10 +113,13 @@ function QrPanel({
         <div className="shrink-0">
           {session.imageSrc ? (
             // Ảnh QR: URL public img.vietqr.io hoặc data-URL sinh từ chuỗi của cổng.
-            <img
+            // Bấm vào để phóng to — quầy hay phải chìa màn hình cho phụ huynh quét.
+            <QrZoom
               src={session.imageSrc}
               alt={`QR thanh toán ${label}`}
-              className={`h-52 w-52 rounded-lg border border-neutral-200 bg-white object-contain ${expired ? "opacity-40" : ""}`}
+              title={`${label}: ${vnd(session.amountShown)}`}
+              matchKey={session.matchKey}
+              dimmed={expired}
             />
           ) : (
             <div className="flex h-52 w-52 items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white text-xs text-neutral-400">
