@@ -22,7 +22,20 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 
 ## A. Nhập liệu ban đầu
 
-### A1 — Import lead · `/admin/leads/import/registered`
+### A1 — Import lead
+
+> ⚠️ **HAI màn import khác nhau, đừng nhầm — nhầm là ra "0 hợp lệ / toàn lỗi":**
+> | File | Màn đúng | Tiêu đề cột nó đòi |
+> |---|---|---|
+> | **Template hệ thống sinh** (3 sheet: Lead · 📖 HƯỚNG DẪN · ✅ VÍ DỤ) — vd `CS2_Lead_Import_v2.xlsx` | `/admin/leads/import` | `Tên phụ huynh · SĐT · Tên con · …` |
+> | File thô của Sale (nhiều sheet theo tháng) | `/admin/leads/import/registered` | `Số điện thoại · Họ và Tên học viên` |
+>
+> **Đã chạy 03/08 với file thật `CS2_Lead_Import_v2.xlsx` (37 dòng):** xem thử báo
+> **37 hợp lệ / 0 lỗi / 3 dòng gộp**; ghi vào hệ thống ra **6 tạo mới + 31 dòng trùng
+> đã có sẵn** (dữ liệu này đã nhập từ 07/07 nên gộp là đúng, không đẻ lead trùng).
+> Hệ thống cũng tự cảnh báo ca đáng ngờ: dòng 21–22 **cùng số `0905090762` nhưng khác
+> tên phụ huynh** → cần xác minh trước khi chạy trên prod (hiện sẽ gộp thành 1 lead).
+
 - [ ] Upload file .xlsx nhiều sheet → bấm **Xem thử** (không được ghi gì ở bước này)
 - [ ] Bảng xem thử hiện: sẽ tạo / sẽ gộp / lỗi dòng / ngoài phạm vi cơ sở
 - [ ] Bấm **Ghi** → lead hiện ở `/admin/leads` trạng thái **Đã đăng ký**
@@ -50,9 +63,27 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 - [ ] **[C]** Đăng nhập **QLCS cơ sở khác** → **không** thấy phụ huynh của cơ sở này
 
 ### A4 — Phụ huynh kích hoạt · `satarobo.vn/kich-hoat`
-- [ ] Mở link trên **domain chính** (không phải hocvien.*) → trang hiện ra
-- [ ] Nhập **SĐT** phụ huynh → nhận mã (lấy ở `/admin/otp-logs`) → đặt mật khẩu
+- [x] Mở link trên **domain chính** (không phải hocvien.*) → trang hiện ra
+- [x] Nhập **SĐT** phụ huynh → form sang bước OTP + đặt mật khẩu, có đếm ngược gửi lại
+- [ ] Nhập mã → **đặt mật khẩu** *(người dùng tự làm — không nhập hộ mật khẩu)*
 - [ ] **[C]** Đăng nhập portal bằng **SĐT + mật khẩu vừa đặt** → vào được, thấy đúng con mình
+
+> ⚠️ **Trên `test` KHÔNG lấy mã qua Zalo được.** Chạy 03/08: `OtpRequest` sinh đúng
+> (kênh ZALO, hạn 5 phút) nhưng `OtpDeliveryLog` = **FAILED · `ZNS_ERROR:ZALO_NOT_CONFIGURED`**
+> — creds Zalo chỉ có ở Production. Màn kích hoạt vẫn báo "đã gửi mã" (cố ý, chống
+> dò tài khoản), nên **muốn biết tin có đi hay không phải xem `/admin/otp-logs`**.
+> Mã cũng lưu dạng hash ⇒ không đọc ngược được từ DB.
+>
+> **Đường lấy mã trên test (và cả trên prod khi ZNS chết):** hồ sơ học viên →
+> **Cấp mã tại quầy** → nhập lý do ≥10 ký tự → mã hiện **một lần** trên màn hình,
+> ghi AuditLog kèm lý do, kênh ghi `OFFLINE` nên không tính vào SLO gửi tin.
+> Đã chạy thử đường này 03/08: ra mã 6 số bình thường.
+>
+> **Chuỗi đã dựng sẵn để nghiệm thu:** đơn `ORD-260803-000003` (Sata3, 7.920.000đ,
+> SĐT `0328545229`) → xác nhận đơn → **hệ thống tự cấp tài khoản PH** (role PARENT,
+> `Chờ kích hoạt`) → tạo HV *Be Nghiem Thu A4* → bấm **Cấp tài khoản phụ huynh** trên
+> hồ sơ HV thì nó **dùng lại đúng tài khoản cũ** ("liên kết 1 con") chứ không đẻ tài
+> khoản thứ hai — nhờ `canonicalPhone` nên `0328545229` và `84328545229` là một.
 
 ---
 
