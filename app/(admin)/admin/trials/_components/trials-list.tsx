@@ -8,12 +8,14 @@ import { FlaskConical, Search } from "lucide-react";
 import type { TrialClassStatus } from "@prisma/client";
 import { TRIAL_STATUS_BADGE, ALL_TRIAL_STATUSES } from "@/lib/trials/status";
 import { filterOpenTrialClasses } from "@/lib/trials/assign";
+import { filterTeachersByCenter } from "@/lib/teachers/center-filter";
 import { updateTrialAction, deleteTrialAction } from "../actions";
 // FL2-04 — tái dùng action ghi danh lớp trải nghiệm (auth + gate + scope + override
 // đã xử lý sẵn) thay vì viết lại. Tạo TrialEnrollment qua service enrollLeadChild.
 import { enrollLeadChildAction } from "../../trial-classes/_actions";
 
-type Opt = { id: string; name: string };
+// GV kèm cơ sở để lọc chéo cơ sở (#4 — buổi CS1 không gán GV CS2).
+type Opt = { id: string; name: string; centerId: string | null };
 // Phòng kèm cơ sở để lọc chéo cơ sở (buổi CS2 KHÔNG chọn được phòng CS1).
 type RoomOpt = { id: string; label: string; centerId: string | null };
 
@@ -213,6 +215,16 @@ function TrialCard({
     );
   }, [rooms, item.effectiveCenterId, item.roomId]);
 
+  // #4 — GV cũng lọc CÙNG cơ sở buổi học (giữ GV đang gán để <Select> không rớt).
+  // Buổi không rõ cơ sở (lead cũ centerId null) → không lọc được, hiện đủ như cũ.
+  const teacherOptions = useMemo(
+    () =>
+      item.effectiveCenterId
+        ? filterTeachersByCenter(teachers, item.effectiveCenterId, [item.teacherId])
+        : teachers,
+    [teachers, item.effectiveCenterId, item.teacherId],
+  );
+
   function saveManage() {
     startTransition(async () => {
       const res = await updateTrialAction(item.id, {
@@ -330,7 +342,7 @@ function TrialCard({
                   className={inputCls}
                 >
                   <option value="">— Chưa phân công —</option>
-                  {teachers.map((t) => (
+                  {teacherOptions.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
                     </option>

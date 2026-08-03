@@ -354,3 +354,24 @@ export async function cancelMakeup(makeupNeedId: string): Promise<{ ok: boolean 
   await db.makeupNeed.update({ where: { id: makeupNeedId }, data: { status: "CANCELLED" } }).catch(() => {});
   return { ok: true };
 }
+
+/**
+ * Sửa điểm danh vắng → CÓ MẶT (PRESENT/LATE): thu hồi nhu cầu bù PENDING còn treo
+ * của (HV, buổi đã lỡ). Idempotent — không có bản ghi PENDING thì không làm gì.
+ * CHỈ đụng PENDING: nhu cầu đã SCHEDULED (đã hẹn buổi bù với PH) / COMPLETED giữ
+ * nguyên để người xếp bù chủ động xử lý, không tự huỷ sau lưng.
+ */
+export async function cancelPendingMakeupNeed(params: {
+  studentId: string;
+  missedSessionId: string;
+}): Promise<{ cancelled: number }> {
+  const res = await db.makeupNeed.updateMany({
+    where: {
+      studentId: params.studentId,
+      missedSessionId: params.missedSessionId,
+      status: "PENDING",
+    },
+    data: { status: "CANCELLED" },
+  });
+  return { cancelled: res.count };
+}

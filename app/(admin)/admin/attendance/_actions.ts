@@ -6,8 +6,9 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createMakeupNeed } from "@/lib/makeup/service";
+import { createMakeupNeed, cancelPendingMakeupNeed } from "@/lib/makeup/service";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
+import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import {
   notifyAttendanceForSession,
   notifyTeacherAttendanceEdited,
@@ -117,6 +118,15 @@ export async function markAttendance(
   });
   if (!decision.ok) return { error: decision.message };
 
+  // SEC-M02 (mirror teacher path): mỗi studentId PHẢI thuộc ROSTER hợp lệ của buổi
+  // (enrolled active trong lớp ∪ học bù SCHEDULED, kể cả liên cơ sở). Attendance là
+  // SCOPE_EXEMPT nên scopedDb KHÔNG chặn — thiếu check này là ghi được attendance
+  // cho HV cơ sở khác rồi gửi thông báo thật tới phụ huynh.
+  const rosterIds = await getSessionRosterStudentIds(actor, data.sessionId);
+  if (data.records.some((r) => !rosterIds.has(r.studentId))) {
+    return { error: "Có học viên không thuộc danh sách buổi này" };
+  }
+
   // Upsert each — composite unique key sessionId_studentId.
   // Wrap in $transaction so a mid-batch failure rolls back the entire save
   // (atomicity matters when teacher hits Save with concurrent edits open).
@@ -195,10 +205,15 @@ export async function markAttendance(
   }
 
   // B1 — record "Cần học bù" (NEEDS_MAKEUP) → tạo MakeupNeed PENDING gắn buổi này.
+  // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
+  // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
   try {
-    const needMakeup = data.records.filter((r) => r.makeupStatus === "NEEDS_MAKEUP");
-    for (const r of needMakeup) {
-      await createMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId, note: r.absenceReason ?? null });
+    for (const r of data.records) {
+      if (r.makeupStatus === "NEEDS_MAKEUP") {
+        await createMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId, note: r.absenceReason ?? null });
+      } else if (r.status === "PRESENT" || r.status === "LATE") {
+        await cancelPendingMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId });
+      }
     }
   } catch (err) {
     console.error("[markAttendance] makeup error:", err);

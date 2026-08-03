@@ -254,6 +254,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // bạ đọc ghi danh cross-center qua checkEnrollmentScope (isHoLevel). Bỏ manage
       // (sửa/tạo học bạ) — Đào tạo chỉ duyệt (24/07).
       { action: "report-cards:review", scopeType: "GLOBAL" },
+      // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
+      // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -355,6 +358,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // BGĐ 31/07 — duyệt giảm giá do Sale/CSKH cơ sở đệ trình ("đệ trình Qly CS duyệt").
       // GLOBAL theo R1 (call-site gọi trần), cách ly cơ sở do scopedDb.
       { action: "discounts:approve", scopeType: "GLOBAL" },
+      // QĐ-T3b (FL W0-NAV-2) trả CM 2 việc vận hành: trials:config ĐÃ về ở cả v1+v2,
+      // còn lesson-change:approve sót lại v1-only ⇒ trên prod (v2) chỉ Đào tạo duyệt
+      // được đề xuất chỉnh bài của GV, người đó nghỉ là đề xuất treo. Đưa về khớp QĐ.
+      { action: "lesson-change:approve", scopeType: "GLOBAL" },
       // ── Đọc tham chiếu ──
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },

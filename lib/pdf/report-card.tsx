@@ -1,7 +1,7 @@
 import React from "react";
 import path from "path";
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
-import type { PublishedReportCardView } from "@/lib/lms/report-card";
+import { reportCardPeriodDisplay, type PublishedReportCardView } from "@/lib/lms/report-card";
 import { SKILL_LABEL, LEVEL_LABEL as SKILL_LEVEL_LABEL } from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
@@ -108,7 +108,8 @@ export function ReportCardPdf({ card }: { card: PublishedReportCardView }) {
             <Text style={s.section}>Nhận xét theo giai đoạn</Text>
             {card.periodComments.map((p, i) => (
               <Text style={s.para} key={i}>
-                <Text style={s.bold}>{p.period}: </Text>
+                {/* A1: PDF tải về không được in mã SESSION_5/SESSION_12 — map ra nhãn VN. */}
+                <Text style={s.bold}>{reportCardPeriodDisplay(p.period)}: </Text>
                 {p.comment}
               </Text>
             ))}

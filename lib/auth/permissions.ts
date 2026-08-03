@@ -358,8 +358,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- HR attendance / chấm công QR (Phase NHÓM 4) ---
   // checkin = mọi nhân viên (không gồm PARENT). view = quản lý cơ sở + HR.
+  // TRAINING thêm 03/08: checkin là self-action của MỌI nhân viên, sót role này
+  // từ khi thêm TRAINING (FL W0) ⇒ tài khoản chỉ-Đào-tạo bị đá khỏi cả 4 trang
+  // chấm công (checkin, lich-ca, yeu-cau-cong, chinh-cong) — không chấm công được ngày nào.
   "hr_attendance:checkin": [
     "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "TRAINING",
   ],
   "hr_attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
   // Chỉnh bản ghi công + duyệt yêu cầu chỉnh công (giới hạn thời gian áp ở action).

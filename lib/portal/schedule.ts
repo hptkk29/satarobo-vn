@@ -40,7 +40,7 @@ function startOfWeek(d: Date): Date {
 export async function getStudentSchedule(studentId: string): Promise<StudentSchedule | null> {
   const student = await db.student.findUnique({ where: { id: studentId }, select: { name: true } });
   const enr = await db.enrollment.findFirst({
-    where: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] } },
+    where: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null }, // FIX-C3
     orderBy: { createdAt: "desc" },
     select: {
       class: {

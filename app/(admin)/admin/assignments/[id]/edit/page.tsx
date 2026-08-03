@@ -75,6 +75,12 @@ export default async function EditAssignmentPage({ params }: Props) {
               },
             },
             gradedBy: { select: { fullName: true } },
+            // BGĐ 31/07 — HV nộp NHIỀU file: phải lấy đủ danh sách (cột đơn fileUrl
+            // chỉ là file ĐẦU — người chấm từng thấy 1/N file, chấm thiếu).
+            files: {
+              select: { id: true, fileUrl: true, fileName: true, fileSize: true },
+              orderBy: { createdAt: "asc" },
+            },
           },
           orderBy: [{ status: "asc" }, { createdAt: "asc" }],
         },
@@ -160,6 +166,12 @@ export default async function EditAssignmentPage({ params }: Props) {
     fileName: s.fileName,
     fileSize: s.fileSize,
     mimeType: s.mimeType,
+    files: s.files.map((f) => ({
+      id: f.id,
+      url: f.fileUrl,
+      name: f.fileName,
+      size: f.fileSize,
+    })),
     submittedAt: s.submittedAt,
     score: s.score,
     feedback: s.feedback,

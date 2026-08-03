@@ -290,7 +290,13 @@ async function reportCardMilestone(user: TaskUser, cfg: PendingCfg): Promise<Pen
   const enrollments = await db.enrollment.findMany({
     // `ACTIVE` là status LEGACY; workflow D5 dùng CONFIRMED/STUDYING/PAUSED. Lọc "ACTIVE"
     // trần sẽ bỏ sót gần hết ghi danh thật → dùng đúng hằng số chung.
-    where: { classId: { in: reached.map((c) => c.id) }, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+    // FIX A2: soft-delete chỉ set deletedAt (status GIỮ NGUYÊN) → thiếu deletedAt: null là
+    // GV bị nhắc viết học bạ cho HV đã xoá khỏi lớp.
+    where: {
+      classId: { in: reached.map((c) => c.id) },
+      status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+      deletedAt: null,
+    },
     select: { id: true, classId: true, student: { select: { name: true } } },
   });
   if (enrollments.length === 0) return null;

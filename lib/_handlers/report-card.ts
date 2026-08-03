@@ -11,8 +11,10 @@ export async function onReportCardPublished(event: DomainEventLite): Promise<voi
   const enrollmentId = str(event.payload.enrollmentId);
   if (!reportCardId || !enrollmentId) return;
 
-  const enr = await db.enrollment.findUnique({
-    where: { id: enrollmentId },
+  // FIX A2: ghi danh XOÁ MỀM → KHÔNG tạo thông báo ma (portal ẩn học bạ của ghi danh
+  // đã xoá — getPublishedReportCards lọc deletedAt — nên PH bấm vào sẽ không thấy gì).
+  const enr = await db.enrollment.findFirst({
+    where: { id: enrollmentId, deletedAt: null },
     select: {
       studentId: true,
       student: { select: { name: true, centerId: true } },

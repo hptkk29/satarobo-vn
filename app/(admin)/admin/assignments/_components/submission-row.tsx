@@ -25,6 +25,8 @@ export interface SubmissionRowData {
   fileName: string | null;
   fileSize: number | null;
   mimeType: string | null;
+  /** BGĐ 31/07 — bài nộp NHIỀU file (cột đơn fileUrl chỉ là file đầu, 2-phase). */
+  files: { id: string; url: string; name: string; size: number | null }[];
   submittedAt: Date | null;
   score: number | null;
   feedback: string | null;
@@ -83,23 +85,44 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
         {fmtDateTime(row.submittedAt)}
       </td>
       <td className="px-3 py-3">
-        {row.textAnswer || row.fileUrl ? (
+        {row.textAnswer || row.fileUrl || row.files.length > 0 ? (
           <div className="space-y-1 max-w-[260px]">
             {row.textAnswer && (
               <p className="text-xs text-neutral-700 line-clamp-2">
                 {row.textAnswer}
               </p>
             )}
-            {row.fileUrl && (
-              <a
-                href={row.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
-              >
-                <FileText className="h-3 w-3" />
-                {row.fileName ?? "Tải file"}
-              </a>
+            {row.files.length > 0 ? (
+              // BGĐ 31/07 — liệt kê ĐỦ danh sách file (như site GV) — trước đây chỉ
+              // hiện cột đơn = file đầu, người chấm thấy 1/N file.
+              <ul className="space-y-1">
+                {row.files.map((f) => (
+                  <li key={f.id}>
+                    <a
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      <FileText className="h-3 w-3" />
+                      {f.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              row.fileUrl && (
+                // 2-phase: bản nộp cũ chưa có AssignmentSubmissionFile → fallback cột đơn.
+                <a
+                  href={row.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                >
+                  <FileText className="h-3 w-3" />
+                  {row.fileName ?? "Tải file"}
+                </a>
+              )
             )}
           </div>
         ) : (

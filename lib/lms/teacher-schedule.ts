@@ -44,7 +44,10 @@ export async function getTeacherTrialSessions(
 ): Promise<TeacherTrialSessionRow[]> {
   const rows = await db.trialClassSession.findMany({
     where: {
-      teacherId, // own-rows: chỉ buổi CHÍNH GV dạy
+      // #5 — ĐỒNG BỘ với getTeacherTrialRoster: buổi GV trực tiếp dạy HOẶC buổi
+      // teacherId null thuộc lớp Trial GV là GV chính (trước đây WHERE teacherId
+      // thuần → buổi chưa gán GV riêng hiện ở màn Trial nhưng MẤT ở màn Lịch).
+      OR: [{ teacherId }, { trialClass: { teacherId } }],
       status: { not: "CANCELLED" },
       date: { gte: from, lt: to },
     },
@@ -159,12 +162,22 @@ export type TrialRosterSlot = {
   students: TrialRosterStudent[];
 };
 
-/** Buổi Trial GV phụ trách trong [from, to) + học viên (ghép theo scheduledSessionId). */
+/** HV Trial CHƯA xếp buổi (scheduledSessionId null) — kèm tên lớp để GV biết nguồn. */
+export type TrialRosterUnassigned = TrialRosterStudent & { trialClassName: string };
+
+export type TrialRosterResult = {
+  slots: TrialRosterSlot[];
+  /** #2 — HV lớp Trial của GV nhưng CHƯA gắn buổi: hiển thị riêng để không ai tàng hình. */
+  unassigned: TrialRosterUnassigned[];
+};
+
+/** Buổi Trial GV phụ trách trong [from, to) + học viên (ghép theo scheduledSessionId)
+ * + nhóm "Chưa xếp buổi" (enroll cũ không sessionId — không phụ thuộc khoảng ngày). */
 export async function getTeacherTrialRoster(
   teacherId: string,
   from: Date,
   to: Date,
-): Promise<TrialRosterSlot[]> {
+): Promise<TrialRosterResult> {
   const sessions = await db.trialClassSession.findMany({
     where: {
       status: { not: "CANCELLED" },
@@ -183,26 +196,54 @@ export async function getTeacherTrialRoster(
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
     take: 200,
   });
-  if (sessions.length === 0) return [];
 
   const sessionIds = sessions.map((s) => s.id);
   // HV xếp vào từng buổi (scheduledSessionId). Câu 46: leadChild only — KHÔNG lead.*.
-  const enrollments = await db.trialEnrollment.findMany({
-    where: { scheduledSessionId: { in: sessionIds } },
+  const enrollments = sessionIds.length
+    ? await db.trialEnrollment.findMany({
+        where: { scheduledSessionId: { in: sessionIds } },
+        select: {
+          id: true,
+          scheduledSessionId: true,
+          status: true,
+          trialClass: { select: { name: true } },
+          leadChild: {
+            select: { fullName: true, dob: true, ageYears: true, interestedCourseId: true },
+          },
+        },
+        orderBy: { leadChild: { fullName: "asc" } },
+      })
+    : [];
+
+  // #2 — HV ghi danh lớp Trial của GV nhưng scheduledSessionId null (data cũ /
+  // enroll trước khi có auto-gán): trước đây `continue` lặng lẽ → GV không hề thấy.
+  const unassignedRows = await db.trialEnrollment.findMany({
+    where: {
+      scheduledSessionId: null,
+      status: { in: ["ACTIVE", "COMPLETED"] },
+      trialClass: { teacherId, status: { not: "CANCELLED" } },
+    },
     select: {
       id: true,
       scheduledSessionId: true,
       status: true,
+      trialClass: { select: { name: true } },
       leadChild: {
         select: { fullName: true, dob: true, ageYears: true, interestedCourseId: true },
       },
     },
     orderBy: { leadChild: { fullName: "asc" } },
+    take: 200,
   });
 
+  if (sessions.length === 0 && unassignedRows.length === 0) {
+    return { slots: [], unassigned: [] };
+  }
+
+  const allEnrollments = [...enrollments, ...unassignedRows];
   const courseIds = [
     ...new Set(
-      enrollments
+      allEnrollments
         .map((e) => e.leadChild.interestedCourseId)
         .filter((id): id is string => Boolean(id)),
     ),
@@ -216,42 +257,49 @@ export async function getTeacherTrialRoster(
   const evaluatedSet = new Set(
     (
       await db.trialRubricEval.findMany({
-        where: { trialEnrollmentId: { in: enrollments.map((e) => e.id) } },
+        where: { trialEnrollmentId: { in: allEnrollments.map((e) => e.id) } },
         select: { trialEnrollmentId: true },
       })
     ).map((r) => r.trialEnrollmentId),
   );
 
   const nowYear = new Date().getUTCFullYear();
+  const toStudent = (e: (typeof allEnrollments)[number]): TrialRosterStudent => ({
+    enrollmentId: e.id,
+    studentName: e.leadChild.fullName,
+    birthYear:
+      e.leadChild.dob?.getUTCFullYear() ??
+      (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null),
+    courseName: e.leadChild.interestedCourseId
+      ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
+      : null,
+    status: e.status,
+    evaluated: evaluatedSet.has(e.id),
+  });
+
   const bySession = new Map<string, TrialRosterStudent[]>();
   for (const e of enrollments) {
     if (!e.scheduledSessionId) continue;
-    const birthYear =
-      e.leadChild.dob?.getUTCFullYear() ??
-      (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null);
     const arr = bySession.get(e.scheduledSessionId) ?? [];
-    arr.push({
-      enrollmentId: e.id,
-      studentName: e.leadChild.fullName,
-      birthYear,
-      courseName: e.leadChild.interestedCourseId
-        ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
-        : null,
-      status: e.status,
-      evaluated: evaluatedSet.has(e.id),
-    });
+    arr.push(toStudent(e));
     bySession.set(e.scheduledSessionId, arr);
   }
 
-  return sessions.map((s) => ({
-    sessionId: s.id,
-    trialClassName: s.trialClass.name,
-    date: s.date,
-    startTime: s.startTime,
-    endTime: s.endTime,
-    status: s.status,
-    students: bySession.get(s.id) ?? [],
-  }));
+  return {
+    slots: sessions.map((s) => ({
+      sessionId: s.id,
+      trialClassName: s.trialClass.name,
+      date: s.date,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      status: s.status,
+      students: bySession.get(s.id) ?? [],
+    })),
+    unassigned: unassignedRows.map((e) => ({
+      ...toStudent(e),
+      trialClassName: e.trialClass.name,
+    })),
+  };
 }
 
 /** Props điền phiếu đánh giá 1 buổi Trial (reuse TrialSessionEvalFill). null = không

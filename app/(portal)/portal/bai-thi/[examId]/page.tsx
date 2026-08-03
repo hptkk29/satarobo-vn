@@ -1,12 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { portalDb } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
+import { studentCanAccessExam } from "@/lib/lms/exam-access";
 import { ExamTaking } from "./_components/exam-taking";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Làm bài thi | Sata Robo", robots: { index: false } };
-
-const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 // Deterministic shuffle seeded bằng chuỗi (giữ thứ tự ổn định qua reload).
 function seededShuffle<T>(arr: T[], seed: string): T[] {
@@ -71,14 +70,12 @@ export default async function ExamTakingPage({ params }: Props) {
   });
   if (!exam) notFound();
 
-  // Access: con phải đang học lớp được giao đề.
-  const enrolled = exam.classId
-    ? await pdb.enrollment.findFirst({
-        where: { studentId, classId: exam.classId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
-        select: { id: true },
-      })
-    : null;
-  if (!enrolled) redirect("/portal/bai-thi");
+  // Access: đề gắn lớp → con đang học lớp đó; đề DÙNG CHUNG (classId=null) → phải
+  // có HomeworkAssignment giao cho con (trước đây chặn cứng → bài về nhà gắn exam
+  // dùng chung thành ngõ cụt). Cùng luật với startAttempt (lib/lms/exam-access).
+  if (!(await studentCanAccessExam({ studentId, examId: exam.id, classId: exam.classId }))) {
+    redirect("/portal/bai-thi");
+  }
 
   // LMS-12 (thi lại): nhiều attempt/đề → ưu tiên bài ĐANG LÀM; nếu không có thì
   // lấy lần mới nhất (attemptNo desc) để quyết định điều hướng.

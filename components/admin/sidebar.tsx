@@ -94,6 +94,11 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CRM & Tuyển sinh",
     items: [
       { label: "Leads", href: "/leads", icon: Users, perm: ["leads:view-all", "leads:view-own"] },
+      // PR #81 — nhập liệu ban đầu: import Excel "đã đăng ký" rồi chốt hàng loạt.
+      // perm khớp gate trang (leads:view-all AND leads:import) — sidebar dùng OR nên
+      // để leads:import (Sale có leads:import nhưng KHÔNG có view-all → trang tự
+      // redirect; đặt view-all ở đây để không hiện link chết cho Sale).
+      { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
       { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
@@ -107,6 +112,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Học viên & Đăng ký học",
     items: [
       { label: "Học viên", href: "/students", icon: GraduationCap, perm: [...PAGE_GATES["/students"]] },
+      // PR #81 — màn vận hành TK phụ huynh chờ kích hoạt (gate students:edit, cùng
+      // quyền với nút cấp TK per-student). Thiếu link ở đây thì màn thành ẩn.
+      { label: "Tài khoản phụ huynh", href: "/students/tai-khoan", icon: KeyRound, perm: ["students:edit"] },
       { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all"] },
       { label: "Chuyển lớp / cơ sở", href: "/chuyen-lop", icon: ArrowLeftRight, perm: [...PAGE_GATES["/chuyen-lop"]] },
       { label: "Sắp hết khoá", href: "/students/sap-het-khoa", icon: GraduationCap, perm: ["enrollments:view-all"] },
@@ -123,7 +131,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
-      { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view"] },
+      // attendance:edit đi kèm vì CSKH (Sale) chỉ có quyền SỬA hồi tố (Task #16),
+      // không có attendance:view — thiếu nó thì họ dùng được trang mà không thấy link.
+      { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view", "attendance:edit"] },
       { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: [...PAGE_GATES["/media"]] },
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },

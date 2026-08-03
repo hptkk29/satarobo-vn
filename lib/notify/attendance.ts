@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { formatDateVN } from "@/lib/format/date";
+import { attendanceLabel, type AttendanceStatusValue } from "@/lib/labels";
 
 // =============================================================================
 // Commit 5 — thông báo điểm danh cho phụ huynh.
@@ -10,14 +11,10 @@ import { formatDateVN } from "@/lib/format/date";
 //    cấu hình) — qua sendZaloNotification.
 //  - Chỉ gửi cho ĐÚNG phụ huynh của con đó; GỘP nếu 1 buổi nhiều con cùng phụ
 //    huynh; mỗi (buổi, học viên) chỉ 1 lần (mốc Attendance.notifiedAt).
+//  - Nhãn trạng thái: attendanceLabel() từ @/lib/labels — phủ đủ 6 enum (kể cả
+//    ABSENT_EXCUSED/ABSENT_UNEXCUSED từ site GV), KHÔNG dùng map riêng để PH
+//    không bao giờ nhận chuỗi enum thô.
 // =============================================================================
-
-const STATUS_LABEL: Record<string, string> = {
-  PRESENT: "Có mặt",
-  ABSENT: "Vắng",
-  LATE: "Đi muộn",
-  EXCUSED: "Vắng có phép",
-};
 
 const ZNS_TEMPLATE = process.env.ZALO_ZNS_TEMPLATE_ATTENDANCE || null;
 
@@ -71,34 +68,72 @@ export async function notifyAttendanceForSession(sessionId: string): Promise<voi
       items: [],
       attendanceIds: [],
     };
-    g.items.push({ studentName: r.student.name, statusLabel: STATUS_LABEL[r.status] ?? r.status });
+    g.items.push({
+      studentName: r.student.name,
+      statusLabel: attendanceLabel(r.status as AttendanceStatusValue).label,
+    });
     g.attendanceIds.push(r.id);
     groups.set(key, g);
   }
 
   for (const g of groups.values()) {
+    // notifiedAt CHỈ set khi đã xử lý xong nhóm (gửi được, hoặc chắc chắn không
+    // gửi được thêm) — FAILED không-fallback / lỗi bất ngờ để trống → lần lưu
+    // điểm danh sau thử lại (bounded theo số lần lưu, không phải vòng lặp nền).
+    let markProcessed = true;
+
     if (g.items.length > 0 && (g.email || g.phone)) {
       const body = g.items
         .map((i) => `Bé ${i.studentName} đã điểm danh ${i.statusLabel} buổi ${dateStr} lớp ${className}.`)
         .join("\n");
       const subject = `Điểm danh buổi ${dateStr} — lớp ${className}`;
 
-      await sendZaloNotification({
-        toPhone: g.phone ?? "",
-        templateKey: ZNS_TEMPLATE,
-        params: {
-          student: g.items.map((i) => i.studentName).join(", "),
-          status: g.items.map((i) => i.statusLabel).join(", "),
-          date: dateStr,
-          class: className,
-        },
-        fallbackEmail: g.email
-          ? { to: g.email, toName: g.parentName, subject, bodyText: body }
-          : null,
-      }).catch(() => {});
+      try {
+        const result = await sendZaloNotification({
+          toPhone: g.phone ?? "",
+          templateKey: ZNS_TEMPLATE,
+          params: {
+            student: g.items.map((i) => i.studentName).join(", "),
+            status: g.items.map((i) => i.statusLabel).join(", "),
+            date: dateStr,
+            class: className,
+          },
+          fallbackEmail: g.email
+            ? { to: g.email, toName: g.parentName, subject, bodyText: body }
+            : null,
+        });
+
+        if (result.status === "FAILED" && !result.fallbackEmailed) {
+          // Zalo lỗi và KHÔNG có email dự phòng → chưa ai nhận gì. Để notifiedAt
+          // trống cho lần lưu sau retry (sendZaloNotification không throw nên
+          // trước đây nhánh này bị nuốt im lặng).
+          markProcessed = false;
+        } else if (result.status === "SENT") {
+          // Bẫy SIMULATED: có creds nhưng ZALO_LIVE≠true → provider trả ok "ảo"
+          // (providerMessageId "SIMULATED-…"), PH KHÔNG nhận tin thật. VẪN set
+          // notifiedAt (tránh gửi lặp mỗi lần lưu trên môi trường test — nơi ZNS
+          // luôn SIMULATED) nhưng cảnh báo rõ trong log.
+          const log = await db.zaloMessageLog.findUnique({
+            where: { id: result.logId },
+            select: { providerMessageId: true },
+          });
+          if (log?.providerMessageId?.startsWith("SIMULATED-")) {
+            console.warn(
+              `[notifyAttendance] ZNS SIMULATED (log ${result.logId}) — PH KHÔNG nhận tin thật (ZALO_LIVE tắt). Vẫn đánh dấu notifiedAt để tránh gửi lặp.`,
+            );
+          }
+        }
+        // SKIPPED (Zalo chưa cấu hình): fallbackEmailed=true → email đã vào queue;
+        // không có email → không kênh nào hoạt động, đánh dấu đã xử lý (cấu hình
+        // không tự đổi giữa 2 lần lưu — tránh retry vô ích).
+      } catch (err) {
+        console.error("[notifyAttendance] send error:", err);
+        markProcessed = false;
+      }
     }
+
     // Đánh dấu đã xử lý (kể cả nhóm không có kênh) → không gửi lại.
-    if (g.attendanceIds.length > 0) {
+    if (markProcessed && g.attendanceIds.length > 0) {
       await db.attendance.updateMany({ where: { id: { in: g.attendanceIds } }, data: { notifiedAt: new Date() } });
     }
   }

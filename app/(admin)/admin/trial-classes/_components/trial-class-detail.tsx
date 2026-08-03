@@ -3,8 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, UserCog, UserPlus, Search, X } from "lucide-react";
+import { CalendarPlus, CheckCircle2, UserCog, UserPlus, Search, X } from "lucide-react";
 import {
+  addTrialSessionAction,
   assignTrialTeacherAction,
   markTrialAttendanceAction,
   completeTrialSessionAction,
@@ -67,6 +68,8 @@ export function TrialClassDetail({
   trialClassId,
   currentTeacherId,
   classSessionCount,
+  classStartTime,
+  classEndTime,
   enrollments,
   sessions,
   teacherOptions,
@@ -78,6 +81,8 @@ export function TrialClassDetail({
   trialClassId: string;
   currentTeacherId: string | null;
   classSessionCount: number;
+  classStartTime: string;
+  classEndTime: string;
   enrollments: Enrollment[];
   sessions: SessionData[];
   teacherOptions: Teacher[];
@@ -88,6 +93,37 @@ export function TrialClassDetail({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // ── #1 — Thêm buổi ad-hoc (QĐ-R2-1: lớp slot không tự sinh buổi) ──
+  const [sessionDate, setSessionDate] = useState("");
+  const [sessionStart, setSessionStart] = useState(classStartTime);
+  const [sessionEnd, setSessionEnd] = useState(classEndTime);
+  // "" = kế thừa GV phụ trách lớp (mặc định).
+  const [sessionTeacherId, setSessionTeacherId] = useState("");
+
+  function onAddSession() {
+    if (!sessionDate) {
+      toast.error("Chọn ngày buổi học");
+      return;
+    }
+    startTransition(async () => {
+      const res = await addTrialSessionAction({
+        trialClassId,
+        date: sessionDate,
+        startTime: sessionStart,
+        endTime: sessionEnd,
+        // không chọn → undefined = GV phụ trách lớp.
+        teacherId: sessionTeacherId || undefined,
+      });
+      if (res.ok) {
+        toast.success("Đã thêm buổi trải nghiệm");
+        setSessionDate("");
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Thêm buổi thất bại");
+      }
+    });
+  }
 
   // ── Thêm học viên (item 4/8): search lead + số buổi RIÊNG từng lead (QĐ-2) ──
   const [showAdd, setShowAdd] = useState(false);
@@ -259,6 +295,80 @@ export function TrialClassDetail({
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* #1 — Thêm buổi (nguồn TrialClassSession — thiếu là GV không nhận được gì) */}
+      {canManage && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <CalendarPlus className="h-4 w-4 text-orange-500" />
+            <h2 className="text-sm font-semibold text-gray-700">Thêm buổi học</h2>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
+              Ngày *
+              <input
+                type="date"
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value)}
+                disabled={pending}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
+              Bắt đầu
+              <input
+                type="time"
+                value={sessionStart}
+                onChange={(e) => setSessionStart(e.target.value)}
+                disabled={pending}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
+              Kết thúc
+              <input
+                type="time"
+                value={sessionEnd}
+                onChange={(e) => setSessionEnd(e.target.value)}
+                disabled={pending}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+              />
+            </label>
+            {teacherOptions.length > 0 && (
+              <label className="flex flex-col gap-1 text-xs text-gray-500">
+                Giáo viên
+                <select
+                  value={sessionTeacherId}
+                  onChange={(e) => setSessionTeacherId(e.target.value)}
+                  disabled={pending}
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+                >
+                  <option value="">— GV phụ trách lớp —</option>
+                  {teacherOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={onAddSession}
+              disabled={pending || !sessionDate}
+              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+            >
+              Thêm buổi
+            </button>
+          </div>
+          {sessions.length === 0 && (
+            <p className="mt-2 text-xs text-amber-600">
+              Lớp chưa có buổi nào — phải thêm buổi thì mới xếp được học viên và giáo
+              viên mới thấy lịch/danh sách Trial.
+            </p>
+          )}
         </div>
       )}
 

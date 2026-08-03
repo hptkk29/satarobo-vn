@@ -87,7 +87,11 @@ export default async function TeacherClassesPage({
   const classIds = [...actor.assignedClassIds];
 
   // ── (c) Roster điểm danh của 1 buổi ──────────────────────────────────────────
-  if (classId && sessionId && actor.assignedClassIds.has(classId)) {
+  // KHÔNG gate bằng assignedClassIds ở đây: GV DẠY THAY không có lớp trong
+  // assignedClassIds (chỉ teacherId/assistantId) — quyền sở hữu thật do
+  // isSessionOwnedByTeacher quyết (xét cả substituteTeacherId/actualTeacherId),
+  // cùng predicate với saveClassAttendanceAction. Fail → NotYours, không rơi im lặng.
+  if (classId && sessionId) {
     const sess = await xdb.classSession.findUnique({
       where: { id: sessionId },
       select: {
@@ -148,7 +152,11 @@ export default async function TeacherClassesPage({
         <AttendancePanel
           sessionId={sessionId}
           rows={panelRows}
-          editable={sess.status !== "CANCELLED"}
+          // Cùng gate với hub-sessions-tab (vnTodayEnd) + server (saveClassAttendanceAction):
+          // buổi TƯƠNG LAI không mở điểm danh — chặn ghi trước + notify PH buổi chưa diễn ra.
+          editable={
+            sess.status !== "CANCELLED" && sess.date.getTime() <= vnTodayEnd().getTime()
+          }
         />
       </div>
     );

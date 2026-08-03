@@ -7,10 +7,11 @@
 //                         + badge "đã nhận xét x/y HV".
 //   (c) ?…&sessionId=…  → FeedbackPanel: nhận xét + chấm sao từng HV ĐI HỌC.
 //
-// Guard: CHỈ lớp ∈ actor.assignedClassIds — khớp gate canManageSessionClass của action
-// saveSessionFeedback (GV chính/trợ giảng của lớp). KHÔNG mở buổi dạy thay/học bù ở
-// màn này (đọc qua scopedDb thường, không withMakeupException — action cũng sẽ chặn).
-// StudentSessionFeedback ∉ SCOPED_MODELS → sdb pass-through SAU khi đã guard classId.
+// Guard (FIX #3 — 08/2026): theo OWNERSHIP BUỔI (isSessionOwnedByTeacher: lớp ∈
+// assignedClassIds ∪ dạy thay substituteTeacherId ∪ thực dạy actualTeacherId) — khớp
+// gate canManageSessionRecord của action saveSessionFeedback + gate điểm danh. GV dạy
+// thay thấy lớp/buổi mình dạy thay ở grid (a)/(b) và nhận xét được ở (c).
+// StudentSessionFeedback ∉ SCOPED_MODELS → sdb pass-through SAU khi đã guard buổi.
 // ⚠️ Câu 46: payload client CHỈ tên HV — không SĐT/email/tên PH.
 import Link from "next/link";
 import { Ban, BookOpen, CalendarX2, MessageSquare } from "lucide-react";
@@ -23,6 +24,7 @@ import {
   deriveFeedbackRoster,
   summarizeSessionFeedback,
 } from "@/lib/lms/session-feedback-roster";
+import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
@@ -58,27 +60,37 @@ export default async function TeacherFeedbackPage({
   if (!session?.user) return null; // layout đã gate
 
   const { classId, sessionId } = await searchParams;
-  const actor = await resolveActor(session.user.id);
+  const userId = session.user.id;
+  const actor = await resolveActor(userId);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
   const { from, to } = recentWindow();
 
   // ── (c) Phiếu nhận xét từng HV của 1 buổi ─────────────────────────────────────
-  if (classId && sessionId && actor.assignedClassIds.has(classId)) {
+  if (classId && sessionId) {
     const sess = await sdb.classSession.findUnique({
       where: { id: sessionId },
       select: {
         id: true,
         classId: true,
         centerId: true, // model scoped — findUnique lọc hậu kỳ theo field này
+        substituteTeacherId: true,
+        actualTeacherId: true,
         date: true,
         topic: true,
         status: true,
         class: { select: { name: true } },
       },
     });
-    // sessionId phải thuộc ĐÚNG lớp trên URL (lớp đã ∈ assignedClassIds) — chống IDOR.
-    if (!sess || sess.classId !== classId) return <NotYours />;
+    // FIX #3 — gate theo ownership BUỔI (assigned ∪ dạy thay ∪ thực dạy), khớp action;
+    // sessionId phải thuộc ĐÚNG lớp trên URL — chống IDOR.
+    if (
+      !sess ||
+      sess.classId !== classId ||
+      !isSessionOwnedByTeacher(sess, { userId, assignedClassIds: actor.assignedClassIds })
+    ) {
+      return <NotYours />;
+    }
 
     const [attRows, enrRows, fbRows] = await Promise.all([
       sdb.attendance.findMany({
@@ -133,13 +145,27 @@ export default async function TeacherFeedbackPage({
   }
 
   // ── (b) Buổi gần đây của 1 lớp ────────────────────────────────────────────────
-  if (classId && actor.assignedClassIds.has(classId)) {
+  // FIX #3 — GV dạy thay: lớp KHÔNG được phân công vẫn vào được, nhưng CHỈ thấy các
+  // buổi mình dạy thay/thực dạy trong cửa sổ; lớp lạ hoàn toàn → rơi xuống grid (a) như cũ.
+  const classAssigned = classId ? actor.assignedClassIds.has(classId) : false;
+  const classSessions = classId
+    ? await sdb.classSession.findMany({
+        where: {
+          classId,
+          date: { gte: from, lte: to },
+          status: { not: "CANCELLED" },
+          ...(classAssigned
+            ? {}
+            : { OR: [{ substituteTeacherId: userId }, { actualTeacherId: userId }] }),
+        },
+        select: { id: true, date: true, topic: true, status: true },
+        orderBy: { date: "desc" },
+      })
+    : [];
+
+  if (classId && (classAssigned || classSessions.length > 0)) {
     const cls = await sdb.class.findUnique({ where: { id: classId }, select: { name: true } });
-    const sessions = await sdb.classSession.findMany({
-      where: { classId, date: { gte: from, lte: to }, status: { not: "CANCELLED" } },
-      select: { id: true, date: true, topic: true, status: true },
-      orderBy: { date: "desc" },
-    });
+    const sessions = classSessions;
 
     // Badge "đã nhận xét x/y HV": gom Attendance + feedback của các buổi trong 1 lượt.
     const ids = sessions.map((s) => s.id);
@@ -227,10 +253,26 @@ export default async function TeacherFeedbackPage({
     );
   }
 
-  // ── (a) Danh sách lớp được phân ───────────────────────────────────────────────
-  const classes = classIds.length
+  // ── (a) Danh sách lớp được phân + lớp có buổi dạy thay ──────────────────────
+  // FIX #3 — thêm lớp mình DẠY THAY/THỰC DẠY trong cửa sổ (ngoài assignedClassIds)
+  // để GV dạy thay có lối vào nhận xét; badge lớp dạy thay đếm SỐ BUỔI mình dạy thay.
+  const subRows = await sdb.classSession.findMany({
+    where: {
+      date: { gte: from, lte: to },
+      status: { not: "CANCELLED" },
+      OR: [{ substituteTeacherId: userId }, { actualTeacherId: userId }],
+    },
+    select: { classId: true },
+  });
+  const subCount = new Map<string, number>();
+  for (const s of subRows) {
+    if (actor.assignedClassIds.has(s.classId)) continue;
+    subCount.set(s.classId, (subCount.get(s.classId) ?? 0) + 1);
+  }
+  const allClassIds = [...classIds, ...subCount.keys()];
+  const classes = allClassIds.length
     ? await sdb.class.findMany({
-        where: { id: { in: classIds } },
+        where: { id: { in: allClassIds } },
         select: {
           id: true,
           name: true,
@@ -271,7 +313,9 @@ export default async function TeacherFeedbackPage({
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                {c._count.sessions} buổi trong 14 ngày gần đây
+                {subCount.has(c.id)
+                  ? `${subCount.get(c.id)} buổi dạy thay trong 14 ngày gần đây`
+                  : `${c._count.sessions} buổi trong 14 ngày gần đây`}
               </p>
               <p className="mt-auto text-sm font-semibold text-orange-600 dark:text-orange-400">
                 Nhận xét →

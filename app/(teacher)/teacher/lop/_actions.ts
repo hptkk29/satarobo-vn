@@ -20,10 +20,21 @@ import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { createMakeupNeed } from "@/lib/makeup/service";
+import { createMakeupNeed, cancelPendingMakeupNeed } from "@/lib/makeup/service";
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
+import { evaluateAbsenceRisk } from "@/lib/risk/service";
 
 const MAKEUP_STATUSES = ["NONE", "NEEDS_MAKEUP", "MADE_UP"] as const;
+
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7, không DST)
+
+/** Mốc hết ngày hôm nay (giờ VN) dạng UTC — buổi có date SAU mốc này là buổi tương lai. */
+function vnTodayEnd(now = new Date()): Date {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
+  const startUtc =
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+  return new Date(startUtc + 24 * 60 * 60 * 1000);
+}
 
 const recordSchema = z.object({
   studentId: z.string().min(1),
@@ -86,12 +97,20 @@ export async function saveClassAttendanceAction(
       id: true,
       classId: true,
       centerId: true,
+      date: true,
       substituteTeacherId: true,
       actualTeacherId: true,
       class: { select: { centerId: true } },
     },
   });
   if (!sess) return { ok: false, error: "Buổi không thuộc bạn" };
+
+  // Server chốt (cùng gate vnTodayEnd với UI /teacher/lop + hub-sessions-tab):
+  // KHÔNG cho điểm danh buổi CHƯA diễn ra — chặn ghi attendance trước + gửi
+  // thông báo PH cho buổi tương lai.
+  if (sess.date.getTime() > vnTodayEnd().getTime()) {
+    return { ok: false, error: "Buổi học chưa diễn ra — không thể điểm danh trước" };
+  }
 
   // (2) Quyền sở hữu THẬT — chống GV điểm danh lớp không phân công.
   const owned = isSessionOwnedByTeacher(
@@ -150,6 +169,8 @@ export async function saveClassAttendanceAction(
 
   // Học bù: HV vắng-không-phép (hoặc component đánh NEEDS_MAKEUP) → MakeupNeed PENDING
   // (idempotent trong service — 1 nhu cầu/buổi/HV). câu 47: học bù có thể liên cơ sở.
+  // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
+  // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
   try {
     for (const r of data.records) {
       if (isAbsent(r.status) && deriveMakeup(r.status, r.makeupStatus) === "NEEDS_MAKEUP") {
@@ -159,10 +180,27 @@ export async function saveClassAttendanceAction(
           createdById: actorId,
           note: r.absenceReason?.trim() || null,
         });
+      } else if (!isAbsent(r.status)) {
+        await cancelPendingMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId });
       }
     }
   } catch (err) {
     console.error("[saveClassAttendanceAction] makeup:", err);
+  }
+
+  // Rủi ro "vắng 2 buổi liên tiếp" — trước đây CHỈ đường admin gọi, làm điểm danh
+  // từ site GV (đường chính) không bao giờ tạo StudentRiskAlert/CareTask. Best-effort:
+  // .catch để không chặn luồng lưu.
+  try {
+    for (const r of data.records) {
+      if (isAbsent(r.status)) {
+        await evaluateAbsenceRisk(r.studentId, sess.classId).catch((err) =>
+          console.error("[saveClassAttendanceAction] risk:", err),
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[saveClassAttendanceAction] risk:", err);
   }
 
   // Audit 1 dòng cho cả buổi (best-effort — không chặn việc lưu).

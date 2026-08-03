@@ -508,7 +508,7 @@ export function BulkConvertClient({
 
       <p className="text-xs text-gray-500">
         Sau khi chốt: tài khoản phụ huynh ở trạng thái <b>chờ kích hoạt</b> — phụ huynh vào{' '}
-        <span className="font-mono">hocvien.satarobo.vn/kich-hoat</span>, nhập SĐT để nhận mã OTP
+        <span className="font-mono">satarobo.vn/kich-hoat</span>, nhập SĐT để nhận mã OTP
         qua Zalo và tự đặt mật khẩu. Quản lý danh sách chờ kích hoạt tại màn{' '}
         <Link href="/students/tai-khoan" className="underline">
           Tài khoản phụ huynh

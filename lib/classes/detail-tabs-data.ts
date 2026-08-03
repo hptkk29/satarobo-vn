@@ -25,12 +25,24 @@ export async function loadClassMediaItems(
   classId: string,
   className: string,
 ): Promise<ClassMediaItem[]> {
-  const rows = await db.classSessionMedia.findMany({
-    where: { classId },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: { tags: { select: { studentId: true } } },
-  });
+  // DRAFT (kho GV) fetch RIÊNG — cùng lỗi đã vá ở app/(admin)/admin/media/page.tsx
+  // (review 02/08): vài lô upload 40 ảnh là DRAFT chiếm trọn cửa sổ 100 row, đẩy
+  // PENDING khỏi hàng duyệt của tab "Ảnh lớp" trong /admin/classes/[id].
+  const [mainRows, draftRows] = await Promise.all([
+    db.classSessionMedia.findMany({
+      where: { classId, status: { not: "DRAFT" } },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: { tags: { select: { studentId: true } } },
+    }),
+    db.classSessionMedia.findMany({
+      where: { classId, status: "DRAFT" },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: { tags: { select: { studentId: true } } },
+    }),
+  ]);
+  const rows = [...mainRows, ...draftRows];
   if (rows.length === 0) return [];
 
   const studentIds = [...new Set(rows.flatMap((r) => r.tags.map((t) => t.studentId)))];

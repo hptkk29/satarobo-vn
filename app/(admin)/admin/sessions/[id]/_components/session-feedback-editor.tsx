@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
@@ -27,21 +27,39 @@ export function SessionFeedbackEditor({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [rows, setRows] = useState<StudentRow[]>(students);
+  // FIX #1 (client) — mốc so sánh dirty: dữ liệu đã lưu server đưa xuống qua props.
+  const initialById = useMemo(
+    () => new Map(students.map((s) => [s.studentId, s])),
+    [students],
+  );
 
   function update(id: string, patch: Partial<StudentRow>) {
     setRows((cur) => cur.map((r) => (r.studentId === id ? { ...r, ...patch } : r)));
   }
 
   function save() {
+    // FIX #1 (client) — CHỈ gửi dòng dirty (comment/sao đổi). Dòng không chạm KHÔNG gửi
+    // → server không nhầm phiếu rubric-only (comment rỗng) thành lệnh xoá phiếu.
+    const items = rows
+      .filter((r) => {
+        const init = initialById.get(r.studentId);
+        return (
+          !init ||
+          r.comment.trim() !== init.comment.trim() ||
+          (r.rating ?? null) !== (init.rating ?? null)
+        );
+      })
+      .map((r) => ({
+        studentId: r.studentId,
+        comment: r.comment,
+        rating: r.rating,
+      }));
+    if (items.length === 0) {
+      toast("Không có thay đổi để lưu");
+      return;
+    }
     startTransition(async () => {
-      const res = await saveSessionFeedback({
-        sessionId,
-        items: rows.map((r) => ({
-          studentId: r.studentId,
-          comment: r.comment,
-          rating: r.rating,
-        })),
-      });
+      const res = await saveSessionFeedback({ sessionId, items });
       if (res.ok) {
         toast.success("Đã lưu nhận xét từng học sinh");
         router.refresh();

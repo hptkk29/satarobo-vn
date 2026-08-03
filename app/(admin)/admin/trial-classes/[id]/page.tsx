@@ -187,6 +187,8 @@ export default async function TrialClassDetailPage({ params }: Props) {
         trialClassId={cls.id}
         currentTeacherId={cls.teacherId}
         classSessionCount={cls.sessionCount}
+        classStartTime={cls.startTime}
+        classEndTime={cls.endTime}
         enrollments={enrollments}
         sessions={sessions}
         teacherOptions={teacherOptions.map((t) => ({

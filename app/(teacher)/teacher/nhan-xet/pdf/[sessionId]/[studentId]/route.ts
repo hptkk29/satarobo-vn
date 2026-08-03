@@ -1,12 +1,13 @@
-// PDF phiếu nhận xét buổi học (site GV). Guard own-class (canManageSessionClass) +
-// ĐÃ LƯU phiếu (notes/rubric != null) → 404 "lưu trước". ⚠️ Câu 46: chỉ tên HV.
+// PDF phiếu nhận xét buổi học (site GV). Guard ownership BUỔI (canManageSessionRecord —
+// nhận cả GV dạy thay/thực dạy, FIX #3) + ĐÃ LƯU phiếu (notes/rubric != null) → 404
+// "lưu trước". ⚠️ Câu 46: chỉ tên HV.
 import { createElement, type ReactElement } from "react";
 import { NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
+import { canManageSessionRecord } from "@/app/(admin)/admin/sessions/[id]/_feedback-core";
 import { normalizeEvalNotes, normalizeEvalRatings } from "@/lib/lms/session-eval-rubric";
 import { SessionEvalPdf } from "@/lib/pdf/session-eval";
 
@@ -37,13 +38,14 @@ export async function GET(
     select: {
       id: true,
       centerId: true, // model scoped — findUnique lọc hậu kỳ theo field này
+      classId: true,
+      substituteTeacherId: true,
+      actualTeacherId: true,
       date: true,
       topic: true,
       class: {
         select: {
           name: true,
-          teacherId: true,
-          assistantId: true,
           centerId: true,
           course: { select: { name: true } },
         },
@@ -52,9 +54,11 @@ export async function GET(
   });
   if (!sess) return NextResponse.json({ error: "Không tìm thấy buổi học" }, { status: 404 });
 
-  const allowed = await canManageSessionClass(
+  // FIX #3 — ownership theo BUỔI (lớp phân công ∪ dạy thay ∪ thực dạy), khớp gate
+  // của saveSessionFeedback/saveSessionEval — GV dạy thay xuất được PDF phiếu mình lưu.
+  const allowed = await canManageSessionRecord(
     { id: session.user.id, role: session.user.role, centerId: session.user.centerId },
-    sess.class,
+    sess,
   );
   if (!allowed) return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
 

@@ -12,6 +12,8 @@ import {
   trialUpdateSchema,
   trialFeedbackSchema,
 } from "@/lib/validators/trial";
+import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
+import { notifyTrialTeacherAssigned } from "@/lib/trial/service";
 import type { LeadStatus, Prisma, TrialClassStatus } from "@prisma/client";
 
 // Cách ly cơ sở (chống IDOR ghi): TrialClass (V1) ∈ SCOPED_MODELS → đọc qua scopedDb
@@ -47,10 +49,30 @@ export async function updateTrialAction(
   const sdb = scopedDb(actor);
   const trial = await sdb.trialClass.findUnique({
     where: { id: trialId },
-    select: { id: true, leadId: true, status: true, scheduledAt: true, centerId: true },
+    select: {
+      id: true,
+      leadId: true,
+      status: true,
+      scheduledAt: true,
+      centerId: true,
+      teacherId: true,
+    },
   });
   if (!trial || !passesScope("TrialClass", trial, actor)) {
     return { ok: false, error: "Buổi học thử không tồn tại" };
+  }
+
+  // #4 — GV gán phải CÙNG cơ sở buổi học thử (backstop server cho lọc dropdown;
+  // chặn gán chéo CS1↔CS2 qua POST thẳng). Buổi không có cơ sở → không ràng buộc.
+  if (parsed.data.teacherId && parsed.data.teacherId !== trial.teacherId) {
+    const t = await sdb.user.findUnique({
+      where: { id: parsed.data.teacherId },
+      select: { centerId: true },
+    });
+    const err = teacherCenterAssignmentError(trial.centerId, [
+      { id: parsed.data.teacherId, centerId: t?.centerId },
+    ]);
+    if (err) return { ok: false, error: err };
   }
 
   const { actorId, actorName } = getAuditActor(session);
@@ -119,6 +141,22 @@ export async function updateTrialAction(
       }
     }
   });
+
+  // #6 — báo GV khi được gán/đổi vào buổi học thử (trước đây chỉ báo Sale).
+  // Không báo khi gỡ gán, giữ nguyên GV cũ, hoặc tự gán mình.
+  if (
+    parsed.data.teacherId &&
+    parsed.data.teacherId !== trial.teacherId &&
+    parsed.data.teacherId !== session.user.id
+  ) {
+    await notifyTrialTeacherAssigned({
+      teacherId: parsed.data.teacherId,
+      title: "Bạn được phân công buổi học thử",
+      body: `Bạn phụ trách buổi học thử lúc ${newAt.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}.`,
+      dedupeKey: `trial-v1.assigned:${trialId}`,
+      href: "/trials",
+    });
+  }
 
   revalidatePath("/trials");
   revalidatePath(`/leads/${trial.leadId}`);

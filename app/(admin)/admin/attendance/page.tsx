@@ -4,6 +4,7 @@ import { ClipboardCheck, AlertCircle } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, withMakeupException } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
@@ -38,19 +39,30 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   const gateUser = (await auth())?.user;
   if (!gateUser) redirect("/login");
   const NONE: Prisma.ClassWhereInput = { id: "__none__" };
-  const classScope: Prisma.ClassWhereInput = hasRole(gateUser, "SUPER_ADMIN")
-    ? {}
-    : hasRole(gateUser, "CENTER_MANAGER")
-      ? gateUser.centerId
-        ? { centerId: gateUser.centerId }
-        : NONE
-      : hasRole(gateUser, "TEACHER")
-        ? { OR: [{ teacherId: gateUser.id }, { assistantId: gateUser.id }] }
-        : NONE;
-
   // Cách ly cơ sở (A0-04): Class/ClassSession ∈ SCOPED_MODELS → đọc qua scopedDb.
   const actor = await resolveActor(gateUser.id);
   const sdb = scopedDb(actor);
+
+  // Ai được sửa điểm danh thì phải VÀO ĐƯỢC màn này. Trước 03/08 selector dựng
+  // bằng hasRole v1 tĩnh (SA/CM/GV, còn lại NONE) nên CSKH bị chặn trắng, trong khi
+  // chính markAttendance cho họ sửa hồi tố 7 ngày qua attendance:edit (Task #16) —
+  // họ phải đi vòng qua hub lớp. Nay hỏi đúng quyền, và hỏi THEO TỪNG CƠ SỞ vì
+  // `attendance:edit` là scope CENTER (R1: action non-GLOBAL cấm gọi trần).
+  const editableCenterIds = (
+    await Promise.all(
+      actor.visibleCenterIds.map(async (centerId) =>
+        (await checkPermission("attendance:edit", { centerId })) ? centerId : null,
+      ),
+    )
+  ).filter((id): id is string => id !== null);
+
+  const classScope: Prisma.ClassWhereInput = actor.isSuperAdmin
+    ? {}
+    : editableCenterIds.length > 0
+      ? { centerId: { in: editableCenterIds } }
+      : hasRole(gateUser, "TEACHER")
+        ? { OR: [{ teacherId: gateUser.id }, { assistantId: gateUser.id }] }
+        : NONE;
 
   // Load list of sessions for selector (upcoming or recent past)
   // QA 21/07 — loại buổi của lớp đã xoá mềm khỏi selector (đồng bộ /sessions).
