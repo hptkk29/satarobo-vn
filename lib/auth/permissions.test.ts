@@ -107,22 +107,36 @@ describe("permissions matrix — CENTER_MANAGER chỉ XEM LMS", () => {
     expect(can("CENTER_MANAGER", "training:manage")).toBe(false);
   });
 
-  it("CENTER_MANAGER GIỮ mọi *:view LMS + quyền ngoài LMS", () => {
-    expect(can("CENTER_MANAGER", "curriculum:view")).toBe(true);
-    expect(can("CENTER_MANAGER", "questions:view")).toBe(true);
-    expect(can("CENTER_MANAGER", "assignments:view")).toBe(true);
-    expect(can("CENTER_MANAGER", "documents:view")).toBe(true);
-    expect(can("CENTER_MANAGER", "exams:view")).toBe(true);
-    expect(can("CENTER_MANAGER", "courses:view")).toBe(true);
+  it("CENTER_MANAGER KHÔNG còn quyền LMS (chủ dự án chốt 03/08) nhưng giữ quyền vận hành", () => {
+    // ⚠️ ĐẢO chốt 24/07 ("CM giữ mọi *:view LMS"). 03/08 chủ dự án yêu cầu chặn hẳn
+    // phần LMS ở vai Quản lý cơ sở — họ vận hành lớp, không soạn/duyệt học liệu.
+    expect(can("CENTER_MANAGER", "curriculum:view")).toBe(false);
+    expect(can("CENTER_MANAGER", "questions:view")).toBe(false);
+    expect(can("CENTER_MANAGER", "assignments:view")).toBe(false);
+    expect(can("CENTER_MANAGER", "documents:view")).toBe(false);
+    expect(can("CENTER_MANAGER", "exams:view")).toBe(false);
+    expect(can("CENTER_MANAGER", "courses:view")).toBe(false);
+    // Gói bán = giá, không phải học liệu → GIỮ (luồng tạo đơn cần).
     expect(can("CENTER_MANAGER", "course-packages:view")).toBe(true);
-    expect(can("CENTER_MANAGER", "teaching-materials:view-own-class")).toBe(true);
-    // chấm + grade vẫn giữ
+    expect(can("CENTER_MANAGER", "teaching-materials:view-own-class")).toBe(false);
+    // Chấm bài vẫn giữ: đó là việc vận hành lớp, không phải soạn học liệu.
     expect(can("CENTER_MANAGER", "assignments:grade")).toBe(true);
     expect(can("CENTER_MANAGER", "exams:grade")).toBe(true);
-    // quyền ngoài LMS giữ nguyên
+    // Học bạ phải CÒN — màn đó gác [curriculum:view | students:view-own-class].
+    expect(can("CENTER_MANAGER", "students:view-own-class")).toBe(true);
+    // Quyền ngoài LMS giữ nguyên.
     expect(can("CENTER_MANAGER", "classes:create")).toBe(true);
-    expect(can("CENTER_MANAGER", "payments:manage")).toBe(true);
-    // 24/07 — CM KHÔNG còn CHỈNH chương trình (chỉ Đào tạo + SUPER_ADMIN); vẫn XEM được.
+    // 03/08 — tiền: chỉ XEM đối soát, không quản lý (Hoàn tiền/Phương thức TT chặn).
+    expect(can("CENTER_MANAGER", "payments:view")).toBe(true);
+    expect(can("CENTER_MANAGER", "payments:manage")).toBe(false);
+    // 03/08 — hồ sơ nhân sự/giáo viên, nhật ký, cấu hình: rút khỏi vai này.
+    expect(can("CENTER_MANAGER", "employees:view-all")).toBe(false);
+    expect(can("CENTER_MANAGER", "audit-logs:view")).toBe(false);
+    expect(can("CENTER_MANAGER", "settings:view")).toBe(false);
+    // 03/08 — vẫn bàn giao/chuyển lead, chỉ mất màn CẤU HÌNH chia lead.
+    expect(can("CENTER_MANAGER", "leads:assign")).toBe(true);
+    expect(can("CENTER_MANAGER", "leads:assign-config")).toBe(false);
+    // 24/07 — CM KHÔNG chỉnh chương trình.
     expect(can("CENTER_MANAGER", "courses:create")).toBe(false);
     expect(can("CENTER_MANAGER", "courses:edit")).toBe(false);
     expect(can("CENTER_MANAGER", "course-packages:edit")).toBe(false);
@@ -158,10 +172,11 @@ describe("permissions matrix — FL W0-NAV-2 QĐ-T3b (CM giữ trial-config + du
     expect(can("ACCOUNTANT", "trials:config")).toBe(false);
   });
 
-  it("lesson-change:approve — Super/Training/CM = true; Sale/GV = false", () => {
+  it("lesson-change:approve — Super/Training = true; CM/Sale/GV = false", () => {
     expect(can("SUPER_ADMIN", "lesson-change:approve")).toBe(true);
     expect(can("TRAINING", "lesson-change:approve")).toBe(true);
-    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(true);
+    // 03/08 — duyệt sửa giáo án là việc Đào tạo; CM đã rút khỏi toàn bộ phần LMS.
+    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(false);
     expect(can("SALES_CSM", "lesson-change:approve")).toBe(false);
     expect(can("TEACHER", "lesson-change:approve")).toBe(false);
   });
@@ -202,7 +217,8 @@ describe("permissions matrix — FL W0-NAV-2 role hygiene (BA #07 3.C)", () => {
     expect(can("TEACHER", "sessions:view")).toBe(true);
     expect(can("TEACHER", "attendance:view")).toBe(true);
     expect(can("CENTER_MANAGER", "rooms:view")).toBe(true);
-    expect(can("CENTER_MANAGER", "courses:view")).toBe(true);
+    // 03/08 — CM đã rút khỏi phần LMS nên KHÔNG còn courses:view (xem test ở trên).
+    expect(can("CENTER_MANAGER", "courses:view")).toBe(false);
     expect(can("HR", "news:view")).toBe(true);
     expect(can("MARKETING", "news:view")).toBe(true);
     expect(can("MARKETING", "courses:view")).toBe(true);
@@ -240,9 +256,11 @@ describe("permissions matrix — #17 học bạ sau phát hành (câu 55, Toại
 describe("permissions matrix — sanity", () => {
   it("teaching-materials:view-own-class tồn tại trong matrix", () => {
     expect(ALL_ACTIONS).toContain("teaching-materials:view-own-class");
+    // 03/08 — CM rút khỏi phần LMS; tài liệu lớp còn Đào tạo + GV.
     expect(PERMISSIONS["teaching-materials:view-own-class"]).toEqual(
-      expect.arrayContaining(["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "TEACHER"]),
+      expect.arrayContaining(["SUPER_ADMIN", "TRAINING", "TEACHER"]),
     );
+    expect(PERMISSIONS["teaching-materials:view-own-class"]).not.toContain("CENTER_MANAGER");
   });
 
   it("PARENT không có quyền admin nào", () => {

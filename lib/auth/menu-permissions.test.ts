@@ -68,9 +68,10 @@ describe("grantedMenuActions — parity với can() khi cờ OFF", () => {
 
 describe("grantedMenuActions — cờ ON thì menu theo v2", () => {
   it("action v2 có ⇒ hiện; action chỉ có ở v1 ⇒ ẩn (đúng thứ cổng trang sẽ làm)", () => {
-    // Người này ở v1 là CENTER_MANAGER (có payments:manage), ở v2 thì không.
-    const user = { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"] };
-    const actor = actorOf([{ action: "students:view-all", roleCode: "CENTER_MANAGER" }], ["CENTER_MANAGER"]);
+    // 03/08: CM mất payments:manage ở CẢ v1 lẫn v2 nên không còn minh hoạ được
+    // "chỉ có ở v1". Dùng ACCOUNTANT — v1 có payments:manage, actor v2 thì không.
+    const user = { role: "ACCOUNTANT", roles: ["ACCOUNTANT"] };
+    const actor = actorOf([{ action: "students:view-all", roleCode: "HO_ACCOUNTANT" }], ["HO_ACCOUNTANT"]);
 
     expect(can(user, "payments:manage" as Action)).toBe(true); // v1 vẫn cho
     const g = grantedMenuActions({ sessionUser: user, actor, flagOn: true });

@@ -384,6 +384,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "inventory:view", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      // Gói bán = GIÁ, không phải học liệu — giữ cho vai này để luồng tạo đơn/báo giá
+      // không gãy khi chặn phần LMS (03/08).
+      { action: "course-packages:view", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "honors:view", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "GLOBAL" },

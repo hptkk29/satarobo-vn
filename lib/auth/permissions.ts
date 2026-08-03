@@ -275,7 +275,7 @@ export type Action =
 
 export const PERMISSIONS: Record<Action, Role[]> = {
   // --- Employees ---
-  "employees:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "HR"],
+  "employees:view-all": ["SUPER_ADMIN", "HR"],
   "employees:view-public": [
     "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
@@ -341,7 +341,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // FL W0-NAV-2 (QĐ-T3b): trả lại cho CM 2 việc vận hành qua action riêng — KHÔNG mở lại training:manage.
   // CM cần cấu hình số buổi lớp trải nghiệm + duyệt đề xuất chỉnh bài của GV.
   "trials:config": ["SUPER_ADMIN", "CENTER_MANAGER"],
-  "lesson-change:approve": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "lesson-change:approve": ["SUPER_ADMIN", "TRAINING"],
 
   // --- Notifications (Phase NHÓM 3) ---
   "notifications:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
@@ -392,7 +392,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Students ---
   "students:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING", "ACCOUNTANT", "HR"],
-  "students:view-own-class": ["SUPER_ADMIN", "TEACHER"],
+  "students:view-own-class": ["SUPER_ADMIN", "TEACHER", "CENTER_MANAGER"],
   "students:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // FL W0 (QĐ-T4): kế toán KHÔNG sửa hồ sơ học viên (gỡ ACCOUNTANT).
   "students:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
@@ -455,9 +455,8 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Courses + Packages ---
   // FL W0-NAV-2 hygiene: SALES_CSM + ACCOUNTANT bỏ "Khoá dạy" (Sale bán qua Gói học = course-packages; KT không cần).
-  "courses:view": [
-    "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "HR", "TEACHER", "MARKETING",
-  ],
+  // 03/08 — gỡ CENTER_MANAGER: chủ dự án chặn phần LMS ở vai Quản lý cơ sở.
+  "courses:view": ["SUPER_ADMIN", "TRAINING", "HR", "TEACHER", "MARKETING"],
   // Chỉnh chương trình học (curriculum + khóa học + gói combo) CHỈ Đào tạo + SUPER_ADMIN
   // (user chốt 24/07): gỡ khỏi CENTER_MANAGER + MARKETING.
   "courses:create": ["SUPER_ADMIN", "TRAINING"],
@@ -473,23 +472,23 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Curriculum + Lessons ---
   // FL W0 (QĐ-T1): biên soạn nội dung LMS = TRAINING (Đào tạo). TEACHER + CENTER_MANAGER chỉ XEM.
-  "curriculum:view": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "TEACHER"],
+  "curriculum:view": ["SUPER_ADMIN", "TRAINING", "TEACHER"],
   "curriculum:create": ["SUPER_ADMIN", "TRAINING"],
   "curriculum:edit": ["SUPER_ADMIN", "TRAINING"],
   "curriculum:delete": ["SUPER_ADMIN", "TRAINING"],
 
   // --- Questions / Exams / Assignments ---
   // FL W0 (QĐ-T1): kho câu hỏi/đề thi/bài tập biên soạn bởi TRAINING. TEACHER chỉ XEM + chấm bài/đề.
-  "questions:view": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "TEACHER"],
+  "questions:view": ["SUPER_ADMIN", "TRAINING", "TEACHER"],
   "questions:author": ["SUPER_ADMIN", "TRAINING"],
   "questions:edit": ["SUPER_ADMIN", "TRAINING"],
   "questions:delete": ["SUPER_ADMIN", "TRAINING"],
-  "exams:view": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "TEACHER"],
+  "exams:view": ["SUPER_ADMIN", "TRAINING", "TEACHER"],
   "exams:create": ["SUPER_ADMIN", "TRAINING"],
   "exams:edit": ["SUPER_ADMIN", "TRAINING"],
   "exams:grade": ["TEACHER", "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
   "exams:delete": ["SUPER_ADMIN", "TRAINING"],
-  "assignments:view": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "TEACHER"],
+  "assignments:view": ["SUPER_ADMIN", "TRAINING", "TEACHER"],
   "assignments:create": ["SUPER_ADMIN", "TRAINING"],
   "assignments:edit": ["SUPER_ADMIN", "TRAINING"],
   "assignments:grade": ["TEACHER", "SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
@@ -507,12 +506,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Documents ---
   // FL W0 (QĐ-T1): tài liệu LMS biên soạn/upload bởi TRAINING. TEACHER + CENTER_MANAGER chỉ XEM.
-  "documents:view": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "TEACHER"],
+  "documents:view": ["SUPER_ADMIN", "TRAINING", "TEACHER"],
   "documents:upload": ["SUPER_ADMIN", "TRAINING"],
   "documents:delete": ["SUPER_ADMIN", "TRAINING"],
 
   // --- Teaching materials (FL W0) — GV xem tài liệu giảng dạy của lớp mình ---
-  "teaching-materials:view-own-class": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER", "TEACHER"],
+  "teaching-materials:view-own-class": ["SUPER_ADMIN", "TRAINING", "TEACHER"],
 
   // --- Centers / Rooms / Holidays ---
   "centers:view": [
@@ -548,18 +547,18 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // người chỉ xem cơ sở mình — scope ép ở tầng query theo orgUnit) được xem; PII
   // che mặc định. view-pii = break-glass "xem đầy đủ" có kiểm soát (reason + log
   // riêng audit.pii-unmasked). Cùng tập role với view — kiểm soát nằm ở reason+audit.
-  "audit-logs:view": ["SUPER_ADMIN", "CENTER_MANAGER"],
-  "audit-logs:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "audit-logs:view": ["SUPER_ADMIN"],
+  "audit-logs:view-pii": ["SUPER_ADMIN"],
 
   // --- Settings / system ---
-  "settings:view": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "settings:view": ["SUPER_ADMIN"],
   "settings:edit": ["SUPER_ADMIN"],
   "users:manage": ["SUPER_ADMIN"], // create/disable User accounts
   "roles:assign": ["SUPER_ADMIN"],
   "roles:manage": ["SUPER_ADMIN"], // A0-02 — chỉ SUPER_ADMIN cấu hình role/permission
 
   // --- Phase 5.6 — Financial ---
-  "payments:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "payments:manage": ["SUPER_ADMIN", "ACCOUNTANT"],
   "payments:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "payments:record": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "payments:confirm": ["SUPER_ADMIN", "ACCOUNTANT"],
