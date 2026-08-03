@@ -220,7 +220,7 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 
 ### C7 — Chuông thông báo site GV
 - [x] Góc trên phải site GV có **chuông**, có badge số, mở ra danh sách thật (*"Học viên sắp hết khoá — 9 việc cần xử lý"*, có nút "Đọc hết")
-- [ ] **[C]** CSKH sửa điểm danh → GV thấy thông báo *(chưa chạy — cần một phiên admin song song)*
+- [x] **[C]** CSKH sửa điểm danh → GV thấy thông báo — **đã chạy 03/08**: QLCS sửa 1 em ở buổi 30/6 lớp CS1.0012 → GV nhận ngay `StaffNotification` *"Điểm danh buổi học bị chỉnh sửa … bởi UAT Quản lý"*; link trong thông báo map đúng sang site GV (`/attendance` → `/diem-danh`, có unit test)
 
 ---
 
@@ -270,8 +270,14 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 
 Với **từng vai** (QLCS · Sale · GV · Đào tạo), đăng nhập và:
 
-- [ ] **[C]** Bấm thử **mọi mục** trên sidebar → không mục nào bị đá về dashboard (link chết)
-- [ ] QLCS thấy: Chốt hàng loạt · Tài khoản PH · Biến động số dư · Điểm danh
+- [x] **[C]** Bấm thử **mọi mục** trên sidebar → không mục nào bị đá về dashboard (link chết) — **QLCS: 69/69 mục mở được, 0 link chết**
+- [x] QLCS thấy: Chốt hàng loạt ✅ · Tài khoản PH ✅ · Điểm danh ✅ · ~~Biến động số dư~~ **KHÔNG — và đó là ĐÚNG, xem bên dưới**
+
+> ⚠️ **Dòng "QLCS thấy Biến động số dư" trong checklist này VIẾT SAI** (viết theo bảng
+> quyền v1). RBAC v2 đã **cố ý** chuyển `payments:manage` khỏi Quản lý cơ sở sang
+> HO_ACCOUNTANT / CENTER_ACCOUNTANT (quyết định #09, Kiệt duyệt 09/07/2026 — ghi ngay
+> trong `prisma/seed-roles.ts`). Nên QLCS **vừa không thấy mục, vừa bị chặn khi gõ
+> thẳng URL** — hai thứ khớp nhau, không phải link chết.
 - [ ] Sale thấy: Tài khoản PH · Điểm danh (sửa hồi tố) — **không** thấy Chốt hàng loạt
 - [ ] Đào tạo mở được `/cham-cong/checkin` *(trước đây bị đá ra)*
 - [ ] **[P]** Đào tạo chỉ thấy ~12 mục (giáo trình + LMS + học bạ) — **đúng thiết kế** theo chốt 24/07, không phải lỗi
@@ -281,6 +287,33 @@ Với **từng vai** (QLCS · Sale · GV · Đào tạo), đăng nhập và:
 > trang đó — tức không còn lớp lỗi "thấy link rồi bị đá về dashboard" do thiếu route
 > hoặc lệch quyền. 15/15 mục sidebar site GV cũng có route thật. Việc còn lại khi
 > đăng nhập từng vai chỉ là xác nhận **đúng vai thấy đúng mục** (dòng gạch đầu dòng ở trên).
+
+
+### 🚨 E-bis — QLCS KHÔNG duyệt được trả góp và KHÔNG xuất được QR (cần quyết)
+
+Đo trực tiếp trên DB test 03/08 với `uat.quanly@satarobo.vn` (role `CENTER_MANAGER`,
+85 quyền):
+
+| Quyền | Ai giữ trong `seed-roles.ts` | QLCS có? | Chặn việc gì |
+|---|---|---|---|
+| `discounts:approve` | HO_ACCOUNTANT, **CENTER_MANAGER** | **thiếu trong DB** | Duyệt giảm giá (B2) |
+| `installments:approve` | **chỉ** HO_ACCOUNTANT | không | **Duyệt kế hoạch 2 đợt (B3)** |
+| `orders:manage` | **chỉ** HO_ACCOUNTANT | không | **Xuất QR theo đợt (B4)** |
+| `payments:manage` | HO_ACCOUNTANT, CENTER_ACCOUNTANT | không | Công nợ · Biến động số dư · Hoàn tiền |
+
+Hai việc khác nhau, đừng gộp:
+
+1. **`discounts:approve` — chỉ là seed cũ.** Seed đã có, DB chưa có. Chạy workflow ở
+   mục F.1 là xong. (Đây đúng là thứ ghi chú ở B2 đã cảnh báo.)
+2. **`installments:approve` + `orders:manage` — KHÔNG có trong seed cho QLCS.** Chạy
+   seed bao nhiêu lần cũng không có. Nghĩa là theo thiết kế hiện tại, **người ở quầy
+   cơ sở không xuất được QR và không duyệt được kế hoạch trả góp** — phải là kế toán
+   Hội sở làm. Việc này **va thẳng vào luồng đã mô tả** ("sale tạo đơn → QLCS duyệt →
+   xuất QR cho khách quét tại quầy").
+
+**Cần chủ dự án chốt:** cấp thêm `installments:approve` + `orders:manage` cho
+CENTER_MANAGER, hay giữ tập trung ở Hội sở và chấp nhận quầy phải gọi kế toán?
+Tôi không tự sửa bảng quyền — đổi quyền là quyết định tổ chức, không phải lỗi code.
 
 ---
 
