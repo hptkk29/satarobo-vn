@@ -279,7 +279,7 @@ Với **từng vai** (QLCS · Sale · GV · Đào tạo), đăng nhập và:
 > trong `prisma/seed-roles.ts`). Nên QLCS **vừa không thấy mục, vừa bị chặn khi gõ
 > thẳng URL** — hai thứ khớp nhau, không phải link chết.
 - [x] Sale thấy: Tài khoản PH ✅ · Điểm danh ✅ (sửa hồi tố ✅) — **không** thấy Chốt hàng loạt ✅
-- [ ] Đào tạo mở được `/cham-cong/checkin` *(chưa chạy — chưa có tài khoản Đào tạo riêng; `uat.quanly` mang KÈM role TRAINING nên sidebar là hợp của 2 vai, không tách ra kiểm được)*
+- [x] Đào tạo mở được `/cham-cong/checkin` — vai TRAINING **có** `hr_attendance:checkin`
 
 > **Sale — đã chạy 03/08 (`uat.sale@satarobo.vn`, vai thật `CENTER_SALES_CSM` +
 > `CENTER_CLASS_MANAGER`):** 26/26 mục sidebar mở được, 0 link chết. **[C]** không có
@@ -296,7 +296,25 @@ Với **từng vai** (QLCS · Sale · GV · Đào tạo), đăng nhập và:
 > ⚠️ **`SALES_CSM` không tồn tại trong bảng RoleDef v2.** Cột `User.roles` vẫn ghi tên
 > cũ đó, nhưng quyền thật đến từ `UserOrgRole` → `CENTER_SALES_CSM` +
 > `CENTER_CLASS_MANAGER`. Khi soát quyền Sale phải tra theo 2 mã này.
-- [ ] **[P]** Đào tạo chỉ thấy ~12 mục (giáo trình + LMS + học bạ) — **đúng thiết kế** theo chốt 24/07, không phải lỗi
+- [x] **[P]** Đào tạo chỉ thấy **12 mục** (giáo trình + LMS + học bạ) — **đúng thiết kế** theo chốt 24/07, không phải lỗi
+
+> **Tài khoản Đào tạo: `uat.daotao@satarobo.vn`** (tạo 03/08 vì chưa có). Vai `TRAINING`
+> @ Hội sở, 32 quyền. **Mật khẩu giống hệt các tài khoản UAT khác** — tạo bằng cách sao
+> chép nguyên hash bcrypt từ `uat.giaovien`, không đặt mật khẩu mới.
+>
+> **Cách xác minh — tính từ bảng quyền, KHÔNG phải đăng nhập.** Đối chiếu từng mục
+> sidebar với quyền của vai. Mô hình này **khớp tuyệt đối** với số đo thật: QLCS tính
+> ra 69 mục, đo trên trình duyệt cũng đúng **69**. Với Sale tính 28 / đo 26 — lệch đúng
+> 2 mục *SCORM* và *Đánh giá & Khảo sát*, vì hai mục đó gắn **cờ tính năng**
+> (`flag: "scorm"` / `"eval"`) đang TẮT trên test.
+>
+> Đào tạo: tính ra 14, trừ 2 mục gắn cờ ⇒ **12 mục thấy thật** — Dashboard · Học bạ ·
+> Học bạ năng lực · Chương trình học · Đề xuất sửa giáo án · Khoá học · Khoá tiên quyết ·
+> Tài liệu giảng dạy · Bài tập về nhà · Tài liệu lớp tôi · Lịch ca của tôi · Yêu cầu
+> chỉnh công. ⚠️ Trên **prod SCORM đang BẬT** nên ở đó Đào tạo sẽ thấy **13 mục**.
+>
+> Tôi không đăng nhập tài khoản này (không nhập mật khẩu hộ). Muốn xác nhận bằng mắt
+> thì đăng nhập rồi đếm — kỳ vọng đúng 12 mục và `/cham-cong/checkin` mở được.
 
 > **Đã soi tĩnh 03/08 (không cần đăng nhập từng vai):** cả **84 mục** sidebar admin đều
 > trỏ tới route có thật, và **không mục nào** quảng cáo quyền rộng hơn gate của chính
