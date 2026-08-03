@@ -1,6 +1,7 @@
 "use client";
 
 import { canonicalPhone, isValidPhoneVN } from "@/lib/phone";
+import { readAttribution } from "@/lib/marketing/attribution";
 
 // gtag/fbq global types declared in components/public/{ga4,meta-pixel}.tsx
 
@@ -115,6 +116,9 @@ async function submitLeadToApi(formData: LeadData): Promise<void> {
       typeof document !== "undefined" ? document.referrer || undefined : undefined,
     note: note || undefined,
     consentMarketing: true,
+    // Nguồn khách giữ từ lúc vào site (?ref= affiliate + UTM + click-id) — landing
+    // này cũng nhận link giới thiệu qua domain cũ laptrinhrobot.vn (proxy.ts).
+    ...readAttribution(),
   };
 
   try {

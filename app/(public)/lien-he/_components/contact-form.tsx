@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { phoneVn } from '@/lib/validators/phone'
+import { readAttribution } from '@/lib/marketing/attribution'
 import { toast } from 'sonner'
 import { Loader2, Send } from 'lucide-react'
 import {
@@ -110,6 +111,7 @@ function ContactFormInner() {
     const subjectLabel = SUBJECTS.find((s) => s.value === values.subject)?.label ?? values.subject
     const note = `[Subject: ${subjectLabel}]${values.message ? ' ' + values.message : ''}`
 
+    const attribution = readAttribution()
     const payload = {
       parentName: values.parentName,
       phone: values.phone,
@@ -122,13 +124,17 @@ function ContactFormInner() {
       consentMarketing: true,
       landingPage: typeof window !== 'undefined' ? window.location.href : undefined,
       referrer: typeof document !== 'undefined' ? document.referrer || undefined : undefined,
-      utmSource: getUrlParam(searchParams, 'utm_source') || undefined,
-      utmMedium: getUrlParam(searchParams, 'utm_medium') || undefined,
-      utmCampaign: getUrlParam(searchParams, 'utm_campaign') || undefined,
-      utmTerm: getUrlParam(searchParams, 'utm_term') || undefined,
-      utmContent: getUrlParam(searchParams, 'utm_content') || undefined,
-      fbclid: getUrlParam(searchParams, 'fbclid') || undefined,
-      gclid: getUrlParam(searchParams, 'gclid') || undefined,
+      // Tham số trên URL HIỆN TẠI ưu tiên; thiếu thì lấy bản đã giữ từ lúc khách
+      // vào site (khách vào `/?ref=X&utm_source=fb` rồi mới bấm sang /lien-he thì
+      // URL ở đây đã sạch — trước bản vá này nguồn mất trắng).
+      utmSource: getUrlParam(searchParams, 'utm_source') || attribution.utmSource,
+      utmMedium: getUrlParam(searchParams, 'utm_medium') || attribution.utmMedium,
+      utmCampaign: getUrlParam(searchParams, 'utm_campaign') || attribution.utmCampaign,
+      utmTerm: getUrlParam(searchParams, 'utm_term') || attribution.utmTerm,
+      utmContent: getUrlParam(searchParams, 'utm_content') || attribution.utmContent,
+      fbclid: getUrlParam(searchParams, 'fbclid') || attribution.fbclid,
+      gclid: getUrlParam(searchParams, 'gclid') || attribution.gclid,
+      ref: getUrlParam(searchParams, 'ref') || attribution.ref,
       fbp: getCookie('_fbp') || undefined,
       fbc: getCookie('_fbc') || undefined,
     }

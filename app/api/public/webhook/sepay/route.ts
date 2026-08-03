@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
+import { sendEmailForTrigger } from "@/lib/email/trigger";
+import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import {
   decideSepayAction,
   extractOrderCode,
@@ -162,6 +164,60 @@ export async function POST(req: NextRequest) {
     console.error("[sepay] provision parent:", err),
   );
 
+  // BIÊN NHẬN — mirror đúng đường xác nhận TAY (`changeOrderStatusAction`): email
+  // PAYMENT_RECEIPT cho khách có email, ZNS học phí cho khách chỉ có SĐT.
+  // Trước bản vá này webhook chỉ cấp tài khoản rồi im — khách chuyển khoản tự động
+  // không nhận được bất kỳ xác nhận nào, trong khi khách thu tay thì có.
+  // Await từng bước: trên serverless, promise chưa xong lúc trả response có thể bị
+  // cắt giữa chừng (đúng lý do dòng provision ở trên cũng await).
+  await sendOrderReceipt(decision.orderId);
+
   await logIntegration({ action: "CONFIRM_ORDER", status: "SUCCESS", payload });
   return NextResponse.json({ success: true, handled: true, orderCode });
+}
+
+/**
+ * Gửi biên nhận cho đơn vừa xác nhận. Best-effort: mọi lỗi chỉ log — tiền đã ghi
+ * sổ xong, không được để khâu thông báo làm webhook trả 500 rồi SePay retry và
+ * đẩy đơn qua nhánh ORDER_ALREADY_HANDLED.
+ */
+async function sendOrderReceipt(orderId: string): Promise<void> {
+  const order = await db.order
+    .findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        code: true,
+        customerEmail: true,
+        customerName: true,
+        totalAmount: true,
+        paidAt: true,
+        paymentMethod: { select: { name: true } },
+      },
+    })
+    .catch(() => null);
+  if (!order) return;
+
+  if (order.customerEmail?.trim()) {
+    await sendEmailForTrigger({
+      trigger: "PAYMENT_RECEIPT",
+      recipient: { email: order.customerEmail, name: order.customerName },
+      vars: {
+        customer_name: order.customerName,
+        order_code: order.code,
+        total_amount: order.totalAmount,
+        payment_method: order.paymentMethod?.name ?? "Chuyển khoản (SePay)",
+        paid_at: order.paidAt ?? new Date(),
+      },
+      context: { type: "Order", id: order.id },
+      triggerType: "SYSTEM",
+      actor: { userId: null, name: SYSTEM_ACTOR.name },
+    }).catch((err) => console.error("[sepay] PAYMENT_RECEIPT email:", err));
+  }
+
+  // Khách không có email → ZNS mẫu học phí (helper tự bỏ qua khi có email, nên
+  // gọi vô điều kiện vẫn không gửi trùng — nhưng gọi trong nhánh cho rõ ý).
+  await notifyOrderByZnsIfNoEmail(order.id).catch((err) =>
+    console.error("[sepay] ZNS receipt:", err),
+  );
 }
