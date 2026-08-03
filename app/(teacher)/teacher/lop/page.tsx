@@ -8,6 +8,7 @@
 // Cách ly cơ sở + makeup liên cơ sở: đọc qua withMakeupException(actor) để GV dạy bù
 // thấy đúng buổi/lớp ở cơ sở khác; quyền sở hữu thật do assignedClassIds / ownership gác.
 // ⚠️ Câu 46: roster từ server đã strip studentPhone — client CHỈ nhận tên HV.
+import { redirect } from "next/navigation";
 import { CalendarX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -160,6 +161,33 @@ export default async function TeacherClassesPage({
         />
       </div>
     );
+  }
+
+  // ── (b′) GV DẠY THAY mở hub của lớp KHÔNG phải lớp mình ──────────────────────
+  // Hub (b) gác bằng assignedClassIds — dạy thay KHÔNG nằm trong tập đó (xem ghi
+  // chú ở nhánh (c)). Trước 03/08 điều kiện sai thì rơi thẳng xuống nhánh (a) và
+  // hiện… danh sách lớp: GV bấm "Nhận xét" cho buổi mình dạy thay thì màn nhảy về
+  // "Lớp học của tôi", URL vẫn nguyên, không một chữ giải thích — đúng lớp lỗi mà
+  // nhánh (c) đã dặn "fail → NotYours, không rơi im lặng".
+  //
+  // Dạy thay được nhận xét buổi mình dạy: /teacher/nhan-xet vốn đã xét
+  // substituteTeacherId/actualTeacherId, nên đưa họ sang đúng đường đó. Các tab còn
+  // lại (roster, học bạ, tài liệu, kho ảnh cả lớp) KHÔNG mở cho người chỉ dạy 1 buổi.
+  if (classId && !actor.assignedClassIds.has(classId)) {
+    const coveredHere = await xdb.classSession.findFirst({
+      where: {
+        classId,
+        OR: [{ substituteTeacherId: session.user.id }, { actualTeacherId: session.user.id }],
+      },
+      select: { id: true },
+    });
+    if (coveredHere) {
+      if (parseHubTab(tab) === "nhan-xet") {
+        const sid = rvSession ?? coveredHere.id;
+        redirect(`/teacher/nhan-xet?classId=${classId}&sessionId=${sid}`);
+      }
+      return <NotYours />;
+    }
   }
 
   // ── (b) Class Hub: 1 lớp, 6 tab (Học viên / Điểm danh / Nhận xét / Bài tập /
