@@ -5,6 +5,14 @@ import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { formatVndPlain } from "@/lib/format/money";
+// 03/08 — SỔ MỚI (PaymentRequest) chạy SONG SONG sổ cũ (OrderInstallment).
+// Sổ cũ giữ nguyên hành vi (đợt 1 = PAID) để không phá công nợ đang chạy; sổ mới
+// theo luật mới: phiếu theo đợt CHỈ sinh khi kế hoạch được DUYỆT, và sinh ở PENDING.
+import {
+  ensureFullOrderRequest,
+  materializeInstallmentRequests,
+  revertInstallmentRequests,
+} from "@/lib/payments/payment-request";
 
 // =============================================================================
 // Commit 4 — thanh toán TỐI ĐA 2 ĐỢT cho 1 Order.
@@ -58,7 +66,7 @@ export async function recordInstallmentPlan(params: {
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { totalAmount: true, centerId: true, leadId: true, installmentApprovalStatus: true },
+    select: { code: true, totalAmount: true, centerId: true, leadId: true, installmentApprovalStatus: true },
   });
   if (!order) return { ok: false, error: "Không tìm thấy đơn" };
   if (dot1Amount + dot2Amount !== order.totalAmount) {
@@ -106,6 +114,16 @@ export async function recordInstallmentPlan(params: {
         actor: { id: actorId },
       });
     }
+    // QĐ-1 (03/08) — kế hoạch mới lập là BẢN NHÁP: KHÔNG sinh phiếu thu theo đợt ở
+    // đây. Chỉ đảm bảo đơn có phiếu "thu toàn đơn" để sale vẫn xuất được QR số
+    // tiền TỔNG trong lúc chờ QLCS duyệt. Phiếu theo đợt sinh ở approveInstallmentPlan.
+    // (Đơn đã duyệt rồi thì hàm này tự no-op — đã có phiếu đợt sống.)
+    await ensureFullOrderRequest(tx, {
+      id: orderId,
+      code: order.code,
+      totalAmount: order.totalAmount,
+      centerId: order.centerId,
+    });
   });
   await recomputeOrder(orderId);
   return { ok: true };
@@ -269,6 +287,13 @@ export async function approveInstallmentPlan(params: {
         actor: { id: params.actor.id, name: params.actor.name },
       });
     }
+    // QĐ-1 (03/08) — ĐÂY là nơi duy nhất phiếu thu theo đợt ra đời. Cùng transaction
+    // với việc set APPROVED ở trên: duyệt hỏng thì phiếu cũng không tồn tại, và
+    // ngược lại không có đơn nào "đã duyệt mà chưa có phiếu".
+    await materializeInstallmentRequests(tx, order.id, {
+      id: params.actor.id,
+      name: params.actor.name,
+    });
   });
   return { ok: true };
 }
@@ -316,6 +341,12 @@ export async function rejectInstallmentPlan(params: {
       reason: params.reason.trim(),
       orgUnitId: order.centerId,
       tx,
+    });
+    // Kế hoạch bị bác sau khi đã lỡ duyệt → thu hồi phiếu theo đợt (chưa dính tiền)
+    // và cho phiếu "thu toàn đơn" sống lại, để đơn vẫn thu được.
+    await revertInstallmentRequests(tx, order.id, {
+      id: params.actor.id,
+      name: params.actor.name,
     });
   });
   return { ok: true };

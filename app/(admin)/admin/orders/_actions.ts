@@ -17,6 +17,7 @@ import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/install
 import { discountFromPercent, needsDiscountApproval } from "@/lib/orders/discount";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
+import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
@@ -327,6 +328,17 @@ export async function createOrderManualAction(input: unknown) {
         },
       },
       select: { id: true, code: true },
+    });
+
+    // 03/08 — đơn nào cũng phải có phiếu thu để xuất được QR. Đơn mới = chưa trả
+    // góp ⇒ đúng MỘT phiếu "thu toàn đơn" (installmentNo=0, amountDue=totalAmount).
+    // Phiếu theo đợt chỉ ra đời khi QLCS duyệt kế hoạch (lib/payments/payment-request.ts).
+    // Cùng transaction với order.create: có đơn là có phiếu, không có nửa vời.
+    await ensureFullOrderRequest(tx, {
+      id: order.id,
+      code: order.code,
+      totalAmount,
+      centerId: data.centerId || null,
     });
 
     // Phase 5.10.1 — Stock decrement + SALE movement for PRODUCT orders.

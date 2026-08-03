@@ -116,8 +116,27 @@ test.describe("[ATTFIX] 7 lỗi điểm danh — rà soát lớp học", () => {
       select: { id: true },
     });
 
-    // Zalo KHÔNG cấu hình trong .env.test → SKIPPED + fallback email (enqueueEmail).
-    await notifyAttendanceForSession(s.id);
+    // Ca này đo nhánh "Zalo CHƯA cấu hình → SKIPPED + fallback email". Trước đây nó
+    // dựa vào giả định ngầm là env test không có credential Zalo — giả định đó vỡ
+    // ngay khi máy dev có `.env.local` mang token thật (Playwright nạp MỌI spec để
+    // liệt kê test trước khi chạy, nên env bị nhiễm từ lúc thu thập, không phải do
+    // spec nào chạy trước). Nay ca tự dựng điều kiện của mình thay vì trông chờ môi
+    // trường — cùng kỷ luật với ATTFIX-01b ngay dưới.
+    const zaloEnvKeys = [
+      "ZALO_OA_ACCESS_TOKEN",
+      "ZALO_OA_REFRESH_TOKEN",
+      "ZALO_APP_ID",
+      "ZALO_APP_SECRET",
+    ] as const;
+    const saved = Object.fromEntries(zaloEnvKeys.map((k) => [k, process.env[k]]));
+    for (const k of zaloEnvKeys) delete process.env[k];
+    try {
+      await notifyAttendanceForSession(s.id);
+    } finally {
+      for (const k of zaloEnvKeys) {
+        if (saved[k] !== undefined) process.env[k] = saved[k];
+      }
+    }
 
     const mail = await db.emailQueue.findFirst({
       where: { toEmail: "ph-nhan@test.satarobo.local" },

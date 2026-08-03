@@ -198,6 +198,30 @@ export const SETTINGS = {
     default: 14,
     centerOverridable: true,
   }),
+  // 03/08 — dung sai LÀM TRÒN khi đối khớp tiền về (lib/payments/allocation.ts).
+  // Khách chuyển thiếu ≤ ngưỡng này thì phiếu thu vẫn coi là ĐÃ ĐÓNG ĐỦ (ghi lại
+  // phần tha để kế toán thấy) — tránh treo phiếu vì lệch vài nghìn do phí/làm tròn.
+  // KHÔNG phải ngưỡng chấp nhận giao dịch: tiền về luôn được ghi nhận và phân bổ.
+  "payment.roundingToleranceVnd": def({
+    key: "payment.roundingToleranceVnd",
+    group: "finance",
+    label: "Dung sai làm tròn khi đối khớp thanh toán (VNĐ)",
+    schema: z.number().int().min(0).max(100_000),
+    default: 5_000,
+    centerOverridable: true,
+  }),
+  // 03/08 — TTL của một phiên QR (QrSession.expiresAt). CHỈ dùng để hiển thị đồng hồ
+  // đếm ngược + chặn 2 QR sống song song trên cùng phiếu thu. KHÔNG phải điều kiện
+  // đối khớp: QR hết hạn mà phụ huynh vẫn chuyển thì tiền VẪN về đúng phiếu (matchKey
+  // bền theo đời phiếu). Đừng biến key này thành cửa sổ nhận tiền.
+  "payment.qrTtlMinutes": def({
+    key: "payment.qrTtlMinutes",
+    group: "finance",
+    label: "Thời gian sống của mã QR (phút)",
+    schema: z.number().int().min(1).max(1440),
+    default: 10,
+    centerOverridable: false,
+  }),
   "enrollment.suspendMaxMonths": def({
     key: "enrollment.suspendMaxMonths",
     group: "enrollment",
