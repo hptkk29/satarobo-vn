@@ -82,12 +82,23 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 - [ ] **[C]** Đợt 1 ở trạng thái **chưa thu** (không tự nhảy "đã thu")
 
 ### B4 — Xuất QR theo đợt
-- [ ] Bấm **Xuất QR** trên dòng **Đợt 1** → hiện QR
-- [ ] **[C]** QR ghi rõ **"Đợt 1: <số tiền đợt 1>"** — **không phải tổng đơn**. *(Đây chính là bug gốc.)*
-- [ ] Có **đồng hồ đếm ngược** và dòng nhắc *"QR hết hạn vẫn nhận được tiền"*
-- [ ] Bấm **Xuất QR** lần nữa ngay → **không** đẻ mã thứ hai, trả lại đúng mã đang sống
-- [ ] Bấm **Tạo lại QR** vài lần → mã mới, nhưng nội dung chuyển khoản (định danh đợt) **không đổi**
-- [ ] **[P]** Phiếu đã thu đủ → nút Xuất QR bị chặn
+- [x] Bấm **Xuất QR** trên dòng **Đợt 1** → hiện QR
+- [x] **[C]** QR ghi rõ **"Đợt 1: <số tiền đợt 1>"** — **không phải tổng đơn**. *(Đây chính là bug gốc.)*
+- [x] Có **đồng hồ đếm ngược** và dòng nhắc *"QR hết hạn vẫn nhận được tiền"*
+- [x] Bấm **Xuất QR** lần nữa ngay → **không** đẻ mã thứ hai, trả lại đúng mã đang sống
+- [x] Bấm **Tạo lại QR** vài lần → mã mới, nhưng nội dung chuyển khoản (định danh đợt) **không đổi**
+- [x] **[P]** Phiếu đã thu đủ → nút Xuất QR bị chặn
+
+> **Đã chạy 03/08 trên `test.satarobo.vn`** — đơn `ORD-260803-000002` (7.128.000đ, 2 đợt
+> 4.000.000 + 3.128.000). QR đợt 1 in **"Đợt 1/2: 4.000.000đ"**, nội dung CK
+> `ORD260803000002D1`; đợt 2 in **3.128.000đ** / `…D2`. Sau nhiều lượt bấm + 1 lượt
+> "Tạo lại QR": đợt 1 có 2 phiên (1 EXPIRED + **đúng 1 ACTIVE**), `matchKey` không đổi;
+> dòng "Thu toàn bộ đơn" đã VOID nên **không có nút Xuất QR** (ca chặn). Ca phiếu đã
+> PAID và ca bấm 2 lần trả lại đúng phiên cũ do test tự động phủ
+> (`tests/e2e/r7/qr-session.spec.ts` QR-02, QR-04).
+>
+> ⚠️ Trước khi bấm được, phải nhập **tài khoản nhận tiền của cơ sở** ở `/admin/tich-hop`
+> → VietQR. Chưa nhập thì nút báo *"Chưa cấu hình tài khoản nhận tiền cho cơ sở này"*.
 
 ### B5 — Biến động số dư · `/admin/bien-dong-so-du`
 - [ ] Vào được từ sidebar nhóm **Tài chính**
@@ -167,6 +178,12 @@ Với **từng vai** (QLCS · Sale · GV · Đào tạo), đăng nhập và:
 - [ ] Sale thấy: Tài khoản PH · Điểm danh (sửa hồi tố) — **không** thấy Chốt hàng loạt
 - [ ] Đào tạo mở được `/cham-cong/checkin` *(trước đây bị đá ra)*
 - [ ] **[P]** Đào tạo chỉ thấy ~12 mục (giáo trình + LMS + học bạ) — **đúng thiết kế** theo chốt 24/07, không phải lỗi
+
+> **Đã soi tĩnh 03/08 (không cần đăng nhập từng vai):** cả **84 mục** sidebar admin đều
+> trỏ tới route có thật, và **không mục nào** quảng cáo quyền rộng hơn gate của chính
+> trang đó — tức không còn lớp lỗi "thấy link rồi bị đá về dashboard" do thiếu route
+> hoặc lệch quyền. 15/15 mục sidebar site GV cũng có route thật. Việc còn lại khi
+> đăng nhập từng vai chỉ là xác nhận **đúng vai thấy đúng mục** (dòng gạch đầu dòng ở trên).
 
 ---
 
