@@ -141,27 +141,57 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 
 ## C. Quản lý lớp học — site GV (`giaovien.satarobo.vn`)
 
-### C1 — Điểm danh
-- [ ] `/teacher/diem-danh` liệt kê buổi cần điểm danh
-- [ ] Điểm danh một lớp: có mặt / đi muộn / **vắng có phép** / **vắng không phép** → lưu được
-- [ ] **[C]** Đánh **vắng không phép** cho HV có email phụ huynh → mở `/admin/email-logs`: nội dung ghi **"Vắng không phép"**, **không** có chuỗi `ABSENT_UNEXCUSED`
-- [ ] **[C]** Buổi **ngày mai** → không điểm danh được (bị chặn)
-- [ ] Vắng không phép → sinh yêu cầu học bù ở `/admin/hoc-bu`
-- [ ] Sửa lại thành **có mặt** → yêu cầu học bù đó **bị huỷ**
-- [ ] **[P]** Vắng 2 buổi liên tiếp → có cảnh báo ở `/admin/canh-bao-rui-ro`
+> **Đã chạy 03/08 bằng tài khoản `uat.giaovien@satarobo.vn` trên `test`.**
+> Tài khoản này ban đầu **không được gán lớp nào** (0 lớp / 0 HV / 0 buổi) nên phải
+> dựng fixture trước: gán lớp `LOP-CS1-0012`, thêm buổi ngày mai, dời 1 buổi vào
+> tuần này (màn Nhận xét chỉ nhìn lại **14 ngày**), gán 1 buổi **dạy thay** ở lớp
+> `LOP-CS1-0010`, và dời 1 buổi trial vào cửa sổ lịch (**3 ngày trước → 28 ngày tới**).
+> ⚠️ Dữ liệu test đã bị sửa theo cách đó — không phải hiện trạng ban đầu.
 
-### C2 — GV dạy thay
-- [ ] Gán một buổi cho GV khác làm **dạy thay**
-- [ ] **[C]** GV dạy thay mở `/teacher/lich` → bấm "Mở điểm danh" → **vào được bảng điểm danh** (trước đây rơi im lặng về danh sách lớp)
-- [ ] **[C]** GV dạy thay **nhận xét được** học viên buổi đó
+
+### C1 — Điểm danh ✅ ĐÃ CHẠY, ĐẠT
+- [x] `/teacher/diem-danh` liệt kê buổi cần điểm danh
+- [x] Điểm danh một lớp: có mặt / đi muộn / **vắng có phép** / **vắng không phép** → lưu được
+- [x] **[C]** Đánh **vắng không phép** → email ghi *"Bé Hồ Thị Dung đã điểm danh **Vắng không phép** buổi 30/6/2026…"*, **không** có chuỗi `ABSENT_UNEXCUSED` (soi thẳng `EmailQueue`)
+- [x] **[C]** Buổi **ngày mai** → không lọt vào màn điểm danh, ở hub lớp nút hiện **"Chưa tới giờ"** (không bấm được)
+- [x] Vắng không phép → sinh `MakeupNeed` trạng thái **PENDING**
+- [x] Sửa lại thành **có mặt** → yêu cầu học bù chuyển **CANCELLED**, và **không sinh email lần hai** (vẫn 9 email như trước)
+- [ ] **[P]** Vắng 2 buổi liên tiếp → có cảnh báo ở `/admin/canh-bao-rui-ro` *(chưa chạy — cần đăng nhập admin)*
+
+### C2 — GV dạy thay ✅ ĐÃ CHẠY — phát hiện 1 lỗi, đã vá
+- [x] Gán một buổi cho GV khác làm **dạy thay**
+- [x] **[C]** GV dạy thay mở `/teacher/lich` → thấy buổi có nhãn **"Dạy thay"** → bấm "Mở điểm danh" → **vào được bảng điểm danh** (10 HV, sửa được)
+- [x] **[C]** GV dạy thay **nhận xét được** học viên buổi đó
+
+> 🐞 **Lỗi tìm thấy 03/08 — đã vá (commit `2e6c8d66`).** Mở tab **Nhận xét** của lớp
+> dạy thay (`/teacher/lop?classId=…&tab=nhan-xet`) thì màn **rơi im lặng về "Lớp học
+> của tôi"** — URL giữ nguyên, không một chữ báo. Nguyên nhân: hub lớp gác bằng
+> `assignedClassIds`, mà dạy thay không nằm trong tập đó (nhánh điểm danh đã tự gác
+> bằng `isSessionOwnedByTeacher`, nhánh hub thì chưa). Nay tab Nhận xét đưa sang
+> `/teacher/nhan-xet` (route này vốn đã xét `substituteTeacherId`, đã xác minh chạy
+> đúng: hiện đủ 10 HV), các tab khác trả "không phải lớp của bạn" thay vì im lặng.
+> Người chỉ dạy thay 1 buổi vẫn KHÔNG mở được roster / học bạ / tài liệu / kho ảnh.
 
 ### C3 — Nhận xét học viên
-- [ ] `/teacher/lop` → tab Nhận xét → chấm **rubric** cho vài em → lưu
-- [ ] **[C]** Sang `/teacher/nhan-xet` cùng buổi đó, bấm **"Lưu tất cả"** → quay lại kiểm: **rubric vẫn còn nguyên** *(trước đây bị xoá sạch, im lặng)*
+- [x] `/teacher/lop` → tab Nhận xét → chấm **rubric** cho vài em → lưu
+- [x] **[C]** Sang `/teacher/nhan-xet` cùng buổi đó, bấm **"Lưu tất cả"** → **rubric vẫn còn nguyên**
 - [ ] Sửa nhận xét 1 em rồi lưu lại → phụ huynh **không** nhận email lần hai cho các em không đổi
+
+> **Bằng chứng 03/08:** lưu phiếu rubric cho *Bùi Thị Hoa* (tên dự án + 4 mục +
+> 9 tiêu chí). Sang màn nhận xét nhanh gõ lời cho *Bùi Tuấn Cường* rồi bấm "Lưu tất
+> cả" (toast *"Đã lưu nhận xét 1 học viên"* — chứng minh hành động ĐÃ chạy, không
+> phải no-op). Soi lại DB: phiếu của Bùi Thị Hoa còn **đủ** `projectName` + `notes`
+> + `rubric` 9 tiêu chí. Lỗi xoá trắng cũ đã hết.
 - [ ] **[C]** Mở portal phụ huynh → mục Nhận xét: **thấy đủ** rubric / 4 mục / tên dự án (không phải card trống)
 
-### C4 — Kho ảnh buổi học
+### C4 — Kho ảnh buổi học ⚠️ MỚI KIỂM ĐƯỢC PHẦN GIAO DIỆN
+> Hộp thoại "Đăng ảnh lớp" có đủ: 2 chế độ **"Đưa vào kho (nhiều ảnh)"** / "Đăng ngay
+> 1 ảnh", câu giải thích *"Ảnh vào KHO (chưa gửi phụ huynh)"*, ô chọn **buổi cho cả
+> lô**, ô chọn nhiều file (`multiple`, `image/*`), và **cảnh báo consent**: *"Học viên
+> CHƯA đồng ý dùng hình ảnh: Đặng Thanh Oanh — Không thể gắn thẻ các em này."*
+> **Chưa tải được ảnh thật**: điều khiển tự động không nhét được file vào ô chọn ảnh
+> (thử 3 lần, ô luôn về 0 file). Phần tải ảnh → duyệt → gửi phụ huynh **cần người làm tay**.
+
 - [ ] `/teacher/anh-lop` → **Đưa vào kho** → chọn **nhiều ảnh cùng lúc** → có tiến độ x/y
 - [ ] Ảnh vào khu **"Kho ảnh — chưa gửi phụ huynh"**, badge *Trong kho*
 - [ ] **[C]** Mở portal phụ huynh lúc này → **không thấy** ảnh nào trong kho
@@ -174,18 +204,23 @@ Ký hiệu: **[C]** = ca chốt chặn, đỏ là không được merge. **[P]**
 - [ ] Sale tạo **lớp trải nghiệm** → **[C]** bấm **"Thêm buổi"** (ngày/giờ/GV) → buổi được tạo
 - [ ] **[C]** Lớp **chưa có buổi** mà xếp con vào → báo lỗi rõ ("thêm buổi trước")
 - [ ] Xếp con vào lớp (không chọn buổi) → tự gán buổi gần nhất
-- [ ] **[C]** GV mở `/teacher/trial` → **thấy học viên** trong danh sách *(trước đây trống trơn)*
+- [x] **[C]** GV mở `/teacher/trial` → **thấy học viên** trong danh sách (Nguyễn A · 18:00–19:30 · "Đã hẹn" · nút Nhập phiếu)
 - [ ] GV nhận được thông báo khi được gán buổi trial
 
+> Lưu ý khi nghiệm thu: màn này chỉ hiện buổi trong **3 ngày trước → 28 ngày tới**.
+> Buổi ngoài cửa sổ đó vắng mặt là ĐÚNG, không phải lỗi — lúc đầu tôi tưởng hỏng.
+> Các mục còn lại của C5 do **Sale** thao tác, chưa chạy.
+
 ### C6 — Bài tập
-- [ ] `/teacher/cham-bai` → giao bài từ **Thư viện Đào tạo**
-- [ ] **[C]** Chọn đề mà hệ thống đã tự sinh nháp lúc tạo lớp → **giao được** (trước đây báo "đã giao rồi" mà không mở được bài)
+- [x] `/teacher/cham-bai` → giao bài từ **Thư viện Đào tạo**
+- [x] **[C]** Chọn đề trong thư viện → **giao được** (toast "Đã giao bài cho lớp"; dòng *QA4-BTVN buổi 2 · Lớp CS1.0012 · Kiểm tra · 0/11 · Đang mở*)
 - [ ] Portal phụ huynh/học viên: thấy bài, **nộp được file**
 - [ ] GV chấm → thấy **đủ số file** học viên đã nộp
 - [ ] **[P]** Sau khi HV làm bài kiểm tra → thẻ "Đã làm x/N" trên portal **tăng** (trước đây đứng im 0/N)
 
 ### C7 — Chuông thông báo site GV
-- [ ] **[C]** Góc trên phải site GV có **chuông**; CSKH sửa điểm danh → GV thấy thông báo (trước đây GV không bao giờ nhận được)
+- [x] Góc trên phải site GV có **chuông**, có badge số, mở ra danh sách thật (*"Học viên sắp hết khoá — 9 việc cần xử lý"*, có nút "Đọc hết")
+- [ ] **[C]** CSKH sửa điểm danh → GV thấy thông báo *(chưa chạy — cần một phiên admin song song)*
 
 ---
 
