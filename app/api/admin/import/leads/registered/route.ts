@@ -23,6 +23,7 @@ import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
+import { planRowFee } from "@/lib/lead/import-fee-plan";
 import {
   parseRegisteredSheets,
   type RegisteredRowOverride,
@@ -192,6 +193,47 @@ export async function POST(req: NextRequest) {
   const courseKeyMap = buildCourseKeyMap(courses);
   const priceByCourseId = new Map(courses.map((c) => [c.id, c.price ?? 0]));
 
+  /** Giá niêm yết của dòng (0 nếu chưa khớp được khoá). */
+  const listPriceOf = (c: {
+    courseRaw: string | null;
+  }): number => {
+    const id =
+      (c.courseRaw &&
+        (courseKeyMap.get(normalizeVi(c.courseRaw)) ?? courseKeyMap.get(compactKey(c.courseRaw)))) ||
+      null;
+    return id ? (priceByCourseId.get(id) ?? 0) : 0;
+  };
+
+  /**
+   * Chia phần chênh giữa giá niêm yết và tiền đã thu thành giảm giá / công nợ.
+   * Luật ở lib/lead/import-fee-plan.ts (thuần, test bằng chính dòng thật trong file).
+   * Ô người nhập tự sửa ở màn xem thử THẮNG suy đoán của máy.
+   */
+  const feePlanFor = (
+    c: {
+      paidAmount: number | null;
+      noteRaw: string | null;
+      payIn2: boolean;
+      discountKind: "PERCENT" | "AMOUNT" | null;
+      discountValue: number | null;
+      discountReason: string | null;
+    },
+    listPrice: number,
+  ) =>
+    planRowFee({
+      listPrice,
+      paid: c.paidAmount ?? 0,
+      note: c.noteRaw,
+      payIn2: c.payIn2,
+      manualDiscountAmount:
+        c.discountValue === null || !c.discountKind
+          ? null
+          : c.discountKind === "PERCENT"
+            ? Math.round((listPrice * c.discountValue) / 100)
+            : Math.min(c.discountValue, listPrice),
+      manualDiscountReason: c.discountReason,
+    });
+
   // Hội sở KHÔNG nhận lead → loại khỏi bảng tra ngay từ đầu. File Excel ghi mã HO thì
   // rơi vào `unmatchedCenters` (cảnh báo ở màn xem thử) chứ KHÔNG âm thầm gắn vào HO.
   const nonEnrollable = await getNonEnrollableCenterIds();
@@ -273,9 +315,25 @@ export async function POST(req: NextRequest) {
     // 04/08 — DÒNG CẦN KIỂM TRA: vẫn import được, nhưng thiếu/mờ thông tin. Liệt kê
     // ở màn xem thử để người nhập sửa NGAY TRONG EXCEL rồi tải lại, thay vì import
     // xong mới đi dò từng lead từng phụ huynh.
+    // Bảng đối chứng: người nhập KHÔNG kiểm nổi 81 dòng, nhưng kiểm được 1 con số —
+    // "tổng đã thu" đối chiếu sao kê/sổ quỹ. Sai ở đâu thì lệch tổng lộ ra ngay.
+    doiChung: (() => {
+      let daThu = 0, giam = 0, no = 0, boQua = 0;
+      for (const p of parsed.parents)
+        for (const c of p.children) {
+          const fp = feePlanFor(c, listPriceOf(c));
+          if (fp.treatment === "REFUND") { boQua++; continue; }
+          daThu += c.paidAmount ?? 0;
+          giam += fp.discountAmount;
+          no += fp.remaining;
+        }
+      return { daThu, giam, no, boQuaHoanPhi: boQua };
+    })(),
+    // 04/08 — DÒNG CẦN KIỂM TRA: vẫn import được, nhưng thiếu/mờ thông tin, HOẶC máy
+    // không đủ căn cứ chia phần chênh học phí (giảm giá hay công nợ?).
     canKiemTra: parsed.parents.flatMap((p) =>
       p.children
-        .filter((c) => c.warnings.length > 0)
+        .filter((c) => c.warnings.length > 0 || feePlanFor(c, listPriceOf(c)).needsHuman)
         .map((c) => ({
           sdt: p.phone,
           hocVien: c.fullName,
@@ -287,30 +345,22 @@ export async function POST(req: NextRequest) {
           tuoi: c.ageYears,
           // Tiền — tính TẠI ĐÂY vì cần giá niêm yết của khoá (parser thuần, không có DB).
           ...(() => {
-            const courseId =
-              (c.courseRaw &&
-                (courseKeyMap.get(normalizeVi(c.courseRaw)) ??
-                  courseKeyMap.get(compactKey(c.courseRaw)))) ||
-              null;
-            const giaNiemYet = courseId ? (priceByCourseId.get(courseId) ?? 0) : 0;
-            const giam =
-              c.discountValue === null || !c.discountKind
-                ? 0
-                : c.discountKind === "PERCENT"
-                  ? Math.round((giaNiemYet * c.discountValue) / 100)
-                  : Math.min(c.discountValue, giaNiemYet);
-            const tongPhaiNop = Math.max(0, giaNiemYet - giam);
-            const daNop = c.paidAmount ?? 0;
+            const giaNiemYet = listPriceOf(c);
+            const p = feePlanFor(c, giaNiemYet);
             return {
               giaNiemYet,
-              giamTinhRa: giam,
-              tongPhaiNop,
-              conLai: Math.max(0, tongPhaiNop - daNop),
+              giamTinhRa: p.discountAmount,
+              tongPhaiNop: p.totalAmount,
+              conLai: p.remaining,
               tra2Dot: c.payIn2,
               hanDot2: c.dueDate2,
               giamKieu: c.discountKind,
               giamGiaTri: c.discountValue,
-              giamLyDo: c.discountReason,
+              giamLyDo: c.discountReason || p.reason,
+              // 04/08 — máy tự phân loại phần chênh: giảm giá thật / công nợ / phải hỏi.
+              xuLy: p.treatment,
+              canCu: p.evidence,
+              phaiXem: p.needsHuman,
             };
           })(),
           // Giá trị ĐANG dùng (đã tính cả ô người nhập vừa sửa) → đổ vào ô nhập
