@@ -176,9 +176,10 @@ test.describe("[FL1-02] Lesson SCORM + Assignment", () => {
     expect(await db.scormAccessLog.count({ where: { packageId: old.id } })).toBe(0);
   });
 
-  test("[FL1-02-05] Handoff — gate duyệt đề xuất = lesson-change:approve (CM có; unlock vẫn training:manage)", () => {
-    // Duyệt đề xuất: SUPER_ADMIN/TRAINING/CENTER_MANAGER.
-    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(true);
+  test("[FL1-02-05] Handoff — gate duyệt đề xuất = lesson-change:approve (Đào tạo; CM đã rút khỏi LMS)", () => {
+    // Duyệt đề xuất: SUPER_ADMIN/TRAINING.
+    // 03/08 — chủ dự án chặn phần LMS ở vai Quản lý cơ sở ⇒ CM KHÔNG duyệt nữa.
+    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(false);
     expect(can("TRAINING", "lesson-change:approve")).toBe(true);
     expect(can("SUPER_ADMIN", "lesson-change:approve")).toBe(true);
     // Unlock buổi LOCKED vẫn chỉ Đào tạo — CM KHÔNG mở khóa được.

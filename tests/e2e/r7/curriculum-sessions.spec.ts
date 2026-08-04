@@ -153,11 +153,12 @@ test.describe("[R7-10] Curriculum sessions", () => {
     const handlerId = "dao-tao-1";
 
     // Gate (FL W0 QĐ-T1/T3b): GV KHÔNG biên soạn (questions:author=TRAINING) và KHÔNG
-    // tự duyệt; GV gửi đề xuất chỉnh bài → Đào tạo/CM DUYỆT qua lesson-change:approve.
+    // tự duyệt; GV gửi đề xuất chỉnh bài → ĐÀO TẠO duyệt qua lesson-change:approve.
+    // 03/08 — CM đã rút khỏi phần LMS nên không còn nằm trong nhóm duyệt.
     expect(can("TEACHER", "questions:author")).toBe(false);
     expect(can("TRAINING", "questions:author")).toBe(true);
     expect(can("TEACHER", "lesson-change:approve")).toBe(false);
-    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(true);
+    expect(can("CENTER_MANAGER", "lesson-change:approve")).toBe(false);
 
     // GV gửi đề xuất → trạng thái mặc định OPEN, chưa có phản hồi / người xử lý.
     const cr = await db.lessonChangeRequest.create({
