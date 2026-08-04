@@ -356,7 +356,7 @@ thì mới có hiệu lực.**
 ## F. Sau khi merge `test` → `main` (không phải nghiệm thu — việc bấm tay)
 
 1. [ ] Chạy workflow **Seed Production RolePermission** — **bắt buộc**. Đợt này đổi bảng quyền. Sau khi chạy, Quản lý cơ sở mới có đủ **3 quyền**: `discounts:approve` (thiếu từ 31/07), và `installments:approve` + `orders:manage` (chủ dự án cấp thêm 03/08 để quầy tự duyệt trả góp + xuất QR). **Chưa chạy = QLCS trên prod không duyệt giảm giá, không duyệt kế hoạch 2 đợt, không bấm được Xuất QR.**
-2. [ ] Đặt lại `SEPAY_WEBHOOK_API_KEY` + **redeploy** → tiền mới chảy vào, trang Biến động mới có dữ liệu.
+2. [x] `SEPAY_WEBHOOK_API_KEY` — **đã có key** (chủ dự án xác nhận 04/08). Việc còn lại là **đối chứng bằng một lần chuyển khoản thật**: chuyển đúng nội dung CK của một phiếu thu rồi mở `/admin/bien-dong-so-du` xem giao dịch có về và có khớp đúng đợt không. Chưa đối chứng thì chưa biết key có đúng cái SePay đang gửi hay không.
 3. [ ] Kiểm env `SESSION_LIFECYCLE_V2` — nút "Hoàn tất buổi" + auto giao bài về nhà nằm sau cờ này.
 4. [ ] Chạy `pnpm payments:backfill --apply` trên **DEV**, rồi `pnpm payments:shadow-compare`, đọc bảng chênh lệch. **Chưa lật cờ sổ mới.**
 5. [ ] Khi mẫu ZNS **616899** được duyệt: đối chiếu bảng tham số trên ZBS → đặt `ZALO_ZNS_TEMPLATE_ACCOUNT` → redeploy → dùng nút "Gửi ZNS tất cả chưa nhận".
