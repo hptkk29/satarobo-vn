@@ -11,6 +11,7 @@ import type { LeadRow } from './_components/leads-table'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
 import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
+import { phoneSearchTerm } from '@/lib/phone'
 
 const PAGE_SIZE = 20
 const KANBAN_LIMIT = 500
@@ -56,6 +57,8 @@ export default async function LeadsPage({
   const page = Math.max(1, Number(params.page ?? 1))
   const statusParam = params.status as LeadStatus | undefined
   const q = params.q?.trim()
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót. Xem lib/phone.ts.
+  const qPhone = q ? (phoneSearchTerm(q) ?? q) : q
   const statusFilter =
     statusParam && ALL_LEAD_STATUSES.includes(statusParam)
       ? statusParam
@@ -104,7 +107,7 @@ export default async function LeadsPage({
       ? {
           OR: [
             { parentName: { contains: q, mode: 'insensitive' as const } },
-            { phone: { contains: q } },
+            { phone: { contains: qPhone } },
             { childName: { contains: q, mode: 'insensitive' as const } },
           ],
         }
@@ -217,6 +220,7 @@ export default async function LeadsPage({
           view={view}
           params={params}
           canCreate={canCreate}
+          canBulkConvert={canViewAll && canCreate}
         />
         <StatusTabs params={params} view={view} registeredCount={registeredCount} />
         <FilterBar
@@ -290,7 +294,7 @@ export default async function LeadsPage({
 
   return (
     <div>
-      <Header total={total} view={view} params={params} canCreate={canCreate} />
+      <Header total={total} view={view} params={params} canCreate={canCreate} canBulkConvert={canViewAll && canCreate} />
       <StatusTabs params={params} view={view} registeredCount={registeredCount} />
       <FilterBar
         params={params}
@@ -321,6 +325,7 @@ function Header({
   view,
   params,
   canCreate,
+  canBulkConvert,
 }: {
   total: number
   /** Số card thực sự hiển thị ở kanban (để chú thích khi đã chạm trần). */
@@ -328,6 +333,8 @@ function Header({
   view: string
   params: SP
   canCreate?: boolean
+  /** Nút "Chốt hàng loạt" chỉ cho manager (leads:view-all) — màn đó thấy mọi lead cơ sở. */
+  canBulkConvert?: boolean
 }) {
   const qs = (v: 'table' | 'kanban') => {
     const u = new URLSearchParams()
@@ -391,6 +398,14 @@ function Header({
           >
             Import Excel
           </Link>
+          {canBulkConvert && (
+            <Link
+              href="/leads/bulk-convert"
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Chốt hàng loạt
+            </Link>
+          )}
           <Link
             href="/leads/new"
             className="rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"

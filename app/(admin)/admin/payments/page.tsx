@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { CreditCard } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { queryPayments, loadOrderOptions } from "./_actions";
 import { PaymentsClient } from "./_components/payments-client";
@@ -12,21 +11,29 @@ export const dynamic = "force-dynamic";
 export default async function PaymentsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
   // Gate list-level (nhiều khoản) — không có 1 centerId cụ thể, không truyền target.
-  if (!(await checkPermission("payments:manage"))) {
+  //
+  // ⚠️ 03/08/2026 — trước đây chỉ nhận `payments:manage`, TRÁI với chính thiết kế
+  // R7-04 AC1/AC5 mà trang này khai ngay dưới tiêu đề ("Ghi nhận khoản thu (Sale) &
+  // xác nhận (Kế toán)"): người GHI NHẬN giữ `payments:record`, không phải
+  // `payments:manage`. Hậu quả: Quản lý cơ sở và Sale — đúng hai vai phải thu tiền
+  // tại quầy — bị đá về dashboard ngay ở cửa. Nhận CẢ HAI quyền.
+  const [canManage, canRecord, canConfirm, canViewPii] = await Promise.all([
+    checkPermission("payments:manage"),
+    checkPermission("payments:record"),
+    // Nút xác nhận/từ chối/điều chỉnh phải soi ĐÚNG quyền mà server action đòi
+    // (`payments:confirm` trong _actions.ts). Trước đây suy từ `payments:manage` +
+    // danh sách role tĩnh nên QLCS thấy nút rồi bấm mới báo lỗi.
+    checkPermission("payments:confirm"),
+    // #15 (câu 32) — chỉ kế toán/admin (payments:view-pii) mới thấy nút "Xem đầy đủ"
+    // CCCD PH + địa chỉ (break-glass). Mặc định mọi người xem bản đã che.
+    checkPermission("payments:view-pii"),
+  ]);
+
+  if (!canManage && !canRecord) {
     redirect("/dashboard?error=unauthorized");
   }
-
-  // Kế toán/quản lý mới thấy nút xác nhận/từ chối/điều chỉnh.
-  const canConfirm =
-    (await checkPermission("payments:manage")) &&
-    (hasRole(session.user, "ACCOUNTANT") ||
-      hasRole(session.user, "SUPER_ADMIN") ||
-      hasRole(session.user, "CENTER_MANAGER"));
-
-  // #15 (câu 32) — chỉ kế toán/admin (payments:view-pii) mới thấy nút "Xem đầy đủ"
-  // CCCD PH + địa chỉ (break-glass). Mặc định mọi người xem bản đã che.
-  const canViewPii = await checkPermission("payments:view-pii");
 
   const [rows, orders] = await Promise.all([
     queryPayments({}),
@@ -51,7 +58,7 @@ export default async function PaymentsPage() {
         initialRows={rows}
         orders={orders}
         canConfirm={canConfirm}
-        canRecord={await checkPermission("payments:manage")}
+        canRecord={canRecord}
         canViewPii={canViewPii}
       />
     </div>

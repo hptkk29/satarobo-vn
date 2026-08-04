@@ -9,16 +9,19 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
+import { phoneSearchTerm } from "@/lib/phone";
 // CONTRACT (R7-02) — lib/trial/service.ts do agent song song tạo; import theo tên.
 // Typecheck gộp cuối sẽ resolve. Mỗi action chỉ "inspect {ok}" + revalidate.
 import {
   setTrialProgramConfig,
   createTrialClass,
+  addTrialSession,
   enrollLeadChild,
   unenrollLeadChild,
   markAttendance,
   completeTrialSession,
   cancelTrialClass,
+  notifyTrialTeacherAssigned,
 } from "@/lib/trial/service";
 
 // ───────────────────────────── helpers ─────────────────────────────
@@ -163,6 +166,70 @@ export async function createTrialClassAction(input: unknown): Promise<ActionResu
   return { ok: true, id: res.trialClassId };
 }
 
+// ───────────────────────── 2b) thêm buổi cho lớp ───────────────────
+
+const addSessionSchema = z
+  .object({
+    trialClassId: z.string().trim().min(1, "Thiếu lớp trải nghiệm"),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày buổi học không hợp lệ"),
+    startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
+    endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
+    // Bỏ trống → mặc định GV phụ trách lớp (service tự fallback).
+    teacherId: z.string().trim().min(1).nullable().optional(),
+    roomId: z.string().trim().min(1).nullable().optional(),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: "Giờ kết thúc phải sau giờ bắt đầu",
+    path: ["endTime"],
+  });
+
+/**
+ * #1 (BLOCKER) — thêm 1 buổi ad-hoc cho lớp trải nghiệm (QĐ-R2-1 slot tái sử dụng:
+ * lớp tạo KHÔNG có ngày → không có buổi → GV không có gì để nhận/điểm danh/đánh giá).
+ * Gate `trials:manage` + cách ly cơ sở; GV của buổi phải cùng cơ sở (service check).
+ */
+export async function addTrialSessionAction(input: unknown): Promise<ActionResult<{ sessionId?: string }>> {
+  const session = await requireSession();
+  if (!session) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền thêm buổi trải nghiệm" };
+  }
+
+  const parsed = addSessionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const actor = await resolveActor(session.user.id);
+  const cls = await loadScopedTrialClass(actor, data.trialClassId);
+  if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
+
+  // @db.Date lưu UTC 00:00 của ngày VN → parse "YYYY-MM-DD" thành mốc UTC midnight.
+  const [y, m, d] = data.date.split("-").map(Number);
+  const date = new Date(Date.UTC(y!, m! - 1, d!));
+
+  const res = await addTrialSession({
+    trialClassId: data.trialClassId,
+    date,
+    startTime: data.startTime,
+    endTime: data.endTime,
+    // undefined = kế thừa GV/phòng của lớp (mặc định theo yêu cầu).
+    teacherId: data.teacherId === undefined ? undefined : data.teacherId,
+    roomId: data.roomId === undefined ? undefined : data.roomId,
+    actorId: session.user.id,
+  });
+  if (!res?.ok) {
+    return { ok: false, error: res?.error ?? "Thêm buổi thất bại" };
+  }
+
+  revalidatePath(`/trial-classes/${data.trialClassId}`);
+  revalidatePath("/trial-classes");
+  return { ok: true, sessionId: res.sessionId };
+}
+
 // ───────────────────────── 3) xếp con vào lớp ──────────────────────
 
 /**
@@ -217,12 +284,15 @@ export async function enrollLeadChildAction(input: {
     }
   }
 
+  // #2 — sessionId truyền thẳng vào service: set scheduledSessionId NGAY khi tạo;
+  // bỏ trống → service auto-gán buổi SCHEDULED gần nhất (lớp chưa có buổi → lỗi rõ).
   const res = await enrollLeadChild({
     trialClassId: input.trialClassId,
     leadChildId: input.leadChildId,
     allowOverride,
     addedById: session.user.id,
     totalSessions,
+    sessionId: input.sessionId ?? null,
   });
   if (!res?.ok) {
     // Surface cờ overCapacity để UI mời QL bấm override.
@@ -231,20 +301,6 @@ export async function enrollLeadChildAction(input: {
       error: res?.error ?? "Xếp chỗ thất bại",
       overCapacity: res?.overCapacity === true,
     };
-  }
-
-  // LD3(b) — lưu buổi đã chọn lên ghi danh vừa tạo (service create không nhận field này;
-  // ghi sau khi enroll OK). Scope đã được xác thực qua loadScopedTrialClass + buổi-thuộc-lớp ở trên.
-  // Partial-unique 1 lớp ACTIVE/con → updateMany trúng đúng ghi danh ACTIVE vừa tạo (kể cả re-enroll).
-  if (input.sessionId) {
-    await scopedDb(actor).trialEnrollment.updateMany({
-      where: {
-        trialClassId: input.trialClassId,
-        leadChildId: input.leadChildId,
-        status: "ACTIVE",
-      },
-      data: { scheduledSessionId: input.sessionId },
-    });
   }
 
   revalidatePath(`/trial-classes/${input.trialClassId}`);
@@ -282,6 +338,8 @@ export async function searchTrialCandidatesAction(input: {
   if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
 
   const q = (input.query ?? "").trim();
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = phoneSearchTerm(q) ?? q;
   const sdb = scopedDb(actor);
   // con CHƯA ở lớp ACTIVE nào (giải phóng partial-unique 1 lớp ACTIVE/con).
   const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
@@ -294,7 +352,7 @@ export async function searchTrialCandidatesAction(input: {
         ? {
             OR: [
               { parentName: { contains: q, mode: "insensitive" as const } },
-              { phone: { contains: q } },
+              { phone: { contains: qPhone } },
               { children: { some: { fullName: { contains: q, mode: "insensitive" as const } } } },
             ],
           }
@@ -393,6 +451,21 @@ export async function assignTrialTeacherAction(
     where: { trialClassId, status: "SCHEDULED" },
     data: { teacherId: teacherId || null },
   });
+
+  // #6 — báo GV mới được gán lớp (trước đây gán xong GV không hề hay biết).
+  // Không báo khi: bỏ gán, gán lại chính GV cũ, hoặc tự gán mình.
+  if (teacherId && teacherId !== cls.teacherId && teacherId !== session.user.id) {
+    const clsName = await sdb.trialClassV2.findUnique({
+      where: { id: trialClassId },
+      select: { name: true },
+    });
+    await notifyTrialTeacherAssigned({
+      teacherId,
+      title: "Bạn được phân công lớp trải nghiệm",
+      body: `Bạn vừa được gán phụ trách lớp trải nghiệm ${clsName?.name ?? ""}. Xem lịch & học viên ở mục Trial.`,
+      dedupeKey: `trial-class.assigned:${trialClassId}`,
+    });
+  }
 
   revalidatePath(`/trial-classes/${trialClassId}`);
   revalidatePath("/trial-classes");

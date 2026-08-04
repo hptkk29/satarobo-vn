@@ -31,14 +31,25 @@ export default async function AdminMediaPage() {
   const classIds = classes.map((c) => c.id);
 
   // ClassSessionMedia ∉ SCOPED_MODELS → cách ly qua classIds đã scope ở trên (sdb.class).
-  const rows = classIds.length
-    ? await sdb.classSessionMedia.findMany({
-        where: { classId: { in: classIds } },
-        orderBy: { createdAt: "desc" },
-        take: 100,
-        include: { tags: { select: { studentId: true } } },
-      })
-    : [];
+  // DRAFT (kho GV) fetch RIÊNG — vài lô upload 40 ảnh là DRAFT chiếm trọn cửa sổ
+  // 100 row, đẩy PENDING cũ khỏi hàng duyệt mà không ai hay (review 02/08).
+  const [mainRows, draftRows] = classIds.length
+    ? await Promise.all([
+        sdb.classSessionMedia.findMany({
+          where: { classId: { in: classIds }, status: { not: "DRAFT" } },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+          include: { tags: { select: { studentId: true } } },
+        }),
+        sdb.classSessionMedia.findMany({
+          where: { classId: { in: classIds }, status: "DRAFT" },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+          include: { tags: { select: { studentId: true } } },
+        }),
+      ])
+    : [[], []];
+  const rows = [...mainRows, ...draftRows];
 
   // Resolve class + tagged student names.
   const classMap = new Map(classes.map((c) => [c.id, c]));

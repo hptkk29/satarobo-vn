@@ -706,27 +706,27 @@ model Holiday {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
+  id              String    @id @default(cuid())
+  name            String?
   // AUTH-SĐT P3 — email nới nullable (P5 sẽ tạo phụ huynh chỉ có SĐT); GIỮ unique.
   // Nhân sự vẫn BẮT BUỘC email ở tầng validator (QĐ-C) — không phải ở DB.
-  email         String?   @unique
-  emailVerified DateTime? @db.Timestamptz(6)
+  email           String?   @unique
+  emailVerified   DateTime? @db.Timestamptz(6)
   // AUTH-SĐT P3 — SĐT làm khoá đăng nhập, LUÔN dạng canonical 84XXXXXXXXX
   // (lib/phone.ts). KHÔNG backfill trong migration — unique index trên toàn
   // NULL không thể fail trên prod; backfill là script riêng ở P5.
   phone           String?   @unique
   phoneVerifiedAt DateTime? @db.Timestamptz(6)
-  password      String?
-  image         String?
-  role          Role      @default(SALES_CSM) // Đợt 3B — vai trò CHÍNH (primary)
-  roles         Role[]    @default([]) // Đợt 3B — tất cả vai trò người này giữ (union quyền)
-  centerId      String?
-  orgUnitId     String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
-  isActive      Boolean   @default(true)
-  deletedAt     DateTime? @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  password        String?
+  image           String?
+  role            Role      @default(SALES_CSM) // Đợt 3B — vai trò CHÍNH (primary)
+  roles           Role[]    @default([]) // Đợt 3B — tất cả vai trò người này giữ (union quyền)
+  centerId        String?
+  orgUnitId       String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
+  isActive        Boolean   @default(true)
+  deletedAt       DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
   // ─── Per-user permission system (Phase 5.3.0) ───
   tokenVersion Int       @default(0)
@@ -1087,21 +1087,21 @@ model Lead {
 // ⚠️ Hoa hồng affiliate: mức % + thời điểm chốt trả CHƯA có quy chế (chờ BGĐ) —
 // model này chỉ ghi NGUỒN + tỉ lệ tham chiếu; KHÔNG tự sinh phiếu chi.
 model Affiliate {
-  id   String @id @default(cuid())
+  id                String  @id @default(cuid())
   /// Mã giới thiệu dùng trong link `?ref=` — chữ HOA + số, không dấu.
-  code String @unique
-  name String
+  code              String  @unique
+  name              String
   /// Liên hệ để đối soát (không bắt buộc).
-  phone String?
-  email String?
+  phone             String?
+  email             String?
   /// Phụ huynh/HV giới thiệu có thể gắn về tài khoản User (không bắt buộc).
-  userId String?
+  userId            String?
   /// Cơ sở phụ trách theo dõi (null = toàn hệ thống).
-  centerId String?
+  centerId          String?
   /// Tỉ lệ hoa hồng tham chiếu (%) — dùng để đối soát tay tới khi có quy chế.
   commissionPercent Float?
-  isActive Boolean @default(true)
-  note     String? @db.Text
+  isActive          Boolean @default(true)
+  note              String? @db.Text
 
   createdById String?
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
@@ -3300,8 +3300,11 @@ model Order {
   voucherRedemption VoucherRedemption? @relation("OrderVoucherRedemption")
 
   // Commit 4 — thanh toán tối đa 2 đợt
-  installments OrderInstallment[]
-  payments     Payment[]          @relation("OrderPayments") // R7-04
+  installments    OrderInstallment[]
+  payments        Payment[]          @relation("OrderPayments") // R7-04
+  // 03/08 — sổ thu theo ĐỢT (PaymentRequest) + sổ phân bổ. Chạy SONG SONG với
+  // OrderInstallment/Payment cho tới khi shadow-compare sạch (cờ PAYMENT_LEDGER_V2).
+  paymentRequests PaymentRequest[]
 
   @@index([code])
   @@index([status])
@@ -3965,6 +3968,9 @@ enum MediaStatus {
   PENDING
   APPROVED
   REJECTED
+  // DRAFT = kho ảnh — GV upload cả loạt, CHƯA chọn gửi PH; không hiện portal,
+  // không vào hàng duyệt (reviewMedia chặn). Đặt CUỐI khớp thứ tự ALTER TYPE ADD VALUE.
+  DRAFT
 }
 
 model ClassSessionMedia {
@@ -5112,6 +5118,166 @@ model Payment {
 }
 
 /// R7-04 — phiếu thu per Enrollment (nhiều phiếu), sinh khi kế toán CONFIRMED.
+// =============================================================================
+// 03/08 — SỔ THU THEO ĐỢT + PHÂN BỔ WATERFALL.
+//
+// Vì sao có: QR in theo TỔNG đơn còn webhook từ chối mọi giao dịch nhỏ hơn tổng
+// ⇒ khách chọn 2 đợt, quét QR đóng đợt 1 thì bị xếp "trả thiếu, chờ xử lý tay".
+// Cơ chế tự xác nhận chưa bao giờ chạy được với người trả góp.
+//
+// Nguyên tắc (chốt chủ dự án 03/08):
+//  • Đối khớp theo ĐỊNH DANH (matchKey/VA hoặc mã cổng), KHÔNG theo số tiền.
+//  • Tiền về LUÔN được ghi nhận rồi phân bổ; thiếu → PARTIAL, dư → tràn sang đợt
+//    sau rồi vào CreditBalance. KHÔNG từ chối vì lệch tiền.
+//  • Trạng thái phiếu thu là KẾT QUẢ TÍNH từ sổ phân bổ, không phải cờ gán tay.
+//  • Hạn QR (5–10 phút) CHỈ để hiển thị + chặn 2 QR sống song song. TUYỆT ĐỐI
+//    không dùng làm điều kiện đối khớp — PH quét QR hết hạn mà tiền vẫn về thì
+//    tiền đó phải phân bổ bình thường.
+//
+// Tiền: Int (VND) — đồng bộ toàn schema, không dùng Decimal.
+// =============================================================================
+
+enum PaymentRequestStatus {
+  PENDING
+  PARTIAL
+  PAID
+  VOID
+}
+
+/// Phiếu thu — MỘT dòng cho mỗi đợt. `installmentNo = 0` là "thu toàn bộ đơn"
+/// (đơn không trả góp / kế hoạch chưa duyệt). Phiếu theo đợt (1,2,…) CHỈ được
+/// sinh bởi đường duyệt kế hoạch trả góp — xem lib/payments/payment-request.ts.
+model PaymentRequest {
+  id            String               @id @default(cuid())
+  orderId       String
+  order         Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  centerId      String? // cách ly cơ sở (scopedDb)
+  installmentNo Int // 0 = toàn đơn; 1,2,… = số thứ tự đợt
+  amountDue     Int
+  dueDate       DateTime?            @db.Timestamptz(6)
+  /// Định danh đối khớp bền theo ĐỜI của phiếu thu (VA payOS hoặc mã tham chiếu
+  /// tĩnh). Sale tạo lại QR bao nhiêu lần thì khoá này vẫn nguyên → tiền luôn
+  /// rơi đúng đợt (bất biến #3).
+  matchKey      String?              @unique
+  /// TÍNH LẠI từ PaymentAllocation, không set tay.
+  status        PaymentRequestStatus @default(PENDING)
+  /// Thứ tự rót waterfall (mặc định = installmentNo).
+  sortOrder     Int                  @default(0)
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
+
+  qrSessions  QrSession[]
+  allocations PaymentAllocation[]
+
+  @@unique([orderId, installmentNo])
+  @@index([centerId, status])
+  @@index([status, dueDate])
+}
+
+enum QrSessionStatus {
+  ACTIVE
+  EXPIRED
+  CONSUMED
+}
+
+/// Một lần sale bấm "Xuất QR". Nhiều session/1 phiếu thu là chuyện THƯỜNG
+/// (QR sống 5–10 phút, quá hạn thì bấm lại) — tất cả trỏ về cùng phiếu thu.
+model QrSession {
+  id                String          @id @default(cuid())
+  paymentRequestId  String
+  paymentRequest    PaymentRequest  @relation(fields: [paymentRequestId], references: [id], onDelete: Cascade)
+  centerId          String?
+  /// Mã cổng trả về (payOS `orderCode`). Đường tra dự phòng khi cổng không cấp
+  /// VA tĩnh: webhook → QrSession → PaymentRequest.
+  providerOrderCode String?         @unique
+  amountShown       Int
+  qrContent         String?         @db.Text
+  checkoutUrl       String?         @db.Text
+  /// CHỈ để hiển thị đếm ngược + chặn 2 QR ACTIVE. KHÔNG phải điều kiện đối khớp.
+  expiresAt         DateTime        @db.Timestamptz(6)
+  status            QrSessionStatus @default(ACTIVE)
+  createdById       String?
+  createdByName     String?
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+
+  @@index([paymentRequestId, status])
+  @@index([centerId, createdAt])
+}
+
+enum BankTransactionStatus {
+  MATCHED
+  UNMATCHED
+  IGNORED
+}
+
+/// Giao dịch tiền về (payOS/SePay) — bản ghi THÔ, là nguồn của mọi phân bổ.
+/// Idempotency của webhook neo vào `providerTxnId` (@unique).
+model BankTransaction {
+  id            String                @id @default(cuid())
+  provider      String // "PAYOS" | "SEPAY"
+  providerTxnId String
+  amount        Int
+  transferredAt DateTime              @db.Timestamptz(6)
+  accountNumber String?
+  referenceCode String?
+  content       String?               @db.Text
+  rawPayload    Json                  @default("{}")
+  status        BankTransactionStatus @default(UNMATCHED)
+  unmatchedNote String?               @db.Text
+  centerId      String?
+  createdAt     DateTime              @default(now()) @db.Timestamptz(6)
+
+  allocations PaymentAllocation[]
+
+  @@unique([provider, providerTxnId])
+  @@index([status, createdAt])
+  @@index([centerId, createdAt])
+}
+
+/// Sổ phân bổ: giao dịch X rót bao nhiêu vào phiếu thu Y. Trạng thái phiếu thu
+/// và công nợ đều TÍNH TỪ bảng này.
+model PaymentAllocation {
+  id                String          @id @default(cuid())
+  bankTransactionId String
+  bankTransaction   BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Restrict)
+  paymentRequestId  String
+  paymentRequest    PaymentRequest  @relation(fields: [paymentRequestId], references: [id], onDelete: Restrict)
+  centerId          String?
+  amount            Int
+  /// Phần THIẾU được tha theo dung sai làm tròn (payment.roundingToleranceVnd).
+  /// Bắt buộc lưu: `deriveStatus` cần nó để coi phiếu là PAID — không có cột này
+  /// thì mỗi lần tính lại trạng thái sẽ ghi đè PAID về PARTIAL, tức dung sai chỉ
+  /// đúng đúng một lần rồi tự huỷ. Cũng là số kế toán cần thấy khi đối soát.
+  roundingWaived    Int             @default(0)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+
+  @@unique([bankTransactionId, paymentRequestId])
+  @@index([paymentRequestId])
+  @@index([centerId, createdAt])
+}
+
+/// Tiền thừa sau khi đã rót hết các đợt của đơn. CHỈ ghi nhận + hiện cho kế toán
+/// quyết — không tự hoàn, không tự trừ sang đơn khác.
+model CreditBalance {
+  id                String    @id @default(cuid())
+  /// Gắn phụ huynh (User) và/hoặc học viên — đơn có thể chưa convert nên cả hai nullable.
+  parentUserId      String?
+  studentId         String?
+  orderId           String?
+  bankTransactionId String?
+  centerId          String?
+  amount            Int
+  note              String?   @db.Text
+  /// Kế toán đã xử lý (hoàn/trừ đơn khác) chưa — xử lý TAY, hệ thống không tự động.
+  settledAt         DateTime? @db.Timestamptz(6)
+  settledById       String?
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([parentUserId, settledAt])
+  @@index([studentId])
+  @@index([centerId, createdAt])
+}
+
 model Receipt {
   id           String        @id @default(cuid())
   code         String        @unique // RCP-{CENTER}-{YY}-{SEQ}

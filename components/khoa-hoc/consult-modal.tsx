@@ -1,6 +1,7 @@
 "use client";
 
 import { canonicalPhone, isValidPhoneVN } from "@/lib/phone";
+import { readAttribution } from "@/lib/marketing/attribution";
 
 import { useState, useEffect, useRef } from "react";
 import { X, Phone, Loader2 } from "lucide-react";
@@ -107,6 +108,9 @@ export function ConsultModal({
         typeof window !== "undefined" ? window.location.href : undefined,
       referrer:
         typeof document !== "undefined" ? document.referrer : undefined,
+      // Nguồn khách đã giữ từ lúc vào site (?ref= affiliate + UTM + click-id).
+      // Trước đây form không gửi gì nên `Lead.affiliateId` và cả bộ cột UTM luôn rỗng.
+      ...readAttribution(),
       timeOnPage,
       website: honeypot,
     };

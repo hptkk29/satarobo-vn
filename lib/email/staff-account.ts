@@ -4,6 +4,7 @@ import { sendEmail } from "./send";
 import { renderTemplate } from "./render";
 import { EMAIL_TEMPLATE_DEFS } from "./template-codes";
 import { sendZaloNotification } from "@/lib/zalo/service";
+import { buildAccountZnsParams } from "@/lib/zalo/templates";
 
 // =============================================================================
 // BGĐ 31/07 — thông báo CẤP TÀI KHOẢN / RESET MẬT KHẨU cho nhân sự.
@@ -91,11 +92,11 @@ export async function notifyStaffAccountGranted(input: StaffAccountNotifyInput):
     await sendZaloNotification({
       toPhone: input.phone,
       templateKey: ZNS_ACCOUNT_TEMPLATE,
-      params: {
-        name: staffName,
-        login_id: loginId,
-        login_url: loginUrl,
-      },
+      // Params qua buildAccountZnsParams để khớp bảng khai mẫu 616899 (chỉ
+      // `name` ≤30 + `login_id` ≤15; KHÔNG có `login_url`). Bản trước dựng tay
+      // {name, login_id, login_url}: name không cắt 30 ký tự → tên dài bị Zalo
+      // từ chối khi live — đúng lớp bug PR #77 đã vá ở provision.ts.
+      params: buildAccountZnsParams({ customerName: staffName, phone: input.phone }),
       // Không fallback email — email chính thức (kèm mật khẩu) đã gửi ở trên.
       fallbackEmail: null,
     }).catch(() => {});

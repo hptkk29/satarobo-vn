@@ -3,6 +3,11 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
+import { sendEmailForTrigger } from "@/lib/email/trigger";
+import { computeDueNow } from "@/lib/payments/due-now";
+import { ingestPayosWebhook } from "@/lib/payments/payos-ingest";
+import { markInstallmentPaid } from "@/lib/orders/installments";
+import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import {
   decideSepayAction,
   extractOrderCode,
@@ -76,11 +81,30 @@ export async function POST(req: NextRequest) {
           leadId: true,
           gatewayTxnId: true,
           discountApprovalStatus: true,
+          installmentApprovalStatus: true,
+          installments: { select: { soDot: true, amount: true, status: true } },
         },
       })
     : null;
 
-  const decision = decideSepayAction({ payload, order });
+  // Số phải thu NGAY: khách chọn 2 đợt thì là đợt 1, không phải tổng đơn — dùng
+  // đúng con số mà QR đã in ra (lib/payments/due-now.ts) để đối khớp.
+  const paidAgg = order
+    ? await db.payment.aggregate({
+        where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+        _sum: { amount: true },
+      })
+    : null;
+  const dueNow = order
+    ? computeDueNow({
+        totalAmount: order.totalAmount,
+        paidAmount: paidAgg?._sum.amount ?? 0,
+        installments: order.installments,
+        installmentApprovalStatus: order.installmentApprovalStatus,
+      })
+    : null;
+
+  const decision = decideSepayAction({ payload, order, dueNow: dueNow ?? undefined });
 
   if (decision.action !== "CONFIRM") {
     await logIntegration({
@@ -95,6 +119,38 @@ export async function POST(req: NextRequest) {
   }
 
   const txnId = payload.id != null ? String(payload.id) : null;
+
+  // ── SỔ MỚI trước ────────────────────────────────────────────────────────────
+  // payOS còn chờ xác thực doanh nghiệp (TGĐ ký), nên SePay là cổng ĐANG CHẠY
+  // THẬT — nó phải nuôi được sổ thu theo đợt, nếu không thì cả cơ chế phiếu thu
+  // chỉ là code chết. Dùng CHUNG `ingestPayosWebhook` (đã tham số hoá provider):
+  // ghi BankTransaction, phân bổ waterfall, ghi song song sổ cũ, side-effect sau
+  // commit — một đường duy nhất cho cả hai cổng.
+  //
+  // Không khớp được phiếu thu nào (đơn cũ chưa backfill) → LÙI về đường ghi sổ cũ
+  // bên dưới, giữ nguyên hành vi đang chạy. Đây là cầu chuyển tiếp, không phải
+  // nhánh chết: sau khi chạy backfill thì mọi đơn đều có phiếu thu.
+  const viaLedger = await ingestPayosWebhook(
+    {
+      orderCode: payload.referenceCode ?? undefined,
+      reference: payload.referenceCode ?? undefined,
+      description: payload.content ?? payload.description ?? undefined,
+      amount: decision.amount,
+      transactionDateTime: payload.transactionDate ?? undefined,
+      accountNumber: payload.accountNumber ?? undefined,
+      virtualAccountNumber: undefined,
+      paymentLinkId: txnId ?? undefined,
+    },
+    "SEPAY",
+  ).catch((err) => {
+    console.error("[sepay] ingest sổ mới lỗi, lùi về sổ cũ:", err);
+    return null;
+  });
+
+  if (viaLedger && (viaLedger.status === "MATCHED" || viaLedger.status === "DUPLICATE")) {
+    await logIntegration({ action: "CONFIRM_ORDER", status: "SUCCESS", payload });
+    return NextResponse.json({ success: true, handled: true, orderCode, ledger: "v2" });
+  }
 
   try {
     await db.$transaction(async (tx) => {
@@ -126,20 +182,43 @@ export async function POST(req: NextRequest) {
       });
 
       // Ghi sổ kế toán y như đường xác nhận tay (idempotent theo marker).
-      const recorded = await tx.payment.aggregate({
-        where: { orderId: decision.orderId, saleStatus: "RECORDED", deletedAt: null },
-        _count: { _all: true },
-      });
-      if (recorded._count._all === 0) {
-        await ensureOrderPaymentRecorded(tx, {
-          orderId: decision.orderId,
-          amount: order!.totalAmount,
-          leadId: order!.leadId,
-          centerId: order!.centerId,
-          actor: SYSTEM_ACTOR,
+      // ⚠️ Khách đóng theo ĐỢT: khoản phải ghi đúng số đợt vừa thu với marker
+      // [auto:order-installment:dotN] — ghi bằng tổng đơn qua đường
+      // [auto:order-confirm] là phá bất biến "2 nguồn auto-Payment loại trừ nhau"
+      // (đợt 2 sau đó sẽ cộng chồng lên). Đợt do markInstallmentPaid lo, ngoài tx.
+      if (decision.soDot == null) {
+        const recorded = await tx.payment.aggregate({
+          where: { orderId: decision.orderId, saleStatus: "RECORDED", deletedAt: null },
+          _count: { _all: true },
         });
+        if (recorded._count._all === 0) {
+          await ensureOrderPaymentRecorded(tx, {
+            orderId: decision.orderId,
+            amount: decision.amount,
+            leadId: order!.leadId,
+            centerId: order!.centerId,
+            actor: SYSTEM_ACTOR,
+          });
+        }
       }
     });
+
+    // Đóng theo đợt → đánh dấu đợt vừa thu là PAID (hàm này tự ghi Payment với
+    // marker theo soDot + tôn trọng trạng thái duyệt kế hoạch). Ngoài transaction
+    // trên vì nó tự mở transaction riêng.
+    if (decision.soDot != null) {
+      const inst = order!.installments.find((i) => i.soDot === decision.soDot);
+      const instRow = inst
+        ? await db.orderInstallment.findFirst({
+            where: { orderId: decision.orderId, soDot: decision.soDot },
+            select: { id: true },
+          })
+        : null;
+      if (instRow) {
+        const res = await markInstallmentPaid(instRow.id, null, decision.orderId);
+        if (!res.ok) console.error("[sepay] markInstallmentPaid:", res.error);
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown";
     const alreadyHandled = message === "ORDER_ALREADY_HANDLED";
@@ -162,6 +241,60 @@ export async function POST(req: NextRequest) {
     console.error("[sepay] provision parent:", err),
   );
 
+  // BIÊN NHẬN — mirror đúng đường xác nhận TAY (`changeOrderStatusAction`): email
+  // PAYMENT_RECEIPT cho khách có email, ZNS học phí cho khách chỉ có SĐT.
+  // Trước bản vá này webhook chỉ cấp tài khoản rồi im — khách chuyển khoản tự động
+  // không nhận được bất kỳ xác nhận nào, trong khi khách thu tay thì có.
+  // Await từng bước: trên serverless, promise chưa xong lúc trả response có thể bị
+  // cắt giữa chừng (đúng lý do dòng provision ở trên cũng await).
+  await sendOrderReceipt(decision.orderId);
+
   await logIntegration({ action: "CONFIRM_ORDER", status: "SUCCESS", payload });
   return NextResponse.json({ success: true, handled: true, orderCode });
+}
+
+/**
+ * Gửi biên nhận cho đơn vừa xác nhận. Best-effort: mọi lỗi chỉ log — tiền đã ghi
+ * sổ xong, không được để khâu thông báo làm webhook trả 500 rồi SePay retry và
+ * đẩy đơn qua nhánh ORDER_ALREADY_HANDLED.
+ */
+async function sendOrderReceipt(orderId: string): Promise<void> {
+  const order = await db.order
+    .findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        code: true,
+        customerEmail: true,
+        customerName: true,
+        totalAmount: true,
+        paidAt: true,
+        paymentMethod: { select: { name: true } },
+      },
+    })
+    .catch(() => null);
+  if (!order) return;
+
+  if (order.customerEmail?.trim()) {
+    await sendEmailForTrigger({
+      trigger: "PAYMENT_RECEIPT",
+      recipient: { email: order.customerEmail, name: order.customerName },
+      vars: {
+        customer_name: order.customerName,
+        order_code: order.code,
+        total_amount: order.totalAmount,
+        payment_method: order.paymentMethod?.name ?? "Chuyển khoản (SePay)",
+        paid_at: order.paidAt ?? new Date(),
+      },
+      context: { type: "Order", id: order.id },
+      triggerType: "SYSTEM",
+      actor: { userId: null, name: SYSTEM_ACTOR.name },
+    }).catch((err) => console.error("[sepay] PAYMENT_RECEIPT email:", err));
+  }
+
+  // Khách không có email → ZNS mẫu học phí (helper tự bỏ qua khi có email, nên
+  // gọi vô điều kiện vẫn không gửi trùng — nhưng gọi trong nhánh cho rõ ý).
+  await notifyOrderByZnsIfNoEmail(order.id).catch((err) =>
+    console.error("[sepay] ZNS receipt:", err),
+  );
 }

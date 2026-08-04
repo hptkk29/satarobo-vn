@@ -55,10 +55,16 @@ export type SepayMatchInput = {
     gatewayTxnId: string | null;
     discountApprovalStatus: string | null;
   } | null;
+  /**
+   * Số tiền PHẢI THU NGAY (lib/payments/due-now.ts) — khách chọn đóng 2 đợt thì
+   * đây là đợt 1, KHÔNG phải tổng đơn. Thiếu tham số này (đường gọi cũ) thì lùi
+   * về `order.totalAmount` để không đổi hành vi ngoài ý muốn.
+   */
+  dueNow?: { amount: number; soDot: number | null };
 };
 
 export type SepayMatchResult =
-  | { action: "CONFIRM"; orderId: string; amount: number }
+  | { action: "CONFIRM"; orderId: string; amount: number; soDot: number | null }
   | { action: "SKIP"; reason: string }
   | { action: "MANUAL"; reason: string };
 
@@ -97,13 +103,17 @@ export function decideSepayAction(input: SepayMatchInput): SepayMatchResult {
   ) {
     return { action: "MANUAL", reason: "Giảm giá chưa được duyệt — cần xử lý tay" };
   }
-  if (amount < order.totalAmount) {
+  // Ngưỡng đối khớp = số tiền phải thu NGAY (đợt 1 nếu khách chọn 2 đợt), không
+  // phải tổng đơn — nếu không, mọi ca trả góp đều rơi vào "trả thiếu → xử lý tay"
+  // và luồng tự xác nhận coi như không tồn tại với khách đóng 2 đợt.
+  const expected = input.dueNow?.amount ?? order.totalAmount;
+  if (amount < expected) {
     return {
       action: "MANUAL",
-      reason: `Số tiền ${amount} nhỏ hơn tổng đơn ${order.totalAmount}`,
+      reason: `Số tiền ${amount} nhỏ hơn số phải thu ${expected}`,
     };
   }
-  return { action: "CONFIRM", orderId: order.id, amount };
+  return { action: "CONFIRM", orderId: order.id, amount, soDot: input.dueNow?.soDot ?? null };
 }
 
 /**

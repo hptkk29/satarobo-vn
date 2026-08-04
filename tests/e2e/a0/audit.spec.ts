@@ -136,22 +136,27 @@ test.describe("[#05] Audit viewer hợp nhất + break-glass PII", () => {
 
   test("[#05-T2] break-glass unmask → hiện SĐT/email đầy đủ", async () => {
     await seedPiiLogs();
-    const cm1 = await userActor("cm1", "CS1", "CENTER_MANAGER");
+    // 03/08 — người dùng break-glass nay là SUPER_ADMIN (CM đã rút khỏi audit-logs:*).
+    const sa = await userActor("sa", "HO", "SUPER_ADMIN");
 
-    const res = await queryUnifiedAuditLogs(cm1, {}, null, { unmask: true });
-    const row = res.items[0]!;
+    const res = await queryUnifiedAuditLogs(sa, {}, null, { unmask: true });
+    // SUPER_ADMIN thấy log CẢ HAI cơ sở nên KHÔNG bám items[0] — tìm đúng bản ghi L1.
+    const row = res.items.find((r) => r.entityId === "L1")!;
+    expect(row).toBeTruthy();
     expect(row.piiMasked).toBe(false);
     expect((row.newValues as { phone: string }).phone).toBe("0901234567");
     expect((row.newValues as { email: string }).email).toBe("a@x.com");
   });
 
-  test("[#05-T2] quyền view-pii: CENTER_MANAGER có, TEACHER không", async () => {
+  test("[#05-T2] quyền view-pii: chỉ SUPER_ADMIN (03/08 rút khỏi Quản lý cơ sở)", async () => {
     const cm1 = await userActor("cm1", "CS1", "CENTER_MANAGER");
     const tea = await userActor("tea", "CS1", "TEACHER");
     const sa = await userActor("sa", "HO", "SUPER_ADMIN");
 
-    expect(can(cm1, "audit-logs:view-pii")).toBe(true);
+    // 03/08 — chủ dự án chặn Audit Log ở vai Quản lý cơ sở: nhật ký hệ thống +
+    // break-glass xem PII nay chỉ còn SUPER_ADMIN.
     expect(can(sa, "audit-logs:view-pii")).toBe(true); // SUPER_ADMIN bypass
+    expect(can(cm1, "audit-logs:view-pii")).toBe(false);
     expect(can(tea, "audit-logs:view-pii")).toBe(false);
   });
 

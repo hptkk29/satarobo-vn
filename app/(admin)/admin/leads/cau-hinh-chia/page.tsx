@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
 export default async function AssignConfigPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("leads:assign"))) redirect("/leads");
+  // 03/08 — tách khỏi `leads:assign`: Quản lý cơ sở vẫn bàn giao / chuyển lead liên CS,
+  // nhưng KHÔNG sửa được cấu hình chia lead (việc của Super Admin).
+  if (!(await checkPermission("leads:assign-config"))) redirect("/leads");
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER") && !isSuper;

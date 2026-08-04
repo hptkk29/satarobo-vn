@@ -4,6 +4,7 @@ import { FloatingCta } from "@/components/public/floating-cta";
 import { StickyMobileCta } from "@/components/sections/sticky-mobile-cta";
 import { CampaignPopup20Suat } from "@/components/public/campaign-popup-20-suat";
 import { CookieConsent } from "@/components/public/cookie-consent";
+import { AttributionCapture } from "@/components/public/attribution-capture";
 
 // F-UI-4 wiring:
 // - <SiteFooter /> thay <Footer /> cũ (giữ file cũ ở components/public/
@@ -14,6 +15,9 @@ import { CookieConsent } from "@/components/public/cookie-consent";
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
+      {/* Giữ nguồn khách (?ref= affiliate + UTM) qua các lần chuyển trang — form
+          đăng ký ở trang bất kỳ mới gửi kèm được. */}
+      <AttributionCapture />
       <Header />
       <main className="flex-1">{children}</main>
       <SiteFooter />

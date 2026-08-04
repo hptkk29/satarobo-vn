@@ -7,8 +7,20 @@ import {
   type RenderedAnswer,
 } from "@/lib/eval/session-eval-portal";
 import { isPortalV2Enabled } from "@/lib/flags";
-import { getStudentFeedback } from "@/lib/portal/feedback";
+import {
+  getStudentFeedback,
+  parseFeedbackNotes,
+  parseFeedbackRubric,
+} from "@/lib/portal/feedback";
+import {
+  EVAL_NOTE_FIELDS,
+  evalLevelText,
+  groupedEvalCriteria,
+} from "@/lib/lms/session-eval-rubric";
 import { NhanXetPageV2 } from "@/components/portal/nhan-xet-page";
+
+// Nhóm rubric (9 tiêu chí × 4 nhóm) — cùng nguồn nhãn với V2 (components/portal/nhan-xet-page).
+const RUBRIC_GROUPS = groupedEvalCriteria();
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Nhận xét | Sata Robo", robots: { index: false } };
@@ -23,8 +35,10 @@ function fmtDate(d: Date | string): string {
 }
 
 // LMS-2 / FL4-02 — phụ huynh xem nhận xét theo buổi của ĐÚNG con đang chọn (active site).
-// Hiển thị song song: (1) nhận xét cũ StudentSessionFeedback (comment+rating) và
-// (2) phiếu đánh giá buổi học mới (SESSION_EVAL) kèm ảnh buổi (gate theo consent).
+// Hiển thị song song: (1) nhận xét StudentSessionFeedback — comment+rating VÀ phiếu
+// mở rộng site GV (Dự án + 4 mục văn xuôi + rubric 9 tiêu chí, FIX #2 08/2026 — trước
+// đây V1 chỉ render comment nên phiếu rubric-only ra card trống) và (2) phiếu đánh
+// giá buổi học mới (SESSION_EVAL) kèm ảnh buổi (gate theo consent).
 export default async function NhanXetPage() {
   const { ctx, studentId } = await requireActiveStudent();
 
@@ -54,6 +68,11 @@ export default async function NhanXetPage() {
         id: true,
         comment: true,
         rating: true,
+        // FIX #2 — phiếu mở rộng site GV (Dự án + 4 mục + rubric 9 tiêu chí): V1 trước
+        // đây chỉ đọc comment+rating → phiếu rubric-only ra card TRỐNG với phụ huynh.
+        projectName: true,
+        notes: true,
+        rubric: true,
         createdAt: true,
         classSession: {
           select: {
@@ -157,29 +176,91 @@ export default async function NhanXetPage() {
             Nhận xét theo buổi
           </h2>
           <ul className="space-y-3">
-            {feedbacks.map((f) => (
-              <li key={f.id} className="rounded-xl border border-neutral-200 bg-white p-4">
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-neutral-900">
-                    {f.classSession.class.classCode ? `${f.classSession.class.classCode} · ` : ""}
-                    {f.classSession.class.name}
-                  </span>
-                  <span className="text-xs tabular-nums text-neutral-400">
-                    {fmtDate(f.classSession.date)}
-                  </span>
-                </div>
-                <div className="mb-1.5 flex items-center gap-2 text-xs text-neutral-500">
-                  <span>GV: {f.classSession.class.teacher?.name ?? "—"}</span>
-                  {f.rating != null && (
-                    <span className="text-amber-500">
-                      {"★".repeat(f.rating)}
-                      {"☆".repeat(5 - f.rating)}
+            {feedbacks.map((f) => {
+              // FIX #2 — parse phiếu mở rộng bằng ĐÚNG helper của V2 (lib/portal/feedback)
+              // để 2 bản không lệch nội dung: notes ưu tiên hơn comment (phiếu mới lưu
+              // comment = 4 mục nối lại, render cả 2 sẽ lặp); rubric render theo nhóm.
+              const notes = parseFeedbackNotes(f.notes);
+              const rubric = parseFeedbackRubric(f.rubric);
+              return (
+                <li key={f.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-neutral-900">
+                      {f.classSession.class.classCode ? `${f.classSession.class.classCode} · ` : ""}
+                      {f.classSession.class.name}
                     </span>
+                    <span className="text-xs tabular-nums text-neutral-400">
+                      {fmtDate(f.classSession.date)}
+                    </span>
+                  </div>
+                  <div className="mb-1.5 flex items-center gap-2 text-xs text-neutral-500">
+                    <span>GV: {f.classSession.class.teacher?.name ?? "—"}</span>
+                    {f.rating != null && (
+                      <span className="text-amber-500">
+                        {"★".repeat(f.rating)}
+                        {"☆".repeat(5 - f.rating)}
+                      </span>
+                    )}
+                  </div>
+
+                  {f.projectName && (
+                    <p className="mb-1.5 text-sm text-neutral-700">
+                      <span className="font-semibold text-neutral-900">Dự án:</span>{" "}
+                      {f.projectName}
+                    </p>
                   )}
-                </div>
-                <p className="whitespace-pre-wrap text-sm text-neutral-700">{f.comment}</p>
-              </li>
-            ))}
+
+                  {notes ? (
+                    <div className="space-y-1">
+                      {EVAL_NOTE_FIELDS.map((fld) => {
+                        const text = notes[fld.key].trim();
+                        if (!text) return null;
+                        return (
+                          <p key={fld.key} className="whitespace-pre-wrap text-sm text-neutral-700">
+                            <span className="font-semibold text-neutral-900">{fld.label}:</span>{" "}
+                            {text}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  ) : f.comment?.trim() ? (
+                    <p className="whitespace-pre-wrap text-sm text-neutral-700">{f.comment}</p>
+                  ) : (
+                    <p className="text-sm text-neutral-400">
+                      {rubric
+                        ? "Buổi này giáo viên đánh giá qua bảng năng lực bên dưới."
+                        : "Chưa có nội dung nhận xét chi tiết cho buổi này."}
+                    </p>
+                  )}
+
+                  {rubric && (
+                    <div className="mt-3 space-y-2.5 border-t border-neutral-100 pt-3">
+                      {RUBRIC_GROUPS.map(([group, items]) => {
+                        const rows = items.filter((c) => rubric[c.id] != null);
+                        if (rows.length === 0) return null;
+                        return (
+                          <div key={group}>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                              {group}
+                            </p>
+                            <div className="mt-1 space-y-1.5">
+                              {rows.map((c) => (
+                                <div key={c.id}>
+                                  <p className="text-sm font-medium text-neutral-900">{c.name}</p>
+                                  <p className="text-sm leading-relaxed text-neutral-600">
+                                    {evalLevelText(c.id, rubric[c.id]) || `Mức ${rubric[c.id]}/5`}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

@@ -39,7 +39,6 @@ const RESOURCE_LABELS: Record<string, string> = {
   payments: "Phương thức thanh toán",
   orders: "Đơn hàng",
   // Phase 5.7 — Vouchers
-  vouchers: "Mã khuyến mãi",
 };
 
 const VERB_LABELS: Record<string, string> = {

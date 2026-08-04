@@ -130,3 +130,27 @@ export function isTeacherSiteEnabled(): boolean {
 export function isAuthPhoneProvisioningEnabled(): boolean {
   return process.env.AUTH_PHONE_PROVISIONING !== "false";
 }
+
+/**
+ * 03/08 — CỜ CUTOVER SỔ THU MỚI (`PaymentRequest` ← `PaymentAllocation` ←
+ * `BankTransaction`). Mặc định **TẮT**.
+ *
+ * Sổ mới đang chạy SONG SONG với sổ cũ (`Payment` Ledger-A + `OrderInstallment`
+ * Ledger-B): tiền về qua payOS ghi CẢ HAI bên — sổ mới (`PaymentAllocation`) và một
+ * dòng `Payment` marker `[auto:payos:<txn>]` cho sổ cũ — vì **công nợ hiển thị vẫn
+ * lấy từ sổ cũ** cho tới khi lật cờ này.
+ * Cờ này là chỗ lật nguồn đọc sang sổ mới — và chỉ được lật khi
+ * `scripts/shadow-compare-debt.ts` báo **0 đơn lệch**. Quy trình:
+ *   1. `pnpm payments:backfill --apply`      → dựng phiếu thu cho đơn cũ
+ *   2. `pnpm payments:shadow-compare`        → còn lệch thì xử lý theo cột lý do
+ *   3. sạch → set env `PAYMENT_LEDGER_V2="true"` + redeploy
+ * Rollback = xoá env (hoặc set khác `"true"`) + redeploy; sổ cũ chưa bị gỡ nên
+ * không mất dữ liệu.
+ *
+ * ⚠️ Cờ mới khai — CHƯA nối vào màn nào. Bật lúc này KHÔNG đổi hành vi. Đây là chủ ý
+ * (khai cờ trước, nối sau) để đường lùi tồn tại trong code từ đầu, không phải chỉ
+ * trên giấy — đúng bài học của `AUTH_PHONE_PROVISIONING`.
+ */
+export function isPaymentLedgerV2Enabled(): boolean {
+  return process.env.PAYMENT_LEDGER_V2 === "true"; // mặc định OFF
+}

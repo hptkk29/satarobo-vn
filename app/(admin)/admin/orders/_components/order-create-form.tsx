@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { createOrderManualAction, previewVoucherAction } from "../_actions";
+import { createOrderManualAction } from "../_actions";
 
 type Course = {
   id: string;
@@ -104,14 +104,6 @@ export function OrderCreateForm({
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountReason, setDiscountReason] = useState("");
-  const [voucherCode, setVoucherCode] = useState("");
-  const [voucherStatus, setVoucherStatus] = useState<
-    | { kind: "idle" }
-    | { kind: "loading" }
-    | { kind: "valid"; voucherName: string; discount: number }
-    | { kind: "invalid"; error: string }
-  >({ kind: "idle" });
-  const [previewPending, startPreviewTransition] = useTransition();
 
   // Notes
   const [customerNote, setCustomerNote] = useState("");
@@ -198,48 +190,6 @@ export function OrderCreateForm({
       : discountAmount;
   const totalAmount = Math.max(0, subtotal - effectiveDiscount);
 
-  function handlePreviewVoucher() {
-    if (!voucherCode.trim()) {
-      setVoucherStatus({ kind: "idle" });
-      return;
-    }
-    if (!customer.phone.trim()) {
-      setVoucherStatus({
-        kind: "invalid",
-        error: "Vui lòng nhập SĐT khách trước",
-      });
-      return;
-    }
-    if (subtotal <= 0) {
-      setVoucherStatus({
-        kind: "invalid",
-        error: "Vui lòng chọn sản phẩm trước",
-      });
-      return;
-    }
-
-    setVoucherStatus({ kind: "loading" });
-    startPreviewTransition(async () => {
-      const result = await previewVoucherAction({
-        code: voucherCode,
-        orderType,
-        subtotal,
-        customerPhone: customer.phone,
-        productId: orderType === "PRODUCT" ? itemRefId : null,
-      });
-      if (result.ok) {
-        setVoucherStatus({
-          kind: "valid",
-          voucherName: result.voucherName,
-          discount: result.discountAmount,
-        });
-        setDiscountAmount(result.discountAmount);
-      } else {
-        setVoucherStatus({ kind: "invalid", error: result.error });
-      }
-    });
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -297,7 +247,6 @@ export function OrderCreateForm({
       discountAmount: discountMode === "percent" ? 0 : discountAmount,
       discountPercent: discountMode === "percent" ? discountPercent || null : null,
       discountReason: discountReason.trim() || null,
-      voucherCode: voucherCode || null,
       customerNote: customerNote || null,
       internalNote: internalNote || null,
     };
@@ -588,45 +537,6 @@ export function OrderCreateForm({
           Định giá
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Mã voucher</Label>
-            <div className="flex gap-2">
-              <Input
-                value={voucherCode}
-                onChange={(e) => {
-                  setVoucherCode(e.target.value.toUpperCase());
-                  setVoucherStatus({ kind: "idle" });
-                }}
-                placeholder="VD: OPENING2026"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handlePreviewVoucher}
-                disabled={previewPending}
-              >
-                {previewPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Check"
-                )}
-              </Button>
-            </div>
-            {voucherStatus.kind === "valid" && (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-sm text-green-800">
-                ✅ <strong>{voucherStatus.voucherName}</strong> — giảm{" "}
-                <strong>
-                  {voucherStatus.discount.toLocaleString("vi-VN")} đ
-                </strong>
-              </div>
-            )}
-            {voucherStatus.kind === "invalid" && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-                ❌ {voucherStatus.error}
-              </div>
-            )}
-          </div>
           {/* BGĐ 31/07 — giảm giá: chọn hình thức % hoặc số tiền. */}
           <div className="space-y-1.5">
             <Label>Giảm giá</Label>
@@ -672,7 +582,7 @@ export function OrderCreateForm({
         </div>
 
         {/* BGĐ 31/07 — giải trình bắt buộc khi giảm giá tay; đơn sẽ chờ QLCS duyệt. */}
-        {effectiveDiscount > 0 && !voucherCode.trim() && (
+        {effectiveDiscount > 0 && (
           <div className="space-y-1.5">
             <Label>Giải trình giảm giá *</Label>
             <Input

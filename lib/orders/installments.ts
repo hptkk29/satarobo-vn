@@ -5,6 +5,15 @@ import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { formatVndPlain } from "@/lib/format/money";
+// 03/08 — SỔ MỚI (PaymentRequest) chạy SONG SONG sổ cũ (OrderInstallment).
+// Sổ cũ giữ nguyên hành vi (đợt 1 = PAID) để không phá công nợ đang chạy; sổ mới
+// ⚠️ 03/08 luật ĐÃ ĐỔI: phiếu theo đợt sinh NGAY khi lưu kế hoạch (không chờ duyệt),
+// vẫn ở trạng thái PENDING. "Duyệt" nay chỉ có nghĩa KHOÁ kế hoạch.
+import {
+  ensureFullOrderRequest,
+  materializeInstallmentRequests,
+  revertInstallmentRequests,
+} from "@/lib/payments/payment-request";
 
 // =============================================================================
 // Commit 4 — thanh toán TỐI ĐA 2 ĐỢT cho 1 Order.
@@ -58,9 +67,19 @@ export async function recordInstallmentPlan(params: {
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    select: { totalAmount: true, centerId: true, leadId: true, installmentApprovalStatus: true },
+    select: { code: true, totalAmount: true, centerId: true, leadId: true, installmentApprovalStatus: true },
   });
   if (!order) return { ok: false, error: "Không tìm thấy đơn" };
+  // Chủ dự án chốt 03/08 — DUYỆT = KHOÁ. Kế hoạch đã duyệt thì không sửa số tiền/
+  // số đợt được nữa: phiếu thu và mã QR đã phát cho khách bám theo nó, sửa sau lưng
+  // là tiền về một đằng sổ ghi một nẻo. Muốn đổi thì QLCS từ chối kế hoạch trước.
+  if (order.installmentApprovalStatus === "APPROVED") {
+    return {
+      ok: false,
+      error:
+        "Kế hoạch trả góp đã được duyệt — không sửa được nữa. Cần đổi thì quản lý cơ sở từ chối kế hoạch rồi lập lại.",
+    };
+  }
   if (dot1Amount + dot2Amount !== order.totalAmount) {
     return { ok: false, error: `Tổng 2 đợt phải bằng học phí (${formatVndPlain(order.totalAmount, false)})` };
   }
@@ -106,18 +125,48 @@ export async function recordInstallmentPlan(params: {
         actor: { id: actorId },
       });
     }
+    // ⚠️ 03/08 — ĐẢO QĐ-1 (chủ dự án chốt trong chat). Trước đây chỗ này chỉ dựng
+    // phiếu "thu toàn đơn" và đợi QLCS duyệt mới sinh phiếu theo đợt ⇒ khách đứng ở
+    // quầy không quét được mã đúng số tiền đợt 1 cho tới khi có người duyệt.
+    // Nay: LƯU KẾ HOẠCH LÀ CÓ PHIẾU THU THEO ĐỢT NGAY (kèm QR đúng số tiền từng đợt).
+    // Duyệt chỉ còn là bước KHOÁ kế hoạch lại.
+    //
+    // Đơn trả 1 lần (không có đợt 2) giữ nguyên đường cũ: 1 phiếu "thu toàn đơn" —
+    // gọi nó là "Đợt 1/1" chỉ làm sale rối chứ không thêm thông tin gì.
+    if (dot2Amount > 0) {
+      await materializeInstallmentRequests(tx, orderId, { id: actorId, name: "" });
+    } else {
+      await ensureFullOrderRequest(tx, {
+        id: orderId,
+        code: order.code,
+        totalAmount: order.totalAmount,
+        centerId: order.centerId,
+      });
+    }
   });
   await recomputeOrder(orderId);
   return { ok: true };
 }
 
-/** Đánh dấu 1 đợt đã đóng (đợt 2). */
-export async function markInstallmentPaid(installmentId: string, actorId: string | null): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Đánh dấu 1 đợt đã đóng (đợt 2).
+ * `expectedOrderId`: Server Action ĐÃ scope-check đơn nào thì truyền id đơn đó vào —
+ * thiếu đối chiếu này là IDOR ghi tiền: client gửi orderId (trong scope) kèm
+ * installmentId của ĐƠN KHÁC cơ sở → flip PAID + sinh Payment chéo cơ sở.
+ */
+export async function markInstallmentPaid(
+  installmentId: string,
+  actorId: string | null,
+  expectedOrderId?: string,
+): Promise<{ ok: boolean; error?: string }> {
   const inst = await db.orderInstallment.findUnique({
     where: { id: installmentId },
     select: { id: true, orderId: true, status: true, soDot: true, amount: true },
   });
   if (!inst) return { ok: false, error: "Không tìm thấy đợt" };
+  if (expectedOrderId && inst.orderId !== expectedOrderId) {
+    return { ok: false, error: "Đợt thu không thuộc đơn hàng này" };
+  }
   if (inst.status === "PAID") return { ok: true };
 
   const order = await db.order.findUnique({
@@ -257,6 +306,13 @@ export async function approveInstallmentPlan(params: {
         actor: { id: params.actor.id, name: params.actor.name },
       });
     }
+    // QĐ-1 (03/08) — ĐÂY là nơi duy nhất phiếu thu theo đợt ra đời. Cùng transaction
+    // với việc set APPROVED ở trên: duyệt hỏng thì phiếu cũng không tồn tại, và
+    // ngược lại không có đơn nào "đã duyệt mà chưa có phiếu".
+    await materializeInstallmentRequests(tx, order.id, {
+      id: params.actor.id,
+      name: params.actor.name,
+    });
   });
   return { ok: true };
 }
@@ -304,6 +360,12 @@ export async function rejectInstallmentPlan(params: {
       reason: params.reason.trim(),
       orgUnitId: order.centerId,
       tx,
+    });
+    // Kế hoạch bị bác sau khi đã lỡ duyệt → thu hồi phiếu theo đợt (chưa dính tiền)
+    // và cho phiếu "thu toàn đơn" sống lại, để đơn vẫn thu được.
+    await revertInstallmentRequests(tx, order.id, {
+      id: params.actor.id,
+      name: params.actor.name,
     });
   });
   return { ok: true };

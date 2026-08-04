@@ -477,47 +477,101 @@ export function ExcelImporter<T>({
         </div>
       )}
 
-      {step === "done" && result && (
-        <div className="space-y-3">
-          <Alert className={result.errors.length === 0 ? "border-green-500" : "border-yellow-500"}>
-            {result.errors.length === 0 ? (
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-yellow-600" />
-            )}
-            <AlertDescription>
-              ✅ Thành công: <strong>{result.success}</strong>
-              {result.errors.length > 0 && (
-                <>
-                  {" "}
-                  | ❌ Lỗi: <strong>{result.errors.length}</strong>
-                </>
-              )}
-            </AlertDescription>
-          </Alert>
-          {result.errors.length > 0 && (
-            <div className="border rounded-lg max-h-[300px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-2 py-1 text-left">Row</th>
-                    <th className="px-2 py-1 text-left">Lỗi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.errors.map((e, i) => (
-                    <tr key={i} className="border-t">
-                      <td className="px-2 py-1">{e.row}</td>
-                      <td className="px-2 py-1 text-red-600">{e.error}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {step === "done" && result && <ImportOutcome result={result} onReset={reset} />}
+    </div>
+  );
+}
+
+/**
+ * Kết quả sau khi ghi.
+ *
+ * ⚠️ Các API import dùng CHUNG mảng `errors` cho hai thứ khác hẳn nhau: lỗi thật
+ * (dòng KHÔNG vào được) và thông báo vô hại (dòng đã có sẵn nên bỏ qua, đã gộp con
+ * vào lead cùng SĐT…). Thông báo vô hại được đánh dấu bằng tiền tố "ℹ️".
+ *
+ * Trước 03/08 màn này đếm tất cả là "❌ Lỗi" — nhập 37 dòng lead thật ra bảng
+ * "Thành công: 6 | Lỗi: 28" trong khi KHÔNG có dòng nào hỏng. Người nhập liệu đọc
+ * xong sẽ tưởng import fail và nhập lại → nhân đôi dữ liệu. Tách hai loại ra.
+ */
+export function ImportOutcome({
+  result,
+  onReset,
+}: {
+  result: ImportResult;
+  onReset: () => void;
+}) {
+  const notices = result.errors.filter((e) => e.error.trimStart().startsWith("ℹ️"));
+  const failures = result.errors.filter((e) => !e.error.trimStart().startsWith("ℹ️"));
+
+  return (
+    <div className="space-y-3">
+      <Alert className={failures.length === 0 ? "border-green-500" : "border-yellow-500"}>
+        {failures.length === 0 ? (
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+        ) : (
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+        )}
+        <AlertDescription>
+          ✅ Thành công: <strong>{result.success}</strong>
+          {notices.length > 0 && (
+            <>
+              {" "}
+              | ℹ️ Đã có sẵn / bỏ qua: <strong>{notices.length}</strong>
+            </>
           )}
-          <Button onClick={reset}>Import file khác</Button>
+          {failures.length > 0 && (
+            <>
+              {" "}
+              | ❌ Lỗi: <strong>{failures.length}</strong>
+            </>
+          )}
+          {failures.length === 0 && notices.length > 0 && (
+            <span className="ml-1 text-neutral-600">— không có dòng nào lỗi.</span>
+          )}
+        </AlertDescription>
+      </Alert>
+
+      {failures.length > 0 && (
+        <div className="max-h-[300px] overflow-y-auto rounded-lg border">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-gray-50">
+              <tr>
+                <th className="px-2 py-1 text-left">Row</th>
+                <th className="px-2 py-1 text-left">Lỗi — dòng KHÔNG được ghi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {failures.map((e, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1">{e.row}</td>
+                  <td className="px-2 py-1 text-red-600">{e.error}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
+
+      {notices.length > 0 && (
+        <details className="rounded-lg border bg-neutral-50">
+          <summary className="cursor-pointer px-3 py-2 text-sm text-neutral-700">
+            Ghi chú ({notices.length}) — dòng trùng đã gộp / đã có sẵn, không cần xử lý
+          </summary>
+          <div className="max-h-[240px] overflow-y-auto border-t bg-white">
+            <table className="w-full text-sm">
+              <tbody>
+                {notices.map((e, i) => (
+                  <tr key={i} className="border-t first:border-t-0">
+                    <td className="px-2 py-1 text-neutral-600">{e.error}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      <Button onClick={onReset}>Import file khác</Button>
     </div>
   );
 }

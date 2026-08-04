@@ -8,8 +8,8 @@ import { writeAudit } from "@/lib/audit/audit-log";
 // BGĐ 31/07 — GIẢM GIÁ nhập tay: giá gốc → giảm (% hoặc số tiền) → tổng →
 // giải trình → Quản lý cơ sở duyệt → mới được xác nhận đơn.
 //
-// Voucher (chính sách đã duyệt sẵn) KHÔNG đi luồng này — chỉ giảm giá do nhân
-// viên tự nhập mới cần giải trình + duyệt.
+// 03/08 — hệ MÃ KHUYẾN MÃI đã gỡ theo chốt chủ dự án (giảm theo %/số tiền linh
+// động hơn, khỏi tạo mã cho từng đợt) ⇒ nay MỌI giảm giá đều đi luồng này.
 //
 // Cùng khuôn với duyệt trả góp (lib/orders/installments.ts): lib nhận actor thuần
 // + assertCan (lớp phòng thủ); gate CHÍNH theo cờ RBAC nằm ở server action wrapper.
@@ -22,12 +22,9 @@ export function discountFromPercent(subtotal: number, percent: number): number {
   return Math.min(subtotal, Math.round((subtotal * pct) / 100));
 }
 
-/** THUẦN — đơn có cần duyệt giảm giá không (giảm tay > 0 và KHÔNG do voucher). */
-export function needsDiscountApproval(input: {
-  discountAmount: number;
-  voucherCode?: string | null;
-}): boolean {
-  return input.discountAmount > 0 && !input.voucherCode?.trim();
+/** THUẦN — đơn có cần duyệt giảm giá không (mọi giảm giá > 0 đều cần). */
+export function needsDiscountApproval(input: { discountAmount: number }): boolean {
+  return input.discountAmount > 0;
 }
 
 export type DiscountApprovalActor = {

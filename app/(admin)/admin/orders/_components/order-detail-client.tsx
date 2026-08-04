@@ -38,6 +38,11 @@ import {
   rejectOrderDiscountAction,
 } from "./_discount-approval-actions";
 import { OrderInstallmentPlan, OrderQrSection } from "./order-payment-section";
+import {
+  PaymentRequestsSection,
+  type PaymentRequestRow,
+} from "./payment-requests-section";
+import type { QrSessionView } from "../_qr-core";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
 
 // G4 — phương thức thanh toán có thể sửa (chỉ khi đơn chưa xác nhận); cần khả năng theo loại đơn.
@@ -72,11 +77,6 @@ type OrderWithIncludes = Prisma.OrderGetPayload<{
     lead: { select: { id: true; parentName: true } };
     center: { select: { id: true; name: true } };
     history: true;
-    voucherRedemption: {
-      include: {
-        voucher: { select: { id: true; code: true; name: true; type: true } };
-      };
-    };
   };
 }>;
 
@@ -118,7 +118,11 @@ export function OrderDetailClient({
   canApproveDiscount = false,
   qrUrl,
   transferContent,
+  dueNow,
   installments,
+  paymentRequests,
+  qrSessions,
+  installmentPlanApproved,
   paymentMethods,
   accounting,
 }: {
@@ -131,7 +135,14 @@ export function OrderDetailClient({
   // G4 — QR + kế hoạch 2 đợt render trong cùng component để kiểm soát thứ tự section.
   qrUrl: string | null;
   transferContent: string;
+  /** Số tiền QR đang thu (đợt 1 nếu chọn 2 đợt) + nhãn. */
+  dueNow: { amount: number; label: string };
   installments: InstallmentView[];
+  /** 03/08 — sổ phiếu thu theo đợt (nguồn của bảng "Phiếu thu & QR theo đợt"). */
+  paymentRequests: PaymentRequestRow[];
+  /** Phiên QR ACTIVE còn hạn của từng phiếu (key = paymentRequestId). */
+  qrSessions: Record<string, QrSessionView>;
+  installmentPlanApproved: boolean;
   paymentMethods: PaymentMethodOption[];
   // (b) PA-A — tổng theo sổ kế toán (Payment) của đơn: CONFIRMED vs PENDING (chờ ✓).
   accounting: { confirmed: number; pending: number };
@@ -412,19 +423,9 @@ export function OrderDetailClient({
               <tr>
                 <td colSpan={3} className="p-2 text-right text-gray-600">
                   Giảm giá
-                  {order.voucherRedemption ? (
-                    <>
-                      {" — "}
-                      <Link
-                        href={`/vouchers/${order.voucherRedemption.voucher.id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        {order.voucherRedemption.voucher.code}
-                      </Link>
-                    </>
-                  ) : order.voucherCode ? (
-                    <> — {order.voucherCode} (manual)</>
-                  ) : null}
+                  {/* Đơn CŨ tạo bằng mã khuyến mãi (hệ đã gỡ 03/08) vẫn hiện mã đã
+                      dùng để đối soát lịch sử — không còn link tới màn voucher. */}
+                  {order.voucherCode ? <> — mã {order.voucherCode}</> : null}
                   :
                 </td>
                 <td className="p-2 text-right text-red-600 tabular-nums">
@@ -780,8 +781,19 @@ export function OrderDetailClient({
           ))}
       </section>
 
-      {/* G4 — "Thanh toán & QR" gần cuối trang (chỉ còn QR sau khi tách kế hoạch 2 đợt). */}
-      <OrderQrSection qrUrl={qrUrl} transferContent={transferContent} />
+      {/* 03/08 — QR xuất THEO TỪNG PHIẾU THU (đợt), thay cho 1 nút QR mức đơn.
+          Đơn cũ chưa có phiếu thu nào → giữ nguyên khối QR mức đơn để không mất
+          khả năng thu tiền. */}
+      {paymentRequests.length > 0 ? (
+        <PaymentRequestsSection
+          requests={paymentRequests}
+          initialSessions={qrSessions}
+          canManage={canManage}
+          installmentPlanApproved={installmentPlanApproved}
+        />
+      ) : (
+        <OrderQrSection qrUrl={qrUrl} transferContent={transferContent} dueNow={dueNow} />
+      )}
 
       {/* G4 (3f) — nút "Đổi trạng thái" ở DƯỚI CÙNG, ngay sau "Thanh toán & QR". */}
       {canManage && nextOptions.length > 0 && (

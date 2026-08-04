@@ -11,6 +11,8 @@
     "db:seed:jobs": "tsx scripts/seed-job-postings.ts",
     "phone:audit": "tsx scripts/phone-audit.ts",
     "phone:backfill": "tsx scripts/phone-backfill.ts",
+    "payments:backfill": "tsx scripts/backfill-payment-requests.ts",
+    "payments:shadow-compare": "tsx scripts/shadow-compare-debt.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",

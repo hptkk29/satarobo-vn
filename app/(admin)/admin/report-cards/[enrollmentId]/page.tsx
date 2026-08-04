@@ -6,7 +6,9 @@ import { db } from "@/lib/db";
 import { resolveActor } from "@/lib/auth/actor";
 import {
   actorCapabilities,
+  canEditReportCardContent,
   checkEnrollmentScope,
+  checkManageWriteScope,
   computeReportCardMetrics,
   getCourseCriteria,
   getEnrollmentContext,
@@ -83,6 +85,23 @@ export default async function ReportCardEditorPage({
   const status = (rc?.status ?? "DRAFT") as ReportCardStatusValue;
   const scoreMap = new Map((rc?.scores ?? []).map((s) => [s.criterionId, s]));
 
+  // FIX A4: `editable` phía UI phải TRÙNG tiêu chí của saveReportCardAction — trước đây
+  // chỉ check isReportCardEditable && canManage nên user manage-only mở card RECALLED
+  // (hoặc CM tiếp nhận qua carve-out câu 20 chỉ-ĐỌC) thấy form + nút Lưu, gõ xong mới bị
+  // server chặn. Server đòi đủ 3 lớp:
+  //  (1) checkEnrollmentScope KHÔNG carve-out (đường GHI không truyền receivingCenterId);
+  //  (2) checkManageWriteScope — ghi theo cơ sở của quyền manage (vá 24/07 Gói E);
+  //  (3) canEditReportCardContent — DRAFT cần 'manage', RECALLED cần 'review' (#17 Gap3).
+  const writeEnrollmentScope = checkEnrollmentScope({
+    actor,
+    centerId: enr.centerId,
+    classId: enr.classId,
+    capabilities,
+  });
+  const writeScope = checkManageWriteScope({ actor, centerId: enr.centerId });
+  const canWrite = writeEnrollmentScope.ok && writeScope.ok;
+  const editable = canEditReportCardContent(status, capabilities) && canWrite;
+
   return (
     <div className="space-y-5 p-4">
       <div>
@@ -108,11 +127,22 @@ export default async function ReportCardEditorPage({
         </div>
       ) : null}
 
+      {/* A4: trạng thái cho-sửa nhưng user này KHÔNG đủ quyền ghi → nói rõ ngay thay vì
+          để form khoá im lặng (message khớp thực tế quyền: RECALLED cần quyền duyệt KÈM
+          quyền nhập tại cơ sở — review-only như Đào tạo@HO cũng chỉ duyệt, không sửa). */}
+      {isReportCardEditable(status) && !editable ? (
+        <div className="rounded-md border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+          {status === "RECALLED"
+            ? "Học bạ đã phát hành và bị thu hồi — chỉ người có quyền duyệt học bạ (Quản lý cơ sở/Đào tạo) kèm quyền nhập tại cơ sở này mới sửa lại nội dung. Bạn chỉ xem."
+            : "Bạn chỉ có quyền xem học bạ này — nội dung do giáo viên phụ trách lớp nhập."}
+        </div>
+      ) : null}
+
       <ReportCardEditor
         enrollmentId={enrollmentId}
         status={status}
-        editable={isReportCardEditable(status) && canManage}
-        canManage={canManage}
+        editable={editable}
+        canManage={canManage && canWrite}
         canReview={canReview}
         publishedAt={rc?.publishedAt ? rc.publishedAt.toISOString() : null}
         metrics={metrics}

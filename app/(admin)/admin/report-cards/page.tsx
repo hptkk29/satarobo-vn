@@ -65,8 +65,10 @@ export default async function ReportCardsPage({
     const inScope = await sdb.class.findUnique({ where: { id: classId }, select: { id: true } });
     if (inScope) {
       // Lớp đã qua sdb.class.findUnique ở trên ⇒ cùng cơ sở; ghi danh + học bạ cũng scoped.
+      // FIX A2: scopedDb KHÔNG tự lọc deletedAt — thiếu filter là ghi danh XOÁ MỀM vẫn
+      // hiện trong list và đi trọn luồng nhập/duyệt/phát hành học bạ.
       const enrollments = await sdb.enrollment.findMany({
-        where: { classId },
+        where: { classId, deletedAt: null },
         orderBy: { createdAt: "asc" },
         select: { id: true, student: { select: { name: true, studentCode: true } } },
       });

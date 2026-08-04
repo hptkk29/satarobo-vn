@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
   // (documents/videos/audio for their lessons).
   // TRAINING added 31/07 — Đào tạo quản lý toàn bộ LMS nên phải upload được học liệu.
   const allowedRoles = ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "TEACHER", "TRAINING"];
-  if (!allowedRoles.includes(session.user.role)) {
+  // B4 (02/08): SALES_CSM chỉ được ký category IMAGE — canUploadToClass (media/actions.ts)
+  // đã cho Sale phụ trách lớp upload ảnh lớp, nhưng list này chặn ngay bước presign nên
+  // Sale thấy canUpload=true mà mọi file đều 403 (R7-09 chết từ bước ký). Giới hạn image
+  // enforce SAU khi parse body (bên dưới) vì category lúc này chưa đọc.
+  const isSalesImageOnly = session.user.role === "SALES_CSM";
+  if (!allowedRoles.includes(session.user.role) && !isSalesImageOnly) {
     return NextResponse.json(
       { error: "Forbidden: insufficient permissions" },
       { status: 403 },
@@ -61,6 +66,14 @@ export async function POST(req: NextRequest) {
         error: `Category không hợp lệ. Cho phép: ${Object.keys(UPLOAD_CONFIG).join(", ")}`,
       },
       { status: 400 },
+    );
+  }
+
+  // B4: Sale phụ trách lớp chỉ upload ẢNH lớp — các category khác (học liệu…) giữ nguyên 403.
+  if (isSalesImageOnly && category !== "image") {
+    return NextResponse.json(
+      { error: "Forbidden: Sale chỉ được upload ảnh (category image)" },
+      { status: 403 },
     );
   }
 

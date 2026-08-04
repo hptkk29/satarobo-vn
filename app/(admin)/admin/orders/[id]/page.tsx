@@ -10,6 +10,9 @@ import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import { getPaymentConfig, buildTransferContent, buildVietQrImageUrl } from "@/lib/payments/vietqr";
+import { computeDueNow } from "@/lib/payments/due-now";
+import { getOrderPaymentRequests } from "@/lib/payments/payment-request";
+import { loadActiveQrSessions } from "../_qr-core";
 import { maskPhone, maskEmail } from "@/lib/utils";
 import type { OrderStatus } from "@prisma/client";
 
@@ -40,7 +43,8 @@ export default async function OrderDetailPage({ params }: Props) {
   const { id } = await params;
   // Cách ly cơ sở: Order ∈ SCOPED_MODELS — findUnique qua scopedDb chống IDOR
   // (đơn cơ sở ngoài tầm nhìn → null → notFound).
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const order = await sdb.order.findUnique({
     where: { id },
     include: {
@@ -55,13 +59,6 @@ export default async function OrderDetailPage({ params }: Props) {
       lead: { select: { id: true, parentName: true } },
       center: { select: { id: true, name: true } },
       history: { orderBy: { createdAt: "desc" } },
-      voucherRedemption: {
-        include: {
-          voucher: {
-            select: { id: true, code: true, name: true, type: true },
-          },
-        },
-      },
       // OD1 — kế hoạch 2 đợt kèm reminderDays (số ngày nhắc trước hạn đợt 2) để pre-fill.
       installments: {
         orderBy: { soDot: "asc" },
@@ -109,7 +106,31 @@ export default async function OrderDetailPage({ params }: Props) {
     // BGĐ 31/07 — mã đơn trong nội dung CK để webhook SePay tự khớp & xác nhận.
     order.code,
   );
-  const qrUrl = buildVietQrImageUrl(payCfg, order.totalAmount, transferContent);
+  // QR in SỐ PHẢI THU NGAY, không phải tổng đơn: khách chọn 2 đợt thì quét đóng
+  // đợt 1. Dùng chung `computeDueNow` với webhook SePay — hai bên phải cùng một
+  // con số, lệch là QR in một đằng máy đối khớp một nẻo (khách trả đúng vẫn bị
+  // xếp vào "trả thiếu → xử lý tay").
+  const paidSoFar = await sdb.payment.aggregate({
+    where: { orderId: order.id, saleStatus: "RECORDED", deletedAt: null },
+    _sum: { amount: true },
+  });
+  const dueNow = computeDueNow({
+    totalAmount: order.totalAmount,
+    paidAmount: paidSoFar._sum.amount ?? 0,
+    installments: order.installments,
+    installmentApprovalStatus: order.installmentApprovalStatus,
+  });
+  const qrUrl = buildVietQrImageUrl(payCfg, dueNow.amount, transferContent);
+
+  // 03/08 — SỔ PHIẾU THU theo đợt (PaymentRequest) + phiên QR ACTIVE còn hạn của
+  // từng phiếu. Đây là nguồn của bảng "Phiếu thu & QR theo đợt"; `OrderQrSection`
+  // (QR mức ĐƠN, hành vi cũ) chỉ còn là lối lùi cho đơn CHƯA có phiếu thu nào —
+  // đơn cũ tạo trước khi có sổ này. Xoá hẳn sẽ làm những đơn đó mất luôn QR.
+  const paymentRequests = await getOrderPaymentRequests(order.id);
+  const qrSessions = await loadActiveQrSessions(
+    actor,
+    paymentRequests.map((r) => ({ id: r.id, matchKey: r.matchKey })),
+  );
 
   const emailTemplates = canManage
     ? await sdb.emailTemplate.findMany({
@@ -217,7 +238,19 @@ export default async function OrderDetailPage({ params }: Props) {
         canApprove={canApprove}
         canApproveDiscount={canApproveDiscount}
         qrUrl={qrUrl}
+        dueNow={dueNow}
         transferContent={transferContent}
+        paymentRequests={paymentRequests.map((r) => ({
+          id: r.id,
+          installmentNo: r.installmentNo,
+          amountDue: r.amountDue,
+          allocated: r.allocated,
+          dueDate: r.dueDate ? r.dueDate.toISOString() : null,
+          status: r.status,
+          matchKey: r.matchKey,
+        }))}
+        qrSessions={qrSessions}
+        installmentPlanApproved={order.installmentApprovalStatus === "APPROVED"}
         paymentMethods={paymentMethods}
         accounting={{
           confirmed: order.payments

@@ -1,9 +1,21 @@
 import { db } from "@/lib/db";
+import type { AttendanceStatus } from "@prisma/client";
 
 // =============================================================================
 // Cụm B2 — đánh giá rủi ro học viên + tạo care task cho SALES_CSM.
 // Gọi sau điểm danh / nộp bài (không cần realtime phức tạp).
 // =============================================================================
+
+// "Vắng" = cả enum CŨ (ABSENT/EXCUSED — đường admin) lẫn enum MỚI
+// (ABSENT_EXCUSED/ABSENT_UNEXCUSED — site GV ghi từ R7-08). Cùng ngữ nghĩa
+// ABSENT_SET của lib/attendance/summary.ts — thiếu 2 giá trị mới thì điểm danh
+// từ site GV không bao giờ kích hoạt cảnh báo vắng liên tiếp.
+const ABSENT_STATUSES = new Set<AttendanceStatus>([
+  "ABSENT",
+  "EXCUSED",
+  "ABSENT_EXCUSED",
+  "ABSENT_UNEXCUSED",
+]);
 
 type AlertType =
   | "CONSECUTIVE_ABSENCE"
@@ -99,7 +111,7 @@ export async function evaluateAbsenceRisk(studentId: string, classId: string): P
 
   const bothAbsent = recent.every((s) => {
     const a = byId.get(s.id);
-    return a && (a.status === "ABSENT" || a.status === "EXCUSED") && a.makeupStatus !== "MADE_UP";
+    return a && ABSENT_STATUSES.has(a.status) && a.makeupStatus !== "MADE_UP";
   });
   if (!bothAbsent) return;
 

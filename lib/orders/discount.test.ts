@@ -18,18 +18,14 @@ describe("discountFromPercent", () => {
 });
 
 describe("needsDiscountApproval", () => {
-  it("giảm giá tay > 0 → cần duyệt", () => {
+  // 03/08 — hệ mã khuyến mãi đã gỡ: KHÔNG còn ngoại lệ "giảm theo voucher thì
+  // miễn duyệt". Mọi giảm giá đều do nhân viên nhập tay ⇒ đều phải QLCS duyệt.
+  it("giảm giá > 0 → cần duyệt", () => {
     expect(needsDiscountApproval({ discountAmount: 200_000 })).toBe(true);
-    expect(needsDiscountApproval({ discountAmount: 200_000, voucherCode: "  " })).toBe(true);
+    expect(needsDiscountApproval({ discountAmount: 1 })).toBe(true);
   });
 
   it("không giảm → không cần duyệt", () => {
     expect(needsDiscountApproval({ discountAmount: 0 })).toBe(false);
-  });
-
-  it("giảm theo VOUCHER (chính sách đã duyệt) → không cần duyệt lại", () => {
-    expect(
-      needsDiscountApproval({ discountAmount: 200_000, voucherCode: "OPENING2026" }),
-    ).toBe(false);
   });
 });

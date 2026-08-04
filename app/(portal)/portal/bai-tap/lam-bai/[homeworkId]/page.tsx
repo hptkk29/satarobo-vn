@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Clock } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentHomeworkDetail } from "@/lib/portal/learning";
+import { StartExamButton } from "../../../bai-thi/_components/start-exam-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Làm bài | Sata Robo", robots: { index: false } };
@@ -39,6 +40,15 @@ export default async function LamBaiPage({ params }: Props) {
           {hw.dueAt && <span>Hạn {new Date(hw.dueAt).toLocaleString("vi-VN")}</span>}
         </p>
       </div>
+
+      {/* Đường NỘP bài — trước đây trang chỉ xem đề tĩnh, HV bấm vào là cụt.
+          StartExamButton gọi startAttempt (tạo/tiếp tục ExamAttempt) rồi điều hướng
+          /portal/bai-thi/[examId] — cùng luồng với danh sách "Bài kiểm tra". */}
+      {hw.questions.length > 0 && (
+        <div>
+          <StartExamButton examId={hw.examId} resume={false} label="Vào làm bài" />
+        </div>
+      )}
 
       <ol className="space-y-3">
         {hw.questions.map((q, i) => (

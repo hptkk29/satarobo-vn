@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { QrCode, BadgeCheck, CalendarClock } from "lucide-react";
+import { QrZoom } from "./qr-zoom";
 import { recordOrderInstallmentsAction, markOrderInstallmentPaidAction } from "../_actions";
 import { formatDateVN } from "@/lib/format/date";
 
@@ -182,9 +183,12 @@ export function OrderInstallmentPlan({
 export function OrderQrSection({
   qrUrl,
   transferContent,
+  dueNow,
 }: {
   qrUrl: string | null;
   transferContent: string;
+  /** Số tiền QR đang in + nhãn ("Đợt 1" / "Toàn bộ đơn" / "Còn thiếu"). */
+  dueNow: { amount: number; label: string };
 }) {
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-5">
@@ -194,10 +198,24 @@ export function OrderQrSection({
       <div className="max-w-sm">
         {qrUrl ? (
           <div className="flex flex-col items-center gap-2">
-            {/* Ảnh QR public từ img.vietqr.io — không cần API key. */}
-            <img src={qrUrl} alt="VietQR thanh toán" className="h-56 w-56 rounded-lg border border-neutral-200 object-contain" />
+            {/* Ảnh QR public từ img.vietqr.io — không cần API key. Bấm để phóng to. */}
+            <QrZoom
+              src={qrUrl}
+              alt="VietQR thanh toán"
+              title={`${dueNow.label}: ${dueNow.amount.toLocaleString("vi-VN")}đ`}
+              matchKey={transferContent}
+              className="h-56 w-56"
+            />
+            {/* Nói rõ QR đang thu bao nhiêu — khách đóng 2 đợt dễ tưởng phải
+                chuyển cả tổng đơn. Đây cũng là số webhook SePay dùng đối khớp. */}
+            <p className="text-center text-sm font-semibold text-neutral-800">
+              {dueNow.label}: {dueNow.amount.toLocaleString("vi-VN")}đ
+            </p>
             <p className="text-center text-xs text-neutral-500">
               Nội dung CK: <span className="font-mono font-semibold text-neutral-700">{transferContent}</span>
+            </p>
+            <p className="text-center text-xs text-neutral-400">
+              Chuyển đúng số tiền + giữ nguyên nội dung → hệ thống tự xác nhận đơn.
             </p>
           </div>
         ) : (

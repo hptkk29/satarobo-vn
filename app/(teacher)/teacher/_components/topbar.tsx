@@ -3,15 +3,18 @@
 import { Menu } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
+import { NotificationBell } from "./notification-bell";
 
 /**
  * Topbar site GV.
  *
- * TeachUI có thêm ô tìm kiếm toàn cục và chuông thông báo. Ô tìm kiếm ở bản gốc
- * là input chết (placeholder "Tìm leads, học viên, blog...") nên KHÔNG port —
- * thêm một ô không tìm được gì là nợ UX. Chuông thông báo cần nguồn việc tồn
- * thật (buổi chưa điểm danh / bài chưa chấm / đơn đã duyệt) → làm ở batch sau
- * cùng lúc với các trang sinh ra thông báo đó.
+ * Ô tìm kiếm toàn cục của TeachUI KHÔNG port — bản gốc là input chết, thêm một ô
+ * không tìm được gì là nợ UX.
+ *
+ * Chuông thông báo (03/08): nguồn việc tồn đã có thật từ lâu (StaffNotification —
+ * điểm danh bị sửa hồi tố, lịch dạy thay ngày mai, nhắc chốt buổi) nhưng chỉ hiện
+ * ở chuông admin, mà GV thuần thì bị đá khỏi host admin từ 10/07 ⇒ ba luồng notify
+ * đó chưa từng tới người nhận chính. Nay dùng chung API bell.
  */
 export function Topbar({
   userName,
@@ -34,6 +37,7 @@ export function Topbar({
       </button>
 
       <div className="ml-auto flex items-center gap-1 sm:gap-3">
+        <NotificationBell />
         <ThemeToggle />
         <UserMenu name={userName} adminReturnUrl={adminReturnUrl} />
       </div>

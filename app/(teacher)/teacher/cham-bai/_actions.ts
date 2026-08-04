@@ -21,6 +21,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { templateToAssignmentData } from "@/lib/assignments/template";
+import { resolveTemplateDup, publishDraftAssignment } from "@/lib/assignments/publish-draft";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 
@@ -117,12 +118,61 @@ export async function assignTemplateAction(input: {
   });
   if (!cls) return { ok: false, error: "Không tìm thấy lớp" };
 
-  // 1 template → tối đa 1 bài/lớp (unique [classId, templateId]) — báo thân thiện.
+  // 1 template → tối đa 1 bài/lớp (unique [classId, templateId]).
+  // ⚠️ Deadlock đã vá: tạo lớp auto-sinh Assignment DRAFT cho mọi template gắn lesson
+  // (generateAssignmentsFromTemplates) — GV chọn đúng template đó ở đây từng bị chặn
+  // "đã giao rồi" trong khi site GV chỉ list PUBLISHED/CLOSED và không có action
+  // publish ⇒ không có cách nào mở bài cho HV. Nay: trùng DRAFT → PUBLISH bản đó
+  // (tái dùng semantics publish: status + dueAt + bản nộp NOT_SUBMITTED roster);
+  // trùng PUBLISHED/CLOSED → vẫn báo lỗi như cũ.
   const dup = await sdb.assignment.findFirst({
     where: { classId, templateId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
-  if (dup) return { ok: false, error: "Đầu bài này đã được giao cho lớp rồi" };
+  const dupResolution = resolveTemplateDup(dup);
+  if (dupResolution === "ALREADY_ASSIGNED") {
+    return { ok: false, error: "Đầu bài này đã được giao cho lớp rồi" };
+  }
+  if (dupResolution === "PUBLISH_DRAFT" && dup) {
+    // Scope đã gate ở trên (classId ∈ assignedClassIds + dup tìm theo classId đó);
+    // helper chỉ là DB effect (Assignment/AssignmentSubmission không thuộc SCOPED_MODELS).
+    try {
+      await publishDraftAssignment({
+        assignmentId: dup.id,
+        dueAt,
+        studentIds: cls.enrollments.map((e) => e.studentId),
+        attachments: parsed.data.attachments,
+        uploadedById: session.user.id,
+      });
+    } catch (err) {
+      console.error("[assignTemplateAction] publish draft:", err);
+      return { ok: false, error: "Lỗi cơ sở dữ liệu — không giao được bài" };
+    }
+
+    // Audit best-effort (không chặn) — cùng action với nhánh tạo mới.
+    try {
+      const { actorId, actorName } = getAuditActor(session);
+      await writeAudit({
+        actor: { id: actorId, name: actorName },
+        module: "assignments",
+        entityType: "Assignment",
+        entityId: dup.id,
+        action: "assignment.assigned-by-teacher",
+        newValues: {
+          classId,
+          templateId,
+          students: cls.enrollments.length,
+          publishedDraft: true, // bài DRAFT auto-sinh lúc tạo lớp, GV publish qua Giao bài
+        },
+      });
+    } catch (err) {
+      console.error("[assignTemplateAction] audit:", err);
+    }
+
+    revalidatePath("/cham-bai");
+    revalidatePath("/teacher/cham-bai");
+    return { ok: true, assignmentId: dup.id };
+  }
 
   const links = await sdb.assignmentTemplateQuestion.findMany({
     where: { templateId },

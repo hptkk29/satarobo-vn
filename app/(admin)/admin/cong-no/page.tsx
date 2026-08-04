@@ -48,7 +48,13 @@ export default async function CongNoPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("payments:manage"))) {
+  // 03/08 — Quản lý cơ sở được ĐỐI SOÁT nhưng chỉ XEM: `payments:view` mở màn này,
+  // mọi thao tác tiền vẫn đòi `payments:manage`/`payments:confirm`.
+  const [canManagePayments, canViewPayments] = await Promise.all([
+    checkPermission("payments:manage"),
+    checkPermission("payments:view"),
+  ]);
+  if (!canManagePayments && !canViewPayments) {
     redirect("/dashboard?error=unauthorized");
   }
   const uid = session.user.id;

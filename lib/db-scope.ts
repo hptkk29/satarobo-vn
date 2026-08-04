@@ -34,6 +34,15 @@ export const SCOPED_MODELS = new Set<string>([
   "ReportCard", // học bạ theo cơ sở (centerId denormalize từ Enrollment)
   "ConversationMessage", // tin nhắn PH↔nhân viên theo cơ sở
   "EvaluationRound", // ⚠️ centerId null = vòng TOÀN HỆ THỐNG → xem NULL_IS_GLOBAL_MODELS
+  // 03/08 — sổ thu theo đợt + phân bổ. Tiền ⇒ cách ly cơ sở là bắt buộc.
+  "PaymentRequest",
+  "PaymentAllocation",
+  "QrSession",
+  "CreditBalance",
+  // ⚠️ BankTransaction: centerId NULL = giao dịch CHƯA khớp được về cơ sở nào
+  // (tiền vừa về, chưa biết của đơn nào) → xem NULL_IS_GLOBAL_MODELS. Ẩn nhóm này
+  // khỏi người đối soát chính là làm mất đúng thứ họ cần xử lý.
+  "BankTransaction",
 ]);
 
 /**
@@ -50,6 +59,10 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   "Survey", // khảo sát chung (không gắn cơ sở)
   "SurveyResponse", // phản hồi của khảo sát chung
   "EvaluationRound", // vòng đánh giá scope SYSTEM / TEACHER_EVAL
+  // 03/08 — giao dịch tiền về chưa đối khớp: centerId null nghĩa là "chưa biết của
+  // cơ sở nào", và đó CHÍNH LÀ nhóm cần mọi người đối soát nhìn thấy để xử lý.
+  // Khớp xong thì centerId được điền, từ đó bị scope bình thường.
+  "BankTransaction",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -107,7 +120,14 @@ export function getModelPrefixes(model: string): string[] {
       return ["leads:"];
     case "Order":
       return ["orders:"];
+    // 03/08 — sổ thu theo đợt + phân bổ + giao dịch tiền về + tiền thừa: cùng
+    // họ "tiền", nên tầm nhìn cơ sở đi theo quyền payments:* như Payment.
     case "Payment":
+    case "PaymentRequest":
+    case "PaymentAllocation":
+    case "QrSession":
+    case "BankTransaction":
+    case "CreditBalance":
       return ["payments:"];
     case "Student":
     case "StudentCareTask":

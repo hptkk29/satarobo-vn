@@ -13,6 +13,13 @@ import { getNonConsentStudents } from "@/lib/lms/media-consent";
 import { resolveActor } from "@/lib/auth/actor";
 import { canManageClass } from "@/lib/auth/lms-scope";
 import { formatDateDMY } from "@/lib/format/date";
+import {
+  createDraftMediaBatch,
+  publishClassMedia,
+  deleteDraftMedia,
+  DRAFT_BATCH_MAX,
+  PUBLISH_BATCH_MAX,
+} from "@/lib/lms/media-publish";
 
 // Cách ly cơ sở (chống IDOR ghi): ClassSessionMedia relation-scoped qua class.centerId.
 // Duyệt/xoá theo mediaId từ client phải xác minh lớp thuộc tầm nhìn actor.
@@ -293,6 +300,15 @@ export async function reviewMedia(input: {
 
   const { actorId, actorName } = getAuditActor(session);
   const sdb = scopedDb(await resolveActor(session.user.id));
+  // DRAFT là ảnh trong KHO (GV chưa gửi) — không thuộc hàng duyệt: chặn duyệt/từ chối.
+  // Đường duy nhất rời kho là publishClassMediaAction (giữ bất biến C6.2/C6.3).
+  const current = await sdb.classSessionMedia.findUnique({
+    where: { id: input.id },
+    select: { status: true },
+  });
+  if (current?.status === "DRAFT") {
+    return { ok: false, error: "Ảnh đang trong kho — giáo viên chưa gửi duyệt" };
+  }
   await sdb.classSessionMedia.update({
     where: { id: input.id },
     data: {
@@ -335,4 +351,183 @@ export async function deleteMedia(id: string): Promise<{ ok: boolean; error?: st
   });
   revalidatePath("/media");
   return { ok: true };
+}
+
+// =============================================================================
+// KHO ẢNH (DRAFT) — GV upload cả loạt vào kho, chọn ảnh gửi PH sau.
+// Action = wrapper auth/quyền/scope; logic thuần ở lib/lms/media-publish.ts.
+// =============================================================================
+
+const uploadBatchSchema = z.object({
+  classId: z.string().min(1, "Chọn lớp"),
+  files: z
+    .array(
+      z.object({
+        fileUrl: z.string().url("File không hợp lệ"),
+        fileName: z.string().optional().nullable(),
+      }),
+    )
+    .min(1, "Chưa có ảnh nào")
+    .max(DRAFT_BATCH_MAX, `Tối đa ${DRAFT_BATCH_MAX} ảnh mỗi lô`),
+  classSessionId: z.string().optional().nullable(),
+  takenAt: z.string().optional().nullable(),
+});
+
+/** Upload N ảnh vào KHO (DRAFT): không tag, không class-wide, không hiện portal. */
+export async function uploadClassMediaBatch(input: {
+  classId: string;
+  files: { fileUrl: string; fileName?: string | null }[];
+  classSessionId?: string | null;
+  takenAt?: string | null;
+}): Promise<{ ok: boolean; error?: string; count?: number }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = uploadBatchSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const d = parsed.data;
+
+  // Quyền upload THEO LỚP (GV / Sale phụ trách / QL) + cách ly cơ sở — như uploadClassMedia.
+  if (!(await canUploadToClass(session.user, d.classId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp này — không thể đăng ảnh" };
+  }
+
+  let takenAt: Date | null = null;
+  if (d.takenAt) {
+    const t = new Date(d.takenAt);
+    if (Number.isNaN(t.getTime())) return { ok: false, error: "Ngày chụp không hợp lệ" };
+    takenAt = t;
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await createDraftMediaBatch(
+    { id: actorId, name: actorName },
+    {
+      classId: d.classId,
+      classSessionId: d.classSessionId ?? null,
+      takenAt,
+      files: d.files,
+      uploadedById: actorId,
+      uploadedByName: actorName,
+    },
+  );
+  if (!res.ok) return { ok: false, error: res.message };
+
+  revalidatePath("/media");
+  return { ok: true, count: res.ids.length };
+}
+
+const publishBatchSchema = z.object({
+  mediaIds: z
+    .array(z.string().min(1))
+    .min(1, "Chưa chọn ảnh nào")
+    .max(PUBLISH_BATCH_MAX, `Tối đa ${PUBLISH_BATCH_MAX} ảnh mỗi lượt gửi`),
+  studentIds: z.array(z.string()).optional(),
+  isClassWide: z.boolean().optional(),
+  classSessionId: z.string().optional().nullable(),
+});
+
+/**
+ * Gửi ảnh kho cho PH. GV (không media:approve) → PENDING chờ duyệt như luồng
+ * hiện tại; QL (media:approve) → APPROVED luôn (nhất quán autoApprove upload).
+ */
+export async function publishClassMediaAction(input: {
+  mediaIds: string[];
+  studentIds?: string[];
+  isClassWide?: boolean;
+  classSessionId?: string | null;
+}): Promise<{ ok: boolean; error?: string; status?: "PENDING" | "APPROVED"; count?: number }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = publishBatchSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const d = parsed.data;
+  const mediaIds = [...new Set(d.mediaIds)];
+
+  // Cách ly cơ sở (chống IDOR theo mediaId): mọi ảnh phải cùng 1 lớp, và lớp đó
+  // trong tầm nhìn + quyền upload của actor (mẫu mediaClassInScope + canUploadToClass).
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const rows = await sdb.classSessionMedia.findMany({
+    where: { id: { in: mediaIds } },
+    select: { classId: true },
+  });
+  if (rows.length !== mediaIds.length) return { ok: false, error: "Không tìm thấy ảnh" };
+  const classIds = [...new Set(rows.map((r) => r.classId))];
+  if (classIds.length !== 1) return { ok: false, error: "Các ảnh phải thuộc cùng một lớp" };
+  if (!(await canUploadToClass(session.user, classIds[0]!))) {
+    return { ok: false, error: "Bạn không phụ trách lớp này" };
+  }
+
+  const autoApprove = await checkPermission("media:approve");
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await publishClassMedia(
+    { id: actorId, name: actorName },
+    {
+      mediaIds,
+      studentIds: d.studentIds,
+      isClassWide: d.isClassWide,
+      classSessionId: d.classSessionId ?? null,
+      autoApprove,
+    },
+  );
+  if (!res.ok) return { ok: false, error: res.message };
+
+  revalidatePath("/media");
+  revalidatePath("/portal/hinh-anh");
+  return { ok: true, status: res.status, count: res.count };
+}
+
+const deleteDraftSchema = z.object({
+  mediaIds: z
+    .array(z.string().min(1))
+    .min(1, "Chưa chọn ảnh nào")
+    .max(PUBLISH_BATCH_MAX, `Tối đa ${PUBLISH_BATCH_MAX} ảnh mỗi lượt xoá`),
+});
+
+/**
+ * Xoá ảnh khỏi kho (chỉ row DRAFT). Uploader tự xoá DRAFT của MÌNH; người có
+ * media:approve xoá được mọi DRAFT của lớp trong scope.
+ */
+export async function deleteDraftMediaAction(input: {
+  mediaIds: string[];
+}): Promise<{ ok: boolean; error?: string; deleted?: number }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = deleteDraftSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const mediaIds = [...new Set(parsed.data.mediaIds)];
+
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const rows = await sdb.classSessionMedia.findMany({
+    where: { id: { in: mediaIds } },
+    select: { classId: true, uploadedById: true },
+  });
+  if (rows.length !== mediaIds.length) return { ok: false, error: "Không tìm thấy ảnh" };
+  const classIds = [...new Set(rows.map((r) => r.classId))];
+  if (classIds.length !== 1) return { ok: false, error: "Các ảnh phải thuộc cùng một lớp" };
+  // Scope theo lớp: GV/Sale phụ trách hoặc QL trong cơ sở (mẫu canUploadToClass).
+  if (!(await canUploadToClass(session.user, classIds[0]!))) {
+    return { ok: false, error: "Không tìm thấy ảnh" };
+  }
+  // Không có quyền duyệt → chỉ xoá ảnh do CHÍNH MÌNH đưa vào kho.
+  if (!(await checkPermission("media:approve"))) {
+    if (rows.some((r) => r.uploadedById !== session.user.id)) {
+      return { ok: false, error: "Chỉ xoá được ảnh do chính bạn đưa vào kho" };
+    }
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await deleteDraftMedia({ id: actorId, name: actorName }, { mediaIds });
+  if (!res.ok) return { ok: false, error: res.message };
+
+  revalidatePath("/media");
+  return { ok: true, deleted: res.deleted };
 }

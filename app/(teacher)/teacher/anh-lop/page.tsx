@@ -26,11 +26,14 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { resolveMediaUrls } from "@/lib/storage/signed-url";
+import { getNonConsentStudents } from "@/lib/lms/media-consent";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { UploadPhotoDialog } from "./_components/upload-photo-dialog";
+import { DraftStorePanel, type DraftItem } from "./_components/draft-store-panel";
 import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Ảnh lớp | Giáo viên Sata Robo" };
@@ -70,6 +73,11 @@ const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
   REJECTED: {
     label: "Từ chối",
     cls: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+  },
+  // Kho ảnh — GV upload cả loạt, CHƯA chọn gửi PH (không hiện portal, không vào hàng duyệt).
+  DRAFT: {
+    label: "Trong kho",
+    cls: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
   },
 };
 
@@ -163,16 +171,10 @@ export default async function TeacherClassPhotosPage({
     const displayUrls = await resolveMediaUrls(media.map((m) => m.fileUrl));
 
     // Gom nhóm: buổi → ngày chụp → mức lớp (fallback), nhóm mới nhất lên đầu.
+    // Ảnh DRAFT (kho — chưa gửi PH) TÁCH RIÊNG khỏi album, render ở DraftStorePanel.
     const groups = new Map<string, AlbumGroup>();
+    const draftItems: DraftItem[] = [];
     media.forEach((m, i) => {
-      const view: MediaView = {
-        id: m.id,
-        url: displayUrls[i] ?? m.fileUrl,
-        status: m.status,
-        caption: m.caption,
-        isClassWide: m.isClassWide,
-        tagNames: m.tags.map((t) => nameMap.get(t.studentId) ?? "?"),
-      };
       const ses = m.classSessionId ? sessionMap.get(m.classSessionId) : undefined;
       let key: string;
       let label: string;
@@ -190,11 +192,57 @@ export default async function TeacherClassPhotosPage({
         label = "Ảnh mức lớp (chưa gắn buổi)";
         sortKey = Number.NEGATIVE_INFINITY; // luôn xếp cuối
       }
+      if (m.status === "DRAFT") {
+        draftItems.push({ id: m.id, url: displayUrls[i] ?? m.fileUrl, label });
+        return;
+      }
+      const view: MediaView = {
+        id: m.id,
+        url: displayUrls[i] ?? m.fileUrl,
+        status: m.status,
+        caption: m.caption,
+        isClassWide: m.isClassWide,
+        tagNames: m.tags.map((t) => nameMap.get(t.studentId) ?? "?"),
+      };
       const g = groups.get(key);
       if (g) g.items.push(view);
       else groups.set(key, { key, label, sortKey, items: [view] });
     });
     const ordered = [...groups.values()].sort((a, b) => b.sortKey - a.sortKey);
+
+    // Roster cho panel kho (chip chọn HS + disable chưa consent) — CÙNG nguồn dữ liệu
+    // getClassUploadContext của dialog upload. Câu 46: chỉ id + TÊN học viên.
+    // B3: kèm danh sách BUỔI của lớp để GV gán buổi ngay lúc gửi (publishClassMedia đã
+    // nhận classSessionId từ trước — chỉ nối UI); mặc định buổi gần nhất ĐÃ diễn ra.
+    let rosterStudents: { id: string; name: string }[] = [];
+    let nonConsentIds: string[] = [];
+    let sessionOptions: { id: string; label: string }[] = [];
+    let defaultSessionId = "";
+    if (draftItems.length > 0) {
+      const [enrRows, nonConsent, sessionRows] = await Promise.all([
+        xdb.enrollment.findMany({
+          where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+          select: { student: { select: { id: true, name: true } } },
+          orderBy: { createdAt: "asc" },
+        }),
+        getNonConsentStudents(classId),
+        // ClassSession ∈ MAKEUP_EXCEPTION_MODELS — cùng đường đọc sessionMap ở trên.
+        xdb.classSession.findMany({
+          where: { classId, status: { not: "CANCELLED" } },
+          select: { id: true, date: true, topic: true },
+          orderBy: { date: "desc" },
+          take: 200,
+        }),
+      ]);
+      rosterStudents = enrRows.map((e) => e.student);
+      nonConsentIds = nonConsent.map((s) => s.id);
+      sessionOptions = sessionRows.map((sn) => ({
+        id: sn.id,
+        label: `${dayFmt.format(sn.date)}${sn.topic ? ` · ${sn.topic}` : ""}`,
+      }));
+      const now = new Date();
+      defaultSessionId = sessionRows.find((sn) => sn.date <= now)?.id ?? "";
+    }
 
     return (
       <div className="space-y-6">
@@ -205,9 +253,20 @@ export default async function TeacherClassPhotosPage({
           actions={<UploadPhotoDialog classId={classId} />}
         />
 
+        {/* Kho ảnh — chưa gửi PH: multi-select + gắn HS/cả lớp + gửi/xoá (client) */}
+        {draftItems.length > 0 && (
+          <DraftStorePanel
+            drafts={draftItems}
+            students={rosterStudents}
+            nonConsentIds={nonConsentIds}
+            sessions={sessionOptions}
+            defaultSessionId={defaultSessionId}
+          />
+        )}
+
         {media.length === 0 ? (
           <EmptyBox text="Lớp chưa có ảnh nào — bấm “Đăng ảnh lớp” để tải ảnh buổi học." />
-        ) : (
+        ) : ordered.length === 0 ? null : (
           <div className="space-y-6">
             {ordered.map((g) => (
               <section key={g.key}>
@@ -278,11 +337,16 @@ export default async function TeacherClassPhotosPage({
         _max: { createdAt: true },
       })
     : [];
-  const statByClass = new Map<string, { total: number; pending: number; latest: Date | null }>();
+  const statByClass = new Map<
+    string,
+    { total: number; pending: number; draft: number; latest: Date | null }
+  >();
   for (const s of stats) {
-    const cur = statByClass.get(s.classId) ?? { total: 0, pending: 0, latest: null };
+    const cur =
+      statByClass.get(s.classId) ?? { total: 0, pending: 0, draft: 0, latest: null };
     cur.total += s._count._all;
     if (s.status === "PENDING") cur.pending += s._count._all;
+    if (s.status === "DRAFT") cur.draft += s._count._all;
     const max = s._max.createdAt;
     if (max && (!cur.latest || max > cur.latest)) cur.latest = max;
     statByClass.set(s.classId, cur);
@@ -299,7 +363,8 @@ export default async function TeacherClassPhotosPage({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {classes.map((c, i) => {
-            const st = statByClass.get(c.id) ?? { total: 0, pending: 0, latest: null };
+            const st =
+              statByClass.get(c.id) ?? { total: 0, pending: 0, draft: 0, latest: null };
             return (
               // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
               // (clean URL /anh-lop) LẪN localhost/preview (path thật /teacher/anh-lop).
@@ -323,10 +388,19 @@ export default async function TeacherClassPhotosPage({
                         </span>
                       )}
                     </div>
-                    {st.pending > 0 && (
-                      <span className="mt-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                        {st.pending} chờ duyệt
-                      </span>
+                    {(st.pending > 0 || st.draft > 0) && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {st.pending > 0 && (
+                          <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                            {st.pending} chờ duyệt
+                          </span>
+                        )}
+                        {st.draft > 0 && (
+                          <span className="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+                            {st.draft} trong kho
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

@@ -35,7 +35,6 @@ import {
   ScrollText,
   CreditCard,
   ShoppingBag,
-  Ticket,
   Package2,
   Mail,
   Send,
@@ -94,7 +93,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CRM & Tuyển sinh",
     items: [
       { label: "Leads", href: "/leads", icon: Users, perm: ["leads:view-all", "leads:view-own"] },
-      { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign"] },
+      // PR #81 — nhập liệu ban đầu: import Excel "đã đăng ký" rồi chốt hàng loạt.
+      // perm khớp gate trang (leads:view-all AND leads:import) — sidebar dùng OR nên
+      // để leads:import (Sale có leads:import nhưng KHÔNG có view-all → trang tự
+      // redirect; đặt view-all ở đây để không hiện link chết cho Sale).
+      { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
+      { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign-config"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
@@ -107,6 +111,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Học viên & Đăng ký học",
     items: [
       { label: "Học viên", href: "/students", icon: GraduationCap, perm: [...PAGE_GATES["/students"]] },
+      // PR #81 — màn vận hành TK phụ huynh chờ kích hoạt (gate students:edit, cùng
+      // quyền với nút cấp TK per-student). Thiếu link ở đây thì màn thành ẩn.
+      { label: "Tài khoản phụ huynh", href: "/students/tai-khoan", icon: KeyRound, perm: ["students:edit"] },
       { label: "Đăng ký học", href: "/enrollments", icon: ClipboardList, perm: ["enrollments:view-all"] },
       { label: "Chuyển lớp / cơ sở", href: "/chuyen-lop", icon: ArrowLeftRight, perm: [...PAGE_GATES["/chuyen-lop"]] },
       { label: "Sắp hết khoá", href: "/students/sap-het-khoa", icon: GraduationCap, perm: ["enrollments:view-all"] },
@@ -123,7 +130,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
-      { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view"] },
+      // attendance:edit đi kèm vì CSKH (Sale) chỉ có quyền SỬA hồi tố (Task #16),
+      // không có attendance:view — thiếu nó thì họ dùng được trang mà không thấy link.
+      { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view", "attendance:edit"] },
       { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: [...PAGE_GATES["/media"]] },
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
@@ -199,10 +208,13 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
-      { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage"] },
-      { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage"] },
+      // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
+      // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
+      { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
+      { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage", "payments:view"] },
+      // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
+      { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
-      { label: "Mã khuyến mãi", href: "/vouchers", icon: Ticket, perm: ["vouchers:view"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
     ],
   },

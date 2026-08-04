@@ -49,6 +49,7 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "HO_ACCOUNTANT", name: "Kế toán Hội sở",
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
+      { action: "payments:view", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
       { action: "payroll:view", scopeType: "GLOBAL" },
       { action: "payroll:edit", scopeType: "GLOBAL" },
@@ -58,8 +59,6 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payments:view-pii", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
-      { action: "vouchers:view", scopeType: "GLOBAL" },
-      { action: "vouchers:manage", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
       { action: "products:manage", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },
@@ -191,8 +190,6 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "kits:edit", scopeType: "GLOBAL" },
       { action: "site-content:view", scopeType: "GLOBAL" },
       { action: "site-content:edit", scopeType: "GLOBAL" },
-      { action: "vouchers:view", scopeType: "GLOBAL" },
-      { action: "vouchers:manage", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
       { action: "emails:view", scopeType: "GLOBAL" },
       { action: "emails:manage", scopeType: "GLOBAL" },
@@ -254,6 +251,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // bạ đọc ghi danh cross-center qua checkEnrollmentScope (isHoLevel). Bỏ manage
       // (sửa/tạo học bạ) — Đào tạo chỉ duyệt (24/07).
       { action: "report-cards:review", scopeType: "GLOBAL" },
+      // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
+      // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
+      { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -269,9 +269,11 @@ export const ROLE_SEED: RoleSeed[] = [
     // SIẾT có chủ đích (bỏ khỏi v1): nội dung marketing (blog/news/site-content/
     // honors/emails) → HO_MARKETING · chương trình (courses:create/edit,
     // course-packages:edit, lesson-change:approve, trials:config) → TRAINING ·
-    // tiền & kho quản lý tập trung (payments:manage, orders:manage,
-    // installments:approve, vouchers:manage, products:manage, inventory:edit/audit,
-    // kits:edit) → HO_ACCOUNTANT · employees:edit + jobs:create/edit → CENTER_HR ·
+    // tiền & kho quản lý tập trung (payments:manage, vouchers:manage,
+    // products:manage, inventory:edit/audit, kits:edit) → HO_ACCOUNTANT ·
+    // employees:edit + jobs:create/edit → CENTER_HR ·
+    // ⚠️ 03/08/2026 chủ dự án ĐẢO một phần: `orders:manage` + `installments:approve`
+    // TRẢ LẠI cho vai này để quầy tự xuất QR (xem ghi chú tại chỗ khai 2 quyền đó).
     // holidays:edit → SUPER_ADMIN · students:delete + enrollments:delete →
     // SUPER_ADMIN (QL dùng enrollments:cancel; CLAUDE.md cấm hard-delete).
     code: "CENTER_MANAGER", name: "Quản lý cơ sở",
@@ -327,9 +329,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "evaluations:manage", scopeType: "GLOBAL" },
       { action: "evaluations:view-aggregate", scopeType: "GLOBAL" },
       { action: "evaluations:view-detail", scopeType: "GLOBAL" },
-      { action: "exams:view", scopeType: "GLOBAL" },
       { action: "exams:grade", scopeType: "GLOBAL" },
-      { action: "assignments:view", scopeType: "GLOBAL" },
       { action: "assignments:grade", scopeType: "GLOBAL" },
       // L6 site GV — capability "own" (parity v1↔v2): soạn đề kho riêng + giao bài +
       // đề xuất hoàn thành (QL cơ sở cũng dùng được; xác nhận thật = completions:manage).
@@ -337,12 +337,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "assignments:author-own", scopeType: "GLOBAL" },
       { action: "assignments:assign-own", scopeType: "GLOBAL" },
       { action: "completions:propose-own", scopeType: "GLOBAL" },
-      { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
       { action: "completions:manage", scopeType: "GLOBAL" },
       { action: "satacoin:manage", scopeType: "GLOBAL" },
       { action: "notifications:manage", scopeType: "GLOBAL" },
       // ── Nhân sự · chấm công ──
-      { action: "employees:view-all", scopeType: "GLOBAL" },
       { action: "hr_attendance:view", scopeType: "CENTER" },
       // Shadow prod 10/07 (25+2 lệch): adjust bị pending-tasks cfg.can() gọi TRẦN → GLOBAL
       // (đúng R1); checkin call-site truyền {centerId} nhưng OWN đòi createdById → GLOBAL
@@ -355,24 +353,40 @@ export const ROLE_SEED: RoleSeed[] = [
       // BGĐ 31/07 — duyệt giảm giá do Sale/CSKH cơ sở đệ trình ("đệ trình Qly CS duyệt").
       // GLOBAL theo R1 (call-site gọi trần), cách ly cơ sở do scopedDb.
       { action: "discounts:approve", scopeType: "GLOBAL" },
+      // Chủ dự án chốt 03/08/2026 — ĐẢO một phần quyết định #09 (siết tiền về Hội sở).
+      // Lý do: luồng thu tại quầy là "Sale tạo đơn → QLCS duyệt → hiện QR cho khách
+      // quét NGAY TẠI QUẦY". Nghiệm thu 03/08 đo ra QLCS không có 2 quyền này ⇒ quầy
+      // tắc, phải gọi kế toán Hội sở mới xuất được QR. Cấp lại cho Quản lý cơ sở:
+      //   · installments:approve — duyệt kế hoạch trả góp 2 đợt (sinh phiếu thu)
+      //   · orders:manage       — gác của "Xuất QR / Tạo lại QR" (_qr-actions.ts)
+      // GLOBAL theo R1 (call-site gọi trần); cách ly cơ sở vẫn do scopedDb gác, nên
+      // QLCS CS1 không đụng được đơn/phiếu thu của CS2.
+      { action: "installments:approve", scopeType: "GLOBAL" },
+      { action: "orders:manage", scopeType: "GLOBAL" },
+      // Chủ dự án chốt 03/08/2026 — QLCS cần ĐỐI SOÁT tiền về nhưng CHỈ XEM.
+      // `payments:view` mở Công nợ + Biến động số dư ở chế độ đọc; mọi thao tác tiền
+      // (sửa/hoàn/cấu hình) vẫn đòi payments:manage / payments:confirm mà vai này KHÔNG có.
+      { action: "payments:view", scopeType: "GLOBAL" },
+      // Giữ Học bạ hiển thị: màn đó gác [curriculum:view | students:view-own-class],
+      // mà curriculum:view vừa bị gỡ theo yêu cầu "chặn phần LMS".
+      { action: "students:view-own-class", scopeType: "GLOBAL" },
+      // QĐ-T3b (FL W0-NAV-2) trả CM 2 việc vận hành: trials:config ĐÃ về ở cả v1+v2,
+      // còn lesson-change:approve sót lại v1-only ⇒ trên prod (v2) chỉ Đào tạo duyệt
+      // được đề xuất chỉnh bài của GV, người đó nghỉ là đề xuất treo. Đưa về khớp QĐ.
       // ── Đọc tham chiếu ──
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },
-      { action: "settings:view", scopeType: "GLOBAL" },
-      { action: "documents:view", scopeType: "GLOBAL" },
-      { action: "curriculum:view", scopeType: "GLOBAL" },
       // 10/07 — báo cáo đào tạo theo chức năng (xem lib/auth/page-gates.ts).
       { action: "reports:training", scopeType: "GLOBAL" },
       // 24/07 — cấu hình lớp học thử: gỡ khỏi Đào tạo (chỉ LMS) → về QL cơ sở (khớp v1).
       { action: "trials:config", scopeType: "GLOBAL" },
-      { action: "questions:view", scopeType: "GLOBAL" },
-      { action: "courses:view", scopeType: "GLOBAL" },
-      { action: "course-packages:view", scopeType: "GLOBAL" },
       { action: "kits:view", scopeType: "GLOBAL" },
       { action: "inventory:view", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
-      { action: "vouchers:view", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      // Gói bán = GIÁ, không phải học liệu — giữ cho vai này để luồng tạo đơn/báo giá
+      // không gãy khi chặn phần LMS (03/08).
+      { action: "course-packages:view", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "honors:view", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "GLOBAL" },
@@ -392,8 +406,6 @@ export const ROLE_SEED: RoleSeed[] = [
       // dạng target), nên CENTER-scope sẽ trả false sau flip #09. Cách ly cơ sở đã ép
       // TAY ở tầng query (queryUnifiedAuditLogs lọc orgUnitId ∈ visibleOrgUnitIds) →
       // GLOBAL an toàn: mỗi QL cơ sở vẫn chỉ thấy log cơ sở mình.
-      { action: "audit-logs:view", scopeType: "GLOBAL" },
-      { action: "audit-logs:view-pii", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -455,7 +467,6 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
-      { action: "vouchers:view", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
     ],
   },
@@ -534,6 +545,7 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
+      { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).

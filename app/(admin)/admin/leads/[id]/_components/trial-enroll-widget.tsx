@@ -171,8 +171,8 @@ export function TrialEnrollWidget({
                   >
                     <option value="">
                       {picked[c.id] && classSessions.length === 0
-                        ? "— lớp chưa có buổi —"
-                        : "— chọn buổi (tuỳ chọn) —"}
+                        ? "— lớp chưa có buổi (thêm buổi trước) —"
+                        : "— chọn buổi (mặc định: buổi gần nhất) —"}
                     </option>
                     {classSessions.map((s) => (
                       <option key={s.id} value={s.id}>

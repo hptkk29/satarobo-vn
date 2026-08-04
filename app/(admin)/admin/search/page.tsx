@@ -8,6 +8,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
+import { phoneSearchTerm } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tìm kiếm | Admin" };
@@ -30,6 +31,8 @@ export default async function GlobalSearchPage({
 
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
+  // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
+  const qPhone = phoneSearchTerm(q) ?? q;
   const doSearch = q.length >= MIN_LENGTH;
 
   const actor = await resolveActor(session.user.id);
@@ -67,7 +70,7 @@ export default async function GlobalSearchPage({
                   : {}),
                 OR: [
                   { parentName: { contains: q, mode: "insensitive" } },
-                  { phone: { contains: q } },
+                  { phone: { contains: qPhone } },
                   { childName: { contains: q, mode: "insensitive" } },
                 ],
               },
@@ -89,8 +92,8 @@ export default async function GlobalSearchPage({
                   { name: { contains: q, mode: "insensitive" } },
                   { studentCode: { contains: q, mode: "insensitive" } },
                   { parentName: { contains: q, mode: "insensitive" } },
-                  { parentPhone: { contains: q } },
-                  { phone: { contains: q } },
+                  { parentPhone: { contains: qPhone } },
+                  { phone: { contains: qPhone } },
                 ],
               },
               select: { id: true, name: true, studentCode: true, parentName: true },
