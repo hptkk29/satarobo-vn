@@ -208,6 +208,22 @@ export async function POST(req: NextRequest) {
     salesKhongKhop: plan.unmatchedSales,
     khoaKhongKhop: plan.unmatchedCourses,
     coSoKhongKhop: plan.unmatchedCenters,
+    // 04/08 — DÒNG CẦN KIỂM TRA: vẫn import được, nhưng thiếu/mờ thông tin. Liệt kê
+    // ở màn xem thử để người nhập sửa NGAY TRONG EXCEL rồi tải lại, thay vì import
+    // xong mới đi dò từng lead từng phụ huynh.
+    canKiemTra: parsed.parents.flatMap((p) =>
+      p.children
+        .filter((c) => c.warnings.length > 0)
+        .map((c) => ({
+          sdt: p.phone,
+          hocVien: c.fullName,
+          sheet: c.sources[0]?.sheet ?? "",
+          dong: c.sources[0]?.row ?? 0,
+          thieu: c.warnings,
+          daDong: c.paidAmount,
+          cachDong: c.feeMode,
+        })),
+    ),
   };
 
   if (mode === "dry-run") {
@@ -241,6 +257,7 @@ export async function POST(req: NextRequest) {
                 create: c.children.map((ch) => ({
                   fullName: ch.fullName,
                   gradeLevel: ch.gradeLevel,
+                  ageYears: ch.ageYears,
                   interestedCourseId: ch.interestedCourseId,
                   interestedCenterId: ch.interestedCenterId,
                   note: ch.note,

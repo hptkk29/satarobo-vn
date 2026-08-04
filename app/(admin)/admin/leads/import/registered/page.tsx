@@ -26,6 +26,16 @@ interface DryRunData {
   salesKhongKhop: string[];
   khoaKhongKhop: string[];
   coSoKhongKhop: string[];
+  /** 04/08 — dòng VẪN import được nhưng thiếu/mờ thông tin, cần soi trước khi ghi. */
+  canKiemTra?: {
+    sdt: string;
+    hocVien: string;
+    sheet: string;
+    dong: number;
+    thieu: string[];
+    daDong: number | null;
+    cachDong: "FULL" | "HALF";
+  }[];
   // Dòng gắn cơ sở NGOÀI phạm vi quyền của bạn → hệ thống KHÔNG tạo (cách ly cơ sở).
   ngoaiPhamVi?: { sdt: string; tenPH: string; coSo: string }[];
   // Câu 34 — SĐT đã thuộc lead của cơ sở khác → KHÔNG gộp, KHÔNG tạo. Chỉ hiện SĐT.
@@ -170,6 +180,11 @@ export default function ImportRegisteredLeadsPage() {
             <Stat label="Phụ huynh (lead)" value={preview.phuHuynh} />
             <Stat label="Học viên (con)" value={preview.hocVien} />
             <Stat label="Tạo mới / Gộp CRM" value={`${preview.seTao.length} / ${preview.seGop.length}`} />
+            <Stat
+              label="Cần kiểm tra"
+              value={preview.canKiemTra?.length ?? 0}
+              tone={(preview.canKiemTra?.length ?? 0) > 0 ? "amber" : undefined}
+            />
           </div>
 
           {(preview.salesKhongKhop.length > 0 ||
@@ -220,6 +235,23 @@ export default function ImportRegisteredLeadsPage() {
             />
           )}
 
+          {(preview.canKiemTra?.length ?? 0) > 0 && (
+            <PreviewTable
+              title={`Cần kiểm tra (${preview.canKiemTra!.length}) — VẪN import được, nhưng nên sửa trong Excel rồi tải lại`}
+              head={["Sheet", "Dòng", "Học viên", "SĐT", "Đã đóng", "Thiếu / cần xác nhận"]}
+              rows={preview.canKiemTra!.map((w) => [
+                w.sheet,
+                String(w.dong),
+                w.hocVien,
+                w.sdt,
+                w.daDong === null
+                  ? "—"
+                  : `${w.daDong.toLocaleString("vi-VN")}đ${w.cachDong === "HALF" ? " (50%)" : ""}`,
+                w.thieu.join(" · "),
+              ])}
+            />
+          )}
+
           {preview.seGop.length > 0 && (
             <PreviewTable
               title={`Sẽ gộp vào lead có sẵn (${preview.seGop.length})`}
@@ -246,11 +278,26 @@ export default function ImportRegisteredLeadsPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number | string; tone?: "red" }) {
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  // "amber" = cần soi nhưng KHÔNG chặn import (khác "red" = dòng bị loại).
+  tone?: "red" | "amber";
+}) {
   return (
     <div className="rounded-lg border border-neutral-200 p-3">
       <p className="text-xs text-neutral-500">{label}</p>
-      <p className={`text-xl font-bold ${tone === "red" ? "text-red-600" : ""}`}>{value}</p>
+      <p
+        className={`text-xl font-bold ${
+          tone === "red" ? "text-red-600" : tone === "amber" ? "text-amber-600" : ""
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }

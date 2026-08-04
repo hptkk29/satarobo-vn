@@ -54,6 +54,14 @@ export interface ParsedRegisteredChild {
   dateRegistered: string | null; // dd/mm/yyyy
   noteRaw: string | null; // cột Ghi chú
   centerCode: string | null; // CS của dòng này (có thể khác giữa các con)
+  /** 04/08 — tuổi suy từ cột Lớp (lớp + 5); null nếu cột Lớp trống/không đọc được. */
+  ageYears: number | null;
+  /** 04/08 — số tiền đọc được từ cột Học phí; null nếu chuỗi không chắc chắn. */
+  paidAmount: number | null;
+  /** 04/08 — FULL: đã đóng đủ (công nợ 0) · HALF: ghi chú nhắc 50%, còn nợ. */
+  feeMode: FeeMode;
+  /** 04/08 — cảnh báo từng dòng để soi TRƯỚC khi ghi (không chặn import). */
+  warnings: string[];
   sources: { sheet: string; row: number }[];
 }
 
@@ -146,6 +154,48 @@ function cellStr(v: CellValue): string | null {
   if (v instanceof Date) return formatExcelDate(v);
   const s = String(v).trim();
   return s === "" ? null : s;
+}
+
+/**
+ * Lớp văn hoá → TUỔI. Quy ước chủ dự án chốt 04/08: lớp 1 = 6 tuổi ⇒ tuổi = lớp + 5.
+ * Ô trống / không đọc được số lớp → null (KHÔNG đoán bừa tuổi cho hồ sơ trẻ em).
+ */
+export function ageFromGrade(grade: string | null): number | null {
+  if (!grade) return null;
+  const n = /(\d{1,2})/.exec(grade)?.[1];
+  if (!n) return null;
+  const g = Number(n);
+  if (!Number.isInteger(g) || g < 1 || g > 12) return null;
+  return g + 5;
+}
+
+/**
+ * "4,640,000vnd" · "3.986.000" · "1,000,000 vnd" → 4640000. Trả null khi không
+ * đọc được CHẮC CHẮN (chuỗi chữ, nhiều số rời rạc…) — thà để trống còn hơn ghi
+ * sai một con số tiền.
+ */
+export function parseTuitionAmount(raw: string | null): number | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/vnd|đ|vnđ/gi, " ").trim();
+  const digits = cleaned.replace(/[.,\s]/g, "");
+  if (!/^\d+$/.test(digits)) return null;
+  const n = Number(digits);
+  if (!Number.isFinite(n) || n <= 0 || n > 1_000_000_000) return null;
+  return n;
+}
+
+/**
+ * Cách đóng, suy từ cột Ghi chú (luật chủ dự án chốt 04/08):
+ *  · ghi chú nhắc "50%"        → HALF  : số trong cột là MỘT NỬA, còn nợ phần kia
+ *  · còn lại                    → FULL  : số trong cột là ĐÃ ĐÓNG ĐỦ, và cũng CHÍNH LÀ
+ *                                        tổng đơn (đã trừ khuyến mãi) ⇒ công nợ = 0
+ * Ghi chú nhắc "đợt"/"cọc"/"còn lại" KHÔNG tự xếp vào HALF — nó chỉ được ĐÁNH DẤU
+ * để người nhập soi, vì mỗi câu một kiểu và đoán sai là sai tiền.
+ */
+export type FeeMode = "FULL" | "HALF";
+
+export function feeModeFromNote(note: string | null): FeeMode {
+  return note && /50\s*%/.test(note) ? "HALF" : "FULL";
 }
 
 /** Học phí: number → chuỗi số nguyên; chuỗi → giữ NGUYÊN (không parse/sửa tiền). */
@@ -281,22 +331,55 @@ export function parseRegisteredSheets(sheets: SheetAoA[]): ParsedRegistered {
 
       const studentCodeOld = normalizeStudentCode(col(row, "studentCode"));
       const centerCode = extractCenterCode(col(row, "center"), studentCodeOld);
+      const grade = cellStr(col(row, "grade"));
+      const courseRaw = cellStr(col(row, "course"));
+      const tuitionRaw = tuitionStr(col(row, "tuition"));
+      const noteRaw = cellStr(col(row, "note"));
+      const parentName = cellStr(col(row, "parentName"));
+
+      const ageYears = ageFromGrade(grade);
+      const paidAmount = parseTuitionAmount(tuitionRaw);
+      const feeMode = feeModeFromNote(noteRaw);
+
+      // 04/08 — CẢNH BÁO, không phải lỗi: dòng vẫn vào được, chỉ là người nhập cần
+      // soi trước khi ghi. Mục đích: thấy hết ở màn xem thử, khỏi phải dò từng lead
+      // sau khi đã nhập vào hệ thống.
+      const warnings: string[] = [];
+      if (!grade) warnings.push("thiếu Lớp → không suy được tuổi");
+      else if (ageYears === null) warnings.push(`Lớp không đọc được số: "${grade}"`);
+      if (!courseRaw) warnings.push("thiếu Khoá học đăng ký");
+      if (!tuitionRaw) warnings.push("thiếu Học phí");
+      else if (paidAmount === null) warnings.push(`Học phí không đọc được số: "${tuitionRaw}"`);
+      if (feeMode === "HALF") warnings.push("ghi chú nhắc 50% → còn nợ, kiểm số tiền");
+      else if (noteRaw && /%/.test(noteRaw)) {
+        warnings.push("ghi chú có giảm theo % → xác nhận số đã đóng");
+      } else if (noteRaw && /(đợt|cọc|còn lại|còn thiếu)/i.test(noteRaw)) {
+        warnings.push("ghi chú nhắc đợt/cọc/còn lại → xác nhận số đã đóng");
+      }
+      if (!parentName) warnings.push("thiếu Tên Phụ Huynh");
+      if (!cellStr(col(row, "parentCccd"))) warnings.push("thiếu CCCD Phụ Huynh");
+      if (!cellStr(col(row, "address"))) warnings.push("thiếu Địa chỉ");
+
       const childData: Omit<ParsedRegisteredChild, "sources"> = {
         fullName: studentName,
-        grade: cellStr(col(row, "grade")),
-        courseRaw: cellStr(col(row, "course")),
-        tuitionRaw: tuitionStr(col(row, "tuition")),
+        grade,
+        courseRaw,
+        tuitionRaw,
         paymentStatus: cellStr(col(row, "paymentStatus")),
         studentCodeOld,
         invoiceRef: cellStr(col(row, "invoice")),
         bank: cellStr(col(row, "bank")),
         invoiceIssued: cellStr(col(row, "invoiceIssued")),
         dateRegistered: formatExcelDate(col(row, "date")),
-        noteRaw: cellStr(col(row, "note")),
+        noteRaw,
         centerCode,
+        ageYears,
+        paidAmount,
+        feeMode,
+        warnings,
       };
       const rowParent = {
-        parentName: cellStr(col(row, "parentName")),
+        parentName,
         parentCccd: cellStr(col(row, "parentCccd")),
         address: cellStr(col(row, "address")),
         salesName: cellStr(col(row, "sales")),
@@ -482,6 +565,8 @@ export interface PlanContext {
 export interface ChildCreatePlan {
   fullName: string;
   gradeLevel: string | null;
+  /** 04/08 — tuổi suy từ Lớp (lớp + 5) → LeadChild.ageYears. */
+  ageYears: number | null;
   interestedCourseId: string | null;
   interestedCenterId: string | null;
   note: string;
@@ -532,6 +617,21 @@ export interface RegisteredImportPlan {
 
 export const IMPORT_NOTE_MARKER = "[Import ĐK Excel]";
 
+/**
+ * 04/08 — nhãn số tiền ĐÃ ĐÓNG dạng máy đọc được trong note của con
+ * (vd `ĐãĐóng=8640000`). Màn "Chốt hàng loạt" đọc nhãn này để ĐIỀN SẴN ô "Đã đóng",
+ * thay vì người nhập gõ tay từng dòng. Đổi chuỗi này là gãy chỗ đọc — sửa cả hai.
+ */
+export const PAID_NOTE_TAG = "ĐãĐóng=";
+
+/** Đọc ngược số tiền đã đóng từ note của LeadChild. null nếu note không có nhãn. */
+export function paidAmountFromNote(note: string | null | undefined): number | null {
+  const m = new RegExp(`${PAID_NOTE_TAG}(\\d+)`).exec(note ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** Note có cấu trúc cho Lead (PII PH cần cho xuất hoá đơn — CCCD PH, địa chỉ). */
 function buildLeadNote(p: ParsedRegisteredParent): string {
   const parts: string[] = [];
@@ -550,6 +650,10 @@ function buildChildNote(c: ParsedRegisteredChild): string {
   if (c.dateRegistered) parts.push(`Ngày ĐK: ${c.dateRegistered}`);
   if (c.courseRaw) parts.push(`Khoá ĐK: ${c.courseRaw}`);
   if (c.tuitionRaw) parts.push(`Học phí: ${c.tuitionRaw}`);
+  // 04/08 — số tiền dạng MÁY ĐỌC ĐƯỢC để màn "Chốt hàng loạt" điền sẵn ô "Đã đóng",
+  // khỏi phải gõ tay 102 dòng. Chuỗi gốc vẫn giữ ở trên để đối chiếu.
+  if (c.paidAmount !== null) parts.push(`${PAID_NOTE_TAG}${c.paidAmount}`);
+  if (c.feeMode === "HALF") parts.push("Đóng 50% — CÒN NỢ");
   if (c.paymentStatus) parts.push(`Tình trạng TT: ${c.paymentStatus}`);
   if (c.invoiceRef) parts.push(`Hoá đơn: ${c.invoiceRef}`);
   if (c.bank) parts.push(`Ngân hàng: ${c.bank}`);
@@ -597,6 +701,7 @@ export function planRegisteredImport(
       return {
         fullName: c.fullName,
         gradeLevel: c.grade,
+        ageYears: c.ageYears,
         interestedCourseId: courseId,
         interestedCenterId: childCenter.centerId,
         note: buildChildNote(c),
