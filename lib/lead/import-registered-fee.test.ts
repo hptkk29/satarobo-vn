@@ -73,6 +73,16 @@ describe("isPlaceholderParentName", () => {
   it("tên thật lỡ chứa chữ 'phụ huynh' ở giữa → vẫn là tên thật", () => {
     expect(isPlaceholderParentName("Chị Lan phụ huynh của bé Bo")).toBe(false);
   });
+
+  it("dạng cũ được nhận ra để chuẩn hoá về dạng mới", () => {
+    // Ca thật thấy trên DB sau lượt nhập 05/08: lead từ import trước mang tên
+    // "PH của THÁI THIÊN KHÁNH (chưa rõ tên)" nằm lẫn với "Phụ huynh của …".
+    const cu = "PH của THÁI THIÊN KHÁNH (chưa rõ tên)";
+    expect(isPlaceholderParentName(cu)).toBe(true);
+    expect(parentDisplayName(null, [{ fullName: "THÁI THIÊN KHÁNH" }], "0968")).toBe(
+      "Phụ huynh của THÁI THIÊN KHÁNH",
+    );
+  });
 });
 
 describe("contactFromLeadNote", () => {

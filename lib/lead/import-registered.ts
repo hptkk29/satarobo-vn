@@ -995,10 +995,13 @@ export function planRegisteredImport(
 
     // ── GỘP với lead đã có (câu 34): giữ record cũ, đắp field trống, append note.
     const set: LeadMergePlan["set"] = {};
-    // Tên PH: file có tên THẬT mà record cũ đang mang tên hệ thống tự điền
-    // ("Phụ huynh của …") → nâng cấp. Tên thật đã có thì tuyệt đối không đè.
-    if (p.parentName?.trim() && isPlaceholderParentName(existing.parentName)) {
-      set.parentName = p.parentName.trim();
+    // Tên PH: record cũ đang mang tên hệ thống tự điền → thay bằng tên THẬT nếu file
+    // có, không thì ít nhất chuẩn hoá về định dạng hiện hành. Nếu không chuẩn hoá,
+    // danh sách CRM lẫn lộn "PH của X (chưa rõ tên)" (dạng trước 05/08) với
+    // "Phụ huynh của X". Tên người thật thì tuyệt đối không đè.
+    if (isPlaceholderParentName(existing.parentName)) {
+      const moi = parentDisplayName(p.parentName, p.children, p.phone);
+      if (moi !== existing.parentName) set.parentName = moi;
     }
     if (!existing.centerId && centerId) set.centerId = centerId;
     if (!existing.orgUnitId && orgUnitId) set.orgUnitId = orgUnitId;

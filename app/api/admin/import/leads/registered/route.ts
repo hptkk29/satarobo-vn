@@ -39,7 +39,24 @@ import {
   type ExistingLead,
 } from "@/lib/lead/import-registered";
 
-export const maxDuration = 60;
+// File thật của Sale: 11.071 dòng / 75 lead / 81 học viên. Ghi tuần tự từng lead
+// vượt 60s và transaction bị đóng giữa chừng (đo 05/08: "60123 ms passed") ⇒ rollback
+// sạch, không ghi được gì. Nới hạn + ghi theo lô song song (xem inBatches).
+export const maxDuration = 300;
+
+/**
+ * Chạy `fn` cho từng phần tử, mỗi lô `size` cái CHẠY SONG SONG.
+ *
+ * Vì sao cần: mỗi lệnh ghi là một vòng đi-về Supabase (~300ms từ máy dev). 75 lead
+ * nối đuôi nhau = quá 60s và transaction chết. Gửi song song thì độ trễ chồng lên
+ * nhau thay vì cộng dồn. Vẫn giới hạn theo lô để không mở quá nhiều lệnh cùng lúc
+ * trên một connection. Mỗi lead là một row riêng nên không có nguy cơ khoá chéo.
+ */
+async function inBatches<T>(items: T[], fn: (item: T) => Promise<unknown>, size = 10) {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.all(items.slice(i, i + size).map(fn));
+  }
+}
 
 function err(status: number, code: string, message: string) {
   return NextResponse.json({ ok: false, error: { code, message } }, { status });
@@ -474,7 +491,7 @@ export async function POST(req: NextRequest) {
   try {
     await sdb.$transaction(
       async (tx) => {
-        for (const c of scopedCreates) {
+        await inBatches(scopedCreates, async (c) => {
           await tx.lead.create({
             data: {
               parentName: c.parentName,
@@ -513,9 +530,9 @@ export async function POST(req: NextRequest) {
           });
           createdLeads++;
           createdChildren += c.children.length;
-        }
+        });
 
-        for (const m of changedMerges) {
+        await inBatches(changedMerges, async (m) => {
           const existing = existingByPhone.get(m.phone);
           await tx.lead.update({
             where: { id: m.leadId },
@@ -548,28 +565,30 @@ export async function POST(req: NextRequest) {
               },
             },
           });
-          for (const cu of m.childUpdates) {
-            const before = existing?.children.find((ch) => ch.id === cu.childId);
-            await tx.leadChild.update({
-              where: { id: cu.childId },
-              data: {
-                ...cu.set,
-                ...(cu.noteAppend
-                  ? { note: before?.note ? `${before.note}\n\n${cu.noteAppend}` : cu.noteAppend }
-                  : {}),
-              },
-            });
-          }
+          await Promise.all(
+            m.childUpdates.map((cu) => {
+              const before = existing?.children.find((ch) => ch.id === cu.childId);
+              return tx.leadChild.update({
+                where: { id: cu.childId },
+                data: {
+                  ...cu.set,
+                  ...(cu.noteAppend
+                    ? { note: before?.note ? `${before.note}\n\n${cu.noteAppend}` : cu.noteAppend }
+                    : {}),
+                },
+              });
+            }),
+          );
           mergedLeads++;
           createdChildren += m.newChildren.length;
-        }
+        });
 
         // Đắp sang hồ sơ học viên đã tồn tại (chỉ field đang trống — planStudentSync).
-        for (const su of studentSyncs) {
-          await tx.student.update({ where: { id: su.studentId }, data: su.set });
-        }
+        await inBatches(studentSyncs, (su) =>
+          tx.student.update({ where: { id: su.studentId }, data: su.set }),
+        );
       },
-      { timeout: 60_000 },
+      { timeout: 180_000 },
     );
   } catch (e) {
     return err(500, "WRITE_FAILED", `Lỗi ghi DB: ${e instanceof Error ? e.message : "Unknown"}`);
