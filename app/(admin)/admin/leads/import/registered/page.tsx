@@ -41,6 +41,7 @@ interface DryRunData {
     tongPhaiNop: number;
     conLai: number;
     tra2Dot: boolean;
+    hanDot2: string | null;
     giamKieu: "AMOUNT" | "PERCENT" | null;
     giamGiaTri: number | null;
     giamLyDo: string | null;
@@ -69,7 +70,8 @@ type EditableCol =
   | "payIn2"
   | "discountKind"
   | "discountValue"
-  | "discountReason";
+  | "discountReason"
+  | "dueDate2";
 
 type Overrides = Record<string, Partial<Record<EditableCol, string>>>;
 
@@ -93,6 +95,7 @@ const COL_LABEL: Record<EditableCol, string> = {
   discountKind: "Kiểu giảm",
   discountValue: "Mức giảm",
   discountReason: "Giải trình giảm",
+  dueDate2: "Hạn đợt 2",
 };
 
 async function postImport(
@@ -398,6 +401,25 @@ export default function ImportRegisteredLeadsPage() {
                             />
                             Đóng 2 đợt
                           </label>
+                          {(edited.payIn2 !== undefined
+                            ? edited.payIn2 === "1"
+                            : w.tra2Dot) && (
+                            <label className="inline-flex items-center gap-1.5 text-neutral-700">
+                              {COL_LABEL.dueDate2}
+                              <input
+                                type="date"
+                                value={edited.dueDate2 ?? (w.hanDot2 ?? "")}
+                                onChange={(e) =>
+                                  setCell(w.sheet, w.dong, "dueDate2", e.target.value)
+                                }
+                                className={`rounded border px-2 py-0.5 text-xs ${
+                                  (edited.dueDate2 ?? w.hanDot2)
+                                    ? "border-neutral-300"
+                                    : "border-red-400 bg-red-50"
+                                }`}
+                              />
+                            </label>
+                          )}
                           <span className="text-neutral-600">
                             Giá niêm yết: <b>{w.giaNiemYet.toLocaleString("vi-VN")}đ</b>
                             {w.giaNiemYet === 0 && (

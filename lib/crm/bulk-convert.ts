@@ -47,6 +47,8 @@ export type BulkConvertLeadInput = {
   paid?: { amount: number; paidDate: Date; note?: string | null } | null;
   /** 04/08 — giải trình khuyến mãi (bắt buộc khi có giảm) — ghi lên đơn backfill. */
   discountReason?: string | null;
+  /** 04/08 — hạn đóng đợt 2; có hạn + còn nợ ⇒ dựng luôn kế hoạch 2 đợt cho đơn. */
+  dueDate2?: Date | null;
 };
 
 export type BulkConvertLeadResult = {
@@ -193,6 +195,7 @@ export async function convertOneLeadBackfill(
           0,
         ),
         discountReason: input.discountReason ?? null,
+        dueDate2: input.dueDate2 ?? null,
         items: students.map((s) => ({
           itemName: `${classMap.get(s.classId)!.course?.name ?? "Khoá học"} — ${s.name}`,
           unitPrice: s.listPrice,

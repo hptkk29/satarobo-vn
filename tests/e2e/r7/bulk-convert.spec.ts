@@ -367,6 +367,67 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     expect(en.finalPrice).toBe(9_000_000);
   });
 
+  test("[BULK-11] tick 2 đợt + có hạn → dựng kế hoạch 2 đợt; phiếu thu đợt 1 bị HUỶ (không đòi lại tiền đã đóng)", async () => {
+    const cs1 = await seedCenter();
+    const { cls } = await seedCourseClass(cs1.id, 10_000_000);
+    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, `09${Date.now() % 100000000}`, ["Bé 2 Đợt"]);
+    const actor = await seedActor();
+
+    const res = await convertOneLeadBackfill(actor, {
+      leadId: lead.id,
+      students: [{ leadChildId: children[0]!.id, name: "Bé 2 Đợt", classId: cls.id, consentMedia: false }],
+      paid: { amount: 5_000_000, paidDate: new Date("2026-06-01"), note: null },
+      dueDate2: new Date("2026-09-15"),
+    });
+    expect(res.ok).toBe(true);
+
+    const order = await db.order.findFirstOrThrow({ where: { leadId: lead.id } });
+    const dots = await db.orderInstallment.findMany({
+      where: { orderId: order.id },
+      orderBy: { soDot: "asc" },
+    });
+    expect(dots.map((d) => [d.soDot, d.amount, d.status])).toEqual([
+      [1, 5_000_000, "PAID"],
+      [2, 5_000_000, "PENDING"],
+    ]);
+    expect(dots[1]!.dueDate?.toISOString().slice(0, 10)).toBe("2026-09-15");
+    // Kế hoạch backfill = đã thoả thuận từ trước ⇒ duyệt sẵn, không bắt duyệt lại.
+    expect(order.installmentApprovalStatus).toBe("APPROVED");
+    // Còn nợ ⇒ đơn KHÔNG được coi là đã thu xong.
+    expect(order.paidAt).toBeNull();
+
+    const reqs = await db.paymentRequest.findMany({
+      where: { orderId: order.id },
+      orderBy: { installmentNo: "asc" },
+    });
+    const dot1 = reqs.find((r) => r.installmentNo === 1)!;
+    const dot2 = reqs.find((r) => r.installmentNo === 2)!;
+    // ⚠️ Bất biến quan trọng: tiền đợt 1 đã thu NGOÀI hệ thống nên phiếu đợt 1 phải
+    // VOID — để nguyên "chờ thu" là sale xuất QR đòi lại khoản khách đã đóng.
+    expect(dot1.status).toBe("VOID");
+    expect(dot2.status).toBe("PENDING");
+    expect(dot2.amountDue).toBe(5_000_000);
+    expect(dot2.matchKey).toContain("D2");
+  });
+
+  test("[BULK-12] tick 2 đợt nhưng KHÔNG có hạn → không dựng kế hoạch, đơn vẫn đúng tiền", async () => {
+    const cs1 = await seedCenter();
+    const { cls } = await seedCourseClass(cs1.id, 10_000_000);
+    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, `09${Date.now() % 100000000}`, ["Bé Không Hạn"]);
+    const actor = await seedActor();
+
+    const res = await convertOneLeadBackfill(actor, {
+      leadId: lead.id,
+      students: [{ leadChildId: children[0]!.id, name: "Bé Không Hạn", classId: cls.id, consentMedia: false }],
+      paid: { amount: 5_000_000, paidDate: new Date("2026-06-01"), note: null },
+      dueDate2: null,
+    });
+    expect(res.ok).toBe(true);
+    const order = await db.order.findFirstOrThrow({ where: { leadId: lead.id } });
+    expect(await db.orderInstallment.count({ where: { orderId: order.id } })).toBe(0);
+    expect(order.totalAmount).toBe(10_000_000);
+  });
+
   test("[BULK-08] khoá học chưa cấu hình giá (null/0) → COURSE_NO_PRICE, không chốt", async () => {
     const center = await seedCenter();
     const course = await db.course.create({ data: { name: "Sata rỗng giá", slug: `sata-nogia-${uniq()}` } });

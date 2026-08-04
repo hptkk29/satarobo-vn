@@ -224,6 +224,15 @@ export function BulkConvertClient({
     return null
   }
 
+  /** Hạn đợt 2 do màn xem thử import ghi vào note (`HạnĐợt2=2026-09-15`). */
+  const readDue2 = (children: { note: string | null }[]): string | null => {
+    for (const ch of children) {
+      const m = /HạnĐợt2=(\d{4}-\d{2}-\d{2})/.exec(ch.note ?? '')
+      if (m) return m[1]
+    }
+    return null
+  }
+
   const submit = async () => {
     if (readyLeads.length === 0) {
       toast.error('Chưa có lead nào đủ điều kiện (cần chọn lớp cho mọi học viên của lead đã tick)')
@@ -255,6 +264,7 @@ export function BulkConvertClient({
               discount: readDiscount(ch.note),
             })),
             discountReason: readDiscountReason(lead.children),
+            dueDate2: readDue2(lead.children),
             paid:
               !hasPayment.has(lead.id) && Number(paidAmount[lead.id] ?? '') > 0
                 ? {

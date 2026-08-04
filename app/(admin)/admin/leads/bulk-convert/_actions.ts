@@ -40,6 +40,12 @@ const leadItemSchema = z.object({
   leadId: z.string().trim().min(1),
   students: z.array(studentSchema).min(1, 'Cần ít nhất 1 học viên').max(10),
   discountReason: z.string().trim().max(300).optional().nullable(),
+  dueDate2: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Hạn đợt 2 không hợp lệ')
+    .optional()
+    .nullable(),
   paid: z
     .object({
       amount: z.number().int().positive('Số tiền phải > 0'),
@@ -143,6 +149,7 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
             discount: s.discount ?? null,
           })),
           discountReason: item.discountReason || null,
+          dueDate2: item.dueDate2 ? new Date(`${item.dueDate2}T12:00:00+07:00`) : null,
           paid:
             item.paid && item.paid.amount > 0
               ? {

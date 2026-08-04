@@ -44,6 +44,7 @@ function err(status: number, code: string, message: string) {
 const OVERRIDABLE = new Set([
   "grade", "course", "tuition", "center",
   "parentName", "parentCccd", "address", "note", "source", "sales",
+  "payIn2", "discountKind", "discountValue", "discountReason", "dueDate2",
 ]);
 
 /**
@@ -296,6 +297,7 @@ export async function POST(req: NextRequest) {
               tongPhaiNop,
               conLai: Math.max(0, tongPhaiNop - daNop),
               tra2Dot: c.payIn2,
+              hanDot2: c.dueDate2,
               giamKieu: c.discountKind,
               giamGiaTri: c.discountValue,
               giamLyDo: c.discountReason,

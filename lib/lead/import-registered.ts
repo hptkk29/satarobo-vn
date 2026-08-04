@@ -62,6 +62,8 @@ export interface ParsedRegisteredChild {
   feeMode: FeeMode;
   /** 04/08 — khách trả làm 2 đợt (mặc định suy từ ghi chú, sửa tay được). */
   payIn2: boolean;
+  /** 04/08 — hạn đóng đợt 2 (yyyy-mm-dd). Không có thì KHÔNG lập được kế hoạch. */
+  dueDate2: string | null;
   /** 04/08 — chương trình giảm giá nhập tay ở màn xem thử. */
   discountKind: DiscountKind | null;
   discountValue: number | null;
@@ -112,7 +114,8 @@ export type OverridableCol =
   | "payIn2"
   | "discountKind"
   | "discountValue"
-  | "discountReason";
+  | "discountReason"
+  | "dueDate2";
 
 export interface RegisteredRowOverride {
   sheet: string;
@@ -438,6 +441,8 @@ export function parseRegisteredSheets(
             : Math.round(dvNum)
           : null;
       const discountReason = (patch?.discountReason ?? "").trim() || null;
+      const dd2 = (patch?.dueDate2 ?? "").trim();
+      const dueDate2 = /^\d{4}-\d{2}-\d{2}$/.test(dd2) ? dd2 : null;
 
       // 04/08 — CẢNH BÁO, không phải lỗi: dòng vẫn vào được, chỉ là người nhập cần
       // soi trước khi ghi. Mục đích: thấy hết ở màn xem thử, khỏi phải dò từng lead
@@ -453,6 +458,10 @@ export function parseRegisteredSheets(
         warnings.push("ghi chú có giảm theo % → xác nhận số đã đóng");
       } else if (noteRaw && /(đợt|cọc|còn lại|còn thiếu)/i.test(noteRaw)) {
         warnings.push("ghi chú nhắc đợt/cọc/còn lại → xác nhận số đã đóng");
+      }
+      if (payIn2 && !dueDate2) {
+        // Không có hạn thì bước chốt KHÔNG lập được kế hoạch 2 đợt (và không có QR đợt 2).
+        warnings.push("đóng 2 đợt nhưng CHƯA có hạn đợt 2");
       }
       if (discountValue !== null && !discountReason) {
         // Cùng luật với màn tạo đơn: giảm giá PHẢI có giải trình.
@@ -479,6 +488,7 @@ export function parseRegisteredSheets(
         paidAmount,
         feeMode,
         payIn2,
+        dueDate2,
         discountKind,
         discountValue,
         discountReason,
@@ -733,6 +743,7 @@ export const PAID_NOTE_TAG = "ĐãĐóng=";
 export const DISCOUNT_NOTE_TAG = "Giảm=";
 export const DISCOUNT_REASON_TAG = "LýDoGiảm=";
 export const PAY2_NOTE_TAG = "Trả2Đợt";
+export const DUE2_NOTE_TAG = "HạnĐợt2=";
 
 /** Đọc ngược khoản giảm từ note. null nếu note không ghi giảm giá. */
 export function discountFromNote(
@@ -743,6 +754,12 @@ export function discountFromNote(
   const value = Number(m[1]);
   if (!Number.isFinite(value) || value <= 0) return null;
   return { kind: m[2] === "%" ? "PERCENT" : "AMOUNT", value };
+}
+
+/** Hạn đóng đợt 2 ghi trong note (yyyy-mm-dd). null nếu chưa đặt. */
+export function dueDate2FromNote(note: string | null | undefined): string | null {
+  const m = new RegExp(`${DUE2_NOTE_TAG}(\d{4}-\d{2}-\d{2})`).exec(note ?? "");
+  return m ? m[1] : null;
 }
 
 /** Note có đánh dấu trả 2 đợt không? */
@@ -787,6 +804,7 @@ function buildChildNote(c: ParsedRegisteredChild): string {
   }
   if (c.discountReason) parts.push(`${DISCOUNT_REASON_TAG}${c.discountReason}`);
   if (c.payIn2) parts.push(PAY2_NOTE_TAG);
+  if (c.dueDate2) parts.push(`${DUE2_NOTE_TAG}${c.dueDate2}`);
   if (c.paymentStatus) parts.push(`Tình trạng TT: ${c.paymentStatus}`);
   if (c.invoiceRef) parts.push(`Hoá đơn: ${c.invoiceRef}`);
   if (c.bank) parts.push(`Ngân hàng: ${c.bank}`);
