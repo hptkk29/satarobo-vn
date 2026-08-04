@@ -5,7 +5,32 @@ import {
   notHeadOfficeWhere,
   buildStudentCourseChain,
   isHeadOfficePick,
+  crossCenterError,
 } from "./enrollment-flow";
+
+// Chủ dự án chốt 04/08/2026: chỉ xếp học viên CS mình vào lớp CS mình.
+describe("crossCenterError", () => {
+  it("cùng cơ sở → cho phép", () => {
+    expect(crossCenterError("cs1", "cs1")).toBeNull();
+  });
+
+  it("khác cơ sở → chặn", () => {
+    expect(crossCenterError("cs1", "cs2")).toMatch(/cơ sở khác/);
+  });
+
+  it("[GUARD TỰ TẮT] lớp chưa gán cơ sở → chặn, KHÔNG mở toang", () => {
+    // Bản cũ `if (cls.centerId && ...)` biến lớp không cơ sở thành lớp nhận mọi CS.
+    expect(crossCenterError(null, "cs2")).toMatch(/Lớp chưa gán cơ sở/);
+  });
+
+  it("học viên chưa gán cơ sở → chặn kèm câu chỉ đường", () => {
+    expect(crossCenterError("cs1", null)).toMatch(/Học viên chưa gán cơ sở/);
+  });
+
+  it("thiếu cả hai → vẫn chặn", () => {
+    expect(crossCenterError(null, null)).not.toBeNull();
+  });
+});
 
 // Chủ dự án chốt 04/08/2026: Hội sở KHÔNG nhận lead / học viên / lớp học.
 describe("isHeadOfficePick", () => {

@@ -171,7 +171,9 @@ async function resolveClassOrg(
   data: ReturnType<typeof classCreateSchema.parse>,
   sdb: ReturnType<typeof scopedDb>,
 ): Promise<{ centerId: string | null; orgUnitId: string | null }> {
-  let orgUnitId = data.orgUnitId ?? null;
+  // orgUnitId nay BẮT BUỘC ở form, nhưng nhánh kế thừa nhóm lớp bên dưới có thể suy
+  // ra null → khai rõ kiểu nullable, đừng để suy ra `string` rồi vỡ.
+  let orgUnitId: string | null = data.orgUnitId ?? null;
   let centerId = await centerIdForOrgUnit(orgUnitId);
 
   if (data.classGroupId) {

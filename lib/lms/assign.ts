@@ -40,8 +40,10 @@ export function buildAssignableWhere(cls: ClassLite): Prisma.EnrollmentWhereInpu
     // (5) chưa đang học lớp active nào của CHÍNH khóa này.
     enrollments: { none: { status: "STUDYING", courseId: cls.courseId } },
   };
-  // (2) đúng cơ sở — chỉ ràng buộc khi lớp có cơ sở.
-  if (cls.centerId) student.centerId = cls.centerId;
+  // (2) đúng cơ sở. Bản cũ chỉ ràng buộc KHI lớp có cơ sở ⇒ lớp chưa gán cơ sở thì
+  // danh sách gán được hiện học viên của MỌI cơ sở. Nay lớp buộc phải có cơ sở
+  // (04/08), nên lớp thiếu cơ sở = dữ liệu hỏng → không gán được ai, chứ không mở toang.
+  student.centerId = cls.centerId ?? "__LOP_CHUA_GAN_CO_SO__";
 
   return {
     courseId: cls.courseId, // (1)

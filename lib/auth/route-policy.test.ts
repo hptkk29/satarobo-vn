@@ -379,7 +379,9 @@ describe("B. route lọt sai host", () => {
 });
 
 describe("B. infra paths không bị auth", () => {
-  for (const p of ["/api/leads", "/_next/static/chunk.js", "/favicon.ico"]) {
+  // `/monitoring` = Sentry tunnel (next.config.ts) — phải `next`, không được 308
+  // sang public host (nếu không: báo lỗi site admin đi sai chỗ + browser cache 308).
+  for (const p of ["/api/leads", "/_next/static/chunk.js", "/favicon.ico", "/monitoring"]) {
     it(`${p} (admin host) → next`, () => {
       expect(
         decideRoute({ hostKind: "admin", pathname: p, role: null, sessionValid: false }),

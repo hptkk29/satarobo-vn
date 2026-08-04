@@ -45,6 +45,27 @@ export async function getNonEnrollableCenterIds(): Promise<string[]> {
   return nonEnrollableCenterIds(centers, orgUnits);
 }
 
+/**
+ * Pure: học viên chỉ được xếp vào lớp CÙNG CƠ SỞ (chủ dự án chốt 04/08/2026).
+ *
+ * ⚠️ Bản cũ viết `if (cls.centerId && student.centerId !== cls.centerId)` — điều kiện
+ * đầu làm guard TỰ TẮT khi lớp chưa gán cơ sở, nên lớp "không cơ sở" nhận được học
+ * viên của MỌI cơ sở. Nay thiếu cơ sở ở bất kỳ bên nào đều chặn, kèm câu chỉ đường.
+ *
+ * Trả `null` = cho phép.
+ */
+export function crossCenterError(
+  classCenterId: string | null | undefined,
+  studentCenterId: string | null | undefined,
+): string | null {
+  if (!classCenterId) return "Lớp chưa gán cơ sở — sửa lớp và chọn cơ sở trước khi xếp học viên.";
+  if (!studentCenterId) return "Học viên chưa gán cơ sở — sửa hồ sơ học viên và chọn cơ sở trước.";
+  if (classCenterId !== studentCenterId) {
+    return "Học viên thuộc cơ sở khác với lớp — chọn lớp cùng cơ sở hoặc chuyển cơ sở học viên trước.";
+  }
+  return null;
+}
+
 /** Đối tượng bị cấm gắn vào Hội sở (dùng cho câu báo lỗi). */
 export type HeadOfficeSubject = "lead" | "học viên" | "lớp học";
 
