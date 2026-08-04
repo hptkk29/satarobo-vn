@@ -521,7 +521,17 @@ export default function ImportRegisteredLeadsPage() {
                         ))}
                       </div>
 
-                      {/* Khối TIỀN — giá niêm yết lấy theo khoá đang chọn ở ô "Khoá" trên. */}
+                      {/* Dòng hoàn phí KHÔNG được nhập → đừng hiện công nợ/ô giảm giá của nó:
+                          nhãn nói "không nhập" mà bên dưới vẫn có "còn lại X đồng" thì đọc như
+                          một khoản phải đòi có thật. */}
+                      {w.xuLy === "REFUND" ? (
+                        <div className="mt-3 rounded-md border border-neutral-300 bg-neutral-100 p-2 text-xs text-neutral-600">
+                          Dòng này <b>sẽ không được nhập</b> — ghi chú cho thấy đây là ca hoàn phí.
+                          Không tạo đơn hàng, không ghi công nợ. Nếu vẫn muốn nhập, sửa ô{" "}
+                          <b>Ghi chú</b> ở trên rồi bấm <b>Xem thử lại</b>.
+                        </div>
+                      ) : (
+                      /* Khối TIỀN — giá niêm yết lấy theo khoá đang chọn ở ô "Khoá" trên. */
                       <div className="mt-3 rounded-md border border-neutral-200 bg-white p-2">
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                           <label className="inline-flex items-center gap-1.5 font-medium text-neutral-800">
@@ -612,6 +622,7 @@ export default function ImportRegisteredLeadsPage() {
                           </label>
                         </div>
                       </div>
+                      )}
                     </div>
                   );
                 })}
