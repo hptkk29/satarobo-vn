@@ -17,9 +17,9 @@ export default async function NewStudentPage() {
   // #15 — chỉ kế toán/admin (payments:view-pii) mới thấy + nhập CCCD PH (PII).
   const canViewParentCccd = await checkPermission("payments:view-pii");
 
-  // PR-C: picker đơn vị qua OrgUnit tree (gồm cả HO) — không dùng db.center.findMany.
   const actor = await resolveActor(session.user.id);
-  const orgUnits = await getSelectableOrgUnits(actor);
+  const orgUnits = await // Hội sở KHÔNG nhận học viên (chốt 04/08) — picker chỉ liệt kê cơ sở dạy học.
+    getSelectableOrgUnits(actor, { types: ["CENTER"] });
 
   return (
     <div>

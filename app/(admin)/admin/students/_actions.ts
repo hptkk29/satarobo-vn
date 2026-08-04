@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client";
 import { hasRole, type Action } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import {
   studentCreateSchema,
   studentUpdateSchema,
@@ -125,6 +126,28 @@ function toUpdateData(
   return data;
 }
 
+/**
+ * Chủ dự án chốt 04/08: HỌC VIÊN KHÔNG THUỘC HỘI SỞ. HO là cơ quan đầu não, không
+ * phải nơi dạy học. Chặn ở server chứ không chỉ giấu khỏi dropdown — form vẫn có
+ * thể bị POST thẳng, và học viên nằm ở HO thì kéo theo lớp/điểm danh/học phí sai.
+ */
+async function rejectHeadOfficeOrgUnit(
+  orgUnitId: string | null | undefined,
+  resolvedCenterId: string | null | undefined,
+): Promise<string | null> {
+  // `centerIdForOrgUnit` map HO/ROOT → null. Nên "chọn đơn vị nhưng ra null cơ sở"
+  // CHÍNH LÀ ca chọn Hội sở — trước đây lọt êm, học viên ra KHÔNG CÓ cơ sở và biến
+  // mất khỏi mọi màn lọc theo cơ sở.
+  if (orgUnitId && !resolvedCenterId) {
+    return "Hội sở không nhận học viên — chọn cơ sở dạy học (CS1/CS2)";
+  }
+  if (!resolvedCenterId) return null;
+  const nonEnrollable = await getNonEnrollableCenterIds();
+  return nonEnrollable.includes(resolvedCenterId)
+    ? "Hội sở không nhận học viên — chọn cơ sở dạy học (CS1/CS2)"
+    : null;
+}
+
 export async function createStudent(formData: FormData): Promise<ActionResult> {
   const session = await requireStudentWrite("create");
 
@@ -148,6 +171,8 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
   // PR-C dual-write: OrgUnit là nguồn chính; suy centerId/preferredCenterId (HO→null).
   data.centerId = await centerIdForOrgUnit(data.orgUnitId ?? null);
   data.preferredCenterId = await centerIdForOrgUnit(data.preferredOrgUnitId ?? null);
+  const hoErr = await rejectHeadOfficeOrgUnit(data.orgUnitId ?? null, data.centerId ?? null);
+  if (hoErr) return { error: hoErr };
 
   // Cách ly cơ sở: center-level chỉ tạo HV cho cơ sở trong tầm nhìn.
   if (!actorCanUseCenter(actor, data.centerId ?? null)) {

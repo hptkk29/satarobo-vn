@@ -63,7 +63,8 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
         },
       },
     }),
-    getSelectableOrgUnits(actor),
+    // Hội sở KHÔNG nhận lead (chốt 04/08) — picker chỉ liệt kê cơ sở dạy học.
+    getSelectableOrgUnits(actor, { types: ["CENTER"] }),
     sdb.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
   ]);
   if (!lead) notFound();
