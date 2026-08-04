@@ -35,6 +35,8 @@ interface DryRunData {
     thieu: string[];
     daDong: number | null;
     cachDong: "FULL" | "HALF";
+    tuoi: number | null;
+    giaTri: Record<EditableCol, string>;
   }[];
   // Dòng gắn cơ sở NGOÀI phạm vi quyền của bạn → hệ thống KHÔNG tạo (cách ly cơ sở).
   ngoaiPhamVi?: { sdt: string; tenPH: string; coSo: string }[];
@@ -46,10 +48,47 @@ interface DryRunData {
   khongDoi?: number;
 }
 
-async function postImport(file: File, mode: "dry-run" | "confirm"): Promise<DryRunData> {
+/** Cột cho sửa tay ngay trên màn — KHÔNG có SĐT/tên học viên (định danh gộp trùng). */
+type EditableCol =
+  | "grade"
+  | "course"
+  | "tuition"
+  | "center"
+  | "parentName"
+  | "parentCccd"
+  | "address"
+  | "note";
+
+type Overrides = Record<string, Partial<Record<EditableCol, string>>>;
+
+const rowKey = (sheet: string, dong: number) => `${sheet}|${dong}`;
+
+const COL_LABEL: Record<EditableCol, string> = {
+  grade: "Lớp",
+  course: "Khoá",
+  tuition: "Học phí",
+  center: "Cơ sở",
+  parentName: "Tên PH",
+  parentCccd: "CCCD PH",
+  address: "Địa chỉ",
+  note: "Ghi chú",
+};
+
+async function postImport(
+  file: File,
+  mode: "dry-run" | "confirm",
+  overrides: Overrides = {},
+): Promise<DryRunData> {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("mode", mode);
+  const list = Object.entries(overrides)
+    .map(([k, values]) => {
+      const [sheet, dong] = k.split("|");
+      return { sheet, row: Number(dong), values };
+    })
+    .filter((o) => Number.isInteger(o.row) && Object.keys(o.values).length > 0);
+  if (list.length > 0) fd.append("overrides", JSON.stringify(list));
   const res = await fetch("/api/admin/import/leads/registered", { method: "POST", body: fd });
   const json = (await res.json().catch(() => null)) as
     | { ok: true; data: DryRunData }
@@ -70,13 +109,24 @@ export default function ImportRegisteredLeadsPage() {
   const [preview, setPreview] = useState<DryRunData | null>(null);
   const [result, setResult] = useState<DryRunData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Ô người nhập sửa tay ở màn xem thử; gửi kèm mỗi lần xem lại / ghi thật.
+  const [overrides, setOverrides] = useState<Overrides>({});
+
+  const setCell = (sheet: string, dong: number, col: EditableCol, value: string) => {
+    setOverrides((prev) => {
+      const k = rowKey(sheet, dong);
+      return { ...prev, [k]: { ...(prev[k] ?? {}), [col]: value } };
+    });
+  };
+
+  const editedCount = Object.values(overrides).reduce((n, v) => n + Object.keys(v).length, 0);
 
   const run = async (mode: "dry-run" | "confirm") => {
     if (!file) return;
     setBusy(mode);
     setError(null);
     try {
-      const data = await postImport(file, mode);
+      const data = await postImport(file, mode, overrides);
       if (mode === "dry-run") {
         setPreview(data);
         setResult(null);
@@ -236,20 +286,90 @@ export default function ImportRegisteredLeadsPage() {
           )}
 
           {(preview.canKiemTra?.length ?? 0) > 0 && (
-            <PreviewTable
-              title={`Cần kiểm tra (${preview.canKiemTra!.length}) — VẪN import được, nhưng nên sửa trong Excel rồi tải lại`}
-              head={["Sheet", "Dòng", "Học viên", "SĐT", "Đã đóng", "Thiếu / cần xác nhận"]}
-              rows={preview.canKiemTra!.map((w) => [
-                w.sheet,
-                String(w.dong),
-                w.hocVien,
-                w.sdt,
-                w.daDong === null
-                  ? "—"
-                  : `${w.daDong.toLocaleString("vi-VN")}đ${w.cachDong === "HALF" ? " (50%)" : ""}`,
-                w.thieu.join(" · "),
-              ])}
-            />
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold">
+                  Cần kiểm tra ({preview.canKiemTra!.length}) — sửa thẳng ở đây rồi bấm{" "}
+                  <b>Xem thử lại</b>
+                </p>
+                {editedCount > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                    đã sửa {editedCount} ô (chưa ghi)
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => run("dry-run")}
+                  disabled={busy !== null || editedCount === 0}
+                  className="rounded-md border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  {busy === "dry-run" ? "Đang tính lại…" : "Xem thử lại"}
+                </button>
+                {editedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setOverrides({})}
+                    disabled={busy !== null}
+                    className="rounded-md border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-50 disabled:opacity-50"
+                  >
+                    Bỏ hết sửa
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-neutral-500">
+                Sửa ở đây chỉ áp cho lượt import này, KHÔNG đụng file Excel gốc. Tuổi và số
+                tiền được tính lại theo giá trị mới sau khi bấm Xem thử lại. Muốn đổi SĐT hoặc
+                tên học viên thì sửa trong Excel rồi tải lại — hai trường đó quyết định gộp
+                trùng nên không cho sửa ở đây.
+              </p>
+              <div className="space-y-2">
+                {preview.canKiemTra!.slice(0, 200).map((w) => {
+                  const k = rowKey(w.sheet, w.dong);
+                  const edited = overrides[k] ?? {};
+                  const val = (c: EditableCol) => edited[c] ?? w.giaTri[c];
+                  return (
+                    <div key={k} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                      <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                        <b className="text-neutral-900">{w.hocVien}</b>
+                        <span className="text-neutral-500">{w.sdt}</span>
+                        <span className="text-xs text-neutral-400">
+                          {w.sheet} · dòng {w.dong}
+                        </span>
+                        <span className="text-xs text-neutral-600">
+                          tuổi: <b>{w.tuoi ?? "—"}</b> · đã đóng:{" "}
+                          <b>
+                            {w.daDong === null ? "—" : `${w.daDong.toLocaleString("vi-VN")}đ`}
+                          </b>
+                          {w.cachDong === "HALF" && " (50% — còn nợ)"}
+                        </span>
+                      </div>
+                      <p className="mb-2 text-xs text-amber-800">{w.thieu.join(" · ")}</p>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {(Object.keys(COL_LABEL) as EditableCol[]).map((c) => (
+                          <label key={c} className="text-xs text-neutral-600">
+                            {COL_LABEL[c]}
+                            <input
+                              value={val(c)}
+                              onChange={(e) => setCell(w.sheet, w.dong, c, e.target.value)}
+                              className={`mt-0.5 w-full rounded border px-2 py-1 text-sm ${
+                                edited[c] !== undefined
+                                  ? "border-amber-400 bg-amber-50"
+                                  : "border-neutral-300"
+                              }`}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {preview.canKiemTra!.length > 200 && (
+                  <p className="text-xs text-neutral-500">
+                    Hiển thị 200/{preview.canKiemTra!.length} dòng.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
 
           {preview.seGop.length > 0 && (

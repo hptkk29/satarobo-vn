@@ -24,6 +24,7 @@ import { getAuditActor } from "@/lib/audit/log";
 import { checkPermission } from "@/lib/auth/check-permission";
 import {
   parseRegisteredSheets,
+  type RegisteredRowOverride,
   planRegisteredImport,
   splitMergesByScope,
   buildCourseKeyMap,
@@ -36,6 +37,47 @@ export const maxDuration = 60;
 
 function err(status: number, code: string, message: string) {
   return NextResponse.json({ ok: false, error: { code, message } }, { status });
+}
+
+const OVERRIDABLE = new Set([
+  "grade", "course", "tuition", "center",
+  "parentName", "parentCccd", "address", "note", "source", "sales",
+]);
+
+/**
+ * Đọc danh sách ô đã sửa từ form. Bỏ qua im lặng những gì không hợp lệ thay vì
+ * 400: một ô sửa hỏng không đáng làm hỏng cả lượt import 100 dòng — và cột không
+ * nằm trong allowlist thì KHÔNG được đè (SĐT/tên học viên là định danh gộp trùng).
+ */
+function parseOverrides(raw: FormDataEntryValue | null): RegisteredRowOverride[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  let arr: unknown;
+  try {
+    arr = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(arr)) return [];
+  const out: RegisteredRowOverride[] = [];
+  for (const it of arr.slice(0, 2000)) {
+    if (!it || typeof it !== "object") continue;
+    const o = it as Record<string, unknown>;
+    const sheet = typeof o.sheet === "string" ? o.sheet : null;
+    const row = typeof o.row === "number" && Number.isInteger(o.row) ? o.row : null;
+    if (!sheet || row === null || row < 1) continue;
+    const vals = o.values;
+    if (!vals || typeof vals !== "object") continue;
+    const values: Record<string, string> = {};
+    for (const [k, v] of Object.entries(vals as Record<string, unknown>)) {
+      if (!OVERRIDABLE.has(k)) continue;
+      if (typeof v !== "string") continue;
+      values[k] = v.slice(0, 300);
+    }
+    if (Object.keys(values).length > 0) {
+      out.push({ sheet, row, values } as RegisteredRowOverride);
+    }
+  }
+  return out;
 }
 
 export async function POST(req: NextRequest) {
@@ -78,7 +120,11 @@ export async function POST(req: NextRequest) {
     return err(400, "INVALID_XLSX", `Không đọc được file Excel: ${e instanceof Error ? e.message : "Unknown"}`);
   }
 
-  const parsed = parseRegisteredSheets(sheets);
+  // 04/08 — sửa tay ở màn xem thử. Nhận danh sách ô đã sửa, đè vào lúc phân tích
+  // để MỌI suy diễn (tuổi, tiền, cơ sở, gộp trùng, cảnh báo) tính lại theo giá trị
+  // người nhập nhìn thấy — không có khoảng lệch giữa bản xem và bản ghi.
+  const overrides = parseOverrides(form.get("overrides"));
+  const parsed = parseRegisteredSheets(sheets, overrides);
 
   // ── Context resolve từ DB (center/orgUnit theo code — dual-write 2-phase như
   // route import leads sự kiện; course theo tên/slug; user active cho fuzzy Sales).
@@ -222,6 +268,19 @@ export async function POST(req: NextRequest) {
           thieu: c.warnings,
           daDong: c.paidAmount,
           cachDong: c.feeMode,
+          tuoi: c.ageYears,
+          // Giá trị ĐANG dùng (đã tính cả ô người nhập vừa sửa) → đổ vào ô nhập
+          // trên màn, để sửa tiếp là sửa trên chính con số mình đang nhìn.
+          giaTri: {
+            grade: c.grade ?? "",
+            course: c.courseRaw ?? "",
+            tuition: c.tuitionRaw ?? "",
+            center: c.centerCode ?? "",
+            parentName: p.parentName ?? "",
+            parentCccd: p.parentCccd ?? "",
+            address: p.address ?? "",
+            note: c.noteRaw ?? "",
+          },
         })),
     ),
   };

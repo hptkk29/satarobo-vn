@@ -8,6 +8,7 @@ import {
   parseTuitionAmount,
   feeModeFromNote,
   paidAmountFromNote,
+  parseRegisteredSheets,
   PAID_NOTE_TAG,
 } from "./import-registered";
 
@@ -75,5 +76,58 @@ describe("paidAmountFromNote — đọc ngược để điền sẵn ô 'đã đ
   it("note không có nhãn → null (không điền bừa)", () => {
     expect(paidAmountFromNote("[Import ĐK Excel] Khoá ĐK: Sata 4")).toBeNull();
     expect(paidAmountFromNote(null)).toBeNull();
+  });
+});
+
+describe("sửa tay ở màn xem thử — giá trị đè phải kéo theo mọi suy diễn", () => {
+  const sheet = (rows: (string | null)[][]) => [{ name: "T8", rows }];
+  const HEAD = [
+    "Ngày", "Họ và Tên học viên", "Lớp", "Số điện thoại",
+    "Khoá học đăng ký", "Học phí", "Cơ sở", "Tên Phụ Huynh", "Ghi chú",
+  ];
+  const ROW = [
+    "1/8/26", "BÉ A", "", "0905000111", "", "", "CS1: N.Hữu Thọ", "", "",
+  ];
+
+  it("chưa sửa → cảnh báo thiếu Lớp / Khoá / Học phí / Tên PH", () => {
+    const p = parseRegisteredSheets(sheet([HEAD, ROW]));
+    const c = p.parents[0]!.children[0]!;
+    expect(c.ageYears).toBeNull();
+    expect(c.paidAmount).toBeNull();
+    expect(c.warnings.join(" | ")).toContain("thiếu Lớp");
+    expect(c.warnings.join(" | ")).toContain("thiếu Khoá học đăng ký");
+    expect(c.warnings.join(" | ")).toContain("thiếu Tên Phụ Huynh");
+  });
+
+  it("sửa Lớp + Học phí + Tên PH → tuổi/tiền tính lại VÀ cảnh báo tự hết", () => {
+    const p = parseRegisteredSheets(sheet([HEAD, ROW]), [
+      {
+        sheet: "T8",
+        row: 2, // dòng Excel của ROW (header ở dòng 1)
+        values: { grade: "Lớp 4", tuition: "8,640,000vnd", parentName: "Chị B", course: "Sata 4" },
+      },
+    ]);
+    const c = p.parents[0]!.children[0]!;
+    expect(c.ageYears).toBe(9);
+    expect(c.paidAmount).toBe(8_640_000);
+    expect(c.feeMode).toBe("FULL");
+    expect(p.parents[0]!.parentName).toBe("Chị B");
+    for (const gone of ["thiếu Lớp", "thiếu Học phí", "thiếu Tên Phụ Huynh", "thiếu Khoá"]) {
+      expect(c.warnings.join(" | ")).not.toContain(gone);
+    }
+  });
+
+  it("sửa Ghi chú thành '50%' → chuyển sang HALF (còn nợ)", () => {
+    const p = parseRegisteredSheets(sheet([HEAD, ROW]), [
+      { sheet: "T8", row: 2, values: { tuition: "4,320,000vnd", note: "Đóng 50% học phí" } },
+    ]);
+    expect(p.parents[0]!.children[0]!.feeMode).toBe("HALF");
+  });
+
+  it("override dòng KHÁC không ảnh hưởng dòng này", () => {
+    const p = parseRegisteredSheets(sheet([HEAD, ROW]), [
+      { sheet: "T8", row: 99, values: { grade: "Lớp 9" } },
+    ]);
+    expect(p.parents[0]!.children[0]!.ageYears).toBeNull();
   });
 });

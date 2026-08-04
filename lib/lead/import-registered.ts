@@ -77,6 +77,44 @@ export interface ParsedRegisteredParent {
   children: ParsedRegisteredChild[];
 }
 
+/**
+ * 04/08 — SỬA TAY NGAY TRÊN MÀN XEM THỬ.
+ *
+ * Người nhập soi bảng "cần kiểm tra", sửa ô nào thì gửi kèm giá trị mới; parser
+ * ĐÈ giá trị đó lên ô gốc TRƯỚC khi suy diễn. Nhờ vậy mọi thứ phía sau tự tính
+ * lại theo giá trị đã sửa: tuổi, số tiền, cách đóng, cơ sở, gộp trùng, và cả
+ * cảnh báo (sửa xong thì cảnh báo tự biến mất) — không có đường nào lệch giữa
+ * cái người ta nhìn thấy và cái được ghi.
+ *
+ * Khoá theo `sheet` + số dòng Excel: ổn định qua các lần xem thử lại.
+ * KHÔNG cho đè `phone`/`studentName` — hai trường đó là ĐỊNH DANH gộp trùng; sửa
+ * chúng ở đây là âm thầm đổi lead nào gộp vào lead nào. Sai số điện thoại thì
+ * sửa trong Excel rồi tải lại.
+ */
+export type OverridableCol =
+  | "grade"
+  | "course"
+  | "tuition"
+  | "center"
+  | "parentName"
+  | "parentCccd"
+  | "address"
+  | "note"
+  | "source"
+  | "sales";
+
+export interface RegisteredRowOverride {
+  sheet: string;
+  /** Số dòng Excel (1-based) — đúng con số hiện ở bảng xem thử. */
+  row: number;
+  values: Partial<Record<OverridableCol, string>>;
+}
+
+/** Khoá tra override cho 1 dòng. */
+export function overrideKey(sheet: string, row: number): string {
+  return `${sheet}|${row}`;
+}
+
 export interface ParsedRegistered {
   /** Tổng dòng dữ liệu đã đọc (sau header, mọi sheet — kể cả dòng trống). */
   totalDataRows: number;
@@ -270,7 +308,13 @@ function findHeader(rows: CellValue[][]): { rowIdx: number; cols: Map<ColKey, nu
 
 // ─── Parse ──────────────────────────────────────────────────────────────────
 
-export function parseRegisteredSheets(sheets: SheetAoA[]): ParsedRegistered {
+export function parseRegisteredSheets(
+  sheets: SheetAoA[],
+  overrides: readonly RegisteredRowOverride[] = [],
+): ParsedRegistered {
+  const overrideByRow = new Map<string, Partial<Record<OverridableCol, string>>>();
+  for (const o of overrides) overrideByRow.set(overrideKey(o.sheet, o.row), o.values);
+
   const errors: SheetRowError[] = [];
   let totalDataRows = 0;
   let skippedEmpty = 0;
@@ -292,7 +336,7 @@ export function parseRegisteredSheets(sheets: SheetAoA[]): ParsedRegistered {
       continue;
     }
     const { rowIdx, cols } = header;
-    const col = (row: CellValue[], key: ColKey): CellValue => {
+    const rawCol = (row: CellValue[], key: ColKey): CellValue => {
       const idx = cols.get(key);
       return idx === undefined ? null : row[idx];
     };
@@ -301,6 +345,14 @@ export function parseRegisteredSheets(sheets: SheetAoA[]): ParsedRegistered {
       const row = sheet.rows[i];
       const excelRow = i + 1; // 1-based như Excel
       totalDataRows++;
+
+      // Giá trị người nhập sửa tay ở màn xem thử ĐÈ lên ô gốc, TRƯỚC mọi suy diễn.
+      // Chuỗi rỗng = "xoá ô này" (có chủ đích, để bỏ ghi chú rác).
+      const patch = overrideByRow.get(overrideKey(sheet.name, excelRow));
+      const col = (r: CellValue[], key: ColKey): CellValue => {
+        if (patch && key in patch) return patch[key as OverridableCol] ?? null;
+        return rawCol(r, key);
+      };
 
       const studentName = cellStr(col(row, "studentName"));
       const phoneCell = col(row, "phone");
