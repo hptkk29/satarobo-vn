@@ -467,7 +467,9 @@ export function parseRegisteredSheets(
         // Cùng luật với màn tạo đơn: giảm giá PHẢI có giải trình.
         warnings.push("có giảm giá nhưng CHƯA giải trình");
       }
-      if (!parentName) warnings.push("thiếu Tên Phụ Huynh");
+      // File không ghi tên PH KHÔNG còn là "thiếu" — hệ thống tự điền "Phụ huynh của
+      // <tên con>" (chốt 05/08). Vẫn nêu ra để người nhập biết mà sửa nếu có tên thật.
+      if (!parentName) warnings.push('tên PH tự điền theo tên con — sửa nếu biết tên thật');
       if (!cellStr(col(row, "parentCccd"))) warnings.push("thiếu CCCD Phụ Huynh");
       if (!cellStr(col(row, "address"))) warnings.push("thiếu Địa chỉ");
 
@@ -624,6 +626,29 @@ export function compactKey(raw: unknown): string {
 }
 
 /** Map tên/slug khoá (cả dạng chuẩn hoá lẫn dạng nén) → Course.id. */
+/**
+ * Tên hiển thị của phụ huynh khi file KHÔNG ghi tên (chủ dự án chốt 05/08/2026:
+ * điền "Phụ huynh của <tên con>").
+ *
+ * Rất nhiều dòng thật chỉ có SĐT — để trống thì danh sách CRM hiện một loạt lead
+ * không tên, Sale không biết gọi cho ai. Lấy tên con làm mốc nhận diện gia đình.
+ * Nhiều con thì nêu đủ (2 em) hoặc rút gọn (≥3 em) cho khỏi dài.
+ */
+export function parentDisplayName(
+  parentName: string | null | undefined,
+  children: { fullName: string }[],
+  phone: string,
+): string {
+  const given = (parentName ?? "").trim();
+  if (given) return given;
+
+  const names = children.map((c) => c.fullName.trim()).filter(Boolean);
+  if (names.length === 0) return `Phụ huynh của ${phone}`; // không cả tên con → còn SĐT
+  if (names.length === 1) return `Phụ huynh của ${names[0]}`;
+  if (names.length === 2) return `Phụ huynh của ${names[0]} và ${names[1]}`;
+  return `Phụ huynh của ${names[0]} và ${names.length - 1} em khác`;
+}
+
 export function buildCourseKeyMap(
   courses: { id: string; name: string; slug: string | null }[],
 ): Map<string, string> {
@@ -871,8 +896,7 @@ export function planRegisteredImport(
     if (!existing) {
       creates.push({
         phone: p.phone,
-        // Nhiều dòng thật không có tên PH → fallback theo tên con (đánh dấu rõ để Sale bổ sung).
-        parentName: p.parentName ?? `PH của ${p.children[0]?.fullName ?? p.phone} (chưa rõ tên)`,
+        parentName: parentDisplayName(p.parentName, p.children, p.phone),
         centerId,
         orgUnitId,
         courseId: leadCourseId,

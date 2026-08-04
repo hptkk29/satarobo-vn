@@ -17,7 +17,42 @@ import {
   PAY2_NOTE_TAG,
   dueDate2FromNote,
   DUE2_NOTE_TAG,
+  parentDisplayName,
 } from "./import-registered";
+
+// Chủ dự án chốt 05/08: file không ghi tên PH → điền "Phụ huynh của <tên con>".
+// Rất nhiều dòng thật chỉ có SĐT; để trống thì CRM đầy lead không tên.
+describe("parentDisplayName", () => {
+  const ch = (...names: string[]) => names.map((fullName) => ({ fullName }));
+
+  it("có tên thật → giữ nguyên, không đụng vào", () => {
+    expect(parentDisplayName("Lisa Dương Hà", ch("HOÀNG VĨNH KHANG"), "0905")).toBe("Lisa Dương Hà");
+  });
+
+  it("không tên + 1 con → 'Phụ huynh của <con>'", () => {
+    expect(parentDisplayName(null, ch("VÕ NGUYÊN KHANG"), "84914324318")).toBe(
+      "Phụ huynh của VÕ NGUYÊN KHANG",
+    );
+  });
+
+  it("không tên + 2 con → nêu đủ cả hai", () => {
+    expect(parentDisplayName("", ch("Đoàn Thanh Tra", "Nguyễn Phạm Gia Huy"), "0937")).toBe(
+      "Phụ huynh của Đoàn Thanh Tra và Nguyễn Phạm Gia Huy",
+    );
+  });
+
+  it("không tên + ≥3 con → rút gọn cho khỏi dài", () => {
+    expect(parentDisplayName(null, ch("A", "B", "C"), "0937")).toBe("Phụ huynh của A và 2 em khác");
+  });
+
+  it("tên chỉ có khoảng trắng → coi như trống", () => {
+    expect(parentDisplayName("   ", ch("Bé A"), "0937")).toBe("Phụ huynh của Bé A");
+  });
+
+  it("không cả tên con → lấy SĐT làm mốc, không trả chuỗi cụt", () => {
+    expect(parentDisplayName(null, [], "84905285992")).toBe("Phụ huynh của 84905285992");
+  });
+});
 
 // Bug 04/08: regex viết `\d` trong template literal → bị nuốt thành `d{4}-d{2}-d{2}`,
 // không bao giờ khớp ngày, nên hạn đợt 2 luôn đọc ra null mà không báo lỗi gì.
@@ -131,14 +166,16 @@ describe("sửa tay ở màn xem thử — giá trị đè phải kéo theo mọ
     "1/8/26", "BÉ A", "", "0905000111", "", "", "CS1: N.Hữu Thọ", "", "",
   ];
 
-  it("chưa sửa → cảnh báo thiếu Lớp / Khoá / Học phí / Tên PH", () => {
+  it("chưa sửa → cảnh báo thiếu Lớp / Khoá / Học phí; tên PH thì TỰ ĐIỀN chứ không báo thiếu", () => {
     const p = parseRegisteredSheets(sheet([HEAD, ROW]));
     const c = p.parents[0]!.children[0]!;
     expect(c.ageYears).toBeNull();
     expect(c.paidAmount).toBeNull();
     expect(c.warnings.join(" | ")).toContain("thiếu Lớp");
     expect(c.warnings.join(" | ")).toContain("thiếu Khoá học đăng ký");
-    expect(c.warnings.join(" | ")).toContain("thiếu Tên Phụ Huynh");
+    // 05/08 — không còn coi là "thiếu": hệ thống điền "Phụ huynh của <tên con>".
+    expect(c.warnings.join(" | ")).toContain("tên PH tự điền");
+    expect(c.warnings.join(" | ")).not.toContain("thiếu Tên Phụ Huynh");
   });
 
   it("sửa Lớp + Học phí + Tên PH → tuổi/tiền tính lại VÀ cảnh báo tự hết", () => {
@@ -154,7 +191,7 @@ describe("sửa tay ở màn xem thử — giá trị đè phải kéo theo mọ
     expect(c.paidAmount).toBe(8_640_000);
     expect(c.feeMode).toBe("FULL");
     expect(p.parents[0]!.parentName).toBe("Chị B");
-    for (const gone of ["thiếu Lớp", "thiếu Học phí", "thiếu Tên Phụ Huynh", "thiếu Khoá"]) {
+    for (const gone of ["thiếu Lớp", "thiếu Học phí", "tên PH tự điền", "thiếu Khoá"]) {
       expect(c.warnings.join(" | ")).not.toContain(gone);
     }
   });

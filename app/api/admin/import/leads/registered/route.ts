@@ -32,6 +32,7 @@ import {
   buildCourseKeyMap,
   compactKey,
   normalizeVi,
+  parentDisplayName,
   type SheetAoA,
   type CellValue,
   type ExistingLead,
@@ -398,7 +399,9 @@ export async function POST(req: NextRequest) {
             course: c.courseRaw ?? "",
             tuition: c.tuitionRaw ?? "",
             center: c.centerCode ?? "",
-            parentName: p.parentName ?? "",
+            // File không ghi tên PH → hiện SẴN tên sẽ được ghi ("Phụ huynh của <tên con>")
+            // thay vì ô trống, để người nhập thấy đúng cái hệ thống sắp lưu và sửa đè được.
+            parentName: parentDisplayName(p.parentName, p.children, p.phone),
             parentCccd: p.parentCccd ?? "",
             address: p.address ?? "",
             note: c.noteRaw ?? "",
