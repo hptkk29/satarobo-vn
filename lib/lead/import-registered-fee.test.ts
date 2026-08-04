@@ -9,8 +9,31 @@ import {
   feeModeFromNote,
   paidAmountFromNote,
   parseRegisteredSheets,
+  discountFromNote,
+  payIn2FromNoteTag,
   PAID_NOTE_TAG,
+  DISCOUNT_NOTE_TAG,
+  DISCOUNT_REASON_TAG,
+  PAY2_NOTE_TAG,
 } from "./import-registered";
+
+/** Dựng lại note giống buildChildNote (hàm đó không export) để kiểm vòng ghi→đọc. */
+function buildChildNoteForTest(c: {
+  paidAmount: number | null;
+  discountKind: "AMOUNT" | "PERCENT" | null;
+  discountValue: number | null;
+  discountReason: string | null;
+  payIn2: boolean;
+}): string {
+  const parts: string[] = [];
+  if (c.paidAmount !== null) parts.push(`${PAID_NOTE_TAG}${c.paidAmount}`);
+  if (c.discountKind && c.discountValue !== null) {
+    parts.push(`${DISCOUNT_NOTE_TAG}${c.discountValue}${c.discountKind === "PERCENT" ? "%" : "đ"}`);
+  }
+  if (c.discountReason) parts.push(`${DISCOUNT_REASON_TAG}${c.discountReason}`);
+  if (c.payIn2) parts.push(PAY2_NOTE_TAG);
+  return `[Import ĐK Excel] ${parts.join(" · ")}`;
+}
 
 describe("ageFromGrade — lớp văn hoá → tuổi", () => {
   it("lớp 1 = 6 tuổi, lớp 9 = 14 tuổi", () => {
@@ -129,5 +152,84 @@ describe("sửa tay ở màn xem thử — giá trị đè phải kéo theo mọ
       { sheet: "T8", row: 99, values: { grade: "Lớp 9" } },
     ]);
     expect(p.parents[0]!.children[0]!.ageYears).toBeNull();
+  });
+});
+
+describe("trả 2 đợt + giảm giá nhập ở màn xem thử", () => {
+  const HEAD = [
+    "Ngày", "Họ và Tên học viên", "Lớp", "Số điện thoại",
+    "Khoá học đăng ký", "Học phí", "Cơ sở", "Tên Phụ Huynh", "Ghi chú",
+  ];
+  const mk = (note: string, over?: Record<string, string>) =>
+    parseRegisteredSheets(
+      [{ name: "T8", rows: [HEAD, ["1/8/26", "BÉ A", "Lớp 4", "0905000111", "Sata 4", "4,320,000vnd", "CS1: N.Hữu Thọ", "Chị B", note]] }],
+      over ? [{ sheet: "T8", row: 2, values: over }] : [],
+    ).parents[0]!.children[0]!;
+
+  it("ghi chú nhắc 50% hoặc '2 đợt' → TỰ TICK trả 2 đợt", () => {
+    expect(mk("Đóng 50% học phí ngày 15/6").payIn2).toBe(true);
+    expect(mk("Khách xin đóng 2 đợt").payIn2).toBe(true);
+    expect(mk("Đợt 1 ngày 8/6").payIn2).toBe(true);
+  });
+
+  it("ghi chú thường → KHÔNG tick", () => {
+    expect(mk("cuối tháng full phí").payIn2).toBe(false);
+    expect(mk("").payIn2).toBe(false);
+  });
+
+  it("người nhập bỏ tick tay → thắng suy đoán từ ghi chú", () => {
+    expect(mk("Đóng 50% học phí", { payIn2: "0" }).payIn2).toBe(false);
+    expect(mk("full phí", { payIn2: "1" }).payIn2).toBe(true);
+  });
+
+  it("giảm theo % kẹp trần 100, theo số tiền giữ nguyên", () => {
+    expect(mk("", { discountKind: "PERCENT", discountValue: "10" }).discountValue).toBe(10);
+    expect(mk("", { discountKind: "PERCENT", discountValue: "999" }).discountValue).toBe(100);
+    expect(mk("", { discountKind: "AMOUNT", discountValue: "500,000" }).discountValue).toBe(500_000);
+  });
+
+  it("giảm giá KHÔNG giải trình → cảnh báo (cùng luật màn tạo đơn)", () => {
+    const c = mk("", { discountKind: "AMOUNT", discountValue: "500000" });
+    expect(c.warnings.join(" | ")).toContain("CHƯA giải trình");
+    const ok = mk("", {
+      discountKind: "AMOUNT", discountValue: "500000", discountReason: "Con quý đối tác",
+    });
+    expect(ok.warnings.join(" | ")).not.toContain("CHƯA giải trình");
+  });
+
+  it("quyết định tiền được ghi vào note để bước chốt đọc lại", () => {
+    const c = mk("Đóng 50%", {
+      discountKind: "PERCENT", discountValue: "10", discountReason: "CT anh em",
+    });
+    const note = buildChildNoteForTest(c);
+    expect(discountFromNote(note)).toEqual({ kind: "PERCENT", value: 10 });
+    expect(payIn2FromNoteTag(note)).toBe(true);
+    expect(paidAmountFromNote(note)).toBe(4_320_000);
+  });
+});
+
+describe("CƠ SỞ — tuyệt đối không được lệch", () => {
+  const HEAD = ["Họ và Tên học viên", "Số điện thoại", "MÃ HỌC VIÊN", "Cơ sở"];
+  const parse = (row: (string | null)[], over?: Record<string, string>) =>
+    parseRegisteredSheets(
+      [{ name: "T8", rows: [HEAD, row] }],
+      over ? [{ sheet: "T8", row: 2, values: over }] : [],
+    ).parents[0]!;
+
+  it("cột Cơ sở THẮNG mã học viên khi hai bên lệch", () => {
+    // Ca thật trong file: HOÀNG VĨNH KHANG mã CS1 nhưng cột Cơ sở ghi CS2.
+    expect(parse(["BÉ A", "0905000111", "CS1.HV.0007", "CS2: Hoàng Diệu"]).centerCode).toBe("CS2");
+  });
+
+  it("cột Cơ sở trống → lấy từ tiền tố mã học viên", () => {
+    expect(parse(["BÉ A", "0905000111", "CS1.HV.0031", ""]).centerCode).toBe("CS1");
+  });
+
+  it("không suy được cơ sở → để NULL, không đoán bừa", () => {
+    expect(parse(["BÉ A", "0905000111", "", ""]).centerCode).toBeNull();
+  });
+
+  it("sửa tay cơ sở ở màn xem thử thì theo đúng giá trị đã sửa", () => {
+    expect(parse(["BÉ A", "0905000111", "CS1.HV.0031", ""], { center: "CS2" }).centerCode).toBe("CS2");
   });
 });

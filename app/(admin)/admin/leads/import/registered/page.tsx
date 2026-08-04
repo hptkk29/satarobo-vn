@@ -36,6 +36,14 @@ interface DryRunData {
     daDong: number | null;
     cachDong: "FULL" | "HALF";
     tuoi: number | null;
+    giaNiemYet: number;
+    giamTinhRa: number;
+    tongPhaiNop: number;
+    conLai: number;
+    tra2Dot: boolean;
+    giamKieu: "AMOUNT" | "PERCENT" | null;
+    giamGiaTri: number | null;
+    giamLyDo: string | null;
     giaTri: Record<EditableCol, string>;
   }[];
   // Dòng gắn cơ sở NGOÀI phạm vi quyền của bạn → hệ thống KHÔNG tạo (cách ly cơ sở).
@@ -57,11 +65,20 @@ type EditableCol =
   | "parentName"
   | "parentCccd"
   | "address"
-  | "note";
+  | "note"
+  | "payIn2"
+  | "discountKind"
+  | "discountValue"
+  | "discountReason";
 
 type Overrides = Record<string, Partial<Record<EditableCol, string>>>;
 
 const rowKey = (sheet: string, dong: number) => `${sheet}|${dong}`;
+
+/** 8 cột lấy từ Excel — hiện thành lưới ô nhập. 4 quyết định tiền có UI riêng bên dưới. */
+const EXCEL_COLS = [
+  "grade", "course", "tuition", "center", "parentName", "parentCccd", "address", "note",
+] as const;
 
 const COL_LABEL: Record<EditableCol, string> = {
   grade: "Lớp",
@@ -72,6 +89,10 @@ const COL_LABEL: Record<EditableCol, string> = {
   parentCccd: "CCCD PH",
   address: "Địa chỉ",
   note: "Ghi chú",
+  payIn2: "Trả 2 đợt",
+  discountKind: "Kiểu giảm",
+  discountValue: "Mức giảm",
+  discountReason: "Giải trình giảm",
 };
 
 async function postImport(
@@ -345,7 +366,7 @@ export default function ImportRegisteredLeadsPage() {
                       </div>
                       <p className="mb-2 text-xs text-amber-800">{w.thieu.join(" · ")}</p>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {(Object.keys(COL_LABEL) as EditableCol[]).map((c) => (
+                        {EXCEL_COLS.map((c) => (
                           <label key={c} className="text-xs text-neutral-600">
                             {COL_LABEL[c]}
                             <input
@@ -359,6 +380,79 @@ export default function ImportRegisteredLeadsPage() {
                             />
                           </label>
                         ))}
+                      </div>
+
+                      {/* Khối TIỀN — giá niêm yết lấy theo khoá đang chọn ở ô "Khoá" trên. */}
+                      <div className="mt-3 rounded-md border border-neutral-200 bg-white p-2">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                          <label className="inline-flex items-center gap-1.5 font-medium text-neutral-800">
+                            <input
+                              type="checkbox"
+                              checked={
+                                edited.payIn2 !== undefined ? edited.payIn2 === "1" : w.tra2Dot
+                              }
+                              onChange={(e) =>
+                                setCell(w.sheet, w.dong, "payIn2", e.target.checked ? "1" : "0")
+                              }
+                              className="h-4 w-4 rounded border-neutral-300"
+                            />
+                            Đóng 2 đợt
+                          </label>
+                          <span className="text-neutral-600">
+                            Giá niêm yết: <b>{w.giaNiemYet.toLocaleString("vi-VN")}đ</b>
+                            {w.giaNiemYet === 0 && (
+                              <span className="ml-1 text-red-600">(chưa khớp khoá)</span>
+                            )}
+                          </span>
+                          <span className="text-neutral-600">
+                            Tổng phải nộp: <b>{w.tongPhaiNop.toLocaleString("vi-VN")}đ</b>
+                            {w.giamTinhRa > 0 && ` (giảm ${w.giamTinhRa.toLocaleString("vi-VN")}đ)`}
+                          </span>
+                          <span className="text-neutral-600">
+                            Đã nộp: <b>{(w.daDong ?? 0).toLocaleString("vi-VN")}đ</b>
+                          </span>
+                          <span className={w.conLai > 0 ? "font-semibold text-amber-700" : "text-emerald-700"}>
+                            Còn lại: <b>{w.conLai.toLocaleString("vi-VN")}đ</b>
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <label className="text-xs text-neutral-600">
+                            {COL_LABEL.discountKind}
+                            <select
+                              value={edited.discountKind ?? w.giamKieu ?? ""}
+                              onChange={(e) =>
+                                setCell(w.sheet, w.dong, "discountKind", e.target.value)
+                              }
+                              className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm"
+                            >
+                              <option value="">— không giảm —</option>
+                              <option value="AMOUNT">Theo số tiền</option>
+                              <option value="PERCENT">Theo %</option>
+                            </select>
+                          </label>
+                          <label className="text-xs text-neutral-600">
+                            {COL_LABEL.discountValue}
+                            <input
+                              value={edited.discountValue ?? (w.giamGiaTri?.toString() ?? "")}
+                              onChange={(e) =>
+                                setCell(w.sheet, w.dong, "discountValue", e.target.value)
+                              }
+                              placeholder="vd 500000 hoặc 10"
+                              className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm"
+                            />
+                          </label>
+                          <label className="col-span-2 text-xs text-neutral-600">
+                            {COL_LABEL.discountReason}
+                            <input
+                              value={edited.discountReason ?? (w.giamLyDo ?? "")}
+                              onChange={(e) =>
+                                setCell(w.sheet, w.dong, "discountReason", e.target.value)
+                              }
+                              placeholder="bắt buộc khi có giảm giá"
+                              className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm"
+                            />
+                          </label>
+                        </div>
                       </div>
                     </div>
                   );

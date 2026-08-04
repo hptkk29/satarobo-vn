@@ -28,6 +28,8 @@ import {
   planRegisteredImport,
   splitMergesByScope,
   buildCourseKeyMap,
+  compactKey,
+  normalizeVi,
   type SheetAoA,
   type CellValue,
   type ExistingLead,
@@ -141,7 +143,7 @@ export async function POST(req: NextRequest) {
   const [centers, orgUnits, courses, users, existingLeads] = await Promise.all([
     sdb.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
     sdb.orgUnit.findMany({ where: { deletedAt: null }, select: { id: true, code: true } }),
-    sdb.course.findMany({ select: { id: true, name: true, slug: true } }),
+    sdb.course.findMany({ select: { id: true, name: true, slug: true, price: true } }),
     sdb.user.findMany({
       where: { deletedAt: null, isActive: true },
       select: { id: true, name: true, role: true, roles: true },
@@ -184,6 +186,9 @@ export async function POST(req: NextRequest) {
     const k = phoneKey(l.phone);
     if (!existingByPhone.has(k)) existingByPhone.set(k, l as ExistingLead);
   }
+
+  const courseKeyMap = buildCourseKeyMap(courses);
+  const priceByCourseId = new Map(courses.map((c) => [c.id, c.price ?? 0]));
 
   const plan = planRegisteredImport(parsed, {
     centerByCode: new Map(centers.filter((c) => c.code).map((c) => [c.code as string, c.id])),
@@ -269,6 +274,33 @@ export async function POST(req: NextRequest) {
           daDong: c.paidAmount,
           cachDong: c.feeMode,
           tuoi: c.ageYears,
+          // Tiền — tính TẠI ĐÂY vì cần giá niêm yết của khoá (parser thuần, không có DB).
+          ...(() => {
+            const courseId =
+              (c.courseRaw &&
+                (courseKeyMap.get(normalizeVi(c.courseRaw)) ??
+                  courseKeyMap.get(compactKey(c.courseRaw)))) ||
+              null;
+            const giaNiemYet = courseId ? (priceByCourseId.get(courseId) ?? 0) : 0;
+            const giam =
+              c.discountValue === null || !c.discountKind
+                ? 0
+                : c.discountKind === "PERCENT"
+                  ? Math.round((giaNiemYet * c.discountValue) / 100)
+                  : Math.min(c.discountValue, giaNiemYet);
+            const tongPhaiNop = Math.max(0, giaNiemYet - giam);
+            const daNop = c.paidAmount ?? 0;
+            return {
+              giaNiemYet,
+              giamTinhRa: giam,
+              tongPhaiNop,
+              conLai: Math.max(0, tongPhaiNop - daNop),
+              tra2Dot: c.payIn2,
+              giamKieu: c.discountKind,
+              giamGiaTri: c.discountValue,
+              giamLyDo: c.discountReason,
+            };
+          })(),
           // Giá trị ĐANG dùng (đã tính cả ô người nhập vừa sửa) → đổ vào ô nhập
           // trên màn, để sửa tiếp là sửa trên chính con số mình đang nhìn.
           giaTri: {

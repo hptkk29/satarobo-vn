@@ -60,6 +60,12 @@ export interface ParsedRegisteredChild {
   paidAmount: number | null;
   /** 04/08 — FULL: đã đóng đủ (công nợ 0) · HALF: ghi chú nhắc 50%, còn nợ. */
   feeMode: FeeMode;
+  /** 04/08 — khách trả làm 2 đợt (mặc định suy từ ghi chú, sửa tay được). */
+  payIn2: boolean;
+  /** 04/08 — chương trình giảm giá nhập tay ở màn xem thử. */
+  discountKind: DiscountKind | null;
+  discountValue: number | null;
+  discountReason: string | null;
   /** 04/08 — cảnh báo từng dòng để soi TRƯỚC khi ghi (không chặn import). */
   warnings: string[];
   sources: { sheet: string; row: number }[];
@@ -101,7 +107,12 @@ export type OverridableCol =
   | "address"
   | "note"
   | "source"
-  | "sales";
+  | "sales"
+  // 04/08 — không phải cột trong Excel, mà là quyết định người nhập gõ ở màn xem thử.
+  | "payIn2"
+  | "discountKind"
+  | "discountValue"
+  | "discountReason";
 
 export interface RegisteredRowOverride {
   sheet: string;
@@ -231,6 +242,22 @@ export function parseTuitionAmount(raw: string | null): number | null {
  * để người nhập soi, vì mỗi câu một kiểu và đoán sai là sai tiền.
  */
 export type FeeMode = "FULL" | "HALF";
+
+/** Kiểu giảm giá nhập ở màn xem thử — theo SỐ TIỀN hoặc theo %. */
+export type DiscountKind = "AMOUNT" | "PERCENT";
+
+/**
+ * Ghi chú có nói khách trả LÀM 2 ĐỢT không?
+ * Bắt cả "đóng 2 đợt" lẫn "50%" — 50% học phí nghĩa là còn một nửa, tức 2 đợt.
+ * Người nhập vẫn tick/bỏ tick tay được ở màn xem thử; đây chỉ là giá trị mặc định.
+ */
+export function payIn2FromNote(note: string | null): boolean {
+  if (!note) return false;
+  // Bỏ dấu trước khi khớp: chuỗi tiếng Việt vào đây từ nhiều nguồn (Excel, gõ tay,
+  // file test) và có cả dạng NFC lẫn NFD — so khớp trực tiếp "đợt" là trượt im lặng.
+  const n = normalizeVi(note);
+  return /50\s*%/.test(n) || /(2\s*dot|hai\s*dot|dot\s*1|dot\s*2)/.test(n);
+}
 
 export function feeModeFromNote(note: string | null): FeeMode {
   return note && /50\s*%/.test(note) ? "HALF" : "FULL";
@@ -393,6 +420,25 @@ export function parseRegisteredSheets(
       const paidAmount = parseTuitionAmount(tuitionRaw);
       const feeMode = feeModeFromNote(noteRaw);
 
+      // Trả 2 đợt: mặc định suy từ ghi chú ("2 đợt" / "50%"), người nhập tick lại được.
+      const payIn2Raw = patch?.payIn2;
+      const payIn2 =
+        payIn2Raw === undefined ? payIn2FromNote(noteRaw) : payIn2Raw === "1" || payIn2Raw === "true";
+
+      // Chương trình giảm giá — chỉ có khi người nhập gõ ở màn xem thử (file Excel
+      // không có cột này). Giá trị vô lý → bỏ, KHÔNG tự sửa thành số khác.
+      const dkRaw = patch?.discountKind;
+      const discountKind: DiscountKind | null =
+        dkRaw === "AMOUNT" || dkRaw === "PERCENT" ? dkRaw : null;
+      const dvNum = Number(String(patch?.discountValue ?? "").replace(/[.,\s]/g, ""));
+      const discountValue =
+        discountKind && Number.isFinite(dvNum) && dvNum > 0
+          ? discountKind === "PERCENT"
+            ? Math.min(100, Math.round(dvNum))
+            : Math.round(dvNum)
+          : null;
+      const discountReason = (patch?.discountReason ?? "").trim() || null;
+
       // 04/08 — CẢNH BÁO, không phải lỗi: dòng vẫn vào được, chỉ là người nhập cần
       // soi trước khi ghi. Mục đích: thấy hết ở màn xem thử, khỏi phải dò từng lead
       // sau khi đã nhập vào hệ thống.
@@ -407,6 +453,10 @@ export function parseRegisteredSheets(
         warnings.push("ghi chú có giảm theo % → xác nhận số đã đóng");
       } else if (noteRaw && /(đợt|cọc|còn lại|còn thiếu)/i.test(noteRaw)) {
         warnings.push("ghi chú nhắc đợt/cọc/còn lại → xác nhận số đã đóng");
+      }
+      if (discountValue !== null && !discountReason) {
+        // Cùng luật với màn tạo đơn: giảm giá PHẢI có giải trình.
+        warnings.push("có giảm giá nhưng CHƯA giải trình");
       }
       if (!parentName) warnings.push("thiếu Tên Phụ Huynh");
       if (!cellStr(col(row, "parentCccd"))) warnings.push("thiếu CCCD Phụ Huynh");
@@ -428,6 +478,10 @@ export function parseRegisteredSheets(
         ageYears,
         paidAmount,
         feeMode,
+        payIn2,
+        discountKind,
+        discountValue,
+        discountReason,
         warnings,
       };
       const rowParent = {
@@ -675,6 +729,26 @@ export const IMPORT_NOTE_MARKER = "[Import ĐK Excel]";
  * thay vì người nhập gõ tay từng dòng. Đổi chuỗi này là gãy chỗ đọc — sửa cả hai.
  */
 export const PAID_NOTE_TAG = "ĐãĐóng=";
+/** 04/08 — quyết định nhập ở màn xem thử, đọc lại ở bước "Chốt hàng loạt". */
+export const DISCOUNT_NOTE_TAG = "Giảm=";
+export const DISCOUNT_REASON_TAG = "LýDoGiảm=";
+export const PAY2_NOTE_TAG = "Trả2Đợt";
+
+/** Đọc ngược khoản giảm từ note. null nếu note không ghi giảm giá. */
+export function discountFromNote(
+  note: string | null | undefined,
+): { kind: DiscountKind; value: number } | null {
+  const m = new RegExp(`${DISCOUNT_NOTE_TAG}(\\d+)(%|đ)`).exec(note ?? "");
+  if (!m) return null;
+  const value = Number(m[1]);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return { kind: m[2] === "%" ? "PERCENT" : "AMOUNT", value };
+}
+
+/** Note có đánh dấu trả 2 đợt không? */
+export function payIn2FromNoteTag(note: string | null | undefined): boolean {
+  return (note ?? "").includes(PAY2_NOTE_TAG);
+}
 
 /** Đọc ngược số tiền đã đóng từ note của LeadChild. null nếu note không có nhãn. */
 export function paidAmountFromNote(note: string | null | undefined): number | null {
@@ -706,6 +780,13 @@ function buildChildNote(c: ParsedRegisteredChild): string {
   // khỏi phải gõ tay 102 dòng. Chuỗi gốc vẫn giữ ở trên để đối chiếu.
   if (c.paidAmount !== null) parts.push(`${PAID_NOTE_TAG}${c.paidAmount}`);
   if (c.feeMode === "HALF") parts.push("Đóng 50% — CÒN NỢ");
+  if (c.discountKind && c.discountValue !== null) {
+    parts.push(
+      `${DISCOUNT_NOTE_TAG}${c.discountValue}${c.discountKind === "PERCENT" ? "%" : "đ"}`,
+    );
+  }
+  if (c.discountReason) parts.push(`${DISCOUNT_REASON_TAG}${c.discountReason}`);
+  if (c.payIn2) parts.push(PAY2_NOTE_TAG);
   if (c.paymentStatus) parts.push(`Tình trạng TT: ${c.paymentStatus}`);
   if (c.invoiceRef) parts.push(`Hoá đơn: ${c.invoiceRef}`);
   if (c.bank) parts.push(`Ngân hàng: ${c.bank}`);
