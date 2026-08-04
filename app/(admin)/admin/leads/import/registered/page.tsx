@@ -45,7 +45,24 @@ interface DryRunData {
     giamKieu: "AMOUNT" | "PERCENT" | null;
     giamGiaTri: number | null;
     giamLyDo: string | null;
+    /** Máy chia phần chênh niêm yết ↔ đã thu thành gì. */
+    xuLy: FeeTreatment;
+    /** Vì sao máy kết luận vậy — để người nhập đối chiếu, khỏi mở lại Excel. */
+    canCu: string;
+    /** true → máy không đủ căn cứ, người phải quyết. */
+    phaiXem: boolean;
     giaTri: Record<EditableCol, string>;
+  }[];
+  /** Bảng đối chứng — con số DUY NHẤT người nhập kiểm được với sao kê. */
+  doiChung?: { daThu: number; giam: number; no: number; boQuaHoanPhi: number };
+  /** Cùng PH + cùng khoá tách nhiều dòng: 1 em trả 2 đợt hay 2 em thật? */
+  nghiTrung?: {
+    sdt: string;
+    tenPH: string | null;
+    hocVien: string[];
+    khoa: string | null;
+    ketLuan: "SAME_STUDENT" | "UNSURE";
+    canCu: string;
   }[];
   // Dòng gắn cơ sở NGOÀI phạm vi quyền của bạn → hệ thống KHÔNG tạo (cách ly cơ sở).
   ngoaiPhamVi?: { sdt: string; tenPH: string; coSo: string }[];
@@ -74,6 +91,27 @@ type EditableCol =
   | "dueDate2";
 
 type Overrides = Record<string, Partial<Record<EditableCol, string>>>;
+
+/** Cách máy chia phần chênh giữa giá niêm yết và tiền đã thu (lib/lead/import-fee-plan.ts). */
+type FeeTreatment =
+  | "PAID_FULL"
+  | "DISCOUNT_NOTED"
+  | "DISCOUNT_INFERRED"
+  | "DEBT"
+  | "REFUND"
+  | "REVIEW";
+
+/** Nhãn + màu cho từng cách xử lý. Đọc nhãn là biết máy làm gì với dòng đó. */
+const TREATMENT: Record<FeeTreatment, { label: string; cls: string }> = {
+  PAID_FULL: { label: "Đã thu đủ", cls: "bg-emerald-100 text-emerald-800" },
+  DISCOUNT_NOTED: { label: "Giảm giá (ghi chú nêu rõ)", cls: "bg-sky-100 text-sky-800" },
+  DISCOUNT_INFERRED: { label: "Giảm giá (máy suy)", cls: "bg-indigo-100 text-indigo-800" },
+  DEBT: { label: "Còn nợ", cls: "bg-amber-100 text-amber-900" },
+  REFUND: { label: "Hoàn phí — KHÔNG nhập", cls: "bg-neutral-200 text-neutral-700" },
+  REVIEW: { label: "Bạn quyết", cls: "bg-red-100 text-red-800" },
+};
+
+const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
 
 const rowKey = (sheet: string, dong: number) => `${sheet}|${dong}`;
 
@@ -259,6 +297,20 @@ export default function ImportRegisteredLeadsPage() {
               value={preview.canKiemTra?.length ?? 0}
               tone={(preview.canKiemTra?.length ?? 0) > 0 ? "amber" : undefined}
             />
+            {(() => {
+              const phaiQuyet = preview.canKiemTra?.filter((w) => w.phaiXem).length ?? 0;
+              const tuDong = Math.max(0, preview.hocVien - phaiQuyet);
+              return (
+                <>
+                  <Stat label="Máy tự lo" value={tuDong} />
+                  <Stat
+                    label="Bạn phải quyết"
+                    value={phaiQuyet}
+                    tone={phaiQuyet > 0 ? "red" : undefined}
+                  />
+                </>
+              );
+            })()}
           </div>
 
           {(preview.salesKhongKhop.length > 0 ||
@@ -309,6 +361,72 @@ export default function ImportRegisteredLeadsPage() {
             />
           )}
 
+          {preview.doiChung && (
+            <div className="rounded-lg border-2 border-neutral-800 bg-white p-3">
+              <p className="text-sm font-semibold text-neutral-900">
+                Đối chứng trước khi ghi
+              </p>
+              <p className="mb-2 text-xs text-neutral-600">
+                Bạn không kiểm nổi từng dòng, nhưng kiểm được <b>một con số</b>: đối chiếu
+                “Tổng đã thu” với sao kê / sổ quỹ. Khớp thì phần tiền đã đúng — phần chia
+                giảm giá ↔ công nợ nếu sai thì sẽ lộ ra khi Sale đi đòi, không mất im lặng.
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-md border-2 border-neutral-900 bg-neutral-50 p-2">
+                  <p className="text-xs text-neutral-600">Tổng đã thu ← đối chiếu sao kê</p>
+                  <p className="text-lg font-bold text-neutral-900">{vnd(preview.doiChung.daThu)}</p>
+                </div>
+                <div className="rounded-md border border-sky-300 bg-sky-50 p-2">
+                  <p className="text-xs text-neutral-600">Tổng giảm giá</p>
+                  <p className="text-lg font-bold text-sky-800">{vnd(preview.doiChung.giam)}</p>
+                </div>
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-2">
+                  <p className="text-xs text-neutral-600">Tổng còn nợ</p>
+                  <p className="text-lg font-bold text-amber-800">{vnd(preview.doiChung.no)}</p>
+                </div>
+                <div className="rounded-md border border-neutral-300 bg-neutral-50 p-2">
+                  <p className="text-xs text-neutral-600">Bỏ qua (hoàn phí)</p>
+                  <p className="text-lg font-bold text-neutral-700">
+                    {preview.doiChung.boQuaHoanPhi} dòng
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(preview.nghiTrung?.length ?? 0) > 0 && (
+            <Alert className="border-red-500 bg-red-50/50">
+              <AlertDescription className="space-y-2">
+                <p className="text-sm font-semibold text-red-900">
+                  Nghi một học viên bị tách thành nhiều dòng ({preview.nghiTrung!.length})
+                </p>
+                <p className="text-xs text-neutral-700">
+                  Cùng phụ huynh + cùng khoá mà có nhiều dòng. Nếu là <b>một em trả nhiều đợt</b>{" "}
+                  mà cứ để nguyên thì hệ thống tạo <b>2 học viên và 2 đơn hàng</b>. Muốn gộp thì
+                  sửa trong Excel cho hai dòng <b>trùng tên học viên</b>, rồi tải lại.
+                </p>
+                {preview.nghiTrung!.map((r, i) => (
+                  <div key={`${r.sdt}-${i}`} className="rounded-md border border-red-200 bg-white p-2 text-xs">
+                    <span
+                      className={`mr-2 rounded-full px-2 py-0.5 font-semibold ${
+                        r.ketLuan === "SAME_STUDENT"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-amber-100 text-amber-900"
+                      }`}
+                    >
+                      {r.ketLuan === "SAME_STUDENT" ? "Gần chắc MỘT em" : "Chưa chắc"}
+                    </span>
+                    <b>{r.hocVien.join("  +  ")}</b>
+                    <span className="ml-2 text-neutral-500">
+                      {r.tenPH ?? "?"} · {r.sdt} · {r.khoa ?? "—"}
+                    </span>
+                    <p className="mt-0.5 text-neutral-600">{r.canCu}</p>
+                  </div>
+                ))}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {(preview.canKiemTra?.length ?? 0) > 0 && (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -347,12 +465,22 @@ export default function ImportRegisteredLeadsPage() {
                 trùng nên không cho sửa ở đây.
               </p>
               <div className="space-y-2">
-                {preview.canKiemTra!.slice(0, 200).map((w) => {
+                {[...preview.canKiemTra!]
+                  // Dòng máy không đủ căn cứ lên ĐẦU — đó là chỗ tốn thời gian của bạn.
+                  .sort((a, b) => Number(b.phaiXem) - Number(a.phaiXem))
+                  .slice(0, 200)
+                  .map((w) => {
                   const k = rowKey(w.sheet, w.dong);
                   const edited = overrides[k] ?? {};
                   const val = (c: EditableCol) => edited[c] ?? w.giaTri[c];
+                  const tt = TREATMENT[w.xuLy] ?? TREATMENT.REVIEW;
                   return (
-                    <div key={k} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                    <div
+                      key={k}
+                      className={`rounded-lg border p-3 ${
+                        w.phaiXem ? "border-red-300 bg-red-50/40" : "border-amber-200 bg-amber-50/40"
+                      }`}
+                    >
                       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
                         <b className="text-neutral-900">{w.hocVien}</b>
                         <span className="text-neutral-500">{w.sdt}</span>
@@ -367,7 +495,15 @@ export default function ImportRegisteredLeadsPage() {
                           {w.cachDong === "HALF" && " (50% — còn nợ)"}
                         </span>
                       </div>
-                      <p className="mb-2 text-xs text-amber-800">{w.thieu.join(" · ")}</p>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tt.cls}`}>
+                          {tt.label}
+                        </span>
+                        <span className="text-xs text-neutral-600">{w.canCu}</span>
+                      </div>
+                      {w.thieu.length > 0 && (
+                        <p className="mb-2 text-xs text-amber-800">{w.thieu.join(" · ")}</p>
+                      )}
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {EXCEL_COLS.map((c) => (
                           <label key={c} className="text-xs text-neutral-600">

@@ -23,7 +23,7 @@ import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
-import { planRowFee } from "@/lib/lead/import-fee-plan";
+import { planRowFee, detectSameStudent } from "@/lib/lead/import-fee-plan";
 import {
   parseRegisteredSheets,
   type RegisteredRowOverride,
@@ -315,6 +315,34 @@ export async function POST(req: NextRequest) {
     // 04/08 — DÒNG CẦN KIỂM TRA: vẫn import được, nhưng thiếu/mờ thông tin. Liệt kê
     // ở màn xem thử để người nhập sửa NGAY TRONG EXCEL rồi tải lại, thay vì import
     // xong mới đi dò từng lead từng phụ huynh.
+    // Cùng phụ huynh + cùng khoá tách thành 2 dòng: 1 em trả 2 đợt hay 2 em thật?
+    // Ca thật 04/08: "Quân" + "Nguyễn Ngọc Quân" (4.000.000 + 4.640.000 = đúng giá
+    // niêm yết) — bộ nhập cũ tạo 2 học viên + 2 đơn hàng.
+    nghiTrung: parsed.parents.flatMap((p) => {
+      const byCourse = new Map<string, typeof p.children>();
+      for (const c of p.children) {
+        const k = c.courseRaw ?? "(trống)";
+        if (!byCourse.has(k)) byCourse.set(k, []);
+        byCourse.get(k)!.push(c);
+      }
+      return [...byCourse.values()]
+        .filter((rows) => rows.length > 1)
+        .map((rows) => {
+          const d = detectSameStudent(
+            rows.map((r) => ({ fullName: r.fullName, paid: r.paidAmount ?? 0 })),
+            listPriceOf(rows[0]!),
+          );
+          return {
+            sdt: p.phone,
+            tenPH: p.parentName,
+            hocVien: rows.map((r) => r.fullName),
+            khoa: rows[0]!.courseRaw,
+            ketLuan: d.verdict,
+            canCu: d.evidence,
+          };
+        })
+        .filter((r) => r.ketLuan !== "DIFFERENT_STUDENTS");
+    }),
     // Bảng đối chứng: người nhập KHÔNG kiểm nổi 81 dòng, nhưng kiểm được 1 con số —
     // "tổng đã thu" đối chiếu sao kê/sổ quỹ. Sai ở đâu thì lệch tổng lộ ra ngay.
     doiChung: (() => {
