@@ -19,6 +19,7 @@ import type { AuditActor } from "@/lib/audit/audit-log";
 import { convertLeadV2, type ConvertV2Student } from "@/lib/crm/convert-lead-v2";
 import { BACKFILL_PAYMENT_MARKER, type BackfillPaymentInput } from "@/lib/crm/backfill-order";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
+import { contactFromLeadNote } from "@/lib/lead/import-registered";
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import type { CourseDiscountType } from "@prisma/client";
 import { canonicalPhone } from "@/lib/phone";
@@ -102,9 +103,13 @@ export async function convertOneLeadBackfill(
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, status: true, centerId: true, parentName: true, phone: true, email: true, deletedAt: true },
+    // `note` — import ghi CCCD PH + Địa chỉ vào đây (Lead không có cột riêng cho 2
+    // trường này). Đọc lại để chốt hàng loạt mang chúng sang hồ sơ phụ huynh, thay
+    // vì để nằm chết trong note (chốt 05/08: nhập vào là phải gộp sang HV luôn).
+    select: { id: true, status: true, centerId: true, parentName: true, phone: true, email: true, note: true, deletedAt: true },
   });
   if (!lead || lead.deletedAt) return fail("LEAD_NOT_FOUND", "Không tìm thấy lead");
+  const leadContact = contactFromLeadNote(lead.note);
   if (!lead.centerId) return fail("LEAD_NO_CENTER", "Lead chưa gắn cơ sở — sửa lead rồi chạy lại");
   // Chủ dự án chốt 04/08: HỌC VIÊN KHÔNG BAO GIỜ THUỘC HỘI SỞ. HO là cơ quan đầu
   // não, không phải địa điểm dạy học — chỉ CS1/CS2 (và cơ sở mở sau) mới nhận HV.
@@ -211,6 +216,10 @@ export async function convertOneLeadBackfill(
       parentEmail: lead.email?.trim().toLowerCase() || null,
       parentName: lead.parentName,
       parentPhone,
+      // C5 — convertLeadV2 đã nhận sẵn 2 trường này và chỉ ghi khi có giá trị; trước
+      // đây bulk-convert không truyền nên chúng rơi mất trên đường từ Excel sang HV.
+      parentCccd: leadContact.cccd,
+      parentAddress: leadContact.address,
       students,
       idempotencyKey: bulkConvertIdempotencyKey(lead.id, students),
       // Có tiền → Order+Payment tạo TRONG tx convert; không tiền → nhánh backfill

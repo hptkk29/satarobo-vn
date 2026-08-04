@@ -18,6 +18,8 @@ import {
   dueDate2FromNote,
   DUE2_NOTE_TAG,
   parentDisplayName,
+  isPlaceholderParentName,
+  contactFromLeadNote,
 } from "./import-registered";
 
 // Chủ dự án chốt 05/08: file không ghi tên PH → điền "Phụ huynh của <tên con>".
@@ -51,6 +53,54 @@ describe("parentDisplayName", () => {
 
   it("không cả tên con → lấy SĐT làm mốc, không trả chuỗi cụt", () => {
     expect(parentDisplayName(null, [], "84905285992")).toBe("Phụ huynh của 84905285992");
+  });
+});
+
+// Chủ dự án chốt 05/08: thông tin nhập vào phải GỘP với lead + học viên đang có.
+describe("isPlaceholderParentName", () => {
+  it("tên hệ thống tự điền (cả dạng cũ) → nhận ra được", () => {
+    expect(isPlaceholderParentName("Phụ huynh của BÉ A")).toBe(true);
+    expect(isPlaceholderParentName("PH của BÉ A (chưa rõ tên)")).toBe(true); // dạng trước 05/08
+  });
+
+  it("tên người thật → KHÔNG coi là tự điền (để không bị đè)", () => {
+    expect(isPlaceholderParentName("Lisa Dương Hà")).toBe(false);
+    expect(isPlaceholderParentName("Hồ Đắc Phúc")).toBe(false);
+    expect(isPlaceholderParentName(null)).toBe(false);
+  });
+
+  it("tên thật lỡ chứa chữ 'phụ huynh' ở giữa → vẫn là tên thật", () => {
+    expect(isPlaceholderParentName("Chị Lan phụ huynh của bé Bo")).toBe(false);
+  });
+});
+
+describe("contactFromLeadNote", () => {
+  const note = "[Import ĐK Excel] Sales: Lộc · CCCD PH: 048188002983 · Địa chỉ: 368/85 Hoàng Diệu";
+
+  it("đọc lại được CCCD và địa chỉ import đã ghi vào note", () => {
+    expect(contactFromLeadNote(note)).toEqual({
+      cccd: "048188002983",
+      address: "368/85 Hoàng Diệu",
+    });
+  });
+
+  it("cắt đúng ở dấu phân cách, không nuốt sang mảnh sau", () => {
+    const n = "[Import ĐK Excel] CCCD PH: 123 · Địa chỉ: Số 1 Lê Lợi · Ghi chú: abc";
+    expect(contactFromLeadNote(n).address).toBe("Số 1 Lê Lợi");
+  });
+
+  it("note không có 2 trường đó → null, không trả chuỗi rỗng", () => {
+    expect(contactFromLeadNote("[Import ĐK Excel] Sales: Lộc")).toEqual({
+      cccd: null,
+      address: null,
+    });
+    expect(contactFromLeadNote(null)).toEqual({ cccd: null, address: null });
+  });
+
+  it("giữ nguyên giá trị chữ (file thật có ô ghi 'không xin được thông tin')", () => {
+    expect(contactFromLeadNote("CCCD PH: không xin được thông tin").cccd).toBe(
+      "không xin được thông tin",
+    );
   });
 });
 

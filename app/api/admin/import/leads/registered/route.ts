@@ -173,6 +173,7 @@ export async function POST(req: NextRequest) {
                 id: true,
                 fullName: true,
                 gradeLevel: true,
+                ageYears: true,
                 note: true,
                 interestedCourseId: true,
                 interestedCenterId: true,

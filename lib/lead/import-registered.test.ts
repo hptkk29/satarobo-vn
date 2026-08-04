@@ -273,7 +273,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
       courseId: null,
       assignedToId: "u-khac", // đã có Sale → KHÔNG ghi đè
       children: [
-        { id: "child-1", fullName: "hv một", gradeLevel: null, note: null, interestedCourseId: null, interestedCenterId: null },
+        { id: "child-1", fullName: "hv một", gradeLevel: null, ageYears: null, note: null, interestedCourseId: null, interestedCenterId: null },
       ],
     });
     const plan = planRegisteredImport(parsed, ctx);
@@ -310,6 +310,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
         id: `child-${i}`,
         fullName: ch.fullName,
         gradeLevel: ch.gradeLevel,
+        ageYears: ch.ageYears, // record cũ đã mang đủ data → gồm cả tuổi
         note: ch.note,
         interestedCourseId: ch.interestedCourseId,
         interestedCenterId: ch.interestedCenterId,

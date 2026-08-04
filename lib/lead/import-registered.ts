@@ -649,6 +649,34 @@ export function parentDisplayName(
   return `Phụ huynh của ${names[0]} và ${names.length - 1} em khác`;
 }
 
+/** Tiền tố của tên PH do hệ thống tự điền (cả dạng cũ trước 05/08). */
+const PLACEHOLDER_NAME_PREFIXES = ["phu huynh cua ", "ph cua "];
+
+/**
+ * Tên PH này là do hệ thống tự điền hay do người ghi thật?
+ * Dùng để quyết định có được ĐÈ khi file có tên thật hay không — tên thật thì
+ * tuyệt đối giữ, tên tự điền thì nâng cấp.
+ */
+export function isPlaceholderParentName(name: string | null | undefined): boolean {
+  const n = normalizeVi(name);
+  return PLACEHOLDER_NAME_PREFIXES.some((p) => n.startsWith(p));
+}
+
+/** Đọc lại CCCD PH / Địa chỉ từ note lead do import ghi (cặp với buildLeadNote). */
+export function contactFromLeadNote(note: string | null | undefined): {
+  cccd: string | null;
+  address: string | null;
+} {
+  const raw = String(note ?? "");
+  const pick = (label: string): string | null => {
+    // Các mảnh trong note nối bằng " · " nên cắt tới dấu đó hoặc hết dòng.
+    const m = new RegExp(`${label}:\\s*([^·\\n]+)`).exec(raw);
+    const v = m?.[1]?.trim();
+    return v ? v : null;
+  };
+  return { cccd: pick("CCCD PH"), address: pick("Địa chỉ") };
+}
+
 export function buildCourseKeyMap(
   courses: { id: string; name: string; slug: string | null }[],
 ): Map<string, string> {
@@ -673,6 +701,7 @@ export interface ExistingLeadChild {
   id: string;
   fullName: string;
   gradeLevel: string | null;
+  ageYears: number | null;
   note: string | null;
   interestedCourseId: string | null;
   interestedCenterId: string | null;
@@ -729,8 +758,13 @@ export interface LeadMergePlan {
   leadId: string;
   phone: string;
   parentName: string; // tên hiển thị (record cũ)
-  /** Field trống trên record cũ được đắp (câu 34 — không ghi đè giá trị cũ). */
+  /**
+   * Field trống trên record cũ được đắp (câu 34 — không ghi đè giá trị cũ).
+   * Ngoại lệ DUY NHẤT: `parentName` được đè khi tên cũ là tên hệ thống tự điền
+   * ("Phụ huynh của …") và file có tên thật — xem isPlaceholderParentName.
+   */
   set: Partial<{
+    parentName: string;
     centerId: string;
     orgUnitId: string;
     courseId: string;
@@ -741,7 +775,12 @@ export interface LeadMergePlan {
   newChildren: ChildCreatePlan[];
   childUpdates: {
     childId: string;
-    set: Partial<{ gradeLevel: string; interestedCourseId: string; interestedCenterId: string }>;
+    set: Partial<{
+      gradeLevel: string;
+      ageYears: number;
+      interestedCourseId: string;
+      interestedCenterId: string;
+    }>;
     noteAppend: string | null;
   }[];
   /** false = không có gì thay đổi (re-import cùng file) → bỏ qua, không ghi. */
@@ -910,6 +949,11 @@ export function planRegisteredImport(
 
     // ── GỘP với lead đã có (câu 34): giữ record cũ, đắp field trống, append note.
     const set: LeadMergePlan["set"] = {};
+    // Tên PH: file có tên THẬT mà record cũ đang mang tên hệ thống tự điền
+    // ("Phụ huynh của …") → nâng cấp. Tên thật đã có thì tuyệt đối không đè.
+    if (p.parentName?.trim() && isPlaceholderParentName(existing.parentName)) {
+      set.parentName = p.parentName.trim();
+    }
     if (!existing.centerId && centerId) set.centerId = centerId;
     if (!existing.orgUnitId && orgUnitId) set.orgUnitId = orgUnitId;
     if (!existing.courseId && leadCourseId) set.courseId = leadCourseId;
@@ -932,6 +976,9 @@ export function planRegisteredImport(
       }
       const cset: (typeof childUpdates)[number]["set"] = {};
       if (!match.gradeLevel && plan.gradeLevel) cset.gradeLevel = plan.gradeLevel;
+      // Tuổi suy từ cột Lớp — trước đây tính ra rồi BỎ khi gộp, nên lead cũ mãi
+      // không có tuổi dù file mới đã có.
+      if (!match.ageYears && plan.ageYears) cset.ageYears = plan.ageYears;
       if (!match.interestedCourseId && plan.interestedCourseId)
         cset.interestedCourseId = plan.interestedCourseId;
       if (!match.interestedCenterId && plan.interestedCenterId)
