@@ -68,9 +68,12 @@ interface DryRunData {
   ngoaiPhamVi?: { sdt: string; tenPH: string; coSo: string }[];
   // Câu 34 — SĐT đã thuộc lead của cơ sở khác → KHÔNG gộp, KHÔNG tạo. Chỉ hiện SĐT.
   trungCoSoKhac?: { sdt: string }[];
+  /** Hồ sơ học viên ĐÃ CÓ sẽ được đắp thêm thông tin từ file (không ghi đè). */
+  seDongBoHocVien?: number;
   daTaoLead?: number;
   daTaoHocVien?: number;
   daGopLead?: number;
+  daDongBoHocVien?: number;
   khongDoi?: number;
 }
 
@@ -292,6 +295,7 @@ export default function ImportRegisteredLeadsPage() {
             <Stat label="Phụ huynh (lead)" value={preview.phuHuynh} />
             <Stat label="Học viên (con)" value={preview.hocVien} />
             <Stat label="Tạo mới / Gộp CRM" value={`${preview.seTao.length} / ${preview.seGop.length}`} />
+            <Stat label="Hồ sơ HV được bổ sung" value={preview.seDongBoHocVien ?? 0} />
             <Stat
               label="Cần kiểm tra"
               value={preview.canKiemTra?.length ?? 0}

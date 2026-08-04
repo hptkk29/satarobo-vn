@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
-import { expandPhoneVariants, phoneKey } from "@/lib/phone";
+import { canonicalPhone, expandPhoneVariants, phoneKey } from "@/lib/phone";
 import { resolveActor } from "@/lib/auth/actor";
 import {
   scopedDb,
@@ -33,6 +33,7 @@ import {
   compactKey,
   normalizeVi,
   parentDisplayName,
+  planStudentSync,
   type SheetAoA,
   type CellValue,
   type ExistingLead,
@@ -273,6 +274,54 @@ export async function POST(req: NextRequest) {
 
   const changedMerges = scopedMerges.filter((m) => m.changed);
 
+  // ── Đồng bộ ngược sang HỒ SƠ HỌC VIÊN (chốt 05/08). Con của lead đã được chốt
+  // thành học viên từ đợt trước thì import lại phải đắp luôn cho học viên đó, chứ
+  // không dừng ở Lead. Đường đi: LeadChild → Enrollment.leadChildId → Student.
+  // CCCD là PII → chỉ ghi khi actor có quyền, giống màn hồ sơ học viên.
+  const canWritePii = await checkPermission("payments:view-pii");
+  const childIdsInMerge = scopedMerges.flatMap((m) => [
+    ...m.childUpdates.map((cu) => cu.childId),
+    ...(existingByPhone.get(m.phone)?.children.map((c) => c.id) ?? []),
+  ]);
+  const studentSyncs: { studentId: string; set: ReturnType<typeof planStudentSync> }[] = [];
+  if (childIdsInMerge.length > 0) {
+    const links = await sdb.enrollment.findMany({
+      where: { leadChildId: { in: [...new Set(childIdsInMerge)] } },
+      select: { leadChildId: true, studentId: true },
+    });
+    const studentIdByChild = new Map(
+      links.filter((l) => l.leadChildId).map((l) => [l.leadChildId as string, l.studentId]),
+    );
+    const students = await sdb.student.findMany({
+      where: { id: { in: [...new Set([...studentIdByChild.values()])] }, deletedAt: null },
+      select: { id: true, parentName: true, parentPhone: true, parentNationalId: true, address: true },
+    });
+    const studentById = new Map(students.map((s) => [s.id, s]));
+
+    for (const m of scopedMerges) {
+      const p = parsed.parents.find((x) => x.phone === m.phone);
+      if (!p) continue;
+      const info = {
+        parentName: p.parentName,
+        parentPhone: canonicalPhone(p.phone) ?? p.phone,
+        cccd: p.parentCccd,
+        address: p.address,
+      };
+      const childIds = [
+        ...m.childUpdates.map((cu) => cu.childId),
+        ...(existingByPhone.get(m.phone)?.children.map((c) => c.id) ?? []),
+      ];
+      for (const sid of new Set(
+        childIds.map((cid) => studentIdByChild.get(cid)).filter((x): x is string => !!x),
+      )) {
+        const s = studentById.get(sid);
+        if (!s) continue;
+        const set = planStudentSync(s, info, { canWritePii });
+        if (Object.keys(set).length > 0) studentSyncs.push({ studentId: sid, set });
+      }
+    }
+  }
+
   // ── Cách ly cơ sở trên đường TẠO lead (DoD#4). scopedDb chỉ scope READ, KHÔNG
   // scope WRITE → chốt WRITE bằng passesScope per-lead như route import sự kiện
   // (app/api/admin/import/leads/route.ts): actor center-level KHÔNG được tạo lead
@@ -289,6 +338,8 @@ export async function POST(req: NextRequest) {
   });
 
   const summary = {
+    // Số hồ sơ HỌC VIÊN đã tồn tại sẽ được đắp thêm thông tin từ file này.
+    seDongBoHocVien: studentSyncs.length,
     // Preview dry-run theo spec task #07.
     tongDongDoc: parsed.totalDataRows,
     boQua: parsed.skippedEmpty,
@@ -478,6 +529,9 @@ export async function POST(req: NextRequest) {
                 create: m.newChildren.map((ch) => ({
                   fullName: ch.fullName,
                   gradeLevel: ch.gradeLevel,
+                  // Nhánh TẠO có ageYears, nhánh GỘP thì thiếu — con thêm vào lead
+                  // đã có bị mất tuổi. Cùng họ lỗi với childUpdates (vá 05/08).
+                  ageYears: ch.ageYears,
                   interestedCourseId: ch.interestedCourseId,
                   interestedCenterId: ch.interestedCenterId,
                   note: ch.note,
@@ -509,6 +563,11 @@ export async function POST(req: NextRequest) {
           mergedLeads++;
           createdChildren += m.newChildren.length;
         }
+
+        // Đắp sang hồ sơ học viên đã tồn tại (chỉ field đang trống — planStudentSync).
+        for (const su of studentSyncs) {
+          await tx.student.update({ where: { id: su.studentId }, data: su.set });
+        }
       },
       { timeout: 60_000 },
     );
@@ -525,6 +584,7 @@ export async function POST(req: NextRequest) {
       daTaoLead: createdLeads,
       daTaoHocVien: createdChildren,
       daGopLead: mergedLeads,
+      daDongBoHocVien: studentSyncs.length,
       khongDoi: plan.merges.length - changedMerges.length,
     },
   });

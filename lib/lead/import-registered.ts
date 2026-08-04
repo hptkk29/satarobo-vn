@@ -677,6 +677,52 @@ export function contactFromLeadNote(note: string | null | undefined): {
   return { cccd: pick("CCCD PH"), address: pick("Địa chỉ") };
 }
 
+/** Hồ sơ học viên đã tồn tại (chỉ các field import có thể bổ sung). */
+export interface ExistingStudentLite {
+  id: string;
+  parentName: string | null;
+  parentPhone: string | null;
+  parentNationalId: string | null;
+  address: string | null;
+}
+
+/** Thông tin phụ huynh lấy từ file import, đã chuẩn hoá. */
+export interface ImportedContact {
+  parentName: string | null;
+  parentPhone: string | null;
+  cccd: string | null;
+  address: string | null;
+}
+
+/**
+ * Đắp thông tin từ file import sang HỒ SƠ HỌC VIÊN đã tồn tại (chốt 05/08:
+ * "nhập vào thì merge với toàn bộ thông tin của lead đó và học viên đó luôn").
+ *
+ * Trước đây thông tin chỉ dừng ở Lead; học viên đã chốt từ đợt trước không nhận
+ * được gì khi import lại file có thêm CCCD/địa chỉ.
+ *
+ * Luật: CHỈ đắp chỗ đang trống — không ghi đè dữ liệu người đã nhập tay. Ngoại lệ
+ * duy nhất là tên PH đang là tên hệ thống tự điền thì cho tên thật thay thế.
+ * CCCD là PII: chỉ ghi khi actor có quyền (canWritePii), giống màn hồ sơ học viên.
+ */
+export function planStudentSync(
+  s: ExistingStudentLite,
+  info: ImportedContact,
+  opts: { canWritePii: boolean },
+): Partial<Pick<ExistingStudentLite, "parentName" | "parentPhone" | "parentNationalId" | "address">> {
+  const set: ReturnType<typeof planStudentSync> = {};
+  const name = info.parentName?.trim();
+  if (name && (!s.parentName?.trim() || isPlaceholderParentName(s.parentName))) {
+    set.parentName = name;
+  }
+  if (info.parentPhone?.trim() && !s.parentPhone?.trim()) set.parentPhone = info.parentPhone.trim();
+  if (opts.canWritePii && info.cccd?.trim() && !s.parentNationalId?.trim()) {
+    set.parentNationalId = info.cccd.trim();
+  }
+  if (info.address?.trim() && !s.address?.trim()) set.address = info.address.trim();
+  return set;
+}
+
 export function buildCourseKeyMap(
   courses: { id: string; name: string; slug: string | null }[],
 ): Map<string, string> {

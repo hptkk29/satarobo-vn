@@ -20,6 +20,7 @@ import {
   parentDisplayName,
   isPlaceholderParentName,
   contactFromLeadNote,
+  planStudentSync,
 } from "./import-registered";
 
 // Chủ dự án chốt 05/08: file không ghi tên PH → điền "Phụ huynh của <tên con>".
@@ -101,6 +102,65 @@ describe("contactFromLeadNote", () => {
     expect(contactFromLeadNote("CCCD PH: không xin được thông tin").cccd).toBe(
       "không xin được thông tin",
     );
+  });
+});
+
+// Chốt 05/08: import lại thì hồ sơ HỌC VIÊN đã có cũng được đắp thêm thông tin.
+describe("planStudentSync", () => {
+  const trong = {
+    id: "s1",
+    parentName: null,
+    parentPhone: null,
+    parentNationalId: null,
+    address: null,
+  };
+  const info = {
+    parentName: "Lisa Dương Hà",
+    parentPhone: "84905167198",
+    cccd: "048188002983",
+    address: "368/85 Hoàng Diệu",
+  };
+  const pii = { canWritePii: true };
+
+  it("hồ sơ trống → đắp đủ 4 trường", () => {
+    expect(planStudentSync(trong, info, pii)).toEqual({
+      parentName: "Lisa Dương Hà",
+      parentPhone: "84905167198",
+      parentNationalId: "048188002983",
+      address: "368/85 Hoàng Diệu",
+    });
+  });
+
+  it("hồ sơ đã có dữ liệu người nhập tay → KHÔNG ghi đè bất cứ gì", () => {
+    const day = {
+      id: "s1",
+      parentName: "Chị Hà (đã sửa tay)",
+      parentPhone: "84900000000",
+      parentNationalId: "111",
+      address: "Địa chỉ đã sửa",
+    };
+    expect(planStudentSync(day, info, pii)).toEqual({});
+  });
+
+  it("tên PH đang là tên tự điền → CHO tên thật thay thế", () => {
+    const s = { ...trong, parentName: "Phụ huynh của HOÀNG VĨNH KHANG" };
+    expect(planStudentSync(s, info, pii).parentName).toBe("Lisa Dương Hà");
+  });
+
+  it("KHÔNG có quyền xem PII → tuyệt đối không ghi CCCD, các trường khác vẫn đắp", () => {
+    const set = planStudentSync(trong, info, { canWritePii: false });
+    expect(set.parentNationalId).toBeUndefined();
+    expect(set.address).toBe("368/85 Hoàng Diệu");
+  });
+
+  it("file không có thông tin → không sinh update rỗng", () => {
+    expect(
+      planStudentSync(trong, { parentName: null, parentPhone: null, cccd: null, address: null }, pii),
+    ).toEqual({});
+  });
+
+  it("giá trị chỉ có khoảng trắng → coi như không có", () => {
+    expect(planStudentSync(trong, { parentName: "  ", parentPhone: "", cccd: " ", address: null }, pii)).toEqual({});
   });
 });
 
