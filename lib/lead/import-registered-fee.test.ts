@@ -15,7 +15,26 @@ import {
   DISCOUNT_NOTE_TAG,
   DISCOUNT_REASON_TAG,
   PAY2_NOTE_TAG,
+  dueDate2FromNote,
+  DUE2_NOTE_TAG,
 } from "./import-registered";
+
+// Bug 04/08: regex viết `\d` trong template literal → bị nuốt thành `d{4}-d{2}-d{2}`,
+// không bao giờ khớp ngày, nên hạn đợt 2 luôn đọc ra null mà không báo lỗi gì.
+describe("dueDate2FromNote", () => {
+  it("đọc được hạn đợt 2 đã ghi trong note", () => {
+    expect(dueDate2FromNote(`abc ${DUE2_NOTE_TAG}2026-09-15 def`)).toBe("2026-09-15");
+  });
+
+  it("note không có tag → null", () => {
+    expect(dueDate2FromNote("ghi chú bình thường")).toBeNull();
+    expect(dueDate2FromNote(null)).toBeNull();
+  });
+
+  it("tag có nhưng ngày sai định dạng → null, không trả rác", () => {
+    expect(dueDate2FromNote(`${DUE2_NOTE_TAG}15/09/2026`)).toBeNull();
+  });
+});
 
 /** Dựng lại note giống buildChildNote (hàm đó không export) để kiểm vòng ghi→đọc. */
 function buildChildNoteForTest(c: {

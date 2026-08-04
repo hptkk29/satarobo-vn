@@ -22,6 +22,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import {
   parseRegisteredSheets,
   type RegisteredRowOverride,
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
   }
   const [centers, orgUnits, courses, users, existingLeads] = await Promise.all([
     sdb.center.findMany({ where: { code: { not: null } }, select: { id: true, code: true } }),
-    sdb.orgUnit.findMany({ where: { deletedAt: null }, select: { id: true, code: true } }),
+    sdb.orgUnit.findMany({ where: { deletedAt: null }, select: { id: true, code: true, type: true } }),
     sdb.course.findMany({ select: { id: true, name: true, slug: true, price: true } }),
     sdb.user.findMany({
       where: { deletedAt: null, isActive: true },
@@ -191,9 +192,18 @@ export async function POST(req: NextRequest) {
   const courseKeyMap = buildCourseKeyMap(courses);
   const priceByCourseId = new Map(courses.map((c) => [c.id, c.price ?? 0]));
 
+  // Hội sở KHÔNG nhận lead → loại khỏi bảng tra ngay từ đầu. File Excel ghi mã HO thì
+  // rơi vào `unmatchedCenters` (cảnh báo ở màn xem thử) chứ KHÔNG âm thầm gắn vào HO.
+  const nonEnrollable = await getNonEnrollableCenterIds();
   const plan = planRegisteredImport(parsed, {
-    centerByCode: new Map(centers.filter((c) => c.code).map((c) => [c.code as string, c.id])),
-    orgUnitByCode: new Map(orgUnits.filter((o) => o.code).map((o) => [o.code, o.id])),
+    centerByCode: new Map(
+      centers
+        .filter((c) => c.code && !nonEnrollable.includes(c.id))
+        .map((c) => [c.code as string, c.id]),
+    ),
+    orgUnitByCode: new Map(
+      orgUnits.filter((o) => o.code && o.type === "CENTER").map((o) => [o.code, o.id]),
+    ),
     courseByKey: buildCourseKeyMap(courses),
     salesUsers: users.map((u) => ({
       id: u.id,

@@ -10,7 +10,7 @@ import type { Prisma } from "@prisma/client";
 import { hasRole, type Action } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
-import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
+import { rejectHeadOffice } from "@/lib/enrollment-flow";
 import {
   studentCreateSchema,
   studentUpdateSchema,
@@ -135,17 +135,7 @@ async function rejectHeadOfficeOrgUnit(
   orgUnitId: string | null | undefined,
   resolvedCenterId: string | null | undefined,
 ): Promise<string | null> {
-  // `centerIdForOrgUnit` map HO/ROOT → null. Nên "chọn đơn vị nhưng ra null cơ sở"
-  // CHÍNH LÀ ca chọn Hội sở — trước đây lọt êm, học viên ra KHÔNG CÓ cơ sở và biến
-  // mất khỏi mọi màn lọc theo cơ sở.
-  if (orgUnitId && !resolvedCenterId) {
-    return "Hội sở không nhận học viên — chọn cơ sở dạy học (CS1/CS2)";
-  }
-  if (!resolvedCenterId) return null;
-  const nonEnrollable = await getNonEnrollableCenterIds();
-  return nonEnrollable.includes(resolvedCenterId)
-    ? "Hội sở không nhận học viên — chọn cơ sở dạy học (CS1/CS2)"
-    : null;
+  return rejectHeadOffice("học viên", { orgUnitId, centerId: resolvedCenterId });
 }
 
 export async function createStudent(formData: FormData): Promise<ActionResult> {

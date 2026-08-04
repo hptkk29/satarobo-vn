@@ -7,7 +7,7 @@ import type { Prisma, EnrollmentStatus } from "@prisma/client";
 import { hasAnyRole, type Action } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit, orgUnitIdForCenter } from "@/lib/org/org-service";
-import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
+import { rejectHeadOffice } from "@/lib/enrollment-flow";
 import { classCreateSchema } from "@/lib/validators/class";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import {
@@ -289,10 +289,7 @@ const CLASS_SNAPSHOT_SELECT = {
  * Nhận diện qua cây OrgUnit (type=CENTER), KHÔNG hardcode mã "HO".
  */
 async function rejectHeadOfficeCenter(centerId: string | null): Promise<string | null> {
-  if (!centerId) return null;
-  const nonEnrollable = await getNonEnrollableCenterIds();
-  if (!nonEnrollable.includes(centerId)) return null;
-  return "Hội sở không phải nơi dạy học — chọn cơ sở (CS1/CS2) để mở lớp";
+  return rejectHeadOffice("lớp học", { centerId });
 }
 
 export async function createClass(formData: FormData): Promise<ActionResult> {

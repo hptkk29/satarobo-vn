@@ -758,7 +758,9 @@ export function discountFromNote(
 
 /** Hạn đóng đợt 2 ghi trong note (yyyy-mm-dd). null nếu chưa đặt. */
 export function dueDate2FromNote(note: string | null | undefined): string | null {
-  const m = new RegExp(`${DUE2_NOTE_TAG}(\d{4}-\d{2}-\d{2})`).exec(note ?? "");
+  // ⚠️ Phải là `\\d`: trong template literal `\d` bị nuốt thành `d`, regex hoá thành
+  // `d{4}-d{2}-d{2}` và KHÔNG BAO GIỜ khớp ngày (bug đã lọt 1 lượt, ESLint bắt được).
+  const m = new RegExp(`${DUE2_NOTE_TAG}(\\d{4}-\\d{2}-\\d{2})`).exec(note ?? "");
   return m ? m[1] : null;
 }
 
