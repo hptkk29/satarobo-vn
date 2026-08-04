@@ -26,11 +26,20 @@ const studentSchema = z.object({
   dob: z.string().trim().optional().or(z.literal('')),
   classId: z.string().trim().min(1, 'Chọn lớp cho học viên'),
   consentMedia: z.boolean().optional(),
+  // 04/08 — khuyến mãi do màn xem thử import ghi vào ghi chú của con, client đọc lại.
+  discount: z
+    .object({
+      type: z.enum(['AMOUNT', 'PERCENT']),
+      value: z.number().int().positive(),
+    })
+    .optional()
+    .nullable(),
 })
 
 const leadItemSchema = z.object({
   leadId: z.string().trim().min(1),
   students: z.array(studentSchema).min(1, 'Cần ít nhất 1 học viên').max(10),
+  discountReason: z.string().trim().max(300).optional().nullable(),
   paid: z
     .object({
       amount: z.number().int().positive('Số tiền phải > 0'),
@@ -131,7 +140,9 @@ export async function bulkConvertLeadsAction(input: unknown): Promise<BulkConver
             dob: s.dob ? new Date(s.dob) : null,
             classId: s.classId,
             consentMedia: s.consentMedia === true,
+            discount: s.discount ?? null,
           })),
+          discountReason: item.discountReason || null,
           paid:
             item.paid && item.paid.amount > 0
               ? {

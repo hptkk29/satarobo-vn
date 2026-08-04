@@ -294,6 +294,79 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("REGISTERED");
   });
 
+  test("[BULK-09] lead gắn HỘI SỞ → LEAD_HEAD_OFFICE, KHÔNG tạo học viên nào", async () => {
+    // Chủ dự án chốt 04/08: HO là cơ quan đầu não, KHÔNG phải nơi dạy học.
+    // Học viên chỉ thuộc cơ sở dạy học (CS1/CS2/…), không bao giờ thuộc HO.
+    const ho = await db.center.create({
+      data: { code: `HO${uniq()}`, name: "Hội sở", slug: `ho-${uniq()}`, address: "x" },
+    });
+    const cs1 = await seedCenter();
+    // Cây OrgUnit: CHỈ cs1 là type=CENTER ⇒ ho là cơ sở không nhận học viên.
+    const root = await db.orgUnit.create({
+      data: { code: `ROOT${uniq()}`, name: "Sata", type: "ROOT" },
+    });
+    await db.orgUnit.create({
+      data: { code: `HOU${uniq()}`, name: "Hội sở", type: "HO", parentId: root.id },
+    });
+    await db.orgUnit.create({
+      data: { code: `C${uniq()}`, name: "CS1", type: "CENTER", parentId: root.id, centerId: cs1.id },
+    });
+
+    const { cls } = await seedCourseClass(cs1.id);
+    const { lead, children } = await seedRegisteredLeadWithChildren(ho.id, `09${Date.now() % 100000000}`, ["Bé HO"]);
+    const actor = await seedActor();
+
+    const res = await convertOneLeadBackfill(actor, {
+      leadId: lead.id,
+      students: [{ leadChildId: children[0]!.id, name: "Bé HO", classId: cls.id, consentMedia: false }],
+      paid: null,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("LEAD_HEAD_OFFICE");
+    expect(await db.student.count({ where: { name: "Bé HO" } })).toBe(0);
+  });
+
+  test("[BULK-10] có khuyến mãi → đơn ghi subtotal/discountAmount/totalAmount đúng, công nợ trừ đủ", async () => {
+    const cs1 = await seedCenter();
+    const { cls } = await seedCourseClass(cs1.id, 10_000_000);
+    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, `09${Date.now() % 100000000}`, ["Bé Giảm"]);
+    const actor = await seedActor();
+
+    const res = await convertOneLeadBackfill(actor, {
+      leadId: lead.id,
+      students: [
+        {
+          leadChildId: children[0]!.id,
+          name: "Bé Giảm",
+          classId: cls.id,
+          consentMedia: false,
+          discount: { type: "PERCENT", value: 10 }, // 10% của 10tr = 1tr
+        },
+      ],
+      discountReason: "Con quý đối tác",
+      paid: { amount: 9_000_000, paidDate: new Date("2026-06-01"), note: null },
+    });
+    expect(res.ok).toBe(true);
+
+    const order = await db.order.findFirstOrThrow({ where: { leadId: lead.id } });
+    expect(order.subtotal).toBe(10_000_000);
+    expect(order.discountAmount).toBe(1_000_000);
+    expect(order.totalAmount).toBe(9_000_000); // đã trừ khuyến mãi
+    expect(order.discountReason).toBe("Con quý đối tác");
+    // Đóng đủ phần phải nộp ⇒ không còn nợ.
+    const paid = await db.payment.aggregate({
+      where: { orderId: order.id, deletedAt: null },
+      _sum: { amount: true },
+    });
+    expect(paid._sum.amount).toBe(9_000_000);
+    expect(order.totalAmount - (paid._sum.amount ?? 0)).toBe(0);
+
+    // Enrollment phản ánh đúng giá sau giảm.
+    const en = await db.enrollment.findFirstOrThrow({ where: { classId: cls.id } });
+    expect(en.finalPrice).toBe(9_000_000);
+  });
+
   test("[BULK-08] khoá học chưa cấu hình giá (null/0) → COURSE_NO_PRICE, không chốt", async () => {
     const center = await seedCenter();
     const course = await db.course.create({ data: { name: "Sata rỗng giá", slug: `sata-nogia-${uniq()}` } });

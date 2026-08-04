@@ -17,6 +17,15 @@ export type BackfillPaymentInput = {
   paidDate: Date;
   note?: string | null;
   items: Array<{ itemName: string; unitPrice: number }>;
+  /**
+   * 04/08 — khoản GIẢM nhập ở màn xem thử import (theo số tiền hoặc theo %),
+   * đã quy ra SỐ TIỀN. Đơn ghi `subtotal` = giá niêm yết, `discountAmount` = khoản
+   * giảm, `totalAmount` = phần khách thực phải nộp. Thiếu chỗ này thì công nợ của
+   * mọi ca có khuyến mãi đều dôi ra đúng bằng khoản giảm.
+   */
+  discountAmount?: number;
+  /** Bắt buộc khi có giảm giá — cùng luật với màn tạo đơn tay. */
+  discountReason?: string | null;
 };
 
 /**
@@ -41,7 +50,10 @@ export async function createBackfillOrderPaymentInTx(
   });
   if (existing) return { created: false, paymentId: existing.id };
 
-  const totalAmount = paid.items.reduce((s, it) => s + Math.max(0, Math.round(it.unitPrice)), 0);
+  const subtotal = paid.items.reduce((s, it) => s + Math.max(0, Math.round(it.unitPrice)), 0);
+  // Giảm không được vượt giá niêm yết (đơn âm) và không âm.
+  const discountAmount = Math.min(Math.max(0, Math.round(paid.discountAmount ?? 0)), subtotal);
+  const totalAmount = subtotal - discountAmount;
   const amount = Math.round(paid.amount);
   if (!Number.isFinite(amount) || amount <= 0) return { created: false, paymentId: null };
 
@@ -55,8 +67,19 @@ export async function createBackfillOrderPaymentInTx(
       customerEmail: lead.email,
       leadId: lead.id,
       centerId: lead.centerId,
-      subtotal: totalAmount,
+      subtotal,
+      discountAmount,
       totalAmount,
+      ...(discountAmount > 0
+        ? {
+            discountReason: paid.discountReason ?? null,
+            // Backfill = tiền đã thu từ trước, giảm giá đã được duyệt ngoài hệ thống
+            // ⇒ đánh dấu ĐÃ DUYỆT để đơn không kẹt ở "chờ duyệt giảm giá".
+            discountApprovalStatus: "APPROVED" as const,
+            discountApprovedById: actor.id,
+            discountApprovedAt: paid.paidDate,
+          }
+        : {}),
       paidAt: paid.paidDate,
       confirmedByUserId: actor.id,
       confirmedAt: paid.paidDate,

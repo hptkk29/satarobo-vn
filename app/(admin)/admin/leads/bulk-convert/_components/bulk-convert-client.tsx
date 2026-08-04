@@ -206,6 +206,24 @@ export function BulkConvertClient({
     [visibleLeads, selected, results, childClass],
   )
 
+  /** Đọc khoản giảm từ ghi chú con (nhãn do import ghi: `Giảm=500000đ` / `Giảm=10%`). */
+  const readDiscount = (note: string | null): { type: 'AMOUNT' | 'PERCENT'; value: number } | null => {
+    const m = /Giảm=(\d+)(%|đ)/.exec(note ?? '')
+    if (!m) return null
+    const value = Number(m[1])
+    if (!Number.isFinite(value) || value <= 0) return null
+    return { type: m[2] === '%' ? 'PERCENT' : 'AMOUNT', value }
+  }
+
+  /** Giải trình giảm giá — lấy của con đầu tiên có ghi (đơn gộp nhiều con dùng chung đơn). */
+  const readDiscountReason = (children: { note: string | null }[]): string | null => {
+    for (const ch of children) {
+      const m = /LýDoGiảm=([^·]+)/.exec(ch.note ?? '')
+      if (m) return m[1].trim()
+    }
+    return null
+  }
+
   const submit = async () => {
     if (readyLeads.length === 0) {
       toast.error('Chưa có lead nào đủ điều kiện (cần chọn lớp cho mọi học viên của lead đã tick)')
@@ -231,7 +249,12 @@ export function BulkConvertClient({
               dob: ch.dob || '',
               classId: childClass[ch.id]!,
               consentMedia: childConsent[ch.id] === true,
+              // 04/08 — khuyến mãi người nhập đã gõ ở màn XEM THỬ IMPORT, lưu trong
+              // ghi chú của con dưới nhãn `Giảm=`. Đọc lại ở đây để đơn tạo ra đã
+              // đúng tiền ngay từ đầu, khỏi phải mở từng đơn sửa sau.
+              discount: readDiscount(ch.note),
             })),
+            discountReason: readDiscountReason(lead.children),
             paid:
               !hasPayment.has(lead.id) && Number(paidAmount[lead.id] ?? '') > 0
                 ? {

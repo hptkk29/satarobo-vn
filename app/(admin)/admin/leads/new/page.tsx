@@ -20,7 +20,11 @@ export default async function NewLeadPage() {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const [orgUnits, courses] = await Promise.all([
-    getSelectableOrgUnits(actor),
+    // Chủ dự án chốt 04/08: LEAD KHÔNG BAO GIỜ VỀ HỘI SỞ. HO là cơ quan đầu não,
+    // không phải nơi dạy học — chỉ đơn vị type=CENTER mới nhận lead/học viên.
+    // (Trước đây dropdown liệt kê cả "Hội sở", tạo đúng loại lead mà bước chốt sẽ
+    // từ chối bằng LEAD_HEAD_OFFICE — sai từ lúc nhập, phát hiện lúc chốt.)
+    getSelectableOrgUnits(actor, { types: ["CENTER"] }),
     // Chỉ khoá LÁ dạy được (Sata1-8/Combo) — kèm category để nhóm optgroup.
     sdb.course.findMany({ where: { isActive: true, isTeachable: true }, orderBy: { name: "asc" }, select: { id: true, name: true, category: true } }),
   ]);
