@@ -292,7 +292,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "honors:create": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "MARKETING"],
   "honors:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "HR", "MARKETING"],
   "honors:delete": ["SUPER_ADMIN"],
-  "honors:settings": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "honors:settings": ["SUPER_ADMIN"],
 
   // --- Jobs ---
   // FL W0-NAV-2 hygiene: SALES_CSM bỏ Tuyển dụng (HR/Marketing/quản lý mới cần).
@@ -530,7 +530,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "inventory:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "ACCOUNTANT"],
   "inventory:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "inventory:movement": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
-  "inventory:audit": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "inventory:audit": ["SUPER_ADMIN", "ACCOUNTANT"],
 
   // --- ZMRoboKit ---
   "kits:view": [
@@ -539,7 +539,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "kits:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Site content / CMS ---
-  "site-content:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  "site-content:view": ["SUPER_ADMIN", "MARKETING"],
   "site-content:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Audit logs ---
@@ -589,7 +589,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- Phase 5.13 — Email System ---
   // R7 hygiene (BA #07 3.C): ACCOUNTANT bỏ Email Templates/Logs — không phải chức năng kế toán.
-  "emails:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  "emails:view": ["SUPER_ADMIN", "MARKETING"],
   "emails:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 };
 
