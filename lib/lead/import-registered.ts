@@ -547,9 +547,25 @@ export function parseRegisteredSheets(
         childByKey.set(childKey, child);
         parent.children.push(child);
       } else {
-        // Dòng lặp cross-sheet (sheet sau tích lũy sheet trước) → gộp, đắp field trống.
+        // Dòng lặp cross-sheet → gộp, đắp field trống.
+        //
+        // ⚠️ KHÔNG cộng dồn học phí. Đo file thật 05/08: 16/19 ca lặp có số tiền
+        // GIỐNG HỆT nhau ở cả hai sheet — đó là danh sách mang sang tháng sau, cộng
+        // vào là thổi khống doanh thu (73.752.000 trên file này). Chỉ 3 ca có số
+        // tiền KHÁC nhau mới là đóng đợt 2 (vd 4.320.000 + 3.600.000 = đúng giá
+        // niêm yết Sata3). Máy không tự quyết được ca nào là đợt 2 → nêu ra cho
+        // người nhập chọn, kèm sẵn tổng để điền.
         mergedDuplicateRows++;
         existingChild.sources.push({ sheet: sheet.name, row: excelRow });
+        const cu = existingChild.paidAmount;
+        const moi = childData.paidAmount;
+        if (cu !== null && moi !== null && cu !== moi) {
+          const dsSheet = existingChild.sources.map((s) => s.sheet).join(" · ");
+          existingChild.warnings.push(
+            `Học phí KHÁC nhau giữa các sheet (${dsSheet}): ${cu.toLocaleString("vi-VN")} và ${moi.toLocaleString("vi-VN")}` +
+              ` — nếu là đóng 2 đợt thì tổng là ${(cu + moi).toLocaleString("vi-VN")}; sửa ô Học phí cho đúng`,
+          );
+        }
         for (const k of [
           "grade",
           "courseRaw",
