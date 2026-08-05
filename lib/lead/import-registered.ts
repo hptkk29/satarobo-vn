@@ -562,7 +562,7 @@ export function parseRegisteredSheets(
         if (cu !== null && moi !== null && cu !== moi) {
           const dsSheet = existingChild.sources.map((s) => s.sheet).join(" · ");
           existingChild.warnings.push(
-            `Học phí KHÁC nhau giữa các sheet (${dsSheet}): ${cu.toLocaleString("vi-VN")} và ${moi.toLocaleString("vi-VN")}` +
+            `${CROSS_SHEET_FEE_WARNING} (${dsSheet}): ${cu.toLocaleString("vi-VN")} và ${moi.toLocaleString("vi-VN")}` +
               ` — nếu là đóng 2 đợt thì tổng là ${(cu + moi).toLocaleString("vi-VN")}; sửa ô Học phí cho đúng`,
           );
         }
@@ -858,6 +858,13 @@ export interface RegisteredImportPlan {
 }
 
 export const IMPORT_NOTE_MARKER = "[Import ĐK Excel]";
+
+/**
+ * Đầu câu cảnh báo "cùng học viên nhưng học phí khác nhau giữa các sheet".
+ * Export để route nâng dòng đó thành BẮT BUỘC QUYẾT — đây là tiền, bỏ sót là ghi
+ * nhận thiếu doanh thu (đo file thật 05/08: 7 dòng, lệch 30.736.000).
+ */
+export const CROSS_SHEET_FEE_WARNING = "Học phí KHÁC nhau giữa các sheet";
 
 /**
  * 04/08 — nhãn số tiền ĐÃ ĐÓNG dạng máy đọc được trong note của con

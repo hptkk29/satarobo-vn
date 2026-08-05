@@ -34,6 +34,7 @@ import {
   normalizeVi,
   parentDisplayName,
   planStudentSync,
+  CROSS_SHEET_FEE_WARNING,
   type SheetAoA,
   type CellValue,
   type ExistingLead,
@@ -458,7 +459,11 @@ export async function POST(req: NextRequest) {
               // 04/08 — máy tự phân loại phần chênh: giảm giá thật / công nợ / phải hỏi.
               xuLy: p.treatment,
               canCu: p.evidence,
-              phaiXem: p.needsHuman,
+              // Học phí lệch giữa các sheet = tiền, không phải chuyện nhỏ. Nếu chỉ
+              // để nó là một dòng cảnh báo nằm lẫn giữa hàng chục dòng khác thì rất
+              // dễ bấm ghi thẳng và ghi nhận THIẾU tiền (đo file thật: 7 dòng, lệch
+              // 30.736.000). Nâng thành dòng BẮT BUỘC QUYẾT → nổi lên đầu, viền đỏ.
+              phaiXem: p.needsHuman || c.warnings.some((w) => w.includes(CROSS_SHEET_FEE_WARNING)),
             };
           })(),
           // Giá trị ĐANG dùng (đã tính cả ô người nhập vừa sửa) → đổ vào ô nhập

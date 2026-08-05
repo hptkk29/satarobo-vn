@@ -21,6 +21,7 @@ import {
   isPlaceholderParentName,
   contactFromLeadNote,
   planStudentSync,
+  CROSS_SHEET_FEE_WARNING,
 } from "./import-registered";
 
 // Chủ dự án chốt 05/08: file không ghi tên PH → điền "Phụ huynh của <tên con>".
@@ -407,5 +408,45 @@ describe("CƠ SỞ — tuyệt đối không được lệch", () => {
 
   it("sửa tay cơ sở ở màn xem thử thì theo đúng giá trị đã sửa", () => {
     expect(parse(["BÉ A", "0905000111", "CS1.HV.0031", ""], { center: "CS2" }).centerCode).toBe("CS2");
+  });
+});
+
+// Chốt 05/08: cùng học viên xuất hiện ở nhiều sheet.
+// Đo file thật: 16/19 ca có tiền GIỐNG NHAU (danh sách mang sang tháng sau) — cộng
+// dồn là thổi khống 73.752.000đ. Chỉ ca tiền KHÁC nhau mới là đóng nhiều đợt.
+describe("gộp cross-sheet — học phí", () => {
+  const HEAD = [
+    "Ngày", "Họ và Tên học viên", "Lớp", "Số điện thoại",
+    "Khoá học đăng ký", "Học phí", "Cơ sở", "Tên Phụ Huynh", "Ghi chú",
+  ];
+  const dong = (tien: string) =>
+    ["1/8/26", "BÉ A", "Lớp 4", "0905000111", "Sata 4", tien, "CS1: N.Hữu Thọ", "Chị B", ""];
+  const hai = (t1: string, t2: string) =>
+    parseRegisteredSheets([
+      { name: "Tháng 7", rows: [HEAD, dong(t1)] },
+      { name: "Tháng 8", rows: [HEAD, dong(t2)] },
+    ]).parents[0]!.children[0]!;
+
+  it("tiền GIỐNG nhau → gộp im lặng, KHÔNG cộng dồn, KHÔNG cảnh báo", () => {
+    const c = hai("4.640.000", "4.640.000");
+    expect(c.sources).toHaveLength(2);
+    expect(c.paidAmount).toBe(4_640_000); // KHÔNG phải 9.280.000
+    expect(c.warnings.join(" | ")).not.toContain(CROSS_SHEET_FEE_WARNING);
+  });
+
+  it("tiền KHÁC nhau → nêu cảnh báo kèm TỔNG gợi ý, vẫn không tự cộng", () => {
+    const c = hai("4.320.000", "3.600.000");
+    expect(c.paidAmount).toBe(4_320_000); // giữ nguyên, người nhập quyết
+    const w = c.warnings.find((x) => x.includes(CROSS_SHEET_FEE_WARNING))!;
+    expect(w).toBeDefined();
+    expect(w).toContain("4.320.000");
+    expect(w).toContain("3.600.000");
+    expect(w).toContain("7.920.000"); // tổng gợi ý = đúng giá niêm yết Sata3
+    expect(w).toContain("Tháng 7");
+    expect(w).toContain("Tháng 8");
+  });
+
+  it("một bên chưa đọc được số tiền → không cảnh báo bừa", () => {
+    expect(hai("4.320.000", "chưa đóng").warnings.join(" | ")).not.toContain(CROSS_SHEET_FEE_WARNING);
   });
 });
