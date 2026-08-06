@@ -4,6 +4,7 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { detectSessionConflicts } from "@/lib/lms/schedule-conflict";
 import { sessionEndAt } from "@/lib/lms/scheduling";
+import { sessionWindow } from "@/lib/lms/schedule-conflict";
 import { vnAddDays } from "@/lib/time/vn";
 
 // =============================================================================
@@ -165,14 +166,19 @@ export async function adjustSession(opts: {
     const effTeacherId = hasTeacher ? teacherId ?? null : cls.teacherId;
     const effRoomId = hasRoom ? roomId ?? null : session.roomId ?? cls.roomId;
     const candDate = hasDate ? date! : session.date;
+    // Mốc đầu PHẢI áp giờ lớp. Bản cũ truyền `candDate` thô (thường 00:00 vì ô chọn
+    // ngày không kèm giờ) trong khi mốc cuối lại áp giờ ⇒ khung kéo dài bất thường
+    // (vd 00:00 → 19:30) và đè lên mọi buổi khác trong ngày. Cùng họ lỗi với
+    // sessionWindow — xem ghi chú ở lib/lms/schedule-conflict.ts.
+    const khung = sessionWindow(candDate, cls.startTime, cls.endTime);
     const conflict = await detectSessionConflicts({
       sessionId,
       excludeClassId: session.classId,
       centerId: null, // soát toàn hệ thống: GV có thể dạy 2 cơ sở
       teacherId: effTeacherId,
       roomId: effRoomId,
-      startAt: candDate,
-      endAt: sessionEndAt(candDate, cls.startTime, cls.endTime),
+      startAt: khung.startAt,
+      endAt: khung.endAt,
     });
     if (conflict.teacherConflict) {
       return { ok: false, error: "Trùng lịch giáo viên: GV đã có buổi dạy lớp khác vào khung giờ này." };

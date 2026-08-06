@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { detectScheduleConflict, type Slot } from "@/lib/lms/scheduling";
+import { vnDateAt, vnParts } from "@/lib/time/vn";
 
 // =============================================================================
 // LMS-6 — nối detectScheduleConflict vào write-path: 1 buổi candidate có trùng
@@ -20,7 +21,20 @@ function parseHHmm(t: string | null | undefined): number | null {
   return (h || 0) * 60 + (m || 0);
 }
 
-/** PURE — cuối buổi từ start (date) + thời lượng lớp; fallback 90'. */
+/**
+ * PURE — khung giờ thật của một buổi: NEO theo `startTime` của lớp (đồng hồ VN),
+ * dài bằng `endTime - startTime` (fallback 90').
+ *
+ * ⚠️ Bản cũ trả `startAt: date` và chỉ dùng startTime/endTime để tính ĐỘ DÀI — tức
+ * phép so trùng KHÔNG BAO GIỜ đọc giờ lớp, chỉ đọc phần giờ nằm trong cột `date`.
+ * Mà `date` lưu 00:00 cho mọi buổi ⇒ lớp 10:00–11:30 và lớp 18:00–19:30 cùng ngày
+ * đều ra `00:00–01:30`, đè khít nhau. Hệ quả: HAI LỚP BẤT KỲ cùng ngày, cùng GV
+ * (hoặc cùng phòng) luôn bị báo "Trùng lịch giáo viên", dù giờ cách nhau bao xa.
+ * Chủ dự án gặp 06/08 khi cài sata6 10h-11h30 và sata4 18h-19h30 cùng 30/07/2026.
+ *
+ * Neo giờ đi qua `vnDateAt` chứ KHÔNG dùng `new Date(y,m,d,h,m)`: Vercel chạy UTC
+ * còn máy dev +07 — dựng giờ bằng constructor local là lệch 7 tiếng trên prod.
+ */
 export function sessionWindow(
   date: Date,
   startTime: string | null | undefined,
@@ -28,9 +42,14 @@ export function sessionWindow(
 ): { startAt: Date; endAt: Date } {
   const s = parseHHmm(startTime);
   const e = parseHHmm(endTime);
-  let durMin = 90;
-  if (s != null && e != null && e - s > 0) durMin = e - s;
-  return { startAt: date, endAt: new Date(date.getTime() + durMin * 60_000) };
+  const durMin = s != null && e != null && e - s > 0 ? e - s : 90;
+
+  // Không đọc được giờ lớp → giữ nguyên mốc cũ (không đoán bừa, không chặn oan).
+  if (s == null) return { startAt: date, endAt: new Date(date.getTime() + durMin * 60_000) };
+
+  const p = vnParts(date);
+  const startAt = vnDateAt(p.year, p.month, p.day, Math.floor(s / 60), s % 60);
+  return { startAt, endAt: new Date(startAt.getTime() + durMin * 60_000) };
 }
 
 type SessionRow = {
