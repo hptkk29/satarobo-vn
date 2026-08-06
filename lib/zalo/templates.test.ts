@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   ZNS_TUITION_PARAM_SPEC,
   ZNS_ACCOUNT_PARAM_SPEC,
+  ZNS_BIRTHDAY_PARAM_SPEC,
   buildTuitionZnsParams,
   buildAccountZnsParams,
+  buildBirthdayZnsParams,
   formatZnsDateTime,
   type TuitionZnsInput,
 } from "./templates";
@@ -93,6 +95,35 @@ describe("buildAccountZnsParams — hợp đồng với mẫu 616899", () => {
   it("thiếu tên thì thay bằng chữ đỡ, KHÔNG gửi chuỗi rỗng", () => {
     expect(buildAccountZnsParams({ customerName: "  ", phone: "84901234567" }).name).toBe("Quý phụ huynh");
     expect(buildAccountZnsParams({ customerName: null, phone: "84901234567" }).name).toBe("Quý phụ huynh");
+  });
+});
+
+describe("buildBirthdayZnsParams — hợp đồng với mẫu chúc mừng sinh nhật", () => {
+  const BIRTHDAY = { studentName: "Nguyễn Văn A", dateText: "20/08/2026" };
+
+  it("trả ĐÚNG bộ khoá mà mẫu khai — không thiếu, không thừa", () => {
+    expect(Object.keys(buildBirthdayZnsParams(BIRTHDAY)).sort()).toEqual(
+      Object.keys(ZNS_BIRTHDAY_PARAM_SPEC).sort(),
+    );
+  });
+
+  it("mỗi tham số đúng KIỂU mẫu khai", () => {
+    const params = buildBirthdayZnsParams(BIRTHDAY);
+    for (const [key, spec] of Object.entries(ZNS_BIRTHDAY_PARAM_SPEC)) {
+      expect(typeof params[key], `tham số ${key}`).toBe(spec.type);
+    }
+  });
+
+  it("không tham số nào vượt giới hạn ký tự của mẫu", () => {
+    const params = buildBirthdayZnsParams({ studentName: "T".repeat(200), dateText: "20/08/2026" });
+    for (const [key, spec] of Object.entries(ZNS_BIRTHDAY_PARAM_SPEC)) {
+      expect(String(params[key]).length, `tham số ${key}`).toBeLessThanOrEqual(spec.max);
+    }
+  });
+
+  it("thiếu tên học viên thì thay bằng chữ đỡ, KHÔNG gửi chuỗi rỗng", () => {
+    expect(buildBirthdayZnsParams({ ...BIRTHDAY, studentName: "  " }).studentName).toBe("Bé yêu");
+    expect(buildBirthdayZnsParams({ ...BIRTHDAY, studentName: null }).studentName).toBe("Bé yêu");
   });
 });
 

@@ -49,6 +49,7 @@ import {
   NotebookPen,
   AlertTriangle,
   HeartHandshake,
+  Cake,
   Gauge,
   Star,
   Clock,
@@ -172,6 +173,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cảnh báo rủi ro", href: "/canh-bao-rui-ro", icon: AlertTriangle, perm: [...PAGE_GATES["/canh-bao-rui-ro"]] },
       // FL W0-NAV-2 hygiene: Chăm sóc HV = CSKH/quản lý + GV (giữ Sale & GV), ẩn khỏi KT.
       { label: "Chăm sóc HV", href: "/cham-soc-hv", icon: HeartHandshake, perm: [...PAGE_GATES["/cham-soc-hv"]] },
+      // Sinh nhật HV (06/08/2026) — cùng nhóm chăm sóc; gate students:view-all nên
+      // Sale/QLCS/Kế toán/MKT/HR thấy, GV không (GV được báo riêng theo buổi dạy).
+      { label: "Sinh nhật HV", href: "/sinh-nhat", icon: Cake, perm: [...PAGE_GATES["/sinh-nhat"]] },
     ],
   },
   {

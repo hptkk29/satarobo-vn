@@ -13,6 +13,10 @@ export const SCOPED_MODELS = new Set<string>([
   "InventoryAudit", "StockBalance", "StockMovement", "Employee", "EmployeeCheckin",
   "CenterDayChecklist", "MakeupNeed", "Notification", "ShiftRegistration",
   "SataCoinTransaction", "StudentCareTask", "StudentCenterHistory", "StudentRiskAlert",
+  // Sinh nhật HV — cùng họ dữ liệu học viên, cách ly theo cơ sở như StudentCareTask.
+  // Mọi create PHẢI tự set centerId (scopedDb không che write) — quên = dòng vô hình
+  // với chính Sale/QLCS cơ sở đó, tức mất luôn việc chăm sóc.
+  "StudentBirthdayGreeting",
   "Survey", "SurveyResponse", "TimesheetAdjustmentRequest",
   "MessengerConversation", // R1-01 — hội thoại CRM theo cơ sở
   "Payment", // R7-04 — khoản thanh toán theo cơ sở
@@ -133,6 +137,7 @@ export function getModelPrefixes(model: string): string[] {
     case "StudentCareTask":
     case "StudentCenterHistory":
     case "StudentRiskAlert":
+    case "StudentBirthdayGreeting":
       return ["students:"];
     case "Class":
     case "ClassGroup":

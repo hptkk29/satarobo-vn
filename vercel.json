@@ -68,6 +68,10 @@
     {
       "path": "/api/cron/payment-reconcile",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/student-birthday",
+      "schedule": "0 1 * * *"
     }
   ]
 }

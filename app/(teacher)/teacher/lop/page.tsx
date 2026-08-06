@@ -34,6 +34,8 @@ import { HubAssignmentsTab } from "./_components/hub-assignments-tab";
 import { HubMaterialsTab } from "./_components/hub-materials-tab";
 import { HubGalleryTab } from "./_components/hub-gallery-tab";
 import { BackLink } from "../_components/ui/back-link";
+import { getSessionBirthdays } from "@/lib/students/birthday";
+import { BirthdayBanner } from "./_components/birthday-banner";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
 
@@ -122,7 +124,11 @@ export default async function TeacherClassesPage({
       return <NotYours />;
     }
 
-    const { rows } = await buildSessionAttendanceRows(actor, sessionId);
+    // Sinh nhật tổ chức tại buổi này — đọc SAU khi ownership đã gác ở trên.
+    const [{ rows }, birthdays] = await Promise.all([
+      buildSessionAttendanceRows(actor, sessionId),
+      getSessionBirthdays(sessionId),
+    ]);
     // Câu 46: bỏ studentPhone khỏi payload client — chỉ giữ tên + trạng thái.
     const panelRows: AttendancePanelRow[] = rows.map((r) => ({
       studentId: r.studentId,
@@ -150,6 +156,7 @@ export default async function TeacherClassesPage({
             .join(" · ")}
           actions={<SessionStatusPill status={sess.status} />}
         />
+        <BirthdayBanner items={birthdays} />
         <AttendancePanel
           sessionId={sessionId}
           rows={panelRows}

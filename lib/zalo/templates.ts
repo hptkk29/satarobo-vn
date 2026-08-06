@@ -65,6 +65,25 @@ export const ZNS_ACCOUNT_PARAM_SPEC = {
   login_id: { type: "string", max: 15 },
 } as const satisfies Record<string, ParamSpec>;
 
+/**
+ * Mẫu **"Chúc mừng sinh nhật"** — mục đích *Chăm sóc khách hàng*.
+ *
+ * 🔴 **MẪU CHƯA TỒN TẠI TRÊN ZBS** (06/08/2026). Bảng dưới là bộ tham số ĐỀ XUẤT
+ * khi soạn mẫu. Sau khi Zalo duyệt (2–3 ngày làm việc) PHẢI mở bảng "Nội dung tham
+ * số" thật trên ZBS đối chiếu rồi mới đặt `zalo.znsTemplateBirthday` — đặt ID mẫu
+ * chưa duyệt / lệch tham số thì Zalo trả `-1122` và tin không tới, trong khi luồng
+ * gọi vẫn báo thành công. Đúng vết mẫu 616899 và bug PR #77.
+ *
+ * ⚠️ Khác mẫu Xác thực (Tag 1, gửi 24/7): tin CSKH **dính khung cấm 22:00–06:00**
+ * (mã lỗi `-133`). Cron chạy 08:00 giờ VN nên an toàn — đừng dời lịch cron ra ngoài
+ * khung cho phép.
+ */
+export const ZNS_BIRTHDAY_PARAM_SPEC = {
+  studentName: { type: "string", max: 50 },
+  /** Ngày sinh nhật dạng `dd/MM/yyyy` — 10 ký tự. */
+  date: { type: "string", max: 20 },
+} as const satisfies Record<string, ParamSpec>;
+
 const VN_TZ = "Asia/Ho_Chi_Minh";
 
 /**
@@ -141,5 +160,24 @@ export function buildAccountZnsParams(input: AccountZnsInput): Record<string, st
   return {
     name: clamp(input.customerName, ZNS_ACCOUNT_PARAM_SPEC.name.max, "Quý phụ huynh"),
     login_id: clamp(formatPhoneVN(input.phone), ZNS_ACCOUNT_PARAM_SPEC.login_id.max, "—"),
+  };
+}
+
+export type BirthdayZnsInput = {
+  studentName: string | null;
+  /** Ngày sinh nhật ĐÃ định dạng `dd/MM/yyyy` theo ngày lịch VN.
+   *  Chuỗi chứ không phải Date: chỗ gọi đã quy về ngày lịch đúng qua `vnDayKey`,
+   *  nhận Date ở đây là mở lại đường format theo giờ máy chạy (lệch 1 ngày). */
+  dateText: string;
+};
+
+/**
+ * Dựng params cho mẫu chúc mừng sinh nhật — đúng bộ khoá `ZNS_BIRTHDAY_PARAM_SPEC`.
+ * THUẦN: không chạm DB/mạng nên test được trực tiếp.
+ */
+export function buildBirthdayZnsParams(input: BirthdayZnsInput): Record<string, string | number> {
+  return {
+    studentName: clamp(input.studentName, ZNS_BIRTHDAY_PARAM_SPEC.studentName.max, "Bé yêu"),
+    date: clamp(input.dateText, ZNS_BIRTHDAY_PARAM_SPEC.date.max, "—"),
   };
 }

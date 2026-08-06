@@ -159,6 +159,8 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "search",
   "sessions",
   "settings",
+  // Sinh nhật học viên (06/08/2026) — thiếu segment ở đây thì route CHẾT dù page tồn tại.
+  "sinh-nhat",
   "site-content",
   "students",
   "teachers",

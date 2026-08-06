@@ -263,6 +263,58 @@ export const SETTINGS = {
     default: 5, // lib/students/lifecycle.ts FREQUENT_ABSENT_WINDOW
     centerOverridable: true,
   }),
+  // ── Sinh nhật học viên (06/08/2026) ────────────────────────────────────────
+  // Buổi TỔ CHỨC có thể rơi TRƯỚC ngày sinh nhật (hôm sinh nhật HV không có lớp),
+  // nên mốc nhắc bám `celebrationDate`, KHÔNG bám ngày sinh nhật. Chủ dự án chốt
+  // cho QLCS tự chỉnh số ngày báo trước tại /admin/cau-hinh-van-hanh.
+  "student.birthdayAlertDaysBefore": def({
+    key: "student.birthdayAlertDaysBefore",
+    group: "student",
+    label: "Báo trước buổi tổ chức sinh nhật (ngày)",
+    schema: z.number().int().min(0).max(30),
+    default: 3,
+    centerOverridable: true,
+  }),
+  "student.birthdayLookaheadDays": def({
+    key: "student.birthdayLookaheadDays",
+    group: "student",
+    label: "Cửa sổ quét sinh nhật sắp tới (ngày)",
+    // Phải ≥ birthdayAlertDaysBefore, nếu không cron chưa kịp lập kế hoạch đã tới hạn báo.
+    schema: z.number().int().min(1).max(60),
+    default: 10,
+    centerOverridable: false,
+  }),
+  "student.birthdayLookbackDays": def({
+    key: "student.birthdayLookbackDays",
+    group: "student",
+    label: "Buổi tổ chức được lùi tối đa trước sinh nhật (ngày)",
+    schema: z.number().int().min(0).max(30),
+    default: 7,
+    centerOverridable: true,
+  }),
+  "student.birthdayZnsEnabled": def({
+    key: "student.birthdayZnsEnabled",
+    group: "student",
+    label: "Gửi ZNS chúc mừng sinh nhật cho phụ huynh",
+    schema: z.boolean(),
+    // Tắt cờ này thì phần nhắc việc Sale/QLCS/GV VẪN chạy — chỉ ngưng tốn tiền tin nhắn.
+    default: true,
+    centerOverridable: false,
+  }),
+  // Template ZNS đọc từ DB để đổi mẫu không cần deploy (cùng mẫu zalo.znsTemplateOtp).
+  // ⚠️ RỖNG = KHÔNG GỬI (skip an toàn). Mẫu "Chúc mừng sinh nhật" phải được Zalo DUYỆT
+  // trước; đặt ID mẫu chưa duyệt vào đây thì mọi cú gửi hỏng — đúng vết mẫu 616899.
+  // Duyệt xong PHẢI mở bảng tham số trên ZBS đối chiếu ZNS_BIRTHDAY_PARAM_SPEC rồi mới đặt.
+  "zalo.znsTemplateBirthday": def({
+    key: "zalo.znsTemplateBirthday",
+    group: "student",
+    // Ô sửa ở /admin/cau-hinh-van-hanh nhận JSON ⇒ giá trị chuỗi phải có nháy kép.
+    // Nhắc ngay trong nhãn, nếu không người nhập gõ 616999 trần → JSON.parse ra SỐ → Zod chặn.
+    label: 'Template ID ZNS chúc mừng sinh nhật — nhập dạng "616999", rỗng "" = không gửi',
+    schema: z.string().regex(/^[0-9]*$/, "Template ID chỉ gồm chữ số"),
+    default: "",
+    centerOverridable: false,
+  }),
   "crm.dedupWindowDays": def({
     key: "crm.dedupWindowDays",
     group: "crm",

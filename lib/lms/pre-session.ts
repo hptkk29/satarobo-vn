@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { getSessionBirthdays } from "@/lib/students/birthday";
 
 // LMS-4 — gom thông tin GV cần TRƯỚC buổi học.
 
@@ -54,7 +55,7 @@ export async function getPreSessionInfo(sessionId: string): Promise<PreSessionIn
     expectedIsSuggested = true;
   }
 
-  const [enrollments, absenceGroups, lowFeedback, ungradedRows] = await Promise.all([
+  const [enrollments, absenceGroups, lowFeedback, ungradedRows, birthdays] = await Promise.all([
     db.enrollment.findMany({
       where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST }, deletedAt: null }, // FIX-C3
       select: { student: { select: { id: true, name: true } } },
@@ -82,6 +83,9 @@ export async function getPreSessionInfo(sessionId: string): Promise<PreSessionIn
         assignment: { select: { title: true } },
       },
     }),
+    // Sinh nhật được TỔ CHỨC tại buổi này (06/08/2026). Đọc theo buổi đã được cron
+    // chốt, không tự dò lại ngày sinh — hai chỗ tính độc lập là hai chỗ lệch nhau.
+    getSessionBirthdays(sessionId),
   ]);
 
   const students = enrollments.map((e) => e.student);
@@ -89,10 +93,22 @@ export async function getPreSessionInfo(sessionId: string): Promise<PreSessionIn
     absenceGroups.filter((g) => g._count._all >= 2).map((g) => [g.studentId, g._count._all]),
   );
   const lowSet = new Set(lowFeedback.map((f) => f.studentId));
+  const birthdayMap = new Map(birthdays.map((b) => [b.studentId, b]));
 
   const studentsToNote = students
     .map((s) => {
       const reasons: string[] = [];
+      // Sinh nhật lên ĐẦU: đây là việc phải làm TRONG buổi, khác hai lý do dưới
+      // (bối cảnh để lưu ý). Buổi tổ chức có thể sớm hơn ngày sinh nhật nên phải
+      // ghi rõ ngày, giáo viên không suy ra được từ hồ sơ.
+      const bd = birthdayMap.get(s.id);
+      if (bd) {
+        reasons.push(
+          bd.onBirthday
+            ? `🎂 Sinh nhật hôm nay (${bd.birthdayText}) — chúc mừng trong buổi`
+            : `🎂 Tổ chức sinh nhật (sinh nhật ${bd.birthdayText}, hôm đó lớp không học)`,
+        );
+      }
       const absent = absentMap.get(s.id);
       if (absent) reasons.push(`Vắng ${absent} buổi`);
       if (lowSet.has(s.id)) reasons.push("Nhận xét gần đây thấp (≤2★)");
