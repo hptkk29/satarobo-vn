@@ -363,6 +363,16 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     });
 
     return { parentId: parent.id, studentIds, enrollmentIds };
+  },
+  {
+    // Không đặt thì Prisma dùng mặc định 5s — chốt 1 lead làm RẤT nhiều việc trong
+    // cùng transaction (claim lead, tạo/gộp User phụ huynh, N học viên, N ghi danh,
+    // đơn hàng + khoản thu backfill, consent, idempotency, audit). 5s vừa đủ khi
+    // app và DB cùng vùng, nhưng hết ngay khi đường truyền chậm hoặc lead nhiều con
+    // — và lỗi hiện ra dưới dạng khó hiểu ("Transaction not found... old closed
+    // transaction"), không phải "quá giờ". Đo 05/08 khi chốt lô nhập liệu đầu tiên.
+    timeout: 30_000,
+    maxWait: 15_000,
   });
 
   // SAU commit — side-effect không-atomic.

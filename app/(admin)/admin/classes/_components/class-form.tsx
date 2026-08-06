@@ -337,13 +337,13 @@ export function ClassForm({
               groups={groupTeachableCourses(courses)}
             />
             <SelectField
-              label="Đơn vị"
+              label="Cơ sở"
               name="orgUnitId"
               value={orgUnitId}
               onChange={onOrgUnitChange}
               required
               options={[
-                { value: "", label: "— Chọn đơn vị —" },
+                { value: "", label: "— Chọn cơ sở —" },
                 ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
               ]}
             />

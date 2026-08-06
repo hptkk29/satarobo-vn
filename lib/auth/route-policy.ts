@@ -159,6 +159,8 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "search",
   "sessions",
   "settings",
+  // Sinh nhật học viên (06/08/2026) — thiếu segment ở đây thì route CHẾT dù page tồn tại.
+  "sinh-nhat",
   "site-content",
   "students",
   "teachers",
@@ -210,6 +212,12 @@ export function isInfraPath(p: string): boolean {
   return (
     p.startsWith("/_next/") ||
     p.startsWith("/api/") ||
+    // Sentry tunnel (`tunnelRoute: "/monitoring"` trong next.config.ts). KHÔNG
+    // phải route admin nên trước đây rơi xuống nhánh cuối của admin host → 308
+    // sang public host: báo lỗi của site admin đi sai chỗ, và 308 permanent bị
+    // trình duyệt cache vĩnh viễn nên không tự khỏi khi sửa.
+    p === "/monitoring" ||
+    p.startsWith("/monitoring/") ||
     p === "/favicon.ico" ||
     p === "/robots.txt" ||
     p === "/sitemap.xml" ||

@@ -105,7 +105,19 @@ export const studentCreateSchema = z.object({
 
   // Existing legacy fields — keep for compat (kept in schema, can still be edited)
   centerId: nullableStr,
-  orgUnitId: nullableStr,
+  // Chủ dự án chốt 04/08: học viên BẮT BUỘC thuộc một cơ sở dạy học. Bỏ trống trước
+  // đây ra HV "không cơ sở" — biến mất khỏi mọi màn lọc theo cơ sở mà không báo lỗi.
+  orgUnitId: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v, ctx) => {
+      const s = typeof v === "string" ? v.trim() : "";
+      if (!s) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Chọn cơ sở của học viên" });
+        return z.NEVER;
+      }
+      return s;
+    }),
 });
 
 export type StudentCreateInput = z.infer<typeof studentCreateSchema>;

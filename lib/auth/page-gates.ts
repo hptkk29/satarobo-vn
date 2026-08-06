@@ -38,6 +38,12 @@ export const PAGE_GATES = {
    *  parent-requests:manage (thay hack `hasRole(SALES_CSM)` cũ trong page.tsx). */
   "/cham-soc-hv": ["parent-requests:manage"],
 
+  /** Sinh nhật học viên (06/08/2026) — Sale/CSKH + QL cơ sở là người đi chúc.
+   *  Gác bằng `students:view-all`: trang liệt kê học viên toàn cơ sở, đúng bộ vai
+   *  đang giữ quyền đó. GV không vào (không lọc theo lớp phân công) — GV nhận
+   *  thông báo riêng cho buổi mình đứng lớp. */
+  "/sinh-nhat": ["students:view-all"],
+
   /** Nội dung website. Trước 10/07 gác nhầm bằng `honors:settings` ⇒ Marketing thấy
    *  menu mà không vào được. Sau flip nó tự hết đau do HO_MARKETING tình cờ giữ cả hai
    *  — tức đúng do may, không do thiết kế. */

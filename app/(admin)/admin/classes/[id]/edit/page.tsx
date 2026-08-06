@@ -75,7 +75,8 @@ export default async function EditClassPage({ params }: Props) {
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true, code: true, slug: true }, // T3.4 — code/slug để gợi ý tên lớp
     }),
-    getSelectableOrgUnits(actor),
+    // Lớp CHỈ mở ở cơ sở dạy học — Hội sở không nằm trong danh sách (chốt 04/08).
+    getSelectableOrgUnits(actor, { types: ["CENTER"] }),
     sdb.classGroup.findMany({
       where: { deletedAt: null, status: "ACTIVE" },
       orderBy: { displayCode: "asc" },

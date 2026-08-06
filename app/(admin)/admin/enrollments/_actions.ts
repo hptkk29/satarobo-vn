@@ -12,6 +12,7 @@ import { z } from "zod";
 import { canTransition } from "@/lib/enrollments/status";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
+import { crossCenterError } from "@/lib/enrollment-flow";
 
 type Sdb = ReturnType<typeof scopedDb>;
 
@@ -243,9 +244,8 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
   if (!studentRow) return { error: "Không tìm thấy học viên" };
   // QA 21/07 (B1) — legacy action vẫn là endpoint exposed: áp cùng guard cơ sở
   // như enrollStudent (rule §15.1(2) lib/lms/assign).
-  if (classRow.centerId && studentRow.centerId !== classRow.centerId) {
-    return { error: "Học viên thuộc cơ sở khác với lớp — không thể đăng ký chéo cơ sở." };
-  }
+  const xErr = crossCenterError(classRow.centerId, studentRow.centerId);
+  if (xErr) return { error: xErr };
   // QA 21/07 (B2 đợt 2) — cùng guard "đang học lớp khác" như enrollStudent.
   const liveElsewhere = await sdb.enrollment.findFirst({
     where: {
@@ -599,13 +599,8 @@ export async function enrollStudent(
   // QA 21/07 (B1) — mirror rule §15.1(2) của luồng gán chuẩn (lib/lms/assign):
   // học viên phải CÙNG CƠ SỞ với lớp. Trước đây /enrollments/new là "cửa sau"
   // cho HS CS2 vào lớp CS1 (đổi trạng thái sau đó fail im lặng vì cross-center).
-  if (cls.centerId && student.centerId !== cls.centerId) {
-    return {
-      ok: false,
-      error:
-        "Học viên thuộc cơ sở khác với lớp — chọn lớp cùng cơ sở hoặc chuyển cơ sở học viên trước.",
-    };
-  }
+  const crossErr = crossCenterError(cls.centerId, student.centerId);
+  if (crossErr) return { ok: false, error: crossErr };
 
   // QA 21/07 (B2, siết đợt 2 theo QĐ user) — chặn khi HS đang có BẤT KỲ ghi danh
   // còn học (STUDYING/ACTIVE) ở lớp khác, KHÔNG chỉ cùng khoá (đợt 1 chỉ chặn

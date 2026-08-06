@@ -15,6 +15,12 @@ import {
   missingMilestoneComments,
 } from "@/lib/lms/report-card-milestone";
 import { formatDateVN } from "@/lib/format/date";
+import {
+  formatDayKeyDMY,
+  shiftDayKey,
+  vnDayKey,
+  vnDayStartUtc,
+} from "@/lib/students/birthday-dates";
 
 // =============================================================================
 // MODULE TRUNG TÂM PHÊ DUYỆT & NHẮC VIỆC — PHẦN 1
@@ -34,6 +40,7 @@ export type PendingTaskType =
   | "renewal"
   | "student_risk"
   | "student_care"
+  | "student_birthday"
   | "class_no_teacher"
   | "registered_stale"
   | "report_card_milestone";
@@ -63,6 +70,8 @@ export type TaskUser = CanUser & {
 interface PendingCfg {
   itemLimit: number;
   staleMs: number;
+  /** Số ngày báo trước buổi tổ chức sinh nhật (SystemSetting student.birthdayAlertDaysBefore). */
+  birthdayAlertDays: number;
   /**
    * Kiểm quyền THEO CỜ `RBAC_V2_ENABLED` + sinh shadow-diff.
    *
@@ -495,6 +504,68 @@ async function studentCare(user: TaskUser, now: Date, cfg: PendingCfg): Promise<
   };
 }
 
+/**
+ * Sinh nhật học viên sắp tới hạn tổ chức (06/08/2026).
+ *
+ * Mốc là `celebrationDate` — NGÀY BUỔI TỔ CHỨC, không phải ngày sinh nhật: hôm sinh
+ * nhật không có lớp thì buổi tổ chức rơi TRƯỚC đó, bám ngày sinh nhật là hiện việc
+ * sau khi buổi đã tan.
+ *
+ * `overdue` = buổi tổ chức đã qua mà chưa ai bấm "Đã chúc" — tức lỡ mất buổi, phải
+ * chăm sóc bù bằng cách khác.
+ */
+async function studentBirthday(
+  user: TaskUser,
+  now: Date,
+  cfg: PendingCfg,
+): Promise<PendingTaskGroup | null> {
+  const { isSuper, isCM } = scope(user);
+  const isSales = hasRole(user, "SALES_CSM");
+  if (!isSuper && !isCM && !isSales) return null;
+  const centerScope = isCM && !isSuper ? (user.centerId ?? null) : null;
+
+  const todayKey = vnDayKey(now);
+  const rows = await db.studentBirthdayGreeting.findMany({
+    where: {
+      celebratedAt: null,
+      celebrationDate: {
+        // Lùi tối đa cfg.staleMs để việc đã lỡ còn hiện (nhắc chăm sóc bù), nhưng
+        // không kéo lê sinh nhật của cả tháng trước lên bảng việc.
+        gte: new Date(now.getTime() - cfg.staleMs),
+        lt: vnDayStartUtc(shiftDayKey(todayKey, cfg.birthdayAlertDays + 1)),
+      },
+      ...(centerScope ? { centerId: centerScope } : {}),
+    },
+    select: {
+      id: true,
+      celebrationDate: true,
+      birthdayDate: true,
+      student: { select: { id: true, name: true } },
+    },
+    orderBy: { celebrationDate: "asc" },
+    take: 50,
+  });
+  if (rows.length === 0) return null;
+
+  const overdueCount = rows.filter(
+    (r) => r.celebrationDate !== null && vnDayKey(r.celebrationDate) < todayKey,
+  ).length;
+
+  return {
+    type: "student_birthday",
+    label: "Sinh nhật học viên",
+    count: rows.length,
+    overdueCount,
+    href: "/sinh-nhat",
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
+      id: r.id,
+      label: `${r.student.name} — sinh nhật ${formatDayKeyDMY(vnDayKey(r.birthdayDate))}`,
+      href: "/sinh-nhat",
+      overdue: r.celebrationDate !== null && vnDayKey(r.celebrationDate) < todayKey,
+    })),
+  };
+}
+
 async function classNoTeacher(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   const { isManager, centerScope } = scope(user);
   if (!isManager) return null;
@@ -574,13 +645,15 @@ async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Prom
  */
 export async function getPendingTasks(user: TaskUser, actor: Actor): Promise<PendingTaskGroup[]> {
   const now = new Date();
-  const [itemLimit, staleDays] = await Promise.all([
+  const [itemLimit, staleDays, birthdayAlertDays] = await Promise.all([
     getSetting("dashboard.pendingItemLimit"),
     getSetting("dashboard.pendingStaleDays"),
+    getSetting("student.birthdayAlertDaysBefore"),
   ]);
   const cfg: PendingCfg = {
     itemLimit,
     staleMs: staleDays * 86400000,
+    birthdayAlertDays,
     can: makePermChecker(user, actor),
   };
   const groups = await Promise.all([
@@ -594,6 +667,7 @@ export async function getPendingTasks(user: TaskUser, actor: Actor): Promise<Pen
     renewal(user, cfg),
     studentRisk(user, now, cfg),
     studentCare(user, now, cfg),
+    studentBirthday(user, now, cfg),
     classNoTeacher(user, now, cfg),
     reportCardMilestone(user, cfg),
     registeredStale(user, now, cfg),

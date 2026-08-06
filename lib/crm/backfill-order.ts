@@ -6,6 +6,7 @@
 // transaction sống sót, transaction thua rollback cả phần tiền tạo ở đây.
 import type { Prisma } from "@prisma/client";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
+import { materializeInstallmentRequests } from "@/lib/payments/payment-request";
 import { generateOrderCode } from "@/lib/orders/code";
 
 type Tx = Prisma.TransactionClient;
@@ -17,6 +18,21 @@ export type BackfillPaymentInput = {
   paidDate: Date;
   note?: string | null;
   items: Array<{ itemName: string; unitPrice: number }>;
+  /**
+   * 04/08 — khoản GIẢM nhập ở màn xem thử import (theo số tiền hoặc theo %),
+   * đã quy ra SỐ TIỀN. Đơn ghi `subtotal` = giá niêm yết, `discountAmount` = khoản
+   * giảm, `totalAmount` = phần khách thực phải nộp. Thiếu chỗ này thì công nợ của
+   * mọi ca có khuyến mãi đều dôi ra đúng bằng khoản giảm.
+   */
+  discountAmount?: number;
+  /** Bắt buộc khi có giảm giá — cùng luật với màn tạo đơn tay. */
+  discountReason?: string | null;
+  /**
+   * 04/08 — khách trả LÀM 2 ĐỢT: hạn đóng đợt 2 (người nhập gõ ở màn xem thử import).
+   * Có hạn + còn nợ ⇒ dựng luôn kế hoạch 2 đợt để đơn có phiếu thu + QR đợt 2 ngay,
+   * khỏi phải mở lại từng đơn lập kế hoạch bằng tay.
+   */
+  dueDate2?: Date | null;
 };
 
 /**
@@ -41,7 +57,10 @@ export async function createBackfillOrderPaymentInTx(
   });
   if (existing) return { created: false, paymentId: existing.id };
 
-  const totalAmount = paid.items.reduce((s, it) => s + Math.max(0, Math.round(it.unitPrice)), 0);
+  const subtotal = paid.items.reduce((s, it) => s + Math.max(0, Math.round(it.unitPrice)), 0);
+  // Giảm không được vượt giá niêm yết (đơn âm) và không âm.
+  const discountAmount = Math.min(Math.max(0, Math.round(paid.discountAmount ?? 0)), subtotal);
+  const totalAmount = subtotal - discountAmount;
   const amount = Math.round(paid.amount);
   if (!Number.isFinite(amount) || amount <= 0) return { created: false, paymentId: null };
 
@@ -55,8 +74,19 @@ export async function createBackfillOrderPaymentInTx(
       customerEmail: lead.email,
       leadId: lead.id,
       centerId: lead.centerId,
-      subtotal: totalAmount,
+      subtotal,
+      discountAmount,
       totalAmount,
+      ...(discountAmount > 0
+        ? {
+            discountReason: paid.discountReason ?? null,
+            // Backfill = tiền đã thu từ trước, giảm giá đã được duyệt ngoài hệ thống
+            // ⇒ đánh dấu ĐÃ DUYỆT để đơn không kẹt ở "chờ duyệt giảm giá".
+            discountApprovalStatus: "APPROVED" as const,
+            discountApprovedById: actor.id,
+            discountApprovedAt: paid.paidDate,
+          }
+        : {}),
       paidAt: paid.paidDate,
       confirmedByUserId: actor.id,
       confirmedAt: paid.paidDate,
@@ -89,6 +119,41 @@ export async function createBackfillOrderPaymentInTx(
     },
     select: { id: true },
   });
+
+  // ── Kế hoạch 2 đợt (khi người nhập tick "Đóng 2 đợt" + đặt hạn ở màn xem thử) ──
+  const remaining = totalAmount - amount;
+  if (paid.dueDate2 && remaining > 0) {
+    await tx.orderInstallment.createMany({
+      data: [
+        { orderId: order.id, soDot: 1, amount, status: "PAID", paidAt: paid.paidDate, recordedById: actor.id },
+        { orderId: order.id, soDot: 2, amount: remaining, status: "PENDING", dueDate: paid.dueDate2, recordedById: actor.id },
+      ],
+    });
+    // Backfill = kế hoạch đã thoả thuận với khách từ trước ⇒ ĐÃ DUYỆT luôn, không
+    // bắt quản lý duyệt lại một việc đã xảy ra rồi.
+    await tx.order.update({
+      where: { id: order.id },
+      data: {
+        installmentApprovalStatus: "APPROVED",
+        installmentRequestedById: actor.id,
+        installmentApprovedById: actor.id,
+        installmentApprovedAt: paid.paidDate,
+        // Còn nợ thì đơn CHƯA đóng đủ — đừng để paidAt làm mọi màn tưởng đã thu xong.
+        paidAt: null,
+        status: "PENDING_PAYMENT",
+      },
+    });
+
+    await materializeInstallmentRequests(tx, order.id, actor);
+
+    // ⚠️ Phiếu thu đợt 1 phải HUỶ. Tiền đợt 1 đã vào từ trước khi lên hệ thống nên
+    // nó nằm ở sổ CŨ (Payment), không có PaymentAllocation ở sổ mới ⇒ phiếu đợt 1
+    // sẽ đứng "chờ thu". Để nguyên là sale xuất QR đòi lại đúng khoản khách đã đóng.
+    await tx.paymentRequest.updateMany({
+      where: { orderId: order.id, installmentNo: 1 },
+      data: { status: "VOID" },
+    });
+  }
 
   await writeAudit({
     actor,

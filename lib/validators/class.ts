@@ -66,7 +66,9 @@ export const classCreateSchema = z
     courseId: z.string().trim().min(1, "Chọn khoá học"),
     // PR-C: orgUnitId là nguồn chính (đơn vị); centerId suy ra từ org (HO→null) để dual-write.
     centerId: nullableStr,
-    orgUnitId: nullableStr,
+    // Chủ dự án chốt 04/08: lớp BẮT BUỘC thuộc một cơ sở dạy học. Bỏ trống trước đây
+    // ra "lớp không thuộc đâu cả" — biến mất khỏi mọi màn lọc theo cơ sở, im lặng.
+    orgUnitId: requiredRefStr("Chọn cơ sở mở lớp"),
     classGroupId: nullableStr,
     // T3.1 — Phòng học + GV chính là TRƯỜNG BẮT BUỘC khi tạo/sửa lớp (không còn
     // "— Chưa phân —"). Trợ giảng vẫn tuỳ chọn.

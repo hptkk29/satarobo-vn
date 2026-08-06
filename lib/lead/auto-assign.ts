@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import type { LeadStatus, Prisma, LeadAssignMode } from "@prisma/client";
 import {
   pickRoundRobin,
@@ -127,13 +128,18 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
   if (await hasSaleInteraction(leadId)) return { ok: true, skipped: true };
 
   // (1) Cơ sở — chia đều cho MỌI cơ sở vận hành đang hoạt động (CS3/CS4 thêm
-  // không cần sửa code). HO không có row Center nên tự loại khỏi phân phối lead.
+  // không cần sửa code).
+  //
+  // ⚠️ Bản cũ ghi "HO không có row Center nên tự loại khỏi phân phối lead" — SAI với
+  // dữ liệu thật: `Center(hoi-so)` CÓ tồn tại và `isActive: true` (đo 04/08/2026), nên
+  // `pickCenterEvenly` chia được lead từ web về Hội sở. Loại tường minh qua OrgUnit tree.
   let centerId = lead.centerId;
   if (!centerId) {
-    const cs = await db.center.findMany({
-      where: { isActive: true },
-      select: { id: true },
-    });
+    const [csAll, nonEnrollable] = await Promise.all([
+      db.center.findMany({ where: { isActive: true }, select: { id: true } }),
+      getNonEnrollableCenterIds(),
+    ]);
+    const cs = csAll.filter((c) => !nonEnrollable.includes(c.id));
     if (cs.length > 0) {
       const loads = await getCenterLoads(cs.map((c) => c.id));
       centerId = pickCenterEvenly(loads);

@@ -12,6 +12,7 @@ import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
 import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
+import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
 
 const PAGE_SIZE = 20
 const KANBAN_LIMIT = 500
@@ -136,13 +137,18 @@ export default async function LeadsPage({
   const canAssign = (await checkPermission('leads:assign'))
 
   // Filter dropdown data (chỉ cần cho role view-all).
+  // Hội sở KHÔNG bao giờ có lead (chốt 04/08) → để trong ô lọc là lựa chọn luôn ra
+  // rỗng, người dùng tưởng mất dữ liệu. Nhận diện qua cây OrgUnit, không hardcode.
+  const nonEnrollable = await getNonEnrollableCenterIds()
   const [centers, sales] = canViewAll
     ? await Promise.all([
-        sdb.center.findMany({
-          where: { isActive: true },
-          select: { id: true, name: true },
-          orderBy: { displayOrder: 'asc' },
-        }),
+        sdb.center
+          .findMany({
+            where: { isActive: true },
+            select: { id: true, name: true },
+            orderBy: { displayOrder: 'asc' },
+          })
+          .then((cs) => cs.filter((c) => !nonEnrollable.includes(c.id))),
         sdb.user.findMany({
           where: { isActive: true, deletedAt: null, roles: { has: 'SALES_CSM' } },
           select: { id: true, name: true },

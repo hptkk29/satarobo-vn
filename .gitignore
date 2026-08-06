@@ -77,3 +77,7 @@ _qa-reports/
 # Playwright (test results local, do NOT commit — CI uploads as artifact)
 /playwright-report/
 /test-results/
+
+# rác cục bộ (lọt vào commit 04/08 — chặn hẳn)
+.pnpm-store/
+full.txt

@@ -80,8 +80,8 @@ export default async function EditStudentPage({ params }: Props) {
         parentUser: { select: { email: true, phone: true, name: true, accountStatus: true } },
       },
     }),
-    // PR-C: picker đơn vị qua OrgUnit tree (gồm cả HO) — không dùng db.center.findMany.
-    getSelectableOrgUnits(actor),
+      // Hội sở KHÔNG nhận học viên (chốt 04/08) — picker chỉ liệt kê cơ sở dạy học.
+    getSelectableOrgUnits(actor, { types: ["CENTER"] }),
   ]);
 
   if (!student) notFound();

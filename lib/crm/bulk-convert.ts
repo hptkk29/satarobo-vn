@@ -18,6 +18,10 @@ import { db } from "@/lib/db";
 import type { AuditActor } from "@/lib/audit/audit-log";
 import { convertLeadV2, type ConvertV2Student } from "@/lib/crm/convert-lead-v2";
 import { BACKFILL_PAYMENT_MARKER, type BackfillPaymentInput } from "@/lib/crm/backfill-order";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
+import { contactFromLeadNote } from "@/lib/lead/import-registered";
+import { computeEnrollmentPrice } from "@/lib/finance/pricing";
+import type { CourseDiscountType } from "@prisma/client";
 import { canonicalPhone } from "@/lib/phone";
 
 export { BACKFILL_PAYMENT_MARKER };
@@ -29,6 +33,12 @@ export type BulkConvertStudentInput = {
   dob?: Date | null;
   classId: string;
   consentMedia: boolean;
+  /**
+   * 04/08 — khuyến mãi của RIÊNG em này (nhập ở màn xem thử import).
+   * Đi thẳng vào `computeEnrollmentPrice` như luồng convert v2 chuẩn, nên
+   * `Enrollment.discountType/discountAmount/finalPrice` khớp đúng, không tự chế.
+   */
+  discount?: { type: CourseDiscountType; value: number } | null;
 };
 
 export type BulkConvertLeadInput = {
@@ -36,6 +46,10 @@ export type BulkConvertLeadInput = {
   students: BulkConvertStudentInput[];
   /** Khoản đã đóng từ trước. Bỏ trống = chưa ghi nhận tiền (đi nhánh allowNoPayment). */
   paid?: { amount: number; paidDate: Date; note?: string | null } | null;
+  /** 04/08 — giải trình khuyến mãi (bắt buộc khi có giảm) — ghi lên đơn backfill. */
+  discountReason?: string | null;
+  /** 04/08 — hạn đóng đợt 2; có hạn + còn nợ ⇒ dựng luôn kế hoạch 2 đợt cho đơn. */
+  dueDate2?: Date | null;
 };
 
 export type BulkConvertLeadResult = {
@@ -89,10 +103,25 @@ export async function convertOneLeadBackfill(
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, status: true, centerId: true, parentName: true, phone: true, email: true, deletedAt: true },
+    // `note` — import ghi CCCD PH + Địa chỉ vào đây (Lead không có cột riêng cho 2
+    // trường này). Đọc lại để chốt hàng loạt mang chúng sang hồ sơ phụ huynh, thay
+    // vì để nằm chết trong note (chốt 05/08: nhập vào là phải gộp sang HV luôn).
+    select: { id: true, status: true, centerId: true, parentName: true, phone: true, email: true, note: true, deletedAt: true },
   });
   if (!lead || lead.deletedAt) return fail("LEAD_NOT_FOUND", "Không tìm thấy lead");
+  const leadContact = contactFromLeadNote(lead.note);
   if (!lead.centerId) return fail("LEAD_NO_CENTER", "Lead chưa gắn cơ sở — sửa lead rồi chạy lại");
+  // Chủ dự án chốt 04/08: HỌC VIÊN KHÔNG BAO GIỜ THUỘC HỘI SỞ. HO là cơ quan đầu
+  // não, không phải địa điểm dạy học — chỉ CS1/CS2 (và cơ sở mở sau) mới nhận HV.
+  // Nhận diện qua cây OrgUnit (type=CENTER), KHÔNG hardcode mã "HO": mở cơ sở mới
+  // là tự được nhận học viên, không phải sửa code.
+  const nonEnrollable = await getNonEnrollableCenterIds();
+  if (nonEnrollable.includes(lead.centerId)) {
+    return fail(
+      "LEAD_HEAD_OFFICE",
+      "Lead đang gắn Hội sở — Hội sở không nhận học viên. Chuyển lead về đúng cơ sở dạy học (CS1/CS2) rồi chốt lại",
+    );
+  }
   if (lead.status === "ENROLLED") return fail("ALREADY_CONVERTED", "Lead đã được chốt trước đó");
   if (lead.status === "LOST" || lead.status === "DUPLICATE") {
     return fail("LEAD_TERMINAL", `Lead ở trạng thái ${lead.status} — không chốt được`);
@@ -143,7 +172,7 @@ export async function convertOneLeadBackfill(
       courseId: cls.courseId,
       classId: s.classId,
       listPrice: cls.course?.price ?? 0,
-      discount: null,
+      discount: s.discount ?? null,
       consentMedia: s.consentMedia === true,
     };
   });
@@ -163,6 +192,15 @@ export async function convertOneLeadBackfill(
         amount: paidAmount,
         paidDate: input.paid.paidDate,
         note: input.paid.note ?? null,
+        discountAmount: students.reduce(
+          (sum, st) =>
+            sum +
+            computeEnrollmentPrice({ listPrice: st.listPrice, discount: st.discount ?? null })
+              .discountAmount,
+          0,
+        ),
+        discountReason: input.discountReason ?? null,
+        dueDate2: input.dueDate2 ?? null,
         items: students.map((s) => ({
           itemName: `${classMap.get(s.classId)!.course?.name ?? "Khoá học"} — ${s.name}`,
           unitPrice: s.listPrice,
@@ -178,6 +216,10 @@ export async function convertOneLeadBackfill(
       parentEmail: lead.email?.trim().toLowerCase() || null,
       parentName: lead.parentName,
       parentPhone,
+      // C5 — convertLeadV2 đã nhận sẵn 2 trường này và chỉ ghi khi có giá trị; trước
+      // đây bulk-convert không truyền nên chúng rơi mất trên đường từ Excel sang HV.
+      parentCccd: leadContact.cccd,
+      parentAddress: leadContact.address,
       students,
       idempotencyKey: bulkConvertIdempotencyKey(lead.id, students),
       // Có tiền → Order+Payment tạo TRONG tx convert; không tiền → nhánh backfill

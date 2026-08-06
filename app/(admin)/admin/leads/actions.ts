@@ -17,6 +17,7 @@ import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
+import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 
@@ -626,6 +627,10 @@ export async function createLeadManual(
   const orgUnitId = d.orgUnitId || null
   const centerId = await centerIdForOrgUnit(orgUnitId)
 
+  // Hội sở không nhận lead — chặn ngay lúc nhập, không để tới lúc chốt mới báo.
+  const hoErr = await rejectHeadOffice('lead', { orgUnitId, centerId })
+  if (hoErr) return { ok: false, error: hoErr }
+
   const lead = await db.lead.create({
     data: {
       parentName: d.parentName,
@@ -732,6 +737,8 @@ export async function updateLeadFields(
   let centerId: string | null | undefined
   if (d.orgUnitId !== undefined) {
     centerId = await centerIdForOrgUnit(d.orgUnitId || null)
+    const hoErr = await rejectHeadOffice('lead', { orgUnitId: d.orgUnitId || null, centerId })
+    if (hoErr) return { ok: false, error: hoErr }
   }
 
   const updateData = {
@@ -884,6 +891,10 @@ export async function transferLead(
 
   const toCenterId = d.toCenterId || lead.centerId || null
   const centerChanged = !!toCenterId && toCenterId !== lead.centerId
+
+  // Không bàn giao lead sang Hội sở (cùng luật với lúc tạo/sửa).
+  const hoErrTransfer = await rejectHeadOffice('lead', { centerId: toCenterId })
+  if (hoErrTransfer) return { ok: false, error: hoErrTransfer }
 
   // FL2-03 — chặn bàn giao "rỗng": cơ sở/sale đích trùng nguồn → báo lỗi rõ (code EN,
   // message VI). Validator thuần (Vitest) — xem lib/crm/transfer-validate.ts.

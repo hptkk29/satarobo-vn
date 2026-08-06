@@ -4,7 +4,61 @@ import {
   nonEnrollableCenterIds,
   notHeadOfficeWhere,
   buildStudentCourseChain,
+  isHeadOfficePick,
+  crossCenterError,
 } from "./enrollment-flow";
+
+// Chủ dự án chốt 04/08/2026: chỉ xếp học viên CS mình vào lớp CS mình.
+describe("crossCenterError", () => {
+  it("cùng cơ sở → cho phép", () => {
+    expect(crossCenterError("cs1", "cs1")).toBeNull();
+  });
+
+  it("khác cơ sở → chặn", () => {
+    expect(crossCenterError("cs1", "cs2")).toMatch(/cơ sở khác/);
+  });
+
+  it("[GUARD TỰ TẮT] lớp chưa gán cơ sở → chặn, KHÔNG mở toang", () => {
+    // Bản cũ `if (cls.centerId && ...)` biến lớp không cơ sở thành lớp nhận mọi CS.
+    expect(crossCenterError(null, "cs2")).toMatch(/Lớp chưa gán cơ sở/);
+  });
+
+  it("học viên chưa gán cơ sở → chặn kèm câu chỉ đường", () => {
+    expect(crossCenterError("cs1", null)).toMatch(/Học viên chưa gán cơ sở/);
+  });
+
+  it("thiếu cả hai → vẫn chặn", () => {
+    expect(crossCenterError(null, null)).not.toBeNull();
+  });
+});
+
+// Chủ dự án chốt 04/08/2026: Hội sở KHÔNG nhận lead / học viên / lớp học.
+describe("isHeadOfficePick", () => {
+  const HO = ["hoi-so"];
+
+  it("chọn cơ sở dạy học → hợp lệ", () => {
+    expect(isHeadOfficePick("ou-cs1", "co-so-nguyen-huu-tho", HO)).toBe(false);
+  });
+
+  it("chọn thẳng Center Hội sở → chặn", () => {
+    expect(isHeadOfficePick("ou-ho", "hoi-so", HO)).toBe(true);
+  });
+
+  it("[LỌT ÊM] chọn đơn vị Hội sở → centerIdForOrgUnit trả null → vẫn phải chặn", () => {
+    // Đây là ca nguy hiểm nhất: KHÔNG có lỗi nào, bản ghi ra không cơ sở rồi biến mất
+    // khỏi mọi màn lọc theo cơ sở. Phải nhận diện qua "có orgUnitId mà centerId null".
+    expect(isHeadOfficePick("ou-ho", null, HO)).toBe(true);
+  });
+
+  it("không chọn gì (lead web chờ chia) → KHÔNG chặn", () => {
+    // Lead từ form web hợp lệ khi chưa có cơ sở — bộ chia sẽ gán sau.
+    expect(isHeadOfficePick(null, null, HO)).toBe(false);
+  });
+
+  it("cây OrgUnit chưa dựng → không khoá nhầm (danh sách rỗng)", () => {
+    expect(isHeadOfficePick("ou-cs1", "co-so-bat-ky", [])).toBe(false);
+  });
+});
 
 // FL2-05 — "cơ sở nhận học viên" = Center CÓ OrgUnit type=CENTER trỏ tới.
 // Ca prod 10/07: Center(hoi-so) MỒ CÔI — không OrgUnit nào trỏ tới nó, nên bản cũ

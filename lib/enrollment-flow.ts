@@ -46,6 +46,62 @@ export async function getNonEnrollableCenterIds(): Promise<string[]> {
 }
 
 /**
+ * Pure: học viên chỉ được xếp vào lớp CÙNG CƠ SỞ (chủ dự án chốt 04/08/2026).
+ *
+ * ⚠️ Bản cũ viết `if (cls.centerId && student.centerId !== cls.centerId)` — điều kiện
+ * đầu làm guard TỰ TẮT khi lớp chưa gán cơ sở, nên lớp "không cơ sở" nhận được học
+ * viên của MỌI cơ sở. Nay thiếu cơ sở ở bất kỳ bên nào đều chặn, kèm câu chỉ đường.
+ *
+ * Trả `null` = cho phép.
+ */
+export function crossCenterError(
+  classCenterId: string | null | undefined,
+  studentCenterId: string | null | undefined,
+): string | null {
+  if (!classCenterId) return "Lớp chưa gán cơ sở — sửa lớp và chọn cơ sở trước khi xếp học viên.";
+  if (!studentCenterId) return "Học viên chưa gán cơ sở — sửa hồ sơ học viên và chọn cơ sở trước.";
+  if (classCenterId !== studentCenterId) {
+    return "Học viên thuộc cơ sở khác với lớp — chọn lớp cùng cơ sở hoặc chuyển cơ sở học viên trước.";
+  }
+  return null;
+}
+
+/** Đối tượng bị cấm gắn vào Hội sở (dùng cho câu báo lỗi). */
+export type HeadOfficeSubject = "lead" | "học viên" | "lớp học";
+
+/** Pure: có phải ca "gắn vào Hội sở" không (tách ra để test không cần DB). */
+export function isHeadOfficePick(
+  orgUnitId: string | null | undefined,
+  resolvedCenterId: string | null | undefined,
+  nonEnrollable: string[],
+): boolean {
+  // `centerIdForOrgUnit` map HO/ROOT → null. Nên "có chọn đơn vị nhưng ra null cơ sở"
+  // CHÍNH LÀ ca chọn Hội sở — trước đây lọt êm: bản ghi ra KHÔNG CÓ cơ sở và biến mất
+  // khỏi mọi màn lọc theo cơ sở, không một dòng báo lỗi nào.
+  if (orgUnitId && !resolvedCenterId) return true;
+  if (!resolvedCenterId) return false;
+  return nonEnrollable.includes(resolvedCenterId);
+}
+
+/**
+ * Chốt chặn server: **Hội sở không nhận lead / học viên / lớp học**.
+ * Chủ dự án chốt 04/08/2026 — HO là cơ quan đầu não, không phải địa điểm dạy học
+ * như CS1/CS2. Chặn ở server chứ không chỉ giấu khỏi dropdown: form vẫn có thể bị
+ * POST thẳng, và bản ghi nằm ở HO thì kéo theo lớp/điểm danh/học phí sai.
+ *
+ * Trả `null` = hợp lệ, trả `string` = câu báo lỗi cho người dùng.
+ */
+export async function rejectHeadOffice(
+  subject: HeadOfficeSubject,
+  opts: { orgUnitId?: string | null; centerId?: string | null },
+): Promise<string | null> {
+  const nonEnrollable = await getNonEnrollableCenterIds();
+  return isHeadOfficePick(opts.orgUnitId, opts.centerId, nonEnrollable)
+    ? `Hội sở không nhận ${subject} — chọn cơ sở dạy học (CS1/CS2)`
+    : null;
+}
+
+/**
  * Where-fragment loại các cơ sở khỏi truy vấn theo `centerId` model nghiệp vụ
  * (Student/Class…). GIỮ row có `centerId = null` (legacy chưa gán) để không ẩn nhầm,
  * chỉ loại đúng row trỏ tới cơ sở Hội sở. Rỗng → không thêm điều kiện (no-op).

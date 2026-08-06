@@ -7,6 +7,7 @@ import type { Prisma, EnrollmentStatus } from "@prisma/client";
 import { hasAnyRole, type Action } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit, orgUnitIdForCenter } from "@/lib/org/org-service";
+import { rejectHeadOffice } from "@/lib/enrollment-flow";
 import { classCreateSchema } from "@/lib/validators/class";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import {
@@ -170,7 +171,9 @@ async function resolveClassOrg(
   data: ReturnType<typeof classCreateSchema.parse>,
   sdb: ReturnType<typeof scopedDb>,
 ): Promise<{ centerId: string | null; orgUnitId: string | null }> {
-  let orgUnitId = data.orgUnitId ?? null;
+  // orgUnitId nay BẮT BUỘC ở form, nhưng nhánh kế thừa nhóm lớp bên dưới có thể suy
+  // ra null → khai rõ kiểu nullable, đừng để suy ra `string` rồi vỡ.
+  let orgUnitId: string | null = data.orgUnitId ?? null;
   let centerId = await centerIdForOrgUnit(orgUnitId);
 
   if (data.classGroupId) {
@@ -279,6 +282,18 @@ const CLASS_SNAPSHOT_SELECT = {
   maxStudents: true,
 } as const;
 
+/**
+ * Chủ dự án chốt 04/08: KHÔNG CÓ LỚP HỌC TẠI HỘI SỞ. HO là cơ quan đầu não, không
+ * phải địa điểm dạy học — lớp chỉ mở ở CS1/CS2 (và cơ sở mở sau).
+ *
+ * Chặn ở SERVER chứ không chỉ giấu khỏi dropdown: form có thể bị POST thẳng, và
+ * lớp lỡ nằm ở HO thì kéo theo học viên + điểm danh + học phí sai cơ sở.
+ * Nhận diện qua cây OrgUnit (type=CENTER), KHÔNG hardcode mã "HO".
+ */
+async function rejectHeadOfficeCenter(centerId: string | null): Promise<string | null> {
+  return rejectHeadOffice("lớp học", { centerId });
+}
+
 export async function createClass(formData: FormData): Promise<ActionResult> {
   const session = await requireClassWrite("create");
 
@@ -302,6 +317,8 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   if (!actorCanUseCenter(actor, centerId)) {
     return { error: "Không có quyền tạo lớp cho cơ sở này" };
   }
+  const hoErr = await rejectHeadOfficeCenter(centerId);
+  if (hoErr) return { error: hoErr };
 
   // R2-RBAC-3 — GV/TA phải cùng cơ sở lớp (chống gán chéo CS).
   const teacherCenterErr = await assertTeachersInCenter(
@@ -492,6 +509,9 @@ export async function updateClass(
   if (!actorCanUseCenter(actor, centerId)) {
     return { error: "Không có quyền chuyển lớp sang cơ sở này" };
   }
+  // Không chuyển lớp về Hội sở (cùng luật với lúc tạo — xem rejectHeadOfficeCenter).
+  const hoErrUpd = await rejectHeadOfficeCenter(centerId);
+  if (hoErrUpd) return { error: hoErrUpd };
 
   // R2-RBAC-3 — GV/TA phải cùng cơ sở lớp (chống gán chéo CS).
   const teacherCenterErr = await assertTeachersInCenter(

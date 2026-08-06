@@ -43,16 +43,58 @@ export default async function BaiTapPage() {
 
 // ── TẦNG PHỤ HUYNH — chỉ tổng quan, không nội dung câu hỏi ────────────────────
 async function ParentView({ studentId }: { studentId: string }) {
-  const hw = await getParentHomeworkSummary(studentId);
+  // 05/08 — trước đây tầng này CHỈ đếm bài kiểm tra: con vừa được giao bài về nhà mà
+  // phụ huynh vẫn thấy "0 Đã giao · chưa được giao bài kiểm tra nào" ⇒ kết luận sai
+  // là chưa có bài. Gộp cả bài tập trên lớp/về nhà vào con số và liệt kê bên dưới.
+  const [hw, assignments] = await Promise.all([
+    getParentHomeworkSummary(studentId),
+    getStudentAssignments(studentId),
+  ]);
+  const btDaNop = assignments.filter((a) => a.status !== "NOT_SUBMITTED").length;
+  const btDaCham = assignments.filter((a) => a.status === "GRADED").length;
+  const tongGiao = hw.assigned + assignments.length;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Đã giao" value={hw.assigned} />
-        <Stat label="Đã làm" value={`${hw.done}/${hw.assigned}`} />
-        <Stat label="Đã chấm" value={hw.graded} />
+        <Stat label="Đã giao" value={tongGiao} />
+        <Stat label="Đã làm" value={`${hw.done + btDaNop}/${tongGiao}`} />
+        <Stat label="Đã chấm" value={hw.graded + btDaCham} />
       </div>
 
+      {assignments.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500">
+            Bài tập trên lớp / về nhà ({assignments.length})
+          </h2>
+          <ul className="space-y-2">
+            {assignments.map((a) => {
+              const st = STATUS[a.status] ?? STATUS.NOT_SUBMITTED;
+              return (
+                <li
+                  key={a.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-4"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-neutral-900">{a.title}</p>
+                    <p className="text-xs text-neutral-500">
+                      {a.className}
+                      {a.dueAt && ` · Hạn ${formatDateVN(a.dueAt)}`}
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>
+                    {st.label}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500">
+        Bài kiểm tra ({hw.items.length})
+      </h2>
       {hw.items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
           Con chưa được giao bài kiểm tra nào.

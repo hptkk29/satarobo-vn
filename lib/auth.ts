@@ -12,15 +12,37 @@ type SessionGrant = { action: string; grant: "ALLOW" | "DENY" };
 /**
  * F2 (Q41) — SSO cookie đa subdomain. Kill-switch: chỉ bật khi env
  * `AUTH_COOKIE_DOMAIN` có giá trị (VD ".satarobo.vn"). MẶC ĐỊNH không set →
- * cookie session host-only như hiện tại (KHÔNG SSO, KHÔNG force-logout) → an
- * toàn để merge trong tuần flip RBAC / UAT mà không đổi behavior.
+ * cookie session host-only (KHÔNG SSO, KHÔNG force-logout).
  *
- * ⚠️ CHỈ set env này SAU khi (a) flip RBAC ổn định và (b) đã tách
- * `sale.satarobo.vn` khỏi zone `.satarobo.vn` (câu 3 Q41) — nếu không, cookie
- * session lộ sang host tĩnh công khai. Khi bật, cookie ĐỔI TÊN (`__Secure-sr.*`)
- * nên mọi user re-login 1 lần (force-logout chủ đích — câu 2 Q41).
+ * ⚠️ SỰ CỐ 22/07→04/08/2026 — ĐỌC TRƯỚC KHI ĐỔI CHỖ NÀY.
+ * Env này từng được bật ở CẢ Production LẪN môi trường `test`. Hai môi trường
+ * dùng chung cookie `__Secure-sr.session-token` trên zone `.satarobo.vn` nhưng
+ * ký bằng HAI KHOÁ KHÁC NHAU (prod chỉ có `NEXTAUTH_SECRET`; `test` có thêm
+ * `AUTH_SECRET`, mà `next-auth/lib/env.js` ưu tiên `AUTH_SECRET`). Bên không
+ * giải mã được cookie sẽ phát `Set-Cookie …; Max-Age=0; Domain=.satarobo.vn`
+ * (@auth/core `sessionStore.clean()`) → XOÁ PHIÊN TRÊN MỌI HOST cùng lúc.
+ * Triệu chứng: mọi vai trò bị đá về `/login?callbackUrl=…` **không kèm
+ * `?reason=`** sau vài phút. (Có `?reason=` là chuyện khác: tokenVersion.)
+ *
+ * Vì vậy TÊN cookie nay MANG THEO TÊN MÔI TRƯỜNG — mỗi môi trường một cookie
+ * riêng, nên không môi trường nào (kể cả **deployment CŨ còn sống**, thứ đã làm
+ * lỗi kéo dài thêm sau khi vá env) đọc hay xoá được cookie của môi trường khác.
+ *
+ * `VERCEL_TARGET_ENV` trả cả tên môi trường TUỲ BIẾN ("test"); `VERCEL_ENV` chỉ
+ * trả production|preview|development nên KHÔNG phân biệt được `test` với prod.
+ * Không xác định được môi trường → KHÔNG bật cookie zone-wide (fail-safe).
+ *
+ * ⚠️ `AUTH_COOKIE_DOMAIN` phải là biến **Non-sensitive** trên Vercel: biến
+ * Sensitive không tồn tại lúc build, mà middleware (edge) được build-time
+ * inline ⇒ middleware và server sẽ lệch tên cookie → đá vô hạn về /login.
  */
-const authCookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined;
+const envSlug = (process.env.VERCEL_TARGET_ENV ?? process.env.VERCEL_ENV)
+  ?.trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9-]/g, "-");
+const authCookieDomain = envSlug
+  ? process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined
+  : undefined;
 
 // Phase T0.1 — map role cũ (JWT phát hành trước khi rename) sang tên mới.
 function migrateLegacyRole(role: string): string {
@@ -71,13 +93,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   // F2 (Q41) — chỉ ghi đè cookie sessionToken khi bật SSO đa subdomain qua env.
   // Không bật (mặc định) → NextAuth tự dùng cookie host-only mặc định.
-  ...(authCookieDomain
+  ...(authCookieDomain && envSlug
     ? {
         cookies: {
           sessionToken: {
-            // Đổi tên (khác `authjs.session-token` mặc định) để không đọc nhầm
-            // cookie host-only cũ → ép re-login sạch 1 lần khi bật SSO.
-            name: "__Secure-sr.session-token",
+            // Tên KÈM môi trường: khác `authjs.session-token` mặc định VÀ khác
+            // mọi môi trường khác → không ai đọc/xoá nhầm cookie của nhau.
+            // Đổi tên = mọi user re-login 1 lần (force-logout chủ đích).
+            name: `__Secure-sr-${envSlug}.session-token`,
             options: {
               httpOnly: true,
               sameSite: "lax" as const,

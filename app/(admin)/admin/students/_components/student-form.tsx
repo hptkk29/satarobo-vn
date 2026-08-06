@@ -314,14 +314,15 @@ export function StudentForm({
           />
         </Grid>
         <SelectField
-          label="Đơn vị đang học (legacy)"
+          label="Cơ sở"
           name="orgUnitId"
           defaultValue={student?.orgUnitId ?? ""}
+          required
           options={[
-            { value: "", label: "— Chưa gắn —" },
+            { value: "", label: "— Chọn cơ sở —" },
             ...orgUnits.map((o) => ({ value: o.id, label: o.name })),
           ]}
-          helper="Field cũ từ trước D1; quan hệ học sinh ↔ đơn vị qua Class sẽ thay thế ở D3."
+          helper="Bắt buộc. Học viên phải thuộc một cơ sở dạy học — quyết định lớp học viên được xếp vào và ai quản lý hồ sơ này."
         />
         <Field
           label="Ghi chú nội bộ"

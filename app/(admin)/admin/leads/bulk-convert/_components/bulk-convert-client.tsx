@@ -157,6 +157,31 @@ export function BulkConvertClient({
       return next
     })
 
+  /**
+   * 04/08 — điền ô "đã đóng" theo SỐ TIỀN TRONG FILE EXCEL đã import, thay vì lấy
+   * giá niêm yết. Số này được importer ghi vào note của con dưới nhãn `ĐãĐóng=`
+   * (lib/lead/import-registered.ts). Luật chủ dự án chốt: dòng KHÔNG có ghi chú 50%
+   * thì số trong file CHÍNH LÀ đã đóng đủ ⇒ công nợ 0.
+   *
+   * Lead nhiều con → CỘNG số của các con (ô "đã đóng" là của cả lead).
+   * Con nào không đọc được số thì bỏ qua con đó, không đoán.
+   */
+  const fillPaidFromImport = () => {
+    setPaidAmount((prev) => {
+      const next = { ...prev }
+      for (const lead of visibleLeads) {
+        if (!selected.has(lead.id) || hasPayment.has(lead.id)) continue
+        let sum = 0
+        for (const ch of lead.children) {
+          const m = /ĐãĐóng=(\d+)/.exec(ch.note ?? '')
+          if (m) sum += Number(m[1])
+        }
+        if (sum > 0) next[lead.id] = String(sum)
+      }
+      return next
+    })
+  }
+
   const fillPaidListPrice = () => {
     setPaidAmount((prev) => {
       const next = { ...prev }
@@ -180,6 +205,33 @@ export function BulkConvertClient({
       ),
     [visibleLeads, selected, results, childClass],
   )
+
+  /** Đọc khoản giảm từ ghi chú con (nhãn do import ghi: `Giảm=500000đ` / `Giảm=10%`). */
+  const readDiscount = (note: string | null): { type: 'AMOUNT' | 'PERCENT'; value: number } | null => {
+    const m = /Giảm=(\d+)(%|đ)/.exec(note ?? '')
+    if (!m) return null
+    const value = Number(m[1])
+    if (!Number.isFinite(value) || value <= 0) return null
+    return { type: m[2] === '%' ? 'PERCENT' : 'AMOUNT', value }
+  }
+
+  /** Giải trình giảm giá — lấy của con đầu tiên có ghi (đơn gộp nhiều con dùng chung đơn). */
+  const readDiscountReason = (children: { note: string | null }[]): string | null => {
+    for (const ch of children) {
+      const m = /LýDoGiảm=([^·]+)/.exec(ch.note ?? '')
+      if (m) return m[1].trim()
+    }
+    return null
+  }
+
+  /** Hạn đợt 2 do màn xem thử import ghi vào note (`HạnĐợt2=2026-09-15`). */
+  const readDue2 = (children: { note: string | null }[]): string | null => {
+    for (const ch of children) {
+      const m = /HạnĐợt2=(\d{4}-\d{2}-\d{2})/.exec(ch.note ?? '')
+      if (m) return m[1]
+    }
+    return null
+  }
 
   const submit = async () => {
     if (readyLeads.length === 0) {
@@ -206,7 +258,13 @@ export function BulkConvertClient({
               dob: ch.dob || '',
               classId: childClass[ch.id]!,
               consentMedia: childConsent[ch.id] === true,
+              // 04/08 — khuyến mãi người nhập đã gõ ở màn XEM THỬ IMPORT, lưu trong
+              // ghi chú của con dưới nhãn `Giảm=`. Đọc lại ở đây để đơn tạo ra đã
+              // đúng tiền ngay từ đầu, khỏi phải mở từng đơn sửa sau.
+              discount: readDiscount(ch.note),
             })),
+            discountReason: readDiscountReason(lead.children),
+            dueDate2: readDue2(lead.children),
             paid:
               !hasPayment.has(lead.id) && Number(paidAmount[lead.id] ?? '') > 0
                 ? {
@@ -306,6 +364,9 @@ export function BulkConvertClient({
         </button>
         <button type="button" onClick={() => consentAllVisible(true)} disabled={running} className="rounded-md border border-gray-300 px-2.5 py-1 hover:bg-gray-50">
           Đồng ý ảnh: tick tất cả
+        </button>
+        <button type="button" onClick={fillPaidFromImport} disabled={running} className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-800 hover:bg-emerald-100">
+          Điền &quot;đã đóng&quot; theo file Excel (lead đã tick)
         </button>
         <button type="button" onClick={fillPaidListPrice} disabled={running} className="rounded-md border border-gray-300 px-2.5 py-1 hover:bg-gray-50">
           Điền &quot;đã đóng&quot; = học phí niêm yết (lead đã tick)
