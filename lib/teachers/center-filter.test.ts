@@ -53,9 +53,11 @@ describe("teacherCenterAssignmentError (guard server-side)", () => {
   });
 
   it("[T-RBAC-8] teacherId không tồn tại (centerId undefined) → chặn", () => {
+    // 06/08: câu báo cho ca này đổi thành "không hợp lệ hoặc chưa gán đơn vị" —
+    // chính xác hơn "phải cùng cơ sở". Ý định test không đổi: PHẢI bị chặn.
     expect(
       teacherCenterAssignmentError("cs1", [{ id: "ghost", centerId: undefined }]),
-    ).toMatch(/cùng cơ sở/);
+    ).not.toBeNull();
   });
 
   it("[T-RBAC-9] lớp HO/không cơ sở (centerId null) → không ràng buộc", () => {
@@ -69,5 +71,39 @@ describe("teacherCenterAssignmentError (guard server-side)", () => {
         { id: "t-cs2-a", centerId: "cs2" },
       ]),
     ).toMatch(/cùng cơ sở/);
+  });
+});
+
+// Chốt 06/08/2026: GV Đà Nẵng chuyển về HỘI SỞ rồi được phân lịch xuống các cơ sở.
+// GV thuộc HO = nguồn lực chung, gán được cho lớp ở MỌI cơ sở. GV thuộc CS khác thì
+// vẫn chặn (cách ly CS1↔CS2 giữ nguyên).
+describe("GV Hội sở điều đi mọi cơ sở", () => {
+  const HO = ["hoi-so"];
+  const gv = (id: string, centerId: string | null) => ({ id, centerId });
+
+  it("GV Hội sở KHÔNG bị chặn khi gán cho lớp CS1", () => {
+    expect(teacherCenterAssignmentError("cs1", [gv("t1", "hoi-so")], HO)).toBeNull();
+  });
+
+  it("GV cơ sở KHÁC vẫn bị chặn", () => {
+    expect(teacherCenterAssignmentError("cs1", [gv("t1", "cs2")], HO)).toMatch(/cùng cơ sở/);
+  });
+
+  it("GV cùng cơ sở với lớp → vẫn hợp lệ như cũ", () => {
+    expect(teacherCenterAssignmentError("cs1", [gv("t1", "cs1")], HO)).toBeNull();
+  });
+
+  it("GV không tồn tại / chưa gán đơn vị → vẫn chặn", () => {
+    expect(teacherCenterAssignmentError("cs1", [{ id: "x", centerId: undefined }], HO)).toMatch(/không hợp lệ/);
+    expect(teacherCenterAssignmentError("cs1", [gv("t1", null)], HO)).toMatch(/không hợp lệ/);
+  });
+
+  it("KHÔNG truyền danh sách HO → giữ hành vi cũ (chặn hết trừ cùng cơ sở)", () => {
+    expect(teacherCenterAssignmentError("cs1", [gv("t1", "hoi-so")])).not.toBeNull();
+  });
+
+  it("dropdown: GV Hội sở hiện ra khi chọn cơ sở CS1", () => {
+    const ds = [gv("a", "cs1"), gv("b", "cs2"), gv("c", "hoi-so")];
+    expect(filterTeachersByCenter(ds, "cs1", [], HO).map((t) => t.id).sort()).toEqual(["a", "c"]);
   });
 });
