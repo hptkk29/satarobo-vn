@@ -90,8 +90,17 @@ export function parseHm(time: string | null | undefined): { h: number; m: number
  * 17h30 giờ VN dù server chạy UTC (Vercel). Bản cũ dùng `new Date(y,m,d,h,m)` nên
  * trên UTC ghi thành 17h30Z = 00h30 hôm sau ở VN → cả lớp nhảy sang ngày kế.
  */
-export function applySlotTimeToDate(date: Date, slots: ClassTimeSlot[]): Date {
+export function applySlotTimeToDate(
+  date: Date,
+  slots: ClassTimeSlot[],
+  fallbackStartTime?: string | null,
+): Date {
   const p = vnParts(date);
-  const { h, m } = parseHm(startTimeForWeekday(slots, p.weekday));
+  // Thứ này KHÔNG có slot riêng (vd lớp khai giờ T7, nay thêm buổi T5) → lùi về giờ
+  // CHUNG của lớp. Thiếu bước này, parseHm(null) trả 00:00 và buổi được lưu 00:00 giờ
+  // VN = 17:00Z ⇒ tab điểm danh hiện "17:00" cho mọi buổi, và phép so trùng lấy nhầm
+  // mốc nên báo trùng oan với lớp khác cùng ngày. Ca thật 06/08/2026.
+  const gio = startTimeForWeekday(slots, p.weekday) ?? fallbackStartTime ?? null;
+  const { h, m } = parseHm(gio);
   return vnDateAt(p.year, p.month, p.day, h, m);
 }

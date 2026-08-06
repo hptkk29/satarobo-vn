@@ -91,7 +91,7 @@ export async function generateClassSessions(
     const data = dates.map((d, i) => ({
       classId,
       // BGĐ 31/07 — giờ buổi lấy theo ĐÚNG THỨ của ngày đó (lớp 2 ca khác giờ).
-      date: applySlotTimeToDate(d, slots),
+      date: applySlotTimeToDate(d, slots, cls.startTime),
       planId: plans[i]?.id ?? null,
       lessonId: plans[i]?.lessonId ?? null,
       // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
@@ -135,7 +135,7 @@ export async function generateClassSessions(
   const data = dates.map((d, i) => ({
     classId,
     // BGĐ 31/07 — giờ buổi theo ĐÚNG THỨ của ngày đó.
-    date: applySlotTimeToDate(d, slots),
+    date: applySlotTimeToDate(d, slots, cls.startTime),
     lessonId: lessonIds[i] ?? null,
     // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
     roomId: cls.roomId ?? null,
