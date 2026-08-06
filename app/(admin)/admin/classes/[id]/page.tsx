@@ -155,10 +155,10 @@ export default async function ClassDetailPage({ params }: Props) {
       select: { version: true, name: true },
     }),
     // R2-RBAC-3 — GV cùng cơ sở + LUÔN kèm GV/TA đang gán (giữ <Select> value).
-    getAssignableTeachers({
-      centerIds: actor.visibleCenterIds,
-      includeIds: [cls.teacherId, cls.assistantId],
-    }),
+    // 06/08 - GV la nguon luc chung (Hoi so dieu di moi co so): KHONG loc danh
+    // sach theo co so nua, neu khong CS2 khong bao gio toi duoc form va bo loc
+    // phia client co mo cung vo nghia.
+    getAssignableTeachers({ includeIds: [cls.teacherId, cls.assistantId] }),
   ]);
 
   const lessonIds = plans
