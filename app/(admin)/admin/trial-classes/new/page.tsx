@@ -38,9 +38,10 @@ export default async function NewTrialClassPage() {
     }),
     // R2-RBAC-3 + vá 24/07 — GV theo scope per-model của Class ("ALL" → như cũ theo
     // visibleCenterIds); form lọc tiếp theo cơ sở đang chọn ở client.
-    getAssignableTeachers({
-      centerIds: classCenters === "ALL" ? actor.visibleCenterIds : classCenters,
-    }),
+    // 06/08 - GV la nguon luc chung (Hoi so dieu di moi co so): KHONG loc danh
+    // sach theo co so nua, neu khong CS2 khong bao gio toi duoc form va bo loc
+    // phia client co mo cung vo nghia.
+    getAssignableTeachers({}),
     // FL-R2: số buổi nhập trong form; chỉ lấy 1 config active làm gợi ý mặc định (nếu có).
     sdb.trialProgramConfig.findFirst({
       where: { active: true },
