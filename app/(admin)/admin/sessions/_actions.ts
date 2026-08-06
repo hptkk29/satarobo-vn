@@ -8,7 +8,7 @@ import { z } from "zod";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
-import { detectSessionConflicts } from "@/lib/lms/schedule-conflict";
+import { detectSessionConflicts, sessionWindow } from "@/lib/lms/schedule-conflict";
 import { sessionEndAt } from "@/lib/lms/scheduling";
 
 type ActionResult = { error?: string };
@@ -62,8 +62,9 @@ async function checkSessionScheduleConflict(
     centerId: null, // soát toàn hệ thống: GV có thể dạy 2 cơ sở
     teacherId: cls.teacherId,
     roomId: cls.roomId,
-    startAt: date,
-    endAt: sessionEndAt(date, cls.startTime, cls.endTime),
+    // Mốc đầu PHẢI áp giờ lớp — xem ghi chú ở lib/lms/schedule-conflict.ts.
+    // Đây là bản sao THỨ BA của cùng lỗi (sessionWindow, adjust.ts, và chỗ này).
+    ...sessionWindow(date, cls.startTime, cls.endTime),
   });
   if (conflict.teacherConflict) {
     return "Trùng lịch giáo viên: GV của lớp này đã có buổi dạy lớp khác vào khung giờ đó.";

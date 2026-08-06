@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeSessionDates, expandHolidaySet, ymdVN } from "./schedule";
 import { applySlotTimeToDate, resolveClassSlots } from "./slots";
+import { vnDateAt } from "@/lib/time/vn";
 import { parseVnYmd, vnParts, vnWeekday } from "@/lib/time/vn";
 
 // 2026-06-01 là Thứ 2.
@@ -97,5 +98,26 @@ describe("expandHolidaySet", () => {
   it("nghỉ 1 ngày (endDate null)", () => {
     const set = expandHolidaySet([{ date: new Date(2026, 5, 10), endDate: null }]);
     expect([...set]).toEqual(["2026-06-10"]);
+  });
+});
+
+// Ca thật 06/08/2026: lớp khai giờ T7 10:00, thêm buổi T5 → thứ đó KHÔNG có slot.
+// Bản cũ parseHm(null) → 00:00, buổi lưu 00:00 VN = 17:00Z ⇒ tab điểm danh hiện
+// "17:00" cho mọi buổi và phép so trùng báo trùng oan với lớp khác cùng ngày.
+describe("applySlotTimeToDate — thứ không có slot riêng", () => {
+  const T7 = [{ weekday: 6, startTime: "10:00", endTime: "11:30" }];
+  const thu5 = vnDateAt(2026, 6, 30); // 30/07/2026 là thứ Năm
+
+  it("lùi về giờ CHUNG của lớp, không rơi về 00:00", () => {
+    expect(applySlotTimeToDate(thu5, T7, "10:00").toISOString()).toBe("2026-07-30T03:00:00.000Z");
+  });
+
+  it("không có slot và cũng không có giờ chung → 00:00 (giữ hành vi cũ)", () => {
+    expect(applySlotTimeToDate(thu5, T7).toISOString()).toBe("2026-07-29T17:00:00.000Z");
+  });
+
+  it("thứ CÓ slot riêng thì slot thắng giờ chung", () => {
+    const t7 = vnDateAt(2026, 7, 1); // 01/08/2026 là thứ Bảy
+    expect(applySlotTimeToDate(t7, T7, "18:00").toISOString()).toBe("2026-08-01T03:00:00.000Z");
   });
 });
