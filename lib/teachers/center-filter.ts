@@ -19,12 +19,14 @@ export function filterTeachersByCenter<T extends TeacherCenterLite>(
   keepIds: (string | null | undefined)[] = [],
   hoCenterIds: string[] = [],
 ): T[] {
-  const keep = new Set(keepIds.filter(Boolean) as string[]);
-  if (centerId == null) return teachers.filter((t) => keep.has(t.id));
-  const ho = new Set(hoCenterIds);
-  return teachers.filter(
-    (t) => t.centerId === centerId || (t.centerId != null && ho.has(t.centerId)) || keep.has(t.id),
-  );
+  // 06/08 — chủ dự án chốt: GẮN ĐƯỢC BẤT KỲ GV NÀO cho lớp / lịch trial, không còn
+  // ràng buộc cơ sở. GV nay là nguồn lực chung, điều đi theo lịch chứ không thuộc
+  // một cơ sở cố định. Tham số centerId/hoCenterIds giữ lại để không phải sửa mọi
+  // nơi gọi, và để quay lại lọc dễ dàng nếu chính sách đổi.
+  void centerId;
+  void hoCenterIds;
+  void keepIds;
+  return teachers;
 }
 
 /**
@@ -38,17 +40,18 @@ export function teacherCenterAssignmentError(
   assigned: { id: string; centerId: string | null | undefined }[],
   hoCenterIds: string[] = [],
 ): string | null {
-  if (!centerId) return null;
-  const ho = new Set(hoCenterIds);
+  // 06/08 — BỎ ràng buộc "GV phải cùng cơ sở với lớp" (chủ dự án chốt): GV là nguồn
+  // lực chung, gắn được cho lớp/lịch trial ở mọi cơ sở. Đây là gỡ hàng rào CÓ CHỦ Ý —
+  // đừng thêm lại vì tưởng thiếu sót.
+  //
+  // VẪN chặn: teacherId không tồn tại (centerId undefined khi tra không ra user).
+  // Đây là guard chống IDOR/typo, không liên quan chính sách cơ sở.
+  void centerId;
+  void hoCenterIds;
   for (const t of assigned) {
-    if (t.centerId === centerId) continue;
-    // GV thuộc HỘI SỞ = nguồn lực chung, được điều đi dạy ở mọi cơ sở (chốt 06/08:
-    // GV Đà Nẵng về HO rồi phân lịch xuống CS). KHÁC với GV thuộc CS khác — vẫn chặn.
-    if (t.centerId != null && ho.has(t.centerId)) continue;
-    // centerId null/undefined = GV chưa gán cơ sở HOẶC teacherId không tồn tại → chặn.
-    return t.centerId == null
-      ? "Giáo viên/trợ giảng không hợp lệ hoặc chưa gán đơn vị"
-      : "Giáo viên/trợ giảng phải thuộc cùng cơ sở với lớp, hoặc thuộc Hội sở";
+    if (t.centerId === undefined) {
+      return "Giáo viên/trợ giảng không hợp lệ (không tìm thấy tài khoản)";
+    }
   }
   return null;
 }
