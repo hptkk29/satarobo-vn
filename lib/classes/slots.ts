@@ -6,6 +6,8 @@
 //
 // THUẦN (không đụng DB / Prisma) để dùng chung form client + server + test.
 
+import { vnDateAt, vnParts } from "@/lib/time/vn";
+
 export interface ClassTimeSlot {
   /** 0=CN … 6=T7 */
   weekday: number;
@@ -81,8 +83,15 @@ export function parseHm(time: string | null | undefined): { h: number; m: number
   return { h: Number(m[1]), m: Number(m[2]) };
 }
 
-/** Gắn giờ của ĐÚNG thứ vào 1 ngày (dùng khi sinh buổi học). */
+/**
+ * Gắn giờ của ĐÚNG thứ vào 1 ngày (dùng khi sinh buổi học).
+ *
+ * ⚠️ Thứ và giờ tính theo LỊCH VN, không theo TZ máy chạy: `17:30` phải luôn ra
+ * 17h30 giờ VN dù server chạy UTC (Vercel). Bản cũ dùng `new Date(y,m,d,h,m)` nên
+ * trên UTC ghi thành 17h30Z = 00h30 hôm sau ở VN → cả lớp nhảy sang ngày kế.
+ */
 export function applySlotTimeToDate(date: Date, slots: ClassTimeSlot[]): Date {
-  const { h, m } = parseHm(startTimeForWeekday(slots, date.getDay()));
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m);
+  const p = vnParts(date);
+  const { h, m } = parseHm(startTimeForWeekday(slots, p.weekday));
+  return vnDateAt(p.year, p.month, p.day, h, m);
 }

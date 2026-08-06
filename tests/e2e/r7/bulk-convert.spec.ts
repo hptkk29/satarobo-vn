@@ -25,6 +25,20 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
   let seq = 0;
   const uniq = () => `${Date.now().toString(36)}-${seq++}`;
 
+  /**
+   * SĐT test 10 chữ số.
+   *
+   * ⚠️ Bản cũ ghép thẳng phần dư `Date.now() % 100000000` vào sau "09" để lấy 8 chữ
+   * số cuối của mốc thời gian. NHƯNG số nguyên JS nuốt số 0 đứng đầu: mốc kết thúc
+   * bằng 01846000 cho ra `1846000` ⇒ SĐT chỉ còn 9 chữ số ⇒ `canonicalPhone` từ
+   * chối ⇒ convert trả `PHONE_INVALID` ⇒ `res.ok` false.
+   *
+   * Hỏng ~10% số lần chạy và TÙY GIỜ CHẠY CI chứ không tùy code, nên cùng một
+   * commit lúc xanh lúc đỏ (4ee0fb2a: 02:14 xanh, 09:11 đỏ). `padStart` giữ đủ 8
+   * chữ số nên độ dài luôn là 10.
+   */
+  const uniqPhone = () => `09${String(Date.now() % 100000000).padStart(8, "0")}`;
+
   async function seedCenter(code = "CS1") {
     return db.center.create({
       data: { code, name: `Cơ sở ${code}`, slug: `cs-${code.toLowerCase()}-${uniq()}`, address: "x" },
@@ -313,7 +327,7 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     });
 
     const { cls } = await seedCourseClass(cs1.id);
-    const { lead, children } = await seedRegisteredLeadWithChildren(ho.id, `09${Date.now() % 100000000}`, ["Bé HO"]);
+    const { lead, children } = await seedRegisteredLeadWithChildren(ho.id, uniqPhone(), ["Bé HO"]);
     const actor = await seedActor();
 
     const res = await convertOneLeadBackfill(actor, {
@@ -330,7 +344,7 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
   test("[BULK-10] có khuyến mãi → đơn ghi subtotal/discountAmount/totalAmount đúng, công nợ trừ đủ", async () => {
     const cs1 = await seedCenter();
     const { cls } = await seedCourseClass(cs1.id, 10_000_000);
-    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, `09${Date.now() % 100000000}`, ["Bé Giảm"]);
+    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, uniqPhone(), ["Bé Giảm"]);
     const actor = await seedActor();
 
     const res = await convertOneLeadBackfill(actor, {
@@ -370,7 +384,7 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
   test("[BULK-11] tick 2 đợt + có hạn → dựng kế hoạch 2 đợt; phiếu thu đợt 1 bị HUỶ (không đòi lại tiền đã đóng)", async () => {
     const cs1 = await seedCenter();
     const { cls } = await seedCourseClass(cs1.id, 10_000_000);
-    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, `09${Date.now() % 100000000}`, ["Bé 2 Đợt"]);
+    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, uniqPhone(), ["Bé 2 Đợt"]);
     const actor = await seedActor();
 
     const res = await convertOneLeadBackfill(actor, {
@@ -413,7 +427,7 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
   test("[BULK-12] tick 2 đợt nhưng KHÔNG có hạn → không dựng kế hoạch, đơn vẫn đúng tiền", async () => {
     const cs1 = await seedCenter();
     const { cls } = await seedCourseClass(cs1.id, 10_000_000);
-    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, `09${Date.now() % 100000000}`, ["Bé Không Hạn"]);
+    const { lead, children } = await seedRegisteredLeadWithChildren(cs1.id, uniqPhone(), ["Bé Không Hạn"]);
     const actor = await seedActor();
 
     const res = await convertOneLeadBackfill(actor, {

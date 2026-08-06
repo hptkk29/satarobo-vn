@@ -24,6 +24,7 @@
     "db:seed:roles": "tsx prisma/seed-roles.ts",
     "db:seed:marketing": "tsx prisma/seed-marketing-content.ts",
     "db:seed:session-eval": "tsx prisma/seed-session-eval.ts",
+    "db:seed:birthday": "tsx scripts/seed-birthday-demo.ts",
     "db:reset": "prisma migrate reset",
     "test:unit": "vitest",
     "test:unit:watch": "vitest watch",

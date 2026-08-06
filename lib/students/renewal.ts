@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { vnAddDays, vnStartOfDay } from "@/lib/time/vn";
 import {
   computeStudentProgress,
   type AttendanceLiteStatus,
@@ -42,10 +43,12 @@ export function projectEndDate(input: ProjectEndDateInput): Date | null {
 
   const needed = totalLessons - sorted.length;
   const last = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+  // Mốc quét theo LỊCH VN: buổi 18:00 VN được lưu là 11:00Z, `getDate()` trên
+  // server UTC vẫn ra đúng ngày, nhưng buổi ≥17:00 VN thì lệch sang hôm sau.
   const anchor = last
-    ? new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1)
+    ? vnAddDays(vnStartOfDay(last), 1)
     : fallbackStart
-      ? new Date(fallbackStart.getFullYear(), fallbackStart.getMonth(), fallbackStart.getDate())
+      ? vnStartOfDay(fallbackStart)
       : null;
 
   if (!anchor || scheduleDays.length === 0) {
