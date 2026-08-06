@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { ymdLocal } from "@/lib/classes/schedule";
+import { ymdVN } from "@/lib/classes/schedule";
 import { enqueueEmail } from "@/lib/email/queue";
+import { vnAddDays, vnStartOfDay, vnWeekday } from "@/lib/time/vn";
 
 // =============================================================================
 // P1-f — khi THÊM/SỬA ngày nghỉ (Holiday): DỜI các buổi học TƯƠNG LAI rơi đúng
@@ -11,19 +12,19 @@ import { enqueueEmail } from "@/lib/email/queue";
 
 function expandRange(start: Date, end: Date | null): Set<string> {
   const set = new Set<string>();
-  const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  // Ngày nghỉ khớp theo LỊCH VN (server Vercel chạy UTC — xem `@/lib/time/vn`).
   // QA 21/07 (B3 — root cause chính): `last = cur` (CÙNG object) khi end=null →
   // vòng while tăng cur đồng thời tăng last → LẶP VÔ HẠN với mọi ngày nghỉ 1
   // ngày (crash "Set maximum size exceeded", bị try/catch nuốt → không dời buổi
-  // nào bao giờ). PHẢI clone. Kèm guard 400 ngày như expandHolidaySet.
-  const last = end
-    ? new Date(end.getFullYear(), end.getMonth(), end.getDate())
-    : new Date(cur);
+  // nào bao giờ). Nay `vnAddDays` trả object MỚI nên không còn bí danh. Giữ
+  // guard 400 ngày như expandHolidaySet.
+  let cur = vnStartOfDay(start);
+  const last = end ? vnStartOfDay(end) : cur;
   let guard = 0;
   while (cur <= last && guard < 400) {
     guard++;
-    set.add(ymdLocal(cur));
-    cur.setDate(cur.getDate() + 1);
+    set.add(ymdVN(cur));
+    cur = vnAddDays(cur, 1);
   }
   return set;
 }
@@ -35,12 +36,12 @@ export async function applyHolidayShift(holiday: {
 }): Promise<{ shifted: number; affectedClasses: number }> {
   const range = expandRange(holiday.date, holiday.endDate);
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = vnStartOfDay(now);
 
   // QA 21/07 (B3) — holiday.date lưu 00:00 UTC nên `lte: holiday.date` tạo cửa sổ
   // RỖNG: buổi 09:00 VN (=02:00Z) đã bị loại ngay từ query → không buổi nào được
   // dời. Nới cửa sổ ±1 ngày đệm múi giờ; khớp CHÍNH XÁC theo ngày-local do filter
-  // `range.has(ymdLocal(...))` bên dưới quyết định.
+  // `range.has(ymdVN(...))` bên dưới quyết định.
   const windowStart = new Date(holiday.date);
   windowStart.setDate(windowStart.getDate() - 1);
   const windowEnd = new Date(holiday.endDate ?? holiday.date);
@@ -71,7 +72,7 @@ export async function applyHolidayShift(holiday: {
       },
     },
   });
-  const affected = sessions.filter((s) => range.has(ymdLocal(s.date)) && s.date >= todayStart);
+  const affected = sessions.filter((s) => range.has(ymdVN(s.date)) && s.date >= todayStart);
   if (affected.length === 0) return { shifted: 0, affectedClasses: 0 };
 
   // Tập ngày nghỉ TOÀN BỘ (để khi dời không rơi vào ngày nghỉ khác). Lấy cả
@@ -94,16 +95,17 @@ export async function applyHolidayShift(holiday: {
     }
     // Các buổi đã có của lớp (tránh trùng ngày).
     const taken = new Set(
-      (await db.classSession.findMany({ where: { classId: s.classId }, select: { date: true } })).map((x) => ymdLocal(x.date)),
+      (await db.classSession.findMany({ where: { classId: s.classId }, select: { date: true } })).map((x) => ymdVN(x.date)),
     );
 
-    // Tìm ngày học hợp lệ kế tiếp sau ngày nghỉ.
-    const cursor = new Date(s.date);
+    // Tìm ngày học hợp lệ kế tiếp sau ngày nghỉ (thứ tính theo lịch VN; giữ
+    // nguyên giờ-phút của buổi cũ nên không cần gắn lại khung giờ lớp).
+    let cursor = s.date;
     let found: Date | null = null;
     for (let i = 0; i < 120; i++) {
-      cursor.setDate(cursor.getDate() + 1);
-      const key = ymdLocal(cursor);
-      if (days.includes(cursor.getDay()) && !holSet.has(key) && !taken.has(key)) {
+      cursor = vnAddDays(cursor, 1);
+      const key = ymdVN(cursor);
+      if (days.includes(vnWeekday(cursor)) && !holSet.has(key) && !taken.has(key)) {
         found = new Date(cursor);
         break;
       }
@@ -125,11 +127,11 @@ export async function applyHolidayShift(holiday: {
         vars: {
           teacherName: s.class.teacher?.name ?? "thầy/cô",
           className: s.class.name,
-          oldDate: ymdLocal(s.date),
-          newDate: ymdLocal(found),
+          oldDate: ymdVN(s.date),
+          newDate: ymdVN(found),
         },
         subject: `Dời buổi học do nghỉ — lớp ${s.class.name}`,
-        bodyText: `Buổi học lớp ${s.class.name} ngày ${ymdLocal(s.date)} trùng ngày nghỉ đã được dời sang ${ymdLocal(found)}.`,
+        bodyText: `Buổi học lớp ${s.class.name} ngày ${ymdVN(s.date)} trùng ngày nghỉ đã được dời sang ${ymdVN(found)}.`,
         context: { type: "HOLIDAY_SHIFT", id: s.id },
       }).catch(() => {});
     }

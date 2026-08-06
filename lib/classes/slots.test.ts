@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveClassSlots, applySlotTimeToDate, startTimeForWeekday } from "./slots";
+import { parseVnYmd, vnParts, vnWeekday } from "@/lib/time/vn";
 
 // BGĐ 31/07 — giờ học riêng theo từng thứ (lớp 2 ca khác giờ).
 
@@ -62,19 +63,22 @@ describe("applySlotTimeToDate", () => {
     slots: [{ weekday: 5, startTime: "08:00" }],
   });
 
+  // ⚠️ Assert bằng `vnParts`, KHÔNG bằng `getHours()/getDay()`: hai hàm đó đọc
+  // theo TZ máy chạy nên test sẽ xanh ở máy dev (+07) mà vẫn để lọt bug trên
+  // Vercel (UTC) — đúng cái bug 06/08/2026.
   it("gắn giờ theo ĐÚNG thứ của ngày", () => {
     // 2026-08-03 là thứ 2, 2026-08-07 là thứ 6.
-    const mon = applySlotTimeToDate(new Date(2026, 7, 3), slots);
-    const fri = applySlotTimeToDate(new Date(2026, 7, 7), slots);
-    expect(mon.getDay()).toBe(1);
-    expect([mon.getHours(), mon.getMinutes()]).toEqual([17, 30]);
-    expect(fri.getDay()).toBe(5);
-    expect([fri.getHours(), fri.getMinutes()]).toEqual([8, 0]);
+    const mon = applySlotTimeToDate(parseVnYmd("2026-08-03")!, slots);
+    const fri = applySlotTimeToDate(parseVnYmd("2026-08-07")!, slots);
+    expect(vnWeekday(mon)).toBe(1);
+    expect(vnParts(mon)).toMatchObject({ day: 3, hour: 17, minute: 30 });
+    expect(vnWeekday(fri)).toBe(5);
+    expect(vnParts(fri)).toMatchObject({ day: 7, hour: 8, minute: 0 });
   });
 
   it("thứ không có trong lịch → 00:00 (không đủ dữ liệu, không đoán)", () => {
-    const wed = applySlotTimeToDate(new Date(2026, 7, 5), slots); // thứ 4
-    expect([wed.getHours(), wed.getMinutes()]).toEqual([0, 0]);
+    const wed = applySlotTimeToDate(parseVnYmd("2026-08-05")!, slots); // thứ 4
+    expect(vnParts(wed)).toMatchObject({ day: 5, hour: 0, minute: 0 });
     expect(startTimeForWeekday(slots, 3)).toBeNull();
   });
 });

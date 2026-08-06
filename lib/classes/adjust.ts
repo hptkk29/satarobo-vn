@@ -4,6 +4,7 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { detectSessionConflicts } from "@/lib/lms/schedule-conflict";
 import { sessionEndAt } from "@/lib/lms/scheduling";
+import { vnAddDays } from "@/lib/time/vn";
 
 // =============================================================================
 // R7-06 — Điều chỉnh buổi học: HỦY buổi (sinh buổi bù cuối lịch, giữ tổng số buổi)
@@ -23,9 +24,7 @@ export function buildMakeupDate(existingDates: Date[], afterDate: Date): Date {
   for (const d of existingDates) {
     if (d.getTime() > latest.getTime()) latest = d;
   }
-  const out = new Date(latest);
-  out.setDate(out.getDate() + MAKEUP_GAP_DAYS);
-  return out;
+  return vnAddDays(latest, MAKEUP_GAP_DAYS);
 }
 
 /**

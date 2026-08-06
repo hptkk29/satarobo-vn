@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { projectEndDate } from "./renewal";
-import { ymdLocal } from "@/lib/classes/schedule";
+import { ymdVN } from "@/lib/classes/schedule";
 
 describe("projectEndDate", () => {
   const noHolidays = new Set<string>();
@@ -19,7 +19,7 @@ describe("projectEndDate", () => {
       holidays: noHolidays,
       fallbackStart: null,
     });
-    expect(end && ymdLocal(end)).toBe("2026-01-12");
+    expect(end && ymdVN(end)).toBe("2026-01-12");
   });
 
   it("thiếu buổi → chiếu tiếp từ buổi cuối theo scheduleDays", () => {
@@ -32,7 +32,7 @@ describe("projectEndDate", () => {
       holidays: noHolidays,
       fallbackStart: null,
     });
-    expect(end && ymdLocal(end)).toBe("2026-01-14");
+    expect(end && ymdVN(end)).toBe("2026-01-14");
   });
 
   it("chiếu tiếp né ngày nghỉ", () => {
@@ -46,7 +46,7 @@ describe("projectEndDate", () => {
       holidays,
       fallbackStart: null,
     });
-    expect(end && ymdLocal(end)).toBe("2026-01-14");
+    expect(end && ymdVN(end)).toBe("2026-01-14");
   });
 
   it("chưa có buổi nào → chiếu từ fallbackStart", () => {
@@ -57,7 +57,7 @@ describe("projectEndDate", () => {
       holidays: noHolidays,
       fallbackStart: new Date(2026, 0, 5), // T2 05/01
     });
-    expect(end && ymdLocal(end)).toBe("2026-01-07");
+    expect(end && ymdVN(end)).toBe("2026-01-07");
   });
 
   it("không có lịch + không buổi → null", () => {

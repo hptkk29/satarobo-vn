@@ -4,6 +4,7 @@ import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { resolveClassSlots, applySlotTimeToDate, type ClassTimeSlot } from "@/lib/classes/slots";
 import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
 import { formatDateVN } from "@/lib/format/date";
+import { vnWeekday } from "@/lib/time/vn";
 
 // =============================================================================
 // W2-4 (LMS-6) — soát trùng GV/phòng ở write-path sinh buổi.
@@ -170,7 +171,7 @@ async function warnIfConflict(
     const all: { date: Date; messages: string[] }[] = [];
     for (const slot of slots) {
       if (!slot.startTime) continue;
-      const dates = data.filter((d) => d.date.getDay() === slot.weekday).map((d) => d.date);
+      const dates = data.filter((d) => vnWeekday(d.date) === slot.weekday).map((d) => d.date);
       if (dates.length === 0) continue;
       const conflicts = await detectBatchConflicts({
         // centerId = null → soát toàn hệ thống: GV có thể dạy 2 cơ sở.

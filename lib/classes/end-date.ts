@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { vnDateOnly } from "@/lib/time/vn";
 
 // =============================================================================
 // T3.3 (QĐ-8) — NGÀY BẾ GIẢNG gợi ý = ngày của BUỔI CUỐI theo lịch lớp, đã trừ
@@ -12,9 +13,13 @@ import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 // ngày bế giảng khác ngày buổi cuối thật.
 // =============================================================================
 
-/** Ngày (bỏ giờ) — endDate là mốc NGÀY, không phải thời điểm. */
+/**
+ * Ngày (bỏ giờ) — endDate là mốc NGÀY, không phải thời điểm. Lấy ngày theo LỊCH VN
+ * rồi lưu nửa đêm UTC, đúng quy ước form admin ghi `startDate`
+ * (`z.coerce.date("2026-06-20")`) để refine `endDate >= startDate` không lệch.
+ */
 function dateOnly(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return vnDateOnly(d);
 }
 
 async function resolveSessionCount(
