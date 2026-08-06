@@ -20,6 +20,7 @@ import { canTransition } from "@/lib/enrollments/status";
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { resolveClassSlots, applySlotTimeToDate } from "@/lib/classes/slots";
+import { vnAddDays, vnEndOfDay, vnStartOfDay, vnWeekday } from "@/lib/time/vn";
 import { suggestClassEndDate } from "@/lib/classes/end-date";
 import { generateClassSessions } from "@/lib/classes/generate";
 import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
@@ -801,7 +802,9 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   }
 
   const now = new Date();
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  // Mốc "hết hôm nay" / "ngày mai" theo LỊCH VN — server Vercel chạy UTC nên
+  // `new Date(y,m,d,…)` sẽ lấy nhầm ngày UTC (lệch 7h so với ngày làm việc thật).
+  const todayEnd = vnEndOfDay(now);
   const future = await sdb.classSession.findMany({
     // R7-06 AC6: chỉ dời buổi SCHEDULED tương lai — KHÔNG đụng buổi đã COMPLETED/
     // đang IN_PROGRESS hay đã CANCELLED (giữ tổng buổi + không hồi sinh buổi huỷ).
@@ -820,10 +823,8 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   // QA 21/07 — không dời buổi về TRƯỚC ngày khai giảng: mốc quét = max(ngày mai,
   // startDate của lớp). Trước đây lớp khai giảng 28/07 đổi lịch là buổi đầu bị
   // kéo về ngay ngày mai (22/07).
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const startDay = cls.startDate
-    ? new Date(cls.startDate.getFullYear(), cls.startDate.getMonth(), cls.startDate.getDate())
-    : tomorrow;
+  const tomorrow = vnAddDays(vnStartOfDay(now), 1);
+  const startDay = cls.startDate ? vnStartOfDay(cls.startDate) : tomorrow;
   const from = startDay > tomorrow ? startDay : tomorrow;
   const newDates = computeSessionDates({
     from,
@@ -848,7 +849,7 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
     if (!slot.startTime) continue;
     const dates = items
       .map((it) => it.newDate)
-      .filter((d) => d.getDay() === slot.weekday);
+      .filter((d) => vnWeekday(d) === slot.weekday);
     if (dates.length === 0) continue;
     const found = await detectBatchConflicts({
       centerId: null, // toàn hệ thống: GV có thể dạy 2 cơ sở

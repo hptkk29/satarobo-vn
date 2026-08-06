@@ -12,6 +12,8 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { getAuditActor } from "@/lib/audit/log";
 import { adoptCurriculumVersion } from "@/lib/classes/snapshot";
 import { cancelSession, adjustSession } from "@/lib/classes/adjust";
+import { resolveClassSlots, startTimeForWeekday, parseHm } from "@/lib/classes/slots";
+import { parseVnYmd, vnDateAt, vnParts } from "@/lib/time/vn";
 
 type Result = { ok: boolean; error?: string };
 
@@ -132,16 +134,16 @@ export async function adoptCurriculumVersionAction(
 async function resolveSessionInScope(
   g: Gate,
   sessionId: string,
-): Promise<{ ok: true; classId: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; classId: string; date: Date } | { ok: false; error: string }> {
   const s = await g.sdb.classSession.findUnique({
     where: { id: sessionId },
-    select: { classId: true, class: { select: { centerId: true } } },
+    select: { classId: true, date: true, class: { select: { centerId: true } } },
   });
   if (!s) return { ok: false, error: "Không tìm thấy buổi học" };
   if (!inScope(s.class?.centerId, g.actor)) {
     return { ok: false, error: "Lớp không thuộc cơ sở bạn quản lý" };
   }
-  return { ok: true, classId: s.classId };
+  return { ok: true, classId: s.classId, date: s.date };
 }
 
 /** Huỷ 1 buổi học (bắt buộc lý do). Không xoá — set status CANCELLED. */
@@ -188,11 +190,32 @@ export async function adjustSessionAction(
 
   const patch: { date?: Date; teacherId?: string; roomId?: string } = {};
   if (input.date) {
-    const d = new Date(input.date);
-    if (Number.isNaN(d.getTime())) {
-      return { ok: false, error: "Ngày không hợp lệ" };
-    }
-    patch.date = d;
+    // Ô nhập là `<input type="date">` → chỉ có "YYYY-MM-DD", KHÔNG có giờ.
+    // `new Date("2026-06-25")` cho nửa đêm UTC ⇒ trên server UTC buổi bị đẩy về
+    // 07:00 VN, mất khung giờ lớp. Đọc ngày theo lịch VN rồi gắn lại giờ của
+    // ĐÚNG thứ đó; thứ nằm ngoài lịch lớp (buổi bù) → giữ nguyên giờ buổi cũ.
+    const day = parseVnYmd(input.date);
+    if (!day) return { ok: false, error: "Ngày không hợp lệ" };
+
+    const cls = await g.gate.sdb.class.findUnique({
+      where: { id: sc.classId },
+      select: {
+        scheduleDays: true,
+        startTime: true,
+        endTime: true,
+        scheduleSlots: { select: { weekday: true, startTime: true, endTime: true } },
+      },
+    });
+    const slots = resolveClassSlots({
+      scheduleDays: cls?.scheduleDays ?? [],
+      startTime: cls?.startTime,
+      endTime: cls?.endTime,
+      slots: cls?.scheduleSlots,
+    });
+    const p = vnParts(day);
+    const hm = startTimeForWeekday(slots, p.weekday);
+    const time = hm ? parseHm(hm) : { h: vnParts(sc.date).hour, m: vnParts(sc.date).minute };
+    patch.date = vnDateAt(p.year, p.month, p.day, time.h, time.m);
   }
   if (input.teacherId) patch.teacherId = input.teacherId;
   if (input.roomId) patch.roomId = input.roomId;
