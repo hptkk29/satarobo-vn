@@ -3,6 +3,10 @@ import { sessionWindow, rowsToSlots } from "@/lib/lms/schedule-conflict";
 import { detectScheduleConflict } from "@/lib/lms/scheduling";
 import { vnDateAt } from "@/lib/time/vn";
 
+// TZ: fixture dựng bằng `vnDateAt`, KHÔNG `new Date(y,m,d,h,m)`. CI chạy UTC còn máy
+// dev +07 — constructor local cho ra thời điểm lệch 7 tiếng, đủ để rơi sang ngày VN
+// khác và làm phép so trùng "không thấy" nhau. Bắt được nhờ CI đỏ 06/08.
+
 describe("sessionWindow", () => {
   it("tính cuối buổi từ startTime/endTime của lớp", () => {
     // 06/08 — mốc ĐẦU nay neo theo giờ lớp (17:30 VN), không còn lấy nguyên phần
@@ -25,7 +29,7 @@ describe("sessionWindow", () => {
 
 describe("rowsToSlots", () => {
   it("phòng/GV hiệu lực = actual ?? class", () => {
-    const date = new Date(2026, 5, 1, 17, 30);
+    const date = vnDateAt(2026, 5, 1, 17, 30);
     const slots = rowsToSlots([
       {
         id: "s1",
@@ -40,7 +44,7 @@ describe("rowsToSlots", () => {
 });
 
 describe("rowsToSlots + detectScheduleConflict", () => {
-  const date = new Date(2026, 5, 1, 17, 30);
+  const date = vnDateAt(2026, 5, 1, 17, 30);
   const existing = rowsToSlots([
     {
       id: "s1",
@@ -55,8 +59,8 @@ describe("rowsToSlots + detectScheduleConflict", () => {
     const r = detectScheduleConflict(existing, {
       roomId: "R1",
       teacherId: "T2",
-      startAt: new Date(2026, 5, 1, 18, 0),
-      endAt: new Date(2026, 5, 1, 19, 30),
+      startAt: vnDateAt(2026, 5, 1, 18, 0),
+      endAt: vnDateAt(2026, 5, 1, 19, 30),
     });
     expect(r.roomConflict).toBe(true);
     expect(r.teacherConflict).toBe(false);
@@ -67,8 +71,8 @@ describe("rowsToSlots + detectScheduleConflict", () => {
     const r = detectScheduleConflict(existing, {
       roomId: "R2",
       teacherId: "T1",
-      startAt: new Date(2026, 5, 1, 18, 0),
-      endAt: new Date(2026, 5, 1, 19, 30),
+      startAt: vnDateAt(2026, 5, 1, 18, 0),
+      endAt: vnDateAt(2026, 5, 1, 19, 30),
     });
     expect(r.teacherConflict).toBe(true);
     expect(r.roomConflict).toBe(false);
@@ -78,8 +82,8 @@ describe("rowsToSlots + detectScheduleConflict", () => {
     const r = detectScheduleConflict(existing, {
       roomId: "R1",
       teacherId: "T1",
-      startAt: new Date(2026, 5, 1, 19, 30),
-      endAt: new Date(2026, 5, 1, 21, 0),
+      startAt: vnDateAt(2026, 5, 1, 19, 30),
+      endAt: vnDateAt(2026, 5, 1, 21, 0),
     });
     expect(r.roomConflict).toBe(false);
     expect(r.teacherConflict).toBe(false);
