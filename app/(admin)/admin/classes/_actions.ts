@@ -7,7 +7,7 @@ import type { Prisma, EnrollmentStatus } from "@prisma/client";
 import { hasAnyRole, type Action } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit, orgUnitIdForCenter } from "@/lib/org/org-service";
-import { rejectHeadOffice } from "@/lib/enrollment-flow";
+import { rejectHeadOffice, getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { classCreateSchema } from "@/lib/validators/class";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import {
@@ -72,9 +72,13 @@ async function assertTeachersInCenter(
   const byId = new Map(users.map((u) => [u.id, u.centerId]));
   // teacherCenterAssignmentError so từng id với centerId lớp (undefined nếu GV không
   // tồn tại → cũng bị chặn). Logic thuần, test ở lib/teachers/center-filter.test.ts.
+  // GV thuộc Hội sở là nguồn lực chung, điều đi dạy mọi cơ sở (chốt 06/08).
+  // Nhận diện HO qua cây OrgUnit, KHÔNG hardcode mã.
+  const hoCenterIds = await getNonEnrollableCenterIds();
   return teacherCenterAssignmentError(
     centerId,
     ids.map((id) => ({ id, centerId: byId.get(id) })),
+    hoCenterIds,
   );
 }
 

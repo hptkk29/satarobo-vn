@@ -17,10 +17,14 @@ export function filterTeachersByCenter<T extends TeacherCenterLite>(
   teachers: T[],
   centerId: string | null,
   keepIds: (string | null | undefined)[] = [],
+  hoCenterIds: string[] = [],
 ): T[] {
   const keep = new Set(keepIds.filter(Boolean) as string[]);
   if (centerId == null) return teachers.filter((t) => keep.has(t.id));
-  return teachers.filter((t) => t.centerId === centerId || keep.has(t.id));
+  const ho = new Set(hoCenterIds);
+  return teachers.filter(
+    (t) => t.centerId === centerId || (t.centerId != null && ho.has(t.centerId)) || keep.has(t.id),
+  );
 }
 
 /**
@@ -32,12 +36,19 @@ export function filterTeachersByCenter<T extends TeacherCenterLite>(
 export function teacherCenterAssignmentError(
   centerId: string | null,
   assigned: { id: string; centerId: string | null | undefined }[],
+  hoCenterIds: string[] = [],
 ): string | null {
   if (!centerId) return null;
+  const ho = new Set(hoCenterIds);
   for (const t of assigned) {
-    if (t.centerId !== centerId) {
-      return "Giáo viên/trợ giảng phải thuộc cùng cơ sở với lớp";
-    }
+    if (t.centerId === centerId) continue;
+    // GV thuộc HỘI SỞ = nguồn lực chung, được điều đi dạy ở mọi cơ sở (chốt 06/08:
+    // GV Đà Nẵng về HO rồi phân lịch xuống CS). KHÁC với GV thuộc CS khác — vẫn chặn.
+    if (t.centerId != null && ho.has(t.centerId)) continue;
+    // centerId null/undefined = GV chưa gán cơ sở HOẶC teacherId không tồn tại → chặn.
+    return t.centerId == null
+      ? "Giáo viên/trợ giảng không hợp lệ hoặc chưa gán đơn vị"
+      : "Giáo viên/trợ giảng phải thuộc cùng cơ sở với lớp, hoặc thuộc Hội sở";
   }
   return null;
 }

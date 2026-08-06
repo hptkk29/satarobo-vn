@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { detectSessionConflicts } from "@/lib/lms/schedule-conflict";
-import { sessionEndAt } from "@/lib/lms/scheduling";
 import { sessionWindow } from "@/lib/lms/schedule-conflict";
 import { vnAddDays } from "@/lib/time/vn";
 

@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm, type ClassFormValue } from "../../_components/class-form";
@@ -26,6 +27,7 @@ export default async function EditClassPage({ params }: Props) {
 
   const { id } = await params;
   const actor = await resolveActor(session.user.id);
+  const hoCenterIds = await getNonEnrollableCenterIds();
 
   const hasEdit = await checkPermission("classes:edit");
   const hasViewAll = await checkPermission("classes:view-all");
@@ -277,6 +279,7 @@ export default async function EditClassPage({ params }: Props) {
       </div>
 
       <ClassForm
+        hoCenterIds={hoCenterIds}
         cls={formValue}
         courses={courses}
         canEdit={canEdit}

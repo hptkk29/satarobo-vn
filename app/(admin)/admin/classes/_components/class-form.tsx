@@ -101,6 +101,7 @@ export function ClassForm({
   classGroups,
   rooms,
   teachers,
+  hoCenterIds = [],
   curricula = [],
   canEdit = true,
 }: {
@@ -110,6 +111,8 @@ export function ClassForm({
   classGroups: ClassGroupOption[];
   rooms: RoomOption[];
   teachers: TeacherOption[];
+  /** Cơ sở KHÔNG dạy học (Hội sở) — GV thuộc đây điều đi dạy được mọi cơ sở. */
+  hoCenterIds?: string[];
   /** R7-06 — giáo trình ACTIVE (sắp xếp version giảm dần) để chốt version lúc tạo lớp. */
   curricula?: CurriculumOption[];
   canEdit?: boolean;
@@ -168,13 +171,13 @@ export function ClassForm({
   // tự rớt value (gốc bug "Lớp học hiện trống"). Dùng helper thuần đã unit-test.
   const filteredTeachers = useMemo(() => {
     if (!orgUnitId) return teachers; // chưa chọn đơn vị → hiện tất (sẽ lọc sau khi chọn)
-    return filterTeachersByCenter(teachers, selectedCenterId, [
-      teacherId,
-      assistantId,
-      cls?.teacherId,
-      cls?.assistantId,
-    ]);
-  }, [teachers, orgUnitId, selectedCenterId, teacherId, assistantId, cls]);
+    return filterTeachersByCenter(
+      teachers,
+      selectedCenterId,
+      [teacherId, assistantId, cls?.teacherId, cls?.assistantId],
+      hoCenterIds,
+    );
+  }, [teachers, orgUnitId, selectedCenterId, teacherId, assistantId, cls, hoCenterIds]);
   const filteredAssistants = useMemo(
     () => filteredTeachers.filter((t) => t.id !== teacherId),
     [filteredTeachers, teacherId],

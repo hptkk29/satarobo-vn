@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { ClassForm } from "../_components/class-form";
@@ -17,6 +18,8 @@ export default async function NewClassPage() {
   }
 
   const actor = await resolveActor(session.user.id);
+
+  const hoCenterIds = await getNonEnrollableCenterIds();
   const sdb = scopedDb(actor);
   // Scope GHI per-model của Class (vá 24/07) — dùng cho CẢ picker GV lẫn picker "Đơn vị"
   // bên dưới: actor kiểu Toại (TRAINING@HO + CM@CS1) chỉ thấy CS1, hết bày GV CS2.
@@ -67,6 +70,7 @@ export default async function NewClassPage() {
     <div>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm lớp học mới</h1>
       <ClassForm
+        hoCenterIds={hoCenterIds}
         courses={courses}
         orgUnits={orgUnitsInScope.map((o) => ({
           id: o.orgUnitId,
