@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { detectScheduleConflict, type Slot } from "@/lib/lms/scheduling";
-import { vnDateAt, vnParts } from "@/lib/time/vn";
+import { vnAddDays, vnDateAt, vnParts, vnStartOfDay } from "@/lib/time/vn";
 
 // =============================================================================
 // LMS-6 — nối detectScheduleConflict vào write-path: 1 buổi candidate có trùng
@@ -169,9 +169,11 @@ export async function detectSessionConflicts(input: {
   endAt: Date;
 }): Promise<ConflictResult> {
   if (!input.roomId && !input.teacherId) return EMPTY;
-  const d = input.startAt;
-  const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dayEnd = new Date(dayStart.getTime() + 24 * 3_600_000);
+  // Khung NGÀY phải theo đồng hồ VN. Bản cũ dùng `new Date(y,m,d)` = ngày theo TZ
+  // máy chạy: trên Vercel (UTC) một buổi 00:00 VN lưu là 17:00Z HÔM TRƯỚC ⇒ lấy
+  // nhầm sang tập buổi của ngày khác, vừa bỏ sót trùng thật vừa bắt trùng oan.
+  const dayStart = vnStartOfDay(input.startAt);
+  const dayEnd = vnAddDays(dayStart, 1);
 
   const others = await db.classSession.findMany({
     where: {
