@@ -162,7 +162,10 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
       .catch(() => [] as Array<{ id: string; name: string }>),
     // Fix #9 — bộ lọc GV dùng chung nguồn assignable (không lọt quản lý/sale thuần).
     // R2-RBAC-3 — chỉ GV thuộc cơ sở actor nhìn thấy (CS1 không lọt GV CS2 vào filter).
-    getAssignableTeachers({ centerIds: actor.visibleCenterIds }).catch(
+    // 06/08 - GV la nguon luc chung (Hoi so dieu di moi co so): KHONG loc danh
+    // sach theo co so nua, neu khong CS2 khong bao gio toi duoc form va bo loc
+    // phia client co mo cung vo nghia.
+    getAssignableTeachers({}).catch(
       () => [] as Array<{ id: string; name: string | null }>,
     ),
   ])

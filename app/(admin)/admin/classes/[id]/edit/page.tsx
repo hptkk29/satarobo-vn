@@ -126,10 +126,10 @@ export default async function EditClassPage({ params }: Props) {
     // R2-RBAC-3 + vá 24/07 — GV theo scope per-model của Class ("ALL" → như cũ theo
     // visibleCenterIds) + LUÔN kèm GV/TA đang gán (includeIds) để <Select> không rớt
     // value; form lọc tiếp theo đơn vị đang chọn ở client.
-    getAssignableTeachers({
-      centerIds: classCenters === "ALL" ? actor.visibleCenterIds : classCenters,
-      includeIds: [cls.teacherId, cls.assistantId],
-    }),
+    // 06/08 - GV la nguon luc chung (Hoi so dieu di moi co so): KHONG loc danh
+    // sach theo co so nua, neu khong CS2 khong bao gio toi duoc form va bo loc
+    // phia client co mo cung vo nghia.
+    getAssignableTeachers({ includeIds: [cls.teacherId, cls.assistantId] }),
   ]);
 
   const lessonIds = plans

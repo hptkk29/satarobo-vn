@@ -45,9 +45,10 @@ export default async function NewClassPage() {
     // Fix #9 — nguồn DUY NHẤT cho GV có thể phân lớp (không lọt quản lý/sale thuần).
     // R2-RBAC-3 + vá 24/07 — GV theo scope per-model của Class ("ALL" → như cũ theo
     // visibleCenterIds); form còn lọc tiếp theo đơn vị đang chọn ở client.
-    getAssignableTeachers({
-      centerIds: classCenters === "ALL" ? actor.visibleCenterIds : classCenters,
-    }),
+    // 06/08 — GV là nguồn lực chung (Hội sở điều đi mọi cơ sở): KHÔNG lọc
+    // danh sách theo cơ sở nữa, nếu không CS2 không bao giờ tới được form và
+    // bộ lọc phía client có mở cũng vô nghĩa.
+    getAssignableTeachers({}),
     sdb.curriculum.findMany({
       where: {
         isActive: true,
