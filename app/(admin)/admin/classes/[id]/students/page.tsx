@@ -54,7 +54,13 @@ export default async function ClassStudentsPage({ params }: Props) {
 
   const [current, assignable] = await Promise.all([
     sdb.enrollment.findMany({
-      where: { classId: cls.id, status: { in: [...CAPACITY_COUNT_STATUSES, "PAUSED"] } },
+      // student.deletedAt: hàng rào 2 cho dữ liệu hỏng trước 07/08 (HV xoá mềm nhưng
+      // ghi danh còn sống) — đây chính là màn "Học sinh lớp" đã hiện HV ma.
+      where: {
+        classId: cls.id,
+        status: { in: [...CAPACITY_COUNT_STATUSES, "PAUSED"] },
+        student: { deletedAt: null },
+      },
       orderBy: { enrolledAt: "asc" },
       select: {
         id: true,

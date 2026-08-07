@@ -21,7 +21,9 @@ const ZNS_TEMPLATE = process.env.ZALO_ZNS_TEMPLATE_ATTENDANCE || null;
 export async function notifyAttendanceForSession(sessionId: string): Promise<void> {
   // Các bản ghi CHƯA gửi thông báo của buổi này.
   const rows = await db.attendance.findMany({
-    where: { sessionId, notifiedAt: null },
+    // student.deletedAt: KHÔNG gửi ZNS/email điểm danh cho phụ huynh của học viên đã bị
+    // xoá khỏi hệ thống (07/08 — bản ghi attendance cũ vẫn còn nên vẫn lọt thông báo).
+    where: { sessionId, notifiedAt: null, student: { deletedAt: null } },
     select: {
       id: true,
       status: true,

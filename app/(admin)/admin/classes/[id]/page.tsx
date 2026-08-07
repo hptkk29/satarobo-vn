@@ -25,6 +25,7 @@ import {
   loadClassMakeupItems,
   loadClassScormSessions,
 } from "@/lib/classes/detail-tabs-data";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { isScormEnabled } from "@/lib/flags";
 import { canManageTraining } from "@/lib/scorm/access";
 
@@ -107,7 +108,20 @@ export default async function ClassDetailPage({ params }: Props) {
         approvedByName: true,
         curriculumVersion: true,
         course: { select: { name: true } },
-        _count: { select: { enrollments: { where: { deletedAt: null } } } },
+        // Sĩ số = HV ĐANG thuộc lớp. Thiếu lọc status thì WITHDREW/CANCELLED/COMPLETED
+        // vẫn được đếm — lệch với cột sĩ số ở /admin/classes (classes/page.tsx) và làm
+        // HV đã nghỉ/đã xoá vẫn kê lên đầu trang lớp (sự cố 07/08).
+        _count: {
+          select: {
+            enrollments: {
+              where: {
+                status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+                deletedAt: null,
+                student: { deletedAt: null },
+              },
+            },
+          },
+        },
       },
     }),
     sdb.course.findMany({

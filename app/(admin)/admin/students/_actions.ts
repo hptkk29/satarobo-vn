@@ -25,6 +25,7 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
 import { canTransition } from "@/lib/enrollments/status";
+import { removeStudentFromClasses } from "@/lib/students/remove-from-classes";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
@@ -319,6 +320,23 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
         data: { deletedAt: new Date() },
       });
 
+      // Sự cố 07/08/2026: trước đây dừng ở đây → ghi danh vẫn "sống", nên HV đã xoá
+      // vẫn nằm trong lớp ở /admin/classes/<id>/students, tab Học viên site GV, bảng
+      // điểm danh… (mọi màn đó đọc từ Enrollment chứ không từ Student). Gỡ khỏi lớp
+      // trong CÙNG transaction. Đổi status, KHÔNG set Enrollment.deletedAt — xem lý do
+      // (sổ sách) trong lib/students/remove-from-classes.ts.
+      // KHÔNG tạo yêu cầu hoàn tiền ở đây: đó là việc của luồng "Nghỉ học"
+      // (withdrawStudentAction); xoá bản ghi là thao tác dọn dữ liệu, không phải sự kiện
+      // học viên rời lớp.
+      await removeStudentFromClasses({
+        tx,
+        studentId: id,
+        actorId,
+        actorName,
+        reason: "Xoá học viên khỏi hệ thống",
+        orgUnitId: before.centerId,
+      });
+
       await logStudentAudit({
         studentId: id,
         action: "DELETE",
@@ -344,6 +362,10 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
     return { error: "Không thể xoá học viên này" };
   }
   revalidatePath("/students");
+  // Roster lớp + danh sách ghi danh vừa đổi theo → phải làm mới, nếu không admin vẫn
+  // thấy HV cũ trong lớp cho tới lần build lại (đúng triệu chứng đã báo 07/08).
+  revalidatePath("/classes");
+  revalidatePath("/enrollments");
   return {};
 }
 

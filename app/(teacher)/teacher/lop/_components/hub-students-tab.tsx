@@ -36,7 +36,12 @@ export async function HubStudentsTab({
     where: { id: classId },
     select: {
       enrollments: {
-        where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+        // student.deletedAt: hàng rào 2 (07/08) — GV không được thấy HV đã xoá khỏi hệ thống.
+        where: {
+          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+          deletedAt: null,
+          student: { deletedAt: null },
+        },
         // Câu 46: Student CHỈ field định danh học tập — KHÔNG parent*/phone/email.
         select: {
           status: true,

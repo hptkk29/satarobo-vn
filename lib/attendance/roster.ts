@@ -47,7 +47,14 @@ export async function buildSessionAttendanceRows(
           id: true,
           name: true,
           enrollments: {
-            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            // `student: { deletedAt: null }` là hàng rào 2 (07/08): cascade lúc xoá HV đã
+            // hạ status, nhưng roster này nuôi CẢ điểm danh admin lẫn site GV và còn là
+            // guard chống ghi attendance ngoài danh sách — dữ liệu hỏng sẵn không được lọt.
+            where: {
+              status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+              deletedAt: null,
+              student: { deletedAt: null },
+            },
             select: {
               status: true,
               student: { select: { id: true, name: true, phone: true } },
