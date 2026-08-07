@@ -90,7 +90,10 @@ export function ClassAttendancePanel({
 
       {selectedId && !error ? (
         <div className={pending ? "opacity-60" : ""}>
-          <AttendanceGrid sessionId={selectedId} rows={rows} />
+          {/* key = buổi: state trong AttendanceGrid chỉ khởi tạo 1 lần, không có key thì
+              đổi buổi xong lưới vẫn giữ trạng thái buổi TRƯỚC (cùng lớp nên phần lớn HV
+              trùng) — màn hình nói dối, và với luật "phải đủ cả lớp" thì đếm luôn sai. */}
+          <AttendanceGrid key={selectedId} sessionId={selectedId} rows={rows} />
         </div>
       ) : !error ? (
         <p className="text-sm text-neutral-500">Chọn một buổi học để điểm danh.</p>

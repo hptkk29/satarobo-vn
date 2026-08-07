@@ -277,7 +277,9 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
             </div>
           </div>
 
-          <AttendanceGrid sessionId={selectedSession.id} rows={rows} />
+          {/* key = buổi: đổi ?sessionId= là điều hướng client, React giữ nguyên instance
+              cũ ⇒ state (chỉ khởi tạo 1 lần) còn của buổi trước. Có key thì lưới nạp lại. */}
+          <AttendanceGrid key={selectedSession.id} sessionId={selectedSession.id} rows={rows} />
         </div>
       )}
     </div>

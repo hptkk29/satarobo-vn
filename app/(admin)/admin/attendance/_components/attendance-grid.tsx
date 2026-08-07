@@ -1,6 +1,14 @@
+// app/(admin)/admin/attendance/_components/attendance-grid.tsx
+//
+// 07/08/2026 — BỎ mặc định "Có mặt", theo đúng site GV (attendance-panel.tsx sửa cùng
+// ngày). Trước đây mở lưới lên là cả lớp đã sáng "Có mặt" sẵn dù buổi chưa điểm danh:
+// màn hình nói dối, và chỉ cần sửa 1 em rồi Lưu là buổi được tính "đã điểm danh" trong
+// khi những em còn lại KHÔNG có bản ghi nào. Nay mọi ô đều TRỐNG, ai bấm mới có
+// (không có bản ghi Attendance = chưa điểm danh — enum không có nhãn "chưa"), và nút
+// Lưu ĐÒI đánh dấu đủ cả lớp. Xem lý do đầy đủ ở comment trong save().
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Check, X, Clock, FileText, Save } from "lucide-react";
 import { markAttendance } from "../_actions";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
@@ -10,10 +18,17 @@ type MakeupStatus = "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
 // R7-08 — DB thêm ABSENT_EXCUSED/ABSENT_UNEXCUSED (2-phase). Lưới điểm danh chỉ chỉnh
 // 4 trạng thái gốc; 2 nhãn mới quy về gốc khi nạp state ban đầu.
 type DbAttendanceStatus = AttendanceStatus | "ABSENT_EXCUSED" | "ABSENT_UNEXCUSED";
-function toEditableStatus(s: DbAttendanceStatus | null | undefined): AttendanceStatus {
+/**
+ * ⚠️ 07/08/2026 — trả `null` khi HV CHƯA có bản ghi điểm danh (trước đây fallback
+ * "PRESENT"). Đây chính là chỗ đẻ ra cảnh cả lớp sáng "Có mặt" khi vừa mở buổi chưa
+ * điểm danh; giờ trạng thái phải do người dùng tự bấm.
+ */
+function toEditableStatus(
+  s: DbAttendanceStatus | null | undefined,
+): AttendanceStatus | null {
   if (s === "ABSENT_EXCUSED") return "EXCUSED";
   if (s === "ABSENT_UNEXCUSED") return "ABSENT";
-  return s ?? "PRESENT";
+  return s ?? null;
 }
 
 interface StudentRow {
@@ -70,14 +85,15 @@ const STATUS_META: Record<
 const STATUS_ORDER: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
 
 interface RowState {
-  status: AttendanceStatus;
+  /** null = CHƯA điểm danh (không phải "có mặt"). */
+  status: AttendanceStatus | null;
   note: string;
   makeupStatus: MakeupStatus;
   absenceReason: string;
   dirty: boolean;
 }
 
-const isAbsent = (s: AttendanceStatus) => s === "ABSENT" || s === "EXCUSED";
+const isAbsent = (s: AttendanceStatus | null) => s === "ABSENT" || s === "EXCUSED";
 
 export function AttendanceGrid({ sessionId, rows }: Props) {
   const [state, setState] = useState<Record<string, RowState>>(() => {
@@ -99,12 +115,28 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
   const [pending, startTransition] = useTransition();
 
   const dirtyCount = Object.values(state).filter((r) => r.dirty).length;
+  /** Số HV chưa được đánh dấu — hiện lên để không ai tưởng buổi đã điểm danh xong. */
+  const unmarked = rows.filter((r) => !state[r.studentId]?.status).length;
 
+  /** HV ĐÃ có bản ghi trong DB lúc mở màn (dùng cho luật bỏ-chọn ở setStatus). */
+  const savedIds = useMemo(
+    () => new Set(rows.filter((r) => r.existing).map((r) => r.studentId)),
+    [rows],
+  );
+
+  /**
+   * Bấm lại đúng nhãn đang chọn = BỎ chọn (về "chưa điểm danh") — lỡ tay còn gỡ được.
+   * CHỈ cho HV CHƯA có bản ghi trong DB: markAttendance chỉ upsert chứ không xoá, nên
+   * bỏ chọn em đã lưu rồi bấm Lưu sẽ không xoá được gì — màn hình sẽ nói dối. Muốn sửa
+   * em đã lưu thì chọn nhãn khác (hoặc xoá bản ghi ở luồng riêng).
+   */
   function setStatus(studentId: string, status: AttendanceStatus) {
-    setState((prev) => ({
-      ...prev,
-      [studentId]: { ...prev[studentId], status, dirty: true },
-    }));
+    setState((prev) => {
+      const clearable = !savedIds.has(studentId);
+      const next =
+        prev[studentId]?.status === status && clearable ? null : status;
+      return { ...prev, [studentId]: { ...prev[studentId], status: next, dirty: true } };
+    });
     setFeedback(null);
   }
 
@@ -154,21 +186,37 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
   }
 
   function save() {
-    const dirty = Object.entries(state).filter(([, r]) => r.dirty);
-    const records = dirty.length > 0 ? dirty : Object.entries(state);
-    if (records.length === 0) return;
+    // Phải đánh dấu đủ CẢ LỚP mới cho lưu. Không phải khắt khe cho vui: khắp hệ thống
+    // (checklist buổi ở /admin/sessions/[id], cảnh báo khi hoàn tất buổi, dashboard +
+    // cột "Cần xử lý" bên site GV) đều coi "buổi có ≥1 bản ghi Attendance = ĐÃ điểm
+    // danh". Cho lưu dở dang thì buổi tô xanh "xong" trong khi vài em không có bản ghi
+    // nào — im lặng mất người.
+    if (unmarked > 0) {
+      setFeedback({
+        kind: "error",
+        msg: `Còn ${unmarked} HV chưa đánh dấu — điểm danh đủ cả lớp rồi mới lưu được.`,
+      });
+      return;
+    }
 
-    startTransition(async () => {
-      const res = await markAttendance(
-        sessionId,
-        records.map(([studentId, r]) => ({
+    // CHỈ gửi HV đã bấm trạng thái VÀ có thay đổi. Em chưa bấm = chưa điểm danh, không
+    // ghi gì (Attendance không có nhãn "chưa" — không có bản ghi CHÍNH LÀ chưa).
+    const records = Object.entries(state).flatMap(([studentId, r]) => {
+      if (!r.dirty || !r.status) return [];
+      return [
+        {
           studentId,
           status: r.status,
           note: r.note.trim() || null,
-          makeupStatus: isAbsent(r.status) ? r.makeupStatus : "NONE",
+          makeupStatus: isAbsent(r.status) ? r.makeupStatus : ("NONE" as MakeupStatus),
           absenceReason: isAbsent(r.status) ? r.absenceReason.trim() || null : null,
-        })),
-      );
+        },
+      ];
+    });
+    if (records.length === 0) return;
+
+    startTransition(async () => {
+      const res = await markAttendance(sessionId, records);
       if (res.error) {
         setFeedback({ kind: "error", msg: res.error });
       } else {
@@ -203,12 +251,21 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
-        <div className="text-sm text-neutral-600">
-          <strong className="text-neutral-900">{rows.length} HV</strong> ·{" "}
-          {dirtyCount > 0 ? (
-            <span className="text-orange-600">{dirtyCount} thay đổi chưa lưu</span>
-          ) : (
-            <span className="text-neutral-400">Không có thay đổi</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-neutral-600">
+          <span>
+            <strong className="text-neutral-900">{rows.length} HV</strong> ·{" "}
+            {dirtyCount > 0 ? (
+              <span className="text-orange-600">{dirtyCount} thay đổi chưa lưu</span>
+            ) : (
+              <span className="text-neutral-400">Không có thay đổi</span>
+            )}
+          </span>
+          {unmarked > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-neutral-300 bg-neutral-50 px-2 py-1 text-xs">
+              <span className="h-2 w-2 rounded-full border border-neutral-400" />
+              <span className="text-neutral-500">Chưa điểm danh</span>
+              <span className="font-bold text-neutral-900">{unmarked}</span>
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2">
