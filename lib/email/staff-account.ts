@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings/service";
 import { sendEmail } from "./send";
 import { renderTemplate } from "./render";
 import { EMAIL_TEMPLATE_DEFS } from "./template-codes";
@@ -20,7 +21,14 @@ import { buildAccountZnsParams } from "@/lib/zalo/templates";
 // =============================================================================
 
 const MASK = "••••••••";
-const ZNS_ACCOUNT_TEMPLATE = process.env.ZALO_ZNS_TEMPLATE_ACCOUNT || null;
+/**
+ * Mã mẫu ZNS "Cấp tài khoản". SETTING (DB) thắng, env là dự phòng.
+ * RỖNG = KHÔNG gửi — trạng thái an toàn, đúng ý chốt 07/08 (chưa cấp TK cho PH).
+ */
+async function znsAccountTemplate(): Promise<string | null> {
+  const fromDb = await getSetting("zalo.znsTemplateAccount").catch(() => null);
+  return (fromDb || process.env.ZALO_ZNS_TEMPLATE_ACCOUNT || "").trim() || null;
+}
 
 /** Link đăng nhập theo vai trò: GV thuần → site giáo viên, còn lại → admin. */
 export function loginUrlForRoles(roles: string[]): string {
@@ -91,7 +99,7 @@ export async function notifyStaffAccountGranted(input: StaffAccountNotifyInput):
   if (input.phone) {
     await sendZaloNotification({
       toPhone: input.phone,
-      templateKey: ZNS_ACCOUNT_TEMPLATE,
+      templateKey: await znsAccountTemplate(),
       // Params qua buildAccountZnsParams để khớp bảng khai mẫu 616899 (chỉ
       // `name` ≤30 + `login_id` ≤15; KHÔNG có `login_url`). Bản trước dựng tay
       // {name, login_id, login_url}: name không cắt 30 ký tự → tên dài bị Zalo

@@ -451,6 +451,32 @@ export const SETTINGS = {
   // (Zalo bắt sửa mẫu là chuyện thường). Default = mẫu A "Xác thực" đã duyệt
   // 31/07 (QĐ-G). Tên tham số trong mẫu phải là `code` + `minutes` — lệch tên
   // là ZNS từ chối template_data (lộ ngay ở smoke dev-mode).
+  // 07/08 — CHUYỂN 2 công tắc ZNS từ env sang DB để admin tự chỉnh, không cần deploy.
+  // Cả hai VẪN đọc env làm dự phòng khi setting rỗng (không vỡ cấu hình đang chạy).
+  //
+  // ⚠️ Đây là 2 công tắc ĐỤNG TIỀN THẬT (400đ/tin) và ĐỤNG KHÁCH THẬT. Rỗng/false là
+  // trạng thái AN TOÀN (không gửi), bật lên mới gửi — không bao giờ ngược lại.
+  "zalo.znsTemplateAccount": def({
+    key: "zalo.znsTemplateAccount",
+    group: "otp",
+    // Ô sửa nhận JSON ⇒ chuỗi phải có nháy kép: "616899", không phải 616899 trần.
+    label: 'Template ID ZNS "Cấp tài khoản" — RỖNG = KHÔNG gửi (nhập dạng "616899")',
+    schema: z.string().regex(/^[0-9]*$/, "Template ID chỉ gồm chữ số"),
+    // Mặc định RỖNG: mẫu 616899 đã duyệt 01/08 nhưng chủ dự án CHƯA muốn cấp TK cho
+    // phụ huynh (chốt 07/08). Điền ID vào đây mới bật đường gửi.
+    default: "",
+    centerOverridable: false,
+  }),
+  "zalo.znsLive": def({
+    key: "zalo.znsLive",
+    group: "otp",
+    label: "Gửi ZNS THẬT (tắt = mô phỏng, không gọi Zalo, không tốn tiền)",
+    schema: z.boolean(),
+    // Mặc định false. Bật lên là MỌI ZNS đi thật, gồm cả OTP đăng nhập —
+    // tắt đi thì phụ huynh KHÔNG nhận được mã đăng nhập.
+    default: false,
+    centerOverridable: false,
+  }),
   "zalo.znsTemplateOtp": def({
     key: "zalo.znsTemplateOtp",
     group: "otp",

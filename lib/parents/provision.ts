@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings/service";
 import { canonicalPhone } from "@/lib/phone";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { buildAccountZnsParams } from "@/lib/zalo/templates";
@@ -20,7 +21,14 @@ import { isAuthPhoneProvisioningEnabled } from "@/lib/flags";
 // tự đặt mật khẩu ở /kich-hoat. Không sinh/gửi mật khẩu qua ZNS.
 // =============================================================================
 
-const ZNS_ACCOUNT_TEMPLATE = process.env.ZALO_ZNS_TEMPLATE_ACCOUNT || null;
+/**
+ * Mã mẫu ZNS "Cấp tài khoản". SETTING (DB) thắng, env là dự phòng.
+ * RỖNG = KHÔNG gửi — trạng thái an toàn, đúng ý chốt 07/08 (chưa cấp TK cho PH).
+ */
+async function znsAccountTemplate(): Promise<string | null> {
+  const fromDb = await getSetting("zalo.znsTemplateAccount").catch(() => null);
+  return (fromDb || process.env.ZALO_ZNS_TEMPLATE_ACCOUNT || "").trim() || null;
+}
 // Domain CHÍNH (không phải hocvien.*) — /kich-hoat mở trên mọi host (route-policy
 // PUBLIC_OTP_PATHS), và người được cấp TK không chỉ phụ huynh: nhân viên, cơ sở
 // nhượng quyền cũng đi link này (chốt chủ dự án 02/08).
@@ -115,7 +123,7 @@ export async function ensureParentAccountForOrder(
   // sạch nên không ai biết. Bài học PR #77.
   await sendZaloNotification({
     toPhone: phone,
-    templateKey: ZNS_ACCOUNT_TEMPLATE,
+    templateKey: await znsAccountTemplate(),
     params: buildAccountZnsParams({ customerName: order.customerName, phone }),
     fallbackEmail: email
       ? {
