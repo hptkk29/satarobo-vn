@@ -8,8 +8,6 @@ import {
   FileText,
   GraduationCap,
   LayoutDashboard,
-  ListChecks,
-  MessageSquareText,
   NotebookPen,
   Sparkles,
   Users,
@@ -55,8 +53,9 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: "Lớp của tôi", href: "/teacher/lop", icon: Users },
       { label: "Lịch làm việc", href: "/teacher/lich", icon: CalendarDays },
-      { label: "Điểm danh", href: "/teacher/diem-danh", icon: ListChecks },
-      { label: "Nhận xét", href: "/teacher/nhan-xet", icon: MessageSquareText },
+      // "Điểm danh" (/teacher/diem-danh) + "Nhận xét" (/teacher/nhan-xet) ĐÃ BỎ khỏi
+      // sidebar (07/08/2026) vì trùng tab trong hub "Lớp của tôi". Route + chức năng
+      // GIỮ NGUYÊN — vẫn vào được từ hub lớp, dashboard và trang Hướng dẫn.
       { label: "Bài tập", href: "/teacher/cham-bai", icon: ClipboardCheck },
       { label: "Kho bài tập", href: "/teacher/kho-bai-tap", icon: NotebookPen },
       { label: "Tài liệu", href: "/teacher/tai-lieu", icon: BookOpenText },
