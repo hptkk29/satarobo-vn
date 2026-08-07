@@ -2,7 +2,7 @@
 // Tháng/Tuần/Danh sách (port visual từ mock satarobo-ui-giaovien sessions/page.tsx).
 //
 // Điều hướng THUẦN server qua searchParams (không client state):
-//   ?view=thang|tuan|ds (default "ds" — giữ nguyên danh sách + SessionActions cũ)
+//   ?view=thang|tuan|ds (default "thang" — lịch tháng; "ds" = danh sách + SessionActions)
 //   ?moc=YYYY-MM-DD     (mốc tháng/tuần; với view ds → lọc đúng 1 ngày)
 // Mọi nút chuyển view / prev-next đều là Link CHỈ-query ("?view=...") — chạy đúng cả
 // trên host giaovien (clean URL /lich) LẪN localhost/preview (path thật /teacher/lich).
@@ -207,7 +207,9 @@ export default async function TeacherSchedulePage({
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
   const sp = await searchParams;
-  const view: ViewMode = sp.view === "thang" || sp.view === "tuan" ? sp.view : "ds";
+  // Mặc định LỊCH THÁNG (07/08/2026 — yêu cầu chủ dự án). "ds"/"tuan" vẫn vào được
+  // qua nút chuyển view; ô ngày trong lịch tháng vẫn nhảy sang ?view=ds&moc=<ngày>.
+  const view: ViewMode = sp.view === "ds" || sp.view === "tuan" ? sp.view : "thang";
   // Bộ lọc toolbar (giữ trong searchParams — server lọc trước khi gom theo ngày).
   const q = (sp.q ?? "").trim().toLowerCase();
   const typeFilter = sp.type === "lop" || sp.type === "trial" ? sp.type : "all";
@@ -436,8 +438,10 @@ function ListView({
   return (
     <div className="space-y-5">
       {singleDay && (
+        // "?view=ds" chứ không phải "?" — từ khi mặc định là lịch tháng, "?" sẽ
+        // rơi về view Tháng, không còn đúng nghĩa "toàn bộ danh sách".
         <Link
-          href="?"
+          href="?view=ds"
           className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           ← Toàn bộ lịch dạy

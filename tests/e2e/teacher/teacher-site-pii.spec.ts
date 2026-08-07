@@ -152,10 +152,18 @@ test.describe("[#06-L6] site GV (browser): không lộ contact PH / studentId tr
 
   test("[câu 46 + studentId-URL] /teacher/lich hiển thị lịch dạy, KHÔNG lộ contact PH; studentId không lên URL", async ({ page }) => {
     await loginTeacher(page);
+    // (a) View MẶC ĐỊNH (từ 07/08 là lịch Tháng) — không rò PII ở dạng render này.
     await page.goto("/teacher/lich", { waitUntil: "domcontentloaded" });
     // Reskin TeachUI: tiêu đề trang = "Lịch làm việc" (bao cả ca làm & ngày nghỉ, không chỉ lịch dạy).
     await expect(page.getByRole("heading", { name: "Lịch làm việc" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(className).first()).toBeVisible();
+    expect(page.url()).not.toContain(studentId);
+    await expectNoContactLeak(page);
+
+    // (b) View danh sách — ép ?view=ds vì buổi seed là HÔM QUA: lưới lịch tháng có thể
+    // KHÔNG chứa hôm qua (khi hôm nay là mùng 1 rơi đúng Thứ 2) ⇒ assert theo tháng sẽ
+    // đỏ theo NGÀY CHẠY. Danh sách [hôm nay−3, +28] luôn chứa buổi này.
+    await page.goto("/teacher/lich?view=ds", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText(className).first()).toBeVisible({ timeout: 30_000 });
     expect(page.url()).not.toContain(studentId);
     await expectNoContactLeak(page);
   });
