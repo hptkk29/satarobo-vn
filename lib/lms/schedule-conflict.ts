@@ -52,6 +52,25 @@ export function sessionWindow(
   return { startAt, endAt: new Date(startAt.getTime() + durMin * 60_000) };
 }
 
+/**
+ * Khung giờ lấy từ CHÍNH thời điểm của buổi, độ dài suy từ giờ lớp (mặc định 90').
+ *
+ * 07/08 — lớp có kế hoạch nhiều giai đoạn thì `Class.startTime` chỉ là bản sao của
+ * giai đoạn đang hiệu lực, KHÔNG phải giờ của buổi này. Ép mọi buổi về giờ lớp sẽ bỏ
+ * sót trùng thật (lớp B đã sang ca sáng, so bằng ca chiều nên không thấy đụng phòng)
+ * và báo trùng oan chiều ngược lại. Buổi đã mang giờ đúng từ lúc sinh — dùng nó.
+ */
+function sessionWindowFromOwnTime(
+  date: Date,
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
+): { startAt: Date; endAt: Date } {
+  const s = parseHHmm(startTime);
+  const e = parseHHmm(endTime);
+  const durMin = s != null && e != null && e - s > 0 ? e - s : 90;
+  return { startAt: date, endAt: new Date(date.getTime() + durMin * 60_000) };
+}
+
 type SessionRow = {
   id: string;
   date: Date;
@@ -75,7 +94,14 @@ type SessionRow = {
  */
 export function rowsToSlots(rows: SessionRow[]): Slot[] {
   return rows.map((o) => {
-    const win = sessionWindow(o.date, o.class?.startTime, o.class?.endTime);
+    // Buổi có giờ THẬT (khác 00:00 giờ VN) → dùng chính nó. Buổi cũ còn nằm ở 00:00
+    // (dữ liệu trước đợt backfill giờ buổi) mới lùi về giờ lớp — giữ nguyên bản vá
+    // 06/08 chống "hai lớp bất kỳ cùng ngày đều báo trùng".
+    const p = vnParts(o.date);
+    const win =
+      p.hour !== 0 || p.minute !== 0
+        ? sessionWindowFromOwnTime(o.date, o.class?.startTime, o.class?.endTime)
+        : sessionWindow(o.date, o.class?.startTime, o.class?.endTime);
     return {
       id: o.id,
       roomId:

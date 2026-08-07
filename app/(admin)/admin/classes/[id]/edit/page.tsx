@@ -12,6 +12,12 @@ import { ClassApprovalActions } from "../_components/class-approval-actions";
 import { ClassCancel } from "../_components/class-cancel";
 import { ClassReschedule } from "../_components/class-reschedule";
 import { ClassCurriculum } from "../_components/class-curriculum";
+import {
+  ClassSchedulePhases,
+  type PhaseFormValue,
+} from "../_components/class-schedule-phases";
+import { loadClassPhases } from "@/lib/classes/phases-service";
+import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "../_components/class-sessions-manage";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 
@@ -182,6 +188,19 @@ export default async function EditClassPage({ params }: Props) {
     (actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER") &&
       (await checkPermission("classes:edit", { centerId: cls.centerId })));
 
+  // Kế hoạch lịch học — lớp chưa lập thì hiện giai đoạn SUY từ lịch hiện tại (isDerived).
+  const loadedPhases = await loadClassPhases(cls.id);
+  const phaseForm: PhaseFormValue[] = (loadedPhases?.phases ?? []).map((p) => ({
+    from: vnYmd(p.effectiveFrom),
+    to: p.effectiveTo ? vnYmd(p.effectiveTo) : "",
+    note: p.note ?? "",
+    days: Object.fromEntries(
+      p.slots.map((s) => [s.weekday, { start: s.startTime, end: s.endTime ?? "" }]),
+    ),
+  }));
+  const defaultApplyFrom = vnYmd(vnAddDays(vnStartOfDay(new Date()), 1));
+  const phaseSignature = `${loadedPhases?.isDerived ? "d" : "s"}:${JSON.stringify(phaseForm)}`;
+
   // Picker "Đơn vị" theo scope GHI của Class (đối xứng guard updateClass — vá 24/07):
   // role HO không có quyền classes:* không được mời chuyển lớp sang cơ sở ngoài scope.
   const orgUnitsInScope =
@@ -246,6 +265,19 @@ export default async function EditClassPage({ params }: Props) {
 
       <div className="mb-6">
         <ClassReschedule classId={cls.id} canEdit={canEdit} />
+      </div>
+
+      {/* Cùng khối với màn tab /classes/[id] — sửa lịch ở đâu cũng phải có, nếu không
+          admin vào nhầm màn là không thấy kế hoạch. */}
+      <div className="mb-6">
+        <ClassSchedulePhases
+          key={phaseSignature}
+          classId={cls.id}
+          canEdit={canEdit}
+          initialPhases={phaseForm}
+          isDerived={loadedPhases?.isDerived ?? true}
+          defaultApplyFrom={defaultApplyFrom}
+        />
       </div>
 
       <div className="mb-6">

@@ -1378,6 +1378,7 @@ model Class {
   sessions        ClassSession[]
   sessionPlans    ClassSessionPlan[] // R7-06
   scheduleSlots   ClassScheduleSlot[] // BGĐ 31/07 — giờ học riêng theo từng thứ
+  schedulePhases  ClassSchedulePhase[] // 07/08 — kế hoạch lịch nhiều giai đoạn
   exams           Exam[]
   assignments     Assignment[]
   progressReports ProgressReportLog[]
@@ -1415,6 +1416,59 @@ model ClassScheduleSlot {
 
   @@unique([classId, weekday])
   @@index([classId])
+}
+
+// ═══ KẾ HOẠCH LỊCH HỌC NHIỀU GIAI ĐOẠN (07/08/2026) ══════════════════════════
+//
+// VÌ SAO: `ClassScheduleSlot` có `@@unique([classId, weekday])` và KHÔNG có chiều
+// thời gian ⇒ 1 lớp chỉ biểu diễn được ĐÚNG MỘT lịch cho cả vòng đời. Thực tế lớp
+// đổi nhịp giữa khoá (tháng 7 học 2 buổi/tuần, tháng 8 còn 1 buổi/tuần) hoặc đổi
+// giờ theo mùa — trước đây phải sửa lịch lớp rồi bấm "dời buổi", làm mất lịch cũ và
+// không lưu được kế hoạch tương lai.
+//
+// QUY ƯỚC: kế hoạch là NGUỒN SỰ THẬT của lịch. `Class.scheduleDays/startTime/endTime`
+// + `ClassScheduleSlot` trở thành BẢN SAO DẪN XUẤT của giai đoạn đang hiệu lực hôm
+// nay (giữ cho ~40 chỗ đọc lịch kiểu cũ — site GV, PDF, soát trùng — không phải sửa
+// một lượt). Đồng bộ ở `syncLegacyScheduleFromPhases` (lib/classes/phases-service.ts).
+// Lớp chưa có giai đoạn nào → toàn hệ thống chạy y như trước (2-phase, không vỡ).
+model ClassSchedulePhase {
+  id      String @id @default(cuid())
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  /// Thứ tự hiển thị; luôn được ghi lại theo effectiveFrom tăng dần khi lưu.
+  order Int @default(0)
+
+  /// Ngày bắt đầu áp dụng — 00:00 GIỜ VN (dựng bằng parseVnYmd/vnDateAt, KHÔNG
+  /// dùng z.coerce.date vì nó cho nửa đêm UTC = 07:00 VN, ăn mất buổi sáng).
+  effectiveFrom DateTime  @db.Timestamptz(6)
+  /// Ngày kết thúc, TÍNH CẢ ngày này (00:00 giờ VN). null = giai đoạn mở, kéo dài
+  /// tới khi đủ số buổi của khoá. Chỉ giai đoạn CUỐI được để null.
+  effectiveTo   DateTime? @db.Timestamptz(6)
+
+  note String?
+
+  slots ClassSchedulePhaseSlot[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([classId, effectiveFrom])
+}
+
+/// Giờ học của MỘT thứ trong MỘT giai đoạn. Khác `ClassScheduleSlot` ở chỗ unique
+/// gắn theo giai đoạn, nên "T2 tháng 7 lúc 17h30" và "T2 tháng 8 lúc 08h00" cùng tồn tại.
+model ClassSchedulePhaseSlot {
+  id      String             @id @default(cuid())
+  phaseId String
+  phase   ClassSchedulePhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  weekday   Int // 0=CN, 1=T2, ..., 6=T7
+  startTime String // "HH:mm"
+  endTime   String? // "HH:mm"
+
+  @@unique([phaseId, weekday])
+  @@index([phaseId])
 }
 
 model Enrollment {

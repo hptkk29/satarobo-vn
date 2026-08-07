@@ -2,7 +2,9 @@ import "server-only";
 import { db } from "@/lib/db";
 import { ymdVN } from "@/lib/classes/schedule";
 import { enqueueEmail } from "@/lib/email/queue";
-import { vnAddDays, vnStartOfDay, vnWeekday } from "@/lib/time/vn";
+import { slotForDate, type SchedulePhase } from "@/lib/classes/phases";
+import { parseHm } from "@/lib/classes/slots";
+import { vnAddDays, vnDateAt, vnParts, vnStartOfDay, vnWeekday } from "@/lib/time/vn";
 
 // =============================================================================
 // P1-f — khi THÊM/SỬA ngày nghỉ (Holiday): DỜI các buổi học TƯƠNG LAI rơi đúng
@@ -68,6 +70,17 @@ export async function applyHolidayShift(holiday: {
           scheduleDays: true,
           centerId: true,
           teacher: { select: { name: true, email: true } },
+          // 07/08 — lớp có kế hoạch nhiều giai đoạn: thứ VÀ giờ đổi theo giai đoạn, nên
+          // không được dùng scheduleDays (bản sao của giai đoạn đang hiệu lực) để tìm
+          // ngày dời — sẽ chọn nhầm thứ mà giai đoạn hiện tại không hề có lớp.
+          schedulePhases: {
+            orderBy: { effectiveFrom: "asc" },
+            select: {
+              effectiveFrom: true,
+              effectiveTo: true,
+              slots: { select: { weekday: true, startTime: true, endTime: true } },
+            },
+          },
         },
       },
     },
@@ -83,8 +96,21 @@ export async function applyHolidayShift(holiday: {
   const affectedClassIds = new Set<string>();
 
   for (const s of affected) {
+    const phases: SchedulePhase[] = s.class.schedulePhases
+      .map((p) => ({
+        effectiveFrom: p.effectiveFrom,
+        effectiveTo: p.effectiveTo,
+        slots: p.slots.map((x) => ({
+          weekday: x.weekday,
+          startTime: x.startTime,
+          endTime: x.endTime,
+        })),
+      }))
+      .filter((p) => p.slots.length > 0);
+    const usePhases = phases.length > 0;
+
     const days = s.class.scheduleDays;
-    if (!days || days.length === 0) continue; // không rõ lịch → bỏ qua
+    if (!usePhases && (!days || days.length === 0)) continue; // không rõ lịch → bỏ qua
 
     // Ngày nghỉ áp dụng cho lớp này = holiday toàn hệ thống + holiday cùng cơ sở.
     const holSet = new Set<string>();
@@ -98,14 +124,25 @@ export async function applyHolidayShift(holiday: {
       (await db.classSession.findMany({ where: { classId: s.classId }, select: { date: true } })).map((x) => ymdVN(x.date)),
     );
 
-    // Tìm ngày học hợp lệ kế tiếp sau ngày nghỉ (thứ tính theo lịch VN; giữ
-    // nguyên giờ-phút của buổi cũ nên không cần gắn lại khung giờ lớp).
+    // Tìm ngày học hợp lệ kế tiếp sau ngày nghỉ (thứ tính theo lịch VN).
+    // • Lớp có kế hoạch: thứ VÀ giờ lấy theo giai đoạn phủ ngày đích — buổi dời sang
+    //   giai đoạn khác phải mang giờ của giai đoạn đó, không giữ giờ cũ.
+    // • Lớp chưa có kế hoạch: giữ nguyên hành vi cũ (giữ giờ-phút của buổi).
     let cursor = s.date;
     let found: Date | null = null;
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 200; i++) {
       cursor = vnAddDays(cursor, 1);
       const key = ymdVN(cursor);
-      if (days.includes(vnWeekday(cursor)) && !holSet.has(key) && !taken.has(key)) {
+      if (holSet.has(key) || taken.has(key)) continue;
+      if (usePhases) {
+        const slot = slotForDate(phases, cursor);
+        if (!slot) continue;
+        const p = vnParts(cursor);
+        const { h, m } = parseHm(slot.startTime);
+        found = vnDateAt(p.year, p.month, p.day, h, m);
+        break;
+      }
+      if (days.includes(vnWeekday(cursor))) {
         found = new Date(cursor);
         break;
       }

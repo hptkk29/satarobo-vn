@@ -3,6 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { db } from "@/lib/db";
+import { sessionTimeRange } from "@/lib/classes/slots";
 import { getSetting } from "@/lib/settings/service";
 import { getStudentClassProgress } from "@/lib/students/progress";
 import { getClassExpectedEndDate, NEAR_END_THRESHOLD } from "@/lib/students/renewal";
@@ -166,8 +167,13 @@ export async function getStudentSessions(studentId: string): Promise<SessionRow[
     lessonTitle: s.lesson?.title ?? null,
     past: s.date.getTime() < now,
     status: s.status,
-    startTime: s.class.startTime ?? null,
-    endTime: s.class.endTime ?? null,
+    // Giờ lấy từ CHÍNH buổi — lớp đổi ca giữa khoá (Kế hoạch lịch học nhiều giai đoạn)
+    // thì `class.startTime` chỉ là bản sao của giai đoạn đang hiệu lực, in ra là phụ
+    // huynh đưa con sai giờ.
+    ...(() => {
+      const r = sessionTimeRange(s.date, s.class.startTime, s.class.endTime);
+      return { startTime: r.start, endTime: r.end };
+    })(),
   }));
 }
 

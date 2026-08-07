@@ -168,11 +168,32 @@ type DayAgg = { labelDate: Date; classes: ClassSessionRow[]; trials: TeacherTria
 type DayShift = { labels: string[]; leave: boolean };
 type DayHoliday = { name: string; typeLabel: string };
 
-/** Giờ hiển thị buổi lớp: khung giờ lớp nếu có, fallback giờ bắt đầu buổi (VN). */
+/**
+ * Giờ hiển thị buổi lớp: lấy từ CHÍNH buổi (`s.date` đã mang giờ từ lúc sinh), độ dài
+ * suy từ khung giờ lớp.
+ *
+ * ⚠️ 07/08 — trước đây ưu tiên `class.startTime–endTime`. Với lớp dùng Kế hoạch lịch học
+ * nhiều giai đoạn, hai field đó chỉ là BẢN SAO của giai đoạn đang hiệu lực: buổi 08:00
+ * của giai đoạn 2 vẫn bị in là "17:30–19:30" của giai đoạn 1, và khoá sort cũng sai nên
+ * buổi sáng bị xếp sau buổi chiều của lớp khác trong cùng ngày.
+ */
+function sessionStart(s: ClassSessionRow): string {
+  return timeFmt.format(s.date);
+}
 function classTime(s: ClassSessionRow): string {
-  return s.class.startTime && s.class.endTime
-    ? `${s.class.startTime}–${s.class.endTime}`
-    : timeFmt.format(s.date);
+  const start = sessionStart(s);
+  if (!s.class.startTime || !s.class.endTime) return start;
+  const dur = hhmmToMin(s.class.endTime) - hhmmToMin(s.class.startTime);
+  if (dur <= 0) return start;
+  return `${start}–${minToHhmm(hhmmToMin(start) + dur)}`;
+}
+function hhmmToMin(v: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+}
+function minToHhmm(v: number): string {
+  const x = ((v % 1440) + 1440) % 1440;
+  return `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`;
 }
 
 /** Trộn buổi lớp + Trial của 1 ngày, sort theo giờ bắt đầu ("HH:mm" so chuỗi được). */
@@ -181,7 +202,7 @@ function mergeDayItems(agg: DayAgg | undefined) {
   return [
     ...agg.classes.map((s) => ({
       kind: "class" as const,
-      sort: s.class.startTime ?? timeFmt.format(s.date),
+      sort: sessionStart(s),
       s,
     })),
     ...agg.trials.map((t) => ({ kind: "trial" as const, sort: t.startTime, t })),
@@ -691,7 +712,7 @@ function MonthView({
                           title={`${classTime(it.s)} · ${it.s.class.name}`}
                           className="truncate rounded border-l-2 border-blue-400 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
                         >
-                          {(it.s.class.startTime ?? timeFmt.format(it.s.date))} {it.s.class.name}
+                          {sessionStart(it.s)} {it.s.class.name}
                         </p>
                       ) : (
                         <p

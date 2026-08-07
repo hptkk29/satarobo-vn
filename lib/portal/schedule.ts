@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { sessionTimeRange } from "@/lib/classes/slots";
 
 // Portal v2 — dữ liệu trang Lịch học (1 con đang chọn). Ownership: caller truyền studentId
 // đã verify (requireActiveStudent). KHÔNG nhận studentId qua URL.
@@ -76,7 +77,12 @@ export async function getStudentSchedule(studentId: string): Promise<StudentSche
   ]);
 
   const attMap = new Map(attendance.map((a) => [a.sessionId, a.status as ScheduleSession["attended"]]));
-  const time = cls.startTime && cls.endTime ? `${cls.startTime} - ${cls.endTime}` : (cls.startTime ?? "");
+  // Giờ tính THEO TỪNG BUỔI: lớp dùng Kế hoạch lịch học nhiều giai đoạn thì mỗi giai
+  // đoạn một khung giờ, một chuỗi `time` chung cho cả khoá là sai từ ngày đổi ca.
+  const timeOf = (d: Date) => {
+    const r = sessionTimeRange(d, cls.startTime, cls.endTime);
+    return r.end ? `${r.start} - ${r.end}` : r.start;
+  };
   const teacherName = teacher?.name ?? null;
   const roomName = room?.name ?? null;
 
@@ -85,7 +91,7 @@ export async function getStudentSchedule(studentId: string): Promise<StudentSche
     order: s.lesson?.order ?? null,
     title: s.lesson?.title ? `Buổi ${s.lesson.order}: ${s.lesson.title}` : "Buổi học",
     dateISO: s.date.toISOString(),
-    time,
+    time: timeOf(s.date),
     room: roomName,
     teacher: teacherName,
     status: s.status,

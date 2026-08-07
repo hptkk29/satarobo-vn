@@ -2,6 +2,10 @@
   "regions": ["hnd1"],
   "crons": [
     {
+      "path": "/api/cron/class-schedule-sync",
+      "schedule": "10 17 * * *"
+    },
+    {
       "path": "/api/cron/class-reminder",
       "schedule": "0 1 * * *"
     },

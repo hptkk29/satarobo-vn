@@ -532,7 +532,16 @@ export async function updateClass(
   // PHẢI kèm centerId (thiếu → trả null cho lớp actor VẪN xem được).
   const current = await sdb.class.findUnique({
     where: { id },
-    select: { centerId: true, curriculumId: true },
+    select: {
+      centerId: true,
+      curriculumId: true,
+      // Lịch phẳng hiện tại — để đối chiếu khi lớp dùng Kế hoạch lịch học (xem dưới).
+      scheduleDays: true,
+      startTime: true,
+      endTime: true,
+      scheduleSlots: { select: { weekday: true, startTime: true, endTime: true } },
+      _count: { select: { schedulePhases: true } },
+    },
   });
   const dataWithEndDate = {
     ...parsed.data,
@@ -550,6 +559,18 @@ export async function updateClass(
   // BGĐ 31/07 — giờ riêng theo thứ (chỉ nhận thứ đang học sau khi sửa lịch).
   const scheduleSlots = readScheduleSlots(formData, parsed.data.scheduleDays);
 
+  // 07/08 — lớp dùng KẾ HOẠCH LỊCH HỌC: các ô lịch ở form này chỉ là BẢN SAO của giai
+  // đoạn đang hiệu lực. Sửa ở đây vừa vô hiệu (mọi đường sinh/dời buổi đọc giai đoạn)
+  // vừa đè mất bản sao ⇒ chặn thẳng, chỉ đường sang tab đúng. Không đổi gì thì cho lưu
+  // bình thường (admin còn sửa tên lớp, phòng, GV…), nhưng KHÔNG ghi lại bảng slot.
+  const usesPhases = (current?._count.schedulePhases ?? 0) > 0;
+  if (usesPhases && scheduleChanged(current, parsed.data, scheduleSlots)) {
+    return {
+      error:
+        "Lớp này dùng Kế hoạch lịch học nhiều giai đoạn — sửa thứ/giờ ở tab “Kế hoạch lịch học”, không sửa ở đây.",
+    };
+  }
+
   try {
     await sdb.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -560,11 +581,14 @@ export async function updateClass(
       });
 
       // Thay TOÀN BỘ slot theo form: bỏ hết rồi ghi lại (rỗng = quay về giờ chung).
-      await tx.classScheduleSlot.deleteMany({ where: { classId: id } });
-      if (scheduleSlots.length > 0) {
-        await tx.classScheduleSlot.createMany({
-          data: scheduleSlots.map((s) => ({ classId: id, ...s })),
-        });
+      // Lớp dùng kế hoạch thì BỎ QUA — bảng slot đang là bản sao do kế hoạch ghi.
+      if (!usesPhases) {
+        await tx.classScheduleSlot.deleteMany({ where: { classId: id } });
+        if (scheduleSlots.length > 0) {
+          await tx.classScheduleSlot.createMany({
+            data: scheduleSlots.map((s) => ({ classId: id, ...s })),
+          });
+        }
       }
 
       await logClassAudit({
@@ -773,8 +797,46 @@ export async function rejectClass(classId: string, reason: string): Promise<WfRe
 
 // ─── Module Quản lý lớp PHẦN 2 — dời buổi tương lai theo lịch mới ────────────
 
+/** Form có đổi thứ/giờ so với lịch phẳng đang lưu không? (so theo NỘI DUNG, không theo thứ tự) */
+function scheduleChanged(
+  current: {
+    scheduleDays: number[];
+    startTime: string | null;
+    endTime: string | null;
+    scheduleSlots: { weekday: number; startTime: string; endTime: string | null }[];
+  } | null,
+  next: { scheduleDays: number[]; startTime?: string | null; endTime?: string | null },
+  nextSlots: { weekday: number; startTime: string; endTime: string | null }[],
+): boolean {
+  if (!current) return false;
+  const days = (xs: number[]) => [...new Set(xs)].sort((a, b) => a - b).join(",");
+  if (days(current.scheduleDays) !== days(next.scheduleDays)) return true;
+  if ((current.startTime ?? null) !== (next.startTime ?? null)) return true;
+  if ((current.endTime ?? null) !== (next.endTime ?? null)) return true;
+  const norm = (xs: { weekday: number; startTime: string; endTime: string | null }[]) =>
+    [...xs]
+      .sort((a, b) => a.weekday - b.weekday)
+      .map((s) => `${s.weekday}|${s.startTime}|${s.endTime ?? ""}`)
+      .join(";");
+  return norm(current.scheduleSlots) !== norm(nextSlots);
+}
+
 async function computeFutureReschedule(classId: string, actor: Actor) {
   const sdb = scopedDb(actor);
+
+  // 07/08 — lớp ĐÃ lập kế hoạch lịch nhiều giai đoạn thì nút này không dùng được nữa:
+  // nó chỉ biết MỘT bộ thứ+giờ (bản sao của giai đoạn đang hiệu lực) nên sẽ rải cả khoá
+  // theo nhịp của riêng giai đoạn đó, xoá sạch ý đồ "tháng 8 học 1 buổi/tuần". Đường
+  // đúng là tab "Kế hoạch lịch học" — ở đó có mốc áp dụng và có giữ buổi đã có dữ liệu.
+  const phaseCount = await sdb.classSchedulePhase.count({ where: { classId } });
+  if (phaseCount > 0) {
+    return {
+      ok: false as const,
+      error:
+        "Lớp này đang dùng Kế hoạch lịch học nhiều giai đoạn — dời buổi ở tab “Kế hoạch lịch học” (có ô “áp dụng từ ngày” và giữ nguyên buổi đã điểm danh).",
+    };
+  }
+
   const cls = await sdb.class.findFirst({
     where: { id: classId, deletedAt: null },
     select: {

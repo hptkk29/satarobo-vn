@@ -13,6 +13,8 @@ import { getAuditActor } from "@/lib/audit/log";
 import { adoptCurriculumVersion } from "@/lib/classes/snapshot";
 import { cancelSession, adjustSession } from "@/lib/classes/adjust";
 import { resolveClassSlots, startTimeForWeekday, parseHm } from "@/lib/classes/slots";
+import { slotForDate } from "@/lib/classes/phases";
+import { loadClassPhases } from "@/lib/classes/phases-service";
 import { parseVnYmd, vnDateAt, vnParts } from "@/lib/time/vn";
 
 type Result = { ok: boolean; error?: string };
@@ -197,23 +199,33 @@ export async function adjustSessionAction(
     const day = parseVnYmd(input.date);
     if (!day) return { ok: false, error: "Ngày không hợp lệ" };
 
-    const cls = await g.gate.sdb.class.findUnique({
-      where: { id: sc.classId },
-      select: {
-        scheduleDays: true,
-        startTime: true,
-        endTime: true,
-        scheduleSlots: { select: { weekday: true, startTime: true, endTime: true } },
-      },
-    });
-    const slots = resolveClassSlots({
-      scheduleDays: cls?.scheduleDays ?? [],
-      startTime: cls?.startTime,
-      endTime: cls?.endTime,
-      slots: cls?.scheduleSlots,
-    });
+    // 07/08 — lớp có KẾ HOẠCH nhiều giai đoạn thì giờ phải lấy theo giai đoạn phủ NGÀY
+    // MỚI, không theo lịch phẳng (bản sao của giai đoạn đang hiệu lực). Dời buổi từ
+    // 17/08 sang 10/09 mà lấy giờ giai đoạn cũ là buổi lệch 9 tiếng so với cả lớp.
+    const loaded = await loadClassPhases(sc.classId);
+    const phaseSlot =
+      loaded && !loaded.isDerived ? slotForDate(loaded.phases, day) : null;
+
+    let hm: string | null = phaseSlot?.startTime ?? null;
+    if (!hm) {
+      const cls = await g.gate.sdb.class.findUnique({
+        where: { id: sc.classId },
+        select: {
+          scheduleDays: true,
+          startTime: true,
+          endTime: true,
+          scheduleSlots: { select: { weekday: true, startTime: true, endTime: true } },
+        },
+      });
+      const slots = resolveClassSlots({
+        scheduleDays: cls?.scheduleDays ?? [],
+        startTime: cls?.startTime,
+        endTime: cls?.endTime,
+        slots: cls?.scheduleSlots,
+      });
+      hm = startTimeForWeekday(slots, vnParts(day).weekday);
+    }
     const p = vnParts(day);
-    const hm = startTimeForWeekday(slots, p.weekday);
     const time = hm ? parseHm(hm) : { h: vnParts(sc.date).hour, m: vnParts(sc.date).minute };
     patch.date = vnDateAt(p.year, p.month, p.day, time.h, time.m);
   }

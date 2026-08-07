@@ -83,6 +83,42 @@ export function parseHm(time: string | null | undefined): { h: number; m: number
   return { h: Number(m[1]), m: Number(m[2]) };
 }
 
+/** "HH:mm" theo đồng hồ VN của một thời điểm (không phụ thuộc TZ máy chạy). */
+export function vnHm(d: Date): string {
+  const p = vnParts(d);
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+}
+
+/**
+ * Khoảng giờ HIỂN THỊ của MỘT buổi: giờ bắt đầu lấy từ chính buổi, độ dài suy từ khung
+ * giờ lớp (thiếu → chỉ trả giờ bắt đầu).
+ *
+ * ⚠️ 07/08 — đừng in thẳng `Class.startTime–endTime` cho buổi nữa. Với lớp dùng Kế hoạch
+ * lịch học nhiều giai đoạn, hai field đó chỉ là BẢN SAO của giai đoạn đang hiệu lực; buổi
+ * 08:00 của giai đoạn sau vẫn bị in "17:30–19:30" của giai đoạn trước (phụ huynh đưa con
+ * sai giờ). `ClassSession.date` đã mang giờ đúng từ lúc sinh.
+ */
+export function sessionTimeRange(
+  date: Date,
+  classStartTime: string | null | undefined,
+  classEndTime: string | null | undefined,
+): { start: string; end: string | null } {
+  const p = vnParts(date);
+  const start = vnHm(date);
+  if (!classStartTime || !classEndTime) return { start, end: null };
+
+  const s = parseHm(classStartTime);
+  const e = parseHm(classEndTime);
+  const durMin = e.h * 60 + e.m - (s.h * 60 + s.m);
+  if (durMin <= 0) return { start, end: null };
+
+  const endMin = ((p.hour * 60 + p.minute + durMin) % 1440 + 1440) % 1440;
+  return {
+    start,
+    end: `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`,
+  };
+}
+
 /**
  * Gắn giờ của ĐÚNG thứ vào 1 ngày (dùng khi sinh buổi học).
  *

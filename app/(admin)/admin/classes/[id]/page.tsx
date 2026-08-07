@@ -14,6 +14,12 @@ import { ClassForm, type ClassFormValue } from "../_components/class-form";
 import { ClassApprovalActions } from "./_components/class-approval-actions";
 import { ClassReschedule } from "./_components/class-reschedule";
 import { ClassCurriculum } from "./_components/class-curriculum";
+import {
+  ClassSchedulePhases,
+  type PhaseFormValue,
+} from "./_components/class-schedule-phases";
+import { loadClassPhases } from "@/lib/classes/phases-service";
+import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "./_components/class-sessions-manage";
 import { ClassAttendancePanel } from "./_components/class-attendance-panel";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
@@ -248,6 +254,21 @@ export default async function ClassDetailPage({ params }: Props) {
     canViewScorm ? loadClassScormSessions(cls.id) : Promise.resolve([]),
   ]);
 
+  // Tab "Kế hoạch lịch học": lớp chưa lập kế hoạch thì hiện GIAI ĐOẠN SUY từ lịch hiện
+  // tại (isDerived) — sửa xong bấm Lưu là chốt, không cần backfill dữ liệu cũ.
+  const loadedPhases = await loadClassPhases(cls.id);
+  const phaseForm: PhaseFormValue[] = (loadedPhases?.phases ?? []).map((p) => ({
+    from: vnYmd(p.effectiveFrom),
+    to: p.effectiveTo ? vnYmd(p.effectiveTo) : "",
+    note: p.note ?? "",
+    days: Object.fromEntries(
+      p.slots.map((s) => [s.weekday, { start: s.startTime, end: s.endTime ?? "" }]),
+    ),
+  }));
+  // Mặc định áp dụng từ NGÀY MAI — không đụng buổi hôm nay (có thể đang dạy).
+  const defaultApplyFrom = vnYmd(vnAddDays(vnStartOfDay(new Date()), 1));
+  const phaseSignature = `${loadedPhases?.isDerived ? "d" : "s"}:${JSON.stringify(phaseForm)}`;
+
   // DS học viên buổi mặc định cho tab Đánh giá (present = đã điểm danh có mặt/muộn).
   const initialEvalStudents = initialRoster.rows.map((r) => ({
     studentId: r.studentId,
@@ -350,6 +371,7 @@ export default async function ClassDetailPage({ params }: Props) {
         <TabsList variant="line" className="flex-wrap">
           <TabsTrigger value="info">Thông tin</TabsTrigger>
           <TabsTrigger value="curriculum">Chương trình</TabsTrigger>
+          <TabsTrigger value="schedule">Kế hoạch lịch học</TabsTrigger>
           <TabsTrigger value="sessions">Buổi & Điểm danh</TabsTrigger>
           {canViewMedia && <TabsTrigger value="media">Ảnh lớp</TabsTrigger>}
           {canManageMakeup && <TabsTrigger value="makeup">Học bù</TabsTrigger>}
@@ -396,6 +418,20 @@ export default async function ClassDetailPage({ params }: Props) {
             plans={planRows}
             versions={curricula}
             canEdit={canEdit}
+          />
+        </TabsContent>
+
+        <TabsContent value="schedule" className="pt-4">
+          {/* key = chữ ký kế hoạch: state của form chỉ khởi tạo 1 lần, không có key thì
+              sau router.refresh() form vẫn giữ bản cũ và banner "chưa lưu kế hoạch" vẫn
+              hiện dù đã lưu xong. */}
+          <ClassSchedulePhases
+            key={phaseSignature}
+            classId={cls.id}
+            canEdit={canEdit}
+            initialPhases={phaseForm}
+            isDerived={loadedPhases?.isDerived ?? true}
+            defaultApplyFrom={defaultApplyFrom}
           />
         </TabsContent>
 

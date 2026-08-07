@@ -1,7 +1,12 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
-import { resolveClassSlots, applySlotTimeToDate, type ClassTimeSlot } from "@/lib/classes/slots";
+import { resolveClassSlots, applySlotTimeToDate } from "@/lib/classes/slots";
+import {
+  computePhasedSessionDates,
+  slotForDate,
+  type SchedulePhase,
+} from "@/lib/classes/phases";
 import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
 import { formatDateVN } from "@/lib/format/date";
 import { vnWeekday } from "@/lib/time/vn";
@@ -41,6 +46,15 @@ export async function generateClassSessions(
       curriculumId: true,
       // BGĐ 31/07 — giờ riêng theo thứ (lớp 2 ca khác giờ); trống → dùng giờ chung.
       scheduleSlots: { select: { weekday: true, startTime: true, endTime: true } },
+      // 07/08 — kế hoạch lịch nhiều giai đoạn; có giai đoạn thì THẮNG lịch phẳng.
+      schedulePhases: {
+        orderBy: { effectiveFrom: "asc" },
+        select: {
+          effectiveFrom: true,
+          effectiveTo: true,
+          slots: { select: { weekday: true, startTime: true, endTime: true } },
+        },
+      },
       course: { select: { id: true, totalSessions: true } },
       // R7-06 — kế hoạch buổi của RIÊNG lớp (nếu đã pin curriculum/snapshot).
       sessionPlans: {
@@ -59,9 +73,54 @@ export async function generateClassSessions(
     slots: cls.scheduleSlots,
   });
   const scheduleDays = slots.map((s) => s.weekday);
-  if (scheduleDays.length === 0) {
+
+  // 07/08 — kế hoạch nhiều giai đoạn THẮNG lịch phẳng: thứ VÀ giờ đổi theo giai đoạn nên
+  // không thể gắn giờ sau bằng `applySlotTimeToDate` (nó chỉ biết 1 bộ slot cho cả khoá).
+  const phases: SchedulePhase[] = cls.schedulePhases
+    .map((p) => ({
+      effectiveFrom: p.effectiveFrom,
+      effectiveTo: p.effectiveTo,
+      slots: p.slots.map((s) => ({
+        weekday: s.weekday,
+        startTime: s.startTime,
+        endTime: s.endTime,
+      })),
+    }))
+    .filter((p) => p.slots.length > 0);
+  const usePhases = phases.length > 0;
+
+  if (!usePhases && scheduleDays.length === 0) {
     return { ok: false, generated: 0, error: "Lớp chưa có lịch học (scheduleDays)" };
   }
+
+  /** Ngày (đã gắn giờ) cho `count` buổi kể từ `from` — theo giai đoạn nếu có. */
+  const planDates = (from: Date, count: number, holidays: Set<string>): Date[] => {
+    if (usePhases) {
+      return computePhasedSessionDates({ from, count, phases, holidays }).dates;
+    }
+    return computeSessionDates({ from, scheduleDays, count, holidays }).map((d) =>
+      // BGĐ 31/07 — giờ buổi lấy theo ĐÚNG THỨ của ngày đó (lớp 2 ca khác giờ).
+      applySlotTimeToDate(d, slots, cls.startTime),
+    );
+  };
+
+  /** Nhóm ngày theo khung giờ thật của chúng — để soát trùng đúng ca của từng giai đoạn. */
+  const conflictGroups = (dates: Date[]): ConflictGroup[] => {
+    const map = new Map<string, ConflictGroup>();
+    for (const d of dates) {
+      const slot = usePhases
+        ? slotForDate(phases, d)
+        : slots.find((s) => s.weekday === vnWeekday(d)) ?? null;
+      const startTime = slot?.startTime || cls.startTime || "";
+      if (!startTime) continue; // thiếu giờ → không đủ dữ liệu kết luận trùng
+      const endTime = slot?.endTime ?? cls.endTime ?? null;
+      const key = `${startTime}|${endTime ?? ""}`;
+      const g = map.get(key) ?? { startTime, endTime, dates: [] };
+      g.dates.push(d);
+      map.set(key, g);
+    }
+    return [...map.values()];
+  };
 
   const existing = await db.classSession.count({ where: { classId } });
   if (onlyIfEmpty && existing > 0) return { ok: true, generated: 0 };
@@ -78,20 +137,15 @@ export async function generateClassSessions(
     const holidays = expandHolidaySet(holidayRows);
 
     const from = cls.startDate ?? new Date();
-    const dates = computeSessionDates({
-      from,
-      scheduleDays,
-      count: plans.length,
-      holidays,
-    });
+    const dates = planDates(from, plans.length, holidays);
     if (dates.length === 0) {
       return { ok: false, generated: 0, error: "Không tính được ngày buổi học" };
     }
 
     const data = dates.map((d, i) => ({
       classId,
-      // BGĐ 31/07 — giờ buổi lấy theo ĐÚNG THỨ của ngày đó (lớp 2 ca khác giờ).
-      date: applySlotTimeToDate(d, slots, cls.startTime),
+      // Ngày ĐÃ kèm giờ: theo giai đoạn (kế hoạch) hoặc theo thứ (lịch phẳng).
+      date: d,
       planId: plans[i]?.id ?? null,
       lessonId: plans[i]?.lessonId ?? null,
       // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
@@ -100,9 +154,13 @@ export async function generateClassSessions(
     }));
 
     // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
-    const warning = await warnIfConflict(cls, slots, data);
+    const warning = await warnIfConflict(cls, conflictGroups(dates));
     await db.classSession.createMany({ data });
-    return { ok: true, generated: data.length, ...(warning ? { warning } : {}) };
+    return {
+      ok: true,
+      generated: data.length,
+      ...mergeWarnings(warning, shortPlanWarning(dates.length, plans.length)),
+    };
   }
 
   // ── FALLBACK (lớp cũ, chưa pin): GIỮ NGUYÊN hành vi cũ ─────────────────────
@@ -129,13 +187,13 @@ export async function generateClassSessions(
   const holidays = expandHolidaySet(holidayRows);
 
   const from = cls.startDate ?? new Date();
-  const dates = computeSessionDates({ from, scheduleDays, count, holidays });
+  const dates = planDates(from, count, holidays);
   if (dates.length === 0) return { ok: false, generated: 0, error: "Không tính được ngày buổi học" };
 
   const data = dates.map((d, i) => ({
     classId,
-    // BGĐ 31/07 — giờ buổi theo ĐÚNG THỨ của ngày đó.
-    date: applySlotTimeToDate(d, slots, cls.startTime),
+    // Ngày ĐÃ kèm giờ (theo giai đoạn hoặc theo thứ).
+    date: d,
     lessonId: lessonIds[i] ?? null,
     // W2-4b — phòng buổi mặc định = phòng của lớp (cho soát trùng phòng per-buổi).
     roomId: cls.roomId ?? null,
@@ -143,9 +201,31 @@ export async function generateClassSessions(
   }));
 
   // W2-4 — cảnh báo trùng GV/phòng (KHÔNG chặn sinh buổi; default an toàn).
-  const warning = await warnIfConflict(cls, slots, data);
+  const warning = await warnIfConflict(cls, conflictGroups(dates));
   await db.classSession.createMany({ data });
-  return { ok: true, generated: data.length, ...(warning ? { warning } : {}) };
+  return {
+    ok: true,
+    generated: data.length,
+    ...mergeWarnings(warning, shortPlanWarning(dates.length, count)),
+  };
+}
+
+/** Kế hoạch đóng, không đủ chỗ cho hết số buổi của khoá → nói thẳng, đừng sinh thiếu im lặng. */
+function shortPlanWarning(got: number, want: number): string | undefined {
+  if (got >= want) return undefined;
+  return `Kế hoạch lịch chỉ đủ chỗ cho ${got}/${want} buổi — bỏ trống “đến ngày” của giai đoạn cuối (để mở) hoặc kéo dài giai đoạn cuối rồi sinh lại.`;
+}
+
+function mergeWarnings(...parts: (string | undefined)[]): { warning?: string } {
+  const w = parts.filter(Boolean).join(" ");
+  return w ? { warning: w } : {};
+}
+
+/** Một khung giờ + các ngày dùng khung giờ đó (lớp nhiều ca / nhiều giai đoạn). */
+interface ConflictGroup {
+  startTime: string;
+  endTime: string | null;
+  dates: Date[];
 }
 
 /**
@@ -163,25 +243,22 @@ async function warnIfConflict(
     teacherId: string | null;
     roomId: string | null;
   },
-  slots: ClassTimeSlot[],
-  data: { date: Date }[],
+  groups: ConflictGroup[],
 ): Promise<string | undefined> {
   if (!cls.teacherId && !cls.roomId) return undefined;
   try {
     const all: { date: Date; messages: string[] }[] = [];
-    for (const slot of slots) {
-      if (!slot.startTime) continue;
-      const dates = data.filter((d) => vnWeekday(d.date) === slot.weekday).map((d) => d.date);
-      if (dates.length === 0) continue;
+    for (const g of groups) {
+      if (g.dates.length === 0) continue;
       const conflicts = await detectBatchConflicts({
         // centerId = null → soát toàn hệ thống: GV có thể dạy 2 cơ sở.
         centerId: null,
         excludeClassId: cls.id,
-        classStartTime: slot.startTime,
-        classEndTime: slot.endTime,
+        classStartTime: g.startTime,
+        classEndTime: g.endTime,
         teacherId: cls.teacherId,
         roomId: cls.roomId,
-        dates,
+        dates: g.dates,
       });
       all.push(...conflicts);
     }
