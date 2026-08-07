@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { X, Calendar, Clock, MapPin, Phone, Star } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 import {
@@ -18,6 +19,13 @@ const CAMPAIGN_START = new Date("2026-05-15T00:00:00+07:00");
 const CAMPAIGN_END = new Date("2026-12-31T23:59:59+07:00");
 
 const INITIAL_DELAY_MS = 15_000; // first show 15s after page load
+
+// Trang KHÔNG được bật popup. `/lien-he` CHÍNH LÀ form đăng ký — bật một overlay
+// che kín form sau 15s là tự tay chặn đúng việc khách đang làm dở (phụ huynh mới
+// gõ được tên con thì ăn ngay modal vào mặt). Popup gắn ở `app/(public)/layout.tsx`
+// nên chạy trên MỌI trang public; layout là Server Component không biết pathname,
+// vì vậy chặn ngay tại đây. Các trang còn lại giữ nguyên popup 15s.
+const SUPPRESSED_PATH = "/lien-he";
 
 interface BatchInfo {
   priority?: boolean;
@@ -68,7 +76,19 @@ export function CampaignPopup20Suat() {
   const [isOpen, setIsOpen] = useState(false);
   const [mountedAt, setMountedAt] = useState<Date | null>(null);
 
+  const pathname = usePathname() ?? "";
+  const suppressed =
+    pathname === SUPPRESSED_PATH || pathname.startsWith(`${SUPPRESSED_PATH}/`);
+
   useEffect(() => {
+    // Layout của route group giữ component này SỐNG khi khách chuyển trang, nên
+    // phải đóng luôn: đang mở popup ở trang chủ rồi bấm sang /lien-he mà chỉ
+    // `return null` thì lúc quay ra nó bật lại ngay, không cần chờ 15s nữa.
+    if (suppressed) {
+      setIsOpen(false);
+      return;
+    }
+
     const now = new Date();
     if (now < CAMPAIGN_START || now > CAMPAIGN_END) return;
     if (hasBeenDismissed()) return;
@@ -76,7 +96,7 @@ export function CampaignPopup20Suat() {
     setMountedAt(now);
     const id = window.setTimeout(() => setIsOpen(true), INITIAL_DELAY_MS);
     return () => window.clearTimeout(id);
-  }, []);
+  }, [suppressed]);
 
   // Batches computed client-side để dates rolling đúng theo "hôm nay".
   const batches = useMemo(
@@ -89,7 +109,7 @@ export function CampaignPopup20Suat() {
     setIsOpen(false);
   };
 
-  if (!isOpen) return null;
+  if (suppressed || !isOpen) return null;
 
   return (
     <div
