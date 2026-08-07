@@ -81,6 +81,9 @@ export const courseGroups: CourseGroup[] = [
   },
 ];
 
+// Học phí không hiển thị số trên web — mọi chỗ show giá đều dùng chuỗi này.
+export const CONTACT_PRICE = "Liên hệ tư vấn";
+
 export const CONSULT_OPTION = {
   id: "consult",
   name: "Chưa biết - Cần hỗ trợ tư vấn",
