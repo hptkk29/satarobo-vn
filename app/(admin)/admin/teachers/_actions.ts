@@ -8,6 +8,9 @@ import { z } from "zod";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { TeacherRank, EmploymentType, TeacherStatus } from "@prisma/client";
+import type { Prisma, Role } from "@prisma/client";
+import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -58,20 +61,37 @@ export async function updateTeacherProfile(input: unknown): Promise<Result> {
 
   const teacher = await gate.sdb.user.findUnique({
     where: { id: userId },
-    select: { role: true, roles: true },
+    select: { role: true, roles: true, orgUnitId: true, centerId: true },
   });
   if (!teacher) return { ok: false, error: "Không tìm thấy người dùng" };
 
   // P1-b: lưu/duyệt hồ sơ GV → ĐẢM BẢO vai trò TEACHER có trong roles[] (đa vai
   // trò 3B). User cũ chỉ có role chính = TEACHER cũng được đồng bộ vào roles[].
   const needsTeacherRole = !hasRole(teacher, "TEACHER");
+  // Đây là đường THỨ TƯ cấp vai TEACHER → cũng phải sinh UserOrgRole, nếu không GV lại
+  // rơi vào ca 07/08/2026: có roles[] mà RBAC v2 rỗng quyền (không điểm danh được).
+  const previousRoles: Role[] =
+    teacher.roles.length > 0 ? teacher.roles : [teacher.role];
+  const anchorOrgUnitId =
+    teacher.orgUnitId ?? (await orgUnitIdForCenter(teacher.centerId));
 
   try {
-    await gate.sdb.$transaction(async (tx) => {
+    await gate.sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
       if (needsTeacherRole) {
+        const nextRoles = Array.from(new Set<Role>([...teacher.roles, "TEACHER"]));
         await tx.user.update({
           where: { id: userId },
-          data: { roles: { set: Array.from(new Set([...teacher.roles, "TEACHER"])) } },
+          data: { roles: { set: nextRoles } },
+        });
+        await reconcileUserOrgRoles({
+          tx,
+          userId,
+          previous: { roles: previousRoles, orgUnitId: anchorOrgUnitId },
+          next: { roles: nextRoles, orgUnitId: anchorOrgUnitId },
+          actorId: gate.session.user.id ?? null,
+          actorName: gate.session.user.name ?? gate.session.user.email ?? "Unknown",
+          reason: "Tự động gán khi lưu hồ sơ giáo viên",
         });
       }
       const profile = await tx.teacherProfile.upsert({
@@ -93,6 +113,7 @@ export async function updateTeacherProfile(input: unknown): Promise<Result> {
       }
     });
   } catch (err) {
+    if (err instanceof OrgRoleSyncError) return { ok: false, error: err.message };
     return {
       ok: false,
       error: `Lỗi lưu hồ sơ: ${err instanceof Error ? err.message : "Unknown"}`,

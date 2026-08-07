@@ -22,29 +22,17 @@
 //
 // Dry-run KHÔNG gọi seedOrgUnits / upsert RoleDef (cả hai đều ghi) — chỉ đọc và in
 // kế hoạch. Prod đã có cây OrgUnit (A0) + 14 RoleDef (seed-prod-roles) nên đọc đủ.
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Role } from "@prisma/client";
 import { seedOrgUnits } from "./seed-orgunit";
+// Bảng ánh xạ dùng CHUNG với action tạo/sửa tài khoản (lib/auth/org-role-sync.ts).
+// Trước 07/08/2026 bảng này chỉ nằm ở đây → màn admin không gán vai v2, đẻ ra sự cố
+// "GV không điểm danh được". Giữ 1 nguồn để hai đường không bao giờ lệch.
+import { CENTER_OVERRIDE, mappingFor } from "../lib/auth/legacy-role-map";
 
 // DIRECT_URL (session pooler :5432) — tránh lỗi prepared statement trên transaction pooler.
 const db = new PrismaClient({
   datasources: { db: { url: process.env.DIRECT_URL || process.env.DATABASE_URL } },
 });
-
-type Mapping = { roleCode: string; org: "HO" | "CENTER" | "CENTER_OR_HO" };
-const LEGACY_TO_ROLEDEF: Record<string, Mapping> = {
-  SUPER_ADMIN: { roleCode: "SUPER_ADMIN", org: "HO" },
-  CENTER_MANAGER: { roleCode: "CENTER_MANAGER", org: "CENTER" },
-  SALES_CSM: { roleCode: "CENTER_SALES_CSM", org: "CENTER" },
-  TEACHER: { roleCode: "TEACHER", org: "CENTER" },
-  ACCOUNTANT: { roleCode: "HO_ACCOUNTANT", org: "CENTER_OR_HO" },
-  MARKETING: { roleCode: "HO_MARKETING", org: "HO" },
-  // Sửa 06/07/2026 (Kiệt duyệt Phương án A, addendum HR): trước đây hard-code "HO"
-  // — mọi user role HR (kể cả thực tập sinh tại 1 cơ sở) đều bị gán HO_HR@HO toàn
-  // hệ thống. Đổi sang CENTER_OR_HO giống ACCOUNTANT: có centerId → CENTER_HR tại
-  // cơ sở đó; không suy được cơ sở → HO_HR@HO (fallback an toàn).
-  HR: { roleCode: "HO_HR", org: "CENTER_OR_HO" },
-  TRAINING: { roleCode: "TRAINING", org: "HO" },
-};
 
 const APPLY = process.argv.includes("--apply");
 
@@ -89,7 +77,7 @@ async function main() {
     const legacyRoles = [...new Set([u.role, ...(u.roles ?? [])])].filter(Boolean) as string[];
     for (const legacy of legacyRoles) {
       if (legacy === "PARENT") continue;
-      const m = LEGACY_TO_ROLEDEF[legacy];
+      const m = mappingFor(legacy as Role);
       if (!m) { skipped.push(`${u.email}: role legacy lạ ${legacy}`); continue; }
 
       // Suy OrgUnit đích.
@@ -114,11 +102,8 @@ async function main() {
       else target = centerOrg ?? hoOrg; // CENTER_OR_HO: kế toán không gắn cơ sở → Hội sở
 
       // Kế toán/Nhân sự gắn cơ sở → role CENTER_* thay vì HO_* (Phương án A, addendum HR 06/07/2026).
-      const CENTER_OVERRIDE: Record<string, string> = {
-        ACCOUNTANT: "CENTER_ACCOUNTANT",
-        HR: "CENTER_HR",
-      };
-      const roleCode = centerOrg && CENTER_OVERRIDE[legacy] ? CENTER_OVERRIDE[legacy] : m.roleCode;
+      const override = (CENTER_OVERRIDE as Record<string, string>)[legacy];
+      const roleCode = centerOrg && override ? override : m.roleCode;
       const roleId = roleByCode.get(roleCode);
       if (!target) { skipped.push(`${u.email}: ${legacy} cần cơ sở nhưng không suy được`); continue; }
       if (!roleId) { skipped.push(`${u.email}: thiếu RoleDef ${roleCode}`); continue; }

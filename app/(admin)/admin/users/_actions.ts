@@ -17,6 +17,7 @@ import {
 import { reassignOpenLeads } from "@/lib/lead/assign";
 import { notifyStaffAccountGranted } from "@/lib/email/staff-account";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
+import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
 import {
   logUserAudit,
   detectChangedFields,
@@ -149,8 +150,27 @@ export async function createUserAction(formData: FormData) {
       tx,
     });
 
+    // RBAC v2: sinh luôn UserOrgRole theo roles[] + đơn vị đã chọn. Trước 07/08/2026
+    // bước này KHÔNG có → tài khoản mới rỗng quyền trên prod (GV vào được site GV
+    // nhưng bấm Lưu điểm danh ra "Không có quyền điểm danh lớp này"). Thiếu đơn vị /
+    // RoleDef → ném lỗi, rollback cả cụm: thà không tạo còn hơn tạo tài khoản què quyền.
+    await reconcileUserOrgRoles({
+      tx,
+      userId: created.id,
+      previous: { roles: [], orgUnitId: null },
+      next: { roles: parsed.data.roles, orgUnitId },
+      actorId,
+      actorName,
+      reason: "Tự động gán theo vai trò khi tạo tài khoản",
+    });
+
     return created;
+  }).catch((err: unknown) => {
+    // Lỗi RBAC hiện nguyên văn cho admin; lỗi khác giữ nguyên hành vi cũ (ném lên).
+    if (err instanceof OrgRoleSyncError) return { syncError: err.message };
+    throw err;
   });
+  if ("syncError" in user) return { ok: false, error: user.syncError };
 
   // BGĐ 31/07 — gửi thông tin đăng nhập (email kèm MK — log mask; ZNS không MK).
   // Fire-and-forget: lỗi gửi không chặn việc tạo tài khoản.
@@ -198,6 +218,8 @@ export async function updateUserAction(id: string, formData: FormData) {
       role: true,
       roles: true,
       centerId: true,
+      // Đơn vị TRƯỚC — mốc để suy vai v2 cần thu hồi khi đổi vai trò/đổi đơn vị.
+      orgUnitId: true,
       employeeId: true,
     },
   });
@@ -266,7 +288,7 @@ export async function updateUserAction(id: string, formData: FormData) {
   const orgUnitId = parsed.data.orgUnitId ?? null;
   const centerId = await centerIdForOrgUnit(orgUnitId);
 
-  await sdb.$transaction(async (txRaw) => {
+  const synced = await sdb.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient;
     const updated = await tx.user.update({
       where: { id },
@@ -319,7 +341,26 @@ export async function updateUserAction(id: string, formData: FormData) {
       changedFields: detectChangedFields(oldValues, newValues),
       tx,
     });
+
+    // RBAC v2 đi kèm: gán vai còn thiếu (chữa cả tài khoản tạo trước 07/08/2026) và
+    // thu hồi vai suy từ bộ vai trò/đơn vị CŨ mà bộ MỚI không còn. Vai gán tay ở
+    // /admin/users/[id]/org-roles nằm ngoài bảng ánh xạ → không bị đụng.
+    await reconcileUserOrgRoles({
+      tx,
+      userId: id,
+      previous: { roles: currentRoles, orgUnitId: current.orgUnitId },
+      next: { roles: parsed.data.roles, orgUnitId },
+      actorId,
+      actorName,
+      reason: "Tự động đồng bộ khi sửa vai trò/đơn vị tài khoản",
+    });
+  }).catch((err: unknown) => {
+    if (err instanceof OrgRoleSyncError) return { syncError: err.message };
+    throw err;
   });
+  if (synced && "syncError" in synced) {
+    return { ok: false, error: synced.syncError };
+  }
 
   revalidatePath("/users");
   revalidatePath(`/users/${id}/edit`);

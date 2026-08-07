@@ -223,20 +223,26 @@ export function UserForm({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="orgUnitId">Đơn vị</Label>
+          <Label htmlFor="orgUnitId">
+            Đơn vị <span className="text-red-600">*</span>
+          </Label>
           <select
             id="orgUnitId"
             name="orgUnitId"
             defaultValue={initialData?.orgUnitId ?? ""}
             className={selectClass}
           >
-            <option value="">— Không gán —</option>
+            <option value="">— Chọn đơn vị —</option>
             {orgUnits.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
               </option>
             ))}
           </select>
+          <p className="text-xs text-gray-500">
+            Bắt buộc: quyền (RBAC) được gán tại đơn vị này. Chọn Hội sở = vai trò
+            xuyên cơ sở.
+          </p>
         </div>
 
         <div className="space-y-1.5">

@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import type { Role } from "@prisma/client";
+import type { Prisma, Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import {
@@ -18,6 +18,8 @@ import {
 } from "@/lib/validators/employee";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 type ActionResult<T = unknown> =
   | { ok: true; data?: T }
@@ -560,7 +562,8 @@ export async function changeEmployeeRoleAction(input: {
       id: true,
       fullName: true,
       centerId: true,
-      userAccount: { select: { id: true, role: true, roles: true } },
+      // orgUnitId: đơn vị neo để đồng bộ UserOrgRole (RBAC v2) theo vai trò mới.
+      userAccount: { select: { id: true, role: true, roles: true, orgUnitId: true } },
     },
   });
   if (!employee) return { ok: false, error: "Không tìm thấy nhân viên" };
@@ -580,34 +583,58 @@ export async function changeEmployeeRoleAction(input: {
     };
   }
 
-  const fromRole = employee.userAccount.role;
+  // Giữ tham chiếu đã narrow — closure trong $transaction không thấy narrowing ở trên.
+  const userAccount = employee.userAccount;
+  const fromRole = userAccount.role;
   const sameRoles =
     fromRole === primaryRole &&
-    [...employee.userAccount.roles].sort().join(",") === [...roles].sort().join(",");
+    [...userAccount.roles].sort().join(",") === [...roles].sort().join(",");
   if (sameRoles) {
     return { ok: false, error: "Vai trò không thay đổi" };
   }
+  // Vai trò hữu hiệu TRƯỚC (roles[] ưu tiên, fallback role chính) — mốc thu hồi vai v2.
+  const previousRoles: Role[] =
+    userAccount.roles.length > 0 ? userAccount.roles : [fromRole];
+  // Đơn vị neo cho RBAC v2: ưu tiên User.orgUnitId; tài khoản cũ chưa gán thì suy từ
+  // cơ sở của nhân sự. Vẫn null → reconcile ném lỗi có hướng dẫn (không skip im lặng).
+  const anchorOrgUnitId =
+    userAccount.orgUnitId ?? (await orgUnitIdForCenter(employee.centerId));
+  const changedByName =
+    session.user.name ?? session.user.email ?? session.user.id ?? "Unknown";
 
   try {
-    await sdb.$transaction([
-      sdb.user.update({
-        where: { id: employee.userAccount.id },
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+      await tx.user.update({
+        where: { id: userAccount.id },
         // Bump tokenVersion → token cũ vô hiệu ngay request kế (buộc re-login để
         // mang roles mới). role = vai trò chính; roles = union.
         data: { role: primaryRole, roles, tokenVersion: { increment: 1 } },
-      }),
-      sdb.roleAuditLog.create({
+      });
+      await tx.roleAuditLog.create({
         data: {
           employeeId: employee.id,
           fromRole,
           toRole: primaryRole,
           changedByUserId: session.user.id ?? null,
-          changedByName: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown",
+          changedByName,
           reason: `${parsed.data.reason} · vai trò: [${roles.join(", ")}] (chính: ${primaryRole})`,
         },
-      }),
-    ]);
+      });
+      // RBAC v2 phải đi CÙNG: đổi vai trò ở v1 mà quên UserOrgRole thì trên prod người
+      // ta mất/giữ quyền sai (prod enforce v2). Gán vai mới + thu hồi vai cũ trong 1 tx.
+      await reconcileUserOrgRoles({
+        tx,
+        userId: userAccount.id,
+        previous: { roles: previousRoles, orgUnitId: anchorOrgUnitId },
+        next: { roles, orgUnitId: anchorOrgUnitId },
+        actorId: session.user.id ?? null,
+        actorName: changedByName,
+        reason: parsed.data.reason,
+      });
+    });
   } catch (err) {
+    if (err instanceof OrgRoleSyncError) return { ok: false, error: err.message };
     return {
       ok: false,
       error: `Lỗi DB: ${err instanceof Error ? err.message : "Unknown"}`,
