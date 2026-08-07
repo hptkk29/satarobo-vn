@@ -8,6 +8,11 @@
 // ATTENDANCE_LABELS (lib/labels) — không dùng token riêng của project mock.
 //
 // Câu 46: rows KHÔNG chứa SĐT/contact — chỉ tên HV (server đã strip trước khi truyền).
+//
+// 07/08/2026 — BỎ mặc định "Có mặt": mở bảng lên mọi em đều TRỐNG, GV bấm nhãn nào
+// mới có nhãn đó (không có bản ghi Attendance = chưa điểm danh — enum không có nhãn
+// "chưa"). Nút "Đánh dấu tất cả có mặt" vẫn còn, nhưng nay là thao tác GV chủ động.
+// Đổi lại, nút Lưu ĐÒI đủ cả lớp: xem lý do ở comment trong save().
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
@@ -69,12 +74,20 @@ export type AttendancePanelRow = {
   existingNote: string | null;
 };
 
-/** Chuẩn hoá status cũ (2-phase R7-08) về 1 trong 4 nhãn markable để hiển thị mặc định. */
-function normalize(status: string | null): Markable {
+/**
+ * Chuẩn hoá status cũ (2-phase R7-08) về 1 trong 4 nhãn markable.
+ *
+ * ⚠️ 07/08/2026 — trả `null` khi HV CHƯA có bản ghi điểm danh. Trước đây hàm này
+ * fallback "PRESENT", nên mở bảng lên là cả lớp đã sáng "Có mặt" sẵn: bấm Lưu (hoặc
+ * lỡ tay) là cả lớp thành có mặt + phụ huynh nhận thông báo, kể cả em vắng. Nay phải
+ * do GV tự bấm mới có trạng thái.
+ */
+function normalize(status: string | null): Markable | null {
+  if (!status) return null;
   if (status === "ABSENT") return "ABSENT_UNEXCUSED";
   if (status === "EXCUSED") return "ABSENT_EXCUSED";
-  if ((MARKABLE as readonly string[]).includes(status ?? "")) return status as Markable;
-  return "PRESENT";
+  if ((MARKABLE as readonly string[]).includes(status)) return status as Markable;
+  return null; // enum chỉ có 6 giá trị trên — nhánh này coi như chưa điểm danh
 }
 
 export function AttendancePanel({
@@ -86,26 +99,47 @@ export function AttendancePanel({
   rows: AttendancePanelRow[];
   editable: boolean;
 }) {
-  const [state, setState] = useState<Record<string, { status: Markable; note: string }>>(() =>
+  const [state, setState] = useState<Record<string, { status: Markable | null; note: string }>>(() =>
     Object.fromEntries(
       rows.map((r) => [r.studentId, { status: normalize(r.existingStatus), note: r.existingNote ?? "" }]),
     ),
   );
   const [pending, startTransition] = useTransition();
 
-  const counts = useMemo(() => {
+  /** Em ĐÃ có bản ghi điểm danh trong DB lúc mở màn (dùng cho luật bỏ-chọn ở setStatus). */
+  const savedIds = useMemo(
+    () => new Set(rows.filter((r) => normalize(r.existingStatus) !== null).map((r) => r.studentId)),
+    [rows],
+  );
+
+  const { counts, unmarked } = useMemo(() => {
     const c: Record<Markable, number> = {
       PRESENT: 0,
       LATE: 0,
       ABSENT_EXCUSED: 0,
       ABSENT_UNEXCUSED: 0,
     };
-    for (const r of rows) c[state[r.studentId]?.status ?? "PRESENT"]++;
-    return c;
+    let u = 0;
+    for (const r of rows) {
+      const st = state[r.studentId]?.status ?? null;
+      if (st) c[st]++;
+      else u++;
+    }
+    return { counts: c, unmarked: u };
   }, [state, rows]);
 
+  /**
+   * Bấm lại đúng nhãn đang chọn = BỎ chọn (về "chưa điểm danh") — lỡ tay còn gỡ được.
+   * CHỈ cho những em CHƯA có bản ghi trong DB: em đã lưu rồi mà bỏ chọn thì bấm Lưu
+   * cũng không xoá được bản ghi cũ (action chỉ upsert, không delete) ⇒ màn hình sẽ nói
+   * dối. Muốn sửa em đã lưu thì chọn nhãn khác.
+   */
   function setStatus(studentId: string, status: Markable) {
-    setState((s) => ({ ...s, [studentId]: { ...s[studentId], status } }));
+    setState((s) => {
+      const clearable = !savedIds.has(studentId);
+      const next = s[studentId]?.status === status && clearable ? null : status;
+      return { ...s, [studentId]: { ...s[studentId], status: next } };
+    });
   }
   function setNote(studentId: string, note: string) {
     setState((s) => ({ ...s, [studentId]: { ...s[studentId], note } }));
@@ -119,11 +153,27 @@ export function AttendancePanel({
   }
 
   function save() {
-    const records = rows.map((r) => ({
-      studentId: r.studentId,
-      status: state[r.studentId]?.status ?? "PRESENT",
-      note: state[r.studentId]?.note?.trim() || null,
-    }));
+    // CHỈ gửi em đã được bấm trạng thái. Em chưa bấm = chưa điểm danh, không ghi gì
+    // (Attendance không có nhãn "chưa" — không có bản ghi CHÍNH LÀ chưa).
+    const records = rows.flatMap((r) => {
+      const cell = state[r.studentId];
+      if (!cell?.status) return [];
+      return [{ studentId: r.studentId, status: cell.status, note: cell.note?.trim() || null }];
+    });
+    if (records.length === 0) {
+      toast.error("Chưa đánh dấu em nào — bấm trạng thái cho từng học viên rồi lưu.");
+      return;
+    }
+
+    // Phải đủ CẢ LỚP mới cho lưu. Lý do không phải khắt khe cho vui: khắp hệ thống
+    // (dashboard GV, cột "Cần xử lý" ở /teacher/lop, trang /teacher/diem-danh) đều coi
+    // "buổi có ≥1 bản ghi Attendance = ĐÃ điểm danh". Cho lưu dở dang thì buổi tô xanh
+    // "xong" trong khi vài em không có bản ghi nào — im lặng mất người.
+    if (unmarked > 0) {
+      toast.error(`Còn ${unmarked} em chưa đánh dấu — điểm danh đủ cả lớp rồi mới lưu được.`);
+      return;
+    }
+
     startTransition(async () => {
       const res = await saveClassAttendanceAction(sessionId, records);
       if (res.ok) toast.success(`Đã lưu điểm danh ${res.saved} học viên`);
@@ -141,6 +191,13 @@ export function AttendancePanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm">
           <span className="font-semibold text-foreground">{rows.length} học viên</span>
+          {unmarked > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border bg-muted px-2 py-1 text-xs">
+              <span className="h-2 w-2 rounded-full border border-muted-foreground" />
+              <span className="text-muted-foreground">Chưa điểm danh</span>
+              <span className="font-bold text-foreground">{unmarked}</span>
+            </span>
+          )}
           {MARKABLE.map((k) => (
             <span
               key={k}
@@ -201,7 +258,7 @@ export function AttendancePanel({
                   <div className="flex flex-wrap gap-1.5">
                     {MARKABLE.map((k) => {
                       const info = ATTENDANCE_LABELS[k];
-                      const active = (state[r.studentId]?.status ?? "PRESENT") === k;
+                      const active = state[r.studentId]?.status === k;
                       return (
                         <button
                           key={k}
@@ -240,7 +297,12 @@ export function AttendancePanel({
       </div>
 
       {editable && (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {unmarked > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Còn <span className="font-semibold text-foreground">{unmarked}</span> em chưa đánh dấu
+            </p>
+          )}
           <Button onClick={save} disabled={pending}>
             <Save className="mr-1.5 h-4 w-4" aria-hidden />
             {pending ? "Đang lưu…" : "Lưu điểm danh"}
