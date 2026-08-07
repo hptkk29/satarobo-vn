@@ -73,13 +73,39 @@ function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean })
           )}
         </div>
       </div>
-      <Textarea
-        className="mt-2 font-mono text-xs"
-        rows={text.includes("\n") ? 6 : 1}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        disabled={!canEdit || pending}
-      />
+      {row.isBoolean ? (
+        // Công tắc: bấm ĐỔI NGAY trạng thái hiển thị (kèm nhãn "chưa lưu"), nhưng vẫn
+        // phải nhập lý do rồi bấm Lưu mới ghi — giữ luật "mọi thay đổi có lý do + audit",
+        // không biến công tắc thành đường ghi tắt bỏ qua nhật ký.
+        <div className="mt-2 flex items-center gap-3">
+          <Switch
+            checked={text === "true"}
+            onCheckedChange={(v) => setText(v ? "true" : "false")}
+            disabled={!canEdit || pending}
+            aria-label={row.label}
+          />
+          <span
+            className={`text-sm font-medium ${
+              text === "true" ? "text-emerald-700" : "text-neutral-500"
+            }`}
+          >
+            {text === "true" ? "Đang BẬT" : "Đang TẮT"}
+          </span>
+          {text !== toText(row.value) && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+              chưa lưu
+            </span>
+          )}
+        </div>
+      ) : (
+        <Textarea
+          className="mt-2 font-mono text-xs"
+          rows={text.includes("\n") ? 6 : 1}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={!canEdit || pending}
+        />
+      )}
       {canEdit && (
         <div className="mt-2 flex items-center gap-2">
           <Input
