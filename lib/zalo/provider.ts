@@ -1,6 +1,7 @@
 import "server-only";
 import { getValidZaloAccessToken, forceRefreshZaloToken } from "@/lib/zalo/token";
 import { canonicalPhone } from "@/lib/phone";
+import { getSetting } from "@/lib/settings/service";
 
 // =============================================================================
 // Cụm C5 + commit 5 — Zalo OA/ZNS provider.
@@ -98,7 +99,12 @@ export const znsProvider: ZaloProvider = {
   async send(input: ZaloSendInput): Promise<ZaloSendResult> {
     if (!hasCredentials()) return { ok: false, error: "ZALO_NOT_CONFIGURED" };
 
-    if (!this.isLive()) {
+    // 07/08 — công tắc live chuyển sang SystemSetting để admin tự bật/tắt, không cần
+    // deploy. Setting thắng; env ZALO_LIVE là dự phòng khi chưa đặt setting.
+    // Đọc lỗi (DB sập) → coi như KHÔNG live: thà không gửi còn hơn gửi nhầm hàng loạt.
+    const liveFromDb = await getSetting("zalo.znsLive").catch(() => false);
+    const live = this.isConfigured() && (liveFromDb || process.env.ZALO_LIVE === "true");
+    if (!live) {
       // Có cấu hình nhưng chưa bật live → mô phỏng, KHÔNG gọi API thật.
       return { ok: true, providerMessageId: `SIMULATED-${input.toPhone}` };
     }

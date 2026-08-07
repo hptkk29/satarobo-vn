@@ -12,6 +12,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { randomInt } from "crypto";
 import { z } from "zod";
+import { getSetting } from "@/lib/settings/service";
 
 // C6 — bật/tắt MISA + chạy thử sync. Gate settings:edit (SUPER_ADMIN).
 
@@ -59,7 +60,11 @@ export async function sendZnsTest(
   const rl = await rateLimit({ key: `zns-test:${session.user.id}`, max: 5, windowMs: 3_600_000 });
   if (!rl.success) return { ok: false, error: "Đã gửi thử quá 5 lần trong 1 giờ. Thử lại sau." };
 
-  const live = znsProvider.isLive();
+  // 07/08 — công tắc live nay ở SystemSetting; isLive() chỉ còn đọc env nên dùng
+  // trần sẽ báo SAI trạng thái cho người vận hành. Đọc cùng công thức với provider.
+  const live =
+    znsProvider.isConfigured() &&
+    ((await getSetting("zalo.znsLive").catch(() => false)) || process.env.ZALO_LIVE === "true");
   const code = String(randomInt(100000, 1000000));
   const res = await zaloOtpProvider.send({
     target: phone,

@@ -188,7 +188,8 @@ const addSessionSchema = z
 /**
  * #1 (BLOCKER) — thêm 1 buổi ad-hoc cho lớp trải nghiệm (QĐ-R2-1 slot tái sử dụng:
  * lớp tạo KHÔNG có ngày → không có buổi → GV không có gì để nhận/điểm danh/đánh giá).
- * Gate `trials:manage` + cách ly cơ sở; GV của buổi phải cùng cơ sở (service check).
+ * Gate `trials:manage` + cách ly cơ sở cho LỚP. GV thì KHÔNG ràng buộc cơ sở nữa
+ * (chốt 07/08 — GV là nguồn lực chung); chỉ còn chặn teacherId không tồn tại.
  */
 export async function addTrialSessionAction(input: unknown): Promise<ActionResult<{ sessionId?: string }>> {
   const session = await requireSession();

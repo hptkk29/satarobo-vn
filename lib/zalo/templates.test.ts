@@ -142,3 +142,31 @@ describe("formatZnsDateTime", () => {
     expect(formatZnsDateTime(new Date("2026-07-30T17:00:00.000Z"))).toBe("00:00:00 31/07/2026");
   });
 });
+
+// 07/08 — 2 công tắc ZNS chuyển từ env sang SystemSetting để admin tự chỉnh.
+// Khoá TRẠNG THÁI AN TOÀN: rỗng/false = KHÔNG gửi. Đây là 2 công tắc đụng tiền
+// thật (400đ/tin) và khách thật, nên mặc định phải là không gửi.
+describe("công tắc ZNS trong cấu hình hệ thống", () => {
+  it("công tắc gửi Cấp tài khoản mặc định TẮT — chưa cấp TK cho PH (chốt 07/08)", async () => {
+    const { SETTINGS } = await import("@/lib/settings/registry");
+    expect(SETTINGS["zalo.znsAccountEnabled"].default).toBe(false);
+  });
+
+  it("mã mẫu GIỮ NGUYÊN giá trị dù công tắc tắt — tắt/bật không mất số đã nhập", async () => {
+    const { SETTINGS } = await import("@/lib/settings/registry");
+    expect(SETTINGS["zalo.znsTemplateAccount"].default).toBe("616899");
+  });
+
+  it("gửi ZNS thật mặc định TẮT — bật nhầm là mất tiền hàng loạt", async () => {
+    const { SETTINGS } = await import("@/lib/settings/registry");
+    expect(SETTINGS["zalo.znsLive"].default).toBe(false);
+  });
+
+  it("mẫu Cấp tài khoản chỉ nhận chữ số — chặn gõ nhầm tên mẫu", async () => {
+    const { SETTINGS } = await import("@/lib/settings/registry");
+    const s = SETTINGS["zalo.znsTemplateAccount"].schema;
+    expect(s.safeParse("616899").success).toBe(true);
+    expect(s.safeParse("").success).toBe(true); // rỗng vẫn hợp lệ (chưa có mẫu)
+    expect(s.safeParse("Cấp tài khoản").success).toBe(false);
+  });
+});
