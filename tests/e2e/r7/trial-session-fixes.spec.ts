@@ -225,7 +225,11 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
     expect(lichIds).toEqual([sesNull.sessionId, sesAssigned.sessionId].sort());
   });
 
-  test("[TRIAL-05] thêm buổi với GV KHÁC cơ sở → bị từ chối", async () => {
+  // 07/08 — CHÍNH SÁCH ĐỔI: GV là nguồn lực chung (Hội sở điều đi mọi cơ sở), gắn
+  // được cho lớp / lịch trial ở BẤT KỲ cơ sở nào. Ca này trước đây khoá luật cũ
+  // "GV khác cơ sở → từ chối"; nay đảo lại thành PHẢI CHẤP NHẬN.
+  // Gỡ hàng rào có chủ ý, không phải hạ chuẩn test.
+  test("[TRIAL-05] thêm buổi với GV khác cơ sở → CHẤP NHẬN (chính sách mới 07/08)", async () => {
     const cs1 = await seedCenter("CS1");
     const cs2 = await seedCenter("CS2");
     const teacherCs2 = await seedTeacher(cs2.id, "gv-cs2");
@@ -240,9 +244,14 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
       teacherId: teacherCs2.id,
       actorId: sale.id,
     });
-    expect(res.ok).toBe(false);
-    expect(res.error ?? "").toContain("cùng cơ sở");
-    expect(await db.trialClassSession.count({ where: { trialClassId: classId } })).toBe(0);
+    expect(res.ok).toBe(true);
+    expect(await db.trialClassSession.count({ where: { trialClassId: classId } })).toBe(1);
+    // GV được gán đúng là người ở cơ sở khác — không bị thay thầm bằng GV lớp.
+    const buoi = await db.trialClassSession.findFirstOrThrow({
+      where: { trialClassId: classId },
+      select: { teacherId: true },
+    });
+    expect(buoi.teacherId).toBe(teacherCs2.id);
   });
 
   test("[TRIAL-06] enrollment cũ scheduledSessionId null → hiện nhóm 'Chưa xếp buổi' của roster GV", async () => {
