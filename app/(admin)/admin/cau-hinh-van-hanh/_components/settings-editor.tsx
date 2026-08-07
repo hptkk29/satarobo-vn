@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { saveGlobalSettingAction } from "../actions";
 
 export type SettingRowView = {
@@ -13,6 +14,8 @@ export type SettingRowView = {
   group: string;
   centerOverridable: boolean;
   value: unknown;
+  /** Setting kiểu bật/tắt → hiện CÔNG TẮC thay vì ô JSON (chốt 07/08). */
+  isBoolean?: boolean;
 };
 
 const GROUP_LABEL: Record<string, string> = {

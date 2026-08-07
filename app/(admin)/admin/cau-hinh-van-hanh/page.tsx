@@ -24,6 +24,8 @@ export default async function OperationalSettingsPage() {
       label: def.label,
       group: def.group,
       centerOverridable: def.centerOverridable,
+      // Suy kiểu từ giá trị mặc định — không cần đưa zod schema qua ranh giới client.
+      isBoolean: typeof def.default === "boolean",
       value: resolved[key],
     };
   });
