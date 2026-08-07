@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -74,6 +74,14 @@ export function LessonList({
   const [lessons, setLessons] = useState<LessonRow[]>(active);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // `lessons` là state cục bộ CHỈ để đổi thứ tự lạc quan (hàm move). useState chỉ nhận
+  // giá trị khởi tạo ở lần mount ĐẦU, nên sau khi sửa tên/trạng thái buổi thì
+  // router.refresh() có nạp dữ liệu mới về prop cũng vô ích — màn hình đứng im cho tới
+  // khi F5. Đồng bộ lại khi prop đổi (idiom sẵn có ở leads-kanban.tsx:81).
+  useEffect(() => {
+    setLessons(initialLessons.filter((l) => !l.archivedAt));
+  }, [initialLessons]);
 
   const nextOrder =
     initialLessons.length === 0

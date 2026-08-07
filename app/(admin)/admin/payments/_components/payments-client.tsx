@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   Loader2,
   Plus,
@@ -126,6 +126,15 @@ export function PaymentsClient({
   const [showForm, setShowForm] = useState(false);
   // #15 — break-glass: mặc định che CCCD PH + địa chỉ; kế toán mở xem đầy đủ có kiểm soát.
   const revealed = rows.length > 0 ? !rows[0]!.piiMasked : false;
+
+  // Xác nhận/từ chối/điều chỉnh khoản thu chỉ hiện toast; dữ liệu mới về qua
+  // revalidatePath("/payments") của action (_actions.ts:384) → prop đổi, nhưng useState
+  // giữ nguyên giá trị mount đầu ⇒ trạng thái khoản thu đứng im tới khi F5. Đồng bộ lại.
+  // Kèm hệ quả có chủ đích: dữ liệu mới là bản ĐÃ CHE PII → break-glass đóng lại, muốn
+  // xem tiếp phải mở lại (và được audit lại) — an toàn hơn là giữ PII mở vô thời hạn.
+  useEffect(() => {
+    setRows(initialRows);
+  }, [initialRows]);
 
   // Số cột (đồng bộ colSpan hàng rỗng): đơn hàng, tên bé, lớp, số tiền, PT, ngày,
   // người thu, nguồn HV, tên PH, CCCD PH, địa chỉ, Sale, Kế toán, Phiếu thu (+ thao tác).

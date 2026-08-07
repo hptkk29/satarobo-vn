@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -88,6 +88,13 @@ export function ExamBuilder({
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<SelectedExamQuestion[]>(initialSelected);
+
+  // Như document-picker: thêm câu hỏi gán id giả `temp-<questionId>`, không đồng bộ lại
+  // thì danh sách đứng im tới khi F5 và bấm xoá/sửa điểm ngay sau khi thêm sẽ gọi server
+  // bằng id giả → lỗi. Nhận id thật khi refresh() trả prop mới.
+  useEffect(() => {
+    setSelected(initialSelected);
+  }, [initialSelected]);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<QuestionType | "">("");
   const [filterDifficulty, setFilterDifficulty] = useState<Difficulty | "">("");

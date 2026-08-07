@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Paperclip, Plus, X } from "lucide-react";
 import { attachDocument, detachDocument } from "../_actions";
@@ -51,6 +51,13 @@ export function DocumentPicker({
 }) {
   const router = useRouter();
   const [attached, setAttached] = useState<AttachedDoc[]>(initialAttached);
+
+  // Cập nhật lạc quan bên dưới gán id giả `temp-<documentId>`; nếu không đồng bộ lại từ
+  // server thì (a) danh sách đứng im tới khi F5, và (b) gỡ ngay tài liệu vừa đính sẽ gọi
+  // detachDocument("temp-…") → lỗi. Nhận id thật ngay khi router.refresh() trả prop mới.
+  useEffect(() => {
+    setAttached(initialAttached);
+  }, [initialAttached]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [error, setError] = useState<string | null>(null);

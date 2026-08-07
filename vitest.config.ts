@@ -8,7 +8,13 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
-    include: ["lib/**/*.test.{ts,tsx}", "components/**/*.test.{ts,tsx}"],
+    // `app/**` — nhiều component client nằm trong route group (`_components/`) chứ không
+    // ở `components/`; không gom vào đây thì chúng không test được (07/08).
+    include: [
+      "lib/**/*.test.{ts,tsx}",
+      "components/**/*.test.{ts,tsx}",
+      "app/**/*.test.{ts,tsx}",
+    ],
     coverage: {
       reporter: ["text", "json", "html"],
       exclude: [
