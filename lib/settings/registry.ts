@@ -460,11 +460,21 @@ export const SETTINGS = {
     key: "zalo.znsTemplateAccount",
     group: "otp",
     // Ô sửa nhận JSON ⇒ chuỗi phải có nháy kép: "616899", không phải 616899 trần.
-    label: 'Template ID ZNS "Cấp tài khoản" — RỖNG = KHÔNG gửi (nhập dạng "616899")',
+    label: 'Template ID ZNS "Cấp tài khoản" (nhập dạng "616899")',
     schema: z.string().regex(/^[0-9]*$/, "Template ID chỉ gồm chữ số"),
-    // Mặc định RỖNG: mẫu 616899 đã duyệt 01/08 nhưng chủ dự án CHƯA muốn cấp TK cho
-    // phụ huynh (chốt 07/08). Điền ID vào đây mới bật đường gửi.
-    default: "",
+    // Mẫu 616899 duyệt 01/08. GIỮ NGUYÊN giá trị kể cả khi tắt gửi — bật/tắt là việc
+    // của `zalo.znsAccountEnabled`, không phải xoá trắng ô này rồi gõ lại (chốt 07/08).
+    default: "616899",
+    centerOverridable: false,
+  }),
+  "zalo.znsAccountEnabled": def({
+    key: "zalo.znsAccountEnabled",
+    group: "otp",
+    label: 'Bật gửi ZNS "Cấp tài khoản" cho phụ huynh',
+    schema: z.boolean(),
+    // TẮT mặc định: chủ dự án chưa muốn cấp TK cho PH (chốt 07/08). Bật lên là tin
+    // đi thật tới khách — 400đ/tin.
+    default: false,
     centerOverridable: false,
   }),
   "zalo.znsLive": def({

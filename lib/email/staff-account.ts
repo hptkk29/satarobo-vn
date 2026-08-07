@@ -23,9 +23,12 @@ import { buildAccountZnsParams } from "@/lib/zalo/templates";
 const MASK = "••••••••";
 /**
  * Mã mẫu ZNS "Cấp tài khoản". SETTING (DB) thắng, env là dự phòng.
- * RỖNG = KHÔNG gửi — trạng thái an toàn, đúng ý chốt 07/08 (chưa cấp TK cho PH).
+ * Công tắc `zalo.znsAccountEnabled` TẮT → không gửi, nhưng mã mẫu GIỮ NGUYÊN
+ * (tắt/bật không làm mất số đã nhập). Chốt 07/08.
  */
 async function znsAccountTemplate(): Promise<string | null> {
+  const enabled = await getSetting("zalo.znsAccountEnabled").catch(() => false);
+  if (!enabled) return null; // công tắc TẮT → không gửi, nhưng mã mẫu vẫn giữ nguyên
   const fromDb = await getSetting("zalo.znsTemplateAccount").catch(() => null);
   return (fromDb || process.env.ZALO_ZNS_TEMPLATE_ACCOUNT || "").trim() || null;
 }
