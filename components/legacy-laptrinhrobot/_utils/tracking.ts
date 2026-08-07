@@ -8,12 +8,23 @@ import { readAttribution } from "@/lib/marketing/attribution";
 export const GOOGLE_SHEET_URL =
   "https://script.google.com/macros/s/AKfycbw4Zlz8HyWqVp_no4m0DSsej61WPbmLoSwYrv9DCU6qzy-OOimZe8LtFFVl5z8k_ruK/exec";
 
-interface LeadData {
+export interface LeadData {
+  /** Họ tên phụ huynh — form mới để KHÔNG bắt buộc, có thể rỗng. */
   name?: string;
   phone?: string;
   email?: string;
   center?: string;
   course?: string;
+  // Bộ field bổ sung theo form đăng ký mới. Lead không có cột riêng cho trường /
+  // lớp / tỉnh nên 3 thứ này đi vào `note`; `childName` thì có cột thật.
+  childName?: string;
+  school?: string;
+  grade?: string;
+  province?: string;
+  /** Honeypot — server chỉ kiểm đúng khoá `website`, đặt tên khác là mất tác dụng. */
+  website?: string;
+  /** Giây kể từ lúc mở form. Server vứt lead nếu < 3 (nghi bot). */
+  timeOnPage?: number;
 }
 
 export function trackFacebookLead(data: LeadData = {}): void {
@@ -68,12 +79,17 @@ export function trackGA4Event(eventName: string, params: Record<string, unknown>
 
 export async function submitLeadToSheet(formData: LeadData): Promise<{ success: boolean; error?: string }> {
   try {
+    // GIỮ NGUYÊN 5 khoá cũ (Google Apps Script đang đọc theo tên) — chỉ thêm khoá mới.
     const sheetPayload = JSON.stringify({
       name: formData.name || "",
       phone: formData.phone || "",
       email: formData.email || "",
       center: formData.center || "",
       course: formData.course || "",
+      childName: formData.childName || "",
+      school: formData.school || "",
+      grade: formData.grade || "",
+      province: formData.province || "",
     });
 
     await fetch(GOOGLE_SHEET_URL, {
@@ -95,15 +111,29 @@ async function submitLeadToApi(formData: LeadData): Promise<void> {
   // Errors do NOT break form submit, but we now CHECK response.ok and log
   // payload + status so silent 400/429 failures surface in browser console.
   const eventId = `ltr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const childName = formData.childName?.trim() ?? "";
+  // Server bắt `parentName` tối thiểu 2 ký tự (`lib/validators/lead.ts`). Form mới
+  // để ô "Họ tên phụ huynh" KHÔNG bắt buộc ⇒ trống thì phải suy ra từ tên con,
+  // nếu gửi rỗng sẽ dính 400 mà `submitLeadToApi` chỉ log rồi nuốt ⇒ lead bốc hơi
+  // trong khi phụ huynh vẫn thấy màn "Đăng ký thành công".
+  const parentName = formData.name?.trim() || (childName ? `PH của ${childName}` : "");
   const note = [
     formData.course ? `Khoá: ${formData.course}` : null,
     formData.center ? `Cơ sở: ${formData.center}` : null,
+    formData.school ? `Trường: ${formData.school}` : null,
+    formData.grade ? `Lớp: ${formData.grade}` : null,
+    formData.province ? `Tỉnh/TP: ${formData.province}` : null,
   ]
     .filter(Boolean)
-    .join(" | ");
+    .join(" | ")
+    // `note` server giới hạn 500 ký tự — vượt là 400 và lead lại bốc hơi.
+    .slice(0, 500);
 
   const payload = {
-    parentName: formData.name || "",
+    parentName,
+    childName: childName || undefined,
+    timeOnPage: formData.timeOnPage,
+    website: formData.website ?? "",
     // AUTH-SĐT P1 — chuẩn hoá TRƯỚC khi gửi: người dùng gõ "0905 123 456"
     // từng bị server trả 400 rồi client nuốt lỗi ⇒ lead bốc hơi không ai biết.
     phone: canonicalPhone(formData.phone) ?? formData.phone ?? "",

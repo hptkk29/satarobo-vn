@@ -163,17 +163,11 @@ export default async function ContactPage() {
         </div>
       </SectionBase>
 
-      {/* ─── Form section SOFT-WARM ─── */}
-      <SectionBase
-        theme="soft-warm"
-        eyebrow="ĐĂNG KÝ TƯ VẤN"
-        title="Gửi thông tin — chúng tôi liên hệ ngay"
-        subtitle="Phản hồi trong 30 phút giờ hành chính · 24h ngoài giờ"
-        variant="narrow"
-        glowOrb={{ color: "orange", position: "top-left" }}
-      >
-        <ContactForm />
-      </SectionBase>
+      {/* ─── Form section SOFT-WARM ───
+          KHÔNG bọc SectionBase: ContactForm tự render <section id="dang-ky">
+          (đích nhảy của CTA "Đăng ký tư vấn"). Bọc thêm sẽ thành section lồng
+          section + tiêu đề đúp. */}
+      <ContactForm />
 
       {/* ─── Centers grid SOFT-COOL ─── */}
       <SectionBase
