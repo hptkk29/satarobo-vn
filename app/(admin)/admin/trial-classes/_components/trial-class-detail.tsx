@@ -15,6 +15,8 @@ import {
 } from "../_actions";
 
 type AttStatus = "PRESENT" | "ABSENT";
+/** Một dòng nháp điểm danh. `status: null` = CHƯA điểm danh (không có bản ghi). */
+type DraftRow = { status: AttStatus | null; note: string };
 
 type Enrollment = {
   id: string;
@@ -203,30 +205,51 @@ export function TrialClassDetail({
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
 
   // Bản nháp điểm danh cho buổi đang chọn (khởi tạo từ dữ liệu đã lưu).
-  const [draft, setDraft] = useState<Record<string, { status: AttStatus; note: string }>>(
-    {},
-  );
+  // status = null ⇒ CHƯA điểm danh (xem comment ở currentDraft).
+  const [draft, setDraft] = useState<Record<string, DraftRow>>({});
 
   const sessionKey = selectedSessionId;
   const currentDraft = useMemo(() => {
     if (!selectedSession) return {};
-    const base: Record<string, { status: AttStatus; note: string }> = {};
+    const base: Record<string, DraftRow> = {};
     for (const e of markable) {
       const existing = selectedSession.attendance[e.id];
       const override = draft[`${sessionKey}:${e.id}`];
       base[e.id] = override ?? {
-        status: existing?.status ?? "PRESENT",
+        // ⚠️ 07/08/2026 — trước đây fallback "PRESENT": mở buổi chưa điểm danh lên là
+        // cả lớp đã sáng "Có mặt", bấm Lưu (hoặc lỡ tay) là ghi có mặt cho tất cả.
+        // Ở lớp trải nghiệm cái giá còn đắt hơn lớp chính: syncTrialProgress đếm số
+        // buổi PRESENT để tự đẩy Kanban lead (TRIAL_IN_PROGRESS → AWAITING_DECISION),
+        // nên điểm danh khống là đẩy nhầm trạng thái lead luôn.
+        status: existing?.status ?? null,
         note: existing?.note ?? "",
       };
     }
     return base;
   }, [selectedSession, markable, draft, sessionKey]);
 
-  function setRow(enrollmentId: string, patch: Partial<{ status: AttStatus; note: string }>) {
+  /** Số em chưa được đánh dấu ở buổi đang chọn. */
+  const unmarked = useMemo(
+    () => markable.filter((e) => !currentDraft[e.id]?.status).length,
+    [markable, currentDraft],
+  );
+
+  function setRow(enrollmentId: string, patch: Partial<DraftRow>) {
     setDraft((prev) => ({
       ...prev,
       [`${sessionKey}:${enrollmentId}`]: { ...currentDraft[enrollmentId], ...patch },
     }));
+  }
+
+  /**
+   * Bấm nhãn: bấm lại đúng nhãn đang chọn = BỎ chọn (về "chưa điểm danh") — lỡ tay còn
+   * gỡ được. CHỈ cho em CHƯA có bản ghi trong DB: markAttendance chỉ upsert chứ không
+   * xoá, nên bỏ chọn em đã lưu rồi bấm Lưu sẽ không xoá được gì — màn hình nói dối.
+   */
+  function toggleStatus(enrollmentId: string, status: AttStatus) {
+    const saved = Boolean(selectedSession?.attendance[enrollmentId]);
+    const cur = currentDraft[enrollmentId]?.status ?? null;
+    setRow(enrollmentId, { status: cur === status && !saved ? null : status });
   }
 
   function onAssignTeacher(teacherId: string) {
@@ -243,11 +266,26 @@ export function TrialClassDetail({
 
   function onSaveAttendance() {
     if (!selectedSession) return;
-    const records = markable.map((e) => ({
-      trialEnrollmentId: e.id,
-      status: currentDraft[e.id]?.status ?? "PRESENT",
-      note: currentDraft[e.id]?.note?.trim() || null,
-    }));
+    // Phải đánh dấu đủ cả lớp mới cho lưu — giống lưới lớp chính và site GV. Lưu dở
+    // dang thì buổi hiện "đã điểm danh" trong khi vài em không có bản ghi nào, mà
+    // tiến độ trải nghiệm của lead lại tính theo số buổi PRESENT đã ghi.
+    if (unmarked > 0) {
+      toast.error(`Còn ${unmarked} em chưa đánh dấu — điểm danh đủ cả lớp rồi mới lưu được.`);
+      return;
+    }
+    // Chỉ gửi em đã bấm trạng thái (không bản ghi = chưa điểm danh).
+    const records = markable.flatMap((e) => {
+      const row = currentDraft[e.id];
+      if (!row?.status) return [];
+      return [
+        {
+          trialEnrollmentId: e.id,
+          status: row.status,
+          note: row.note?.trim() || null,
+        },
+      ];
+    });
+    if (records.length === 0) return;
     startTransition(async () => {
       const res = await markTrialAttendanceAction({
         trialSessionId: selectedSession.id,
@@ -596,7 +634,7 @@ export function TrialClassDetail({
                 ) : (
                   <div className="space-y-2">
                     {markable.map((e) => {
-                      const row = currentDraft[e.id] ?? { status: "PRESENT" as AttStatus, note: "" };
+                      const row: DraftRow = currentDraft[e.id] ?? { status: null, note: "" };
                       return (
                         <div
                           key={e.id}
@@ -608,7 +646,7 @@ export function TrialClassDetail({
                           <div className="flex gap-1">
                             <button
                               type="button"
-                              onClick={() => setRow(e.id, { status: "PRESENT" })}
+                              onClick={() => toggleStatus(e.id, "PRESENT")}
                               disabled={pending}
                               className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
                                 row.status === "PRESENT"
@@ -620,7 +658,7 @@ export function TrialClassDetail({
                             </button>
                             <button
                               type="button"
-                              onClick={() => setRow(e.id, { status: "ABSENT" })}
+                              onClick={() => toggleStatus(e.id, "ABSENT")}
                               disabled={pending}
                               className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
                                 row.status === "ABSENT"
@@ -641,14 +679,22 @@ export function TrialClassDetail({
                         </div>
                       );
                     })}
-                    <button
-                      type="button"
-                      onClick={onSaveAttendance}
-                      disabled={pending}
-                      className="mt-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
-                    >
-                      {pending ? "Đang lưu…" : "Lưu điểm danh"}
-                    </button>
+                    <div className="mt-1 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={onSaveAttendance}
+                        disabled={pending}
+                        className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                      >
+                        {pending ? "Đang lưu…" : "Lưu điểm danh"}
+                      </button>
+                      {unmarked > 0 && (
+                        <p className="text-xs text-gray-500">
+                          Còn <span className="font-semibold text-gray-800">{unmarked}</span> em
+                          chưa đánh dấu
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
