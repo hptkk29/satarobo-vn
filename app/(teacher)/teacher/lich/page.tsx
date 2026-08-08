@@ -38,6 +38,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
+import { sessionTimeRange } from "@/lib/classes/slots";
 import { SHIFT_ORDER, shiftLabel } from "@/lib/shifts";
 import {
   getOwnShiftRegistrations,
@@ -106,11 +107,6 @@ function parseMoc(raw?: string): Date | null {
 }
 const two = (n: number) => String(n).padStart(2, "0");
 
-const timeFmt = new Intl.DateTimeFormat("vi-VN", {
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Asia/Ho_Chi_Minh",
-});
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "long",
   day: "2-digit",
@@ -176,24 +172,16 @@ type DayHoliday = { name: string; typeLabel: string };
  * nhiều giai đoạn, hai field đó chỉ là BẢN SAO của giai đoạn đang hiệu lực: buổi 08:00
  * của giai đoạn 2 vẫn bị in là "17:30–19:30" của giai đoạn 1, và khoá sort cũng sai nên
  * buổi sáng bị xếp sau buổi chiều của lớp khác trong cùng ngày.
+ *
+ * Đi qua `sessionTimeRange` (không tự format nữa) để dùng chung chốt chặn buổi cũ còn ở
+ * 00:00 giờ VN — buổi chưa backfill giờ vẫn in giờ lớp thay vì "00:00".
  */
 function sessionStart(s: ClassSessionRow): string {
-  return timeFmt.format(s.date);
+  return sessionTimeRange(s.date, s.class.startTime, s.class.endTime).start;
 }
 function classTime(s: ClassSessionRow): string {
-  const start = sessionStart(s);
-  if (!s.class.startTime || !s.class.endTime) return start;
-  const dur = hhmmToMin(s.class.endTime) - hhmmToMin(s.class.startTime);
-  if (dur <= 0) return start;
-  return `${start}–${minToHhmm(hhmmToMin(start) + dur)}`;
-}
-function hhmmToMin(v: string): number {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
-  return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
-}
-function minToHhmm(v: number): string {
-  const x = ((v % 1440) + 1440) % 1440;
-  return `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`;
+  const r = sessionTimeRange(s.date, s.class.startTime, s.class.endTime);
+  return r.end ? `${r.start}–${r.end}` : r.start;
 }
 
 /** Trộn buổi lớp + Trial của 1 ngày, sort theo giờ bắt đầu ("HH:mm" so chuỗi được). */

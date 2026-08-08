@@ -104,6 +104,15 @@ export function sessionTimeRange(
   classEndTime: string | null | undefined,
 ): { start: string; end: string | null } {
   const p = vnParts(date);
+
+  // Buổi CŨ còn nằm ở 00:00 giờ VN (dữ liệu sinh trước đợt vá giờ buổi 06/08) KHÔNG mang
+  // giờ thật — in thẳng ra là phụ huynh thấy "00:00". Lùi về giờ lớp như hành vi trước
+  // 07/08. Cùng chốt chặn với `rowsToSlots` (lib/lms/schedule-conflict.ts): không lớp nào
+  // học lúc nửa đêm, nên 00:00 luôn là dữ liệu chưa backfill chứ không phải giờ hợp lệ.
+  if (p.hour === 0 && p.minute === 0 && classStartTime) {
+    return { start: classStartTime, end: classEndTime ?? null };
+  }
+
   const start = vnHm(date);
   if (!classStartTime || !classEndTime) return { start, end: null };
 
