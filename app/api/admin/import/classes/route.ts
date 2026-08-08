@@ -7,6 +7,7 @@ import { z } from "zod";
 import { ClassStatusEnum } from "@/lib/validators/class";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 // Excel date parser — reused from D2 / B3.
 function parseExcelDate(v: unknown): Date | null {
@@ -416,15 +417,27 @@ export async function POST(req: NextRequest) {
           notes: r.data.notes,
         };
         try {
+          let classId: string;
           if (r.data.classCode) {
-            await tx.class.upsert({
+            const up = await tx.class.upsert({
               where: { classCode: r.data.classCode },
               create: { ...base, classCode: r.data.classCode },
               update: base,
+              select: { id: true },
             });
+            classId = up.id;
           } else {
-            await tx.class.create({ data: base });
+            const created = await tx.class.create({ data: base, select: { id: true } });
+            classId = created.id;
           }
+          // US-03 chat — import có thể tạo lớp ACTIVE / đổi GV → đồng bộ nhóm lớp
+          // trong cùng transaction (trạng thái khác ACTIVE → sync tự no-op).
+          // Cast: client extension không structurally-assignable vào TransactionClient
+          // (tiền lệ students/classes _actions) — runtime không đổi.
+          await syncConversationMembership(
+            tx as unknown as import("@prisma/client").Prisma.TransactionClient,
+            classId,
+          );
           success++;
         } catch (err) {
           throw new Error(

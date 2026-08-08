@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { can, type UserGrant } from "@/lib/auth/permissions";
 import { firstInvalidAction } from "@/lib/auth/action-registry";
 import { logRbacAudit } from "@/lib/audit/log";
+import { syncCenterClassConversations } from "@/lib/chat/sync-membership";
 import {
   assignUserOrgRoleSchema,
   createRoleSchema,
@@ -203,22 +204,30 @@ export async function assignUserOrgRole(
       roleId: parsed.roleId,
     },
   };
-  const assignment = await db.userOrgRole.upsert({
-    where: key,
-    update: {
-      effectiveFrom: parsed.effectiveFrom ?? new Date(),
-      effectiveTo: parsed.effectiveTo ?? null,
-      status: "ACTIVE",
-      grantedById: actor.id,
-    },
-    create: {
-      userId: parsed.userId,
-      orgUnitId: parsed.orgUnitId,
-      roleId: parsed.roleId,
-      effectiveFrom: parsed.effectiveFrom ?? new Date(),
-      effectiveTo: parsed.effectiveTo ?? null,
-      grantedById: actor.id,
-    },
+  // US-03 chat — gán vai CENTER_MANAGER ở OrgUnit cơ sở = đổi QLCS → đồng bộ nhóm
+  // lớp của cơ sở trong CÙNG transaction với upsert (F-SYNC "đổi QLCS").
+  const assignment = await db.$transaction(async (tx) => {
+    const row = await tx.userOrgRole.upsert({
+      where: key,
+      update: {
+        effectiveFrom: parsed.effectiveFrom ?? new Date(),
+        effectiveTo: parsed.effectiveTo ?? null,
+        status: "ACTIVE",
+        grantedById: actor.id,
+      },
+      create: {
+        userId: parsed.userId,
+        orgUnitId: parsed.orgUnitId,
+        roleId: parsed.roleId,
+        effectiveFrom: parsed.effectiveFrom ?? new Date(),
+        effectiveTo: parsed.effectiveTo ?? null,
+        grantedById: actor.id,
+      },
+    });
+    if (role.code === "CENTER_MANAGER" && org.centerId) {
+      await syncCenterClassConversations(tx, org.centerId);
+    }
+    return row;
   });
 
   await logRbacAudit({
@@ -248,9 +257,21 @@ export async function revokeUserOrgRole(
   const existing = await db.userOrgRole.findUnique({ where: key });
   if (!existing) throw new RbacError("ASSIGNMENT_NOT_FOUND", "Không tìm thấy phân quyền.", "roleId");
 
-  const updated = await db.userOrgRole.update({
-    where: key,
-    data: { status: "EXPIRED", effectiveTo: new Date() },
+  // US-03 chat — thu hồi vai CENTER_MANAGER ở OrgUnit cơ sở = đổi QLCS → đồng bộ nhóm
+  // lớp của cơ sở trong CÙNG transaction với update (F-SYNC "đổi QLCS").
+  const [role, org] = await Promise.all([
+    db.roleDef.findUnique({ where: { id: parsed.roleId }, select: { code: true } }),
+    db.orgUnit.findUnique({ where: { id: parsed.orgUnitId }, select: { centerId: true } }),
+  ]);
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.userOrgRole.update({
+      where: key,
+      data: { status: "EXPIRED", effectiveTo: new Date() },
+    });
+    if (role?.code === "CENTER_MANAGER" && org?.centerId) {
+      await syncCenterClassConversations(tx, org.centerId);
+    }
+    return row;
   });
   await logRbacAudit({
     entity: "ASSIGNMENT", entityId: `${parsed.userId}:${parsed.orgUnitId}:${parsed.roleId}`,

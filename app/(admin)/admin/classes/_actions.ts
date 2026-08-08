@@ -33,6 +33,7 @@ import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 type ActionResult = { error?: string; warning?: string };
 
@@ -437,6 +438,10 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
         newValues,
         tx,
       });
+
+      // US-03 chat — lớp tạo THẲNG ở trạng thái ACTIVE (không qua approveClass) cũng
+      // phải có nhóm lớp (BR-01); trạng thái khác → sync tự no-op.
+      await syncConversationMembership(tx, created.id);
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
@@ -630,6 +635,10 @@ export async function updateClass(
         changedFields: detectChangedFields(before, updated),
         tx,
       });
+
+      // US-03 chat — cùng transaction: đổi GV/trợ giảng, đổi trạng thái (→ACTIVE tạo
+      // nhóm; →COMPLETED archive nhóm) đều đồng bộ membership tại đây.
+      await syncConversationMembership(tx, id);
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
@@ -716,6 +725,9 @@ export async function deleteClass(id: string): Promise<ActionResult> {
         oldValues: before,
         tx,
       });
+
+      // US-03 chat — lớp xoá mềm → nhóm lớp archive (sync thấy deletedAt → archive).
+      await syncConversationMembership(tx, id);
     });
   } catch {
     return { error: "Không thể xoá lớp này" };
@@ -796,14 +808,20 @@ export async function approveClass(classId: string): Promise<WfResult & { warnin
   if (gate.cls.status !== "PENDING_APPROVAL") {
     return { ok: false, error: "Lớp không ở trạng thái chờ duyệt" };
   }
-  await gate.sdb.class.update({
-    where: { id: classId },
-    data: {
-      status: "ACTIVE",
-      approvedAt: new Date(),
-      approvedById: gate.session.user.id,
-      approvedByName: gate.session.user.name ?? gate.session.user.email ?? "Quản lý",
-    },
+  // US-03 chat — duyệt lớp → ACTIVE là điểm sinh nhóm lớp (BR-01): bọc transaction
+  // để tạo Conversation + participant dẫn xuất CÙNG lúc với đổi trạng thái.
+  await gate.sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
+    await tx.class.update({
+      where: { id: classId },
+      data: {
+        status: "ACTIVE",
+        approvedAt: new Date(),
+        approvedById: gate.session.user.id,
+        approvedByName: gate.session.user.name ?? gate.session.user.email ?? "Quản lý",
+      },
+    });
+    await syncConversationMembership(tx, classId);
   });
 
   // P2 — duyệt lớp ACTIVE → TỰ SINH buổi học (nếu chưa có).
@@ -1332,6 +1350,9 @@ export async function cancelClassAction(
         reason: trimmedReason,
         tx,
       });
+
+      // US-03 chat — lớp CANCELLED → nhóm lớp archive (BR-03), cùng transaction.
+      await syncConversationMembership(tx, classId);
 
       // d) Thông báo PH/GV qua DomainEvent (handler idempotent ở r7-notifications).
       await publishEvent(

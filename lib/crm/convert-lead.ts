@@ -7,6 +7,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { nextInvoiceCode } from "@/lib/finance/invoice-code";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 export class ConvertError extends Error {
   readonly code: string;
@@ -165,6 +166,9 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
       newValues: { status: "ENROLLED", studentId: student.id, orderCode: order.code },
       reason: input.reason, orgUnitId: lead.centerId, tx,
     });
+
+    // US-03 chat — HV vào lớp (enrollment mặc định ACTIVE) → PH vào nhóm lớp, cùng tx.
+    await syncConversationMembership(tx, input.classId);
 
     return { lead, parent, student, enrollment, order };
   });

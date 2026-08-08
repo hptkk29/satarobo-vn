@@ -11,6 +11,7 @@
 // làm lệch phân bổ thanh toán. Đổi status giữ nguyên sổ sách, chỉ gỡ khỏi danh sách lớp.
 import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 /**
  * Ghi danh còn "sống" — học viên vẫn thuộc lớp. Rộng hơn `ENROLLMENT_ACTIVE_STATUS_LIST`
@@ -68,7 +69,7 @@ export async function removeStudentFromClasses(params: {
       status: { in: REMOVABLE_ENROLLMENT_STATUSES },
       deletedAt: null,
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, classId: true },
   });
   if (live.length === 0) return [];
 
@@ -107,6 +108,12 @@ export async function removeStudentFromClasses(params: {
     });
 
     removed.push({ id: enr.id, fromStatus: enr.status, toStatus });
+  }
+
+  // US-03 chat — HV rời các lớp → sync nhóm lớp từng lớp (PH rời nếu hết con trong
+  // lớp), cùng transaction của caller.
+  for (const classId of new Set(live.map((e) => e.classId))) {
+    await syncConversationMembership(tx, classId);
   }
 
   return removed;

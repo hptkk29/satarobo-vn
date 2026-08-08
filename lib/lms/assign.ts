@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 // =============================================================================
 // R7-07 (PR1) — Gán học viên vào lớp.
@@ -166,6 +167,12 @@ export async function assignEnrollments(opts: {
           { enrollmentId: enr.id, classId: cls.id, studentId: enr.studentId },
           { tx, dedupeKey: `enrollment.assigned:${enr.id}:${cls.id}` },
         );
+        // US-03 chat — gán vào lớp: PH vào nhóm lớp đích; enrollment CONFIRMED trước
+        // đó có thể đang trỏ lớp khác → sync cả lớp nguồn (PH rời nếu hết con ở đó).
+        await syncConversationMembership(tx, cls.id);
+        if (enr.classId && enr.classId !== cls.id) {
+          await syncConversationMembership(tx, enr.classId);
+        }
       });
       assigned += 1;
     } catch {

@@ -11,6 +11,7 @@ import { TeacherRank, EmploymentType, TeacherStatus } from "@prisma/client";
 import type { Prisma, Role } from "@prisma/client";
 import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -154,9 +155,14 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
   }
 
   try {
-    await gate.sdb.class.update({
-      where: { id: classId },
-      data: as === "teacher" ? { teacherId: teacherUserId } : { assistantId: teacherUserId },
+    // US-03 chat — gán GV/TA vào lớp phải vào nhóm lớp trong CÙNG transaction (BR-12).
+    await gate.sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+      await tx.class.update({
+        where: { id: classId },
+        data: as === "teacher" ? { teacherId: teacherUserId } : { assistantId: teacherUserId },
+      });
+      await syncConversationMembership(tx, classId);
     });
   } catch (err) {
     return { ok: false, error: `Lỗi gán lớp: ${err instanceof Error ? err.message : "Unknown"}` };
@@ -239,9 +245,15 @@ export async function unassignClassFromTeacher(input: unknown): Promise<Result> 
   }
 
   try {
-    await gate.sdb.class.update({
-      where: { id: classId },
-      data: as === "teacher" ? { teacherId: null } : { assistantId: null },
+    // US-03 chat — gỡ GV/TA khỏi lớp: leftAt + SYSTEM message trong CÙNG transaction
+    // (US-03 AC2 / F-KICK bước 1).
+    await gate.sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+      await tx.class.update({
+        where: { id: classId },
+        data: as === "teacher" ? { teacherId: null } : { assistantId: null },
+      });
+      await syncConversationMembership(tx, classId);
     });
   } catch (err) {
     return { ok: false, error: `Lỗi gỡ lớp: ${err instanceof Error ? err.message : "Unknown"}` };
