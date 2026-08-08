@@ -116,11 +116,14 @@ describe("US-02 · bảng chân trị 4 dataScope × {null, khớp, lệch} (AC3
       mismatch: { target: { centerId: "c9" }, expect: true },
     },
     {
+      // PER-ROLE (điều chỉnh review 09/08): neo roleCenterScope[subjectId], KHÔNG dùng
+      // union visibleCenterIds toàn actor — visibleCenterIds có c3 nhưng vẫn phải false.
       scope: "UNIT_AND_BELOW",
       actor: () =>
         makeActor({
           roleIds: [R1],
-          visibleCenterIds: ["c1", "c2"],
+          roleCenterScope: { [R1]: ["c1", "c2"] },
+          visibleCenterIds: ["c1", "c2", "c3"],
           permissionGrants: [grant({ dataScope: "UNIT_AND_BELOW" })],
         }),
       nullExpect: false,
@@ -188,6 +191,31 @@ describe("US-02 · không grant khớp → fallback NGUYÊN TRẠNG canV2 (luậ
       permissionGrants: [grant({ subjectType: "GROUP", subjectId: "g1", effect: "DENY" })],
     });
     expect(resolveGrant(actor, "students:view-all").hit).toBe(false);
+  });
+});
+
+describe("US-02 · chống rò NGANG qua role kiêm nhiệm (review 09/08)", () => {
+  it("grant UNIT_AND_BELOW của role CS1 KHÔNG vươn sang CS2 dù visibleCenterIds có c2 (role khác)", () => {
+    // Kịch bản review: kiêm nhiệm R1@CS1 + TEACHER@CS2 — grant đứng tên R1 chỉ phủ CS1.
+    const actor = makeActor({
+      roleIds: [R1],
+      roleCenterScope: { [R1]: ["c1"] },
+      visibleCenterIds: ["c1", "c2"],
+      permissionGrants: [grant({ dataScope: "UNIT_AND_BELOW" })],
+    });
+    expect(can(actor, "students:view-all", { centerId: "c1" })).toBe(true);
+    expect(can(actor, "students:view-all", { centerId: "c2" })).toBe(false);
+  });
+
+  it("row ALLOW mang fieldMask là dữ liệu vô nghĩa → bị bỏ qua (fallback), không mở quyền", () => {
+    const actor = makeActor({
+      roleIds: [R1],
+      permissionGrants: [grant({ effect: "ALLOW", fieldMask: ["name"] })],
+    });
+    // Row invalid bị loại → không grant nào khớp → hit:false, quyền theo đường cũ (rỗng = false).
+    expect(resolveGrant(actor, "students:view-all").hit).toBe(false);
+    expect(can(actor, "students:view-all")).toBe(false);
+    expect(getFieldMask(actor, "students:view-all")).toEqual([]);
   });
 });
 
