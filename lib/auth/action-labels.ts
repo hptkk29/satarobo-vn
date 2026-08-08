@@ -39,6 +39,8 @@ const RESOURCE_LABELS: Record<string, string> = {
   payments: "Phương thức thanh toán",
   orders: "Đơn hàng",
   // Phase 5.7 — Vouchers
+  // Chat realtime (US-05)
+  chat: "Tin nhắn (chat)",
 };
 
 const VERB_LABELS: Record<string, string> = {
@@ -69,6 +71,12 @@ const VERB_LABELS: Record<string, string> = {
   view: "Xem",
   author: "Soạn",
   grade: "Chấm điểm",
+  // Chat realtime (US-05)
+  read: "Đọc tin",
+  send: "Gửi tin",
+  announce: "Gửi thông báo",
+  moderate: "Gỡ tin vi phạm",
+  admin: "Quản trị hội thoại",
 };
 
 export function getActionMeta(action: string): {

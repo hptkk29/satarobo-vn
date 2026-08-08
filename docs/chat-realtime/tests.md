@@ -1,21 +1,26 @@
 # tests.md — Bản đồ kiểm chứng
 
-> **Trạng thái thật thà: chưa có dòng test nào tồn tại** — code chưa viết. Vì vậy mục "Existing coverage" rỗng theo định nghĩa; toàn bộ nằm ở "Proposed". Sau mỗi story merge, chuyển dòng tương ứng từ Proposed → Existing kèm đường dẫn file test. Tài liệu này chỉ được coi là xanh khi cột Existing phủ hết nhóm CI-required.
+> Sau mỗi story merge, chuyển dòng tương ứng từ Proposed → Existing kèm đường dẫn file test. Tài liệu này chỉ được coi là xanh khi cột Existing phủ hết nhóm CI-required.
 
 ## 1. Existing coverage (hiện có trong repo)
 
-*(rỗng — cập nhật khi US-05 tạo khung test đầu tiên)*
+| Rule (nguồn) | Phủ bởi | Scenario | Loại |
+|---|---|---|---|
+| Cách ly đọc theo lớp/cơ sở (permissions.md) | **Existing (tầng tĩnh)** — `lib/auth/chat-permissions.test.ts` (từng ô ma trận trên can() v1 + v2, mã ô [TS-01.x] cạnh assertion) · tầng động: `tests/chat/permission-matrix.spec.ts` (todo, mở dần theo story US-06/US-08) | TS-01 | **AUTO-CI** |
+| Cách ly channel + không INSERT client (flows F-SUB) | Existing (US-02): integration `scripts/_zztest-chat-us02.ts` chạy trên dev (CI không có Realtime service) + unit JWT `lib/chat/realtime-token.test.ts` chạy vitest trong CI | TS-02 | **AUTO-CI** |
+| Ma trận hành động ghi (permissions.md) | **Existing (tầng tĩnh)** — `lib/auth/chat-permissions.test.ts` (vai × action, gồm SALES_CSM deny cả 5 · PH deny announce · QLCS=MEMBER gửi CHAT+ANN · QLCS/PH deny moderate) · tầng động: `tests/chat/permission-matrix.spec.ts` (todo TS-03.1→03.8 kèm mã lỗi kỳ vọng, mở ở US-06/US-10/US-12) | TS-03 | **AUTO-CI** |
+| 1-1 kín + audit-gated (flows F-AUDIT) | **Existing (tầng tĩnh)** — `lib/auth/chat-permissions.test.ts` (QLCS deny DM qua CENTER-scope × centerId=null; chat:admin chỉ SUPER_ADMIN) · tầng động: `tests/chat/permission-matrix.spec.ts` (todo TS-04.1→04.6, mở ở US-13/US-15) | TS-04 | **AUTO-CI** |
+| Seed chuẩn TestScenarios trên schema thật | Existing — `tests/chat/_helpers/seed-chat.ts` (assertTestDb bắt buộc, idempotent) + 3 smoke test trong `permission-matrix.spec.ts` (skip có thông điệp khi không có Postgres local) | Seed chuẩn | AUTO |
+| Khai action `chat:*` 2 tầng RBAC | Existing — v1 `lib/auth/permissions.ts` + v2 `prisma/seed-roles.ts`; pin chống drift trong `lib/auth/chat-permissions.test.ts` (describe "pin nội dung seed v2") | — | **AUTO-CI** |
 
 ## 2. Proposed (đề xuất, chưa viết)
 
 Loại: **AUTO-CI** (chặn merge) · **AUTO** (chạy CI, không chặn) · **TAY** (kịch bản staging trước phát hành).
 
+> Ghi chú US-05 (08/08): TS-01/TS-03/TS-04 đã chuyển lên mục 1 (tầng tĩnh Existing; tầng động là khung it.todo trong `tests/chat/permission-matrix.spec.ts` — story US-06→US-15 đổi todo → test thật, KHÔNG tạo file mới). TS-02 giữ như US-02 đã ghi.
+
 | Rule (nguồn) | Hành vi kỳ vọng — gồm deny case | Scenario | Loại |
 |---|---|---|---|
-| Cách ly đọc theo lớp/cơ sở (permissions.md) | ph đọc lớp khác/ql đọc cơ sở khác/sale mọi endpoint/PH đã rời → 403; gv dạy chéo thấy đủ 2 lớp | TS-01 | **AUTO-CI** |
-| Cách ly channel + không INSERT client (flows F-SUB) | non-participant subscribe → CHANNEL_ERROR; `channel.send()` client → từ chối; **canary private-flag** | TS-02 (integration chạy bằng scripts/_zztest-chat-us02.ts trên dev — CI không có Realtime service; phần unit JWT chạy vitest trong CI) | **AUTO-CI** |
-| Ma trận hành động ghi (permissions.md) | từng ô ❌ đúng mã lỗi: PH gửi ANN 403, GV gửi lớp không dạy 403, QLCS gửi cả CHAT+ANN lớp mình 200, gỡ tin thiếu lý do 400, ARCHIVED 403 mã riêng | TS-03 | **AUTO-CI** |
-| 1-1 kín + audit-gated (flows F-AUDIT) | 4 vai ngoài cuộc đọc 1-1 → 403; admin thiếu reason → 403 **ở API** không chỉ UI; audit ghi trước khi trả nội dung; payload thành viên cho PH không chứa SĐT/email | TS-04 | **AUTO-CI** |
 | Sync trong transaction (flows F-SYNC) | chuyển lớp: rời cũ + vào mới cùng TX; rollback → không sync nửa vời | TS-05 | **AUTO-CI** |
 | PH nhiều con (BR US-03.3) | 1 con nghỉ → ở lại; con cuối nghỉ → leftAt; luôn 1 bản ghi participant | TS-06 | **AUTO-CI** |
 | Đối soát tự thi hành (cron.md) | drift REMOVE → tự set leftAt; drift ADD → chỉ log; `0 drift` khi sạch | TS-07 | AUTO + TAY 3 đêm |

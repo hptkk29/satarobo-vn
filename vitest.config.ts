@@ -14,6 +14,8 @@ export default defineConfig({
       "lib/**/*.test.{ts,tsx}",
       "components/**/*.test.{ts,tsx}",
       "app/**/*.test.{ts,tsx}",
+      // US-05 — bộ ma trận quyền chat (tầng động, tự skip khi không có DB local).
+      "tests/chat/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],
