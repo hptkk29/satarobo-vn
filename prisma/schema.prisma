@@ -352,6 +352,24 @@ model RolePermission {
   @@index([roleId])
 }
 
+// ─── Nền Hệ thống P0 · US-01 — Registry quyền tập trung (TS-01) ───
+// Nguồn khai báo: lib/permissions/registry (mỗi module 1 ModuleDecl). Seed nạp lúc
+// deploy qua prisma/seed-permission-registry.ts (pnpm db:seed:permissions).
+// Key vắng khỏi khai báo → isActive=false, KHÔNG DELETE (giữ vết audit/rollback).
+model PermissionDescriptor {
+  key             String   @id // vd "leads:view-all" (format v1) — format mới chuẩn hoá ở pha sau
+  module          String // module nghiệp vụ sở hữu quyền, vd "crm", "lms"
+  action          String // verb thô sau dấu ":"
+  scopable        Boolean  @default(true) // quyền có cần data scope không (BA §2.5)
+  sensitiveFields String[] @default([])
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([module])
+}
+
 model UserOrgRole {
   userId        String
   orgUnitId     String
