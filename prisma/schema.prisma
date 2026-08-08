@@ -6010,3 +6010,40 @@ model AnnouncementRead {
 
   @@id([messageId, userId])
 }
+
+// ── US-04: job đối soát thành viên hằng đêm (cron chat-membership-reconcile) ──
+// Log kỹ thuật của lưới cuối chống drift: REMOVE tự thi hành (leftAt), ADD chỉ log.
+// Chỉ SUPER_ADMIN xem qua /admin/hoi-thoai/doi-soat (gate chat:admin) — SCOPE_EXEMPT
+// trong lib/db-scope.ts. centerId + orgUnitId ghi kép theo luật Nền Hệ thống #3.
+
+enum MembershipDriftType {
+  REMOVE // phải rời mà chưa — job TỰ set leftAt (autoEnforced=true)
+  ADD // phải có mà thiếu — job CHỈ log, chờ người xử lý (pre-mortem T5)
+}
+
+model ConversationMembershipDrift {
+  id             String              @id @default(uuid())
+  conversationId String
+  classId        String
+  userId         String // User.id (cuid) — không relation, đồng bộ với ConversationParticipant
+  driftType      MembershipDriftType
+  detail         String // luồng nghi vấn / ngữ cảnh (derivedFrom, lý do nghi)
+  autoEnforced   Boolean             @default(false)
+  centerId       String?
+  orgUnitId      String?
+  createdAt      DateTime            @default(now())
+
+  @@index([createdAt])
+  @@index([classId, createdAt])
+}
+
+// Mỗi lần cron chạy = 1 record — phân biệt "đêm sạch" (removeCount=addCount=0)
+// với "job không chạy" (không có record) — US-04 AC4 / cron.md mục 4.
+model ConversationReconcileRun {
+  id             String   @id @default(uuid())
+  ranAt          DateTime @default(now())
+  classesChecked Int
+  removeCount    Int
+  addCount       Int
+  durationMs     Int
+}

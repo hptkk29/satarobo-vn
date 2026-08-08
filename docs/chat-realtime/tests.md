@@ -12,6 +12,7 @@
 | 1-1 kín + audit-gated (flows F-AUDIT) | **Existing (tầng tĩnh)** — `lib/auth/chat-permissions.test.ts` (QLCS deny DM qua CENTER-scope × centerId=null; chat:admin chỉ SUPER_ADMIN) · tầng động: `tests/chat/permission-matrix.spec.ts` (todo TS-04.1→04.6, mở ở US-13/US-15) | TS-04 | **AUTO-CI** |
 | Seed chuẩn TestScenarios trên schema thật | Existing — `tests/chat/_helpers/seed-chat.ts` (assertTestDb bắt buộc, idempotent) + 3 smoke test trong `permission-matrix.spec.ts` (skip có thông điệp khi không có Postgres local) | Seed chuẩn | AUTO |
 | Khai action `chat:*` 2 tầng RBAC | Existing — v1 `lib/auth/permissions.ts` + v2 `prisma/seed-roles.ts`; pin chống drift trong `lib/auth/chat-permissions.test.ts` (describe "pin nội dung seed v2") | — | **AUTO-CI** |
+| Đối soát tự thi hành (cron.md) | Existing (US-04): unit phần thuần `lib/chat/reconcile-membership.test.ts` (REMOVE/ADD/bỏ qua MANUAL/idempotent, vitest CI) + integration `scripts/_zztest-chat-us04.ts` trên DB dev (TS-07.1→.4: REMOVE tự set leftAt + drift log, ADD chỉ log không tự thêm, run record 0/0 đêm sạch, rerun không drift trùng). Vế **[TAY]** 3 đêm staging giữ Proposed (mục 2). | TS-07 | AUTO + TAY 3 đêm |
 
 ## 2. Proposed (đề xuất, chưa viết)
 
@@ -23,7 +24,7 @@ Loại: **AUTO-CI** (chặn merge) · **AUTO** (chạy CI, không chặn) · **T
 |---|---|---|---|
 | Sync trong transaction (flows F-SYNC) | chuyển lớp: rời cũ + vào mới cùng TX; rollback → không sync nửa vời | TS-05 | **AUTO-CI** |
 | PH nhiều con (BR US-03.3) | 1 con nghỉ → ở lại; con cuối nghỉ → leftAt; luôn 1 bản ghi participant | TS-06 | **AUTO-CI** |
-| Đối soát tự thi hành (cron.md) | drift REMOVE → tự set leftAt; drift ADD → chỉ log; `0 drift` khi sạch | TS-07 | AUTO + TAY 3 đêm |
+| Đối soát — vế [TAY] còn lại (cron.md) | kiểm log/run record 3 đêm liên tiếp trên staging trước Đợt 2 (TS-07.4 [TAY]); phần AUTO đã Existing (mục 1) | TS-07 | TAY 3 đêm |
 | ARCHIVED + hạn 90 ngày (permissions.md) | PH sau 91 ngày → 403; GV/QLCS/Admin vẫn đọc | TS-08 | AUTO |
 | Reconcile không mất tin (flows F-SUB, NT1) | offline 30s/10' → nhận đủ, đúng thứ tự, không trùng | TS-09 | TAY (API con: AUTO) |
 | Khử trùng optimistic + idempotent gửi lại (F-SEND) | race broadcast-trước-response vẫn 1 bản; cùng clientMsgId không nhân đôi | TS-10 | **AUTO-CI** |

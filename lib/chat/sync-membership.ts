@@ -160,6 +160,67 @@ function systemLabel(derivedFrom: DesiredDerivedFrom | null): string | null {
   return null; // QLCS vào/rời không sinh SYSTEM message (quyết định US-03)
 }
 
+/** Field lớp cần cho việc dẫn xuất thành viên (subset của Class). */
+export type ClassForMembership = {
+  id: string;
+  centerId: string | null;
+  teacherId: string | null;
+  assistantId: string | null;
+};
+
+export type LoadedMembership = {
+  /** Tập thành viên MONG MUỐN (đã lọc user còn sống trong DB). */
+  desired: DesiredParticipant[];
+  /** User của desired (name/email/phone) — sync dùng cho SYSTEM message. */
+  userById: Map<
+    string,
+    { id: string; name: string | null; email: string | null; phone: string | null }
+  >;
+};
+
+/**
+ * Loader DUY NHẤT của tập thành viên dẫn xuất từ dữ liệu lớp thật (US-03), tái dùng
+ * cho job đối soát đêm (US-04, lib/chat/reconcile-membership.ts) — KHÔNG viết lại
+ * logic dẫn xuất lần 2. Chạy trong transaction của caller.
+ */
+export async function loadDerivedMembership(
+  tx: Tx,
+  cls: ClassForMembership,
+): Promise<LoadedMembership> {
+  const students = await tx.student.findMany({
+    where: {
+      deletedAt: null,
+      parentUserId: { not: null },
+      enrollments: {
+        some: {
+          classId: cls.id,
+          deletedAt: null,
+          status: { in: CHAT_MEMBER_ENROLLMENT_STATUSES },
+        },
+      },
+    },
+    select: { id: true, parentUserId: true },
+  });
+  const centerManagerIds = await resolveCenterManagerUserIds(tx, cls.centerId);
+
+  const desiredRaw = computeDerivedMembership({
+    teacherIds: [cls.teacherId, cls.assistantId],
+    students: students.map((s) => ({
+      id: s.id,
+      parentIds: s.parentUserId ? [s.parentUserId] : [],
+    })),
+    centerManagerIds,
+  });
+
+  // Chỉ nhận user còn sống trong DB (userId trên participant không có FK — BA cố ý).
+  const users = await tx.user.findMany({
+    where: { id: { in: desiredRaw.map((d) => d.userId) }, deletedAt: null },
+    select: { id: true, name: true, email: true, phone: true },
+  });
+  const userById = new Map(users.map((u) => [u.id, u]));
+  return { desired: desiredRaw.filter((d) => userById.has(d.userId)), userById };
+}
+
 /**
  * Đồng bộ nhóm lớp cho `classId` — gọi TRONG transaction của thao tác nghiệp vụ.
  *
@@ -248,39 +309,8 @@ export async function syncConversationMembership(
     });
   }
 
-  // ── Snapshot dẫn xuất từ dữ liệu lớp ──
-  const students = await tx.student.findMany({
-    where: {
-      deletedAt: null,
-      parentUserId: { not: null },
-      enrollments: {
-        some: {
-          classId,
-          deletedAt: null,
-          status: { in: CHAT_MEMBER_ENROLLMENT_STATUSES },
-        },
-      },
-    },
-    select: { id: true, parentUserId: true },
-  });
-  const centerManagerIds = await resolveCenterManagerUserIds(tx, cls.centerId);
-
-  const desiredRaw = computeDerivedMembership({
-    teacherIds: [cls.teacherId, cls.assistantId],
-    students: students.map((s) => ({
-      id: s.id,
-      parentIds: s.parentUserId ? [s.parentUserId] : [],
-    })),
-    centerManagerIds,
-  });
-
-  // Chỉ nhận user còn sống trong DB (userId trên participant không có FK — BA cố ý).
-  const users = await tx.user.findMany({
-    where: { id: { in: desiredRaw.map((d) => d.userId) }, deletedAt: null },
-    select: { id: true, name: true, email: true, phone: true },
-  });
-  const userById = new Map(users.map((u) => [u.id, u]));
-  const desired = desiredRaw.filter((d) => userById.has(d.userId));
+  // ── Snapshot dẫn xuất từ dữ liệu lớp (loader chung với job đối soát US-04) ──
+  const { desired, userById } = await loadDerivedMembership(tx, cls);
   const desiredById = new Map(desired.map((d) => [d.userId, d]));
 
   const existing = await tx.conversationParticipant.findMany({

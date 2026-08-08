@@ -80,6 +80,7 @@ describe("A. admin host × role", () => {
       "teaching-materials",
       "huong-dan",
       "otp-logs",
+      "hoi-thoai",
     ]) {
       expect(isAdminRoute(`/${seg}`)).toBe(true);
       expect(
