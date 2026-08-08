@@ -167,6 +167,7 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
 
 ## Detailed rules (load on-demand)
 
+- [docs/chat-realtime/00-dieu-chinh-cho-repo.md](docs/chat-realtime/00-dieu-chinh-cho-repo.md) — **Module Chat Realtime (đang xây)**: đọc file này + `docs/chat-realtime/architecture.md` trước MỌI task chat. Backlog: `docs/chat-realtime/backlog/`. Luật cứng không thương lượng: (1) client CHỈ ĐỌC realtime, mọi ghi qua Server Action, không bao giờ tạo policy INSERT trên `realtime.messages`; (2) Postgres là nguồn sự thật — broadcast fail → log, không rollback; (3) mọi xoá là SOFT DELETE; (4) không hard-code classId vào Message; (5) đổi phân công/học viên phải gọi `syncConversationMembership` TRONG CÙNG transaction; (6) SĐT/email PH không bao giờ vào payload trả cho PH khác; (7) test ma trận quyền phải xanh trước khi coi story xong; (8) `permissions.md` là nguồn sự thật — code lệch ma trận là bug.
 - [.claude/rules/client-site.md](.claude/rules/client-site.md) — animations, SEO, performance
 - [.claude/rules/admin-site.md](.claude/rules/admin-site.md) — server actions, RBAC patterns
 - [.claude/rules/ui-libraries.md](.claude/rules/ui-libraries.md) — Magic UI / Motion / Recharts allowed scope
