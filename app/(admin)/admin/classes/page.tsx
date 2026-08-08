@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FileSpreadsheet, Plus } from 'lucide-react'
+import { CalendarCheck2, FileSpreadsheet, Plus } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
@@ -194,6 +194,14 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
             >
               <FileSpreadsheet className="h-4 w-4" />
               Import Excel
+            </Link>
+            {/* 08/08 — rà soát buổi lệch ngày khai giảng (lỗi im lặng, phải chủ động soi). */}
+            <Link
+              href="/classes/kiem-tra-lich"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <CalendarCheck2 className="h-4 w-4" />
+              Kiểm tra lịch buổi
             </Link>
           </div>
         )}

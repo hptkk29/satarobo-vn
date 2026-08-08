@@ -20,9 +20,10 @@ import { canTransition } from "@/lib/enrollments/status";
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { resolveClassSlots, applySlotTimeToDate } from "@/lib/classes/slots";
-import { vnAddDays, vnEndOfDay, vnStartOfDay, vnWeekday } from "@/lib/time/vn";
+import { vnAddDays, vnEndOfDay, vnStartOfDay, vnWeekday, vnYmd } from "@/lib/time/vn";
 import { suggestClassEndDate } from "@/lib/classes/end-date";
 import { generateClassSessions } from "@/lib/classes/generate";
+import { auditClassSessions, resyncClassSessions } from "@/lib/classes/session-sync";
 import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
 import { courseHasActiveCurriculum } from "@/lib/courses/activation-guard";
 import { createSessionPlansForClass } from "@/lib/classes/snapshot";
@@ -33,7 +34,7 @@ import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
 
-type ActionResult = { error?: string };
+type ActionResult = { error?: string; warning?: string };
 
 // Cách ly cơ sở (chống IDOR ghi): Class ∈ SCOPED_MODELS. Mutation theo classId từ
 // client phải xác minh lớp thuộc tầm nhìn cơ sở của actor trước khi ghi.
@@ -465,10 +466,29 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
     console.error("[createClass] generateAssignmentsFromTemplates error:", err);
   }
 
+  // 08/08 — lớp tạo THẲNG ở trạng thái "Đang dạy" thì KHÔNG đi qua `approveClass`, nên
+  // trước đây không đường nào sinh buổi: lớp có học viên mà 0 buổi, im lặng. Ca thật trên
+  // prod: `sata2.09h-CN.CS1-101` (tạo 07/08, ACTIVE, 6 HV, khai giảng 16/07 → 0 buổi).
+  let createWarning: string | undefined;
+  if (data.status === "ACTIVE") {
+    try {
+      const gen = await generateClassSessions(createdId, { onlyIfEmpty: true });
+      if (!gen.ok) {
+        createWarning = `Lớp đã tạo nhưng CHƯA sinh được buổi học: ${gen.error ?? "lỗi không rõ"}. Sửa lịch/khoá rồi bấm “Sinh buổi học”.`;
+      } else if (gen.warning) {
+        createWarning = gen.warning;
+      }
+    } catch (err) {
+      console.error("[createClass] generateClassSessions error:", err);
+      createWarning = "Lớp đã tạo nhưng chưa sinh được buổi học — vào lớp bấm “Sinh buổi học”.";
+    }
+  }
+
   revalidatePath("/classes");
+  revalidatePath("/sessions");
   // Thành công → trả {} để client toast + điều hướng (QA 20/07 Vấn đề 4 — không
   // redirect server-side âm thầm nữa).
-  return {};
+  return createWarning ? { warning: createWarning } : {};
 }
 
 export async function updateClass(
@@ -564,12 +584,21 @@ export async function updateClass(
   // vừa đè mất bản sao ⇒ chặn thẳng, chỉ đường sang tab đúng. Không đổi gì thì cho lưu
   // bình thường (admin còn sửa tên lớp, phòng, GV…), nhưng KHÔNG ghi lại bảng slot.
   const usesPhases = (current?._count.schedulePhases ?? 0) > 0;
-  if (usesPhases && scheduleChanged(current, parsed.data, scheduleSlots)) {
+  const scheduleTouched = scheduleChanged(current, parsed.data, scheduleSlots);
+  if (usesPhases && scheduleTouched) {
     return {
       error:
         "Lớp này dùng Kế hoạch lịch học nhiều giai đoạn — sửa thứ/giờ ở tab “Kế hoạch lịch học”, không sửa ở đây.",
     };
   }
+
+  // 08/08 — ĐỔI NGÀY KHAI GIẢNG PHẢI KÉO THEO BUỔI HỌC. Trước đây chỗ này chỉ tính lại
+  // `endDate` (một con số dự phóng) rồi dừng, còn `ClassSession` giữ nguyên dãy cũ ⇒ lịch
+  // lớp và buổi học lệch nhau vĩnh viễn mà không có cảnh báo nào. Ca thật:
+  // `sata3.15h45-17h15.T7.CS1-201` sửa khai giảng 26/07 → 27/06 nhưng 48 buổi vẫn nằm
+  // 01/08/2026 → 26/06/2027 (lệch 5 tuần).
+  const startDateChanged =
+    ymdOrNull(before.startDate) !== ymdOrNull(dataWithEndDate.startDate ?? null);
 
   try {
     await sdb.$transaction(async (txRaw) => {
@@ -609,9 +638,48 @@ export async function updateClass(
     return { error: "Lớp không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
+  // Xếp lại buổi cho khớp lịch vừa lưu. Ngoài transaction trên: `resyncClassSessions`
+  // đọc lại lớp bằng connection khác nên phải chạy SAU commit, nếu không nó vẫn thấy
+  // ngày khai giảng cũ. Lỗi ở bước này KHÔNG rollback việc sửa lớp — người dùng còn nút
+  // "Xếp lại buổi theo lịch" ở màn lớp để chạy lại.
+  let syncWarning: string | undefined;
+  if (!usesPhases && (startDateChanged || scheduleTouched)) {
+    try {
+      const res = await resyncClassSessions({
+        classId: id,
+        // Đổi ngày khai giảng ⇒ neo lại CẢ DÃY. Chỉ đổi thứ/giờ ⇒ giữ nguyên quá khứ.
+        wholeSeries: startDateChanged,
+        actor: { id: actorId, name: actorName },
+        reason: startDateChanged
+          ? "Đổi ngày khai giảng — xếp lại buổi theo lịch"
+          : "Đổi lịch học — xếp lại buổi từ hôm nay",
+      });
+      if (!res.ok) {
+        syncWarning = `Đã lưu lớp nhưng CHƯA xếp lại được buổi học: ${res.error ?? "lỗi không rõ"}`;
+      } else {
+        const parts: string[] = [];
+        if (res.generated) parts.push(`đã sinh ${res.generated} buổi`);
+        if (res.moved) parts.push(`đã dời ${res.moved} buổi theo lịch mới`);
+        if (res.kept) parts.push(`giữ nguyên ${res.kept} buổi đã có dữ liệu`);
+        if (parts.length > 0) syncWarning = `Buổi học: ${parts.join(", ")}.`;
+        if (res.warning) syncWarning = `${syncWarning ?? ""} ${res.warning}`.trim();
+      }
+    } catch (err) {
+      console.error("[updateClass] resyncClassSessions error:", err);
+      syncWarning = "Đã lưu lớp nhưng chưa xếp lại được buổi học — vào lớp bấm “Xếp lại buổi theo lịch”.";
+    }
+  }
+
   revalidatePath("/classes");
+  revalidatePath(`/classes/${id}`);
   revalidatePath(`/classes/${id}/edit`);
-  return {};
+  revalidatePath("/sessions");
+  return syncWarning ? { warning: syncWarning } : {};
+}
+
+/** "YYYY-MM-DD" theo lịch VN của một mốc NGÀY; null giữ nguyên null. */
+function ymdOrNull(d: Date | null | undefined): string | null {
+  return d ? vnYmd(d) : null;
 }
 
 export async function deleteClass(id: string): Promise<ActionResult> {
@@ -722,7 +790,7 @@ async function requireApprover(classId: string) {
 }
 
 /** Quản lý duyệt lớp (PENDING_APPROVAL → ACTIVE). */
-export async function approveClass(classId: string): Promise<WfResult> {
+export async function approveClass(classId: string): Promise<WfResult & { warning?: string }> {
   const gate = await requireApprover(classId);
   if (!gate.ok) return gate;
   if (gate.cls.status !== "PENDING_APPROVAL") {
@@ -738,18 +806,29 @@ export async function approveClass(classId: string): Promise<WfResult> {
     },
   });
 
-  // P2 — duyệt lớp ACTIVE → TỰ SINH buổi học (nếu chưa có). Best-effort.
+  // P2 — duyệt lớp ACTIVE → TỰ SINH buổi học (nếu chưa có).
+  // 08/08 — KHÔNG nuốt lỗi nữa: trước đây `res.ok === false` (lớp chưa khai lịch, khoá
+  // chưa cấu hình số buổi…) bị bỏ qua im lặng ⇒ lớp duyệt xong không có buổi nào mà
+  // không ai biết. Vẫn không chặn duyệt — chỉ báo lên để người duyệt xử lý ngay.
+  let warning: string | undefined;
   try {
-    await generateClassSessions(classId, { onlyIfEmpty: true });
+    const gen = await generateClassSessions(classId, { onlyIfEmpty: true });
+    if (!gen.ok) {
+      warning = `Lớp đã duyệt nhưng CHƯA sinh được buổi học: ${gen.error ?? "lỗi không rõ"}.`;
+    } else if (gen.warning) {
+      warning = gen.warning;
+    }
   } catch (err) {
     console.error("[approveClass] generate sessions error:", err);
+    warning = "Lớp đã duyệt nhưng chưa sinh được buổi học — bấm “Sinh buổi học” ở tab Thông tin.";
   }
 
   revalidatePath("/classes");
+  revalidatePath(`/classes/${classId}`);
   revalidatePath(`/classes/${classId}/edit`);
   revalidatePath("/sessions");
   revalidatePath("/dashboard");
-  return { ok: true };
+  return warning ? { ok: true, warning } : { ok: true };
 }
 
 /** P2 — nút sinh buổi học thủ công cho 1 lớp (khi cần sinh lại / lớp cũ chưa có buổi). */
@@ -764,11 +843,78 @@ export async function generateSessionsAction(
   if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
   const res = await generateClassSessions(classId, { onlyIfEmpty: true });
   if (!res.ok) return { ok: false, error: res.error ?? "Không sinh được buổi học" };
+  revalidatePath(`/classes/${classId}`);
   revalidatePath(`/classes/${classId}/edit`);
   revalidatePath("/sessions");
+  // 08/08 — lớp đã có buổi thì `onlyIfEmpty` trả `generated: 0` mà vẫn `ok`, trước đây
+  // client toast "Lớp đã có buổi học" ⇒ người dùng tưởng đã kiểm tra xong. Nói thẳng
+  // rằng nút này KHÔNG sửa dãy cũ và chỉ đường sang nút xếp lại.
+  if (res.generated === 0) {
+    return {
+      ok: true,
+      generated: 0,
+      warning:
+        "Lớp đã có buổi học nên nút này không tạo thêm. Muốn dãy buổi khớp lại ngày khai giảng + lịch thì bấm “Xếp lại buổi theo lịch”.",
+    };
+  }
   // T4.1/T4.2 — báo cáo trùng lô: generateClassSessions CHỈ cảnh báo (không chặn),
   // trước đây warning bị nuốt ở action nên người dùng không hề biết.
   return { ok: true, generated: res.generated, ...(res.warning ? { warning: res.warning } : {}) };
+}
+
+/**
+ * 08/08 — XẾP LẠI dãy buổi cho khớp ngày khai giảng + lịch học (sửa tay).
+ *
+ * Đường sửa cho những lớp đã lỡ lệch trước khi có bản vá tự động ở `updateClass`.
+ * Chỉ đổi `date`, không tạo/xoá buổi; buổi đã có dữ liệu giữ nguyên ngày.
+ */
+export async function resyncClassSessionsAction(
+  classId: string,
+): Promise<WfResult & { generated?: number; moved?: number; kept?: number; warning?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
+  const actor = await resolveActor(session.user.id);
+  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await resyncClassSessions({
+    classId,
+    wholeSeries: true, // sửa tay = neo lại cả dãy từ ngày khai giảng
+    actor: { id: actorId, name: actorName },
+    reason: "Xếp lại buổi theo ngày khai giảng (sửa tay)",
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Không xếp lại được buổi học" };
+
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath(`/classes/${classId}/edit`);
+  revalidatePath("/sessions");
+  return {
+    ok: true,
+    generated: res.generated,
+    moved: res.moved,
+    kept: res.kept,
+    ...(res.warning ? { warning: res.warning } : {}),
+  };
+}
+
+/** Soát 1 lớp: dãy buổi có khớp ngày khai giảng + lịch không (thuần đọc, cho banner). */
+export async function auditClassSessionsAction(classId: string): Promise<
+  | { ok: true; severity: string; message: string | null; wrongDateCount: number }
+  | { ok: false; error: string }
+> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  const actor = await resolveActor(session.user.id);
+  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  const audit = await auditClassSessions(classId);
+  if (!audit) return { ok: false, error: "Lớp không tồn tại" };
+  return {
+    ok: true,
+    severity: audit.severity,
+    message: audit.message,
+    wrongDateCount: audit.wrongDateCount,
+  };
 }
 
 /** Quản lý trả lại lớp (PENDING_APPROVAL → RECRUITING) kèm lý do. */

@@ -3,24 +3,67 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarClock, CalendarPlus, AlertTriangle } from "lucide-react";
-import { previewClassReschedule, applyClassReschedule, generateSessionsAction } from "../../_actions";
+import { CalendarClock, CalendarPlus, AlertTriangle, CalendarSync } from "lucide-react";
+import {
+  previewClassReschedule,
+  applyClassReschedule,
+  generateSessionsAction,
+  resyncClassSessionsAction,
+} from "../../_actions";
 
 type Item = { id: string; topic: string | null; oldDate: string; newDate: string };
 /** T4.1 — buổi ở lịch mới bị trùng phòng/GV với lớp khác (chặn apply). */
 type Conflict = { date: string; messages: string[] };
 
+/** Kết quả soát "dãy buổi có khớp ngày khai giảng + lịch học" (tính ở RSC). */
+export interface SessionAuditProp {
+  severity: string;
+  message: string | null;
+}
+
 function fmt(iso: string): string {
   return new Date(iso).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
 }
 
-export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit: boolean }) {
+export function ClassReschedule({
+  classId,
+  canEdit,
+  audit,
+}: {
+  classId: string;
+  canEdit: boolean;
+  audit?: SessionAuditProp;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [items, setItems] = useState<Item[] | null>(null);
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
 
   if (!canEdit) return null;
+
+  // Neo sai / chưa có buổi = lỗi thật, phải nổi bật. "DRIFT" thường là hệ quả của việc
+  // đổi lịch giữa khoá (hợp lệ) nên chỉ nhắc nhẹ.
+  const severe = audit?.severity === "ANCHOR_WRONG" || audit?.severity === "NO_SESSIONS";
+  const notable = severe || audit?.severity === "DRIFT" || audit?.severity === "NO_SCHEDULE";
+
+  function resync() {
+    startTransition(async () => {
+      const res = await resyncClassSessionsAction(classId);
+      if (!res.ok) {
+        toast.error(res.error ?? "Không xếp lại được buổi học");
+        return;
+      }
+      const parts: string[] = [];
+      if (res.generated) parts.push(`sinh ${res.generated} buổi`);
+      if (res.moved) parts.push(`dời ${res.moved} buổi`);
+      if (res.kept) parts.push(`giữ ${res.kept} buổi đã có dữ liệu`);
+      toast.success(parts.length ? `Đã xếp lại: ${parts.join(", ")}` : "Dãy buổi đã khớp lịch");
+      if (res.warning) toast.warning(res.warning);
+      setItems(null);
+      setConflicts([]);
+      router.refresh();
+    });
+  }
 
   function preview() {
     startTransition(async () => {
@@ -58,8 +101,9 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
     startTransition(async () => {
       const res = await generateSessionsAction(classId);
       if (res.ok) {
-        toast.success(res.generated ? `Đã sinh ${res.generated} buổi học` : "Lớp đã có buổi học");
+        if (res.generated) toast.success(`Đã sinh ${res.generated} buổi học`);
         // T4.1 — buổi vừa sinh trùng phòng/GV với lớp khác (cảnh báo, không chặn).
+        // 08/08 — lớp đã có buổi thì action trả warning nói rõ nút này KHÔNG sửa dãy cũ.
         if (res.warning) toast.warning(res.warning);
         router.refresh();
       } else toast.error(res.error ?? "Lỗi");
@@ -83,6 +127,18 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
           </button>
           <button
             type="button"
+            onClick={resync}
+            disabled={pending}
+            className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${
+              severe
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "border border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            <CalendarSync className="h-4 w-4" /> Xếp lại buổi theo lịch
+          </button>
+          <button
+            type="button"
             onClick={preview}
             disabled={pending}
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
@@ -91,11 +147,34 @@ export function ClassReschedule({ classId, canEdit }: { classId: string; canEdit
           </button>
         </div>
       </div>
+
+      {/* 08/08 — dãy buổi lệch ngày khai giảng / lịch học là lỗi im lặng: `endDate` được
+          tính lại theo lịch mới còn buổi giữ nguyên dãy cũ. Nay soát ở RSC và nói thẳng. */}
+      {notable && audit?.message && (
+        <div
+          className={`mb-3 rounded-lg border p-3 text-sm ${
+            severe
+              ? "border-red-200 bg-red-50 text-red-800"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          <p className="flex items-start gap-2 font-semibold">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{audit.message}</span>
+          </p>
+        </div>
+      )}
+
       <p className="mb-2 text-xs text-gray-500">
-        &quot;Sinh buổi học&quot; tạo buổi theo lịch lớp + số buổi chuẩn của khoá, bỏ qua ngày nghỉ (chỉ khi lớp chưa có buổi). Lớp duyệt ACTIVE tự sinh.
+        &quot;Sinh buổi học&quot; tạo buổi theo lịch lớp + số buổi chuẩn của khoá, bỏ qua ngày nghỉ (chỉ khi lớp CHƯA có buổi). Lớp duyệt ACTIVE tự sinh.
+      </p>
+      <p className="mb-2 text-xs text-gray-500">
+        &quot;Xếp lại buổi theo lịch&quot; neo lại CẢ DÃY buổi từ ngày khai giảng theo lịch hiện tại
+        (trừ ngày nghỉ). Chỉ đổi ngày — không tạo, không xoá buổi; buổi đã điểm danh / có nhận xét /
+        đã giao bài / có ảnh / đã hoàn tất giữ nguyên ngày.
       </p>
       <p className="text-xs text-gray-500">
-        Áp lịch lớp hiện tại cho các buổi CHƯA diễn ra; buổi trùng lịch nghỉ cơ sở sẽ dời sang buổi kế (giữ đủ tổng buổi). Buổi đã diễn ra giữ nguyên.
+        &quot;Xem trước dời&quot; chỉ áp lịch cho các buổi CHƯA diễn ra; buổi trùng lịch nghỉ cơ sở sẽ dời sang buổi kế (giữ đủ tổng buổi). Buổi đã diễn ra giữ nguyên.
       </p>
 
       {items && (

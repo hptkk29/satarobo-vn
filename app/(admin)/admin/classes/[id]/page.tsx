@@ -18,7 +18,8 @@ import {
   ClassSchedulePhases,
   type PhaseFormValue,
 } from "./_components/class-schedule-phases";
-import { loadClassPhases } from "@/lib/classes/phases-service";
+import { loadClassPhases, loadHolidayKeys } from "@/lib/classes/phases-service";
+import { auditSessionSeries } from "@/lib/classes/session-audit";
 import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "./_components/class-sessions-manage";
 import { ClassAttendancePanel } from "./_components/class-attendance-panel";
@@ -269,6 +270,17 @@ export default async function ClassDetailPage({ params }: Props) {
   const defaultApplyFrom = vnYmd(vnAddDays(vnStartOfDay(new Date()), 1));
   const phaseSignature = `${loadedPhases?.isDerived ? "d" : "s"}:${JSON.stringify(phaseForm)}`;
 
+  // 08/08 — SOÁT dãy buổi có khớp "ngày khai giảng + lịch học" không. Trước đây lệch là
+  // lệch âm thầm: `endDate` được tính lại theo lịch mới còn `ClassSession` giữ dãy cũ,
+  // không màn nào đối chiếu hai thứ đó với nhau.
+  const sessionAudit = auditSessionSeries({
+    from: cls.startDate ? vnStartOfDay(cls.startDate) : null,
+    phases: loadedPhases?.phases ?? [],
+    holidays: await loadHolidayKeys(cls.centerId),
+    sessions,
+    classStatus: cls.status,
+  });
+
   // DS học viên buổi mặc định cho tab Đánh giá (present = đã điểm danh có mặt/muộn).
   const initialEvalStudents = initialRoster.rows.map((r) => ({
     studentId: r.studentId,
@@ -389,7 +401,11 @@ export default async function ClassDetailPage({ params }: Props) {
             canApprove={canApproveClass}
             approvedByName={cls.approvedByName}
           />
-          <ClassReschedule classId={cls.id} canEdit={canEdit} />
+          <ClassReschedule
+            classId={cls.id}
+            canEdit={canEdit}
+            audit={{ severity: sessionAudit.severity, message: sessionAudit.message }}
+          />
           <ClassForm
         hoCenterIds={hoCenterIds}
             cls={formValue}

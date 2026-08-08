@@ -26,11 +26,17 @@ export function ClassApprovalActions({
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
 
-  function run(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string) {
+  function run(
+    fn: () => Promise<{ ok: boolean; error?: string; warning?: string }>,
+    okMsg: string,
+  ) {
     startTransition(async () => {
       const res = await fn();
       if (res.ok) {
         toast.success(okMsg);
+        // 08/08 — duyệt lớp mà KHÔNG sinh được buổi (chưa khai lịch, khoá chưa cấu hình
+        // số buổi…) trước đây bị nuốt vào console: lớp ACTIVE mà 0 buổi, không ai biết.
+        if (res.warning) toast.warning(res.warning, { duration: 10000 });
         setRejecting(false);
         setReason("");
         router.refresh();

@@ -250,6 +250,9 @@ export function ClassForm({
       return;
     }
     toast.success(isEdit ? "Đã cập nhật lớp học" : "Đã tạo lớp học mới");
+    // 08/08 — đổi ngày khai giảng/lịch thì server xếp lại buổi ngay; báo kết quả để
+    // người dùng biết dãy buổi vừa đổi (trước đây im lặng, lịch và buổi lệch nhau).
+    if (res?.warning) toast.warning(res.warning, { duration: 8000 });
     // QA 21/07 (B6) — refresh kèm push để danh sách chắc chắn hiện dữ liệu mới.
     router.push("/classes");
     router.refresh();

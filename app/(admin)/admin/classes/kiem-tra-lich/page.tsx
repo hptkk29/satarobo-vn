@@ -1,0 +1,138 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { CalendarCheck2, ArrowLeft } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { passesScope } from "@/lib/db-scope";
+import { auditAllClassSessions } from "@/lib/classes/session-sync";
+import { vnYmd } from "@/lib/time/vn";
+import { vnHm } from "@/lib/classes/slots";
+import { AuditRowActions } from "./_components/audit-row-actions";
+
+export const metadata = { title: "Kiểm tra lịch buổi học | Admin" };
+export const dynamic = "force-dynamic";
+
+// =============================================================================
+// 08/08/2026 — MÀN RÀ SOÁT "buổi học có khớp ngày khai giảng + lịch học không".
+//
+// Vì sao cần một màn riêng: lệch dãy buổi là lỗi IM LẶNG (endDate được tính lại theo
+// lịch mới, còn ClassSession giữ dãy cũ). Không ai phát hiện được nếu phải mở từng lớp.
+// Ca thật đã xảy ra: `sata3.15h45-17h15.T7.CS1-201` lệch 5 tuần, `sata2.09h-CN.CS1-101`
+// tạo thẳng ACTIVE nên chưa từng có buổi nào.
+// =============================================================================
+
+const SEVERITY_LABEL: Record<string, { text: string; cls: string }> = {
+  ANCHOR_WRONG: { text: "Neo sai ngày khai giảng", cls: "bg-red-100 text-red-800" },
+  NO_SESSIONS: { text: "Chưa có buổi nào", cls: "bg-red-100 text-red-800" },
+  DRIFT: { text: "Lệch giữa khoá", cls: "bg-amber-100 text-amber-800" },
+  NO_SCHEDULE: { text: "Thiếu lịch/khai giảng", cls: "bg-gray-200 text-gray-700" },
+};
+
+const fmt = (d: Date | null) => (d ? `${vnYmd(d)} ${vnHm(d)}` : "—");
+
+export default async function ClassScheduleAuditPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("classes:view-all"))) redirect("/dashboard?error=unauthorized");
+
+  const actor = await resolveActor(session.user.id);
+  const canEdit = await checkPermission("classes:edit");
+  // `auditAllClassSessions` đọc bằng `db` trần (cần gom 4 truy vấn, không n+1) nên phải
+  // tự lọc cách ly cơ sở ở đây — đúng luật `scopedDb` chỉ che READ khi đi qua nó.
+  const all = await auditAllClassSessions();
+  const rows = all.filter((r) => passesScope("Class", { centerId: r.centerId }, actor));
+
+  return (
+    <div>
+      <div className="mb-6">
+        <Link
+          href="/classes"
+          className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        >
+          <ArrowLeft className="h-4 w-4" /> Lớp học
+        </Link>
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <CalendarCheck2 className="h-6 w-6 text-orange-500" />
+          Kiểm tra lịch buổi học
+        </h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Đối chiếu dãy buổi đã sinh với <strong>ngày khai giảng + lịch học</strong> của từng lớp
+          (đã trừ ngày nghỉ). Chỉ liệt kê lớp có vấn đề — danh sách rỗng nghĩa là mọi lớp đều khớp.
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-sm font-medium text-emerald-800">
+          Mọi lớp đang khớp lịch — không có buổi nào lệch ngày khai giảng.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <tr>
+                <th className="px-4 py-3">Lớp</th>
+                <th className="px-4 py-3">Vấn đề</th>
+                <th className="px-4 py-3">Khai giảng</th>
+                <th className="px-4 py-3">Buổi 1 hiện tại</th>
+                <th className="px-4 py-3">Buổi 1 đúng lịch</th>
+                <th className="px-4 py-3 text-right">Buổi lệch</th>
+                <th className="px-4 py-3 text-right">Xử lý</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((r) => {
+                const sev = SEVERITY_LABEL[r.severity] ?? {
+                  text: r.severity,
+                  cls: "bg-gray-100 text-gray-700",
+                };
+                return (
+                  <tr key={r.classId} className="align-top">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/classes/${r.classId}`}
+                        className="font-semibold text-orange-600 hover:underline"
+                      >
+                        {r.className}
+                      </Link>
+                      <p className="text-xs text-gray-500">
+                        {r.classStatus} · {r.sessionCount} buổi
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${sev.cls}`}
+                      >
+                        {sev.text}
+                      </span>
+                      {r.message && <p className="mt-1 max-w-md text-xs text-gray-600">{r.message}</p>}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-gray-700">
+                      {r.startDate ? vnYmd(r.startDate) : "—"}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-gray-700">{fmt(r.actualFirst)}</td>
+                    <td className="px-4 py-3 tabular-nums font-semibold text-gray-900">
+                      {fmt(r.expectedFirst)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+                      {r.wrongDateCount}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <AuditRowActions classId={r.classId} canEdit={canEdit} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="mt-4 text-xs text-gray-500">
+        &quot;Xếp lại&quot; neo lại cả dãy buổi từ ngày khai giảng theo lịch hiện tại. Chỉ đổi ngày —
+        không tạo, không xoá buổi; buổi đã điểm danh / có nhận xét / đã giao bài / có ảnh / đã hoàn
+        tất giữ nguyên ngày và chiếm chỗ ngày đó.
+      </p>
+    </div>
+  );
+}
