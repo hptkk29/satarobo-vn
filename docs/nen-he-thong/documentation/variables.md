@@ -1,5 +1,7 @@
 # variables.md — Cấu hình & bí mật (INTENDED STATE)
 
+> **[AS-BUILT US-01 · 09/08/2026]** Không thêm secret mới. Step "Sync permission registry" trong `deploy.yml`/`migrate-test.yml` tái dùng `PROD_DIRECT_URL`/`TEST_DIRECT_URL` sẵn có (SESSION pooler — tránh quirk prepared-statement của transaction pooler, tiền lệ seed-prod-roles.yml).
+
 ## Bảng biến
 
 | Tên | Dùng bởi | Phạm vi | Nguồn | Xoay vòng | Rủi ro nếu lộ |

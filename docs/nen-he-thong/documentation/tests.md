@@ -8,8 +8,12 @@
 |---|---|
 | Bộ test RBAC v2 (shadow-compare, từ đợt go-live 26/07) | Hành vi quyền theo `centerId` hiện hành — chính là ĐƯỜNG CŨ mà F6 so sánh; giữ nguyên, không xoá trước P4 |
 | (Đợt chat, đang viết) US-05 khung test ma trận quyền chat | Quyền Participant của module chat qua adapter `can()` |
+| **[AS-BUILT US-01]** `lib/permissions/registry.test.ts` (unit, 7 test) | TS-01: key trùng → throw nêu key + 2 module; parity 2 chiều registry ↔ `ALL_ACTIONS` + exception khai-trước tự hết hạn (assert c) — CI job unit-tests chặn merge |
+| **[AS-BUILT US-01]** `tests/e2e/a0/permission-registry.spec.ts` (integration, 4 case) | TS-01: sync đủ N row · idempotent · key trùng → DB nguyên trạng (snapshot trước/sau) · key vắng khai báo → isActive=false không DELETE — chạy CI job e2e-a0 (Postgres service) |
 
-Ngoài hai nhóm trên: chưa có test nào cho các luật của nền. Mọi dòng dưới đây là PROPOSED.
+Ngoài các nhóm trên: chưa có test nào cho các luật còn lại của nền. Các dòng dưới đây là PROPOSED (TS-01 đã chuyển lên mục 1).
+
+> ⚠️ Đính chính wording TS-01 "deploy fail": thực tế = **workflow migrate/seed ĐỎ + registry DB nguyên trạng**; Vercel vẫn ship code độc lập (deploy.yml không gate được Vercel Git integration). Cổng chặn chính là unit test TS-01 ở PR. Kẽ hở semantic-conflict 2 PR cùng khai 1 key (CI từng nhánh xanh, merge union mới trùng) → phát hiện ở vitest trên push `test`/`main` + step sync đỏ; chấp nhận ở P0 vì registry chưa có consumer runtime — xem lại khi US-02 cho `can()` đọc registry.
 
 ## 2. Đề xuất (chưa viết) — nguồn: 04-TestScenarios
 

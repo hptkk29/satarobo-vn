@@ -1,5 +1,16 @@
 # permissions.md — Ai được làm gì (INTENDED STATE)
 
+## AS-BUILT — US-01 Registry quyền (09/08/2026, nhánh feat/nen-he-thong-p0)
+
+- **Bảng `PermissionDescriptor` đã tồn tại** (migration `20260808183000_add_permission_descriptor`, SQL idempotent `IF NOT EXISTS` — chủ đích vì DB dev dùng chung nhiều nhánh): key (PK), module, action, scopable, sensitiveFields[], description, isActive, createdAt/updatedAt.
+- **Key GIỮ NGUYÊN format v1 `resource:verb`** (162 key = 157 hiện có + 5 key chat khai trước) — KHÔNG remap sang `module.resource.action`; `module` là cột riêng. Lý do: zero-behavior-change, 81 file đang import matrix v1.
+- **`action` là String verb thô, không phải enum 6 giá trị của BA §2.5** — repo có 20+ verb thực tế; enum hoá là việc pha sau nếu muốn.
+- Khai báo per-module ở `lib/permissions/registry/{chat,crm,students,classes,lms,hr,finance,content,inventory,system}.ts`; `collectDescriptors()` pure, key trùng → `DuplicatePermissionKeyError` nêu key + 2 module (TS-01). Chat KHAI TRƯỚC từ nhánh feat/chat-realtime (AC4) — khi chat merge, test parity (c) trong `lib/permissions/registry.test.ts` buộc rút exception `PRE_DECLARED_V1_KEYS`.
+- Sync: `pnpm db:seed:permissions` (`prisma/seed-permission-registry.ts`) — check trùng TRƯỚC transaction, 1 `$transaction`, upsert theo key, key vắng khai báo → `isActive=false` (không DELETE). Chạy tự động sau migrate trong `deploy.yml` + `migrate-test.yml` (user duyệt 09/08), DB URL = SESSION pooler (tiền lệ seed-prod-roles).
+- Liệt kê: `pnpm permissions:list` (+`--db` đối chiếu DB, `--strict` exit≠0 khi lệch).
+- **Registry chưa có consumer runtime** — `can()` v1/v2 CHƯA đọc nó (đó là US-02). `RoleDef`/`RolePermission`/`UserOrgRole` giữ nguyên; quyết định thiết kế: `PermissionGrant` (US-02/03) sẽ trỏ `subjectId = RoleDef.id` khi `subjectType=ROLE` — KHÔNG tạo bảng Role mới.
+- **Shape cam kết cho US-02/US-03** (đông cứng để khỏi trôi): `PermissionGrant { subjectType ROLE|GROUP, subjectId, permissionKey → PermissionDescriptor.key, effect ALLOW|DENY, dataScope, fieldMask String[], derivedFrom String? }` — cột dataScope/fieldMask/derivedFrom có mặt ngay migration US-02 dù engine chưa dùng (BA §6 "chừa cột trước").
+
 ## Nguồn quyền
 
 - **Token KHÔNG chứa quyền.** JWT chỉ mang `userId`; toàn bộ role/scope resolve từ DB mỗi request (cache theo request). Lý do: thu quyền phải hiệu lực tức thì (F3).
