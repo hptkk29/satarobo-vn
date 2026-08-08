@@ -1,0 +1,61 @@
+// Registry quyền — module CRM: lead, lớp trải nghiệm, yêu cầu/phản hồi PH, thông báo.
+// Key GIỮ NGUYÊN format v1 `resource:verb` — parity 2 chiều với ALL_ACTIONS (TS-01).
+import type { ModuleDecl } from "./types";
+
+export const crmModule: ModuleDecl = {
+  module: "crm",
+  permissions: [
+    // --- Leads ---
+    { key: "leads:view-all", action: "view-all" },
+    { key: "leads:view-own", action: "view-own" },
+    {
+      key: "leads:view-pii",
+      action: "view-pii",
+      // #11 T2 (OI-4) — khớp ĐỦ bộ field maskLeadPiiFields đang gate (lib/lead/pii.ts).
+      sensitiveFields: ["parentName", "phone", "email", "childName", "note"],
+      description: "Xem PII lead (tên PH-HS/SĐT/email/ghi chú tư vấn) không che.",
+    },
+    { key: "leads:create", action: "create" },
+    { key: "leads:edit", action: "edit" },
+    { key: "leads:assign", action: "assign" },
+    {
+      key: "leads:assign-config",
+      action: "assign-config",
+      // LeadAssignmentConfig là dữ liệu THEO CƠ SỞ (centerId @unique) — CM chỉ đặt
+      // được cơ sở mình (leads/actions.ts setCenterAssignModeAction) ⇒ scopable.
+      description: "Cấu hình quy tắc chia lead tự động (theo cơ sở).",
+    },
+    { key: "leads:delete", action: "delete" },
+    { key: "leads:export", action: "export" },
+    {
+      key: "leads:import",
+      action: "import",
+      description: "Import danh sách khách đã đăng ký từ Excel.",
+    },
+
+    // --- Trials (lớp trải nghiệm) ---
+    { key: "trials:view", action: "view" },
+    { key: "trials:manage", action: "manage" },
+    {
+      key: "trials:feedback",
+      action: "feedback",
+      description: "GV ghi nhận xét buổi trải nghiệm.",
+    },
+    { key: "trials:assign-teacher", action: "assign-teacher" },
+    {
+      key: "trials:override-capacity",
+      action: "override-capacity",
+      description: "Xếp lớp trải nghiệm vượt sĩ số tối đa.",
+    },
+    {
+      key: "trials:config",
+      action: "config",
+      description: "Cấu hình số buổi của lớp trải nghiệm.",
+    },
+
+    // --- Thông báo + yêu cầu/phản hồi phụ huynh ---
+    { key: "notifications:manage", action: "manage" },
+    { key: "parent-requests:manage", action: "manage" },
+    { key: "parent-feedback:view", action: "view" },
+  ],
+};

@@ -53,9 +53,19 @@ describe("TS-01 · registry chặn key trùng", () => {
 
 describe("TS-01 · chống trôi hai nguồn (registry ↔ ALL_ACTIONS v1)", () => {
   // Mọi key hiện tại của registry đều theo format v1 `resource:verb`.
-  // Key format mới (vd "chat.conversation.read") được miễn assert (b) —
+  // Key format mới (dấu chấm, vd "iam.group.manage" về sau) được miễn assert (b) —
   // chúng thuộc module chưa có trong matrix v1.
   const V1_KEY_RE = /^[a-z0-9_-]+:[a-z0-9-]+$/;
+
+  // Key KHAI TRƯỚC (AC4): tồn tại trên nhánh feat/chat-realtime nhưng chưa merge
+  // vào base của nhánh này. Assert (c) tự dọn: chat merge xong là list này PHẢI rỗng.
+  const PRE_DECLARED_V1_KEYS = new Set<string>([
+    "chat:read",
+    "chat:send",
+    "chat:announce",
+    "chat:moderate",
+    "chat:admin",
+  ]);
 
   it("(a) mọi action của matrix v1 đều có descriptor trong registry", () => {
     const descriptors = collectDescriptors(ALL_MODULE_DECLS);
@@ -67,9 +77,23 @@ describe("TS-01 · chống trôi hai nguồn (registry ↔ ALL_ACTIONS v1)", () 
     const descriptors = collectDescriptors(ALL_MODULE_DECLS);
     const v1Actions = new Set<string>(ALL_ACTIONS);
     const stray = [...descriptors.keys()].filter(
-      (key) => V1_KEY_RE.test(key) && !v1Actions.has(key),
+      (key) =>
+        V1_KEY_RE.test(key) &&
+        !v1Actions.has(key) &&
+        !PRE_DECLARED_V1_KEYS.has(key),
     );
     expect(stray).toEqual([]);
+  });
+
+  it("(c) exception khai-trước tự hết hạn: key đã vào ALL_ACTIONS thì phải rút khỏi PRE_DECLARED", () => {
+    // Khi chat merge, ALL_ACTIONS chứa chat:* → test này đỏ → buộc dọn exception,
+    // đưa chat về diện kiểm parity 2 chiều bình thường. Không được nới regex/skip.
+    const v1Actions = new Set<string>(ALL_ACTIONS);
+    const stale = [...PRE_DECLARED_V1_KEYS].filter((key) => v1Actions.has(key));
+    expect(
+      stale,
+      `Key ${stale.join(", ")} đã có trong ALL_ACTIONS — rút khỏi PRE_DECLARED_V1_KEYS`,
+    ).toEqual([]);
   });
 
   it("mỗi descriptor mang module không rỗng và action khớp phần verb của key v1", () => {
