@@ -5861,3 +5861,152 @@ model EvalAnswer {
 // NOTE(reconcile FixLMS→main): messaging FixLMS (MessageThread/Message, LMS-15) đã GỠ
 // — D6 theo MAIN dùng ConversationMessage (per-enrollmentId). RevenueTarget bản FixLMS
 // (`amount`, LMS-16) đã GỠ — giữ bản MAIN (`targetAmount`) ở trên.
+
+// ============================================================================
+// === CHAT REALTIME (Đợt 0) ===
+// Schema theo BA-chat-realtime-satarobo.md mục 4 + delta 00-dieu-chinh-cho-repo.md.
+// KHÁC hệ cũ ConversationMessage (per-enrollment) — hệ mới thay thế ở Đợt 1 (Q3).
+// userId/senderId là String trần (User.id cuid) — BA cố ý KHÔNG relation sang User.
+// Quyền đọc/gửi là participant-based; Conversation.centerId chỉ phục vụ truy vấn
+// quản trị (SCOPE_EXEMPT — DM có centerId=null, xem delta mục E.3).
+// ============================================================================
+
+enum ConversationType {
+  CLASS_GROUP
+  DM_TEACHER_PARENT
+  DM_SALE_PARENT
+  DM_STAFF // reserve cho cây B, chưa dùng ở P0
+}
+
+enum ConversationSubjectType {
+  CLASS
+  NONE
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+  LOCKED
+}
+
+enum ParticipantRole {
+  OWNER
+  MODERATOR
+  MEMBER
+  OBSERVER
+}
+
+enum ParticipantSource {
+  DERIVED
+  MANUAL
+}
+
+enum DerivedFrom {
+  CLASS_TEACHER
+  CLASS_STUDENT_PARENT
+  CENTER_MANAGER
+}
+
+enum MessageKind {
+  CHAT
+  ANNOUNCEMENT
+  SYSTEM
+}
+
+model Conversation {
+  id     String             @id @default(uuid())
+  type   ConversationType
+  status ConversationStatus @default(ACTIVE)
+
+  // Phạm vi tổ chức — phục vụ quyền quản trị, KHÔNG dùng để suy ra thành viên
+  centerId  String?
+  orgUnitId String?
+
+  // Đa hình
+  subjectType ConversationSubjectType @default(NONE)
+  subjectId   String?
+
+  // Khoá duy nhất cho hội thoại 1-1: sort 2 userId rồi nối — chống tạo trùng (BR-06)
+  dmKey String? @unique
+
+  title         String?
+  lastMessageAt DateTime?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  archivedAt    DateTime?
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@unique([type, subjectType, subjectId])
+  @@index([centerId, status, lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String @id @default(uuid())
+  conversationId String
+  userId         String // User.id (cuid) — không relation, BA cố ý
+
+  role        ParticipantRole   @default(MEMBER)
+  source      ParticipantSource @default(DERIVED)
+  derivedFrom DerivedFrom?
+
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  lastReadMessageId String?
+  lastReadAt        DateTime?
+  unreadCount       Int       @default(0)
+  muted             Boolean   @default(false)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([conversationId, userId])
+  @@index([userId, leftAt]) // truy vấn "danh sách hội thoại của tôi"
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String
+  senderId       String? // null khi kind = SYSTEM
+  kind           MessageKind @default(CHAT)
+
+  body      String  @db.Text
+  replyToId String? // một cấp, không lồng nhau
+
+  // Idempotency gửi lại (US-06 AC4/TS-10.4) — client sinh, SYSTEM message không có
+  clientMsgId String?
+
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedReason String?
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id])
+  attachments  MessageAttachment[]
+
+  @@unique([conversationId, senderId, clientMsgId])
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([conversationId, kind, createdAt(sort: Desc)]) // lọc ANNOUNCEMENT
+}
+
+model MessageAttachment {
+  id          String  @id @default(uuid())
+  messageId   String
+  storagePath String // R2 private, prefix `chat-attachments/` + signed URL (delta Q2)
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  message     Message @relation(fields: [messageId], references: [id])
+}
+
+// Chỉ dùng cho ANNOUNCEMENT — GV cần biết PH nào đã đọc thông báo lịch học
+model AnnouncementRead {
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  @@id([messageId, userId])
+}
