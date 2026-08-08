@@ -7,6 +7,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { CurriculumForm } from "../../_components/curriculum-form";
 import { LessonList, type LessonRow } from "../../_components/lesson-list";
 import { CurriculumSessionsForm } from "../../_components/curriculum-sessions-form";
+import { CurriculumMergeForm } from "../../_components/curriculum-merge-form";
 import {
   LessonChangeRequests,
   type ChangeRequestRow,
@@ -268,6 +269,10 @@ export default async function EditCurriculumPage({ params }: Props) {
         currentCount={activeLessons.length}
         expectedVersions={expectedVersions}
       />
+
+      {/* Khoá gộp (Combo = Sata 1 + Sata 2): nạp nội dung bài từ giáo trình khác,
+          ghi đè tại chỗ nên lớp đang chạy không mất liên kết buổi. */}
+      <CurriculumMergeForm curriculumId={curriculum.id} currentCount={activeLessons.length} />
 
       <LessonList
         curriculumId={curriculum.id}

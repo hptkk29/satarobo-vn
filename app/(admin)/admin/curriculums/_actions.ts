@@ -25,6 +25,7 @@ import {
   type CurriculumInput,
   type LessonInput,
 } from "@/lib/validators/curriculum";
+import { planLessonMerge, pickLessonContent } from "@/lib/lms/curriculum-merge";
 
 type Result<T = undefined> =
   | { ok: true; data?: T }
@@ -438,6 +439,238 @@ export async function applyResizeCurriculum(input: {
 
   revalidatePath(`/curriculums/${input.curriculumId}/edit`);
   return { ok: true, data: { created: res.created, archived: res.archived } };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// 08/08/2026 — GỘP BÀI TỪ GIÁO TRÌNH KHÁC
+//
+// Khoá Combo theo định nghĩa là khoá gộp (Sata 1 buổi 1–16 + Sata 2 buổi 17–32).
+// Gõ tay 32 bài vừa lâu vừa lệch dần mỗi lần giáo trình gốc đổi.
+//
+// ⚠️ GHI ĐÈ TẠI CHỖ, giữ nguyên `Lesson.id`: lớp Combo đang chạy có
+// `ClassSession.lessonId` / `ClassSessionPlan.lessonId` trỏ vào chính các bài này.
+// Xoá-rồi-tạo-lại sẽ để lại con trỏ mồ côi ở học bạ / tiến độ / bài tập theo buổi.
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Giáo trình chọn được làm NGUỒN (mọi giáo trình khác, kèm số bài còn hiệu lực). */
+export async function listMergeSources(
+  targetCurriculumId: string,
+): Promise<Result<{ id: string; label: string; lessonCount: number }[]>> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const rows = await gate.sdb.curriculum.findMany({
+    where: { id: { not: targetCurriculumId } },
+    orderBy: [{ course: { name: "asc" } }, { version: "desc" }],
+    select: {
+      id: true,
+      name: true,
+      version: true,
+      course: { select: { name: true } },
+      _count: { select: { lessons: { where: { archivedAt: null } } } },
+    },
+  });
+
+  return {
+    ok: true,
+    data: rows.map((c) => ({
+      id: c.id,
+      label: `${c.course.name} — ${c.name} (v${c.version})`,
+      lessonCount: c._count.lessons,
+    })),
+  };
+}
+
+const LESSON_CONTENT_SELECT = {
+  id: true,
+  order: true,
+  title: true,
+  description: true,
+  content: true,
+  duration: true,
+  objectives: true,
+  materials: true,
+  notes: true,
+  teacherGuide: true,
+  expectedOutput: true,
+  homeworkDefault: true,
+  assessmentCriteria: true,
+} as const;
+
+/** Nạp nguồn + đích rồi dựng phương án. Dùng chung cho xem trước và áp dụng. */
+async function buildMergePlan(
+  sdb: ReturnType<typeof scopedDb>,
+  input: { targetCurriculumId: string; sourceCurriculumId: string; startOrder: number },
+) {
+  if (input.sourceCurriculumId === input.targetCurriculumId) {
+    return { ok: false as const, error: "Không thể gộp giáo trình vào chính nó" };
+  }
+
+  const [target, sources, targets] = await Promise.all([
+    sdb.curriculum.findUnique({
+      where: { id: input.targetCurriculumId },
+      select: { id: true, name: true },
+    }),
+    sdb.lesson.findMany({
+      where: { curriculumId: input.sourceCurriculumId, archivedAt: null },
+      orderBy: { order: "asc" },
+      select: LESSON_CONTENT_SELECT,
+    }),
+    sdb.lesson.findMany({
+      where: { curriculumId: input.targetCurriculumId },
+      orderBy: { order: "asc" },
+      select: {
+        id: true,
+        order: true,
+        title: true,
+        status: true,
+        archivedAt: true,
+        _count: {
+          select: { scormPackages: true, assignments: true, exams: true, documents: true },
+        },
+      },
+    }),
+  ]);
+  if (!target) return { ok: false as const, error: "Giáo trình đích không tồn tại" };
+
+  const plan = planLessonMerge({
+    sources,
+    targets: targets.map((t) => ({
+      id: t.id,
+      order: t.order,
+      title: t.title,
+      status: t.status as string,
+      archivedAt: t.archivedAt,
+      attachmentCount:
+        t._count.scormPackages + t._count.assignments + t._count.exams + t._count.documents,
+    })),
+    startOrder: input.startOrder,
+  });
+  return { ok: true as const, plan, sources };
+}
+
+export interface MergePreviewRow {
+  targetOrder: number;
+  currentTitle: string;
+  sourceTitle: string;
+  action: "overwrite" | "create";
+  note: string | null;
+}
+
+/** Xem trước gộp — THUẦN ĐỌC, không ghi gì. */
+export async function previewMergeLessons(input: {
+  targetCurriculumId: string;
+  sourceCurriculumId: string;
+  startOrder: number;
+}): Promise<
+  Result<{
+    rows: MergePreviewRow[];
+    errors: string[];
+    warnings: string[];
+    overwriteCount: number;
+    createCount: number;
+  }>
+> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const built = await buildMergePlan(gate.sdb, input);
+  if (!built.ok) return built;
+
+  return {
+    ok: true,
+    data: {
+      rows: built.plan.items.map((it) => ({
+        targetOrder: it.targetOrder,
+        currentTitle: it.currentTitle,
+        sourceTitle: it.sourceTitle,
+        action: it.action,
+        note: it.blockedReason ?? it.warning,
+      })),
+      errors: built.plan.errors,
+      warnings: built.plan.warnings,
+      overwriteCount: built.plan.overwriteCount,
+      createCount: built.plan.createCount,
+    },
+  };
+}
+
+/**
+ * Áp dụng gộp: ghi đè NỘI DUNG bài đích tại chỗ (giữ `id`), tạo bài mới nếu vượt
+ * quá số buổi hiện có. KHÔNG đụng trạng thái/khoá/lưu trữ và KHÔNG chép học liệu
+ * (SCORM / bài tập / đề thi / tài liệu) — chúng là thực thể riêng gắn theo buổi.
+ */
+export async function applyMergeLessons(input: {
+  targetCurriculumId: string;
+  sourceCurriculumId: string;
+  startOrder: number;
+}): Promise<Result<{ overwritten: number; created: number }>> {
+  const gate = await requireRole();
+  if (!gate.ok) return gate;
+
+  const built = await buildMergePlan(gate.sdb, input);
+  if (!built.ok) return built;
+  if (built.plan.errors.length > 0) {
+    return { ok: false, error: built.plan.errors.join(" ") };
+  }
+  if (built.plan.items.length === 0) {
+    return { ok: false, error: "Không có bài nào để gộp" };
+  }
+
+  const byId = new Map(built.sources.map((s) => [s.id, s]));
+
+  try {
+    await gate.sdb.$transaction(async (tx) => {
+      for (const it of built.plan.items) {
+        const src = byId.get(it.sourceLessonId);
+        if (!src) continue;
+        const data = pickLessonContent(src);
+        if (it.targetId) {
+          await tx.lesson.update({
+            where: { id: it.targetId },
+            data: { ...data, version: { increment: 1 } },
+          });
+        } else {
+          await tx.lesson.create({
+            data: {
+              ...data,
+              curriculumId: input.targetCurriculumId,
+              order: it.targetOrder,
+            },
+          });
+        }
+      }
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Gộp thất bại: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  const { actorId, actorName } = getAuditActor(gate.session);
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "curriculum",
+    entityType: "Curriculum",
+    entityId: input.targetCurriculumId,
+    action: "MERGE_LESSONS",
+    newValues: {
+      sourceCurriculumId: input.sourceCurriculumId,
+      startOrder: input.startOrder,
+      overwritten: built.plan.overwriteCount,
+      created: built.plan.createCount,
+      titles: built.plan.items.map((it) => `${it.targetOrder}. ${it.sourceTitle}`),
+    },
+    reason: `Gộp ${built.plan.items.length} bài từ giáo trình khác vào buổi ${input.startOrder}+`,
+  });
+
+  revalidatePath(`/curriculums/${input.targetCurriculumId}/edit`);
+  revalidatePath("/curriculums");
+  return {
+    ok: true,
+    data: { overwritten: built.plan.overwriteCount, created: built.plan.createCount },
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
