@@ -51,9 +51,9 @@ export const faqs: FAQ[] = [
       {
         type: "list",
         items: [
-          "Sata1: 11 buổi tính phí (5 buổi đầu miễn phí), tổng 16,5 giờ.",
+          "Sata1: 16 buổi/khóa, tổng 24 giờ (5 buổi đầu là buổi học thử miễn phí).",
           "Sata2: 16 buổi/khóa, tổng 24 giờ.",
-          "Combo Sata1 + Sata2: 27 buổi tính phí, tổng 40,5 giờ.",
+          "Combo Sata1 + Sata2: 32 buổi, tổng 48 giờ.",
           "Sata8: 5 buổi chuyên sâu, tổng 7,5 giờ.",
           "Sata3-Sata7: 48 buổi/năm, tổng 72 giờ.",
         ],

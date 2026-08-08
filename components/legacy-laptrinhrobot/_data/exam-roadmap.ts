@@ -91,14 +91,14 @@ export const examRoadmap: ExamRoadmapItem[] = [
     id: "Combo",
     displayName: "Full Lộ Trình Luyện Thi",
     grade: "Lớp 3-8",
-    sessions: 27,
-    totalDuration: "40,5 giờ",
+    sessions: 32,
+    totalDuration: "48 giờ",
     device: "RoboSim phần mềm + Robot Beta thật",
     description:
-      "Gói Combo bao gồm 11 buổi tính phí Robosim Master + 16 buổi Đấu trường Robot. Phụ huynh chọn gói này khi muốn con đi trọn lộ trình luyện thi từ RoboSim đến robot Beta.",
+      "Gói Combo bao gồm 16 buổi Robosim Master + 16 buổi Đấu trường Robot. Phụ huynh chọn gói này khi muốn con đi trọn lộ trình luyện thi từ RoboSim đến robot Beta.",
     highlights: [
       "Bao gồm Robosim Master + Đấu trường Robot",
-      "27 buổi tính phí - 90 phút/buổi - Tổng 40,5 giờ",
+      "32 buổi - 90 phút/buổi - Tổng 48 giờ",
       "Học trọn lộ trình luyện thi với chi phí ưu đãi hơn so với học riêng từng khoá",
     ],
     ...examDuration,
