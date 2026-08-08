@@ -228,7 +228,7 @@ export async function assignUserOrgRole(
       await syncCenterClassConversations(tx, org.centerId);
     }
     return row;
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   await logRbacAudit({
     entity: "ASSIGNMENT", entityId: `${parsed.userId}:${parsed.orgUnitId}:${parsed.roleId}`,
@@ -272,7 +272,7 @@ export async function revokeUserOrgRole(
       await syncCenterClassConversations(tx, org.centerId);
     }
     return row;
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
   await logRbacAudit({
     entity: "ASSIGNMENT", entityId: `${parsed.userId}:${parsed.orgUnitId}:${parsed.roleId}`,
     action: "REVOKE", actorId: actor.id, actorName: actor.name, reason: parsed.reason,

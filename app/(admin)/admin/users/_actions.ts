@@ -171,7 +171,8 @@ export async function createUserAction(formData: FormData) {
     }
 
     return created;
-  }).catch((err: unknown) => {
+    // timeout 30s: syncCenterClassConversations chạm mọi lớp ACTIVE của cơ sở
+  }, { timeout: 30_000, maxWait: 10_000 }).catch((err: unknown) => {
     // Lỗi RBAC hiện nguyên văn cho admin; lỗi khác giữ nguyên hành vi cũ (ném lên).
     if (err instanceof OrgRoleSyncError) return { syncError: err.message };
     throw err;
@@ -372,7 +373,7 @@ export async function updateUserAction(id: string, formData: FormData) {
         await syncCenterClassConversations(tx, centerId);
       }
     }
-  }).catch((err: unknown) => {
+  }, { timeout: 30_000, maxWait: 10_000 }).catch((err: unknown) => {
     if (err instanceof OrgRoleSyncError) return { syncError: err.message };
     throw err;
   });
@@ -449,7 +450,7 @@ export async function toggleUserActiveAction(id: string) {
       if (hasRole(user, "CENTER_MANAGER")) {
         await syncCenterClassConversations(tx, user.centerId);
       }
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     console.error("[toggleUserActive] error:", err);
     return { ok: false, error: "Không cập nhật được trạng thái tài khoản — thử lại" };

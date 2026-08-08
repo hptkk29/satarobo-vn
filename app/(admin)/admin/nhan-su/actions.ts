@@ -642,7 +642,7 @@ export async function changeEmployeeRoleAction(input: {
       ) {
         await syncCenterClassConversations(tx, employee.centerId);
       }
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     if (err instanceof OrgRoleSyncError) return { ok: false, error: err.message };
     return {
