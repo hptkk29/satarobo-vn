@@ -94,6 +94,29 @@ prisma/
 - **`EmployeeOrgAssignment`** (nhân sự/kiêm nhiệm/lương — 5 assignmentType + allocationPercent) **KHÔNG tự sinh quyền**; quyền chỉ từ `UserOrgRole`.
 - **scopedDb(actor)** ép cách ly cơ sở: CS1 không xem CS2 (test CI bắt buộc).
 
+## Nền Hệ thống — luật cứng cho agent
+
+> Nguồn: bàn giao Nền Hệ thống 08/08/2026 (`docs/nen-he-thong/` trên nhánh `feat/nen-he-thong-p0`; gốc `E:\websatarobo data\taicautruc-module-hethong`). Áp dụng cho MỌI module từ nay — kể cả module chat đang xây (điều khoản adapter `can()`, Tiger T3).
+
+1. MỌI kiểm tra quyền đi qua duy nhất hàm `can(actor, permissionKey, target)`.
+   Cấm viết điều kiện quyền (so role, so centerId/orgUnitId) trong Server Action,
+   component, hay query. Vi phạm lint `no-inline-authz` = build fail.
+2. Trước P4, `can()` fallback về logic centerId hiện hành. Không được xoá
+   đường cũ, không được đổi hành vi đường cũ.
+3. Mọi bảng mới có dữ liệu theo đơn vị BẮT BUỘC có cột `orgUnitId`
+   (không thêm `centerId` mới). Bảng cũ: ghi kép cả hai cột cho tới P4.
+4. Không tự ý sinh migration đổi/bỏ cột trên bảng đang có dữ liệu PROD.
+   Migration chỉ nằm trong story được giao, có dry-run, và Dev chạy tay trên PROD.
+5. Test AUTO-CI của story (xem 04-TestScenarios) viết TRƯỚC phần hiện thực.
+   Story chưa có test đỏ thì chưa được viết Server Action.
+6. Không nhúng role/scope vào JWT. Nguồn quyền là DB, cache theo request.
+7. Nội dung chương trình dạy: mọi endpoint trả nội dung phải qua chuỗi
+   4 điều kiện ở server (BA §3.2). Không có ngoại lệ cho môi trường dev.
+8. Không cron nào GHI thay đổi quyền. Hết hạn là thuộc tính resolver.
+9. Secret chỉ trong env; không hardcode, không log giá trị secret.
+10. Kết thúc phiên: cập nhật documentation/ tương ứng phần đã làm,
+    liệt kê file đổi, và DỪNG — không tự chuyển sang story kế.
+
 ## Performance budget
 
 - Client public pages: Lighthouse ≥ 85 mobile · LCP < 2.5s · CLS < 0.1.
