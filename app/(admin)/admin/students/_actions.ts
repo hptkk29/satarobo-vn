@@ -32,6 +32,7 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import { phoneSearchTerm } from "@/lib/phone";
+import { syncStudentNameToCrm } from "@/lib/students/sync-name";
 
 type ActionResult = { error?: string };
 
@@ -258,6 +259,8 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
     }
   }
 
+  // Lead bị đổi tên theo — gom lại để revalidate SAU transaction.
+  let syncedLeadIds: string[] = [];
   try {
     await sdb.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -277,6 +280,22 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
         changedFields: detectChangedFields(before, updated),
         tx,
       });
+
+      // 08/08 — ĐỔI TÊN HV PHẢI DỘI SANG CRM trong CÙNG transaction. Trước đây chỉ ghi
+      // `Student.name` ⇒ trang lead / chi tiết lead / học thử vẫn hiện tên cũ
+      // (`LeadChild.fullName`, `Lead.childName`, `ParentFeedback.studentName` là các
+      // bản sao rời), admin phải đi sửa tay từng màn.
+      if (before.name !== updated.name) {
+        const res = await syncStudentNameToCrm({
+          tx,
+          studentId: id,
+          oldName: before.name,
+          newName: updated.name,
+          parentPhone: updated.parentPhone ?? before.parentPhone,
+          actor: { id: actorId, name: actorName },
+        });
+        syncedLeadIds = res.leadIds;
+      }
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
@@ -287,6 +306,13 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
 
   revalidatePath("/students");
   revalidatePath(`/students/${id}/edit`);
+  if (syncedLeadIds.length > 0) {
+    revalidatePath("/leads");
+    for (const leadId of syncedLeadIds) revalidatePath(`/leads/${leadId}`);
+    // Màn học thử/lớp trải nghiệm đọc LeadChild.fullName.
+    revalidatePath("/trial-classes");
+    revalidatePath("/hoc-thu");
+  }
   redirect("/students");
 }
 
