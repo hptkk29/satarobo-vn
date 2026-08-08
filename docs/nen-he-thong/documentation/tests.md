@@ -10,6 +10,9 @@
 | (Đợt chat, đang viết) US-05 khung test ma trận quyền chat | Quyền Participant của module chat qua adapter `can()` |
 | **[AS-BUILT US-01]** `lib/permissions/registry.test.ts` (unit, 7 test) | TS-01: key trùng → throw nêu key + 2 module; parity 2 chiều registry ↔ `ALL_ACTIONS` + exception khai-trước tự hết hạn (assert c) — CI job unit-tests chặn merge |
 | **[AS-BUILT US-01]** `tests/e2e/a0/permission-registry.spec.ts` (integration, 4 case) | TS-01: sync đủ N row · idempotent · key trùng → DB nguyên trạng (snapshot trước/sau) · key vắng khai báo → isActive=false không DELETE — chạy CI job e2e-a0 (Postgres service) |
+| **[AS-BUILT US-02]** `lib/permissions/can.test.ts` (unit, 15) + `lib/auth/permission-decision.test.ts` (unit, 3) | TS-02 phần ROLE: DENY>ALLOW · DENY cấp trường · bảng chân trị 4 dataScope · chống rò ngang đa-role · ALLOW+mask invalid · parity fallback canV2 · mask vô điều kiện qua detail |
+| **[AS-BUILT US-02]** `lib/eslint/inline-authz.test.ts` (unit, 22) | TS-03: 2 rule chặn inline-authz + bắt action ghi thiếu can() (AST-based, chống bypass export{}/comment) + allowlist 71 file + freshness — CI job unit-tests + quality (pnpm lint) chặn merge |
+| **[AS-BUILT US-02]** `tests/e2e/a0/permission-grant.spec.ts` (integration, 4 case) | resolveActor nạp grant thật · DENY ROLE-grant chặn end-to-end · xoá grant → request kế mất hiệu lực (không cache phiên) · bảng rỗng → parity tuyệt đối đường cũ |
 
 Ngoài các nhóm trên: chưa có test nào cho các luật còn lại của nền. Các dòng dưới đây là PROPOSED (TS-01 đã chuyển lên mục 1).
 
