@@ -4,6 +4,7 @@ import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { CertificatePdf, type CertificateData } from "@/lib/pdf/certificate";
 import { checkPermission } from "@/lib/auth/check-permission";
 
@@ -66,8 +67,10 @@ export async function GET(req: NextRequest) {
 
   let pdfBuffer: Buffer;
   try {
-    pdfBuffer = await renderToBuffer(
-      createElement(CertificatePdf, { d: data }) as unknown as ReactElement<DocumentProps>,
+    pdfBuffer = await withFreshFonts(() =>
+      renderToBuffer(
+        createElement(CertificatePdf, { d: data }) as unknown as ReactElement<DocumentProps>,
+      ),
     );
   } catch (err) {
     return NextResponse.json(

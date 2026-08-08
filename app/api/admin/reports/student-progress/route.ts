@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getStudentProgress } from "@/lib/progress";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import {
   ProgressReportPdf,
   type ProgressReportData,
@@ -167,10 +168,12 @@ export async function POST(req: NextRequest) {
     // ProgressReportPdf returns a <Document>; renderToBuffer's typing only
     // accepts ReactElement<DocumentProps>, so cast through the function-
     // component element since TS can't infer the JSX return.
-    pdfBuffer = await renderToBuffer(
-      createElement(ProgressReportPdf, {
-        data: reportData,
-      }) as unknown as ReactElement<DocumentProps>,
+    pdfBuffer = await withFreshFonts(() =>
+      renderToBuffer(
+        createElement(ProgressReportPdf, {
+          data: reportData,
+        }) as unknown as ReactElement<DocumentProps>,
+      ),
     );
   } catch (err) {
     return NextResponse.json(

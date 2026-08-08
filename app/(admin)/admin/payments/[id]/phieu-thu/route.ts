@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { ReceiptPdf, type ReceiptPdfData } from "@/lib/pdf/receipt";
 
 export const dynamic = "force-dynamic";
@@ -115,8 +116,10 @@ export async function GET(
 
   let pdf: Buffer;
   try {
-    pdf = await renderToBuffer(
-      createElement(ReceiptPdf, { data }) as unknown as ReactElement<DocumentProps>,
+    pdf = await withFreshFonts(() =>
+      renderToBuffer(
+        createElement(ReceiptPdf, { data }) as unknown as ReactElement<DocumentProps>,
+      ),
     );
   } catch (err) {
     return NextResponse.json(

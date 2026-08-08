@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getPublishedReportCardForStudent } from "@/lib/lms/report-card";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { ReportCardPdf } from "@/lib/pdf/report-card";
 
 export const dynamic = "force-dynamic";
@@ -65,8 +66,10 @@ export async function GET(
 
   let pdf: Buffer;
   try {
-    pdf = await renderToBuffer(
-      createElement(ReportCardPdf, { card }) as unknown as ReactElement<DocumentProps>,
+    pdf = await withFreshFonts(() =>
+      renderToBuffer(
+        createElement(ReportCardPdf, { card }) as unknown as ReactElement<DocumentProps>,
+      ),
     );
   } catch (err) {
     return NextResponse.json(

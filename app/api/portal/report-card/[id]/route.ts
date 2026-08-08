@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getPublishedReportCardForStudent } from "@/lib/lms/report-card";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { ReportCardPdf } from "@/lib/pdf/report-card";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   let pdf: Buffer;
   try {
-    pdf = await renderToBuffer(createElement(ReportCardPdf, { card }) as unknown as ReactElement<DocumentProps>);
+    pdf = await withFreshFonts(() =>
+      renderToBuffer(createElement(ReportCardPdf, { card }) as unknown as ReactElement<DocumentProps>),
+    );
   } catch (err) {
     return NextResponse.json(
       { error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}` },

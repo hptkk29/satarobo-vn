@@ -6,6 +6,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getStudentTranscript } from "@/lib/transcript/service";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { TranscriptPdf } from "@/lib/pdf/transcript";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,9 @@ export async function GET(req: NextRequest) {
 
   let pdf: Buffer;
   try {
-    pdf = await renderToBuffer(createElement(TranscriptPdf, { t }) as unknown as ReactElement<DocumentProps>);
+    pdf = await withFreshFonts(() =>
+      renderToBuffer(createElement(TranscriptPdf, { t }) as unknown as ReactElement<DocumentProps>),
+    );
   } catch (err) {
     return NextResponse.json(
       { error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}` },

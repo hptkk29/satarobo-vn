@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getStudentTranscript } from "@/lib/transcript/service";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { TranscriptPdf } from "@/lib/pdf/transcript";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,9 @@ export async function GET() {
 
   let pdf: Buffer;
   try {
-    pdf = await renderToBuffer(createElement(TranscriptPdf, { t }) as unknown as ReactElement<DocumentProps>);
+    pdf = await withFreshFonts(() =>
+      renderToBuffer(createElement(TranscriptPdf, { t }) as unknown as ReactElement<DocumentProps>),
+    );
   } catch (err) {
     return NextResponse.json(
       { error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}` },

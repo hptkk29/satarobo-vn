@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { getTeacherTrialRubricContext } from "@/lib/lms/teacher-schedule";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { TrialEvalPdf } from "@/lib/pdf/trial-eval";
 
 export const dynamic = "force-dynamic";
@@ -32,14 +33,16 @@ export async function GET(
   if (!ctx) {
     return NextResponse.json({ error: "Không tìm thấy học viên trải nghiệm" }, { status: 404 });
   }
-  if (!ctx.existing) {
+  // Gán ra biến riêng: TS mất narrowing của `ctx.existing` khi dùng trong callback.
+  const existing = ctx.existing;
+  if (!existing) {
     return NextResponse.json(
       { error: "Chưa có phiếu đánh giá — hãy lưu phiếu trước khi xuất PDF" },
       { status: 404 },
     );
   }
 
-  const dateLabel = ctx.existing.updatedAt.toLocaleDateString("vi-VN", {
+  const dateLabel = existing.updatedAt.toLocaleDateString("vi-VN", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -48,21 +51,23 @@ export async function GET(
 
   let pdf: Buffer;
   try {
-    pdf = await renderToBuffer(
-      createElement(TrialEvalPdf, {
-        data: {
-          studentName: ctx.studentName,
-          courseName: ctx.courseName,
-          trialClassName: ctx.trialClassName,
-          scores: ctx.existing.scores,
-          totalScore: ctx.existing.totalScore,
-          rank: ctx.existing.rank,
-          generalComment: ctx.existing.generalComment,
-          orientation: ctx.existing.orientation,
-          evaluatedByName: ctx.existing.evaluatedByName,
-          dateLabel,
-        },
-      }) as unknown as ReactElement<DocumentProps>,
+    pdf = await withFreshFonts(() =>
+      renderToBuffer(
+        createElement(TrialEvalPdf, {
+          data: {
+            studentName: ctx.studentName,
+            courseName: ctx.courseName,
+            trialClassName: ctx.trialClassName,
+            scores: existing.scores,
+            totalScore: existing.totalScore,
+            rank: existing.rank,
+            generalComment: existing.generalComment,
+            orientation: existing.orientation,
+            evaluatedByName: existing.evaluatedByName,
+            dateLabel,
+          },
+        }) as unknown as ReactElement<DocumentProps>,
+      ),
     );
   } catch (err) {
     return NextResponse.json(

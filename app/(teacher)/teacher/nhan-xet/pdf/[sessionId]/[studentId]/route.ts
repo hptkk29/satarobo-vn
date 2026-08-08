@@ -9,6 +9,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { canManageSessionRecord } from "@/app/(admin)/admin/sessions/[id]/_feedback-core";
 import { normalizeEvalNotes, normalizeEvalRatings } from "@/lib/lms/session-eval-rubric";
+import { withFreshFonts } from "@/lib/pdf/brand";
 import { SessionEvalPdf } from "@/lib/pdf/session-eval";
 
 export const dynamic = "force-dynamic";
@@ -90,20 +91,22 @@ export async function GET(
 
   let pdf: Buffer;
   try {
-    pdf = await renderToBuffer(
-      createElement(SessionEvalPdf, {
-        data: {
-          studentName: student.name,
-          courseName: sess.class.course.name,
-          className: sess.class.name,
-          sessionTopic: sess.topic ?? "Buổi học",
-          dateLabel,
-          projectName: fb.projectName,
-          notes: normalizeEvalNotes(fb.notes),
-          ratings: normalizeEvalRatings(fb.rubric),
-          evaluatedByName: gv?.name ?? null,
-        },
-      }) as unknown as ReactElement<DocumentProps>,
+    pdf = await withFreshFonts(() =>
+      renderToBuffer(
+        createElement(SessionEvalPdf, {
+          data: {
+            studentName: student.name,
+            courseName: sess.class.course.name,
+            className: sess.class.name,
+            sessionTopic: sess.topic ?? "Buổi học",
+            dateLabel,
+            projectName: fb.projectName,
+            notes: normalizeEvalNotes(fb.notes),
+            ratings: normalizeEvalRatings(fb.rubric),
+            evaluatedByName: gv?.name ?? null,
+          },
+        }) as unknown as ReactElement<DocumentProps>,
+      ),
     );
   } catch (err) {
     return NextResponse.json(
