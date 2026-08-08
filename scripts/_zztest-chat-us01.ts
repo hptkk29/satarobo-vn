@@ -21,7 +21,11 @@ import { currentDbHost } from "./_load-env";
 import { execSync } from "node:child_process";
 import { Prisma, PrismaClient } from "@prisma/client";
 
-const db = new PrismaClient();
+// Script chạy ngoài Next: đi session pooler (DIRECT_URL) nếu có — tránh lỗi pgbouncer
+// "prepared statement s1 already exists" (42P05) của transaction pooler khi chạy lặp.
+const db = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
+});
 
 const P = "ZZTEST_CHAT_US01_";
 const SUBJECT_ID = `${P}class_A`; // subjectId là String trần — không FK sang Class
@@ -66,15 +70,19 @@ async function cleanup() {
 
 // ---------- AC1: migrate status sạch ----------
 function ac1MigrateStatus() {
+  // Gộp cả stdout lẫn stderr — prisma in một phần ra stderr khi non-TTY,
+  // chỉ đọc stdout có lúc thiếu chuỗi xác nhận (bug lộ ở tổng nghiệm thu Đợt 0).
   let out = "";
   try {
-    out = execSync("pnpm prisma migrate status", {
+    out = execSync("pnpm exec prisma migrate status 2>&1", {
       cwd: process.cwd(),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      shell: "cmd.exe",
     });
   } catch (e) {
-    out = e instanceof Error && "stdout" in e ? String((e as { stdout: unknown }).stdout) : String(e);
+    const err = e as { stdout?: unknown; stderr?: unknown };
+    out = `${String(err.stdout ?? "")}\n${String(err.stderr ?? "")}` || String(e);
   }
   const clean = out.includes("Database schema is up to date");
   report(
@@ -218,15 +226,16 @@ async function ac4Indexes(convId: string) {
   const idx = await db.$queryRaw<Array<{ indexname: string; indexdef: string }>>(
     Prisma.sql`SELECT indexname, indexdef FROM pg_indexes WHERE tablename IN ('ConversationParticipant','Message') ORDER BY indexname`
   );
-  const def = (name: string) => idx.find((r) => r.indexname === name)?.indexdef ?? "";
-  const okMy = def("ConversationParticipant_userId_leftAt_idx").includes(
-    '("userId", "leftAt")'
-  );
+  // So khớp trên indexdef ĐÃ BỎ nháy kép: Postgres không quote identifier
+  // lowercase (vd cột enum `kind`) nên so chuỗi có nháy sẽ trượt oan.
+  const def = (name: string) =>
+    (idx.find((r) => r.indexname === name)?.indexdef ?? "").replace(/"/g, "");
+  const okMy = def("ConversationParticipant_userId_leftAt_idx").includes("(userId, leftAt)");
   const ok30 = def("Message_conversationId_createdAt_idx").includes(
-    '("conversationId", "createdAt" DESC)'
+    "(conversationId, createdAt DESC)"
   );
   const okKind = def("Message_conversationId_kind_createdAt_idx").includes(
-    '("conversationId", "kind", "createdAt" DESC)'
+    "(conversationId, kind, createdAt DESC)"
   );
   report(
     "AC4 index (fallback planner-smalltable)",
