@@ -45,8 +45,8 @@ export const examRoadmap: ExamRoadmapItem[] = [
     groupName: "Khóa luyện thi",
     educationLevel: "Tiểu học, Trung học cơ sở",
     grade: "Lớp 3-8",
-    sessions: 11,
-    totalDuration: "16,5 giờ",
+    sessions: 16,
+    totalDuration: "24 giờ",
     device: "RoboSim phần mềm",
     format: "Trực tiếp, kết hợp E-learning",
     description:
@@ -60,9 +60,8 @@ export const examRoadmap: ExamRoadmapItem[] = [
       "Trình bày được quy trình lắp ráp, lập trình và vận hành robot.",
     ],
     methods: ["Blended Learning", "Flipped Classroom", "Luyện tập theo nhiệm vụ bài thi", "Tự học có hướng dẫn và kiểm soát"],
-    // 5 buổi đầu (intro/discovery) đã miễn phí cho học sinh, không tính trong lộ trình tính phí.
-    // Hiển thị 11 buổi tính phí từ lesson số 6 trong contestLessons trở đi.
-    lessons: contestLessons.slice(5),
+    // Hiển thị trọn 16 buổi của lộ trình (5 buổi đầu là buổi học thử miễn phí, 11 buổi sau tính phí).
+    lessons: contestLessons,
     ...examDuration,
   },
   {
