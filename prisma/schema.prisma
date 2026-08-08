@@ -367,7 +367,50 @@ model PermissionDescriptor {
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
+  grants PermissionGrant[] // US-02 — grant trỏ về key registry (Restrict: không xoá key còn grant)
+
   @@index([module])
+}
+
+// ─── Nền Hệ thống P0 · US-02 — PermissionGrant (TS-02) ───
+// Bảng grant MỚI cho engine can() hợp nhất (lib/permissions/can.ts). Ship RỖNG:
+// không grant khớp → fallback NGUYÊN TRẠNG đường cũ (v1/v2/shadow/flag).
+// KHÔNG liên quan UserPermissionGrant cũ — engine mới TUYỆT ĐỐI không đọc bảng cũ
+// (test ghim [A0-03-T6-02] "grant DENY không làm mất quyền role" phải xanh nguyên trạng).
+
+/// US-02 — chủ thể nhận grant: RoleDef (subjectId = RoleDef.id) hoặc UserGroup (US-03).
+enum GrantSubjectType {
+  ROLE
+  GROUP
+}
+
+/// US-02 — phạm vi dữ liệu của grant (BA §2.5). Trước P1 fallback theo centerId (AC3).
+enum DataScope {
+  ALL
+  UNIT_AND_BELOW
+  UNIT_ONLY
+  OWN
+}
+
+model PermissionGrant {
+  id          String           @id @default(cuid())
+  subjectType GrantSubjectType
+  subjectId   String // polymorphic theo subjectType (RoleDef.id | UserGroup.id US-03) — KHÔNG FK có chủ đích
+  // FK về registry (Restrict): không cho grant trỏ key chưa khai báo, không xoá key còn grant.
+  permissionKey String
+  descriptor    PermissionDescriptor @relation(fields: [permissionKey], references: [key], onDelete: Restrict)
+  effect        GrantType // ALLOW | DENY — DENY fieldMask rỗng chặn action, KHÁC rỗng chỉ che trường
+  dataScope     DataScope
+  fieldMask     String[]             @default([]) // rỗng = toàn action; khác rỗng (DENY) = che các trường này
+  derivedFrom   String? // vd hợp đồng franchise sinh grant (BA §6 "chừa cột trước" — engine chưa dùng)
+  reason        String?              @db.Text // lý do cấp/chặn (audit)
+  createdById   String?
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@unique([subjectType, subjectId, permissionKey, effect])
+  @@index([subjectType, subjectId])
+  @@index([permissionKey])
 }
 
 model UserOrgRole {
