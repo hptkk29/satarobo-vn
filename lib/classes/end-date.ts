@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
+import { computePhasedSessionDates, type SchedulePhase } from "@/lib/classes/phases";
 import { vnDateOnly } from "@/lib/time/vn";
 
 // =============================================================================
@@ -45,10 +46,18 @@ export async function suggestClassEndDate(input: {
   centerId: string | null;
   startDate: Date | null;
   scheduleDays: number[];
+  /**
+   * KẾ HOẠCH LỊCH nhiều giai đoạn — có thì THẮNG `scheduleDays`. Lớp giảm từ 2 xuống
+   * 1 buổi/tuần giữa khoá kết thúc muộn hơn nhiều so với tính bằng nhịp của giai đoạn
+   * đầu, nên tính bằng lịch phẳng ra ngày bế giảng sai (và lệch với buổi cuối thật).
+   */
+  phases?: readonly SchedulePhase[];
   courseId: string;
   curriculumId?: string | null;
 }): Promise<Date | null> {
-  if (!input.startDate || input.scheduleDays.length === 0) return null;
+  const usable = (input.phases ?? []).filter((p) => p.slots.length > 0);
+  if (!input.startDate) return null;
+  if (usable.length === 0 && input.scheduleDays.length === 0) return null;
 
   const count = await resolveSessionCount(input.courseId, input.curriculumId);
   if (count <= 0) return null;
@@ -57,13 +66,22 @@ export async function suggestClassEndDate(input: {
     where: { OR: [{ centerId: input.centerId }, { centerId: null }] },
     select: { date: true, endDate: true },
   });
+  const holidays = expandHolidaySet(holidayRows);
 
-  const dates = computeSessionDates({
-    from: input.startDate,
-    scheduleDays: input.scheduleDays,
-    count,
-    holidays: expandHolidaySet(holidayRows),
-  });
+  const dates =
+    usable.length > 0
+      ? computePhasedSessionDates({
+          from: input.startDate,
+          count,
+          phases: usable,
+          holidays,
+        }).dates
+      : computeSessionDates({
+          from: input.startDate,
+          scheduleDays: input.scheduleDays,
+          count,
+          holidays,
+        });
   const last = dates[dates.length - 1];
   return last ? dateOnly(last) : null;
 }

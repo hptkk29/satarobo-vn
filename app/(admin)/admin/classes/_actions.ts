@@ -20,6 +20,16 @@ import { canTransition } from "@/lib/enrollments/status";
 import { genClassCode } from "@/lib/codegen";
 import { computeSessionDates, expandHolidaySet } from "@/lib/classes/schedule";
 import { resolveClassSlots, applySlotTimeToDate } from "@/lib/classes/slots";
+import {
+  flatScheduleAtStart,
+  phaseInputsToDomain,
+  sortPhases,
+  validatePhases,
+  WEEKDAY_LABELS,
+  type SchedulePhase,
+} from "@/lib/classes/phases";
+import { loadClassPhases, persistPhases } from "@/lib/classes/phases-service";
+import type { SchedulePhaseInput } from "@/lib/classes/phase-form";
 import { vnAddDays, vnEndOfDay, vnStartOfDay, vnWeekday, vnYmd } from "@/lib/time/vn";
 import { suggestClassEndDate } from "@/lib/classes/end-date";
 import { generateClassSessions } from "@/lib/classes/generate";
@@ -138,6 +148,12 @@ function toUpdateData(
   parsed: ReturnType<typeof classCreateSchema.parse>,
   centerId: string | null,
   orgUnitId: string | null,
+  /**
+   * `omitSchedule` — form không mang lịch theo (màn sửa lớp: lịch do khối "Kế hoạch lịch
+   * học" quản). Phải BỎ HẲN 3 khoá lịch khỏi payload: để nguyên là ghi giá trị mặc định
+   * của schema (`[]` / `null`) đè lên lịch thật.
+   */
+  opts: { omitSchedule?: boolean } = {},
 ): Prisma.ClassUpdateInput {
   const {
     courseId,
@@ -147,6 +163,9 @@ function toUpdateData(
     roomId,
     teacherId,
     assistantId,
+    scheduleDays,
+    startTime,
+    endTime,
     ...rest
   } = parsed;
   void _ignoredCenter;
@@ -154,6 +173,7 @@ function toUpdateData(
 
   return {
     ...rest,
+    ...(opts.omitSchedule ? {} : { scheduleDays, startTime, endTime }),
     // PR-C dual-write: orgUnitId nguồn chính, centerId suy ra (HO→null).
     orgUnitId,
     course: { connect: { id: courseId } },
@@ -234,6 +254,59 @@ function readScheduleSlots(
   return out;
 }
 
+/**
+ * 08/08 — LỊCH LỚP GỬI TỪ FORM = KẾ HOẠCH NHIỀU GIAI ĐOẠN (field `schedulePhases`, JSON).
+ *
+ * Ba trạng thái, đừng gộp:
+ *   • `provided: false` — form KHÔNG mang lịch theo (màn sửa lớp: khối "Kế hoạch lịch học"
+ *     tự lưu riêng). Server phải GIỮ NGUYÊN lịch đang có, tuyệt đối không ghi đè bằng
+ *     giá trị mặc định của schema (`scheduleDays: []`, `startTime: null`) — làm thế là
+ *     xoá lịch của lớp mà không ai bấm gì.
+ *   • `provided: true` + `error` — kế hoạch sai → CHẶN, nói rõ sai ở giai đoạn nào.
+ *   • `provided: true` + `phases` — dùng làm nguồn ghi.
+ *
+ * Đường nhập Excel/API cũ vẫn gửi `scheduleDays`/`startTime` phẳng: không có
+ * `schedulePhases` thì nhánh cũ chạy y như trước.
+ */
+function readSchedulePhases(
+  formData: FormData,
+): { provided: false } | { provided: true; error: string } | { provided: true; phases: SchedulePhase[] } {
+  const raw = formData.get("schedulePhases");
+  if (typeof raw !== "string") return { provided: false };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { provided: true, error: "Kế hoạch lịch học không đọc được — tải lại trang rồi nhập lại." };
+  }
+  if (!Array.isArray(parsed)) {
+    return { provided: true, error: "Kế hoạch lịch học không hợp lệ." };
+  }
+
+  const mapped = phaseInputsToDomain(parsed as SchedulePhaseInput[]);
+  if (!mapped.ok) return { provided: true, error: mapped.error };
+
+  const errors = validatePhases(mapped.phases);
+  if (errors.length > 0) return { provided: true, error: errors.join(" ") };
+
+  return { provided: true, phases: mapped.phases };
+}
+
+/** Chữ ký so sánh 2 kế hoạch — đổi thật mới xếp lại buổi, không xếp lại vì bấm Lưu. */
+function phaseSignature(phases: readonly SchedulePhase[]): string {
+  return sortPhases(phases)
+    .map(
+      (p) =>
+        `${vnYmd(p.effectiveFrom)}..${p.effectiveTo ? vnYmd(p.effectiveTo) : ""}#` +
+        [...p.slots]
+          .sort((a, b) => a.weekday - b.weekday)
+          .map((s) => `${WEEKDAY_LABELS[s.weekday] ?? s.weekday}|${s.startTime}|${s.endTime ?? ""}`)
+          .join(","),
+    )
+    .join(";");
+}
+
 function readForm(formData: FormData) {
   const scheduleDaysRaw = formData.getAll("scheduleDays");
   const scheduleDays = scheduleDaysRaw
@@ -310,9 +383,28 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   }
 
   const { actorId, actorName } = getAuditActor(session);
-  const data = parsed.data;
+
+  // 08/08 — form tạo lớp gửi KẾ HOẠCH LỊCH; lịch phẳng (`scheduleDays`/giờ/slot) là bản
+  // sao suy ra từ đó. Đường nhập cũ (Excel/API) không gửi kế hoạch → nhánh phẳng như trước.
+  const plan = readSchedulePhases(formData);
+  if (plan.provided && "error" in plan) return { error: plan.error };
+  const planPhases = plan.provided && "phases" in plan ? plan.phases : null;
+
+  const flat = planPhases
+    ? flatScheduleAtStart(planPhases, parsed.data.startDate ?? null)
+    : null;
+  const data = flat
+    ? {
+        ...parsed.data,
+        scheduleDays: flat.scheduleDays,
+        startTime: flat.startTime,
+        endTime: flat.endTime,
+      }
+    : parsed.data;
   // BGĐ 31/07 — giờ riêng theo thứ (chỉ nhận thứ đang học).
-  const scheduleSlots = readScheduleSlots(formData, data.scheduleDays);
+  const scheduleSlots = flat
+    ? flat.slots.filter((s) => s.startTime)
+    : readScheduleSlots(formData, data.scheduleDays);
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
@@ -383,6 +475,9 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
         centerId,
         startDate: data.startDate,
         scheduleDays: data.scheduleDays,
+        // Nhiều giai đoạn ⇒ ngày bế giảng phải tính theo CẢ dãy, không theo mỗi giai
+        // đoạn đầu (lớp giảm từ 2 xuống 1 buổi/tuần sẽ kết thúc muộn hơn nhiều).
+        phases: planPhases ?? undefined,
         courseId: data.courseId,
         curriculumId: curriculum.id,
       }).catch(() => null)),
@@ -425,6 +520,12 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
         select: { id: true, ...CLASS_SNAPSHOT_SELECT },
       });
       createdId = created.id;
+
+      // Kế hoạch lịch phải nằm CÙNG transaction với lớp: lớp có mà kế hoạch không có thì
+      // mọi đường sinh/dời buổi lùi về lịch phẳng và lớp im lặng chạy sai nhịp.
+      if (planPhases) {
+        await persistPhases(tx, created.id, planPhases, new Date());
+      }
 
       const { id: _id, ...newValues } = created;
       void _id;
@@ -563,32 +664,64 @@ export async function updateClass(
       _count: { select: { schedulePhases: true } },
     },
   });
+  // 08/08 — form sửa lớp KHÔNG còn ô lịch nào (khối "Kế hoạch lịch học" tự lưu). Không có
+  // `schedulePhases` trong FormData ⇒ GIỮ NGUYÊN lịch hiện tại: schema mặc định
+  // `scheduleDays: []` + `startTime: null`, ghi thẳng là xoá sạch lịch lớp trong im lặng.
+  const plan = readSchedulePhases(formData);
+  if (plan.provided && "error" in plan) return { error: plan.error };
+  const planPhases = plan.provided && "phases" in plan ? plan.phases : null;
+  const scheduleProvided = planPhases !== null || formData.getAll("scheduleDays").length > 0;
+
+  const flat = planPhases
+    ? flatScheduleAtStart(planPhases, parsed.data.startDate ?? null)
+    : null;
+  const dataWithSchedule = flat
+    ? {
+        ...parsed.data,
+        scheduleDays: flat.scheduleDays,
+        startTime: flat.startTime,
+        endTime: flat.endTime,
+      }
+    : parsed.data;
+
   const dataWithEndDate = {
-    ...parsed.data,
+    ...dataWithSchedule,
     endDate:
       parsed.data.endDate ??
       (await suggestClassEndDate({
         centerId,
         startDate: parsed.data.startDate,
-        scheduleDays: parsed.data.scheduleDays,
+        // Lịch không gửi kèm → tính bằng lịch ĐANG LƯU, không phải mảng rỗng của schema.
+        scheduleDays: scheduleProvided
+          ? dataWithSchedule.scheduleDays
+          : (current?.scheduleDays ?? []),
+        phases: planPhases ?? undefined,
         courseId: parsed.data.courseId,
         curriculumId: current?.curriculumId ?? null,
       }).catch(() => null)),
   };
 
   // BGĐ 31/07 — giờ riêng theo thứ (chỉ nhận thứ đang học sau khi sửa lịch).
-  const scheduleSlots = readScheduleSlots(formData, parsed.data.scheduleDays);
+  const scheduleSlots = flat
+    ? flat.slots.filter((s) => s.startTime)
+    : readScheduleSlots(formData, dataWithSchedule.scheduleDays);
 
-  // 07/08 — lớp dùng KẾ HOẠCH LỊCH HỌC: các ô lịch ở form này chỉ là BẢN SAO của giai
-  // đoạn đang hiệu lực. Sửa ở đây vừa vô hiệu (mọi đường sinh/dời buổi đọc giai đoạn)
-  // vừa đè mất bản sao ⇒ chặn thẳng, chỉ đường sang tab đúng. Không đổi gì thì cho lưu
-  // bình thường (admin còn sửa tên lớp, phòng, GV…), nhưng KHÔNG ghi lại bảng slot.
   const usesPhases = (current?._count.schedulePhases ?? 0) > 0;
-  const scheduleTouched = scheduleChanged(current, parsed.data, scheduleSlots);
-  if (usesPhases && scheduleTouched) {
+  // Lịch có ĐỔI THẬT không. Gửi kế hoạch → so kế hoạch cũ/mới (so bản sao phẳng sẽ bỏ sót
+  // thay đổi ở giai đoạn tương lai). Gửi lịch phẳng → so như cũ. Không gửi gì → không đổi.
+  const beforePhases = usesPhases ? ((await loadClassPhases(id))?.phases ?? []) : [];
+  const scheduleTouched = planPhases
+    ? phaseSignature(planPhases) !== phaseSignature(beforePhases)
+    : scheduleProvided
+      ? scheduleChanged(current, dataWithSchedule, scheduleSlots)
+      : false;
+
+  // Lớp đã có kế hoạch mà form lại gửi lịch PHẲNG (đường nhập cũ/API) — chặn: ghi đè bản
+  // sao trong khi kế hoạch vẫn là nguồn sự thật chỉ tạo ra lệch lịch âm thầm.
+  if (usesPhases && !planPhases && scheduleProvided && scheduleTouched) {
     return {
       error:
-        "Lớp này dùng Kế hoạch lịch học nhiều giai đoạn — sửa thứ/giờ ở tab “Kế hoạch lịch học”, không sửa ở đây.",
+        "Lớp này dùng Kế hoạch lịch học nhiều giai đoạn — sửa thứ/giờ ở khối “Kế hoạch lịch học”, không sửa bằng lịch phẳng.",
     };
   }
 
@@ -605,13 +738,18 @@ export async function updateClass(
       const tx = txRaw as unknown as Prisma.TransactionClient;
       const updated = await tx.class.update({
         where: { id },
-        data: toUpdateData(dataWithEndDate, centerId, orgUnitId),
+        data: toUpdateData(dataWithEndDate, centerId, orgUnitId, {
+          omitSchedule: !scheduleProvided,
+        }),
         select: CLASS_SNAPSHOT_SELECT,
       });
 
-      // Thay TOÀN BỘ slot theo form: bỏ hết rồi ghi lại (rỗng = quay về giờ chung).
-      // Lớp dùng kế hoạch thì BỎ QUA — bảng slot đang là bản sao do kế hoạch ghi.
-      if (!usesPhases) {
+      // Kế hoạch gửi kèm form → ghi kế hoạch; `persistPhases` tự đồng bộ luôn bản sao
+      // phẳng + bảng slot, nên KHÔNG đụng tay vào `classScheduleSlot` ở nhánh này.
+      if (planPhases) {
+        await persistPhases(tx, id, planPhases, new Date());
+      } else if (scheduleProvided && !usesPhases) {
+        // Đường lịch phẳng cũ: thay TOÀN BỘ slot theo form (rỗng = quay về giờ chung).
         await tx.classScheduleSlot.deleteMany({ where: { classId: id } });
         if (scheduleSlots.length > 0) {
           await tx.classScheduleSlot.createMany({
@@ -642,8 +780,10 @@ export async function updateClass(
   // đọc lại lớp bằng connection khác nên phải chạy SAU commit, nếu không nó vẫn thấy
   // ngày khai giảng cũ. Lỗi ở bước này KHÔNG rollback việc sửa lớp — người dùng còn nút
   // "Xếp lại buổi theo lịch" ở màn lớp để chạy lại.
+  // Kế hoạch gửi kèm form thì cũng phải xếp lại buổi — nếu không, lớp đổi nhịp mà dãy
+  // buổi giữ nguyên (đúng lỗi "lịch một đằng buổi một nẻo" đã phải vá hôm 08/08).
   let syncWarning: string | undefined;
-  if (!usesPhases && (startDateChanged || scheduleTouched)) {
+  if (startDateChanged || scheduleTouched) {
     try {
       const res = await resyncClassSessions({
         classId: id,
@@ -973,13 +1113,14 @@ async function computeFutureReschedule(classId: string, actor: Actor) {
   // 07/08 — lớp ĐÃ lập kế hoạch lịch nhiều giai đoạn thì nút này không dùng được nữa:
   // nó chỉ biết MỘT bộ thứ+giờ (bản sao của giai đoạn đang hiệu lực) nên sẽ rải cả khoá
   // theo nhịp của riêng giai đoạn đó, xoá sạch ý đồ "tháng 8 học 1 buổi/tuần". Đường
-  // đúng là tab "Kế hoạch lịch học" — ở đó có mốc áp dụng và có giữ buổi đã có dữ liệu.
+  // đúng là khối "Kế hoạch lịch học" ở tab Thông tin — ở đó có mốc áp dụng và có giữ
+  // nguyên buổi đã có dữ liệu.
   const phaseCount = await sdb.classSchedulePhase.count({ where: { classId } });
   if (phaseCount > 0) {
     return {
       ok: false as const,
       error:
-        "Lớp này đang dùng Kế hoạch lịch học nhiều giai đoạn — dời buổi ở tab “Kế hoạch lịch học” (có ô “áp dụng từ ngày” và giữ nguyên buổi đã điểm danh).",
+        "Lớp này đang dùng Kế hoạch lịch học nhiều giai đoạn — dời buổi ở khối “Kế hoạch lịch học” trong tab Thông tin (có ô “áp dụng từ ngày” và giữ nguyên buổi đã điểm danh).",
     };
   }
 
