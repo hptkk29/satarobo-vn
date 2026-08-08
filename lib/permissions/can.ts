@@ -14,18 +14,11 @@
 //      scope KHÔNG thoả → false, KHÔNG rơi xuống đường cũ.
 import type { Actor, Target } from "@/lib/auth/actor";
 import { can as canV2, PermissionError } from "@/lib/auth/can";
+import type { GrantRow } from "@/lib/permissions/grant-types";
 
-/** 1 dòng bảng PermissionGrant đã nạp lên Actor (shape đông cứng — permissions.md AS-BUILT US-01). */
-export type GrantRow = {
-  subjectType: "ROLE" | "GROUP";
-  /** RoleDef.id khi ROLE · UserGroup.id khi GROUP (US-03). */
-  subjectId: string;
-  permissionKey: string;
-  effect: "ALLOW" | "DENY";
-  dataScope: "ALL" | "UNIT_AND_BELOW" | "UNIT_ONLY" | "OWN";
-  /** Rỗng = toàn action; khác rỗng (DENY) = chỉ che các trường này, không chặn action. */
-  fieldMask: string[];
-};
+// Re-export giữ nguyên API public (test + consumer import GrantRow từ đây);
+// định nghĩa thật nằm ở grant-types.ts (type-lá, phá vòng actor→can→actor).
+export type { GrantRow } from "@/lib/permissions/grant-types";
 
 export type GrantDecision =
   | { hit: true; allowed: boolean; fieldMask: string[] }

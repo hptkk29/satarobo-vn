@@ -7,7 +7,9 @@ import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
 import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
 import type { OrgUnitNode } from "@/lib/org/types";
 // US-02 — type-only (erased khi compile, không tạo cycle runtime với lib/permissions/can.ts).
-import type { GrantRow } from "@/lib/permissions/can";
+// GrantRow lấy từ module type-lá (KHÔNG phải lib/permissions/can) — tránh vòng
+// actor→can→actor bị dependency-cruiser no-circular chặn ở CI.
+import type { GrantRow } from "@/lib/permissions/grant-types";
 
 // REQ-02 (REVERTED) — cây OrgUnit đọc TRẦN mỗi request. Trước đây bọc unstable_cache
 // (TTL 300s) nhưng: (a) bảng OrgUnit RẤT NHỎ (HO+CS1+CS2…) → full-scan không đáng kể,
