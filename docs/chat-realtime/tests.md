@@ -13,7 +13,7 @@ Loại: **AUTO-CI** (chặn merge) · **AUTO** (chạy CI, không chặn) · **T
 | Rule (nguồn) | Hành vi kỳ vọng — gồm deny case | Scenario | Loại |
 |---|---|---|---|
 | Cách ly đọc theo lớp/cơ sở (permissions.md) | ph đọc lớp khác/ql đọc cơ sở khác/sale mọi endpoint/PH đã rời → 403; gv dạy chéo thấy đủ 2 lớp | TS-01 | **AUTO-CI** |
-| Cách ly channel + không INSERT client (flows F-SUB) | non-participant subscribe → CHANNEL_ERROR; `channel.send()` client → từ chối; **canary private-flag** | TS-02 | **AUTO-CI** |
+| Cách ly channel + không INSERT client (flows F-SUB) | non-participant subscribe → CHANNEL_ERROR; `channel.send()` client → từ chối; **canary private-flag** | TS-02 (integration chạy bằng scripts/_zztest-chat-us02.ts trên dev — CI không có Realtime service; phần unit JWT chạy vitest trong CI) | **AUTO-CI** |
 | Ma trận hành động ghi (permissions.md) | từng ô ❌ đúng mã lỗi: PH gửi ANN 403, GV gửi lớp không dạy 403, QLCS gửi cả CHAT+ANN lớp mình 200, gỡ tin thiếu lý do 400, ARCHIVED 403 mã riêng | TS-03 | **AUTO-CI** |
 | 1-1 kín + audit-gated (flows F-AUDIT) | 4 vai ngoài cuộc đọc 1-1 → 403; admin thiếu reason → 403 **ở API** không chỉ UI; audit ghi trước khi trả nội dung; payload thành viên cho PH không chứa SĐT/email | TS-04 | **AUTO-CI** |
 | Sync trong transaction (flows F-SYNC) | chuyển lớp: rời cũ + vào mới cùng TX; rollback → không sync nửa vời | TS-05 | **AUTO-CI** |
