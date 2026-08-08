@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
@@ -11,6 +12,7 @@ import {
 } from "@/lib/validators/student";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { syncStudentNameToCrm } from "@/lib/students/sync-name";
 
 // Excel date parser — reused pattern from B3 / C2.
 function parseExcelDate(v: unknown): Date | null {
@@ -260,6 +262,7 @@ export async function POST(req: NextRequest) {
 
   // Stage 3: upsert by studentCode in a transaction. Empty code → create only.
   let success = 0;
+  let renamedAny = false;
   try {
     await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
@@ -293,11 +296,34 @@ export async function POST(req: NextRequest) {
         };
         try {
           if (r.data.studentCode) {
+            // 08/08 — upsert theo mã có thể ĐỔI TÊN học viên đang có → phải dội sang
+            // CRM (LeadChild/Lead.childName/ParentFeedback) như màn sửa học viên, nếu
+            // không import Excel lại tái tạo đúng bug "lead hiện tên cũ" vừa vá.
+            const prev = await tx.student.findUnique({
+              where: { studentCode: r.data.studentCode },
+              select: { id: true, name: true, parentPhone: true },
+            });
             await tx.student.upsert({
               where: { studentCode: r.data.studentCode },
               create: { ...base, studentCode: r.data.studentCode },
               update: base,
             });
+            if (prev && prev.name !== base.name) {
+              renamedAny = true;
+              await syncStudentNameToCrm({
+                // Cùng cast như mọi chỗ khác: client mở rộng của scopedDb ≠ type
+                // TransactionClient thuần, nhưng là cùng một connection/tx.
+                tx: tx as unknown as Prisma.TransactionClient,
+                studentId: prev.id,
+                oldName: prev.name,
+                newName: base.name,
+                parentPhone: base.parentPhone ?? prev.parentPhone,
+                actor: {
+                  id: session.user.id,
+                  name: session.user.name ?? "Import Excel",
+                },
+              });
+            }
           } else {
             await tx.student.create({ data: base });
           }
@@ -329,6 +355,11 @@ export async function POST(req: NextRequest) {
   }
 
   revalidatePath("/admin/students");
+  if (renamedAny) {
+    // Import đổi tên HV đang có → CRM cũng vừa đổi theo (sync-name).
+    revalidatePath("/leads");
+    revalidatePath("/trial-classes");
+  }
 
   return NextResponse.json({ success, errors });
 }

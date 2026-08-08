@@ -20,6 +20,7 @@ import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
+import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
 
 const statusSchema = z.enum([
   'NEW',
@@ -1095,20 +1096,46 @@ export async function updateLeadChild(
   const data = leadChildData(parsed.data)
 
   const { actorId, actorName } = getAuditActor(session)
-  await db.leadChild.update({ where: { id: childId }, data })
+  // 08/08 — đổi tên con Ở MÀN LEAD cũng phải dội sang hồ sơ học viên đã convert (và
+  // các bản sao còn lại), cùng một transaction — đối xứng với chiều updateStudent.
+  // Sửa một nơi mà nơi kia giữ tên cũ thì lần lưu sau sẽ ghi đè ngược, hai hồ sơ
+  // giằng co nhau vô hạn.
+  let syncedStudentIds: string[] = []
+  await db.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient
+    await tx.leadChild.update({ where: { id: childId }, data })
 
-  await logLeadAudit({
-    leadId: child.leadId,
-    action: 'UPDATE',
-    actorId,
-    actorName,
-    oldValues: { childUpdated: child.fullName, leadChildId: childId },
-    newValues: { fullName: data.fullName },
-    changedFields: ['children'],
-  }).catch(() => {})
+    // KHÔNG .catch() nuốt lỗi ở đây nữa: query hỏng giữa transaction là tx đã toang,
+    // nuốt đi chỉ đổi được thông báo lỗi khó hiểu hơn ở query kế tiếp.
+    await logLeadAudit({
+      leadId: child.leadId,
+      action: 'UPDATE',
+      actorId,
+      actorName,
+      oldValues: { childUpdated: child.fullName, leadChildId: childId },
+      newValues: { fullName: data.fullName },
+      changedFields: ['children'],
+      tx,
+    })
+
+    if (child.fullName !== data.fullName) {
+      const res = await syncLeadChildNameToStudents({
+        tx,
+        leadChildId: childId,
+        oldName: child.fullName,
+        newName: data.fullName,
+        actor: { id: actorId, name: actorName },
+      })
+      syncedStudentIds = res.studentIds
+    }
+  })
 
   revalidatePath(`/leads/${child.leadId}`)
   revalidatePath('/leads')
+  if (syncedStudentIds.length > 0) {
+    revalidatePath('/students')
+    for (const sid of syncedStudentIds) revalidatePath(`/students/${sid}/edit`)
+  }
   return { ok: true }
 }
 

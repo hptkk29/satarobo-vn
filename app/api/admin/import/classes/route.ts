@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
@@ -8,6 +9,8 @@ import { ClassStatusEnum } from "@/lib/validators/class";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
+import { phaseFromFlatSchedule } from "@/lib/classes/phases";
+import { persistPhases } from "@/lib/classes/phases-service";
 
 // Excel date parser — reused from D2 / B3.
 function parseExcelDate(v: unknown): Date | null {
@@ -393,6 +396,7 @@ export async function POST(req: NextRequest) {
 
   // Stage 4: upsert by classCode in a single transaction.
   let success = 0;
+  const now = new Date();
   try {
     await sdb.$transaction(async (tx) => {
       for (let i = 0; i < validRows.length; i++) {
@@ -417,18 +421,29 @@ export async function POST(req: NextRequest) {
           notes: r.data.notes,
         };
         try {
-          let classId: string;
-          if (r.data.classCode) {
-            const up = await tx.class.upsert({
-              where: { classCode: r.data.classCode },
-              create: { ...base, classCode: r.data.classCode },
-              update: base,
-              select: { id: true },
-            });
-            classId = up.id;
-          } else {
-            const created = await tx.class.create({ data: base, select: { id: true } });
-            classId = created.id;
+          const saved = r.data.classCode
+            ? await tx.class.upsert({
+                where: { classCode: r.data.classCode },
+                create: { ...base, classCode: r.data.classCode },
+                update: base,
+                select: { id: true },
+              })
+            : await tx.class.create({ data: base, select: { id: true } });
+
+          // 08/08 — lớp nhập file cũng phải CÓ Kế hoạch lịch học, y như lớp tạo tay: kế
+          // hoạch mới là nguồn sự thật của lịch. Không ghi thì lớp nhập file vô hình với
+          // cron đồng bộ bản sao (`resyncLegacyScheduleForAllClasses` chỉ quét lớp có kế
+          // hoạch) và với khối sửa lịch — mỗi đường nhập ra một loại lớp khác nhau.
+          // File chỉ tả được MỘT nhịp học ⇒ đúng 1 giai đoạn mở từ ngày khai giảng; admin
+          // thêm giai đoạn sau ở màn lớp. Thiếu thứ/giờ → bỏ qua, lớp chạy lịch phẳng cũ.
+          const phase = phaseFromFlatSchedule({
+            scheduleDays: base.scheduleDays,
+            startTime: base.startTime ?? null,
+            endTime: base.endTime ?? null,
+            startDate: base.startDate ?? null,
+          });
+          if (phase) {
+            await persistPhases(tx as unknown as Prisma.TransactionClient, saved.id, [phase], now);
           }
           // US-03 chat — import có thể tạo lớp ACTIVE / đổi GV → đồng bộ nhóm lớp
           // trong cùng transaction (trạng thái khác ACTIVE → sync tự no-op).
@@ -436,7 +451,7 @@ export async function POST(req: NextRequest) {
           // (tiền lệ students/classes _actions) — runtime không đổi.
           await syncConversationMembership(
             tx as unknown as import("@prisma/client").Prisma.TransactionClient,
-            classId,
+            saved.id,
           );
           success++;
         } catch (err) {

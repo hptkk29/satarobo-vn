@@ -16,9 +16,18 @@
 // `getDay()` / `new Date(y,m,d)` (bug "chạy máy tôi thì được" 06/08/2026: máy dev +07
 // đúng, Vercel UTC lệch 1 ngày).
 
-import { vnAddDays, vnDateAt, vnParts, vnStartOfDay, vnWeekday, vnYmd } from "@/lib/time/vn";
+import {
+  parseVnYmd,
+  vnAddDays,
+  vnDateAt,
+  vnParts,
+  vnStartOfDay,
+  vnWeekday,
+  vnYmd,
+} from "@/lib/time/vn";
 import type { ClassTimeSlot } from "@/lib/classes/slots";
 import { parseHm } from "@/lib/classes/slots";
+import type { SchedulePhaseInput } from "@/lib/classes/phase-form";
 
 /** Giờ học của MỘT thứ trong MỘT giai đoạn. */
 export interface PhaseSlot {
@@ -277,6 +286,94 @@ export function assignPhasedDates(input: {
     items.push({ id: s.id, oldDate: s.date, newDate: nd, keepReason: null });
   }
   return { items, ranOut: false };
+}
+
+/**
+ * Bản sao lịch PHẲNG để ghi vào `Class` NGAY LÚC TẠO, quy chiếu theo NGÀY KHAI GIẢNG.
+ *
+ * Khác `legacyScheduleFromPhases` ở chỗ KHÔNG BAO GIỜ trả null khi kế hoạch có nội dung:
+ * lớp khai giảng tháng sau thì hôm nay chưa giai đoạn nào hiệu lực, hàm kia trả null
+ * (đúng cho cron: giữ nguyên bản sao đang có) — nhưng lớp VỪA TẠO chưa có bản sao nào để
+ * giữ, nên nó sẽ nằm im với `scheduleDays: []` suốt cả kỳ trước khai giảng. Khi đó ~40 chỗ
+ * đọc lịch kiểu cũ đều hỏng lặng: bảng công GV 0 giờ, lưới lịch tuần mất lớp, dò trùng
+ * phòng bỏ qua, PDF học bạ in "—". Không giai đoạn nào phủ ngày khai giảng thì lùi về
+ * giai đoạn ĐẦU.
+ */
+export function flatScheduleAtStart(
+  phases: readonly SchedulePhase[],
+  startDate: Date | null,
+): { scheduleDays: number[]; startTime: string | null; endTime: string | null; slots: PhaseSlot[] } {
+  const derived = legacyScheduleFromPhases(phases, startDate ?? new Date());
+  if (derived) return derived;
+
+  const first = sortPhases(phases).filter((p) => p.slots.length > 0)[0];
+  if (!first) return { scheduleDays: [], startTime: null, endTime: null, slots: [] };
+
+  const slots = [...first.slots].sort((a, b) => byWeekOrder(a.weekday, b.weekday));
+  return {
+    scheduleDays: slots.map((s) => s.weekday),
+    startTime: slots[0]?.startTime ?? null,
+    endTime: slots[0]?.endTime ?? null,
+    slots,
+  };
+}
+
+/**
+ * Lịch PHẲNG (đường nhập Excel/API cũ) → MỘT giai đoạn mở kể từ ngày khai giảng.
+ *
+ * Vì sao cần: `legacyPhaseFromClass` chỉ suy giai đoạn khi ĐỌC, không ghi gì. Lớp tạo bằng
+ * import vì thế không có bản ghi `ClassSchedulePhase` nào ⇒ vô hình với cron đồng bộ bản
+ * sao (`resyncLegacyScheduleForAllClasses` chỉ quét lớp CÓ kế hoạch) và với khối sửa lịch.
+ * Ghi luôn 1 giai đoạn lúc import thì mọi lớp — nhập tay hay nhập file — cùng một mô hình.
+ */
+export function phaseFromFlatSchedule(input: {
+  scheduleDays: number[];
+  startTime: string | null;
+  endTime: string | null;
+  slots?: { weekday: number; startTime: string; endTime?: string | null }[] | null;
+  startDate: Date | null;
+}): SchedulePhase | null {
+  const phase = legacyPhaseFromClass(input);
+  // Giờ bắt đầu rỗng = lớp mới khai thứ chứ chưa khai giờ → kế hoạch sẽ không qua nổi
+  // `validatePhases` (HH:mm) và sinh buổi lúc 00:00. Thà không có kế hoạch còn hơn có
+  // kế hoạch rác: lớp vẫn chạy đường lịch phẳng như trước.
+  if (!phase || phase.slots.some((s) => !HHMM.test(s.startTime))) return null;
+  return phase;
+}
+
+/**
+ * Kế hoạch dạng FORM (chuỗi "YYYY-MM-DD" / "HH:mm") → miền nghiệp vụ (`Date`).
+ *
+ * ⚠️ Ngày phải đi qua `parseVnYmd` (00:00 giờ VN). `new Date("2026-08-12")` hay
+ * `z.coerce.date()` ra nửa đêm UTC = 07:00 VN và ăn mất buổi sáng của chính ngày đó.
+ *
+ * Dùng chung cho CẢ HAI đường vào: khối "Kế hoạch lịch học" của lớp đã tồn tại
+ * (`_schedule-actions.ts`) và form tạo lớp (`classes/_actions.ts`). Hai bản chép tay
+ * sẽ lệch nhau đúng vào lúc không ai ngờ.
+ */
+export function phaseInputsToDomain(
+  input: readonly SchedulePhaseInput[],
+): { ok: true; phases: SchedulePhase[] } | { ok: false; error: string } {
+  const phases: SchedulePhase[] = [];
+  for (const [i, p] of input.entries()) {
+    const from = parseVnYmd(p.from ?? "");
+    if (!from) return { ok: false, error: `Giai đoạn ${i + 1}: thiếu ngày bắt đầu.` };
+    const to = p.to?.trim() ? parseVnYmd(p.to) : null;
+    if (p.to?.trim() && !to) {
+      return { ok: false, error: `Giai đoạn ${i + 1}: ngày kết thúc không hợp lệ.` };
+    }
+    phases.push({
+      effectiveFrom: from,
+      effectiveTo: to,
+      note: p.note?.trim() || null,
+      slots: (p.slots ?? []).map((s) => ({
+        weekday: Number(s.weekday),
+        startTime: (s.startTime ?? "").trim(),
+        endTime: (s.endTime ?? "").trim() || null,
+      })),
+    });
+  }
+  return { ok: true, phases };
 }
 
 /**

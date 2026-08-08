@@ -26,6 +26,7 @@ import { detectBatchConflicts } from "@/lib/lms/schedule-conflict";
 import { formatDateVN } from "@/lib/format/date";
 import {
   findScheduleGaps,
+  phaseInputsToDomain,
   slotForDate,
   validatePhases,
   WEEKDAY_LABELS,
@@ -38,18 +39,13 @@ import {
   planScheduleApply,
   type ReschedulePlanItem,
 } from "@/lib/classes/phases-service";
+import type { SchedulePhaseInput } from "@/lib/classes/phase-form";
 import { parseVnYmd, vnDateOnly, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 
 type Result = { ok: boolean; error?: string; warning?: string };
 
-/** Kế hoạch gửi từ form (ngày dạng "YYYY-MM-DD", giờ dạng "HH:mm"). */
-export interface SchedulePhaseInput {
-  from: string;
-  /** "" = để mở (chỉ giai đoạn cuối). */
-  to: string;
-  note?: string;
-  slots: { weekday: number; startTime: string; endTime: string }[];
-}
+/** Kế hoạch gửi từ form — hình dạng dùng chung với planner client (`lib/classes/phase-form`). */
+export type { SchedulePhaseInput };
 
 type Gate = {
   actor: Actor;
@@ -81,31 +77,8 @@ async function gate(
   return { ok: true, gate: { actor, sdb, actorId, actorName }, centerId: cls.centerId };
 }
 
-/** Form → domain. Ngày rỗng ở ô "đến" = giai đoạn mở. */
-function toDomainPhases(
-  input: SchedulePhaseInput[],
-): { ok: true; phases: SchedulePhase[] } | { ok: false; error: string } {
-  const phases: SchedulePhase[] = [];
-  for (const [i, p] of input.entries()) {
-    const from = parseVnYmd(p.from ?? "");
-    if (!from) return { ok: false, error: `Giai đoạn ${i + 1}: thiếu ngày bắt đầu.` };
-    const to = p.to?.trim() ? parseVnYmd(p.to) : null;
-    if (p.to?.trim() && !to) {
-      return { ok: false, error: `Giai đoạn ${i + 1}: ngày kết thúc không hợp lệ.` };
-    }
-    phases.push({
-      effectiveFrom: from,
-      effectiveTo: to,
-      note: p.note?.trim() || null,
-      slots: (p.slots ?? []).map((s) => ({
-        weekday: Number(s.weekday),
-        startTime: (s.startTime ?? "").trim(),
-        endTime: (s.endTime ?? "").trim() || null,
-      })),
-    });
-  }
-  return { ok: true, phases };
-}
+/** Form → domain (dùng chung với form tạo/sửa lớp). Ngày rỗng ở ô "đến" = giai đoạn mở. */
+const toDomainPhases = phaseInputsToDomain;
 
 /**
  * Mốc áp dụng: "YYYY-MM-DD" → 00:00 giờ VN, KHÔNG cho ở quá khứ.
