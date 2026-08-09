@@ -28,6 +28,7 @@
     "db:reset": "prisma migrate reset",
     "test:unit": "vitest",
     "test:unit:watch": "vitest watch",
+    "test:chat-db": "vitest run tests/chat --reporter=verbose --no-file-parallelism",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:smoke": "playwright test smoke.spec.ts",
