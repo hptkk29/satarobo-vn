@@ -19,6 +19,7 @@ import {
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
+import { syncCenterClassConversations } from "@/lib/chat/sync-membership";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 type ActionResult<T = unknown> =
@@ -632,7 +633,16 @@ export async function changeEmployeeRoleAction(input: {
         actorName: changedByName,
         reason: parsed.data.reason,
       });
-    });
+
+      // US-03 chat — đổi vai trò có đụng CENTER_MANAGER → đồng bộ nhóm lớp của cơ sở
+      // nhân sự trong cùng transaction (F-SYNC "đổi QLCS").
+      if (
+        previousRoles.includes("CENTER_MANAGER") ||
+        roles.includes("CENTER_MANAGER")
+      ) {
+        await syncCenterClassConversations(tx, employee.centerId);
+      }
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     if (err instanceof OrgRoleSyncError) return { ok: false, error: err.message };
     return {

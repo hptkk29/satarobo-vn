@@ -18,6 +18,7 @@ import { reassignOpenLeads } from "@/lib/lead/assign";
 import { notifyStaffAccountGranted } from "@/lib/email/staff-account";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
+import { syncCenterClassConversations } from "@/lib/chat/sync-membership";
 import {
   logUserAudit,
   detectChangedFields,
@@ -164,8 +165,14 @@ export async function createUserAction(formData: FormData) {
       reason: "Tự động gán theo vai trò khi tạo tài khoản",
     });
 
+    // US-03 chat — tài khoản mới là QLCS → vào nhóm mọi lớp ACTIVE của cơ sở, cùng tx.
+    if (parsed.data.roles.includes("CENTER_MANAGER")) {
+      await syncCenterClassConversations(tx, centerId);
+    }
+
     return created;
-  }).catch((err: unknown) => {
+    // timeout 30s: syncCenterClassConversations chạm mọi lớp ACTIVE của cơ sở
+  }, { timeout: 30_000, maxWait: 10_000 }).catch((err: unknown) => {
     // Lỗi RBAC hiện nguyên văn cho admin; lỗi khác giữ nguyên hành vi cũ (ném lên).
     if (err instanceof OrgRoleSyncError) return { syncError: err.message };
     throw err;
@@ -354,7 +361,19 @@ export async function updateUserAction(id: string, formData: FormData) {
       actorName,
       reason: "Tự động đồng bộ khi sửa vai trò/đơn vị tài khoản",
     });
-  }).catch((err: unknown) => {
+
+    // US-03 chat — đổi QLCS (thêm/bỏ vai CENTER_MANAGER hoặc đổi cơ sở) → đồng bộ
+    // nhóm lớp của cơ sở CŨ lẫn MỚI trong cùng transaction (F-SYNC "đổi QLCS").
+    const touchesCenterManager =
+      currentRoles.includes("CENTER_MANAGER") ||
+      parsed.data.roles.includes("CENTER_MANAGER");
+    if (touchesCenterManager) {
+      await syncCenterClassConversations(tx, current.centerId);
+      if (centerId !== current.centerId) {
+        await syncCenterClassConversations(tx, centerId);
+      }
+    }
+  }, { timeout: 30_000, maxWait: 10_000 }).catch((err: unknown) => {
     if (err instanceof OrgRoleSyncError) return { syncError: err.message };
     throw err;
   });
@@ -379,7 +398,7 @@ export async function toggleUserActiveAction(id: string) {
 
   const user = await sdb.user.findUnique({
     where: { id },
-    select: { isActive: true, role: true, roles: true },
+    select: { isActive: true, role: true, roles: true, centerId: true },
   });
   if (!user) return { ok: false, error: "Không tìm thấy user" };
   // Đa vai trò: nhận diện SALES_CSM theo cả role chính lẫn roles[].
@@ -425,7 +444,13 @@ export async function toggleUserActiveAction(id: string) {
         changedFields: ["isActive"],
         tx,
       });
-    });
+
+      // US-03 chat — bật/tắt tài khoản QLCS đổi tập QLCS hiệu lực của cơ sở (nguồn v1
+      // lọc isActive) → đồng bộ nhóm lớp của cơ sở trong cùng transaction.
+      if (hasRole(user, "CENTER_MANAGER")) {
+        await syncCenterClassConversations(tx, user.centerId);
+      }
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     console.error("[toggleUserActive] error:", err);
     return { ok: false, error: "Không cập nhật được trạng thái tài khoản — thử lại" };

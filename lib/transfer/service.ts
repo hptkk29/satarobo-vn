@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { isSameFeeTransfer } from "@/lib/transfer/transfer-policy";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 // =============================================================================
 // Cụm C1 — Chuyển lớp / chuyển cơ sở.
@@ -214,6 +215,13 @@ export async function approveTransfer(
       await tx.student.update({ where: { id: req.studentId }, data: { centerId: toClass.centerId } });
     }
 
+    // 3b) US-03 chat / TS-05 — chuyển lớp: PH rời nhóm cũ + vào nhóm mới + SYSTEM
+    // message, TRONG CÙNG transaction duyệt chuyển (rollback → không sync nửa vời).
+    if (req.fromClassId) {
+      await syncConversationMembership(tx, req.fromClassId);
+    }
+    await syncConversationMembership(tx, toClass.id);
+
     // 4) Đóng yêu cầu.
     await tx.studentTransferRequest.update({
       where: { id: requestId },
@@ -234,7 +242,7 @@ export async function approveTransfer(
         tx,
       });
     }
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   return { ok: true };
 }

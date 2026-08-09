@@ -24,7 +24,9 @@ import type { Role } from "@prisma/client";
 // PARENT = phụ huynh (portal hocvien.satarobo.vn). KHÔNG có quyền admin nào —
 // không xuất hiện trong bất kỳ array PERMISSIONS nào → can(PARENT, adminAction)
 // luôn false. Quyền portal (xem data con) check riêng qua activeSite, không qua
-// matrix này.
+// matrix này. NGOẠI LỆ DUY NHẤT (US-05 chat, 08/08/2026): `chat:read`/`chat:send`
+// — chat là tính năng dùng chung portal+admin+teacher, PH là vai chat hạng nhất
+// (docs/chat-realtime/permissions.md); các action chat:* còn lại PARENT vẫn false.
 //
 // Legacy lib/permissions.ts (6 roles, missing HR) đã xoá ở Sprint 5.2.
 // 15 callsite cũ migrated sang can(role, "resource:action") trực tiếp.
@@ -268,7 +270,14 @@ export type Action =
 
   // --- Phase 5.13 — Email System ---
   | "emails:view"
-  | "emails:manage";
+  | "emails:manage"
+
+  // --- Chat realtime (US-05, Đợt 0 — docs/chat-realtime/permissions.md) ---
+  | "chat:read"
+  | "chat:send"
+  | "chat:announce"
+  | "chat:moderate"
+  | "chat:admin";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -593,6 +602,23 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // R7 hygiene (BA #07 3.C): ACCOUNTANT bỏ Email Templates/Logs — không phải chức năng kế toán.
   "emails:view": ["SUPER_ADMIN", "MARKETING"],
   "emails:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+
+  // --- Chat realtime (US-05 — nguồn sự thật: docs/chat-realtime/permissions.md) ---
+  // Matrix v1 chỉ gate VAI được vào chat; quyền đọc/gửi thật là participant-based
+  // enforce ở tầng action (delta 00-dieu-chinh mục E.3). SALES_CSM P0: 403 toàn bộ
+  // (F5 đã dời) — cố ý KHÔNG xuất hiện ở bất kỳ action chat:* nào.
+  "chat:read": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "PARENT"],
+  // ⚠️ chat:send CỐ Ý KHÔNG có SUPER_ADMIN — ngoại lệ DUY NHẤT của luật "SUPER_ADMIN
+  // phủ mọi action" (permissions.test.ts): US-15 AC4 — chế độ xem của Admin là CHỈ
+  // ĐỌC, không gửi CHAT vào hội thoại mình không phải thành viên. can() v2 bypass
+  // SUPER_ADMIN vẫn true ⇒ chốt chặn thật nằm ở participant-check trong Server
+  // Action (US-06); v1 deny thêm một lớp + pin ý định ngay tại matrix.
+  "chat:send": ["CENTER_MANAGER", "TEACHER", "PARENT"],
+  "chat:announce": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // Gỡ tin người khác: GV nhóm mình (+ lý do) hoặc Admin. QLCS ❌ (permissions.md).
+  "chat:moderate": ["SUPER_ADMIN", "TEACHER"],
+  // /admin/hoi-thoai + khoá hội thoại + tra cứu F-AUDIT — chỉ Admin HO (US-15 AC5).
+  "chat:admin": ["SUPER_ADMIN"],
 };
 
 // =============================================================================

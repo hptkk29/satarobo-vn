@@ -1,0 +1,367 @@
+// US-05 — Bộ test ma trận quyền chat, TẦNG TĨNH (pure, không DB — chạy mọi nơi kể cả
+// CI unit-tests). "Người review thứ hai" chặn merge (pre-mortem T2).
+//
+// Nguồn sự thật: docs/chat-realtime/permissions.md (ma trận resource × operation × vai)
+// + delta docs/chat-realtime/00-dieu-chinh-cho-repo.md mục D (ánh xạ vai) + E.2 (bộ action).
+//
+// Mỗi Ô của ma trận được dịch thành ≥1 assertion, chạy trên CẢ HAI tầng RBAC:
+//   - v1: can(role, action) — matrix tĩnh lib/auth/permissions.ts (đang chạy local/dev).
+//   - v2: can(actor, action, target) — lib/auth/can.ts với actor dựng từ CHÍNH
+//     prisma/seed-roles.ts (test pin luôn nội dung seed, không hand-copy mock).
+//
+// Mã ô ghi cạnh assertion để truy vết: [TS-xx.y] = TestScenarios-chat-realtime;
+// [MTX-...] = hàng/cột trong permissions.md không có số TS riêng.
+//
+// LƯU Ý PHẠM VI TẦNG TĨNH: can() chỉ gate VAI + SCOPE (ASSIGNED/CENTER/OWN...).
+// Các điều kiện "participant hiệu lực", "≤15 phút", "bắt buộc lý do", "ARCHIVED/LOCKED"
+// là việc của Server Action — pin ở tầng động tests/chat/permission-matrix.spec.ts.
+import { describe, it, expect } from "vitest";
+import type { Role } from "@prisma/client";
+import { can as canV1 } from "@/lib/auth/permissions";
+import { can as canV2 } from "@/lib/auth/can";
+import { buildActor, type UserOrgRoleRow } from "@/lib/auth/actor";
+import type { OrgUnitNode } from "@/lib/org/types";
+import { ROLE_SEED } from "../../prisma/seed-roles";
+
+const CHAT_ACTIONS = [
+  "chat:read",
+  "chat:send",
+  "chat:announce",
+  "chat:moderate",
+  "chat:admin",
+] as const;
+
+// ─── V2 fixtures — cùng khuôn với lib/auth/can.test.ts ───────────────────────
+const ORG: OrgUnitNode[] = [
+  { id: "root", code: "SATAROBO", type: "ROOT", parentId: null, centerId: null },
+  { id: "ho", code: "HO", type: "HO", parentId: "root", centerId: null },
+  { id: "cs1", code: "CS1", type: "CENTER", parentId: "root", centerId: "c1" },
+  { id: "cs2", code: "CS2", type: "CENTER", parentId: "root", centerId: "c2" },
+];
+const PAST = new Date("2000-01-01");
+const NOW = new Date("2026-08-08");
+const U = "u-self"; // userId của actor đang test
+
+/** Perms lấy từ CHÍNH ROLE_SEED — test đỏ ngay nếu seed v2 thiếu/lệch action chat. */
+function seedPermsOf(code: string): UserOrgRoleRow["role"]["permissions"] {
+  const r = ROLE_SEED.find((x) => x.code === code);
+  if (!r) throw new Error(`ROLE_SEED thiếu RoleDef ${code}`);
+  return r.perms.map((p) => ({ action: p.action, scopeType: p.scopeType }));
+}
+
+function actorOf(code: string, orgUnitId: string, opts: { classes?: string[] } = {}) {
+  return buildActor({
+    userId: U,
+    rows: [
+      {
+        orgUnitId,
+        status: "ACTIVE",
+        effectiveFrom: PAST,
+        effectiveTo: null,
+        role: { code, isActive: true, permissions: seedPermsOf(code) },
+      },
+    ],
+    orgNodes: ORG,
+    assignedClassIds: opts.classes,
+    now: NOW,
+  });
+}
+
+// Target theo seed chuẩn TestScenarios: LopA (CS1), LopB (CS2), DM (centerId=null).
+const LOPA = { classId: "lopA", centerId: "c1" };
+const LOPB = { classId: "lopB", centerId: "c2" };
+const DM = { centerId: null }; // DM_TEACHER_PARENT — delta E.3: DM có centerId=null
+
+// Actor seed chuẩn (TestScenarios "Seed chuẩn"):
+const ph1 = () => actorOf("PARENT", "cs1"); // PH 2 con cùng LopA
+const gv1 = () => actorOf("TEACHER", "cs1", { classes: ["lopA"] }); // dạy LopA
+const gv3 = () => actorOf("TEACHER", "cs1", { classes: ["lopA", "lopB"] }); // dạy chéo cơ sở
+const tg1 = () => actorOf("ASSISTANT_TEACHER", "cs1", { classes: ["lopA"] });
+const ql1 = () => actorOf("CENTER_MANAGER", "cs1"); // quản CS1
+const qlLop1 = () => actorOf("CENTER_CLASS_MANAGER", "cs1");
+const sale1 = () => actorOf("CENTER_SALES_CSM", "cs1"); // P0: 403 toàn bộ
+const daoTao = () => actorOf("TRAINING", "ho"); // v2-only: chỉ đọc giám sát
+const admin1 = () => actorOf("SUPER_ADMIN", "ho");
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TẦNG V1 — can(role, action), matrix tĩnh lib/auth/permissions.ts
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("US-05 v1 — nhóm lớp (CLASS_GROUP), permissions.md ma trận", () => {
+  it("[MTX-CG-READ] Đọc tin: PH/GV/QLCS/Admin ✅ — Sale ❌ [TS-01.6]", () => {
+    expect(canV1("PARENT", "chat:read")).toBe(true); // ô PH ✅ lớp của con
+    expect(canV1("TEACHER", "chat:read")).toBe(true); // ô GV ✅ lớp mình dạy
+    expect(canV1("CENTER_MANAGER", "chat:read")).toBe(true); // ô QLCS ✅ lớp cơ sở mình
+    expect(canV1("SUPER_ADMIN", "chat:read")).toBe(true); // ô Admin ⚠️ (F-AUDIT enforce ở action)
+    expect(canV1("SALES_CSM", "chat:read")).toBe(false); // ô Sale ❌ [TS-01.6]
+  });
+
+  it("[MTX-CG-CHAT] Gửi CHAT: PH/GV/QLCS ✅ — Sale ❌ — Admin ❌ (US-15 AC4) [TS-03.1a/3a]", () => {
+    expect(canV1("PARENT", "chat:send")).toBe(true); // [TS-03.1a] ph1 gửi CHAT → 200
+    expect(canV1("TEACHER", "chat:send")).toBe(true);
+    expect(canV1("CENTER_MANAGER", "chat:send")).toBe(true); // [TS-03.3a] chốt QLCS=MEMBER
+    expect(canV1("SALES_CSM", "chat:send")).toBe(false); // [TS-01.6]
+    // Ô Admin "❌ (nếu không phải thành viên)" — v1 pin deny toàn phần (ngoại lệ duy
+    // nhất của luật SUPER_ADMIN-phủ-mọi-action, xem permissions.ts + permissions.test.ts).
+    expect(canV1("SUPER_ADMIN", "chat:send")).toBe(false); // [TS-03.4b][US-15 AC4]
+  });
+
+  it("[MTX-CG-ANN] Gửi ANNOUNCEMENT: GV/QLCS/Admin ✅ — PH ❌ — Sale ❌ [TS-03.1b/2a/3a/4a]", () => {
+    expect(canV1("TEACHER", "chat:announce")).toBe(true); // [TS-03.2a]
+    expect(canV1("CENTER_MANAGER", "chat:announce")).toBe(true); // [TS-03.3a]
+    expect(canV1("SUPER_ADMIN", "chat:announce")).toBe(true); // [TS-03.4a]
+    expect(canV1("PARENT", "chat:announce")).toBe(false); // [TS-03.1b] PH gửi ANN → 403
+    expect(canV1("SALES_CSM", "chat:announce")).toBe(false); // [TS-01.6]
+  });
+
+  it("[MTX-CG-MOD] Gỡ tin người khác: GV/Admin ✅ — PH/QLCS/Sale ❌ [TS-03.6]", () => {
+    expect(canV1("TEACHER", "chat:moderate")).toBe(true); // [TS-03.6b] GV nhóm mình + lý do
+    expect(canV1("SUPER_ADMIN", "chat:moderate")).toBe(true); // ô Admin ✅ + lý do
+    expect(canV1("PARENT", "chat:moderate")).toBe(false); // [TS-03.6a] ph1 gỡ tin ph2 → 403
+    expect(canV1("CENTER_MANAGER", "chat:moderate")).toBe(false); // [TS-03.6c] ql1 gỡ → 403
+    expect(canV1("SALES_CSM", "chat:moderate")).toBe(false); // [TS-01.6]
+  });
+});
+
+describe("US-05 v1 — quản trị (/admin/hoi-thoai, khoá, audit)", () => {
+  it("[MTX-ADMIN] chat:admin: chỉ Admin ✅ — QLCS ❌ [US-15 AC5] — mọi vai khác ❌", () => {
+    expect(canV1("SUPER_ADMIN", "chat:admin")).toBe(true); // ô Admin ✅
+    expect(canV1("CENTER_MANAGER", "chat:admin")).toBe(false); // ô QLCS ❌ [US-15 AC5]
+    expect(canV1("TEACHER", "chat:admin")).toBe(false); // TEACHER deny chat:admin
+    expect(canV1("PARENT", "chat:admin")).toBe(false);
+    expect(canV1("SALES_CSM", "chat:admin")).toBe(false); // [TS-01.6]
+  });
+});
+
+describe("US-05 v1 — deny toàn phần theo vai (điều kiện chốt 07-08/08)", () => {
+  it("[TS-01.6][P0] SALES_CSM: cả 5 action chat → deny (F5 đã dời)", () => {
+    for (const a of CHAT_ACTIONS) expect(canV1("SALES_CSM", a)).toBe(false);
+  });
+
+  it("PARENT: deny chat:announce / chat:moderate / chat:admin [TS-03.1b][TS-03.6a]", () => {
+    expect(canV1("PARENT", "chat:announce")).toBe(false);
+    expect(canV1("PARENT", "chat:moderate")).toBe(false);
+    expect(canV1("PARENT", "chat:admin")).toBe(false);
+  });
+
+  it("CENTER_MANAGER: deny chat:moderate + chat:admin [TS-03.6c][US-15 AC5]", () => {
+    expect(canV1("CENTER_MANAGER", "chat:moderate")).toBe(false);
+    expect(canV1("CENTER_MANAGER", "chat:admin")).toBe(false);
+  });
+
+  it("TEACHER: deny chat:admin", () => {
+    expect(canV1("TEACHER", "chat:admin")).toBe(false);
+  });
+
+  it("vai ngoài ma trận (HR/MARKETING/ACCOUNTANT/TRAINING) v1: không action chat nào", () => {
+    // TRAINING đọc-giám-sát là grant v2-only (seed-roles) — v1 chưa có màn chat cho
+    // Đào tạo ở P0 nên v1 giữ deny; thêm khi có call-site.
+    for (const role of ["HR", "MARKETING", "ACCOUNTANT", "TRAINING"] as Role[]) {
+      for (const a of CHAT_ACTIONS) expect(canV1(role, a)).toBe(false);
+    }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TẦNG V2 — can(actor, action, target), actor dựng từ CHÍNH prisma/seed-roles.ts
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("US-05 v2 — PH (PARENT, scope OWN)", () => {
+  it("[MTX-CG-READ/PH][TS-01.1] đọc/gửi hội thoại CỦA MÌNH (target.createdById=mình) → allow", () => {
+    expect(canV2(ph1(), "chat:read", { createdById: U })).toBe(true);
+    expect(canV2(ph1(), "chat:send", { createdById: U })).toBe(true); // [TS-03.1a]
+  });
+
+  it("[TS-01.2] đọc hội thoại KHÔNG phải của mình / thiếu target → deny (an toàn)", () => {
+    expect(canV2(ph1(), "chat:read", { createdById: "nguoi-khac" })).toBe(false);
+    expect(canV2(ph1(), "chat:read")).toBe(false); // thiếu target → false
+  });
+
+  it("[TS-03.1b][TS-03.6a] PH deny announce/moderate/admin với MỌI target", () => {
+    expect(canV2(ph1(), "chat:announce", LOPA)).toBe(false); // [TS-03.1b]
+    expect(canV2(ph1(), "chat:announce", { createdById: U })).toBe(false);
+    expect(canV2(ph1(), "chat:moderate", LOPA)).toBe(false); // [TS-03.6a]
+    expect(canV2(ph1(), "chat:admin")).toBe(false);
+  });
+});
+
+describe("US-05 v2 — GV (TEACHER, scope ASSIGNED theo phân công lớp)", () => {
+  it("[MTX-CG-READ/GV][TS-03.2a] gv1 đọc/gửi/announce LopA (lớp mình dạy) → allow", () => {
+    expect(canV2(gv1(), "chat:read", LOPA)).toBe(true);
+    expect(canV2(gv1(), "chat:send", LOPA)).toBe(true);
+    expect(canV2(gv1(), "chat:announce", LOPA)).toBe(true); // [TS-03.2a]
+  });
+
+  it("[TS-03.2b] gv1 vào LopB (không dạy) → deny cả read/send/announce/moderate", () => {
+    expect(canV2(gv1(), "chat:read", LOPB)).toBe(false);
+    expect(canV2(gv1(), "chat:send", LOPB)).toBe(false);
+    expect(canV2(gv1(), "chat:announce", LOPB)).toBe(false); // [TS-03.2b]
+    expect(canV2(gv1(), "chat:moderate", LOPB)).toBe(false);
+  });
+
+  it("[TS-01.5] gv3 dạy chéo cơ sở → thấy CẢ LopA (CS1) + LopB (CS2) — membership theo phân công, không theo centerId", () => {
+    expect(canV2(gv3(), "chat:read", LOPA)).toBe(true);
+    expect(canV2(gv3(), "chat:read", LOPB)).toBe(true);
+    expect(canV2(gv3(), "chat:send", LOPB)).toBe(true);
+  });
+
+  it("[TS-03.6b][MTX-CG-MOD] gv1 gỡ tin người khác NHÓM MÌNH → allow; ngoài nhóm → deny (lý do enforce ở action)", () => {
+    expect(canV2(gv1(), "chat:moderate", LOPA)).toBe(true); // [TS-03.6b]
+    expect(canV2(gv1(), "chat:moderate", LOPB)).toBe(false);
+  });
+
+  it("GV deny chat:admin với mọi target [MTX-ADMIN]", () => {
+    expect(canV2(gv1(), "chat:admin", LOPA)).toBe(false);
+    expect(canV2(gv3(), "chat:admin")).toBe(false);
+  });
+
+  it("Trợ giảng (ASSISTANT_TEACHER) cùng bộ ASSIGNED với GV — lớp gán allow, lớp khác deny", () => {
+    expect(canV2(tg1(), "chat:read", LOPA)).toBe(true);
+    expect(canV2(tg1(), "chat:send", LOPA)).toBe(true);
+    expect(canV2(tg1(), "chat:announce", LOPA)).toBe(true);
+    expect(canV2(tg1(), "chat:moderate", LOPA)).toBe(true);
+    expect(canV2(tg1(), "chat:read", LOPB)).toBe(false);
+    expect(canV2(tg1(), "chat:admin")).toBe(false);
+  });
+});
+
+describe("US-05 v2 — QLCS (CENTER_MANAGER, scope CENTER — MEMBER nhóm lớp cơ sở mình)", () => {
+  it("[TS-03.3a][MTX-CG-CHAT/ANN] ql1 đọc + gửi CHAT + gửi ANNOUNCEMENT vào LopA (CS1) → allow cả ba", () => {
+    expect(canV2(ql1(), "chat:read", LOPA)).toBe(true); // [TS-01.4]
+    expect(canV2(ql1(), "chat:send", LOPA)).toBe(true); // [TS-03.3a] chốt QLCS=MEMBER
+    expect(canV2(ql1(), "chat:announce", LOPA)).toBe(true); // [TS-03.3a]
+  });
+
+  it("[TS-01.4][TS-03.3b] ql1 sang LopB (CS2) → deny read/send/announce", () => {
+    expect(canV2(ql1(), "chat:read", LOPB)).toBe(false); // [TS-01.4] ql1 đọc LopB → 403
+    expect(canV2(ql1(), "chat:send", LOPB)).toBe(false); // [TS-03.3b]
+    expect(canV2(ql1(), "chat:announce", LOPB)).toBe(false);
+  });
+
+  it("[TS-04.1][MTX-DM] QLCS với 1-1 (DM centerId=null) → CENTER scope tự deny đọc/gửi", () => {
+    expect(canV2(ql1(), "chat:read", DM)).toBe(false); // [TS-04.1] ql1 đọc DM gv1↔ph1 → 403
+    expect(canV2(ql1(), "chat:send", DM)).toBe(false); // ô DM/Gửi/QLCS ❌
+  });
+
+  it("[TS-03.6c][US-15 AC5] QLCS deny moderate + admin với mọi target", () => {
+    expect(canV2(ql1(), "chat:moderate", LOPA)).toBe(false); // [TS-03.6c]
+    expect(canV2(ql1(), "chat:admin")).toBe(false); // [US-15 AC5] /admin/hoi-thoai
+    expect(canV2(ql1(), "chat:admin", LOPA)).toBe(false);
+  });
+
+  it("CENTER_CLASS_MANAGER (QL lớp học) — cùng bộ CENTER với QLCS, không moderate/admin", () => {
+    expect(canV2(qlLop1(), "chat:read", LOPA)).toBe(true);
+    expect(canV2(qlLop1(), "chat:send", LOPA)).toBe(true);
+    expect(canV2(qlLop1(), "chat:announce", LOPA)).toBe(true);
+    expect(canV2(qlLop1(), "chat:read", LOPB)).toBe(false);
+    expect(canV2(qlLop1(), "chat:moderate", LOPA)).toBe(false);
+    expect(canV2(qlLop1(), "chat:admin")).toBe(false);
+  });
+});
+
+describe("US-05 v2 — Sale (CENTER_SALES_CSM): P0 deny TOÀN BỘ [TS-01.6]", () => {
+  it("[TS-01.6] sale1 gọi cả 5 action × mọi target (LopA/LopB/DM/không target) → deny", () => {
+    for (const a of CHAT_ACTIONS) {
+      expect(canV2(sale1(), a, LOPA)).toBe(false);
+      expect(canV2(sale1(), a, LOPB)).toBe(false);
+      expect(canV2(sale1(), a, DM)).toBe(false);
+      expect(canV2(sale1(), a)).toBe(false);
+    }
+  });
+
+  it("seed v2 CENTER_SALES_CSM không chứa bất kỳ perm chat:* nào (pin chống thêm nhầm)", () => {
+    const chatPerms = seedPermsOf("CENTER_SALES_CSM").filter((p) =>
+      p.action.startsWith("chat:"),
+    );
+    expect(chatPerms).toEqual([]);
+  });
+});
+
+describe("US-05 v2 — TRAINING (Đào tạo): CHỈ đọc giám sát, v2-only", () => {
+  it("chat:read GLOBAL → allow không cần target (giám sát LMS toàn hệ thống)", () => {
+    expect(canV2(daoTao(), "chat:read")).toBe(true);
+    expect(canV2(daoTao(), "chat:read", LOPA)).toBe(true);
+    expect(canV2(daoTao(), "chat:read", LOPB)).toBe(true);
+  });
+
+  it("TRAINING deny send/announce/moderate/admin (đọc để giám sát, KHÔNG can thiệp)", () => {
+    expect(canV2(daoTao(), "chat:send", LOPA)).toBe(false);
+    expect(canV2(daoTao(), "chat:announce", LOPA)).toBe(false);
+    expect(canV2(daoTao(), "chat:moderate", LOPA)).toBe(false);
+    expect(canV2(daoTao(), "chat:admin")).toBe(false);
+  });
+});
+
+describe("US-05 v2 — Admin HO (SUPER_ADMIN)", () => {
+  it("[MTX-ADMIN][TS-03.4a] bypass → allow mọi action chat (kể cả chat:admin)", () => {
+    for (const a of CHAT_ACTIONS) expect(canV2(admin1(), a, LOPA)).toBe(true);
+    expect(canV2(admin1(), "chat:admin")).toBe(true);
+  });
+
+  it("[TS-03.4b] LƯU Ý: v2 bypass KHÔNG chặn được Admin gửi CHAT — chốt chặn nằm ở participant-check trong action (US-06) + v1 deny", () => {
+    // Pin hành vi bypass để ai đổi can() v2 phải nhìn thấy hệ quả với ma trận chat.
+    expect(canV2(admin1(), "chat:send", DM)).toBe(true); // v2 true — action layer phải tự chặn (US-15 AC4)
+    expect(canV1("SUPER_ADMIN", "chat:send")).toBe(false); // v1 false — lớp phòng thủ pin ý định
+  });
+});
+
+// ─── Pin seed v2 đúng đặc tả US-05 (chống drift khi ai đó sửa seed-roles) ─────
+describe("US-05 — pin nội dung seed v2 cho 5 action chat", () => {
+  const expectSeed = (code: string, expected: Record<string, string>) => {
+    const chatPerms = Object.fromEntries(
+      seedPermsOf(code)
+        .filter((p) => p.action.startsWith("chat:"))
+        .map((p) => [p.action, p.scopeType]),
+    );
+    expect(chatPerms).toEqual(expected);
+  };
+
+  it("PARENT: read/send OWN — không hơn", () => {
+    expectSeed("PARENT", { "chat:read": "OWN", "chat:send": "OWN" });
+  });
+
+  it("TEACHER + ASSISTANT_TEACHER: read/send/announce/moderate ASSIGNED", () => {
+    const boGV = {
+      "chat:read": "ASSIGNED",
+      "chat:send": "ASSIGNED",
+      "chat:announce": "ASSIGNED",
+      "chat:moderate": "ASSIGNED",
+    };
+    expectSeed("TEACHER", boGV);
+    expectSeed("ASSISTANT_TEACHER", boGV);
+  });
+
+  it("CENTER_MANAGER + CENTER_CLASS_MANAGER: read/send/announce CENTER — không moderate/admin", () => {
+    const boQL = {
+      "chat:read": "CENTER",
+      "chat:send": "CENTER",
+      "chat:announce": "CENTER",
+    };
+    expectSeed("CENTER_MANAGER", boQL);
+    expectSeed("CENTER_CLASS_MANAGER", boQL);
+  });
+
+  it("SUPER_ADMIN: cả 5 GLOBAL · TRAINING: chỉ read GLOBAL", () => {
+    expectSeed("SUPER_ADMIN", {
+      "chat:read": "GLOBAL",
+      "chat:send": "GLOBAL",
+      "chat:announce": "GLOBAL",
+      "chat:moderate": "GLOBAL",
+      "chat:admin": "GLOBAL",
+    });
+    expectSeed("TRAINING", { "chat:read": "GLOBAL" });
+  });
+
+  it("HO_SALE / kế toán / HR / marketing: không perm chat nào", () => {
+    for (const code of [
+      "HO_SALE",
+      "HO_ACCOUNTANT",
+      "CENTER_ACCOUNTANT",
+      "HO_HR",
+      "CENTER_HR",
+      "HO_MARKETING",
+    ]) {
+      expect(seedPermsOf(code).filter((p) => p.action.startsWith("chat:"))).toEqual([]);
+    }
+  });
+});

@@ -110,6 +110,19 @@ export const SCOPE_EXEMPT = new Set<string>([
   // hợp lệ lại không tra được. Cách ly nằm ở gate quyền (leads:view-all/assign);
   // dữ liệu nghiệp vụ gắn theo nó (Lead) vẫn scoped bình thường.
   "Affiliate",
+  // US-04 chat — log KỸ THUẬT của job đối soát thành viên đêm (drift REMOVE/ADD).
+  // Chỉ SUPER_ADMIN đọc qua /admin/hoi-thoai/doi-soat (gate chat:admin — mà
+  // SUPER_ADMIN vốn bypass scope). centerId/orgUnitId trên dòng log là ghi kép
+  // ngữ cảnh (luật Nền Hệ thống #3), không phải ranh giới tenant của dữ liệu
+  // nghiệp vụ → không auto-scope.
+  "ConversationMembershipDrift",
+  // US-05 chat (delta 00-dieu-chinh mục E.3) — quyền đọc/gửi chat là PARTICIPANT-BASED
+  // (ConversationParticipant tại thời điểm request), KHÔNG center-based. Conversation
+  // có centerId CHỈ phục vụ truy vấn quản trị; DM (DM_TEACHER_PARENT) có centerId=null
+  // ⇒ nếu đưa vào SCOPED_MODELS thì inject `centerId IN [...]` sẽ ẩn nhầm toàn bộ DM
+  // khỏi chính người trong cuộc. Cách ly cho màn admin: filter TAY theo
+  // getVisibleCenterIds(actor) (US-15).
+  "Conversation",
 ]);
 
 function bypassesScope(actor: Actor): boolean {

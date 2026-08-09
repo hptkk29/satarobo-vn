@@ -16,6 +16,7 @@ import { registerAccountNotifHandlers } from "@/lib/_handlers/account-notif";
 import { registerCommentNotifHandlers } from "@/lib/_handlers/comment-notif";
 import { registerConversationNotifHandlers } from "@/lib/_handlers/conversation-notif";
 import { registerParentRequestHandlers } from "@/lib/events/handlers/parent-request";
+import { registerChatParticipantRemovedHandlers } from "@/lib/chat/_handlers/participant-removed";
 
 let registered = false;
 
@@ -38,4 +39,5 @@ export function ensureHandlersRegistered(): void {
   registerCommentNotifHandlers(); // R7-17 — comment.added → báo PH có nhận xét mới của GV
   registerConversationNotifHandlers(); // LMS-15 — conversation.message_posted → báo GV (PH gửi) / PH (GV trả lời)
   registerParentRequestHandlers(); // #08 — parent_request.created → báo Sale + Quản lý cơ sở
+  registerChatParticipantRemovedHandlers(); // US-07/F-KICK — chat.participant_removed → đá client ra khỏi kênh realtime
 }

@@ -13,6 +13,7 @@ import {
   createBackfillOrderPaymentInTx,
   type BackfillPaymentInput,
 } from "@/lib/crm/backfill-order";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 import type { CourseDiscountType } from "@prisma/client";
 
 export type ConvertV2Result =
@@ -356,6 +357,12 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       orgUnitId: lead.centerId,
       tx,
     });
+
+    // US-03 chat — HV vào lớp qua convert (kể cả bulk-convert + import lead) → PH vào
+    // nhóm lớp trong CÙNG transaction (BR-12). Sync theo tập lớp distinct.
+    for (const classId of new Set(input.students.map((s) => s.classId))) {
+      await syncConversationMembership(tx, classId);
+    }
 
     // Ghi idempotency key (cùng tx) → double-submit sau trả kết quả này.
     await tx.idempotencyKey.create({

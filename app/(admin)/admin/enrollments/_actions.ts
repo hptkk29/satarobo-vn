@@ -13,6 +13,7 @@ import { canTransition } from "@/lib/enrollments/status";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { crossCenterError } from "@/lib/enrollment-flow";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 type Sdb = ReturnType<typeof scopedDb>;
 
@@ -60,7 +61,11 @@ async function runSerializable<T>(
       // Prisma.TransactionClient (tiền lệ students/classes) — runtime không đổi.
       return await sdb.$transaction(
         async (tx) => fn(tx as unknown as Prisma.TransactionClient),
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 30_000,
+          maxWait: 10_000,
+        },
       );
     } catch (err) {
       const isConflict =
@@ -276,7 +281,12 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
   };
 
   try {
-    await sdb.enrollment.create({ data });
+    // US-03 chat — HV vào lớp → PH vào nhóm lớp trong CÙNG transaction (BR-12).
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+      await tx.enrollment.create({ data });
+      await syncConversationMembership(tx, e.classId);
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được đăng ký" };
   }
@@ -355,7 +365,16 @@ export async function updateEnrollment(
   };
 
   try {
-    await sdb.enrollment.update({ where: { id }, data });
+    // US-03 chat — update trần có thể đổi lớp/học viên/trạng thái → sync CẢ lớp cũ
+    // lẫn lớp mới trong cùng transaction.
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+      await tx.enrollment.update({ where: { id }, data });
+      await syncConversationMembership(tx, e.classId);
+      if (existing.classId !== e.classId) {
+        await syncConversationMembership(tx, existing.classId);
+      }
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Lỗi cơ sở dữ liệu — không cập nhật được" };
   }
@@ -382,7 +401,16 @@ export async function deleteEnrollment(id: string): Promise<ActionResult> {
   }
   try {
     // FIX-C3 — soft-delete (giữ vết tài chính); read filter deletedAt: null sẽ ẩn.
-    await sdb.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
+    // US-03 chat — HV rời lớp (xoá mềm ghi danh) → sync membership cùng transaction.
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+      const row = await tx.enrollment.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+        select: { classId: true },
+      });
+      await syncConversationMembership(tx, row.classId);
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Không thể xoá đăng ký này" };
   }
@@ -455,6 +483,8 @@ export async function deleteEnrollmentAction(
       const tx = txRaw as unknown as Prisma.TransactionClient;
       // FIX-C3 — soft-delete thay hard delete (guard _count ở trên vẫn giữ).
       await tx.enrollment.update({ where: { id }, data: { deletedAt: new Date() } });
+      // US-03 chat — HV rời lớp → sync membership nhóm lớp cùng transaction.
+      await syncConversationMembership(tx, enrollment.classId);
       // P3 (additive): ghi AuditLog hợp nhất cho viewer chung (atomic với soft-delete).
       await writeAudit({
         actor: { id: actorId, name: actorName },
@@ -470,7 +500,7 @@ export async function deleteEnrollmentAction(
         orgUnitId: enrollment.class?.centerId ?? null,
         tx,
       });
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { ok: false, error: "Không thể xoá đăng ký này" };
   }
@@ -691,6 +721,9 @@ export async function enrollStudent(
         orgUnitId: cls!.centerId,
         tx,
       });
+      // US-03 chat — ghi danh mới (PENDING chưa "thuộc lớp" → sync no-op, nhưng giữ
+      // điểm gọi để mọi đường tạo enrollment đều đi qua service).
+      await syncConversationMembership(tx, classId);
       return created.id;
     });
     revalidatePath("/enrollments");
@@ -838,6 +871,9 @@ export async function changeEnrollmentStatus(
         orgUnitId: enrollment.class?.centerId ?? null,
         tx,
       });
+      // US-03 chat — đổi trạng thái ghi danh (WITHDREW/COMPLETED/CANCELLED ⇒ PH rời
+      // nhóm; CONFIRMED từ PENDING ⇒ PH vào nhóm) — cùng transaction.
+      await syncConversationMembership(tx, enrollment.classId);
     });
   } catch (err) {
     if (err instanceof EnrollmentWorkflowError) {
@@ -1063,6 +1099,11 @@ export async function transferEnrollment(
         orgUnitId: targetClass.centerId,
         tx,
       });
+
+      // US-03 chat / TS-05 — chuyển lớp: PH rời nhóm cũ + vào nhóm mới + SYSTEM message
+      // ở cả hai nhóm, TRONG CÙNG transaction (rollback → không sync nửa vời).
+      await syncConversationMembership(tx, oldEnrollment.classId);
+      await syncConversationMembership(tx, data.targetClassId);
 
       return newEnrollment.id;
     });

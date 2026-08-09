@@ -10,6 +10,7 @@ import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import { genClassGroupCode } from "@/lib/codegen";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 
 type ActionResult = { error?: string };
 
@@ -349,9 +350,15 @@ export async function enrollGroupIntoClass(input: {
       skipped++;
       continue;
     }
-    await sdb.enrollment.create({
-      data: { studentId, classId: cls.id, courseId: cls.courseId, centerId: cls.centerId, status: "CONFIRMED", confirmedAt: new Date(), notes: `Ghi danh theo nhóm ${input.groupId}` },
-    });
+    // US-03 chat — ghi danh CONFIRMED (thuộc lớp ngay) → PH vào nhóm lớp trong CÙNG
+    // transaction với create (giữ per-item như vòng lặp cũ: 1 em lỗi không hỏng cả lô).
+    await sdb.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient;
+      await tx.enrollment.create({
+        data: { studentId, classId: cls.id, courseId: cls.courseId, centerId: cls.centerId, status: "CONFIRMED", confirmedAt: new Date(), notes: `Ghi danh theo nhóm ${input.groupId}` },
+      });
+      await syncConversationMembership(tx, cls.id);
+    }, { timeout: 30_000, maxWait: 10_000 });
     created++;
   }
   revalidatePath(`/class-groups/${input.groupId}`);

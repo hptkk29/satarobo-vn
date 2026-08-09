@@ -1,35 +1,31 @@
 "use client";
 
-// Tab "Kế hoạch lịch học" — lớp có NHIỀU giai đoạn lịch (vd tháng 7 học 2 buổi/tuần,
-// tháng 8 còn 1 buổi/tuần), và ô "áp dụng từ ngày" để dội lịch mới xuống các buổi ĐÃ SINH.
+// "Kế hoạch lịch học" của lớp ĐÃ TỒN TẠI — planner (`SchedulePhasesEditor`) + hai việc chỉ
+// làm được khi đã có `classId`: LƯU kế hoạch, và DỘI lịch mới xuống các buổi ĐÃ SINH.
 //
-// Chọn ngày/giờ bằng `<input type="date">` / `type="time"` native — đúng idiom admin của
-// repo (class-form.tsx) và trình duyệt tự mở lịch khi bấm vào. Không thêm thư viện UI.
+// 08/08 — khối này chuyển vào tab "Thông tin" (chỗ cũ của "Lịch học trong tuần"); phần gõ
+// tay đã tách sang `_components/schedule-phases-editor.tsx` để form TẠO LỚP dùng lại.
+//
+// ⚠️ "Áp dụng" gửi CHÍNH kế hoạch đang gõ (không phải bản đã lưu): admin duyệt bảng nào thì
+// hệ thống ghi bảng đó. Đừng tách planner khỏi nút áp dụng.
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarRange, Info, Plus, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, Save } from "lucide-react";
+import {
+  toPhaseInputs,
+  type PhaseFormValue,
+  type SchedulePhaseInput,
+} from "@/lib/classes/phase-form";
+import { SchedulePhasesEditor } from "../../_components/schedule-phases-editor";
 import {
   applyScheduleAction,
   previewApplyScheduleAction,
   saveSchedulePhasesAction,
-  type SchedulePhaseInput,
 } from "../_schedule-actions";
 
-/** T2…T7 rồi CN — đọc theo tuần học. */
-const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
-const WEEK_LABEL: Record<number, string> = {
-  1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN",
-};
-
-export interface PhaseFormValue {
-  from: string;
-  to: string;
-  note: string;
-  /** weekday → giờ; có khoá = học thứ đó. */
-  days: Record<number, { start: string; end: string }>;
-}
+export type { PhaseFormValue };
 
 type PreviewRow = {
   id: string;
@@ -50,16 +46,6 @@ function fmt(iso: string): string {
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 }
-/** +1 ngày cho chuỗi "YYYY-MM-DD" bằng số học UTC (không dính TZ máy). */
-function nextYmd(s: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return "";
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1))
-    .toISOString()
-    .slice(0, 10);
-}
-
-const emptyPhase = (from = ""): PhaseFormValue => ({ from, to: "", note: "", days: {} });
 
 export function ClassSchedulePhases({
   classId,
@@ -79,7 +65,7 @@ export function ClassSchedulePhases({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [phases, setPhases] = useState<PhaseFormValue[]>(
-    initialPhases.length > 0 ? initialPhases : [emptyPhase()],
+    initialPhases.length > 0 ? initialPhases : [{ from: "", to: "", note: "", days: {} }],
   );
   const [reason, setReason] = useState("");
   const [applyFrom, setApplyFrom] = useState(defaultApplyFrom);
@@ -91,60 +77,11 @@ export function ClassSchedulePhases({
     newEndDate: string | null;
   } | null>(null);
 
-  const payload: SchedulePhaseInput[] = useMemo(
-    () =>
-      phases.map((p) => ({
-        from: p.from,
-        to: p.to,
-        note: p.note,
-        slots: WEEK_ORDER.filter((w) => p.days[w]).map((w) => ({
-          weekday: w,
-          startTime: p.days[w].start,
-          endTime: p.days[w].end,
-        })),
-      })),
-    [phases],
-  );
+  const payload: SchedulePhaseInput[] = useMemo(() => toPhaseInputs(phases), [phases]);
 
-  function patch(i: number, next: Partial<PhaseFormValue>) {
-    setPhases((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...next } : p)));
-    setPreview(null);
-  }
-  function toggleDay(i: number, w: number) {
-    setPhases((prev) =>
-      prev.map((p, idx) => {
-        if (idx !== i) return p;
-        const days = { ...p.days };
-        if (days[w]) delete days[w];
-        // Giờ mặc định lấy từ thứ đã khai trong CÙNG giai đoạn — bớt gõ lại.
-        else {
-          const any = WEEK_ORDER.map((x) => p.days[x]).find(Boolean);
-          days[w] = { start: any?.start ?? "17:30", end: any?.end ?? "19:00" };
-        }
-        return { ...p, days };
-      }),
-    );
-    setPreview(null);
-  }
-  function setDayTime(i: number, w: number, field: "start" | "end", value: string) {
-    setPhases((prev) =>
-      prev.map((p, idx) =>
-        idx === i ? { ...p, days: { ...p.days, [w]: { ...p.days[w], [field]: value } } } : p,
-      ),
-    );
-    setPreview(null);
-  }
-  function addPhase() {
-    setPhases((prev) => {
-      const last = prev[prev.length - 1];
-      // Giai đoạn mới nối ngay sau giai đoạn trước; giai đoạn trước phải có ngày kết thúc.
-      const from = last?.to ? nextYmd(last.to) : "";
-      return [...prev, emptyPhase(from)];
-    });
-    setPreview(null);
-  }
-  function removePhase(i: number) {
-    setPhases((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+  /** Mọi sửa đổi kế hoạch làm bản xem trước cũ hết giá trị — bỏ ngay, đừng để lệch. */
+  function updatePhases(next: PhaseFormValue[]) {
+    setPhases(next);
     setPreview(null);
   }
 
@@ -213,148 +150,12 @@ export function ClassSchedulePhases({
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
-          <CalendarRange className="h-4 w-4" /> Kế hoạch lịch học
-        </h2>
-        <p className="mb-3 text-xs text-gray-500">
-          Một lớp có thể đổi nhịp học giữa khoá — ví dụ tháng 7 học 2 buổi/tuần, tháng 8 còn
-          1 buổi/tuần. Mỗi giai đoạn khai khoảng ngày + các thứ trong tuần + giờ của từng thứ.
-          Giai đoạn cuối bỏ trống ô &quot;đến ngày&quot; để kéo dài tới khi học đủ số buổi.
-        </p>
-
-        {isDerived && (
-          <p className="mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-            <Info className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              Lớp chưa có kế hoạch. Giai đoạn dưới đây được suy từ lịch hiện tại của lớp — kiểm
-              lại rồi bấm <b>Lưu kế hoạch</b> để chốt. Trước khi lưu, lớp vẫn chạy theo lịch cũ.
-            </span>
-          </p>
-        )}
-
-        <div className="space-y-3">
-          {phases.map((p, i) => {
-            const isLast = i === phases.length - 1;
-            return (
-              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50/60 p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-gray-800">Giai đoạn {i + 1}</span>
-                  {phases.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removePhase(i)}
-                      disabled={pending}
-                      className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Xoá
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-gray-700">
-                      Từ ngày <span className="text-red-600">*</span>
-                    </span>
-                    <input
-                      type="date"
-                      value={p.from}
-                      onChange={(e) => patch(i, { from: e.target.value })}
-                      disabled={pending}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-gray-700">
-                      Đến ngày{" "}
-                      {isLast && <span className="font-normal text-gray-400">(để trống = đến hết khoá)</span>}
-                    </span>
-                    <input
-                      type="date"
-                      value={p.to}
-                      onChange={(e) => patch(i, { to: e.target.value })}
-                      disabled={pending}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
-                    />
-                  </label>
-                </div>
-
-                <div className="mt-3">
-                  <span className="mb-1.5 block text-xs font-semibold text-gray-700">
-                    Học thứ mấy, mấy giờ <span className="text-red-600">*</span>
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {WEEK_ORDER.map((w) => {
-                      const on = Boolean(p.days[w]);
-                      return (
-                        <button
-                          key={w}
-                          type="button"
-                          onClick={() => toggleDay(i, w)}
-                          disabled={pending}
-                          aria-pressed={on}
-                          className={`rounded-md border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
-                            on
-                              ? "border-orange-500 bg-orange-500 text-white"
-                              : "border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
-                          }`}
-                        >
-                          {WEEK_LABEL[w]}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {WEEK_ORDER.filter((w) => p.days[w]).length > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      {WEEK_ORDER.filter((w) => p.days[w]).map((w) => (
-                        <div key={w} className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className="w-8 font-semibold text-gray-700">{WEEK_LABEL[w]}</span>
-                          <input
-                            type="time"
-                            value={p.days[w].start}
-                            onChange={(e) => setDayTime(i, w, "start", e.target.value)}
-                            disabled={pending}
-                            className="rounded-lg border border-gray-300 px-2 py-1 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
-                          />
-                          <span className="text-gray-400">→</span>
-                          <input
-                            type="time"
-                            value={p.days[w].end}
-                            onChange={(e) => setDayTime(i, w, "end", e.target.value)}
-                            disabled={pending}
-                            className="rounded-lg border border-gray-300 px-2 py-1 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <label className="mt-3 block">
-                  <span className="mb-1 block text-xs font-semibold text-gray-700">Ghi chú</span>
-                  <input
-                    type="text"
-                    value={p.note}
-                    onChange={(e) => patch(i, { note: e.target.value })}
-                    disabled={pending}
-                    placeholder="vd: nghỉ hè, chuyển sang 1 buổi/tuần"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
-                  />
-                </label>
-              </div>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={addPhase}
+        <SchedulePhasesEditor
+          phases={phases}
+          onChange={updatePhases}
           disabled={pending}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-400 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" /> Thêm kế hoạch lịch
-        </button>
+          isDerived={isDerived}
+        />
 
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-gray-200 pt-4">
           <label className="min-w-[16rem] flex-1">

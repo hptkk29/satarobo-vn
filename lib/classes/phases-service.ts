@@ -234,7 +234,8 @@ export async function planScheduleApply(
   if (phases.length === 0) {
     return {
       ok: false,
-      error: "Lớp chưa có lịch học — lập kế hoạch lịch (hoặc khai thứ + giờ ở tab Thông tin) trước.",
+      error:
+        "Lớp chưa có lịch học — khai Kế hoạch lịch học (tab Thông tin của lớp) trước.",
     };
   }
 

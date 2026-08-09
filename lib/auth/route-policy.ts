@@ -126,6 +126,8 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "evaluations",
   "exams",
   "hoc-bu",
+  // US-04 chat — /hoi-thoai/doi-soat (log đối soát thành viên; sau này US-15 tra cứu).
+  "hoi-thoai",
   "holidays",
   "hoan-thanh-khoa",
   "hoan-tien",
