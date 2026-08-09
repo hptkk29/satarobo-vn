@@ -15,18 +15,28 @@
  *   5. heic                                         → 415 "Định dạng chưa hỗ trợ"
  *   6. người KHÔNG phải participant xin read URL của ảnh trong hội thoại đó
  *                                                   → 403 NOT_PARTICIPANT (TS-14.2)
+ *   6c. signed GET URL trỏ **bucket riêng của chat**, KHÔNG chứa host công khai
+ *      (R2_PUBLIC_URL) và không chứa tên bucket công khai (R2_BUCKET_NAME).
  *   7. soft-delete tin chứa ảnh rồi xin read URL    → 403 MESSAGE_DELETED (TS-14.4)
  *
  * Bước 2–7 KHÔNG chạm R2 (guard chặn trước khi ký) nên luôn chạy được; chỉ bước
- * 1 và phần "ký GET URL của participant hợp lệ" cần env R2 — thiếu env thì in
- * SKIP kèm lý do, KHÔNG tính là PASS.
+ * 1, 6b, 6c cần env R2 — thiếu env thì in SKIP kèm lý do, KHÔNG tính là PASS.
  *
- * Máy dev để trống 5 biến R2 (.env có key nhưng giá trị rỗng) ⇒ 2 bước đó SKIP.
+ * ⚠️ Kho ảnh chat dùng bucket RIÊNG `R2_CHAT_BUCKET_NAME` (bucket KHÔNG gắn custom
+ * domain). Bucket `R2_BUCKET_NAME` phát công khai qua `R2_PUBLIC_URL`
+ * (cdn.satarobo.vn) nên ký signed URL vào đó là vô nghĩa — ghép key sang tên miền
+ * CDN là tải được vĩnh viễn, kể cả sau khi tin bị gỡ. Thiếu `R2_CHAT_BUCKET_NAME`
+ * ⇒ luồng ảnh trả 503, KHÔNG bao giờ mượn tạm bucket công khai.
+ *
+ * Máy dev để trống các biến R2 (.env có key nhưng giá trị rỗng) ⇒ các bước đó SKIP.
  * Muốn chạy nốt chúng mà không cần credential thật: presign chỉ là HMAC cục bộ,
  * KHÔNG gọi mạng — nên gán giá trị giả cho 1 lượt chạy là đủ để nghiệm thu khuôn
  * key + `X-Amz-Expires=300`:
  *   R2_ACCOUNT_ID=x R2_ACCESS_KEY_ID=x R2_SECRET_ACCESS_KEY=x \
- *   R2_BUCKET_NAME=x R2_PUBLIC_URL=https://x.invalid pnpm tsx scripts/_zztest-chat-us11.ts
+ *   R2_BUCKET_NAME=satarobo-uploads R2_PUBLIC_URL=https://cdn.satarobo.vn \
+ *   R2_CHAT_BUCKET_NAME=satarobo-chat-private pnpm tsx scripts/_zztest-chat-us11.ts
+ * (R2_PUBLIC_URL vẫn phải có: `getR2Client()` — hạ tầng dùng chung với media/SCORM —
+ * đòi đủ 5 biến cũ để khởi tạo, dù luồng chat không bao giờ dùng public URL.)
  * (upload/tải THẬT lên R2 vẫn phải smoke bằng credential thật — vế [TAY] TS-14.3.)
  */
 import "./_load-env";
@@ -179,9 +189,16 @@ async function main() {
   } = await attachmentsModule;
   const r2Ready = isChatStorageConfigured();
   if (!r2Ready) {
+    const chatBucket = (process.env.R2_CHAT_BUCKET_NAME ?? "").trim();
+    const publicBucket = (process.env.R2_BUCKET_NAME ?? "").trim();
+    const why =
+      chatBucket === ""
+        ? "R2_CHAT_BUCKET_NAME chưa đặt (bucket RIÊNG cho ảnh chat)"
+        : chatBucket === publicBucket
+          ? "R2_CHAT_BUCKET_NAME đang trỏ vào bucket CÔNG KHAI R2_BUCKET_NAME — bị từ chối"
+          : "thiếu credential R2 (R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY)";
     console.log(
-      "⚠️  Env R2 thiếu (R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/" +
-        "R2_BUCKET_NAME/R2_PUBLIC_URL) → các bước cần KÝ URL sẽ SKIP, không tính PASS.",
+      `⚠️  Kho ảnh chat chưa cấu hình: ${why} → các bước cần KÝ URL sẽ SKIP, không tính PASS.`,
     );
   }
 
@@ -191,7 +208,10 @@ async function main() {
 
     // ── 1. Participant hiệu lực xin upload ticket ─────────────────────────
     if (!r2Ready) {
-      skip("1. participant xin upload ticket", "thiếu env R2 → không ký được PUT URL");
+      skip(
+        "1. participant xin upload ticket",
+        "kho ảnh chat chưa cấu hình (R2_CHAT_BUCKET_NAME) → không ký được PUT URL",
+      );
     } else {
       const r = await createChatUploadTicket({
         conversationId: s.conv.id,
@@ -294,7 +314,8 @@ async function main() {
     // Đối chứng: ph1 (thành viên) xin CÙNG ảnh đó → phải ký được (chứng minh 403
     // ở trên là do QUYỀN, không phải do ảnh hỏng/env thiếu).
     if (!r2Ready) {
-      skip("6b. đối chứng ph1 (thành viên) ký được GET URL", "thiếu env R2");
+      skip("6b. đối chứng ph1 (thành viên) ký được GET URL", "kho ảnh chat chưa cấu hình");
+      skip("6c. GET URL không chứa host công khai", "kho ảnh chat chưa cấu hình");
     } else {
       const ok6 = await getChatAttachmentReadUrl(s.att.id, s.ph1.id);
       report(
@@ -304,6 +325,27 @@ async function main() {
           CHAT_IMAGE_RULES.readUrlTtlSeconds === 300 &&
           /X-Amz-Expires=300/.test(ok6.url),
         `expiresIn=${ok6.expiresIn}s, URL có X-Amz-Expires=300 → ${/X-Amz-Expires=300/.test(ok6.url)}`,
+      );
+
+      // ── 6c. URL ký PHẢI trỏ bucket riêng, KHÔNG dính bucket/host công khai ──
+      // Nếu ảnh nằm ở bucket có cdn.satarobo.vn thì chữ ký + hạn 5 phút vô nghĩa:
+      // người nhận chỉ cần ghép https://cdn.satarobo.vn/<key> là có bản vĩnh viễn,
+      // tải được cả sau khi tin bị gỡ (phá flows.md:51-52,63 + US-12 AC5).
+      const chatBucket = (process.env.R2_CHAT_BUCKET_NAME ?? "").trim();
+      const publicBucket = (process.env.R2_BUCKET_NAME ?? "").trim();
+      const publicHost = (process.env.R2_PUBLIC_URL ?? "")
+        .replace(/^https?:\/\//i, "")
+        .replace(/\/$/, "")
+        .trim();
+      const hitsChatBucket = chatBucket.length > 0 && ok6.url.includes(chatBucket);
+      const noPublicBucket = publicBucket.length === 0 || !ok6.url.includes(publicBucket);
+      const noPublicHost = publicHost.length === 0 || !ok6.url.includes(publicHost);
+      report(
+        "6c. GET URL trỏ bucket RIÊNG của chat, không chứa bucket/host công khai",
+        hitsChatBucket && noPublicBucket && noPublicHost && chatBucket !== publicBucket,
+        `bucket chat=${chatBucket || "(trống)"} có trong URL=${hitsChatBucket}, ` +
+          `không dính bucket công khai '${publicBucket || "(trống)"}'=${noPublicBucket}, ` +
+          `không dính host công khai '${publicHost || "(trống)"}'=${noPublicHost}`,
       );
     }
 

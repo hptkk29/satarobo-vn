@@ -1,6 +1,6 @@
 // @vitest-environment node
 // (node: dùng Buffer thật để dựng magic bytes — jsdom bọc Uint8Array khác realm.)
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // (server-only được alias sang stub rỗng trong vitest.config.ts)
 
@@ -29,20 +29,83 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-// R2: không đụng mạng/env trong unit test — ZZTEST mới ký thật.
+// ── R2 giả ──────────────────────────────────────────────────────────────────
+// KHÔNG mock `@/lib/storage/chat-storage`: nó chính là thứ phải kiểm (ký vào
+// bucket NÀO). Chỉ chặn ở tầng dưới cùng (`getSignedUrl`) để không đụng mạng.
+//
+// 3 hàm của kho CÔNG KHAI (`getR2Bucket`, `getR2PublicUrl`, `signedMediaUrl`) được
+// mock kèm giá trị thật-như-prod và bị **assert là KHÔNG ĐƯỢC GỌI**: luồng chat
+// chạm bất kỳ hàm nào trong số đó = ảnh trẻ em rơi vào bucket có cdn.satarobo.vn.
+const h = vi.hoisted(() => {
+  const presign: Array<{
+    bucket: string;
+    key: string;
+    contentType?: string;
+    expiresIn: number;
+  }> = [];
+  return {
+    presign,
+    getR2Client: vi.fn(() => ({})),
+    getR2Bucket: vi.fn(() => "satarobo-uploads"),
+    getR2PublicUrl: vi.fn(() => "https://cdn.satarobo.vn"),
+    getPublicUrl: vi.fn((k: string) => `https://cdn.satarobo.vn/${k}`),
+    signedMediaUrl: vi.fn(
+      async (key: string, ttl: number) => `https://cdn.satarobo.vn/${key}?ttl=${ttl}`,
+    ),
+    getSignedUrl: vi.fn(
+      async (
+        _c: unknown,
+        cmd: { input: { Bucket: string; Key: string; ContentType?: string } },
+        opts: { expiresIn: number },
+      ) => {
+        presign.push({
+          bucket: cmd.input.Bucket,
+          key: cmd.input.Key,
+          contentType: cmd.input.ContentType,
+          expiresIn: opts.expiresIn,
+        });
+        const ct = cmd.input.ContentType
+          ? `&ct=${encodeURIComponent(cmd.input.ContentType)}`
+          : "";
+        // Host mang tên bucket ⇒ test soi được URL đang trỏ vào bucket nào.
+        return `https://${cmd.input.Bucket}.r2-signed.test/${cmd.input.Key}?X-Amz-Expires=${opts.expiresIn}${ct}`;
+      },
+    ),
+  };
+});
+
 vi.mock("@/lib/storage/r2-client", () => ({
-  getR2Client: () => ({}),
-  getR2Bucket: () => "zztest-bucket",
+  getR2Client: h.getR2Client,
+  getR2Bucket: h.getR2Bucket,
+  getR2PublicUrl: h.getR2PublicUrl,
+  getPublicUrl: h.getPublicUrl,
 }));
-vi.mock("@aws-sdk/s3-request-presigner", () => ({
-  getSignedUrl: vi.fn(
-    async (_c: unknown, cmd: { input: { Key: string; ContentType: string } }) =>
-      `https://r2.test/PUT/${cmd.input.Key}?ct=${encodeURIComponent(cmd.input.ContentType)}`,
-  ),
-}));
-vi.mock("@/lib/storage/signed-url", () => ({
-  signedMediaUrl: vi.fn(async (key: string, ttl: number) => `https://r2.test/GET/${key}?ttl=${ttl}`),
-}));
+vi.mock("@/lib/storage/signed-url", () => ({ signedMediaUrl: h.signedMediaUrl }));
+vi.mock("@aws-sdk/s3-request-presigner", () => ({ getSignedUrl: h.getSignedUrl }));
+
+/** Bucket RIÊNG của chat (không custom domain) — nơi ảnh chat PHẢI nằm. */
+const CHAT_BUCKET = "satarobo-chat-private";
+/** Bucket CÔNG KHAI (gắn cdn.satarobo.vn) — chat KHÔNG ĐƯỢC chạm. */
+const PUBLIC_BUCKET = "satarobo-uploads";
+const PUBLIC_HOST = "cdn.satarobo.vn";
+
+const ENV_KEYS = [
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET_NAME",
+  "R2_PUBLIC_URL",
+  "R2_CHAT_BUCKET_NAME",
+] as const;
+let envSnapshot: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
+
+/** Không hàm nào của kho công khai được gọi trong luồng chat. */
+function expectPublicStorageUntouched() {
+  expect(h.getR2Bucket).not.toHaveBeenCalled();
+  expect(h.getR2PublicUrl).not.toHaveBeenCalled();
+  expect(h.getPublicUrl).not.toHaveBeenCalled();
+  expect(h.signedMediaUrl).not.toHaveBeenCalled();
+}
 
 import {
   CHAT_IMAGE_RULES,
@@ -50,6 +113,7 @@ import {
   buildChatAttachmentKey,
   createChatUploadTicket,
   getChatAttachmentReadUrl,
+  isChatStorageConfigured,
   sanitizeChatFileName,
   sniffImageMime,
   assertChatUploadFiles,
@@ -95,6 +159,25 @@ beforeEach(() => {
   state.conv = { id: CONV, status: "ACTIVE" };
   state.part = { leftAt: null };
   state.att = null;
+
+  envSnapshot = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+  process.env.R2_ACCOUNT_ID = "zztest-account";
+  process.env.R2_ACCESS_KEY_ID = "zztest-key";
+  process.env.R2_SECRET_ACCESS_KEY = "zztest-secret";
+  process.env.R2_BUCKET_NAME = PUBLIC_BUCKET;
+  process.env.R2_PUBLIC_URL = `https://${PUBLIC_HOST}`;
+  process.env.R2_CHAT_BUCKET_NAME = CHAT_BUCKET;
+
+  h.presign.length = 0;
+  vi.clearAllMocks(); // xoá lịch sử gọi, GIỮ implementation (vi.fn(impl))
+});
+
+afterEach(() => {
+  for (const k of ENV_KEYS) {
+    const v = envSnapshot[k];
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -385,7 +468,7 @@ describe("[US-11] getChatAttachmentReadUrl — signed GET 5 phút (TS-14.2/14.4)
     state.att = { ...ATT, message: { ...ATT.message } };
     const r = await getChatAttachmentReadUrl("att-1", USER);
     expect(CHAT_IMAGE_RULES.readUrlTtlSeconds).toBe(300);
-    expect(r.url).toContain("ttl=300");
+    expect(r.url).toContain("X-Amz-Expires=300");
     expect(r.url).toContain(ATT.storagePath);
     expect(r.expiresIn).toBe(300);
     expect(r.expiresAt.getTime() - Date.now()).toBeGreaterThan(290_000);
@@ -430,5 +513,107 @@ describe("[US-11] getChatAttachmentReadUrl — signed GET 5 phút (TS-14.2/14.4)
     await expect(getChatAttachmentReadUrl("att-1", USER)).rejects.toMatchObject({
       code: "NOT_PARTICIPANT",
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Kho ảnh chat PHẢI tách khỏi bucket công khai (cdn.satarobo.vn).
+// Nếu ảnh nằm ở bucket có custom domain thì signed URL vô nghĩa: URL ký chứa
+// nguyên key ⇒ ghép `https://cdn.satarobo.vn/<key>` là có bản vĩnh viễn, không
+// chữ ký, không hạn 5 phút, tải được cả SAU KHI tin bị gỡ. Phá thẳng
+// flows.md:51-52,63 + US-12 AC5 + Q2 (00-dieu-chinh-cho-repo.md).
+// Bộ test dưới đây chốt: đổi `getChatBucket()` → `getR2Bucket()` là ĐỎ.
+// ═══════════════════════════════════════════════════════════════════════════
+describe("[SEC][US-11] ảnh chat nằm ở bucket RIÊNG, không phải bucket công khai", () => {
+  const ATT = {
+    id: "att-1",
+    storagePath: `chat-attachments/${CONV}/2026-08/aaaa.jpg`,
+    fileName: "anh.jpg",
+    mimeType: "image/jpeg",
+    message: { conversationId: CONV, deletedAt: null as Date | null },
+  };
+
+  it("PUT được ký vào R2_CHAT_BUCKET_NAME, KHÔNG phải R2_BUCKET_NAME", async () => {
+    const r = await createChatUploadTicket({
+      conversationId: CONV,
+      userId: USER,
+      files: [file()],
+    });
+    expect(h.presign).toHaveLength(1);
+    expect(h.presign[0]!.bucket).toBe(CHAT_BUCKET);
+    expect(h.presign[0]!.bucket).not.toBe(PUBLIC_BUCKET);
+    expect(r.tickets[0]!.uploadUrl).toContain(CHAT_BUCKET);
+    expectPublicStorageUntouched();
+  });
+
+  it("GET được ký vào R2_CHAT_BUCKET_NAME (không đi qua signedMediaUrl)", async () => {
+    state.att = { ...ATT, message: { ...ATT.message } };
+    const r = await getChatAttachmentReadUrl("att-1", USER);
+    expect(h.presign).toHaveLength(1);
+    expect(h.presign[0]!.bucket).toBe(CHAT_BUCKET);
+    expect(h.presign[0]!.expiresIn).toBe(300);
+    expect(r.url).toContain(CHAT_BUCKET);
+    expectPublicStorageUntouched();
+  });
+
+  it("URL cấp cho người dùng KHÔNG chứa host công khai R2_PUBLIC_URL", async () => {
+    const put = await createChatUploadTicket({
+      conversationId: CONV,
+      userId: USER,
+      files: [file()],
+    });
+    state.att = { ...ATT, message: { ...ATT.message } };
+    const get = await getChatAttachmentReadUrl("att-1", USER);
+    for (const url of [put.tickets[0]!.uploadUrl, get.url]) {
+      expect(url).not.toContain(PUBLIC_HOST);
+      expect(url).not.toContain(process.env.R2_PUBLIC_URL!);
+      expect(url).not.toContain(PUBLIC_BUCKET);
+    }
+  });
+
+  it("thiếu R2_CHAT_BUCKET_NAME → 503, TUYỆT ĐỐI không rơi về bucket công khai", async () => {
+    delete process.env.R2_CHAT_BUCKET_NAME;
+    expect(isChatStorageConfigured()).toBe(false);
+
+    await expect(
+      createChatUploadTicket({ conversationId: CONV, userId: USER, files: [file()] }),
+    ).rejects.toMatchObject({ code: "STORAGE_NOT_CONFIGURED", status: 503 });
+
+    state.att = { ...ATT, message: { ...ATT.message } };
+    await expect(getChatAttachmentReadUrl("att-1", USER)).rejects.toMatchObject({
+      code: "STORAGE_NOT_CONFIGURED",
+      status: 503,
+    });
+
+    // Không ký gì cả — và nhất là không hỏi bucket công khai để "chữa cháy".
+    expect(h.presign).toHaveLength(0);
+    expectPublicStorageUntouched();
+  });
+
+  it("R2_CHAT_BUCKET_NAME bị trỏ ĐÚNG vào bucket công khai → vẫn 503 (chặn cấu hình sai)", async () => {
+    process.env.R2_CHAT_BUCKET_NAME = PUBLIC_BUCKET;
+    expect(isChatStorageConfigured()).toBe(false);
+    await expect(
+      createChatUploadTicket({ conversationId: CONV, userId: USER, files: [file()] }),
+    ).rejects.toMatchObject({ code: "STORAGE_NOT_CONFIGURED", status: 503 });
+    expect(h.presign).toHaveLength(0);
+  });
+
+  it("isChatStorageConfigured KHÔNG còn phụ thuộc R2_PUBLIC_URL / R2_BUCKET_NAME", async () => {
+    delete process.env.R2_PUBLIC_URL;
+    delete process.env.R2_BUCKET_NAME;
+    expect(isChatStorageConfigured()).toBe(true);
+    const r = await createChatUploadTicket({
+      conversationId: CONV,
+      userId: USER,
+      files: [file()],
+    });
+    expect(r.tickets[0]!.uploadUrl).toContain(CHAT_BUCKET);
+    expectPublicStorageUntouched();
+  });
+
+  it("thiếu credential R2 → isChatStorageConfigured false (fail closed)", () => {
+    delete process.env.R2_SECRET_ACCESS_KEY;
+    expect(isChatStorageConfigured()).toBe(false);
   });
 });
