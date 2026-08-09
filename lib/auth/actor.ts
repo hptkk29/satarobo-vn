@@ -73,7 +73,7 @@ export type Actor = {
   // Optional có chủ đích: ~35 file dựng Actor literal (system-actor, test cũ) không vỡ.
   /** RoleDef.id của các role ĐANG hiệu lực (đối chiếu PermissionGrant subjectType=ROLE). */
   roleIds?: string[];
-  /** UserGroup.id — rỗng tới US-03. */
+  /** US-03 — UserGroup.id các nhóm actor là thành viên (chỉ nhóm CHƯA xoá mềm). */
   groupIds?: string[];
   /** Grant từ bảng PermissionGrant MỚI (KHÔNG phải UserPermissionGrant cũ). */
   permissionGrants?: GrantRow[];
@@ -126,8 +126,10 @@ export function buildActor(input: {
   assignedClassIds?: string[];
   now?: Date;
   validActions?: Set<string>;
-  /** US-02 — grant bảng MỚI (PermissionGrant) đã query theo roleIds của actor. */
+  /** US-02 — grant bảng MỚI (PermissionGrant) đã query theo roleIds/groupIds của actor. */
   permissionGrants?: GrantRow[];
+  /** US-03 — UserGroup.id của các nhóm actor đang là thành viên (nhóm CHƯA xoá mềm). */
+  groupIds?: string[];
 }): Actor {
   const now = input.now ?? new Date();
   const orgById = new Map(input.orgNodes.map((n) => [n.id, n]));
@@ -214,7 +216,7 @@ export function buildActor(input: {
     assignedClassIds: new Set(input.assignedClassIds ?? []),
     // US-02 — additive: engine mới (lib/permissions/can.ts) đọc các field này.
     roleIds: [...roleIdSet],
-    groupIds: [], // US-03 mới có nhóm
+    groupIds: input.groupIds ?? [], // US-03 — membership nhóm (caller đã lọc nhóm sống)
     permissionGrants: input.permissionGrants ?? [],
     roleCenterScope,
   };
@@ -222,7 +224,7 @@ export function buildActor(input: {
 
 export async function resolveActorUncached(userId: string): Promise<Actor> {
   const now = new Date();
-  const [rows, orgNodes, grants, classes] = await Promise.all([
+  const [rows, orgNodes, grants, classes, groupMemberships] = await Promise.all([
     db.userOrgRole.findMany({
       where: {
         userId,
@@ -243,16 +245,33 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       where: { deletedAt: null, OR: [{ teacherId: userId }, { assistantId: userId }] },
       select: { id: true },
     }),
+    // US-03 — membership nhóm, CHỈ nhóm còn sống (group.deletedAt null): nhóm xoá mềm
+    // → grant GROUP của nó vô hiệu ngay lần resolve kế, không cần dọn PermissionGrant.
+    db.userGroupMember.findMany({
+      where: { userId, group: { deletedAt: null } },
+      select: { groupId: true },
+    }),
   ]);
 
-  // US-02 — query thứ 5 (phụ thuộc roleIds từ rows nên nằm SAU Promise.all): grant bảng
-  // MỚI PermissionGrant theo role. subjectType GROUP query ở US-03 khi có UserGroup.
+  // US-02/US-03 — query grant (phụ thuộc roleIds/groupIds nên nằm SAU Promise.all):
+  // grant bảng MỚI PermissionGrant theo ROLE ∪ GROUP; cả hai rỗng → skip (PARENT
+  // không tốn query).
   const roleIds = [...new Set(rows.map((r) => r.roleId))];
+  const groupIds = groupMemberships.map((m) => m.groupId);
   const permissionGrants =
-    roleIds.length === 0
+    roleIds.length === 0 && groupIds.length === 0
       ? []
       : await db.permissionGrant.findMany({
-          where: { subjectType: "ROLE", subjectId: { in: roleIds } },
+          where: {
+            OR: [
+              ...(roleIds.length > 0
+                ? [{ subjectType: "ROLE" as const, subjectId: { in: roleIds } }]
+                : []),
+              ...(groupIds.length > 0
+                ? [{ subjectType: "GROUP" as const, subjectId: { in: groupIds } }]
+                : []),
+            ],
+          },
           select: {
             subjectType: true,
             subjectId: true,
@@ -268,6 +287,7 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
     now,
     orgNodes,
     permissionGrants,
+    groupIds,
     rows: rows.map((r) => ({
       orgUnitId: r.orgUnitId,
       roleId: r.roleId,
