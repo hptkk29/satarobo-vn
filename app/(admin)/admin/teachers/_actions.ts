@@ -163,7 +163,7 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
         data: as === "teacher" ? { teacherId: teacherUserId } : { assistantId: teacherUserId },
       });
       await syncConversationMembership(tx, classId);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     return { ok: false, error: `Lỗi gán lớp: ${err instanceof Error ? err.message : "Unknown"}` };
   }
@@ -254,7 +254,7 @@ export async function unassignClassFromTeacher(input: unknown): Promise<Result> 
         data: as === "teacher" ? { teacherId: null } : { assistantId: null },
       });
       await syncConversationMembership(tx, classId);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     return { ok: false, error: `Lỗi gỡ lớp: ${err instanceof Error ? err.message : "Unknown"}` };
   }

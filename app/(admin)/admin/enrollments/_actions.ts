@@ -61,7 +61,11 @@ async function runSerializable<T>(
       // Prisma.TransactionClient (tiền lệ students/classes) — runtime không đổi.
       return await sdb.$transaction(
         async (tx) => fn(tx as unknown as Prisma.TransactionClient),
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 30_000,
+          maxWait: 10_000,
+        },
       );
     } catch (err) {
       const isConflict =
@@ -282,7 +286,7 @@ export async function createEnrollment(formData: FormData): Promise<ActionResult
       const tx = txRaw as unknown as Prisma.TransactionClient;
       await tx.enrollment.create({ data });
       await syncConversationMembership(tx, e.classId);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được đăng ký" };
   }
@@ -370,7 +374,7 @@ export async function updateEnrollment(
       if (existing.classId !== e.classId) {
         await syncConversationMembership(tx, existing.classId);
       }
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Lỗi cơ sở dữ liệu — không cập nhật được" };
   }
@@ -406,7 +410,7 @@ export async function deleteEnrollment(id: string): Promise<ActionResult> {
         select: { classId: true },
       });
       await syncConversationMembership(tx, row.classId);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Không thể xoá đăng ký này" };
   }
@@ -496,7 +500,7 @@ export async function deleteEnrollmentAction(
         orgUnitId: enrollment.class?.centerId ?? null,
         tx,
       });
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { ok: false, error: "Không thể xoá đăng ký này" };
   }

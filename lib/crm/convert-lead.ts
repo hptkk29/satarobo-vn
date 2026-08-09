@@ -171,7 +171,7 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
     await syncConversationMembership(tx, input.classId);
 
     return { lead, parent, student, enrollment, order };
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   // SAU commit: side-effect không-atomic (activation email, stats...) qua DomainEvent (C2.5).
   await publishEvent("lead.converted", {

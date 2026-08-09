@@ -358,7 +358,7 @@ export async function enrollGroupIntoClass(input: {
         data: { studentId, classId: cls.id, courseId: cls.courseId, centerId: cls.centerId, status: "CONFIRMED", confirmedAt: new Date(), notes: `Ghi danh theo nhóm ${input.groupId}` },
       });
       await syncConversationMembership(tx, cls.id);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
     created++;
   }
   revalidatePath(`/class-groups/${input.groupId}`);

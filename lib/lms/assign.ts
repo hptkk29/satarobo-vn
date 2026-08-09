@@ -173,7 +173,7 @@ export async function assignEnrollments(opts: {
         if (enr.classId && enr.classId !== cls.id) {
           await syncConversationMembership(tx, enr.classId);
         }
-      });
+      }, { timeout: 30_000, maxWait: 10_000 });
       assigned += 1;
     } catch {
       // Đụng độ partial unique (studentId, classId) WHERE deletedAt IS NULL

@@ -463,7 +463,7 @@ export async function POST(req: NextRequest) {
           );
         }
       }
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     return NextResponse.json(
       {

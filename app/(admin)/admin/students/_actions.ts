@@ -387,7 +387,7 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
         orgUnitId: before.centerId,
         tx,
       });
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Không thể xoá học viên này" };
   }
@@ -960,7 +960,7 @@ export async function withdrawStudentAction(input: {
     for (const classId of new Set(activeEnrollments.map((e) => e.classId))) {
       await syncConversationMembership(tx, classId);
     }
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
@@ -1132,7 +1132,7 @@ export async function createParentAccount(input: {
       }
 
       return { linkedCount: res.count, isNewPending };
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
 
     // Tài khoản mới PENDING_ACTIVATION → gửi OTP kích hoạt (ngoài transaction).
     // P5 — target là SĐT ⇒ `getOtpProviderFor` chọn Zalo ZNS; email chỉ còn là
@@ -1285,7 +1285,7 @@ export async function addChildToParent(input: {
     for (const classId of new Set(activeClasses.map((e) => e.classId))) {
       await syncConversationMembership(tx, classId);
     }
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
   revalidatePath(`/students/${child.id}/edit`);
   return { ok: true };
 }
@@ -1322,7 +1322,7 @@ export async function unlinkChildFromParent(
     for (const classId of new Set(activeClasses.map((e) => e.classId))) {
       await syncConversationMembership(tx, classId);
     }
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
   revalidatePath(`/students/${childStudentId}/edit`);
   return { ok: true };
 }

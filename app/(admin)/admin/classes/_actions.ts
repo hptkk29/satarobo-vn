@@ -543,7 +543,7 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
       // US-03 chat — lớp tạo THẲNG ở trạng thái ACTIVE (không qua approveClass) cũng
       // phải có nhóm lớp (BR-01); trạng thái khác → sync tự no-op.
       await syncConversationMembership(tx, created.id);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã lớp đã tồn tại" };
@@ -777,7 +777,7 @@ export async function updateClass(
       // US-03 chat — cùng transaction: đổi GV/trợ giảng, đổi trạng thái (→ACTIVE tạo
       // nhóm; →COMPLETED archive nhóm) đều đồng bộ membership tại đây.
       await syncConversationMembership(tx, id);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Mã lớp đã tồn tại" };
@@ -868,7 +868,7 @@ export async function deleteClass(id: string): Promise<ActionResult> {
 
       // US-03 chat — lớp xoá mềm → nhóm lớp archive (sync thấy deletedAt → archive).
       await syncConversationMembership(tx, id);
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Không thể xoá lớp này" };
   }
@@ -962,7 +962,7 @@ export async function approveClass(classId: string): Promise<WfResult & { warnin
       },
     });
     await syncConversationMembership(tx, classId);
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   // P2 — duyệt lớp ACTIVE → TỰ SINH buổi học (nếu chưa có).
   // 08/08 — KHÔNG nuốt lỗi nữa: trước đây `res.ok === false` (lớp chưa khai lịch, khoá
@@ -1505,7 +1505,7 @@ export async function cancelClassAction(
         },
         { tx },
       );
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {
     return {
       ok: false,

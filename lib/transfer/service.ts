@@ -242,7 +242,7 @@ export async function approveTransfer(
         tx,
       });
     }
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   return { ok: true };
 }
