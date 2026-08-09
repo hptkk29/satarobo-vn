@@ -13,6 +13,8 @@
 | **[AS-BUILT US-02]** `lib/permissions/can.test.ts` (unit, 15) + `lib/auth/permission-decision.test.ts` (unit, 3) | TS-02 phần ROLE: DENY>ALLOW · DENY cấp trường · bảng chân trị 4 dataScope · chống rò ngang đa-role · ALLOW+mask invalid · parity fallback canV2 · mask vô điều kiện qua detail |
 | **[AS-BUILT US-02]** `lib/eslint/inline-authz.test.ts` (unit, 22) | TS-03: 2 rule chặn inline-authz + bắt action ghi thiếu can() (AST-based, chống bypass export{}/comment) + allowlist 71 file + freshness — CI job unit-tests + quality (pnpm lint) chặn merge |
 | **[AS-BUILT US-02]** `tests/e2e/a0/permission-grant.spec.ts` (integration, 4 case) | resolveActor nạp grant thật · DENY ROLE-grant chặn end-to-end · xoá grant → request kế mất hiệu lực (không cache phiên) · bảng rỗng → parity tuyệt đối đường cũ |
+| **[AS-BUILT US-04]** `lib/permissions/matrix.test.ts` (26 test: 22 thật + 4 `it.fails` `[US-04→P5]`) | TS-04: ma trận 4 dataScope × 3 relationshipType × 2 effect; DENY>ALLOW cả 12 case; tripwire chống gỡ lặng lẽ; case biên UNIT_ONLY@REGION |
+| **[AS-BUILT US-04]** `lib/permissions/session-content-gate.test.ts` (8 test: 1 tripwire + 7 `it.fails`) | TS-18 pin HỢP ĐỒNG chuỗi 4 điều kiện (4 case DENY thiếu từng đk · CONTENT · LIST_ONLY · franchise ACTIVE vẫn xem) — US-16 hiện thực làm tripwire đỏ → gỡ .fails cùng commit |
 
 Ngoài các nhóm trên: chưa có test nào cho các luật còn lại của nền. Các dòng dưới đây là PROPOSED (TS-01 đã chuyển lên mục 1).
 
