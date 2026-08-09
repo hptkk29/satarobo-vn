@@ -18,6 +18,19 @@ async function main() {
   console.log(`CLASSES: ${classes.length}`);
   for (const c of classes) console.log(`  ${c.name} · status=${c.status} · id=${c.id}`);
 
+  const enrolls = await db.enrollment.findMany({
+    where: { student: { studentCode: { startsWith: P } } },
+    select: {
+      id: true, status: true, deletedAt: true, centerId: true,
+      class: { select: { name: true } },
+      student: { select: { name: true } },
+    },
+  });
+  console.log(`ENROLLMENTS: ${enrolls.length}`);
+  for (const e of enrolls) {
+    console.log(`  ${e.student.name} → ${e.class?.name ?? "?"} · status=${e.status} · deletedAt=${e.deletedAt ? "SET" : "null"} · centerId=${e.centerId ?? "NULL"}`);
+  }
+
   const convs = await db.conversation.findMany({
     where: { subjectId: { in: classes.map((c) => c.id) } },
     select: {
