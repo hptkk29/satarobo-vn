@@ -47,8 +47,17 @@ function printStatic(descriptors: Map<string, DescriptorRow>): void {
 /** Đối chiếu khai báo tĩnh ↔ bảng PermissionDescriptor. Trả về true nếu LỆCH. */
 async function compareWithDb(descriptors: Map<string, DescriptorRow>): Promise<boolean> {
   // Script chạy ngoài Next → dùng PrismaClient trực tiếp (như scripts/cleanup-zztest.ts).
+  // Ưu tiên DIRECT_URL (session pooler :5432): findMany trần qua transaction pooler
+  // :6543 dính quirk `prepared statement "s0" already exists` (42P05) — đã ăn thật
+  // 09/08 khi nghiệm thu US-01. Không có DIRECT_URL thì append pgbouncer=true như
+  // lib/db.ts phòng thủ.
   const { PrismaClient } = await import("@prisma/client");
-  const db = new PrismaClient();
+  const raw = process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "";
+  const url =
+    raw && !process.env.DIRECT_URL && !raw.includes("pgbouncer=")
+      ? `${raw}${raw.includes("?") ? "&" : "?"}pgbouncer=true`
+      : raw;
+  const db = new PrismaClient(url ? { datasourceUrl: url } : undefined);
   try {
     const rows = await db.permissionDescriptor.findMany({
       select: { key: true, isActive: true },
