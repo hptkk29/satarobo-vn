@@ -29,11 +29,16 @@ async function main() {
     },
   });
   console.log(`CONVERSATIONS: ${convs.length}`);
+  const partIds = [...new Set(convs.flatMap((c) => c.participants.map((p) => p.userId)))];
   const users = await db.user.findMany({
-    where: { name: { startsWith: P } },
-    select: { id: true, name: true },
+    where: { id: { in: partIds } },
+    select: { id: true, name: true, role: true, roles: true, centerId: true },
   });
-  const uname = (id: string) => users.find((u) => u.id === id)?.name ?? id.slice(0, 10);
+  const uname = (id: string) => {
+    const u = users.find((x) => x.id === id);
+    if (!u) return `${id.slice(0, 10)} (KHÔNG TÌM THẤY USER)`;
+    return `${u.name} [v1 roles=${u.roles.join("|") || u.role} · centerId=${u.centerId ?? "null"}]`;
+  };
   for (const cv of convs) {
     const cls = classes.find((c) => c.id === cv.subjectId);
     console.log(`  conv cho [${cls?.name}] · type=${cv.type} · status=${cv.status} · centerId=${cv.centerId ? "SET" : "NULL"} · orgUnitId=${cv.orgUnitId ? "SET" : "NULL"}`);

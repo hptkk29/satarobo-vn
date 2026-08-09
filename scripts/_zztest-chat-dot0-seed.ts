@@ -65,7 +65,12 @@ async function cleanup() {
 }
 
 async function seed() {
+  // Cơ sở của bộ seed — mặc định cơ sở đầu tiên; ép cơ sở khác bằng
+  // `pnpm exec tsx scripts/_zztest-chat-dot0-seed.ts seed <centerId>` để khớp
+  // cơ sở của lớp tạo qua UI (ghi danh chéo cơ sở bị scopedDb chặn).
+  const wantCenterId = process.argv[3];
   const center = await db.center.findFirst({
+    where: wantCenterId ? { id: wantCenterId } : undefined,
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true },
   });
