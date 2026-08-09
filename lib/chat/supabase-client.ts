@@ -37,6 +37,18 @@ export function getSupabaseBrowserClient(): SupabaseClient {
   return browserClient;
 }
 
+/**
+ * Đổi JWT của KẾT NỐI realtime đang mở (không dựng lại kênh).
+ *
+ * US-07 — token sống 15': client xin token mới ở ~80% TTL rồi gọi hàm này, connection
+ * đẩy `access_token` mới xuống các channel đã join ⇒ kênh không rớt giữa chừng.
+ * ⚠️ Chỉ đổi token cho phiên hiện tại; quyền đọc THẬT vẫn do policy RLS quyết định
+ * (và policy chỉ chạy lúc join — xem F-KICK: gỡ giữa phiên đi bằng `participant.removed`).
+ */
+export async function setRealtimeAuth(jwt: string): Promise<void> {
+  await getSupabaseBrowserClient().realtime.setAuth(jwt);
+}
+
 export type SubscribeConversationHandlers = {
   /** Payload broadcast của hội thoại (server phát bằng service role). */
   onBroadcast?: (event: string, payload: Record<string, unknown>) => void;
