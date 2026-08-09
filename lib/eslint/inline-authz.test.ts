@@ -166,6 +166,53 @@ export async function evictAction(key: string) {
 }
 `;
 
+// ── Fixture wrapper cục bộ MỘT CẤP (trả nợ NỢ 3, 09/08) ──
+// Wrapper FunctionDeclaration cùng file có gọi check → action đi qua nó KHÔNG bị report.
+const CODE_WRITE_LOCAL_WRAPPER_FN = `declare function checkPermission(k: string): Promise<void>;
+declare const db: { x: { update: (a: unknown) => Promise<unknown> } };
+async function ensurePermission() {
+  await checkPermission("things:update");
+}
+export async function saveViaWrapperAction(input: unknown) {
+  await ensurePermission();
+  await db.x.update({ where: input });
+}
+`;
+
+// Wrapper dạng VariableDeclarator arrow ở module scope — cũng được nhận.
+const CODE_WRITE_LOCAL_WRAPPER_ARROW = `declare function assertPermission(k: string): Promise<void>;
+declare const db: { x: { deleteMany: (a: unknown) => Promise<unknown> } };
+const guardWipe = async () => {
+  await assertPermission("things:delete");
+};
+export async function wipeViaArrowWrapperAction() {
+  await guardWipe();
+  await db.x.deleteMany({});
+}
+`;
+
+// Wrapper cục bộ nhưng thân KHÔNG có call check nào → action vẫn bị report.
+const CODE_WRITE_LOCAL_WRAPPER_NO_CHECK = `declare const db: { x: { update: (a: unknown) => Promise<unknown> } };
+async function ensureSession() {
+  if (!globalThis) throw new Error("chưa đăng nhập");
+}
+export async function saveNoCheckWrapperAction(input: unknown) {
+  await ensureSession();
+  await db.x.update({ where: input });
+}
+`;
+
+// Giới hạn ghi nhận CHỦ ĐÍCH: wrapper import từ file khác nằm ngoài tầm AST 1 file
+// → vẫn report (dù wrapper thật có thể kiểm quyền). Escape hatch = gọi check trực tiếp
+// trong thân, hoặc eslint-disable kèm lý do.
+const CODE_WRITE_IMPORTED_WRAPPER = `import { ensurePermission } from "./guards";
+declare const db: { x: { update: (a: unknown) => Promise<unknown> } };
+export async function saveViaImportedWrapperAction(input: unknown) {
+  await ensurePermission();
+  await db.x.update({ where: input });
+}
+`;
+
 // Lần lintText đầu nạp cả config + typescript-eslint (~30s). Warm-up trước.
 beforeAll(async () => {
   await lint("export {};\n", "lib/__warmup__.ts");
@@ -292,6 +339,31 @@ describe("[TS-03/b] require-can-in-write-action bắt action ghi thiếu can()",
 
   it("pin giới hạn biết trước: map.delete(key) vẫn tính là GHI (heuristic giữ chủ đích, xem header rule)", async () => {
     const msgs = await lint(CODE_MAP_DELETE, IN_SCOPE_UNDERSCORE);
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].ruleId).toBe(RULE_B);
+  });
+});
+
+describe("[TS-03/b] wrapper cục bộ MỘT CẤP cùng file (trả nợ NỢ 3)", () => {
+  it("wrapper FunctionDeclaration có checkPermission → action đi qua wrapper KHÔNG lỗi", async () => {
+    const msgs = await lint(CODE_WRITE_LOCAL_WRAPPER_FN, IN_SCOPE_UNDERSCORE);
+    expect(msgs.filter((m) => m.ruleId === RULE_B)).toEqual([]);
+  });
+
+  it("wrapper const arrow module scope có assertPermission → KHÔNG lỗi", async () => {
+    const msgs = await lint(CODE_WRITE_LOCAL_WRAPPER_ARROW, IN_SCOPE_UNDERSCORE);
+    expect(msgs.filter((m) => m.ruleId === RULE_B)).toEqual([]);
+  });
+
+  it("wrapper cục bộ KHÔNG có call check trong thân → VẪN lỗi", async () => {
+    const msgs = await lint(CODE_WRITE_LOCAL_WRAPPER_NO_CHECK, IN_SCOPE_UNDERSCORE);
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].ruleId).toBe(RULE_B);
+    expect(msgs[0].message).toContain("saveNoCheckWrapperAction");
+  });
+
+  it("wrapper IMPORT từ file khác → VẪN lỗi (giới hạn 1-file ghi nhận chủ đích)", async () => {
+    const msgs = await lint(CODE_WRITE_IMPORTED_WRAPPER, IN_SCOPE_UNDERSCORE);
     expect(msgs.length).toBe(1);
     expect(msgs[0].ruleId).toBe(RULE_B);
   });
