@@ -31,6 +31,7 @@ const h = vi.hoisted(() => {
     unreadUpdates: [] as Row[],
     txOptions: null as Row | null,
     txCalls: 0,
+    rateCalls: [] as { key: string; max: number; windowMs: number }[],
   };
   const mockDb: Record<string, unknown> = {
     $extends: () => mockDb,
@@ -72,6 +73,14 @@ const h = vi.hoisted(() => {
     broadcast: vi.fn(async () => true),
     publishEvent: vi.fn(async () => ({ id: "evt-1" })),
     writeAudit: vi.fn(async () => ({})),
+    // Rate limit (F-ANN kế thừa F-SEND bước 4) — mock để test không phụ thuộc bộ đếm
+    // in-memory dùng chung giữa các `it` (20 lượt/phút sẽ cạn giữa chừng và biến cả
+    // file thành flake theo THỨ TỰ chạy). Mặc định luôn cho qua; test nào cần chặn thì
+    // tự `mockResolvedValueOnce`.
+    rateLimit: vi.fn(async (args: { key: string; max: number; windowMs: number }) => {
+      state.rateCalls.push(args);
+      return { success: true, remaining: args.max - 1, resetAt: Date.now() + args.windowMs };
+    }),
   };
 });
 
@@ -79,6 +88,7 @@ vi.mock("@/lib/db", () => ({ db: h.mockDb }));
 vi.mock("@/lib/audit/audit-log", () => ({ writeAudit: h.writeAudit }));
 vi.mock("@/lib/chat/broadcast", () => ({ broadcastToConversation: h.broadcast }));
 vi.mock("@/lib/events/publish", () => ({ publishEvent: h.publishEvent }));
+vi.mock("@/lib/rate-limit", () => ({ rateLimit: h.rateLimit }));
 // Không kéo next-auth vào test node (lõi nhận Actor seed, không cần phiên thật).
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => null) }));
 
@@ -88,6 +98,9 @@ import { ROLE_SEED } from "../../prisma/seed-roles";
 import {
   ANNOUNCEMENT_BODY_MAX,
   ANNOUNCEMENT_DAILY_QUOTA,
+  ANNOUNCEMENT_RATE_MAX,
+  ANNOUNCEMENT_RATE_WINDOW_MS,
+  announcementRateKey,
   buildReadStats,
   checkAnnouncementQuota,
   isAnnouncementRecipient,
@@ -346,6 +359,8 @@ beforeEach(() => {
   h.state.unreadUpdates = [];
   h.state.txOptions = null;
   h.state.txCalls = 0;
+  h.state.rateCalls = [];
+  h.rateLimit.mockClear();
   h.broadcast.mockClear();
   h.broadcast.mockImplementation(async () => true);
   h.publishEvent.mockClear();
@@ -476,6 +491,88 @@ describe("[US-10][AC2] quota 10 ANNOUNCEMENT/ngày/lớp", () => {
     expect(createdAt.lt.getTime() - createdAt.gte.getTime()).toBe(24 * 60 * 60_000);
     // Mốc phải rơi đúng 17:00Z (= 00:00 VN) — nếu ai dùng UTC ngày trần thì là 00:00Z.
     expect(createdAt.gte.getUTCHours()).toBe(17);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F-ANN kế thừa **bước 4 của F-SEND**: rate limit 20/phút/NGƯỜI (vá 09/08/2026).
+//
+// Trước đó `sendAnnouncement` không gọi `rateLimit` lần nào. Quota 10/ngày/lớp KHÔNG
+// bịt được khe này: quota đếm theo HỘI THOẠI, nên một GV dạy 10 lớp bắn 10 thông báo
+// trong 2 giây vẫn hợp quota — 10 lượt ghi + 10 broadcast + 10 DomainEvent tức thì.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[US-10] rate limit 20 thông báo/phút/người (F-SEND bước 4)", () => {
+  it("khoá bộ đếm là chat:announce:<userId> — RIÊNG, không dùng chung với chat:send", () => {
+    expect(announcementRateKey("u-1")).toBe("chat:announce:u-1");
+    expect(announcementRateKey("u-1")).not.toContain("chat:send");
+  });
+
+  it("gửi hợp lệ → có gọi rateLimit đúng khoá/ngưỡng/cửa sổ của CHÍNH người gửi", async () => {
+    const actor = actorOf("TEACHER", "cs1", "gv-rate", ["lopA"]);
+    const res = await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(res.ok).toBe(true);
+    expect(h.state.rateCalls).toEqual([
+      {
+        key: "chat:announce:gv-rate",
+        max: ANNOUNCEMENT_RATE_MAX,
+        windowMs: ANNOUNCEMENT_RATE_WINDOW_MS,
+      },
+    ]);
+    expect(ANNOUNCEMENT_RATE_MAX).toBe(20);
+    expect(ANNOUNCEMENT_RATE_WINDOW_MS).toBe(60_000);
+  });
+
+  it("hết lượt → RATE_LIMITED, KHÔNG mở transaction, KHÔNG ghi tin, KHÔNG broadcast/event", async () => {
+    h.rateLimit.mockResolvedValueOnce({
+      success: false,
+      remaining: 0,
+      resetAt: Date.now() + 42_000,
+    });
+    const actor = actorOf("TEACHER", "cs1", "gv-rate", ["lopA"]);
+    const res = await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error.code).toBe("RATE_LIMITED");
+    expect(res.error.message).toContain("thử lại sau"); // nói rõ chờ bao lâu
+    expect(h.state.txCalls).toBe(0);
+    expect(h.state.created).toHaveLength(0);
+    expect(h.broadcast).not.toHaveBeenCalled();
+    expect(h.publishEvent).not.toHaveBeenCalled();
+  });
+
+  it("rate limit chạy TRƯỚC quota — quota đã cạn vẫn báo RATE_LIMITED, và không mở tx để đếm", async () => {
+    // Quota cũng đã cạn: nếu thứ tự đảo, mã lỗi sẽ là ANNOUNCEMENT_QUOTA_EXCEEDED.
+    h.state.sentToday = ANNOUNCEMENT_DAILY_QUOTA;
+    h.rateLimit.mockResolvedValueOnce({ success: false, remaining: 0, resetAt: Date.now() + 1_000 });
+    const actor = actorOf("CENTER_MANAGER", "cs1", "ql-rate");
+    const res = await sendAnnouncementAsActor(actor, "QLCS Test", input());
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error.code).toBe("RATE_LIMITED");
+    // Quota đếm BÊN TRONG transaction ⇒ không mở tx nghĩa là chưa hề đụng tới quota.
+    expect(h.state.txCalls).toBe(0);
+  });
+
+  it("bị chặn ở cổng VAI (PH/Sale) thì KHÔNG tiêu lượt của ai — rate limit nằm sau can()", async () => {
+    const res = await sendAnnouncementAsActor(
+      actorOf("PARENT", "cs1", "ph-rate"),
+      "PH Test",
+      input(),
+    );
+    expect(res.ok).toBe(false);
+    expect(h.rateLimit).not.toHaveBeenCalled();
+  });
+
+  it("bộ đếm theo NGƯỜI: 2 người gửi vào CÙNG hội thoại → 2 khoá khác nhau", async () => {
+    await sendAnnouncementAsActor(actorOf("TEACHER", "cs1", "gv-a", ["lopA"]), "A", input());
+    await sendAnnouncementAsActor(actorOf("TEACHER", "cs1", "gv-b", ["lopA"]), "B", input());
+    expect(h.state.rateCalls.map((c) => c.key)).toEqual([
+      "chat:announce:gv-a",
+      "chat:announce:gv-b",
+    ]);
   });
 });
 

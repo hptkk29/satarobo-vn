@@ -27,8 +27,31 @@ export const PAGE_GATES = {
   "/hoc-ba": ["curriculum:view", "students:view-own-class"],
 
   /** Hội thoại phụ huynh ↔ giáo viên (PII). GV vào được vì trang CÓ lọc theo lớp
-   *  phân công (teacherClassIds). Đào tạo/HR/Kế toán/Marketing bị cắt. */
-  "/tin-nhan": ["parent-requests:manage", "classes:view-own"],
+   *  phân công. Đào tạo/HR/Kế toán/Marketing bị cắt.
+   *
+   *  ⚠️ 09/08/2026 — GỠ `parent-requests:manage` khỏi ô này. Action đó do
+   *  SUPER_ADMIN + CENTER_MANAGER + **SALES_CSM** giữ (nó là chìa khoá CSKH cho
+   *  /cham-soc-hv và /canh-bao-rui-ro, không gỡ khỏi Sale được), nên Sale mở được
+   *  /tin-nhan — trong khi `docs/chat-realtime/permissions.md` ghi Sale ❌ ở MỌI ô
+   *  chat và TS-01.6 đòi "sale1 gọi mọi endpoint chat → 403 toàn bộ". Danh sách hiện
+   *  rỗng (phạm vi đọc là participant-based) nhưng cửa vẫn mở — hợp đồng nói là đóng.
+   *
+   *  Vì sao là `students:view-own-class` chứ KHÔNG phải `chat:read`: gate cấp trang gọi
+   *  `checkAnyPermission` KHÔNG có target, mà dưới RBAC v2 (đang bật prod) `chat:read`
+   *  seed scope CENTER cho QLCS và ASSIGNED cho GV — `scopeMatches` đòi target
+   *  (lib/auth/can.ts:18,29) nên gọi trần trả FALSE ⇒ khoá cửa chính của cả QLCS lẫn GV
+   *  trên prod, trong khi máy dev (v1 tĩnh) vẫn xanh. Đúng dạng "chạy máy tôi thì được".
+   *  `students:view-own-class` giữ được cả hai tính chất cần: v1 = SUPER_ADMIN +
+   *  CENTER_MANAGER + TEACHER (không có Sale), v2 = GLOBAL ở CẢ CENTER_MANAGER lẫn
+   *  TEACHER nên gọi trần vẫn đúng. Quyền theo TỪNG hội thoại (đọc/gửi/thông báo/gỡ)
+   *  vẫn kiểm CÓ target trong `chat-workspace` + từng Server Action — gate này chỉ là
+   *  cửa vào màn hình. Bất biến "action trong PAGE_GATES phải GLOBAL ở mọi RoleDef giữ
+   *  nó" được `page-gates.test.ts` khoá lại.
+   *
+   *  Giáo vụ (`CENTER_CLASS_MANAGER`) cũng ra khỏi cửa này: `lib/chat/sync-membership.ts`
+   *  chỉ dẫn xuất participant cho RoleDef `CENTER_MANAGER`, nên vai đó chưa bao giờ là
+   *  thành viên hội thoại nào — vào cũng chỉ thấy danh sách rỗng, y như Sale. */
+  "/tin-nhan": ["students:view-own-class", "classes:view-own"],
 
   /** Cảnh báo rủi ro HV. GV KHÔNG vào: trang không có lọc theo lớp, cho GV vào là
    *  mở toàn cơ sở — đúng thứ câu 19 cấm. */

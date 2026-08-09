@@ -30,6 +30,13 @@ export const DELETED_MESSAGE_TEXT = "Tin nhắn đã được gỡ";
 export const ARCHIVED_LABEL = "Đã lưu trữ";
 /** US-09 AC1 — 30 tin mỗi trang. */
 export const DEFAULT_PAGE_SIZE = 30;
+/**
+ * **BR-04** — sau khi hội thoại chuyển ARCHIVED, PH còn đọc lịch sử thêm 90 ngày;
+ * GV/QLCS/Admin KHÔNG hết hạn (nghĩa vụ lưu vết). permissions.md, "Trạng thái đè lên
+ * tất cả": `ARCHIVED → Đọc ✅ (PH hết hạn sau 90 ngày …)`. TS-08 bước 2.
+ */
+export const ARCHIVED_PARENT_READ_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_CONVERSATION_LIMIT = 100;
 const MAX_CONVERSATION_LIMIT = 500;
@@ -104,6 +111,48 @@ export function decodeCursor(raw: string | null | undefined): MessageCursor | nu
   const createdAt = new Date(raw.slice(0, sep));
   if (Number.isNaN(createdAt.getTime())) return null;
   return { createdAt, id };
+}
+
+/**
+ * BR-04 — mốc "archive trước thời điểm này thì PH hết hạn đọc". Dùng CHUNG cho cả hai
+ * đường: điều kiện SQL trong {@link listConversationsForUser} và hàm thuần
+ * {@link isArchivedReadExpired} của cổng chặn — một quy tắc, một chỗ tính.
+ */
+export function archivedReadCutoff(now: Date): Date {
+  return new Date(now.getTime() - ARCHIVED_PARENT_READ_DAYS * DAY_MS);
+}
+
+/** Ba mẩu cần để áp BR-04 — nhận rời nhau nên test được không cần DB. */
+export type ArchivedReadInput = {
+  /** `Conversation.status` */
+  status: string;
+  /** `Conversation.archivedAt` */
+  archivedAt: Date | null;
+  /** Tư cách của NGƯỜI ĐỌC trong hội thoại (`ConversationParticipant.derivedFrom`). */
+  derivedFrom: string | null;
+  now: Date;
+};
+
+/**
+ * **BR-04** — `true` = PH đã quá hạn 90 ngày đọc lịch sử hội thoại đã lưu trữ.
+ *
+ * Chỉ áp cho PH: quy tắc phân biệt theo `derivedFrom = CLASS_STUDENT_PARENT` (tư cách
+ * TRONG hội thoại) chứ không theo `User.role` — người vừa là GV vừa là PH đứng trong
+ * nhóm với đúng một tư cách, và ma trận nói "GV/QLCS/Admin không hết hạn".
+ *
+ * `archivedAt = null` → KHÔNG hết hạn (fail-open có chủ đích): không có mốc thì không
+ * tính được 90 ngày, mà chặn nhầm PH khỏi lịch sử lớp CỦA CON MÌNH là hỏng chức năng
+ * chứ không phải rò rỉ. Đường archive thật (`lib/chat/sync-membership.ts` — lớp
+ * COMPLETED/CANCELLED) LUÔN ghi `archivedAt`, nên nhánh này chỉ chạm dữ liệu cũ / bản
+ * ghi sửa tay.
+ *
+ * Biên: đúng 90 ngày vẫn ĐỌC ĐƯỢC (`>`, không phải `>=`) — "hết hạn SAU 90 ngày".
+ */
+export function isArchivedReadExpired(input: ArchivedReadInput): boolean {
+  if (input.status !== "ARCHIVED") return false;
+  if (input.derivedFrom !== "CLASS_STUDENT_PARENT") return false;
+  if (!input.archivedAt) return false;
+  return input.archivedAt.getTime() < archivedReadCutoff(input.now).getTime();
 }
 
 const PHONE_LIKE_RE = /(?<![0-9])(?:\+?84|0)(?:3|5|7|8|9)[0-9]{8}(?![0-9])/g;
@@ -293,13 +342,24 @@ type ActiveParticipant = {
 };
 
 /**
- * Cổng chặn DUY NHẤT của tầng đọc: phải là participant CÒN HIỆU LỰC (`leftAt IS NULL`).
- * TS-01.7 — PH đã rời bị chặn NGAY, không có grace period ở API (hạn đọc 90 ngày của
- * BR-04 là việc của story riêng, không nới ở đây).
+ * Cổng chặn DUY NHẤT của tầng đọc, HAI điều kiện:
+ *
+ *  1. Phải là participant CÒN HIỆU LỰC (`leftAt IS NULL`). TS-01.7 — PH đã rời bị chặn
+ *     NGAY, không có grace period ở API.
+ *  2. **BR-04** — hội thoại ARCHIVED quá 90 ngày thì PH hết quyền đọc; GV/QLCS/Admin
+ *     KHÔNG hết hạn (xem {@link isArchivedReadExpired}).
+ *
+ * Cả hai đều trả `NOT_PARTICIPANT` — đúng "QUY ƯỚC MÃ LỖI" chốt 09/08
+ * (`tests/chat/permission-matrix.spec.ts`): tầng đọc KHÔNG gọi `can()`, cổng của nó là
+ * tư cách thành viên, nên mọi deny ở đây là NOT_PARTICIPANT chứ không phải
+ * PERMISSION_DENIED.
+ *
+ * `now` tiêm được để test không phụ thuộc đồng hồ máy (TS-08 "tua thời gian +91 ngày").
  */
 async function assertActiveParticipant(
   conversationId: string,
   userId: string,
+  now: Date = new Date(),
 ): Promise<ActiveParticipant> {
   const p = await db.conversationParticipant.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
@@ -310,9 +370,22 @@ async function assertActiveParticipant(
       leftAt: true,
       unreadCount: true,
       lastReadMessageId: true,
+      // Một lượt đi-về: trạng thái + mốc lưu trữ đi kèm luôn (BR-04), không bắn thêm
+      // query cho `Conversation`.
+      conversation: { select: { status: true, archivedAt: true } },
     },
   });
   if (!p || p.leftAt !== null) notParticipant();
+  if (
+    isArchivedReadExpired({
+      status: p.conversation.status,
+      archivedAt: p.conversation.archivedAt,
+      derivedFrom: p.derivedFrom,
+      now,
+    })
+  ) {
+    notParticipant();
+  }
   return {
     id: p.id,
     role: p.role,
@@ -381,18 +454,25 @@ function statusLabelOf(status: string): string | null {
  * nhóm lớp của con, GV thấy lớp mình dạy (kể cả dạy chéo cơ sở — TS-01.5), QLCS thấy
  * lớp cơ sở mình vì service đồng bộ đã cho họ vào nhóm.
  *
+ * **BR-04** — hội thoại ARCHIVED quá 90 ngày BIẾN MẤT khỏi danh sách của PH (GV/QLCS/
+ * Admin vẫn thấy). Lọc ngay trong SQL chứ không lọc sau khi trả về: `LIMIT` chạy trước
+ * ở tầng DB, lọc sau sẽ ăn mất dòng hợp lệ của trang.
+ *
  * HIỆU NĂNG (không N+1 theo số hội thoại): đúng **2 truy vấn** bất kể user có bao
  * nhiêu hội thoại — (1) participant ⨝ conversation ⨝ class, (2) `DISTINCT ON` lấy tin
  * cuối của từng hội thoại (bám index `Message(conversationId, createdAt DESC)`).
  */
 export async function listConversationsForUser(
   userId: string,
-  opts?: { limit?: number },
+  opts?: { limit?: number; now?: Date },
 ): Promise<ConversationListItem[]> {
   const limit = Math.min(
     Math.max(opts?.limit ?? DEFAULT_CONVERSATION_LIMIT, 1),
     MAX_CONVERSATION_LIMIT,
   );
+  // Sinh đôi SQL của `isArchivedReadExpired` — cùng mốc, cùng biên (`<` = đúng 90 ngày
+  // vẫn thấy), cùng điều kiện "chỉ PH" và "archivedAt NULL thì không hết hạn".
+  const archivedCutoff = archivedReadCutoff(opts?.now ?? new Date());
 
   // (1) Truy vấn chính. Raw có chủ đích: gộp 3 bảng trong MỘT lượt đi-về (Prisma
   // `include` bắn thêm query cho từng quan hệ), và Postgres cần `NULLS LAST` tường minh
@@ -420,6 +500,12 @@ export async function listConversationsForUser(
      AND c."subjectType"::text = 'CLASS'
     WHERE p."userId" = ${userId}
       AND p."leftAt" IS NULL
+      AND NOT (
+        c."status"::text = 'ARCHIVED'
+        AND p."derivedFrom"::text = 'CLASS_STUDENT_PARENT'
+        AND c."archivedAt" IS NOT NULL
+        AND c."archivedAt" < ${archivedCutoff}
+      )
     ORDER BY c."lastMessageAt" DESC NULLS LAST, c."id" ASC
     LIMIT ${limit}
   `;
@@ -474,9 +560,9 @@ export type MessagePage = {
 export async function getMessagesPage(
   conversationId: string,
   userId: string,
-  opts?: { cursor?: string | null; limit?: number },
+  opts?: { cursor?: string | null; limit?: number; now?: Date },
 ): Promise<MessagePage> {
-  await assertActiveParticipant(conversationId, userId);
+  await assertActiveParticipant(conversationId, userId, opts?.now);
 
   const limit = Math.min(Math.max(opts?.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
   const cursor = decodeCursor(opts?.cursor);
@@ -527,9 +613,9 @@ export async function fetchMessagesSince(
   conversationId: string,
   userId: string,
   lastSeenMessageId: string | null,
-  opts?: { limit?: number },
+  opts?: { limit?: number; now?: Date },
 ): Promise<MessagesSincePage> {
-  await assertActiveParticipant(conversationId, userId);
+  await assertActiveParticipant(conversationId, userId, opts?.now);
 
   const limit = Math.min(Math.max(opts?.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
   const anchor = lastSeenMessageId
@@ -576,8 +662,13 @@ export async function fetchMessagesSince(
 export async function getConversationMembers(
   conversationId: string,
   viewerUserId: string,
+  opts?: { now?: Date },
 ): Promise<ConversationMemberView[]> {
-  const viewerParticipant = await assertActiveParticipant(conversationId, viewerUserId);
+  const viewerParticipant = await assertActiveParticipant(
+    conversationId,
+    viewerUserId,
+    opts?.now,
+  );
 
   const [conversation, participants] = await Promise.all([
     db.conversation.findUnique({
@@ -675,8 +766,10 @@ export async function markConversationRead(
   conversationId: string,
   userId: string,
   lastReadMessageId: string | null,
+  opts?: { now?: Date },
 ): Promise<MarkReadResult> {
-  await assertActiveParticipant(conversationId, userId);
+  // BR-04 áp cả ở đây: PH đã hết hạn đọc thì cũng không còn gì để "đánh dấu đã đọc".
+  await assertActiveParticipant(conversationId, userId, opts?.now);
 
   const lastReadAt = new Date();
   await db.conversationParticipant.update({

@@ -19,11 +19,14 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 
 import {
   ARCHIVED_LABEL,
+  ARCHIVED_PARENT_READ_DAYS,
   DELETED_MESSAGE_TEXT,
+  archivedReadCutoff,
   buildPreview,
   compareConversations,
   decodeCursor,
   encodeCursor,
+  isArchivedReadExpired,
   redactContactLike,
   shouldHideContacts,
   toMemberView,
@@ -315,6 +318,86 @@ describe("[BR-30] toMemberView — payload PH tuyệt đối không có liên h�
     const v = toMemberView({ ...ph, name: null }, { hideContacts: true });
     expect(v.displayName).toBe("Thành viên");
     expect(findContactLeaks(v)).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BR-04 — hạn đọc 90 ngày sau khi hội thoại chuyển ARCHIVED.
+//
+// permissions.md, "Trạng thái đè lên tất cả": ARCHIVED → "Đọc ✅ (PH hết hạn sau 90
+// ngày — GV/QLCS/Admin không hết hạn)". TS-08 bước 2: "tua thời gian +91 ngày (mock
+// clock) → ph1 đọc → 403; gv1, ql1, admin1 vẫn đọc được".
+//
+// MỌI mốc thời gian TIÊM VÀO qua tham số `now` — không đọc đồng hồ máy, nên test cho
+// cùng kết quả ở mọi múi giờ và không bao giờ "hết hạn" theo ngày chạy CI.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[BR-04] isArchivedReadExpired — PH hết hạn 90 ngày, nhân viên thì không", () => {
+  const NOW = new Date("2026-08-09T10:00:00.000Z");
+  const ngayTruoc = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
+  const PH = "CLASS_STUDENT_PARENT";
+
+  it("hằng số là 90 ngày và mốc cắt lùi đúng 90 ngày", () => {
+    expect(ARCHIVED_PARENT_READ_DAYS).toBe(90);
+    expect(archivedReadCutoff(NOW).toISOString()).toBe("2026-05-11T10:00:00.000Z");
+  });
+
+  it("hội thoại còn ACTIVE / LOCKED → không bao giờ hết hạn, kể cả với PH", () => {
+    for (const status of ["ACTIVE", "LOCKED"]) {
+      expect(
+        isArchivedReadExpired({ status, archivedAt: ngayTruoc(999), derivedFrom: PH, now: NOW }),
+      ).toBe(false);
+    }
+  });
+
+  it("PH: ARCHIVED 89 ngày → còn đọc; 91 ngày → HẾT HẠN [TS-08]", () => {
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: ngayTruoc(89), derivedFrom: PH, now: NOW }),
+    ).toBe(false);
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: ngayTruoc(91), derivedFrom: PH, now: NOW }),
+    ).toBe(true);
+  });
+
+  it("biên ĐÚNG 90 ngày vẫn đọc được — 'hết hạn SAU 90 ngày', lệch 1 ngày là sai", () => {
+    const at90 = ngayTruoc(90);
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: at90, derivedFrom: PH, now: NOW }),
+    ).toBe(false);
+    // nhích thêm 1 mili-giây quá mốc → hết hạn
+    expect(
+      isArchivedReadExpired({
+        status: "ARCHIVED",
+        archivedAt: new Date(at90.getTime() - 1),
+        derivedFrom: PH,
+        now: NOW,
+      }),
+    ).toBe(true);
+  });
+
+  it("GV / QLCS / participant thêm tay: KHÔNG hết hạn dù archive đã 10 năm", () => {
+    for (const derivedFrom of ["CLASS_TEACHER", "CENTER_MANAGER", null]) {
+      expect(
+        isArchivedReadExpired({
+          status: "ARCHIVED",
+          archivedAt: ngayTruoc(3650),
+          derivedFrom,
+          now: NOW,
+        }),
+        `${derivedFrom} không được hết hạn`,
+      ).toBe(false);
+    }
+  });
+
+  it("archivedAt NULL (dữ liệu cũ / archive sửa tay) → KHÔNG hết hạn, không chặn nhầm PH", () => {
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: null, derivedFrom: PH, now: NOW }),
+    ).toBe(false);
+  });
+
+  it("kết quả chỉ phụ thuộc `now` TIÊM VÀO — cùng dữ liệu, 'now' khác cho kết quả khác", () => {
+    const row = { status: "ARCHIVED", archivedAt: new Date("2026-01-01T00:00:00.000Z"), derivedFrom: PH };
+    expect(isArchivedReadExpired({ ...row, now: new Date("2026-03-01T00:00:00.000Z") })).toBe(false);
+    expect(isArchivedReadExpired({ ...row, now: new Date("2026-08-09T00:00:00.000Z") })).toBe(true);
   });
 });
 

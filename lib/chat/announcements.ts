@@ -48,14 +48,35 @@ import {
   DEFAULT_PAGE_SIZE,
   decodeCursor,
   encodeCursor,
+  isArchivedReadExpired,
   redactContactLike,
   toMessageView,
   type ChatMessageView,
 } from "@/lib/chat/queries";
+import { rateLimit } from "@/lib/rate-limit";
 import { vnAddDays, vnParts, vnStartOfDay } from "@/lib/time/vn";
 
 /** AC2 — trần thông báo mỗi NGÀY (giờ VN) cho mỗi LỚP. */
 export const ANNOUNCEMENT_DAILY_QUOTA = 10;
+
+/**
+ * F-ANN thừa hưởng **bước 4 của F-SEND**: rate limit 20 thao tác/phút/NGƯỜI
+ * (`flows.md` — "Khác F-SEND ở: guard vai; quota; push xuyên mute", tức mọi bước còn
+ * lại giữ nguyên). Cùng con số với `CHAT_SEND_RATE_MAX` trong `lib/chat/messages.ts`.
+ *
+ * ⚠️ Quota 10/ngày/lớp KHÔNG thay thế được cái này: quota đếm theo HỘI THOẠI, nên một
+ * GV dạy 10 lớp bắn 10 thông báo trong 2 giây vẫn hợp quota mà vẫn là 10 lượt ghi +
+ * 10 lượt broadcast + 10 DomainEvent trong nháy mắt. Rate limit đếm theo NGƯỜI nên bịt
+ * đúng khe đó. Bộ đếm riêng (`chat:announce:`), không dùng chung với `chat:send:` —
+ * gửi tin thường không được ăn mất lượt gửi thông báo và ngược lại.
+ */
+export const ANNOUNCEMENT_RATE_MAX = 20;
+export const ANNOUNCEMENT_RATE_WINDOW_MS = 60_000;
+
+/** Khoá bộ đếm rate limit — export để test pin đúng định dạng, không chép chuỗi tay. */
+export function announcementRateKey(userId: string): string {
+  return `chat:announce:${userId}`;
+}
 /** Trần độ dài, chặn ở CẢ server (không tin client) — cùng mức tin CHAT. */
 export const ANNOUNCEMENT_BODY_MAX = 4000;
 
@@ -302,6 +323,22 @@ function buildSendAnnouncementConfig(
       if (guard) throw new ActionError(guard.code, guard.message);
       const conv = ctx as SendContext;
 
+      // ── F-ANN kế thừa F-SEND bước 4: rate limit 20/phút/NGƯỜI ──
+      // Đặt TRƯỚC transaction (và trước quota) có chủ đích: chặn ở đây thì không mở
+      // transaction, không đếm quota, không ghi gì — rẻ nhất và không để lại rác.
+      const limit = await rateLimit({
+        key: announcementRateKey(actor.userId),
+        max: ANNOUNCEMENT_RATE_MAX,
+        windowMs: ANNOUNCEMENT_RATE_WINDOW_MS,
+      });
+      if (!limit.success) {
+        const giay = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
+        throw new ActionError(
+          "RATE_LIMITED",
+          `Bạn gửi thông báo quá nhanh (tối đa ${ANNOUNCEMENT_RATE_MAX} thông báo/phút). Vui lòng thử lại sau ${giay} giây.`,
+        );
+      }
+
       const now = new Date();
       const day = vnDayWindow(now);
 
@@ -504,13 +541,35 @@ async function loadAnnouncementRef(messageId: string): Promise<AnnouncementRef |
 /**
  * Cổng chặn chung: phải là thành viên CÒN HIỆU LỰC (`leftAt IS NULL`) của hội thoại.
  * Người đã rời bị chặn NGAY, không ân hạn (TS-01.7).
+ *
+ * **BR-04** áp y hệt tầng đọc (`lib/chat/queries.ts`): hội thoại ARCHIVED quá 90 ngày
+ * thì PH hết quyền đọc — kể cả đường thông báo. Không lặp lại quy tắc ở đây, gọi thẳng
+ * `isArchivedReadExpired` để chỉ có MỘT định nghĩa của "quá hạn".
  */
-async function assertActiveParticipant(conversationId: string, userId: string): Promise<void> {
+async function assertActiveParticipant(
+  conversationId: string,
+  userId: string,
+  now: Date = new Date(),
+): Promise<void> {
   const p = await db.conversationParticipant.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
-    select: { leftAt: true },
+    select: {
+      leftAt: true,
+      derivedFrom: true,
+      conversation: { select: { status: true, archivedAt: true } },
+    },
   });
   if (!p || p.leftAt !== null) notParticipant();
+  if (
+    isArchivedReadExpired({
+      status: p.conversation.status,
+      archivedAt: p.conversation.archivedAt,
+      derivedFrom: p.derivedFrom,
+      now,
+    })
+  ) {
+    notParticipant();
+  }
 }
 
 /**

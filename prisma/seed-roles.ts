@@ -262,10 +262,22 @@ export const ROLE_SEED: RoleSeed[] = [
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
-      // US-05 chat (08/08): Đào tạo quản TOÀN BỘ LMS — ĐỌC chat để giám sát nội dung
-      // giảng dạy trong nhóm lớp, KHÔNG send/announce/moderate (v2-only, v1 không có
-      // vì Đào tạo không có màn chat riêng ở P0 — mở khi có call-site).
-      { action: "chat:read", scopeType: "GLOBAL" },
+      // ⛔ KHÔNG THÊM LẠI `chat:read` CHO ĐÀO TẠO (gỡ 09/08/2026).
+      // Bản seed 08/08 có `{ action: "chat:read", scopeType: "GLOBAL" }` ở đây với lý do
+      // "giám sát nội dung giảng dạy". Đối chiếu intended-vs-implemented lộ ra 3 điều:
+      //   1. `docs/chat-realtime/permissions.md` KHÔNG có vai Đào tạo ở bất kỳ ô nào —
+      //      bảng ma trận chỉ có PH / GV / QLCS / Sale / Admin. Quyền này không có hợp đồng.
+      //   2. GLOBAL ⇒ đọc được MỌI hội thoại, kể cả 1-1 GV↔PH (`DM_TEACHER_PARENT`,
+      //      centerId=null) — tức mạnh hơn cả Admin. Ô "Đọc" của Admin trong ma trận là
+      //      ⚠️ *có điều kiện*: không phải thành viên thì phải đi đường tra cứu F-AUDIT
+      //      (bắt buộc nhập lý do + ghi AuditLog TRƯỚC khi trả nội dung). Đào tạo đọc
+      //      thẳng qua `can()` thì không để lại một dòng vết nào.
+      //   3. Không có call-site: P0 không có màn chat cho Đào tạo, nên đây là quyền chết
+      //      — chỉ còn tác dụng nếu ai đó gắn `chat:read` vào một bề mặt đọc mới.
+      // Mở lại CHỈ KHI có story + màn hình thật, và khi đó phải đi qua đường F-AUDIT như
+      // Admin (lý do + audit), KHÔNG phải bằng một dòng grant GLOBAL ở đây.
+      // Pin chống tái phát: `lib/auth/chat-permissions.test.ts` — "TRAINING không có bất
+      // kỳ action chat:* nào ở CẢ v1 lẫn v2".
     ],
   },
   {
