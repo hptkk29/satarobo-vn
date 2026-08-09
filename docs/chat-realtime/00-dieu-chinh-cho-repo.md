@@ -82,3 +82,13 @@ Cả 5 đều XANH ở `typecheck` + `lint` + `build` + 1644 unit test, chỉ l�
 | A2 (PH có tài khoản) | Luồng cấp TK PH ĐÃ TỒN TẠI trên repo (satarobo.vn/kich-hoat + OTP Zalo + ZNS) → E3 coi như đã chốt: **SĐT + mật khẩu, kích hoạt qua link + OTP**. US-16 hết blocker kỹ thuật; còn lại là vận hành pilot. |
 | A3 (query PH-theo-lớp 1 query) | Kiểm bằng EXPLAIN khi làm US-03 (schema có index `Enrollment`/`Student.parentId` sẵn — xác nhận lúc code) |
 | A4 (tắt public access an toàn) | ĐÚNG — mục C |
+
+## G. Checklist bắt buộc khi đưa chat lên PROD (chưa làm — chat mới chỉ ở `test`)
+
+Ba việc dưới đây **không** thể làm trước, vì code chat chưa có trên `main`:
+
+1. **Chạy workflow `Seed Production RolePermission (Supabase)`** sau khi merge. Đã xác minh 09/08: `origin/main:prisma/seed-roles.ts` có **0 dòng `chat:`** ⇒ prod hiện chưa có quyền chat nào, và cũng chưa từng dính lỗi "TRAINING có `chat:read` GLOBAL" (lỗi đó chỉ sống trong nhánh feature, đã gỡ ở `2fb3b20e`). Không chạy seed = mọi vai trên prod vào `/tin-nhan` đều bị chặn.
+2. **Chạy `scripts/backfill-nhom-lop-chat.ts --apply`** trên prod. `syncConversationMembership` chỉ chạy theo **sự kiện nghiệp vụ**; lớp đã ở trạng thái ACTIVE từ trước ngày phát hành **không bao giờ** có sự kiện nào để kích hoạt ⇒ nhóm không tự sinh, GV/PH mở trang chỉ thấy "Chưa có hội thoại nào". Trên `test` đo được 24 lớp ACTIVE / 0 nhóm trước khi backfill. Chạy `--apply` xong kiểm bằng `/admin/hoi-thoai/doi-soat` (phải ra 0 drift).
+3. **Điền `R2_CHAT_BUCKET_NAME` cho scope Production** (bucket riêng, không Public Access, không `r2.dev`). Thiếu → luồng ảnh trả 503 (fail-closed, có chủ đích).
+
+> Bài học từ nghiệm thu 09/08: hai việc 1 và 2 đều **không** có test nào bắt được, vì cả hai là trạng thái dữ liệu/môi trường chứ không phải code. Trang danh sách rỗng nhìn giống hệt "tính năng chưa chạy".
