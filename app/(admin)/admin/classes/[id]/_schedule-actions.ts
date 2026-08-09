@@ -44,8 +44,10 @@ import { parseVnYmd, vnDateOnly, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 
 type Result = { ok: boolean; error?: string; warning?: string };
 
-/** Kế hoạch gửi từ form — hình dạng dùng chung với planner client (`lib/classes/phase-form`). */
-export type { SchedulePhaseInput };
+// Kế hoạch gửi từ form dùng hình dạng chung `SchedulePhaseInput` — import thẳng
+// từ `lib/classes/phase-form`. KHÔNG re-export type ở đây: file "use server" bắt
+// mọi export phải là async action; loader sinh export value cho tên type-only
+// → ReferenceError lúc eval module, chết TOÀN BỘ action tạo/sửa lớp (bug 09/08).
 
 type Gate = {
   actor: Actor;
