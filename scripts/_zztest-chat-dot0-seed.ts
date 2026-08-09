@@ -56,6 +56,13 @@ async function cleanup() {
   await db.classSchedulePhase.deleteMany({ where: { classId: { in: classIds } } }).catch(() => null);
   await db.class.deleteMany({ where: { id: { in: classIds } } });
   await db.student.deleteMany({ where: { id: { in: studentIds } } });
+  // Bản ghi lần chạy đối soát do nghiệm thu tay sinh ra — xoá để sổ vận hành
+  // không có dòng giả (thiếu dòng 2 đêm liên tiếp là tín hiệu điều tra thật).
+  const runs = await db.conversationReconcileRun.findMany({
+    where: { ranAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) } },
+    select: { id: true },
+  });
+  await db.conversationReconcileRun.deleteMany({ where: { id: { in: runs.map((r) => r.id) } } });
   await db.userOrgRole.deleteMany({ where: { userId: { in: userIds } } });
   await db.auditLog.deleteMany({ where: { actorId: { in: userIds } } }).catch(() => null);
   await db.user.deleteMany({ where: { id: { in: userIds } } });
