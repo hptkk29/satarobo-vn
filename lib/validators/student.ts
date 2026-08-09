@@ -21,6 +21,14 @@ export const BloodTypeEnum = z.enum([
 
 export const GenderEnum = z.enum(["MALE", "FEMALE", "OTHER"]);
 
+// NỢ-2 (US-03 write-path, 09/08): chuỗi MASK không bao giờ là SĐT hợp lệ.
+// Actor bị DENY cấp trường thấy form prefill dạng che ("090xxxx678" từ maskPhone,
+// hoặc "09••••••78") — nếu chuỗi đó lọt tới DB là số thật bị ghi đè mất. Chặn cứng
+// ở validator cho MỌI actor (phòng thủ độc lập với fieldMask ở action).
+export const PHONE_MASK_RE = /[•*]|x{2,}/i;
+export const PHONE_MASK_MSG =
+  "SĐT đang ở dạng che (mask) — không phải số thật, không thể lưu";
+
 // Helper transforms — turn empty strings into null so optional Prisma columns
 // don't receive '' values.
 const nullableStr = z
@@ -31,6 +39,12 @@ const nullableStr = z
     const s = v.trim();
     return s.length > 0 ? s : null;
   });
+
+// SĐT nullable + chặn chuỗi mask (NỢ-2). Dùng cho phone HV / parent2Phone.
+const nullablePhoneStr = nullableStr.refine(
+  (v) => v === null || !PHONE_MASK_RE.test(v),
+  PHONE_MASK_MSG,
+);
 
 const nullableEmail = z
   .union([z.string(), z.null()])
@@ -64,7 +78,7 @@ export const studentCreateSchema = z.object({
     .union([GenderEnum, z.literal(""), z.null()])
     .optional()
     .transform((v) => (v === "" || v === undefined || v === null ? null : v)),
-  phone: nullableStr,
+  phone: nullablePhoneStr,
   email: nullableEmail,
   avatarUrl: nullableStr,
 
@@ -74,14 +88,19 @@ export const studentCreateSchema = z.object({
   // Parent — required at write time even though DB column is nullable
   // (legacy rows from before D1 may have NULL parentName / parentPhone).
   parentName: z.string().trim().min(1, "Họ tên phụ huynh bắt buộc"),
-  parentPhone: z.string().trim().min(1, "SĐT phụ huynh bắt buộc"),
+  parentPhone: z
+    .string()
+    .trim()
+    .min(1, "SĐT phụ huynh bắt buộc")
+    // NỢ-2: chuỗi mask không phải SĐT — chặn ghi đè số thật trong DB.
+    .refine((v) => !PHONE_MASK_RE.test(v), PHONE_MASK_MSG),
   parentEmail: nullableEmail,
   parentRelation: nullableStr,
   // #15 (câu 32) — CCCD phụ huynh (CHỈ phụ huynh, KHÔNG lưu CCCD học viên). PII nhạy
   // cảm: hiển thị mask + break-glass ở màn thanh toán. Nhập tại form học viên.
   parentNationalId: nullableStr,
   parent2Name: nullableStr,
-  parent2Phone: nullableStr,
+  parent2Phone: nullablePhoneStr,
   parent2Relation: nullableStr,
 
   address: nullableStr,
