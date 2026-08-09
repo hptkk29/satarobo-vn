@@ -98,10 +98,16 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (centerFilter) where.centerId = centerFilter;
 
   if (q) {
+    // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT khi actor thấy được SĐT thật —
+    // cùng điều kiện với hiển thị (canViewPii VÀ không bị DENY cấp trường TS-02).
     where.OR = [
       { student: { name: { contains: q, mode: "insensitive" } } },
-      { student: { parentPhone: { contains: qPhone } } },
-      { student: { phone: { contains: qPhone } } },
+      ...(canViewPii && !phoneMasked
+        ? [
+            { student: { parentPhone: { contains: qPhone } } },
+            { student: { phone: { contains: qPhone } } },
+          ]
+        : []),
       { class: { name: { contains: q, mode: "insensitive" } } },
       { class: { classCode: { contains: q, mode: "insensitive" } } },
     ];

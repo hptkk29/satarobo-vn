@@ -155,12 +155,19 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   // on before lifecycle tabs were added.
   const baseFilters: Prisma.StudentWhereInput = {};
   if (q) {
+    // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT khi actor thấy được SĐT thật —
+    // cùng điều kiện với hiển thị (canViewPii VÀ không bị DENY cấp trường TS-02).
+    // Thiếu quyền mà vẫn filter theo SĐT = dò được số qua kết quả trả về.
     baseFilters.OR = [
       { name: { contains: q, mode: "insensitive" } },
       { studentCode: { contains: q, mode: "insensitive" } },
       { parentName: { contains: q, mode: "insensitive" } },
-      { parentPhone: { contains: qPhone } },
-      { phone: { contains: qPhone } },
+      ...(canViewPii && !phoneMasked
+        ? [
+            { parentPhone: { contains: qPhone } },
+            { phone: { contains: qPhone } },
+          ]
+        : []),
     ];
   }
   if (centerId) baseFilters.preferredCenterId = centerId;

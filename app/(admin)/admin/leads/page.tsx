@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
-import { checkPermission } from '@/lib/auth/check-permission'
+import { checkPermission, checkPermissionDetail } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
@@ -79,6 +79,18 @@ export default async function LeadsPage({
         }
       : undefined
 
+  // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) ở SERVER cho actor không có
+  // quyền leads:view-pii — chặn leak qua RSC payload, không chỉ che UI.
+  // ⚠️ Không lấy MARKETING làm ví dụ nữa: từ 21/07 MARKETING CÓ leads:view-pii.
+  // Hiện mọi vai vào được trang này đều có quyền, nên nhánh mask chỉ chạy khi
+  // admin thu quyền của một người cụ thể qua UserPermissionGrant (DENY).
+  const canViewPii = await canViewLeadPii()
+  // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT khi actor thấy được SĐT thật —
+  // PII lead do leads:view-pii cai quản (canViewPii VÀ không bị DENY cấp trường
+  // "phone" TS-02). Thiếu quyền mà vẫn filter theo SĐT = dò được số qua kết quả.
+  const { fieldMask: leadPiiMask } = await checkPermissionDetail('leads:view-pii')
+  const canSearchPhone = canViewPii && !leadPiiMask.includes('phone')
+
   // Base filter (không kèm status) — dùng cho query chính (thêm status tuỳ view)
   // + đếm badge tab "Đã đăng ký" (luôn đếm trên scope hiện tại, bất kể view/status filter).
   const baseWhere: Prisma.LeadWhereInput = {
@@ -108,7 +120,8 @@ export default async function LeadsPage({
       ? {
           OR: [
             { parentName: { contains: q, mode: 'insensitive' as const } },
-            { phone: { contains: qPhone } },
+            // Lead.phone = SĐT PH — chỉ tìm được khi thấy SĐT thật (NỢ #11).
+            ...(canSearchPhone ? [{ phone: { contains: qPhone } }] : []),
             { childName: { contains: q, mode: 'insensitive' as const } },
           ],
         }
@@ -126,12 +139,6 @@ export default async function LeadsPage({
     where: { ...baseWhere, status: 'REGISTERED' },
   })
 
-  // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) ở SERVER cho actor không có
-  // quyền leads:view-pii — chặn leak qua RSC payload, không chỉ che UI.
-  // ⚠️ Không lấy MARKETING làm ví dụ nữa: từ 21/07 MARKETING CÓ leads:view-pii.
-  // Hiện mọi vai vào được trang này đều có quyền, nên nhánh mask chỉ chạy khi
-  // admin thu quyền của một người cụ thể qua UserPermissionGrant (DENY).
-  const canViewPii = await canViewLeadPii()
   const canCloseDeal =
     (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
   const canAssign = (await checkPermission('leads:assign'))
