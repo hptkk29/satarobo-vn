@@ -25,6 +25,17 @@ export type ChatMessageKind = "CHAT" | "ANNOUNCEMENT" | "SYSTEM";
  */
 export const DELETED_MESSAGE_TEXT = "Tin nhắn đã được gỡ";
 
+/**
+ * Câu hiện dưới ô nhập khi hội thoại đang bị Admin khoá (US-15 AC3).
+ *
+ * ⚠️ PHẢI khớp thông điệp của mã `CONVERSATION_LOCKED` trong `lib/chat/messages.ts` —
+ * cùng lý do khai lại như `DELETED_MESSAGE_TEXT` ở trên. Người dùng phải nghe một câu
+ * giống nhau dù họ gặp nó qua giao diện (khoá ngay lập tức) hay qua lỗi trả về từ server
+ * (client cũ chưa nhận broadcast).
+ */
+export const CONVERSATION_LOCKED_NOTICE =
+  "Hội thoại đang bị khoá — vui lòng liên hệ quản trị viên.";
+
 /** Tiền tố id của bản optimistic — id THẬT do server sinh (uuid) không bao giờ có tiền tố này. */
 export const OPTIMISTIC_ID_PREFIX = "tmp:";
 
@@ -372,6 +383,26 @@ export function parseMessageDeleted(payload: Record<string, unknown>): string | 
 /** Payload `participant.removed` → `User.id` bị gỡ (AC3 so với chính mình). */
 export function parseParticipantRemoved(payload: Record<string, unknown>): string | null {
   return str(payload.userId);
+}
+
+/**
+ * US-15 AC3 — payload `conversation.locked` → trạng thái mới của hội thoại.
+ *
+ * MỘT event cho cả hai chiều: cờ `locked` quyết định khoá hay mở khoá (server chỉ khai
+ * `conversation.locked` trong `ChatBroadcastEvent`). Đọc `locked` trước, `status` chỉ là
+ * đường dự phòng — payload lạ (thiếu cả hai) trả `null` để client GIỮ NGUYÊN trạng thái
+ * server đã render, thay vì đoán bừa rồi mở ô nhập của một hội thoại đang khoá.
+ */
+export function parseConversationLocked(
+  payload: Record<string, unknown>,
+): { locked: boolean; status: string } | null {
+  const status = str(payload.status);
+  if (typeof payload.locked === "boolean") {
+    return { locked: payload.locked, status: status ?? (payload.locked ? "LOCKED" : "ACTIVE") };
+  }
+  if (status === "LOCKED") return { locked: true, status };
+  if (status === "ACTIVE") return { locked: false, status };
+  return null;
 }
 
 /**

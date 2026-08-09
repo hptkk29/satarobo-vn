@@ -806,3 +806,72 @@ describe("[US-06][AC3][TS-12] broadcast hỏng KHÔNG làm hỏng việc gửi t
     expect(h.state.created).toHaveLength(1);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// US-15 AC4 — "Admin HO chỉ ĐỌC hội thoại mình không thuộc về".
+//
+// Vì sao phải pin ở TẦNG NÀY chứ không ở `can()`: `can()` v2 trả `true` ngay dòng đầu
+// cho SUPER_ADMIN (`lib/auth/can.ts` — `if (actor.isSuperAdmin) return true`), và seed
+// còn cấp thẳng `chat:send` GLOBAL cho vai đó. Nghĩa là cổng QUYỀN không chặn nổi một
+// chữ nào ở đây; chốt chặn DUY NHẤT là `checkConversationSendable` trong chính action.
+// Ai gỡ nó đi thì mọi test quyền vẫn xanh — nên bốn ô dưới đây là nơi duy nhất bắt được.
+//
+// Nghiệm thu trên DB thật: tests/chat/permission-matrix.spec.ts (TS-03.4b, TS-03.7b).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[US-15 AC4] Admin HO gửi tin — quyền cao nhất KHÔNG mở được cửa", () => {
+  it("hội thoại mình KHÔNG thuộc về → NOT_PARTICIPANT, 0 tin / 0 transaction / 0 broadcast [TS-03.4b]", async () => {
+    h.state.ctxRow = ctxRow({ participantId: null });
+    const admin = actorOf("SUPER_ADMIN", "ho", "admin-ngoai-nhom");
+    const res = await sendChatMessageAsActor(admin, "Admin HO", input());
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    // KHÔNG phải PERMISSION_DENIED: vai này có quyền, cái sai là không ở trong nhóm.
+    expect(res.error.code).toBe("NOT_PARTICIPANT");
+    expect(h.state.created).toHaveLength(0);
+    expect(h.state.txCalls).toBe(0);
+    expect(h.broadcast).not.toHaveBeenCalled();
+  });
+
+  it("Admin ĐÃ RỜI nhóm → NOT_PARTICIPANT (không có ân hạn riêng cho Admin)", async () => {
+    h.state.ctxRow = ctxRow({ participantLeftAt: new Date("2026-08-01T00:00:00Z") });
+    const admin = actorOf("SUPER_ADMIN", "ho", "admin-da-roi");
+    const res = await sendChatMessageAsActor(admin, "Admin HO", input());
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error.code).toBe("NOT_PARTICIPANT");
+    expect(h.state.created).toHaveLength(0);
+  });
+
+  it("hội thoại LOCKED → CONVERSATION_LOCKED với MỌI vai KỂ CẢ người ĐANG LÀ thành viên [TS-03.7b]", async () => {
+    // `ctxRow()` mặc định có `participantId` ⇒ cả ba người dưới đây đều LÀ thành viên
+    // còn hiệu lực. Nếu chỉ thử người ngoài nhóm thì test này chỉ đang chứng minh lại
+    // NOT_PARTICIPANT, chứ không chứng minh cái khoá có tác dụng.
+    for (const [code, uid] of [
+      ["PARENT", "ph-locked-member"],
+      ["TEACHER", "gv-locked-member"],
+      ["SUPER_ADMIN", "admin-locked-member"],
+    ] as const) {
+      h.state.ctxRow = ctxRow({ status: "LOCKED" });
+      const actor = actorOf(code, code === "SUPER_ADMIN" ? "ho" : "cs1", uid, ["lopA"]);
+      const res = await sendChatMessageAsActor(actor, code, input({ clientMsgId: cid(1) }));
+
+      expect(res.ok, `${code} không được gửi vào hội thoại đang khoá`).toBe(false);
+      if (res.ok) return;
+      expect(res.error.code).toBe("CONVERSATION_LOCKED");
+    }
+    expect(h.state.created).toHaveLength(0);
+  });
+
+  it("Admin LÀ thành viên nhưng hội thoại ARCHIVED → CONVERSATION_ARCHIVED (mã KHÁC 'đang khoá')", async () => {
+    h.state.ctxRow = ctxRow({ status: "ARCHIVED" });
+    const admin = actorOf("SUPER_ADMIN", "ho", "admin-archived");
+    const res = await sendChatMessageAsActor(admin, "Admin HO", input());
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error.code).toBe("CONVERSATION_ARCHIVED");
+    expect(h.state.created).toHaveLength(0);
+  });
+});

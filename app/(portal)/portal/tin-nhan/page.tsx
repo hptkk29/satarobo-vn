@@ -12,8 +12,10 @@ import Link from "next/link";
 import { MessagesSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listConversationsForUser, type ConversationListItem } from "@/lib/chat/queries";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
 import { formatConversationTime } from "@/components/chat/portal/format";
 import { ChatListRefresher } from "@/components/chat/chat-list-refresher";
+import { ChatPolicyGate } from "./_components/policy-gate";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +92,12 @@ export default async function PortalMessagesPage() {
       </p>
     );
   }
+
+  // US-16 AC2 — cổng chính sách. `layout.tsx` của segment đã chặn trước (children không
+  // vào cây React nên page này không chạy); kiểm lại ở đây để bất biến "chưa đồng ý ⇒
+  // server không truy vấn nội dung" không phụ thuộc vào quy ước render của framework.
+  // Tốn 0 truy vấn thừa: `hasAcceptedChatPolicy` là `cache()` theo request.
+  if (!(await hasAcceptedChatPolicy(session.user.id))) return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(session.user.id);
   // AC4 — ARCHIVED xuống dưới; trong mỗi khối giữ NGUYÊN thứ tự của query.

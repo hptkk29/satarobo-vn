@@ -19,6 +19,8 @@ import {
 } from "@/lib/chat/queries";
 import { listAnnouncements } from "@/lib/chat/announcements";
 import { listChatAttachments } from "@/lib/chat/messages";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
+import { ChatPolicyGate } from "../_components/policy-gate";
 import { ChatThread } from "@/components/chat/portal/chat-thread";
 import { AnnouncementReadMarker } from "@/components/chat/portal/announcement-read-marker";
 import { formatChatTimestamp } from "@/components/chat/portal/format";
@@ -26,18 +28,18 @@ import { formatChatTimestamp } from "@/components/chat/portal/format";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tin nhắn | Sata Robo", robots: { index: false } };
 
-/** US-09 AC3 — ô nhập vô hiệu kèm ĐÚNG lý do, không gộp thành một câu chung chung. */
+/**
+ * US-09 AC3 — ô nhập vô hiệu kèm ĐÚNG lý do, không gộp thành một câu chung chung.
+ *
+ * ⚠️ LOCKED cố ý KHÔNG nằm ở đây (US-15 AC3): Admin khoá/mở được GIỮA PHIÊN, nên trạng
+ * thái đó đi đường riêng (`initialLocked` + broadcast `conversation.locked`) để ô nhập
+ * đổi ngay mà không phải tải lại trang.
+ */
 function sendGate(status: string): { canSend: boolean; reason: string | null } {
   if (status === "ARCHIVED") {
     return {
       canSend: false,
       reason: "Lớp đã kết thúc — hội thoại chỉ còn đọc, không gửi tin được.",
-    };
-  }
-  if (status === "LOCKED") {
-    return {
-      canSend: false,
-      reason: "Hội thoại đang bị khoá — vui lòng liên hệ quản trị viên.",
     };
   }
   return { canSend: true, reason: null };
@@ -52,6 +54,10 @@ export default async function PortalConversationPage({
   if (!session?.user?.id) notFound();
   const userId = session.user.id;
   const { conversationId } = await params;
+
+  // US-16 AC2 — cổng chính sách, kiểm TRƯỚC mọi truy vấn nội dung (layout đã chặn; đây là
+  // lớp thứ hai để bất biến "chưa đồng ý ⇒ không đọc" không nằm nhờ ở quy ước framework).
+  if (!(await hasAcceptedChatPolicy(userId))) return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(userId);
   const conversation = conversations.find((c) => c.conversationId === conversationId);
@@ -143,6 +149,7 @@ export default async function PortalConversationPage({
         initialHasMore={page.hasMore}
         canSend={gate.canSend}
         disabledReason={gate.reason}
+        initialLocked={conversation.status === "LOCKED"}
       />
     </div>
   );

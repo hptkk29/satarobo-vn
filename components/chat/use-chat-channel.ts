@@ -31,6 +31,7 @@ import {
   lastSeenMessageId,
   mergeMessages,
   parseBroadcastMessage,
+  parseConversationLocked,
   parseMessageDeleted,
   parseParticipantRemoved,
   type ChatMessage,
@@ -109,6 +110,13 @@ export type UseChatChannelOptions = {
 export type UseChatChannelResult = {
   /** Luồng tin CŨ → MỚI, đã khử trùng. */
   messages: ChatMessage[];
+  /**
+   * US-15 AC3 — trạng thái khoá do Admin vừa đổi, nhận qua broadcast `conversation.locked`.
+   * `null` = chưa có event nào trong phiên này ⇒ dùng trạng thái server đã render.
+   * Chỉ để ĐỔI GIAO DIỆN cho kịp; chốt chặn thật vẫn là guard `CONVERSATION_LOCKED` ở
+   * server (`lib/chat/messages.ts`), nên client cũ chưa cập nhật cũng không gửi được tin.
+   */
+  lockedByAdmin: boolean | null;
   status: ChatChannelStatus;
   error: string | null;
   /** Đang chạy một lượt reconcile (UI có thể hiện "đang đồng bộ…"). */
@@ -154,6 +162,8 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
   const [error, setError] = useState<string | null>(null);
   const [isReconciling, setIsReconciling] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  /** US-15 AC3 — null cho tới khi có event `conversation.locked` đầu tiên. */
+  const [lockedByAdmin, setLockedByAdmin] = useState<boolean | null>(null);
 
   // Mọi thứ thay đổi mỗi render đi qua ref ⇒ effect kết nối CHỈ phụ thuộc conversationId,
   // không bị re-subscribe (và không mất tin) chỉ vì cha render lại với callback mới.
@@ -340,6 +350,13 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
         if (messageId) setMessages((prev) => applyMessageDeleted(prev, messageId));
         return;
       }
+      if (event === "conversation.locked") {
+        // US-15 AC3 — Admin khoá/mở khoá: ô nhập của MỌI client đang mở phải đổi NGAY,
+        // không chờ tải lại trang. Payload lạ → giữ nguyên trạng thái server đã render.
+        const parsed = parseConversationLocked(payload);
+        if (parsed) setLockedByAdmin(parsed.locked);
+        return;
+      }
       if (event === "participant.removed") {
         // AC3 — chỉ phản ứng khi là CHÍNH MÌNH (event phát cho cả topic).
         if (parseParticipantRemoved(payload) !== currentUserIdRef.current) return;
@@ -386,5 +403,14 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
     return teardown;
   }, [conversationId, enabled, reconcile]);
 
-  return { messages, status, error, isReconciling, unreadCount, reconcile, mergeLocal };
+  return {
+    messages,
+    lockedByAdmin,
+    status,
+    error,
+    isReconciling,
+    unreadCount,
+    reconcile,
+    mergeLocal,
+  };
 }

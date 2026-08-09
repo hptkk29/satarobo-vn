@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useChatChannel } from "@/components/chat/use-chat-channel";
 import {
+  CONVERSATION_LOCKED_NOTICE,
   DELETED_MESSAGE_TEXT,
   createOptimisticMessage,
   isOptimistic,
@@ -120,10 +121,17 @@ export type ChatThreadProps = {
   capabilities: StaffChatCapabilities;
   /** Thông báo ghim (US-09 AC2) — lấy từ `listAnnouncements` nên không phụ thuộc 30 tin đầu. */
   pinnedAnnouncement: StaffChatMessage | null;
-  /** ARCHIVED/LOCKED → ô nhập vô hiệu kèm lý do (US-09 AC3). */
+  /**
+   * Lý do KHÔNG-PHẢI-KHOÁ làm ô nhập vô hiệu (US-09 AC3) — hiện chỉ có "đã lưu trữ".
+   * Việc khoá đi đường riêng qua `initialLocked` + broadcast, vì nó đổi được GIỮA PHIÊN.
+   */
   disabledReason: string | null;
+  /** US-15 AC3 — trạng thái khoá lúc server render; broadcast `conversation.locked` đè lên. */
+  initialLocked: boolean;
   /** Link màn "Xem tất cả thông báo". */
   announcementsHref: string;
+  /** Link màn danh sách thành viên (nơi đặt nút "Nhắn riêng" — US-13 AC1). */
+  membersHref: string;
   /** Link quay lại danh sách (chỉ hiện ở mobile). */
   backHref: string;
 };
@@ -134,7 +142,6 @@ export function ChatThread(props: ChatThreadProps) {
     currentUserId,
     members,
     capabilities,
-    disabledReason,
     announcementsHref,
     backHref,
   } = props;
@@ -188,13 +195,19 @@ export function ChatThread(props: ChatThreadProps) {
     [conversationId],
   );
 
-  const { messages, status, error, mergeLocal } = useChatChannel({
+  const { messages, lockedByAdmin, status, error, mergeLocal } = useChatChannel({
     conversationId,
     currentUserId,
     fetchSince,
     markRead,
     initialMessages: props.initialMessages,
   });
+
+  // US-15 AC3 — Admin khoá/mở khoá trong lúc màn hình đang mở: broadcast đè lên trạng
+  // thái server đã render. "Đã lưu trữ" THẮNG khoá: mở khoá không làm lớp đã kết thúc
+  // gửi tin lại được (server cũng trả CONVERSATION_ARCHIVED trước khi tới nhánh khoá).
+  const locked = lockedByAdmin ?? props.initialLocked;
+  const disabledReason = props.disabledReason ?? (locked ? CONVERSATION_LOCKED_NOTICE : null);
 
   const { attachmentsOf, setLocalAttachments } = useMessageAttachments({
     conversationId,
@@ -441,7 +454,13 @@ export function ChatThread(props: ChatThreadProps) {
             <h2 className="truncate text-sm font-semibold text-foreground sm:text-base">
               {props.title}
             </h2>
-            <p className="truncate text-xs text-muted-foreground">{props.subtitle}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {props.subtitle}
+              {" · "}
+              <Link href={props.membersHref} className="underline hover:text-foreground">
+                {members.length} thành viên
+              </Link>
+            </p>
           </div>
         </div>
         {capabilities.canAnnounce && (

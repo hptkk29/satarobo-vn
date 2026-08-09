@@ -16,7 +16,15 @@
 // nên chỉ bọc mỏng để client có một chỗ import duy nhất.
 
 import { auth } from "@/lib/auth";
+import { isParentOnly } from "@/lib/auth/permissions";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
 import { listChatAttachments, sendChatMessage } from "@/lib/chat/messages";
+import { resolveActor } from "@/lib/auth/actor";
+import { openDmAsActor } from "@/lib/chat/dm";
+import {
+  adminLookupConversationAsActor,
+  setConversationLockAsActor,
+} from "@/lib/chat/admin";
 import { recallOwnMessage } from "@/lib/chat/moderation";
 import { markAnnouncementRead } from "@/lib/chat/announcements";
 import {
@@ -29,9 +37,46 @@ import {
 import type { ActionResult } from "@/lib/actions/factory";
 import type { ChatAttachmentRef, SentChatMessage } from "@/lib/chat/messages";
 import type { DeletedChatMessage } from "@/lib/chat/moderation";
+import type { OpenedDm } from "@/lib/chat/dm";
+import type {
+  AdminConversationTranscript,
+  ConversationLockResult,
+} from "@/lib/chat/admin";
 
 /** Lớp lỗi nghiệp vụ của module chat — thông điệp đã viết SẴN cho người dùng cuối. */
 const DOMAIN_ERROR_NAMES = new Set(["ChatQueryError", "ChatAnnouncementError"]);
+
+/**
+ * US-16 AC2 — CỬA THỨ BA của cổng chính sách.
+ *
+ * Cổng đó có ĐÚNG ba cửa vào nội dung chat, và chặn hai cửa là chưa chặn:
+ *   1. HTML   — `app/(portal)/portal/tin-nhan/layout.tsx` + 4 page RSC.
+ *   2. Realtime — `app/api/chat/realtime-token/route.ts` (không vé thì không nghe được kênh).
+ *   3. **Server Action — chính file này.** Server Action là endpoint HTTP thật: biết id hội
+ *      thoại là gọi thẳng được, không đi qua layout nào. Bỏ trống cửa này thì phụ huynh chưa
+ *      bấm đồng ý vẫn `getMessagesPageAction(convId, null)` ra nguyên lịch sử — tức AC2 chỉ
+ *      là một tấm màn che, không phải cổng.
+ *
+ * CHỈ áp cho tài khoản THUẦN phụ huynh: giáo viên/quản lý không bao giờ thấy màn chính sách
+ * nên chặn họ ở đây là tắt chat của nhân viên. Lỗi đọc DB ⇒ coi như CHƯA đồng ý (fail-closed
+ * — đây là cổng nội dung, hỏng thì phải đóng chứ không phải mở).
+ *
+ * Trả `null` nghĩa là ĐI TIẾP ĐƯỢC.
+ */
+async function chatPolicyBlock(
+  user: { id: string; role?: string | null; roles?: string[] | null },
+): Promise<{ ok: false; error: { code: string; message: string } } | null> {
+  if (!isParentOnly(user)) return null;
+  const accepted = await hasAcceptedChatPolicy(user.id).catch(() => false);
+  if (accepted) return null;
+  return {
+    ok: false,
+    error: {
+      code: "CHAT_POLICY_REQUIRED",
+      message: "Vui lòng đồng ý quy định sử dụng tin nhắn trước khi vào chat.",
+    },
+  };
+}
 
 /**
  * Lỗi tầng đọc → cùng hình dạng `ActionResult` với các action ghi (client chỉ xử 1 kiểu).
@@ -61,6 +106,12 @@ function readFail(err: unknown): { ok: false; error: { code: string; message: st
 export async function sendChatMessageAction(
   input: unknown,
 ): Promise<ActionResult<SentChatMessage>> {
+  // Cổng chính sách áp cho cả đường GHI: chưa đồng ý quy định mà đã nhắn được vào nhóm có
+  // giáo viên và phụ huynh khác thì "bấm đồng ý mới vào" (AC2) không còn nghĩa gì.
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  const blocked = await chatPolicyBlock(session.user);
+  if (blocked) return blocked;
   return sendChatMessage(input);
 }
 
@@ -69,6 +120,62 @@ export async function recallOwnMessageAction(
   input: unknown,
 ): Promise<ActionResult<DeletedChatMessage>> {
   return recallOwnMessage(input);
+}
+
+/**
+ * US-13 — "Nhắn riêng": mở (hoặc mở lại) hội thoại 1-1 GV↔PH rồi trả `conversationId`
+ * để client điều hướng.
+ *
+ * Phần ghép phiên nằm ở ĐÂY chứ không trong `lib/chat/dm.ts`: file đó phải chạy được
+ * ngoài Next (vitest node của bộ ma trận quyền, cron, script) nên không được import
+ * `next-auth`. Quyền + quan hệ dạy học vẫn do `openDmAsActor` kiểm — nút trên UI KHÔNG
+ * phải chốt chặn. Không `revalidatePath`: người bấm được điều hướng thẳng sang hội thoại.
+ */
+export async function openDmAction(input: unknown): Promise<ActionResult<OpenedDm>> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  }
+  const actor = await resolveActor(session.user.id);
+  const actorName = session.user.name ?? session.user.email ?? session.user.id;
+  return openDmAsActor(actor, actorName, input);
+}
+
+/**
+ * US-15 AC1/AC2 (F-AUDIT) — Admin mở nội dung hội thoại mình KHÔNG thuộc về.
+ *
+ * Modal nhập lý do ở UI chỉ là trải nghiệm: `adminLookupConversationAsActor` tự kiểm zod
+ * (thiếu/ngắn lý do → VALIDATION), `can("chat:admin")` (QLCS → PERMISSION_DENIED, AC5) và
+ * ghi AuditLog TRƯỚC khi đọc một dòng tin nào. Gọi thẳng action này không kèm `reason`
+ * cũng không lấy được gì (AC1 "không route/API nào vòng qua được").
+ */
+export async function adminLookupConversationAction(
+  input: unknown,
+): Promise<ActionResult<AdminConversationTranscript>> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  }
+  const actor = await resolveActor(session.user.id);
+  const actorName = session.user.name ?? session.user.email ?? session.user.id;
+  return adminLookupConversationAsActor(actor, actorName, input);
+}
+
+/**
+ * US-15 AC3 (F-LOCK) — khoá / mở khoá hội thoại. Bắt buộc lý do, ghi audit cả hai chiều,
+ * phát `conversation.locked` xuống `conv:{id}` để client đang mở đổi trạng thái ô nhập
+ * ngay. Không `revalidatePath`: trang chi tiết tự làm mới phần của nó sau khi action trả.
+ */
+export async function setConversationLockAction(
+  input: unknown,
+): Promise<ActionResult<ConversationLockResult>> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  }
+  const actor = await resolveActor(session.user.id);
+  const actorName = session.user.name ?? session.user.email ?? session.user.id;
+  return setConversationLockAsActor(actor, actorName, input);
 }
 
 /** US-07 AC5 — hội thoại đang mở ở foreground: `unreadCount` về 0. */
@@ -116,6 +223,8 @@ export async function fetchMessagesSinceAction(
 ): Promise<ActionResult<MessagesSincePage>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  const blocked = await chatPolicyBlock(session.user);
+  if (blocked) return blocked;
   try {
     return { ok: true, data: await fetchMessagesSince(conversationId, session.user.id, lastSeenMessageId) };
   } catch (err) {
@@ -136,6 +245,8 @@ export async function listChatAttachmentsAction(
 ): Promise<ActionResult<ChatAttachmentRef[]>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  const blocked = await chatPolicyBlock(session.user);
+  if (blocked) return blocked;
   try {
     return { ok: true, data: await listChatAttachments(conversationId, session.user.id, messageIds) };
   } catch (err) {
@@ -150,6 +261,8 @@ export async function getMessagesPageAction(
 ): Promise<ActionResult<MessagePage>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  const blocked = await chatPolicyBlock(session.user);
+  if (blocked) return blocked;
   try {
     return { ok: true, data: await getMessagesPage(conversationId, session.user.id, { cursor }) };
   } catch (err) {

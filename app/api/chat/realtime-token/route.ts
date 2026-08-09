@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isParentOnly } from "@/lib/auth/permissions";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
 import { mintRealtimeToken, RealtimeTokenError } from "@/lib/chat/realtime-token";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -38,6 +40,29 @@ export async function GET() {
       },
       { status: 429 },
     );
+  }
+
+  // US-16 AC2 — phụ huynh CHƯA đồng ý quy định thì KHÔNG cấp vé realtime. Thiếu bước này
+  // thì cổng chính sách chỉ chặn được đường HTML: vé realtime cho phép nghe thẳng
+  // broadcast của nhóm, tức đọc tin MỚI mà không đi qua trang nào.
+  // Chỉ áp cho tài khoản THUẦN phụ huynh: giáo viên/quản lý không bao giờ thấy màn chính
+  // sách của phụ huynh nên chặn họ ở đây là tắt chat của nhân viên. Đặt SAU rate limit để
+  // client hỏng (retry 30s) cũng nằm trong trần. Lỗi đọc DB → coi như CHƯA đồng ý
+  // (fail-closed) vì đây là cổng nội dung.
+  if (isParentOnly(session.user)) {
+    const accepted = await hasAcceptedChatPolicy(session.user.id).catch(() => false);
+    if (!accepted) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: {
+            code: "CHAT_POLICY_REQUIRED",
+            message: "Vui lòng đồng ý quy định sử dụng tin nhắn trước khi vào chat.",
+          },
+        },
+        { status: 403 },
+      );
+    }
   }
 
   try {

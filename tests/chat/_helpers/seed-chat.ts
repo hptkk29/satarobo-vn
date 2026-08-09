@@ -19,6 +19,7 @@
  */
 import type { Role } from "@prisma/client";
 import { db } from "../../../lib/db";
+import { dmKeyOf } from "../../../lib/chat/dm";
 import {
   assertTestDb,
   seedOrg,
@@ -248,10 +249,10 @@ async function upsertParticipant(input: {
   });
 }
 
-/** dmKey = 2 userId sort rồi nối (BR-06 — chống tạo 1-1 trùng cặp). */
-export function dmKeyOf(userIdA: string, userIdB: string): string {
-  return [userIdA, userIdB].sort().join(":");
-}
+// ⚠️ `dmKeyOf` KHÔNG được chép lại ở đây — nó là công thức SẢN PHẨM (BR-06), sống ở
+// `lib/chat/dm.ts`. Fixture chép tay một công thức riêng = test DM xanh giả: seed ghi
+// một khoá, `openDm` tra một khoá khác, cả hai đều "chạy đúng" theo cách của mình.
+export { dmKeyOf };
 
 export async function seedChatFixture(): Promise<ChatFixture> {
   assertTestDb();

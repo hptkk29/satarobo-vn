@@ -46,6 +46,8 @@ import {
 // US-11 — CHỈ dùng phần THUẦN của `lib/chat/attachments.ts` (luật key + gói cắt định dạng).
 // KHÔNG chạm R2 ở file này: việc ký URL đã xong ở bước 1 của F-FILE.
 import { CHAT_IMAGE_RULES, buildChatAttachmentKey } from "@/lib/chat/attachments";
+// US-13 — lớp làm chứng của hội thoại 1-1, nguồn DUY NHẤT của `target.classId` cho DM.
+import { dmWitnessClassId } from "@/lib/chat/dm";
 
 /** AC1 — 20 tin/phút/user. */
 export const CHAT_SEND_RATE_MAX = 20;
@@ -131,6 +133,8 @@ export type ChatSendError = { code: string; message: string };
 
 export type SendContext = {
   conversationId: string;
+  /** ConversationType dạng text: CLASS_GROUP | DM_TEACHER_PARENT | … */
+  type: string;
   /** ConversationStatus dạng text: ACTIVE | ARCHIVED | LOCKED. */
   status: string;
   centerId: string | null;
@@ -143,6 +147,13 @@ export type SendContext = {
   participantId: string | null;
   /** khác null = đã rời nhóm. */
   participantLeftAt: Date | null;
+  /**
+   * Hội thoại 1-1: lớp làm chứng cho quan hệ dạy học của CHÍNH người gửi
+   * ({@link dmWitnessClassId}). `null` với nhóm lớp (đã có `subjectId`) và với 1-1 hết
+   * quan hệ. KHÔNG đọc trong `loadSendContext` — nạp riêng ở {@link sendChatMessageAsActor}
+   * để nhóm lớp (đa số lượt gửi) không phải trả thêm một truy vấn nào.
+   */
+  dmClassId?: string | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -164,6 +175,7 @@ async function loadSendContext(
 ): Promise<SendContext | null> {
   const rows = await db.$queryRaw<SendContext[]>`
     SELECT c."id"                AS "conversationId",
+           c."type"::text        AS "type",
            c."status"::text      AS "status",
            c."centerId",
            c."orgUnitId",
@@ -373,11 +385,19 @@ async function findByClientMsgId(
  * xét `leftAt` ở đây: người đã rời vẫn qua cổng vai để nhận đúng mã `NOT_PARTICIPANT` từ
  * guard, thay vì `PERMISSION_DENIED` chung chung.
  * `classId`/`centerId` phục vụ scope ASSIGNED (GV) và CENTER (QLCS).
+ *
+ * ⚠️ NHÓM LỚP LẤY `classId` TỪ `subjectId`, 1-1 LẤY TỪ LỚP LÀM CHỨNG (`dmClassId`) —
+ * đừng rút gọn về một nguồn. 1-1 có `subjectType = NONE` nên nếu chỉ đọc `subjectId`
+ * thì `classId = null` và GV (scope ASSIGNED) bị `PERMISSION_DENIED` ngay ở cổng vai,
+ * trong khi PH gửi được (scope OWN) — đúng bug "hộp câm một chiều" đo được 09/08.
+ * Xem `dmWitnessClassId` (lib/chat/dm.ts) để biết vì sao lớp làm chứng là câu trả lời
+ * đúng thay vì nới ma trận quyền.
  */
 function sendTargetOf(ctx: SendContext | null, actor: Actor) {
   return {
     createdById: ctx?.participantId ? actor.userId : (ctx?.createdById ?? null),
-    classId: ctx?.subjectType === "CLASS" ? (ctx.subjectId ?? null) : null,
+    classId:
+      ctx?.subjectType === "CLASS" ? (ctx.subjectId ?? null) : (ctx?.dmClassId ?? null),
     centerId: ctx?.centerId ?? null,
   };
 }
@@ -642,6 +662,12 @@ export async function sendChatMessageAsActor(
 ): Promise<ActionResult<SentChatMessage>> {
   const conversationId = extractConversationId(rawInput);
   const ctx = conversationId ? await loadSendContext(conversationId, actor.userId) : null;
+  // 1-1 KHÔNG có `subjectId` để làm `target.classId` ⇒ hỏi thêm lớp làm chứng, nếu không
+  // GV rụng ở cổng vai (xem `sendTargetOf`). Chỉ chạy cho hội thoại KHÁC nhóm lớp, nên
+  // đường gửi tin nhóm lớp — đường nóng nhất — không tốn thêm truy vấn nào.
+  if (ctx && ctx.subjectType !== "CLASS") {
+    ctx.dmClassId = await dmWitnessClassId(ctx.conversationId, actor.userId);
+  }
   const { res } = await runAction(
     buildSendChatMessageConfig(ctx, actor),
     actor,

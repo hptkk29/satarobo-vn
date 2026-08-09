@@ -6052,3 +6052,67 @@ model ConversationReconcileRun {
   /// Default 0 để dòng cũ (trước 09/08/2026) đọc được, KHÔNG phải "0 lớp thiếu" đã đo.
   missingConversations Int @default(0)
 }
+
+// ── US-14: sổ gửi ZNS "có tin nhắn mới" (cron chat-zns-notify) ───────────────
+// Bảng này là CHỐT CHỐNG TRÙNG, không phải log cho vui: mỗi tin 400đ và ZNS không
+// thu hồi được. Hai lượt cron chồng nhau (Vercel retry, GitHub pump trên test) phải
+// va vào UNIQUE `(conversationId, userId, messageId)` chứ không được gửi đôi.
+// Quy trình: GIÀNH CHỖ trước (status PENDING) → gửi → cập nhật kết quả. Giành chỗ
+// trước nên nếu tiến trình chết giữa chừng thì lượt sau KHÔNG gửi lại (fail-safe
+// nghiêng về "thiếu một lời nhắc" thay vì "trừ tiền hai lần").
+
+enum ChatZnsStatus {
+  PENDING // đã giành chỗ, chưa biết kết quả (tiến trình chết giữa chừng thì dừng ở đây)
+  SENT // Zalo nhận thật
+  SIMULATED // provider mô phỏng (ZALO_LIVE tắt) — PHỤ HUYNH KHÔNG NHẬN GÌ
+  SKIPPED // thiếu điều kiện gửi (không có SĐT / chưa cấu hình credential)
+  FAILED // Zalo từ chối
+}
+
+model ChatZnsNotification {
+  id             String @id @default(uuid())
+  conversationId String
+  /// Phụ huynh nhận tin (User.id cuid) — không relation, đồng bộ ConversationParticipant.
+  userId         String
+  /// Tin "mốc": tin CŨ NHẤT chưa đọc đã quá ngưỡng (lib/chat/zns-notify-rules.ts).
+  /// Tất định giữa các lượt quét — nhờ vậy UNIQUE bên dưới mới chặn được trùng.
+  messageId      String
+  messageKind    MessageKind
+  status         ChatZnsStatus @default(PENDING)
+  /// ZaloMessageLog.id — đường duy nhất truy ngược "tin này gửi cho ai, vì việc gì"
+  /// (ZaloMessageLog không có cột userId/entityId).
+  znsLogId       String?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  sentAt         DateTime?
+
+  @@unique([conversationId, userId, messageId])
+  /// Trần chống bão: "phụ huynh này đã được nhắc ở hội thoại này trong X phút qua chưa".
+  @@index([conversationId, userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// ── US-16: mốc ĐỒNG Ý chính sách sử dụng chat (onboarding PH) ────────────────
+// Cổng chặn Ở SERVER: chưa có dòng nào ở version hiện hành thì `/portal/tin-nhan/**`
+// KHÔNG trả một chữ nội dung nào (layout + từng page tự kiểm — lib/chat/policy.ts).
+//
+// Vì sao BẢNG MỚI chứ không tái dùng `StudentConsent`: consent kia gắn theo `studentId`
+// và enum `ConsentType` chỉ có `CLASS_MEDIA`; còn "đồng ý điều khoản chat" là hành vi của
+// NGƯỜI DÙNG (1 PH nhiều con vẫn bấm một lần) — nhét vào đó là sai chủ thể + phải đụng
+// enum đang chạy prod.
+//
+// Vì sao có cột `version`: đổi nội dung chính sách thì tăng CHAT_POLICY_VERSION là mọi PH
+// phải đồng ý lại — bản ghi CŨ giữ nguyên (bằng chứng "lúc đó họ đồng ý với bản nào").
+// UNIQUE (userId, version) làm luôn nhiệm vụ chống ghi đôi khi bấm 2 lần / 2 tab.
+model ChatPolicyAcceptance {
+  id String @id @default(uuid())
+  /// User.id (cuid) — không relation, đồng bộ với ConversationParticipant/Message.
+  userId     String
+  /// CHAT_POLICY_VERSION tại thời điểm bấm đồng ý (lib/chat/policy.ts).
+  version    String
+  acceptedAt DateTime @default(now())
+
+  @@unique([userId, version])
+  /// Dashboard pilot đếm "đã đồng ý trong khoảng" — theo version của bản đang phát hành.
+  @@index([version, acceptedAt])
+}

@@ -29,6 +29,7 @@ import {
   isArchivedReadExpired,
   redactContactLike,
   shouldHideContacts,
+  hidesContactOf,
   toMemberView,
   toMessageView,
 } from "./queries";
@@ -411,5 +412,81 @@ describe("[BR-30] redactContactLike", () => {
   it("không đụng chuỗi bình thường (mã lớp, ngày tháng, id)", () => {
     expect(redactContactLike("Lớp Sata 1 - 2026")).toBe("Lớp Sata 1 - 2026");
     expect(redactContactLike("clz9k2h4t0000abcd")).toBe("clz9k2h4t0000abcd");
+  });
+});
+
+describe("[BR-30] hidesContactOf — liên hệ của TỪNG thành viên (quyết định 09/08/2026)", () => {
+  const nhomLop = "CLASS_GROUP";
+  const nhanRieng = "DM_TEACHER_PARENT";
+  const phMember = "CLASS_STUDENT_PARENT";
+
+  it("GIÁO VIÊN KHÔNG thấy liên hệ phụ huynh trong nhóm lớp", () => {
+    // Chủ dự án chốt 09/08: chat theo luật PII chung của repo (`canViewParentContact`),
+    // vốn đã chặn giáo viên ở trang tiến độ lớp ("P0-3: chống lộ SĐT toàn lớp").
+    // Trước đó module chat pin chiều ngược lại và hai luật cùng sống mà không ai thấy,
+    // vì chưa màn hình nhân viên nào vẽ liên hệ ra. ĐỪNG vá ngược case này.
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "TEACHER", roles: ["TEACHER"], derivedFrom: "CLASS_TEACHER" },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(true);
+  });
+
+  it("TRỢ GIẢNG cũng không thấy — cùng lý do với giáo viên", () => {
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "ASSISTANT_TEACHER", roles: ["ASSISTANT_TEACHER"], derivedFrom: "CLASS_TEACHER" },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(true);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG — QLCS VẪN thấy (không được siết quá tay thành ẩn với tất cả)", () => {
+    // Thiếu ca này thì một bản vá `return true` cũng làm cả khối trên xanh. Quản lý cơ sở
+    // cần gọi phụ huynh về học phí/nghỉ học — chặn họ là hỏng vận hành chứ không phải an toàn.
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"], derivedFrom: "CENTER_MANAGER" },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(false);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG — kế toán và sale vẫn thấy (đúng nhóm vai của luật PII chung)", () => {
+    for (const role of ["ACCOUNTANT", "SALES_CSM", "SUPER_ADMIN"]) {
+      expect(
+        hidesContactOf({
+          conversationType: nhomLop,
+          viewer: { role, roles: [role], derivedFrom: "CENTER_MANAGER" },
+          memberDerivedFrom: phMember,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("hội thoại 1-1: ẩn với MỌI người xem, kể cả vai được xem liên hệ", () => {
+    // Bảng "1-1" của permissions.md không có dòng "Xem thành viên" nào; không ô nào cấp
+    // thì mặc định là không — màn thành viên của 1-1 vốn chỉ có đúng hai người.
+    expect(
+      hidesContactOf({
+        conversationType: nhanRieng,
+        viewer: { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"], derivedFrom: null },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(true);
+  });
+
+  it("phụ huynh không thấy liên hệ của ai (luật cũ, tầng 1 vẫn thắng)", () => {
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "PARENT", roles: ["PARENT"], derivedFrom: phMember },
+        memberDerivedFrom: "CLASS_TEACHER",
+      }),
+    ).toBe(true);
   });
 });

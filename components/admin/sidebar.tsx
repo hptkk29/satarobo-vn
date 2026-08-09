@@ -42,6 +42,7 @@ import {
   Bell,
   MessageSquarePlus,
   MessageCircle,
+  MessagesSquare,
   RefreshCw,
   FileText,
   Presentation,
@@ -167,6 +168,11 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       // FL W0-NAV-2 hygiene: Tin nhắn (CSKH) gate CSKH+GV — ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
       { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: [...PAGE_GATES["/tin-nhan"]], badge: "chat" },
+      // US-15 — tra cứu có lý do + khoá hội thoại. `chat:admin` CHỈ SUPER_ADMIN có
+      // (AC5: QLCS không vào được), và nó seed scope GLOBAL nên dùng làm gate cấp trang
+      // được — khác chat:read/chat:send (CENTER/ASSIGNED), xem lib/auth/page-gates.ts.
+      // KHÔNG đưa vào PAGE_GATES: bảng đó dành cho route có nhiều action OR với nhau.
+      { label: "Quản trị hội thoại", href: "/hoi-thoai", icon: MessagesSquare, perm: ["chat:admin"] },
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },
@@ -262,6 +268,10 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cohort tiến độ", href: "/bao-cao/cohort", icon: Users, perm: [...PAGE_GATES["/bao-cao/cohort"]] },
       { label: "Churn / rời bỏ", href: "/bao-cao/churn", icon: BarChart3, perm: ["enrollments:view-all"] },
       { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: ["payments:manage"] },
+      // US-16 AC4 — đo pilot chat (kích hoạt TK + đọc thông báo đầu ≤48h) theo từng lớp.
+      // `chat:admin` khớp ĐÚNG gate của trang (chỉ SUPER_ADMIN) — không mượn PAGE_GATES vì
+      // route này cố ý không khai ở đó.
+      { label: "Đo pilot chat", href: "/bao-cao/chat-pilot", icon: MessagesSquare, perm: ["chat:admin"] },
     ],
   },
 ];

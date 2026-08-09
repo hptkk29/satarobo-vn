@@ -21,6 +21,7 @@ import { Loader2, RefreshCw, Users } from "lucide-react";
 import Link from "next/link";
 import { useChatChannel } from "@/components/chat/use-chat-channel";
 import {
+  CONVERSATION_LOCKED_NOTICE,
   DELETED_MESSAGE_TEXT,
   createOptimisticMessage,
   nextSendState,
@@ -78,6 +79,7 @@ export function ChatThread({
   initialHasMore,
   canSend,
   disabledReason,
+  initialLocked,
 }: {
   conversationId: string;
   currentUserId: string;
@@ -88,9 +90,12 @@ export function ChatThread({
   initialAttachments: MessageAttachmentRow[];
   initialCursor: string | null;
   initialHasMore: boolean;
+  /** Gửi được không, XÉT MỌI THỨ TRỪ khoá (khoá đổi được giữa phiên — xem `initialLocked`). */
   canSend: boolean;
   /** Lý do hiện dưới ô nhập khi `canSend = false` (US-09 AC3). */
   disabledReason: string | null;
+  /** US-15 AC3 — đang bị Admin khoá lúc server render; broadcast `conversation.locked` đè lên. */
+  initialLocked: boolean;
 }) {
   const router = useRouter();
 
@@ -117,7 +122,7 @@ export function ChatThread({
   const retryTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { messages, status, error, isReconciling, mergeLocal, reconcile } = useChatChannel({
+  const { messages, lockedByAdmin, status, error, isReconciling, mergeLocal, reconcile } = useChatChannel({
     conversationId,
     currentUserId,
     initialMessages,
@@ -139,6 +144,13 @@ export function ChatThread({
       router.refresh();
     },
   });
+
+  // US-15 AC3 — Admin khoá/mở khoá trong lúc phụ huynh đang mở luồng: broadcast đè lên
+  // trạng thái server đã render, ô nhập vô hiệu/bật lại ngay, không cần tải lại trang.
+  // Lý do khác (lớp đã kết thúc) THẮNG: mở khoá không làm lớp đã lưu trữ gửi tin lại được.
+  const locked = lockedByAdmin ?? initialLocked;
+  const canSendNow = canSend && !locked;
+  const sendBlockedReason = disabledReason ?? (locked ? CONVERSATION_LOCKED_NOTICE : null);
 
   const { attachmentsOf, setLocalAttachments } = useMessageAttachments({
     conversationId,
@@ -438,7 +450,7 @@ export function ChatThread({
             attachments={attachmentsOf(m.id)}
             replyQuote={m.replyToId ? quoteOf(m.replyToId) : null}
             highlighted={highlightId === m.id}
-            canSend={canSend}
+            canSend={canSendNow}
             onRecall={(id) => void handleRecall(id)}
             onRetry={handleRetry}
             onReply={setReplyToId}
@@ -449,8 +461,8 @@ export function ChatThread({
 
       <MessageComposer
         conversationId={conversationId}
-        disabled={!canSend}
-        disabledReason={disabledReason}
+        disabled={!canSendNow}
+        disabledReason={sendBlockedReason}
         replyQuote={replyToId ? quoteOf(replyToId) : null}
         onCancelReply={() => setReplyToId(null)}
         onSend={handleSend}

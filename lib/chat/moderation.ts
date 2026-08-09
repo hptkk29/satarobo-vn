@@ -54,6 +54,8 @@ import {
   userBumpBroadcasts,
 } from "@/lib/chat/broadcast";
 import { DELETED_MESSAGE_TEXT } from "@/lib/chat/queries";
+// US-13 — lớp làm chứng của hội thoại 1-1 (nguồn duy nhất của `target.classId` cho DM).
+import { dmWitnessClassId } from "@/lib/chat/dm";
 
 // ─── Hằng số nghiệp vụ ──────────────────────────────────────────────────────
 
@@ -117,6 +119,12 @@ export type ModerationContext = {
   participantId: string | null;
   /** khác null = đã rời nhóm. */
   participantLeftAt: Date | null;
+  /**
+   * Hội thoại 1-1: lớp làm chứng cho quan hệ dạy học của người thao tác
+   * ({@link dmWitnessClassId}). Nạp riêng ở `recallOwnMessageAsActor` — đường gỡ tin
+   * trong nhóm lớp không tốn thêm truy vấn.
+   */
+  dmClassId?: string | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -300,7 +308,11 @@ export type DeletedChatMessage = {
 function recallTargetOf(ctx: ModerationContext | null) {
   return {
     createdById: ctx?.senderId ?? null,
-    classId: ctx?.subjectType === "CLASS" ? (ctx.subjectId ?? null) : null,
+    // 1-1 (`subjectType = NONE`) lấy LỚP LÀM CHỨNG — cùng lý do đã ghi ở `sendTargetOf`
+    // (lib/chat/messages.ts): thiếu nó thì GV gửi được tin riêng nhưng KHÔNG thu hồi
+    // được chính tin đó (scope ASSIGNED trượt trên `classId = null`), còn PH thì thu
+    // hồi bình thường nhờ scope OWN.
+    classId: ctx?.subjectType === "CLASS" ? (ctx.subjectId ?? null) : (ctx?.dmClassId ?? null),
     centerId: ctx?.centerId ?? null,
   };
 }
@@ -311,6 +323,11 @@ function recallTargetOf(ctx: ModerationContext | null) {
  * CENTER_MANAGER **không có action này** ⇒ PERMISSION_DENIED (TS-03.6a/6c).
  * Cố ý KHÔNG đưa `createdById` vào target: scope OWN cho hành vi "gỡ tin người khác"
  * là vô nghĩa, để lọt vào đây thì một grant nhầm sẽ mở cửa cho chính tác giả.
+ *
+ * ⚠️ CỐ Ý KHÔNG dùng lớp làm chứng của 1-1 ở đây (khác `recallTargetOf`): ma trận
+ * `docs/chat-realtime/permissions.md`, bảng "1-1 (DM_TEACHER_PARENT)", KHÔNG có ô "gỡ
+ * tin người khác" — nên GV giữ nguyên trạng thái rụng ở cổng vai trong hội thoại riêng
+ * (fail-closed). Admin vẫn gỡ được nhờ scope GLOBAL. Muốn mở thì sửa ma trận TRƯỚC.
  */
 function moderateTargetOf(ctx: ModerationContext | null) {
   return {
@@ -557,6 +574,10 @@ export async function recallOwnMessageAsActor(
 ): Promise<ActionResult<DeletedChatMessage>> {
   const messageId = extractMessageId(rawInput);
   const ctx = messageId ? await loadModerationContext(messageId, actor.userId) : null;
+  // 1-1 không có `subjectId` để làm `target.classId` — xem `recallTargetOf`.
+  if (ctx && ctx.subjectType !== "CLASS") {
+    ctx.dmClassId = await dmWitnessClassId(ctx.conversationId, actor.userId);
+  }
   const { res } = await runAction(buildRecallConfig(ctx), actor, rawInput, { actorName });
   return res;
 }

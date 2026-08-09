@@ -10,7 +10,10 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getConversationMembers, listConversationsForUser } from "@/lib/chat/queries";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
+import { ChatPolicyGate } from "../../_components/policy-gate";
 import { formatVnDate } from "@/components/chat/portal/format";
+import { OpenDmButton } from "@/components/chat/open-dm-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Thành viên nhóm | Sata Robo", robots: { index: false } };
@@ -24,6 +27,9 @@ export default async function PortalConversationMembersPage({
   if (!session?.user?.id) notFound();
   const userId = session.user.id;
   const { conversationId } = await params;
+
+  // US-16 AC2 — cổng chính sách (lớp thứ hai sau layout của segment).
+  if (!(await hasAcceptedChatPolicy(userId))) return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(userId);
   const conversation = conversations.find((c) => c.conversationId === conversationId);
@@ -81,6 +87,11 @@ export default async function PortalConversationMembersPage({
                   </span>
                 )}
               </span>
+              {/* US-13 AC1 — chỉ với GIÁO VIÊN của nhóm (`derivedFrom` là tư cách TRONG
+                  nhóm, không phải vai hệ thống). Server vẫn kiểm quan hệ dạy học lần nữa. */}
+              {m.derivedFrom === "CLASS_TEACHER" && m.userId !== userId && (
+                <OpenDmButton peerUserId={m.userId} hrefTemplate="/portal/tin-nhan/:id" />
+              )}
             </li>
           ))}
         </ul>
