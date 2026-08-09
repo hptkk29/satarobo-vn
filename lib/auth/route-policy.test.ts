@@ -80,12 +80,28 @@ describe("A. admin host × role", () => {
       "teaching-materials",
       "huong-dan",
       "otp-logs",
+      "user-groups",
     ]) {
       expect(isAdminRoute(`/${seg}`)).toBe(true);
       expect(
         decideRoute({ hostKind: "admin", pathname: `/${seg}`, ...authed("SUPER_ADMIN") }),
       ).toEqual<RouteDecision>({ type: "rewrite", path: `/admin/${seg}` });
     }
+  });
+
+  // US-03 (Nền Hệ thống P0) — /user-groups từng THIẾU trong ADMIN_ROUTE_SEGMENTS dù
+  // page tồn tại → link sidebar trên admin.satarobo.vn bounce 308 về public = 404.
+  // Pin thêm path chi tiết (nested [id]) để không tái phát.
+  it("user-groups là admin route — kể cả path chi tiết /user-groups/[id]", () => {
+    expect(isAdminRoute("/user-groups")).toBe(true);
+    expect(isAdminRoute("/user-groups/abc123")).toBe(true);
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/user-groups/abc123",
+        ...authed("SUPER_ADMIN"),
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/user-groups/abc123" });
   });
 
   it("PARENT vào admin route → redirectHost portal (lỗ hổng đã bịt)", () => {

@@ -2,7 +2,11 @@
 
 // US-03 — grant của nhóm (ALLOW + DENY, SUPER_ADMIN only qua user-groups:manage).
 // Luật P0 (validator chặn cứng, UI chỉ dẫn đường):
-//   - dataScope chỉ ALL | OWN (UNIT_* chưa có mapping nhóm→đơn vị tới P1);
+//   - dataScope CHỈ ALL (siết 09/08 — OWN là bẫy thu hồi im lặng khi consumer chưa
+//     truyền target, UNIT_* chưa có mapping nhóm→đơn vị; mở lại ở P1) → UI không
+//     render select nữa, hiển thị badge ALL cố định;
+//   - khoá quản trị (NON_GROUP_GRANTABLE_KEYS) đã bị page lọc khỏi select key,
+//     validator chặn cứng ở action (chống tự-leo-thang);
 //   - fieldMask CHỈ khi DENY (DENY + mask = che trường, DENY không mask = chặn action);
 //   - ALLOW ⇒ fieldMask rỗng; reason bắt buộc (RbacAuditLog).
 // KHÔNG sửa grant tại chỗ — đổi = xoá (2-click) rồi tạo lại, giữ vết audit trọn vẹn.
@@ -23,7 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { GROUP_GRANT_DATA_SCOPES } from "@/lib/validators/user-group";
 import { createGroupGrantAction, deleteGroupGrantAction } from "../_actions";
 
 type GrantRow = {
@@ -40,11 +43,6 @@ type GrantRow = {
 
 type Descriptor = { key: string; module: string; sensitiveFields: string[] };
 
-const SCOPE_LABEL: Record<string, string> = {
-  ALL: "ALL — toàn hệ thống",
-  OWN: "OWN — bản ghi của chính mình",
-};
-
 export function GroupGrants({
   groupId,
   grants,
@@ -59,7 +57,6 @@ export function GroupGrants({
 
   const [permissionKey, setPermissionKey] = useState("");
   const [effect, setEffect] = useState<"ALLOW" | "DENY">("DENY");
-  const [dataScope, setDataScope] = useState<"ALL" | "OWN">("ALL");
   const [fieldMaskText, setFieldMaskText] = useState("");
   const [reason, setReason] = useState("");
   // 2-click xoá grant.
@@ -95,7 +92,8 @@ export function GroupGrants({
       const res = await createGroupGrantAction(groupId, {
         permissionKey,
         effect,
-        dataScope,
+        // P0 chỉ ALL (siết 09/08) — validator reject mọi scope khác, UI không cho chọn.
+        dataScope: "ALL",
         fieldMask: effect === "DENY" ? fieldMask : [],
         reason,
       });
@@ -174,20 +172,12 @@ export function GroupGrants({
             </select>
           </div>
           <div>
-            <Label htmlFor="grant-scope">Phạm vi dữ liệu (P0: ALL | OWN)</Label>
-            <select
-              id="grant-scope"
-              value={dataScope}
-              onChange={(e) => setDataScope(e.target.value as "ALL" | "OWN")}
-              disabled={pending}
-              className="mt-1 h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-orange-400 focus:outline-none"
-            >
-              {GROUP_GRANT_DATA_SCOPES.map((s) => (
-                <option key={s} value={s}>
-                  {SCOPE_LABEL[s] ?? s}
-                </option>
-              ))}
-            </select>
+            <Label>Phạm vi dữ liệu</Label>
+            {/* P0 chỉ ALL (siết 09/08 — bẫy ALLOW+OWN thu hồi im lặng): không render
+                select, badge cố định. OWN/UNIT_* mở lại ở P1 khi consumer truyền target. */}
+            <div className="mt-1 flex h-9 items-center">
+              <Badge variant="secondary">ALL — toàn hệ thống (P0 chỉ có scope này)</Badge>
+            </div>
           </div>
 
           {effect === "DENY" && (

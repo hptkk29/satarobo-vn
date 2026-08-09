@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { NON_GROUP_GRANTABLE_KEYS } from "@/lib/validators/user-group";
 import { GroupSettingsForm } from "../_components/group-settings-form";
 import { GroupMembers } from "../_components/group-members";
 import { GroupGrants } from "../_components/group-grants";
@@ -61,9 +62,11 @@ export default async function UserGroupDetailPage({ params }: Props) {
       orderBy: { createdAt: "desc" },
       include: { descriptor: { select: { module: true, isActive: true } } },
     }),
-    // Select permission key cho grant editor: CHỈ key đang hoạt động trong registry (US-01).
+    // Select permission key cho grant editor: CHỈ key đang hoạt động trong registry
+    // (US-01), LOẠI khoá quản trị NON_GROUP_GRANTABLE_KEYS (chống tự-leo-thang —
+    // validator chặn cứng ở action, đây là lớp UI cùng 1 nguồn hằng).
     sdb.permissionDescriptor.findMany({
-      where: { isActive: true },
+      where: { isActive: true, key: { notIn: [...NON_GROUP_GRANTABLE_KEYS] } },
       orderBy: [{ module: "asc" }, { key: "asc" }],
       select: { key: true, module: true, sensitiveFields: true },
     }),

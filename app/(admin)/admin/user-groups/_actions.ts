@@ -11,7 +11,11 @@
 //   - Thành viên: HARD DELETE — gỡ là mất quyền ở request kế tiếp (AC3, cache theo request).
 //   - Grant: permissionKey phải tồn tại + isActive trong PermissionDescriptor (registry DB
 //     là nguồn sự thật — KHÔNG đối chiếu matrix v1 vì registry có key khai trước của chat);
-//     dataScope chỉ ALL|OWN, ALLOW ⇒ fieldMask rỗng, reason bắt buộc (validator).
+//     dataScope P0 chỉ ALL (siết 09/08 — bẫy ALLOW+OWN thu hồi im lặng, xem validator),
+//     khoá quản trị NON_GROUP_GRANTABLE_KEYS bị chặn (chống tự-leo-thang), ALLOW ⇒
+//     fieldMask rỗng, reason bắt buộc (tất cả nằm trong groupGrantCreateSchema).
+//   - Thành viên: KHÔNG nhận tài khoản PARENT — đối xứng query ứng viên của [id]/page.tsx
+//     (groupMemberIneligibleReason — validator file, có unit test pin).
 //   - Mọi mutation ghi RbacAuditLog TRONG CÙNG transaction (entity GROUP / GROUP_MEMBER /
 //     GROUP_GRANT — cột entity là String, viewer đọc thẳng).
 // UserGroup/UserGroupMember/PermissionGrant ∉ SCOPED_MODELS (cấu hình quyền toàn cục
@@ -29,6 +33,7 @@ import {
   userGroupUpdateSchema,
   groupMemberAddSchema,
   groupGrantCreateSchema,
+  groupMemberIneligibleReason,
 } from "@/lib/validators/user-group";
 
 type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -39,10 +44,15 @@ function isUniqueViolation(e: unknown): boolean {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
 
-/** Đường dẫn revalidate: list + (nếu có) trang chi tiết nhóm. */
+/**
+ * Đường dẫn revalidate: list + (nếu có) trang chi tiết nhóm.
+ * Path phải là ROUTE THẬT sau khi strip route-group: app/(admin)/admin/user-groups
+ * → "/admin/user-groups" (convention giống roles/actions.ts — proxy rewrite clean URL
+ * /user-groups → /admin/user-groups nội bộ, revalidate theo path gốc mới ăn cache).
+ */
 function revalidateGroupPaths(groupId?: string) {
-  revalidatePath("/user-groups");
-  if (groupId) revalidatePath(`/user-groups/${groupId}`);
+  revalidatePath("/admin/user-groups");
+  if (groupId) revalidatePath(`/admin/user-groups/${groupId}`);
 }
 
 // ─── 1. Tạo nhóm ─────────────────────────────────────────────────────────────
@@ -245,9 +255,15 @@ export async function addGroupMemberAction(groupId: string, input: unknown): Pro
   // Chỉ nhận tài khoản đang hoạt động — nhóm là công cụ cấp quyền, không phải danh bạ.
   const user = await sdb.user.findFirst({
     where: { id: userId, isActive: true, deletedAt: null },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, role: true },
   });
   if (!user) return { ok: false, error: "Tài khoản không tồn tại hoặc đã khoá" };
+
+  // Chặn PARENT Ở SERVER — UI đã loại PH khỏi select ứng viên ([id]/page.tsx lọc
+  // role chính ≠ PARENT), nhưng action nhận userId thô nên phải chặn lại cùng điều
+  // kiện (đối xứng — groupMemberIneligibleReason có unit test pin ở validator test).
+  const khongHopLe = groupMemberIneligibleReason(user);
+  if (khongHopLe) return { ok: false, error: khongHopLe };
 
   try {
     await sdb.$transaction(async (tx) => {
@@ -349,7 +365,8 @@ export async function createGroupGrantAction(groupId: string, input: unknown): P
     return { ok: false, error: KHONG_QUYEN };
   }
 
-  // Validator gánh 3 luật P0: dataScope chỉ ALL|OWN (lỗi rõ chữ), ALLOW ⇒ fieldMask
+  // Validator gánh 4 luật P0: dataScope chỉ ALL (siết 09/08 — lỗi rõ chữ), khoá quản
+  // trị NON_GROUP_GRANTABLE_KEYS bị reject (chống tự-leo-thang), ALLOW ⇒ fieldMask
   // rỗng, reason bắt buộc 5..500.
   const parsed = groupGrantCreateSchema.safeParse(input);
   if (!parsed.success) {
