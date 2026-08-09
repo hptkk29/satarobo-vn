@@ -48,7 +48,11 @@ import {
   type ActionResult,
 } from "@/lib/actions/factory";
 import { db } from "@/lib/db";
-import { broadcastToConversation } from "@/lib/chat/broadcast";
+import {
+  broadcastMessages,
+  conversationBroadcast,
+  userBumpBroadcasts,
+} from "@/lib/chat/broadcast";
 import { DELETED_MESSAGE_TEXT } from "@/lib/chat/queries";
 
 // ─── Hằng số nghiệp vụ ──────────────────────────────────────────────────────
@@ -319,21 +323,53 @@ function moderateTargetOf(ctx: ModerationContext | null) {
 
 /**
  * Broadcast SAU commit, NGOÀI transaction, fail-and-forget.
- * `broadcastToConversation` đã cam kết không throw; bọc thêm một lớp ở đây để dù hợp
+ * `broadcastMessages` đã cam kết không throw; bọc thêm một lớp ở đây để dù hợp
  * đồng đó bị phá thì việc gỡ ĐÃ commit cũng không biến thành lỗi đỏ trước mặt người
  * dùng. Payload mang sẵn `body` thay thế để client đổi hiển thị mà không phải tải lại
  * — đúng chuỗi mà `lib/chat/queries.ts` trả về, giữ một nguồn sự thật.
+ *
+ * Kèm `conversation.bumped` tới topic `user:{id}` của các thành viên CÒN HIỆU LỰC:
+ * preview của tin vừa gỡ có thể đang nằm trong danh sách hội thoại của họ, không bump
+ * thì nó còn hiển thị tới lần điều hướng kế tiếp. Payload bump KHÔNG mang nội dung
+ * (BR-30) — client hỏi lại server, và server đã lọc tin bị gỡ ở `lib/chat/queries.ts`.
+ *
+ * Danh sách người nhận đọc NGOÀI transaction (đường gỡ tin không có tx chung cho cả hai
+ * nhánh) bằng `db` TRẦN — luật E-bis #5. Có thể lệch vài mili giây so với thời điểm gỡ;
+ * chấp nhận được vì bump chỉ là tín hiệu, mọi dữ liệu hiển thị vẫn qua đường kiểm quyền.
  */
-async function broadcastDeleted(msg: DeletedChatMessage): Promise<void> {
+async function broadcastDeleted(
+  msg: DeletedChatMessage,
+  actorUserId: string,
+): Promise<void> {
   try {
-    await broadcastToConversation(msg.conversationId, "message.deleted", {
-      id: msg.id,
-      conversationId: msg.conversationId,
-      senderId: msg.senderId,
-      body: DELETED_MESSAGE_TEXT,
-      deleted: true,
-      deletedAt: msg.deletedAt.toISOString(),
+    const recipients = await db.conversationParticipant.findMany({
+      where: {
+        conversationId: msg.conversationId,
+        leftAt: null,
+        userId: { not: actorUserId },
+      },
+      select: { userId: true },
     });
+
+    await broadcastMessages([
+      conversationBroadcast(msg.conversationId, "message.deleted", {
+        id: msg.id,
+        conversationId: msg.conversationId,
+        senderId: msg.senderId,
+        body: DELETED_MESSAGE_TEXT,
+        deleted: true,
+        deletedAt: msg.deletedAt.toISOString(),
+      }),
+      ...userBumpBroadcasts(
+        recipients.map((r) => r.userId),
+        {
+          conversationId: msg.conversationId,
+          messageId: msg.id,
+          kind: "DELETED",
+          at: msg.deletedAt.toISOString(),
+        },
+      ),
+    ]);
   } catch (e) {
     console.warn("[chat/moderation] broadcast lỗi — tin vẫn đã được gỡ:", e);
   }
@@ -378,7 +414,7 @@ function buildRecallConfig(
         deletedById: actor.userId,
         systemMessageId: null, // AC4: người gỡ CHÍNH là tác giả ⇒ không có tin SYSTEM
       };
-      await broadcastDeleted(data);
+      await broadcastDeleted(data, actor.userId);
 
       return {
         entityId: m.messageId,
@@ -471,7 +507,7 @@ function buildModerateConfig(
         deletedById: actor.userId,
         systemMessageId,
       };
-      await broadcastDeleted(data);
+      await broadcastDeleted(data, actor.userId);
 
       return {
         entityId: m.messageId,

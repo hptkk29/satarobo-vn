@@ -11,6 +11,8 @@ import {
   type ReconcilePage,
 } from "./use-chat-channel";
 import type { IncomingMessage } from "./chat-store";
+import { getActiveConversation, setActiveConversation } from "./active-conversation";
+import { subscribeConversationRead } from "./read-signal";
 
 const CONV = "conv-1";
 const ME = "user-me";
@@ -327,6 +329,43 @@ describe("AC5 — mốc đã đọc theo foreground", () => {
     expect(h.markRead).toHaveBeenLastCalledWith("m3");
   });
 
+  // Badge tổng ở thanh nav do LAYOUT RSC tính và layout KHÔNG render lại khi điều hướng
+  // client-side; đọc tin lại không sinh `bump` nào. Nên đánh dấu đã đọc XONG mà không phát
+  // tín hiệu ở đây = badge chỉ biết tăng, treo số cũ tới khi F5.
+  it("markConversationRead ghi xong ⇒ phát tín hiệu cho badge nav hỏi lại", async () => {
+    const heard = vi.fn();
+    const unsubscribe = subscribeConversationRead(heard);
+    try {
+      const h = setup();
+      h.fetchSince.mockResolvedValueOnce(page([row("m1")]));
+      await connect(h);
+
+      expect(h.markRead).toHaveBeenCalledWith("m1");
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("markConversationRead HỎNG ⇒ KHÔNG phát tín hiệu (badge không được tụt khi DB chưa ghi)", async () => {
+    const heard = vi.fn();
+    const unsubscribe = subscribeConversationRead(heard);
+    try {
+      const h = setup({
+        markRead: vi.fn(async () => {
+          throw new Error("mạng chớp");
+        }),
+      });
+      h.fetchSince.mockResolvedValueOnce(page([row("m1")]));
+      await connect(h);
+      await flush();
+
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("tab ẩn ⇒ KHÔNG đánh dấu đã đọc; quay lại foreground mới đánh dấu", async () => {
     const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
     const h = setup();
@@ -470,5 +509,29 @@ describe("mergeLocal — cùng đường khử trùng với broadcast (TS-10.3)"
     await flush();
 
     expect(h.view.result.current.messages.map((m) => m.id)).toEqual(["m-real"]);
+  });
+});
+
+// AC5 — mẩu trạng thái nối luồng chat với BADGE ở thanh nav. Không có đăng ký này thì badge
+// tổng cộng thêm cho chính hội thoại người dùng đang nhìn (tin đó đã được `markConversationRead`
+// đánh dấu đọc), số nháy lên rồi tụt về 0 — nhìn như lỗi.
+describe("đăng ký hội thoại ĐANG MỞ cho badge nav", () => {
+  beforeEach(() => setActiveConversation(null));
+  afterEach(() => setActiveConversation(null));
+
+  it("mount ⇒ ghi nhận hội thoại đang mở; unmount ⇒ nhả ra", async () => {
+    const h = setup();
+    await connect(h);
+    expect(getActiveConversation()).toBe(CONV);
+
+    act(() => h.view.unmount());
+    expect(getActiveConversation()).toBeNull();
+  });
+
+  it("enabled=false (chưa mở luồng nào) ⇒ KHÔNG chiếm chỗ của hội thoại khác", async () => {
+    const h = setup({ enabled: false });
+    await flush();
+    expect(getActiveConversation()).toBeNull();
+    act(() => h.view.unmount());
   });
 });

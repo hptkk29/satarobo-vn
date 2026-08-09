@@ -70,3 +70,47 @@ describe("subscribeConversation — bất biến của đường subscribe thậ
     expect(createChannel.mock.calls[0]![0]).toBe("conv:11111111-2222-3333-4444-555555555555");
   });
 });
+
+/**
+ * `subscribeUserTopic` — kênh mức NGƯỜI DÙNG, đường THẬT của badge + danh sách tự cập nhật.
+ * Hub (`components/chat/user-channel.ts`) bơm transport giả khi test nên hàm này cũng nằm
+ * ngoài mọi bài test khác, y hệt cái bẫy đã ghi ở đầu file.
+ *
+ * Chuỗi phải khớp Ở BA NƠI: server phát (`lib/chat/broadcast.ts`), client join (đây), và
+ * `USING` của policy `user_can_receive_own_user_broadcast` (`'user:' || app_user_id`).
+ * Lệch một ký tự ⇒ kênh câm: không tin nào tới, không lỗi nào ném, CI vẫn xanh.
+ */
+describe("subscribeUserTopic — bất biến của kênh `user:{id}`", () => {
+  it("topic đúng `user:{User.id}` (policy so chuỗi này với claim app_user_id)", async () => {
+    const { subscribeUserTopic } = await load();
+    subscribeUserTopic("ckuser123", "jwt-x");
+
+    expect(createChannel).toHaveBeenCalledTimes(1);
+    expect(createChannel.mock.calls[0]![0]).toBe("user:ckuser123");
+  });
+
+  it("LUÔN private (kênh public = ai cầm anon key cũng dò được tín hiệu của người khác)", async () => {
+    const { subscribeUserTopic } = await load();
+    subscribeUserTopic("ckuser123", "jwt-x");
+    expect(createChannel.mock.calls[0]![1]?.config?.private).toBe(true);
+  });
+
+  it("đặt JWT TRƯỚC khi join (join trước = policy đọc token cũ/rỗng ⇒ bị từ chối)", async () => {
+    const { subscribeUserTopic } = await load();
+    subscribeUserTopic("ckuser123", "jwt-x");
+
+    expect(setAuth).toHaveBeenCalledWith("jwt-x");
+    expect(setAuth.mock.invocationCallOrder[0]).toBeLessThan(
+      createChannel.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("KHÔNG dùng chung tiền tố với kênh hội thoại (hai policy, hai bề mặt quyền)", async () => {
+    const { subscribeUserTopic, subscribeConversation } = await load();
+    subscribeUserTopic("abc", "jwt");
+    subscribeConversation("abc", "jwt");
+
+    const topics = createChannel.mock.calls.map((c) => c[0]);
+    expect(topics).toEqual(["user:abc", "conv:abc"]);
+  });
+});

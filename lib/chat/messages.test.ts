@@ -32,6 +32,9 @@ const h = vi.hoisted(() => {
     attachments: [] as Row[],
     convUpdates: [] as Row[],
     unreadUpdates: [] as Row[],
+    recipientQueries: [] as Row[],
+    /** Thành viên hội thoại — nguồn dữ liệu THẬT cho `conversationParticipant.findMany`. */
+    participants: [] as { userId: string; leftAt: Date | null }[],
     txOptions: null as Row | null,
     txCalls: 0,
     /** true trong lúc callback của `$transaction` đang chạy — dùng để chứng minh
@@ -91,6 +94,19 @@ const h = vi.hoisted(() => {
         state.unreadUpdates.push(args);
         return { count: 1 };
       }),
+      // Người nhận `conversation.bumped` (topic `user:{id}`) — đọc TRONG cùng tx, ngay
+      // sau `updateMany`, với đúng điều kiện `leftAt: null` + loại người gửi.
+      // Mock LỌC THẬT theo `where` (không trả mảng cứng): bỏ một điều kiện trong code là
+      // người không đáng nhận lọt thẳng vào mảng broadcast — test đỏ vì HÀNH VI, không
+      // phải vì hình dạng đối số.
+      findMany: vi.fn(async (args: Row) => {
+        state.recipientQueries.push({ ...args, insideTx: state.insideTx });
+        const where = (args.where ?? {}) as { leftAt?: unknown; userId?: { not?: string } };
+        return state.participants
+          .filter((p) => (where.leftAt === null ? p.leftAt === null : true))
+          .filter((p) => (where.userId?.not ? p.userId !== where.userId.not : true))
+          .map((p) => ({ userId: p.userId }));
+      }),
     },
   };
   return {
@@ -103,7 +119,24 @@ const h = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({ db: h.mockDb }));
 vi.mock("@/lib/audit/audit-log", () => ({ writeAudit: h.writeAudit }));
-vi.mock("@/lib/chat/broadcast", () => ({ broadcastToConversation: h.broadcast }));
+// `broadcastMessages` là primitive DUY NHẤT gọi HTTP (1 POST mang cả topic `conv:` lẫn
+// N topic `user:`); hai builder còn lại là hàm THUẦN nên dựng lại y hệt bản thật ở đây
+// để test soi được hình dạng mảng gửi đi.
+vi.mock("@/lib/chat/broadcast", () => ({
+  broadcastMessages: h.broadcast,
+  conversationBroadcast: (
+    conversationId: string,
+    event: string,
+    payload: Record<string, unknown>,
+  ) => ({ topic: `conv:${conversationId}`, event, payload, private: true }),
+  userBumpBroadcasts: (userIds: readonly string[], payload: Record<string, unknown>) =>
+    userIds.map((id) => ({
+      topic: `user:${id}`,
+      event: "conversation.bumped",
+      payload,
+      private: true,
+    })),
+}));
 // Không kéo next-auth vào test node (lõi nhận Actor seed, không cần phiên thật).
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => null) }));
 
@@ -175,6 +208,14 @@ function ctxRow(over: CtxRow = {}): CtxRow {
   };
 }
 
+/** Một phần tử trong mảng `messages` của lời gọi `broadcastMessages`. */
+type BroadcastCall = { topic: string; event: string; payload: Record<string, unknown> };
+
+/** Mảng gửi đi ở lời gọi broadcast thứ `n` (mặc định lời gọi đầu). */
+function sentBroadcasts(n = 0): BroadcastCall[] {
+  return (h.broadcast.mock.calls[n] as unknown as [BroadcastCall[]])[0];
+}
+
 function input(over: Record<string, unknown> = {}) {
   return {
     conversationId: CONV,
@@ -194,6 +235,11 @@ beforeEach(() => {
   h.state.attachments = [];
   h.state.convUpdates = [];
   h.state.unreadUpdates = [];
+  h.state.recipientQueries = [];
+  h.state.participants = [
+    { userId: "ph-khac", leftAt: null },
+    { userId: "gv-lopA", leftAt: null },
+  ];
   h.state.txOptions = null;
   h.state.txCalls = 0;
   h.state.insideTx = false;
@@ -448,15 +494,82 @@ describe("[US-06] đường thành công (AC2 + AC3)", () => {
     await sendChatMessageAsActor(actor, "PH Test", input());
 
     expect(h.broadcast).toHaveBeenCalledTimes(1);
-    const [convId, event, payload] = h.broadcast.mock.calls[0] as unknown as [
-      string,
-      string,
-      Record<string, unknown>,
+    const conv = sentBroadcasts()[0] as BroadcastCall;
+    expect(conv.topic).toBe(`conv:${CONV}`);
+    expect(conv.event).toBe("message.created");
+    expect(conv.payload.clientMsgId).toBe(cid(1));
+    expect(conv.payload.id).toBe("msg-1");
+  });
+
+  it("người nhận bump đọc TRONG tx, đúng điều kiện leftAt=null + loại người gửi", async () => {
+    const actor = actorOf("PARENT", "cs1", "ph-recip");
+    await sendChatMessageAsActor(actor, "PH Test", input());
+
+    expect(h.state.recipientQueries).toHaveLength(1);
+    const where = (h.state.recipientQueries[0] as { where: Record<string, unknown> }).where;
+    expect(where.conversationId).toBe(CONV);
+    expect(where.leftAt).toBeNull();
+    expect(where.userId).toEqual({ not: "ph-recip" });
+  });
+
+  it("danh sách người nhận đọc TRONG transaction — không có cửa sổ đua với `leftAt`", async () => {
+    // `updateMany` ngay trước đó đã khoá đúng các dòng này; một tx khác đang set `leftAt`
+    // phải chờ ta commit. Đọc SAU khi tx đóng là mở lại đúng cửa sổ đua đó.
+    const actor = actorOf("PARENT", "cs1", "ph-intx");
+    await sendChatMessageAsActor(actor, "PH Test", input());
+
+    expect(h.state.recipientQueries).toHaveLength(1);
+    expect((h.state.recipientQueries[0] as { insideTx: boolean }).insideTx).toBe(true);
+  });
+
+  it("MỘT POST duy nhất: 1 phần tử conv: + N phần tử user:{id} event conversation.bumped, KHÔNG kèm nội dung tin (BR-30)", async () => {
+    const actor = actorOf("PARENT", "cs1", "ph-bump");
+    await sendChatMessageAsActor(actor, "PH Test", input());
+
+    // Đúng 1 lời gọi HTTP dù có N người nhận — không lặp N call.
+    expect(h.broadcast).toHaveBeenCalledTimes(1);
+    const all = sentBroadcasts();
+    expect(all).toHaveLength(3); // 1 conv + 2 người nhận (mock findMany)
+    const bumps = all.filter((m) => m.topic.startsWith("user:"));
+    expect(bumps.map((m) => m.topic)).toEqual(["user:ph-khac", "user:gv-lopA"]);
+    for (const b of bumps) {
+      expect(b.event).toBe("conversation.bumped");
+      expect(Object.keys(b.payload).sort()).toEqual(["at", "conversationId", "kind", "messageId"]);
+      expect(b.payload.kind).toBe("CHAT");
+      expect(JSON.stringify(b.payload)).not.toContain("Chào cả nhà");
+    }
+  });
+
+  it("người ĐÃ RỜI nhóm và CHÍNH người gửi KHÔNG nhận bump (lọc thật, không chỉ soi đối số)", async () => {
+    h.state.participants = [
+      { userId: "ph-khac", leftAt: null },
+      { userId: "gv-lopA", leftAt: null },
+      // Chuyển lớp / gỡ phân công — kênh `user:{id}` của họ không được kêu nữa.
+      { userId: "ph-da-roi", leftAt: new Date("2026-07-01T00:00:00.000Z") },
+      // Người gửi: client của họ đã có tin (optimistic + kênh `conv:`), bump lại là thừa.
+      { userId: "ph-loc", leftAt: null },
     ];
-    expect(convId).toBe(CONV);
-    expect(event).toBe("message.created");
-    expect(payload.clientMsgId).toBe(cid(1));
-    expect(payload.id).toBe("msg-1");
+
+    const actor = actorOf("PARENT", "cs1", "ph-loc");
+    await sendChatMessageAsActor(actor, "PH Test", input());
+
+    const topics = sentBroadcasts()
+      .filter((m) => m.topic.startsWith("user:"))
+      .map((m) => m.topic);
+    expect(topics).toEqual(["user:ph-khac", "user:gv-lopA"]);
+    expect(topics).not.toContain("user:ph-da-roi");
+    expect(topics).not.toContain("user:ph-loc");
+  });
+
+  it("không còn ai khác trong nhóm → chỉ 1 phần tử conv:, không có bump rỗng", async () => {
+    h.state.participants = [{ userId: "ph-mot-minh", leftAt: null }];
+
+    const actor = actorOf("PARENT", "cs1", "ph-mot-minh");
+    await sendChatMessageAsActor(actor, "PH Test", input());
+
+    const all = sentBroadcasts();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.topic).toBe(`conv:${CONV}`);
   });
 
   it("ghi AuditLog module=chat / entityType=Message / action=CREATE, KHÔNG kèm nội dung tin", async () => {
@@ -650,7 +763,7 @@ describe("[US-11] gửi tin kèm ảnh qua pipeline", () => {
     const actor = actorOf("PARENT", "cs1", "ph-att-bc");
     await sendChatMessageAsActor(actor, "PH Test", input({ attachments: [att()] }));
 
-    const payload = (h.broadcast.mock.calls[0] as unknown as [string, string, Record<string, unknown>])[2];
+    const payload = sentBroadcasts()[0]!.payload;
     expect(payload.attachments).toEqual([
       { id: "att-1", fileName: "buoi-hoc.jpg", mimeType: "image/jpeg", sizeBytes: 123_456 },
     ]);

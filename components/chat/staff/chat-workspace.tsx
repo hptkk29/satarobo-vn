@@ -24,6 +24,7 @@ import {
 } from "@/lib/chat/queries";
 import { getAnnouncementReadStats, listAnnouncements } from "@/lib/chat/announcements";
 import { listChatAttachments } from "@/lib/chat/messages";
+import { ChatListRefresher } from "../chat-list-refresher";
 import { ChatThread } from "./chat-thread";
 import { ConversationList } from "./conversation-list";
 import { AnnouncementReadStats } from "./announcement-read-stats";
@@ -98,6 +99,10 @@ export async function StaffChatWorkspace({
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
+      {/* Tin mới ở BẤT KỲ hội thoại nào ⇒ chạy lại RSC này ⇒ danh sách tự sắp lại, đổi
+          preview/giờ/badge. Không render gì; giữ `ConversationList` là component thuần. */}
+      <ChatListRefresher userId={userId} />
+
       <aside
         className={`w-full shrink-0 lg:w-80 ${selected ? "hidden lg:block" : "block"}`}
         aria-label="Danh sách hội thoại"

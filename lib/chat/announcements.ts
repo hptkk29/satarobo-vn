@@ -38,7 +38,12 @@ import {
 } from "@/lib/actions/factory";
 import { db } from "@/lib/db";
 import { publishEvent } from "@/lib/events/publish";
-import { broadcastToConversation } from "@/lib/chat/broadcast";
+import {
+  broadcastMessages,
+  broadcastToConversation,
+  conversationBroadcast,
+  userBumpBroadcasts,
+} from "@/lib/chat/broadcast";
 // Guard "participant hiệu lực → trạng thái hội thoại" của F-ANN GIỐNG HỆT F-SEND
 // (flows.md: "Khác F-SEND ở: guard vai; quota; push xuyên mute"). Dùng lại đúng hàm
 // đó thay vì chép: bảng mã lỗi NOT_PARTICIPANT / CONVERSATION_ARCHIVED /
@@ -347,6 +352,7 @@ function buildSendAnnouncementConfig(
       // ActionError ném từ trong tx (quota) đi thẳng ra `runAction` → ActionResult lỗi,
       // và tx tự rollback ⇒ không có tin nào lọt qua hàng rào quota.
       let sentTodayBefore = 0;
+      let recipientIds: string[] = [];
       const created: SentAnnouncement = await db.$transaction(
           async (tx) => {
             // AC2 — quota tính TRÊN HỘI THOẠI, mà nhóm lớp ↔ lớp là 1-1
@@ -399,6 +405,20 @@ function buildSendAnnouncementConfig(
               data: { unreadCount: { increment: 1 } },
             });
 
+            // Người nhận bump = ĐÚNG tập vừa được +1, đọc SAU `updateMany` trong CÙNG
+            // tx: `updateMany` đã khoá các dòng đó nên một tx khác đang set `leftAt`
+            // phải chờ ta commit ⇒ người vừa bị gỡ không lọt vào danh sách bump.
+            // `tx` của `db` TRẦN (không scopedDb) — luật E-bis #5.
+            const recipients = await tx.conversationParticipant.findMany({
+              where: {
+                conversationId: input.conversationId,
+                leftAt: null,
+                userId: { not: actor.userId },
+              },
+              select: { userId: true },
+            });
+            recipientIds = recipients.map((r) => r.userId);
+
             // AC5 — ĐIỂM MÓC push/ZNS "xuyên mute" (US-14, Đợt 2). Trong tx ⇒ rollback
             // tin thì không còn event; `dedupeKey` ⇒ retry không đẻ event trùng.
             await publishEvent(
@@ -427,17 +447,28 @@ function buildSendAnnouncementConfig(
       );
 
       // ── Broadcast SAU commit, NGOÀI transaction, fail-and-forget (AC3) ──
-      // `broadcastToConversation` đã cam kết không throw; bọc thêm một lớp để dù hợp
+      // `broadcastMessages` đã cam kết không throw; bọc thêm một lớp để dù hợp
       // đồng đó bị phá thì thông báo ĐÃ commit cũng không biến thành lỗi đỏ.
+      // MỘT POST mang cả kênh hội thoại lẫn N kênh `user:{id}`.
+      // ⚠️ Bump KHÔNG thay `publishEvent("chat.announcement_created")` ở trên: outbox là
+      // đường của push/ZNS (US-14), realtime KHÔNG bao giờ đi qua outbox.
       try {
-        await broadcastToConversation(created.conversationId, "announcement.created", {
-          id: created.id,
-          conversationId: created.conversationId,
-          senderId: created.senderId,
-          kind: created.kind,
-          body: created.body,
-          createdAt: created.createdAt.toISOString(),
-        });
+        await broadcastMessages([
+          conversationBroadcast(created.conversationId, "announcement.created", {
+            id: created.id,
+            conversationId: created.conversationId,
+            senderId: created.senderId,
+            kind: created.kind,
+            body: created.body,
+            createdAt: created.createdAt.toISOString(),
+          }),
+          ...userBumpBroadcasts(recipientIds, {
+            conversationId: created.conversationId,
+            messageId: created.id,
+            kind: "ANNOUNCEMENT",
+            at: created.createdAt.toISOString(),
+          }),
+        ]);
       } catch (err) {
         console.warn("[chat/sendAnnouncement] broadcast lỗi — thông báo vẫn đã lưu:", err);
       }

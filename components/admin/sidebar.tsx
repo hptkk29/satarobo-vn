@@ -61,6 +61,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useChatUnread } from "@/components/chat/use-chat-unread";
 import { type Action } from "@/lib/auth/permissions";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 
@@ -70,6 +71,8 @@ type NavItem = {
   icon: LucideIcon;
   /** Hiện mục nếu user có quyền với BẤT KỲ action nào trong đây. Bỏ trống = luôn hiện. */
   perm?: Action[];
+  /** Mục có badge số động. `"chat"` = tổng tin nhắn chưa đọc (layout tính, sidebar vẽ). */
+  badge?: "chat";
   /** Mục gắn feature flag — chỉ hiện khi flag bật (R7-16: "eval"). */
   flag?: "eval" | "scorm";
   /**
@@ -163,7 +166,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CSKH & Phụ huynh",
     items: [
       // FL W0-NAV-2 hygiene: Tin nhắn (CSKH) gate CSKH+GV — ẩn khỏi KT (BA #07 3.C) + MKT/HR/Training.
-      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: [...PAGE_GATES["/tin-nhan"]] },
+      { label: "Tin nhắn", href: "/tin-nhan", icon: MessageCircle, perm: [...PAGE_GATES["/tin-nhan"]], badge: "chat" },
       { label: "Yêu cầu phụ huynh", href: "/parent-requests", icon: MessageSquarePlus, perm: ["parent-requests:manage"] },
       { label: "Đánh giá PH", href: "/parent-feedback", icon: Star, perm: ["parent-feedback:view"] },
       { label: "Khảo sát / NPS", href: "/khao-sat", icon: Gauge, perm: ["parent-feedback:view"] },
@@ -271,14 +274,24 @@ const STORAGE_KEY = "satarobo:sidebar:collapsed";
 
 export function Sidebar({
   granted,
+  userId,
+  chatUnread = 0,
   evalV2Enabled = false,
   scormEnabled = false,
 }: {
   granted: string[];
+  /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
+  userId: string;
+  /** Số chưa đọc do layout (RSC) tính sẵn; sidebar KHÔNG tự fetch lúc mount. */
+  chatUnread?: number;
   evalV2Enabled?: boolean;
   scormEnabled?: boolean;
 }) {
   const pathname = usePathname();
+
+  // Số SỐNG: seed = số server, sau đó chỉ nhảy khi kênh `user:{id}` báo có tin mới.
+  // Không `router.refresh()` ⇒ trang admin đang mở không bị render lại vì một cái badge.
+  const chatCount = useChatUnread(userId, chatUnread);
 
   // Lọc menu theo quyền — chỉ giữ mục user được phép thấy. Mục không có `perm`
   // (Dashboard) luôn hiện. Mục gắn flag chỉ hiện khi flag bật. Nhóm rỗng sau lọc → ẩn.
@@ -396,7 +409,15 @@ export function Sidebar({
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{item.label}</span>
+                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        {item.badge === "chat" && chatCount > 0 && (
+                          <span
+                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
+                            aria-label={`${chatCount} tin chưa đọc`}
+                          >
+                            {chatCount > 9 ? "9+" : chatCount}
+                          </span>
+                        )}
                       </Link>
                     </Fragment>
                   );

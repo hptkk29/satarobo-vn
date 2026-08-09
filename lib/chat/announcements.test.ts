@@ -29,6 +29,9 @@ const h = vi.hoisted(() => {
     created: [] as Row[],
     convUpdates: [] as Row[],
     unreadUpdates: [] as Row[],
+    recipientQueries: [] as Row[],
+    /** Thành viên hội thoại — nguồn dữ liệu THẬT cho `conversationParticipant.findMany`. */
+    participants: [] as { userId: string; leftAt: Date | null }[],
     txOptions: null as Row | null,
     txCalls: 0,
     rateCalls: [] as { key: string; max: number; windowMs: number }[],
@@ -65,6 +68,18 @@ const h = vi.hoisted(() => {
         state.unreadUpdates.push(args);
         return { count: 1 };
       }),
+      // Người nhận `conversation.bumped` (topic `user:{id}`) — đọc TRONG cùng tx, ngay
+      // sau `updateMany`, với đúng điều kiện `leftAt: null` + loại người gửi.
+      // Mock LỌC THẬT theo `where` (không trả mảng cứng): bỏ một điều kiện trong code là
+      // người không đáng nhận lọt thẳng vào mảng broadcast.
+      findMany: vi.fn(async (args: Row) => {
+        state.recipientQueries.push(args);
+        const where = (args.where ?? {}) as { leftAt?: unknown; userId?: { not?: string } };
+        return state.participants
+          .filter((p) => (where.leftAt === null ? p.leftAt === null : true))
+          .filter((p) => (where.userId?.not ? p.userId !== where.userId.not : true))
+          .map((p) => ({ userId: p.userId }));
+      }),
     },
   };
   return {
@@ -86,7 +101,24 @@ const h = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({ db: h.mockDb }));
 vi.mock("@/lib/audit/audit-log", () => ({ writeAudit: h.writeAudit }));
-vi.mock("@/lib/chat/broadcast", () => ({ broadcastToConversation: h.broadcast }));
+// `broadcastMessages` = primitive DUY NHẤT gọi HTTP (1 POST cho cả `conv:` lẫn N `user:`);
+// hai builder còn lại là hàm THUẦN, dựng lại y hệt bản thật để soi hình dạng mảng.
+vi.mock("@/lib/chat/broadcast", () => ({
+  broadcastMessages: h.broadcast,
+  broadcastToConversation: h.broadcast,
+  conversationBroadcast: (
+    conversationId: string,
+    event: string,
+    payload: Record<string, unknown>,
+  ) => ({ topic: `conv:${conversationId}`, event, payload, private: true }),
+  userBumpBroadcasts: (userIds: readonly string[], payload: Record<string, unknown>) =>
+    userIds.map((id) => ({
+      topic: `user:${id}`,
+      event: "conversation.bumped",
+      payload,
+      private: true,
+    })),
+}));
 vi.mock("@/lib/events/publish", () => ({ publishEvent: h.publishEvent }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: h.rateLimit }));
 // Không kéo next-auth vào test node (lõi nhận Actor seed, không cần phiên thật).
@@ -350,6 +382,14 @@ function input(over: Record<string, unknown> = {}) {
   return { conversationId: CONV, body: "Thứ 7 này lớp nghỉ, bù vào Chủ nhật.", ...over };
 }
 
+/** Một phần tử trong mảng `messages` của lời gọi `broadcastMessages`. */
+type BroadcastCall = { topic: string; event: string; payload: Record<string, unknown> };
+
+/** Mảng gửi đi ở lời gọi broadcast thứ `n` (mặc định lời gọi đầu). */
+function sentBroadcasts(n = 0): BroadcastCall[] {
+  return (h.broadcast.mock.calls[n] as unknown as [BroadcastCall[]])[0];
+}
+
 beforeEach(() => {
   h.state.ctxRow = ctxRow();
   h.state.sentToday = 0;
@@ -357,6 +397,11 @@ beforeEach(() => {
   h.state.created = [];
   h.state.convUpdates = [];
   h.state.unreadUpdates = [];
+  h.state.recipientQueries = [];
+  h.state.participants = [
+    { userId: "ph-khac", leftAt: null },
+    { userId: "gv-khac", leftAt: null },
+  ];
   h.state.txOptions = null;
   h.state.txCalls = 0;
   h.state.rateCalls = [];
@@ -630,15 +675,57 @@ describe("[US-10][AC3][AC5] broadcast + điểm móc push (US-14 Đợt 2)", () 
     await sendAnnouncementAsActor(actor, "GV Test", input());
 
     expect(h.broadcast).toHaveBeenCalledTimes(1);
-    const [convId, event, payload] = h.broadcast.mock.calls[0] as unknown as [
-      string,
-      string,
-      Record<string, unknown>,
+    const conv = sentBroadcasts()[0] as BroadcastCall;
+    expect(conv.topic).toBe(`conv:${CONV}`);
+    expect(conv.event).toBe("announcement.created");
+    expect(conv.payload.kind).toBe("ANNOUNCEMENT");
+    expect(conv.payload.id).toBe("ann-1");
+  });
+
+  it("MỘT POST duy nhất: kèm N phần tử user:{id} event conversation.bumped, KHÔNG kèm nội dung (BR-30)", async () => {
+    const actor = actorOf("TEACHER", "cs1", "gv-bump", ["lopA"]);
+    await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(h.broadcast).toHaveBeenCalledTimes(1);
+    const bumps = sentBroadcasts().filter((m) => m.topic.startsWith("user:"));
+    expect(bumps.map((m) => m.topic)).toEqual(["user:ph-khac", "user:gv-khac"]);
+    for (const b of bumps) {
+      expect(b.event).toBe("conversation.bumped");
+      expect(Object.keys(b.payload).sort()).toEqual(["at", "conversationId", "kind", "messageId"]);
+      expect(b.payload.kind).toBe("ANNOUNCEMENT");
+      expect(JSON.stringify(b.payload)).not.toContain("lớp nghỉ");
+    }
+  });
+
+  it("người nhận bump đọc TRONG tx, đúng điều kiện leftAt=null + loại người gửi", async () => {
+    const actor = actorOf("TEACHER", "cs1", "gv-recip", ["lopA"]);
+    await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(h.state.recipientQueries).toHaveLength(1);
+    const where = (h.state.recipientQueries[0] as { where: Record<string, unknown> }).where;
+    expect(where.conversationId).toBe(CONV);
+    expect(where.leftAt).toBeNull();
+    expect(where.userId).toEqual({ not: "gv-recip" });
+  });
+
+  it("người ĐÃ RỜI nhóm và CHÍNH người gửi KHÔNG nhận bump (lọc thật, không chỉ soi đối số)", async () => {
+    h.state.participants = [
+      { userId: "ph-khac", leftAt: null },
+      { userId: "gv-khac", leftAt: null },
+      // PH chuyển lớp giữa kỳ — thông báo của lớp cũ không được đánh thức máy họ nữa.
+      { userId: "ph-da-roi", leftAt: new Date("2026-07-01T00:00:00.000Z") },
+      { userId: "gv-loc", leftAt: null },
     ];
-    expect(convId).toBe(CONV);
-    expect(event).toBe("announcement.created");
-    expect(payload.kind).toBe("ANNOUNCEMENT");
-    expect(payload.id).toBe("ann-1");
+
+    const actor = actorOf("TEACHER", "cs1", "gv-loc", ["lopA"]);
+    await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    const topics = sentBroadcasts()
+      .filter((m) => m.topic.startsWith("user:"))
+      .map((m) => m.topic);
+    expect(topics).toEqual(["user:ph-khac", "user:gv-khac"]);
+    expect(topics).not.toContain("user:ph-da-roi");
+    expect(topics).not.toContain("user:gv-loc");
   });
 
   it("broadcast NÉM lỗi → thông báo VẪN ghi, action VẪN ok (AC3/TS-12)", async () => {

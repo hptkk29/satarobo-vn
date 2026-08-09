@@ -13,6 +13,7 @@ import { MessagesSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listConversationsForUser, type ConversationListItem } from "@/lib/chat/queries";
 import { formatConversationTime } from "@/components/chat/portal/format";
+import { ChatListRefresher } from "@/components/chat/chat-list-refresher";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -98,6 +99,10 @@ export default async function PortalMessagesPage() {
 
   return (
     <div className="space-y-5">
+      {/* Tin mới ở nhóm bất kỳ ⇒ chạy lại RSC này (trang `force-dynamic`) ⇒ nhóm đó lên
+          đầu, đổi preview + giờ + badge. Không render gì ra màn hình. */}
+      <ChatListRefresher userId={session.user.id} />
+
       <div>
         <h1 className="text-xl font-bold text-foreground">Tin nhắn</h1>
         <p className="mt-1 text-sm text-muted-foreground">

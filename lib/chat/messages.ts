@@ -38,7 +38,11 @@ import {
 } from "@/lib/actions/factory";
 import { db } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
-import { broadcastToConversation } from "@/lib/chat/broadcast";
+import {
+  broadcastMessages,
+  conversationBroadcast,
+  userBumpBroadcasts,
+} from "@/lib/chat/broadcast";
 // US-11 — CHỈ dùng phần THUẦN của `lib/chat/attachments.ts` (luật key + gói cắt định dạng).
 // KHÔNG chạm R2 ở file này: việc ký URL đã xong ở bước 1 của F-FILE.
 import { CHAT_IMAGE_RULES, buildChatAttachmentKey } from "@/lib/chat/attachments";
@@ -451,8 +455,9 @@ function buildSendChatMessageConfig(
       // timeout 30s/maxWait 10s theo luật E-bis #2 (trần 5s mặc định của Prisma đứt
       // giữa chừng khi pooler chậm ⇒ tin mất mà UI báo thành công).
       let created: SentChatMessage;
+      let recipientIds: string[];
       try {
-        created = await db.$transaction(
+        const tx0 = await db.$transaction(
           async (tx) => {
             const msg = await tx.message.create({
               data: {
@@ -510,10 +515,32 @@ function buildSendChatMessageConfig(
               data: { unreadCount: { increment: 1 } },
             });
 
-            return toSent({ ...msg, attachments: savedAttachments });
+            // Danh sách người nhận bump = ĐÚNG tập vừa được +1. Đặt SAU `updateMany`
+            // có chủ đích: `updateMany` đã khoá đúng các dòng đó, nên một transaction
+            // khác đang set `leftAt` (chuyển lớp / gỡ phân công / syncConversationMembership)
+            // phải chờ ta commit ⇒ `findMany` trong CÙNG tx thấy đúng tập đã tăng,
+            // không có cửa sổ đua "người vừa bị gỡ vẫn nhận bump".
+            // Đọc bằng `tx` của `db` TRẦN (không scopedDb) — luật E-bis #5: dẫn xuất
+            // thành viên là thao tác mức hệ thống; qua scopedDb thì GV dạy chéo cơ sở
+            // biến mất im lặng.
+            const recipients = await tx.conversationParticipant.findMany({
+              where: {
+                conversationId: input.conversationId,
+                leftAt: null,
+                userId: { not: actor.userId },
+              },
+              select: { userId: true },
+            });
+
+            return {
+              sent: toSent({ ...msg, attachments: savedAttachments }),
+              recipientIds: recipients.map((r) => r.userId),
+            };
           },
           { timeout: 30_000, maxWait: 10_000 },
         );
+        created = tx0.sent;
+        recipientIds = tx0.recipientIds;
       } catch (err) {
         // Đua 2 tab cùng clientMsgId → unique chặn; đọc lại và trả tin đã có (AC4).
         if (isUniqueViolation(err)) {
@@ -539,24 +566,36 @@ function buildSendChatMessageConfig(
       }
 
       // ── F-SEND bước 6: broadcast SAU commit, NGOÀI transaction (AC3) ──
-      // `broadcastToConversation` đã cam kết không throw; bọc thêm một lớp ở đây để
+      // `broadcastMessages` đã cam kết không throw; bọc thêm một lớp ở đây để
       // dù hợp đồng đó có bị phá thì tin ĐÃ commit cũng không biến thành lỗi đỏ.
       // Payload mang `clientMsgId` để client khử trùng với bản optimistic (AC4).
+      // MỘT POST duy nhất mang cả kênh hội thoại lẫn N kênh `user:{id}` ⇒ số lời gọi
+      // HTTP trong đường gửi tin KHÔNG tăng, độ trễ gửi tin không đổi.
       try {
-        await broadcastToConversation(created.conversationId, "message.created", {
-          id: created.id,
-          conversationId: created.conversationId,
-          senderId: created.senderId,
-          kind: created.kind,
-          body: created.body,
-          replyToId: created.replyToId,
-          clientMsgId: created.clientMsgId,
-          createdAt: created.createdAt.toISOString(),
-          // Người nhận cần biết tin CÓ ảnh ngay lúc broadcast; URL đọc thì họ tự đổi
-          // bằng `attachmentId` (bước 3 F-FILE) — không bao giờ đẩy URL đã ký qua kênh
-          // broadcast, nó sống 5 phút và ai nghe được topic cũng dùng được.
-          attachments: created.attachments,
-        });
+        await broadcastMessages([
+          conversationBroadcast(created.conversationId, "message.created", {
+            id: created.id,
+            conversationId: created.conversationId,
+            senderId: created.senderId,
+            kind: created.kind,
+            body: created.body,
+            replyToId: created.replyToId,
+            clientMsgId: created.clientMsgId,
+            createdAt: created.createdAt.toISOString(),
+            // Người nhận cần biết tin CÓ ảnh ngay lúc broadcast; URL đọc thì họ tự đổi
+            // bằng `attachmentId` (bước 3 F-FILE) — không bao giờ đẩy URL đã ký qua kênh
+            // broadcast, nó sống 5 phút và ai nghe được topic cũng dùng được.
+            attachments: created.attachments,
+          }),
+          // Tín hiệu nhẹ cho badge + danh sách của người KHÔNG mở hội thoại này.
+          // KHÔNG có nội dung tin (BR-30) — client tự hỏi lại server.
+          ...userBumpBroadcasts(recipientIds, {
+            conversationId: created.conversationId,
+            messageId: created.id,
+            kind: "CHAT",
+            at: created.createdAt.toISOString(),
+          }),
+        ]);
       } catch (err) {
         console.warn("[chat/sendMessage] broadcast lỗi — tin vẫn đã lưu:", err);
       }

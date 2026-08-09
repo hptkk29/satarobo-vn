@@ -15,6 +15,7 @@ import { isTeacherSiteEnabled } from "@/lib/flags";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { adminHomeUrl } from "@/lib/auth/hosts";
+import { countChatUnreadForUser } from "@/lib/chat/unread";
 import { AppShell } from "./_components/app-shell";
 import "./teacher.css";
 
@@ -74,10 +75,17 @@ export default async function TeacherLayout({
   const adminReturnUrl =
     ssoEnabled && hasStaffRole(session.user) ? adminHomeUrl() : undefined;
 
+  // Badge "Tin nhắn" trên sidebar: SỐ BAN ĐẦU tính ở server (client không fetch lúc mount).
+  // Đếm participant-based qua `lib/chat/unread` — cố ý KHÔNG scopedDb (GV dạy chéo cơ sở).
+  // Hỏng thì badge = 0, không được làm chết cả site GV.
+  const chatUnread = await countChatUnreadForUser(session.user.id).catch(() => 0);
+
   return (
     <AppShell
+      userId={session.user.id}
       userName={session.user.name ?? session.user.email ?? "Giáo viên"}
       adminReturnUrl={adminReturnUrl}
+      chatUnread={chatUnread}
     >
       {children}
     </AppShell>

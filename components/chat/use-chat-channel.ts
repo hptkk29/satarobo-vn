@@ -23,6 +23,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setRealtimeAuth, subscribeConversation } from "@/lib/chat/supabase-client";
+import { clearActiveConversation, setActiveConversation } from "./active-conversation";
+import { notifyConversationRead } from "./read-signal";
 import {
   applyMessageDeleted,
   computeUnreadReset,
@@ -224,10 +226,22 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
     lastMarkedRef.current = target; // đặt TRƯỚC await ⇒ không bắn hai lần cho cùng một mốc
     const call = markReadRef.current;
     if (!call) return;
-    void Promise.resolve(call(target)).catch(() => {
-      // Hỏng thì lùi mốc để lần đánh giá sau thử lại (unread không được "mất" âm thầm).
-      if (lastMarkedRef.current === target) lastMarkedRef.current = previous;
-    });
+    // Hai nhánh của CÙNG một `then` (không phải `.then().catch()`): nhánh lỗi ở đây chỉ được
+    // bắt lỗi của `markConversationRead`, không được nuốt lỗi của `notifyConversationRead`
+    // rồi lùi nhầm mốc đã đọc.
+    void Promise.resolve(call(target)).then(
+      () => {
+        // Badge tổng ở thanh nav do LAYOUT RSC tính (`countChatUnreadForUser`), mà layout
+        // KHÔNG render lại khi điều hướng client-side — và việc đọc tin không sinh `bump`
+        // nào trên kênh `user:{id}`. Không phát tín hiệu ở đây thì badge chỉ biết TĂNG:
+        // đọc hết 5 tin, DB đã về 0, nav vẫn treo "5" cho tới khi F5.
+        notifyConversationRead();
+      },
+      () => {
+        // Hỏng thì lùi mốc để lần đánh giá sau thử lại (unread không được "mất" âm thầm).
+        if (lastMarkedRef.current === target) lastMarkedRef.current = previous;
+      },
+    );
   }, []);
 
   useEffect(() => {
@@ -236,6 +250,15 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
       mountedRef.current = false;
     };
   }, []);
+
+  // AC5 — cho badge tổng ở thanh nav biết hội thoại nào đang mở, để tin mới của CHÍNH nó
+  // không cộng badge (nó được đánh dấu đã đọc ngay khi tab đang hiện). Chỉ là mẩu trạng
+  // thái điều phối, không phải nguồn dữ liệu — xem `active-conversation.ts`.
+  useEffect(() => {
+    if (!enabled || !conversationId) return;
+    setActiveConversation(conversationId);
+    return () => clearActiveConversation(conversationId);
+  }, [conversationId, enabled]);
 
   // Luồng đổi ⇒ cập nhật mốc reconcile + đánh giá lại mốc đã đọc.
   useEffect(() => {

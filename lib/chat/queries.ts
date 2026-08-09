@@ -39,7 +39,7 @@ export const ARCHIVED_PARENT_READ_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_CONVERSATION_LIMIT = 100;
-const MAX_CONVERSATION_LIMIT = 500;
+export const MAX_CONVERSATION_LIMIT = 500;
 const PREVIEW_MAX_LENGTH = 120;
 
 /**
@@ -461,10 +461,16 @@ function statusLabelOf(status: string): string | null {
  * HIỆU NĂNG (không N+1 theo số hội thoại): đúng **2 truy vấn** bất kể user có bao
  * nhiêu hội thoại — (1) participant ⨝ conversation ⨝ class, (2) `DISTINCT ON` lấy tin
  * cuối của từng hội thoại (bám index `Message(conversationId, createdAt DESC)`).
+ *
+ * `withPreview: false` bỏ hẳn truy vấn (2) và trả `lastMessage: null`. Dành cho người
+ * gọi CHỈ cần con số (badge chưa đọc) — đường đó chạy ở layout của cả 3 site và ở mỗi
+ * lượt `GET /api/chat/unread`, dựng preview cho tới 100 hội thoại rồi vứt đi là lãng phí
+ * thấy rõ. Phạm vi hội thoại vẫn do truy vấn (1) quyết định nên **định nghĩa "hội thoại
+ * của tôi" không đổi** — badge và màn danh sách vẫn là một nguồn.
  */
 export async function listConversationsForUser(
   userId: string,
-  opts?: { limit?: number; now?: Date },
+  opts?: { limit?: number; now?: Date; withPreview?: boolean },
 ): Promise<ConversationListItem[]> {
   const limit = Math.min(
     Math.max(opts?.limit ?? DEFAULT_CONVERSATION_LIMIT, 1),
@@ -514,7 +520,9 @@ export async function listConversationsForUser(
   // (2) Tin cuối của TỪNG hội thoại trong một truy vấn — `DISTINCT ON` là cách duy
   // nhất trong Postgres lấy "bản ghi đầu mỗi nhóm" mà không phải bắn N query.
   const ids = rows.map((r) => r.conversationId);
-  const previews = await db.$queryRaw<PreviewRowRaw[]>`
+  const previews: PreviewRowRaw[] = opts?.withPreview === false
+    ? []
+    : await db.$queryRaw<PreviewRowRaw[]>`
     SELECT DISTINCT ON (m."conversationId")
       m."conversationId", m."id", m."kind"::text AS "kind", m."senderId",
       m."body", m."createdAt", m."deletedAt"

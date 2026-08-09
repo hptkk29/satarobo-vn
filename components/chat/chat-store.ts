@@ -373,3 +373,40 @@ export function parseMessageDeleted(payload: Record<string, unknown>): string | 
 export function parseParticipantRemoved(payload: Record<string, unknown>): string | null {
   return str(payload.userId);
 }
+
+/**
+ * Tín hiệu `conversation.bumped` đã chuẩn hoá (topic mức NGƯỜI DÙNG `user:{id}`).
+ *
+ * ⚠️ Đây KHÔNG phải dữ liệu để hiển thị — nó chỉ nói "hội thoại X vừa có gì đó mới".
+ * Mọi thứ vẽ ra màn hình vẫn phải hỏi lại server (đường đã kiểm quyền): badge qua
+ * `GET /api/chat/unread`, danh sách qua RSC. Payload cố ý KHÔNG mang body/tên/SĐT (BR-30).
+ */
+export type ConversationBump = {
+  conversationId: string;
+  /** cuid tin vừa tạo/đổi — chỉ để khử trùng khi cùng một bump tới hai lần. */
+  messageId: string;
+  /** "CHAT" | "ANNOUNCEMENT" | "DELETED" (union server có thể mở rộng ⇒ nhận string). */
+  kind: string | null;
+  at: Date;
+};
+
+/**
+ * Payload `conversation.bumped` → bump chuẩn hoá; `null` nếu payload dị dạng.
+ *
+ * Nghiêm ngặt có chủ đích (giống `parseBroadcastMessage`): thà bỏ một tín hiệu hỏng còn
+ * hơn đoán bừa — lần `SUBSCRIBED` kế tiếp phát `resync`, client hỏi lại server là đủ bù.
+ */
+export function parseConversationBumped(
+  payload: Record<string, unknown>,
+): ConversationBump | null {
+  const conversationId = str(payload.conversationId);
+  const messageId = str(payload.messageId);
+  if (!conversationId || !messageId) return null;
+
+  const at = payload.at;
+  if (typeof at !== "string" && typeof at !== "number" && !(at instanceof Date)) return null;
+  const parsed = new Date(at as string | number | Date);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return { conversationId, messageId, kind: str(payload.kind), at: parsed };
+}

@@ -17,6 +17,7 @@ import {
   normalizeIncomingMessage,
   optimisticIdFor,
   parseBroadcastMessage,
+  parseConversationBumped,
   parseMessageDeleted,
   parseParticipantRemoved,
   startSend,
@@ -419,5 +420,44 @@ describe("parse payload broadcast (không tin cấu trúc)", () => {
   it("participant.removed đọc userId", () => {
     expect(parseParticipantRemoved({ userId: ME })).toBe(ME);
     expect(parseParticipantRemoved({ userId: 5 })).toBeNull();
+  });
+
+  it("conversation.bumped: đọc đúng 4 khoá của hợp đồng server", () => {
+    const parsed = parseConversationBumped({
+      conversationId: "conv-1",
+      messageId: "msg-9",
+      kind: "ANNOUNCEMENT",
+      at: "2026-08-09T10:00:05.000Z",
+    });
+    expect(parsed).toEqual({
+      conversationId: "conv-1",
+      messageId: "msg-9",
+      kind: "ANNOUNCEMENT",
+      at: new Date("2026-08-09T10:00:05.000Z"),
+    });
+  });
+
+  it("conversation.bumped: nhận cả kind DELETED (đường gỡ tin cũng bump)", () => {
+    expect(
+      parseConversationBumped({
+        conversationId: "c",
+        messageId: "m",
+        kind: "DELETED",
+        at: "2026-08-09T10:00:05.000Z",
+      })?.kind,
+    ).toBe("DELETED");
+  });
+
+  it("conversation.bumped dị dạng ⇒ null (thà bỏ tín hiệu còn hơn đoán bừa)", () => {
+    const ok = {
+      conversationId: "c",
+      messageId: "m",
+      kind: "CHAT",
+      at: "2026-08-09T10:00:05.000Z",
+    };
+    expect(parseConversationBumped({})).toBeNull();
+    expect(parseConversationBumped({ ...ok, conversationId: undefined })).toBeNull();
+    expect(parseConversationBumped({ ...ok, messageId: 7 })).toBeNull();
+    expect(parseConversationBumped({ ...ok, at: "không-phải-ngày" })).toBeNull();
   });
 });
