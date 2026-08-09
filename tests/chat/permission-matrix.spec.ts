@@ -93,18 +93,31 @@ if (!HAS_LOCAL_DB) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// QUY ƯỚC MÃ LỖI (chốt 09/08 khi ghép US-06 + US-08 — ĐỌC TRƯỚC KHI MỞ TODO):
+//   • PERMISSION_DENIED = VAI không có action, hoặc SCOPE không khớp.
+//     Vd: Sale gửi tin (không có chat:send); PH gửi ANNOUNCEMENT (không có
+//     chat:announce); GV gửi vào lớp KHÔNG dạy (ASSIGNED trượt); QLCS gửi sang
+//     cơ sở khác (CENTER trượt); PH/QLCS gỡ tin người khác (không có chat:moderate).
+//   • NOT_PARTICIPANT = vai/scope ĐỀU ổn nhưng người này không phải thành viên
+//     CÒN HIỆU LỰC của CHÍNH hội thoại đó. Vd: PH đọc lớp khác; PH đã rời nhóm;
+//     Admin (bypass can()) gửi vào hội thoại mình không thuộc về (US-15 AC4).
+//   Tầng đọc (lib/chat/queries.ts) KHÔNG gọi can() — cổng của nó là participant,
+//   nên mọi deny ở đó là NOT_PARTICIPANT.
+//   Lý do tách: UI cần phân biệt "bạn không có quyền này" với "bạn không còn ở
+//   trong nhóm" — hai câu nói khác nhau với phụ huynh.
+// ─────────────────────────────────────────────────────────────────────────────
 // TS-01 · Cách ly đọc theo lớp và cơ sở — mở ở US-06 (getMessages) + US-08
 // (listConversations). Mã lỗi kỳ vọng ghi trong tên test.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("TS-01 · Cách ly đọc theo lớp và cơ sở [todo — mở dần theo story]", () => {
   it.todo("TS-01.1 ph1 listConversations → chỉ nhóm LopA (+DM của mình), KHÔNG LopB/LopC [US-08]");
-  it.todo("TS-01.2 ph1 getMessages(LopB) trực tiếp bằng ID → 403 PERMISSION_DENIED [US-06]");
+  it.todo("TS-01.2 ph1 getMessages(LopB) trực tiếp bằng ID → 403 NOT_PARTICIPANT [US-08]");
   it.todo("TS-01.3 ph2 (con ở cả 2 lớp) listConversations → đúng 2 nhóm LopA + LopB [US-08]");
   it.todo("TS-01.4a ql1 listConversations → LopA + LopC (cùng CS1), KHÔNG LopB [US-08]");
-  it.todo("TS-01.4b ql1 getMessages(LopB) bằng ID → 403 PERMISSION_DENIED [US-06]");
+  it.todo("TS-01.4b ql1 getMessages(LopB) bằng ID → 403 NOT_PARTICIPANT [US-08]");
   it.todo("TS-01.5 gv3 (dạy chéo) listConversations → CẢ LopA + LopB dù khác cơ sở — theo phân công, không theo centerId [US-08]");
-  it.todo("TS-01.6 sale1 gọi MỌI endpoint chat (listConversations/getMessages/sendMessage/sendAnnouncement/openDm/deleteMessage/adminLookup) → 403 PERMISSION_DENIED toàn bộ [US-06→US-15]");
-  it.todo("TS-01.7 ph4 (leftAt đã set) getMessages(LopA) → 403 PERMISSION_DENIED ngay, KHÔNG grace period ở API [US-06]");
+  it.todo("TS-01.6 sale1 gọi MỌI endpoint chat → 403 toàn bộ: đường GHI (sendMessage/sendAnnouncement/deleteMessage/openDm/adminLookup) = PERMISSION_DENIED (vai không có action); đường ĐỌC (listConversations rỗng / getMessages) = NOT_PARTICIPANT [US-06→US-15]");
+  it.todo("TS-01.7 ph4 (leftAt đã set) getMessages(LopA) → 403 NOT_PARTICIPANT ngay, KHÔNG grace period ở API [US-08]");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +139,7 @@ describe("TS-03 · Ma trận hành động ghi [todo — mở dần theo story]"
   it.todo("TS-03.3a ql1 sendMessage + sendAnnouncement vào LopA → ok:true CẢ HAI (chốt QLCS=MEMBER) [US-06/US-10]");
   it.todo("TS-03.3b ql1 sendMessage/sendAnnouncement vào LopB → 403 PERMISSION_DENIED [US-06/US-10]");
   it.todo("TS-03.4a admin1 sendAnnouncement vào LopA → ok:true [US-10]");
-  it.todo("TS-03.4b admin1 sendMessage CHAT vào hội thoại KHÔNG phải thành viên → 403 PERMISSION_DENIED (US-15 AC4 — v2 bypass không cứu, participant-check trong action chặn) [US-06]");
+  it.todo("TS-03.4b admin1 sendMessage CHAT vào hội thoại KHÔNG phải thành viên → 403 NOT_PARTICIPANT (US-15 AC4 — SUPER_ADMIN bypass can() nên KHÔNG dừng ở PERMISSION_DENIED; participant-check trong action mới là chốt chặn) [US-06]");
   it.todo("TS-03.5a ph1 recallMessage tin mình gửi 10 phút trước → ok:true [US-12]");
   it.todo("TS-03.5b ph1 recallMessage tin gửi 20 phút trước → 403 RECALL_WINDOW_EXPIRED (quá 15') [US-12]");
   it.todo("TS-03.6a ph1 deleteMessage tin của ph2 → 403 PERMISSION_DENIED [US-12]");
@@ -134,14 +147,14 @@ describe("TS-03 · Ma trận hành động ghi [todo — mở dần theo story]"
   it.todo("TS-03.6c ql1 deleteMessage tin người khác → 403 PERMISSION_DENIED [US-12]");
   it.todo("TS-03.7a sendMessage vào LopC (ARCHIVED) với MỌI actor (ph1/gv1/ql1/admin1) → 403 CONVERSATION_ARCHIVED — mã lỗi PHÂN BIỆT với 'không phải thành viên' [US-06]");
   it.todo("TS-03.7b hội thoại LOCKED → sendMessage 403 CONVERSATION_LOCKED mọi vai kể cả GV; đọc vẫn được cho thành viên [US-15]");
-  it.todo("TS-03.8 ph4 (participant đã rời) sendMessage vào LopA → 403 PERMISSION_DENIED [US-06]");
+  it.todo("TS-03.8 ph4 (participant đã rời) sendMessage vào LopA → 403 NOT_PARTICIPANT (vai PH vẫn có chat:send; cái sai là không còn trong nhóm — thông điệp cho PH phải nói đúng điều đó) [US-06]");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TS-04 · Riêng tư 1-1 và tra cứu admin — mở ở US-13 (openDm) + US-15 (adminLookup).
 // ─────────────────────────────────────────────────────────────────────────────
 describe("TS-04 · Riêng tư 1-1 và tra cứu admin [todo — mở dần theo story]", () => {
-  it.todo("TS-04.1 DM gv1↔ph1: ql1 / gv2 / ph2 / sale1 getMessages bằng ID → 403 PERMISSION_DENIED TOÀN BỘ [US-13]");
+  it.todo("TS-04.1 DM gv1↔ph1: ql1 / gv2 / ph2 / sale1 getMessages bằng ID → 403 NOT_PARTICIPANT TOÀN BỘ (tầng đọc gác bằng participant) [US-13]");
   it.todo("TS-04.2a admin1 adminLookup DM KHÔNG nhập lý do → 403/400, nội dung KHÔNG trả về [US-15]");
   it.todo("TS-04.2b admin1 adminLookup CÓ lý do → ok:true + 1 bản ghi AuditLog đúng (ai/khi nào/hội thoại/lý do) ghi TRƯỚC khi trả nội dung (F-AUDIT) [US-15]");
   it.todo("TS-04.3 gọi thẳng adminLookup (bỏ qua UI/modal) không kèm reason → 403 — modal không phải chốt chặn duy nhất [US-15]");
