@@ -15,6 +15,10 @@
 | **[AS-BUILT US-02]** `tests/e2e/a0/permission-grant.spec.ts` (integration, 4 case) | resolveActor nạp grant thật · DENY ROLE-grant chặn end-to-end · xoá grant → request kế mất hiệu lực (không cache phiên) · bảng rỗng → parity tuyệt đối đường cũ |
 | **[AS-BUILT US-04]** `lib/permissions/matrix.test.ts` (26 test: 22 thật + 4 `it.fails` `[US-04→P5]`) | TS-04: ma trận 4 dataScope × 3 relationshipType × 2 effect; DENY>ALLOW cả 12 case; tripwire chống gỡ lặng lẽ; case biên UNIT_ONLY@REGION |
 | **[AS-BUILT US-04]** `lib/permissions/session-content-gate.test.ts` (8 test: 1 tripwire + 7 `it.fails`) | TS-18 pin HỢP ĐỒNG chuỗi 4 điều kiện (4 case DENY thiếu từng đk · CONTENT · LIST_ONLY · franchise ACTIVE vẫn xem) — US-16 hiện thực làm tripwire đỏ → gỡ .fails cùng commit |
+| **[AS-BUILT US-03]** `tests/e2e/a0/user-group-ts02.spec.ts` (integration, 4 case) | TS-02 đủ 2 vế trên DB thật: DENY fieldMask nhóm che parentPhone khi ALLOW từ vai · gỡ member → resolve mới hết mask (AC3) · DENY toàn-action nhóm thắng ALLOW vai (AC2) · soft-delete nhóm vô hiệu grant |
+| **[AS-BUILT US-03]** `lib/validators/user-group.test.ts` + can.test.ts (6 GHIM GROUP) + menu-permissions.test.ts (DENY-aware + ALLOW-đối-xứng) + route-policy.test.ts (segment user-groups) | Validator chặn: UNIT_*/OWN cho GROUP (P0 chỉ ALL) · ALLOW+fieldMask · 7 khoá quản trị · PARENT vào nhóm — mỗi luật 1 case pin |
+
+**CỔNG P0 (README bàn giao §4): TS-01..04 xanh CI + lint no-inline-authz bật — ĐẠT 09/08/2026** (TS-02 full-flow tại US-03; TS-04 20/24 chạy thật + 4 ô `[US-04→P5]` expected-fail có kỷ luật flip).
 
 Ngoài các nhóm trên: chưa có test nào cho các luật còn lại của nền. Các dòng dưới đây là PROPOSED (TS-01 đã chuyển lên mục 1).
 
