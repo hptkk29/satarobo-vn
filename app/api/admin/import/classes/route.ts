@@ -399,6 +399,11 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   try {
     await sdb.$transaction(async (tx) => {
+      // US-03 chat — gom classId đã tạo/sửa rồi sync MỘT LẦN cho mỗi lớp DUY NHẤT sau
+      // vòng lặp (sync idempotent nên gọi sau cũng cho kết quả y hệt). Gọi per-row nhân
+      // bội truy vấn theo số dòng file (tối đa 5000) — file có nhiều dòng cùng classCode
+      // còn sync lặp lại đúng lớp đó — dễ vượt timeout 30s và rollback CẢ file.
+      const touchedClassIds = new Set<string>();
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         const base = {
@@ -445,14 +450,10 @@ export async function POST(req: NextRequest) {
           if (phase) {
             await persistPhases(tx as unknown as Prisma.TransactionClient, saved.id, [phase], now);
           }
-          // US-03 chat — import có thể tạo lớp ACTIVE / đổi GV → đồng bộ nhóm lớp
-          // trong cùng transaction (trạng thái khác ACTIVE → sync tự no-op).
-          // Cast: client extension không structurally-assignable vào TransactionClient
-          // (tiền lệ students/classes _actions) — runtime không đổi.
-          await syncConversationMembership(
-            tx as unknown as import("@prisma/client").Prisma.TransactionClient,
-            saved.id,
-          );
+          // US-03 chat — import có thể tạo lớp ACTIVE / đổi GV → nhóm lớp phải đồng bộ
+          // trong cùng transaction (trạng thái khác ACTIVE → sync tự no-op). Chỉ GOM
+          // ở đây; sync chạy 1 lần/lớp sau vòng lặp.
+          touchedClassIds.add(saved.id);
           success++;
         } catch (err) {
           throw new Error(
@@ -462,6 +463,15 @@ export async function POST(req: NextRequest) {
             { cause: err },
           );
         }
+      }
+      // Sync 1 lần cho mỗi lớp DUY NHẤT, vẫn trong transaction của import.
+      // Cast: client extension không structurally-assignable vào TransactionClient
+      // (tiền lệ students/classes _actions) — runtime không đổi.
+      for (const classId of touchedClassIds) {
+        await syncConversationMembership(
+          tx as unknown as Prisma.TransactionClient,
+          classId,
+        );
       }
     }, { timeout: 30_000, maxWait: 10_000 });
   } catch (err) {

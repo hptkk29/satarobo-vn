@@ -2,12 +2,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { auth } from '@/lib/auth'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { hasRole } from '@/lib/auth/permissions'
 import { getAuditActor } from '@/lib/audit/log'
 import { writeAudit } from '@/lib/audit/audit-log'
+import {
+  CHAT_MEMBER_ENROLLMENT_STATUSES,
+  syncConversationMembership,
+} from '@/lib/chat/sync-membership'
 
 // ─── R7-05 — màn Admin xử lý xung đột dedupe parent (AC3) ─────────────────────
 // Chỉ SUPER_ADMIN / CENTER_MANAGER. Hai cách xử lý:
@@ -43,12 +48,36 @@ export async function mergeConflictIntoA(input: unknown): Promise<{ ok: boolean;
 
   const { actorId, actorName } = getAuditActor(session)
 
-  await sdb.$transaction(async (tx) => {
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient
+    // US-03 chat — ĐỌC TRƯỚC KHI ĐỔI CHỦ: các lớp đang học của con thuộc hồ sơ B. Gộp
+    // hồ sơ đổi `Student.parentUserId` = đổi nguồn dẫn xuất thành viên nhóm lớp: không
+    // sync thì PH B (hết con trong lớp) VẪN đọc được nhóm — rò rỉ — còn PH A không bao
+    // giờ vào nhóm.
+    // ⚠️ Raw có chủ đích: Student/Enrollment/Class đều ∈ SCOPED_MODELS, mà
+    // `student.updateMany` ngay dưới KHÔNG bị scopedDb chặn (scopedDb chỉ auto-scope
+    // READ) ⇒ nó chuyển CẢ con ở cơ sở ngoài tầm nhìn actor. Đọc scoped ở đây sẽ bỏ sót
+    // đúng những lớp đó, tức vá nửa vời.
+    const affected = await tx.$queryRaw<{ classId: string }[]>`
+      SELECT DISTINCT e."classId"
+      FROM "Enrollment" e
+      JOIN "Student" s ON s."id" = e."studentId"
+      JOIN "Class" c ON c."id" = e."classId"
+      WHERE s."parentUserId" = ${conflict.parentBId}
+        AND s."deletedAt" IS NULL
+        AND e."deletedAt" IS NULL
+        AND e."status" = ANY(${CHAT_MEMBER_ENROLLMENT_STATUSES}::"EnrollmentStatus"[])
+        AND c."deletedAt" IS NULL
+    `
     // Chuyển học viên của B sang A → phone sẽ trỏ về A ở lần convert sau.
     const moved = await tx.student.updateMany({
       where: { parentUserId: conflict.parentBId, deletedAt: null },
       data: { parentUserId: conflict.parentAId },
     })
+    // Sync SAU khi đã đổi chủ, cùng transaction: B rời nhóm + A vào nhóm trong 1 nhịp.
+    for (const classId of new Set(affected.map((r) => r.classId))) {
+      await syncConversationMembership(tx, classId)
+    }
     await tx.convertConflict.update({
       where: { id: conflict.id },
       data: {
@@ -71,7 +100,8 @@ export async function mergeConflictIntoA(input: unknown): Promise<{ ok: boolean;
       },
       reason: parsed.data.note || undefined,
     })
-  })
+    // timeout rộng: sync chạm mọi lớp đang học của các con được gộp.
+  }, { timeout: 30_000, maxWait: 10_000 })
 
   revalidatePath('/convert-conflicts')
   revalidatePath(`/leads/${conflict.leadId}`)

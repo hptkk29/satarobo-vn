@@ -15,11 +15,25 @@
  *   TS-06   — PH 2 con cùng lớp: 1 con nghỉ → Ở LẠI; con cuối nghỉ → leftAt; suốt
  *             quá trình đúng 1 bản ghi participant. RE-JOIN: con học lại → leftAt=null
  *             trên bản ghi CŨ, joinedAt KHÔNG đổi (AC6).
+ *   VÁ1.a   — BẪY scopedDb (audit 09/08): HV chuyển cơ sở (Student.centerId = CS2) mà
+ *             VẪN học lớp ở CS1; sync chạy qua tx của `scopedDb(actor cấp cơ sở CS1)`
+ *             → PH của em PHẢI CÒN trong nhóm. Trước khi vá, `tx.student.findMany` bị
+ *             extension lọc mất em ⇒ PH bị set leftAt + SYSTEM "đã rời nhóm" SAI.
+ *   VÁ1.b   — cùng bẫy, phía `Class`: lớp nằm NGOÀI tầm nhìn actor → trước khi vá
+ *             `tx.class.findUnique` bị lọc hậu kỳ trả null ⇒ sync im lặng no-op.
  */
 import "./_load-env";
 import { currentDbHost } from "./_load-env";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { syncConversationMembership } from "../lib/chat/sync-membership";
+import type { Actor } from "../lib/auth/actor";
+
+// ⚠️ `scopedDb` bám singleton `@/lib/db` (đọc DATABASE_URL lúc khởi tạo) — ép DIRECT_URL
+// (session pooler) TRƯỚC rồi mới dynamic-import, y hệt _zztest-chat-us04.ts: transaction
+// pooler 6543 chạy lặp sẽ lỗi prepared-statement/42P05. (Static import bị hoist chạy
+// trước dòng gán env → bắt buộc import() động.)
+if (process.env.DIRECT_URL) process.env.DATABASE_URL = process.env.DIRECT_URL;
+const dbScopeModule = import("../lib/db-scope");
 
 // Script chạy ngoài Next: đi session pooler (DIRECT_URL) nếu có — tránh lỗi pgbouncer
 // "prepared statement does not exist" của transaction pooler khi chạy nhiều query.
@@ -83,7 +97,8 @@ async function cleanup(): Promise<number> {
   }
   await db.user.deleteMany({ where: { email: { startsWith: `${SLUG}-` } } });
   await db.course.deleteMany({ where: { slug: `${SLUG}-course` } });
-  await db.center.deleteMany({ where: { slug: `${SLUG}-center` } });
+  // startsWith: dọn cả `-center` lẫn `-center-b` (cơ sở thứ 2 của case VÁ1).
+  await db.center.deleteMany({ where: { slug: { startsWith: `${SLUG}-center` } } });
   return convIds.length;
 }
 
@@ -139,8 +154,13 @@ async function seed() {
   return { center, course, gv1, ph1, ph3, ql1, lopA, lopB, c1, c2, c3 };
 }
 
+// timeout 30s (giống mọi điểm gọi thật) — mặc định 5s của Prisma quá sát: script chạy
+// xuyên Internet tới Supabase, mỗi query mất hàng trăm ms nên sync ~10 query là chạm trần
+// ⇒ P2028 "Transaction already closed" ngẫu nhiên, trông hệt lỗi code.
+const TX_OPTS = { timeout: 30_000, maxWait: 10_000 } as const;
+
 const sync = (classId: string) =>
-  db.$transaction(async (tx) => syncConversationMembership(tx as Tx, classId));
+  db.$transaction(async (tx) => syncConversationMembership(tx as Tx, classId), TX_OPTS);
 
 async function convOf(classId: string) {
   return db.conversation.findUnique({
@@ -241,7 +261,7 @@ async function main() {
         await syncConversationMembership(tx, s.lopB.id);
         await syncConversationMembership(tx, s.lopA.id);
         throw new Error("SIMULATED_FAILURE"); // bước sau cùng fail
-      });
+      }, TX_OPTS);
     } catch (e) {
       rolledBack = e instanceof Error && e.message === "SIMULATED_FAILURE";
       if (!rolledBack) throw e;
@@ -279,7 +299,7 @@ async function main() {
       });
       await syncConversationMembership(tx, s.lopB.id);
       await syncConversationMembership(tx, s.lopA.id);
-    });
+    }, TX_OPTS);
     {
       const convA = await convOf(s.lopA.id);
       const convB = await convOf(s.lopB.id);
@@ -307,7 +327,7 @@ async function main() {
           data: { status: "WITHDREW", endedAt: new Date() },
         });
         await syncConversationMembership(tx, s.lopA.id);
-      });
+      }, TX_OPTS);
 
     await withdraw(s.c1.id);
     const after1 = await convOf(s.lopA.id);
@@ -341,7 +361,7 @@ async function main() {
         data: { status: "STUDYING", endedAt: null },
       });
       await syncConversationMembership(tx, s.lopA.id);
-    });
+    }, TX_OPTS);
     const after3 = await convOf(s.lopA.id);
     const ph1Rows3 = (after3?.participants ?? []).filter((p) => p.userId === s.ph1.id);
     report(
@@ -352,6 +372,115 @@ async function main() {
         ph1Rows3[0]!.joinedAt.getTime() === oldRow.joinedAt.getTime(),
       `rows=${ph1Rows3.length}, sameId=${ph1Rows3[0]?.id === oldRow.id}, ` +
         `joinedAt ${ph1Rows3[0]?.joinedAt.toISOString()} == ${oldRow.joinedAt.toISOString()}`,
+    );
+
+    // ── VÁ1: BẪY scopedDb — dẫn xuất thành viên là thao tác MỨC HỆ THỐNG ──
+    // Kịch bản có thật: HV chuyển cơ sở (màn /chuyen-lop + StudentCenterHistory) nên
+    // `Student.centerId` = CS2, nhưng em vẫn học nốt lớp ở CS1. QLCS CS1 sửa lớp →
+    // action mở tx bằng `scopedDb(actor)` rồi truyền tx đó xuống service.
+    const { scopedDb } = await dbScopeModule;
+    const centerB = await db.center.create({
+      data: { name: `${P}CenterB`, slug: `${SLUG}-center-b`, address: "ZZTEST", city: "" },
+    });
+    const ph4 = await db.user.create({
+      data: {
+        email: EMAIL("ph4"), name: `${P}PH Bốn`, role: "PARENT",
+        roles: ["PARENT"], centerId: s.center.id,
+      },
+    });
+    const c4 = await db.student.create({
+      data: { name: `${P}Con 4 (ph4)`, parentUserId: ph4.id, centerId: s.center.id },
+    });
+    await db.enrollment.create({
+      data: {
+        studentId: c4.id, classId: s.lopA.id, courseId: s.course.id,
+        centerId: s.center.id, status: "STUDYING",
+      },
+    });
+    await sync(s.lopA.id); // sync trần (không scope) → ph4 vào nhóm bình thường
+    const ph4Joined = (await convOf(s.lopA.id))?.participants.find(
+      (p) => p.userId === ph4.id,
+    );
+
+    // HV chuyển sang CS2 nhưng KHÔNG rời lớp ở CS1.
+    await db.student.update({ where: { id: c4.id }, data: { centerId: centerB.id } });
+
+    // Actor cấp cơ sở chỉ thấy CS1. permissions rỗng ⇒ mọi SCOPED_MODEL rơi về
+    // `visibleCenterIds` (nhánh !hasAnyPermissionForModel của getModelVisibleCenterIds).
+    const actorCs1: Actor = {
+      userId: s.ql1.id,
+      isSuperAdmin: false,
+      isHoLevel: false,
+      orgRoles: [],
+      permissions: [],
+      visibleCenterIds: [s.center.id],
+      visibleOrgUnitIds: [],
+      grantsAllow: new Set<string>(),
+      assignedClassIds: new Set<string>(),
+    };
+    await scopedDb(actorCs1).$transaction(
+      async (txRaw) => {
+        await syncConversationMembership(txRaw as unknown as Tx, s.lopA.id);
+      },
+      TX_OPTS,
+    );
+    const afterScoped = await convOf(s.lopA.id);
+    const ph4Row = afterScoped?.participants.find((p) => p.userId === ph4.id);
+    const kickMsg = (afterScoped?.messages ?? []).filter(
+      (m) => m.kind === "SYSTEM" && m.body.includes(`${P}PH Bốn`) && m.body.includes("rời nhóm"),
+    );
+    report(
+      "VÁ1.a HV chuyển cơ sở + sync qua scopedDb(CS1) → PH VẪN trong nhóm",
+      ph4Joined?.leftAt === null && ph4Row?.leftAt === null && kickMsg.length === 0,
+      `ph4 leftAt=${
+        ph4Row?.leftAt ? "SET (BUG: scopedDb lọc mất HV ⇒ đá PH oan)" : "null (đúng)"
+      }, SYSTEM "rời nhóm" sai=${kickMsg.length}`,
+    );
+
+    // VÁ1.b — cùng bẫy nhưng phía `Class`, tách BIỆT khỏi VÁ1.a bằng cặp ph5/c5 riêng
+    // (nếu dùng lại ph4 thì leftAt do bug VÁ1.a để lại sẽ làm case này "xanh giả").
+    // c5 đặt ở CS2 để chính actor CS2 THẤY được học viên ⇒ nếu sync không chạy thì chỉ
+    // có thể vì `tx.class.findUnique` bị lọc hậu kỳ trả null (lớp ở CS1) → return sớm.
+    const ph5 = await db.user.create({
+      data: {
+        email: EMAIL("ph5"), name: `${P}PH Năm`, role: "PARENT",
+        roles: ["PARENT"], centerId: centerB.id,
+      },
+    });
+    const c5 = await db.student.create({
+      data: { name: `${P}Con 5 (ph5)`, parentUserId: ph5.id, centerId: centerB.id },
+    });
+    await db.enrollment.create({
+      data: {
+        studentId: c5.id, classId: s.lopA.id, courseId: s.course.id,
+        centerId: s.center.id, status: "STUDYING",
+      },
+    });
+    await sync(s.lopA.id); // sync trần → ph5 vào nhóm
+    const ph5Joined = (await convOf(s.lopA.id))?.participants.find(
+      (p) => p.userId === ph5.id,
+    );
+    await db.enrollment.updateMany({
+      where: { studentId: c5.id, classId: s.lopA.id },
+      data: { status: "WITHDREW", endedAt: new Date() },
+    });
+    const actorCs2: Actor = { ...actorCs1, visibleCenterIds: [centerB.id] };
+    await scopedDb(actorCs2).$transaction(
+      async (txRaw) => {
+        await syncConversationMembership(txRaw as unknown as Tx, s.lopA.id);
+      },
+      TX_OPTS,
+    );
+    const afterOutOfScope = await convOf(s.lopA.id);
+    const ph5Row = afterOutOfScope?.participants.find((p) => p.userId === ph5.id);
+    report(
+      "VÁ1.b lớp NGOÀI tầm nhìn actor → sync vẫn chạy (không im lặng no-op)",
+      ph5Joined?.leftAt === null && ph5Row?.leftAt != null,
+      `ph5 vào nhóm trước=${ph5Joined?.leftAt === null}, sau khi rút ghi danh leftAt=${
+        ph5Row?.leftAt
+          ? "set (đúng — sync đã chạy)"
+          : "null (BUG: class.findUnique bị scope lọc → no-op)"
+      }`,
     );
   } finally {
     const n = await cleanup();

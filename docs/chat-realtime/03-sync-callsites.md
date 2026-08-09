@@ -42,7 +42,7 @@
 | `app/(admin)/admin/classes/_actions.ts` — `createClass` (sync trong tx tạo lớp, sau `logClassAudit`) | Tạo lớp thẳng ở trạng thái ACTIVE (không qua duyệt) | ✅ cùng tx |
 | `app/(admin)/admin/classes/_actions.ts` — `approveClass` (bọc `$transaction` mới quanh `class.update` → ACTIVE) | Duyệt lớp PENDING_APPROVAL → ACTIVE (điểm sinh nhóm chính — BR-01) | ✅ cùng tx |
 | `app/(admin)/admin/classes/_actions.ts` — `updateClass` (sync trong tx update) | Sửa lớp đổi status → ACTIVE (form edit cho phép) | ✅ cùng tx |
-| `app/api/admin/import/classes/route.ts` — vòng upsert/create trong `$transaction` | Import Excel tạo/sửa lớp với status tuỳ file (kể cả ACTIVE) | ✅ cùng tx |
+| `app/api/admin/import/classes/route.ts` — gom `classId` trong vòng upsert/create, sync 1 lần/lớp DUY NHẤT sau vòng lặp, vẫn trong `$transaction` | Import Excel tạo/sửa lớp với status tuỳ file (kể cả ACTIVE) | ✅ cùng tx |
 | `submitClassForApproval` / `rejectClass` (cùng file classes/_actions.ts) | PLANNED↔RECRUITING↔PENDING_APPROVAL — chưa từng ACTIVE → chưa có nhóm | — không cần |
 
 ## 2) Đổi phân công GV (`Class.teacherId` / `assistantId`)
@@ -129,4 +129,17 @@
   xuất → đã wire luôn: `createParentAccount` (link + siblings, cùng tx),
   `addChildToParent`, `unlinkChildFromParent` (bọc tx mới) — đều sync các lớp con đang học.
   `app/(admin)/admin/students/tai-khoan/_actions.ts` chỉ gửi ZNS/OTP, không đổi link → không cần.
+
+## 8) Gộp trùng phụ huynh (đổi `Student.parentUserId` hàng loạt)
+
+| Điểm gọi | Sự kiện | Wire |
+|---|---|---|
+| `app/(admin)/admin/convert-conflicts/actions.ts` — `mergeConflictIntoA` (đọc distinct classId TRƯỚC `student.updateMany`, sync SAU khi đổi chủ, cùng tx) | Gộp hồ sơ PH B → PH A khi convert lead trùng email/phone | ✅ cùng tx |
+| `dismissConflict` (cùng file) | Chỉ đánh dấu đã xử lý tay, không đụng `parentUserId` | — không cần |
+
+> Bổ sung 09/08 sau audit runtime-only (điểm gọi bị SÓT ở Đợt 0): không sync thì PH B —
+> đã hết con trong lớp — **vẫn đọc được nhóm lớp** (rò rỉ), còn PH A không bao giờ vào nhóm.
+> Truy vấn lấy lớp bị ảnh hưởng đi bằng `$queryRaw`: `student.updateMany` KHÔNG bị scopedDb
+> chặn (scopedDb chỉ auto-scope READ) nên nó chuyển cả con ở cơ sở ngoài tầm nhìn actor —
+> đọc scoped sẽ bỏ sót đúng những lớp đó.
 - **Học viên xoá mềm** đi qua `deleteStudent` → `removeStudentFromClasses` (đã wire mục 5).

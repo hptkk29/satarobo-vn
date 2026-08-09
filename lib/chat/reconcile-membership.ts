@@ -21,6 +21,12 @@
 //  • Mỗi lớp 1 transaction riêng — lớp lỗi không phá lớp khác (log ERROR, đi tiếp);
 //    xử lý tuần tự theo cơ sở để không vượt timeout (cron.md: chia batch theo cơ sở).
 //
+// ✅ BẪY scopedDb (xem lib/chat/sync-membership.ts, mục "PHẦN DB"): job này đọc/ghi qua
+// `db` TRẦN + `db.$transaction` — KHÔNG qua `scopedDb(actor)` — nên không có extension
+// cách ly cơ sở nào áp lên `db.class.findMany`/`loadDerivedMembership` ở đây. Đó là đúng
+// ý: đối soát là thao tác mức hệ thống, phải thấy MỌI lớp/học viên. Đừng đổi sang
+// scopedDb "cho an toàn" — sẽ làm job bỏ sót đúng phần dữ liệu nó sinh ra để canh.
+//
 // ⚠️ Luật Nền Hệ thống "cron KHÔNG ghi thay đổi quyền": job này chỉ set `leftAt` trên
 // ConversationParticipant — đó là DỮ LIỆU MEMBERSHIP DẪN XUẤT của nhóm chat, không
 // phải quyền RBAC (RoleDef/UserOrgRole/UserPermissionGrant không bị đụng) → hợp lệ.

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { mintRealtimeToken, RealtimeTokenError } from "@/lib/chat/realtime-token";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,28 @@ export async function GET() {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  }
+
+  // Mint JWT = ký chữ ký + 1 query DB kiểm tokenVersion ⇒ phải có trần. Đặt SAU auth()
+  // để khoá theo userId (không phải IP: nhiều PH sau chung NAT). Token sống 15' nên
+  // client lành mạnh gọi vài lần/giờ; 30/phút rộng cho nhiều tab + reconnect realtime.
+  // fail-soft (Upstash → memory) như các route khác.
+  const rl = await rateLimit({
+    key: `chat:realtime-token:${session.user.id}`,
+    max: 30,
+    windowMs: 60_000,
+  });
+  if (!rl.success) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "RATE_LIMITED",
+          message: "Thao tác quá nhanh — thử lại sau ít giây",
+        },
+      },
+      { status: 429 },
+    );
   }
 
   try {

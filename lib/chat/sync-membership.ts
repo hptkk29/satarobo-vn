@@ -94,6 +94,28 @@ export function computeDerivedMembership(
 }
 
 // ─── PHẦN DB (chạy TRONG transaction của caller) ────────────────────────────
+//
+// ⚠️⚠️ BẪY scopedDb — ĐỌC TRƯỚC KHI ĐỔI BẤT KỲ TRUY VẤN NÀO DƯỚI ĐÂY ⚠️⚠️
+// Gần như MỌI điểm gọi mở transaction bằng `scopedDb(actor).$transaction(...)` rồi
+// truyền chính `tx` đó xuống service này ⇒ extension cách ly cơ sở của scopedDb VẪN
+// áp lên mọi READ chạm model ∈ SCOPED_MODELS (lib/db-scope.ts) đi qua `tx`.
+// Nhưng việc DẪN XUẤT THÀNH VIÊN là thao tác MỨC HỆ THỐNG (đúng như job đối soát đêm
+// US-04): nó phải thấy trạng thái THẬT của lớp, bất kể AI kích hoạt. Đọc qua scope thì:
+//   • `Student` (SCOPED): học viên đã chuyển cơ sở (`Student.centerId` = CS2) nhưng vẫn
+//     còn học lớp ở CS1 sẽ bị LỌC MẤT khỏi kết quả ⇒ service hiểu nhầm "em này không
+//     còn thuộc lớp" ⇒ set `leftAt` cho PH của em + ghi SYSTEM message "đã rời nhóm"
+//     SAI, chỉ vì người bấm nút là QLCS cơ sở kia.
+//   • `Class` (SCOPED): `findUnique` bị lọc HẬU KỲ trả `null` khi lớp ngoài tầm nhìn
+//     actor — và cả khi `Class.centerId` NULL (passesScope chặn) ⇒ sync IM LẶNG no-op.
+// ⇒ LUẬT: mọi truy vấn chạm SCOPED_MODELS trong file này đi bằng `tx.$queryRaw`
+// (tagged template — Prisma client extension KHÔNG áp lên raw query; TUYỆT ĐỐI không
+// dùng `$queryRawUnsafe`, CLAUDE.md cấm). Vẫn dùng `tx` của caller nên tính atomic
+// giữ nguyên. Raw cũng bỏ qua extension soft-delete của base `db` → phải TỰ viết
+// `"deletedAt" IS NULL` cho model soft-delete (Enrollment).
+// Model KHÔNG scoped thì dùng Prisma API bình thường, an toàn: `User`/`OrgUnit` ∈
+// SCOPE_EXEMPT, `Conversation` ∈ SCOPE_EXEMPT, `UserOrgRole`/`ConversationParticipant`/
+// `Message` không nằm trong SCOPED_MODELS.
+// Schema KHÔNG dùng `@@map`/`@map` ⇒ tên bảng/cột trong SQL = tên model/field PascalCase.
 
 type Tx = Prisma.TransactionClient;
 
@@ -112,6 +134,9 @@ async function resolveCenterManagerUserIds(
 ): Promise<string[]> {
   if (!centerId) return [];
   const ids = new Set<string>();
+
+  // An toàn với BẪY scopedDb: `OrgUnit` + `User` ∈ SCOPE_EXEMPT và `UserOrgRole` không
+  // nằm trong SCOPED_MODELS ⇒ 3 truy vấn dưới đây KHÔNG bị extension lọc → giữ Prisma API.
 
   // v2 — UserOrgRole @ OrgUnit (type CENTER) trỏ Center này.
   const orgUnit = await tx.orgUnit.findFirst({
@@ -168,6 +193,17 @@ export type ClassForMembership = {
   assistantId: string | null;
 };
 
+/**
+ * Dòng `Class` đọc bằng raw (BẪY scopedDb). `status` lấy `::text` — so sánh chuỗi với
+ * ClassStatus, khỏi phụ thuộc cách driver giải mã enum.
+ */
+type ClassRowRaw = ClassForMembership & {
+  name: string;
+  status: string;
+  deletedAt: Date | null;
+  orgUnitId: string | null;
+};
+
 export type LoadedMembership = {
   /** Tập thành viên MONG MUỐN (đã lọc user còn sống trong DB). */
   desired: DesiredParticipant[];
@@ -187,20 +223,22 @@ export async function loadDerivedMembership(
   tx: Tx,
   cls: ClassForMembership,
 ): Promise<LoadedMembership> {
-  const students = await tx.student.findMany({
-    where: {
-      deletedAt: null,
-      parentUserId: { not: null },
-      enrollments: {
-        some: {
-          classId: cls.id,
-          deletedAt: null,
-          status: { in: CHAT_MEMBER_ENROLLMENT_STATUSES },
-        },
-      },
-    },
-    select: { id: true, parentUserId: true },
-  });
+  // ⚠️ RAW CÓ CHỦ ĐÍCH — đừng đổi về `tx.student.findMany` (xem "BẪY scopedDb" đầu mục):
+  // `Student` VÀ `Enrollment` đều ∈ SCOPED_MODELS, nên qua tx của scopedDb(actor cấp cơ
+  // sở) học viên đã chuyển cơ sở mà còn học lớp này sẽ biến mất ⇒ PH của em bị đá khỏi
+  // nhóm oan. Điều kiện dưới đây = bản dịch 1-1 của where cũ (HV sống + có PH + có ghi
+  // danh SỐNG ở lớp này với status thuộc bộ "đang thuộc lớp"); `e."deletedAt" IS NULL`
+  // phải viết tay vì raw không qua extension soft-delete của base `db`.
+  const students = await tx.$queryRaw<{ id: string; parentUserId: string }[]>`
+    SELECT DISTINCT s."id", s."parentUserId"
+    FROM "Student" s
+    JOIN "Enrollment" e ON e."studentId" = s."id"
+    WHERE s."deletedAt" IS NULL
+      AND s."parentUserId" IS NOT NULL
+      AND e."classId" = ${cls.id}
+      AND e."deletedAt" IS NULL
+      AND e."status" = ANY(${CHAT_MEMBER_ENROLLMENT_STATUSES}::"EnrollmentStatus"[])
+  `;
   const centerManagerIds = await resolveCenterManagerUserIds(tx, cls.centerId);
 
   const desiredRaw = computeDerivedMembership({
@@ -213,6 +251,7 @@ export async function loadDerivedMembership(
   });
 
   // Chỉ nhận user còn sống trong DB (userId trên participant không có FK — BA cố ý).
+  // `User` ∈ SCOPE_EXEMPT → Prisma API an toàn (không bị scopedDb lọc).
   const users = await tx.user.findMany({
     where: { id: { in: desiredRaw.map((d) => d.userId) }, deletedAt: null },
     select: { id: true, name: true, email: true, phone: true },
@@ -239,19 +278,18 @@ export async function syncConversationMembership(
   tx: Tx,
   classId: string,
 ): Promise<void> {
-  const cls = await tx.class.findUnique({
-    where: { id: classId },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      deletedAt: true,
-      centerId: true,
-      orgUnitId: true,
-      teacherId: true,
-      assistantId: true,
-    },
-  });
+  // ⚠️ RAW CÓ CHỦ ĐÍCH (xem "BẪY scopedDb" đầu mục): `Class` ∈ SCOPED_MODELS và
+  // `findUnique` của scopedDb lọc HẬU KỲ → trả null cho lớp ngoài tầm nhìn actor, và cả
+  // cho lớp `centerId` NULL ⇒ sync im lặng no-op (bug ẩn: không lỗi, không log, chỉ là
+  // nhóm chat không bao giờ cập nhật). Dẫn xuất thành viên là thao tác mức hệ thống.
+  const clsRows = await tx.$queryRaw<ClassRowRaw[]>`
+    SELECT "id", "name", "status"::text AS "status", "deletedAt",
+           "centerId", "orgUnitId", "teacherId", "assistantId"
+    FROM "Class"
+    WHERE "id" = ${classId}
+    LIMIT 1
+  `;
+  const cls = clsRows[0];
   if (!cls) return; // lớp không tồn tại → không có gì để sync
 
   const convKey = {
@@ -259,6 +297,8 @@ export async function syncConversationMembership(
     subjectType: "CLASS" as const,
     subjectId: classId,
   };
+  // `Conversation` ∈ SCOPE_EXEMPT (quyền chat là participant-based, xem db-scope.ts)
+  // → findUnique KHÔNG bị lọc scope. Prisma API an toàn ở đây.
   let conv = await tx.conversation.findUnique({
     where: { type_subjectType_subjectId: convKey },
     select: { id: true, status: true },
@@ -277,7 +317,8 @@ export async function syncConversationMembership(
   if (!conv) {
     if (cls.status !== "ACTIVE") return; // BR-01: nhóm chỉ sinh khi lớp hoạt động
     // Ghi kép centerId + orgUnitId (luật Nền Hệ thống #3). Lớp cũ chưa backfill
-    // orgUnitId → suy từ OrgUnit(type CENTER) trỏ centerId.
+    // orgUnitId → suy từ OrgUnit(type CENTER) trỏ centerId. `OrgUnit` ∈ SCOPE_EXEMPT
+    // → Prisma API an toàn (không dính BẪY scopedDb).
     const orgUnitId =
       cls.orgUnitId ??
       (cls.centerId
@@ -313,6 +354,7 @@ export async function syncConversationMembership(
   const { desired, userById } = await loadDerivedMembership(tx, cls);
   const desiredById = new Map(desired.map((d) => [d.userId, d]));
 
+  // `ConversationParticipant` không ∈ SCOPED_MODELS → Prisma API an toàn.
   const existing = await tx.conversationParticipant.findMany({
     where: { conversationId: conv.id },
     select: {
@@ -416,6 +458,7 @@ export async function syncConversationMembership(
  * Lớp kết thúc/hủy/xoá mềm → nhóm lớp chuyển ARCHIVED (BR-03: đọc được, không gửi
  * được, KHÔNG xoá; participant giữ nguyên để đọc lịch sử theo BR-04). Idempotent.
  * Nhóm đang LOCKED cũng archive — vòng đời lớp đã đóng thì trạng thái cuối là ARCHIVED.
+ * (`Conversation` ∈ SCOPE_EXEMPT → không dính BẪY scopedDb, giữ Prisma API.)
  */
 export async function archiveClassConversation(
   tx: Tx,
@@ -448,10 +491,15 @@ export async function syncCenterClassConversations(
   centerId: string | null | undefined,
 ): Promise<void> {
   if (!centerId) return;
-  const classes = await tx.class.findMany({
-    where: { centerId, deletedAt: null, status: "ACTIVE" },
-    select: { id: true },
-  });
+  // ⚠️ RAW CÓ CHỦ ĐÍCH (xem "BẪY scopedDb" đầu mục): `Class` ∈ SCOPED_MODELS. Qua tx của
+  // scopedDb, actor cấp cơ sở đổi vai QLCS cho cơ sở KHÁC sẽ nhận [] ⇒ không nhóm nào
+  // được đồng bộ mà cũng không có lỗi nào nổi lên.
+  const classes = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "Class"
+    WHERE "centerId" = ${centerId}
+      AND "deletedAt" IS NULL
+      AND "status" = 'ACTIVE'::"ClassStatus"
+  `;
   for (const c of classes) {
     await syncConversationMembership(tx, c.id);
   }
