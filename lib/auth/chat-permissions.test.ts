@@ -257,6 +257,32 @@ describe("US-05 v2 — QLCS (CENTER_MANAGER, scope CENTER — MEMBER nhóm lớp
     expect(canV2(qlLop1(), "chat:moderate", LOPA)).toBe(false);
     expect(canV2(qlLop1(), "chat:admin")).toBe(false);
   });
+
+  /**
+   * Chốt 09/08/2026 — "Giáo vụ được đối xử Y HỆT Quản lý cơ sở trong chat".
+   * Ô-đối-ô, không chỉ "gần giống": 3 ô read/send/announce PHẢI trùng câu trả lời của
+   * QLCS trên MỌI target, và 2 ô moderate/admin vẫn đóng cho cả hai.
+   *
+   * Nửa còn lại của chốt nằm ở tầng membership (Giáo vụ phải LÀ participant) —
+   * `lib/chat/sync-membership.ts` + `lib/chat/sync-membership.test.ts`; quyền ở đây mà
+   * không có membership thì vẫn là quyền chết (đúng tình trạng trước 09/08).
+   */
+  it("[chốt 09/08] Giáo vụ ≡ QLCS trên cả 5 ô × mọi target (read/send/announce ✅, moderate/admin ❌)", () => {
+    for (const a of CHAT_ACTIONS) {
+      for (const target of [LOPA, LOPB, DM, undefined]) {
+        expect(
+          canV2(qlLop1(), a, target),
+          `ô ${a} × ${JSON.stringify(target)}: Giáo vụ phải trả lời GIỐNG QLCS`,
+        ).toBe(canV2(ql1(), a, target));
+      }
+    }
+    // Neo giá trị tuyệt đối (phòng trường hợp CẢ HAI cùng sai theo một hướng).
+    expect(canV2(qlLop1(), "chat:read", LOPA)).toBe(true);
+    expect(canV2(qlLop1(), "chat:send", LOPA)).toBe(true);
+    expect(canV2(qlLop1(), "chat:announce", LOPA)).toBe(true);
+    expect(canV2(qlLop1(), "chat:moderate", LOPA)).toBe(false);
+    expect(canV2(qlLop1(), "chat:admin", LOPA)).toBe(false);
+  });
 });
 
 describe("US-05 v2 — Sale (CENTER_SALES_CSM): P0 deny TOÀN BỘ [TS-01.6]", () => {

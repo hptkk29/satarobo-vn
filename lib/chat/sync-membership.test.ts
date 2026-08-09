@@ -2,9 +2,11 @@
 // computeDerivedMembership — bẫy BA mục 5 + BR-11/BR-14.
 import { describe, expect, it } from "vitest";
 import {
+  CHAT_CENTER_MANAGER_ROLE_CODES,
   computeDerivedMembership,
   type ClassMembershipSnapshot,
 } from "./sync-membership";
+import { ROLE_SEED } from "../../prisma/seed-roles";
 
 function snap(partial: Partial<ClassMembershipSnapshot>): ClassMembershipSnapshot {
   return { teacherIds: [], students: [], centerManagerIds: [], ...partial };
@@ -121,6 +123,23 @@ describe("computeDerivedMembership (US-03)", () => {
     expect(out[0]!.role).toBe("MEMBER");
   });
 
+  it("[chốt 09/08] Giáo vụ trong snapshot → participant MEMBER/CENTER_MANAGER, y hệt QLCS", () => {
+    // `centerManagerIds` là tập HỢP NHẤT (QLCS ∪ Giáo vụ) do resolveCenterManagerUserIds
+    // dựng — Giáo vụ dùng CHUNG nhãn CENTER_MANAGER vì `DerivedFrom` là enum DB
+    // (thêm giá trị = phải migration) và hai vai có cùng tư cách trong nhóm.
+    const out = computeDerivedMembership(
+      snap({ teacherIds: ["gv1"], centerManagerIds: ["ql1", "giaovu1"] }),
+    );
+    const m = byUser(out);
+    expect(m.get("giaovu1")).toEqual({
+      userId: "giaovu1",
+      role: "MEMBER",
+      derivedFrom: "CENTER_MANAGER",
+    });
+    expect(m.get("giaovu1")).toEqual({ ...m.get("ql1")!, userId: "giaovu1" });
+    expect(out).toHaveLength(3);
+  });
+
   it("hàm thuần + xác định: cùng input gọi 2 lần → cùng output (nền cho AC6)", () => {
     const input = snap({
       teacherIds: ["gv1"],
@@ -134,5 +153,48 @@ describe("computeDerivedMembership (US-03)", () => {
     const b = computeDerivedMembership(input);
     expect(a).toEqual(b);
     expect(a).toHaveLength(4); // gv1, ph1 (1 entry cho 2 con), ph2, ql1
+  });
+});
+
+/**
+ * NGUỒN "quản lý cơ sở" ở nhánh v2 của `resolveCenterManagerUserIds`.
+ *
+ * Phần DB không unit-test được (cần Postgres — vế đó ở scripts/_zztest-chat-backfill.ts),
+ * nhưng DANH SÁCH RoleDef thì thuần và là chỗ dễ tụt nhất: gỡ `CENTER_CLASS_MANAGER` khỏi
+ * đây là Giáo vụ lặng lẽ biến mất khỏi mọi nhóm lớp trong lần sync kế tiếp (participant
+ * bị set leftAt + không có lỗi nào nổi lên), trong khi 3 perm chat:* của vai vẫn còn
+ * nguyên ⇒ họ mở /tin-nhan ra thấy trắng. Test này chặn đúng cú đó.
+ */
+describe("CHAT_CENTER_MANAGER_ROLE_CODES — nguồn QLCS (v2) của nhóm lớp", () => {
+  it("[chốt 09/08] gồm ĐÚNG CENTER_MANAGER + CENTER_CLASS_MANAGER (Giáo vụ)", () => {
+    expect([...CHAT_CENTER_MANAGER_ROLE_CODES].sort()).toEqual([
+      "CENTER_CLASS_MANAGER",
+      "CENTER_MANAGER",
+    ]);
+  });
+
+  it("mọi code trong danh sách phải TỒN TẠI trong ROLE_SEED (chống gõ sai → lọc rỗng im lặng)", () => {
+    // Sai chính tả không làm query nổ, chỉ trả 0 dòng — vai đó rơi khỏi nhóm không dấu vết.
+    for (const code of CHAT_CENTER_MANAGER_ROLE_CODES) {
+      expect(
+        ROLE_SEED.find((r) => r.code === code),
+        `ROLE_SEED không có RoleDef "${code}"`,
+      ).toBeDefined();
+    }
+  });
+
+  it("mọi code trong danh sách phải giữ ĐỦ bộ chat:read/send/announce (membership không kèm quyền = vô nghĩa)", () => {
+    for (const code of CHAT_CENTER_MANAGER_ROLE_CODES) {
+      const perms = ROLE_SEED.find((r) => r.code === code)!.perms;
+      const chat = perms
+        .filter((p) => p.action.startsWith("chat:"))
+        .map((p) => `${p.action}=${p.scopeType}`)
+        .sort();
+      expect(chat, `RoleDef ${code}`).toEqual([
+        "chat:announce=CENTER",
+        "chat:read=CENTER",
+        "chat:send=CENTER",
+      ]);
+    }
   });
 });

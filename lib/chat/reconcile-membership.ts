@@ -16,6 +16,8 @@
 //  • MANUAL (ngoại lệ Admin, BR-15) bị bỏ qua cả 2 chiều — job không gỡ, không đòi.
 //  • Mỗi lần chạy ghi 1 ConversationReconcileRun — "đêm sạch" = run 0/0, KHÁC
 //    "job không chạy" = không có run (AC4; thiếu 2 đêm liên tiếp là tín hiệu điều tra).
+//  • `missingConversations` (09/08/2026) — ĐẾM lớp ACTIVE chưa có nhóm, KHÔNG tạo.
+//    Xem chú thích tại chỗ tính bên dưới.
 //  • Idempotent: chạy 2 lần liên tiếp → lần 2 removeCount=0, không drift trùng
 //    (leftAt đã set là no-op).
 //  • Mỗi lớp 1 transaction riêng — lớp lỗi không phá lớp khác (log ERROR, đi tiếp);
@@ -100,6 +102,11 @@ export type ReconcileSummary = {
   classesChecked: number;
   removeCount: number;
   addCount: number;
+  /**
+   * Lớp ACTIVE CHƯA có nhóm chat — job CHỈ đếm và báo động, KHÔNG tạo (BR-01: nhóm sinh
+   * từ luồng nghiệp vụ, không từ cron; luật Nền Hệ thống "job không tự thêm người").
+   */
+  missingConversations: number;
   /** Lớp lỗi (đã log ERROR, không phá lớp khác) — không persist, chỉ trả cho caller. */
   errorCount: number;
   durationMs: number;
@@ -229,6 +236,15 @@ export async function reconcileConversationMembership(opts?: {
     : [];
   const orgUnitByCenterId = new Map(orgUnits.map((o) => [o.centerId as string, o.id]));
 
+  // ⚠️ ĐIỂM MÙ ĐÃ VÁ (09/08/2026): vòng lặp dưới đây bỏ qua lớp chưa có nhóm
+  // (`if (!conversationId) continue`) — đúng (job không tạo nhóm), nhưng hệ quả là lớp
+  // ACTIVE chưa từng có nhóm KHÔNG xuất hiện ở bất kỳ con số nào: `classesChecked` không
+  // đếm nó, drift không có dòng nào, trang đối soát báo "0 drift · đêm sạch". Đó chính là
+  // cách 24 lớp ACTIVE / 0 hội thoại sống sót đến ngày mở chat mà không ai thấy.
+  // Nay đếm thành `missingConversations` — vẫn KHÔNG tạo nhóm (việc đó của
+  // scripts/backfill-nhom-lop-chat.ts, chạy tay có dry-run), chỉ để báo động.
+  const missingConversations = classes.filter((c) => !convByClassId.has(c.id)).length;
+
   let classesChecked = 0;
   let removeCount = 0;
   let addCount = 0;
@@ -236,7 +252,7 @@ export async function reconcileConversationMembership(opts?: {
 
   for (const cls of classes) {
     const conversationId = convByClassId.get(cls.id);
-    if (!conversationId) continue; // chưa có nhóm → không có gì để đối soát
+    if (!conversationId) continue; // chưa có nhóm → không có gì để đối soát (đã đếm ở trên)
     const orgUnitId =
       cls.orgUnitId ?? (cls.centerId ? orgUnitByCenterId.get(cls.centerId) ?? null : null);
     try {
@@ -260,7 +276,7 @@ export async function reconcileConversationMembership(opts?: {
   const durationMs = Date.now() - startedAt;
   // Run record ghi MỌI lần chạy — "0 drift" = removeCount=addCount=0 (AC4).
   const run = await db.conversationReconcileRun.create({
-    data: { classesChecked, removeCount, addCount, durationMs },
+    data: { classesChecked, removeCount, addCount, missingConversations, durationMs },
     select: { id: true },
   });
   if (removeCount === 0 && addCount === 0) {
@@ -271,5 +287,20 @@ export async function reconcileConversationMembership(opts?: {
         `(chờ người xử lý) — ${classesChecked} lớp, ${durationMs}ms`,
     );
   }
-  return { runId: run.id, classesChecked, removeCount, addCount, errorCount, durationMs };
+  if (missingConversations > 0) {
+    console.warn(
+      `[chat-reconcile] ⚠️ ${missingConversations} lớp ACTIVE CHƯA có nhóm chat — job ` +
+        `KHÔNG tự tạo. Chạy: pnpm exec tsx scripts/backfill-nhom-lop-chat.ts (dry-run) ` +
+        `rồi --apply.`,
+    );
+  }
+  return {
+    runId: run.id,
+    classesChecked,
+    removeCount,
+    addCount,
+    missingConversations,
+    errorCount,
+    durationMs,
+  };
 }

@@ -456,9 +456,23 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       // US-05 chat (08/08) — cùng bộ với CENTER_MANAGER (vai QLCS thu hẹp): nhóm lớp
       // cơ sở mình, không moderate/admin. CENTER an toàn — call-site chat luôn có target.
+      // 09/08: Giáo vụ ĐƯỢC dẫn xuất thành participant nhóm lớp y như QLCS
+      // (lib/chat/sync-membership.ts → CHAT_CENTER_MANAGER_ROLE_CODES) — trước đó 3 perm
+      // này là QUYỀN CHẾT vì phạm vi đọc chat là participant-based.
       { action: "chat:read", scopeType: "CENTER" },
       { action: "chat:send", scopeType: "CENTER" },
       { action: "chat:announce", scopeType: "CENTER" },
+      // 09/08 — CHÌA KHOÁ CỬA /tin-nhan cho Giáo vụ. 3 perm chat:* ở trên KHÔNG mở nổi
+      // cửa: gate cấp trang gọi checkAnyPermission KHÔNG kèm target nên scope CENTER trả
+      // FALSE (lib/auth/can.ts:18) — đó chính là lý do PAGE_GATES["/tin-nhan"] gác bằng
+      // [students:view-own-class | classes:view-own], hai action GLOBAL.
+      // Vì sao `classes:view-own` chứ KHÔNG phải `students:view-own-class`: action kia
+      // cũng là gate của /hoc-ba, mà BGĐ 10/07 chốt Giáo vụ KHÔNG xem học bạ — mượn nó
+      // là mở nhầm cửa thứ hai. `classes:view-own` chỉ làm gate ở /tin-nhan; các
+      // call-site còn lại (/classes, /classes/[id], /lich) vai này đã vào được sẵn bằng
+      // `classes:view-all` nên KHÔNG nới thêm quyền nào. GLOBAL là bắt buộc —
+      // page-gates.test.ts khoá "action làm gate phải GLOBAL ở mọi RoleDef giữ nó".
+      { action: "classes:view-own", scopeType: "GLOBAL" },
     ],
   },
   {

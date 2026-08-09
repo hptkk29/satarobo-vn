@@ -48,9 +48,14 @@ export const PAGE_GATES = {
    *  cửa vào màn hình. Bất biến "action trong PAGE_GATES phải GLOBAL ở mọi RoleDef giữ
    *  nó" được `page-gates.test.ts` khoá lại.
    *
-   *  Giáo vụ (`CENTER_CLASS_MANAGER`) cũng ra khỏi cửa này: `lib/chat/sync-membership.ts`
-   *  chỉ dẫn xuất participant cho RoleDef `CENTER_MANAGER`, nên vai đó chưa bao giờ là
-   *  thành viên hội thoại nào — vào cũng chỉ thấy danh sách rỗng, y như Sale. */
+   *  ⚠️ 09/08/2026 — ĐẢO phần Giáo vụ. Bản trước ghi "Giáo vụ (`CENTER_CLASS_MANAGER`)
+   *  cũng ra khỏi cửa này vì sync chỉ dẫn xuất participant cho `CENTER_MANAGER`". Chủ dự
+   *  án chốt Giáo vụ được đối xử Y HỆT Quản lý cơ sở trong chat, nên
+   *  `lib/chat/sync-membership.ts` (CHAT_CENTER_MANAGER_ROLE_CODES) nay dẫn xuất cả vai
+   *  này → họ LÀ thành viên nhóm lớp cơ sở mình. Gate không đổi; Giáo vụ vào bằng
+   *  `classes:view-own` GLOBAL vừa thêm ở `prisma/seed-roles.ts` (KHÔNG mượn
+   *  `students:view-own-class` — action đó kéo theo /hoc-ba mà BGĐ 10/07 đã cấm Giáo vụ).
+   *  Sale vẫn ❌: vai đó không giữ action nào trong danh sách này. */
   "/tin-nhan": ["students:view-own-class", "classes:view-own"],
 
   /** Cảnh báo rủi ro HV. GV KHÔNG vào: trang không có lọc theo lớp, cho GV vào là

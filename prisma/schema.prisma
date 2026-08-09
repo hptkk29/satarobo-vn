@@ -6046,4 +6046,9 @@ model ConversationReconcileRun {
   removeCount    Int
   addCount       Int
   durationMs     Int
+  /// Lớp ACTIVE CHƯA có nhóm chat tại thời điểm chạy — job KHÔNG tự tạo (luật "job không
+  /// tự thêm người/nhóm"), chỉ báo động. >0 = có lớp lọt lưới BR-01 (vd lớp đã ACTIVE từ
+  /// trước khi module chat ra đời) ⇒ chạy scripts/backfill-nhom-lop-chat.ts.
+  /// Default 0 để dòng cũ (trước 09/08/2026) đọc được, KHÔNG phải "0 lớp thiếu" đã đo.
+  missingConversations Int @default(0)
 }

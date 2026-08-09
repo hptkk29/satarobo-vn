@@ -164,6 +164,25 @@ describe("/tin-nhan — Sale bị chặn, QLCS/GV/Admin vẫn vào được", ()
     }
   });
 
+  /**
+   * Chốt 09/08/2026 — Giáo vụ vào nhóm lớp như QLCS ⇒ phải mở được CỬA màn chat.
+   * CHỈ kiểm v2: `CENTER_CLASS_MANAGER` là RoleDef gán tay, enum `Role` (v1) không có nó
+   * (lib/auth/legacy-role-map.ts) — nên không có vế v1 để so.
+   * Đi kèm: vai này KHÔNG được lọt vào /hoc-ba (BGĐ 10/07 chốt Giáo vụ không xem học bạ)
+   * — đó là lý do gate mượn `classes:view-own` chứ không mượn `students:view-own-class`.
+   */
+  it("[chốt 09/08] Giáo vụ (CENTER_CLASS_MANAGER) vào được /tin-nhan — nhưng KHÔNG lọt /hoc-ba", () => {
+    expect(vaoDuocV2("CENTER_CLASS_MANAGER"), "v2: Giáo vụ phải vào được /tin-nhan").toBe(
+      true,
+    );
+    const hocBa = PAGE_GATES["/hoc-ba"] as readonly string[];
+    const giaoVu = ROLE_SEED.find((r) => r.code === "CENTER_CLASS_MANAGER")!;
+    expect(
+      giaoVu.perms.filter((p) => hocBa.includes(p.action)).map((p) => p.action),
+      "Giáo vụ không được giữ action nào của gate /hoc-ba",
+    ).toEqual([]);
+  });
+
   it("vai ngoài ma trận chat (HR/Kế toán/Marketing/Đào tạo/PH) KHÔNG vào được", () => {
     for (const role of ["HR", "ACCOUNTANT", "MARKETING", "TRAINING", "PARENT"] as Role[]) {
       expect(vaoDuocV1(role), `v1: ${role} không được vào /tin-nhan`).toBe(false);
