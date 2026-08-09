@@ -64,6 +64,16 @@ Repo **không dùng Supabase Auth**: Auth.js v5 (Credentials, session JWT-JWE, s
 10. Test: unit đặt cạnh source (vitest); bộ ma trận quyền US-05 đặt `tests/chat/` chạy bằng vitest node + `runAction` với actor seed (không cần HTTP); e2e Playwright thêm sau theo pattern `tests/e2e/a0/`. ⚠️ Postgres local trong sandbox máy này hay hỏng — nghiệm thu DB-touching bằng script ZZTEST trên DB dev (xoá sau khi xong) theo quy ước sẵn có; CI mới là nơi chạy đủ.
 11. **Đặt tên tránh đụng**: repo đã có `ConversationMessage` (hệ cũ), `ConversationSide`, `MessengerConversation/Message`. Model mới đúng tên bàn giao: `Conversation`, `ConversationParticipant`, `Message`, `MessageAttachment`, `AnnouncementRead` — đều chưa tồn tại, an toàn.
 
+## E-bis. Luật rút ra từ nghiệm thu từ xa 09/08 (5 bug lọt mọi cổng test)
+
+Cả 5 đều XANH ở `typecheck` + `lint` + `build` + 1644 unit test, chỉ lộ khi chạy thật:
+
+1. **Cấm `export type { X }` (và mọi export không phải async function) trong file `"use server"`.** Server-actions loader sinh export VALUE cho tên chỉ có ở tầng type ⇒ `ReferenceError` lúc eval module ⇒ chết TOÀN BỘ action trong module đó. Nơi cần type thì import thẳng từ file định nghĩa.
+2. **Mọi `$transaction` có gọi `syncConversationMembership` phải đặt `{ timeout: 30_000, maxWait: 10_000 }`.** Trần 5s mặc định của Prisma đứt giữa chừng khi tx gánh thêm phần sync (đã vá 22 điểm + cron).
+3. **Migration tạo bảng mới trong `public` PHẢI kèm `ENABLE ROW LEVEL SECURITY`.** `20260617000000` là thao tác một lần; bảng sinh sau ra đời RLS tắt trong khi Supabase cấp sẵn anon/authenticated đủ DML. Đo 09/08: 31 bảng hở, đã vá ở `20260809140000`.
+4. **Hàm helper SQL không đặt ở schema `public`.** PostgREST phơi hàm schema public thành RPC `/rest/v1/rpc/<tên>`, và `REVOKE ALL FROM PUBLIC` không gỡ grant mặc định của anon/authenticated. Đặt ở `private`, và đừng nhận tham số cho phép hỏi hộ người khác (đọc claim của chính người gọi).
+5. **Dẫn xuất thành viên là thao tác MỨC HỆ THỐNG — phải đọc KHÔNG qua scope.** `loadDerivedMembership` từng dùng `tx.student.findMany` trong khi `Student` ∈ `SCOPED_MODELS` và mọi call-site truyền tx của `scopedDb` ⇒ học viên ngoài tầm nhìn actor bị hiểu là "đã rời lớp" ⇒ PH bị GỠ khỏi nhóm + sinh tin SYSTEM sai. Nay đi `tx.$queryRaw` (raw không dính client extension), có chú thích tại chỗ.
+
 ## F. Trạng thái giả định của BA sau spike
 
 | Giả định | Kết quả |
