@@ -66,11 +66,14 @@ describe("[US-02] mintRealtimeToken — cầu JWT Auth.js → Supabase", () => {
     expect(deriveRealtimeSub(USER.id)).toBe(deriveRealtimeSub(USER.id));
   });
 
-  it("TTL 15 phút: exp - iat = 900s và expiresAt khớp exp", async () => {
+  // Con số này là CẬN TRÊN của cửa sổ rò LỖ 2 (người bị gỡ vẫn nghe được nội dung tin cho
+  // tới khi kênh được dựng lại — đo thật: ân hạn ≈ 0s, cửa sổ = phần đời còn lại của vé).
+  // Nâng lên là nới thẳng cửa sổ rò; xem chú thích ở `REALTIME_TOKEN_TTL_SECONDS`.
+  it("TTL 5 phút: exp - iat = 300s và expiresAt khớp exp", async () => {
     const { token, expiresAt } = await mintRealtimeToken(USER);
     const payload = decodeJwt(token);
     expect(payload.exp! - payload.iat!).toBe(REALTIME_TOKEN_TTL_SECONDS);
-    expect(REALTIME_TOKEN_TTL_SECONDS).toBe(15 * 60);
+    expect(REALTIME_TOKEN_TTL_SECONDS).toBe(5 * 60);
     expect(expiresAt.getTime()).toBe(payload.exp! * 1000);
     expect(payload.iat).toBe(Math.floor(Date.now() / 1000));
   });

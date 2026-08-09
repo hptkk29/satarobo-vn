@@ -26,21 +26,56 @@ const h = vi.hoisted(() => {
     participants: [] as Participant[],
     recipientQueries: [] as Row[],
     deleteUpdates: [] as Row[],
+    /** Câu UPDATE khoá dòng participant chạy TRƯỚC khi đọc (xem `lockAndReadRecipients`). */
+    participantLocks: [] as Row[],
+    /** Nhật ký thao tác theo thứ tự — dùng để chứng minh "khoá rồi mới đọc", "đọc trong tx". */
+    trace: [] as string[],
+    /** Đang ở trong `$transaction` hay không — bắt lỗi đọc người nhận ngoài tx. */
+    inTransaction: false,
   };
   const mockDb: Record<string, unknown> = {
     $extends: () => mockDb,
     $queryRaw: vi.fn(async () => (state.ctxRow ? [state.ctxRow] : [])),
+    $transaction: vi.fn(
+      async (fn: (tx: unknown) => Promise<unknown>, opts?: Record<string, unknown>) => {
+        state.trace.push(`tx:start(timeout=${String(opts?.timeout)},maxWait=${String(opts?.maxWait)})`);
+        state.inTransaction = true;
+        try {
+          return await fn(mockDb);
+        } finally {
+          state.inTransaction = false;
+          state.trace.push("tx:end");
+        }
+      },
+    ),
     message: {
       updateMany: vi.fn(async (args: Row) => {
         state.deleteUpdates.push(args);
+        state.trace.push(`message.updateMany(inTx=${state.inTransaction})`);
         return { count: 1 };
+      }),
+      create: vi.fn(async () => {
+        state.trace.push(`message.create(inTx=${state.inTransaction})`);
+        return { id: "sys-1" };
+      }),
+    },
+    conversation: {
+      update: vi.fn(async () => {
+        state.trace.push(`conversation.update(inTx=${state.inTransaction})`);
+        return {};
       }),
     },
     conversationParticipant: {
+      updateMany: vi.fn(async (args: Row) => {
+        state.participantLocks.push(args);
+        state.trace.push(`participant.lock(inTx=${state.inTransaction})`);
+        return { count: 0 };
+      }),
       // Lọc THẬT theo `where` (leftAt / userId.not) — đây là điều làm test có răng:
-      // gỡ một điều kiện trong `broadcastDeleted` là người không đáng nhận lọt vào mảng.
+      // gỡ một điều kiện trong đường đọc là người không đáng nhận lọt vào mảng.
       findMany: vi.fn(async (args: Row) => {
         state.recipientQueries.push(args);
+        state.trace.push(`participant.read(inTx=${state.inTransaction})`);
         const where = (args.where ?? {}) as {
           leftAt?: unknown;
           userId?: { not?: string };
@@ -84,7 +119,7 @@ vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => null) }));
 import { buildActor, type UserOrgRoleRow } from "@/lib/auth/actor";
 import type { OrgUnitNode } from "@/lib/org/types";
 import { ROLE_SEED } from "../../prisma/seed-roles";
-import { recallOwnMessageAsActor } from "./moderation";
+import { deleteMessageAsModeratorAsActor, recallOwnMessageAsActor } from "./moderation";
 
 const ORG: OrgUnitNode[] = [
   { id: "root", code: "SATAROBO", type: "ROOT", parentId: null, centerId: null },
@@ -160,6 +195,9 @@ beforeEach(() => {
   ];
   h.state.recipientQueries = [];
   h.state.deleteUpdates = [];
+  h.state.participantLocks = [];
+  h.state.trace = [];
+  h.state.inTransaction = false;
   h.broadcast.mockClear();
   h.broadcast.mockImplementation(async () => true);
   h.writeAudit.mockClear();
@@ -228,6 +266,59 @@ describe("[US-12] broadcastDeleted — fan-out bump khi gỡ tin", () => {
     expect(res.ok).toBe(true);
     // Soft delete vẫn đi qua: DB là nguồn sự thật, realtime chỉ là lớp thông báo.
     expect(h.state.deleteUpdates).toHaveLength(1);
+  });
+
+  // Lỗi đã tái hiện TẤT ĐỊNH trước khi vá: đọc người nhận bằng `db` TRẦN ngoài transaction
+  // ⇒ người đang bị gỡ (tx set `leftAt` chưa commit) vẫn nhận bump DELETED. Cùng kịch bản ở
+  // đường GỬI tin thì không, vì bên đó đọc trong tx SAU một `updateMany` khoá dòng.
+  it("đọc người nhận NẰM TRONG transaction gỡ tin, và SAU câu khoá dòng participant", async () => {
+    const actor = actorOf("PARENT", TAC_GIA);
+    await recallOwnMessageAsActor(actor, "PH Test", { messageId: MSG });
+
+    expect(h.state.trace).toEqual([
+      "tx:start(timeout=30000,maxWait=10000)",
+      "message.updateMany(inTx=true)",
+      "participant.lock(inTx=true)",
+      "participant.read(inTx=true)",
+      "tx:end",
+    ]);
+    // Câu khoá phải nhắm ĐÚNG tập sắp đọc, nếu không thì khoá nhầm dòng = vô tác dụng.
+    expect(h.state.participantLocks[0]?.where).toEqual(h.state.recipientQueries[0]?.where);
+  });
+
+  /**
+   * Đường KIỂM DUYỆT (GV gỡ tin của người khác) có thêm tin SYSTEM + `conversation.update`.
+   * Hai bất biến chồng lên nhau ở đây:
+   *  • người nhận vẫn phải đọc TRONG tx, SAU câu khoá — y như đường thu hồi;
+   *  • THỨ TỰ KHOÁ phải là Message → Conversation → ConversationParticipant, trùng đường
+   *    gửi tin (`lib/chat/messages.ts`). Khoá participant TRƯỚC `conversation.update` là
+   *    dựng ngược thứ tự ⇒ deadlock giữa "gửi tin" và "gỡ tin" trên cùng hội thoại — thứ
+   *    chỉ hiện ra dưới tải thật, không bao giờ hiện ở máy dev.
+   */
+  it("đường kiểm duyệt: đọc người nhận trong tx, và khoá participant SAU conversation.update", async () => {
+    const actor = actorOf("TEACHER", "gv-lopA", ["lopA"]);
+    const res = await deleteMessageAsModeratorAsActor(actor, "GV Test", {
+      messageId: MSG,
+      reason: "Nội dung không phù hợp với nhóm lớp",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(h.state.trace).toEqual([
+      "tx:start(timeout=30000,maxWait=10000)",
+      "message.updateMany(inTx=true)",
+      "message.create(inTx=true)",
+      "conversation.update(inTx=true)",
+      "participant.lock(inTx=true)",
+      "participant.read(inTx=true)",
+      "tx:end",
+    ]);
+    expect(h.state.participantLocks[0]?.where).toEqual(h.state.recipientQueries[0]?.where);
+
+    // Và fan-out vẫn đúng tập người: người đã rời + chính người gỡ đứng ngoài.
+    const topics = sentBroadcasts()
+      .filter((m) => m.topic.startsWith("user:"))
+      .map((m) => m.topic);
+    expect(topics).toEqual(["user:ph-khac", `user:${TAC_GIA}`]);
   });
 
   it("không còn ai trong nhóm → chỉ còn phần tử conv:, không có bump rỗng", async () => {

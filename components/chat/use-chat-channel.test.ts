@@ -18,7 +18,9 @@ const CONV = "conv-1";
 const ME = "user-me";
 const OTHER = "user-other";
 /** TTL thật của `/api/chat/realtime-token` (lib/chat/realtime-token.ts). */
-const TTL_MS = 15 * 60_000;
+const TTL_MS = 5 * 60_000;
+/** Trần backoff nối lại (`RECONNECT_MAX_MS` trong use-chat-channel.ts). */
+const RECONNECT_CAP_MS = 30_000;
 
 function row(id: string, over: Partial<IncomingMessage> = {}): IncomingMessage {
   return {
@@ -40,14 +42,15 @@ function page(messages: IncomingMessage[], over: Partial<ReconcilePage> = {}): R
 function createFakeTransport() {
   const calls = {
     subscribe: [] as { conversationId: string; jwt: string }[],
+    /** Vé đã gửi vào chu kỳ gia hạn (`renewAuth`), theo thứ tự. */
     setAuth: [] as string[],
     unsubscribe: 0,
   };
   let handlers: ChatChannelHandlers | null = null;
 
   const transport: ChatChannelTransport = {
-    subscribe(conversationId, jwt, h) {
-      calls.subscribe.push({ conversationId, jwt });
+    subscribe(conversationId, auth, h) {
+      calls.subscribe.push({ conversationId, jwt: auth.token });
       handlers = h;
       return {
         unsubscribe: () => {
@@ -55,8 +58,9 @@ function createFakeTransport() {
         },
       };
     },
-    setAuth(jwt) {
-      calls.setAuth.push(jwt);
+    renewAuth(auth) {
+      calls.setAuth.push(auth.token);
+      return auth.expiresAt;
     },
   };
 
@@ -387,7 +391,10 @@ describe("AC5 — mốc đã đọc theo foreground", () => {
 });
 
 describe("gia hạn token trước khi hết hạn", () => {
-  it("tới ~80% TTL ⇒ xin token mới + setAuth, KHÔNG dựng lại kênh", async () => {
+  // Việc dựng lại kênh khi đổi vé là của TẦNG KẾT NỐI (`lib/chat/supabase-client.ts`):
+  // rời hết kênh → setAuth → join lại. Hook chỉ giao vé; nó KHÔNG được tự gọi
+  // `transport.subscribe` lần nữa, nếu không hai bên cùng join một topic.
+  it("tới ~80% TTL ⇒ xin vé mới + giao cho tầng kết nối, hook KHÔNG tự dựng kênh", async () => {
     const h = setup();
     await connect(h);
     expect(h.fetchToken).toHaveBeenCalledTimes(1);
@@ -396,8 +403,28 @@ describe("gia hạn token trước khi hết hạn", () => {
 
     expect(h.fetchToken).toHaveBeenCalledTimes(2);
     expect(h.fake.calls.setAuth).toEqual(["jwt-2"]);
-    expect(h.fake.calls.subscribe).toHaveLength(1); // kênh cũ vẫn sống
+    expect(h.fake.calls.subscribe).toHaveLength(1);
     expect(h.fetchSince).toHaveBeenCalledTimes(1); // gia hạn KHÔNG kích hoạt reconcile
+  });
+
+  // `renewAuth` trả mốc hết hạn ĐANG có hiệu lực — có thể là vé của kênh `user:{id}` vừa
+  // đổi hộ trên cùng kết nối. Hẹn giờ theo vé mình vừa xin (dài hơn) = tới lúc gia hạn
+  // thì vé thật đã chết từ lâu ⇒ kênh câm.
+  it("hẹn giờ theo mốc HIỆU LỰC do tầng kết nối trả về, không theo vé vừa xin", async () => {
+    const h = setup();
+    // Tầng kết nối giữ vé cũ: chỉ còn 60s nữa là hết hạn.
+    h.fake.transport.renewAuth = (auth) => {
+      h.fake.calls.setAuth.push(auth.token);
+      return new Date(Date.now() + 60_000).toISOString();
+    };
+    await connect(h);
+
+    await flush(TTL_MS * 0.8 + 100); // lần gia hạn 1 — nhận về mốc 60s
+    expect(h.fetchToken).toHaveBeenCalledTimes(2);
+
+    // Nếu hẹn theo vé vừa xin (5') thì mốc này chưa có gì xảy ra.
+    await flush(60_000 * 0.8 + 100);
+    expect(h.fetchToken).toHaveBeenCalledTimes(3);
   });
 
   it("gia hạn lặp lại được (token thứ 3) — không dừng sau lần đầu", async () => {
@@ -408,6 +435,40 @@ describe("gia hạn token trước khi hết hạn", () => {
     await flush(TTL_MS * 0.8 + 100);
 
     expect(h.fake.calls.setAuth).toEqual(["jwt-2", "jwt-3"]);
+  });
+
+  // Vé về SAU khi component đã chết: giao nó cho tầng kết nối là khởi động một chu kỳ
+  // rời-đổi-join cho một kênh không còn ai giữ ⇒ kênh mồ côi, không ai đóng được nữa.
+  it("unmount GIỮA lúc gia hạn ⇒ không giao vé cho tầng kết nối, không dựng kênh mồ côi", async () => {
+    let release: ((t: { token: string; expiresAt: string }) => void) | null = null;
+    const fetchToken = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse("jwt-1"))
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ token: string; expiresAt: string }>((resolve) => {
+            release = resolve;
+          }),
+      );
+    const h = setup({ fetchToken });
+    await connect(h);
+
+    await flush(TTL_MS * 0.8 + 100); // đã xin vé mới, đang chờ mạng trả về
+    expect(fetchToken).toHaveBeenCalledTimes(2);
+
+    act(() => h.view.unmount());
+    await act(async () => {
+      release?.(tokenResponse("jwt-2"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(h.fake.calls.setAuth).toHaveLength(0);
+    expect(h.fake.calls.subscribe).toHaveLength(1);
+    expect(h.fake.calls.unsubscribe).toBe(1);
+
+    // Và không còn hẹn giờ nào sống sót để xin vé tiếp.
+    await flush(TTL_MS * 2);
+    expect(fetchToken).toHaveBeenCalledTimes(2);
   });
 
   it("xin token hỏng ⇒ thử lại sau, không làm chết kênh", async () => {
@@ -425,6 +486,88 @@ describe("gia hạn token trước khi hết hạn", () => {
 
     await flush(30_000 + 100); // lần thử lại
     expect(h.fake.calls.setAuth).toEqual(["jwt-3"]);
+  });
+});
+
+// Đo thật (scripts/_zztest-chat-token-va-lo.ts, LỖ 3): kênh Supabase một khi đã CLOSED thì
+// KHÔNG tự hồi — theo dõi thêm 56–81s, 0 lần SUBSCRIBED lại. Bản cũ chỉ `setStatus("closed")`
+// rồi thôi ⇒ người mở chat lâu mất realtime âm thầm, không lỗi, không dấu hiệu gì.
+describe("tự nối lại khi kênh đóng ngoài ý muốn", () => {
+  it("CLOSED ⇒ xin vé mới + dựng kênh mới sau backoff, và bỏ hẳn kênh cũ", async () => {
+    const h = setup();
+    await connect(h);
+    expect(h.fake.calls.subscribe).toHaveLength(1);
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    await flush();
+    expect(h.view.result.current.status).toBe("closed");
+    expect(h.fake.calls.subscribe).toHaveLength(1); // chưa nối ngay — phải có backoff
+
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2);
+    expect(h.fake.calls.subscribe[1].jwt).toBe("jwt-2"); // vé MỚI, không xài lại vé cũ
+    expect(h.fake.calls.unsubscribe).toBe(1);
+  });
+
+  it("nối lại hỏng liên tiếp ⇒ backoff nhân đôi rồi kịch 30s (không vòng lặp nóng)", async () => {
+    const h = setup();
+    await connect(h);
+
+    const closeAndWait = async (delay: number) => {
+      act(() => h.fake.handlers.onStatus("CLOSED"));
+      await flush(delay);
+    };
+
+    // 2s → 4s → 8s: mỗi lần chỉ nối lại khi đã qua đúng mốc backoff.
+    await closeAndWait(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2);
+    await closeAndWait(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2); // chưa tới 4s
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(3);
+
+    // Rất nhiều lần rớt liên tiếp vẫn không vượt trần 30s/lượt.
+    for (let i = 0; i < 8; i++) await closeAndWait(RECONNECT_CAP_MS + 50);
+    const callsAfter = h.fake.calls.subscribe.length;
+    await flush(RECONNECT_CAP_MS * 3);
+    expect(h.fake.calls.subscribe.length - callsAfter).toBeLessThanOrEqual(3);
+  });
+
+  it("SUBSCRIBED lại ⇒ backoff về mốc đầu (lần rớt sau không phải chờ 30s)", async () => {
+    const h = setup();
+    await connect(h);
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2);
+    act(() => h.fake.handlers.onStatus("SUBSCRIBED"));
+    await flush();
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(3);
+  });
+
+  it("bị gỡ khỏi hội thoại ⇒ KHÔNG nối lại (CLOSED sau đó là do ta tự đóng)", async () => {
+    const h = setup();
+    await connect(h);
+
+    act(() => h.fake.handlers.onBroadcast("participant.removed", { userId: ME }));
+    await flush(RECONNECT_CAP_MS * 4);
+
+    expect(h.fake.calls.subscribe).toHaveLength(1);
+    expect(h.view.result.current.status).toBe("removed");
+  });
+
+  it("unmount giữa lúc chờ backoff ⇒ không nối lại (không rò timer)", async () => {
+    const h = setup();
+    await connect(h);
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    act(() => h.view.unmount());
+    await flush(RECONNECT_CAP_MS * 4);
+
+    expect(h.fake.calls.subscribe).toHaveLength(1);
   });
 });
 

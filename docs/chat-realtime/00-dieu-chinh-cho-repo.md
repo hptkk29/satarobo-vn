@@ -74,6 +74,105 @@ Cả 5 đều XANH ở `typecheck` + `lint` + `build` + 1644 unit test, chỉ l�
 4. **Hàm helper SQL không đặt ở schema `public`.** PostgREST phơi hàm schema public thành RPC `/rest/v1/rpc/<tên>`, và `REVOKE ALL FROM PUBLIC` không gỡ grant mặc định của anon/authenticated. Đặt ở `private`, và đừng nhận tham số cho phép hỏi hộ người khác (đọc claim của chính người gọi).
 5. **Dẫn xuất thành viên là thao tác MỨC HỆ THỐNG — phải đọc KHÔNG qua scope.** `loadDerivedMembership` từng dùng `tx.student.findMany` trong khi `Student` ∈ `SCOPED_MODELS` và mọi call-site truyền tx của `scopedDb` ⇒ học viên ngoài tầm nhìn actor bị hiểu là "đã rời lớp" ⇒ PH bị GỠ khỏi nhóm + sinh tin SYSTEM sai. Nay đi `tx.$queryRaw` (raw không dính client extension), có chú thích tại chỗ.
 
+## E-ter. Luật rút ra từ ĐO THẬT kênh realtime 10/08 (4 điểm mù, 0 test nào bắt được)
+
+Nguồn số đo: `scripts/_zztest-chat-token-va-lo.ts` (LỖ 3 + LỖ 4) và
+`scripts/_zztest-chat-ro-giua-phien.ts` (LỖ 1 + LỖ 2), chạy trên Supabase DEV.
+Cả 4 đều XANH ở `typecheck` + `lint` + `build` + toàn bộ unit test — vì unit test của
+nhánh realtime là fake-timer + transport giả, còn test broadcast thì `fetch` giả luôn trả 202.
+
+1. **CẤM `realtime.setAuth(jwt)` giữa phiên khi còn kênh đang `joined`.**
+   Đo: kênh gọi `setAuth` CHẾT ở nhịp heartbeat kế tiếp (≤25s sau lời gọi) và **không tự hồi**
+   (R: setAuth@+25,0s → CLOSED@+40,2s · R3: setAuth@+45,1s → CLOSED@+64,5s trong khi vé gốc
+   còn tới +187,4s ⇒ chết sớm 122s). Kênh đối chứng không gọi `setAuth` đi qua đúng các nhịp
+   heartbeat đó vẫn SUBSCRIBED 94/94 tick. Nguyên nhân trong thư viện: `_performAuth` đẩy
+   `push(access_token)` xuống mọi kênh `joined` khi giá trị token đổi.
+   ⇒ Đổi vé là thao tác **mức KẾT NỐI**: rời hết kênh → `setAuth` → join lại. Đã hiện thực ở
+   `lib/chat/supabase-client.ts` (`applyRealtimeAuth`).
+   ⚠️ **ĐÍNH CHÍNH 10/08 (đo lại, bác bỏ một câu của chính mục này):** *"`client.channel()` là
+   singleton dùng chung nên gia hạn của kênh `conv:` giết luôn kênh `user:`"* là **SAI**. Phép
+   thử V2 — hai kênh private `conv:` + `user:` trên **một** kết nối, cùng dòng thời gian —
+   cho **91/91** và **67/67** tick, không kênh nào bị đóng. Hình dạng "một tab, hai kênh" là
+   LÀNH; thủ phạm nằm ở mục 1-bis.
+
+   **1-bis. Vé phải được `await` XONG rồi mới join. Không chờ = kênh chết CÂM.**
+   Hai kênh RAW khác nhau đúng một biến (`scripts/_zztest-chat-token-va-lo.ts`, V1 vs V2a/CTRL):
+
+   | biến thể | kết quả |
+   |---|---|
+   | `void setAuth(vé)` rồi join NGAY | **0/91 tick**, SUBSCRIBED rồi **CLOSED sau 2,7–3,5s**, không lý do |
+   | `await setAuth(vé)` rồi join | **91/91 tick**, không bao giờ bị đóng |
+
+   Bản vá đầu tiên vẫn dính đúng bẫy này ở nhánh "vé đầu tiên" (`void setAuth` + join ngay,
+   với lý lẽ "chưa kênh nào joined nên vô hại"), và trả giá đúng như bảng trên: kênh `conv:`
+   của module SUBSCRIBED rồi CLOSED sau 1,5–3,5s, nhận **1** tick trong khi CONTROL nhận 92.
+   Sau khi cho vé đầu đi chung `swapAuth` (có `await`): **91 tick, không CLOSED lần nào**, khe
+   hở lúc rời-join còn **0,5s** (trước đó 7,5s).
+
+   **1-ter. PHẢI tự cấp callback `accessToken` khi tạo client — nếu không vé bị thay bằng ANON KEY.**
+   `SupabaseClient` **luôn** truyền `accessToken: _getAccessToken` xuống `RealtimeClient`, và hàm
+   đó rơi về `supabaseKey` (anon key) khi không có phiên Supabase Auth — repo này dùng Auth.js
+   nên nó LUÔN rơi về anon key. Vì `this.accessToken` tồn tại, `_performAuth` đặt
+   `_manuallySetToken = false`, và `_wrapHeartbeatCallback` gọi `_setAuthSafely()` mỗi nhịp 25s
+   ⇒ `accessTokenValue` bị ghi đè bằng anon key. Mà `RealtimeChannel.subscribe()` nhét chính
+   `socket.accessTokenValue` vào payload JOIN.
+   Hệ quả đo được (V3, client mặc định, join mới ở +60,3s sau ≥2 nhịp heartbeat, người dùng
+   VẪN là participant hợp lệ):
+   `CHANNEL_ERROR: Unauthorized: You do not have permissions to read from this Channel topic`
+   lặp ở +65,6 / +71,4 / +78,2 / +88,5 / +103,4 / +118,2s — **không bao giờ vào lại được**.
+   Đây đúng là đường mà bản vá dựa vào (join lại khi gia hạn, và join lại khi tự nối lại sau
+   CLOSED) ⇒ thiếu callback này thì realtime chết vĩnh viễn tới khi tải lại trang.
+2. **Kênh Supabase đã `CLOSED` thì KHÔNG bao giờ tự SUBSCRIBED lại** (theo dõi thêm 56–81s: 0 lần).
+   Mọi nơi nghe realtime phải tự nối lại có backoff. `setStatus("closed")` rồi thôi = mất realtime
+   ÂM THẦM: không lỗi, không dấu hiệu, người dùng vẫn thấy giao diện chat bình thường.
+3. **Policy RLS chỉ được đánh giá LÚC JOIN.** Người bị set `leftAt` mà cố ý không rời kênh nhận
+   đủ tin thật, payload **có nguyên trường `body`**; ân hạn ≈ 0 giây, cửa sổ = đúng phần đời còn
+   lại của vé (xác nhận chéo 3 TTL). Kiểm ngược: người ngoài join → CHANNEL_ERROR, chính người đã
+   bị gỡ join LẠI → cũng CHANNEL_ERROR ⇒ policy vẫn chạy, chỉ là không đánh giá lại.
+   ⇒ `REALTIME_TOKEN_TTL_SECONDS` là **cận trên của một lỗ rò**, không phải một nút tinh chỉnh
+   hiệu năng.
+   **Hai cận trên KHÁC NHAU cho hai kẻ đe doạ — đừng gộp làm một:**
+   • *client SỬA ĐỔI* (đúng mô hình đe doạ: nó cố tình không rời kênh) cũng sẽ không tự gia
+     hạn ⇒ cận trên = **đúng TTL = 300s**. Nó không kéo dài được vì kéo dài đòi JOIN LẠI, mà
+     join lại thì bị chặn. Vậy chính việc hạ 900→300 mới là thứ chặn kẻ tấn công (giảm 3 lần).
+   • *client THẬT* gia hạn ở 80% TTL, mỗi lần gia hạn là một chu kỳ rời-đổi-JOIN LẠI ⇒ cận
+     trên = **240s**. Đo 10/08 (`_zztest-chat-ro-giua-phien.ts` phần B5, đủ đối chứng dương
+     trong CÙNG lần chạy: trước gia hạn CÓ rò 1/1, nhân chứng nhận 3/3, tai nạn nhân còn
+     sống, và chu kỳ chứng minh được là đã chạy): sau MỘT chu kỳ, người bị gỡ nhận **0/3**
+     tin; Realtime từ chối kênh của họ **4,8s** sau lời gọi `applyRealtimeAuth`.
+   ⚠️ Bẫy khi đo lại: `applyRealtimeAuth` có luật *"vé đang áp còn hơn NỬA đời vé mới thì giữ
+   nguyên"*. Gia hạn bằng một vé dài ngay sau khi vừa đặt vé ⇒ vé mới BỊ BỎ, chu kỳ không
+   chạy, và phép đo báo nhầm *"lỗ chưa đóng"* (đã dính đúng bẫy này một lần). Muốn đo thì
+   dựng đúng tỉ lệ của sản phẩm: vé đang áp còn ~20% đời so với vé mới.
+4. **Trần lô của endpoint `/realtime/v1/api/broadcast` thấp hơn ta tưởng nhiều.** Đo: n≤80 → 202;
+   n=95 → 502; n=200 → **429** `Too many messages to broadcast, please reduce the batch size` và
+   **0 người nhận**. `BROADCAST_MAX_PER_POST` để 60 (không phải 80: lúc endpoint xuống cấp đo
+   ~0,68 s/phần tử và n=90 chạm trần gateway 60s). Bắn nhiều lô song song không giới hạn cũng
+   hỏng: 4×65 và 8×65 → 12/12 lô vượt `BROADCAST_TIMEOUT_MS` ⇒ trần đồng thời 2 lô + ngân sách
+   tổng cho cả lượt (hàm này chạy TRONG Server Action, người dùng ngồi đợi).
+5. **Dẫn xuất người nhận cho broadcast phải đọc TRONG transaction, SAU một câu khoá dòng
+   participant.** Đọc ngoài tx bằng `db` trần ⇒ người đang bị gỡ (tx chưa commit) vẫn nhận tín
+   hiệu; tái hiện tất định ở đường gỡ tin, trong khi đường gửi tin thì không. Khuôn chuẩn:
+   `lib/chat/messages.ts` (`updateMany` khoá → `findMany` cùng tx); nay `lib/chat/moderation.ts`
+   dùng chung khuôn qua `lockAndReadRecipients`. Thứ tự khoá bắt buộc **Message → Conversation →
+   ConversationParticipant** ở mọi đường, nếu không sẽ deadlock giữa "gửi tin" và "gỡ tin".
+
+### E-ter.bis — 5 luật trên được GIM bằng test nào
+
+| Luật E-ter | Test khoá nó | Đột biến đã kiểm ngược (sửa vào là ĐỎ) |
+|---|---|---|
+| 1 — cấm `setAuth` khi còn kênh `joined` | `lib/chat/supabase-client.test.ts` → *"gia hạn: rời HẾT kênh → setAuth → join lại"*, *"subscribe MỚI giữa chu kỳ"*, *"unsubscribe GIỮA lúc gia hạn"* | bỏ bước rời-kênh trong `swapAuth`; bỏ guard `if (!swapInFlight)`; bỏ CẢ `entries.delete` lẫn cờ `released` |
+| 2 — kênh CLOSED không tự hồi ⇒ phải tự nối lại có backoff | `components/chat/use-chat-channel.test.ts` + `user-channel.test.ts` → nhóm *"tự nối lại khi kênh đóng ngoài ý muốn"* | `setStatus("closed")` rồi thôi; bỏ nhân đôi backoff; gia hạn vé nuốt mất lượt nối lại (`clearTimers` thay `clearTokenTimers`) |
+| 3 — TTL vé là CẬN TRÊN của lỗ rò | `lib/chat/realtime-token.test.ts` → *"TTL 5 phút"* | nâng TTL về 900s |
+| 4 — trần lô thật của endpoint | `lib/chat/broadcast.test.ts` → *"mảng 205 → [60,60,60,25]"*, *"endpoint mô phỏng theo SỐ ĐO THẬT"*, *"lô ĐẦY rụng ⇒ log truy ra được ai mất tin"* | trần lô về 200; nuốt lỗi HTTP; bỏ trần đồng thời; log chỉ in `batch[0].topic` |
+| 5 — đọc người nhận trong tx, sau câu khoá, đúng thứ tự khoá | `lib/chat/moderation-broadcast.test.ts` → *"đọc người nhận NẰM TRONG transaction…"*, *"đường kiểm duyệt: … khoá participant SAU conversation.update"* | đưa việc đọc ra ngoài tx; bỏ câu `updateMany` khoá; bỏ `{timeout:30_000,maxWait:10_000}`; khoá participant trước `conversation.update` |
+
+> ⚠️ Bộ test này chỉ có răng nhờ hai thứ, đừng gỡ khi refactor: `fetch` giả của
+> `broadcast.test.ts` **mô phỏng đúng ngưỡng từ chối đã đo** (n≥95 hỏng) thay vì luôn trả 202
+> — bản cũ luôn-202 chính là thứ đã bảo lãnh cho ngưỡng 200 hỏng; và mock Prisma của
+> `moderation-broadcast.test.ts` **lọc thật theo `where`** + ghi nhật ký thao tác theo thứ tự
+> (`tx:start → message.updateMany → participant.lock → participant.read → tx:end`).
+
 ## F. Trạng thái giả định của BA sau spike
 
 | Giả định | Kết quả |

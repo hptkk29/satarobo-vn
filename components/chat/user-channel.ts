@@ -13,25 +13,32 @@
 // `client.channel("user:X")` trên CÙNG một connection singleton là đường vào lỗi join
 // trùng topic. Ở đây: người nghe đầu tiên mở kênh, người cuối cùng rời thì đóng.
 //
-// ⚠️ Hub có bộ hẹn giờ gia hạn token RIÊNG, chạy song song với bộ của `useChatChannel`.
-// KHÔNG sai: `setRealtimeAuth` đổi token ở mức CONNECTION và mọi token đều của cùng một
-// người — ai ghi sau thắng, cả hai đều hợp lệ. Giá phải trả: 2 request
-// `/api/chat/realtime-token` mỗi ~12 phút (trần 30/phút/user — dư xa). Cố ý KHÔNG xây tầng
-// chia sẻ token: 20 dòng trừu tượng để tiết kiệm 1 request/12 phút là lỗ.
+// ⚠️ Hub có bộ hẹn giờ gia hạn vé RIÊNG, chạy song song với bộ của `useChatChannel`, và cả
+// hai dùng CHUNG một connection singleton. Bản cũ ghi "không sai, ai ghi sau thắng" — ĐO THẬT
+// đã bác bỏ: `realtime.setAuth` giữa phiên giết kênh ở nhịp heartbeat kế tiếp (≤25s sau lời
+// gọi) và kênh KHÔNG tự hồi, tức mỗi lần hub gia hạn có thể giết luôn kênh `conv:` của tab.
+// Nay việc đổi vé đi qua `applyRealtimeAuth` ở `lib/chat/supabase-client.ts` — một chu kỳ
+// RỜI-ĐỔI-JOIN ở mức kết nối, và nó trả về mốc hết hạn ĐANG có hiệu lực để hai bộ hẹn giờ
+// không dẫm chân nhau (bên tới sau thấy vé còn quá nửa đời thì rút lui).
 //
-// ⚠️ Broadcast KHÔNG đảm bảo delivery ⇒ MỖI lần kênh về `SUBSCRIBED` (lần đầu VÀ mọi lần
-// re-subscribe sau khi chập mạng) hub phát `{ type: "resync" }` để người nghe hỏi lại
-// nguồn sự thật. Đây là chốt chặn, không phải tối ưu — cùng luật với `useChatChannel`.
+// ⚠️ Broadcast KHÔNG đảm bảo delivery ⇒ MỖI lần kênh về `SUBSCRIBED` (lần đầu, mọi lần
+// re-subscribe sau khi chập mạng, VÀ mọi lần gia hạn vé) hub phát `{ type: "resync" }` để
+// người nghe hỏi lại nguồn sự thật. Đây là chốt chặn, không phải tối ưu — cùng luật với
+// `useChatChannel`. Kênh về `CLOSED` ngoài ý muốn thì hub tự nối lại (backoff).
 
 import { parseConversationBumped, type ConversationBump } from "./chat-store";
 
 /** Xin token mới khi đã tiêu 80% TTL — trùng chính sách của `use-chat-channel.ts`. */
 const TOKEN_RENEW_RATIO = 0.8;
 const MIN_RENEW_DELAY_MS = 5_000;
-const FALLBACK_RENEW_MS = 10 * 60_000;
+/** Không đọc được `expiresAt` → 3' xin lại (vẫn ngắn hơn TTL 5'). */
+const FALLBACK_RENEW_MS = 3 * 60_000;
 const TOKEN_RENEW_RETRY_MS = 30_000;
 /** Mở kênh hỏng (mạng chớp lúc tải trang) → thử lại; hub sống suốt phiên nên đáng thử. */
 const START_RETRY_MS = 30_000;
+/** Kênh đóng ngoài ý muốn → nối lại, nhân đôi mỗi lần, kịch 30s (trùng `use-chat-channel.ts`). */
+const RECONNECT_BASE_MS = 2_000;
+const RECONNECT_MAX_MS = 30_000;
 
 export type UserChannelEvent =
   /** Có tin mới ở một hội thoại nào đó của tôi. */
@@ -48,13 +55,21 @@ export type UserChannelHandlers = {
   onStatus: (status: string, err?: Error) => void;
 };
 
+export type RealtimeTokenResponse = { token: string; expiresAt: string };
+
 /** Cổng ra Realtime — tách interface để test bơm bản giả (không cần Supabase thật). */
 export type UserChannelTransport = {
-  subscribe(userId: string, jwt: string, handlers: UserChannelHandlers): UserChannelSubscription;
-  setAuth(jwt: string): void | Promise<void>;
+  subscribe(
+    userId: string,
+    auth: RealtimeTokenResponse,
+    handlers: UserChannelHandlers,
+  ): UserChannelSubscription;
+  /**
+   * Gia hạn vé ở mức KẾT NỐI (chu kỳ rời-đổi-join). Trả về mốc `expiresAt` ĐANG có
+   * hiệu lực (ISO) — có thể là vé của kênh `conv:` nếu bên đó vừa đổi hộ.
+   */
+  renewAuth(auth: RealtimeTokenResponse): string | Promise<string>;
 };
-
-export type RealtimeTokenResponse = { token: string; expiresAt: string };
 
 export type UserChannelHub = {
   /** Đăng ký nghe; trả về hàm huỷ. Người nghe cuối cùng huỷ ⇒ kênh đóng. */
@@ -71,14 +86,14 @@ export type UserChannelHub = {
  * phụ huynh). Nạp động đẩy nó ra chunk bất đồng bộ, tải sau khi trang đã tương tác được.
  */
 const defaultTransport: UserChannelTransport = {
-  subscribe(userId, jwt, handlers) {
+  subscribe(userId, auth, handlers) {
     let channel: { unsubscribe: () => unknown } | null = null;
     let cancelled = false;
 
     void import("@/lib/chat/supabase-client")
       .then((mod) => {
         if (cancelled) return;
-        channel = mod.subscribeUserTopic(userId, jwt, handlers);
+        channel = mod.subscribeUserTopic(userId, auth, handlers);
       })
       .catch(() => {
         // Không tải được module realtime ⇒ badge đứng ở số server (xuống cấp êm).
@@ -92,9 +107,9 @@ const defaultTransport: UserChannelTransport = {
       },
     };
   },
-  async setAuth(jwt) {
+  async renewAuth(auth) {
     const mod = await import("@/lib/chat/supabase-client");
-    await mod.setRealtimeAuth(jwt);
+    return mod.applyRealtimeAuth(auth);
   },
 };
 
@@ -117,6 +132,9 @@ export function createUserChannelHub(deps: {
   let abort: AbortController | null = null;
   let renewTimer: ReturnType<typeof setTimeout> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Số lần nối lại liên tiếp — về 0 mỗi lần kênh SUBSCRIBED thật sự. */
+  let reconnectAttempt = 0;
   /** Mọi callback bất đồng bộ so số này trước khi đụng state — chặn kết quả của lượt cũ. */
   let generation = 0;
 
@@ -130,7 +148,12 @@ export function createUserChannelHub(deps: {
     }
   };
 
-  const clearTimers = () => {
+  /**
+   * Huỷ hẹn giờ của VÉ (gia hạn / thử lại). CỐ Ý không đụng `reconnectTimer`: một lần gia
+   * hạn vé thành công không được nuốt mất lượt nối lại đang chờ, nếu không kênh đã CLOSED
+   * sẽ nằm chết im lặng — đúng cái bug đang vá.
+   */
+  const clearTokenTimers = () => {
     if (renewTimer !== null) {
       clearTimeout(renewTimer);
       renewTimer = null;
@@ -138,6 +161,15 @@ export function createUserChannelHub(deps: {
     if (retryTimer !== null) {
       clearTimeout(retryTimer);
       retryTimer = null;
+    }
+  };
+
+  /** Huỷ MỌI hẹn giờ — chỉ dùng khi thật sự đóng kênh (`stop`). */
+  const clearTimers = () => {
+    clearTokenTimers();
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
   };
 
@@ -159,7 +191,7 @@ export function createUserChannelHub(deps: {
 
     const scheduleRenew = (expiresAt: string | undefined) => {
       if (gen !== generation) return;
-      clearTimers();
+      clearTokenTimers();
       const at = expiresAt ? new Date(expiresAt).getTime() : Number.NaN;
       const delay = Number.isNaN(at)
         ? FALLBACK_RENEW_MS
@@ -172,12 +204,13 @@ export function createUserChannelHub(deps: {
       try {
         const fresh = await fetchToken(controller.signal);
         if (gen !== generation) return;
-        await transport.setAuth(fresh.token);
+        // Mốc HIỆU LỰC, không phải mốc của vé vừa xin (kênh `conv:` có thể vừa đổi vé hộ).
+        const effectiveExpiresAt = await transport.renewAuth(fresh);
         if (gen !== generation) return;
-        scheduleRenew(fresh.expiresAt);
+        scheduleRenew(effectiveExpiresAt);
       } catch {
         if (gen !== generation) return;
-        clearTimers();
+        clearTokenTimers();
         // Token CŨ còn hiệu lực ⇒ kênh chưa rớt, chỉ cần thử lại lát nữa.
         renewTimer = setTimeout(() => void renew(), TOKEN_RENEW_RETRY_MS);
       }
@@ -190,24 +223,47 @@ export function createUserChannelHub(deps: {
       if (bump) emit({ type: "bump", bump });
     };
 
+    /**
+     * Kênh đóng ngoài ý muốn ⇒ dựng lại bằng vé MỚI. Hub sống suốt phiên nên không được
+     * "đóng rồi thôi": badge chưa đọc sẽ đứng im tới khi người dùng F5. Backoff nhân đôi,
+     * kịch 30s, và chỉ nối lại khi còn người nghe.
+     */
+    const scheduleReconnect = () => {
+      if (gen !== generation || reconnectTimer !== null || listeners.size === 0) return;
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+      reconnectAttempt += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (gen !== generation || listeners.size === 0) return;
+        stop(); // đóng kênh cũ + huỷ mọi timer (generation++) — listeners GIỮ NGUYÊN
+        start(userId);
+      }, delay);
+    };
+
     const handleStatus = (status: string) => {
       if (gen !== generation) return;
       // Chốt chặn: broadcast có thể rơi ⇒ mỗi lần (re)kết nối là một lần hỏi lại server.
-      if (status === "SUBSCRIBED") emit({ type: "resync" });
+      if (status === "SUBSCRIBED") {
+        reconnectAttempt = 0;
+        emit({ type: "resync" });
+        return;
+      }
+      // CHANNEL_ERROR / TIMED_OUT có `rejoinTimer` của phoenix lo — chen vào là join đôi.
+      if (status === "CLOSED") scheduleReconnect();
     };
 
     void (async () => {
       try {
-        const { token, expiresAt } = await fetchToken(controller.signal);
+        const auth = await fetchToken(controller.signal);
         if (gen !== generation) return;
-        subscription = transport.subscribe(userId, token, {
+        subscription = transport.subscribe(userId, auth, {
           onBroadcast: handleBroadcast,
           onStatus: handleStatus,
         });
-        scheduleRenew(expiresAt);
+        scheduleRenew(auth.expiresAt);
       } catch {
         if (gen !== generation) return;
-        clearTimers();
+        clearTokenTimers();
         // Không có kênh = badge đứng ở số server dựng lúc tải trang (xuống cấp êm),
         // nhưng hub sống suốt phiên nên vẫn đáng thử lại thay vì bỏ hẳn realtime.
         retryTimer = setTimeout(() => {

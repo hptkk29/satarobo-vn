@@ -158,8 +158,20 @@ describe("[bump] userBumpBroadcasts — builder thuần", () => {
   });
 });
 
-describe("[bump] broadcastMessages — N người nhận nằm trong MỘT POST", () => {
-  it("1 conv + 65 bump → fetch gọi ĐÚNG 1 lần, body có 66 phần tử", async () => {
+/**
+ * ⚠️ NHÓM NÀY TỪNG HỢP THỨC HOÁ MỘT LỖI SẢN PHẨM.
+ *
+ * Bản cũ gim ngưỡng lô = 200 với `fetch` giả LUÔN trả 202, nên nó "chứng minh" rằng chia
+ * lô 200 là ổn — trong khi endpoint Supabase THẬT từ chối: đo trên dev (LỖ 4) n=95 → 502,
+ * n=200 → HTTP 429 "Too many messages to broadcast, please reduce the batch size" và
+ * KHÔNG giao cho ai. Nghĩa là mọi nhóm >200 người đã im lặng mất tin realtime suốt thời
+ * gian qua, với một bài test xanh đứng bảo lãnh.
+ *
+ * Luật rút ra, giữ nguyên khi sửa nhóm này: ngưỡng phải được gim bằng SỐ ĐO, và phải có
+ * ít nhất một bài chứng minh "lô quá to = THẤT BẠI có tiếng", không phải im lặng.
+ */
+describe("[bump] broadcastMessages — chia lô theo trần THẬT của endpoint", () => {
+  it("1 conv + 65 bump → 2 lô (≤60/lô), KHÔNG mất phần tử nào", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -176,13 +188,89 @@ describe("[bump] broadcastMessages — N người nhận nằm trong MỘT POST"
     ]);
 
     expect(ok).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const msgs = sentBody((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]);
-    expect(msgs).toHaveLength(66);
-    expect(msgs[0]?.topic).toBe("conv:c1");
+    const sent = fetchMock.mock.calls.flatMap((c) =>
+      sentBody((c as unknown as [string, RequestInit])[1]),
+    );
+    expect(sent).toHaveLength(66);
+    expect(sent[0]?.topic).toBe("conv:c1");
+    expect(new Set(sent.map((m) => m.topic)).size).toBe(66);
   });
 
-  it("250 phần tử → chia 2 lô, không lô nào quá 200, KHÔNG mất người nhận", async () => {
+  // Đúng mảng 205 của số đo: bản cũ chia [200,5] và 7/7 người mẫu trong lô 1 MẤT tin.
+  it("mảng 205 → [60,60,60,25]: không lô nào vượt trần, không phần tử nào rơi", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { broadcastMessages, userBumpBroadcasts } = await loadModule();
+    const ids = Array.from({ length: 205 }, (_, i) => `u${i}`);
+    const ok = await broadcastMessages(
+      userBumpBroadcasts(ids, {
+        conversationId: "c1",
+        messageId: "m1",
+        kind: "CHAT",
+        at: "2026-08-09T00:00:00.000Z",
+      }),
+    );
+
+    expect(ok).toBe(true);
+    const batches = fetchMock.mock.calls.map((c) =>
+      sentBody((c as unknown as [string, RequestInit])[1]),
+    );
+    expect(batches.map((b) => b.length)).toEqual([60, 60, 60, 25]);
+    // Không ai bị bỏ lại: đúng 205 topic KHÁC NHAU đã lên đường.
+    const topics = batches.flat().map((m) => m.topic);
+    expect(new Set(topics).size).toBe(205);
+    expect(topics).toEqual(ids.map((id) => `user:${id}`));
+  });
+
+  /**
+   * Bài quyết định: `fetch` giả KHÔNG còn "luôn 202" mà mô phỏng ĐÚNG số đo của endpoint
+   * thật (LỖ 4) — n≤80 nhận, n=95 trả 502, n≥100 trả 429 và KHÔNG giao cho ai. Đây là
+   * thứ mà bản test cũ thiếu, và vì thiếu nên nó đứng bảo lãnh cho ngưỡng 200 hỏng.
+   * Nâng `BROADCAST_MAX_PER_POST` lên lại là bài này đỏ ngay.
+   */
+  it("với endpoint mô phỏng theo SỐ ĐO THẬT (n=95→502, n≥100→429): mọi lô đều được nhận", async () => {
+    const rejected: number[] = [];
+    const delivered: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const batch = sentBody(init);
+        if (batch.length >= 100) {
+          rejected.push(batch.length);
+          return new Response(
+            JSON.stringify({
+              message: "Too many messages to broadcast, please reduce the batch size",
+            }),
+            { status: 429 },
+          );
+        }
+        if (batch.length >= 90) {
+          rejected.push(batch.length);
+          return new Response("bad gateway", { status: 502 });
+        }
+        delivered.push(...batch.map((m) => m.topic));
+        return new Response("{}", { status: 202 });
+      }),
+    );
+
+    const { broadcastMessages, userBumpBroadcasts } = await loadModule();
+    const ids = Array.from({ length: 205 }, (_, i) => `u${i}`);
+    const ok = await broadcastMessages(
+      userBumpBroadcasts(ids, {
+        conversationId: "c1",
+        messageId: "m1",
+        kind: "CHAT",
+        at: "2026-08-09T00:00:00.000Z",
+      }),
+    );
+
+    expect(rejected).toEqual([]);
+    expect(delivered).toHaveLength(205);
+    expect(ok).toBe(true);
+  });
+
+  it("250 phần tử → KHÔNG lô nào quá 60 (n=95 đã 502, n=200 đã 429 trên endpoint thật)", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -197,12 +285,90 @@ describe("[bump] broadcastMessages — N người nhận nằm trong MỘT POST"
       }),
     );
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
     const sizes = fetchMock.mock.calls.map(
       (c) => sentBody((c as unknown as [string, RequestInit])[1]).length,
     );
-    expect(Math.max(...sizes)).toBeLessThanOrEqual(200);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(60);
     expect(sizes.reduce((a, b) => a + b, 0)).toBe(250);
+  });
+
+  it("lô quá to bị endpoint từ chối (429) → THẤT BẠI có tiếng: false + log, KHÔNG im lặng", async () => {
+    const body = JSON.stringify({
+      message: "Too many messages to broadcast, please reduce the batch size",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 429 })));
+
+    const { broadcastMessages, userBumpBroadcasts } = await loadModule();
+    const ok = await broadcastMessages(
+      userBumpBroadcasts(["u1", "u2"], {
+        conversationId: "c1",
+        messageId: "m1",
+        kind: "CHAT",
+        at: "2026-08-09T00:00:00.000Z",
+      }),
+    );
+
+    expect(ok).toBe(false);
+    const logged = warnSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+    expect(logged).toContain("429");
+    // Truy được AI mất tin — bản cũ chỉ in `batch[0].topic`.
+    expect(logged).toContain("user:u1");
+    expect(logged).toContain("user:u2");
+    // Và đọc được mã lỗi thật của Realtime để biết phải hạ ngưỡng.
+    expect(logged).toContain("reduce the batch size");
+  });
+
+  // Lô ĐẦY (60 người) rụng: log không được rút gọn thành "lô 1 hỏng". Bản cũ in đúng
+  // `batch[0].topic` ⇒ 59 người còn lại biến mất khỏi mọi dấu vết, không có đường nào
+  // dựng lại danh sách ai mất tin.
+  it("lô ĐẦY rụng ⇒ log in mẫu 10 topic + tổng số còn lại (truy ra được ai mất tin)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
+
+    const { broadcastMessages, userBumpBroadcasts } = await loadModule();
+    const ids = Array.from({ length: 60 }, (_, i) => `u${i}`);
+    await broadcastMessages(
+      userBumpBroadcasts(ids, {
+        conversationId: "c1",
+        messageId: "m1",
+        kind: "CHAT",
+        at: "2026-08-09T00:00:00.000Z",
+      }),
+    );
+
+    const logged = warnSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+    for (const id of ids.slice(0, 10)) expect(logged).toContain(`user:${id}`);
+    expect(logged).toContain("…+50");
+    expect(logged).toContain("n=60");
+  });
+
+  it("nhiều lô KHÔNG bắn dồn: tối đa 2 lô chạy song song (bắn dồn = timeout cả loạt)", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 1));
+        inFlight -= 1;
+        return new Response("{}", { status: 202 });
+      }),
+    );
+
+    const { broadcastMessages, userBumpBroadcasts } = await loadModule();
+    const ids = Array.from({ length: 300 }, (_, i) => `u${i}`);
+    await broadcastMessages(
+      userBumpBroadcasts(ids, {
+        conversationId: "c1",
+        messageId: "m1",
+        kind: "CHAT",
+        at: "2026-08-09T00:00:00.000Z",
+      }),
+    );
+
+    // Đúng 2, không phải "≤2": 300 phần tử = 5 lô, đo được đỉnh 2 chứng minh vừa có
+    // song song (không tuần tự hoá) vừa không vượt trần. Bắn cả 5 lô một lúc → đỉnh 5.
+    expect(peak).toBe(2);
   });
 
   it("mảng rỗng → KHÔNG gọi fetch, trả true (không POST body rỗng)", async () => {

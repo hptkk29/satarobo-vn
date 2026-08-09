@@ -12,19 +12,22 @@ import {
 
 const ME = "user-me";
 /** TTL thật của `/api/chat/realtime-token`. */
-const TTL_MS = 15 * 60_000;
+const TTL_MS = 5 * 60_000;
+/** Trần backoff nối lại (`RECONNECT_MAX_MS` trong user-channel.ts). */
+const RECONNECT_CAP_MS = 30_000;
 
 function createFakeTransport() {
   const calls = {
     subscribe: [] as { userId: string; jwt: string }[],
+    /** Vé đã giao cho chu kỳ gia hạn (`renewAuth`), theo thứ tự. */
     setAuth: [] as string[],
     unsubscribe: 0,
   };
   let handlers: UserChannelHandlers | null = null;
 
   const transport: UserChannelTransport = {
-    subscribe(userId, jwt, h) {
-      calls.subscribe.push({ userId, jwt });
+    subscribe(userId, auth, h) {
+      calls.subscribe.push({ userId, jwt: auth.token });
       handlers = h;
       return {
         unsubscribe: () => {
@@ -32,8 +35,9 @@ function createFakeTransport() {
         },
       };
     },
-    setAuth(jwt) {
-      calls.setAuth.push(jwt);
+    renewAuth(auth) {
+      calls.setAuth.push(auth.token);
+      return auth.expiresAt;
     },
   };
 
@@ -274,6 +278,144 @@ describe("createUserChannelHub", () => {
     expect(fake.calls.subscribe.map((c) => c.userId)).toEqual([ME, "user-khac"]);
     off1();
     off2();
+  });
+
+  // Đo thật (LỖ 3): kênh đã CLOSED thì KHÔNG tự hồi. Hub sống suốt phiên nên "đóng rồi
+  // thôi" = badge chưa đọc đứng im tới khi người dùng F5 — không lỗi, không dấu hiệu.
+  it("CLOSED ngoài ý muốn ⇒ nối lại bằng vé MỚI sau backoff", async () => {
+    const { hub, fake, fetchToken } = setup();
+    const off = hub.subscribe(ME, vi.fn());
+    await flush();
+    fake.handlers.onStatus("SUBSCRIBED");
+
+    fake.handlers.onStatus("CLOSED");
+    expect(fake.calls.subscribe).toHaveLength(1); // chưa nối ngay
+
+    await flush(2_000 + 10);
+    expect(fake.calls.subscribe).toHaveLength(2);
+    expect(fetchToken).toHaveBeenCalledTimes(2);
+    expect(fake.calls.subscribe[1].jwt).toBe("jwt-2");
+    off();
+  });
+
+  it("không còn người nghe ⇒ CLOSED KHÔNG nối lại (kênh do chính ta đóng)", async () => {
+    const { hub, fake } = setup();
+    const off = hub.subscribe(ME, vi.fn());
+    await flush();
+    const stale = fake.handlers;
+
+    off();
+    expect(fake.calls.unsubscribe).toBe(1);
+    stale.onStatus("CLOSED");
+    await flush(RECONNECT_CAP_MS * 3);
+
+    expect(fake.calls.subscribe).toHaveLength(1);
+  });
+
+  it("rớt liên tiếp ⇒ backoff nhân đôi, không nối dồn (trần vé 30 lượt/phút)", async () => {
+    const { hub, fake } = setup();
+    const off = hub.subscribe(ME, vi.fn());
+    await flush();
+
+    fake.handlers.onStatus("CLOSED");
+    await flush(2_000 + 10);
+    expect(fake.calls.subscribe).toHaveLength(2);
+
+    fake.handlers.onStatus("CLOSED");
+    await flush(2_000 + 10);
+    expect(fake.calls.subscribe).toHaveLength(2); // lần 2 phải chờ 4s
+    await flush(2_000 + 10);
+    expect(fake.calls.subscribe).toHaveLength(3);
+    off();
+  });
+
+  // Vòng lặp nóng = mỗi lượt nối lại là một lần xin vé (`/api/chat/realtime-token`, trần
+  // 30 lượt/phút/user). Rớt liên tục mà không có trần backoff là tự khoá chính mình.
+  it("rớt liên tục ⇒ backoff kịch 30s, KHÔNG vòng lặp nóng", async () => {
+    const { hub, fake } = setup();
+    const off = hub.subscribe(ME, vi.fn());
+    await flush();
+
+    // Đẩy backoff lên kịch trần.
+    for (let i = 0; i < 8; i++) {
+      fake.handlers.onStatus("CLOSED");
+      await flush(RECONNECT_CAP_MS + 10);
+    }
+    const before = fake.calls.subscribe.length;
+
+    // Rớt lại rồi để trôi 3 lần trần: nhiều nhất 3 lượt nối lại, không phải hàng chục.
+    fake.handlers.onStatus("CLOSED");
+    await flush(RECONNECT_CAP_MS * 3);
+    expect(fake.calls.subscribe.length - before).toBeLessThanOrEqual(3);
+    off();
+  });
+
+  /**
+   * Hai bộ hẹn giờ SỐNG CHUNG: gia hạn vé và nối lại. Một lần gia hạn thành công KHÔNG
+   * được nuốt mất lượt nối lại đang chờ — nếu nuốt thì kênh đã CLOSED nằm chết im lặng
+   * vĩnh viễn (badge chưa đọc đứng số cũ tới khi F5), đúng cái bug đang vá nhưng ở dạng
+   * khó thấy hơn vì nó chỉ xảy ra khi backoff dài hơn nhịp gia hạn.
+   */
+  it("gia hạn vé GIỮA lúc chờ nối lại ⇒ KHÔNG huỷ mất lượt nối lại", async () => {
+    // Vé rất ngắn để nhịp gia hạn (80% ⇒ 10s) rơi vào giữa cửa sổ backoff 16s.
+    const SHORT_TTL_MS = 12_500;
+    let seq = 0;
+    const fetchToken = vi.fn(async () => ({
+      token: `jwt-${++seq}`,
+      expiresAt: new Date(Date.now() + SHORT_TTL_MS).toISOString(),
+    }));
+    const { hub, fake } = setup({ fetchToken });
+    const off = hub.subscribe(ME, vi.fn());
+    await flush();
+
+    // Đẩy backoff lên 16s: mỗi lần CLOSED ngay sau khi vừa nối lại ⇒ 2s, 4s, 8s.
+    for (const delay of [2_000, 4_000, 8_000]) {
+      fake.handlers.onStatus("CLOSED");
+      await flush(delay + 10);
+    }
+    expect(fake.calls.subscribe).toHaveLength(4);
+
+    fake.handlers.onStatus("CLOSED"); // lượt kế: chờ 16s
+    const setAuthBefore = fake.calls.setAuth.length;
+
+    await flush(10_000 + 10); // nhịp gia hạn vé rơi vào đây
+    expect(fake.calls.setAuth.length).toBeGreaterThan(setAuthBefore);
+    expect(fake.calls.subscribe).toHaveLength(4); // chưa tới hạn nối lại
+
+    await flush(6_000 + 10); // qua mốc 16s
+    expect(fake.calls.subscribe).toHaveLength(5);
+    off();
+  });
+
+  // Người nghe cuối rời (điều hướng khỏi trang) ĐÚNG LÚC vé đang trên đường về: giao nó
+  // cho tầng kết nối là chạy một chu kỳ rời-đổi-join cho kênh vừa bị đóng.
+  it("rời hết người nghe GIỮA lúc gia hạn ⇒ KHÔNG giao vé cho tầng kết nối", async () => {
+    type TokenRes = { token: string; expiresAt: string };
+    // Giữ trong object: `let` bị TS thu hẹp về `never` vì phép gán nằm trong callback.
+    const pending: { resolve: ((t: TokenRes) => void) | null } = { resolve: null };
+    let n = 0;
+    const fetchToken = vi.fn(async () => {
+      n += 1;
+      if (n === 1) return { token: "jwt-1", expiresAt: new Date(Date.now() + TTL_MS).toISOString() };
+      return new Promise<TokenRes>((resolve) => {
+        pending.resolve = resolve;
+      });
+    });
+    const { hub, fake } = setup({ fetchToken });
+    const off = hub.subscribe(ME, vi.fn());
+    await flush();
+
+    await flush(TTL_MS * 0.8 + 10); // đã xin vé mới, đang chờ mạng
+    expect(fetchToken).toHaveBeenCalledTimes(2);
+
+    off(); // người nghe cuối rời ⇒ kênh đóng
+    pending.resolve?.({ token: "jwt-2", expiresAt: new Date(Date.now() + TTL_MS).toISOString() });
+    await flush(10);
+
+    expect(fake.calls.setAuth).toHaveLength(0);
+    expect(fake.calls.unsubscribe).toBe(1);
+    await flush(TTL_MS * 2);
+    expect(fake.calls.subscribe).toHaveLength(1);
   });
 
   it("kênh CŨ bắn muộn sau khi đã dựng lại ⇒ KHÔNG lọt vào người nghe (chặn theo generation)", async () => {

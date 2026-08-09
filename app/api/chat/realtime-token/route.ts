@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * US-02 — Cấp JWT ngắn hạn (15') cho client subscribe Supabase Realtime
+ * US-02 — Cấp JWT ngắn hạn (5' — xem `REALTIME_TOKEN_TTL_SECONDS`) cho client subscribe Supabase Realtime
  * private channel. Mọi role đăng nhập đều cấp được — quyền đọc THẬT nằm ở
  * policy RLS participant trên `realtime.messages`, không ở đây.
  * `mintRealtimeToken` tự kiểm tokenVersion trong DB (force-logout → 401).
@@ -21,8 +21,9 @@ export async function GET() {
   }
 
   // Mint JWT = ký chữ ký + 1 query DB kiểm tokenVersion ⇒ phải có trần. Đặt SAU auth()
-  // để khoá theo userId (không phải IP: nhiều PH sau chung NAT). Token sống 15' nên
-  // client lành mạnh gọi vài lần/giờ; 30/phút rộng cho nhiều tab + reconnect realtime.
+  // để khoá theo userId (không phải IP: nhiều PH sau chung NAT). Token sống 5' và client
+  // gia hạn ở 80% TTL ⇒ mỗi bộ hẹn giờ gọi ~1 lần/4 phút (một tab mở chat có 2 bộ: kênh
+  // `conv:` và kênh `user:`); 30/phút vẫn rộng cho nhiều tab + backoff nối lại.
   // fail-soft (Upstash → memory) như các route khác.
   const rl = await rateLimit({
     key: `chat:realtime-token:${session.user.id}`,
