@@ -27,6 +27,10 @@
 //  • Ghi kép centerId + orgUnitId trên Conversation (luật Nền Hệ thống #3).
 import type { Prisma } from "@prisma/client";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { publishEvent } from "@/lib/events/publish";
+// Lấy hằng từ lib/chat/events (module rỗng phụ thuộc) chứ KHÔNG từ file handler —
+// handler kéo theo broadcast → `import "server-only"` → file này chết dưới tsx/cron.
+import { CHAT_PARTICIPANT_REMOVED } from "@/lib/chat/events";
 
 // ─── PHẦN THUẦN (không DB — unit test được) ─────────────────────────────────
 
@@ -434,6 +438,17 @@ export async function syncConversationMembership(
       } else if (label) {
         systemMessages.push(`${label} ${displayName(p.userId)} đã rời nhóm.`);
       }
+
+      // F-KICK bước 3 — đá người vừa bị gỡ ra khỏi kênh realtime đang mở. Policy RLS
+      // chỉ chạy lúc join nên không tự đuổi được; handler bắn `participant.removed`
+      // xuống topic để client tự unsubscribe (lib/chat/_handlers/participant-removed.ts).
+      // Publish TRONG tx (rollback nghiệp vụ ⇒ không có event), broadcast chạy SAU
+      // commit ở dispatcher — side-effect không-atomic không được nằm trong tx.
+      await publishEvent(
+        CHAT_PARTICIPANT_REMOVED,
+        { conversationId: conv.id, userId: p.userId },
+        { tx, dedupeKey: `${CHAT_PARTICIPANT_REMOVED}:${p.id}:${now.toISOString()}` },
+      );
     }
   }
 
