@@ -23,6 +23,7 @@ import {
   listConversationsForUser,
 } from "@/lib/chat/queries";
 import { getAnnouncementReadStats, listAnnouncements } from "@/lib/chat/announcements";
+import { listChatAttachments } from "@/lib/chat/messages";
 import { ChatThread } from "./chat-thread";
 import { ConversationList } from "./conversation-list";
 import { AnnouncementReadStats } from "./announcement-read-stats";
@@ -183,6 +184,13 @@ async function ThreadPanel({
 
   const pinnedRaw = pinnedPage.announcements.find((a) => !a.deleted) ?? null;
 
+  // US-11 — ảnh của đúng 30 tin vừa tải. Chạy SAU vì cần danh sách id.
+  const initialAttachments = await listChatAttachments(
+    conversationId,
+    userId,
+    page.messages.map((m) => m.id),
+  );
+
   return (
     <ChatThread
       // Đổi hội thoại = luồng khác hẳn → remount để state trong hook không dính lại.
@@ -192,6 +200,7 @@ async function ThreadPanel({
       title={title}
       subtitle={`${type === "CLASS_GROUP" ? "Nhóm lớp" : "Hội thoại riêng"} · ${members.length} thành viên`}
       initialMessages={page.messages as StaffChatMessage[]}
+      initialAttachments={initialAttachments}
       initialHasMore={page.hasMore}
       initialCursor={page.nextCursor}
       members={members}

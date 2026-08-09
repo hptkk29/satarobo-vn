@@ -18,6 +18,7 @@ import {
   listConversationsForUser,
 } from "@/lib/chat/queries";
 import { listAnnouncements } from "@/lib/chat/announcements";
+import { listChatAttachments } from "@/lib/chat/messages";
 import { ChatThread } from "@/components/chat/portal/chat-thread";
 import { AnnouncementReadMarker } from "@/components/chat/portal/announcement-read-marker";
 import { formatChatTimestamp } from "@/components/chat/portal/format";
@@ -61,6 +62,15 @@ export default async function PortalConversationPage({
     getConversationMembers(conversationId, userId),
     listAnnouncements(conversationId, userId, { limit: 1 }),
   ]);
+
+  // US-11 — ảnh của đúng 30 tin vừa tải. Chạy SAU vì cần danh sách id; tách khỏi tầng đọc
+  // chung (`getMessagesPage`) để mọi đường đọc khác không phải gánh thêm một join cho thứ
+  // mà tuyệt đại đa số tin không có.
+  const initialAttachments = await listChatAttachments(
+    conversationId,
+    userId,
+    page.messages.map((m) => m.id),
+  );
 
   const pinned = announcements.announcements[0] ?? null;
   const gate = sendGate(conversation.status);
@@ -128,6 +138,7 @@ export default async function PortalConversationPage({
           roleLabel: m.roleLabel,
         }))}
         initialMessages={page.messages}
+        initialAttachments={initialAttachments}
         initialCursor={page.nextCursor}
         initialHasMore={page.hasMore}
         canSend={gate.canSend}

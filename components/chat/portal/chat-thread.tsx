@@ -21,6 +21,7 @@ import { Loader2, RefreshCw, Users } from "lucide-react";
 import Link from "next/link";
 import { useChatChannel } from "@/components/chat/use-chat-channel";
 import {
+  DELETED_MESSAGE_TEXT,
   createOptimisticMessage,
   nextSendState,
   startSend,
@@ -33,6 +34,12 @@ import {
   recallOwnMessageAction,
   sendChatMessageAction,
 } from "@/lib/chat/_actions";
+import {
+  useMessageAttachments,
+  type MessageAttachmentRow,
+} from "@/components/chat/attachments/use-message-attachments";
+import type { ChatAttachmentPayload } from "@/components/chat/attachments/rules";
+import { messageDomId, replyQuoteOf } from "@/components/chat/reply-quote";
 import { MessageComposer } from "./message-composer";
 import { MessageRow } from "./message-row";
 import type { PortalChatMember, PortalChatMessage } from "./types";
@@ -41,6 +48,8 @@ import type { PortalChatMember, PortalChatMessage } from "./types";
 const STICK_TO_BOTTOM_PX = 80;
 /** Nhịp cập nhật đồng hồ cho cửa sổ thu hồi 15' (không cần chính xác tới giây). */
 const RECALL_CLOCK_TICK_MS = 30_000;
+/** Nhấn sáng tin gốc sau khi cuộn tới (US-09 AC5) — đủ để mắt bắt được, không lâu hơn. */
+const REPLY_HIGHLIGHT_MS = 1_800;
 
 /** `clientMsgId` phải là UUID (schema server). `crypto.randomUUID` không có ở vài WebView cũ. */
 function newClientMsgId(): string {
@@ -64,6 +73,7 @@ export function ChatThread({
   currentUserId,
   members,
   initialMessages,
+  initialAttachments,
   initialCursor,
   initialHasMore,
   canSend,
@@ -74,6 +84,8 @@ export function ChatThread({
   members: PortalChatMember[];
   /** 30 tin mới nhất từ RSC (MỚI → CŨ; store tự sắp lại CŨ → MỚI). */
   initialMessages: PortalChatMessage[];
+  /** Ảnh của đúng những tin trên, cũng từ RSC (US-11) — không có `useEffect` nạp ban đầu. */
+  initialAttachments: MessageAttachmentRow[];
   initialCursor: string | null;
   initialHasMore: boolean;
   canSend: boolean;
@@ -88,13 +100,22 @@ export function ChatThread({
   const [recallingId, setRecallingId] = useState<string | null>(null);
   // 0 = chưa mount xong ⇒ chưa hiện nút thu hồi (tránh lệch server/client khi hydrate).
   const [nowMs, setNowMs] = useState(0);
+  /** US-09 AC5 — tin đang được trả lời (id server, không bao giờ là `tmp:`). */
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+  /** Tin vừa được cuộn tới từ một trích dẫn — nhấn sáng rồi tự tắt. */
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   /** Bản optimistic đang chờ, theo `clientMsgId` — nguồn để thử lại mà không mất nội dung. */
   const pendingRef = useRef(new Map<string, ChatMessage>());
+  /** Ảnh + preview đi kèm bản optimistic (không nằm trong `ChatMessage`) — giữ để thử lại. */
+  const pendingFilesRef = useRef(
+    new Map<string, { attachments: ChatAttachmentPayload[]; previewUrls: string[] }>(),
+  );
   const retryTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { messages, status, error, isReconciling, mergeLocal, reconcile } = useChatChannel({
     conversationId,
@@ -119,17 +140,40 @@ export function ChatThread({
     },
   });
 
+  const { attachmentsOf, setLocalAttachments } = useMessageAttachments({
+    conversationId,
+    messages,
+    initialAttachments,
+    initialResolvedIds: useMemo(() => initialMessages.map((m) => m.id), [initialMessages]),
+  });
+
   const memberNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const m of members) map.set(m.userId, m.displayName);
     return map;
   }, [members]);
 
+  const messageById = useMemo(() => {
+    const map = new Map<string, ChatMessage>();
+    for (const m of messages) map.set(m.id, m);
+    return map;
+  }, [messages]);
+
+  const nameOf = (userId: string | null) => {
+    if (!userId) return null;
+    if (userId === currentUserId) return "Bạn";
+    return memberNameById.get(userId) ?? "Thành viên";
+  };
+
+  const quoteOf = (targetId: string) =>
+    replyQuoteOf(targetId, (id) => messageById.get(id), nameOf, DELETED_MESSAGE_TEXT);
+
   // ── Gửi tin: optimistic + clientMsgId + thử lại theo chính sách của store ──
 
   async function deliver(clientMsgId: string) {
     const optimistic = pendingRef.current.get(clientMsgId);
     if (!optimistic) return;
+    const files = pendingFilesRef.current.get(clientMsgId);
 
     let errorMessage: string | null = null;
     let outcome: "retry" | "fatal";
@@ -138,11 +182,28 @@ export function ChatThread({
         conversationId,
         body: optimistic.body,
         clientMsgId,
+        ...(optimistic.replyToId ? { replyToId: optimistic.replyToId } : {}),
+        ...(files && files.attachments.length > 0 ? { attachments: files.attachments } : {}),
       });
       if (res.ok) {
         // Bản server thắng bản optimistic (khử trùng tầng 2 theo clientMsgId).
         pendingRef.current.delete(clientMsgId);
+        pendingFilesRef.current.delete(clientMsgId);
         retryTimersRef.current.delete(clientMsgId);
+        // Ảnh chuyển từ bản tạm sang tin thật, GIỮ NGUYÊN object URL cục bộ theo đúng thứ
+        // tự: người gửi không phải chờ một vòng ký URL để thấy lại ảnh mình vừa gửi.
+        if (res.data.attachments.length > 0) {
+          setLocalAttachments(
+            res.data.id,
+            res.data.attachments.map((a, i) => ({
+              id: a.id,
+              fileName: a.fileName,
+              mimeType: a.mimeType,
+              sizeBytes: a.sizeBytes,
+              ...(files?.previewUrls[i] ? { localUrl: files.previewUrls[i] } : {}),
+            })),
+          );
+        }
         mergeLocal(res.data);
         return;
       }
@@ -167,18 +228,54 @@ export function ChatThread({
     if (errorMessage) toast.error(errorMessage);
   }
 
-  function handleSend(body: string) {
+  function handleSend(
+    body: string,
+    attachments: ChatAttachmentPayload[],
+    previewUrls: string[],
+  ) {
     const clientMsgId = newClientMsgId();
     const optimistic = createOptimisticMessage({
       conversationId,
       clientMsgId,
       senderId: currentUserId,
       body,
+      replyToId,
     });
     pendingRef.current.set(clientMsgId, optimistic);
+    if (attachments.length > 0) {
+      pendingFilesRef.current.set(clientMsgId, { attachments, previewUrls });
+      // Bong bóng tạm hiện ảnh ngay bằng object URL — chưa có `MessageAttachment.id` nào.
+      setLocalAttachments(
+        optimistic.id,
+        attachments.map((a, i) => ({
+          id: `local:${clientMsgId}:${i}`,
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+          ...(previewUrls[i] ? { localUrl: previewUrls[i] } : {}),
+        })),
+      );
+    }
+    setReplyToId(null);
     mergeLocal(optimistic);
     stickToBottomRef.current = true;
     void deliver(clientMsgId);
+  }
+
+  // ── Trả lời một cấp (US-09 AC5) ───────────────────────────────────────────
+
+  function jumpToMessage(messageId: string) {
+    const el = document.getElementById(messageDomId(messageId));
+    if (!el) {
+      toast.info("Tin gốc chưa được tải — hãy cuộn lên để tải thêm tin cũ.");
+      return;
+    }
+    // Đang xem tin cũ thì tin mới KHÔNG được kéo màn hình xuống đáy.
+    stickToBottomRef.current = false;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setHighlightId(messageId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightId(null), REPLY_HIGHLIGHT_MS);
   }
 
   function handleRetry(clientMsgId: string) {
@@ -277,6 +374,7 @@ export function ChatThread({
     return () => {
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     };
   }, []);
 
@@ -337,13 +435,26 @@ export function ChatThread({
             senderName={m.senderId ? (memberNameById.get(m.senderId) ?? "Thành viên") : null}
             nowMs={nowMs}
             recallPending={recallingId === m.id}
+            attachments={attachmentsOf(m.id)}
+            replyQuote={m.replyToId ? quoteOf(m.replyToId) : null}
+            highlighted={highlightId === m.id}
+            canSend={canSend}
             onRecall={(id) => void handleRecall(id)}
             onRetry={handleRetry}
+            onReply={setReplyToId}
+            onJumpToReply={jumpToMessage}
           />
         ))}
       </div>
 
-      <MessageComposer disabled={!canSend} disabledReason={disabledReason} onSend={handleSend} />
+      <MessageComposer
+        conversationId={conversationId}
+        disabled={!canSend}
+        disabledReason={disabledReason}
+        replyQuote={replyToId ? quoteOf(replyToId) : null}
+        onCancelReply={() => setReplyToId(null)}
+        onSend={handleSend}
+      />
 
       <Link
         href={`/portal/tin-nhan/${conversationId}/thanh-vien`}

@@ -27,11 +27,16 @@ const h = vi.hoisted(() => {
     existing: null as Row | null,
     reply: null as Row | null,
     seq: 0,
+    attSeq: 0,
     created: [] as Row[],
+    attachments: [] as Row[],
     convUpdates: [] as Row[],
     unreadUpdates: [] as Row[],
     txOptions: null as Row | null,
     txCalls: 0,
+    /** true trong lúc callback của `$transaction` đang chạy — dùng để chứng minh
+     *  `MessageAttachment` được ghi TRONG tx, không phải sau khi tx đã đóng. */
+    insideTx: false,
   };
   const mockDb: Record<string, unknown> = {
     $extends: () => mockDb,
@@ -39,8 +44,27 @@ const h = vi.hoisted(() => {
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>, opts?: Row) => {
       state.txCalls += 1;
       state.txOptions = opts ?? null;
-      return fn(mockDb);
+      state.insideTx = true;
+      try {
+        return await fn(mockDb);
+      } finally {
+        state.insideTx = false;
+      }
     }),
+    messageAttachment: {
+      create: vi.fn(async ({ data }: { data: Row }) => {
+        state.attSeq += 1;
+        const row = { id: `att-${state.attSeq}`, insideTx: state.insideTx, ...data };
+        state.attachments.push(row);
+        return {
+          id: row.id,
+          fileName: data.fileName,
+          mimeType: data.mimeType,
+          sizeBytes: data.sizeBytes,
+        };
+      }),
+      findMany: vi.fn(async () => []),
+    },
     message: {
       findFirst: vi.fn(async () => state.existing),
       findUnique: vi.fn(async () => state.reply),
@@ -87,6 +111,8 @@ import { buildActor, type UserOrgRoleRow } from "@/lib/auth/actor";
 import type { OrgUnitNode } from "@/lib/org/types";
 import { ROLE_SEED } from "../../prisma/seed-roles";
 import {
+  chatAttachmentPrefix,
+  checkAttachmentPaths,
   checkConversationSendable,
   checkReplyTarget,
   sendChatMessageAsActor,
@@ -163,11 +189,14 @@ beforeEach(() => {
   h.state.existing = null;
   h.state.reply = null;
   h.state.seq = 0;
+  h.state.attSeq = 0;
   h.state.created = [];
+  h.state.attachments = [];
   h.state.convUpdates = [];
   h.state.unreadUpdates = [];
   h.state.txOptions = null;
   h.state.txCalls = 0;
+  h.state.insideTx = false;
   h.broadcast.mockClear();
   h.broadcast.mockImplementation(async () => true);
   h.writeAudit.mockClear();
@@ -264,6 +293,115 @@ describe("[US-06] checkReplyTarget — reply 1 cấp, không xuyên hội thoạ
 
   it("tin gốc không tồn tại → REPLY_NOT_IN_CONVERSATION", () => {
     expect(checkReplyTarget(CONV, null)?.code).toBe("REPLY_NOT_IN_CONVERSATION");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// US-11 — ĐÍNH KÈM ẢNH (tầng thuần)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Key R2 hợp lệ của MỘT hội thoại — cùng khuôn `buildChatAttachmentKey` sinh ra. */
+const keyOf = (conv: string, n = 1) => `chat-attachments/${conv}/2026-08/anh-${n}.jpg`;
+
+function att(over: Record<string, unknown> = {}) {
+  return {
+    storagePath: keyOf(CONV),
+    fileName: "buoi-hoc.jpg",
+    mimeType: "image/jpeg",
+    sizeBytes: 123_456,
+    ...over,
+  };
+}
+
+describe("[US-11] chatAttachmentPrefix — suy tiền tố từ chính hàm dựng key", () => {
+  it("trả đúng tiền tố của hội thoại đang gửi", () => {
+    expect(chatAttachmentPrefix(CONV)).toBe(`chat-attachments/${CONV}/`);
+  });
+
+  it("hai hội thoại khác nhau ⇒ hai tiền tố khác nhau (nền của mọi kiểm tra bên dưới)", () => {
+    expect(chatAttachmentPrefix(CONV)).not.toBe(chatAttachmentPrefix(CONV_KHAC));
+  });
+
+  it("conversationId dị dạng (có dấu /) → null ⇒ caller phải TỪ CHỐI, không đoán bừa", () => {
+    expect(chatAttachmentPrefix("../../etc")).toBeNull();
+  });
+});
+
+describe("[US-11][AC1] checkAttachmentPaths — chống gán ảnh của hội thoại KHÁC", () => {
+  it("không có ảnh → không lỗi (đường thường của mọi tin chữ)", () => {
+    expect(checkAttachmentPaths(CONV, [])).toBeNull();
+  });
+
+  it("key đúng tiền tố hội thoại đang gửi → hợp lệ", () => {
+    expect(checkAttachmentPaths(CONV, [att(), att({ storagePath: keyOf(CONV, 2) })])).toBeNull();
+  });
+
+  it("⭐ key của hội thoại KHÁC → ATTACHMENT_PATH_MISMATCH (chống đọc chéo ảnh)", () => {
+    const err = checkAttachmentPaths(CONV, [att({ storagePath: keyOf(CONV_KHAC) })]);
+    expect(err?.code).toBe("ATTACHMENT_PATH_MISMATCH");
+  });
+
+  it("⭐ một ảnh hợp lệ + một ảnh của hội thoại khác → vẫn chặn CẢ tin", () => {
+    expect(
+      checkAttachmentPaths(CONV, [att(), att({ storagePath: keyOf(CONV_KHAC, 9) })])?.code,
+    ).toBe("ATTACHMENT_PATH_MISMATCH");
+  });
+
+  it("key chui ra ngoài bằng '..' → ATTACHMENT_PATH_MISMATCH", () => {
+    expect(
+      checkAttachmentPaths(CONV, [
+        att({ storagePath: `chat-attachments/${CONV}/../${CONV_KHAC}/2026-08/x.jpg` }),
+      ])?.code,
+    ).toBe("ATTACHMENT_PATH_MISMATCH");
+  });
+
+  it("tiền tố chỉ TRÙNG MỘT PHẦN (id hội thoại khác bắt đầu bằng id này) → vẫn chặn", () => {
+    expect(
+      checkAttachmentPaths(CONV, [att({ storagePath: `chat-attachments/${CONV}x/2026-08/x.jpg` }),
+      ])?.code,
+    ).toBe("ATTACHMENT_PATH_MISMATCH");
+  });
+
+  it("mime ngoài gói cắt (pdf/heic) → ATTACHMENT_UNSUPPORTED_TYPE, mã KHÁC path mismatch", () => {
+    const err = checkAttachmentPaths(CONV, [att({ mimeType: "application/pdf" })]);
+    expect(err?.code).toBe("ATTACHMENT_UNSUPPORTED_TYPE");
+    expect(err?.code).not.toBe("ATTACHMENT_PATH_MISMATCH");
+  });
+});
+
+describe("[US-11][AC1] schema — trần 5 ảnh + tin chỉ có ảnh", () => {
+  it("6 ảnh → VALIDATION (trần 5 ảnh/tin, khớp CHAT_IMAGE_RULES)", () => {
+    const res = sendChatMessageSchema.safeParse(
+      input({ attachments: Array.from({ length: 6 }, (_, i) => att({ storagePath: keyOf(CONV, i) })) }),
+    );
+    expect(res.success).toBe(false);
+  });
+
+  it("5 ảnh → hợp lệ (biên không lệch 1)", () => {
+    const res = sendChatMessageSchema.safeParse(
+      input({ attachments: Array.from({ length: 5 }, (_, i) => att({ storagePath: keyOf(CONV, i) })) }),
+    );
+    expect(res.success).toBe(true);
+  });
+
+  it("QUYẾT ĐỊNH US-11: body rỗng + ≥1 ảnh → HỢP LỆ (gửi ảnh không kèm chữ)", () => {
+    const res = sendChatMessageSchema.safeParse(input({ body: "   ", attachments: [att()] }));
+    expect(res.success).toBe(true);
+    expect(res.data?.body).toBe("");
+  });
+
+  it("body rỗng + KHÔNG ảnh → VALIDATION ở field body (không đẻ tin rỗng)", () => {
+    const res = sendChatMessageSchema.safeParse(input({ body: "   ", attachments: [] }));
+    expect(res.success).toBe(false);
+    expect(res.error?.issues[0]?.path.join(".")).toBe("body");
+  });
+
+  it("ảnh vượt 10MB → VALIDATION (client sửa số cũng không lách được)", () => {
+    expect(
+      sendChatMessageSchema.safeParse(
+        input({ attachments: [att({ sizeBytes: 10 * 1024 * 1024 + 1 })] }),
+      ).success,
+    ).toBe(false);
   });
 });
 
@@ -450,6 +588,87 @@ describe("[US-06][AC4] idempotency theo clientMsgId (TS-10.4)", () => {
     expect(h.state.unreadUpdates).toHaveLength(0); // KHÔNG tăng unread lần 2
     expect(h.state.convUpdates).toHaveLength(0);
     expect(h.state.txCalls).toBe(0);
+  });
+});
+
+describe("[US-11] gửi tin kèm ảnh qua pipeline", () => {
+  it("2 ảnh → 2 MessageAttachment gắn ĐÚNG messageId, ghi TRONG CHÍNH transaction gửi tin", async () => {
+    const actor = actorOf("PARENT", "cs1", "ph-att");
+    const res = await sendChatMessageAsActor(
+      actor,
+      "PH Test",
+      input({ attachments: [att(), att({ storagePath: keyOf(CONV, 2), fileName: "b.png", mimeType: "image/png" })] }),
+    );
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(h.state.created).toHaveLength(1);
+    expect(h.state.attachments).toHaveLength(2);
+
+    const msgId = (h.state.created[0] as { id: string }).id;
+    for (const a of h.state.attachments) {
+      expect((a as { messageId: string }).messageId).toBe(msgId);
+      // ⭐ Bất biến sống còn: attachment KHÔNG được ghi ngoài transaction — tin rollback
+      // mà attachment còn lại là rác trỏ vào messageId không tồn tại.
+      expect((a as { insideTx: boolean }).insideTx).toBe(true);
+    }
+
+    // Action trả về id ảnh để client đổi lấy signed GET URL (bước 3 F-FILE).
+    expect(res.data.attachments.map((a) => a.id)).toEqual(["att-1", "att-2"]);
+    expect(res.data.attachments[0]?.mimeType).toBe("image/jpeg");
+    expect(res.data.attachments[1]?.mimeType).toBe("image/png");
+  });
+
+  it("tin CHỈ CÓ ẢNH (body rỗng) gửi được — quyết định US-11", async () => {
+    const actor = actorOf("PARENT", "cs1", "ph-att-only");
+    const res = await sendChatMessageAsActor(actor, "PH Test", input({ body: "", attachments: [att()] }));
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.body).toBe("");
+    expect(h.state.attachments).toHaveLength(1);
+  });
+
+  it("⭐ storagePath của hội thoại KHÁC → ATTACHMENT_PATH_MISMATCH, KHÔNG mở tx, KHÔNG ghi gì", async () => {
+    const actor = actorOf("PARENT", "cs1", "ph-att-x");
+    const res = await sendChatMessageAsActor(
+      actor,
+      "PH Test",
+      input({ attachments: [att({ storagePath: keyOf(CONV_KHAC) })] }),
+    );
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error.code).toBe("ATTACHMENT_PATH_MISMATCH");
+    expect(h.state.created).toHaveLength(0);
+    expect(h.state.attachments).toHaveLength(0);
+    expect(h.state.txCalls).toBe(0);
+    expect(h.broadcast).not.toHaveBeenCalled();
+  });
+
+  it("broadcast mang theo danh sách ảnh nhưng KHÔNG mang URL đã ký", async () => {
+    const actor = actorOf("PARENT", "cs1", "ph-att-bc");
+    await sendChatMessageAsActor(actor, "PH Test", input({ attachments: [att()] }));
+
+    const payload = (h.broadcast.mock.calls[0] as unknown as [string, string, Record<string, unknown>])[2];
+    expect(payload.attachments).toEqual([
+      { id: "att-1", fileName: "buoi-hoc.jpg", mimeType: "image/jpeg", sizeBytes: 123_456 },
+    ]);
+    // URL đã ký sống 5 phút và ai nghe được topic cũng dùng được ⇒ không bao giờ broadcast.
+    expect(JSON.stringify(payload)).not.toContain("http");
+    expect(JSON.stringify(payload)).not.toContain("storagePath");
+  });
+
+  it("AuditLog ghi SỐ LƯỢNG ảnh, không ghi key kho ảnh", async () => {
+    const actor = actorOf("PARENT", "cs1", "ph-att-audit");
+    await sendChatMessageAsActor(actor, "PH Test", input({ attachments: [att(), att({ storagePath: keyOf(CONV, 2) })] }));
+
+    const arg = (h.writeAudit.mock.calls as unknown as Record<string, unknown>[][])[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect((arg.newValues as Record<string, unknown>).attachmentCount).toBe(2);
+    expect(JSON.stringify(arg.newValues)).not.toContain("chat-attachments/");
   });
 });
 

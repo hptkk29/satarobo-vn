@@ -19,13 +19,28 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Megaphone, RotateCcw, Send, Trash2, Undo2, WifiOff } from "lucide-react";
+import {
+  ArrowLeft,
+  CornerUpLeft,
+  Loader2,
+  Megaphone,
+  RotateCcw,
+  Send,
+  Trash2,
+  Undo2,
+  WifiOff,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useChatChannel } from "@/components/chat/use-chat-channel";
-import { createOptimisticMessage, isOptimistic, type ChatMessage } from "@/components/chat/chat-store";
+import {
+  DELETED_MESSAGE_TEXT,
+  createOptimisticMessage,
+  isOptimistic,
+  type ChatMessage,
+} from "@/components/chat/chat-store";
 // Cửa CHUNG của module chat (dùng chung với bề mặt phụ huynh) — không chép lại.
 import {
   fetchMessagesSinceAction,
@@ -34,6 +49,27 @@ import {
   recallOwnMessageAction,
   sendChatMessageAction,
 } from "@/lib/chat/_actions";
+import { ChatAttachmentGallery } from "@/components/chat/attachments/attachment-gallery";
+import {
+  AttachmentPickerButton,
+  PendingUploadStrip,
+} from "@/components/chat/attachments/attachment-picker";
+import { useAttachmentUploads } from "@/components/chat/attachments/use-attachment-uploads";
+import {
+  useMessageAttachments,
+  type MessageAttachmentRow,
+} from "@/components/chat/attachments/use-message-attachments";
+import type {
+  ChatAttachmentPayload,
+  ChatAttachmentView,
+} from "@/components/chat/attachments/rules";
+import {
+  ReplyComposerBar,
+  ReplyQuote,
+  messageDomId,
+  replyQuoteOf,
+  type ReplyQuoteData,
+} from "@/components/chat/reply-quote";
 import { AnnouncementComposer } from "./announcement-composer";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 import type { StaffChatCapabilities, StaffChatMember, StaffChatMessage } from "./types";
@@ -42,6 +78,8 @@ import type { StaffChatCapabilities, StaffChatMember, StaffChatMessage } from ".
 const RECALL_WINDOW_MS = 15 * 60_000;
 /** Trần độ dài, khớp `CHAT_BODY_MAX` của lib/chat/messages.ts. */
 const BODY_MAX = 4000;
+/** Nhấn sáng tin gốc sau khi cuộn tới từ một trích dẫn (US-09 AC5). */
+const REPLY_HIGHLIGHT_MS = 1_800;
 
 const timeFmt = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
@@ -74,6 +112,8 @@ export type ChatThreadProps = {
   /** Nhãn phụ dưới tên hội thoại (vd "Nhóm lớp · 24 thành viên"). */
   subtitle: string;
   initialMessages: StaffChatMessage[];
+  /** Ảnh của đúng những tin trên, cũng do RSC tải (US-11). */
+  initialAttachments: MessageAttachmentRow[];
   initialHasMore: boolean;
   initialCursor: string | null;
   members: StaffChatMember[];
@@ -107,9 +147,29 @@ export function ChatThread(props: ChatThreadProps) {
   const [hasMore, setHasMore] = useState(props.initialHasMore);
   const [loadingOlder, startLoadOlder] = useTransition();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; preview: string } | null>(null);
+  /** US-09 AC5 — tin đang được trả lời. */
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Ảnh + trích dẫn đi kèm một lượt gửi, theo `clientMsgId`. Không nhét vào state `failed`
+   * (nó chỉ giữ chữ) vì nút "Gửi lại" phải gửi lại NGUYÊN VẸN cả ảnh lẫn tin được trả lời.
+   */
+  const attemptRef = useRef(
+    new Map<
+      string,
+      { attachments: ChatAttachmentPayload[]; previewUrls: string[]; replyToId: string | null }
+    >(),
+  );
 
   useEffect(() => setMounted(true), []);
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    },
+    [],
+  );
 
   const fetchSince = useCallback(
     async (lastSeenMessageId: string | null) => {
@@ -136,11 +196,59 @@ export function ChatThread(props: ChatThreadProps) {
     initialMessages: props.initialMessages,
   });
 
+  const { attachmentsOf, setLocalAttachments } = useMessageAttachments({
+    conversationId,
+    messages,
+    initialAttachments: props.initialAttachments,
+    initialResolvedIds: useMemo(
+      () => props.initialMessages.map((m) => m.id),
+      [props.initialMessages],
+    ),
+  });
+
+  const uploader = useAttachmentUploads({
+    conversationId,
+    onError: (message) => toast.error(message),
+  });
+
   const memberById = useMemo(() => {
     const map = new Map<string, StaffChatMember>();
     for (const m of members) map.set(m.userId, m);
     return map;
   }, [members]);
+
+  const messageById = useMemo(() => {
+    const map = new Map<string, ChatMessage>();
+    for (const m of messages) map.set(m.id, m);
+    return map;
+  }, [messages]);
+
+  const quoteOf = useCallback(
+    (targetId: string): ReplyQuoteData =>
+      replyQuoteOf(
+        targetId,
+        (id) => messageById.get(id),
+        (userId) => {
+          if (!userId) return null;
+          if (userId === currentUserId) return "Bạn";
+          return memberById.get(userId)?.displayName ?? "Thành viên";
+        },
+        DELETED_MESSAGE_TEXT,
+      ),
+    [messageById, memberById, currentUserId],
+  );
+
+  const jumpToMessage = useCallback((messageId: string) => {
+    const el = document.getElementById(messageDomId(messageId));
+    if (!el) {
+      toast.info("Tin gốc chưa được tải — bấm \"Tải tin cũ hơn\" rồi thử lại.");
+      return;
+    }
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setHighlightId(messageId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightId(null), REPLY_HIGHLIGHT_MS);
+  }, []);
 
   /** Ghim ANNOUNCEMENT mới nhất: bản từ server (RSC) hoặc bản vừa tới trong luồng. */
   const pinned = useMemo(() => {
@@ -181,8 +289,32 @@ export function ChatThread(props: ChatThreadProps) {
 
   const doSend = useCallback(
     async (clientMsgId: string, body: string) => {
-      const res = await sendChatMessageAction({ conversationId, body, clientMsgId });
+      const attempt = attemptRef.current.get(clientMsgId);
+      const res = await sendChatMessageAction({
+        conversationId,
+        body,
+        clientMsgId,
+        ...(attempt?.replyToId ? { replyToId: attempt.replyToId } : {}),
+        ...(attempt && attempt.attachments.length > 0
+          ? { attachments: attempt.attachments }
+          : {}),
+      });
       if (res.ok) {
+        if (res.data.attachments.length > 0) {
+          // Giữ object URL cục bộ theo đúng thứ tự ⇒ người gửi thấy lại ảnh của mình ngay,
+          // không phải chờ một vòng ký URL.
+          setLocalAttachments(
+            res.data.id,
+            res.data.attachments.map((a, i) => ({
+              id: a.id,
+              fileName: a.fileName,
+              mimeType: a.mimeType,
+              sizeBytes: a.sizeBytes,
+              ...(attempt?.previewUrls[i] ? { localUrl: attempt.previewUrls[i] } : {}),
+            })),
+          );
+        }
+        attemptRef.current.delete(clientMsgId);
         mergeLocal(res.data);
         setFailed((prev) => {
           if (!(clientMsgId in prev)) return prev;
@@ -195,23 +327,47 @@ export function ChatThread(props: ChatThreadProps) {
       setFailed((prev) => ({ ...prev, [clientMsgId]: body }));
       toast.error(res.error.message);
     },
-    [conversationId, mergeLocal],
+    [conversationId, mergeLocal, setLocalAttachments],
   );
 
   function submitDraft() {
+    if (sendDisabled || uploader.busy) return;
     const body = draft.trim();
-    if (!body || sendDisabled) return;
+    const { payloads, previewUrls } = uploader.takeReady();
+    // Tin rỗng hoàn toàn không gửi; tin CHỈ CÓ ẢNH thì được (quyết định US-11).
+    if (!body && payloads.length === 0) return;
+
     const clientMsgId = newUuid();
-    mergeLocal(
-      createOptimisticMessage({ conversationId, clientMsgId, senderId: currentUserId, body }),
-    );
+    attemptRef.current.set(clientMsgId, { attachments: payloads, previewUrls, replyToId });
+    const optimistic = createOptimisticMessage({
+      conversationId,
+      clientMsgId,
+      senderId: currentUserId,
+      body,
+      replyToId,
+    });
+    if (payloads.length > 0) {
+      setLocalAttachments(
+        optimistic.id,
+        payloads.map((a, i) => ({
+          id: `local:${clientMsgId}:${i}`,
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+          ...(previewUrls[i] ? { localUrl: previewUrls[i] } : {}),
+        })),
+      );
+    }
+    mergeLocal(optimistic);
     setDraft("");
+    setReplyToId(null);
     void doSend(clientMsgId, body);
   }
 
   function retry(clientMsgId: string) {
     const body = failed[clientMsgId];
-    if (!body) return;
+    // Tin CHỈ CÓ ẢNH có `body` rỗng — không được coi là "không có gì để gửi lại".
+    if (body === undefined) return;
     setFailed((prev) => {
       const next = { ...prev };
       delete next[clientMsgId];
@@ -356,9 +512,15 @@ export function ChatThread(props: ChatThreadProps) {
             mounted={mounted}
             now={now}
             canModerate={capabilities.canModerate}
-            failedBody={m.clientMsgId ? failed[m.clientMsgId] : undefined}
+            canReply={!sendDisabled}
+            hasFailed={m.clientMsgId !== null && m.clientMsgId in failed}
+            attachments={attachmentsOf(m.id)}
+            replyQuote={m.replyToId ? quoteOf(m.replyToId) : null}
+            highlighted={highlightId === m.id}
             onRetry={() => m.clientMsgId && retry(m.clientMsgId)}
             onRecall={() => recall(m.id)}
+            onReply={() => setReplyToId(m.id)}
+            onJumpToReply={jumpToMessage}
             onDelete={() => setDeleteTarget({ id: m.id, preview: m.body })}
           />
         ))}
@@ -371,32 +533,46 @@ export function ChatThread(props: ChatThreadProps) {
             {disabledReason ?? "Bạn không có quyền gửi tin trong hội thoại này."}
           </p>
         ) : (
-          <div className="flex items-end gap-2">
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submitDraft();
+          <div className="space-y-1.5">
+            {replyToId && (
+              <ReplyComposerBar quote={quoteOf(replyToId)} onCancel={() => setReplyToId(null)} />
+            )}
+            <PendingUploadStrip uploads={uploader.uploads} onCancel={uploader.cancel} />
+            <div className="flex items-end gap-1">
+              <AttachmentPickerButton onPick={uploader.addFiles} />
+              <Textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    submitDraft();
+                  }
+                }}
+                placeholder="Nhập tin nhắn…"
+                rows={2}
+                maxLength={BODY_MAX}
+                className="max-h-40 min-h-[44px] flex-1 resize-none"
+                aria-label="Nội dung tin nhắn"
+              />
+              <Button
+                type="button"
+                onClick={submitDraft}
+                disabled={
+                  uploader.busy || (draft.trim().length === 0 && uploader.readyCount === 0)
                 }
-              }}
-              placeholder="Nhập tin nhắn…"
-              rows={2}
-              maxLength={BODY_MAX}
-              className="max-h-40 min-h-[44px] flex-1 resize-none"
-              aria-label="Nội dung tin nhắn"
-            />
-            <Button
-              type="button"
-              onClick={submitDraft}
-              disabled={draft.trim().length === 0}
-              className="h-11 w-11 shrink-0 p-0 sm:h-10 sm:w-auto sm:px-4"
-              aria-label="Gửi tin nhắn"
-            >
-              <Send className="h-4 w-4" aria-hidden />
-              <span className="hidden sm:inline">Gửi</span>
-            </Button>
+                className="h-11 w-11 shrink-0 p-0 sm:h-10 sm:w-auto sm:px-4"
+                aria-label="Gửi tin nhắn"
+              >
+                <Send className="h-4 w-4" aria-hidden />
+                <span className="hidden sm:inline">Gửi</span>
+              </Button>
+            </div>
+            {uploader.busy && (
+              <p className="text-[11px] text-muted-foreground">
+                Đang tải ảnh lên — chờ xong rồi gửi.
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -423,9 +599,15 @@ function MessageRow({
   mounted,
   now,
   canModerate,
-  failedBody,
+  canReply,
+  hasFailed,
+  attachments,
+  replyQuote,
+  highlighted,
   onRetry,
   onRecall,
+  onReply,
+  onJumpToReply,
   onDelete,
 }: {
   message: ChatMessage;
@@ -435,15 +617,25 @@ function MessageRow({
   mounted: boolean;
   now: number;
   canModerate: boolean;
-  failedBody?: string;
+  /** Hội thoại còn gửi được ⇒ mới có nút "Trả lời". */
+  canReply: boolean;
+  /** Lượt gửi này đã hỏng — dùng cờ chứ không dùng nội dung: tin CHỈ CÓ ẢNH có body rỗng. */
+  hasFailed: boolean;
+  attachments: readonly ChatAttachmentView[];
+  replyQuote: ReplyQuoteData | null;
+  highlighted: boolean;
   onRetry: () => void;
   onRecall: () => void;
+  onReply: () => void;
+  onJumpToReply: (messageId: string) => void;
   onDelete: () => void;
 }) {
   // US-09 AC4 — tin SYSTEM: giữa luồng, không avatar, không hành động.
   if (message.kind === "SYSTEM") {
     return (
-      <p className="py-1 text-center text-xs text-muted-foreground">{message.body}</p>
+      <p id={messageDomId(message.id)} className="py-1 text-center text-xs text-muted-foreground">
+        {message.body}
+      </p>
     );
   }
 
@@ -453,40 +645,61 @@ function MessageRow({
   const canRecall =
     mounted && mine && !pending && !message.deleted && now - message.createdAt.getTime() <= RECALL_WINDOW_MS;
   const canDelete = mounted && canModerate && !mine && !pending && !message.deleted;
+  // Tin CHỈ CÓ ẢNH (US-11): không vẽ bong bóng rỗng.
+  const hasBubble = message.deleted || message.body.length > 0 || replyQuote !== null || isAnnouncement;
 
   return (
-    <div className={cn("flex flex-col", mine ? "items-end" : "items-start")}>
+    <div
+      id={messageDomId(message.id)}
+      className={cn(
+        "flex scroll-mt-4 flex-col rounded-lg transition-colors",
+        mine ? "items-end" : "items-start",
+        highlighted && "bg-primary/10 ring-2 ring-primary/40",
+      )}
+    >
       {!mine && (
         <span className="mb-0.5 px-1 text-[11px] text-muted-foreground">
           {senderName}
           {senderRole ? ` · ${senderRole}` : ""}
         </span>
       )}
-      <div
-        className={cn(
-          "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm sm:max-w-[75%]",
-          message.deleted
-            ? "bg-muted italic text-muted-foreground"
-            : isAnnouncement
-              ? "bg-orange-100 text-orange-950 dark:bg-orange-950/50 dark:text-orange-50"
-              : mine
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-foreground",
-        )}
-      >
-        {isAnnouncement && !message.deleted && (
-          <span className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide">
-            <Megaphone className="h-3 w-3" aria-hidden />
-            Thông báo
-          </span>
-        )}
-        {message.body}
-      </div>
+      {hasBubble && (
+        <div
+          className={cn(
+            "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm sm:max-w-[75%]",
+            message.deleted
+              ? "bg-muted italic text-muted-foreground"
+              : isAnnouncement
+                ? "bg-orange-100 text-orange-950 dark:bg-orange-950/50 dark:text-orange-50"
+                : mine
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-foreground",
+          )}
+        >
+          {isAnnouncement && !message.deleted && (
+            <span className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide">
+              <Megaphone className="h-3 w-3" aria-hidden />
+              Thông báo
+            </span>
+          )}
+          {replyQuote && !message.deleted && (
+            <ReplyQuote quote={replyQuote} onJump={onJumpToReply} />
+          )}
+          {message.body}
+        </div>
+      )}
+
+      {!message.deleted && attachments.length > 0 && (
+        <ChatAttachmentGallery
+          attachments={attachments}
+          className={cn("mt-1", mine && "justify-end")}
+        />
+      )}
 
       <div className="mt-0.5 flex items-center gap-2 px-1 text-[10px] text-muted-foreground">
         <span>{timeFmt.format(message.createdAt)}</span>
-        {pending && !failedBody && <span>Đang gửi…</span>}
-        {failedBody && (
+        {pending && !hasFailed && <span>Đang gửi…</span>}
+        {hasFailed && (
           <button
             type="button"
             onClick={onRetry}
@@ -494,6 +707,16 @@ function MessageRow({
           >
             <RotateCcw className="h-3 w-3" aria-hidden />
             Chưa gửi được — gửi lại
+          </button>
+        )}
+        {canReply && !pending && !message.deleted && (
+          <button
+            type="button"
+            onClick={onReply}
+            className="inline-flex items-center gap-0.5 underline hover:text-foreground"
+          >
+            <CornerUpLeft className="h-3 w-3" aria-hidden />
+            Trả lời
           </button>
         )}
         {canRecall && (

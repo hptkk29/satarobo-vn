@@ -16,7 +16,7 @@
 // nên chỉ bọc mỏng để client có một chỗ import duy nhất.
 
 import { auth } from "@/lib/auth";
-import { sendChatMessage } from "@/lib/chat/messages";
+import { listChatAttachments, sendChatMessage } from "@/lib/chat/messages";
 import { recallOwnMessage } from "@/lib/chat/moderation";
 import { markAnnouncementRead } from "@/lib/chat/announcements";
 import {
@@ -27,7 +27,7 @@ import {
   type MessagesSincePage,
 } from "@/lib/chat/queries";
 import type { ActionResult } from "@/lib/actions/factory";
-import type { SentChatMessage } from "@/lib/chat/messages";
+import type { ChatAttachmentRef, SentChatMessage } from "@/lib/chat/messages";
 import type { DeletedChatMessage } from "@/lib/chat/moderation";
 
 /** Lớp lỗi nghiệp vụ của module chat — thông điệp đã viết SẴN cho người dùng cuối. */
@@ -118,6 +118,26 @@ export async function fetchMessagesSinceAction(
   if (!session?.user?.id) return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
   try {
     return { ok: true, data: await fetchMessagesSince(conversationId, session.user.id, lastSeenMessageId) };
+  } catch (err) {
+    return readFail(err);
+  }
+}
+
+/**
+ * US-11 — ảnh của một lô tin đang hiển thị.
+ *
+ * RSC lo dữ liệu BAN ĐẦU (30 tin đầu đã kèm ảnh); action này chỉ phục vụ những tin đến
+ * SAU khi mở màn hình: tin realtime, tin tải thêm khi cuộn lên, tin bù sau khi mất mạng.
+ * Không phải "useEffect fetch dữ liệu ban đầu".
+ */
+export async function listChatAttachmentsAction(
+  conversationId: string,
+  messageIds: string[],
+): Promise<ActionResult<ChatAttachmentRef[]>> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: { code: "AUTH", message: "Chưa đăng nhập" } };
+  try {
+    return { ok: true, data: await listChatAttachments(conversationId, session.user.id, messageIds) };
   } catch (err) {
     return readFail(err);
   }
