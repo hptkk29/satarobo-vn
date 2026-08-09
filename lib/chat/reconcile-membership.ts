@@ -240,8 +240,12 @@ export async function reconcileConversationMembership(opts?: {
     const orgUnitId =
       cls.orgUnitId ?? (cls.centerId ? orgUnitByCenterId.get(cls.centerId) ?? null : null);
     try {
-      const r = await db.$transaction((tx) =>
-        reconcileClass(tx as Tx, cls, conversationId, orgUnitId),
+      // timeout 30s như mọi điểm gọi sync khác: trần 5s mặc định của Prisma đứt
+      // giữa chừng khi lớp đông/RTT cao → lớp đó rơi vào catch và bị BỎ QUA IM
+      // LẶNG tới đêm sau, đúng thứ job này sinh ra để chặn.
+      const r = await db.$transaction(
+        (tx) => reconcileClass(tx as Tx, cls, conversationId, orgUnitId),
+        { timeout: 30_000, maxWait: 10_000 },
       );
       classesChecked += 1;
       removeCount += r.removes;

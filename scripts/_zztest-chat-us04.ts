@@ -139,7 +139,10 @@ async function main() {
     const s = await seed();
 
     // Baseline: sync US-03 dựng nhóm + participant đúng (gv1 + ph3 + QLCS nếu có).
-    await db.$transaction(async (tx) => syncConversationMembership(tx as Tx, s.lopA.id));
+    await db.$transaction(async (tx) => syncConversationMembership(tx as Tx, s.lopA.id), {
+      timeout: 30_000,
+      maxWait: 10_000,
+    });
     const conv = await db.conversation.findUnique({
       where: {
         type_subjectType_subjectId: {
