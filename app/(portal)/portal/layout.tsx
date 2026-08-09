@@ -8,7 +8,7 @@ import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { getParentNotificationBadge } from "@/lib/portal/notification-feed";
 import { getSwitcherChildren } from "@/lib/portal/child-switcher-data";
-import { countUnreadForParent } from "@/lib/conversation/service";
+import { countChatUnreadForUser } from "./tin-nhan/unread";
 import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
@@ -52,7 +52,7 @@ export default async function PortalLayout({
     // cache 60s: layout KHÔNG fan-out full feed trên mọi page view.
     const [notifCount, msgCount, switcherChildren] = await Promise.all([
       getParentNotificationBadge(session.user.id).catch(() => 0),
-      countUnreadForParent(session.user.id).catch(() => 0),
+      countChatUnreadForUser(session.user.id).catch(() => 0),
       getSwitcherChildren(session.user.id, ctx?.activeStudent?.id ?? null).catch(() => []),
     ]);
     return (
@@ -83,7 +83,7 @@ export default async function PortalLayout({
 
   const [notifCount, msgCount] = await Promise.all([
     getParentNotificationCount(session.user.id).catch(() => 0),
-    countUnreadForParent(session.user.id).catch(() => 0),
+    countChatUnreadForUser(session.user.id).catch(() => 0),
   ]);
 
   return (

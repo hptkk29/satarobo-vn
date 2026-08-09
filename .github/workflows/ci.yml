@@ -110,6 +110,61 @@ jobs:
       - name: Run Vitest
         run: pnpm test:unit -- --run --reporter=verbose
 
+  chat-db-tests:
+    name: Chat DB invariants (Vitest + Postgres local)
+    # Job `unit-tests` KHÔNG có Postgres ⇒ mọi spec `tests/chat` (describe.skipIf) skip
+    # sạch ở đó. Job này là nơi DUY NHẤT tầng DB của module chat thật sự chạy trong CI:
+    # thiếu nó, đột biến kiểu `leavers = existing.filter(() => false)` (PH bị gỡ khỏi lớp
+    # vẫn đọc được nhóm) vẫn cho CI XANH.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # HAS_LOCAL_DB của tests/chat/*.spec.ts nhận host localhost + db ci_test.
+      # KHÔNG dùng ${{ env.* }} ở job-level env (GitHub Actions cấm) — ghi literal.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
+      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Migrate DB schema (local CI Postgres)
+        run: pnpm exec prisma migrate deploy
+
+      - name: Run chat DB tests
+        # = `pnpm test:chat-db` chạy tay được y hệt (vitest run tests/chat).
+        run: pnpm test:chat-db
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest
