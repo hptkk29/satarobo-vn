@@ -6,7 +6,12 @@ export const studentsModule: ModuleDecl = {
   module: "students",
   permissions: [
     // --- Students (hồ sơ học viên) ---
-    { key: "students:view-all", action: "view-all" },
+    {
+      key: "students:view-all",
+      action: "view-all",
+      // US-03/TS-02 — trường nhạy cảm cho DENY cấp trường (tên cột THẬT trên Student).
+      sensitiveFields: ["parentPhone"],
+    },
     { key: "students:view-own-class", action: "view-own-class" },
     { key: "students:create", action: "create" },
     { key: "students:edit", action: "edit" },

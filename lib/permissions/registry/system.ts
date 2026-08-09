@@ -25,6 +25,15 @@ export const systemModule: ModuleDecl = {
       description: "CRUD RoleDef + gán RolePermission (chỉ SUPER_ADMIN).",
     },
 
+    // --- User groups (US-03 — nhóm người dùng nhận grant ad-hoc) ---
+    {
+      key: "user-groups:manage",
+      action: "manage",
+      // Nhóm + grant nhóm là cấu hình quyền toàn cục (như roles:manage).
+      scopable: false,
+      description: "CRUD UserGroup + thành viên + grant ALLOW/DENY cho nhóm (chỉ SUPER_ADMIN).",
+    },
+
     // --- Users ---
     {
       key: "users:manage",
