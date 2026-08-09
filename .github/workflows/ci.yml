@@ -88,6 +88,13 @@ jobs:
           NEXTAUTH_URL: "http://localhost:3000"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
 
+      # Canary secret trong bundle client — variables.md liệt đây là cổng BẮT BUỘC trước
+      # go-live nhưng tới 09/08/2026 chưa có bước nào thực thi. Lý lẽ đầy đủ + vì sao KHÔNG
+      # dùng `grep service_role` nằm ngay đầu file script (grep vừa kêu oan trên bản build
+      # sạch vì chuỗi trong @supabase/supabase-js, vừa bỏ lọt khoá đời cũ vì nó là JWT).
+      - name: Canary — không secret nào lọt bundle client
+        run: node scripts/canary-client-bundle-keys.mjs
+
   unit-tests:
     name: Unit tests (Vitest)
     runs-on: ubuntu-latest
