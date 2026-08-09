@@ -16,6 +16,7 @@
 // ghi shadow ở đây sẽ bơm ~120 dòng RbacShadowDiff mỗi lần mở trang, dìm chết tín hiệu thật.
 import { PERMISSIONS, can as canMatrix, type Action } from "@/lib/auth/permissions";
 import type { Actor } from "@/lib/auth/actor";
+import { resolveGrant } from "@/lib/permissions/can";
 
 type MenuUser = Parameters<typeof canMatrix>[0];
 
@@ -62,7 +63,19 @@ export function grantedMenuActions(params: {
     const ok = params.flagOn
       ? v2HoldsAction(params.actor, action)
       : canMatrix(params.sessionUser, action);
-    if (ok) out.push(action);
+    if (!ok) continue;
+    // US-03: bảng PermissionGrant MỚI cắm TRƯỚC đường cũ ở cổng trang
+    // (`decidePermissionWithGrant` — bất kể cờ), nên menu phải hỏi cùng câu:
+    // grant DENY toàn-action khớp (hit && !allowed) ⇒ cổng sẽ chặn ⇒ vẽ lối vào
+    // là tái sinh dead-link. resolveGrant PURE/SYNC trên actor đã nạp — 0 query.
+    // Menu không có target: DENY dataScope ALL khớp luôn; DENY scope hẹp
+    // (UNIT_*/OWN) không khớp target-trần → không giấu oan (đúng triết lý
+    // "có giữ action" ở trên). hit && allowed vẫn qua nhánh cũ bình thường.
+    if (params.actor) {
+      const d = resolveGrant(params.actor, action);
+      if (d.hit && !d.allowed) continue;
+    }
+    out.push(action);
   }
   return out;
 }
