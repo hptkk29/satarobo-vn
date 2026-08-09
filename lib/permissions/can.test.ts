@@ -219,6 +219,90 @@ describe("US-02 · chống rò NGANG qua role kiêm nhiệm (review 09/08)", () 
   });
 });
 
+describe("US-03 · GROUP grant (GHIM — engine US-02 đã sẵn nhánh GROUP, các case này XANH NGAY)", () => {
+  // Vai trò của describe này là ĐÔNG CỨNG hành vi GROUP của engine TRƯỚC khi US-03 nối
+  // dây thật (schema UserGroup + resolveActor nạp groupIds). Nếu ai sửa engine trong lúc
+  // làm US-03 mà lệch các chân trị này → đỏ ngay ở unit, không đợi tới integration.
+  const G1 = "group-1";
+
+  it("GROUP ALLOW dataScope ALL, actor thuộc nhóm → hit + true", () => {
+    const actor = makeActor({
+      groupIds: [G1],
+      permissionGrants: [grant({ subjectType: "GROUP", subjectId: G1, effect: "ALLOW" })],
+    });
+    const d = resolveGrant(actor, "students:view-all");
+    expect(d.hit).toBe(true);
+    if (d.hit) expect(d.allowed).toBe(true);
+    expect(can(actor, "students:view-all")).toBe(true);
+  });
+
+  it("GROUP DENY toàn-action thắng ROLE ALLOW cùng key (AC2 US-03 — DENY nhóm > ALLOW vai)", () => {
+    const actor = makeActor({
+      roleIds: [R1],
+      groupIds: [G1],
+      permissionGrants: [
+        grant({ subjectType: "ROLE", subjectId: R1, effect: "ALLOW" }),
+        grant({ subjectType: "GROUP", subjectId: G1, effect: "DENY" }),
+      ],
+    });
+    expect(can(actor, "students:view-all")).toBe(false);
+    expect(() => assertCan(actor, "students:view-all")).toThrow();
+  });
+
+  it("GROUP DENY fieldMask góp mask qua getFieldMask CẢ KHI resolveGrant hit:false (TS-02 vế 1)", () => {
+    // Chỉ có DENY cấp trường, không ALLOW nào cùng key trong bảng grant → hit:false,
+    // action ALLOW đến từ ĐƯỜNG CŨ (grantsAllow) — nhưng trường vẫn phải che.
+    const actor = makeActor({
+      groupIds: [G1],
+      grantsAllow: new Set(["students:view-all"]),
+      permissionGrants: [
+        grant({ subjectType: "GROUP", subjectId: G1, effect: "DENY", fieldMask: ["parentPhone"] }),
+      ],
+    });
+    expect(resolveGrant(actor, "students:view-all").hit).toBe(false);
+    expect(can(actor, "students:view-all")).toBe(true); // ALLOW từ đường cũ
+    expect(getFieldMask(actor, "students:view-all")).toEqual(["parentPhone"]);
+  });
+
+  it("groupIds KHÔNG chứa subjectId → miss (grant nhóm khác không dính actor)", () => {
+    const actor = makeActor({
+      groupIds: ["group-khac"],
+      grantsAllow: new Set(["students:view-all"]),
+      permissionGrants: [grant({ subjectType: "GROUP", subjectId: G1, effect: "DENY" })],
+    });
+    expect(resolveGrant(actor, "students:view-all").hit).toBe(false);
+    expect(can(actor, "students:view-all")).toBe(true); // fallback đường cũ
+    expect(getFieldMask(actor, "students:view-all")).toEqual([]);
+  });
+
+  it("[PIN] GROUP + UNIT_ONLY thiếu mapping roleCenterScope → false (vì sao validator US-03 chặn UNIT_*)", () => {
+    // roleCenterScope chỉ có entry cho RoleDef.id (buildActor) — GROUP không có mapping
+    // center tới P1 ⇒ scopeSatisfied trả false an toàn ⇒ ALLOW hit nhưng allowed=false.
+    // Đây CHÍNH là lý do write path US-03 chỉ cho dataScope ALL|OWN: grant UNIT_* cho
+    // nhóm sẽ "trông như có" mà không bao giờ hoạt động.
+    const actor = makeActor({
+      groupIds: [G1],
+      permissionGrants: [
+        grant({ subjectType: "GROUP", subjectId: G1, effect: "ALLOW", dataScope: "UNIT_ONLY" }),
+      ],
+    });
+    const d = resolveGrant(actor, "students:view-all", { centerId: "c1" });
+    expect(d.hit).toBe(true);
+    if (d.hit) expect(d.allowed).toBe(false);
+    expect(can(actor, "students:view-all", { centerId: "c1" })).toBe(false);
+  });
+
+  it("SUPER_ADMIN bypass grant GROUP (DENY nhóm không khoá được admin)", () => {
+    const actor = makeActor({
+      isSuperAdmin: true,
+      groupIds: [G1],
+      permissionGrants: [grant({ subjectType: "GROUP", subjectId: G1, effect: "DENY" })],
+    });
+    expect(can(actor, "students:view-all")).toBe(true);
+    expect(getFieldMask(actor, "students:view-all")).toEqual([]);
+  });
+});
+
 describe("US-02 · SUPER_ADMIN bỏ qua grant + engine pure", () => {
   it("DENY trùm không khoá được SUPER_ADMIN", () => {
     const actor = makeActor({
