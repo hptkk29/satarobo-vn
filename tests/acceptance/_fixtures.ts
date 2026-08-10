@@ -14,6 +14,7 @@ export const ACCOUNT_EMAILS = {
   ph1: "zztest-chat-nt-ph1@zztest.local",
   ph2: "zztest-chat-nt-ph2@zztest.local",
   ph3: "zztest-chat-nt-ph3@zztest.local",
+  sale: "zztest-chat-nt-sale@zztest.local",
 } as const;
 
 export type AccountKey = keyof typeof ACCOUNT_EMAILS;

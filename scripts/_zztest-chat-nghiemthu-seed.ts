@@ -42,6 +42,8 @@ const ACCOUNTS = {
   ph1: { email: EMAIL("ph1"), name: `${P} PH Một`, phone: "84900000803", role: "PARENT" },
   ph2: { email: EMAIL("ph2"), name: `${P} PH Hai`, phone: "84900000804", role: "PARENT" },
   ph3: { email: EMAIL("ph3"), name: `${P} PH Ba`, phone: "84900000805", role: "PARENT" },
+  // F5 — tư vấn viên được gán phụ trách HV1 (con của PH1).
+  sale: { email: EMAIL("sale"), name: `${P} Sale`, phone: "84900000806", role: "SALES_CSM" },
 } as const;
 
 const TX_OPTS = { timeout: 30_000, maxWait: 10_000 } as const;
@@ -146,6 +148,10 @@ async function seed() {
   const rootOrg = await db.orgUnit.findFirst({ where: { parentId: null }, select: { id: true } });
   const saRole = await db.roleDef.findUnique({ where: { code: "SUPER_ADMIN" }, select: { id: true } });
   const gvRole = await db.roleDef.findUnique({ where: { code: "TEACHER" }, select: { id: true } });
+  const saleRole = await db.roleDef.findUnique({
+    where: { code: "CENTER_SALES_CSM" },
+    select: { id: true },
+  });
 
   const hash = await bcrypt.hash(PASSWORD, 10);
 
@@ -154,6 +160,7 @@ async function seed() {
   const ph1 = await upsertUser(ACCOUNTS.ph1, hash, null);
   const ph2 = await upsertUser(ACCOUNTS.ph2, hash, null);
   const ph3 = await upsertUser(ACCOUNTS.ph3, hash, null);
+  const sale = await upsertUser(ACCOUNTS.sale, hash, center.id);
 
   // RBAC v2: cờ RBAC_V2_ENABLED có thể ON trên env `test` (prod đang ON) — thiếu
   // UserOrgRole thì `can()` v2 từ chối sạch và mọi thứ trông như "chat hỏng".
@@ -173,6 +180,16 @@ async function seed() {
       },
       update: { status: "ACTIVE", effectiveTo: null },
       create: { userId: gv.id, orgUnitId: centerOrg.id, roleId: gvRole.id, grantedById: admin.id },
+    });
+  }
+
+  if (centerOrg && saleRole) {
+    await db.userOrgRole.upsert({
+      where: {
+        userId_orgUnitId_roleId: { userId: sale.id, orgUnitId: centerOrg.id, roleId: saleRole.id },
+      },
+      update: { status: "ACTIVE", effectiveTo: null },
+      create: { userId: sale.id, orgUnitId: centerOrg.id, roleId: saleRole.id, grantedById: admin.id },
     });
   }
 
@@ -238,7 +255,13 @@ async function seed() {
     if (existing) {
       await db.enrollment.update({
         where: { id: existing.id },
-        data: { status: "STUDYING", deletedAt: null },
+        // F5 — CHỈ gán sale cho HV1: cần cả ca "có phụ trách" lẫn ca "không phụ trách"
+        // để nghiệm thu được cả hai chiều của luật.
+        data: {
+          status: "STUDYING",
+          deletedAt: null,
+          ...(r.key === "hv1" ? { saleId: sale.id } : {}),
+        },
       });
     } else {
       await db.enrollment.create({
@@ -282,6 +305,7 @@ async function seed() {
       ph1: { id: ph1.id, email: ACCOUNTS.ph1.email },
       ph2: { id: ph2.id, email: ACCOUNTS.ph2.email },
       ph3: { id: ph3.id, email: ACCOUNTS.ph3.email },
+      sale: { id: sale.id, email: ACCOUNTS.sale.email },
     },
     classes: { lopA: lopA.id, lopB: lopB.id },
     students,
