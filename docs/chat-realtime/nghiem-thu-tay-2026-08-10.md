@@ -219,7 +219,11 @@ header `Authorization` rụng theo ⇒ **20 cron chưa từng chạy một lần
 | 2 | Backfill nhóm lớp | ✅ **12/12 nhóm, 0 lỗi** | 13 lớp ACTIVE, 1 lớp đã tự có nhóm (thao tác nghiệp vụ sau khi chat lên prod đã kích `syncConversationMembership` — đúng thiết kế, script bỏ qua) |
 | 3 | `R2_CHAT_BUCKET_NAME` scope Production | ✅ đã điền `satarobo-chat` | |
 | 4 | CORS bucket ảnh chat | ✅ đã đặt | Preflight `204` + `ACAO` cho cả `satarobo.vn` lẫn `test.satarobo.vn` |
-| 5 | Token R2 phải có bucket `satarobo-chat` | ✅ trên `test` · ⏳ prod chưa xác minh | **Phát hiện 10/08:** token bị giới hạn theo bucket ⇒ `PUT` trả `403 AccessDenied`, mà R2 không kèm header CORS vào response lỗi nên trình duyệt báo nhầm thành lỗi CORS. Xác minh prod rẻ nhất: đăng nhập GV thật → gửi một tấm ảnh vào nhóm lớp |
+| 5 | Token R2 phải có bucket `satarobo-chat` | ✅ test **và prod** | **Phát hiện 10/08:** token bị giới hạn theo bucket ⇒ `PUT` trả `403 AccessDenied`, mà R2 không kèm header CORS vào response lỗi nên trình duyệt báo nhầm thành lỗi CORS. Xác minh prod: GV thật gửi ảnh vào nhóm lớp — chạy bình thường |
+
+**SMOKE PROD 10/08 — PASS.** Tài khoản giáo viên thật (Nguyễn Đức Tuấn) trong nhóm lớp
+thật: gửi **tin chữ** OK · gửi **ảnh** OK · **thu hồi** OK (tức cửa sổ 15 phút +
+`chat:moderate` cũng đúng đường). Checklist prod đóng đủ 5/5.
 
 **Kiểm chứng sau backfill:** tài khoản GV thật (Nguyễn Đức Tuấn) mở site giáo viên thấy
 đủ nhóm lớp. Tài khoản GV KHÔNG phụ trách lớp ACTIVE nào thì thấy danh sách rỗng — **đúng
