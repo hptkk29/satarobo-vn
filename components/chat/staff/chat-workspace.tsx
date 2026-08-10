@@ -74,6 +74,9 @@ export type StaffChatWorkspaceProps = {
   announcementCursor?: string;
   /** Câu gợi ý khi người dùng chưa có hội thoại nào (khác nhau giữa admin và GV). */
   emptyHint: string;
+  /** F5 — nơi bắt đầu một hội thoại mới, cho vai không có nhóm lớp tự sinh (sale). */
+  startHref?: string;
+  startLabel?: string;
 };
 
 export async function StaffChatWorkspace({
@@ -83,6 +86,8 @@ export async function StaffChatWorkspace({
   tab,
   announcementCursor,
   emptyHint,
+  startHref,
+  startLabel,
 }: StaffChatWorkspaceProps) {
   const conversations = await listConversationsForUser(userId);
 
@@ -104,7 +109,10 @@ export async function StaffChatWorkspace({
     : null;
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
+    // ⚠️ `min-h` là thứ biến màn này từ "trang vỡ" thành màn chat. Không có nó, người
+    // chỉ có 1–2 hội thoại (điển hình là SALE — họ không có nhóm lớp tự sinh nào) thấy
+    // toàn bộ nội dung dồn lên ~270px trên cùng của màn 900px, còn lại trắng trơn.
+    <div className="flex min-h-[70vh] flex-col gap-4 lg:flex-row">
       {/* Tin mới ở BẤT KỲ hội thoại nào ⇒ chạy lại RSC này ⇒ danh sách tự sắp lại, đổi
           preview/giờ/badge. Không render gì; giữ `ConversationList` là component thuần. */}
       <ChatListRefresher userId={userId} />
@@ -118,6 +126,8 @@ export async function StaffChatWorkspace({
           basePath={basePath}
           selectedId={selected?.conversationId ?? null}
           emptyHint={emptyHint}
+          startHref={startHref}
+          startLabel={startLabel}
         />
       </aside>
 
@@ -155,7 +165,7 @@ export async function StaffChatWorkspace({
           )
         ) : (
           items.length > 0 && (
-            <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
+            <div className="flex h-full min-h-[50vh] items-center justify-center rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
               Chọn một hội thoại bên trái để đọc và trả lời.
             </div>
           )

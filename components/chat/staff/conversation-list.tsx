@@ -33,17 +33,30 @@ export function ConversationList({
   basePath,
   selectedId,
   emptyHint,
+  startHref,
+  startLabel,
 }: {
   items: StaffConversationItem[];
   /** "/tin-nhan" (admin) hoặc "/teacher/tin-nhan" (site GV). */
   basePath: string;
   selectedId: string | null;
   emptyHint: string;
+  /** F5 — vai không có nhóm lớp tự sinh (sale) cần được CHỈ ĐƯỜNG, không chỉ báo "trống". */
+  startHref?: string;
+  startLabel?: string;
 }) {
   if (items.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-        {emptyHint}
+        <p>{emptyHint}</p>
+        {startHref && startLabel && (
+          <Link
+            href={startHref}
+            className="mt-3 inline-flex min-h-[36px] items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground"
+          >
+            {startLabel}
+          </Link>
+        )}
       </div>
     );
   }

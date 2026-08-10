@@ -41,14 +41,21 @@ export default async function AdminMessagesPage({
   }
 
   const sp = await searchParams;
+  // F5 — sale THUẦN (không kiêm vai nào khác) không có nhóm lớp nào, chỉ có kênh 1-1.
+  // Câu mô tả và ô rỗng phải nói đúng thứ họ thấy, và chỉ đường tới chỗ mở kênh.
+  const vaiTro = [session.user.role, ...(session.user.roles ?? [])].filter(Boolean);
+  const laSaleThuan =
+    vaiTro.includes("SALES_CSM") &&
+    vaiTro.every((r) => r === "SALES_CSM" || r === "PARENT");
 
   return (
     <div>
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-foreground">Tin nhắn</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Nhóm lớp và trao đổi riêng với phụ huynh — bạn thấy những hội thoại mình là
-          thành viên.
+          {laSaleThuan
+            ? "Trao đổi riêng với phụ huynh bạn phụ trách."
+            : "Nhóm lớp và trao đổi riêng với phụ huynh — bạn thấy những hội thoại mình là thành viên."}
         </p>
       </div>
 
@@ -58,7 +65,13 @@ export default async function AdminMessagesPage({
         conversationId={sp.c}
         tab={sp.tab}
         announcementCursor={sp.ac}
-        emptyHint="Chưa có hội thoại nào. Nhóm lớp được tạo tự động khi lớp chuyển sang trạng thái hoạt động — quản lý cơ sở được thêm vào nhóm của các lớp thuộc cơ sở mình."
+        emptyHint={
+          laSaleThuan
+            ? "Chưa có hội thoại nào. Mở kênh riêng với phụ huynh bạn phụ trách tại trang Đăng ký học — bấm “Nhắn riêng” ở đúng hàng của học viên đó."
+            : "Chưa có hội thoại nào. Nhóm lớp được tạo tự động khi lớp chuyển sang trạng thái hoạt động — quản lý cơ sở được thêm vào nhóm của các lớp thuộc cơ sở mình."
+        }
+        startHref={laSaleThuan ? "/admin/enrollments" : undefined}
+        startLabel={laSaleThuan ? "Tới trang Đăng ký học" : undefined}
       />
     </div>
   );
