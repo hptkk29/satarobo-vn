@@ -20,6 +20,9 @@
 // chính điều kiện `participant.leftAt IS NULL` bảo đảm — chặt hơn centerId.
 import type { DerivedFrom, MessageKind, ParticipantRole } from "@prisma/client";
 import { db } from "@/lib/db";
+// Luật PII chung của repo — nguồn sự thật DUY NHẤT cho "ai được xem SĐT/email phụ huynh".
+// File này là ma trận tĩnh (không DB, không phiên) nên import được cả trong tsx/ZZTEST.
+import { canViewParentContact } from "@/lib/auth/permissions";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 // ─── Hằng dùng chung ────────────────────────────────────────────────────────
@@ -30,9 +33,16 @@ export const DELETED_MESSAGE_TEXT = "Tin nhắn đã được gỡ";
 export const ARCHIVED_LABEL = "Đã lưu trữ";
 /** US-09 AC1 — 30 tin mỗi trang. */
 export const DEFAULT_PAGE_SIZE = 30;
+/**
+ * **BR-04** — sau khi hội thoại chuyển ARCHIVED, PH còn đọc lịch sử thêm 90 ngày;
+ * GV/QLCS/Admin KHÔNG hết hạn (nghĩa vụ lưu vết). permissions.md, "Trạng thái đè lên
+ * tất cả": `ARCHIVED → Đọc ✅ (PH hết hạn sau 90 ngày …)`. TS-08 bước 2.
+ */
+export const ARCHIVED_PARENT_READ_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_CONVERSATION_LIMIT = 100;
-const MAX_CONVERSATION_LIMIT = 500;
+export const MAX_CONVERSATION_LIMIT = 500;
 const PREVIEW_MAX_LENGTH = 120;
 
 /**
@@ -106,6 +116,48 @@ export function decodeCursor(raw: string | null | undefined): MessageCursor | nu
   return { createdAt, id };
 }
 
+/**
+ * BR-04 — mốc "archive trước thời điểm này thì PH hết hạn đọc". Dùng CHUNG cho cả hai
+ * đường: điều kiện SQL trong {@link listConversationsForUser} và hàm thuần
+ * {@link isArchivedReadExpired} của cổng chặn — một quy tắc, một chỗ tính.
+ */
+export function archivedReadCutoff(now: Date): Date {
+  return new Date(now.getTime() - ARCHIVED_PARENT_READ_DAYS * DAY_MS);
+}
+
+/** Ba mẩu cần để áp BR-04 — nhận rời nhau nên test được không cần DB. */
+export type ArchivedReadInput = {
+  /** `Conversation.status` */
+  status: string;
+  /** `Conversation.archivedAt` */
+  archivedAt: Date | null;
+  /** Tư cách của NGƯỜI ĐỌC trong hội thoại (`ConversationParticipant.derivedFrom`). */
+  derivedFrom: string | null;
+  now: Date;
+};
+
+/**
+ * **BR-04** — `true` = PH đã quá hạn 90 ngày đọc lịch sử hội thoại đã lưu trữ.
+ *
+ * Chỉ áp cho PH: quy tắc phân biệt theo `derivedFrom = CLASS_STUDENT_PARENT` (tư cách
+ * TRONG hội thoại) chứ không theo `User.role` — người vừa là GV vừa là PH đứng trong
+ * nhóm với đúng một tư cách, và ma trận nói "GV/QLCS/Admin không hết hạn".
+ *
+ * `archivedAt = null` → KHÔNG hết hạn (fail-open có chủ đích): không có mốc thì không
+ * tính được 90 ngày, mà chặn nhầm PH khỏi lịch sử lớp CỦA CON MÌNH là hỏng chức năng
+ * chứ không phải rò rỉ. Đường archive thật (`lib/chat/sync-membership.ts` — lớp
+ * COMPLETED/CANCELLED) LUÔN ghi `archivedAt`, nên nhánh này chỉ chạm dữ liệu cũ / bản
+ * ghi sửa tay.
+ *
+ * Biên: đúng 90 ngày vẫn ĐỌC ĐƯỢC (`>`, không phải `>=`) — "hết hạn SAU 90 ngày".
+ */
+export function isArchivedReadExpired(input: ArchivedReadInput): boolean {
+  if (input.status !== "ARCHIVED") return false;
+  if (input.derivedFrom !== "CLASS_STUDENT_PARENT") return false;
+  if (!input.archivedAt) return false;
+  return input.archivedAt.getTime() < archivedReadCutoff(input.now).getTime();
+}
+
 const PHONE_LIKE_RE = /(?<![0-9])(?:\+?84|0)(?:3|5|7|8|9)[0-9]{8}(?![0-9])/g;
 const EMAIL_LIKE_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
@@ -130,6 +182,9 @@ export type ContactViewer = {
  * BR-30 — quyết định "ẩn hay không" nằm ở TẦNG QUERY (permissions.md: PH thấy bản ẩn
  * liên hệ). FAIL-CLOSED: không nhận ra người xem là nhân viên → ẩn. Người vừa là GV
  * vừa là PH cũng ẩn (giữ nguyên văn "người xem có vai PARENT").
+ *
+ * ⚠️ Đây là tầng 1 — "người xem có được thấy liên hệ của BẤT KỲ AI không". Tầng 2
+ * (liên hệ của TỪNG thành viên) ở {@link hidesContactOf}.
  */
 export function shouldHideContacts(viewer: ContactViewer): boolean {
   if (viewer.derivedFrom === "CLASS_STUDENT_PARENT") return true;
@@ -140,6 +195,47 @@ export function shouldHideContacts(viewer: ContactViewer): boolean {
     (r): r is string => typeof r === "string" && r.length > 0 && r !== "PARENT",
   );
   return staff.length === 0;
+}
+
+/** Ba mẩu quyết định liên hệ của MỘT thành viên có được trả về hay không. */
+export type ContactVisibilityInput = {
+  /** `Conversation.type` dạng text. */
+  conversationType: string;
+  viewer: ContactViewer;
+  /** Tư cách của THÀNH VIÊN đang xét (`ConversationParticipant.derivedFrom`). */
+  memberDerivedFrom: string | null;
+};
+
+/**
+ * **BR-30 (mở rộng 09/08/2026)** — `true` = KHÔNG trả `phone`/`email` của thành viên này.
+ *
+ *  1. Người xem là PH ⇒ ẩn liên hệ của TẤT CẢ ({@link shouldHideContacts}, luật cũ,
+ *     permissions.md: "PH thấy bản ẩn liên hệ").
+ *  2. Hội thoại KHÔNG phải nhóm lớp (tức 1-1) ⇒ ẩn với MỌI người xem. Bảng
+ *     "1-1 (DM_TEACHER_PARENT)" của `docs/chat-realtime/permissions.md` chỉ có 3 dòng
+ *     Tạo/mở · Đọc · Gửi — KHÔNG có dòng "Xem thành viên" nào. Không ô nào cấp quyền thì
+ *     mặc định là KHÔNG, chứ không phải "cứ cho vì tiện": màn thành viên của 1-1 vốn chỉ
+ *     có đúng hai người, chẳng ai cần tra SĐT ở đó.
+ *  3. Người xem KHÔNG nằm trong nhóm vai được xem liên hệ phụ huynh ⇒ ẩn — **kể cả GV**.
+ *
+ * ⚠️ ĐIỂM 3 LÀ QUYẾT ĐỊNH CỦA CHỦ DỰ ÁN (09/08/2026), đừng vá ngược.
+ * Repo từng có HAI luật ngược nhau và chúng ngủ yên vì chưa màn hình nhân viên nào thật sự
+ * vẽ liên hệ ra: luật PII chung (`canViewParentContact`, `lib/auth/permissions.ts` — chú
+ * thích ghi rõ "P0-3: chống lộ SĐT toàn lớp ở trang tiến độ lớp") CHẶN giáo viên, trong khi
+ * module chat lại pin chiều cho phép ở 3 chỗ. Màn "danh sách thành viên nhóm lớp" của US-13
+ * đánh thức đúng mâu thuẫn đó. Chủ dự án chốt: theo luật PII chung.
+ *
+ * ⇒ Nguồn sự thật DUY NHẤT cho câu hỏi này nay là `canViewParentContact`. Đừng chép lại
+ * danh sách vai vào đây: hai bản sao là hai luật, và lần trước chính hai bản sao đẻ ra mâu
+ * thuẫn này.
+ */
+export function hidesContactOf(input: ContactVisibilityInput): boolean {
+  if (shouldHideContacts(input.viewer)) return true;
+  if (input.conversationType !== "CLASS_GROUP") return true;
+  return !canViewParentContact({
+    role: input.viewer.role,
+    roles: input.viewer.roles ? [...input.viewer.roles] : null,
+  });
 }
 
 /** Tin nhắn thô đọc từ DB (subset của Message). */
@@ -251,7 +347,16 @@ function roleLabelOf(derivedFrom: DerivedFrom | null, childNames: string[]): str
 
 export function toMemberView(
   source: ConversationMemberSource,
-  opts: { hideContacts: boolean },
+  opts: {
+    /** Người xem là PH → bôi tên/nhãn VÀ bỏ hẳn `contact` (BR-30 mức hội thoại). */
+    hideContacts: boolean;
+    /**
+     * Riêng liên hệ của THÀNH VIÊN NÀY bị ẩn ({@link hidesContactOf}) — tên/nhãn giữ
+     * nguyên. Tách khỏi `hideContacts` vì hai câu hỏi khác nhau: "người xem có phải PH
+     * không" (bôi tên) và "người xem có được thấy SĐT của CHÍNH người này không".
+     */
+    hideContact?: boolean;
+  },
 ): ConversationMemberView {
   // Không rơi về phone/email làm tên khi `name` rỗng — đó chính là đường rò của
   // `displayName()` trong sync-membership (chỗ đó chỉ ghi SYSTEM message nội bộ).
@@ -265,7 +370,7 @@ export function toMemberView(
     roleLabel: opts.hideContacts ? redactContactLike(label) : label,
     joinedAt: source.joinedAt,
   };
-  if (opts.hideContacts) return base; // khoá `contact` không được tạo ra
+  if (opts.hideContacts || opts.hideContact) return base; // khoá `contact` không được tạo ra
   return { ...base, contact: { phone: source.phone, email: source.email } };
 }
 
@@ -293,13 +398,24 @@ type ActiveParticipant = {
 };
 
 /**
- * Cổng chặn DUY NHẤT của tầng đọc: phải là participant CÒN HIỆU LỰC (`leftAt IS NULL`).
- * TS-01.7 — PH đã rời bị chặn NGAY, không có grace period ở API (hạn đọc 90 ngày của
- * BR-04 là việc của story riêng, không nới ở đây).
+ * Cổng chặn DUY NHẤT của tầng đọc, HAI điều kiện:
+ *
+ *  1. Phải là participant CÒN HIỆU LỰC (`leftAt IS NULL`). TS-01.7 — PH đã rời bị chặn
+ *     NGAY, không có grace period ở API.
+ *  2. **BR-04** — hội thoại ARCHIVED quá 90 ngày thì PH hết quyền đọc; GV/QLCS/Admin
+ *     KHÔNG hết hạn (xem {@link isArchivedReadExpired}).
+ *
+ * Cả hai đều trả `NOT_PARTICIPANT` — đúng "QUY ƯỚC MÃ LỖI" chốt 09/08
+ * (`tests/chat/permission-matrix.spec.ts`): tầng đọc KHÔNG gọi `can()`, cổng của nó là
+ * tư cách thành viên, nên mọi deny ở đây là NOT_PARTICIPANT chứ không phải
+ * PERMISSION_DENIED.
+ *
+ * `now` tiêm được để test không phụ thuộc đồng hồ máy (TS-08 "tua thời gian +91 ngày").
  */
 async function assertActiveParticipant(
   conversationId: string,
   userId: string,
+  now: Date = new Date(),
 ): Promise<ActiveParticipant> {
   const p = await db.conversationParticipant.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
@@ -310,9 +426,22 @@ async function assertActiveParticipant(
       leftAt: true,
       unreadCount: true,
       lastReadMessageId: true,
+      // Một lượt đi-về: trạng thái + mốc lưu trữ đi kèm luôn (BR-04), không bắn thêm
+      // query cho `Conversation`.
+      conversation: { select: { status: true, archivedAt: true } },
     },
   });
   if (!p || p.leftAt !== null) notParticipant();
+  if (
+    isArchivedReadExpired({
+      status: p.conversation.status,
+      archivedAt: p.conversation.archivedAt,
+      derivedFrom: p.derivedFrom,
+      now,
+    })
+  ) {
+    notParticipant();
+  }
   return {
     id: p.id,
     role: p.role,
@@ -356,6 +485,8 @@ type ConversationRowRaw = {
   muted: boolean;
   lastReadMessageId: string | null;
   className: string | null;
+  /** US-13 — tên NGƯỜI CÒN LẠI của hội thoại 1-1 (null với nhóm lớp). */
+  peerName: string | null;
 };
 
 type PreviewRowRaw = {
@@ -381,18 +512,31 @@ function statusLabelOf(status: string): string | null {
  * nhóm lớp của con, GV thấy lớp mình dạy (kể cả dạy chéo cơ sở — TS-01.5), QLCS thấy
  * lớp cơ sở mình vì service đồng bộ đã cho họ vào nhóm.
  *
+ * **BR-04** — hội thoại ARCHIVED quá 90 ngày BIẾN MẤT khỏi danh sách của PH (GV/QLCS/
+ * Admin vẫn thấy). Lọc ngay trong SQL chứ không lọc sau khi trả về: `LIMIT` chạy trước
+ * ở tầng DB, lọc sau sẽ ăn mất dòng hợp lệ của trang.
+ *
  * HIỆU NĂNG (không N+1 theo số hội thoại): đúng **2 truy vấn** bất kể user có bao
  * nhiêu hội thoại — (1) participant ⨝ conversation ⨝ class, (2) `DISTINCT ON` lấy tin
  * cuối của từng hội thoại (bám index `Message(conversationId, createdAt DESC)`).
+ *
+ * `withPreview: false` bỏ hẳn truy vấn (2) và trả `lastMessage: null`. Dành cho người
+ * gọi CHỈ cần con số (badge chưa đọc) — đường đó chạy ở layout của cả 3 site và ở mỗi
+ * lượt `GET /api/chat/unread`, dựng preview cho tới 100 hội thoại rồi vứt đi là lãng phí
+ * thấy rõ. Phạm vi hội thoại vẫn do truy vấn (1) quyết định nên **định nghĩa "hội thoại
+ * của tôi" không đổi** — badge và màn danh sách vẫn là một nguồn.
  */
 export async function listConversationsForUser(
   userId: string,
-  opts?: { limit?: number },
+  opts?: { limit?: number; now?: Date; withPreview?: boolean },
 ): Promise<ConversationListItem[]> {
   const limit = Math.min(
     Math.max(opts?.limit ?? DEFAULT_CONVERSATION_LIMIT, 1),
     MAX_CONVERSATION_LIMIT,
   );
+  // Sinh đôi SQL của `isArchivedReadExpired` — cùng mốc, cùng biên (`<` = đúng 90 ngày
+  // vẫn thấy), cùng điều kiện "chỉ PH" và "archivedAt NULL thì không hết hạn".
+  const archivedCutoff = archivedReadCutoff(opts?.now ?? new Date());
 
   // (1) Truy vấn chính. Raw có chủ đích: gộp 3 bảng trong MỘT lượt đi-về (Prisma
   // `include` bắn thêm query cho từng quan hệ), và Postgres cần `NULLS LAST` tường minh
@@ -411,7 +555,21 @@ export async function listConversationsForUser(
       p."unreadCount"       AS "unreadCount",
       p."muted"             AS "muted",
       p."lastReadMessageId" AS "lastReadMessageId",
-      cls."name"            AS "className"
+      cls."name"            AS "className",
+      -- US-13: hội thoại 1-1 không có lớp để lấy tên ⇒ tên hiển thị là NGƯỜI CÒN LẠI.
+      -- CASE bọc ngoài để truy vấn con KHÔNG chạy với nhóm lớp (đa số dòng).
+      -- Dựng tên ở đây thay vì ghi cứng vào Conversation.title lúc tạo: title bị đông
+      -- cứng (đổi tên người dùng không cập nhật) và cả hai bên sẽ thấy CÙNG một tên —
+      -- tức phụ huynh nhìn thấy tên của chính mình.
+      CASE WHEN c."type"::text <> 'CLASS_GROUP' THEN (
+        SELECT u."name"
+        FROM "ConversationParticipant" pp
+        JOIN "User" u ON u."id" = pp."userId"
+        WHERE pp."conversationId" = c."id"
+          AND pp."userId" <> ${userId}
+        ORDER BY pp."leftAt" NULLS FIRST, pp."joinedAt" ASC
+        LIMIT 1
+      ) END                 AS "peerName"
     FROM "ConversationParticipant" p
     JOIN "Conversation" c ON c."id" = p."conversationId"
     LEFT JOIN "Class" cls
@@ -420,15 +578,45 @@ export async function listConversationsForUser(
      AND c."subjectType"::text = 'CLASS'
     WHERE p."userId" = ${userId}
       AND p."leftAt" IS NULL
+      AND NOT (
+        c."status"::text = 'ARCHIVED'
+        AND p."derivedFrom"::text = 'CLASS_STUDENT_PARENT'
+        AND c."archivedAt" IS NOT NULL
+        AND c."archivedAt" < ${archivedCutoff}
+      )
     ORDER BY c."lastMessageAt" DESC NULLS LAST, c."id" ASC
     LIMIT ${limit}
   `;
   if (rows.length === 0) return [];
 
+  // BR-30 — tên người còn lại của một DM rất có thể LÀ liên hệ ("PH 0905123456" với tài
+  // khoản sinh từ lead cũ). Người xem có vai PARENT thì che phần trông giống SĐT/email,
+  // đúng luật đã áp ở `getConversationMembers`. Chỉ hỏi vai người xem KHI thật sự có DM
+  // trong danh sách — đường này còn chạy ở mọi lần dựng badge chưa đọc của cả 3 site.
+  const peerNames = rows.filter((r) => (r.peerName ?? "").trim().length > 0);
+  let hidePeerContacts = true; // fail-closed: không biết người xem là ai thì che
+  if (peerNames.length > 0) {
+    const viewer = await db.user.findUnique({
+      where: { id: userId },
+      select: { role: true, roles: true },
+    });
+    hidePeerContacts = shouldHideContacts({
+      role: viewer?.role ?? null,
+      roles: viewer?.roles ?? null,
+    });
+  }
+  const peerDisplayName = (raw: string | null): string | null => {
+    const name = (raw ?? "").trim();
+    if (!name) return null;
+    return hidePeerContacts ? redactContactLike(name) : name;
+  };
+
   // (2) Tin cuối của TỪNG hội thoại trong một truy vấn — `DISTINCT ON` là cách duy
   // nhất trong Postgres lấy "bản ghi đầu mỗi nhóm" mà không phải bắn N query.
   const ids = rows.map((r) => r.conversationId);
-  const previews = await db.$queryRaw<PreviewRowRaw[]>`
+  const previews: PreviewRowRaw[] = opts?.withPreview === false
+    ? []
+    : await db.$queryRaw<PreviewRowRaw[]>`
     SELECT DISTINCT ON (m."conversationId")
       m."conversationId", m."id", m."kind"::text AS "kind", m."senderId",
       m."body", m."createdAt", m."deletedAt"
@@ -445,7 +633,7 @@ export async function listConversationsForUser(
       status: r.status,
       isArchived: r.status === "ARCHIVED",
       statusLabel: statusLabelOf(r.status),
-      displayName: r.className ?? r.title ?? "Hội thoại",
+      displayName: r.className ?? peerDisplayName(r.peerName) ?? r.title ?? "Hội thoại",
       lastMessageAt: r.lastMessageAt,
       unreadCount: r.unreadCount,
       muted: r.muted,
@@ -474,9 +662,9 @@ export type MessagePage = {
 export async function getMessagesPage(
   conversationId: string,
   userId: string,
-  opts?: { cursor?: string | null; limit?: number },
+  opts?: { cursor?: string | null; limit?: number; now?: Date },
 ): Promise<MessagePage> {
-  await assertActiveParticipant(conversationId, userId);
+  await assertActiveParticipant(conversationId, userId, opts?.now);
 
   const limit = Math.min(Math.max(opts?.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
   const cursor = decodeCursor(opts?.cursor);
@@ -527,9 +715,9 @@ export async function fetchMessagesSince(
   conversationId: string,
   userId: string,
   lastSeenMessageId: string | null,
-  opts?: { limit?: number },
+  opts?: { limit?: number; now?: Date },
 ): Promise<MessagesSincePage> {
-  await assertActiveParticipant(conversationId, userId);
+  await assertActiveParticipant(conversationId, userId, opts?.now);
 
   const limit = Math.min(Math.max(opts?.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
   const anchor = lastSeenMessageId
@@ -576,8 +764,13 @@ export async function fetchMessagesSince(
 export async function getConversationMembers(
   conversationId: string,
   viewerUserId: string,
+  opts?: { now?: Date },
 ): Promise<ConversationMemberView[]> {
-  const viewerParticipant = await assertActiveParticipant(conversationId, viewerUserId);
+  const viewerParticipant = await assertActiveParticipant(
+    conversationId,
+    viewerUserId,
+    opts?.now,
+  );
 
   const [conversation, participants] = await Promise.all([
     db.conversation.findUnique({
@@ -600,11 +793,15 @@ export async function getConversationMembers(
   const userById = new Map(users.map((u) => [u.id, u]));
 
   const viewer = userById.get(viewerUserId);
-  const hideContacts = shouldHideContacts({
+  const viewerCtx: ContactViewer = {
     role: viewer?.role ?? null,
     roles: viewer?.roles ?? null,
     derivedFrom: viewerParticipant.derivedFrom,
-  });
+  };
+  // `hideContacts` (mức hội thoại) vẫn quyết định việc BÔI tên/nhãn — tên "PH 0905…"
+  // chỉ được che khi người xem là PH. Việc trả `contact` thì xét TỪNG thành viên.
+  const hideContacts = shouldHideContacts(viewerCtx);
+  const conversationType = conversation?.type ?? "CLASS_GROUP";
 
   // Nhãn "PH của <tên học viên>": con của từng PH ĐANG thuộc lớp của nhóm này.
   // `Student`/`Enrollment` ∈ SCOPED_MODELS — `db` trần cố ý (xem đầu file); `deletedAt`
@@ -656,7 +853,14 @@ export async function getConversationMembers(
         email: u?.email ?? null,
         childNames: childNamesByParent.get(p.userId) ?? [],
       },
-      { hideContacts },
+      {
+        hideContacts,
+        hideContact: hidesContactOf({
+          conversationType,
+          viewer: viewerCtx,
+          memberDerivedFrom: p.derivedFrom,
+        }),
+      },
     );
   });
 }
@@ -675,8 +879,10 @@ export async function markConversationRead(
   conversationId: string,
   userId: string,
   lastReadMessageId: string | null,
+  opts?: { now?: Date },
 ): Promise<MarkReadResult> {
-  await assertActiveParticipant(conversationId, userId);
+  // BR-04 áp cả ở đây: PH đã hết hạn đọc thì cũng không còn gì để "đánh dấu đã đọc".
+  await assertActiveParticipant(conversationId, userId, opts?.now);
 
   const lastReadAt = new Date();
   await db.conversationParticipant.update({

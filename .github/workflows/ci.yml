@@ -88,6 +88,13 @@ jobs:
           NEXTAUTH_URL: "http://localhost:3000"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
 
+      # Canary secret trong bundle client — variables.md liệt đây là cổng BẮT BUỘC trước
+      # go-live nhưng tới 09/08/2026 chưa có bước nào thực thi. Lý lẽ đầy đủ + vì sao KHÔNG
+      # dùng `grep service_role` nằm ngay đầu file script (grep vừa kêu oan trên bản build
+      # sạch vì chuỗi trong @supabase/supabase-js, vừa bỏ lọt khoá đời cũ vì nó là JWT).
+      - name: Canary — không secret nào lọt bundle client
+        run: node scripts/canary-client-bundle-keys.mjs
+
   unit-tests:
     name: Unit tests (Vitest)
     runs-on: ubuntu-latest
@@ -160,6 +167,12 @@ jobs:
 
       - name: Migrate DB schema (local CI Postgres)
         run: pnpm exec prisma migrate deploy
+
+      # RBAC v2 lấy quyền từ DỮ LIỆU (RoleDef + RolePermission), không từ code. Không seed
+      # thì `parent-permission.spec.ts` không có RoleDef PARENT để đọc — mà đó đúng là bài
+      # test canh sự cố 10/08 (114 phụ huynh / 0 UserOrgRole ⇒ không gửi được tin nào).
+      - name: Seed RoleDef + RolePermission (dữ liệu quyền v2)
+        run: pnpm exec tsx prisma/seed-roles.ts
 
       - name: Run chat DB tests
         # = `pnpm test:chat-db` chạy tay được y hệt (vitest run tests/chat).

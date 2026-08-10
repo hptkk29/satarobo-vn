@@ -20,7 +20,11 @@ import { describe, expect, it, vi } from "vitest";
 // Hạ tầng chỉ cần "import được" — mọi hàm dưới đây thuần, không gọi tới chúng.
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/audit/audit-log", () => ({ writeAudit: vi.fn() }));
-vi.mock("@/lib/chat/broadcast", () => ({ broadcastToConversation: vi.fn() }));
+vi.mock("@/lib/chat/broadcast", () => ({
+  broadcastMessages: vi.fn(async () => true),
+  conversationBroadcast: vi.fn(() => ({})),
+  userBumpBroadcasts: vi.fn(() => []),
+}));
 // Không kéo next-auth vào test node (lõi nhận Actor seed, không cần phiên thật).
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => null) }));
 

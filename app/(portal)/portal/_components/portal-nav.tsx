@@ -24,6 +24,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { useChatUnread } from "@/components/chat/use-chat-unread";
 
 const ITEMS = [
   { label: "Trang chủ", href: "/portal", icon: Home },
@@ -51,16 +52,23 @@ const ITEMS = [
 // Sidebar DỌC (commit 2): desktop hiển thị cố định bên trái; mobile thu gọn thành
 // nút "Menu" mở/đóng. Mọi mục truy cập được, không scroll ngang.
 export function PortalNav({
+  userId,
   notifCount = 0,
   msgCount = 0,
   evalV2Enabled = false,
 }: {
+  /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
+  userId: string;
   notifCount?: number;
   msgCount?: number;
   evalV2Enabled?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // `msgCount` (server) là số ban đầu; hook chỉ cập nhật khi có tin mới ở hội thoại KHÁC
+  // hội thoại đang mở. Badge chuông thông báo giữ nguyên đường cũ (chưa có kênh realtime).
+  const liveMsgCount = useChatUnread(userId, msgCount);
 
   // Mục gắn flag "eval" chỉ hiện khi EVAL_V2_ENABLED (R7-16).
   const items = ITEMS.filter((it) => !("flag" in it) || (it.flag === "eval" && evalV2Enabled));
@@ -77,8 +85,8 @@ export function PortalNav({
           const badge =
             item.href === "/portal/thong-bao" && notifCount > 0
               ? notifCount
-              : item.href === "/portal/tin-nhan" && msgCount > 0
-                ? msgCount
+              : item.href === "/portal/tin-nhan" && liveMsgCount > 0
+                ? liveMsgCount
                 : 0;
           return (
             <Link
@@ -119,9 +127,9 @@ export function PortalNav({
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             Menu
           </span>
-          {!open && notifCount + msgCount > 0 && (
+          {!open && notifCount + liveMsgCount > 0 && (
             <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-              {notifCount + msgCount > 9 ? "9+" : notifCount + msgCount}
+              {notifCount + liveMsgCount > 9 ? "9+" : notifCount + liveMsgCount}
             </span>
           )}
         </button>

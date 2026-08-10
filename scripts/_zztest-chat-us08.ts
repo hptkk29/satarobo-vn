@@ -25,6 +25,11 @@
  *   TS-04.4 — BR-30: payload thành viên cho PH KHÔNG chứa SĐT/email của bất kỳ ai
  *             (DUYỆT SÂU toàn object: tên khoá nhạy cảm + giá trị khớp SĐT VN/email),
  *             GV thấy đầy đủ.
+ *   TS-08   — BR-04 hạn đọc 90 ngày sau ARCHIVED: PH đọc được tới ĐÚNG ngày 90, sang
+ *             ngày 91 thì NOT_PARTICIPANT ở page/since/members/markRead và hội thoại
+ *             biến khỏi danh sách; QLCS/GV KHÔNG hết hạn; hội thoại còn ACTIVE không
+ *             bị áp nhầm. Mốc thời gian TIÊM VÀO qua tham số `now` (không mock clock,
+ *             không phụ thuộc đồng hồ máy).
  *
  * Nhóm + participant dựng bằng CHÍNH syncConversationMembership (US-03) — không chế
  * participant bằng tay, để cái được kiểm là đường đi thật.
@@ -532,6 +537,88 @@ async function main() {
       "TS-04.4c người ngoài nhóm xin danh sách thành viên → NOT_PARTICIPANT",
       membersBlocked === "NOT_PARTICIPANT",
       `mã lỗi = ${membersBlocked}`,
+    );
+
+    // ═════════════ TS-08 · BR-04 hạn đọc 90 ngày sau ARCHIVED ═════════════
+    // LopC đã COMPLETED → convC ARCHIVED (sync đặt `archivedAt`). ph3 là PH của con7
+    // trong LopC; ql1 là QLCS cùng cơ sở. Mốc thời gian TIÊM VÀO (`now`) chứ không sửa
+    // `archivedAt` rồi tin vào đồng hồ máy — test cho cùng kết quả ở mọi múi giờ.
+    const convCRow = await db.conversation.findUniqueOrThrow({
+      where: { id: convC },
+      select: { status: true, archivedAt: true },
+    });
+    const archivedAt = convCRow.archivedAt;
+    const sauNgay = (n: number) =>
+      new Date((archivedAt?.getTime() ?? Date.now()) + n * 24 * 60 * 60 * 1000);
+    report(
+      "TS-08 TIỀN ĐỀ — LopC kết thúc → convC ARCHIVED và CÓ mốc archivedAt",
+      convCRow.status === "ARCHIVED" && archivedAt !== null,
+      `status=${convCRow.status}, archivedAt=${archivedAt?.toISOString() ?? "NULL (sai — BR-04 không tính được)"}`,
+    );
+
+    const codeOf = async (fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+        return "KHÔNG chặn";
+      } catch (e) {
+        return e instanceof Q.ChatQueryError ? e.code : `lỗi lạ: ${String(e)}`;
+      }
+    };
+
+    // — Trong hạn (ngày 89) và ĐÚNG biên (ngày 90): PH vẫn đọc được.
+    const ph3Ngay89 = await codeOf(() => Q.getMessagesPage(convC, s.ph3.id, { now: sauNgay(89) }));
+    const ph3Ngay90 = await codeOf(() => Q.getMessagesPage(convC, s.ph3.id, { now: sauNgay(90) }));
+    const listPh3Trong = (await Q.listConversationsForUser(s.ph3.id, { now: sauNgay(89) })).map(
+      (c) => c.conversationId,
+    );
+    report(
+      "TS-08.1 PH trong hạn (ngày 89) + ĐÚNG biên 90 ngày → VẪN đọc được, hội thoại còn trong danh sách",
+      ph3Ngay89 === "KHÔNG chặn" && ph3Ngay90 === "KHÔNG chặn" && listPh3Trong.includes(convC),
+      `ngày89=${ph3Ngay89}, ngày90=${ph3Ngay90}, danh sách có convC=${listPh3Trong.includes(convC)}`,
+    );
+
+    // — Quá hạn (ngày 91): PH bị chặn ở CẢ BA đường đọc + biến khỏi danh sách.
+    const now91 = sauNgay(91);
+    const ph3Page = await codeOf(() => Q.getMessagesPage(convC, s.ph3.id, { now: now91 }));
+    const ph3Since = await codeOf(() => Q.fetchMessagesSince(convC, s.ph3.id, null, { now: now91 }));
+    const ph3Members = await codeOf(() => Q.getConversationMembers(convC, s.ph3.id, { now: now91 }));
+    const ph3Mark = await codeOf(() => Q.markConversationRead(convC, s.ph3.id, null, { now: now91 }));
+    const listPh3Qua = (await Q.listConversationsForUser(s.ph3.id, { now: now91 })).map(
+      (c) => c.conversationId,
+    );
+    report(
+      "TS-08.2a PH quá 90 ngày → NOT_PARTICIPANT ở page/since/members/markRead + ẩn khỏi danh sách",
+      ph3Page === "NOT_PARTICIPANT" && ph3Since === "NOT_PARTICIPANT" &&
+        ph3Members === "NOT_PARTICIPANT" && ph3Mark === "NOT_PARTICIPANT" &&
+        !listPh3Qua.includes(convC),
+      `page=${ph3Page}, since=${ph3Since}, members=${ph3Members}, markRead=${ph3Mark}, danh sách còn convC=${listPh3Qua.includes(convC)} (phải false)`,
+    );
+
+    // — Cùng mốc thời gian đó, QLCS/GV KHÔNG hết hạn (nghĩa vụ lưu vết).
+    const ql1Page = await codeOf(() => Q.getMessagesPage(convC, s.ql1.id, { now: now91 }));
+    const ql1Members = await codeOf(() => Q.getConversationMembers(convC, s.ql1.id, { now: now91 }));
+    const listQl1Qua = (await Q.listConversationsForUser(s.ql1.id, { now: now91 })).map(
+      (c) => c.conversationId,
+    );
+    const gv1Page = await codeOf(() => Q.getMessagesPage(convC, s.gv1.id, { now: sauNgay(3650) }));
+    report(
+      "TS-08.2b QLCS/GV KHÔNG hết hạn — cùng mốc 91 ngày (và 10 năm) vẫn đọc + vẫn thấy trong danh sách",
+      ql1Page === "KHÔNG chặn" && ql1Members === "KHÔNG chặn" && listQl1Qua.includes(convC) &&
+        gv1Page === "KHÔNG chặn",
+      `ql1: page=${ql1Page}, members=${ql1Members}, danh sách có convC=${listQl1Qua.includes(convC)}; gv1 sau 10 năm: page=${gv1Page}`,
+    );
+
+    // — Hội thoại CHƯA archive không bao giờ hết hạn, kể cả tua 10 năm (chống áp nhầm).
+    const ph1XaTuongLai = await codeOf(() =>
+      Q.getMessagesPage(convA, s.ph1.id, { now: sauNgay(3650) }),
+    );
+    const listPh1XaTuongLai = (
+      await Q.listConversationsForUser(s.ph1.id, { now: sauNgay(3650) })
+    ).map((c) => c.conversationId);
+    report(
+      "TS-08.3 hội thoại còn ACTIVE → KHÔNG áp hạn 90 ngày (tua 10 năm PH vẫn đọc LopA)",
+      ph1XaTuongLai === "KHÔNG chặn" && listPh1XaTuongLai.includes(convA),
+      `page=${ph1XaTuongLai}, danh sách có convA=${listPh1XaTuongLai.includes(convA)}`,
     );
   } finally {
     await cleanup();

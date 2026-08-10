@@ -11,12 +11,16 @@ import {
   type ReconcilePage,
 } from "./use-chat-channel";
 import type { IncomingMessage } from "./chat-store";
+import { getActiveConversation, setActiveConversation } from "./active-conversation";
+import { subscribeConversationRead } from "./read-signal";
 
 const CONV = "conv-1";
 const ME = "user-me";
 const OTHER = "user-other";
 /** TTL thật của `/api/chat/realtime-token` (lib/chat/realtime-token.ts). */
-const TTL_MS = 15 * 60_000;
+const TTL_MS = 5 * 60_000;
+/** Trần backoff nối lại (`RECONNECT_MAX_MS` trong use-chat-channel.ts). */
+const RECONNECT_CAP_MS = 30_000;
 
 function row(id: string, over: Partial<IncomingMessage> = {}): IncomingMessage {
   return {
@@ -38,14 +42,15 @@ function page(messages: IncomingMessage[], over: Partial<ReconcilePage> = {}): R
 function createFakeTransport() {
   const calls = {
     subscribe: [] as { conversationId: string; jwt: string }[],
+    /** Vé đã gửi vào chu kỳ gia hạn (`renewAuth`), theo thứ tự. */
     setAuth: [] as string[],
     unsubscribe: 0,
   };
   let handlers: ChatChannelHandlers | null = null;
 
   const transport: ChatChannelTransport = {
-    subscribe(conversationId, jwt, h) {
-      calls.subscribe.push({ conversationId, jwt });
+    subscribe(conversationId, auth, h) {
+      calls.subscribe.push({ conversationId, jwt: auth.token });
       handlers = h;
       return {
         unsubscribe: () => {
@@ -53,8 +58,9 @@ function createFakeTransport() {
         },
       };
     },
-    setAuth(jwt) {
-      calls.setAuth.push(jwt);
+    renewAuth(auth) {
+      calls.setAuth.push(auth.token);
+      return auth.expiresAt;
     },
   };
 
@@ -241,6 +247,39 @@ describe("AC2 — reconcile bắt buộc mỗi lần SUBSCRIBED (TS-09)", () => 
     await flush();
     expect(h.fetchSince).toHaveBeenLastCalledWith("m9");
   });
+
+  // ⚠️ Test này sinh ra từ một lỗi ĐÃ LỌT RA MÔI TRƯỜNG TEST (nghiệm thu 10/08/2026):
+  // `lib/chat/announcements.ts` phát `announcement.created`, còn hook chỉ nhận
+  // `message.created` ⇒ thông báo bị nuốt im. Nó KHÔNG hiện thành lỗi đỏ vì mỗi lần
+  // re-SUBSCRIBED đều reconcile đọc bù, nên chờ đủ lâu (gia hạn vé ~4') là tin "tự"
+  // xuất hiện. Đột biến kiểm ngược: xoá nhánh `announcement.created` trong
+  // use-chat-channel.ts ⇒ cả hai assertion dưới đây ĐỎ.
+  it("THÔNG BÁO tới qua broadcast cũng vào luồng NGAY + báo cho khung ghim dựng lại", async () => {
+    const onAnnouncement = vi.fn();
+    const h = setup({ onAnnouncement });
+    await connect(h);
+
+    act(() =>
+      h.fake.handlers.onBroadcast("announcement.created", {
+        id: "a1",
+        conversationId: CONV,
+        senderId: OTHER,
+        kind: "ANNOUNCEMENT",
+        body: "Lớp nghỉ ngày 15/08, học bù ngày 22/08",
+        createdAt: "2026-08-10T02:00:00.000Z",
+      }),
+    );
+    await flush();
+
+    expect(h.view.result.current.messages.map((m) => m.id)).toEqual(["a1"]);
+    expect(h.view.result.current.messages[0]?.kind).toBe("ANNOUNCEMENT");
+    expect(onAnnouncement).toHaveBeenCalledTimes(1);
+
+    // Và nó cũng phải trở thành mốc reconcile như mọi tin khác.
+    act(() => h.fake.handlers.onStatus("SUBSCRIBED"));
+    await flush();
+    expect(h.fetchSince).toHaveBeenLastCalledWith("a1");
+  });
 });
 
 describe("AC3 — bị gỡ giữa phiên (TS-11 / F-KICK)", () => {
@@ -327,6 +366,43 @@ describe("AC5 — mốc đã đọc theo foreground", () => {
     expect(h.markRead).toHaveBeenLastCalledWith("m3");
   });
 
+  // Badge tổng ở thanh nav do LAYOUT RSC tính và layout KHÔNG render lại khi điều hướng
+  // client-side; đọc tin lại không sinh `bump` nào. Nên đánh dấu đã đọc XONG mà không phát
+  // tín hiệu ở đây = badge chỉ biết tăng, treo số cũ tới khi F5.
+  it("markConversationRead ghi xong ⇒ phát tín hiệu cho badge nav hỏi lại", async () => {
+    const heard = vi.fn();
+    const unsubscribe = subscribeConversationRead(heard);
+    try {
+      const h = setup();
+      h.fetchSince.mockResolvedValueOnce(page([row("m1")]));
+      await connect(h);
+
+      expect(h.markRead).toHaveBeenCalledWith("m1");
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("markConversationRead HỎNG ⇒ KHÔNG phát tín hiệu (badge không được tụt khi DB chưa ghi)", async () => {
+    const heard = vi.fn();
+    const unsubscribe = subscribeConversationRead(heard);
+    try {
+      const h = setup({
+        markRead: vi.fn(async () => {
+          throw new Error("mạng chớp");
+        }),
+      });
+      h.fetchSince.mockResolvedValueOnce(page([row("m1")]));
+      await connect(h);
+      await flush();
+
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("tab ẩn ⇒ KHÔNG đánh dấu đã đọc; quay lại foreground mới đánh dấu", async () => {
     const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
     const h = setup();
@@ -348,7 +424,10 @@ describe("AC5 — mốc đã đọc theo foreground", () => {
 });
 
 describe("gia hạn token trước khi hết hạn", () => {
-  it("tới ~80% TTL ⇒ xin token mới + setAuth, KHÔNG dựng lại kênh", async () => {
+  // Việc dựng lại kênh khi đổi vé là của TẦNG KẾT NỐI (`lib/chat/supabase-client.ts`):
+  // rời hết kênh → setAuth → join lại. Hook chỉ giao vé; nó KHÔNG được tự gọi
+  // `transport.subscribe` lần nữa, nếu không hai bên cùng join một topic.
+  it("tới ~80% TTL ⇒ xin vé mới + giao cho tầng kết nối, hook KHÔNG tự dựng kênh", async () => {
     const h = setup();
     await connect(h);
     expect(h.fetchToken).toHaveBeenCalledTimes(1);
@@ -357,8 +436,28 @@ describe("gia hạn token trước khi hết hạn", () => {
 
     expect(h.fetchToken).toHaveBeenCalledTimes(2);
     expect(h.fake.calls.setAuth).toEqual(["jwt-2"]);
-    expect(h.fake.calls.subscribe).toHaveLength(1); // kênh cũ vẫn sống
+    expect(h.fake.calls.subscribe).toHaveLength(1);
     expect(h.fetchSince).toHaveBeenCalledTimes(1); // gia hạn KHÔNG kích hoạt reconcile
+  });
+
+  // `renewAuth` trả mốc hết hạn ĐANG có hiệu lực — có thể là vé của kênh `user:{id}` vừa
+  // đổi hộ trên cùng kết nối. Hẹn giờ theo vé mình vừa xin (dài hơn) = tới lúc gia hạn
+  // thì vé thật đã chết từ lâu ⇒ kênh câm.
+  it("hẹn giờ theo mốc HIỆU LỰC do tầng kết nối trả về, không theo vé vừa xin", async () => {
+    const h = setup();
+    // Tầng kết nối giữ vé cũ: chỉ còn 60s nữa là hết hạn.
+    h.fake.transport.renewAuth = (auth) => {
+      h.fake.calls.setAuth.push(auth.token);
+      return new Date(Date.now() + 60_000).toISOString();
+    };
+    await connect(h);
+
+    await flush(TTL_MS * 0.8 + 100); // lần gia hạn 1 — nhận về mốc 60s
+    expect(h.fetchToken).toHaveBeenCalledTimes(2);
+
+    // Nếu hẹn theo vé vừa xin (5') thì mốc này chưa có gì xảy ra.
+    await flush(60_000 * 0.8 + 100);
+    expect(h.fetchToken).toHaveBeenCalledTimes(3);
   });
 
   it("gia hạn lặp lại được (token thứ 3) — không dừng sau lần đầu", async () => {
@@ -369,6 +468,40 @@ describe("gia hạn token trước khi hết hạn", () => {
     await flush(TTL_MS * 0.8 + 100);
 
     expect(h.fake.calls.setAuth).toEqual(["jwt-2", "jwt-3"]);
+  });
+
+  // Vé về SAU khi component đã chết: giao nó cho tầng kết nối là khởi động một chu kỳ
+  // rời-đổi-join cho một kênh không còn ai giữ ⇒ kênh mồ côi, không ai đóng được nữa.
+  it("unmount GIỮA lúc gia hạn ⇒ không giao vé cho tầng kết nối, không dựng kênh mồ côi", async () => {
+    let release: ((t: { token: string; expiresAt: string }) => void) | null = null;
+    const fetchToken = vi
+      .fn()
+      .mockResolvedValueOnce(tokenResponse("jwt-1"))
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ token: string; expiresAt: string }>((resolve) => {
+            release = resolve;
+          }),
+      );
+    const h = setup({ fetchToken });
+    await connect(h);
+
+    await flush(TTL_MS * 0.8 + 100); // đã xin vé mới, đang chờ mạng trả về
+    expect(fetchToken).toHaveBeenCalledTimes(2);
+
+    act(() => h.view.unmount());
+    await act(async () => {
+      release?.(tokenResponse("jwt-2"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(h.fake.calls.setAuth).toHaveLength(0);
+    expect(h.fake.calls.subscribe).toHaveLength(1);
+    expect(h.fake.calls.unsubscribe).toBe(1);
+
+    // Và không còn hẹn giờ nào sống sót để xin vé tiếp.
+    await flush(TTL_MS * 2);
+    expect(fetchToken).toHaveBeenCalledTimes(2);
   });
 
   it("xin token hỏng ⇒ thử lại sau, không làm chết kênh", async () => {
@@ -386,6 +519,88 @@ describe("gia hạn token trước khi hết hạn", () => {
 
     await flush(30_000 + 100); // lần thử lại
     expect(h.fake.calls.setAuth).toEqual(["jwt-3"]);
+  });
+});
+
+// Đo thật (scripts/_zztest-chat-token-va-lo.ts, LỖ 3): kênh Supabase một khi đã CLOSED thì
+// KHÔNG tự hồi — theo dõi thêm 56–81s, 0 lần SUBSCRIBED lại. Bản cũ chỉ `setStatus("closed")`
+// rồi thôi ⇒ người mở chat lâu mất realtime âm thầm, không lỗi, không dấu hiệu gì.
+describe("tự nối lại khi kênh đóng ngoài ý muốn", () => {
+  it("CLOSED ⇒ xin vé mới + dựng kênh mới sau backoff, và bỏ hẳn kênh cũ", async () => {
+    const h = setup();
+    await connect(h);
+    expect(h.fake.calls.subscribe).toHaveLength(1);
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    await flush();
+    expect(h.view.result.current.status).toBe("closed");
+    expect(h.fake.calls.subscribe).toHaveLength(1); // chưa nối ngay — phải có backoff
+
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2);
+    expect(h.fake.calls.subscribe[1].jwt).toBe("jwt-2"); // vé MỚI, không xài lại vé cũ
+    expect(h.fake.calls.unsubscribe).toBe(1);
+  });
+
+  it("nối lại hỏng liên tiếp ⇒ backoff nhân đôi rồi kịch 30s (không vòng lặp nóng)", async () => {
+    const h = setup();
+    await connect(h);
+
+    const closeAndWait = async (delay: number) => {
+      act(() => h.fake.handlers.onStatus("CLOSED"));
+      await flush(delay);
+    };
+
+    // 2s → 4s → 8s: mỗi lần chỉ nối lại khi đã qua đúng mốc backoff.
+    await closeAndWait(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2);
+    await closeAndWait(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2); // chưa tới 4s
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(3);
+
+    // Rất nhiều lần rớt liên tiếp vẫn không vượt trần 30s/lượt.
+    for (let i = 0; i < 8; i++) await closeAndWait(RECONNECT_CAP_MS + 50);
+    const callsAfter = h.fake.calls.subscribe.length;
+    await flush(RECONNECT_CAP_MS * 3);
+    expect(h.fake.calls.subscribe.length - callsAfter).toBeLessThanOrEqual(3);
+  });
+
+  it("SUBSCRIBED lại ⇒ backoff về mốc đầu (lần rớt sau không phải chờ 30s)", async () => {
+    const h = setup();
+    await connect(h);
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(2);
+    act(() => h.fake.handlers.onStatus("SUBSCRIBED"));
+    await flush();
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    await flush(2_000 + 50);
+    expect(h.fake.calls.subscribe).toHaveLength(3);
+  });
+
+  it("bị gỡ khỏi hội thoại ⇒ KHÔNG nối lại (CLOSED sau đó là do ta tự đóng)", async () => {
+    const h = setup();
+    await connect(h);
+
+    act(() => h.fake.handlers.onBroadcast("participant.removed", { userId: ME }));
+    await flush(RECONNECT_CAP_MS * 4);
+
+    expect(h.fake.calls.subscribe).toHaveLength(1);
+    expect(h.view.result.current.status).toBe("removed");
+  });
+
+  it("unmount giữa lúc chờ backoff ⇒ không nối lại (không rò timer)", async () => {
+    const h = setup();
+    await connect(h);
+
+    act(() => h.fake.handlers.onStatus("CLOSED"));
+    act(() => h.view.unmount());
+    await flush(RECONNECT_CAP_MS * 4);
+
+    expect(h.fake.calls.subscribe).toHaveLength(1);
   });
 });
 
@@ -470,5 +685,29 @@ describe("mergeLocal — cùng đường khử trùng với broadcast (TS-10.3)"
     await flush();
 
     expect(h.view.result.current.messages.map((m) => m.id)).toEqual(["m-real"]);
+  });
+});
+
+// AC5 — mẩu trạng thái nối luồng chat với BADGE ở thanh nav. Không có đăng ký này thì badge
+// tổng cộng thêm cho chính hội thoại người dùng đang nhìn (tin đó đã được `markConversationRead`
+// đánh dấu đọc), số nháy lên rồi tụt về 0 — nhìn như lỗi.
+describe("đăng ký hội thoại ĐANG MỞ cho badge nav", () => {
+  beforeEach(() => setActiveConversation(null));
+  afterEach(() => setActiveConversation(null));
+
+  it("mount ⇒ ghi nhận hội thoại đang mở; unmount ⇒ nhả ra", async () => {
+    const h = setup();
+    await connect(h);
+    expect(getActiveConversation()).toBe(CONV);
+
+    act(() => h.view.unmount());
+    expect(getActiveConversation()).toBeNull();
+  });
+
+  it("enabled=false (chưa mở luồng nào) ⇒ KHÔNG chiếm chỗ của hội thoại khác", async () => {
+    const h = setup({ enabled: false });
+    await flush();
+    expect(getActiveConversation()).toBeNull();
+    act(() => h.view.unmount());
   });
 });

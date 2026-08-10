@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import { useChatUnread } from "@/components/chat/use-chat-unread";
 import { cn } from "@/lib/utils";
 import { Sidebar, SidebarContent } from "./sidebar";
 import { TeacherThemeRoot } from "./teacher-theme";
@@ -13,20 +14,30 @@ import { Topbar } from "./topbar";
  * Sidebar cố định 16rem trên desktop, chuyển thành drawer trượt trên mobile.
  */
 export function AppShell({
+  userId,
   userName,
   adminReturnUrl,
+  chatUnread = 0,
   children,
 }: {
+  /** `User.id` — topic realtime `user:{id}` cho badge tin nhắn. */
+  userId: string;
   userName: string;
   /** F3 (Q41) — URL admin cho GV kiêm nhiệm; undefined = không hiện lối về admin. */
   adminReturnUrl?: string;
+  /** Số tin chưa đọc do layout (RSC) tính — số ban đầu, KHÔNG fetch ở client. */
+  chatUnread?: number;
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Sidebar được render Ở HAI NƠI (desktop + drawer) nhưng CHỈ MỘT hook ở đây ⇒ đúng một
+  // người nghe kênh `user:{id}` và một lượt hỏi lại server cho mỗi cụm tín hiệu.
+  const chatCount = useChatUnread(userId, chatUnread);
+
   return (
     <TeacherThemeRoot>
-      <Sidebar />
+      <Sidebar chatUnread={chatCount} />
 
       {/* Drawer mobile */}
       <div
@@ -57,7 +68,7 @@ export function AppShell({
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
-          <SidebarContent onNavigate={() => setDrawerOpen(false)} />
+          <SidebarContent onNavigate={() => setDrawerOpen(false)} chatUnread={chatCount} />
         </div>
       </div>
 

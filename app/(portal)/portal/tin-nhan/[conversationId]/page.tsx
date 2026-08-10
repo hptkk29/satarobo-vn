@@ -18,6 +18,9 @@ import {
   listConversationsForUser,
 } from "@/lib/chat/queries";
 import { listAnnouncements } from "@/lib/chat/announcements";
+import { listChatAttachments } from "@/lib/chat/messages";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
+import { ChatPolicyGate } from "../_components/policy-gate";
 import { ChatThread } from "@/components/chat/portal/chat-thread";
 import { AnnouncementReadMarker } from "@/components/chat/portal/announcement-read-marker";
 import { formatChatTimestamp } from "@/components/chat/portal/format";
@@ -25,18 +28,30 @@ import { formatChatTimestamp } from "@/components/chat/portal/format";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tin nhắn | Sata Robo", robots: { index: false } };
 
-/** US-09 AC3 — ô nhập vô hiệu kèm ĐÚNG lý do, không gộp thành một câu chung chung. */
-function sendGate(status: string): { canSend: boolean; reason: string | null } {
+/**
+ * US-09 AC3 — ô nhập vô hiệu kèm ĐÚNG lý do, không gộp thành một câu chung chung.
+ *
+ * ⚠️ LOCKED cố ý KHÔNG nằm ở đây (US-15 AC3): Admin khoá/mở được GIỮA PHIÊN, nên trạng
+ * thái đó đi đường riêng (`initialLocked` + broadcast `conversation.locked`) để ô nhập
+ * đổi ngay mà không phải tải lại trang.
+ */
+function sendGate(
+  status: string,
+  type?: string,
+): { canSend: boolean; reason: string | null } {
   if (status === "ARCHIVED") {
+    // F5 — lý do đóng KHÁC nhau theo loại hội thoại, đừng nói câu sai sự thật với phụ
+    // huynh: kênh tư vấn đóng vì hết phân công chăm sóc, chẳng liên quan gì tới lớp.
+    // Giữ đúng ý của `DM_ARCHIVED_SYSTEM_TEXT` (lib/chat/dm.ts) để tin SYSTEM trong luồng
+    // và câu dưới ô nhập nói cùng một chuyện.
     return {
       canSend: false,
-      reason: "Lớp đã kết thúc — hội thoại chỉ còn đọc, không gửi tin được.",
-    };
-  }
-  if (status === "LOCKED") {
-    return {
-      canSend: false,
-      reason: "Hội thoại đang bị khoá — vui lòng liên hệ quản trị viên.",
+      reason:
+        type === "DM_SALE_PARENT"
+          ? "Tư vấn viên này không còn phụ trách — hội thoại chỉ còn đọc."
+          : type === "DM_TEACHER_PARENT"
+            ? "Quan hệ dạy học đã kết thúc — hội thoại chỉ còn đọc."
+            : "Lớp đã kết thúc — hội thoại chỉ còn đọc, không gửi tin được.",
     };
   }
   return { canSend: true, reason: null };
@@ -52,6 +67,10 @@ export default async function PortalConversationPage({
   const userId = session.user.id;
   const { conversationId } = await params;
 
+  // US-16 AC2 — cổng chính sách, kiểm TRƯỚC mọi truy vấn nội dung (layout đã chặn; đây là
+  // lớp thứ hai để bất biến "chưa đồng ý ⇒ không đọc" không nằm nhờ ở quy ước framework).
+  if (!(await hasAcceptedChatPolicy(userId))) return <ChatPolicyGate />;
+
   const conversations = await listConversationsForUser(userId);
   const conversation = conversations.find((c) => c.conversationId === conversationId);
   if (!conversation) notFound();
@@ -62,8 +81,17 @@ export default async function PortalConversationPage({
     listAnnouncements(conversationId, userId, { limit: 1 }),
   ]);
 
+  // US-11 — ảnh của đúng 30 tin vừa tải. Chạy SAU vì cần danh sách id; tách khỏi tầng đọc
+  // chung (`getMessagesPage`) để mọi đường đọc khác không phải gánh thêm một join cho thứ
+  // mà tuyệt đại đa số tin không có.
+  const initialAttachments = await listChatAttachments(
+    conversationId,
+    userId,
+    page.messages.map((m) => m.id),
+  );
+
   const pinned = announcements.announcements[0] ?? null;
-  const gate = sendGate(conversation.status);
+  const gate = sendGate(conversation.status, conversation.type);
 
   return (
     <div className="space-y-3">
@@ -128,10 +156,12 @@ export default async function PortalConversationPage({
           roleLabel: m.roleLabel,
         }))}
         initialMessages={page.messages}
+        initialAttachments={initialAttachments}
         initialCursor={page.nextCursor}
         initialHasMore={page.hasMore}
         canSend={gate.canSend}
         disabledReason={gate.reason}
+        initialLocked={conversation.status === "LOCKED"}
       />
     </div>
   );

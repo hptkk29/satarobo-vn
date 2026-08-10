@@ -10,6 +10,8 @@ import { ArrowLeft, Megaphone } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listConversationsForUser } from "@/lib/chat/queries";
 import { listAnnouncements } from "@/lib/chat/announcements";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
+import { ChatPolicyGate } from "../../_components/policy-gate";
 import { AnnouncementReadMarker } from "@/components/chat/portal/announcement-read-marker";
 import { formatChatTimestamp } from "@/components/chat/portal/format";
 
@@ -28,6 +30,10 @@ export default async function PortalConversationAnnouncementsPage({
   const userId = session.user.id;
   const { conversationId } = await params;
   const { cursor } = await searchParams;
+
+  // US-16 AC2 — cổng chính sách (lớp thứ hai sau layout của segment). Quan trọng ở ĐÚNG
+  // trang này: thông báo là thứ PH thấy đầu tiên, và mở nó cũng GHI mốc "đã đọc".
+  if (!(await hasAcceptedChatPolicy(userId))) return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(userId);
   const conversation = conversations.find((c) => c.conversationId === conversationId);

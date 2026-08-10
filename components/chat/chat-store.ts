@@ -25,6 +25,17 @@ export type ChatMessageKind = "CHAT" | "ANNOUNCEMENT" | "SYSTEM";
  */
 export const DELETED_MESSAGE_TEXT = "Tin nhắn đã được gỡ";
 
+/**
+ * Câu hiện dưới ô nhập khi hội thoại đang bị Admin khoá (US-15 AC3).
+ *
+ * ⚠️ PHẢI khớp thông điệp của mã `CONVERSATION_LOCKED` trong `lib/chat/messages.ts` —
+ * cùng lý do khai lại như `DELETED_MESSAGE_TEXT` ở trên. Người dùng phải nghe một câu
+ * giống nhau dù họ gặp nó qua giao diện (khoá ngay lập tức) hay qua lỗi trả về từ server
+ * (client cũ chưa nhận broadcast).
+ */
+export const CONVERSATION_LOCKED_NOTICE =
+  "Hội thoại đang bị khoá — vui lòng liên hệ quản trị viên.";
+
 /** Tiền tố id của bản optimistic — id THẬT do server sinh (uuid) không bao giờ có tiền tố này. */
 export const OPTIMISTIC_ID_PREFIX = "tmp:";
 
@@ -372,4 +383,61 @@ export function parseMessageDeleted(payload: Record<string, unknown>): string | 
 /** Payload `participant.removed` → `User.id` bị gỡ (AC3 so với chính mình). */
 export function parseParticipantRemoved(payload: Record<string, unknown>): string | null {
   return str(payload.userId);
+}
+
+/**
+ * US-15 AC3 — payload `conversation.locked` → trạng thái mới của hội thoại.
+ *
+ * MỘT event cho cả hai chiều: cờ `locked` quyết định khoá hay mở khoá (server chỉ khai
+ * `conversation.locked` trong `ChatBroadcastEvent`). Đọc `locked` trước, `status` chỉ là
+ * đường dự phòng — payload lạ (thiếu cả hai) trả `null` để client GIỮ NGUYÊN trạng thái
+ * server đã render, thay vì đoán bừa rồi mở ô nhập của một hội thoại đang khoá.
+ */
+export function parseConversationLocked(
+  payload: Record<string, unknown>,
+): { locked: boolean; status: string } | null {
+  const status = str(payload.status);
+  if (typeof payload.locked === "boolean") {
+    return { locked: payload.locked, status: status ?? (payload.locked ? "LOCKED" : "ACTIVE") };
+  }
+  if (status === "LOCKED") return { locked: true, status };
+  if (status === "ACTIVE") return { locked: false, status };
+  return null;
+}
+
+/**
+ * Tín hiệu `conversation.bumped` đã chuẩn hoá (topic mức NGƯỜI DÙNG `user:{id}`).
+ *
+ * ⚠️ Đây KHÔNG phải dữ liệu để hiển thị — nó chỉ nói "hội thoại X vừa có gì đó mới".
+ * Mọi thứ vẽ ra màn hình vẫn phải hỏi lại server (đường đã kiểm quyền): badge qua
+ * `GET /api/chat/unread`, danh sách qua RSC. Payload cố ý KHÔNG mang body/tên/SĐT (BR-30).
+ */
+export type ConversationBump = {
+  conversationId: string;
+  /** cuid tin vừa tạo/đổi — chỉ để khử trùng khi cùng một bump tới hai lần. */
+  messageId: string;
+  /** "CHAT" | "ANNOUNCEMENT" | "DELETED" (union server có thể mở rộng ⇒ nhận string). */
+  kind: string | null;
+  at: Date;
+};
+
+/**
+ * Payload `conversation.bumped` → bump chuẩn hoá; `null` nếu payload dị dạng.
+ *
+ * Nghiêm ngặt có chủ đích (giống `parseBroadcastMessage`): thà bỏ một tín hiệu hỏng còn
+ * hơn đoán bừa — lần `SUBSCRIBED` kế tiếp phát `resync`, client hỏi lại server là đủ bù.
+ */
+export function parseConversationBumped(
+  payload: Record<string, unknown>,
+): ConversationBump | null {
+  const conversationId = str(payload.conversationId);
+  const messageId = str(payload.messageId);
+  if (!conversationId || !messageId) return null;
+
+  const at = payload.at;
+  if (typeof at !== "string" && typeof at !== "number" && !(at instanceof Date)) return null;
+  const parsed = new Date(at as string | number | Date);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return { conversationId, messageId, kind: str(payload.kind), at: parsed };
 }

@@ -11,6 +11,8 @@ import { formatDateVN } from "@/lib/format/date";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskPhone } from "@/lib/utils";
 import { phoneSearchTerm } from "@/lib/phone";
+import { ENROLLMENT_ACTIVE_STATUSES } from "@/lib/enrollment-status";
+import { OpenDmButton } from "@/components/chat/open-dm-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Đăng ký học | Admin" };
@@ -123,6 +125,9 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         status: true,
         enrolledAt: true,
         startedAt: true,
+        // F5 — hai field này là ĐỦ để dựng nút "Nhắn riêng" của sale, và cả hai nằm trên
+        // hàng đã fetch sẵn nên KHÔNG tốn thêm truy vấn nào.
+        saleId: true,
         student: {
           select: {
             id: true,
@@ -130,6 +135,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
             avatarUrl: true,
             parentPhone: true,
             phone: true,
+            parentUserId: true,
           },
         },
         class: {
@@ -323,6 +329,29 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center justify-end gap-2">
+                          {/* F5 — nút CHỈ hiện đúng khi server sẽ cho qua: người xem là
+                              sale được gán CỦA CHÍNH ghi danh này, phụ huynh đã có tài
+                              khoản, và ghi danh còn hiệu lực. Điều kiện phải TRÙNG KHÍT
+                              `findSaleAssignedEnrollmentIds` (lib/chat/dm.ts) — hiện nút
+                              rộng hơn server là đẩy người dùng vào PERMISSION_DENIED. */}
+                          {e.saleId === session.user.id &&
+                            e.student.parentUserId &&
+                            (ENROLLMENT_ACTIVE_STATUSES as readonly string[]).includes(e.status) && (
+                              <OpenDmButton
+                                peerUserId={e.student.parentUserId}
+                                kind="SALE_PARENT"
+                                // ⚠️ `/admin/tin-nhan` chứ KHÔNG phải `/tin-nhan` (đường
+                                // sidebar dùng). Đo trên test 10/08: bấm từ
+                                // `/admin/enrollments`, Server Action trả ok kèm
+                                // conversationId nhưng `router.push("/tin-nhan?c=…")`
+                                // KHÔNG điều hướng — URL đứng nguyên, người dùng thấy nút
+                                // như chết. Trang này nằm dưới `/admin/**` nên đi thẳng
+                                // đường đã có tiền tố, không nhờ tới lớp rewrite clean-URL
+                                // của proxy.
+                                hrefTemplate="/admin/tin-nhan?c=:id"
+                                label="Nhắn riêng"
+                              />
+                            )}
                           <Link
                             href={`/enrollments/${e.id}/edit`}
                             className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"

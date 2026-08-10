@@ -1,18 +1,25 @@
 import "server-only";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "@/lib/db";
-import { getR2Bucket, getR2Client } from "@/lib/storage/r2-client";
-import { signedMediaUrl } from "@/lib/storage/signed-url";
+import {
+  getChatBucket,
+  isChatBucketConfigured,
+  signChatGetUrl,
+  signChatPutUrl,
+} from "@/lib/storage/chat-storage";
 
 // =============================================================================
 // lib/chat/attachments.ts — US-11: đính kèm ảnh trong hội thoại (F-FILE, TS-14).
 //
 // Storage = **Cloudflare R2** (quyết định Q2, docs/chat-realtime/00-dieu-chinh
-// -cho-repo.md) — KHÔNG dùng Supabase Storage. Tái dùng `lib/storage/r2-client`
-// + `lib/storage/signed-url` sẵn có, bổ sung kiểm **magic bytes** (mẫu:
-// lib/exams/docx-import.ts:89).
+// -cho-repo.md) — KHÔNG dùng Supabase Storage. Đi qua `lib/storage/chat-storage`
+// (bucket RIÊNG `R2_CHAT_BUCKET_NAME`, không custom domain), bổ sung kiểm
+// **magic bytes** (mẫu: lib/exams/docx-import.ts:89).
+//
+// ⛔ KHÔNG dùng `getR2Bucket()` / `getR2PublicUrl()` / `signedMediaUrl()`: chúng
+// trỏ vào bucket `R2_BUCKET_NAME` đang phát công khai qua `R2_PUBLIC_URL`
+// (cdn.satarobo.vn) ⇒ signed URL trở nên vô nghĩa (ghép key sang tên miền CDN là
+// tải được vĩnh viễn, kể cả sau khi tin bị gỡ). Lý do đầy đủ: lib/storage/chat-storage.ts.
 //
 // 3 bước của F-FILE:
 //   1. Client xin signed PUT URL  → `createChatUploadTicket`  (guard quyền + file)
@@ -248,15 +255,15 @@ export function buildChatAttachmentKey(params: {
   return `chat-attachments/${conversationId}/${month}/${objectId}${EXT_BY_MIME[mime]}`;
 }
 
-/** Env R2 đã đủ chưa — script nghiệm thu dùng để SKIP bước cần ký URL. */
+/**
+ * Env đã đủ để ký URL ảnh chat chưa — script nghiệm thu dùng để SKIP bước cần ký.
+ *
+ * CỐ Ý **không** xét `R2_PUBLIC_URL` và **không** xét `R2_BUCKET_NAME`: luồng chat
+ * không bao giờ dùng public URL, và thiếu `R2_CHAT_BUCKET_NAME` thì phải trả 503
+ * chứ KHÔNG được rơi về bucket công khai.
+ */
 export function isChatStorageConfigured(): boolean {
-  return Boolean(
-    process.env.R2_ACCOUNT_ID &&
-      process.env.R2_ACCESS_KEY_ID &&
-      process.env.R2_SECRET_ACCESS_KEY &&
-      process.env.R2_BUCKET_NAME &&
-      process.env.R2_PUBLIC_URL,
-  );
+  return isChatBucketConfigured();
 }
 
 // ─── PHẦN CHẠM DB + R2 ──────────────────────────────────────────────────────
@@ -338,42 +345,43 @@ export async function createChatUploadTicket(input: {
 
   const now = new Date();
   const ttl = CHAT_IMAGE_RULES.uploadUrlTtlSeconds;
-  let client: ReturnType<typeof getR2Client>;
-  let bucket: string;
+  // Chốt cấu hình TRƯỚC khi ký: thiếu bucket chat (hoặc bucket chat bị trỏ vào
+  // bucket công khai) → 503 cấu hình hạ tầng, KHÔNG phải lỗi người dùng, và
+  // tuyệt đối không có nhánh nào rơi về `R2_BUCKET_NAME`.
   try {
-    client = getR2Client();
-    bucket = getR2Bucket();
+    getChatBucket();
   } catch {
-    // Env R2 thiếu → lỗi cấu hình hạ tầng, KHÔNG phải lỗi người dùng.
     throw new ChatAttachmentError(
       "STORAGE_NOT_CONFIGURED",
       "Kho ảnh chưa được cấu hình — báo quản trị viên.",
     );
   }
 
-  const tickets = await Promise.all(
-    files.map(async (f, i) => {
-      const mime = mimes[i]!;
-      const storagePath = buildChatAttachmentKey({ conversationId, mime, now });
-      // CHỈ ký Content-Type. KHÔNG ký Metadata/ContentLength: browser PUT chỉ gửi
-      // Content-Type nên header đã-ký-nhưng-không-gửi làm R2 trả 403
-      // SignatureDoesNotMatch (ghi chú A1 ở app/api/admin/upload-url/route.ts).
-      const command = new PutObjectCommand({
-        Bucket: bucket,
-        Key: storagePath,
-        ContentType: mime,
-      });
-      const uploadUrl = await getSignedUrl(client, command, { expiresIn: ttl });
-      return {
-        fileName: sanitizeChatFileName(f.fileName, mime),
-        mimeType: mime,
-        sizeBytes: f.sizeBytes,
-        storagePath,
-        uploadUrl,
-        expiresIn: ttl,
-      } satisfies ChatUploadTicket;
-    }),
-  );
+  let tickets: ChatUploadTicket[];
+  try {
+    tickets = await Promise.all(
+      files.map(async (f, i) => {
+        const mime = mimes[i]!;
+        const storagePath = buildChatAttachmentKey({ conversationId, mime, now });
+        const uploadUrl = await signChatPutUrl(storagePath, mime, ttl);
+        return {
+          fileName: sanitizeChatFileName(f.fileName, mime),
+          mimeType: mime,
+          sizeBytes: f.sizeBytes,
+          storagePath,
+          uploadUrl,
+          expiresIn: ttl,
+        } satisfies ChatUploadTicket;
+      }),
+    );
+  } catch (e) {
+    if (e instanceof ChatAttachmentError) throw e;
+    // Credential R2 thiếu/hỏng ⇒ vẫn là lỗi cấu hình, không phải lỗi người dùng.
+    throw new ChatAttachmentError(
+      "STORAGE_NOT_CONFIGURED",
+      "Kho ảnh chưa được cấu hình — báo quản trị viên.",
+    );
+  }
 
   return { tickets, expiresAt: new Date(now.getTime() + ttl * 1000) };
 }
@@ -426,7 +434,9 @@ export async function getChatAttachmentReadUrl(
   const ttl = CHAT_IMAGE_RULES.readUrlTtlSeconds;
   let url: string;
   try {
-    url = await signedMediaUrl(att.storagePath, ttl);
+    // Bucket chat (private, không custom domain) — KHÔNG dùng signedMediaUrl:
+    // hàm đó ký vào bucket công khai nên URL 5 phút sẽ vô nghĩa.
+    url = await signChatGetUrl(att.storagePath, ttl);
   } catch {
     throw new ChatAttachmentError(
       "STORAGE_NOT_CONFIGURED",

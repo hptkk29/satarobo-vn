@@ -80,6 +80,10 @@
     {
       "path": "/api/cron/chat-membership-reconcile",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/chat-zns-notify",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

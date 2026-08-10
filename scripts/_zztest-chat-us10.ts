@@ -20,6 +20,9 @@
  *                                   ANNOUNCEMENT — PH ❌").
  *   8. listAnnouncements         → chỉ `kind=ANNOUNCEMENT`, mới nhất trước, cursor
  *                                   không trùng/sót (US-09 AC2).
+ *   9. Rate limit 20/phút/NGƯỜI  → hết lượt thì RATE_LIMITED và KHÔNG ghi tin nào
+ *                                   (F-ANN kế thừa bước 4 của F-SEND); bộ đếm theo
+ *                                   người nên người khác không bị lây.
  *
  * Nhóm + participant dựng bằng CHÍNH `syncConversationMembership` (US-03) — không chế
  * participant bằng tay, để cái được kiểm là đường đi thật.
@@ -33,6 +36,8 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import path from "node:path";
 import Module from "node:module";
 import { syncConversationMembership } from "../lib/chat/sync-membership";
+// Module thuần (không `server-only`, không Prisma) — import tĩnh an toàn dưới tsx.
+import { rateLimit } from "../lib/rate-limit";
 
 // ⚠️ `lib/chat/broadcast.ts` mở đầu bằng `import "server-only"` (chặn service role key
 // lọt xuống client). Package đó do Next tự cấp lúc build, KHÔNG nằm trong node_modules →
@@ -607,6 +612,57 @@ async function main() {
         page1.hasMore &&
         blocked8 === "NOT_PARTICIPANT",
       `trang1=${page1.announcements.length} (hasMore=${page1.hasMore}) · trang2=${page2.announcements.length} · trùng=${ids.length - new Set(ids).size} · toàn ANNOUNCEMENT=${allAnn} · giảm dần=${descOk} · người ngoài=${blocked8}`,
+    );
+
+    // ── 9. Rate limit 20/phút/NGƯỜI (F-ANN kế thừa F-SEND bước 4) ──────────
+    // ⚠️ userId sinh THEO LẦN CHẠY: bộ đếm có thể là Upstash (dùng chung giữa các
+    // tiến trình, TTL 60s) — id cố định sẽ làm lần chạy thứ 2 trong vòng 1 phút đỏ
+    // oan. Không cần User thật: `ConversationParticipant.userId` cố ý không có FK, và
+    // `can()` quyết theo perm/assignedClassIds của Actor chứ không theo userId.
+    const rl1 = `${SLUG}-u-rl1-${Date.now()}`;
+    const rl2 = `${SLUG}-u-rl2-${Date.now()}`;
+    await db.conversationParticipant.createMany({
+      data: [rl1, rl2].map((userId) => ({
+        conversationId: convId,
+        userId,
+        role: "MODERATOR" as const,
+        source: "MANUAL" as const,
+        derivedFrom: "CLASS_TEACHER" as const,
+      })),
+    });
+    // Tiêu hết 20 lượt của rl1 bằng CHÍNH khoá/ngưỡng/cửa sổ mà action dùng.
+    for (let i = 0; i < A.ANNOUNCEMENT_RATE_MAX; i += 1) {
+      await rateLimit({
+        key: A.announcementRateKey(rl1),
+        max: A.ANNOUNCEMENT_RATE_MAX,
+        windowMs: A.ANNOUNCEMENT_RATE_WINDOW_MS,
+      });
+    }
+    const annBefore9 = await db.message.count({
+      where: { conversationId: convId, kind: "ANNOUNCEMENT" },
+    });
+    const res9a = await A.sendAnnouncementAsActor({ ...actorGv, userId: rl1 }, `${P}rl1`, {
+      conversationId: convId,
+      body: "Thông báo thứ 21 trong phút — phải bị chặn vì rate limit.",
+    });
+    // rl2 chưa tiêu lượt nào ⇒ KHÔNG được dính RATE_LIMITED (bộ đếm theo NGƯỜI).
+    // Quota ngày của lớp đã cạn ở case 4 nên kỳ vọng là ANNOUNCEMENT_QUOTA_EXCEEDED —
+    // điều cần chứng minh chỉ là "không phải RATE_LIMITED".
+    const res9b = await A.sendAnnouncementAsActor({ ...actorGv, userId: rl2 }, `${P}rl2`, {
+      conversationId: convId,
+      body: "Người khác vẫn còn lượt riêng.",
+    });
+    const annAfter9 = await db.message.count({
+      where: { conversationId: convId, kind: "ANNOUNCEMENT" },
+    });
+    report(
+      "9. rate limit 20/phút/NGƯỜI — hết lượt → RATE_LIMITED, không ghi tin; người khác không bị lây",
+      !res9a.ok &&
+        res9a.error.code === "RATE_LIMITED" &&
+        !res9b.ok &&
+        res9b.error.code !== "RATE_LIMITED" &&
+        annAfter9 === annBefore9,
+      `rl1=${res9a.ok ? "ok:true (SAI)" : res9a.error.code} · rl2=${res9b.ok ? "ok:true" : res9b.error.code} (phải KHÁC RATE_LIMITED) · số ANNOUNCEMENT ${annBefore9}→${annAfter9} (phải không đổi)`,
     );
   } finally {
     await cleanup();

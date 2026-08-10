@@ -12,8 +12,10 @@
 //    kèm deletedAt: null. PAUSED (bảo lưu) vẫn thuộc lớp ⇒ PH KHÔNG rời nhóm.
 //  • GV = teacherId VÀ assistantId (trợ giảng cũng đứng lớp) → MODERATOR/CLASS_TEACHER.
 //  • QLCS = MEMBER/CENTER_MANAGER (chốt 07/08) — hợp NHẤT 2 nguồn như tiền lệ
-//    payment-reconcile: v2 UserOrgRole(role.code=CENTER_MANAGER @ OrgUnit của cơ sở)
-//    ∪ v1 User.roles[] chứa CENTER_MANAGER + User.centerId = cơ sở lớp.
+//    payment-reconcile: v2 UserOrgRole(role.code ∈ CHAT_CENTER_MANAGER_ROLE_CODES @
+//    OrgUnit của cơ sở) ∪ v1 User.roles[] chứa CENTER_MANAGER + User.centerId = cơ sở lớp.
+//    Giáo vụ (RoleDef `CENTER_CLASS_MANAGER`) nằm trong tập v2 đó — chốt 09/08, xem
+//    CHAT_CENTER_MANAGER_ROLE_CODES.
 //  • BẪY BA (mục 5): PH nhiều con cùng lớp → MỘT bản ghi participant; leftAt CHỈ set
 //    khi TẬP con đang thuộc lớp của PH đó rỗng. Học viên có 2 PH → 2 participant.
 //  • Idempotent tuyệt đối (AC6): chạy lại không tạo trùng, không đổi joinedAt cũ,
@@ -39,7 +41,10 @@ export type ClassMembershipSnapshot = {
   teacherIds: readonly (string | null | undefined)[];
   /** Học viên đang thuộc lớp + danh sách PH (User.id) của từng em. */
   students: readonly { id: string; parentIds: readonly string[] }[];
-  /** User.id các QLCS của cơ sở chứa lớp. */
+  /**
+   * User.id các QLCS của cơ sở chứa lớp — GỒM CẢ Giáo vụ (`CENTER_CLASS_MANAGER`),
+   * dùng chung nhãn `CENTER_MANAGER` trong nhóm (CHAT_CENTER_MANAGER_ROLE_CODES).
+   */
   centerManagerIds: readonly string[];
 };
 
@@ -127,9 +132,36 @@ type Tx = Prisma.TransactionClient;
 export const CHAT_MEMBER_ENROLLMENT_STATUSES = ENROLLMENT_ACTIVE_STATUS_LIST;
 
 /**
+ * RoleDef (v2) được đối xử như "quản lý cơ sở" khi dẫn xuất thành viên nhóm lớp.
+ *
+ * `CENTER_CLASS_MANAGER` (Giáo vụ — "Quản lý lớp học", vai #16) thêm vào 09/08/2026 theo
+ * chốt của chủ dự án: Giáo vụ vào nhóm lớp Y HỆT Quản lý cơ sở. Trước đó vai này giữ đủ
+ * 3 quyền `chat:read/send/announce` (prisma/seed-roles.ts, cùng bộ CENTER với
+ * CENTER_MANAGER) nhưng KHÔNG bao giờ được dẫn xuất thành participant ⇒ 3 quyền đó là
+ * QUYỀN CHẾT: phạm vi đọc của chat là participant-based, vai không phải thành viên thì
+ * mở màn chat ra chỉ thấy danh sách rỗng.
+ *
+ * ⚠️ CỐ Ý dùng chung nhãn `derivedFrom = CENTER_MANAGER` + `role = MEMBER` cho cả hai:
+ * `DerivedFrom` là enum trong DB (prisma/schema.prisma), thêm giá trị mới là phải
+ * migration + đụng mọi chỗ đọc enum, trong khi hai vai có CÙNG tư cách trong nhóm
+ * (MEMBER, không sinh SYSTEM message vào/rời — xem `systemLabel`). Nhãn ở đây trả lời
+ * "vì sao người này ở trong nhóm" (vì quản lý cơ sở này), không phải "tên vai của họ".
+ *
+ * ⚠️ CHỈ áp cho nhánh v2. Enum `Role` (v1) KHÔNG có `CENTER_CLASS_MANAGER` — vai này
+ * chỉ tồn tại dưới dạng RoleDef gán tay ở /admin/users/[id]/org-roles
+ * (lib/auth/legacy-role-map.ts: nằm ngoài MANAGED_ROLE_CODES) — nên nhánh v1 giữ
+ * nguyên `CENTER_MANAGER`, đừng bịa role legacy mới.
+ */
+export const CHAT_CENTER_MANAGER_ROLE_CODES = [
+  "CENTER_MANAGER",
+  "CENTER_CLASS_MANAGER",
+] as const;
+
+/**
  * QLCS của một cơ sở — hợp nhất v2 (UserOrgRole, prod đang enforce) ∪ v1
  * (User.roles[], local/dev/CI) theo tiền lệ getReconcileRecipients
  * (app/api/cron/payment-reconcile/route.ts). Chỉ trả tài khoản còn sống.
+ * "QLCS" ở đây gồm cả Giáo vụ ở nhánh v2 — xem CHAT_CENTER_MANAGER_ROLE_CODES.
  */
 async function resolveCenterManagerUserIds(
   tx: Tx,
@@ -142,7 +174,8 @@ async function resolveCenterManagerUserIds(
   // An toàn với BẪY scopedDb: `OrgUnit` + `User` ∈ SCOPE_EXEMPT và `UserOrgRole` không
   // nằm trong SCOPED_MODELS ⇒ 3 truy vấn dưới đây KHÔNG bị extension lọc → giữ Prisma API.
 
-  // v2 — UserOrgRole @ OrgUnit (type CENTER) trỏ Center này.
+  // v2 — UserOrgRole @ OrgUnit (type CENTER) trỏ Center này. Gồm cả Giáo vụ
+  // (CENTER_CLASS_MANAGER) — xem CHAT_CENTER_MANAGER_ROLE_CODES.
   const orgUnit = await tx.orgUnit.findFirst({
     where: { centerId, deletedAt: null },
     select: { id: true },
@@ -154,7 +187,7 @@ async function resolveCenterManagerUserIds(
         status: "ACTIVE",
         effectiveFrom: { lte: now },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
-        role: { code: "CENTER_MANAGER", isActive: true },
+        role: { code: { in: [...CHAT_CENTER_MANAGER_ROLE_CODES] }, isActive: true },
       },
       select: { userId: true },
     });
@@ -162,6 +195,7 @@ async function resolveCenterManagerUserIds(
   }
 
   // v1 — User.roles[] chứa CENTER_MANAGER (fallback: cột role chính) + đúng cơ sở.
+  // KHÔNG có biến thể Giáo vụ ở đây: enum `Role` không có CENTER_CLASS_MANAGER.
   const v1 = await tx.user.findMany({
     where: {
       centerId,
@@ -186,7 +220,7 @@ async function resolveCenterManagerUserIds(
 function systemLabel(derivedFrom: DesiredDerivedFrom | null): string | null {
   if (derivedFrom === "CLASS_TEACHER") return "Giáo viên";
   if (derivedFrom === "CLASS_STUDENT_PARENT") return "Phụ huynh";
-  return null; // QLCS vào/rời không sinh SYSTEM message (quyết định US-03)
+  return null; // QLCS/Giáo vụ vào/rời không sinh SYSTEM message (quyết định US-03)
 }
 
 /** Field lớp cần cho việc dẫn xuất thành viên (subset của Class). */

@@ -1,55 +1,72 @@
 # tests.md — Bản đồ kiểm chứng
 
-> Sau mỗi story merge, chuyển dòng tương ứng từ Proposed → Existing kèm đường dẫn file test. Tài liệu này chỉ được coi là xanh khi cột Existing phủ hết nhóm CI-required.
+> **Viết lại 09/08/2026** sau khi Đợt 0 + Đợt 1 xong. Bản gốc 07/08 ghi "chưa có dòng
+> test nào tồn tại" — đúng lúc đó, sai bây giờ. Tài liệu này chỉ có giá trị nếu nó
+> **trung thực**: cột "Cổng chạy" phân biệt rõ thứ CHẶN MERGE với thứ chỉ chạy tay.
 
-## 1. Existing coverage (hiện có trong repo)
+## 0. Hạ tầng chạy test
 
-| Rule (nguồn) | Phủ bởi | Scenario | Loại |
-|---|---|---|---|
-| Cách ly đọc theo lớp/cơ sở (permissions.md) | **Existing (tầng tĩnh)** — `lib/auth/chat-permissions.test.ts` (từng ô ma trận trên can() v1 + v2, mã ô [TS-01.x] cạnh assertion) · tầng động: `tests/chat/permission-matrix.spec.ts` (todo, mở dần theo story US-06/US-08) | TS-01 | **AUTO-CI** |
-| Cách ly channel + không INSERT client (flows F-SUB) | Existing (US-02): integration `scripts/_zztest-chat-us02.ts` chạy trên dev (CI không có Realtime service) + unit JWT `lib/chat/realtime-token.test.ts` chạy vitest trong CI | TS-02 | **AUTO-CI** |
-| Ma trận hành động ghi (permissions.md) | **Existing (tầng tĩnh)** — `lib/auth/chat-permissions.test.ts` (vai × action, gồm SALES_CSM deny cả 5 · PH deny announce · QLCS=MEMBER gửi CHAT+ANN · QLCS/PH deny moderate) · tầng động: `tests/chat/permission-matrix.spec.ts` (todo TS-03.1→03.8 kèm mã lỗi kỳ vọng, mở ở US-06/US-10/US-12) | TS-03 | **AUTO-CI** |
-| 1-1 kín + audit-gated (flows F-AUDIT) | **Existing (tầng tĩnh)** — `lib/auth/chat-permissions.test.ts` (QLCS deny DM qua CENTER-scope × centerId=null; chat:admin chỉ SUPER_ADMIN) · tầng động: `tests/chat/permission-matrix.spec.ts` (todo TS-04.1→04.6, mở ở US-13/US-15) | TS-04 | **AUTO-CI** |
-| Seed chuẩn TestScenarios trên schema thật | Existing — `tests/chat/_helpers/seed-chat.ts` (assertTestDb bắt buộc, idempotent) + 3 smoke test trong `permission-matrix.spec.ts` (skip có thông điệp khi không có Postgres local) | Seed chuẩn | AUTO |
-| Khai action `chat:*` 2 tầng RBAC | Existing — v1 `lib/auth/permissions.ts` + v2 `prisma/seed-roles.ts`; pin chống drift trong `lib/auth/chat-permissions.test.ts` (describe "pin nội dung seed v2") | — | **AUTO-CI** |
-| Đối soát tự thi hành (cron.md) | Existing (US-04): unit phần thuần `lib/chat/reconcile-membership.test.ts` (REMOVE/ADD/bỏ qua MANUAL/idempotent, vitest CI) + integration `scripts/_zztest-chat-us04.ts` trên DB dev (TS-07.1→.4: REMOVE tự set leftAt + drift log, ADD chỉ log không tự thêm, run record 0/0 đêm sạch, rerun không drift trùng). Vế **[TAY]** 3 đêm staging giữ Proposed (mục 2). | TS-07 | AUTO + TAY 3 đêm |
+| Cổng | Chạy gì | Chặn merge? |
+|---|---|---|
+| CI job **Quality** | `typecheck` + `lint` + `boundaries` + `build` | ✅ |
+| CI job **Unit tests (Vitest)** | toàn bộ `*.test.ts` cạnh source | ✅ |
+| CI job **Chat DB invariants** *(thêm 09/08)* | `tests/chat/**` với Postgres 16 dựng trong job (`pnpm test:chat-db`) | ✅ |
+| `scripts/_zztest-chat-*.ts` | chạy **TAY** trên DB dev — cần secret thật (Supabase Realtime, R2) mà CI không có | ❌ |
 
-## 2. Proposed (đề xuất, chưa viết)
+⚠️ **Vì sao job "Chat DB invariants" phải tồn tại:** trước 09/08, `tests/chat/**` bọc
+`describe.skipIf(!HAS_LOCAL_DB)` mà job `unit-tests` không có Postgres ⇒ **skip sạch**.
+Một phiên audit đối kháng đã chứng minh: đổi bộ lọc "người phải rời nhóm" thành rỗng
+(⇒ phụ huynh bị gỡ khỏi lớp vẫn đọc được lịch sử, vẫn vào được kênh realtime, F-KICK
+chết) mà **CI vẫn xanh 100%**. Đó là lý do bộ test tầng DB phải chạy tự động, không
+phải "có script chạy tay là đủ".
 
-Loại: **AUTO-CI** (chặn merge) · **AUTO** (chạy CI, không chặn) · **TAY** (kịch bản staging trước phát hành).
+## 1. Existing coverage — test TỰ ĐỘNG (chặn merge)
 
-> Ghi chú US-05 (08/08): TS-01/TS-03/TS-04 đã chuyển lên mục 1 (tầng tĩnh Existing; tầng động là khung it.todo trong `tests/chat/permission-matrix.spec.ts` — story US-06→US-15 đổi todo → test thật, KHÔNG tạo file mới). TS-02 giữ như US-02 đã ghi.
+| File | Phủ | Cổng |
+|---|---|---|
+| `tests/chat/db-invariants.spec.ts` | 6 bất biến sống còn: sync đặt `leftAt` · bẫy PH nhiều con · phát `chat.participant_removed` (+ rollback không sót event) · cổng đọc `NOT_PARTICIPANT` · BR-30 · cron REMOVE tự thi hành / ADD chỉ log — **mỗi bất biến đã kiểm ngược bằng đột biến** | Chat DB |
+| `tests/chat/permission-matrix.spec.ts` | seed chuẩn + khung TS-01/03/04 (còn 32 `it.todo` — xem §3) | Chat DB |
+| `lib/auth/chat-permissions.test.ts` | ma trận `permissions.md` × **cả v1 lẫn v2**, actor v2 dựng từ chính `ROLE_SEED` (seed lệch ⇒ test đỏ) | Unit |
+| `lib/chat/messages.test.ts` | US-06: idempotency `clientMsgId` · rate limit · trạng thái hội thoại · đính kèm (tiền tố `storagePath` phải khớp hội thoại — chống gán ảnh nhóm khác) | Unit |
+| `lib/chat/queries.test.ts` | US-08/09: sắp xếp · cursor · **BR-30 bằng máy dò duyệt sâu** (khoá nhạy cảm + regex SĐT/email) | Unit |
+| `lib/chat/announcements.test.ts` | US-10: quota theo **ngày VN** (pin bằng mốc ISO tuyệt đối) · ai xem được thống kê · BR-30 trong danh sách chưa đọc | Unit |
+| `lib/chat/moderation.test.ts` | US-12: cửa sổ 15' · bắt buộc lý do (400 ≠ 403) · luôn soft delete | Unit |
+| `lib/chat/attachments.test.ts` | US-11: **magic bytes** byte thật (exe đổi đuôi + khai gian mime) · giới hạn số/cỡ · `[SEC]` luồng chat không chạm bucket công khai | Unit |
+| `lib/storage/chat-storage.test.ts` | bucket chat tách hẳn; thiếu env → fail-closed; trùng bucket công khai → từ chối | Unit |
+| `lib/chat/supabase-client.test.ts` | đường subscribe THẬT luôn `private: true` + `setAuth` trước khi join | Unit |
+| `lib/chat/broadcast.test.ts` | fail-and-forget: lỗi/thiếu env không ném ra ngoài | Unit |
+| `lib/chat/realtime-token.test.ts` | claims · TTL 15' · từ chối khi `tokenVersion` lệch | Unit |
+| `lib/chat/sync-membership.test.ts` | `computeDerivedMembership` (thuần) | Unit |
+| `lib/chat/reconcile-membership.test.ts` | `diffMembership` (thuần) | Unit |
+| `lib/chat/_handlers/participant-removed.test.ts` | handler nhận **cả object event**, payload hỏng thì không bắn | Unit |
+| `lib/chat/migrate-legacy.test.ts` | luật ánh xạ chat cũ (công cụ dự phòng — chủ dự án chốt KHÔNG migrate) | Unit |
+| `components/chat/chat-store.test.ts` | US-07: khử trùng 2 tầng · race broadcast-trước-response · 3 lần thử lại | Unit |
+| `components/chat/use-chat-channel.test.ts` | reconcile mỗi lần re-SUBSCRIBED · `participant.removed` · gia hạn token · dọn listener | Unit |
+| `components/chat/attachments/rules.test.ts` · `components/chat/portal/format.test.ts` | luật chọn ảnh phía client · định dạng giờ VN | Unit |
 
-| Rule (nguồn) | Hành vi kỳ vọng — gồm deny case | Scenario | Loại |
-|---|---|---|---|
-| Sync trong transaction (flows F-SYNC) | chuyển lớp: rời cũ + vào mới cùng TX; rollback → không sync nửa vời | TS-05 | **AUTO-CI** |
-| PH nhiều con (BR US-03.3) | 1 con nghỉ → ở lại; con cuối nghỉ → leftAt; luôn 1 bản ghi participant | TS-06 | **AUTO-CI** |
-| Đối soát — vế [TAY] còn lại (cron.md) | kiểm log/run record 3 đêm liên tiếp trên staging trước Đợt 2 (TS-07.4 [TAY]); phần AUTO đã Existing (mục 1) | TS-07 | TAY 3 đêm |
-| ARCHIVED + hạn 90 ngày (permissions.md) | PH sau 91 ngày → 403; GV/QLCS/Admin vẫn đọc | TS-08 | AUTO |
-| Reconcile không mất tin (flows F-SUB, NT1) | offline 30s/10' → nhận đủ, đúng thứ tự, không trùng | TS-09 | TAY (API con: AUTO) |
-| Khử trùng optimistic + idempotent gửi lại (F-SEND) | race broadcast-trước-response vẫn 1 bản; cùng clientMsgId không nhân đôi | TS-10 | **AUTO-CI** |
-| Kick giữa phiên (F-KICK) | client thoát trong vài giây; quay lại → 403; **đo độ trễ ghi vào architecture.md** | TS-11 | TAY |
-| Broadcast fail không phá gửi (F-SEND bước 6) | mock 500 → tin vẫn 200 + trong DB + log warning | TS-12 | **AUTO-CI** |
-| Vòng ANNOUNCEMENT (F-ANN) | ghim, đã-đọc theo viewport, quota 11/ngày chặn, xuyên mute | TS-13 | TAY |
-| File: magic bytes + signed URL + tin gỡ (F-FILE, F-DEL) | exe-đổi-đuôi 415; non-participant xin URL 403; URL >5' 403; ảnh tin gỡ 403 | TS-14 | AUTO (1,2,4) + TAY (3) |
-| Push đúng điều kiện (US-14) | foreground không push; mute chặn CHAT không chặn ANN; logout thôi nhận | TS-15 | TAY |
-| Khoá lan realtime + audit (F-LOCK) | 3 client vô hiệu ô nhập không reload; audit khoá & mở | TS-16 | TAY |
-| Diễn tập ngày-đầu PH (US-16) | kích hoạt→đọc thông báo ≤3 phút không trợ giúp; dashboard đếm đúng | TS-17 | TAY (gate Đợt 2) |
-| Không secret trong bundle client (variables.md) | grep build output sạch `service_role`/`sb_secret` | — | **AUTO-CI** |
-| Ràng buộc unique schema (US-01) | nhóm lớp thứ hai cùng Class bị từ chối; 2 insert dmKey song song → 1 thắng | — | **AUTO-CI** |
+## 2. Kiểm chứng chạy TAY (không chặn merge)
 
-## 3. Gaps (rule có tài liệu nhưng chưa có gì kiểm)
+Cần secret thật nên CI không chạy được. Chạy trước mỗi lần phát hành.
 
-Xếp theo mức lộ nếu vượt qua:
+| Script | Phủ | Ghi chú |
+|---|---|---|
+| `_zztest-chat-us02.ts` | **TS-02 đủ 6 bước** kể cả **canary TS-02.5** ("Allow public access" bị bật lại ⇒ đỏ) | Cần Supabase Realtime thật |
+| `_zztest-chat-us01/03/04/06/08/10/11/12.ts` | TS-01, TS-03, TS-05→TS-08, TS-10, TS-12, TS-14 trên DB thật | us11 cần R2 thật |
+| `_zztest-chat-us07-kick.ts` | F-KICK: event trong tx, rollback không sót | |
+| `_zztest-chat-dot0-{seed,verify}.ts` | dựng/kiểm dữ liệu nghiệm thu tay trên test.satarobo.vn | có `cleanup` |
+
+## 3. Gaps — rule có tài liệu nhưng chưa có gì kiểm
 
 | Gap | Lộ gì | Kế hoạch |
 |---|---|---|
-| Quy trình con người xử lý yêu cầu xoá ảnh trẻ em (architecture.md rủi ro mở) | Pháp lý/uy tín — không test kỹ thuật nào phủ được | Văn bản quy trình, fast-follow T6 |
-| Độ trễ P95 ≤1,5s dưới tải thật (NFR PRD) | Trải nghiệm, không phải an toàn | Đo trong pilot Đợt 2, không dựng load-test riêng (paper tiger) |
-| Chất lượng dữ liệu SĐT PH cho luồng cấp tài khoản (E3) | Cổng pilot sập vì lý do ngoài chat | Thuộc hạng mục cấp tài khoản — flag phụ thuộc, không phủ ở đây |
-| Hành vi ZNS (P1) | — | Chưa áp dụng ở P0 |
+| **32 `it.todo` trong `permission-matrix.spec.ts`** | Từng ô ma trận chưa có assertion ở tầng DB (tầng tĩnh `chat-permissions.test.ts` đã phủ) | Mở dần; nay job Chat DB đã tồn tại nên mở là chạy được ngay |
+| **TS-09, TS-11, TS-13, TS-15, TS-16, TS-17** ([TAY]) | Mất mạng không mất tin · kick giữa phiên · vòng thông báo · push · khoá hội thoại · ngày đầu của PH | TS-15/16/17 phụ thuộc US-14/15/16 (Đợt 2). TS-09/11 cần 2 thiết bị thật |
+| **Canary "grep bundle client không có service_role"** | Secret lọt bundle | `variables.md` liệt là cổng bắt buộc nhưng **chưa có step CI** — nên thêm sau `pnpm build` |
+| Quy trình con người xử lý yêu cầu xoá ảnh trẻ em | Pháp lý/uy tín — không test kỹ thuật nào phủ được | Văn bản quy trình, fast-follow T6 |
+| Độ trễ P95 ≤1,5s dưới tải thật | Trải nghiệm | Đo trong pilot Đợt 2 |
 
 ## Quy tắc CI
 
-- Nhánh `main` bảo vệ: nhóm **AUTO-CI** đỏ → không merge. Đây là "người review thứ hai" (pre-mortem T2) — tắt quy tắc này phải coi như một quyết định rủi ro có ghi nhận, không phải thao tác tiện tay.
-- Định nghĩa sẵn sàng Đợt 2 (từ TestScenarios): AUTO xanh 3 lần liên tiếp + toàn bộ TAY pass trong một buổi diễn tập có Dev chứng kiến + TS-17 ≤3 phút.
+- Nhánh bảo vệ: **Quality + Unit tests + Chat DB invariants** đỏ ⇒ không merge. Đây là "người review thứ hai" (pre-mortem T2) — tắt là một quyết định rủi ro có ghi nhận, không phải thao tác tiện tay.
+- **Test mới phải chứng minh bắt được lỗi**: áp đột biến vào code thật → test đỏ → khôi phục → xanh. Bài học 09/08: 12 story đều "test 2 lần pass" mà vẫn có 2 lỗ hổng kiểm chứng nghiêm trọng lọt qua.
+- Định nghĩa sẵn sàng Đợt 2 (từ TestScenarios): AUTO xanh 3 lần liên tiếp + toàn bộ [TAY] pass trong một buổi diễn tập có chủ dự án chứng kiến + TS-17 ≤3 phút.

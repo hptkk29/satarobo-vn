@@ -25,6 +25,7 @@ import { auth } from "@/lib/auth";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { StaffChatWorkspace } from "@/components/chat/staff/chat-workspace";
+import { listAssignableParentsForSale } from "@/lib/chat/dm";
 
 export const metadata = { title: "Tin nhắn | Admin" };
 export const dynamic = "force-dynamic";
@@ -41,24 +42,32 @@ export default async function AdminMessagesPage({
   }
 
   const sp = await searchParams;
+  // F5 — sale THUẦN (không kiêm vai nào khác) không có nhóm lớp nào, chỉ có kênh 1-1.
+  // Câu mô tả và ô rỗng phải nói đúng thứ họ thấy, và chỉ đường tới chỗ mở kênh.
+  const vaiTro = [session.user.role, ...(session.user.roles ?? [])].filter(Boolean);
+  const laSaleThuan =
+    vaiTro.includes("SALES_CSM") &&
+    vaiTro.every((r) => r === "SALES_CSM" || r === "PARENT");
+  // Chỉ nạp cho vai MỞ ĐƯỢC kênh mới. GV/QLCS không có quyền mở 1-1 với phụ huynh nên
+  // đưa danh sách xuống client cho họ là vừa thừa vừa lộ dữ liệu không cần thiết.
+  const phDuocGan = vaiTro.includes("SALES_CSM")
+    ? await listAssignableParentsForSale(session.user.id)
+    : [];
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="text-2xl font-bold text-foreground">Tin nhắn</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Nhóm lớp và trao đổi riêng với phụ huynh — bạn thấy những hội thoại mình là
-          thành viên.
-        </p>
-      </div>
-
       <StaffChatWorkspace
         userId={session.user.id}
         basePath="/tin-nhan"
         conversationId={sp.c}
         tab={sp.tab}
         announcementCursor={sp.ac}
-        emptyHint="Chưa có hội thoại nào. Nhóm lớp được tạo tự động khi lớp chuyển sang trạng thái hoạt động — quản lý cơ sở được thêm vào nhóm của các lớp thuộc cơ sở mình."
+        emptyHint={
+          laSaleThuan
+            ? "Chưa có hội thoại nào. Gõ tên phụ huynh hoặc tên học viên vào ô tìm kiếm bên trái để mở kênh riêng."
+            : "Chưa có hội thoại nào. Nhóm lớp được tạo tự động khi lớp chuyển sang trạng thái hoạt động — quản lý cơ sở được thêm vào nhóm của các lớp thuộc cơ sở mình."
+        }
+        assignableParents={phDuocGan}
       />
     </div>
   );

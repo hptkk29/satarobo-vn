@@ -18,17 +18,31 @@
 //   - **Trùng tin** → mọi đường vào (optimistic, broadcast, Server Action, reconcile) đều
 //     đi qua `mergeMessages` với khử trùng 2 tầng (id + clientMsgId).
 //
-// Token realtime sống 15' → hook tự xin token mới ở ~80% TTL và `setAuth` lại, không
-// chờ tới lúc hết hạn mới xử lý (hết hạn giữa chừng = kênh im lặng, tin tới muộn cả phút).
+// Vé realtime sống 5' → hook tự xin vé mới ở ~80% TTL, không chờ tới lúc hết hạn mới xử lý
+// (hết hạn giữa chừng = kênh im lặng, tin tới muộn cả phút).
+//
+// ⚠️ GIA HẠN VÉ KHÔNG PHẢI `setAuth` — nó là chu kỳ RỜI-ĐỔI-JOIN ở mức KẾT NỐI, xem
+// `lib/chat/supabase-client.ts` (đo thật: `setAuth` giữa phiên giết kênh ở nhịp heartbeat
+// kế tiếp và kênh KHÔNG tự hồi). Ở đây chỉ cần nhớ hai hệ quả:
+//   • mỗi lần gia hạn là một lần JOIN MỚI ⇒ `SUBSCRIBED` bắn lại ⇒ `reconcile()` chạy lại,
+//     nên khe hở vài trăm ms lúc đổi kênh không làm mất tin;
+//   • `renewAuth` trả về mốc hết hạn ĐANG CÓ HIỆU LỰC (có thể khác vé ta vừa xin, vì kênh
+//     `user:{id}` dùng chung kết nối và có thể vừa đổi vé hộ) — hẹn giờ theo mốc ĐÓ.
+//
+// Và một lớp phòng thủ nữa: kênh về `CLOSED` ngoài ý muốn thì hook tự nối lại (backoff).
+// Bản cũ chỉ `setStatus("closed")` rồi thôi ⇒ người mở chat lâu mất realtime ÂM THẦM.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { setRealtimeAuth, subscribeConversation } from "@/lib/chat/supabase-client";
+import { applyRealtimeAuth, subscribeConversation } from "@/lib/chat/supabase-client";
+import { clearActiveConversation, setActiveConversation } from "./active-conversation";
+import { notifyConversationRead } from "./read-signal";
 import {
   applyMessageDeleted,
   computeUnreadReset,
   lastSeenMessageId,
   mergeMessages,
   parseBroadcastMessage,
+  parseConversationLocked,
   parseMessageDeleted,
   parseParticipantRemoved,
   type ChatMessage,
@@ -39,12 +53,20 @@ import {
 const TOKEN_RENEW_RATIO = 0.8;
 /** Sàn chống vòng lặp nóng khi `expiresAt` quá gần / lệch giờ máy. */
 const MIN_RENEW_DELAY_MS = 5_000;
-/** Không đọc được `expiresAt` → cứ 10' xin lại (vẫn ngắn hơn TTL 15'). */
-const FALLBACK_RENEW_MS = 10 * 60_000;
+/** Không đọc được `expiresAt` → cứ 3' xin lại (vẫn ngắn hơn TTL 5'). */
+const FALLBACK_RENEW_MS = 3 * 60_000;
 /** Xin token hỏng (mạng chớp) → thử lại; token cũ còn hiệu lực nên chưa rớt kênh. */
 const TOKEN_RENEW_RETRY_MS = 30_000;
 /** Trần số trang của MỘT lượt reconcile (30 tin/trang) — chặn vòng lặp nếu server trả `hasMore` mãi. */
 const MAX_RECONCILE_PAGES = 20;
+/**
+ * Nối lại sau khi kênh đóng ngoài ý muốn. Nhân đôi mỗi lần, KỊCH ở 30s và không bao giờ
+ * ngắn hơn 2s — đo thật cho thấy kênh chết KHÔNG tự hồi (theo dõi 56–81s: 0 lần
+ * SUBSCRIBED lại), nên phải có người chủ động nối; nhưng nối lại mỗi lần là một lần xin
+ * vé (`/api/chat/realtime-token`, trần 30 lượt/phút/user) nên KHÔNG được nối dồn.
+ */
+const RECONNECT_BASE_MS = 2_000;
+const RECONNECT_MAX_MS = 30_000;
 
 export type ChatChannelStatus =
   | "idle"
@@ -62,17 +84,21 @@ export type ChatChannelHandlers = {
   onStatus: (status: string, err?: Error) => void;
 };
 
+export type RealtimeTokenResponse = { token: string; expiresAt: string };
+
 /** Cổng ra Realtime. Tách interface để test bơm bản giả (không cần Supabase thật). */
 export type ChatChannelTransport = {
   subscribe(
     conversationId: string,
-    jwt: string,
+    auth: RealtimeTokenResponse,
     handlers: ChatChannelHandlers,
   ): ChatChannelSubscription;
-  setAuth(jwt: string): void | Promise<void>;
+  /**
+   * Gia hạn vé ở mức KẾT NỐI. Trả về mốc `expiresAt` ĐANG có hiệu lực (ISO) — có thể
+   * khác vé vừa xin nếu kênh khác trên cùng kết nối vừa đổi vé hộ.
+   */
+  renewAuth(auth: RealtimeTokenResponse): string;
 };
-
-export type RealtimeTokenResponse = { token: string; expiresAt: string };
 
 /** Trang trả về của `fetchMessagesSince` (xem `lib/chat/queries.ts`). */
 export type ReconcilePage = {
@@ -96,6 +122,12 @@ export type UseChatChannelOptions = {
   initialMessages?: IncomingMessage[];
   /** AC3 — gọi khi chính mình bị gỡ khỏi hội thoại; UI điều hướng về danh sách. */
   onRemoved?: () => void;
+  /**
+   * US-10 AC3 — gọi khi có THÔNG BÁO mới tới qua realtime. Tin đã được hợp nhất vào
+   * luồng rồi; callback này dành cho phần KHUNG GHIM, thứ do RSC dựng nên hook không
+   * chạm tới được (điểm gọi thật: `router.refresh()`).
+   */
+  onAnnouncement?: () => void;
   /** false ⇒ không kết nối (chưa chọn hội thoại). */
   enabled?: boolean;
   /** DI cho test. */
@@ -107,6 +139,13 @@ export type UseChatChannelOptions = {
 export type UseChatChannelResult = {
   /** Luồng tin CŨ → MỚI, đã khử trùng. */
   messages: ChatMessage[];
+  /**
+   * US-15 AC3 — trạng thái khoá do Admin vừa đổi, nhận qua broadcast `conversation.locked`.
+   * `null` = chưa có event nào trong phiên này ⇒ dùng trạng thái server đã render.
+   * Chỉ để ĐỔI GIAO DIỆN cho kịp; chốt chặn thật vẫn là guard `CONVERSATION_LOCKED` ở
+   * server (`lib/chat/messages.ts`), nên client cũ chưa cập nhật cũng không gửi được tin.
+   */
+  lockedByAdmin: boolean | null;
   status: ChatChannelStatus;
   error: string | null;
   /** Đang chạy một lượt reconcile (UI có thể hiện "đang đồng bộ…"). */
@@ -120,15 +159,9 @@ export type UseChatChannelResult = {
 };
 
 const defaultTransport: ChatChannelTransport = {
-  subscribe(conversationId, jwt, handlers) {
-    const channel = subscribeConversation(conversationId, jwt, handlers);
-    return {
-      unsubscribe: () => {
-        void channel.unsubscribe();
-      },
-    };
-  },
-  setAuth: (jwt) => setRealtimeAuth(jwt),
+  subscribe: (conversationId, auth, handlers) =>
+    subscribeConversation(conversationId, auth, handlers),
+  renewAuth: (auth) => applyRealtimeAuth(auth),
 };
 
 async function defaultFetchToken(signal: AbortSignal): Promise<RealtimeTokenResponse> {
@@ -152,18 +185,22 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
   const [error, setError] = useState<string | null>(null);
   const [isReconciling, setIsReconciling] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  /** US-15 AC3 — null cho tới khi có event `conversation.locked` đầu tiên. */
+  const [lockedByAdmin, setLockedByAdmin] = useState<boolean | null>(null);
 
   // Mọi thứ thay đổi mỗi render đi qua ref ⇒ effect kết nối CHỈ phụ thuộc conversationId,
   // không bị re-subscribe (và không mất tin) chỉ vì cha render lại với callback mới.
   const fetchSinceRef = useRef(options.fetchSince);
   const markReadRef = useRef(options.markRead);
   const onRemovedRef = useRef(options.onRemoved);
+  const onAnnouncementRef = useRef(options.onAnnouncement);
   const currentUserIdRef = useRef(currentUserId);
   const transportRef = useRef(options.transport ?? defaultTransport);
   const fetchTokenRef = useRef(options.fetchToken ?? defaultFetchToken);
   fetchSinceRef.current = options.fetchSince;
   markReadRef.current = options.markRead;
   onRemovedRef.current = options.onRemoved;
+  onAnnouncementRef.current = options.onAnnouncement;
   currentUserIdRef.current = currentUserId;
 
   const messagesRef = useRef<ChatMessage[]>(messages);
@@ -224,10 +261,22 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
     lastMarkedRef.current = target; // đặt TRƯỚC await ⇒ không bắn hai lần cho cùng một mốc
     const call = markReadRef.current;
     if (!call) return;
-    void Promise.resolve(call(target)).catch(() => {
-      // Hỏng thì lùi mốc để lần đánh giá sau thử lại (unread không được "mất" âm thầm).
-      if (lastMarkedRef.current === target) lastMarkedRef.current = previous;
-    });
+    // Hai nhánh của CÙNG một `then` (không phải `.then().catch()`): nhánh lỗi ở đây chỉ được
+    // bắt lỗi của `markConversationRead`, không được nuốt lỗi của `notifyConversationRead`
+    // rồi lùi nhầm mốc đã đọc.
+    void Promise.resolve(call(target)).then(
+      () => {
+        // Badge tổng ở thanh nav do LAYOUT RSC tính (`countChatUnreadForUser`), mà layout
+        // KHÔNG render lại khi điều hướng client-side — và việc đọc tin không sinh `bump`
+        // nào trên kênh `user:{id}`. Không phát tín hiệu ở đây thì badge chỉ biết TĂNG:
+        // đọc hết 5 tin, DB đã về 0, nav vẫn treo "5" cho tới khi F5.
+        notifyConversationRead();
+      },
+      () => {
+        // Hỏng thì lùi mốc để lần đánh giá sau thử lại (unread không được "mất" âm thầm).
+        if (lastMarkedRef.current === target) lastMarkedRef.current = previous;
+      },
+    );
   }, []);
 
   useEffect(() => {
@@ -236,6 +285,15 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
       mountedRef.current = false;
     };
   }, []);
+
+  // AC5 — cho badge tổng ở thanh nav biết hội thoại nào đang mở, để tin mới của CHÍNH nó
+  // không cộng badge (nó được đánh dấu đã đọc ngay khi tab đang hiện). Chỉ là mẩu trạng
+  // thái điều phối, không phải nguồn dữ liệu — xem `active-conversation.ts`.
+  useEffect(() => {
+    if (!enabled || !conversationId) return;
+    setActiveConversation(conversationId);
+    return () => clearActiveConversation(conversationId);
+  }, [conversationId, enabled]);
 
   // Luồng đổi ⇒ cập nhật mốc reconcile + đánh giá lại mốc đã đọc.
   useEffect(() => {
@@ -264,6 +322,9 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
     let cancelled = false;
     let subscription: ChatChannelSubscription | null = null;
     let renewTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Số lần nối lại liên tiếp — về 0 mỗi lần kênh SUBSCRIBED thật sự. */
+    let reconnectAttempt = 0;
 
     const clearRenew = () => {
       if (renewTimer !== null) {
@@ -272,9 +333,17 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
       }
     };
 
+    const clearReconnect = () => {
+      if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
     const teardown = () => {
       cancelled = true;
       clearRenew();
+      clearReconnect();
       abort.abort();
       subscription?.unsubscribe();
       subscription = null;
@@ -294,13 +363,31 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
       try {
         const fresh = await fetchTokenRef.current(abort.signal);
         if (cancelled) return;
-        await transport.setAuth(fresh.token);
-        scheduleRenew(fresh.expiresAt);
+        // Mốc hết hạn HIỆU LỰC, không phải mốc của vé vừa xin: kênh `user:{id}` dùng
+        // chung kết nối và có thể vừa đổi vé hộ, lúc đó vé này bị bỏ.
+        const effectiveExpiresAt = transport.renewAuth(fresh);
+        if (cancelled) return;
+        scheduleRenew(effectiveExpiresAt);
       } catch {
         if (cancelled) return;
         clearRenew();
         renewTimer = setTimeout(() => void renew(), TOKEN_RENEW_RETRY_MS);
       }
+    };
+
+    /**
+     * Kênh đóng ngoài ý muốn (server đá, socket chết, vé hỏng) → dựng lại bằng vé MỚI.
+     * Chỉ hẹn MỘT lượt tại một thời điểm; backoff nhân đôi, kịch ở 30s; dừng khi unmount
+     * hoặc khi chính mình đã bị gỡ khỏi hội thoại (teardown đặt `cancelled`).
+     */
+    const scheduleReconnect = () => {
+      if (cancelled || reconnectTimer !== null) return;
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+      reconnectAttempt += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        void start();
+      }, delay);
     };
 
     const handleBroadcast = (event: string, payload: Record<string, unknown>) => {
@@ -311,10 +398,35 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
         if (parsed) setMessages((prev) => mergeMessages(prev, parsed));
         return;
       }
+      // US-10 AC3 — THÔNG BÁO phải hiện NGAY trên máy đang mở, y như tin thường.
+      //
+      // ⚠️ NGHIỆM THU 10/08/2026 — VÌ SAO NHÁNH NÀY TỪNG KHÔNG TỒN TẠI VÀ KHÔNG AI BIẾT:
+      // `lib/chat/announcements.ts` phát tên sự kiện RIÊNG `announcement.created`
+      // (không dùng lại `message.created`), còn chỗ này chỉ nhận 4 tên sự kiện kia ⇒
+      // thông báo bị NUỐT IM. Nó vẫn "hiện ra" nếu chờ đủ lâu, vì mỗi lần re-SUBSCRIBED
+      // (gia hạn vé ~4 phút, hoặc nối lại sau khi rớt) đều kéo theo một vòng reconcile
+      // đọc bù từ DB — nên lỗi này lúc xanh lúc đỏ tuỳ thời điểm, và một lần chạy may
+      // mắn đủ để tưởng là đã chạy tốt. Đo được ngày 10/08: gửi thông báo → máy phụ
+      // huynh đang mở KHÔNG thấy gì trong 30 giây.
+      if (event === "announcement.created") {
+        const parsed = parseBroadcastMessage(payload);
+        if (parsed) setMessages((prev) => mergeMessages(prev, parsed));
+        // Khung GHIM nằm NGOÀI vùng cuộn và do RSC dựng — hook không chạm được, phải
+        // nhờ trang dựng lại; nếu không, tin vào luồng mà khung ghim vẫn là bản cũ.
+        onAnnouncementRef.current?.();
+        return;
+      }
       if (event === "message.deleted") {
         // AC4 — đổi tại chỗ, KHÔNG reload luồng.
         const messageId = parseMessageDeleted(payload);
         if (messageId) setMessages((prev) => applyMessageDeleted(prev, messageId));
+        return;
+      }
+      if (event === "conversation.locked") {
+        // US-15 AC3 — Admin khoá/mở khoá: ô nhập của MỌI client đang mở phải đổi NGAY,
+        // không chờ tải lại trang. Payload lạ → giữ nguyên trạng thái server đã render.
+        const parsed = parseConversationLocked(payload);
+        if (parsed) setLockedByAdmin(parsed.locked);
         return;
       }
       if (event === "participant.removed") {
@@ -329,33 +441,54 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
     const handleStatus = (channelStatus: string, err?: Error) => {
       if (cancelled) return;
       if (channelStatus === "SUBSCRIBED") {
+        reconnectAttempt = 0;
+        clearReconnect();
         setStatus("subscribed");
-        // ⚠️ AC2 — reconcile ở MỌI lần SUBSCRIBED, kể cả lần re-subscribe sau khi mạng chập.
+        // ⚠️ AC2 — reconcile ở MỌI lần SUBSCRIBED, kể cả lần re-subscribe sau khi mạng chập
+        // VÀ mọi lần gia hạn vé (chu kỳ rời-đổi-join). Đây là thứ bịt khe hở vài trăm ms
+        // của lần đổi kênh — đừng bỏ vì "kênh đang chạy tốt".
         void reconcile();
         return;
       }
       if (channelStatus === "CHANNEL_ERROR" || channelStatus === "TIMED_OUT") {
+        // KHÔNG tự nối lại ở đây: phoenix có `rejoinTimer` riêng cho hai trạng thái này,
+        // chen vào là hai bên cùng join một topic.
         setStatus("error");
         setError(err?.message ?? "Mất kết nối tới máy chủ tin nhắn — đang thử lại");
         return;
       }
-      if (channelStatus === "CLOSED") setStatus("closed");
+      if (channelStatus === "CLOSED") {
+        setStatus("closed");
+        scheduleReconnect();
+      }
     };
 
     const start = async () => {
+      if (cancelled) return;
+      // Nối lại: bỏ hẳn kênh cũ TRƯỚC khi dựng kênh mới (một topic — một kênh).
+      subscription?.unsubscribe();
+      subscription = null;
       setStatus("connecting");
       try {
-        const { token, expiresAt } = await fetchTokenRef.current(abort.signal);
+        const auth = await fetchTokenRef.current(abort.signal);
         if (cancelled) return;
-        subscription = transport.subscribe(conversationId, token, {
+        subscription = transport.subscribe(conversationId, auth, {
           onBroadcast: handleBroadcast,
           onStatus: handleStatus,
         });
-        scheduleRenew(expiresAt);
+        // Hẹn theo vé VỪA XIN (lần gia hạn sau mới dùng mốc hiệu lực). Nếu kết nối đang
+        // giữ một vé khác, vé đó đã có chủ — chủ nó hẹn giờ theo đúng mốc của nó, mà 80%
+        // của phần đời còn lại thì luôn tới TRƯỚC hạn ⇒ vé không bao giờ chết vì không ai
+        // gia hạn. Lệch ở đây chỉ làm ta hỏi vé sớm/muộn một nhịp, và nhịp thừa sẽ bị luật
+        // "còn hơn nửa đời" bỏ đi.
+        scheduleRenew(auth.expiresAt);
       } catch (err) {
         if (cancelled) return;
         setStatus("error");
         setError(err instanceof Error ? err.message : "Không kết nối được kênh tin nhắn");
+        // Không có vé thì cũng không có kênh — vẫn phải thử lại, nếu không lần chớp mạng
+        // lúc mở trang khoá realtime cho tới khi người dùng F5.
+        scheduleReconnect();
       }
     };
     void start();
@@ -363,5 +496,14 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
     return teardown;
   }, [conversationId, enabled, reconcile]);
 
-  return { messages, status, error, isReconciling, unreadCount, reconcile, mergeLocal };
+  return {
+    messages,
+    lockedByAdmin,
+    status,
+    error,
+    isReconciling,
+    unreadCount,
+    reconcile,
+    mergeLocal,
+  };
 }

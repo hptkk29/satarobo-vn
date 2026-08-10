@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   decideRoute,
   isAdminRoute,
+  isInfraPath,
   sanitizeCallbackUrl,
   type MaybeRole,
   type RouteDecision,
@@ -958,5 +959,32 @@ describe("P6. trang OTP công khai (/kich-hoat + /quen-mat-khau) — cùng một
         decideRoute({ hostKind: "admin", pathname, ...authed("SUPER_ADMIN") }),
       ).toEqual<RouteDecision>({ type: "redirectPath", path: "/dashboard" });
     });
+  }
+});
+
+/**
+ * 10/08 — HỒI QUY: mọi cron chết im vì canonical 308 của nhánh `.vercel.app`.
+ *
+ * Vercel Cron gọi `satarobo-vn.vercel.app/api/cron/*`; nhánh 1 trong `proxy.ts` trả 308
+ * sang host thật ⇒ handler không chạy, `Authorization: Bearer` rụng khi đổi host.
+ * `proxy.ts` giờ chặn trước bằng `isInfraPath()`, nên hợp đồng của hàm này là chỗ khoá lại.
+ */
+describe("isInfraPath — đường hạ tầng KHÔNG được canonical-hoá", () => {
+  for (const p of [
+    "/api/cron/dispatch-events",
+    "/api/cron/class-schedule-sync",
+    "/api/public/webhook/sepay",
+    "/api/auth/session",
+    "/_next/data/x.json",
+    "/monitoring",
+    "/robots.txt",
+    "/sitemap.xml",
+  ]) {
+    it(`${p} → infra`, () => expect(isInfraPath(p)).toBe(true));
+  }
+
+  for (const p of ["/", "/khoa-hoc", "/login", "/dashboard", "/apidocs", "/monitoringx"]) {
+    it(`${p} → KHÔNG phải infra (vẫn canonical-hoá bình thường)`, () =>
+      expect(isInfraPath(p)).toBe(false));
   }
 });

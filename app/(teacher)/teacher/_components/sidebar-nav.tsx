@@ -7,7 +7,16 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isNavItemActive, navGroups, type NavGroup, type NavItem } from "./nav-config";
 
-function NavLinkItem({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+function NavLinkItem({
+  item,
+  onNavigate,
+  badgeCount = 0,
+}: {
+  item: NavItem;
+  onNavigate?: () => void;
+  /** Số hiện trên badge của mục này (0 = không vẽ). */
+  badgeCount?: number;
+}) {
   const pathname = usePathname();
   const active = isNavItemActive(pathname, item.href);
   const Icon = item.icon;
@@ -28,7 +37,16 @@ function NavLinkItem({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
           strokeWidth={2}
           aria-hidden
         />
-        <span className="truncate">{item.label}</span>
+        {/* `min-w-0 flex-1` để nhãn dài bị cắt chứ không đẩy badge ra ngoài khung 16rem. */}
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        {badgeCount > 0 && (
+          <span
+            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
+            aria-label={`${badgeCount} tin chưa đọc`}
+          >
+            {badgeCount > 9 ? "9+" : badgeCount}
+          </span>
+        )}
       </Link>
     </li>
   );
@@ -37,17 +55,26 @@ function NavLinkItem({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
 function NavGroupBlock({
   group,
   onNavigate,
+  chatUnread,
 }: {
   group: NavGroup;
   onNavigate?: () => void;
+  chatUnread: number;
 }) {
   const [open, setOpen] = useState(!group.collapsed);
+
+  const badgeOf = (item: NavItem) => (item.badge === "chat" ? chatUnread : 0);
 
   if (group.standalone) {
     return (
       <ul className="space-y-0.5">
         {group.items.map((item) => (
-          <NavLinkItem key={item.href} item={item} onNavigate={onNavigate} />
+          <NavLinkItem
+            key={item.href}
+            item={item}
+            onNavigate={onNavigate}
+            badgeCount={badgeOf(item)}
+          />
         ))}
       </ul>
     );
@@ -71,7 +98,12 @@ function NavGroupBlock({
       {open && (
         <ul className="space-y-0.5">
           {group.items.map((item) => (
-            <NavLinkItem key={item.href} item={item} onNavigate={onNavigate} />
+            <NavLinkItem
+              key={item.href}
+              item={item}
+              onNavigate={onNavigate}
+              badgeCount={badgeOf(item)}
+            />
           ))}
         </ul>
       )}
@@ -79,11 +111,23 @@ function NavGroupBlock({
   );
 }
 
-export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarNav({
+  onNavigate,
+  chatUnread = 0,
+}: {
+  onNavigate?: () => void;
+  /** Tổng tin chưa đọc — `AppShell` tính MỘT lần rồi truyền xuống cả hai bản sidebar. */
+  chatUnread?: number;
+}) {
   return (
     <nav aria-label="Điều hướng giáo viên" className="space-y-1 px-3 pb-6">
       {navGroups.map((group) => (
-        <NavGroupBlock key={group.label} group={group} onNavigate={onNavigate} />
+        <NavGroupBlock
+          key={group.label}
+          group={group}
+          onNavigate={onNavigate}
+          chatUnread={chatUnread}
+        />
       ))}
     </nav>
   );

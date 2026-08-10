@@ -15,6 +15,12 @@
  *   5. Broadcast hỏng   — ép Realtime không tới được → action VẪN ok và tin VẪN trong
  *                         DB (AC3/TS-12: Postgres là nguồn sự thật).
  *   6. Rate limit       — quá 20 tin/phút/user → RATE_LIMITED.
+ *   7. Đính kèm ảnh     — tin kèm 2 ảnh → ĐÚNG 2 `MessageAttachment` gắn đúng messageId,
+ *                         đúng storagePath/fileName/mime/size (US-11).
+ *   8. Ảnh hội thoại KHÁC — storagePath mang tiền tố của hội thoại khác →
+ *                         ATTACHMENT_PATH_MISMATCH, không sinh tin lẫn attachment nào.
+ *   9. Nguyên tử        — ảnh thứ 2 làm hỏng câu INSERT → CẢ tin lẫn ảnh thứ nhất phải
+ *                         biến mất (chứng minh attachment nằm TRONG tx gửi tin).
  *
  * Tự dựng RoleDef riêng (ZZTEST_CHAT_US06_PARENT + perm chat:send/chat:read scope OWN)
  * để KHÔNG phụ thuộc việc DB dev đã seed `prisma/seed-roles.ts` bản mới hay chưa, và
@@ -77,6 +83,10 @@ async function cleanup(): Promise<void> {
   });
   const convIds = convs.map((c) => c.id);
   if (convIds.length > 0) {
+    // Attachment trước Message (FK messageId).
+    await db.messageAttachment.deleteMany({
+      where: { message: { conversationId: { in: convIds } } },
+    });
     await db.message.deleteMany({ where: { conversationId: { in: convIds } } });
     await db.conversationParticipant.deleteMany({
       where: { conversationId: { in: convIds } },
@@ -114,7 +124,7 @@ async function unreadOf(conversationId: string, userId: string): Promise<number>
 
 async function main() {
   console.log(`DB host: ${currentDbHost()}`);
-  const { sendChatMessageAsActor } = await chatModule;
+  const { sendChatMessageAsActor, chatAttachmentPrefix } = await chatModule;
   const { resolveActorUncached } = await actorModule;
 
   await cleanup(); // dọn rác lần chạy trước (idempotent)
@@ -357,6 +367,133 @@ async function main() {
         /quá nhanh/i.test(r6b.error.message) &&
         spamStored === 1,
       `tin 1=${r6a.ok ? "ok" : r6a.error.code} · tin 21=${r6b.ok ? "ok (SAI)" : `${r6b.error.code} · msg="${r6b.error.message}"`} · tin của spam trong DB=${spamStored} (phải là 1)`,
+    );
+
+    // ═══ US-11 — đính kèm ảnh ═══════════════════════════════════════════════
+    // Key kho ảnh lấy từ CHÍNH hàm production dùng để kiểm (không viết tay chuỗi
+    // "chat-attachments/…"): nếu mai layout key đổi, script này đổi theo, không đỏ giả.
+    const prefixActive = chatAttachmentPrefix(convActive.id);
+    const prefixArchived = chatAttachmentPrefix(convArchived.id);
+    if (!prefixActive || !prefixArchived) throw new Error("Không suy được tiền tố key ảnh");
+    const keyOf = (prefix: string, n: number) => `${prefix}2026-08/${P}anh-${n}.jpg`;
+
+    // ── 7. Gửi tin kèm 2 ảnh → 2 MessageAttachment đúng messageId ───────────
+    const clientMsgId7 = randomUUID();
+    const res7 = await sendChatMessageAsActor(actorSender, `${P}sender`, {
+      conversationId: convActive.id,
+      body: "Ảnh buổi học hôm nay ạ",
+      clientMsgId: clientMsgId7,
+      attachments: [
+        {
+          storagePath: keyOf(prefixActive, 1),
+          fileName: "buoi-hoc-1.jpg",
+          mimeType: "image/jpeg",
+          sizeBytes: 111_111,
+        },
+        {
+          storagePath: keyOf(prefixActive, 2),
+          fileName: "buoi-hoc-2.png",
+          mimeType: "image/png",
+          sizeBytes: 222_222,
+        },
+      ],
+    });
+    const msg7 = await db.message.findFirst({
+      where: { conversationId: convActive.id, clientMsgId: clientMsgId7 },
+      select: { id: true },
+    });
+    const att7 = msg7
+      ? await db.messageAttachment.findMany({
+          where: { messageId: msg7.id },
+          orderBy: { storagePath: "asc" },
+        })
+      : [];
+    const ok7 =
+      res7.ok &&
+      msg7 !== null &&
+      att7.length === 2 &&
+      att7[0]?.storagePath === keyOf(prefixActive, 1) &&
+      att7[0]?.fileName === "buoi-hoc-1.jpg" &&
+      att7[0]?.mimeType === "image/jpeg" &&
+      att7[0]?.sizeBytes === 111_111 &&
+      att7[1]?.mimeType === "image/png" &&
+      // Action phải trả id ảnh để client đổi lấy signed GET URL (bước 3 F-FILE).
+      res7.ok &&
+      res7.data.attachments.length === 2 &&
+      res7.data.attachments.every((a) => att7.some((row) => row.id === a.id));
+    report(
+      "7. gửi tin kèm 2 ảnh → 2 MessageAttachment trong cùng tin (US-11)",
+      ok7,
+      `ok=${res7.ok} · attachment trong DB=${att7.length} · id trả về=${res7.ok ? res7.data.attachments.length : "-"}${res7.ok ? "" : ` · err=${JSON.stringify(res7.error)}`}`,
+    );
+
+    // ── 8. storagePath của hội thoại KHÁC → ATTACHMENT_PATH_MISMATCH ────────
+    const countBefore8 = await db.message.count({ where: { conversationId: convActive.id } });
+    const res8 = await sendChatMessageAsActor(actorSender, `${P}sender`, {
+      conversationId: convActive.id,
+      body: "Ảnh mượn của nhóm khác",
+      clientMsgId: randomUUID(),
+      attachments: [
+        {
+          storagePath: keyOf(prefixArchived, 9), // key thuộc hội thoại KHÁC
+          fileName: "trom.jpg",
+          mimeType: "image/jpeg",
+          sizeBytes: 333_333,
+        },
+      ],
+    });
+    const countAfter8 = await db.message.count({ where: { conversationId: convActive.id } });
+    const stolen = await db.messageAttachment.count({
+      where: { storagePath: keyOf(prefixArchived, 9) },
+    });
+    report(
+      "8. ảnh của hội thoại KHÁC → ATTACHMENT_PATH_MISMATCH, không ghi gì",
+      !res8.ok &&
+        res8.error.code === "ATTACHMENT_PATH_MISMATCH" &&
+        countAfter8 === countBefore8 &&
+        stolen === 0,
+      `${res8.ok ? "ok:true (SAI)" : `code=${res8.error.code} · msg="${res8.error.message}"`} · tin trước/sau=${countBefore8}/${countAfter8} · attachment lạc=${stolen}`,
+    );
+
+    // ── 9. Nguyên tử: INSERT ảnh thứ 2 hỏng → tin + ảnh thứ 1 cùng biến mất ─
+    // Ký tự NUL không lưu được vào cột text của Postgres ⇒ câu INSERT thứ hai nổ NGAY
+    // TRONG transaction, sau khi tin và ảnh thứ nhất đã được ghi. Nếu attachment bị tạo
+    // ngoài transaction thì ảnh thứ nhất sẽ còn lại (rác trỏ vào tin không tồn tại).
+    const clientMsgId9 = randomUUID();
+    const keyGood9 = keyOf(prefixActive, 91);
+    let threw9 = false;
+    try {
+      const res9 = await sendChatMessageAsActor(actorSender, `${P}sender`, {
+        conversationId: convActive.id,
+        body: "Tin sẽ bị rollback",
+        clientMsgId: clientMsgId9,
+        attachments: [
+          {
+            storagePath: keyGood9,
+            fileName: "ok.jpg",
+            mimeType: "image/jpeg",
+            sizeBytes: 444_444,
+          },
+          {
+            storagePath: keyOf(prefixActive, 92),
+            fileName: `hong${String.fromCharCode(0)}.jpg`, // NUL → Postgres từ chối
+            mimeType: "image/jpeg",
+            sizeBytes: 555_555,
+          },
+        ],
+      });
+      threw9 = !res9.ok;
+    } catch {
+      threw9 = true; // lỗi hạ tầng nổi lên nguyên vẹn cũng được — điều cần kiểm là DB sạch
+    }
+    const msg9 = await db.message.count({
+      where: { conversationId: convActive.id, clientMsgId: clientMsgId9 },
+    });
+    const orphan9 = await db.messageAttachment.count({ where: { storagePath: keyGood9 } });
+    report(
+      "9. INSERT ảnh hỏng → rollback CẢ tin, KHÔNG sót attachment (cùng transaction)",
+      threw9 && msg9 === 0 && orphan9 === 0,
+      `gửi thất bại=${threw9} · tin còn lại=${msg9} (phải 0) · attachment mồ côi=${orphan9} (phải 0)`,
     );
   } finally {
     await cleanup();

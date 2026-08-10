@@ -92,6 +92,27 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
         </p>
       </div>
 
+      {/* Cảnh báo lớp ACTIVE chưa có nhóm (09/08/2026). Job CỐ Ý không tự tạo nhóm —
+          nó chỉ đếm; tạo là việc chạy tay có dry-run. Không gộp vào badge "0 drift" ở
+          dưới: đó là hai loại vấn đề khác nhau (drift = nhóm có mà sai người;
+          thiếu nhóm = lớp chưa từng có nhóm, đúng thứ đã giấu 24 lớp trước go-live). */}
+      {lastRun && lastRun.missingConversations > 0 ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4">
+          <p className="font-medium text-destructive">
+            ⚠️ {lastRun.missingConversations} lớp đang hoạt động CHƯA có nhóm chat
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Giáo viên và phụ huynh của những lớp này mở màn tin nhắn ra sẽ thấy trống.
+            Job đối soát cố ý KHÔNG tự tạo nhóm — chạy{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+              pnpm exec tsx scripts/backfill-nhom-lop-chat.ts
+            </code>{" "}
+            (mặc định dry-run, soi kỹ danh sách rồi thêm{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">--apply</code>).
+          </p>
+        </div>
+      ) : null}
+
       <section className="space-y-3">
         <h2 className="text-lg font-medium">
           Lần chạy gần nhất{" "}
@@ -114,13 +135,14 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
               <TableHead className="text-right">Lớp kiểm</TableHead>
               <TableHead className="text-right">REMOVE (tự gỡ)</TableHead>
               <TableHead className="text-right">ADD (chờ người)</TableHead>
+              <TableHead className="text-right">Thiếu nhóm</TableHead>
               <TableHead className="text-right">Thời lượng</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {runs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
+                <TableCell colSpan={6} className="text-muted-foreground">
                   Chưa có lần chạy nào.
                 </TableCell>
               </TableRow>
@@ -131,6 +153,15 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
                   <TableCell className="text-right">{r.classesChecked}</TableCell>
                   <TableCell className="text-right">{r.removeCount}</TableCell>
                   <TableCell className="text-right">{r.addCount}</TableCell>
+                  <TableCell
+                    className={
+                      r.missingConversations > 0
+                        ? "text-right font-medium text-destructive"
+                        : "text-right"
+                    }
+                  >
+                    {r.missingConversations}
+                  </TableCell>
                   <TableCell className="text-right">{r.durationMs} ms</TableCell>
                 </TableRow>
               ))

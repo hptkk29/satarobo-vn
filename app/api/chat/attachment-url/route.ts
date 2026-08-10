@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/auth/permissions";
+import { can, isParentOnly } from "@/lib/auth/permissions";
 import { ChatAttachmentError, getChatAttachmentReadUrl } from "@/lib/chat/attachments";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,23 @@ export async function GET(req: NextRequest) {
   // Cổng VAI (thô) — cổng THẬT là participant guard trong getChatAttachmentReadUrl.
   if (!can(session.user, "chat:read")) {
     return fail("FORBIDDEN", "Không có quyền", 403);
+  }
+
+  // US-16 AC2 — phụ huynh CHƯA đồng ý quy định thì server KHÔNG trả nội dung, và ẢNH
+  // ĐÍNH KÈM LÀ NỘI DUNG. Thiếu chốt này thì cổng chính sách chỉ chặn được đường HTML:
+  // link `/api/chat/attachment-url?id=…` nằm sẵn trong lịch sử trình duyệt / bundle client
+  // của phụ huynh đã dùng chat trước khi `CHAT_POLICY_VERSION` được nâng.
+  // Chỉ áp cho tài khoản THUẦN phụ huynh (giáo viên/quản lý không bao giờ thấy màn chính
+  // sách). Lỗi đọc DB → coi như CHƯA đồng ý (fail-closed) vì đây là cổng nội dung.
+  if (isParentOnly(session.user)) {
+    const accepted = await hasAcceptedChatPolicy(session.user.id).catch(() => false);
+    if (!accepted) {
+      return fail(
+        "CHAT_POLICY_REQUIRED",
+        "Vui lòng đồng ý quy định sử dụng tin nhắn trước khi xem ảnh.",
+        403,
+      );
+    }
   }
 
   const id = req.nextUrl.searchParams.get("id");

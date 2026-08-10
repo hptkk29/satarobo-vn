@@ -60,6 +60,22 @@ export function getR2Client(): S3Client {
       accessKeyId: env.accessKeyId,
       secretAccessKey: env.secretAccessKey,
     },
+    // ⚠️ BẮT BUỘC CHO URL KÝ SẴN — phát hiện khi nghiệm thu chat 10/08/2026.
+    // Từ @aws-sdk/client-s3 v3.729, mặc định là `requestChecksumCalculation:
+    // "WHEN_SUPPORTED"` ⇒ SDK nhét `x-amz-checksum-crc32` + `x-amz-sdk-checksum-algorithm`
+    // vào URL ký sẵn của PutObject. Nhưng lúc KÝ thì server CHƯA CÓ file, nên giá trị
+    // nhúng vào là CRC32 của body RỖNG (`AAAAAA==`). Trình duyệt PUT byte thật lên →
+    // R2 tính CRC32 khác → TỪ CHỐI.
+    //
+    // Vì sao cực khó chẩn đoán: response lỗi của R2 KHÔNG kèm header CORS, nên trình
+    // duyệt báo "No 'Access-Control-Allow-Origin' header is present" — nhìn y hệt lỗi
+    // cấu hình CORS. Ngày 10/08 đã mất một vòng đi đặt CORS cho bucket (việc đó vẫn
+    // đúng và vẫn cần) rồi mới lộ ra thủ phạm thật nằm ở đây.
+    //
+    // Ảnh hưởng KHÔNG chỉ chat: `getR2Client()` là client dùng chung cho mọi đường ký
+    // URL, gồm cả upload của admin/SCORM (`lib/storage/signed-url.ts`).
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
   return _client;
 }

@@ -37,6 +37,7 @@
 // Vì sao thiếu lý do là 400 chứ KHÔNG phải 403 (TS-03.6b): người bấm gỡ ĐÃ có quyền —
 // cái thiếu là một trường của biểu mẫu. Trả 403 ở đây là bảo GV "anh không có quyền"
 // trong khi thật ra chỉ chưa gõ lý do.
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
@@ -48,8 +49,14 @@ import {
   type ActionResult,
 } from "@/lib/actions/factory";
 import { db } from "@/lib/db";
-import { broadcastToConversation } from "@/lib/chat/broadcast";
+import {
+  broadcastMessages,
+  conversationBroadcast,
+  userBumpBroadcasts,
+} from "@/lib/chat/broadcast";
 import { DELETED_MESSAGE_TEXT } from "@/lib/chat/queries";
+// US-13 — lớp làm chứng của hội thoại 1-1 (nguồn duy nhất của `target.classId` cho DM).
+import { dmWitnessClassId } from "@/lib/chat/dm";
 
 // ─── Hằng số nghiệp vụ ──────────────────────────────────────────────────────
 
@@ -113,6 +120,12 @@ export type ModerationContext = {
   participantId: string | null;
   /** khác null = đã rời nhóm. */
   participantLeftAt: Date | null;
+  /**
+   * Hội thoại 1-1: lớp làm chứng cho quan hệ dạy học của người thao tác
+   * ({@link dmWitnessClassId}). Nạp riêng ở `recallOwnMessageAsActor` — đường gỡ tin
+   * trong nhóm lớp không tốn thêm truy vấn.
+   */
+  dmClassId?: string | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -296,7 +309,11 @@ export type DeletedChatMessage = {
 function recallTargetOf(ctx: ModerationContext | null) {
   return {
     createdById: ctx?.senderId ?? null,
-    classId: ctx?.subjectType === "CLASS" ? (ctx.subjectId ?? null) : null,
+    // 1-1 (`subjectType = NONE`) lấy LỚP LÀM CHỨNG — cùng lý do đã ghi ở `sendTargetOf`
+    // (lib/chat/messages.ts): thiếu nó thì GV gửi được tin riêng nhưng KHÔNG thu hồi
+    // được chính tin đó (scope ASSIGNED trượt trên `classId = null`), còn PH thì thu
+    // hồi bình thường nhờ scope OWN.
+    classId: ctx?.subjectType === "CLASS" ? (ctx.subjectId ?? null) : (ctx?.dmClassId ?? null),
     centerId: ctx?.centerId ?? null,
   };
 }
@@ -307,6 +324,11 @@ function recallTargetOf(ctx: ModerationContext | null) {
  * CENTER_MANAGER **không có action này** ⇒ PERMISSION_DENIED (TS-03.6a/6c).
  * Cố ý KHÔNG đưa `createdById` vào target: scope OWN cho hành vi "gỡ tin người khác"
  * là vô nghĩa, để lọt vào đây thì một grant nhầm sẽ mở cửa cho chính tác giả.
+ *
+ * ⚠️ CỐ Ý KHÔNG dùng lớp làm chứng của 1-1 ở đây (khác `recallTargetOf`): ma trận
+ * `docs/chat-realtime/permissions.md`, bảng "1-1 (DM_TEACHER_PARENT)", KHÔNG có ô "gỡ
+ * tin người khác" — nên GV giữ nguyên trạng thái rụng ở cổng vai trong hội thoại riêng
+ * (fail-closed). Admin vẫn gỡ được nhờ scope GLOBAL. Muốn mở thì sửa ma trận TRƯỚC.
  */
 function moderateTargetOf(ctx: ModerationContext | null) {
   return {
@@ -318,22 +340,79 @@ function moderateTargetOf(ctx: ModerationContext | null) {
 // ─── Hiệu ứng phụ sau commit ────────────────────────────────────────────────
 
 /**
+ * Khoá dòng participant rồi ĐỌC danh sách người nhận — chạy TRONG transaction gỡ tin.
+ *
+ * Bắt chước đúng khuôn của đường gửi tin (`lib/chat/messages.ts`, `updateMany` khoá dòng
+ * rồi `findMany` trong cùng tx). Vì sao phải khoá: nếu đọc ngoài transaction thì một tx
+ * khác đang set `leftAt` (chuyển lớp / gỡ phân công / `syncConversationMembership`) mà
+ * CHƯA commit vẫn để người đó lọt vào danh sách ⇒ người vừa bị gỡ nhận bump. Đã tái hiện
+ * TẤT ĐỊNH ở đường gỡ tin, trong khi cùng kịch bản ở đường gửi tin thì KHÔNG — đây là bất
+ * biến duy nhất trong module chat từng có hai cách thi hành khác nhau.
+ *
+ * `increment: 0` KHÔNG phải code chết: đây là câu UPDATE **chỉ để khoá** đúng tập dòng sắp
+ * đọc (gỡ tin không có thay đổi nghiệp vụ nào trên participant để mượn khoá). Bỏ nó đi là
+ * mất khoá, và lỗi quay lại y như cũ.
+ *
+ * Đọc bằng `tx` của `db` TRẦN (không scopedDb) — luật E-bis #5: dẫn xuất thành viên là
+ * thao tác mức hệ thống; qua scopedDb thì GV dạy chéo cơ sở biến mất im lặng.
+ */
+async function lockAndReadRecipients(
+  tx: Prisma.TransactionClient,
+  conversationId: string,
+  actorUserId: string,
+): Promise<string[]> {
+  const where = {
+    conversationId,
+    leftAt: null,
+    userId: { not: actorUserId },
+  } as const;
+  await tx.conversationParticipant.updateMany({
+    where,
+    data: { unreadCount: { increment: 0 } },
+  });
+  const recipients = await tx.conversationParticipant.findMany({
+    where,
+    select: { userId: true },
+  });
+  return recipients.map((r) => r.userId);
+}
+
+/**
  * Broadcast SAU commit, NGOÀI transaction, fail-and-forget.
- * `broadcastToConversation` đã cam kết không throw; bọc thêm một lớp ở đây để dù hợp
+ * `broadcastMessages` đã cam kết không throw; bọc thêm một lớp ở đây để dù hợp
  * đồng đó bị phá thì việc gỡ ĐÃ commit cũng không biến thành lỗi đỏ trước mặt người
  * dùng. Payload mang sẵn `body` thay thế để client đổi hiển thị mà không phải tải lại
  * — đúng chuỗi mà `lib/chat/queries.ts` trả về, giữ một nguồn sự thật.
+ *
+ * Kèm `conversation.bumped` tới topic `user:{id}` của các thành viên CÒN HIỆU LỰC:
+ * preview của tin vừa gỡ có thể đang nằm trong danh sách hội thoại của họ, không bump
+ * thì nó còn hiển thị tới lần điều hướng kế tiếp. Payload bump KHÔNG mang nội dung
+ * (BR-30) — client hỏi lại server, và server đã lọc tin bị gỡ ở `lib/chat/queries.ts`.
+ *
+ * Danh sách người nhận là tập đã được {@link lockAndReadRecipients} chốt TRONG transaction
+ * — hàm này KHÔNG đọc DB nữa.
  */
-async function broadcastDeleted(msg: DeletedChatMessage): Promise<void> {
+async function broadcastDeleted(
+  msg: DeletedChatMessage,
+  recipientIds: readonly string[],
+): Promise<void> {
   try {
-    await broadcastToConversation(msg.conversationId, "message.deleted", {
-      id: msg.id,
-      conversationId: msg.conversationId,
-      senderId: msg.senderId,
-      body: DELETED_MESSAGE_TEXT,
-      deleted: true,
-      deletedAt: msg.deletedAt.toISOString(),
-    });
+    await broadcastMessages([
+      conversationBroadcast(msg.conversationId, "message.deleted", {
+        id: msg.id,
+        conversationId: msg.conversationId,
+        senderId: msg.senderId,
+        body: DELETED_MESSAGE_TEXT,
+        deleted: true,
+        deletedAt: msg.deletedAt.toISOString(),
+      }),
+      ...userBumpBroadcasts(recipientIds, {
+        conversationId: msg.conversationId,
+        messageId: msg.id,
+        kind: "DELETED",
+        at: msg.deletedAt.toISOString(),
+      }),
+    ]);
   } catch (e) {
     console.warn("[chat/moderation] broadcast lỗi — tin vẫn đã được gỡ:", e);
   }
@@ -358,17 +437,29 @@ function buildRecallConfig(
       const m = ctx as ModerationContext;
 
       const deletedAt = new Date();
-      // MỘT câu lệnh, tự nó atomic — không cần transaction. `deletedAt: null` trong
-      // `where` là chốt chống đua (2 tab bấm cùng lúc): người thứ hai được count = 0
-      // và nhận đúng mã MESSAGE_ALREADY_DELETED thay vì ghi đè dấu vết người thứ nhất.
+      // Việc soft delete tự nó atomic, NHƯNG danh sách người nhận bump phải đọc trong
+      // CÙNG transaction (xem `lockAndReadRecipients`) nên cả hai đi chung một tx.
+      // `deletedAt: null` trong `where` là chốt chống đua (2 tab bấm cùng lúc): người thứ
+      // hai được count = 0 và nhận đúng mã MESSAGE_ALREADY_DELETED thay vì ghi đè dấu vết
+      // người thứ nhất.
       // ⚠️ KHÔNG đụng `body` (AC3) — DB giữ nguyên nội dung để đối chất.
-      const updated = await db.message.updateMany({
-        where: { id: m.messageId, deletedAt: null },
-        data: { deletedAt, deletedById: actor.userId },
-      });
-      if (updated.count === 0) {
-        throw new ActionError("MESSAGE_ALREADY_DELETED", "Tin nhắn này đã được gỡ trước đó.");
-      }
+      // timeout 30s / maxWait 10s theo luật E-bis #2.
+      const recipientIds = await db.$transaction(
+        async (tx) => {
+          const updated = await tx.message.updateMany({
+            where: { id: m.messageId, deletedAt: null },
+            data: { deletedAt, deletedById: actor.userId },
+          });
+          if (updated.count === 0) {
+            throw new ActionError(
+              "MESSAGE_ALREADY_DELETED",
+              "Tin nhắn này đã được gỡ trước đó.",
+            );
+          }
+          return lockAndReadRecipients(tx, m.conversationId, actor.userId);
+        },
+        { timeout: 30_000, maxWait: 10_000 },
+      );
 
       const data: DeletedChatMessage = {
         id: m.messageId,
@@ -378,7 +469,7 @@ function buildRecallConfig(
         deletedById: actor.userId,
         systemMessageId: null, // AC4: người gỡ CHÍNH là tác giả ⇒ không có tin SYSTEM
       };
-      await broadcastDeleted(data);
+      await broadcastDeleted(data, recipientIds);
 
       return {
         entityId: m.messageId,
@@ -427,7 +518,7 @@ function buildModerateConfig(
       // tin vẫn hiện nguyên.
       // timeout 30s / maxWait 10s theo luật E-bis #2 — trần 5s mặc định của Prisma đứt
       // giữa chừng khi pooler chậm.
-      const systemMessageId = await db.$transaction(
+      const tx0 = await db.$transaction(
         async (tx) => {
           const updated = await tx.message.updateMany({
             // `deletedAt: null` — chống đua, xem ghi chú ở đường thu hồi.
@@ -441,24 +532,33 @@ function buildModerateConfig(
               "Tin nhắn này đã được gỡ trước đó.",
             );
           }
-          if (!withNotice) return null;
 
-          const sys = await tx.message.create({
-            data: {
-              conversationId: m.conversationId,
-              kind: "SYSTEM",
-              senderId: null,
-              body: MODERATION_SYSTEM_MESSAGE,
-            },
-            select: { id: true },
-          });
-          // Nhóm vừa có tin mới → danh sách hội thoại phải nổi lên đúng chỗ
-          // (cùng cách `lib/chat/sync-membership.ts` xử lý tin SYSTEM của nó).
-          await tx.conversation.update({
-            where: { id: m.conversationId },
-            data: { lastMessageAt: deletedAt },
-          });
-          return sys.id;
+          let systemMessageId: string | null = null;
+          if (withNotice) {
+            const sys = await tx.message.create({
+              data: {
+                conversationId: m.conversationId,
+                kind: "SYSTEM",
+                senderId: null,
+                body: MODERATION_SYSTEM_MESSAGE,
+              },
+              select: { id: true },
+            });
+            // Nhóm vừa có tin mới → danh sách hội thoại phải nổi lên đúng chỗ
+            // (cùng cách `lib/chat/sync-membership.ts` xử lý tin SYSTEM của nó).
+            await tx.conversation.update({
+              where: { id: m.conversationId },
+              data: { lastMessageAt: deletedAt },
+            });
+            systemMessageId = sys.id;
+          }
+
+          // ⚠️ ĐẶT SAU `conversation.update` có chủ đích: đường gửi tin khoá theo thứ tự
+          // Message → Conversation → ConversationParticipant. Khoá participant TRƯỚC
+          // Conversation ở đây là dựng ngược thứ tự ⇒ mở cửa cho deadlock giữa "gửi tin"
+          // và "gỡ tin" trên cùng một hội thoại.
+          const recipientIds = await lockAndReadRecipients(tx, m.conversationId, actor.userId);
+          return { systemMessageId, recipientIds };
         },
         { timeout: 30_000, maxWait: 10_000 },
       );
@@ -469,9 +569,9 @@ function buildModerateConfig(
         senderId: m.senderId,
         deletedAt,
         deletedById: actor.userId,
-        systemMessageId,
+        systemMessageId: tx0.systemMessageId,
       };
-      await broadcastDeleted(data);
+      await broadcastDeleted(data, tx0.recipientIds);
 
       return {
         entityId: m.messageId,
@@ -483,7 +583,7 @@ function buildModerateConfig(
           conversationId: m.conversationId,
           kind: m.kind,
           messageAuthorId: m.senderId,
-          systemNoticeCreated: systemMessageId !== null,
+          systemNoticeCreated: tx0.systemMessageId !== null,
         },
         orgUnitId: m.orgUnitId,
       };
@@ -521,6 +621,10 @@ export async function recallOwnMessageAsActor(
 ): Promise<ActionResult<DeletedChatMessage>> {
   const messageId = extractMessageId(rawInput);
   const ctx = messageId ? await loadModerationContext(messageId, actor.userId) : null;
+  // 1-1 không có `subjectId` để làm `target.classId` — xem `recallTargetOf`.
+  if (ctx && ctx.subjectType !== "CLASS") {
+    ctx.dmClassId = await dmWitnessClassId(ctx.conversationId, actor.userId);
+  }
   const { res } = await runAction(buildRecallConfig(ctx), actor, rawInput, { actorName });
   return res;
 }

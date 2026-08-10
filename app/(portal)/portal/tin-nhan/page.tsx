@@ -12,7 +12,12 @@ import Link from "next/link";
 import { MessagesSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listConversationsForUser, type ConversationListItem } from "@/lib/chat/queries";
+import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
+import { listSalesForParent } from "@/lib/chat/dm";
+import { OpenDmButton } from "@/components/chat/open-dm-button";
 import { formatConversationTime } from "@/components/chat/portal/format";
+import { ChatListRefresher } from "@/components/chat/chat-list-refresher";
+import { ChatPolicyGate } from "./_components/policy-gate";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -90,7 +95,16 @@ export default async function PortalMessagesPage() {
     );
   }
 
+  // US-16 AC2 — cổng chính sách. `layout.tsx` của segment đã chặn trước (children không
+  // vào cây React nên page này không chạy); kiểm lại ở đây để bất biến "chưa đồng ý ⇒
+  // server không truy vấn nội dung" không phụ thuộc vào quy ước render của framework.
+  // Tốn 0 truy vấn thừa: `hasAcceptedChatPolicy` là `cache()` theo request.
+  if (!(await hasAcceptedChatPolicy(session.user.id))) return <ChatPolicyGate />;
+
   const conversations = await listConversationsForUser(session.user.id);
+  // F5 — tư vấn viên đang phụ trách phụ huynh này. Trả về DANH SÁCH: một PH nhiều con,
+  // mỗi ghi danh có `saleId` riêng ⇒ hai sale khác nhau là chuyện bình thường.
+  const sales = await listSalesForParent(session.user.id);
   // AC4 — ARCHIVED xuống dưới; trong mỗi khối giữ NGUYÊN thứ tự của query.
   const active = conversations.filter((c) => !c.isArchived);
   const archived = conversations.filter((c) => c.isArchived);
@@ -98,12 +112,54 @@ export default async function PortalMessagesPage() {
 
   return (
     <div className="space-y-5">
+      {/* Tin mới ở nhóm bất kỳ ⇒ chạy lại RSC này (trang `force-dynamic`) ⇒ nhóm đó lên
+          đầu, đổi preview + giờ + badge. Không render gì ra màn hình. */}
+      <ChatListRefresher userId={session.user.id} />
+
       <div>
         <h1 className="text-xl font-bold text-foreground">Tin nhắn</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Nhóm lớp của con — trao đổi trực tiếp với giáo viên và trung tâm.
         </p>
       </div>
+
+      {/* F5 — lối vào kênh riêng với tư vấn viên. Đặt ở ĐÂY chứ không phải dashboard
+          `/portal`: `openDmAction` là Server Action DUY NHẤT không đi qua `chatPolicyBlock`,
+          mà trang này nằm sau cổng chính sách (kiểm ở layout VÀ ngay đầu page) — đặt chỗ
+          khác là tạo được hội thoại TRƯỚC khi phụ huynh bấm đồng ý. */}
+      {sales.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold text-foreground">Tư vấn viên phụ trách</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Hỏi về học phí, lịch học thử, chuyển lớp — nhắn riêng, không hiện trong nhóm lớp.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {sales.map((s) => (
+              <li
+                key={s.saleUserId}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {s.saleName ?? "Tư vấn viên"}
+                  </p>
+                  {s.childNames.length > 0 && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      Phụ trách: {s.childNames.join(" · ")}
+                    </p>
+                  )}
+                </div>
+                <OpenDmButton
+                  peerUserId={s.saleUserId}
+                  kind="SALE_PARENT"
+                  hrefTemplate="/portal/tin-nhan/:id"
+                  label="Nhắn riêng"
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {conversations.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">

@@ -19,13 +19,17 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 
 import {
   ARCHIVED_LABEL,
+  ARCHIVED_PARENT_READ_DAYS,
   DELETED_MESSAGE_TEXT,
+  archivedReadCutoff,
   buildPreview,
   compareConversations,
   decodeCursor,
   encodeCursor,
+  isArchivedReadExpired,
   redactContactLike,
   shouldHideContacts,
+  hidesContactOf,
   toMemberView,
   toMessageView,
 } from "./queries";
@@ -318,6 +322,86 @@ describe("[BR-30] toMemberView — payload PH tuyệt đối không có liên h�
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BR-04 — hạn đọc 90 ngày sau khi hội thoại chuyển ARCHIVED.
+//
+// permissions.md, "Trạng thái đè lên tất cả": ARCHIVED → "Đọc ✅ (PH hết hạn sau 90
+// ngày — GV/QLCS/Admin không hết hạn)". TS-08 bước 2: "tua thời gian +91 ngày (mock
+// clock) → ph1 đọc → 403; gv1, ql1, admin1 vẫn đọc được".
+//
+// MỌI mốc thời gian TIÊM VÀO qua tham số `now` — không đọc đồng hồ máy, nên test cho
+// cùng kết quả ở mọi múi giờ và không bao giờ "hết hạn" theo ngày chạy CI.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[BR-04] isArchivedReadExpired — PH hết hạn 90 ngày, nhân viên thì không", () => {
+  const NOW = new Date("2026-08-09T10:00:00.000Z");
+  const ngayTruoc = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
+  const PH = "CLASS_STUDENT_PARENT";
+
+  it("hằng số là 90 ngày và mốc cắt lùi đúng 90 ngày", () => {
+    expect(ARCHIVED_PARENT_READ_DAYS).toBe(90);
+    expect(archivedReadCutoff(NOW).toISOString()).toBe("2026-05-11T10:00:00.000Z");
+  });
+
+  it("hội thoại còn ACTIVE / LOCKED → không bao giờ hết hạn, kể cả với PH", () => {
+    for (const status of ["ACTIVE", "LOCKED"]) {
+      expect(
+        isArchivedReadExpired({ status, archivedAt: ngayTruoc(999), derivedFrom: PH, now: NOW }),
+      ).toBe(false);
+    }
+  });
+
+  it("PH: ARCHIVED 89 ngày → còn đọc; 91 ngày → HẾT HẠN [TS-08]", () => {
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: ngayTruoc(89), derivedFrom: PH, now: NOW }),
+    ).toBe(false);
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: ngayTruoc(91), derivedFrom: PH, now: NOW }),
+    ).toBe(true);
+  });
+
+  it("biên ĐÚNG 90 ngày vẫn đọc được — 'hết hạn SAU 90 ngày', lệch 1 ngày là sai", () => {
+    const at90 = ngayTruoc(90);
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: at90, derivedFrom: PH, now: NOW }),
+    ).toBe(false);
+    // nhích thêm 1 mili-giây quá mốc → hết hạn
+    expect(
+      isArchivedReadExpired({
+        status: "ARCHIVED",
+        archivedAt: new Date(at90.getTime() - 1),
+        derivedFrom: PH,
+        now: NOW,
+      }),
+    ).toBe(true);
+  });
+
+  it("GV / QLCS / participant thêm tay: KHÔNG hết hạn dù archive đã 10 năm", () => {
+    for (const derivedFrom of ["CLASS_TEACHER", "CENTER_MANAGER", null]) {
+      expect(
+        isArchivedReadExpired({
+          status: "ARCHIVED",
+          archivedAt: ngayTruoc(3650),
+          derivedFrom,
+          now: NOW,
+        }),
+        `${derivedFrom} không được hết hạn`,
+      ).toBe(false);
+    }
+  });
+
+  it("archivedAt NULL (dữ liệu cũ / archive sửa tay) → KHÔNG hết hạn, không chặn nhầm PH", () => {
+    expect(
+      isArchivedReadExpired({ status: "ARCHIVED", archivedAt: null, derivedFrom: PH, now: NOW }),
+    ).toBe(false);
+  });
+
+  it("kết quả chỉ phụ thuộc `now` TIÊM VÀO — cùng dữ liệu, 'now' khác cho kết quả khác", () => {
+    const row = { status: "ARCHIVED", archivedAt: new Date("2026-01-01T00:00:00.000Z"), derivedFrom: PH };
+    expect(isArchivedReadExpired({ ...row, now: new Date("2026-03-01T00:00:00.000Z") })).toBe(false);
+    expect(isArchivedReadExpired({ ...row, now: new Date("2026-08-09T00:00:00.000Z") })).toBe(true);
+  });
+});
+
 describe("[BR-30] redactContactLike", () => {
   it("che SĐT VN mọi dạng và email, giữ nguyên chữ còn lại", () => {
     expect(redactContactLike("gọi 0905123456 nhé")).toBe("gọi ••• nhé");
@@ -328,5 +412,81 @@ describe("[BR-30] redactContactLike", () => {
   it("không đụng chuỗi bình thường (mã lớp, ngày tháng, id)", () => {
     expect(redactContactLike("Lớp Sata 1 - 2026")).toBe("Lớp Sata 1 - 2026");
     expect(redactContactLike("clz9k2h4t0000abcd")).toBe("clz9k2h4t0000abcd");
+  });
+});
+
+describe("[BR-30] hidesContactOf — liên hệ của TỪNG thành viên (quyết định 09/08/2026)", () => {
+  const nhomLop = "CLASS_GROUP";
+  const nhanRieng = "DM_TEACHER_PARENT";
+  const phMember = "CLASS_STUDENT_PARENT";
+
+  it("GIÁO VIÊN KHÔNG thấy liên hệ phụ huynh trong nhóm lớp", () => {
+    // Chủ dự án chốt 09/08: chat theo luật PII chung của repo (`canViewParentContact`),
+    // vốn đã chặn giáo viên ở trang tiến độ lớp ("P0-3: chống lộ SĐT toàn lớp").
+    // Trước đó module chat pin chiều ngược lại và hai luật cùng sống mà không ai thấy,
+    // vì chưa màn hình nhân viên nào vẽ liên hệ ra. ĐỪNG vá ngược case này.
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "TEACHER", roles: ["TEACHER"], derivedFrom: "CLASS_TEACHER" },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(true);
+  });
+
+  it("TRỢ GIẢNG cũng không thấy — cùng lý do với giáo viên", () => {
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "ASSISTANT_TEACHER", roles: ["ASSISTANT_TEACHER"], derivedFrom: "CLASS_TEACHER" },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(true);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG — QLCS VẪN thấy (không được siết quá tay thành ẩn với tất cả)", () => {
+    // Thiếu ca này thì một bản vá `return true` cũng làm cả khối trên xanh. Quản lý cơ sở
+    // cần gọi phụ huynh về học phí/nghỉ học — chặn họ là hỏng vận hành chứ không phải an toàn.
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"], derivedFrom: "CENTER_MANAGER" },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(false);
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG — kế toán và sale vẫn thấy (đúng nhóm vai của luật PII chung)", () => {
+    for (const role of ["ACCOUNTANT", "SALES_CSM", "SUPER_ADMIN"]) {
+      expect(
+        hidesContactOf({
+          conversationType: nhomLop,
+          viewer: { role, roles: [role], derivedFrom: "CENTER_MANAGER" },
+          memberDerivedFrom: phMember,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("hội thoại 1-1: ẩn với MỌI người xem, kể cả vai được xem liên hệ", () => {
+    // Bảng "1-1" của permissions.md không có dòng "Xem thành viên" nào; không ô nào cấp
+    // thì mặc định là không — màn thành viên của 1-1 vốn chỉ có đúng hai người.
+    expect(
+      hidesContactOf({
+        conversationType: nhanRieng,
+        viewer: { role: "CENTER_MANAGER", roles: ["CENTER_MANAGER"], derivedFrom: null },
+        memberDerivedFrom: phMember,
+      }),
+    ).toBe(true);
+  });
+
+  it("phụ huynh không thấy liên hệ của ai (luật cũ, tầng 1 vẫn thắng)", () => {
+    expect(
+      hidesContactOf({
+        conversationType: nhomLop,
+        viewer: { role: "PARENT", roles: ["PARENT"], derivedFrom: phMember },
+        memberDerivedFrom: "CLASS_TEACHER",
+      }),
+    ).toBe(true);
   });
 });

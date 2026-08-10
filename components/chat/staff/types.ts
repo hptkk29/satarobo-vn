@@ -26,15 +26,17 @@ export type StaffChatMessage = {
 };
 
 /**
- * Thành viên hội thoại. `contact` CÓ MẶT với nhân viên và KHÔNG TỒN TẠI với phụ huynh —
- * quyết định đó nằm ở `getConversationMembers` (BR-30), UI chỉ hiển thị cái mình nhận
- * được, KHÔNG tự lọc lại.
+ * Thành viên hội thoại — đúng 3 mẩu luồng chat cần để gắn tên vào bong bóng tin.
+ *
+ * ⚠️ CỐ Ý KHÔNG CÓ `contact` (gỡ 09/08): kiểu này được truyền vào `ChatThread`
+ * (Client Component) nên MỌI khoá của nó đi xuống trình duyệt trong payload RSC, kể cả
+ * khoá không component nào render. Liên hệ chỉ xuất hiện ở màn "Thành viên" — nơi
+ * `getConversationMembers` quyết định ai được thấy (BR-30).
  */
 export type StaffChatMember = {
   userId: string;
   displayName: string;
   roleLabel: string;
-  contact?: { phone: string | null; email: string | null };
 };
 
 /** Một dòng trong danh sách hội thoại (M1). */

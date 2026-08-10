@@ -29,8 +29,12 @@ const h = vi.hoisted(() => {
     created: [] as Row[],
     convUpdates: [] as Row[],
     unreadUpdates: [] as Row[],
+    recipientQueries: [] as Row[],
+    /** Thành viên hội thoại — nguồn dữ liệu THẬT cho `conversationParticipant.findMany`. */
+    participants: [] as { userId: string; leftAt: Date | null }[],
     txOptions: null as Row | null,
     txCalls: 0,
+    rateCalls: [] as { key: string; max: number; windowMs: number }[],
   };
   const mockDb: Record<string, unknown> = {
     $extends: () => mockDb,
@@ -64,6 +68,18 @@ const h = vi.hoisted(() => {
         state.unreadUpdates.push(args);
         return { count: 1 };
       }),
+      // Người nhận `conversation.bumped` (topic `user:{id}`) — đọc TRONG cùng tx, ngay
+      // sau `updateMany`, với đúng điều kiện `leftAt: null` + loại người gửi.
+      // Mock LỌC THẬT theo `where` (không trả mảng cứng): bỏ một điều kiện trong code là
+      // người không đáng nhận lọt thẳng vào mảng broadcast.
+      findMany: vi.fn(async (args: Row) => {
+        state.recipientQueries.push(args);
+        const where = (args.where ?? {}) as { leftAt?: unknown; userId?: { not?: string } };
+        return state.participants
+          .filter((p) => (where.leftAt === null ? p.leftAt === null : true))
+          .filter((p) => (where.userId?.not ? p.userId !== where.userId.not : true))
+          .map((p) => ({ userId: p.userId }));
+      }),
     },
   };
   return {
@@ -72,13 +88,39 @@ const h = vi.hoisted(() => {
     broadcast: vi.fn(async () => true),
     publishEvent: vi.fn(async () => ({ id: "evt-1" })),
     writeAudit: vi.fn(async () => ({})),
+    // Rate limit (F-ANN kế thừa F-SEND bước 4) — mock để test không phụ thuộc bộ đếm
+    // in-memory dùng chung giữa các `it` (20 lượt/phút sẽ cạn giữa chừng và biến cả
+    // file thành flake theo THỨ TỰ chạy). Mặc định luôn cho qua; test nào cần chặn thì
+    // tự `mockResolvedValueOnce`.
+    rateLimit: vi.fn(async (args: { key: string; max: number; windowMs: number }) => {
+      state.rateCalls.push(args);
+      return { success: true, remaining: args.max - 1, resetAt: Date.now() + args.windowMs };
+    }),
   };
 });
 
 vi.mock("@/lib/db", () => ({ db: h.mockDb }));
 vi.mock("@/lib/audit/audit-log", () => ({ writeAudit: h.writeAudit }));
-vi.mock("@/lib/chat/broadcast", () => ({ broadcastToConversation: h.broadcast }));
+// `broadcastMessages` = primitive DUY NHẤT gọi HTTP (1 POST cho cả `conv:` lẫn N `user:`);
+// hai builder còn lại là hàm THUẦN, dựng lại y hệt bản thật để soi hình dạng mảng.
+vi.mock("@/lib/chat/broadcast", () => ({
+  broadcastMessages: h.broadcast,
+  broadcastToConversation: h.broadcast,
+  conversationBroadcast: (
+    conversationId: string,
+    event: string,
+    payload: Record<string, unknown>,
+  ) => ({ topic: `conv:${conversationId}`, event, payload, private: true }),
+  userBumpBroadcasts: (userIds: readonly string[], payload: Record<string, unknown>) =>
+    userIds.map((id) => ({
+      topic: `user:${id}`,
+      event: "conversation.bumped",
+      payload,
+      private: true,
+    })),
+}));
 vi.mock("@/lib/events/publish", () => ({ publishEvent: h.publishEvent }));
+vi.mock("@/lib/rate-limit", () => ({ rateLimit: h.rateLimit }));
 // Không kéo next-auth vào test node (lõi nhận Actor seed, không cần phiên thật).
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => null) }));
 
@@ -88,6 +130,9 @@ import { ROLE_SEED } from "../../prisma/seed-roles";
 import {
   ANNOUNCEMENT_BODY_MAX,
   ANNOUNCEMENT_DAILY_QUOTA,
+  ANNOUNCEMENT_RATE_MAX,
+  ANNOUNCEMENT_RATE_WINDOW_MS,
+  announcementRateKey,
   buildReadStats,
   checkAnnouncementQuota,
   isAnnouncementRecipient,
@@ -337,6 +382,14 @@ function input(over: Record<string, unknown> = {}) {
   return { conversationId: CONV, body: "Thứ 7 này lớp nghỉ, bù vào Chủ nhật.", ...over };
 }
 
+/** Một phần tử trong mảng `messages` của lời gọi `broadcastMessages`. */
+type BroadcastCall = { topic: string; event: string; payload: Record<string, unknown> };
+
+/** Mảng gửi đi ở lời gọi broadcast thứ `n` (mặc định lời gọi đầu). */
+function sentBroadcasts(n = 0): BroadcastCall[] {
+  return (h.broadcast.mock.calls[n] as unknown as [BroadcastCall[]])[0];
+}
+
 beforeEach(() => {
   h.state.ctxRow = ctxRow();
   h.state.sentToday = 0;
@@ -344,8 +397,15 @@ beforeEach(() => {
   h.state.created = [];
   h.state.convUpdates = [];
   h.state.unreadUpdates = [];
+  h.state.recipientQueries = [];
+  h.state.participants = [
+    { userId: "ph-khac", leftAt: null },
+    { userId: "gv-khac", leftAt: null },
+  ];
   h.state.txOptions = null;
   h.state.txCalls = 0;
+  h.state.rateCalls = [];
+  h.rateLimit.mockClear();
   h.broadcast.mockClear();
   h.broadcast.mockImplementation(async () => true);
   h.publishEvent.mockClear();
@@ -479,6 +539,88 @@ describe("[US-10][AC2] quota 10 ANNOUNCEMENT/ngày/lớp", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// F-ANN kế thừa **bước 4 của F-SEND**: rate limit 20/phút/NGƯỜI (vá 09/08/2026).
+//
+// Trước đó `sendAnnouncement` không gọi `rateLimit` lần nào. Quota 10/ngày/lớp KHÔNG
+// bịt được khe này: quota đếm theo HỘI THOẠI, nên một GV dạy 10 lớp bắn 10 thông báo
+// trong 2 giây vẫn hợp quota — 10 lượt ghi + 10 broadcast + 10 DomainEvent tức thì.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[US-10] rate limit 20 thông báo/phút/người (F-SEND bước 4)", () => {
+  it("khoá bộ đếm là chat:announce:<userId> — RIÊNG, không dùng chung với chat:send", () => {
+    expect(announcementRateKey("u-1")).toBe("chat:announce:u-1");
+    expect(announcementRateKey("u-1")).not.toContain("chat:send");
+  });
+
+  it("gửi hợp lệ → có gọi rateLimit đúng khoá/ngưỡng/cửa sổ của CHÍNH người gửi", async () => {
+    const actor = actorOf("TEACHER", "cs1", "gv-rate", ["lopA"]);
+    const res = await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(res.ok).toBe(true);
+    expect(h.state.rateCalls).toEqual([
+      {
+        key: "chat:announce:gv-rate",
+        max: ANNOUNCEMENT_RATE_MAX,
+        windowMs: ANNOUNCEMENT_RATE_WINDOW_MS,
+      },
+    ]);
+    expect(ANNOUNCEMENT_RATE_MAX).toBe(20);
+    expect(ANNOUNCEMENT_RATE_WINDOW_MS).toBe(60_000);
+  });
+
+  it("hết lượt → RATE_LIMITED, KHÔNG mở transaction, KHÔNG ghi tin, KHÔNG broadcast/event", async () => {
+    h.rateLimit.mockResolvedValueOnce({
+      success: false,
+      remaining: 0,
+      resetAt: Date.now() + 42_000,
+    });
+    const actor = actorOf("TEACHER", "cs1", "gv-rate", ["lopA"]);
+    const res = await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error.code).toBe("RATE_LIMITED");
+    expect(res.error.message).toContain("thử lại sau"); // nói rõ chờ bao lâu
+    expect(h.state.txCalls).toBe(0);
+    expect(h.state.created).toHaveLength(0);
+    expect(h.broadcast).not.toHaveBeenCalled();
+    expect(h.publishEvent).not.toHaveBeenCalled();
+  });
+
+  it("rate limit chạy TRƯỚC quota — quota đã cạn vẫn báo RATE_LIMITED, và không mở tx để đếm", async () => {
+    // Quota cũng đã cạn: nếu thứ tự đảo, mã lỗi sẽ là ANNOUNCEMENT_QUOTA_EXCEEDED.
+    h.state.sentToday = ANNOUNCEMENT_DAILY_QUOTA;
+    h.rateLimit.mockResolvedValueOnce({ success: false, remaining: 0, resetAt: Date.now() + 1_000 });
+    const actor = actorOf("CENTER_MANAGER", "cs1", "ql-rate");
+    const res = await sendAnnouncementAsActor(actor, "QLCS Test", input());
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error.code).toBe("RATE_LIMITED");
+    // Quota đếm BÊN TRONG transaction ⇒ không mở tx nghĩa là chưa hề đụng tới quota.
+    expect(h.state.txCalls).toBe(0);
+  });
+
+  it("bị chặn ở cổng VAI (PH/Sale) thì KHÔNG tiêu lượt của ai — rate limit nằm sau can()", async () => {
+    const res = await sendAnnouncementAsActor(
+      actorOf("PARENT", "cs1", "ph-rate"),
+      "PH Test",
+      input(),
+    );
+    expect(res.ok).toBe(false);
+    expect(h.rateLimit).not.toHaveBeenCalled();
+  });
+
+  it("bộ đếm theo NGƯỜI: 2 người gửi vào CÙNG hội thoại → 2 khoá khác nhau", async () => {
+    await sendAnnouncementAsActor(actorOf("TEACHER", "cs1", "gv-a", ["lopA"]), "A", input());
+    await sendAnnouncementAsActor(actorOf("TEACHER", "cs1", "gv-b", ["lopA"]), "B", input());
+    expect(h.state.rateCalls.map((c) => c.key)).toEqual([
+      "chat:announce:gv-a",
+      "chat:announce:gv-b",
+    ]);
+  });
+});
+
 describe("[US-10] guard F-SEND dùng lại nguyên vẹn (mã lỗi PHÂN BIỆT)", () => {
   it("GV đã rời nhóm → NOT_PARTICIPANT (không phải PERMISSION_DENIED)", async () => {
     h.state.ctxRow = ctxRow({ participantLeftAt: new Date() });
@@ -533,15 +675,57 @@ describe("[US-10][AC3][AC5] broadcast + điểm móc push (US-14 Đợt 2)", () 
     await sendAnnouncementAsActor(actor, "GV Test", input());
 
     expect(h.broadcast).toHaveBeenCalledTimes(1);
-    const [convId, event, payload] = h.broadcast.mock.calls[0] as unknown as [
-      string,
-      string,
-      Record<string, unknown>,
+    const conv = sentBroadcasts()[0] as BroadcastCall;
+    expect(conv.topic).toBe(`conv:${CONV}`);
+    expect(conv.event).toBe("announcement.created");
+    expect(conv.payload.kind).toBe("ANNOUNCEMENT");
+    expect(conv.payload.id).toBe("ann-1");
+  });
+
+  it("MỘT POST duy nhất: kèm N phần tử user:{id} event conversation.bumped, KHÔNG kèm nội dung (BR-30)", async () => {
+    const actor = actorOf("TEACHER", "cs1", "gv-bump", ["lopA"]);
+    await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(h.broadcast).toHaveBeenCalledTimes(1);
+    const bumps = sentBroadcasts().filter((m) => m.topic.startsWith("user:"));
+    expect(bumps.map((m) => m.topic)).toEqual(["user:ph-khac", "user:gv-khac"]);
+    for (const b of bumps) {
+      expect(b.event).toBe("conversation.bumped");
+      expect(Object.keys(b.payload).sort()).toEqual(["at", "conversationId", "kind", "messageId"]);
+      expect(b.payload.kind).toBe("ANNOUNCEMENT");
+      expect(JSON.stringify(b.payload)).not.toContain("lớp nghỉ");
+    }
+  });
+
+  it("người nhận bump đọc TRONG tx, đúng điều kiện leftAt=null + loại người gửi", async () => {
+    const actor = actorOf("TEACHER", "cs1", "gv-recip", ["lopA"]);
+    await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    expect(h.state.recipientQueries).toHaveLength(1);
+    const where = (h.state.recipientQueries[0] as { where: Record<string, unknown> }).where;
+    expect(where.conversationId).toBe(CONV);
+    expect(where.leftAt).toBeNull();
+    expect(where.userId).toEqual({ not: "gv-recip" });
+  });
+
+  it("người ĐÃ RỜI nhóm và CHÍNH người gửi KHÔNG nhận bump (lọc thật, không chỉ soi đối số)", async () => {
+    h.state.participants = [
+      { userId: "ph-khac", leftAt: null },
+      { userId: "gv-khac", leftAt: null },
+      // PH chuyển lớp giữa kỳ — thông báo của lớp cũ không được đánh thức máy họ nữa.
+      { userId: "ph-da-roi", leftAt: new Date("2026-07-01T00:00:00.000Z") },
+      { userId: "gv-loc", leftAt: null },
     ];
-    expect(convId).toBe(CONV);
-    expect(event).toBe("announcement.created");
-    expect(payload.kind).toBe("ANNOUNCEMENT");
-    expect(payload.id).toBe("ann-1");
+
+    const actor = actorOf("TEACHER", "cs1", "gv-loc", ["lopA"]);
+    await sendAnnouncementAsActor(actor, "GV Test", input());
+
+    const topics = sentBroadcasts()
+      .filter((m) => m.topic.startsWith("user:"))
+      .map((m) => m.topic);
+    expect(topics).toEqual(["user:ph-khac", "user:gv-khac"]);
+    expect(topics).not.toContain("user:ph-da-roi");
+    expect(topics).not.toContain("user:gv-loc");
   });
 
   it("broadcast NÉM lỗi → thông báo VẪN ghi, action VẪN ok (AC3/TS-12)", async () => {

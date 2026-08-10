@@ -23,8 +23,12 @@ import {
   listConversationsForUser,
 } from "@/lib/chat/queries";
 import { getAnnouncementReadStats, listAnnouncements } from "@/lib/chat/announcements";
+import { dmWitnessClassId } from "@/lib/chat/dm";
+import { listChatAttachments } from "@/lib/chat/messages";
+import { ChatListRefresher } from "../chat-list-refresher";
+import { OpenDmButton } from "../open-dm-button";
 import { ChatThread } from "./chat-thread";
-import { ConversationList } from "./conversation-list";
+import { ConversationSearch } from "./conversation-search";
 import { AnnouncementReadStats } from "./announcement-read-stats";
 import type {
   StaffAnnouncementStats,
@@ -47,9 +51,13 @@ const timeFmt = new Intl.DateTimeFormat("vi-VN", {
   minute: "2-digit",
 });
 
+/**
+ * Lý do vô hiệu ô nhập KHÔNG-PHẢI-KHOÁ. Trạng thái LOCKED cố ý KHÔNG nằm ở đây: nó đổi
+ * được giữa phiên (Admin bấm khoá — US-15 AC3) nên đi đường riêng `initialLocked` +
+ * broadcast `conversation.locked`, còn câu hiển thị nằm ở `CONVERSATION_LOCKED_NOTICE`.
+ */
 function disabledReasonOf(status: string): string | null {
   if (status === "ARCHIVED") return "Lớp đã kết thúc — hội thoại đã lưu trữ, chỉ xem lại.";
-  if (status === "LOCKED") return "Hội thoại đang bị khoá — không gửi được tin mới.";
   return null;
 }
 
@@ -66,6 +74,8 @@ export type StaffChatWorkspaceProps = {
   announcementCursor?: string;
   /** Câu gợi ý khi người dùng chưa có hội thoại nào (khác nhau giữa admin và GV). */
   emptyHint: string;
+  /** F5 — phụ huynh mình được gán nhưng CHƯA có kênh (rỗng với vai không mở được kênh). */
+  assignableParents?: { parentUserId: string; parentName: string | null; childLabels: string[] }[];
 };
 
 export async function StaffChatWorkspace({
@@ -75,6 +85,7 @@ export async function StaffChatWorkspace({
   tab,
   announcementCursor,
   emptyHint,
+  assignableParents = [],
 }: StaffChatWorkspaceProps) {
   const conversations = await listConversationsForUser(userId);
 
@@ -96,22 +107,46 @@ export async function StaffChatWorkspace({
     : null;
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
+    // Màn chat chiếm TRỌN chiều cao khả dụng (yêu cầu chủ dự án 10/08: "bấm vào tin nhắn
+    // thì cả màn hình là các cuộc hội thoại"). `h-[calc(100vh-…)]` chứ không phải `min-h`:
+    // hai cột phải TỰ CUỘN bên trong, nếu để trang cuộn thì ô nhập tin trôi khỏi tầm mắt.
+    <div className="flex h-[calc(100vh-8rem)] min-h-[32rem] flex-col gap-4 lg:flex-row">
+      {/* Tin mới ở BẤT KỲ hội thoại nào ⇒ chạy lại RSC này ⇒ danh sách tự sắp lại, đổi
+          preview/giờ/badge. Không render gì; giữ `ConversationList` là component thuần. */}
+      <ChatListRefresher userId={userId} />
+
       <aside
-        className={`w-full shrink-0 lg:w-80 ${selected ? "hidden lg:block" : "block"}`}
+        className={`min-h-0 w-full shrink-0 lg:w-96 ${selected ? "hidden lg:flex" : "flex"} flex-col`}
         aria-label="Danh sách hội thoại"
       >
-        <ConversationList
-          items={items}
+        <ConversationSearch
+          conversations={items.map((i) => ({
+            conversationId: i.conversationId,
+            displayName: i.displayName,
+            type: i.type,
+            preview: i.preview,
+            unreadCount: i.unreadCount,
+            isArchived: i.isArchived,
+          }))}
+          parents={assignableParents}
           basePath={basePath}
           selectedId={selected?.conversationId ?? null}
-          emptyHint={emptyHint}
         />
       </aside>
 
-      <section className={`min-w-0 flex-1 ${selected ? "block" : "hidden lg:block"}`}>
+      <section
+        className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${selected ? "block" : "hidden lg:block"}`}
+      >
         {selected ? (
-          tab === "thong-bao" ? (
+          tab === "thanh-vien" ? (
+            <MembersPanel
+              userId={userId}
+              basePath={basePath}
+              conversationId={selected.conversationId}
+              title={selected.displayName}
+              type={selected.type}
+            />
+          ) : tab === "thong-bao" ? (
             <AnnouncementsPanel
               userId={userId}
               basePath={basePath}
@@ -134,11 +169,11 @@ export async function StaffChatWorkspace({
             />
           )
         ) : (
-          items.length > 0 && (
-            <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
-              Chọn một hội thoại bên trái để đọc và trả lời.
-            </div>
-          )
+          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
+            {items.length > 0
+              ? "Chọn một hội thoại bên trái để đọc và trả lời."
+              : emptyHint}
+          </div>
         )}
       </section>
     </div>
@@ -164,24 +199,57 @@ async function ThreadPanel({
   classId: string | null;
   centerId: string | null;
 }) {
-  const target = { classId, centerId };
+  // ⚠️ TARGET PHẢI GIỐNG HỆT SERVER, KHÔNG ĐƯỢC "gần đúng":
+  // • GỬI/THU HỒI — hội thoại 1-1 có `subjectType = NONE` nên không có `subjectId` làm
+  //   `classId`; nguồn đúng là LỚP LÀM CHỨNG (`dmWitnessClassId`), y hệt `sendTargetOf`
+  //   ở lib/chat/messages.ts. Thiếu nó thì GV thấy ô nhập XÁM trong mọi hội thoại riêng.
+  // • THÔNG BÁO/GỠ TIN NGƯỜI KHÁC — server cố ý KHÔNG dùng lớp làm chứng cho 1-1
+  //   (ma trận không có ô đó), nên ở đây cũng dùng `classId` thô để nút hiện đúng bằng
+  //   thứ server sẽ cho qua. Hai target khác nhau là CÓ CHỦ ĐÍCH.
+  const sendClassId =
+    type === "CLASS_GROUP" ? classId : await dmWitnessClassId(conversationId, userId);
+  // ⚠️ `createdById: userId` — BẢN SAO PHẢI KHỚP HỆT SERVER, và đây chính là chỗ nó từng
+  // lệch. `sendTargetOf` (lib/chat/messages.ts:396-403) gán `createdById = actor.userId`
+  // KHI người gửi là thành viên hội thoại; người xem màn này LUÔN là thành viên (danh sách
+  // chỉ trả hội thoại của chính họ — `listConversationsForUser`), nên bỏ khoá này là dựng
+  // một target NGHÈO HƠN server.
+  //
+  // Hậu quả đo được khi mở F5: SALES_CSM giữ `chat:send` scope **OWN**, mà `scopeMatches`
+  // nhánh OWN đòi `target.createdById === actor.userId` (lib/auth/can.ts:24) ⇒ `canSend`
+  // = false ⇒ ô nhập XÁM, trong khi Server Action vẫn CHO gửi. Người dùng thấy "hỏng",
+  // log server sạch trơn.
+  //
+  // ⚠️ Và nó KHÔNG lộ ở máy local: `checkPermission` trả v1 khi `RBAC_V2_ENABLED` OFF
+  // (mặc định trong code — lib/flags.ts:8), mà v1 là ma trận TĨNH không có scope nên
+  // `chat:send` của Sale luôn true. Chỉ prod (v2 đang bật) mới xám.
+  const sendTarget = { classId: sendClassId, centerId, createdById: userId };
+  const groupTarget = { classId, centerId };
   const [page, memberViews, pinnedPage, canSend, canAnnounce, canModerate] = await Promise.all([
     getMessagesPage(conversationId, userId),
     getConversationMembers(conversationId, userId),
     listAnnouncements(conversationId, userId, { limit: 1 }),
-    checkPermission("chat:send", target),
-    checkPermission("chat:announce", target),
-    checkPermission("chat:moderate", target),
+    checkPermission("chat:send", sendTarget),
+    checkPermission("chat:announce", groupTarget),
+    checkPermission("chat:moderate", groupTarget),
   ]);
 
+  // KHÔNG kèm `contact`: luồng chat không hiển thị SĐT/email của ai, mà mọi thứ truyền
+  // vào ChatThread (Client Component) đều đi xuống trình duyệt trong payload RSC. Dữ
+  // liệu không dùng tới mà vẫn gửi đi là rò rỉ không có lý do (BR-30).
   const members: StaffChatMember[] = memberViews.map((m) => ({
     userId: m.userId,
     displayName: m.displayName,
     roleLabel: m.roleLabel,
-    ...(m.contact ? { contact: m.contact } : {}),
   }));
 
   const pinnedRaw = pinnedPage.announcements.find((a) => !a.deleted) ?? null;
+
+  // US-11 — ảnh của đúng 30 tin vừa tải. Chạy SAU vì cần danh sách id.
+  const initialAttachments = await listChatAttachments(
+    conversationId,
+    userId,
+    page.messages.map((m) => m.id),
+  );
 
   return (
     <ChatThread
@@ -190,17 +258,108 @@ async function ThreadPanel({
       conversationId={conversationId}
       currentUserId={userId}
       title={title}
-      subtitle={`${type === "CLASS_GROUP" ? "Nhóm lớp" : "Hội thoại riêng"} · ${members.length} thành viên`}
+      // Số thành viên chuyển vào chính LINK sang màn thành viên (US-13 AC1) — trước đây
+      // con số hiện ở đây nhưng bấm vào không ra gì.
+      subtitle={type === "CLASS_GROUP" ? "Nhóm lớp" : "Hội thoại riêng"}
       initialMessages={page.messages as StaffChatMessage[]}
+      initialAttachments={initialAttachments}
       initialHasMore={page.hasMore}
       initialCursor={page.nextCursor}
       members={members}
       capabilities={{ canSend, canAnnounce, canModerate }}
       pinnedAnnouncement={(pinnedRaw as StaffChatMessage | null) ?? null}
       disabledReason={disabledReasonOf(status)}
+      initialLocked={status === "LOCKED"}
       announcementsHref={`${basePath}?c=${conversationId}&tab=thong-bao`}
+      membersHref={`${basePath}?c=${conversationId}&tab=thanh-vien`}
       backHref={basePath}
     />
+  );
+}
+
+/**
+ * US-13 AC1 (chiều GV) — danh sách thành viên cho màn NHÂN VIÊN. Trước đây chỉ phía phụ
+ * huynh có màn này (`/portal/tin-nhan/[id]/thanh-vien`); phía nhân viên chỉ có con số
+ * "N thành viên" trong tiêu đề, bấm vào không ra gì — nên không có chỗ nào để đặt nút
+ * "Nhắn riêng". Bản này cố ý TỐI GIẢN: một danh sách + nút, dùng lại đúng
+ * `getConversationMembers` nên luật ẩn liên hệ (BR-30) vẫn do tầng query quyết định.
+ *
+ * ⚠️ Dòng liên hệ bên dưới KHÔNG tự lọc gì cả — nó chỉ in ra `m.contact` nếu tầng query
+ * trả về. Sau bản vá 09/08, `contact` VẮNG MẶT với: người xem là PH · mọi hội thoại 1-1 ·
+ * thành viên là phụ huynh mà người xem không có quyền xem liên hệ PH (GV/trợ giảng).
+ * Đừng "cho chắc" bằng cách lọc thêm ở đây — hai chỗ lọc là hai chỗ trôi lệch; xem
+ * `hidesContactOf` (lib/chat/queries.ts).
+ */
+async function MembersPanel({
+  userId,
+  basePath,
+  conversationId,
+  title,
+  type,
+}: {
+  userId: string;
+  basePath: string;
+  conversationId: string;
+  title: string;
+  type: string;
+}) {
+  const members = await getConversationMembers(conversationId, userId);
+  const isClassGroup = type === "CLASS_GROUP";
+
+  return (
+    <div className="rounded-xl border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-foreground sm:text-base">
+            Thành viên · {title}
+          </h2>
+          <p className="text-xs text-muted-foreground">{members.length} người đang trong hội thoại</p>
+        </div>
+        <Link
+          href={`${basePath}?c=${conversationId}`}
+          className="text-xs font-medium text-primary underline"
+        >
+          ← Về luồng hội thoại
+        </Link>
+      </div>
+
+      {members.length === 0 ? (
+        <p className="p-10 text-center text-sm text-muted-foreground">
+          Hội thoại chưa có thành viên nào.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {members.map((m) => (
+            <li key={m.userId} className="flex items-center gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {m.displayName}
+                  {m.userId === userId && (
+                    <span className="ml-1 font-normal text-muted-foreground">(bạn)</span>
+                  )}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {m.roleLabel}
+                  {m.contact && (m.contact.phone || m.contact.email)
+                    ? ` · ${[m.contact.phone, m.contact.email].filter(Boolean).join(" · ")}`
+                    : ""}
+                </p>
+              </div>
+              {/* Nhắn riêng chỉ mở với PHỤ HUYNH của nhóm lớp (`derivedFrom` = tư cách
+                  TRONG nhóm). Quan hệ dạy học vẫn được server kiểm lại — nút chỉ là lối vào. */}
+              {isClassGroup &&
+                m.derivedFrom === "CLASS_STUDENT_PARENT" &&
+                m.userId !== userId && (
+                  <OpenDmButton
+                    peerUserId={m.userId}
+                    hrefTemplate={`${basePath}?c=:id`}
+                  />
+                )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

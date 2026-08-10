@@ -33,7 +33,8 @@ export type SettingGroup =
   | "content"
   | "cron"
   | "dashboard"
-  | "makeup";
+  | "makeup"
+  | "chat";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -493,6 +494,66 @@ export const SETTINGS = {
     label: "Template ID ZNS cho mã OTP (mẫu Xác thực đã duyệt)",
     schema: z.string().regex(/^[0-9]*$/, "Template ID chỉ gồm chữ số"),
     default: "616128",
+    centerOverridable: false,
+  }),
+  // ─── US-14: báo tin nhắn mới cho phụ huynh qua ZNS (cron chat-zns-notify) ───
+  // 400đ/tin, gửi cho KHÁCH THẬT ⇒ mọi ngưỡng/trần nằm ở đây để hạ/nâng không cần
+  // deploy, và trạng thái AN TOÀN luôn là "không gửi" (false / rỗng / trần thấp).
+  // ⚠️ Chỉ áp dụng cho nhóm lớp. Nhắn riêng (DM) KHÔNG BAO GIỜ gửi — luật cứng nằm
+  // trong code (`lib/chat/zns-notify.ts`), KHÔNG có công tắc nào mở được.
+  "chat.znsNotifyEnabled": def({
+    key: "chat.znsNotifyEnabled",
+    group: "chat",
+    label: "Gửi ZNS báo tin nhắn mới trong nhóm lớp cho phụ huynh",
+    schema: z.boolean(),
+    // TẮT mặc định: bật lên là tin đi thật + tính tiền. Bật sau khi mẫu đã được duyệt
+    // và đã điền `chat.znsTemplateNewMessage`.
+    default: false,
+    centerOverridable: false,
+  }),
+  "chat.znsTemplateNewMessage": def({
+    key: "chat.znsTemplateNewMessage",
+    group: "chat",
+    // Ô sửa ở /admin/cau-hinh-van-hanh nhận JSON ⇒ chuỗi phải có nháy kép.
+    label: 'Template ID ZNS "có tin nhắn mới" — nhập dạng "616999", rỗng "" = không gửi',
+    schema: z.string().regex(/^[0-9]*$/, "Template ID chỉ gồm chữ số"),
+    // RỖNG = KHÔNG GỬI (skip an toàn). Mẫu phải được Zalo DUYỆT và có ĐÚNG 3 tham số
+    // className/senderName/time (ZNS_CHAT_NEW_MESSAGE_PARAM_SPEC) trước khi điền.
+    default: "",
+    centerOverridable: false,
+  }),
+  "chat.znsUnreadMinutes": def({
+    key: "chat.znsUnreadMinutes",
+    group: "chat",
+    label: "Tin thường: phụ huynh chưa đọc bao nhiêu phút thì nhắc qua ZNS",
+    schema: z.number().int().min(5).max(1440),
+    default: 360, // 6 tiếng — chốt 09/08/2026
+    centerOverridable: false,
+  }),
+  "chat.znsAnnouncementUnreadMinutes": def({
+    key: "chat.znsAnnouncementUnreadMinutes",
+    group: "chat",
+    label: "Thông báo chính thức: chưa đọc bao nhiêu phút thì nhắc qua ZNS",
+    // Ô RIÊNG (không dùng chung với tin thường) để hạ xuống 30 phút cho thông báo gấp
+    // mà không phải deploy — chốt 09/08/2026.
+    schema: z.number().int().min(5).max(1440),
+    default: 360,
+    centerOverridable: false,
+  }),
+  "chat.znsCooldownMinutes": def({
+    key: "chat.znsCooldownMinutes",
+    group: "chat",
+    label: "Trần chống bão: mỗi phụ huynh chỉ nhận 1 ZNS/hội thoại trong bao nhiêu phút",
+    schema: z.number().int().min(30).max(2880),
+    default: 360,
+    centerOverridable: false,
+  }),
+  "chat.znsMaxPerRun": def({
+    key: "chat.znsMaxPerRun",
+    group: "chat",
+    label: "Trần số ZNS gửi trong một lượt cron (chống hoá đơn bất ngờ)",
+    schema: z.number().int().min(1).max(500),
+    default: 100,
     centerOverridable: false,
   }),
   "teacher.overloadHoursPerWeek": def({

@@ -264,10 +264,22 @@ export const ROLE_SEED: RoleSeed[] = [
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
-      // US-05 chat (08/08): Đào tạo quản TOÀN BỘ LMS — ĐỌC chat để giám sát nội dung
-      // giảng dạy trong nhóm lớp, KHÔNG send/announce/moderate (v2-only, v1 không có
-      // vì Đào tạo không có màn chat riêng ở P0 — mở khi có call-site).
-      { action: "chat:read", scopeType: "GLOBAL" },
+      // ⛔ KHÔNG THÊM LẠI `chat:read` CHO ĐÀO TẠO (gỡ 09/08/2026).
+      // Bản seed 08/08 có `{ action: "chat:read", scopeType: "GLOBAL" }` ở đây với lý do
+      // "giám sát nội dung giảng dạy". Đối chiếu intended-vs-implemented lộ ra 3 điều:
+      //   1. `docs/chat-realtime/permissions.md` KHÔNG có vai Đào tạo ở bất kỳ ô nào —
+      //      bảng ma trận chỉ có PH / GV / QLCS / Sale / Admin. Quyền này không có hợp đồng.
+      //   2. GLOBAL ⇒ đọc được MỌI hội thoại, kể cả 1-1 GV↔PH (`DM_TEACHER_PARENT`,
+      //      centerId=null) — tức mạnh hơn cả Admin. Ô "Đọc" của Admin trong ma trận là
+      //      ⚠️ *có điều kiện*: không phải thành viên thì phải đi đường tra cứu F-AUDIT
+      //      (bắt buộc nhập lý do + ghi AuditLog TRƯỚC khi trả nội dung). Đào tạo đọc
+      //      thẳng qua `can()` thì không để lại một dòng vết nào.
+      //   3. Không có call-site: P0 không có màn chat cho Đào tạo, nên đây là quyền chết
+      //      — chỉ còn tác dụng nếu ai đó gắn `chat:read` vào một bề mặt đọc mới.
+      // Mở lại CHỈ KHI có story + màn hình thật, và khi đó phải đi qua đường F-AUDIT như
+      // Admin (lý do + audit), KHÔNG phải bằng một dòng grant GLOBAL ở đây.
+      // Pin chống tái phát: `lib/auth/chat-permissions.test.ts` — "TRAINING không có bất
+      // kỳ action chat:* nào ở CẢ v1 lẫn v2".
     ],
   },
   {
@@ -446,9 +458,23 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       // US-05 chat (08/08) — cùng bộ với CENTER_MANAGER (vai QLCS thu hẹp): nhóm lớp
       // cơ sở mình, không moderate/admin. CENTER an toàn — call-site chat luôn có target.
+      // 09/08: Giáo vụ ĐƯỢC dẫn xuất thành participant nhóm lớp y như QLCS
+      // (lib/chat/sync-membership.ts → CHAT_CENTER_MANAGER_ROLE_CODES) — trước đó 3 perm
+      // này là QUYỀN CHẾT vì phạm vi đọc chat là participant-based.
       { action: "chat:read", scopeType: "CENTER" },
       { action: "chat:send", scopeType: "CENTER" },
       { action: "chat:announce", scopeType: "CENTER" },
+      // 09/08 — CHÌA KHOÁ CỬA /tin-nhan cho Giáo vụ. 3 perm chat:* ở trên KHÔNG mở nổi
+      // cửa: gate cấp trang gọi checkAnyPermission KHÔNG kèm target nên scope CENTER trả
+      // FALSE (lib/auth/can.ts:18) — đó chính là lý do PAGE_GATES["/tin-nhan"] gác bằng
+      // [students:view-own-class | classes:view-own], hai action GLOBAL.
+      // Vì sao `classes:view-own` chứ KHÔNG phải `students:view-own-class`: action kia
+      // cũng là gate của /hoc-ba, mà BGĐ 10/07 chốt Giáo vụ KHÔNG xem học bạ — mượn nó
+      // là mở nhầm cửa thứ hai. `classes:view-own` chỉ làm gate ở /tin-nhan; các
+      // call-site còn lại (/classes, /classes/[id], /lich) vai này đã vào được sẵn bằng
+      // `classes:view-all` nên KHÔNG nới thêm quyền nào. GLOBAL là bắt buộc —
+      // page-gates.test.ts khoá "action làm gate phải GLOBAL ở mọi RoleDef giữ nó".
+      { action: "classes:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -484,6 +510,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "honors:view", scopeType: "CENTER" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // ── F5 (Đợt 3, mở phạm vi 10/08/2026): nhắn riêng 1-1 với PHỤ HUYNH MÌNH PHỤ TRÁCH ──
+      // Scope **OWN**, giống hệt vai PARENT, và CỐ Ý KHÔNG dùng CENTER: `scopeMatches`
+      // cho CENTER chỉ cần `target.centerId` khớp, mà nhóm lớp LUÔN có `centerId` ⇒ cấp
+      // CENTER là mở toang cửa nhóm lớp cho Sale — trái ma trận permissions.md (Sale ❌
+      // ở mọi ô nhóm lớp). Với OWN thì `openDmTargetOf`/`sendTargetOf` gán
+      // `createdById = actor.userId` nên chỉ khớp khi Sale là THÀNH VIÊN hội thoại; chốt
+      // chặn thật là quan hệ phân công (`Enrollment.saleId`) kiểm trong handler.
+      { action: "chat:read", scopeType: "OWN" },
+      { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "CENTER" },

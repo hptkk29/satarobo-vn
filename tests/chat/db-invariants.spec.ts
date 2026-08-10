@@ -626,7 +626,7 @@ describe.skipIf(!RUN_DB_TESTS)("Chat · 6 bất biến tầng DB (Postgres thậ
     }, HOOK_TIMEOUT);
 
     it(
-      "đối chứng dương: GV thấy ĐẦY ĐỦ liên hệ (SĐT thật có trong DB)",
+      "GV KHÔNG thấy SĐT/email phụ huynh — dù SĐT thật CÓ trong DB (chủ dự án chốt 09/08)",
       async () => {
         const members = await getConversationMembers(convId, w.users.gv!);
         expect(members.length).toBeGreaterThanOrEqual(3); // gv + ph1 + ph2
@@ -635,13 +635,30 @@ describe.skipIf(!RUN_DB_TESTS)("Chat · 6 bất biến tầng DB (Postgres thậ
           where: { id: w.users.ph1! },
           select: { phone: true, email: true },
         });
-        expect(ph1?.contact?.phone).toBe(dbPh1?.phone);
-        expect(ph1?.contact?.email).toBe(dbPh1?.email);
-        // Nếu đối chứng này rỗng thì test dưới xanh giả — chốt lại cho chắc.
+
+        // ĐỐI CHỨNG BẮT BUỘC: SĐT phải THẬT SỰ có trong DB. Thiếu dòng này thì test dưới
+        // xanh giả — một `getConversationMembers` trả rỗng cũng "pass".
         expect(dbPh1?.phone).toMatch(VN_PHONE_RE);
+
+        // Case này TRƯỚC 09/08 khẳng định điều NGƯỢC LẠI ("GV thấy đầy đủ"). Repo khi đó có
+        // hai luật xung khắc cùng sống: luật PII chung (`canViewParentContact`) chặn giáo
+        // viên — chú thích ghi rõ "P0-3: chống lộ SĐT toàn lớp ở trang tiến độ lớp" — còn
+        // module chat lại pin chiều cho phép. Mâu thuẫn ngủ yên vì chưa màn hình nhân viên
+        // nào vẽ liên hệ ra; màn "thành viên nhóm lớp" của US-13 đánh thức nó.
+        // Chủ dự án chốt: theo luật PII chung. KHÔNG vá ngược case này.
+        expect(ph1?.contact?.phone ?? null).toBeNull();
+        expect(ph1?.contact?.email ?? null).toBeNull();
+
+        // Nhưng vẫn phải ĐỦ DÙNG: GV cần nhận ra ai là ai để nhắn riêng.
+        expect(ph1?.userId).toBe(w.users.ph1);
       },
       CASE_TIMEOUT,
     );
+
+    // Đối chứng "QLCS VẪN thấy đầy đủ liên hệ" nằm ở tests/chat/list-and-admin-search.spec.ts
+    // — `createWorld` của file này chỉ dựng TEACHER + PARENT, không có quản lý cơ sở. Đối
+    // chứng đó bắt buộc phải tồn tại ở đâu đó: thiếu nó thì một bản vá "ẩn liên hệ với TẤT CẢ"
+    // cũng làm mọi thứ xanh, mà siết vậy là chặn cả người cần gọi phụ huynh về học phí.
 
     it(
       "PH xem danh sách thành viên → duyệt SÂU payload KHÔNG còn SĐT/email của AI",

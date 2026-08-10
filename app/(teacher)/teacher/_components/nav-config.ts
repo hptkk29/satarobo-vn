@@ -19,6 +19,11 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /**
+   * Mục có badge số động. `"chat"` = tổng tin nhắn chưa đọc — số do layout (RSC) tính rồi
+   * truyền xuống, sidebar chỉ VẼ (cùng nguyên tắc "layout tính, nav vẽ" của admin).
+   */
+  badge?: "chat";
 }
 
 export interface NavGroup {
@@ -65,7 +70,7 @@ export const navGroups: NavGroup[] = [
       // ⚠️ href PHẢI giữ tiền tố `/teacher`: clean URL `/tin-nhan` trên host giaovien
       // trùng segment admin (`ADMIN_ROUTE_SEGMENTS` có "tin-nhan") nên bị decideRoute
       // đá về trang chủ GV — cùng vết với `hoc-ba`/`don-tu` đã có.
-      { label: "Tin nhắn", href: "/teacher/tin-nhan", icon: MessageCircle },
+      { label: "Tin nhắn", href: "/teacher/tin-nhan", icon: MessageCircle, badge: "chat" },
     ],
   },
   {
