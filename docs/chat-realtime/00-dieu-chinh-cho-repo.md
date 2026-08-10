@@ -162,11 +162,22 @@ nhánh realtime là fake-timer + transport giả, còn test broadcast thì `fetc
 | Luật E-ter | Test khoá nó | Đột biến đã kiểm ngược (sửa vào là ĐỎ) |
 |---|---|---|
 | 1 — cấm `setAuth` khi còn kênh `joined` | `lib/chat/supabase-client.test.ts` → *"gia hạn: rời HẾT kênh → setAuth → join lại"*, *"subscribe MỚI giữa chu kỳ"*, *"unsubscribe GIỮA lúc gia hạn"* | bỏ bước rời-kênh trong `swapAuth`; bỏ guard `if (!swapInFlight)`; bỏ CẢ `entries.delete` lẫn cờ `released` |
+| **1-ter — phải tự cấp callback `accessToken`** (bổ sung 10/08, xem ghi chú dưới bảng) | `lib/chat/supabase-client.test.ts` → nhóm *"LUẬT 1-ter — vé phải sống qua nhịp heartbeat"*: *"createClient PHẢI nhận callback"*, *"kênh mở MUỘN sau nhịp heartbeat vẫn join bằng VÉ"*, *"gia hạn vé ⇒ callback trả vé MỚI"* | xoá `accessToken:` khỏi `createClient`; giữ callback nhưng bỏ `ticketForConnection = current.token` trong `swapAuth` (**cả hai đều làm 17 test cũ VẪN XANH**) |
 | 2 — kênh CLOSED không tự hồi ⇒ phải tự nối lại có backoff | `components/chat/use-chat-channel.test.ts` + `user-channel.test.ts` → nhóm *"tự nối lại khi kênh đóng ngoài ý muốn"* | `setStatus("closed")` rồi thôi; bỏ nhân đôi backoff; gia hạn vé nuốt mất lượt nối lại (`clearTimers` thay `clearTokenTimers`) |
 | 3 — TTL vé là CẬN TRÊN của lỗ rò | `lib/chat/realtime-token.test.ts` → *"TTL 5 phút"* | nâng TTL về 900s |
-| 4 — trần lô thật của endpoint | `lib/chat/broadcast.test.ts` → *"mảng 205 → [60,60,60,25]"*, *"endpoint mô phỏng theo SỐ ĐO THẬT"*, *"lô ĐẦY rụng ⇒ log truy ra được ai mất tin"* | trần lô về 200; nuốt lỗi HTTP; bỏ trần đồng thời; log chỉ in `batch[0].topic` |
+| 4 — trần lô thật của endpoint | `lib/chat/broadcast.test.ts` → *"mảng 205 → [60,60,60,25]"*, *"endpoint mô phỏng theo SỐ ĐO THẬT"*, *"lô ĐẦY rụng ⇒ log truy ra được ai mất tin"*, **+ *"hết ngân sách tổng ⇒ BỎ lô còn lại"*** | trần lô về 200; nuốt lỗi HTTP; bỏ trần đồng thời; log chỉ in `batch[0].topic`; **vô hiệu hoá guard `remainingBudget <= 0`** |
 | 5 — đọc người nhận trong tx, sau câu khoá, đúng thứ tự khoá | `lib/chat/moderation-broadcast.test.ts` → *"đọc người nhận NẰM TRONG transaction…"*, *"đường kiểm duyệt: … khoá participant SAU conversation.update"* | đưa việc đọc ra ngoài tx; bỏ câu `updateMany` khoá; bỏ `{timeout:30_000,maxWait:10_000}`; khoá participant trước `conversation.update` |
 
+> ⚠️ **Luật 1-ter từng nằm trong tài liệu mà KHÔNG có dòng test nào khoá** (rà lại 10/08 sau
+> khi vá): mock `createClient` của `supabase-client.test.ts` vứt bỏ tham số options, nên xoá
+> `accessToken: async () => ticketForConnection ?? anonKey` vẫn cho typecheck + lint + build +
+> **toàn bộ** unit test XANH — trong khi hậu quả thật là realtime **chết vĩnh viễn** tới khi
+> tải lại trang. Nay mock mô phỏng đúng cơ chế đã đọc trong thư viện: `realtime.setAuth(jwt)`
+> đặt `accessTokenValue`, `heartbeat()` ghi đè nó bằng giá trị callback trả về (thiếu callback
+> ⇒ anon key), và `subscribe()` ghi lại ĐÚNG giá trị đó làm vé JOIN. Bài giữa nhóm tái dựng
+> đường thật đã đo (V3): kênh thứ hai mount MUỘN khi vé cũ còn hạn ⇒ `applyRealtimeAuth` thoát
+> sớm, không `setAuth`, nên vé JOIN chính là thứ heartbeat vừa ghi đè.
+>
 > ⚠️ Bộ test này chỉ có răng nhờ hai thứ, đừng gỡ khi refactor: `fetch` giả của
 > `broadcast.test.ts` **mô phỏng đúng ngưỡng từ chối đã đo** (n≥95 hỏng) thay vì luôn trả 202
 > — bản cũ luôn-202 chính là thứ đã bảo lãnh cho ngưỡng 200 hỏng; và mock Prisma của

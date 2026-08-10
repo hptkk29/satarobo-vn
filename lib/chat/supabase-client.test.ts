@@ -40,6 +40,36 @@ let liveChannels: FakeChannel[] = [];
 /** Nhật ký thao tác theo THỨ TỰ — chỗ duy nhất chứng minh được "setAuth khi không còn kênh". */
 let trace: string[] = [];
 
+const ANON_KEY = "anon-key-gia";
+
+/**
+ * Tuỳ chọn `createClient` — bản mock CŨ VỨT BỎ tham số này, và chính vì thế luật 1-ter
+ * ("phải tự cấp callback `accessToken`") VÔ HÌNH với mọi bài test: xoá dòng đó khỏi
+ * `supabase-client.ts` thì typecheck + lint + build + toàn bộ unit test vẫn xanh, trong khi
+ * realtime trên prod chết vĩnh viễn sau nhịp heartbeat đầu tiên.
+ */
+type CreateClientOpts = { accessToken?: () => Promise<string> };
+let clientOpts: CreateClientOpts | null = null;
+
+/**
+ * `RealtimeClient.accessTokenValue` — giá trị mà `RealtimeChannel.subscribe()` NHÉT VÀO
+ * PAYLOAD JOIN. Đây là biến quyết định ai được vào kênh, không phải vé ta cầm trong tay.
+ */
+let accessTokenValue: string = ANON_KEY;
+/** Vé thực sự đi kèm MỖI lần join, theo thứ tự. */
+let joinTokens: string[] = [];
+
+/**
+ * Mô phỏng `_wrapHeartbeatCallback` → `_setAuthSafely()` của `@supabase/realtime-js`: mỗi
+ * nhịp 25s, thư viện tự lấy token từ callback `accessToken` rồi ghi đè `accessTokenValue`.
+ * KHÔNG có callback ⇒ `_getAccessToken()` rơi về `supabaseKey` (anon key) vì repo này dùng
+ * Auth.js chứ không dùng Supabase Auth. Đo thật 10/08 (V3, `_zztest-chat-token-va-lo.ts`):
+ * join MUỘN sau ≥2 nhịp heartbeat → `CHANNEL_ERROR: Unauthorized`, không bao giờ vào lại được.
+ */
+async function heartbeat(): Promise<void> {
+  accessTokenValue = clientOpts?.accessToken ? await clientOpts.accessToken() : ANON_KEY;
+}
+
 const createChannel = vi.fn((topic: string, _opts: ChannelOpts) => {
   const existing = liveChannels.find((c) => c.topic === topic);
   if (existing) return existing;
@@ -56,6 +86,9 @@ const createChannel = vi.fn((topic: string, _opts: ChannelOpts) => {
     },
     subscribe: vi.fn((cb?: (status: string) => void) => {
       channel.joined = true;
+      // `RealtimeChannel.subscribe()` gửi `socket.accessTokenValue` trong payload JOIN —
+      // KHÔNG phải vé mà người gọi vừa cầm. Ghi lại đúng giá trị đó.
+      joinTokens.push(accessTokenValue);
       trace.push(`join:${topic}`);
       cb?.("SUBSCRIBED");
       return channel;
@@ -65,6 +98,7 @@ const createChannel = vi.fn((topic: string, _opts: ChannelOpts) => {
   return channel;
 });
 const setAuth = vi.fn(async (jwt: string) => {
+  accessTokenValue = jwt;
   trace.push(`setAuth:${jwt}:joined=${liveChannels.filter((c) => c.joined).length}`);
 });
 const removeChannel = vi.fn(async (channel: FakeChannel) => {
@@ -75,11 +109,14 @@ const removeChannel = vi.fn(async (channel: FakeChannel) => {
 });
 
 vi.mock("@supabase/supabase-js", () => ({
-  createClient: () => ({
-    channel: (topic: string, opts: ChannelOpts) => createChannel(topic, opts),
-    removeChannel: (channel: FakeChannel) => removeChannel(channel),
-    realtime: { setAuth: (jwt: string) => setAuth(jwt) },
-  }),
+  createClient: (_url: string, _key: string, opts?: CreateClientOpts) => {
+    clientOpts = opts ?? null;
+    return {
+      channel: (topic: string, chOpts: ChannelOpts) => createChannel(topic, chOpts),
+      removeChannel: (channel: FakeChannel) => removeChannel(channel),
+      realtime: { setAuth: (jwt: string) => setAuth(jwt) },
+    };
+  },
 }));
 
 /** Vé hợp lệ: `expiresAt` là ISO thật vì `applyRealtimeAuth` so mốc hết hạn. */
@@ -94,8 +131,11 @@ beforeEach(() => {
   removeChannel.mockClear();
   liveChannels = [];
   trace = [];
+  clientOpts = null;
+  accessTokenValue = ANON_KEY;
+  joinTokens = [];
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://zztest.supabase.co";
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key-gia";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = ANON_KEY;
 });
 
 async function load() {
@@ -403,5 +443,74 @@ describe("applyRealtimeAuth — đổi vé là thao tác MỨC KẾT NỐI", () 
     await vi.waitFor(() => expect(trace).toContain("join:user:u1"));
     // 2) người giữ kênh hỏng ĐƯỢC BÁO, nếu không thì bộ nối-lại của họ không bao giờ chạy.
     await vi.waitFor(() => expect(convStatuses).toContain("CLOSED"));
+  });
+});
+
+/**
+ * LUẬT 1-ter — callback `accessToken` khi tạo client.
+ *
+ * Luật này nằm trong `docs/chat-realtime/00-dieu-chinh-cho-repo.md` §E-ter từ 10/08 nhưng
+ * KHÔNG có dòng test nào khoá nó: mock `createClient` cũ vứt bỏ tham số options, nên xoá
+ * `accessToken: async () => ticketForConnection ?? anonKey` khỏi `supabase-client.ts` vẫn
+ * cho typecheck + lint + build + toàn bộ unit test XANH. Đúng loại điểm mù mà cả đợt đo
+ * 10/08 sinh ra để diệt, và là điểm mù ĐẮT NHẤT còn lại: hậu quả không phải một tin trễ mà
+ * là realtime CHẾT VĨNH VIỄN tới khi người dùng tải lại trang.
+ *
+ * Cơ chế (đọc trong `@supabase/supabase-js@2.112.2` + `realtime-js@2.112.2`):
+ * `SupabaseClient` LUÔN truyền `accessToken` xuống `RealtimeClient`; thiếu callback của ta
+ * thì nó rơi về `supabaseKey` = ANON KEY (repo dùng Auth.js, không có phiên Supabase Auth).
+ * `_wrapHeartbeatCallback` gọi `_setAuthSafely()` mỗi nhịp 25s ⇒ ghi đè `accessTokenValue`,
+ * mà `RealtimeChannel.subscribe()` nhét chính giá trị đó vào payload JOIN.
+ */
+describe("LUẬT 1-ter — vé phải sống qua nhịp heartbeat (callback `accessToken`)", () => {
+  it("createClient PHẢI nhận callback `accessToken`, và callback trả VÉ chứ không phải anon key", async () => {
+    const { subscribeConversation } = await load();
+    subscribeConversation("c1", auth("jwt-1"));
+    await vi.waitFor(() => expect(trace).toContain("join:conv:c1"));
+
+    // Không có callback ⇒ thư viện tự "làm mới" bằng anon key mỗi 25s.
+    expect(typeof clientOpts?.accessToken).toBe("function");
+    // Có callback nhưng trả nhầm giá trị cũng hỏng y hệt — khoá luôn giá trị.
+    await expect(clientOpts!.accessToken!()).resolves.toBe("jwt-1");
+  });
+
+  /**
+   * ĐÂY LÀ ĐƯỜNG THẬT ĐÃ ĐO (V3): kênh thứ hai mở MUỘN trong khi vé cũ VẪN CÒN HẠN.
+   * `applyRealtimeAuth` thấy `auth.token === appliedToken` nên thoát sớm — KHÔNG `setAuth`
+   * — rồi `openChannel` join thẳng bằng `accessTokenValue` hiện có. Sau một nhịp heartbeat,
+   * giá trị đó là ANON KEY nếu thiếu callback ⇒ RLS từ chối ⇒ `CHANNEL_ERROR: Unauthorized`
+   * lặp mãi (đo được ở +65,6 / +71,4 / +78,2 / +88,5 / +103,4 / +118,2s, không lần nào vào lại).
+   *
+   * Hình dạng này có thật trong sản phẩm: badge `user:{id}` và kênh `conv:{id}` mount ở hai
+   * thời điểm khác nhau nhưng dùng CHUNG một vé còn hạn.
+   */
+  it("kênh mở MUỘN sau nhịp heartbeat (vé cũ còn hạn, không setAuth) vẫn join bằng VÉ", async () => {
+    const { subscribeConversation, subscribeUserTopic } = await load();
+    subscribeConversation("c1", auth("jwt-1"));
+    await vi.waitFor(() => expect(trace).toContain("join:conv:c1"));
+    expect(joinTokens).toEqual(["jwt-1"]);
+
+    await heartbeat(); // 25s trôi qua, thư viện tự làm mới token của kết nối
+
+    subscribeUserTopic("u1", auth("jwt-1")); // CÙNG vé ⇒ không có setAuth nào chạy
+    await vi.waitFor(() => expect(trace).toContain("join:user:u1"));
+
+    expect(setAuth).toHaveBeenCalledTimes(1); // đúng là đã đi đường "thoát sớm"
+    expect(joinTokens).toEqual(["jwt-1", "jwt-1"]); // KHÔNG được là anon key
+  });
+
+  it("gia hạn vé ⇒ callback trả vé MỚI (quên cập nhật = heartbeat kéo kết nối về vé cũ)", async () => {
+    const { subscribeConversation, applyRealtimeAuth } = await load();
+    subscribeConversation("c1", auth("jwt-1", 10));
+    await vi.waitFor(() => expect(trace).toContain("join:conv:c1"));
+
+    applyRealtimeAuth(auth("jwt-2", 300));
+    await vi.waitFor(() => expect(trace).toContain("join:conv:c1"));
+    await vi.waitFor(() => expect(setAuth).toHaveBeenCalledWith("jwt-2"));
+
+    await expect(clientOpts!.accessToken!()).resolves.toBe("jwt-2");
+    // Nhịp heartbeat sau khi gia hạn không được kéo kết nối về vé cũ/anon key.
+    await heartbeat();
+    expect(accessTokenValue).toBe("jwt-2");
   });
 });

@@ -371,6 +371,53 @@ describe("[bump] broadcastMessages — chia lô theo trần THẬT của endpoin
     expect(peak).toBe(2);
   });
 
+  /**
+   * Trần ngân sách TỔNG (`BROADCAST_TOTAL_BUDGET_MS`) — nhánh duy nhất của module này
+   * chưa từng có test nào chạy qua, dù nó là thứ quyết định hành vi khi endpoint chậm
+   * đúng như đã ĐO: ~0,70 giây MỖI PHẦN TỬ và tuyến tính (n=60 → 41,8s). Một lớp lớn
+   * chia 3 lô là chạm trần thật, không phải tình huống giả định.
+   *
+   * Hai điều được khoá ở đây, và cả hai đều là bài học phải trả giá mới có:
+   *  • hết ngân sách thì DỪNG, không bắn tiếp (bản không có trần sẽ chạy tới lúc Vercel
+   *    cắt ngang việc-sau-response, và lúc đó không còn log nào để biết chuyện gì xảy ra);
+   *  • dừng thì phải KÊU, và kêu đủ để TRUY RA AI MẤT TIN. Im lặng ở đây tái lập đúng lỗi
+   *    đã đo 10/08: 8/12 người mẫu mất bump trong khi `probeAlive` chứng minh tai họ vẫn
+   *    nghe được — mất tín hiệu mà không ai biết là loại hỏng đắt nhất của module này.
+   */
+  it("hết ngân sách tổng ⇒ BỎ lô còn lại, trả false và log truy ra được ai mất tin", async () => {
+    let nowMs = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => nowMs);
+    // Mỗi lô 60 phần tử ngốn ~42s theo số đo thật; lấy tròn 30s để 2 lô đầu vừa lọt
+    // ngân sách 45s còn lô thứ ba thì chắc chắn hết.
+    const fetchMock = vi.fn(async () => {
+      nowMs += 30_000;
+      return new Response("{}", { status: 202 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { broadcastMessages, userBumpBroadcasts } = await loadModule();
+    const ids = Array.from({ length: 130 }, (_, i) => `u${i}`); // 3 lô: [60, 60, 10]
+    const ok = await broadcastMessages(
+      userBumpBroadcasts(ids, {
+        conversationId: "c1",
+        messageId: "m1",
+        kind: "CHAT",
+        at: "2026-08-09T00:00:00.000Z",
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2); // lô 3 KHÔNG được bắn
+    expect(ok).toBe(false); // và người gọi phải biết là lượt này KHÔNG trọn vẹn
+
+    const logged = warnSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+    expect(logged).toContain("Hết ngân sách");
+    expect(logged).toContain("lô 3/3");
+    expect(logged).toContain("n=10");
+    // Đủ để truy ra ai mất tin — không phải một dòng "đã bỏ một lô".
+    expect(logged).toContain("user:u120");
+    expect(logged).toContain("user:u129");
+  });
+
   it("mảng rỗng → KHÔNG gọi fetch, trả true (không POST body rỗng)", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
