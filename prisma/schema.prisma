@@ -5861,3 +5861,258 @@ model EvalAnswer {
 // NOTE(reconcile FixLMS→main): messaging FixLMS (MessageThread/Message, LMS-15) đã GỠ
 // — D6 theo MAIN dùng ConversationMessage (per-enrollmentId). RevenueTarget bản FixLMS
 // (`amount`, LMS-16) đã GỠ — giữ bản MAIN (`targetAmount`) ở trên.
+
+// ============================================================================
+// === CHAT REALTIME (Đợt 0) ===
+// Schema theo BA-chat-realtime-satarobo.md mục 4 + delta 00-dieu-chinh-cho-repo.md.
+// KHÁC hệ cũ ConversationMessage (per-enrollment) — hệ mới thay thế ở Đợt 1 (Q3).
+// userId/senderId là String trần (User.id cuid) — BA cố ý KHÔNG relation sang User.
+// Quyền đọc/gửi là participant-based; Conversation.centerId chỉ phục vụ truy vấn
+// quản trị (SCOPE_EXEMPT — DM có centerId=null, xem delta mục E.3).
+// ============================================================================
+
+enum ConversationType {
+  CLASS_GROUP
+  DM_TEACHER_PARENT
+  DM_SALE_PARENT
+  DM_STAFF // reserve cho cây B, chưa dùng ở P0
+}
+
+enum ConversationSubjectType {
+  CLASS
+  NONE
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+  LOCKED
+}
+
+enum ParticipantRole {
+  OWNER
+  MODERATOR
+  MEMBER
+  OBSERVER
+}
+
+enum ParticipantSource {
+  DERIVED
+  MANUAL
+}
+
+enum DerivedFrom {
+  CLASS_TEACHER
+  CLASS_STUDENT_PARENT
+  CENTER_MANAGER
+}
+
+enum MessageKind {
+  CHAT
+  ANNOUNCEMENT
+  SYSTEM
+}
+
+model Conversation {
+  id     String             @id @default(uuid())
+  type   ConversationType
+  status ConversationStatus @default(ACTIVE)
+
+  // Phạm vi tổ chức — phục vụ quyền quản trị, KHÔNG dùng để suy ra thành viên
+  centerId  String?
+  orgUnitId String?
+
+  // Đa hình
+  subjectType ConversationSubjectType @default(NONE)
+  subjectId   String?
+
+  // Khoá duy nhất cho hội thoại 1-1: sort 2 userId rồi nối — chống tạo trùng (BR-06)
+  dmKey String? @unique
+
+  title         String?
+  lastMessageAt DateTime?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  archivedAt    DateTime?
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@unique([type, subjectType, subjectId])
+  @@index([centerId, status, lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String @id @default(uuid())
+  conversationId String
+  userId         String // User.id (cuid) — không relation, BA cố ý
+
+  role        ParticipantRole   @default(MEMBER)
+  source      ParticipantSource @default(DERIVED)
+  derivedFrom DerivedFrom?
+
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  lastReadMessageId String?
+  lastReadAt        DateTime?
+  unreadCount       Int       @default(0)
+  muted             Boolean   @default(false)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([conversationId, userId])
+  @@index([userId, leftAt]) // truy vấn "danh sách hội thoại của tôi"
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String
+  senderId       String? // null khi kind = SYSTEM
+  kind           MessageKind @default(CHAT)
+
+  body      String  @db.Text
+  replyToId String? // một cấp, không lồng nhau
+
+  // Idempotency gửi lại (US-06 AC4/TS-10.4) — client sinh, SYSTEM message không có
+  clientMsgId String?
+
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedReason String?
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id])
+  attachments  MessageAttachment[]
+
+  @@unique([conversationId, senderId, clientMsgId])
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([conversationId, kind, createdAt(sort: Desc)]) // lọc ANNOUNCEMENT
+}
+
+model MessageAttachment {
+  id          String  @id @default(uuid())
+  messageId   String
+  storagePath String // R2 private, prefix `chat-attachments/` + signed URL (delta Q2)
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  message     Message @relation(fields: [messageId], references: [id])
+}
+
+// Chỉ dùng cho ANNOUNCEMENT — GV cần biết PH nào đã đọc thông báo lịch học
+model AnnouncementRead {
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  @@id([messageId, userId])
+}
+
+// ── US-04: job đối soát thành viên hằng đêm (cron chat-membership-reconcile) ──
+// Log kỹ thuật của lưới cuối chống drift: REMOVE tự thi hành (leftAt), ADD chỉ log.
+// Chỉ SUPER_ADMIN xem qua /admin/hoi-thoai/doi-soat (gate chat:admin) — SCOPE_EXEMPT
+// trong lib/db-scope.ts. centerId + orgUnitId ghi kép theo luật Nền Hệ thống #3.
+
+enum MembershipDriftType {
+  REMOVE // phải rời mà chưa — job TỰ set leftAt (autoEnforced=true)
+  ADD // phải có mà thiếu — job CHỈ log, chờ người xử lý (pre-mortem T5)
+}
+
+model ConversationMembershipDrift {
+  id             String              @id @default(uuid())
+  conversationId String
+  classId        String
+  userId         String // User.id (cuid) — không relation, đồng bộ với ConversationParticipant
+  driftType      MembershipDriftType
+  detail         String // luồng nghi vấn / ngữ cảnh (derivedFrom, lý do nghi)
+  autoEnforced   Boolean             @default(false)
+  centerId       String?
+  orgUnitId      String?
+  createdAt      DateTime            @default(now())
+
+  @@index([createdAt])
+  @@index([classId, createdAt])
+}
+
+// Mỗi lần cron chạy = 1 record — phân biệt "đêm sạch" (removeCount=addCount=0)
+// với "job không chạy" (không có record) — US-04 AC4 / cron.md mục 4.
+model ConversationReconcileRun {
+  id             String   @id @default(uuid())
+  ranAt          DateTime @default(now())
+  classesChecked Int
+  removeCount    Int
+  addCount       Int
+  durationMs     Int
+  /// Lớp ACTIVE CHƯA có nhóm chat tại thời điểm chạy — job KHÔNG tự tạo (luật "job không
+  /// tự thêm người/nhóm"), chỉ báo động. >0 = có lớp lọt lưới BR-01 (vd lớp đã ACTIVE từ
+  /// trước khi module chat ra đời) ⇒ chạy scripts/backfill-nhom-lop-chat.ts.
+  /// Default 0 để dòng cũ (trước 09/08/2026) đọc được, KHÔNG phải "0 lớp thiếu" đã đo.
+  missingConversations Int @default(0)
+}
+
+// ── US-14: sổ gửi ZNS "có tin nhắn mới" (cron chat-zns-notify) ───────────────
+// Bảng này là CHỐT CHỐNG TRÙNG, không phải log cho vui: mỗi tin 400đ và ZNS không
+// thu hồi được. Hai lượt cron chồng nhau (Vercel retry, GitHub pump trên test) phải
+// va vào UNIQUE `(conversationId, userId, messageId)` chứ không được gửi đôi.
+// Quy trình: GIÀNH CHỖ trước (status PENDING) → gửi → cập nhật kết quả. Giành chỗ
+// trước nên nếu tiến trình chết giữa chừng thì lượt sau KHÔNG gửi lại (fail-safe
+// nghiêng về "thiếu một lời nhắc" thay vì "trừ tiền hai lần").
+
+enum ChatZnsStatus {
+  PENDING // đã giành chỗ, chưa biết kết quả (tiến trình chết giữa chừng thì dừng ở đây)
+  SENT // Zalo nhận thật
+  SIMULATED // provider mô phỏng (ZALO_LIVE tắt) — PHỤ HUYNH KHÔNG NHẬN GÌ
+  SKIPPED // thiếu điều kiện gửi (không có SĐT / chưa cấu hình credential)
+  FAILED // Zalo từ chối
+}
+
+model ChatZnsNotification {
+  id             String @id @default(uuid())
+  conversationId String
+  /// Phụ huynh nhận tin (User.id cuid) — không relation, đồng bộ ConversationParticipant.
+  userId         String
+  /// Tin "mốc": tin CŨ NHẤT chưa đọc đã quá ngưỡng (lib/chat/zns-notify-rules.ts).
+  /// Tất định giữa các lượt quét — nhờ vậy UNIQUE bên dưới mới chặn được trùng.
+  messageId      String
+  messageKind    MessageKind
+  status         ChatZnsStatus @default(PENDING)
+  /// ZaloMessageLog.id — đường duy nhất truy ngược "tin này gửi cho ai, vì việc gì"
+  /// (ZaloMessageLog không có cột userId/entityId).
+  znsLogId       String?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  sentAt         DateTime?
+
+  @@unique([conversationId, userId, messageId])
+  /// Trần chống bão: "phụ huynh này đã được nhắc ở hội thoại này trong X phút qua chưa".
+  @@index([conversationId, userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// ── US-16: mốc ĐỒNG Ý chính sách sử dụng chat (onboarding PH) ────────────────
+// Cổng chặn Ở SERVER: chưa có dòng nào ở version hiện hành thì `/portal/tin-nhan/**`
+// KHÔNG trả một chữ nội dung nào (layout + từng page tự kiểm — lib/chat/policy.ts).
+//
+// Vì sao BẢNG MỚI chứ không tái dùng `StudentConsent`: consent kia gắn theo `studentId`
+// và enum `ConsentType` chỉ có `CLASS_MEDIA`; còn "đồng ý điều khoản chat" là hành vi của
+// NGƯỜI DÙNG (1 PH nhiều con vẫn bấm một lần) — nhét vào đó là sai chủ thể + phải đụng
+// enum đang chạy prod.
+//
+// Vì sao có cột `version`: đổi nội dung chính sách thì tăng CHAT_POLICY_VERSION là mọi PH
+// phải đồng ý lại — bản ghi CŨ giữ nguyên (bằng chứng "lúc đó họ đồng ý với bản nào").
+// UNIQUE (userId, version) làm luôn nhiệm vụ chống ghi đôi khi bấm 2 lần / 2 tab.
+model ChatPolicyAcceptance {
+  id String @id @default(uuid())
+  /// User.id (cuid) — không relation, đồng bộ với ConversationParticipant/Message.
+  userId     String
+  /// CHAT_POLICY_VERSION tại thời điểm bấm đồng ý (lib/chat/policy.ts).
+  version    String
+  acceptedAt DateTime @default(now())
+
+  @@unique([userId, version])
+  /// Dashboard pilot đếm "đã đồng ý trong khoảng" — theo version của bản đang phát hành.
+  @@index([version, acceptedAt])
+}

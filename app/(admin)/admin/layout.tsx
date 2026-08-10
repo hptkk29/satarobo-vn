@@ -12,6 +12,8 @@ import {
   resolveActiveRoleFrom,
 } from "@/lib/auth/active-role";
 import { grantedMenuActions } from "@/lib/auth/menu-permissions";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
+import { countChatUnreadForUser } from "@/lib/chat/unread";
 import { isEvalV2Enabled, isRbacV2Enabled, isScormEnabled } from "@/lib/flags";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
@@ -86,11 +88,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     flagOn,
   });
 
+  // Badge "Tin nhắn" — CHỈ truy vấn khi mục đó thực sự hiện trên menu, để người không dùng
+  // chat không gánh câu SQL ở MỌI trang admin. Số ban đầu do server đưa xuống (sidebar
+  // không fetch lúc mount); hỏng thì badge = 0 chứ không làm chết layout.
+  const canSeeChat = PAGE_GATES["/tin-nhan"].some((p) => granted.includes(p));
+  const chatUnread = canSeeChat
+    ? await countChatUnreadForUser(session.user.id).catch(() => 0)
+    : 0;
+  // Cùng cổng đó phải áp cho CẢ phía client, không riêng câu SQL: `useChatUnread` bỏ qua
+  // khi `userId` rỗng, nên truyền rỗng là kế toán/nhân sự (không thấy mục Tin nhắn) không
+  // mở kết nối Realtime và không gọi `/api/chat/realtime-token` trên mọi trang admin —
+  // toàn bộ chi phí đó chỉ để nuôi một badge không bao giờ hiện.
+  const chatUserId = canSeeChat ? session.user.id : "";
+
   return (
     <div className="admin-scope flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex md:shrink-0">
-        <Sidebar granted={granted} evalV2Enabled={isEvalV2Enabled()} scormEnabled={isScormEnabled()} />
+        <Sidebar
+          granted={granted}
+          userId={chatUserId}
+          chatUnread={chatUnread}
+          evalV2Enabled={isEvalV2Enabled()}
+          scormEnabled={isScormEnabled()}
+        />
       </div>
 
       {/* Main */}

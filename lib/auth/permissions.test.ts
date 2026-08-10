@@ -276,12 +276,34 @@ describe("permissions matrix — sanity", () => {
 // Trước bản vá 09/07 có 4 action rơi vào bẫy này: leads:view-own,
 // students:view-own-class, classes:view-own, enrollments:view-own.
 describe("permissions matrix — SUPER_ADMIN phủ toàn bộ action (khớp bypass v2)", () => {
-  it("mọi action trong ALL_ACTIONS đều cấp cho SUPER_ADMIN", () => {
-    const thieu = ALL_ACTIONS.filter((a) => !PERMISSIONS[a].includes("SUPER_ADMIN"));
+  // US-05 chat (08/08/2026) — ngoại lệ DUY NHẤT, có chủ đích: Admin KHÔNG gửi CHAT
+  // (US-15 AC4 — chế độ xem của Admin là chỉ đọc; permissions.md ô "Gửi CHAT/Admin").
+  // v2 bypass vẫn true cho SUPER_ADMIN ⇒ chốt chặn thật là participant-check trong
+  // action (US-06); v1 deny để pin ý định. Lệch v1/v2 ở đây được CHẤP NHẬN — admin
+  // không có UI gửi CHAT nên shadow-compare không phát sinh diff từ traffic thật.
+  // ⚠️ Danh sách này KHÔNG được phình ra nếu không có quyết định tương đương US-15 AC4.
+  const NGOAI_LE_CHI_DOC = new Set<string>(["chat:send"]);
+
+  it("mọi action trong ALL_ACTIONS đều cấp cho SUPER_ADMIN (trừ ngoại lệ chỉ-đọc)", () => {
+    const thieu = ALL_ACTIONS.filter(
+      (a) => !NGOAI_LE_CHI_DOC.has(a) && !PERMISSIONS[a].includes("SUPER_ADMIN"),
+    );
     expect(thieu).toEqual([]);
   });
 
-  it("can(SUPER_ADMIN, *) = true với mọi action", () => {
-    for (const a of ALL_ACTIONS) expect(can("SUPER_ADMIN", a)).toBe(true);
+  it("can(SUPER_ADMIN, *) = true với mọi action ngoài ngoại lệ", () => {
+    for (const a of ALL_ACTIONS) {
+      if (NGOAI_LE_CHI_DOC.has(a)) continue;
+      expect(can("SUPER_ADMIN", a)).toBe(true);
+    }
+  });
+
+  it("ngoại lệ đúng là deny ở v1 (không thừa dòng)", () => {
+    for (const a of NGOAI_LE_CHI_DOC) {
+      expect({ action: a, superAdminV1: can("SUPER_ADMIN", a as (typeof ALL_ACTIONS)[number]) }).toEqual({
+        action: a,
+        superAdminV1: false,
+      });
+    }
   });
 });

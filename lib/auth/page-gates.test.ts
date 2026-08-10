@@ -12,8 +12,10 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import type { Role } from "@prisma/client";
 import { PAGE_GATES, GATE_MISMATCH_ALLOWLIST } from "@/lib/auth/page-gates";
-import { PERMISSIONS } from "@/lib/auth/permissions";
+import { PERMISSIONS, can as canV1, type Action } from "@/lib/auth/permissions";
+import { ROLE_SEED } from "../../prisma/seed-roles";
 
 const ROOT = process.cwd();
 const SIDEBAR = path.join(ROOT, "components/admin/sidebar.tsx");
@@ -87,6 +89,111 @@ describe("PAGE_GATES — bảng gate là nguồn duy nhất", () => {
     for (const href of GATE_MISMATCH_ALLOWLIST) {
       expect(Object.keys(PAGE_GATES)).not.toContain(href);
     }
+  });
+
+  /**
+   * BẤT BIẾN CHỐNG "CHẠY MÁY TÔI THÌ ĐƯỢC" (thêm 09/08/2026).
+   *
+   * Gate cấp trang gọi `checkAnyPermission(PAGE_GATES[href])` **không có target**.
+   * Dưới RBAC v2 (đang bật prod) `scopeMatches` đòi target với CENTER/ASSIGNED/CLASS/OWN
+   * (lib/auth/can.ts:18,29) ⇒ action seed ở scope đó trả FALSE khi gọi trần: vai giữ
+   * đúng quyền vẫn bị khoá ngoài cửa TRÊN PROD, còn máy dev (v1 tĩnh) vẫn xanh nên
+   * không ai thấy. Đây chính là bẫy đã suýt dính khi định gác /tin-nhan bằng `chat:read`
+   * (QLCS=CENTER, GV=ASSIGNED).
+   *
+   * Luật: action nào xuất hiện trong PAGE_GATES thì ở MỌI RoleDef giữ nó phải là GLOBAL
+   * (cách ly cơ sở đã do scopedDb + kiểm CÓ target ở tầng action lo).
+   */
+  it("mọi action trong bảng phải là GLOBAL ở mọi RoleDef giữ nó (gate gọi KHÔNG target)", () => {
+    const gateActions = new Set<string>(Object.values(PAGE_GATES).flat());
+    const viPham: string[] = [];
+    for (const role of ROLE_SEED) {
+      for (const p of role.perms) {
+        if (gateActions.has(p.action) && p.scopeType !== "GLOBAL") {
+          viPham.push(`${role.code} · ${p.action} = ${p.scopeType}`);
+        }
+      }
+    }
+    expect(
+      viPham,
+      `Action dùng làm gate nhưng seed non-GLOBAL (gọi trần sẽ FALSE trên prod):\n  - ${viPham.join("\n  - ")}\n`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * /tin-nhan — ai được vào màn chat của site admin.
+ *
+ * Hợp đồng: `docs/chat-realtime/permissions.md` cho Sale ❌ ở MỌI ô chat; TestScenarios
+ * TS-01.6 đòi "sale1 gọi mọi endpoint chat → 403 toàn bộ". Trước 09/08/2026 gate là
+ * `["parent-requests:manage", "classes:view-own"]`, mà `parent-requests:manage` là chìa
+ * khoá CSKH của Sale (dùng cho /cham-soc-hv, /canh-bao-rui-ro — không gỡ khỏi Sale
+ * được) ⇒ Sale mở được /tin-nhan (200, danh sách rỗng). Cửa mở trong khi hợp đồng nói
+ * đóng, nên gate đổi sang `students:view-own-class`.
+ *
+ * Kiểm CẢ HAI tầng: v1 (chạy local/dev) và v2 (đang enforce prod) phải cho cùng câu
+ * trả lời — lệch tầng chính là chỗ bug ẩn.
+ */
+describe("/tin-nhan — Sale bị chặn, QLCS/GV/Admin vẫn vào được", () => {
+  const GATE = PAGE_GATES["/tin-nhan"];
+
+  /** v1: vào được ⟺ có ≥1 action trong gate (đúng ngữ nghĩa checkAnyPermission). */
+  const vaoDuocV1 = (role: Role) => GATE.some((a) => canV1(role, a as Action));
+
+  /** v2 gọi TRẦN: chỉ perm GLOBAL mới ăn (SUPER_ADMIN bypass, xử lý riêng). */
+  const vaoDuocV2 = (roleCode: string) => {
+    const r = ROLE_SEED.find((x) => x.code === roleCode);
+    if (!r) throw new Error(`ROLE_SEED thiếu RoleDef ${roleCode}`);
+    if (roleCode === "SUPER_ADMIN") return true; // can() v2 bypass vai quản trị tối cao
+    return r.perms.some(
+      (p) => (GATE as readonly string[]).includes(p.action) && p.scopeType === "GLOBAL",
+    );
+  };
+
+  it("[TS-01.6] Sale KHÔNG vào được — cả v1 lẫn v2", () => {
+    expect(vaoDuocV1("SALES_CSM")).toBe(false);
+    expect(vaoDuocV2("CENTER_SALES_CSM")).toBe(false);
+  });
+
+  it("QLCS / GV / Admin VẪN vào được — cả v1 lẫn v2 (không khoá nhầm cửa chính)", () => {
+    for (const role of ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"] as Role[]) {
+      expect(vaoDuocV1(role), `v1: ${role} phải vào được /tin-nhan`).toBe(true);
+    }
+    for (const code of ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"]) {
+      expect(vaoDuocV2(code), `v2: ${code} phải vào được /tin-nhan`).toBe(true);
+    }
+  });
+
+  /**
+   * Chốt 09/08/2026 — Giáo vụ vào nhóm lớp như QLCS ⇒ phải mở được CỬA màn chat.
+   * CHỈ kiểm v2: `CENTER_CLASS_MANAGER` là RoleDef gán tay, enum `Role` (v1) không có nó
+   * (lib/auth/legacy-role-map.ts) — nên không có vế v1 để so.
+   * Đi kèm: vai này KHÔNG được lọt vào /hoc-ba (BGĐ 10/07 chốt Giáo vụ không xem học bạ)
+   * — đó là lý do gate mượn `classes:view-own` chứ không mượn `students:view-own-class`.
+   */
+  it("[chốt 09/08] Giáo vụ (CENTER_CLASS_MANAGER) vào được /tin-nhan — nhưng KHÔNG lọt /hoc-ba", () => {
+    expect(vaoDuocV2("CENTER_CLASS_MANAGER"), "v2: Giáo vụ phải vào được /tin-nhan").toBe(
+      true,
+    );
+    const hocBa = PAGE_GATES["/hoc-ba"] as readonly string[];
+    const giaoVu = ROLE_SEED.find((r) => r.code === "CENTER_CLASS_MANAGER")!;
+    expect(
+      giaoVu.perms.filter((p) => hocBa.includes(p.action)).map((p) => p.action),
+      "Giáo vụ không được giữ action nào của gate /hoc-ba",
+    ).toEqual([]);
+  });
+
+  it("vai ngoài ma trận chat (HR/Kế toán/Marketing/Đào tạo/PH) KHÔNG vào được", () => {
+    for (const role of ["HR", "ACCOUNTANT", "MARKETING", "TRAINING", "PARENT"] as Role[]) {
+      expect(vaoDuocV1(role), `v1: ${role} không được vào /tin-nhan`).toBe(false);
+    }
+    for (const code of ["TRAINING", "HO_SALE", "HO_HR", "HO_ACCOUNTANT", "HO_MARKETING", "PARENT"]) {
+      expect(vaoDuocV2(code), `v2: ${code} không được vào /tin-nhan`).toBe(false);
+    }
+  });
+
+  it("gate KHÔNG được dùng chat:* (scope CENTER/ASSIGNED → gọi trần FALSE trên prod)", () => {
+    expect(GATE.filter((a) => a.startsWith("chat:"))).toEqual([]);
   });
 });
 

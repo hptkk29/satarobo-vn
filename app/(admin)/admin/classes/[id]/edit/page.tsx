@@ -12,10 +12,7 @@ import { ClassApprovalActions } from "../_components/class-approval-actions";
 import { ClassCancel } from "../_components/class-cancel";
 import { ClassReschedule } from "../_components/class-reschedule";
 import { ClassCurriculum } from "../_components/class-curriculum";
-import {
-  ClassSchedulePhases,
-  type PhaseFormValue,
-} from "../_components/class-schedule-phases";
+import type { PhaseFormValue } from "@/lib/classes/phase-form";
 import { loadClassPhases } from "@/lib/classes/phases-service";
 import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "../_components/class-sessions-manage";
@@ -267,18 +264,8 @@ export default async function EditClassPage({ params }: Props) {
         <ClassReschedule classId={cls.id} canEdit={canEdit} />
       </div>
 
-      {/* Cùng khối với màn tab /classes/[id] — sửa lịch ở đâu cũng phải có, nếu không
-          admin vào nhầm màn là không thấy kế hoạch. */}
-      <div className="mb-6">
-        <ClassSchedulePhases
-          key={phaseSignature}
-          classId={cls.id}
-          canEdit={canEdit}
-          initialPhases={phaseForm}
-          isDerived={loadedPhases?.isDerived ?? true}
-          defaultApplyFrom={defaultApplyFrom}
-        />
-      </div>
+      {/* 08/08 — Kế hoạch lịch học nay nằm TRONG <ClassForm> ở cuối trang (chỗ cũ của
+          "Lịch học trong tuần"), giống màn tab /classes/[id]. Một nơi sửa lịch, không hai. */}
 
       <div className="mb-6">
         <ClassCurriculum
@@ -315,6 +302,10 @@ export default async function EditClassPage({ params }: Props) {
         cls={formValue}
         courses={courses}
         canEdit={canEdit}
+        schedulePhases={phaseForm}
+        phasesDerived={loadedPhases?.isDerived ?? true}
+        phaseSignature={phaseSignature}
+        defaultApplyFrom={defaultApplyFrom}
         orgUnits={orgUnitsInScope.map((o) => ({
           id: o.orgUnitId,
           name: o.name,

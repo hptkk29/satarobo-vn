@@ -84,6 +84,27 @@ export const ZNS_BIRTHDAY_PARAM_SPEC = {
   date: { type: "string", max: 20 },
 } as const satisfies Record<string, ParamSpec>;
 
+/**
+ * Mẫu **"Có tin nhắn mới trong nhóm lớp"** (US-14) — mục đích *Chăm sóc khách hàng*.
+ *
+ * ⚠️ **KHÔNG có tham số nội dung tin nhắn — và đừng bao giờ thêm.** ZNS rời khỏi hệ
+ * thống (không thu hồi được, không kiểm soát được ai đọc trên máy phụ huynh); BR-30
+ * cấm đưa nội dung/liên hệ ra ngoài. Tin chỉ nói "lớp nào, ai nhắn, lúc mấy giờ" —
+ * muốn đọc thì mở portal, nơi quyền đọc được kiểm đúng một chỗ.
+ *
+ * Bộ tham số dưới đây khớp mẫu chủ dự án đã tạo trên ZBS (chốt 09/08/2026): đúng 3
+ * khoá. Đổi mẫu bên Zalo ⇒ sửa bảng này theo, `templates.test.ts` sẽ bắt lệch.
+ *
+ * ⚠️ Tin CSKH **dính khung cấm 22:00–06:00 giờ VN** (mã `-133`) — cron gửi phải tự
+ * hoãn qua khung, xem `lib/chat/zns-notify-rules.ts` (`isVnQuietHour`).
+ */
+export const ZNS_CHAT_NEW_MESSAGE_PARAM_SPEC = {
+  className: { type: "string", max: 50 },
+  senderName: { type: "string", max: 50 },
+  /** Mốc tin nhắn dạng `HH:mm dd/MM/yyyy` — 16 ký tự. */
+  time: { type: "string", max: 20 },
+} as const satisfies Record<string, ParamSpec>;
+
 const VN_TZ = "Asia/Ho_Chi_Minh";
 
 /**
@@ -106,6 +127,25 @@ export function formatZnsDateTime(d: Date): string {
   }).formatToParts(d);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
   return `${get("hour")}:${get("minute")}:${get("second")} ${get("day")}/${get("month")}/${get("year")}`;
+}
+
+/**
+ * Định dạng `HH:mm dd/MM/yyyy` (16 ký tự) — mẫu tin nhắn mới khai `time` không có giây.
+ * Cùng lý do ép múi giờ VN như `formatZnsDateTime`: app chạy region `hnd1` (UTC+9),
+ * lấy giờ máy thì phụ huynh đọc lệch 2 tiếng so với lúc giáo viên thực sự nhắn.
+ */
+export function formatZnsShortDateTime(d: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: VN_TZ,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  return `${get("hour")}:${get("minute")} ${get("day")}/${get("month")}/${get("year")}`;
 }
 
 /** Cắt theo giới hạn mẫu + thay rỗng bằng chữ đỡ, để không gửi chuỗi trống. */
@@ -179,5 +219,30 @@ export function buildBirthdayZnsParams(input: BirthdayZnsInput): Record<string, 
   return {
     studentName: clamp(input.studentName, ZNS_BIRTHDAY_PARAM_SPEC.studentName.max, "Bé yêu"),
     date: clamp(input.dateText, ZNS_BIRTHDAY_PARAM_SPEC.date.max, "—"),
+  };
+}
+
+export type ChatNewMessageZnsInput = {
+  /** Tên lớp — KHÔNG phải tên hội thoại tự do do người dùng đặt. */
+  className: string | null;
+  /** Tên người gửi (GV/QLCS). Chỗ gọi đã che liên hệ bằng `redactContactLike`. */
+  senderName: string | null;
+  /** Mốc tin nhắn — hàm tự ép về đồng hồ VN, truyền `Date` thô là đúng. */
+  at: Date;
+};
+
+/**
+ * Dựng params cho mẫu "có tin nhắn mới" — đúng bộ khoá `ZNS_CHAT_NEW_MESSAGE_PARAM_SPEC`.
+ * THUẦN: không chạm DB/mạng nên test được trực tiếp.
+ *
+ * ⚠️ Không nhận `body`/`preview`: nội dung tin KHÔNG được rời hệ thống (BR-30).
+ */
+export function buildChatNewMessageZnsParams(
+  input: ChatNewMessageZnsInput,
+): Record<string, string | number> {
+  return {
+    className: clamp(input.className, ZNS_CHAT_NEW_MESSAGE_PARAM_SPEC.className.max, "Lớp của con"),
+    senderName: clamp(input.senderName, ZNS_CHAT_NEW_MESSAGE_PARAM_SPEC.senderName.max, "Giáo viên"),
+    time: clamp(formatZnsShortDateTime(input.at), ZNS_CHAT_NEW_MESSAGE_PARAM_SPEC.time.max, "—"),
   };
 }

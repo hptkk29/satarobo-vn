@@ -5,6 +5,7 @@ import type { Role } from "@prisma/client";
 import {
   decideRoute,
   isAdminRoute,
+  isInfraPath,
   isLegacyAdminPrefixed,
   isTeacherPath,
   sanitizeCallbackUrl,
@@ -114,6 +115,17 @@ export default auth((req: NextAuthRequest) => {
   // Pure canonicalization (không liên quan auth) — giữ inline.
   // ═══════════════════════════════════════════════════════════════════
   if (kind === "vercel" && process.env.NODE_ENV === "production") {
+    // 10/08 — SỰ CỐ: MỌI cron chết im từ lúc dựng. Vercel Cron gọi vào URL deployment
+    // (`satarobo-vn.vercel.app`), request rơi đúng nhánh này rồi ăn 308 sang host thật ⇒
+    // handler KHÔNG BAO GIỜ chạy, và `Authorization: Bearer` cũng rụng khi đổi host nên
+    // có follow redirect cũng 401. Triệu chứng: `DomainEvent` tích 285 dòng PENDING,
+    // `attempts` = 0 (chưa từng được claim), không log lỗi, không ai biết.
+    // Cùng họ với bug `/monitoring` đã vá trong `isInfraPath` — lần đó chỉ vá 3 nhánh
+    // host thật, bỏ sót đúng nhánh canonical này.
+    // Canonical-hoá là chuyện SEO/người dùng; `/api/*`, `/_next/*`, sitemap… không liên
+    // quan ⇒ cho đi thẳng. Webhook ngoài (SePay/Zalo) trỏ nhầm vào .vercel.app cũng nhờ
+    // đây mà sống thay vì rụng payload im lặng.
+    if (isInfraPath(pathname)) return NextResponse.next();
     if (isLegacyAdminPrefixed(pathname)) {
       const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
       return redirectToHost(req, ADMIN_HOST, cleanPath, 308);

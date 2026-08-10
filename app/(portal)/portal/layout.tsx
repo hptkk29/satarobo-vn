@@ -8,7 +8,7 @@ import { hotlinesInline } from "@/lib/locations";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { getParentNotificationBadge } from "@/lib/portal/notification-feed";
 import { getSwitcherChildren } from "@/lib/portal/child-switcher-data";
-import { countUnreadForParent } from "@/lib/conversation/service";
+import { countChatUnreadForUser } from "@/lib/chat/unread";
 import { isEvalV2Enabled, isPortalV2Enabled } from "@/lib/flags";
 import { SiteSwitcher } from "./_components/site-switcher";
 import { PortalNav } from "./_components/portal-nav";
@@ -52,11 +52,12 @@ export default async function PortalLayout({
     // cache 60s: layout KHÔNG fan-out full feed trên mọi page view.
     const [notifCount, msgCount, switcherChildren] = await Promise.all([
       getParentNotificationBadge(session.user.id).catch(() => 0),
-      countUnreadForParent(session.user.id).catch(() => 0),
+      countChatUnreadForUser(session.user.id).catch(() => 0),
       getSwitcherChildren(session.user.id, ctx?.activeStudent?.id ?? null).catch(() => []),
     ]);
     return (
       <PortalV2Shell
+        userId={session.user.id}
         parentName={ctx?.parentName ?? session.user.name ?? "Phụ huynh"}
         parentEmail={session.user.email}
         activeStudentName={ctx?.activeStudent?.name ?? null}
@@ -83,7 +84,7 @@ export default async function PortalLayout({
 
   const [notifCount, msgCount] = await Promise.all([
     getParentNotificationCount(session.user.id).catch(() => 0),
-    countUnreadForParent(session.user.id).catch(() => 0),
+    countChatUnreadForUser(session.user.id).catch(() => 0),
   ]);
 
   return (
@@ -124,7 +125,12 @@ export default async function PortalLayout({
       ) : (
         // Sidebar DỌC + nội dung: desktop 2 cột, mobile xếp dọc (nav thu gọn "Menu").
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6 lg:flex-row lg:gap-6">
-          <PortalNav notifCount={notifCount} msgCount={msgCount} evalV2Enabled={isEvalV2Enabled()} />
+          <PortalNav
+            userId={session.user.id}
+            notifCount={notifCount}
+            msgCount={msgCount}
+            evalV2Enabled={isEvalV2Enabled()}
+          />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       )}

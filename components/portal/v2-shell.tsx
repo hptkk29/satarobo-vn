@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PortalAppearanceProvider } from "@/components/portal/appearance-provider";
 import { PortalThemeToggle } from "@/components/portal/theme-toggle";
+import { useChatUnread } from "@/components/chat/use-chat-unread";
 
 // Portal v2 (merge SataUI) — shell Cổng phụ huynh: sidebar coral + topbar profile chip.
 // Nav map sang route /portal/* của main. Bọc .portal-v2 để accent coral.
@@ -103,6 +104,7 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 export function PortalV2Shell({
+  userId,
   parentName,
   parentEmail,
   activeStudentName,
@@ -111,6 +113,8 @@ export function PortalV2Shell({
   switcherChildren = [],
   children,
 }: {
+  /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
+  userId: string;
   parentName: string;
   parentEmail?: string | null;
   activeStudentName?: string | null;
@@ -121,6 +125,10 @@ export function PortalV2Shell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // MỘT hook cho cả shell: sidebar desktop, bottom-nav mobile, menu "Thêm" và chấm tổng
+  // hợp đều đọc cùng con số qua `badgeFor` ⇒ không có chỗ nào lệch nhau.
+  const liveMsgCount = useChatUnread(userId, msgCount);
 
   // Mode = phụ huynh (coral, nav đầy đủ) hoặc học sinh (cam, 6 mục quanh việc học).
   // Suy từ URL (/portal/hoc-sinh/*) — stateless, sống qua điều hướng.
@@ -137,7 +145,7 @@ export function PortalV2Shell({
 
   // Badge số chưa đọc theo mục nav (Thông báo = chuông, Tin nhắn = hội thoại).
   const badgeFor = (href: string): number =>
-    href.endsWith("/thong-bao") ? notifCount : href === "/portal/tin-nhan" ? msgCount : 0;
+    href.endsWith("/thong-bao") ? notifCount : href === "/portal/tin-nhan" ? liveMsgCount : 0;
   const nameWords = parentName.trim().split(/\s+/).filter((w) => /\p{L}/u.test(w[0] ?? ""));
   const initials = nameWords.slice(-1)[0]?.[0]?.toUpperCase() ?? "P";
 

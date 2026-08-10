@@ -8,6 +8,7 @@ import {
   FileText,
   GraduationCap,
   LayoutDashboard,
+  MessageCircle,
   NotebookPen,
   Sparkles,
   Users,
@@ -18,6 +19,11 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /**
+   * Mục có badge số động. `"chat"` = tổng tin nhắn chưa đọc — số do layout (RSC) tính rồi
+   * truyền xuống, sidebar chỉ VẼ (cùng nguyên tắc "layout tính, nav vẽ" của admin).
+   */
+  badge?: "chat";
 }
 
 export interface NavGroup {
@@ -59,6 +65,12 @@ export const navGroups: NavGroup[] = [
       { label: "Bài tập", href: "/teacher/cham-bai", icon: ClipboardCheck },
       { label: "Kho bài tập", href: "/teacher/kho-bai-tap", icon: NotebookPen },
       { label: "Tài liệu", href: "/teacher/tai-lieu", icon: BookOpenText },
+      // Sóng 3 Đợt 1 — chat với phụ huynh NGAY TRONG site GV (trước đây phải sang site
+      // admin mới nhắn được). Đặt trong "Giảng dạy" vì nhóm lớp bám lớp mình dạy.
+      // ⚠️ href PHẢI giữ tiền tố `/teacher`: clean URL `/tin-nhan` trên host giaovien
+      // trùng segment admin (`ADMIN_ROUTE_SEGMENTS` có "tin-nhan") nên bị decideRoute
+      // đá về trang chủ GV — cùng vết với `hoc-ba`/`don-tu` đã có.
+      { label: "Tin nhắn", href: "/teacher/tin-nhan", icon: MessageCircle, badge: "chat" },
     ],
   },
   {

@@ -27,11 +27,16 @@ import { genStudentCode } from "@/lib/codegen";
 import { canTransition } from "@/lib/enrollments/status";
 import { removeStudentFromClasses } from "@/lib/students/remove-from-classes";
 import { createRefundRequest } from "@/lib/finance/refund";
+import {
+  syncConversationMembership,
+  CHAT_MEMBER_ENROLLMENT_STATUSES,
+} from "@/lib/chat/sync-membership";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import { phoneSearchTerm } from "@/lib/phone";
+import { syncStudentNameToCrm } from "@/lib/students/sync-name";
 
 type ActionResult = { error?: string };
 
@@ -258,6 +263,8 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
     }
   }
 
+  // Lead bị đổi tên theo — gom lại để revalidate SAU transaction.
+  let syncedLeadIds: string[] = [];
   try {
     await sdb.$transaction(async (txRaw) => {
       const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -277,6 +284,22 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
         changedFields: detectChangedFields(before, updated),
         tx,
       });
+
+      // 08/08 — ĐỔI TÊN HV PHẢI DỘI SANG CRM trong CÙNG transaction. Trước đây chỉ ghi
+      // `Student.name` ⇒ trang lead / chi tiết lead / học thử vẫn hiện tên cũ
+      // (`LeadChild.fullName`, `Lead.childName`, `ParentFeedback.studentName` là các
+      // bản sao rời), admin phải đi sửa tay từng màn.
+      if (before.name !== updated.name) {
+        const res = await syncStudentNameToCrm({
+          tx,
+          studentId: id,
+          oldName: before.name,
+          newName: updated.name,
+          parentPhone: updated.parentPhone ?? before.parentPhone,
+          actor: { id: actorId, name: actorName },
+        });
+        syncedLeadIds = res.leadIds;
+      }
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
@@ -287,6 +310,13 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
 
   revalidatePath("/students");
   revalidatePath(`/students/${id}/edit`);
+  if (syncedLeadIds.length > 0) {
+    revalidatePath("/leads");
+    for (const leadId of syncedLeadIds) revalidatePath(`/leads/${leadId}`);
+    // Màn học thử/lớp trải nghiệm đọc LeadChild.fullName.
+    revalidatePath("/trial-classes");
+    revalidatePath("/hoc-thu");
+  }
   redirect("/students");
 }
 
@@ -357,7 +387,7 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
         orgUnitId: before.centerId,
         tx,
       });
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
   } catch {
     return { error: "Không thể xoá học viên này" };
   }
@@ -878,7 +908,7 @@ export async function withdrawStudentAction(input: {
         studentId: input.studentId,
         status: { in: ["PENDING", "CONFIRMED", "STUDYING", "PAUSED"] },
       },
-      select: { id: true, status: true },
+      select: { id: true, status: true, classId: true },
     });
 
     for (const enr of activeEnrollments) {
@@ -924,7 +954,13 @@ export async function withdrawStudentAction(input: {
         tx,
       });
     }
-  });
+
+    // US-03 chat / TS-06 — HV nghỉ học: sync nhóm từng lớp bị ảnh hưởng, cùng tx.
+    // PH còn con khác đang học lớp đó thì Ở LẠI (điều kiện theo TẬP học viên).
+    for (const classId of new Set(activeEnrollments.map((e) => e.classId))) {
+      await syncConversationMembership(tx, classId);
+    }
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
@@ -1072,12 +1108,31 @@ export async function createParentAccount(input: {
           }
         : { id: studentId };
 
-      const res = await tx.student.updateMany({
+      // US-03 chat — cần danh sách HV bị link để sync nhóm lớp → lấy id trước khi update.
+      const linkTargets = await tx.student.findMany({
         where: siblingFilter,
+        select: { id: true },
+      });
+      const res = await tx.student.updateMany({
+        where: { id: { in: linkTargets.map((s) => s.id) } },
         data: { parentUserId },
       });
+
+      // US-03 chat — gắn tài khoản PH cho HV → PH vào nhóm các lớp con đang học, cùng tx.
+      const activeClasses = await tx.enrollment.findMany({
+        where: {
+          studentId: { in: linkTargets.map((s) => s.id) },
+          deletedAt: null,
+          status: { in: CHAT_MEMBER_ENROLLMENT_STATUSES },
+        },
+        select: { classId: true },
+      });
+      for (const classId of new Set(activeClasses.map((e) => e.classId))) {
+        await syncConversationMembership(tx, classId);
+      }
+
       return { linkedCount: res.count, isNewPending };
-    });
+    }, { timeout: 30_000, maxWait: 10_000 });
 
     // Tài khoản mới PENDING_ACTIVATION → gửi OTP kích hoạt (ngoài transaction).
     // P5 — target là SĐT ⇒ `getOtpProviderFor` chọn Zalo ZNS; email chỉ còn là
@@ -1215,7 +1270,22 @@ export async function addChildToParent(input: {
     return { ok: false, error: "Học viên đã thuộc phụ huynh khác — gỡ liên kết cũ trước" };
   }
 
-  await sdb.student.update({ where: { id: child.id }, data: { parentUserId: input.parentUserId } });
+  // US-03 chat — thêm con cho PH → PH vào nhóm các lớp con đang học, cùng transaction.
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
+    await tx.student.update({ where: { id: child.id }, data: { parentUserId: input.parentUserId } });
+    const activeClasses = await tx.enrollment.findMany({
+      where: {
+        studentId: child.id,
+        deletedAt: null,
+        status: { in: CHAT_MEMBER_ENROLLMENT_STATUSES },
+      },
+      select: { classId: true },
+    });
+    for (const classId of new Set(activeClasses.map((e) => e.classId))) {
+      await syncConversationMembership(tx, classId);
+    }
+  }, { timeout: 30_000, maxWait: 10_000 });
   revalidatePath(`/students/${child.id}/edit`);
   return { ok: true };
 }
@@ -1236,7 +1306,23 @@ export async function unlinkChildFromParent(
     return { ok: false, error: "Không tìm thấy học viên" };
   }
 
-  await sdb.student.update({ where: { id: childStudentId }, data: { parentUserId: null } });
+  // US-03 chat — gỡ liên kết con → PH rời nhóm lớp của con đó (nếu không còn con khác
+  // trong lớp), cùng transaction.
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
+    const activeClasses = await tx.enrollment.findMany({
+      where: {
+        studentId: childStudentId,
+        deletedAt: null,
+        status: { in: CHAT_MEMBER_ENROLLMENT_STATUSES },
+      },
+      select: { classId: true },
+    });
+    await tx.student.update({ where: { id: childStudentId }, data: { parentUserId: null } });
+    for (const classId of new Set(activeClasses.map((e) => e.classId))) {
+      await syncConversationMembership(tx, classId);
+    }
+  }, { timeout: 30_000, maxWait: 10_000 });
   revalidatePath(`/students/${childStudentId}/edit`);
   return { ok: true };
 }

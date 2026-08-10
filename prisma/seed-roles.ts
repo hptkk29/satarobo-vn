@@ -38,6 +38,14 @@ export const ROLE_SEED: RoleSeed[] = [
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
       { action: "report-cards:review", scopeType: "GLOBAL" },
+      // US-05 chat (08/08): bypass làm 5 dòng này không đổi hành vi — khai cho rõ ý.
+      // Riêng chat:send Admin bị chặn ở tầng action (US-15 AC4 — chỉ đọc khi không
+      // phải thành viên); v1 matrix cố ý không cấp (xem permissions.ts).
+      { action: "chat:read", scopeType: "GLOBAL" },
+      { action: "chat:send", scopeType: "GLOBAL" },
+      { action: "chat:announce", scopeType: "GLOBAL" },
+      { action: "chat:moderate", scopeType: "GLOBAL" },
+      { action: "chat:admin", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -254,6 +262,22 @@ export const ROLE_SEED: RoleSeed[] = [
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
+      // ⛔ KHÔNG THÊM LẠI `chat:read` CHO ĐÀO TẠO (gỡ 09/08/2026).
+      // Bản seed 08/08 có `{ action: "chat:read", scopeType: "GLOBAL" }` ở đây với lý do
+      // "giám sát nội dung giảng dạy". Đối chiếu intended-vs-implemented lộ ra 3 điều:
+      //   1. `docs/chat-realtime/permissions.md` KHÔNG có vai Đào tạo ở bất kỳ ô nào —
+      //      bảng ma trận chỉ có PH / GV / QLCS / Sale / Admin. Quyền này không có hợp đồng.
+      //   2. GLOBAL ⇒ đọc được MỌI hội thoại, kể cả 1-1 GV↔PH (`DM_TEACHER_PARENT`,
+      //      centerId=null) — tức mạnh hơn cả Admin. Ô "Đọc" của Admin trong ma trận là
+      //      ⚠️ *có điều kiện*: không phải thành viên thì phải đi đường tra cứu F-AUDIT
+      //      (bắt buộc nhập lý do + ghi AuditLog TRƯỚC khi trả nội dung). Đào tạo đọc
+      //      thẳng qua `can()` thì không để lại một dòng vết nào.
+      //   3. Không có call-site: P0 không có màn chat cho Đào tạo, nên đây là quyền chết
+      //      — chỉ còn tác dụng nếu ai đó gắn `chat:read` vào một bề mặt đọc mới.
+      // Mở lại CHỈ KHI có story + màn hình thật, và khi đó phải đi qua đường F-AUDIT như
+      // Admin (lý do + audit), KHÔNG phải bằng một dòng grant GLOBAL ở đây.
+      // Pin chống tái phát: `lib/auth/chat-permissions.test.ts` — "TRAINING không có bất
+      // kỳ action chat:* nào ở CẢ v1 lẫn v2".
     ],
   },
   {
@@ -406,6 +430,14 @@ export const ROLE_SEED: RoleSeed[] = [
       // dạng target), nên CENTER-scope sẽ trả false sau flip #09. Cách ly cơ sở đã ép
       // TAY ở tầng query (queryUnifiedAuditLogs lọc orgUnitId ∈ visibleOrgUnitIds) →
       // GLOBAL an toàn: mỗi QL cơ sở vẫn chỉ thấy log cơ sở mình.
+      // ── US-05 chat (08/08) — QLCS = MEMBER nhóm lớp cơ sở mình (chốt 07/08):
+      // đọc + gửi CHAT + gửi ANNOUNCEMENT, KHÔNG moderate (gỡ tin người khác) và
+      // KHÔNG chat:admin (/admin/hoi-thoai — US-15 AC5). Scope CENTER thật: call-site
+      // chat luôn truyền target (participant-based, action mới viết sau test US-05)
+      // — DM có centerId=null nên CENTER tự deny (khớp permissions.md: QLCS ❌ 1-1).
+      { action: "chat:read", scopeType: "CENTER" },
+      { action: "chat:send", scopeType: "CENTER" },
+      { action: "chat:announce", scopeType: "CENTER" },
     ],
   },
   {
@@ -422,6 +454,25 @@ export const ROLE_SEED: RoleSeed[] = [
       // 10/07 — gate CSKH (/tin-nhan, /canh-bao-rui-ro, /cham-soc-hv) doi
       // parent-requests:manage. Giao vu la vai #16 sinh ra de lam CSKH => phai co.
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
+      // US-05 chat (08/08) — cùng bộ với CENTER_MANAGER (vai QLCS thu hẹp): nhóm lớp
+      // cơ sở mình, không moderate/admin. CENTER an toàn — call-site chat luôn có target.
+      // 09/08: Giáo vụ ĐƯỢC dẫn xuất thành participant nhóm lớp y như QLCS
+      // (lib/chat/sync-membership.ts → CHAT_CENTER_MANAGER_ROLE_CODES) — trước đó 3 perm
+      // này là QUYỀN CHẾT vì phạm vi đọc chat là participant-based.
+      { action: "chat:read", scopeType: "CENTER" },
+      { action: "chat:send", scopeType: "CENTER" },
+      { action: "chat:announce", scopeType: "CENTER" },
+      // 09/08 — CHÌA KHOÁ CỬA /tin-nhan cho Giáo vụ. 3 perm chat:* ở trên KHÔNG mở nổi
+      // cửa: gate cấp trang gọi checkAnyPermission KHÔNG kèm target nên scope CENTER trả
+      // FALSE (lib/auth/can.ts:18) — đó chính là lý do PAGE_GATES["/tin-nhan"] gác bằng
+      // [students:view-own-class | classes:view-own], hai action GLOBAL.
+      // Vì sao `classes:view-own` chứ KHÔNG phải `students:view-own-class`: action kia
+      // cũng là gate của /hoc-ba, mà BGĐ 10/07 chốt Giáo vụ KHÔNG xem học bạ — mượn nó
+      // là mở nhầm cửa thứ hai. `classes:view-own` chỉ làm gate ở /tin-nhan; các
+      // call-site còn lại (/classes, /classes/[id], /lich) vai này đã vào được sẵn bằng
+      // `classes:view-all` nên KHÔNG nới thêm quyền nào. GLOBAL là bắt buộc —
+      // page-gates.test.ts khoá "action làm gate phải GLOBAL ở mọi RoleDef giữ nó".
+      { action: "classes:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -530,11 +581,28 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "assignments:author-own", scopeType: "GLOBAL" },
       { action: "assignments:assign-own", scopeType: "GLOBAL" },
       { action: "completions:propose-own", scopeType: "GLOBAL" },
+      // ── US-05 chat (08/08) — GV theo PHÂN CÔNG lớp (Class.teacherId/assistantId →
+      // actor.assignedClassIds), KHÔNG theo centerId (GV biên chế HO dạy chéo cơ sở —
+      // permissions.md "Vai & nguồn scope"). ASSIGNED thật: call-site chat truyền
+      // target.classId (action mới viết sau test US-05, không có call-site trần).
+      // moderate = gỡ tin người khác trong NHÓM MÌNH + bắt buộc lý do (TS-03.6).
+      { action: "chat:read", scopeType: "ASSIGNED" },
+      { action: "chat:send", scopeType: "ASSIGNED" },
+      { action: "chat:announce", scopeType: "ASSIGNED" },
+      { action: "chat:moderate", scopeType: "ASSIGNED" },
     ],
   },
   {
     code: "ASSISTANT_TEACHER", name: "Trợ giảng",
-    perms: [{ action: "attendance:view", scopeType: "ASSIGNED" }],
+    perms: [
+      { action: "attendance:view", scopeType: "ASSIGNED" },
+      // US-05 chat (08/08) — trợ giảng là participant nhóm lớp được gán, cùng bộ với
+      // TEACHER (assignedClassIds đã gồm Class.assistantId — lib/auth/actor.ts).
+      { action: "chat:read", scopeType: "ASSIGNED" },
+      { action: "chat:send", scopeType: "ASSIGNED" },
+      { action: "chat:announce", scopeType: "ASSIGNED" },
+      { action: "chat:moderate", scopeType: "ASSIGNED" },
+    ],
   },
   {
     // Mapping ACCOUNTANT (v1) đã duyệt — Kiệt 06/07/2026, xem mapping-proposal.md §1.
@@ -559,7 +627,15 @@ export const ROLE_SEED: RoleSeed[] = [
   },
   {
     code: "PARENT", name: "Phụ huynh", isSystem: true,
-    perms: [{ action: "parent-feedback:view", scopeType: "CHILDREN" }],
+    perms: [
+      { action: "parent-feedback:view", scopeType: "CHILDREN" },
+      // US-05 chat (08/08) — PH đọc/gửi trong hội thoại CỦA MÌNH (scope OWN: target
+      // mang createdById = userId khi call-site đã xác nhận participant hiệu lực).
+      // Nguồn phạm vi thật là ConversationParticipant (DB lúc request), không phải
+      // token — permissions.md "Vai & nguồn scope". KHÔNG announce/moderate/admin.
+      { action: "chat:read", scopeType: "OWN" },
+      { action: "chat:send", scopeType: "OWN" },
+    ],
   },
 ];
 

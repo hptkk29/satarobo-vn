@@ -7,6 +7,14 @@ import { createClass, updateClass } from "../_actions";
 import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
 import { filterTeachersByCenter } from "@/lib/teachers/center-filter";
 import { buildClassDisplayName } from "@/lib/classes/naming";
+import {
+  emptyPhase,
+  firstPhaseFlatSchedule,
+  toPhaseInputs,
+  type PhaseFormValue,
+} from "@/lib/classes/phase-form";
+import { SchedulePhasesEditor } from "./schedule-phases-editor";
+import { ClassSchedulePhases } from "../[id]/_components/class-schedule-phases";
 
 export type ClassFormValue = {
   id: string;
@@ -21,10 +29,14 @@ export type ClassFormValue = {
   assistantId: string | null;
   startDate: Date | null;
   endDate: Date | null;
+  /**
+   * 08/08 — BẢN SAO lịch phẳng của giai đoạn đang hiệu lực. Form KHÔNG còn sửa mấy field
+   * này (mọi thao tác lịch đi qua Kế hoạch lịch học); giữ lại vì màn ngoài vẫn dựng
+   * `ClassFormValue` từ cùng một query.
+   */
   scheduleDays: number[];
   startTime: string | null;
   endTime: string | null;
-  // BGĐ 31/07 — giờ riêng theo thứ (lớp 2 ca khác giờ).
   scheduleSlots?: { weekday: number; startTime: string; endTime: string | null }[];
   maxStudents: number;
   minStudents: number;
@@ -79,16 +91,6 @@ const STATUS_OPTIONS = [
 const PENDING_OPTION = { value: "PENDING_APPROVAL", label: "Chờ duyệt" } as const;
 const CANCELLED_OPTION = { value: "CANCELLED", label: "Huỷ" } as const;
 
-const WEEKDAY_OPTIONS = [
-  { value: 1, label: "T2" },
-  { value: 2, label: "T3" },
-  { value: 3, label: "T4" },
-  { value: 4, label: "T5" },
-  { value: 5, label: "T6" },
-  { value: 6, label: "T7" },
-  { value: 0, label: "CN" },
-] as const;
-
 function toDateInput(d: Date | null): string {
   if (!d) return "";
   return new Date(d).toISOString().slice(0, 10);
@@ -104,6 +106,10 @@ export function ClassForm({
   hoCenterIds = [],
   curricula = [],
   canEdit = true,
+  schedulePhases = [],
+  phasesDerived = true,
+  phaseSignature,
+  defaultApplyFrom = "",
 }: {
   cls?: ClassFormValue;
   courses: CourseOption[];
@@ -116,6 +122,14 @@ export function ClassForm({
   /** R7-06 — giáo trình ACTIVE (sắp xếp version giảm dần) để chốt version lúc tạo lớp. */
   curricula?: CurriculumOption[];
   canEdit?: boolean;
+  /** Kế hoạch lịch học hiện có (lớp đã tồn tại) — rỗng khi tạo mới. */
+  schedulePhases?: PhaseFormValue[];
+  /** true = lớp chưa lưu kế hoạch, giai đoạn dưới là bản SUY từ lịch cũ. */
+  phasesDerived?: boolean;
+  /** Chữ ký kế hoạch — dùng làm `key` để form lịch nhận bản mới sau `router.refresh()`. */
+  phaseSignature?: string;
+  /** "YYYY-MM-DD" — mốc mặc định của ô "Áp dụng từ ngày" (thường là ngày mai). */
+  defaultApplyFrom?: string;
 }) {
   const router = useRouter();
   const isEdit = Boolean(cls);
@@ -134,18 +148,14 @@ export function ClassForm({
   const [roomId, setRoomId] = useState<string>(cls?.roomId ?? "");
   const [teacherId, setTeacherId] = useState<string>(cls?.teacherId ?? "");
   const [assistantId, setAssistantId] = useState<string>(cls?.assistantId ?? "");
-  const [scheduleDays, setScheduleDays] = useState<number[]>(cls?.scheduleDays ?? []);
-  const [startTime, setStartTime] = useState<string>(cls?.startTime ?? "");
-  // BGĐ 31/07 — giờ RIÊNG theo từng thứ (lớp 2 ca khác giờ, vd 17h30-T2 & 08h-T6).
-  // Bỏ trống 1 thứ = dùng giờ chung bên dưới. Key = weekday.
-  const [daySlots, setDaySlots] = useState<Record<number, { start: string; end: string }>>(
-    () => {
-      const init: Record<number, { start: string; end: string }> = {};
-      for (const s of cls?.scheduleSlots ?? []) {
-        init[s.weekday] = { start: s.startTime, end: s.endTime ?? "" };
-      }
-      return init;
-    },
+  const [startDate, setStartDate] = useState<string>(toDateInput(cls?.startDate ?? null));
+  // 08/08 — LỊCH LỚP = KẾ HOẠCH NHIỀU GIAI ĐOẠN. Ba ô cũ ("Lịch học trong tuần" / "Giờ bắt
+  // đầu" / "Giờ kết thúc" / "Giờ riêng theo thứ") đã bỏ: chúng chỉ mô tả được ĐÚNG MỘT lịch
+  // cho cả vòng đời lớp, còn kế hoạch mới là nguồn sự thật và tự sinh lại bản sao phẳng.
+  // Lớp đang TẠO thì gõ ngay tại đây và gửi kèm form; lớp ĐÃ CÓ dùng khối quản lý riêng
+  // (tự lưu + áp lịch xuống buổi đã sinh) vì hai việc đó cần `classId`.
+  const [phases, setPhases] = useState<PhaseFormValue[]>(
+    schedulePhases.length > 0 ? schedulePhases : [emptyPhase()],
   );
   // T3.4 — tên lớp: khi TẠO MỚI và chưa gõ tay thì bám theo gợi ý quy ước (tự đổi
   // khi chọn khoá/giờ/thứ/phòng). Gõ tay 1 chữ là dừng bám (tên là free-text).
@@ -190,22 +200,21 @@ export function ClassForm({
     [curricula, courseId],
   );
 
-  // T3.4 — gợi ý tên lớp theo quy ước `tênkhoá.giờ-thứ.phòng`.
+  // T3.4 — gợi ý tên lớp theo quy ước `tênkhoá.giờ-thứ.phòng`. Lịch lấy từ giai đoạn ĐẦU
+  // TIÊN của kế hoạch: tên lớp là nhãn lúc khai giảng, đổi nhịp giữa khoá không đổi tên.
   const suggestedName = useMemo(() => {
     const course = courses.find((c) => c.id === courseId);
     const room = rooms.find((r) => r.id === roomId);
+    const flat = firstPhaseFlatSchedule(phases);
     return buildClassDisplayName({
       courseCode: course?.code ?? null,
       courseSlug: course?.slug ?? null,
-      scheduleDays,
-      startTime,
-      // BGĐ 31/07 — giờ riêng theo thứ vào thẳng tên gợi ý (sata4.17h30-T2&08h-T6.P302).
-      slots: scheduleDays
-        .filter((d) => daySlots[d]?.start)
-        .map((d) => ({ weekday: d, startTime: daySlots[d]!.start })),
+      scheduleDays: flat.scheduleDays,
+      startTime: flat.startTime,
+      slots: flat.slots,
       roomCode: room?.code ?? null,
     });
-  }, [courses, courseId, rooms, roomId, scheduleDays, startTime, daySlots]);
+  }, [courses, courseId, rooms, roomId, phases]);
   // Chưa gõ tay → ô tên bám gợi ý (rỗng thì để trống cho người dùng tự nhập).
   const nameValue = nameTouched ? name : suggestedName;
 
@@ -225,21 +234,12 @@ export function ClassForm({
     setError(null);
     setPending(true);
     const formData = new FormData(e.currentTarget);
-    formData.delete("scheduleDays");
-    for (const d of scheduleDays) formData.append("scheduleDays", String(d));
-    // BGĐ 31/07 — giờ riêng theo thứ (chỉ gửi thứ đang học + có nhập giờ).
-    formData.set(
-      "scheduleSlots",
-      JSON.stringify(
-        scheduleDays
-          .filter((d) => daySlots[d]?.start)
-          .map((d) => ({
-            weekday: d,
-            startTime: daySlots[d]!.start,
-            endTime: daySlots[d]!.end || null,
-          })),
-      ),
-    );
+    // Lớp ĐANG TẠO: kế hoạch lịch đi kèm form (server suy ra bản sao phẳng từ nó).
+    // Lớp ĐÃ CÓ: KHÔNG gửi field lịch nào — khối "Kế hoạch lịch học" bên dưới tự lưu, và
+    // server giữ nguyên lịch hiện tại khi form không mang lịch theo.
+    if (!isEdit) {
+      formData.set("schedulePhases", JSON.stringify(toPhaseInputs(phases)));
+    }
 
     const res = isEdit
       ? await updateClass(cls!.id, formData)
@@ -258,12 +258,22 @@ export function ClassForm({
     router.refresh();
   }
 
-  function toggleDay(d: number, checked: boolean) {
-    setScheduleDays((prev) =>
-      checked
-        ? Array.from(new Set([...prev, d])).sort((a, b) => a - b)
-        : prev.filter((x) => x !== d),
-    );
+  /**
+   * Ngày khai giảng kéo theo mốc "Từ ngày" của GIAI ĐOẠN 1 — hai thứ này phải khớp, nếu
+   * không kế hoạch bắt đầu ở một ngày còn buổi đầu ở ngày khác. Chỉ tự đổi khi ô đó đang
+   * trống hoặc vẫn đang bám ngày khai giảng cũ (admin sửa tay thì tôn trọng).
+   */
+  function onStartDateChange(value: string) {
+    // Chỉ lúc TẠO: `phases` ở đây là state của form. Lớp đã có thì kế hoạch do khối riêng
+    // quản (có nút Lưu + xem trước dời buổi) — sửa lén state này chẳng đi tới đâu.
+    if (!isEdit) {
+      setPhases((prev) =>
+        prev.map((p, i) =>
+          i === 0 && (!p.from || p.from === startDate) ? { ...p, from: value } : p,
+        ),
+      );
+    }
+    setStartDate(value);
   }
 
   function onOrgUnitChange(value: string) {
@@ -484,136 +494,55 @@ export function ClassForm({
             />
           </Grid>
 
-          <Grid cols={3}>
+          <Grid cols={2}>
             <Field
               label="Ngày khai giảng"
               name="startDate"
               type="date"
-              defaultValue={toDateInput(cls?.startDate ?? null)}
+              value={startDate}
+              onChange={onStartDateChange}
               required
             />
-            {/* T3.3 — bỏ trống thì server tự tính buổi cuối (computeSessionDates,
-                đã trừ ngày nghỉ); nhập tay vẫn được ưu tiên. */}
+            {/* T3.3 — bỏ trống thì server tự tính buổi cuối theo KẾ HOẠCH LỊCH bên dưới
+                (đã trừ ngày nghỉ); nhập tay vẫn được ưu tiên. */}
             <Field
               label="Ngày bế giảng"
               name="endDate"
               type="date"
               defaultValue={toDateInput(cls?.endDate ?? null)}
-              helper="Bỏ trống = tự tính từ lịch học + số buổi (trừ ngày nghỉ)"
-            />
-            <div>
-              <span className="mb-2 block text-sm font-semibold text-neutral-700">
-                Lịch học trong tuần
-                <span className="ml-1 text-red-500">*</span>
-              </span>
-              <div className="flex flex-wrap gap-x-3 gap-y-2 rounded-lg border border-neutral-200 bg-neutral-50/50 p-2.5">
-                {WEEKDAY_OPTIONS.map((opt) => {
-                  const checked = scheduleDays.includes(opt.value);
-                  return (
-                    <label key={opt.value} className="flex items-center gap-1.5 text-sm font-medium text-neutral-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={!canEdit}
-                        onChange={(e) => toggleDay(opt.value, e.target.checked)}
-                        aria-label={`Lịch học ${opt.label}`}
-                        className="rounded border-neutral-300 text-[#7C3AED] focus:ring-[#7C3AED]"
-                      />
-                      {opt.label}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </Grid>
-
-          <Grid cols={2}>
-            <Field
-              label="Giờ bắt đầu"
-              name="startTime"
-              type="time"
-              value={startTime}
-              onChange={setStartTime}
-              required
-            />
-            <Field
-              label="Giờ kết thúc"
-              name="endTime"
-              type="time"
-              defaultValue={cls?.endTime ?? undefined}
-              required
+              helper="Bỏ trống = tự tính từ kế hoạch lịch học + số buổi (trừ ngày nghỉ)"
             />
           </Grid>
 
-          {/* BGĐ 31/07 — lớp có ca KHÁC GIỜ theo thứ (vd 17h30-T2 & 08h-T6).
-              Bỏ trống 1 thứ = dùng giờ chung ở trên. */}
-          {scheduleDays.length > 0 && (
-            <div>
-              <span className="mb-2 block text-sm font-semibold text-neutral-700">
-                Giờ riêng theo thứ (nếu lớp có ca khác giờ)
-              </span>
-              <div className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50/50 p-2.5">
-                {[...scheduleDays]
-                  .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
-                  .map((d) => {
-                    const label =
-                      WEEKDAY_OPTIONS.find((o) => o.value === d)?.label ?? String(d);
-                    const slot = daySlots[d] ?? { start: "", end: "" };
-                    return (
-                      <div key={d} className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="w-10 font-medium text-neutral-700">{label}</span>
-                        <input
-                          type="time"
-                          value={slot.start}
-                          disabled={!canEdit}
-                          onChange={(e) =>
-                            setDaySlots((prev) => ({
-                              ...prev,
-                              [d]: { ...slot, start: e.target.value },
-                            }))
-                          }
-                          aria-label={`Giờ bắt đầu ${label}`}
-                          className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-[#7C3AED]"
-                        />
-                        <span className="text-neutral-400">→</span>
-                        <input
-                          type="time"
-                          value={slot.end}
-                          disabled={!canEdit}
-                          onChange={(e) =>
-                            setDaySlots((prev) => ({
-                              ...prev,
-                              [d]: { ...slot, end: e.target.value },
-                            }))
-                          }
-                          aria-label={`Giờ kết thúc ${label}`}
-                          className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-[#7C3AED]"
-                        />
-                        {slot.start && canEdit && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDaySlots((prev) => {
-                                const next = { ...prev };
-                                delete next[d];
-                                return next;
-                              })
-                            }
-                            className="text-xs font-semibold text-neutral-500 hover:text-red-600"
-                          >
-                            Dùng giờ chung
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-              <p className="mt-1 text-xs text-neutral-500">
-                Bỏ trống = dùng giờ chung ở trên. Điền khi lớp học 2 ca khác giờ (vd
-                17:30 thứ 2 và 08:00 thứ 6).
-              </p>
-            </div>
-          )}
+          {/* 08/08 — CHỖ CŨ CỦA "Lịch học trong tuần / Giờ bắt đầu / Giờ kết thúc / Giờ
+              riêng theo thứ". Nay là Kế hoạch lịch học: một lớp khai được nhiều giai đoạn
+              (đổi nhịp, đổi giờ giữa khoá) thay vì đúng một lịch cho cả vòng đời. */}
+          {/* Khối lịch nằm TRONG <form> nên Enter ở ô "Ghi chú"/ngày của nó sẽ submit cả
+              form lớp — chặn lại; các ô này không có `name` nên không lọt vào FormData. */}
+          <div
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
+                e.preventDefault();
+              }
+            }}
+          >
+            {isEdit ? (
+              <ClassSchedulePhases
+                key={phaseSignature}
+                classId={cls!.id}
+                canEdit={canEdit}
+                initialPhases={schedulePhases}
+                isDerived={phasesDerived}
+                defaultApplyFrom={defaultApplyFrom}
+              />
+            ) : (
+              <SchedulePhasesEditor
+                phases={phases}
+                onChange={setPhases}
+                disabled={!canEdit || pending}
+              />
+            )}
+          </div>
 
           {/* QA 21/07 (B5) — trước đây thiếu ô "Số HS tối thiểu": server mặc định
               min=5 rồi báo "min phải <= max" khi max nhỏ mà admin không có chỗ sửa. */}

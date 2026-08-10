@@ -76,6 +76,14 @@
     {
       "path": "/api/cron/student-birthday",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/chat-membership-reconcile",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/chat-zns-notify",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

@@ -21,7 +21,10 @@ jobs:
           set -e
           [ -n "${{ secrets.TEST_CRON_SECRET }}" ] || { echo "::error::Thiếu secret TEST_CRON_SECRET"; exit 1; }
           fail=0
-          for p in dispatch-events email-queue; do
+          # chat-zns-notify (US-14): thêm 09/08/2026 để nghiệm thu được luồng nhắc tin
+          # nhắn trên test. Trên test KHÔNG có credential Zalo ⇒ mọi tin ghi SIMULATED,
+          # không có tin thật nào tới phụ huynh — đúng thứ ta cần cho UAT.
+          for p in dispatch-events email-queue chat-zns-notify; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")
