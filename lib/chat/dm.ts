@@ -311,6 +311,67 @@ export async function listSalesForParent(
   return [...byId.values()];
 }
 
+/** Một phụ huynh mà sale được gán — dữ liệu cho ô tìm kiếm ở màn Tin nhắn. */
+export type AssignableParent = {
+  parentUserId: string;
+  parentName: string | null;
+  /** "Bé An · Sata3 CS1" — GHI RÕ LỚP để phân biệt hai phụ huynh trùng tên. */
+  childLabels: string[];
+};
+
+/**
+ * Danh sách phụ huynh mà SALE đang được gán, kèm tên con + TÊN LỚP.
+ *
+ * Vì sao kèm tên lớp: trùng tên phụ huynh là chuyện thường, và sale nhớ học viên theo lớp.
+ * Thiếu nó thì ô tìm kiếm trả về hai dòng giống hệt nhau, chọn bừa là nhắn nhầm người.
+ *
+ * Điều kiện lọc TRÙNG KHÍT `findSaleAssignedEnrollmentIds` (cùng bộ trạng thái, cùng
+ * `deletedAt IS NULL`, cố ý KHÔNG ràng `Class.status`) — lệch một điều kiện là danh sách
+ * hiện tên mà server từ chối mở.
+ */
+export async function listAssignableParentsForSale(
+  saleUserId: string,
+  client: Db = db,
+): Promise<AssignableParent[]> {
+  if (!saleUserId) return [];
+  const rows = await client.$queryRaw<
+    { parentUserId: string; parentName: string | null; childName: string | null; className: string | null }[]
+  >`
+    SELECT DISTINCT s."parentUserId" AS "parentUserId",
+           u."name"  AS "parentName",
+           s."name"  AS "childName",
+           cl."name" AS "className"
+    FROM "Enrollment" e
+    JOIN "Student" s ON s."id" = e."studentId"
+    JOIN "User" u ON u."id" = s."parentUserId"
+    LEFT JOIN "Class" cl ON cl."id" = e."classId"
+    WHERE e."saleId" = ${saleUserId}
+      AND e."deletedAt" IS NULL
+      AND e."status" = ANY(${ENROLLMENT_ACTIVE_STATUS_LIST}::"EnrollmentStatus"[])
+      AND s."deletedAt" IS NULL
+      AND s."parentUserId" IS NOT NULL
+      AND u."deletedAt" IS NULL
+      AND u."isActive" = true
+    ORDER BY u."name" ASC NULLS LAST
+    LIMIT 500
+  `;
+  const byId = new Map<string, AssignableParent>();
+  for (const r of rows) {
+    const label = [r.childName, r.className].filter(Boolean).join(" · ");
+    const cur = byId.get(r.parentUserId);
+    if (cur) {
+      if (label && !cur.childLabels.includes(label)) cur.childLabels.push(label);
+      continue;
+    }
+    byId.set(r.parentUserId, {
+      parentUserId: r.parentUserId,
+      parentName: r.parentName,
+      childLabels: label ? [label] : [],
+    });
+  }
+  return [...byId.values()];
+}
+
 /** Chiều quan hệ đã xác định của F5: ai là sale, ai là PH. */
 export type SaleParentRelation = {
   saleUserId: string;

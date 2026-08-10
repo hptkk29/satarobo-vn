@@ -28,7 +28,7 @@ import { listChatAttachments } from "@/lib/chat/messages";
 import { ChatListRefresher } from "../chat-list-refresher";
 import { OpenDmButton } from "../open-dm-button";
 import { ChatThread } from "./chat-thread";
-import { ConversationList } from "./conversation-list";
+import { ConversationSearch } from "./conversation-search";
 import { AnnouncementReadStats } from "./announcement-read-stats";
 import type {
   StaffAnnouncementStats,
@@ -74,9 +74,8 @@ export type StaffChatWorkspaceProps = {
   announcementCursor?: string;
   /** Câu gợi ý khi người dùng chưa có hội thoại nào (khác nhau giữa admin và GV). */
   emptyHint: string;
-  /** F5 — nơi bắt đầu một hội thoại mới, cho vai không có nhóm lớp tự sinh (sale). */
-  startHref?: string;
-  startLabel?: string;
+  /** F5 — phụ huynh mình được gán nhưng CHƯA có kênh (rỗng với vai không mở được kênh). */
+  assignableParents?: { parentUserId: string; parentName: string | null; childLabels: string[] }[];
 };
 
 export async function StaffChatWorkspace({
@@ -86,8 +85,7 @@ export async function StaffChatWorkspace({
   tab,
   announcementCursor,
   emptyHint,
-  startHref,
-  startLabel,
+  assignableParents = [],
 }: StaffChatWorkspaceProps) {
   const conversations = await listConversationsForUser(userId);
 
@@ -109,29 +107,36 @@ export async function StaffChatWorkspace({
     : null;
 
   return (
-    // ⚠️ `min-h` là thứ biến màn này từ "trang vỡ" thành màn chat. Không có nó, người
-    // chỉ có 1–2 hội thoại (điển hình là SALE — họ không có nhóm lớp tự sinh nào) thấy
-    // toàn bộ nội dung dồn lên ~270px trên cùng của màn 900px, còn lại trắng trơn.
-    <div className="flex min-h-[70vh] flex-col gap-4 lg:flex-row">
+    // Màn chat chiếm TRỌN chiều cao khả dụng (yêu cầu chủ dự án 10/08: "bấm vào tin nhắn
+    // thì cả màn hình là các cuộc hội thoại"). `h-[calc(100vh-…)]` chứ không phải `min-h`:
+    // hai cột phải TỰ CUỘN bên trong, nếu để trang cuộn thì ô nhập tin trôi khỏi tầm mắt.
+    <div className="flex h-[calc(100vh-8rem)] min-h-[32rem] flex-col gap-4 lg:flex-row">
       {/* Tin mới ở BẤT KỲ hội thoại nào ⇒ chạy lại RSC này ⇒ danh sách tự sắp lại, đổi
           preview/giờ/badge. Không render gì; giữ `ConversationList` là component thuần. */}
       <ChatListRefresher userId={userId} />
 
       <aside
-        className={`w-full shrink-0 lg:w-80 ${selected ? "hidden lg:block" : "block"}`}
+        className={`min-h-0 w-full shrink-0 lg:w-96 ${selected ? "hidden lg:flex" : "flex"} flex-col`}
         aria-label="Danh sách hội thoại"
       >
-        <ConversationList
-          items={items}
+        <ConversationSearch
+          conversations={items.map((i) => ({
+            conversationId: i.conversationId,
+            displayName: i.displayName,
+            type: i.type,
+            preview: i.preview,
+            unreadCount: i.unreadCount,
+            isArchived: i.isArchived,
+          }))}
+          parents={assignableParents}
           basePath={basePath}
           selectedId={selected?.conversationId ?? null}
-          emptyHint={emptyHint}
-          startHref={startHref}
-          startLabel={startLabel}
         />
       </aside>
 
-      <section className={`min-w-0 flex-1 ${selected ? "block" : "hidden lg:block"}`}>
+      <section
+        className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${selected ? "block" : "hidden lg:block"}`}
+      >
         {selected ? (
           tab === "thanh-vien" ? (
             <MembersPanel
@@ -164,11 +169,11 @@ export async function StaffChatWorkspace({
             />
           )
         ) : (
-          items.length > 0 && (
-            <div className="flex h-full min-h-[50vh] items-center justify-center rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
-              Chọn một hội thoại bên trái để đọc và trả lời.
-            </div>
-          )
+          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
+            {items.length > 0
+              ? "Chọn một hội thoại bên trái để đọc và trả lời."
+              : emptyHint}
+          </div>
         )}
       </section>
     </div>

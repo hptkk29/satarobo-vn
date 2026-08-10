@@ -281,6 +281,23 @@ export default async function ClassDetailPage({ params }: Props) {
     classStatus: cls.status,
   });
 
+  // Nhóm chat của lớp (nếu đã sinh) — chỉ lấy `id`, một truy vấn khoá duy nhất.
+  // Đi qua `sdb` chứ không `db` trần — luật ESLint của repo cấm import `@/lib/db` trong
+  // app/(admin). An toàn: `Conversation` nằm trong SCOPE_EXEMPT nên scopedDb không lọc nó
+  // (DM có centerId = null, đưa vào diện scoped là hiểu sai thành "không thuộc cơ sở nào").
+  const chatConversationId = (
+    await sdb.conversation.findUnique({
+      where: {
+        type_subjectType_subjectId: {
+          type: "CLASS_GROUP",
+          subjectType: "CLASS",
+          subjectId: cls.id,
+        },
+      },
+      select: { id: true },
+    })
+  )?.id;
+
   // DS học viên buổi mặc định cho tab Đánh giá (present = đã điểm danh có mặt/muộn).
   const initialEvalStudents = initialRoster.rows.map((r) => ({
     studentId: r.studentId,
@@ -360,6 +377,19 @@ export default async function ClassDetailPage({ params }: Props) {
             >
               📊 Tiến độ
             </Link>
+            {/* Lối tắt sang nhóm chat của lớp (yêu cầu chủ dự án 10/08): từ trang lớp
+                bấm thẳng sang chỗ nhắn tin / gửi thông báo cho phụ huynh, không phải đi
+                vòng qua màn Tin nhắn rồi dò tên lớp trong danh sách.
+                Nhóm chỉ tồn tại khi lớp đã ACTIVE (BR-01) nên nút chỉ hiện khi CÓ nhóm —
+                nút dẫn tới hư vô còn tệ hơn không có nút. */}
+            {chatConversationId && (
+              <Link
+                href={`/admin/tin-nhan?c=${chatConversationId}`}
+                className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+              >
+                💬 Nhắn nhóm lớp
+              </Link>
+            )}
           </div>
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
