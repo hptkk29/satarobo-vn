@@ -31,8 +31,9 @@ một `BrowserContext`/hồ sơ trình duyệt riêng.
 | Nhật ký chat | ✅ | 4 dòng đúng thứ tự: `READ` → `Cập nhật status/locked` (khoá) → (mở khoá) → `Tạo mới Message` |
 | **US-16** cổng chính sách | ✅ | 3/3 phụ huynh gặp cổng ở lần đầu; `ChatPolicyAcceptance` ghi đúng version `2026-08-10` |
 | **US-16 AC4** bảng đo pilot | ✅ | `/admin/bao-cao/chat-pilot` chạy: 26 nhóm lớp · kích hoạt 60% (97/162) · đọc thông báo đầu ≤48h 50% |
-| **TS-11** kick giữa phiên | ⏳ xem §2 | |
-| **TS-13** vòng thông báo | ⏳ xem §2 | |
+| **TS-11** kick giữa phiên | ✅ phần bảo mật · ⚠️ phần trải nghiệm — xem §2 | server chặn đọc **ngay** |
+| **TS-13** thông báo tới máy PH đang mở | ✅ **sau khi vá** — xem §3-bis | `Đã đọc 0/2` lúc gửi → `1/2` sau khi PH1 đọc; PH2 còn trong danh sách chưa đọc |
+| **TS-13** quota 10/ngày | ✅ đã có test tự động chặn merge (`lib/chat/announcements.test.ts`, quota theo NGÀY VN pin bằng mốc ISO tuyệt đối) | |
 | **TS-14** ảnh + signed URL | ❌ **CHẶN** — xem §3 | |
 | **TS-15** báo tin ZNS | ⛔ không nghiệm thu được trên test — xem §4 | |
 | **TS-17** ngày đầu của PH | ◐ một phần — xem §4 | |

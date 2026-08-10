@@ -15,9 +15,11 @@ export async function contextFor(browser: Browser, key: AccountKey): Promise<Bro
 export async function openPortalThread(page: Page, conversationId: string): Promise<void> {
   await page.goto(paths.portalThread(conversationId));
   await acceptPolicyIfShown(page);
-  await expect(page.getByLabel("Nội dung tin nhắn").or(page.getByText("Hội thoại"))).toBeVisible({
-    timeout: 30_000,
-  });
+  // Chờ ĐÚNG ô nhập, đừng `.or(getByText("Hội thoại"))`: chuỗi "hội thoại" xuất hiện ở
+  // nhiều chỗ khác trên trang (liên kết "Về luồng hội thoại", câu báo khoá) ⇒ strict mode
+  // violation "resolved to 2 elements", đỏ vì lý do chẳng liên quan tới thứ đang nghiệm thu.
+  // Mọi hội thoại dùng trong bộ này đều ACTIVE nên ô nhập PHẢI có.
+  await expect(page.getByLabel("Nội dung tin nhắn").first()).toBeVisible({ timeout: 30_000 });
 }
 
 export async function acceptPolicyIfShown(page: Page): Promise<boolean> {
@@ -33,12 +35,12 @@ export async function acceptPolicyIfShown(page: Page): Promise<boolean> {
 /** Mở màn chat phía giáo viên tại đúng hội thoại. */
 export async function openTeacherThread(page: Page, conversationId: string): Promise<void> {
   await page.goto(paths.teacherChat(conversationId));
-  await expect(page.getByLabel("Nội dung tin nhắn")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByLabel("Nội dung tin nhắn").first()).toBeVisible({ timeout: 30_000 });
 }
 
 /** Gõ + gửi một tin. Dùng chung được cho cả 2 bề mặt (nhãn ô nhập giống nhau). */
 export async function sendMessage(page: Page, body: string): Promise<void> {
-  const box = page.getByLabel("Nội dung tin nhắn");
+  const box = page.getByLabel("Nội dung tin nhắn").first();
   await box.fill(body);
   const sendBtn = page
     .getByRole("button", { name: "Gửi tin nhắn" })

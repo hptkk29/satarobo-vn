@@ -112,8 +112,22 @@ test("TS-13 · thông báo ghim, đếm đã đọc, quota 10/ngày, ghim trụ 
   // CUỐI CÙNG gửi được để bước 5 biết cái nào đang ghim.
   let lastSentAnnouncement = annBody;
   for (let i = 2; i <= 11; i++) {
+    // ⚠️ "Gửi thông báo" là nhãn của CẢ nút mở lẫn nút gửi trong hộp thoại. Bấm khi hộp
+    // thoại trước chưa đóng hẳn ⇒ `.first()` trỏ vào nút mở đang bị lớp phủ che, Playwright
+    // chờ actionability tới hết giờ và cả bài test treo (đã dính đúng thế lúc 10:47).
+    //
+    // ⚠️ Không dò trạng thái của chính phần tử `role="dialog"`: trên trang GV nó LUÔN tồn
+    // tại (đo: 33 lần đều thấy 1 phần tử) và Playwright vẫn coi là "visible" khi đóng, nên
+    // cả `toHaveCount(0)` lẫn `toBeHidden()` đều sai. Cách chắc chắn nhất mà vẫn là thao
+    // tác người dùng thật: TẢI LẠI TRANG giữa hai lượt — trang mới thì không còn lớp phủ
+    // nào sót lại.
+    await gv.goto(paths.teacherChat(seed.conversations.lopA));
+    // `.first()`: sau vài lượt điều hướng mềm, trang GV có lúc còn giữ DOM của lượt trước
+    // ⇒ hai ô nhập cùng nhãn. Ta chỉ cần biết trang đã dựng xong.
+    await expect(gv.getByLabel("Nội dung tin nhắn").first()).toBeVisible({ timeout: 30_000 });
     await gv.getByRole("button", { name: "Gửi thông báo" }).first().click();
     const d = gv.getByRole("dialog");
+    await expect(d).toBeVisible({ timeout: 15_000 });
     await d.getByLabel("Nội dung thông báo").fill(`${tag} thông báo số ${i} trong ngày`);
     await d.getByRole("button", { name: "Gửi thông báo" }).click();
     const alert = d.locator('[role="alert"]');
@@ -126,8 +140,7 @@ test("TS-13 · thông báo ghim, đếm đã đọc, quota 10/ngày, ghim trụ 
       break;
     }
     lastSentAnnouncement = `${tag} thông báo số ${i} trong ngày`;
-    await d.getByRole("button", { name: "Đóng" }).click();
-    await gv.waitForTimeout(500);
+    // Không cần bấm "Đóng": lượt sau tải lại trang, hộp thoại biến mất theo.
   }
   expect(blockedMessage, "phải bị chặn ở thông báo thứ 11").not.toBeNull();
   expect(blockedMessage!).toMatch(/10 thông báo/);
