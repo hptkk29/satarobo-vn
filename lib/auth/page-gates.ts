@@ -56,7 +56,20 @@ export const PAGE_GATES = {
    *  `classes:view-own` GLOBAL vừa thêm ở `prisma/seed-roles.ts` (KHÔNG mượn
    *  `students:view-own-class` — action đó kéo theo /hoc-ba mà BGĐ 10/07 đã cấm Giáo vụ).
    *  Sale vẫn ❌: vai đó không giữ action nào trong danh sách này. */
-  "/tin-nhan": ["students:view-own-class", "classes:view-own"],
+  /**
+   * F5 (mở phạm vi 10/08/2026) — THÊM `parent-requests:manage` để Sale vào được.
+   *
+   * Vì sao action này chứ không phải `chat:read`: hai bất biến do chính file test bên
+   * cạnh khoá lại — (a) mọi action trong bảng phải seed **GLOBAL** ở MỌI RoleDef giữ nó,
+   * vì `checkAnyPermission` gọi KHÔNG target; (b) gate **cấm** mọi `chat:*`. Sale giữ
+   * `chat:read` scope OWN, GV giữ ASSIGNED, QLCS giữ CENTER ⇒ nhét `chat:read` vào gate
+   * là khoá luôn cửa chính của GV lẫn QLCS. `parent-requests:manage` thoả cả hai: GLOBAL
+   * ở cả 3 RoleDef giữ nó (seed-roles.ts:347/456/520) và không phải chat:*.
+   *
+   * Nó cũng KHÔNG mở cửa cho ai mới ngoài Sale: v1 giữ nó ở đúng
+   * [SUPER_ADMIN, CENTER_MANAGER, SALES_CSM] — hai vai đầu vốn đã qua cổng này.
+   */
+  "/tin-nhan": ["students:view-own-class", "classes:view-own", "parent-requests:manage"],
 
   /** Cảnh báo rủi ro HV. GV KHÔNG vào: trang không có lọc theo lớp, cho GV vào là
    *  mở toàn cơ sở — đúng thứ câu 19 cấm. */

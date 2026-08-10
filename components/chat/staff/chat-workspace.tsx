@@ -193,7 +193,21 @@ async function ThreadPanel({
   //   thứ server sẽ cho qua. Hai target khác nhau là CÓ CHỦ ĐÍCH.
   const sendClassId =
     type === "CLASS_GROUP" ? classId : await dmWitnessClassId(conversationId, userId);
-  const sendTarget = { classId: sendClassId, centerId };
+  // ⚠️ `createdById: userId` — BẢN SAO PHẢI KHỚP HỆT SERVER, và đây chính là chỗ nó từng
+  // lệch. `sendTargetOf` (lib/chat/messages.ts:396-403) gán `createdById = actor.userId`
+  // KHI người gửi là thành viên hội thoại; người xem màn này LUÔN là thành viên (danh sách
+  // chỉ trả hội thoại của chính họ — `listConversationsForUser`), nên bỏ khoá này là dựng
+  // một target NGHÈO HƠN server.
+  //
+  // Hậu quả đo được khi mở F5: SALES_CSM giữ `chat:send` scope **OWN**, mà `scopeMatches`
+  // nhánh OWN đòi `target.createdById === actor.userId` (lib/auth/can.ts:24) ⇒ `canSend`
+  // = false ⇒ ô nhập XÁM, trong khi Server Action vẫn CHO gửi. Người dùng thấy "hỏng",
+  // log server sạch trơn.
+  //
+  // ⚠️ Và nó KHÔNG lộ ở máy local: `checkPermission` trả v1 khi `RBAC_V2_ENABLED` OFF
+  // (mặc định trong code — lib/flags.ts:8), mà v1 là ma trận TĨNH không có scope nên
+  // `chat:send` của Sale luôn true. Chỉ prod (v2 đang bật) mới xám.
+  const sendTarget = { classId: sendClassId, centerId, createdById: userId };
   const groupTarget = { classId, centerId };
   const [page, memberViews, pinnedPage, canSend, canAnnounce, canModerate] = await Promise.all([
     getMessagesPage(conversationId, userId),

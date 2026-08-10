@@ -23,12 +23,27 @@ export function OpenDmButton({
   peerUserId,
   hrefTemplate,
   label = "Nhắn riêng",
+  kind = "TEACHER_PARENT",
 }: {
   /** `User.id` của người còn lại. */
   peerUserId: string;
   /** Vd `"/portal/tin-nhan/:id"` hoặc `"/tin-nhan?c=:id"`. */
   hrefTemplate: string;
   label?: string;
+  /**
+   * F5 — kênh muốn mở. MẶC ĐỊNH `TEACHER_PARENT` để hai call-site cũ (thành viên nhóm
+   * lớp phía phụ huynh + phía nhân viên) không phải đổi một dòng nào.
+   *
+   * ⚠️ Union viết bằng chữ TRỰC TIẾP, KHÔNG `import { DmKind } from "@/lib/chat/dm"`:
+   * đây là Client Component, mà `dm.ts` import `@/lib/db` (Prisma) + `@/lib/audit` ⇒
+   * import value từ đó là kéo module server vào bundle client.
+   *
+   * ⚠️ Quên truyền `kind="SALE_PARENT"` ở lối vào của sale thì `extractDmKind` rơi về
+   * mặc định ⇒ server đi tra QUAN HỆ DẠY HỌC ⇒ luôn PERMISSION_DENIED, mà thông báo lại
+   * là "Chỉ nhắn riêng được giữa giáo viên và phụ huynh của lớp đang học" — sai hẳn
+   * hướng, rất tốn thời gian truy.
+   */
+  kind?: "TEACHER_PARENT" | "SALE_PARENT";
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -38,7 +53,7 @@ export function OpenDmButton({
     setPending(true);
     void (async () => {
       try {
-        const res = await openDmAction({ peerUserId });
+        const res = await openDmAction({ peerUserId, kind });
         if (!res.ok) {
           toast.error(res.error.message);
           setPending(false);

@@ -150,9 +150,20 @@ describe("/tin-nhan — Sale bị chặn, QLCS/GV/Admin vẫn vào được", ()
     );
   };
 
-  it("[TS-01.6] Sale KHÔNG vào được — cả v1 lẫn v2", () => {
-    expect(vaoDuocV1("SALES_CSM")).toBe(false);
-    expect(vaoDuocV2("CENTER_SALES_CSM")).toBe(false);
+  /**
+   * F5 (mở phạm vi 10/08/2026) ĐẢO ca này. Bản cũ pin "Sale KHÔNG vào được", viện dẫn
+   * TS-01.6 ("sale gọi mọi endpoint chat → 403 toàn bộ") — đúng với phạm vi CŨ khi F5 đã
+   * bị cắt khỏi P0. Nay Sale có kênh 1-1 với phụ huynh mình phụ trách nên PHẢI vào được
+   * màn chat, nếu không thì mở hội thoại xong bị `redirect("/dashboard")`.
+   *
+   * Điều còn phải giữ nguyên và ca dưới đây canh: vào được TRANG không có nghĩa là đọc
+   * được nhóm lớp. Phạm vi đọc là participant-based (`listConversationsForUser`), mà Sale
+   * không bao giờ là thành viên nhóm lớp; và scope OWN của Sale không khớp target nhóm
+   * lớp (pin ở lib/auth/chat-permissions.test.ts).
+   */
+  it("[F5] Sale VÀO ĐƯỢC /tin-nhan — cả v1 lẫn v2 (kênh 1-1 với PH mình phụ trách)", () => {
+    expect(vaoDuocV1("SALES_CSM")).toBe(true);
+    expect(vaoDuocV2("CENTER_SALES_CSM")).toBe(true);
   });
 
   it("QLCS / GV / Admin VẪN vào được — cả v1 lẫn v2 (không khoá nhầm cửa chính)", () => {

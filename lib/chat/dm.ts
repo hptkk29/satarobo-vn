@@ -246,6 +246,71 @@ export async function findSaleAssignedEnrollmentIds(
   return rows.map((r) => r.id);
 }
 
+/** Một tư vấn viên đang phụ trách phụ huynh này (F5, chiều PH → sale). */
+export type SaleOfParent = {
+  saleUserId: string;
+  saleName: string | null;
+  /** Tên các con đang được sale này phụ trách — để PH biết ai là ai khi có nhiều sale. */
+  childNames: string[];
+};
+
+/**
+ * ⭐ Chiều NGƯỢC của {@link findSaleAssignedEnrollmentIds}: phụ huynh chưa biết sale nào
+ * phụ trách mình, nên lối vào phía portal phải hỏi từ đầu kia.
+ *
+ * ⚠️ TRẢ VỀ MỘT DANH SÁCH, KHÔNG phải `sale | null`. Một phụ huynh có nhiều con, mỗi con
+ * nhiều ghi danh, mỗi ghi danh có `saleId` độc lập ⇒ **hai sale khác nhau là chuyện bình
+ * thường**, không phải dữ liệu hỏng. Ép về một người là tự tay giấu mất một kênh.
+ *
+ * ⚠️ Điều kiện lọc phải TRÙNG KHÍT `findSaleAssignedEnrollmentIds` (cùng
+ * `ENROLLMENT_ACTIVE_STATUS_LIST`, cùng `deletedAt IS NULL`, và cố ý KHÔNG ràng
+ * `Class.status`). Lệch một điều kiện là nút hiện ra mà server từ chối — hoặc ngược lại.
+ *
+ * ⚠️ Lọc `u."deletedAt" IS NULL AND u."isActive" = true` vì `loadOpenDmContext` cũng đòi
+ * đúng thế: thiếu là hiện nút cho sale đã nghỉ việc rồi bấm vào báo "Không tìm thấy
+ * người này".
+ *
+ * RAW có chủ đích — `Enrollment`/`Student` ∈ SCOPED_MODELS (xem khối "BẪY scopedDb" đầu
+ * file): học viên chuyển cơ sở vẫn phải giữ được kênh với sale cũ.
+ */
+export async function listSalesForParent(
+  parentUserId: string,
+  client: Db = db,
+): Promise<SaleOfParent[]> {
+  if (!parentUserId) return [];
+  const rows = await client.$queryRaw<
+    { saleUserId: string; saleName: string | null; childName: string | null }[]
+  >`
+    SELECT DISTINCT e."saleId" AS "saleUserId", u."name" AS "saleName", s."name" AS "childName"
+    FROM "Enrollment" e
+    JOIN "Student" s ON s."id" = e."studentId"
+    JOIN "User" u ON u."id" = e."saleId"
+    WHERE e."saleId" IS NOT NULL
+      AND e."deletedAt" IS NULL
+      AND e."status" = ANY(${ENROLLMENT_ACTIVE_STATUS_LIST}::"EnrollmentStatus"[])
+      AND s."deletedAt" IS NULL
+      AND s."parentUserId" = ${parentUserId}
+      AND u."deletedAt" IS NULL
+      AND u."isActive" = true
+    ORDER BY u."name" ASC NULLS LAST
+    LIMIT 20
+  `;
+  const byId = new Map<string, SaleOfParent>();
+  for (const r of rows) {
+    const cur = byId.get(r.saleUserId);
+    if (cur) {
+      if (r.childName && !cur.childNames.includes(r.childName)) cur.childNames.push(r.childName);
+      continue;
+    }
+    byId.set(r.saleUserId, {
+      saleUserId: r.saleUserId,
+      saleName: r.saleName,
+      childNames: r.childName ? [r.childName] : [],
+    });
+  }
+  return [...byId.values()];
+}
+
 /** Chiều quan hệ đã xác định của F5: ai là sale, ai là PH. */
 export type SaleParentRelation = {
   saleUserId: string;

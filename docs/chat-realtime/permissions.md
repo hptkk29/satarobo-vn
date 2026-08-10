@@ -9,7 +9,7 @@
 | PH | `User.role=PARENT` | Quan hệ PH→học viên→lớp (DB, không phải token) |
 | GV | `User.role=TEACHER` | Phân công dạy lớp (DB) — KHÔNG theo `centerId` của user (GV biên chế HO dạy chéo cơ sở) |
 | QLCS | Quản lý `Center` | `Class.centerId` của lớp (DB) |
-| Sale | `User.role=SALE` | **P0: không có quyền chat nào** (F5 đã dời) |
+| Sale | `User.role=SALES_CSM` / RoleDef `CENTER_SALES_CSM` | **F5 mở lại 10/08/2026**: CHỈ kênh 1-1 với phụ huynh mình được gán (`Enrollment.saleId`). ❌ ở MỌI ô nhóm lớp |
 | Admin HO | Quản trị hệ thống | Toàn cục, nhưng đọc nội dung ngoài thành viên phải qua F-AUDIT |
 
 Mọi scope tính từ **DB tại thời điểm request**, không nhúng vào JWT — trừ TB2 (subscribe) nơi policy RLS tự query DB lúc join.
@@ -30,7 +30,7 @@ Ký hiệu: ✅ cho phép · ❌ từ chối (kèm test pin ô đó) · ⚠️ c
 | Thu hồi tin mình ≤15' | ✅ | ✅ | ✅ | — | ✅ |
 | Gỡ tin người khác | ❌ | ✅ nhóm mình + lý do | ❌ | ❌ | ✅ + lý do |
 
-### 1-1 (DM_TEACHER_PARENT)
+### 1-1 giáo viên ↔ phụ huynh (DM_TEACHER_PARENT)
 
 | Operation | PH | GV | QLCS | Sale | Admin |
 |---|---|---|---|---|---|
@@ -40,6 +40,42 @@ Ký hiệu: ✅ cho phép · ❌ từ chối (kèm test pin ô đó) · ⚠️ c
 | Thu hồi tin mình ≤15' | ✅ | ✅ | ❌ | ❌ | ✅ |
 | Gỡ tin người khác | ❌ | ❌ | ❌ | ❌ | ✅ + lý do |
 | Xem liên hệ (SĐT/email) của người kia | ❌ | ❌ | — | — | — |
+
+### 1-1 tư vấn viên ↔ phụ huynh (DM_SALE_PARENT) — F5, mở lại 10/08/2026
+
+Phạm vi GIAI ĐOẠN 1: chỉ phụ huynh **đã có tài khoản**. Lead đang học thử chưa có `User`
+nào (học thử gắn `LeadChild`, không phải `Student`) — xem
+[`f5-giai-doan-2-cap-tai-khoan-tu-trial.md`](./f5-giai-doan-2-cap-tai-khoan-tu-trial.md).
+
+| Operation | PH | Sale được gán | Sale khác | GV | QLCS | Admin |
+|---|---|---|---|---|---|---|
+| Tạo/mở | ⚠️ chỉ với sale đang phụ trách con mình | ⚠️ chỉ với PH mình được gán | ❌ | ❌ | ❌ | ❌ |
+| Đọc | ✅ của mình | ✅ của mình | ❌ | ❌ | ❌ | ⚠️ F-AUDIT bắt buộc lý do + audit |
+| Gửi | ✅ khi ACTIVE | ✅ khi ACTIVE | ❌ | ❌ | ❌ | ❌ |
+| Thu hồi tin mình ≤15' | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Gửi ANNOUNCEMENT | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+**Định nghĩa "sale được gán"** (`findSaleAssignedEnrollmentIds`, `lib/chat/dm.ts`): tồn tại
+≥1 `Enrollment` với `saleId = sale`, `deletedAt IS NULL`, `status ∈
+ENROLLMENT_ACTIVE_STATUSES`, và học viên của nó có `parentUserId = PH`.
+
+**Ba điều dễ hiểu nhầm, ghi rõ để khỏi "sửa cho tiện":**
+
+1. **Cố ý KHÔNG ràng `Class.status = 'ACTIVE'`** như kênh dạy học. Kênh tư vấn sống theo
+   *phân công chăm sóc*, không theo việc lớp đã khai giảng chưa — ghi danh `PENDING`/
+   `CONFIRMED` chính là lúc phụ huynh cần hỏi sale nhất.
+2. **"Tệp của sale" = CHỈ phụ huynh mình được gán** (chốt của chủ dự án 10/08). KHÔNG mở
+   sang lead dùng chung của cơ sở (`Lead.isSharedWithTeam`): lead dùng chung thì trao đổi
+   trong nhóm lớp, không đẻ thêm kênh riêng. Nới ra là nhiều sale cùng nhắn riêng một PH.
+3. **Sale giữ `chat:read`/`chat:send` scope `OWN`, TUYỆT ĐỐI không phải `CENTER`.**
+   `scopeMatches` nhánh CENTER chỉ đòi `target.centerId` khớp, mà nhóm lớp LUÔN có
+   `centerId` ⇒ cấp CENTER là mở toang cửa nhóm lớp cho Sale. Pin ở
+   `lib/auth/chat-permissions.test.ts` ("[F5] Sale KHÔNG lọt vào nhóm lớp").
+
+**`dmKey` mang tiền tố loại** (`TP:` / `SP:`) từ F5: một nhân sự kiêm `TEACHER` +
+`SALES_CSM` có thể có ĐỒNG THỜI hai quan hệ với cùng một phụ huynh. Không có tiền tố thì
+hai kênh dùng chung một `Conversation`, và job đối soát archive nó khi *hết quan hệ dạy
+học* — cắt luôn kênh tư vấn còn hiệu lực, im lặng.
 
 **Ghi chú hiện thực 1-1 (09/08/2026) — `lib/chat/dm.ts`:**
 

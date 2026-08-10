@@ -35,11 +35,23 @@ export const metadata = { title: "Tin nhắn | Sata Robo", robots: { index: fals
  * thái đó đi đường riêng (`initialLocked` + broadcast `conversation.locked`) để ô nhập
  * đổi ngay mà không phải tải lại trang.
  */
-function sendGate(status: string): { canSend: boolean; reason: string | null } {
+function sendGate(
+  status: string,
+  type?: string,
+): { canSend: boolean; reason: string | null } {
   if (status === "ARCHIVED") {
+    // F5 — lý do đóng KHÁC nhau theo loại hội thoại, đừng nói câu sai sự thật với phụ
+    // huynh: kênh tư vấn đóng vì hết phân công chăm sóc, chẳng liên quan gì tới lớp.
+    // Giữ đúng ý của `DM_ARCHIVED_SYSTEM_TEXT` (lib/chat/dm.ts) để tin SYSTEM trong luồng
+    // và câu dưới ô nhập nói cùng một chuyện.
     return {
       canSend: false,
-      reason: "Lớp đã kết thúc — hội thoại chỉ còn đọc, không gửi tin được.",
+      reason:
+        type === "DM_SALE_PARENT"
+          ? "Tư vấn viên này không còn phụ trách — hội thoại chỉ còn đọc."
+          : type === "DM_TEACHER_PARENT"
+            ? "Quan hệ dạy học đã kết thúc — hội thoại chỉ còn đọc."
+            : "Lớp đã kết thúc — hội thoại chỉ còn đọc, không gửi tin được.",
     };
   }
   return { canSend: true, reason: null };
@@ -79,7 +91,7 @@ export default async function PortalConversationPage({
   );
 
   const pinned = announcements.announcements[0] ?? null;
-  const gate = sendGate(conversation.status);
+  const gate = sendGate(conversation.status, conversation.type);
 
   return (
     <div className="space-y-3">
