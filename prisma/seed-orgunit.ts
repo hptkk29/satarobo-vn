@@ -37,7 +37,10 @@ const SPINE: UnitSpec[] = [
     type: "HO",
     name: "Hội sở",
     address: "114 Hoàng Diệu, Đà Nẵng",
-    centerCode: "HO",
+    // ⚠️ centerCode: null CÓ CHỦ ĐÍCH. Center("hoi-so") là bản ghi MỒ CÔI đã biết — gắn nó
+    // vào đây làm rò quyền qua màn nhân sự (xem ghi chú dài ở validateCenterId).
+    // Việc bịt mồ côi thuộc US-07, bằng cầu ánh xạ tường minh.
+    centerCode: null,
     parentCode: null,
   },
   {
@@ -76,6 +79,14 @@ const CENTERS: UnitSpec[] = [
  */
 export async function seedPrimaryLegalEntity(db: PrismaClient): Promise<string> {
   const taxCode = "0402301783";
+  // Hạ cờ mọi pháp nhân gốc KHÁC trước khi upsert — DB có partial unique index
+  // `LegalEntity_isPrimary_unique`. Trên DB dev/test (dùng chung với test.satarobo.vn),
+  // ai đó tạo pháp nhân gốc khác qua UI là `pnpm db:seed` đỏ ở ngay dòng đầu, kéo theo
+  // toàn bộ cây OrgUnit không được seed.
+  await db.legalEntity.updateMany({
+    where: { isPrimary: true, taxCode: { not: taxCode } },
+    data: { isPrimary: false },
+  });
   const le = await db.legalEntity.upsert({
     where: { taxCode },
     update: {

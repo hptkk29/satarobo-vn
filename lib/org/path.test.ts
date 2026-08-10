@@ -146,16 +146,24 @@ describe("[US-05] phạm vi cơ sở — tách UNIT_ONLY khỏi UNIT_AND_BELOW",
     return base.map((n) => ({ ...n, path: buildPath(base, n.id) }));
   }
 
-  it("[US-05-U-18] đường PATH và đường PARENT-ID cho CÙNG kết quả", () => {
-    // Đây là dây an toàn của toàn bộ P1: nếu hai đường lệch thì path hỏng, và path hỏng
-    // nghĩa là QUYỀN sai (không phải hiển thị sai). Test này phải xanh trước mọi thứ khác.
+  it("[US-05-U-18] phạm vi KHÔNG phụ thuộc việc node đã có path hay chưa", () => {
+    // centerScopeForOrgUnit cố ý CHỈ duyệt parentId (xem ghi chú trong org-tree.ts:
+    // so prefix path bỏ qua liveness của tổ tiên ⇒ nở quyền). Test này ghim điều đó:
+    // thêm/bớt cột path KHÔNG được làm đổi kết quả phạm vi.
     const withPath = treeWithPath();
-    const withoutPath = tree(); // path undefined → hàm rơi về duyệt parentId
+    const withoutPath = tree();
     for (const id of ["ho", "dn", "vunga", "cs1", "csf"]) {
       expect(centerScopeForOrgUnit(withPath, id).unitAndBelow.sort()).toEqual(
         centerScopeForOrgUnit(withoutPath, id).unitAndBelow.sort(),
       );
     }
+  });
+
+  it("[US-05-U-18b] vùng CHẾT thì cơ sở dưới nó rơi khỏi phạm vi của HO", () => {
+    // Đây là ngữ nghĩa mà so prefix path KHÔNG có. Ghim lại để ai định "tối ưu" bằng path
+    // sẽ thấy đỏ ngay, thay vì mở rộng quyền im lặng.
+    const t = treeWithPath().map((n) => (n.id === "dn" ? { ...n, status: "SUSPENDED" as const } : n));
+    expect(centerScopeForOrgUnit(t, "ho").unitAndBelow).toEqual(["center-cs-f"]);
   });
 
   it("[US-05-U-19] REGION: unitOnly rỗng, unitAndBelow = cơ sở trong vùng", () => {

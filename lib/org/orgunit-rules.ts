@@ -62,23 +62,34 @@ export function validateRootRule(input: {
 }
 
 /**
- * V7 — centerId chỉ set cho CENTER… và HO.
+ * V7 — centerId chỉ set cho type CENTER.
  *
- * NỚI Ở P1 · US-05, có chủ đích. Hệ đang chạy có bản ghi `Center` id="hoi-so" (prisma/seed.ts:47)
- * mà KHÔNG OrgUnit nào trỏ tới, vì luật cũ cấm HO mang centerId. Hệ quả đo được: mọi bản
- * ghi gắn HO đi qua `orgUnitIdForCenter('hoi-so')` đều nhận NULL âm thầm ⇒ khi P4 lật
- * scopedDb sang orgUnitId thì TOÀN BỘ dữ liệu HO biến mất. Cho HO mang centerId là cách
- * rẻ nhất bịt lỗ đó mà không đụng 73 call-site đang đọc bảng Center.
+ * ⚠️ ĐÃ THỬ NỚI CHO HO Ở P1 RỒI GỠ (11/08/2026) — đừng nới lại mà không đọc hết đoạn này.
  *
- * KHÔNG kéo theo việc HO thành "một cơ sở": `getSubtreeCenterIds`/`allCenterIds` vẫn lọc
- * đúng `type === "CENTER"`, nên centerId của HO không lọt vào phạm vi cơ sở của ai cả.
- * Chỗ duy nhất dùng tới nó là cầu ánh xạ 2 chiều Center ↔ OrgUnit của US-07.
+ * Ý định ban đầu đúng: `Center("hoi-so")` không được OrgUnit nào trỏ tới, nên
+ * `orgUnitIdForCenter('hoi-so')` trả null im lặng và dữ liệu Hội sở không bao giờ nhận
+ * `orgUnitId`. Nhưng cách vá bằng cách cho HO mang `centerId` LÀM RÒ QUYỀN, đo được:
+ *
+ *   `app/(admin)/admin/nhan-su/actions.ts` suy đơn vị neo RBAC v2 bằng
+ *   `userAccount.orgUnitId ?? orgUnitIdForCenter(employee.centerId)`. Với nhân sự Hội sở,
+ *   trước đây vế phải là null ⇒ `reconcileUserOrgRoles` NÉM `OrgRoleSyncError` kèm hướng
+ *   dẫn (chặn cứng, buộc admin chọn đơn vị tay). Sau khi nới, nó trả OrgUnit(HO) ⇒ vai
+ *   được neo TẠI HO ⇒ `isHoLevel = true` (lib/auth/actor.ts) ⇒ người đó thấy MỌI cơ sở.
+ *   Chính `lib/auth/legacy-role-map.ts:94` đã cảnh báo sẵn: "vai neo ở HO ⇒ isHoLevel ⇒
+ *   scopedDb mở ALL cơ sở".
+ *
+ * Hai hệ quả nữa cùng gốc: `centerIdForOrgUnit(HO)` hết trả null, phá hợp đồng "HO → null"
+ * mà các màn nghỉ lễ/phòng học đang dựa vào (nghỉ lễ "toàn hệ thống" biến thành nghỉ lễ
+ * của một Center không ai thấy; phòng học tạo được ở Hội sở thành phòng ma).
+ *
+ * ⇒ Center mồ côi được XỬ Ở US-07 bằng một cầu ánh xạ TƯỜNG MINH, không bằng cách nạp
+ * thêm nghĩa cho cột `centerId`. `findOrphanCenters()` trong org-service.ts là công cụ đo.
  */
 export function validateCenterId(type: OrgUnitType, centerId: string | null | undefined): void {
-  if (centerId != null && type !== "CENTER" && type !== "HO") {
+  if (centerId != null && type !== "CENTER") {
     throw new OrgRuleError(
       "ORG_CENTERID_NOT_CENTER",
-      "Chỉ đơn vị loại CENTER (hoặc HO — bản ghi Center 'hoi-so' cũ) mới được gắn centerId.",
+      "Chỉ đơn vị loại CENTER mới được gắn centerId.",
       "centerId",
     );
   }

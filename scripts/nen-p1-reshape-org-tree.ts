@@ -90,35 +90,64 @@ async function main() {
   // ── 1. HO lên gốc ──────────────────────────────────────────────────────────
   if (ho.parentId !== null) viec.push(`HO: gỡ cha (đang là ${rows.find((x) => x.id === ho.parentId)?.code}) → đứng gốc`);
 
-  // ── 2. HO nhận Center "hoi-so" (bịt Center mồ côi) ─────────────────────────
-  const hoCenter = await db.center.findFirst({ where: { code: "HO" }, select: { id: true, name: true } });
-  if (hoCenter && ho.centerId !== hoCenter.id) {
-    viec.push(`HO: gắn centerId="${hoCenter.id}" (${hoCenter.name}) — đang mồ côi`);
+  // ── 2. Tạo/tìm vùng, VÀ kiểm nó có đúng chỗ không ──────────────────────────
+  // Cả HAI nhánh phải có mặt trong `viec`. Bản đầu chỉ ghi nhánh "chưa có vùng", nên khi
+  // vùng đã tồn tại nhưng nằm sai chỗ thì bản xem trước KHÔNG nhắc, còn --apply vẫn ghi —
+  // tức bản dry-run (thứ duy nhất biện minh cho việc chạy tay trên PROD, luật cứng #4)
+  // nói không đúng thao tác thật. Tệ hơn: nếu đó là việc DUY NHẤT còn lại thì
+  // viec.length === 0 và script báo "cây đã đúng hình" rồi bỏ đi.
+  const region = byCode.get(REGION_CODE) ?? null;
+  if (!region) {
+    viec.push(`Tạo đơn vị ${REGION_CODE} (REGION, "${REGION_NAME}") dưới HO`);
+  } else if (region.parentId !== ho.id) {
+    viec.push(
+      `${REGION_CODE}: dời về dưới HO (đang thuộc ${
+        rows.find((x) => x.id === region.parentId)?.code ?? "—"
+      })`,
+    );
   }
 
-  // ── 3. Tạo/tìm vùng ────────────────────────────────────────────────────────
-  const region = byCode.get(REGION_CODE) ?? null;
-  if (!region) viec.push(`Tạo đơn vị ${REGION_CODE} (REGION, "${REGION_NAME}") dưới HO`);
-
-  // ── 4. Dời CENTER đang treo ở ROOT/HO xuống vùng ───────────────────────────
+  // ── 3. Dời CENTER đang treo ở ROOT/HO xuống vùng ───────────────────────────
   const centersToMove = rows.filter(
     (r) => r.type === "CENTER" && (r.parentId === root?.id || r.parentId === ho.id),
   );
   for (const c of centersToMove) viec.push(`${c.code}: dời xuống ${REGION_CODE}`);
 
-  // ── 5. UserOrgRole đang gắn ROOT → chuyển sang HO ──────────────────────────
-  let uorAtRoot = 0;
+  // ── 4. UserOrgRole đang gắn ROOT → chuyển sang HO ──────────────────────────
+  // UserOrgRole có KHOÁ CHÍNH GHÉP (userId, orgUnitId, roleId). Một updateMany trần sẽ
+  // đâm unique 23505 nếu ai đó đã giữ CÙNG roleId ở cả ROOT lẫn HO (chuyện thường: seed
+  // và reconcileUserOrgRoles đều ưu tiên HO) ⇒ cả transaction rollback và người vận hành
+  // đứng trên PROD với lỗi Prisma thô. Nên tách: dòng TRÙNG thì XOÁ ở ROOT (bản HO đã có,
+  // quyền không đổi), phần còn lại mới chuyển.
+  let uorChuyen = 0;
+  let uorTrung: { userId: string; roleId: string }[] = [];
   if (root) {
-    uorAtRoot = await db.userOrgRole.count({ where: { orgUnitId: root.id } });
-    if (uorAtRoot > 0) {
+    const oRoot = await db.userOrgRole.findMany({
+      where: { orgUnitId: root.id },
+      select: { userId: true, roleId: true },
+    });
+    const oHo = await db.userOrgRole.findMany({
+      where: { orgUnitId: ho.id },
+      select: { userId: true, roleId: true },
+    });
+    const daCo = new Set(oHo.map((x) => `${x.userId}:${x.roleId}`));
+    uorTrung = oRoot.filter((x) => daCo.has(`${x.userId}:${x.roleId}`));
+    uorChuyen = oRoot.length - uorTrung.length;
+    if (uorChuyen > 0) {
       viec.push(
-        `UserOrgRole: chuyển ${uorAtRoot} dòng từ ${root.code} sang HO ` +
+        `UserOrgRole: chuyển ${uorChuyen} dòng từ ${root.code} sang HO ` +
           `(quyền KHÔNG đổi — isHoRoot() vốn coi ROOT ≡ HO)`,
+      );
+    }
+    if (uorTrung.length > 0) {
+      viec.push(
+        `UserOrgRole: XOÁ ${uorTrung.length} dòng ở ${root.code} vì người đó ĐÃ có cùng vai ở HO ` +
+          `(chuyển sang sẽ đâm khoá chính ghép userId+orgUnitId+roleId)`,
       );
     }
   }
 
-  // ── 6. Đóng node ROOT sau khi hết con ──────────────────────────────────────
+  // ── 5. Đóng node ROOT sau khi hết con ──────────────────────────────────────
   if (root) viec.push(`${root.code}: đóng (status=CLOSED, deletedAt) sau khi hết đơn vị con`);
 
   if (viec.length === 0) {
@@ -134,10 +163,20 @@ async function main() {
     return;
   }
 
+  // Pháp nhân gốc để gán cho vùng mới — seed gắn mọi đơn vị về pháp nhân gốc (US-06 AC2),
+  // nếu vùng do script tạo bỏ trống thì nó là node DUY NHẤT trong cây không có pháp nhân.
+  const phapNhanGoc = await db.legalEntity.findFirst({
+    where: { isPrimary: true, deletedAt: null },
+    select: { id: true },
+  });
+  if (!phapNhanGoc) {
+    console.warn(
+      "⚠️  Chưa có pháp nhân gốc (isPrimary) — vùng mới sẽ để trống legalEntityId. " +
+        "Chạy `pnpm db:seed` hoặc tạo pháp nhân gốc trước nếu không muốn vậy.",
+    );
+  }
+
   await db.$transaction(async (tx) => {
-    if (hoCenter && ho.centerId !== hoCenter.id) {
-      await tx.orgUnit.update({ where: { id: ho.id }, data: { centerId: hoCenter.id } });
-    }
     if (ho.parentId !== null) {
       await tx.orgUnit.update({ where: { id: ho.id }, data: { parentId: null } });
     }
@@ -155,6 +194,7 @@ async function main() {
           depth: 1,
           relationshipType: "OWNED",
           status: "ACTIVE",
+          legalEntityId: phapNhanGoc?.id ?? null,
         },
         select: { id: true, code: true, type: true, parentId: true, path: true, depth: true, centerId: true },
       }));
@@ -166,11 +206,18 @@ async function main() {
       await tx.orgUnit.update({ where: { id: c.id }, data: { parentId: regionRow.id } });
     }
 
-    if (root && uorAtRoot > 0) {
-      await tx.userOrgRole.updateMany({
-        where: { orgUnitId: root.id },
-        data: { orgUnitId: ho.id },
-      });
+    if (root) {
+      for (const t of uorTrung) {
+        await tx.userOrgRole.deleteMany({
+          where: { orgUnitId: root.id, userId: t.userId, roleId: t.roleId },
+        });
+      }
+      if (uorChuyen > 0) {
+        await tx.userOrgRole.updateMany({
+          where: { orgUnitId: root.id },
+          data: { orgUnitId: ho.id },
+        });
+      }
     }
 
     // Tính lại path/depth CẢ CÂY từ HO (gốc mới) — cùng công thức lib/org/path.ts.

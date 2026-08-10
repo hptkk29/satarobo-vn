@@ -102,9 +102,15 @@ export function getSubtreeOrgUnitIds(
  *                  `resolveRoleCenterScope` của matrix-fixture, ô biên đã ghim ở TS-04).
  * - `unitAndBelow` = mọi cơ sở trong nhánh, GỒM chính nó.
  *
- * Ưu tiên `path` khi cả cây đã có path (rẻ + đúng công thức BA §2.5 `LIKE path || '%'`);
- * rơi về duyệt parentId khi còn dòng chưa backfill. Test [US-05-U-18] khẳng định hai
- * đường cho CÙNG kết quả — nếu lệch là path hỏng, và path hỏng nghĩa là quyền sai.
+ * ⚠️ CỐ Ý CHỈ CÓ MỘT HIỆN THỰC: duyệt `parentId`. KHÔNG dùng `path` ở đây, dù P1 vừa
+ * thêm cột đó. Lý do — hai đường KHÔNG tương đương về ngữ nghĩa:
+ *   · duyệt parentId dừng ở node cha đã chết ⇒ cả nhánh dưới rơi khỏi phạm vi;
+ *   · so prefix `path` chỉ kiểm liveness của CHÍNH node CENTER ⇒ cơ sở nằm dưới một vùng
+ *     đang SUSPENDED vẫn lọt vào.
+ * Thay `path` vào đây là NỞ QUYỀN im lặng. `path` là cột để P3 truy vấn ở TẦNG DB
+ * (`WHERE path LIKE prefix || '%'` kèm điều kiện liveness của cả nhánh) — không phải để
+ * thay thuật toán trong RAM ở P1. Tính đúng đắn của cột được ghim bằng [US-05-IT-08]
+ * ("path lưu trong DB khớp path tính lại từ parentId").
  */
 export function centerScopeForOrgUnit(
   nodes: OrgUnitNode[],
@@ -113,18 +119,7 @@ export function centerScopeForOrgUnit(
 ): { unitOnly: string[]; unitAndBelow: string[] } {
   const self = indexBy(nodes).get(orgUnitId);
   const unitOnly = self && self.type === "CENTER" && self.centerId ? [self.centerId] : [];
-
-  const selfPath = self?.path;
-  const canUsePath = !!selfPath && nodes.every((n) => !!n.path || (!opts.includeDeleted && !isLive(n)));
-
-  const unitAndBelow = canUsePath
-    ? nodes
-        .filter((n) => (opts.includeDeleted || isLive(n)) && n.type === "CENTER" && n.centerId)
-        .filter((n) => n.path!.startsWith(selfPath!))
-        .map((n) => n.centerId as string)
-    : getSubtreeCenterIds(nodes, orgUnitId, opts);
-
-  return { unitOnly, unitAndBelow };
+  return { unitOnly, unitAndBelow: getSubtreeCenterIds(nodes, orgUnitId, opts) };
 }
 
 /** Đường đi từ node lên ROOT, GỒM chính nó: [self, parent, ..., root]. */

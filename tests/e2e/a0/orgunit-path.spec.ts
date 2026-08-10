@@ -12,6 +12,7 @@ import { resetDb, seedOrg } from "../_helpers/seed";
 import { OrgRuleError } from "../../../lib/org/types";
 import {
   createOrgUnit,
+  findOrphanCenters,
   getSubtreeCenterIds,
   updateOrgUnit,
 } from "../../../lib/org/org-service";
@@ -41,7 +42,7 @@ const byCode = (code: string) => db.orgUnit.findUnique({ where: { code } });
 async function seedFixtureTree() {
   await db.center.create({ data: { code: "CS1", name: "CS1", slug: "cs1-p1", address: "211", city: "" } });
   await db.center.create({ data: { code: "CS2", name: "CS2", slug: "cs2-p1", address: "114", city: "" } });
-  await db.center.create({ data: { code: "HO", name: "Hội sở", slug: "ho-p1", address: "114", city: "" } });
+  await db.center.create({ data: { id: "hoi-so-p1", code: "HO", name: "Hội sở", slug: "ho-p1", address: "114", city: "" } });
   await seedOrg(["HO", "CS1", "CS2"]);
 
   const ho = await byCode("HO");
@@ -171,17 +172,48 @@ test.describe("[US-05][TS-05] materialized path", () => {
     expect((await byCode("LAB_F"))?.path).toBe("/ho/vung-a/cs-franchise/lab-f/");
   });
 
-  test("[US-05-IT-07] Center 'hoi-so' KHÔNG còn mồ côi — HO mang centerId", async () => {
-    // Đây là lỗ đã đo được trước P1: không OrgUnit nào trỏ tới Center('hoi-so') nên mọi
-    // bản ghi của Hội sở nhận orgUnitId = null vĩnh viễn (và biến mất ở P4).
+  test("[US-05-IT-07] Center 'hoi-so' VẪN mồ côi — có chủ đích, và đo được", async () => {
+    // Lỗ thật: không OrgUnit nào trỏ tới Center('hoi-so') nên mọi bản ghi của Hội sở nhận
+    // orgUnitId = null vĩnh viễn (và biến mất khi P4 lật scope sang orgUnitId).
+    //
+    // ĐÃ THỬ vá ở US-05 bằng cách cho HO mang centerId — GỠ vì làm RÒ QUYỀN qua màn nhân
+    // sự (đơn vị neo RBAC v2 suy từ Center của nhân sự ⇒ nhân sự Hội sở được neo tại HO ⇒
+    // isHoLevel ⇒ thấy mọi cơ sở; trước đó đường này bị chặn cứng bằng OrgRoleSyncError).
+    // Việc bịt mồ côi thuộc US-07 — test này GIỮ cho tới lúc đó, và phải ĐỔI CHIỀU khi
+    // US-07 làm xong.
     await seedFixtureTree();
     const ho = await byCode("HO");
-    const hoCenter = await db.center.findFirst({ where: { code: "HO" }, select: { id: true } });
-    expect(ho?.centerId).toBe(hoCenter!.id);
+    expect(ho?.centerId).toBeNull();
 
-    // …nhưng centerId của HO KHÔNG được lọt vào phạm vi "cơ sở" của ai cả.
-    const centersOfHo = await getSubtreeCenterIds(ho!.id);
-    expect(centersOfHo).not.toContain(hoCenter!.id);
+    const orphans = await findOrphanCenters();
+    expect(orphans.map((o) => o.id)).toContain("hoi-so-p1");
+  });
+
+  test("[US-05-IT-08] path lưu trong DB KHỚP path tính lại từ parentId", async () => {
+    // Bất biến quan trọng nhất của US-05. `path` là dữ liệu DẪN XUẤT; nó chỉ có giá trị
+    // khi luôn khớp cây thật. Lệch nghĩa là mọi truy vấn prefix của P3 trả sai phạm vi.
+    const { csf } = await seedFixtureTree();
+    const dn = await byCode("DANANG");
+    await createOrgUnit({ type: "DEPARTMENT", code: "LAB_F", name: "Lab", parentId: csf.id });
+    await updateOrgUnit(csf.id, { parentId: dn!.id });
+
+    const rows = await db.orgUnit.findMany({
+      where: { deletedAt: null },
+      select: { id: true, code: true, type: true, parentId: true, path: true, depth: true },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const r of rows) {
+      const segments: string[] = [];
+      let cur: (typeof rows)[number] | undefined = r;
+      const guard = new Set<string>();
+      while (cur && !guard.has(cur.id)) {
+        guard.add(cur.id);
+        segments.unshift(cur.code.toLowerCase().replace(/_/g, "-"));
+        cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+      }
+      expect(r.path).toBe(`/${segments.join("/")}/`);
+      expect(r.depth).toBe(segments.length - 1);
+    }
   });
 });
 
@@ -263,7 +295,10 @@ test.describe("[US-06][TS-06] LegalEntity — pháp nhân", () => {
     expect(xoa.deletedAt).not.toBeNull();
   });
 
-  test("[US-06-IT-05] đơn vị hết hiệu lực (effectiveTo quá khứ) KHÔNG chặn xoá pháp nhân", async () => {
+  test("[US-06-IT-05] đơn vị CHƯA tới hạn hiệu lực VẪN chặn xoá pháp nhân", async () => {
+    // Ca thật của nhượng quyền: hợp đồng đã ký, cơ sở tạo sẵn với effectiveFrom tương lai.
+    // Bản đầu dùng isOrgUnitActiveAt(now) nên hôm nay nó "chưa active" ⇒ xoá được pháp
+    // nhân của nó ⇒ tới ngày khai trương thì thu học phí dưới một pháp nhân đã bị xoá.
     await db.center.create({ data: { code: "CS1", name: "CS1", slug: "cs1-eff", address: "211", city: "" } });
     await db.center.create({ data: { code: "HO", name: "HO", slug: "ho-eff", address: "114", city: "" } });
     await seedOrg(["HO", "CS1"]);
@@ -271,10 +306,42 @@ test.describe("[US-06][TS-06] LegalEntity — pháp nhân", () => {
     const cs1 = await byCode("CS1");
     await updateOrgUnit(cs1!.id, {
       legalEntityId: le.id,
-      effectiveTo: new Date("2020-01-01T00:00:00Z"),
+      effectiveFrom: new Date("2099-01-01T00:00:00Z"),
     });
 
-    const xoa = await softDeleteLegalEntity(le.id);
-    expect(xoa.deletedAt).not.toBeNull();
+    await expectOrgError(softDeleteLegalEntity(le.id), "LEGAL_HAS_ACTIVE_ORG_UNITS");
+  });
+
+  test("[US-06-IT-06] đơn vị SUSPENDED VẪN chặn xoá pháp nhân — chỉ CLOSED mới thôi chặn", async () => {
+    await db.center.create({ data: { code: "CS1", name: "CS1", slug: "cs1-sus", address: "211", city: "" } });
+    await db.center.create({ data: { code: "HO", name: "HO", slug: "ho-sus", address: "114", city: "" } });
+    await seedOrg(["HO", "CS1"]);
+    const le = await createLegalEntity({ taxCode: "0101243150", legalName: "Pháp nhân B" });
+    const cs1 = await byCode("CS1");
+    await updateOrgUnit(cs1!.id, { legalEntityId: le.id });
+
+    // "Tạm dừng, sẽ mở lại" — không phải cái cớ để xoá pháp nhân của nó.
+    await updateOrgUnit(cs1!.id, { status: "SUSPENDED" });
+    await expectOrgError(softDeleteLegalEntity(le.id), "LEGAL_HAS_ACTIVE_ORG_UNITS");
+
+    await updateOrgUnit(cs1!.id, { status: "CLOSED" });
+    expect((await softDeleteLegalEntity(le.id)).deletedAt).not.toBeNull();
+  });
+
+  test("[US-06-IT-07][AC3] KHÔNG gán được pháp nhân ĐÃ XOÁ — bịt đường vòng 2 bước", async () => {
+    // Xoá pháp nhân là xoá MỀM nên FK RESTRICT không cứu. Thiếu cổng này thì AC3 bị vòng
+    // qua: xoá lúc chưa ai trỏ vào → rồi gán lại cho cơ sở đang hoạt động.
+    await db.center.create({ data: { code: "CS1", name: "CS1", slug: "cs1-rev", address: "211", city: "" } });
+    await db.center.create({ data: { code: "HO", name: "HO", slug: "ho-rev", address: "114", city: "" } });
+    await seedOrg(["HO", "CS1"]);
+    const le = await createLegalEntity({ taxCode: "0101243150", legalName: "Pháp nhân B" });
+    await softDeleteLegalEntity(le.id); // hợp lệ: chưa đơn vị nào trỏ vào
+
+    const cs1 = await byCode("CS1");
+    await expectOrgError(updateOrgUnit(cs1!.id, { legalEntityId: le.id }), "LEGAL_NOT_FOUND");
+    await expectOrgError(
+      createOrgUnit({ type: "REGION", code: "VUNG_Z", name: "Vùng Z", parentId: (await byCode("HO"))!.id, legalEntityId: le.id }),
+      "LEGAL_NOT_FOUND",
+    );
   });
 });

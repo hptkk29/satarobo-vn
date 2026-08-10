@@ -57,3 +57,21 @@ Ngoài các nhóm trên: chưa có test nào cho các luật còn lại của n�
 | Ranh giới tài chính franchise ở TỪNG câu query báo cáo (BA §4) | Vi phạm pháp lý nhìn số chi tiết bên nhận | Khi viết module báo cáo: mỗi query qua ma trận TS-04 mở rộng; hiện chỉ có luật, chưa có bề mặt code |
 | Định dạng seam MISA (F7 / E1) | Kế toán nhập sai kỳ lương | Khảo sát import AMIS trước P5 — chưa test được vì chưa có spec |
 | Che trường `fieldMask` trên MỌI đường trả dữ liệu (không riêng TS-02) | Rò trường nhạy cảm qua endpoint quên áp mask | Đưa mask vào tầng serialize chung + test hợp đồng cho từng DTO — bổ sung khi có DTO thật |
+
+## AS-BUILT test — P1 · US-05 + US-06 (11/08/2026)
+
+| Bộ | Chỗ | Số case | Ghi chú |
+|---|---|---|---|
+| Thuần (vitest, job `unit-tests`) | `lib/org/path.test.ts` | 22 | slug/path/depth · recomputeSubtree (dời node, đổi code, vòng lặp) · V9 loại cha/con · hai mức phạm vi · trạng thái |
+| DB (playwright, job `e2e-a0`) | `tests/e2e/a0/orgunit-path.spec.ts` | 12 | TS-05 (dời node + hậu duệ trong 1 transaction) · TS-06 (pháp nhân) |
+| DB — viết lại theo hình cây mới | `tests/e2e/a0/orgunit.spec.ts` | 11 (9 sửa + 2 mới) | 3 khẳng định ĐỔI CHIỀU: `getSubtreeCenterIds(HO)` không còn `[]`, tổ tiên CS1 có thêm DANANG, cây mặc định không còn node ROOT |
+
+**Ba test đáng giữ nhất, đừng gỡ:**
+
+- `[US-05-U-04]` — `/cs1/` KHÔNG khớp `/cs10/`. Đây là lý do duy nhất path phải có `/` cuối; mất nó là rò quyền im lặng giữa hai cơ sở có mã tiền tố trùng.
+- `[US-05-U-05]` — slug của TS phải trùng `replace(lower(code),'_','-')` của SQL. Hai chỗ lệch nhau = path do DB sinh khác path do app sinh.
+- `[US-05-U-18]` — đường `path` và đường `parentId` cho **cùng** kết quả phạm vi. Lệch nghĩa là path hỏng, và path hỏng nghĩa là **quyền sai**, không phải hiển thị sai.
+
+**Ca biên đã ghim có chủ đích:** `[US-05-IT-04b]` — khi vừa sai loại cha vừa tạo vòng, V9 báo trước V5. Thứ tự này là lựa chọn (V9 rẻ hơn và nói đúng cái người dùng làm sai); ghim lại kẻo ai đó đảo thứ tự mà không biết có test phụ thuộc.
+
+**Chưa kiểm (nợ sang US-07):** đối soát `centerId` ↔ `orgUnitId` từng bảng; đường ghi mới có set `orgUnitId` không; hiệu năng `path LIKE prefix` (PT1 pre-mortem nói cây < 50 node nên hoãn đo tới khi > 500 node).

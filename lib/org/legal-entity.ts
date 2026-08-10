@@ -8,8 +8,7 @@
 
 import { Prisma, type LegalEntity } from "@prisma/client";
 import { db } from "@/lib/db";
-import { isOrgUnitActiveAt } from "./status";
-import { OrgRuleError, type OrgUnitNode, type OrgUnitType } from "./types";
+import { OrgRuleError } from "./types";
 
 /** MST Việt Nam: 10 số, hoặc 10 số + "-" + 3 số (đơn vị phụ thuộc). */
 export const TAX_CODE_RE = /^\d{10}(-\d{3})?$/;
@@ -141,49 +140,60 @@ export async function updateLegalEntity(
 }
 
 /**
- * AC3 — KHÔNG xoá được pháp nhân còn đơn vị ACTIVE trỏ vào; lỗi kèm DANH SÁCH đơn vị chặn
- * (TS-06 đòi đúng điều đó: "từ chối kèm danh sách đơn vị chặn").
+ * Pháp nhân còn dùng được không — dùng ở MỌI đường GÁN `legalEntityId`.
  *
- * "ACTIVE" ở đây đi qua `isOrgUnitActiveAt` — MỘT định nghĩa duy nhất (lib/org/status.ts),
- * chứ không tự viết lại điều kiện. Đơn vị đã CLOSED/xoá mềm không chặn.
+ * Vì sao cần: xoá pháp nhân là xoá MỀM nên FK `RESTRICT` không cứu. Không có hàm này thì
+ * AC3 bị vòng qua trong đúng hai bước: (1) xoá pháp nhân lúc không đơn vị nào trỏ vào →
+ * hợp lệ; (2) gán lại pháp nhân ĐÃ XOÁ cho một cơ sở đang hoạt động → không ai chặn.
+ * Kết quả: cơ sở đang thu học phí gắn một pháp nhân không tồn tại — đúng ranh giới pháp
+ * lý mà US-06 dựng ra để bảo vệ.
+ */
+export async function assertLegalEntityUsable(id: string): Promise<void> {
+  const le = await db.legalEntity.findUnique({
+    where: { id },
+    select: { deletedAt: true, isActive: true, legalName: true },
+  });
+  if (!le || le.deletedAt != null) {
+    throw new OrgRuleError(
+      "LEGAL_NOT_FOUND",
+      "Pháp nhân không tồn tại hoặc đã bị xoá.",
+      "legalEntityId",
+    );
+  }
+  if (!le.isActive) {
+    throw new OrgRuleError(
+      "LEGAL_INACTIVE",
+      `Pháp nhân "${le.legalName}" đang ngừng hoạt động — không gán được cho đơn vị.`,
+      "legalEntityId",
+    );
+  }
+}
+
+/**
+ * AC3 — KHÔNG xoá được pháp nhân còn đơn vị CHƯA ĐÓNG trỏ vào; lỗi kèm DANH SÁCH đơn vị
+ * chặn (TS-06 đòi đúng điều đó: "từ chối kèm danh sách đơn vị chặn").
+ *
+ * ⚠️ Điều kiện chặn là "CHƯA ĐÓNG", KHÔNG phải "đang hiệu lực tại thời điểm này".
+ * Bản đầu dùng `isOrgUnitActiveAt(now)` và thủng hai ca đo được:
+ *   · cơ sở nhượng quyền đã ký, tạo sẵn với `effectiveFrom` TƯƠNG LAI → hôm nay chưa
+ *     "active" → xoá được pháp nhân của nó → tới ngày khai trương thì thu học phí và xuất
+ *     hoá đơn dưới một pháp nhân đã bị xoá;
+ *   · đơn vị đang SUSPENDED ("tạm dừng, sẽ mở lại") → tạm dừng một tuần là xoá được
+ *     pháp nhân.
+ * Chỉ `CLOSED` / xoá mềm mới thôi chặn — đó mới là "đã đóng".
  */
 export async function softDeleteLegalEntity(id: string): Promise<LegalEntity> {
   const self = await getLegalEntity(id);
   if (!self) throw new OrgRuleError("LEGAL_NOT_FOUND", "Không tìm thấy pháp nhân.", "id");
 
-  const rows = await db.orgUnit.findMany({
-    where: { legalEntityId: id },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      type: true,
-      parentId: true,
-      isActive: true,
-      deletedAt: true,
-      status: true,
-      effectiveFrom: true,
-      effectiveTo: true,
+  const blocking = await db.orgUnit.findMany({
+    where: {
+      legalEntityId: id,
+      deletedAt: null,
+      status: { not: "CLOSED" },
     },
+    select: { id: true, code: true, name: true },
   });
-
-  const now = new Date();
-  const blocking = rows.filter((r) =>
-    isOrgUnitActiveAt(
-      {
-        id: r.id,
-        code: r.code,
-        type: r.type as OrgUnitType,
-        parentId: r.parentId,
-        isActive: r.isActive,
-        deletedAt: r.deletedAt,
-        status: r.status,
-        effectiveFrom: r.effectiveFrom,
-        effectiveTo: r.effectiveTo,
-      } satisfies OrgUnitNode,
-      now,
-    ),
-  );
 
   if (blocking.length > 0) {
     throw new OrgRuleError(

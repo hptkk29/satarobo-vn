@@ -100,7 +100,7 @@ WITH RECURSIVE tree AS (
     SELECT
         "id",
         "parentId",
-        '/' || replace(lower("code"), '_', '-') || '/' AS "path",
+        '/' || replace(lower(btrim("code")), '_', '-') || '/' AS "path",
         0 AS "depth"
     FROM "OrgUnit"
     WHERE "parentId" IS NULL
@@ -110,7 +110,7 @@ WITH RECURSIVE tree AS (
     SELECT
         c."id",
         c."parentId",
-        t."path" || replace(lower(c."code"), '_', '-') || '/',
+        t."path" || replace(lower(btrim(c."code")), '_', '-') || '/',
         t."depth" + 1
     FROM "OrgUnit" c
     JOIN tree t ON c."parentId" = t."id"
@@ -121,6 +121,17 @@ FROM tree t
 WHERE o."id" = t."id" AND NOT t.is_cycle;
 
 -- status = GƯƠNG của isActive (không phải nguồn sự thật mới — xem đầu file).
--- Chỉ chạm dòng đang lệch để chạy lại là no-op thật sự.
+--
+-- CHỈ hạ từ ACTIVE. Viết `status <> 'SUSPENDED'` là SAI: 'CLOSED' cũng thoả, nên lần chạy
+-- lại thứ hai (đúng kịch bản mà header file này mô tả là chuyện thường) sẽ kéo đơn vị đã
+-- ĐÓNG VĨNH VIỄN tụt về "tạm dừng, sẽ mở lại" — hai nghĩa mà softDeleteOrgUnit phân biệt
+-- có chủ đích.
 UPDATE "OrgUnit" SET "status" = 'SUSPENDED'
-WHERE "isActive" = false AND "status" <> 'SUSPENDED';
+WHERE "isActive" = false AND "status" = 'ACTIVE';
+
+-- Đơn vị đã xoá mềm là CLOSED, không phải SUSPENDED. Câu này phải đứng SAU câu trên:
+-- mọi dòng xoá mềm trên DB đang chạy đều có isActive=false (softDeleteOrgUnit luôn set),
+-- nên nếu không có nó thì migration tự đẻ ra tổ hợp deletedAt != NULL + SUSPENDED —
+-- đúng tổ hợp mâu thuẫn mà lib/org/status.ts tuyên bố là bất biến.
+UPDATE "OrgUnit" SET "status" = 'CLOSED'
+WHERE "deletedAt" IS NOT NULL AND "status" <> 'CLOSED';

@@ -353,7 +353,11 @@ model OrgUnit {
   @@index([type])
   @@index([parentId])
   @@index([deletedAt])
-  @@index([path])
+  // text_pattern_ops PHẢI khai ở đây cho khớp migration 20260811030000. Thiếu nó, lần
+  // `prisma migrate dev` kế tiếp thấy shadow DB có opclass còn schema thì không, và sinh
+  // migration DROP/CREATE đổi về btree thường — mọi `path LIKE '/ho/danang/%'` của P3 âm
+  // thầm quay về seq scan.
+  @@index([path(ops: raw("text_pattern_ops"))])
   @@index([legalEntityId])
   @@index([status])
 }

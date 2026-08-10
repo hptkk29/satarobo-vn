@@ -17,6 +17,7 @@ import {
   validateRootRule,
   wouldCreateCycle,
 } from "./orgunit-rules";
+import { assertLegalEntityUsable } from "./legal-entity";
 import { childPath, recomputeSubtree } from "./path";
 import { isActiveFromStatus } from "./status";
 import {
@@ -114,8 +115,12 @@ export async function createOrgUnit(input: CreateOrgUnitInput): Promise<OrgUnit>
 
   validateCenterId(input.type, centerId); // V7
 
+  // KHÔNG lọc deletedAt: "chỉ một ROOT" phải đúng kể cả khi ROOT cũ đã bị đóng bằng
+  // script reshape. Lọc deletedAt sẽ cho tạo ROOT thứ hai song song với cây HO, và mọi
+  // node dưới ROOT mới lại được buildActor coi là HO-level (isHoRoot nhận cả ROOT) —
+  // tức mở đường cấp quyền cross-center bằng cách dựng một cây thứ hai.
   const existingRoot = await db.orgUnit.findFirst({
-    where: { type: "ROOT", deletedAt: null },
+    where: { type: "ROOT" },
     select: { id: true },
   });
   validateRootRule({ type: input.type, parentId, existingRootId: existingRoot?.id ?? null }); // V3 + V4(parent required)
@@ -127,6 +132,10 @@ export async function createOrgUnit(input: CreateOrgUnitInput): Promise<OrgUnit>
   if (dup) {
     throw new OrgRuleError("ORG_CODE_CONFLICT", `Mã đơn vị "${code}" đã tồn tại.`, "code");
   }
+
+  // Pháp nhân phải CÒN SỐNG. Xoá pháp nhân là xoá MỀM nên FK RESTRICT không cứu —
+  // thiếu chỗ này là AC3 của US-06 bị vòng qua trong hai bước (xoá rồi gán lại).
+  if (input.legalEntityId) await assertLegalEntityUsable(input.legalEntityId);
 
   // P1 · US-05 — node MỚI không có con, nên path tính thẳng từ path cha; không cần đệ quy.
   // Cha chưa có path (dòng cũ chưa backfill) → path con cũng null, và script đối soát
@@ -201,6 +210,7 @@ export async function updateOrgUnit(id: string, input: UpdateOrgUnitInput): Prom
   if (input.effectiveFrom !== undefined) data.effectiveFrom = input.effectiveFrom;
   if (input.effectiveTo !== undefined) data.effectiveTo = input.effectiveTo;
   if (input.legalEntityId !== undefined) {
+    if (input.legalEntityId) await assertLegalEntityUsable(input.legalEntityId);
     data.legalEntity = input.legalEntityId
       ? { connect: { id: input.legalEntityId } }
       : { disconnect: true };
@@ -237,26 +247,44 @@ export async function updateOrgUnit(id: string, input: UpdateOrgUnitInput): Prom
     data.parent = newParentId ? { connect: { id: newParentId } } : { disconnect: true };
   }
 
-  // Không đụng cấu trúc → update phẳng, khỏi mở transaction.
-  if (!parentChanged && newCode === undefined) {
-    return db.orgUnit.update({ where: { id }, data });
-  }
-
-  // Đụng cấu trúc → ghi node + tính lại CẢ NHÁNH trong cùng một transaction (AC2).
-  return db.$transaction(async (tx) => {
-    const updated = await tx.orgUnit.update({ where: { id }, data });
-
-    const rows = await tx.orgUnit.findMany({ where: { deletedAt: null } });
-    const rowsPure = rows.map(toNode);
-    for (const r of recomputeSubtree(rowsPure, id)) {
-      await tx.orgUnit.update({
-        where: { id: r.id },
-        data: { path: r.path, depth: r.depth },
-      });
+  try {
+    // Không đụng cấu trúc → update phẳng, khỏi mở transaction.
+    if (!parentChanged && newCode === undefined) {
+      return await db.orgUnit.update({ where: { id }, data });
     }
 
-    return tx.orgUnit.findUniqueOrThrow({ where: { id: updated.id } });
-  });
+    // Đụng cấu trúc → ghi node + tính lại CẢ NHÁNH trong cùng một transaction (AC2).
+    return await db.$transaction(async (tx) => {
+      const updated = await tx.orgUnit.update({ where: { id }, data });
+
+      // GỒM CẢ node đã xoá mềm: `path` là dữ liệu CẤU TRÚC, không phải dữ liệu nghiệp vụ.
+      // Bỏ chúng ra thì đơn vị đã xoá mềm giữ path của nhánh cũ VĨNH VIỄN (updateOrgUnit
+      // chặn node deletedAt ngay đầu hàm nên không đường nào tính lại cho nó) — tới lúc
+      // có đường khôi phục đơn vị ở P5, nó sống lại với path trỏ vào nhánh không còn tồn tại.
+      // Việc LỌC node chết chỉ thuộc về chỗ tính PHẠM VI QUYỀN, không thuộc chỗ tính path.
+      const rows = await tx.orgUnit.findMany();
+      const rowsPure = rows.map(toNode);
+      for (const r of recomputeSubtree(rowsPure, id)) {
+        await tx.orgUnit.update({
+          where: { id: r.id },
+          data: { path: r.path, depth: r.depth },
+        });
+      }
+
+      return tx.orgUnit.findUniqueOrThrow({ where: { id: updated.id } });
+    });
+  } catch (e) {
+    // Đua 2 request cùng đổi code về một giá trị: findUnique ở trên qua được cả hai,
+    // DB unique mới bắt. Dịch sang lỗi nghiệp vụ như createOrgUnit, không để 500 thô.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new OrgRuleError(
+        "ORG_CODE_CONFLICT",
+        `Mã đơn vị "${newCode ?? self.code}" đã tồn tại.`,
+        "code",
+      );
+    }
+    throw e;
+  }
 }
 
 /** Soft-delete (V8: chặn nếu còn con đang sống — vd xoá ROOT khi còn HO/CS). */
