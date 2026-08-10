@@ -200,8 +200,25 @@ describe("dmKeyOf — BR-06", () => {
     expect(dmKeyOf("zzz", "aaa")).toBe(dmKeyOf("aaa", "zzz"));
   });
 
-  it("sort rồi nối bằng dấu phân cách đã công bố", () => {
-    expect(dmKeyOf("b", "a")).toBe(`a${DM_KEY_SEPARATOR}b`);
+  it("sort rồi nối bằng dấu phân cách đã công bố, kèm tiền tố loại", () => {
+    expect(dmKeyOf("b", "a")).toBe(`TP${DM_KEY_SEPARATOR}a${DM_KEY_SEPARATOR}b`);
+  });
+
+  // F5 — điều kiện đã có thật, không phải giả định: repo cho phép đa vai, nên một nhân sự
+  // kiêm TEACHER + SALES_CSM với CÙNG một phụ huynh sẽ đụng một khoá nếu thiếu tiền tố.
+  // Hậu quả: hai kênh chung một Conversation, job đối soát archive nó khi hết quan hệ dạy
+  // học và cắt luôn kênh tư vấn còn hiệu lực.
+  it("CÙNG một cặp user nhưng KHÁC loại DM ⇒ khoá KHÁC nhau", () => {
+    expect(dmKeyOf("u1", "u2", "SALE_PARENT")).not.toBe(dmKeyOf("u1", "u2", "TEACHER_PARENT"));
+    expect(dmKeyOf("u2", "u1", "SALE_PARENT")).toBe(dmKeyOf("u1", "u2", "SALE_PARENT"));
+  });
+
+  it("mặc định là TEACHER_PARENT — mọi điểm gọi cũ giữ nguyên hành vi", () => {
+    expect(dmKeyOf("u1", "u2")).toBe(dmKeyOf("u1", "u2", "TEACHER_PARENT"));
+  });
+
+  it("loại lạ thì ném lỗi, không âm thầm sinh khoá không tiền tố", () => {
+    expect(() => dmKeyOf("u1", "u2", "KHONG_CO" as never)).toThrow();
   });
 
   it("tất định: gọi nhiều lần cho cùng kết quả", () => {

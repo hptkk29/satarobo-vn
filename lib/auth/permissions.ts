@@ -605,13 +605,17 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // Matrix v1 chỉ gate VAI được vào chat; quyền đọc/gửi thật là participant-based
   // enforce ở tầng action (delta 00-dieu-chinh mục E.3). SALES_CSM P0: 403 toàn bộ
   // (F5 đã dời) — cố ý KHÔNG xuất hiện ở bất kỳ action chat:* nào.
-  "chat:read": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "PARENT"],
+  // F5 (mở phạm vi 10/08/2026): SALES_CSM vào danh sách — nhưng CHỈ mở được kênh 1-1 với
+  // phụ huynh mình phụ trách; chốt chặn thật là `Enrollment.saleId` kiểm trong handler
+  // của `openDm`. Sale vẫn ❌ ở MỌI ô nhóm lớp (không có action nào cho phép, và scope
+  // OWN của v2 không khớp target nhóm lớp).
+  "chat:read": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "PARENT", "SALES_CSM"],
   // ⚠️ chat:send CỐ Ý KHÔNG có SUPER_ADMIN — ngoại lệ DUY NHẤT của luật "SUPER_ADMIN
   // phủ mọi action" (permissions.test.ts): US-15 AC4 — chế độ xem của Admin là CHỈ
   // ĐỌC, không gửi CHAT vào hội thoại mình không phải thành viên. can() v2 bypass
   // SUPER_ADMIN vẫn true ⇒ chốt chặn thật nằm ở participant-check trong Server
   // Action (US-06); v1 deny thêm một lớp + pin ý định ngay tại matrix.
-  "chat:send": ["CENTER_MANAGER", "TEACHER", "PARENT"],
+  "chat:send": ["CENTER_MANAGER", "TEACHER", "PARENT", "SALES_CSM"],
   "chat:announce": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   // Gỡ tin người khác: GV nhóm mình (+ lý do) hoặc Admin. QLCS ❌ (permissions.md).
   "chat:moderate": ["SUPER_ADMIN", "TEACHER"],

@@ -508,6 +508,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "honors:view", scopeType: "CENTER" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // ── F5 (Đợt 3, mở phạm vi 10/08/2026): nhắn riêng 1-1 với PHỤ HUYNH MÌNH PHỤ TRÁCH ──
+      // Scope **OWN**, giống hệt vai PARENT, và CỐ Ý KHÔNG dùng CENTER: `scopeMatches`
+      // cho CENTER chỉ cần `target.centerId` khớp, mà nhóm lớp LUÔN có `centerId` ⇒ cấp
+      // CENTER là mở toang cửa nhóm lớp cho Sale — trái ma trận permissions.md (Sale ❌
+      // ở mọi ô nhóm lớp). Với OWN thì `openDmTargetOf`/`sendTargetOf` gán
+      // `createdById = actor.userId` nên chỉ khớp khi Sale là THÀNH VIÊN hội thoại; chốt
+      // chặn thật là quan hệ phân công (`Enrollment.saleId`) kiểm trong handler.
+      { action: "chat:read", scopeType: "OWN" },
+      { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "CENTER" },

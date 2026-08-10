@@ -591,7 +591,20 @@ describe("[US-06] đường thành công (AC2 + AC3)", () => {
     expect(res.ok).toBe(true);
   });
 
-  it("[TS-01.6] Sale (CENTER_SALES_CSM) → PERMISSION_DENIED, không ghi tin nào", async () => {
+  /**
+   * F5 (mở phạm vi 10/08/2026) VIẾT LẠI CA NÀY. Bản cũ pin "Sale → 403 ở MỌI endpoint
+   * chat", đúng với phạm vi cũ khi Sale không giữ action chat nào. Nay Sale có
+   * `chat:read`/`chat:send` scope **OWN** cho kênh 1-1 với phụ huynh mình phụ trách, nên
+   * điều cần ghim đổi thành: **Sale KHÔNG gửi được vào NHÓM LỚP**.
+   *
+   * ⚠️ Fixture phải để `participantId: null` mới phản ánh đời thật: Sale KHÔNG BAO GIỜ là
+   * thành viên nhóm lớp (`computeDerivedMembership` chỉ dẫn xuất GV/trợ giảng/PH/QLCS).
+   * Bản cũ để `participantId: "part-1"` — tức giả định Sale đã là thành viên, tình huống
+   * không tồn tại — và chính giả định đó làm `sendTargetOf` gán `createdById = chính
+   * mình` khiến scope OWN khớp. Ghim sai fixture thì test đo một thế giới không có thật.
+   */
+  it("[TS-01.6][F5] Sale KHÔNG gửi được vào nhóm lớp → PERMISSION_DENIED, không ghi tin nào", async () => {
+    h.state.ctxRow = ctxRow({ participantId: null, createdById: "nguoi-tao-nhom" });
     const actor = actorOf("CENTER_SALES_CSM", "cs1", "sale-1");
     const res = await sendChatMessageAsActor(actor, "Sale Test", input());
     expect(res.ok).toBe(false);

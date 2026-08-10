@@ -93,14 +93,19 @@ describe("US-05 v1 — nhóm lớp (CLASS_GROUP), permissions.md ma trận", () 
     expect(canV1("TEACHER", "chat:read")).toBe(true); // ô GV ✅ lớp mình dạy
     expect(canV1("CENTER_MANAGER", "chat:read")).toBe(true); // ô QLCS ✅ lớp cơ sở mình
     expect(canV1("SUPER_ADMIN", "chat:read")).toBe(true); // ô Admin ⚠️ (F-AUDIT enforce ở action)
-    expect(canV1("SALES_CSM", "chat:read")).toBe(false); // ô Sale ❌ [TS-01.6]
+    // F5 (mở phạm vi 10/08/2026): Sale nay CÓ `chat:read`, nhưng đó là chìa cho kênh 1-1
+    // với phụ huynh mình phụ trách. Ô NHÓM LỚP của Sale vẫn ❌ — v1 là ma trận TĨNH không
+    // có target nên không diễn tả nổi sự khác biệt đó; chốt chặn thật nằm ở v2 (scope OWN
+    // không khớp target nhóm lớp) + quan hệ `Enrollment.saleId` trong handler openDm.
+    // Xem case "[F5] Sale KHÔNG lọt vào nhóm lớp" ở khối v2 bên dưới.
+    expect(canV1("SALES_CSM", "chat:read")).toBe(true);
   });
 
   it("[MTX-CG-CHAT] Gửi CHAT: PH/GV/QLCS ✅ — Sale ❌ — Admin ❌ (US-15 AC4) [TS-03.1a/3a]", () => {
     expect(canV1("PARENT", "chat:send")).toBe(true); // [TS-03.1a] ph1 gửi CHAT → 200
     expect(canV1("TEACHER", "chat:send")).toBe(true);
     expect(canV1("CENTER_MANAGER", "chat:send")).toBe(true); // [TS-03.3a] chốt QLCS=MEMBER
-    expect(canV1("SALES_CSM", "chat:send")).toBe(false); // [TS-01.6]
+    expect(canV1("SALES_CSM", "chat:send")).toBe(true); // F5 — chỉ có nghĩa cho 1-1, xem chú thích trên
     // Ô Admin "❌ (nếu không phải thành viên)" — v1 pin deny toàn phần (ngoại lệ duy
     // nhất của luật SUPER_ADMIN-phủ-mọi-action, xem permissions.ts + permissions.test.ts).
     expect(canV1("SUPER_ADMIN", "chat:send")).toBe(false); // [TS-03.4b][US-15 AC4]
@@ -134,8 +139,15 @@ describe("US-05 v1 — quản trị (/admin/hoi-thoai, khoá, audit)", () => {
 });
 
 describe("US-05 v1 — deny toàn phần theo vai (điều kiện chốt 07-08/08)", () => {
-  it("[TS-01.6][P0] SALES_CSM: cả 5 action chat → deny (F5 đã dời)", () => {
-    for (const a of CHAT_ACTIONS) expect(canV1("SALES_CSM", a)).toBe(false);
+  // F5 mở phạm vi 10/08/2026: Sale nhận ĐÚNG HAI action (read/send) cho kênh 1-1 với phụ
+  // huynh mình phụ trách. Ba action còn lại vẫn deny tuyệt đối — Sale không được gửi
+  // thông báo, không gỡ tin người khác, không vào trang quản trị hội thoại.
+  it("[TS-01.6][F5] SALES_CSM: chỉ chat:read + chat:send; announce/moderate/admin vẫn deny", () => {
+    expect(canV1("SALES_CSM", "chat:read")).toBe(true);
+    expect(canV1("SALES_CSM", "chat:send")).toBe(true);
+    expect(canV1("SALES_CSM", "chat:announce")).toBe(false);
+    expect(canV1("SALES_CSM", "chat:moderate")).toBe(false);
+    expect(canV1("SALES_CSM", "chat:admin")).toBe(false);
   });
 
   it("PARENT: deny chat:announce / chat:moderate / chat:admin [TS-03.1b][TS-03.6a]", () => {
@@ -295,11 +307,29 @@ describe("US-05 v2 — Sale (CENTER_SALES_CSM): P0 deny TOÀN BỘ [TS-01.6]", (
     }
   });
 
-  it("seed v2 CENTER_SALES_CSM không chứa bất kỳ perm chat:* nào (pin chống thêm nhầm)", () => {
-    const chatPerms = seedPermsOf("CENTER_SALES_CSM").filter((p) =>
-      p.action.startsWith("chat:"),
-    );
-    expect(chatPerms).toEqual([]);
+  // F5 (10/08/2026) — Sale nay CÓ perm chat, nhưng ĐÚNG HAI cái và ĐÚNG scope OWN.
+  // Case này giữ nguyên vai trò cũ: chống thêm nhầm. Điều nguy hiểm nhất là ai đó "cho
+  // tiện" đổi sang CENTER — `scopeMatches` cho CENTER chỉ đòi `target.centerId` khớp, mà
+  // nhóm lớp LUÔN có centerId ⇒ Sale lọt thẳng vào mọi nhóm lớp của cơ sở mình.
+  it("[F5] seed v2 CENTER_SALES_CSM: đúng chat:read + chat:send, đúng scope OWN", () => {
+    const chatPerms = seedPermsOf("CENTER_SALES_CSM")
+      .filter((p) => p.action.startsWith("chat:"))
+      .sort((a, b) => a.action.localeCompare(b.action));
+    expect(chatPerms).toEqual([
+      { action: "chat:read", scopeType: "OWN" },
+      { action: "chat:send", scopeType: "OWN" },
+    ]);
+  });
+
+  it("[F5] Sale KHÔNG lọt vào nhóm lớp: scope OWN không khớp target có classId/centerId", () => {
+    const sale = actorOf("CENTER_SALES_CSM", "cs1");
+    // Target nhóm lớp (`sendTargetOf` với hội thoại CLASS_GROUP mà Sale KHÔNG là thành viên).
+    expect(canV2(sale, "chat:read", { classId: "lopA", centerId: "c1" })).toBe(false);
+    expect(canV2(sale, "chat:send", { classId: "lopA", centerId: "c1" })).toBe(false);
+    // Và không bao giờ được gửi thông báo / gỡ tin / vào trang quản trị.
+    expect(canV2(sale, "chat:announce", { classId: "lopA", centerId: "c1" })).toBe(false);
+    expect(canV2(sale, "chat:moderate", { classId: "lopA", centerId: "c1" })).toBe(false);
+    expect(canV2(sale, "chat:admin")).toBe(false);
   });
 });
 

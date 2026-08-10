@@ -61,8 +61,19 @@ export const DM_KEY_SEPARATOR = ":";
 // ─── PHẦN THUẦN (không DB — unit test ở dm.test.ts) ─────────────────────────
 
 /**
- * **BR-06** — khoá duy nhất của hội thoại 1-1: **sort 2 `User.id` rồi nối**.
- * Đúng nguyên văn chú thích của cột `Conversation.dmKey` trong `prisma/schema.prisma`.
+ * Loại hội thoại 1-1 mà `dmKeyOf` biết đặt khoá. Trùng tên với `ConversationType`
+ * nhưng khai riêng để `dmKeyOf` giữ được tính THUẦN (không import Prisma enum).
+ */
+export type DmKind = "TEACHER_PARENT" | "SALE_PARENT";
+
+/** Tiền tố loại trong `dmKey`. Đổi giá trị = phải migrate `Conversation.dmKey`. */
+export const DM_KIND_PREFIX: Record<DmKind, string> = {
+  TEACHER_PARENT: "TP",
+  SALE_PARENT: "SP",
+};
+
+/**
+ * **BR-06** — khoá duy nhất của hội thoại 1-1: **loại + sort 2 `User.id` rồi nối**.
  *
  * Đây là ĐỊNH NGHĨA DUY NHẤT của công thức trong toàn repo — fixture test
  * (`tests/chat/_helpers/seed-chat.ts`) import lại hàm này chứ không chép công thức.
@@ -72,18 +83,29 @@ export const DM_KEY_SEPARATOR = ":";
  * Sắp xếp làm cho khoá ĐỐI XỨNG: `dmKeyOf(a,b) === dmKeyOf(b,a)` ⇒ hai người bấm
  * "Nhắn riêng" cùng lúc va vào CÙNG một unique index (AC5), không sinh 2 hội thoại.
  *
- * ⚠️ KHÔNG có phần phân biệt loại DM trong khoá. Ở P0 chỉ tồn tại
- * `DM_TEACHER_PARENT`, và một cặp (GV, PH) chỉ có đúng một hội thoại riêng. Khi Đợt 3
- * mở `DM_SALE_PARENT`/`DM_STAFF`, nếu CÙNG một cặp user có thể có hai DM khác loại thì
- * phải thêm phần loại vào khoá **ở đây** + migrate dữ liệu cũ — đừng vá bằng cách sinh
- * khoá riêng ở call-site.
+ * ⚠️ VÌ SAO CÓ TIỀN TỐ LOẠI (F5, Đợt 3 — 10/08/2026). Bản P0 cố ý bỏ tiền tố vì chỉ có
+ * một loại DM, kèm chỉ dẫn "khi mở DM_SALE_PARENT, nếu CÙNG một cặp user có thể có hai
+ * DM khác loại thì thêm phần loại vào khoá Ở ĐÂY + migrate dữ liệu cũ". Điều kiện đó ĐÃ
+ * XẢY RA và không phải giả định: repo cho phép đa vai (`User.roles[]`), nên một nhân sự
+ * kiêm TEACHER + SALES_CSM với cùng một phụ huynh sẽ đụng đúng một khoá. Hậu quả nếu để
+ * nguyên: hai kênh chung một `Conversation`, và `reconcileDmConversations` archive nó khi
+ * **hết quan hệ dạy học** — cắt luôn kênh tư vấn còn đang hiệu lực, im lặng.
+ *
+ * Khoá cũ (`a:b`, không tiền tố) được migration `20260810..._dm_key_kind_prefix` đổi
+ * thành `TP:a:b`. Migration idempotent, chỉ chạm dòng `type = 'DM_TEACHER_PARENT'`.
  */
-export function dmKeyOf(userIdA: string, userIdB: string): string {
+export function dmKeyOf(
+  userIdA: string,
+  userIdB: string,
+  kind: DmKind = "TEACHER_PARENT",
+): string {
   const a = typeof userIdA === "string" ? userIdA.trim() : "";
   const b = typeof userIdB === "string" ? userIdB.trim() : "";
   if (!a || !b) throw new Error("dmKeyOf: thiếu userId");
   if (a === b) throw new Error("dmKeyOf: không thể mở hội thoại riêng với chính mình");
-  return [a, b].sort().join(DM_KEY_SEPARATOR);
+  const prefix = DM_KIND_PREFIX[kind];
+  if (!prefix) throw new Error(`dmKeyOf: loại DM không hợp lệ (${String(kind)})`);
+  return [prefix, ...[a, b].sort()].join(DM_KEY_SEPARATOR);
 }
 
 /** Mã lỗi EN + thông điệp VI (quy ước API contract) — client hiện `message` nguyên văn. */
@@ -177,6 +199,85 @@ export async function findTeachingClassIds(
     LIMIT 20
   `;
   return rows.map((r) => r.id);
+}
+
+/**
+ * ⭐ ĐỊNH NGHĨA DỨT KHOÁT — "SALE ĐANG PHỤ TRÁCH PHỤ HUYNH NÀY" (F5, giai đoạn 1):
+ *
+ *   tồn tại ≥ 1 ghi danh E thoả ĐỒNG THỜI:
+ *     • `E.saleId = sale` — cột này gán từ `Lead.assignedToId` lúc convert và sửa được
+ *       ở màn học viên của lớp; nó LÀ định nghĩa "tệp của sale" trong repo;
+ *     • `E.deletedAt IS NULL`, `E.status ∈ ENROLLMENT_ACTIVE_STATUSES`;
+ *     • học viên S: `E.studentId = S.id`, `S.deletedAt IS NULL`, `S.parentUserId = PH`.
+ *
+ * ⚠️ KHÔNG ràng `Class.status = 'ACTIVE'` như quan hệ dạy học. Có chủ đích: kênh tư vấn
+ * sống theo PHÂN CÔNG CHĂM SÓC, không theo việc lớp đã khai giảng hay chưa — ghi danh
+ * `PENDING`/`CONFIRMED` (chờ xếp lớp, đã xếp chưa học) chính là lúc phụ huynh cần hỏi
+ * sale nhất. Ràng thêm điều kiện lớp sẽ đóng kênh đúng lúc nó có ích nhất.
+ *
+ * ⚠️ Chốt phạm vi 10/08/2026 (chủ dự án): "tệp mình" = **CHỈ phụ huynh mình được gán**,
+ * KHÔNG mở sang lead dùng chung của cơ sở (`Lead.isSharedWithTeam`). Lead dùng chung thì
+ * trao đổi trong nhóm lớp, không đẻ thêm kênh riêng. Đừng nới ở đây mà không có quyết
+ * định mới — nới ra là nhiều sale cùng nhắn riêng một phụ huynh.
+ *
+ * ⚠️ Giai đoạn 1 chỉ phục vụ phụ huynh ĐÃ CÓ TÀI KHOẢN. Lead chưa chuyển đổi không có
+ * `User` nào (trial gắn vào `LeadChild`, không phải `Student`) — xem đặc tả giai đoạn 2.
+ */
+export async function findSaleAssignedEnrollmentIds(
+  saleUserId: string,
+  parentUserId: string,
+  client: Db = db,
+): Promise<string[]> {
+  if (!saleUserId || !parentUserId || saleUserId === parentUserId) return [];
+  // RAW có chủ đích — `Enrollment`/`Student` ∈ SCOPED_MODELS, xem khối "BẪY scopedDb"
+  // đầu file: sale phụ trách học viên đã chuyển cơ sở vẫn phải giữ được kênh.
+  const rows = await client.$queryRaw<{ id: string }[]>`
+    SELECT e."id"
+    FROM "Enrollment" e
+    JOIN "Student" s ON s."id" = e."studentId"
+    WHERE e."saleId" = ${saleUserId}
+      AND e."deletedAt" IS NULL
+      AND e."status" = ANY(${ENROLLMENT_ACTIVE_STATUS_LIST}::"EnrollmentStatus"[])
+      AND s."deletedAt" IS NULL
+      AND s."parentUserId" = ${parentUserId}
+    ORDER BY e."id" ASC
+    LIMIT 20
+  `;
+  return rows.map((r) => r.id);
+}
+
+/** Chiều quan hệ đã xác định của F5: ai là sale, ai là PH. */
+export type SaleParentRelation = {
+  saleUserId: string;
+  parentUserId: string;
+  /** Ghi danh làm chứng cho phân công — chỉ để ghi audit, KHÔNG dùng làm target scope. */
+  enrollmentIds: string[];
+};
+
+/**
+ * Xác định chiều quan hệ sale–PH giữa 2 user bất kỳ. `null` = không còn phân công nào
+ * ⇒ không mở được 1-1; hội thoại cũ chuyển ARCHIVED.
+ *
+ * Thử CẢ HAI chiều vì hàm phục vụ cả nút bấm phía sale lẫn phía phụ huynh (F5 là kênh
+ * HAI CHIỀU theo PRD: "sale mở với PH thuộc tệp mình; PH mở với đúng sale được gán").
+ */
+export async function resolveSaleParentRelation(
+  userA: string,
+  userB: string,
+  client: Db = db,
+): Promise<SaleParentRelation | null> {
+  if (!userA || !userB || userA === userB) return null;
+  const [aIsSale, bIsSale] = await Promise.all([
+    findSaleAssignedEnrollmentIds(userA, userB, client),
+    findSaleAssignedEnrollmentIds(userB, userA, client),
+  ]);
+  if (aIsSale.length > 0) {
+    return { saleUserId: userA, parentUserId: userB, enrollmentIds: aIsSale };
+  }
+  if (bIsSale.length > 0) {
+    return { saleUserId: userB, parentUserId: userA, enrollmentIds: bIsSale };
+  }
+  return null;
 }
 
 /**
@@ -346,8 +447,11 @@ async function findOrCreateDm(
   actorUserId: string,
   peerUserId: string,
   dmKey: string,
+  kind: DmKind = "TEACHER_PARENT",
 ): Promise<OpenedDm> {
   const userIds = [actorUserId, peerUserId] as const;
+  const conversationType =
+    kind === "SALE_PARENT" ? ("DM_SALE_PARENT" as const) : ("DM_TEACHER_PARENT" as const);
 
   const found = await db.conversation.findUnique({
     where: { dmKey },
@@ -361,7 +465,7 @@ async function findOrCreateDm(
     const conv = await db.$transaction(async (tx) => {
       const created = await tx.conversation.create({
         data: {
-          type: "DM_TEACHER_PARENT",
+          type: conversationType,
           subjectType: "NONE",
           subjectId: null,
           dmKey,
@@ -411,8 +515,10 @@ async function archiveDmConversation(conversationId: string): Promise<boolean> {
 }
 
 /** SYSTEM message ghi lại vì sao hội thoại đóng — người dùng thấy lý do, không "tự dưng câm". */
-const DM_ARCHIVED_SYSTEM_TEXT =
-  "Quan hệ dạy học đã kết thúc — hội thoại chuyển sang chế độ chỉ đọc.";
+const DM_ARCHIVED_SYSTEM_TEXT: Record<DmKind, string> = {
+  TEACHER_PARENT: "Quan hệ dạy học đã kết thúc — hội thoại chuyển sang chế độ chỉ đọc.",
+  SALE_PARENT: "Bạn không còn được phụ trách chăm sóc — hội thoại chuyển sang chế độ chỉ đọc.",
+};
 
 /**
  * ĐƯỜNG DUY NHẤT đóng một 1-1 vì hết quan hệ dạy học — dùng CHUNG cho cả hai lối:
@@ -424,7 +530,10 @@ const DM_ARCHIVED_SYSTEM_TEXT =
  * Gộp lại đây để không thể lệch lần nữa. Idempotent: đã ARCHIVED thì trả `false` và
  * KHÔNG ghi thêm tin SYSTEM thứ hai.
  */
-async function archiveDmForEndedRelation(conversationId: string): Promise<boolean> {
+async function archiveDmForEndedRelation(
+  conversationId: string,
+  kind: DmKind = "TEACHER_PARENT",
+): Promise<boolean> {
   const archived = await archiveDmConversation(conversationId);
   if (!archived) return false;
   const now = new Date();
@@ -433,7 +542,7 @@ async function archiveDmForEndedRelation(conversationId: string): Promise<boolea
       conversationId,
       kind: "SYSTEM",
       senderId: null,
-      body: DM_ARCHIVED_SYSTEM_TEXT,
+      body: DM_ARCHIVED_SYSTEM_TEXT[kind],
     },
   });
   await db.conversation.update({
@@ -448,6 +557,13 @@ async function archiveDmForEndedRelation(conversationId: string): Promise<boolea
 export const openDmSchema = z.object({
   /** `User.id` (cuid) của người còn lại — GV nếu người bấm là PH và ngược lại. */
   peerUserId: z.string().trim().min(1, "Thiếu người nhận").max(64, "Người nhận không hợp lệ"),
+  /**
+   * Loại kênh muốn mở. Người gọi phải nói RÕ, không để hệ thống đoán: một nhân sự kiêm
+   * TEACHER + SALES_CSM có thể có ĐỒNG THỜI hai quan hệ với cùng một phụ huynh, và từ
+   * F5 trở đi đó là HAI hội thoại khác nhau (khoá khác nhau). Đoán hộ là có ngày tin
+   * tư vấn rơi vào kênh dạy học. Mặc định giữ hành vi cũ của nút "Nhắn riêng" ở nhóm lớp.
+   */
+  kind: z.enum(["TEACHER_PARENT", "SALE_PARENT"]).optional().default("TEACHER_PARENT"),
 });
 
 export type OpenDmInput = z.infer<typeof openDmSchema>;
@@ -458,13 +574,28 @@ export type OpenDmContext = {
   peerName: string | null;
   /** null = người này không tồn tại / đã khoá / đã xoá. */
   peerExists: boolean;
+  kind: DmKind;
   dmKey: string | null;
+  /** Quan hệ dạy học — chỉ nạp khi `kind = TEACHER_PARENT`. */
   relation: TeacherParentRelation | null;
+  /** Phân công chăm sóc — chỉ nạp khi `kind = SALE_PARENT` (F5). */
+  saleRelation: SaleParentRelation | null;
   existing: { id: string; status: string } | null;
 };
 
 /** `User.id` là cuid — chỉ nhận ký tự an toàn, sai dạng thì để zod báo VALIDATION. */
 const USER_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * Loại kênh lấy từ input THÔ (trước zod) — cùng lý do với `extractPeerUserId`: target của
+ * `can()` phải dựng TRƯỚC `runAction`, mà lúc đó input chưa qua schema. Giá trị lạ → về
+ * mặc định `TEACHER_PARENT`; zod vẫn là chốt chặn thật và sẽ trả VALIDATION.
+ */
+function extractDmKind(raw: unknown): DmKind {
+  if (typeof raw !== "object" || raw === null) return "TEACHER_PARENT";
+  const v = (raw as { kind?: unknown }).kind;
+  return v === "SALE_PARENT" ? "SALE_PARENT" : "TEACHER_PARENT";
+}
 
 function extractPeerUserId(raw: unknown): string | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -475,13 +606,16 @@ function extractPeerUserId(raw: unknown): string | null {
 export async function loadOpenDmContext(
   actorUserId: string,
   peerUserId: string,
+  kind: DmKind = "TEACHER_PARENT",
 ): Promise<OpenDmContext> {
   const empty: OpenDmContext = {
     peerUserId,
     peerName: null,
     peerExists: false,
+    kind,
     dmKey: null,
     relation: null,
+    saleRelation: null,
     existing: null,
   };
   if (!peerUserId || peerUserId === actorUserId) return empty;
@@ -493,12 +627,24 @@ export async function loadOpenDmContext(
   });
   if (!peer) return empty;
 
-  const dmKey = dmKeyOf(actorUserId, peerUserId);
-  const [relation, existing] = await Promise.all([
-    resolveTeacherParentRelation(actorUserId, peerUserId),
+  const dmKey = dmKeyOf(actorUserId, peerUserId, kind);
+  // Chỉ hỏi ĐÚNG quan hệ của loại đang mở — hỏi cả hai là tốn 2 truy vấn join cho một
+  // câu trả lời không ai dùng.
+  const [relation, saleRelation, existing] = await Promise.all([
+    kind === "TEACHER_PARENT" ? resolveTeacherParentRelation(actorUserId, peerUserId) : null,
+    kind === "SALE_PARENT" ? resolveSaleParentRelation(actorUserId, peerUserId) : null,
     db.conversation.findUnique({ where: { dmKey }, select: { id: true, status: true } }),
   ]);
-  return { peerUserId, peerName: peer.name, peerExists: true, dmKey, relation, existing };
+  return {
+    peerUserId,
+    peerName: peer.name,
+    peerExists: true,
+    kind,
+    dmKey,
+    relation,
+    saleRelation,
+    existing,
+  };
 }
 
 function buildOpenDmConfig(
@@ -527,8 +673,13 @@ function buildOpenDmConfig(
         throw new ActionError("PEER_NOT_FOUND", "Không tìm thấy người này.");
       }
 
-      // ── AC3: quan hệ dạy học không còn hiệu lực ──
-      if (!ctx.relation) {
+      // ── AC3: quan hệ nền của kênh không còn hiệu lực ──
+      // F5: kênh tư vấn sống theo PHÂN CÔNG (`Enrollment.saleId`), kênh dạy học sống theo
+      // quan hệ dạy học. Hai loại, hai điều kiện — nhưng CÙNG một cách đóng, để lối tức
+      // thời và job đêm không bao giờ lệch nhau.
+      const relationAlive =
+        ctx.kind === "SALE_PARENT" ? ctx.saleRelation !== null : ctx.relation !== null;
+      if (!relationAlive) {
         // Hội thoại cũ (nếu có) chuyển ARCHIVED NGAY tại đây, không đợi job đêm:
         // đọc được, không gửi được. Không có rủi ro bên thứ ba — `ctx` được khoá theo
         // đúng cặp (actor, peer), và cổng vai `can()` đã chạy trước handler.
@@ -539,7 +690,7 @@ function buildOpenDmConfig(
         // Đi cùng `archiveDmForEndedRelation` để lối tức thời và job đêm để lại CÙNG
         // một hiện trạng (tin SYSTEM giải thích lý do).
         if (ctx.existing) {
-          const archived = await archiveDmForEndedRelation(ctx.existing.id);
+          const archived = await archiveDmForEndedRelation(ctx.existing.id, ctx.kind);
           if (archived) {
             try {
               await writeAudit({
@@ -549,7 +700,13 @@ function buildOpenDmConfig(
                 entityId: ctx.existing.id,
                 action: "UPDATE",
                 oldValues: { status: "ACTIVE" },
-                newValues: { status: "ARCHIVED", cause: "TEACHING_RELATION_ENDED" },
+                newValues: {
+                  status: "ARCHIVED",
+                  cause:
+                    ctx.kind === "SALE_PARENT"
+                      ? "SALE_ASSIGNMENT_ENDED"
+                      : "TEACHING_RELATION_ENDED",
+                },
                 // DM không thuộc đơn vị nào ⇒ chỉ scope "ALL" (SUPER_ADMIN) thấy lại
                 // dòng này trong /admin/audit-log. Có chủ đích, như mọi audit của DM.
                 orgUnitId: null,
@@ -566,11 +723,13 @@ function buildOpenDmConfig(
         // về tư cách thành viên.
         throw new ActionError(
           "PERMISSION_DENIED",
-          "Chỉ nhắn riêng được giữa giáo viên và phụ huynh của lớp đang học.",
+          ctx.kind === "SALE_PARENT"
+            ? "Chỉ nhắn riêng được với phụ huynh do bạn phụ trách."
+            : "Chỉ nhắn riêng được giữa giáo viên và phụ huynh của lớp đang học.",
         );
       }
 
-      const opened = await findOrCreateDm(actor.userId, ctx.peerUserId, ctx.dmKey);
+      const opened = await findOrCreateDm(actor.userId, ctx.peerUserId, ctx.dmKey, ctx.kind);
       return {
         entityId: opened.conversationId,
         data: { ...opened, peerName: ctx.peerName },
@@ -579,7 +738,9 @@ function buildOpenDmConfig(
         // dòng audit này trong /admin/audit-log.
         newValues: {
           peerUserId: ctx.peerUserId,
-          relationClassId: ctx.relation.classIds[0] ?? null,
+          kind: ctx.kind,
+          relationClassId: ctx.relation?.classIds[0] ?? null,
+          relationEnrollmentId: ctx.saleRelation?.enrollmentIds[0] ?? null,
           created: opened.created,
           reopened: opened.reopened,
           status: opened.status,
@@ -623,14 +784,17 @@ export async function openDmAsActor(
   }
 
   const peerUserId = extractPeerUserId(rawInput);
-  const ctx = peerUserId
-    ? await loadOpenDmContext(actor.userId, peerUserId)
+  const kind = extractDmKind(rawInput);
+  const ctx: OpenDmContext = peerUserId
+    ? await loadOpenDmContext(actor.userId, peerUserId, kind)
     : {
         peerUserId: "",
         peerName: null,
         peerExists: false,
+        kind,
         dmKey: null,
         relation: null,
+        saleRelation: null,
         existing: null,
       };
   const { res } = await runAction(buildOpenDmConfig(ctx, actor, actorName), actor, rawInput, {
@@ -667,12 +831,15 @@ export async function reconcileDmConversations(opts?: {
 }): Promise<DmReconcileSummary> {
   const conversations = await db.conversation.findMany({
     where: {
-      type: "DM_TEACHER_PARENT",
+      // F5 — quét CẢ HAI loại 1-1. Bỏ sót loại mới ở đây là để kênh tư vấn sống mãi
+      // sau khi sale đã bị gỡ phân công: đúng lỗ hổng mà AC3 sinh ra để bịt.
+      type: { in: ["DM_TEACHER_PARENT", "DM_SALE_PARENT"] },
       status: "ACTIVE",
       ...(opts?.onlyConversationIds ? { id: { in: opts.onlyConversationIds } } : {}),
     },
     select: {
       id: true,
+      type: true,
       participants: { select: { userId: true }, orderBy: { joinedAt: "asc" } },
     },
   });
@@ -692,16 +859,22 @@ export async function reconcileDmConversations(opts?: {
       continue;
     }
     dmChecked += 1;
-    const relation = await resolveTeacherParentRelation(userIds[0] as string, userIds[1] as string);
+    const kind: DmKind = conv.type === "DM_SALE_PARENT" ? "SALE_PARENT" : "TEACHER_PARENT";
+    const relation =
+      kind === "SALE_PARENT"
+        ? await resolveSaleParentRelation(userIds[0] as string, userIds[1] as string)
+        : await resolveTeacherParentRelation(userIds[0] as string, userIds[1] as string);
     if (relation) continue;
 
-    const archived = await archiveDmForEndedRelation(conv.id);
+    const archived = await archiveDmForEndedRelation(conv.id, kind);
     if (!archived) continue;
     dmArchived += 1;
   }
 
   if (dmArchived > 0) {
-    console.log(`[chat-reconcile] DM: ${dmArchived}/${dmChecked} chuyển ARCHIVED (hết quan hệ dạy học).`);
+    console.log(
+      `[chat-reconcile] DM: ${dmArchived}/${dmChecked} chuyển ARCHIVED (hết quan hệ nền: dạy học hoặc phân công chăm sóc).`,
+    );
   }
   return { dmChecked, dmArchived, dmSkipped };
 }
