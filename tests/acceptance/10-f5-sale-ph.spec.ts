@@ -22,6 +22,20 @@ test("F5 · sale mở kênh riêng với PH mình phụ trách, hai chiều nh�
   const sale = await saleCtx.newPage();
   const ph = await phCtx.newPage();
 
+  // Máy đo: Server Action POST thẳng vào URL trang, đây là chỗ đọc được mã lỗi thật.
+  // Trình duyệt chỉ hiện toast rồi biến mất, không đủ để chẩn đoán.
+  for (const [ten, trang] of [["sale", sale], ["ph", ph]] as const) {
+    trang.on("response", async (r) => {
+      if (r.request().method() !== "POST") return;
+      const body = await r.text().catch(() => "");
+      const m = body.match(/\{"ok":.{0,300}/)?.[0];
+      if (m) console.log(`[ACTION:${ten}] ${m}`);
+    });
+    trang.on("console", (msg) => {
+      if (msg.type() === "error") console.log(`[console:${ten}] …${msg.text().slice(-160)}`);
+    });
+  }
+
   // ── 1. Sale vào được màn chat (cổng trang đã mở) ──────────────────────────
   await sale.goto("/tin-nhan");
   await expect(sale).not.toHaveURL(/\/dashboard/, { timeout: 30_000 });
@@ -36,7 +50,9 @@ test("F5 · sale mở kênh riêng với PH mình phụ trách, hai chiều nh�
 
   // ── 3. Bấm mở kênh → điều hướng sang màn chat, KHÔNG lỗi quyền ────────────
   await nut.first().click();
-  await expect(sale).toHaveURL(/\/tin-nhan\?c=/, { timeout: 60_000 });
+  await sale.waitForTimeout(8_000);
+  console.log(`[F5.3] URL sau khi bấm: ${sale.url()}`);
+  await expect(sale).toHaveURL(/tin-nhan\?c=/, { timeout: 60_000 });
   const convId = new URL(sale.url()).searchParams.get("c");
   console.log(`[F5.3] Mở được hội thoại ${convId}`);
   expect(convId).toBeTruthy();

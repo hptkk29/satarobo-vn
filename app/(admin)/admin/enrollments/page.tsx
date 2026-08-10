@@ -327,7 +327,15 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                               <OpenDmButton
                                 peerUserId={e.student.parentUserId}
                                 kind="SALE_PARENT"
-                                hrefTemplate="/tin-nhan?c=:id"
+                                // ⚠️ `/admin/tin-nhan` chứ KHÔNG phải `/tin-nhan` (đường
+                                // sidebar dùng). Đo trên test 10/08: bấm từ
+                                // `/admin/enrollments`, Server Action trả ok kèm
+                                // conversationId nhưng `router.push("/tin-nhan?c=…")`
+                                // KHÔNG điều hướng — URL đứng nguyên, người dùng thấy nút
+                                // như chết. Trang này nằm dưới `/admin/**` nên đi thẳng
+                                // đường đã có tiền tố, không nhờ tới lớp rewrite clean-URL
+                                // của proxy.
+                                hrefTemplate="/admin/tin-nhan?c=:id"
                                 label="Nhắn riêng"
                               />
                             )}
