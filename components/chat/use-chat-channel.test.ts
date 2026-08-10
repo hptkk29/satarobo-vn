@@ -247,6 +247,39 @@ describe("AC2 — reconcile bắt buộc mỗi lần SUBSCRIBED (TS-09)", () => 
     await flush();
     expect(h.fetchSince).toHaveBeenLastCalledWith("m9");
   });
+
+  // ⚠️ Test này sinh ra từ một lỗi ĐÃ LỌT RA MÔI TRƯỜNG TEST (nghiệm thu 10/08/2026):
+  // `lib/chat/announcements.ts` phát `announcement.created`, còn hook chỉ nhận
+  // `message.created` ⇒ thông báo bị nuốt im. Nó KHÔNG hiện thành lỗi đỏ vì mỗi lần
+  // re-SUBSCRIBED đều reconcile đọc bù, nên chờ đủ lâu (gia hạn vé ~4') là tin "tự"
+  // xuất hiện. Đột biến kiểm ngược: xoá nhánh `announcement.created` trong
+  // use-chat-channel.ts ⇒ cả hai assertion dưới đây ĐỎ.
+  it("THÔNG BÁO tới qua broadcast cũng vào luồng NGAY + báo cho khung ghim dựng lại", async () => {
+    const onAnnouncement = vi.fn();
+    const h = setup({ onAnnouncement });
+    await connect(h);
+
+    act(() =>
+      h.fake.handlers.onBroadcast("announcement.created", {
+        id: "a1",
+        conversationId: CONV,
+        senderId: OTHER,
+        kind: "ANNOUNCEMENT",
+        body: "Lớp nghỉ ngày 15/08, học bù ngày 22/08",
+        createdAt: "2026-08-10T02:00:00.000Z",
+      }),
+    );
+    await flush();
+
+    expect(h.view.result.current.messages.map((m) => m.id)).toEqual(["a1"]);
+    expect(h.view.result.current.messages[0]?.kind).toBe("ANNOUNCEMENT");
+    expect(onAnnouncement).toHaveBeenCalledTimes(1);
+
+    // Và nó cũng phải trở thành mốc reconcile như mọi tin khác.
+    act(() => h.fake.handlers.onStatus("SUBSCRIBED"));
+    await flush();
+    expect(h.fetchSince).toHaveBeenLastCalledWith("a1");
+  });
 });
 
 describe("AC3 — bị gỡ giữa phiên (TS-11 / F-KICK)", () => {

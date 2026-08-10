@@ -137,6 +137,9 @@ export function ChatThread({
       // Nuốt lỗi ở đây = badge "chưa đọc" biến mất trong khi DB chưa ghi gì.
       if (!res.ok) throw new Error(res.error.message);
     },
+    // US-10 AC3 — thông báo mới: tin đã vào luồng qua hook, nhưng KHUNG GHIM đầu trang
+    // do RSC (`page.tsx`) dựng nên phải bảo Next dựng lại, không thì ghim vẫn là bản cũ.
+    onAnnouncement: () => router.refresh(),
     // US-07 AC3 — bị gỡ khỏi nhóm giữa phiên: hook đã unsubscribe, UI chỉ việc thoát ra.
     onRemoved: () => {
       toast.info("Bạn không còn trong nhóm lớp này.");

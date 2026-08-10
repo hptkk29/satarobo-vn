@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CornerUpLeft,
@@ -195,12 +196,16 @@ export function ChatThread(props: ChatThreadProps) {
     [conversationId],
   );
 
+  const router = useRouter();
   const { messages, lockedByAdmin, status, error, mergeLocal } = useChatChannel({
     conversationId,
     currentUserId,
     fetchSince,
     markRead,
     initialMessages: props.initialMessages,
+    // US-10 AC3 — thông báo do người KHÁC gửi (GV thứ hai, QLCS) phải hiện ngay ở đây
+    // nữa; khung ghim `pinnedAnnouncement` là prop từ RSC nên phải dựng lại trang.
+    onAnnouncement: () => router.refresh(),
   });
 
   // US-15 AC3 — Admin khoá/mở khoá trong lúc màn hình đang mở: broadcast đè lên trạng

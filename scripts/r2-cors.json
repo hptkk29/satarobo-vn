@@ -4,8 +4,10 @@
       "AllowedOrigins": [
         "https://admin.satarobo.vn",
         "https://hocvien.satarobo.vn",
+        "https://giaovien.satarobo.vn",
         "https://satarobo.vn",
         "https://www.satarobo.vn",
+        "https://test.satarobo.vn",
         "https://satarobo-vn.vercel.app",
         "https://*.vercel.app",
         "http://localhost:3000",

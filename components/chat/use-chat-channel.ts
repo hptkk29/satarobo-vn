@@ -122,6 +122,12 @@ export type UseChatChannelOptions = {
   initialMessages?: IncomingMessage[];
   /** AC3 — gọi khi chính mình bị gỡ khỏi hội thoại; UI điều hướng về danh sách. */
   onRemoved?: () => void;
+  /**
+   * US-10 AC3 — gọi khi có THÔNG BÁO mới tới qua realtime. Tin đã được hợp nhất vào
+   * luồng rồi; callback này dành cho phần KHUNG GHIM, thứ do RSC dựng nên hook không
+   * chạm tới được (điểm gọi thật: `router.refresh()`).
+   */
+  onAnnouncement?: () => void;
   /** false ⇒ không kết nối (chưa chọn hội thoại). */
   enabled?: boolean;
   /** DI cho test. */
@@ -187,12 +193,14 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
   const fetchSinceRef = useRef(options.fetchSince);
   const markReadRef = useRef(options.markRead);
   const onRemovedRef = useRef(options.onRemoved);
+  const onAnnouncementRef = useRef(options.onAnnouncement);
   const currentUserIdRef = useRef(currentUserId);
   const transportRef = useRef(options.transport ?? defaultTransport);
   const fetchTokenRef = useRef(options.fetchToken ?? defaultFetchToken);
   fetchSinceRef.current = options.fetchSince;
   markReadRef.current = options.markRead;
   onRemovedRef.current = options.onRemoved;
+  onAnnouncementRef.current = options.onAnnouncement;
   currentUserIdRef.current = currentUserId;
 
   const messagesRef = useRef<ChatMessage[]>(messages);
@@ -388,6 +396,24 @@ export function useChatChannel(options: UseChatChannelOptions): UseChatChannelRe
       if (event === "message.created") {
         const parsed = parseBroadcastMessage(payload);
         if (parsed) setMessages((prev) => mergeMessages(prev, parsed));
+        return;
+      }
+      // US-10 AC3 — THÔNG BÁO phải hiện NGAY trên máy đang mở, y như tin thường.
+      //
+      // ⚠️ NGHIỆM THU 10/08/2026 — VÌ SAO NHÁNH NÀY TỪNG KHÔNG TỒN TẠI VÀ KHÔNG AI BIẾT:
+      // `lib/chat/announcements.ts` phát tên sự kiện RIÊNG `announcement.created`
+      // (không dùng lại `message.created`), còn chỗ này chỉ nhận 4 tên sự kiện kia ⇒
+      // thông báo bị NUỐT IM. Nó vẫn "hiện ra" nếu chờ đủ lâu, vì mỗi lần re-SUBSCRIBED
+      // (gia hạn vé ~4 phút, hoặc nối lại sau khi rớt) đều kéo theo một vòng reconcile
+      // đọc bù từ DB — nên lỗi này lúc xanh lúc đỏ tuỳ thời điểm, và một lần chạy may
+      // mắn đủ để tưởng là đã chạy tốt. Đo được ngày 10/08: gửi thông báo → máy phụ
+      // huynh đang mở KHÔNG thấy gì trong 30 giây.
+      if (event === "announcement.created") {
+        const parsed = parseBroadcastMessage(payload);
+        if (parsed) setMessages((prev) => mergeMessages(prev, parsed));
+        // Khung GHIM nằm NGOÀI vùng cuộn và do RSC dựng — hook không chạm được, phải
+        // nhờ trang dựng lại; nếu không, tin vào luồng mà khung ghim vẫn là bản cũ.
+        onAnnouncementRef.current?.();
         return;
       }
       if (event === "message.deleted") {
