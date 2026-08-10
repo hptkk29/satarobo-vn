@@ -213,12 +213,19 @@ header `Authorization` rụng theo ⇒ **20 cron chưa từng chạy một lần
 **Bốn việc còn lại trên prod** (mục G của `00-dieu-chinh-cho-repo.md`) — mỗi việc đều
 đổi hành vi thật nên phải có người bấm:
 
-| # | Việc | Cách chạy | Rủi ro phải biết trước |
+| # | Việc | Trạng thái 10/08 | Ghi chú |
 |---|---|---|---|
-| 1 | Seed RolePermission | Actions → *Seed Production RolePermission* | **Reset TOÀN BỘ RolePermission theo định nghĩa trong code.** Role nào từng chỉnh tay qua UI mà không đưa vào `seed-roles.ts` sẽ mất chỉnh đó. RBAC v2 đang ON trên prod ⇒ đổi quyền NGAY |
-| 2 | Backfill nhóm lớp | Actions → *Backfill nhóm lớp chat (prod)* | Chạy `dry-run` trước và ĐỌC danh sách: tạo nhóm = mở kênh riêng tư giữa GV và phụ huynh |
-| 3 | `R2_CHAT_BUCKET_NAME` scope Production | Vercel env | Thiếu → luồng ảnh 503 (fail-closed) |
-| 4 | CORS cho bucket ảnh chat | R2 dashboard / `apply-r2-cors.ts chat` | Thiếu → ảnh chết câm, xem §3 |
+| 1 | Seed RolePermission | ✅ đã chạy | Reset toàn bộ RolePermission theo `seed-roles.ts`. RBAC v2 ON ⇒ đổi quyền ngay khi chạy |
+| 2 | Backfill nhóm lớp | ✅ **12/12 nhóm, 0 lỗi** | 13 lớp ACTIVE, 1 lớp đã tự có nhóm (thao tác nghiệp vụ sau khi chat lên prod đã kích `syncConversationMembership` — đúng thiết kế, script bỏ qua) |
+| 3 | `R2_CHAT_BUCKET_NAME` scope Production | ✅ đã điền `satarobo-chat` | |
+| 4 | CORS bucket ảnh chat | ✅ đã đặt | Preflight `204` + `ACAO` cho cả `satarobo.vn` lẫn `test.satarobo.vn` |
+| 5 | Token R2 phải có bucket `satarobo-chat` | ✅ trên `test` · ⏳ prod chưa xác minh | **Phát hiện 10/08:** token bị giới hạn theo bucket ⇒ `PUT` trả `403 AccessDenied`, mà R2 không kèm header CORS vào response lỗi nên trình duyệt báo nhầm thành lỗi CORS. Xác minh prod rẻ nhất: đăng nhập GV thật → gửi một tấm ảnh vào nhóm lớp |
+
+**Kiểm chứng sau backfill:** tài khoản GV thật (Nguyễn Đức Tuấn) mở site giáo viên thấy
+đủ nhóm lớp. Tài khoản GV KHÔNG phụ trách lớp ACTIVE nào thì thấy danh sách rỗng — **đúng
+thiết kế**, không phải lỗi: thành viên nhóm dẫn xuất từ `Class.teacherId`/`assistantId`.
+Tài khoản admin cũng thấy rỗng vì quyền đọc chat là participant-based; đường của admin là
+`/admin/hoi-thoai` (tra cứu bắt buộc nhập lý do).
 
 ## 5. Hai cổng khác nhau — đừng gộp
 
