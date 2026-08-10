@@ -75,6 +75,40 @@ export type Target = {
   classId?: string | null;
 } | null;
 
+/**
+ * VAI QUAN HỆ — vai KHÔNG gắn vào đơn vị tổ chức, quyền suy ra từ QUAN HỆ với dữ liệu
+ * (con mình, hội thoại mình là thành viên), không từ chỗ đứng trong cây OrgUnit.
+ *
+ * ⚠️ VÌ SAO PHẢI CÓ — SỰ CỐ ĐO ĐƯỢC 10/08/2026: phụ huynh KHÔNG gửi được tin nào, cả
+ * chữ lẫn ảnh, trên test lẫn prod. `sendChatMessageAction` trả `PERMISSION_DENIED` trong
+ * khi `permissions.md` ghi rõ "PH ✅ Gửi CHAT". Đo trên DB: **114 tài khoản PARENT, 0
+ * dòng `UserOrgRole`**. RBAC v2 lấy quyền DUY NHẤT từ `UserOrgRole` ⇒ `actor.permissions`
+ * rỗng ⇒ mọi scope đều vô nghĩa vì không có gì để khớp. Đọc thì vẫn chạy nên lỗi ẩn kỹ:
+ * đường đọc chat kiểm theo tư cách THÀNH VIÊN HỘI THOẠI, không qua `can()`.
+ *
+ * Vì sao KHÔNG vá bằng cách tạo `UserOrgRole` cho từng phụ huynh:
+ *  1. Sẽ phải backfill 114 tài khoản cũ VÀ nhớ gắn cho mọi tài khoản tạo sau — quên một
+ *     lần là một phụ huynh câm lặng không ai biết. Chủ dự án yêu cầu dứt điểm 10/08.
+ *  2. `buildActor` suy `isHoLevel` + `visibleCenterIds` TỪ CHÍNH các dòng `UserOrgRole`.
+ *     Gắn phụ huynh vào ROOT là biến họ thành "HO-level, thấy mọi cơ sở" — nới quyền ở
+ *     đúng chỗ nguy hiểm nhất, để đổi lấy một thứ họ không cần.
+ *
+ * Cho nên: vai quan hệ nạp thẳng từ `RoleDef` theo `User.roles`, và **CỐ Ý KHÔNG** đóng
+ * góp vào `isHoLevel` / `visibleCenterIds` / `visibleOrgUnitIds`. `centerScope: null` ⇒
+ * mọi permission scope CENTER của vai này (nếu ai đó lỡ khai) sẽ KHÔNG BAO GIỜ khớp —
+ * fail-closed đúng hướng.
+ *
+ * RoleDef vẫn là NƠI DUY NHẤT định nghĩa vai này được làm gì: sửa quyền phụ huynh = sửa
+ * `prisma/seed-roles.ts` rồi chạy seed, y hệt mọi vai khác.
+ */
+export const RELATIONSHIP_ROLE_CODES = ["PARENT"] as const;
+
+export type RelationshipRole = {
+  code: string;
+  isActive: boolean;
+  permissions: { action: string; scopeType: ScopeType }[];
+};
+
 export type UserOrgRoleRow = {
   orgUnitId: string;
   status: string; // AssignStatus
@@ -110,6 +144,8 @@ export function buildActor(input: {
   assignedClassIds?: string[];
   now?: Date;
   validActions?: Set<string>;
+  /** Vai KHÔNG gắn đơn vị (xem {@link RELATIONSHIP_ROLE_CODES}). */
+  relationshipRoles?: RelationshipRole[];
 }): Actor {
   const now = input.now ?? new Date();
   const orgById = new Map(input.orgNodes.map((n) => [n.id, n]));
@@ -163,6 +199,22 @@ export function buildActor(input: {
     }
   }
 
+  // Vai quan hệ: CHỈ đổ permission vào, KHÔNG chạm `visible`/`visibleOrg`/`isHoLevel`/
+  // `orgRoles` — đó là chỗ suy ra tầm nhìn theo cây tổ chức, mà vai này không đứng ở
+  // đâu trong cây cả. `orgUnitId: ""` là dấu hiệu "không thuộc đơn vị nào".
+  for (const role of input.relationshipRoles ?? []) {
+    if (!role.isActive) continue;
+    for (const p of role.permissions) {
+      permissions.push({
+        action: p.action,
+        scopeType: p.scopeType,
+        orgUnitId: "",
+        roleCode: role.code,
+        centerScope: null,
+      });
+    }
+  }
+
   const grantsAllow = new Set(
     (input.grants ?? [])
       .filter((g) => g.grant === "ALLOW" && validActions.has(g.action))
@@ -182,9 +234,38 @@ export function buildActor(input: {
   };
 }
 
+/**
+ * Vai quan hệ của user, suy TỪ `User.role`/`User.roles` — không cần `UserOrgRole`.
+ * Trả mảng rỗng (không truy vấn RoleDef) với người không mang vai nào trong
+ * {@link RELATIONSHIP_ROLE_CODES}, tức đại đa số nhân viên: đường nóng không tốn thêm gì.
+ */
+async function loadRelationshipRoles(userId: string): Promise<RelationshipRole[]> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { role: true, roles: true },
+  });
+  if (!user) return [];
+  const codes = new Set<string>([user.role as string, ...(user.roles as string[])]);
+  const wanted = RELATIONSHIP_ROLE_CODES.filter((c) => codes.has(c));
+  if (wanted.length === 0) return [];
+
+  const defs = await db.roleDef.findMany({
+    where: { code: { in: [...wanted] } },
+    select: { code: true, isActive: true, permissions: true },
+  });
+  return defs.map((d) => ({
+    code: d.code,
+    isActive: d.isActive,
+    permissions: d.permissions.map((p) => ({
+      action: p.action,
+      scopeType: p.scopeType as ScopeType,
+    })),
+  }));
+}
+
 export async function resolveActorUncached(userId: string): Promise<Actor> {
   const now = new Date();
-  const [rows, orgNodes, grants, classes] = await Promise.all([
+  const [rows, orgNodes, grants, classes, relationshipRoles] = await Promise.all([
     db.userOrgRole.findMany({
       where: {
         userId,
@@ -205,12 +286,14 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       where: { deletedAt: null, OR: [{ teacherId: userId }, { assistantId: userId }] },
       select: { id: true },
     }),
+    loadRelationshipRoles(userId),
   ]);
 
   return buildActor({
     userId,
     now,
     orgNodes,
+    relationshipRoles,
     rows: rows.map((r) => ({
       orgUnitId: r.orgUnitId,
       status: r.status,

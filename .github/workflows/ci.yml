@@ -168,6 +168,12 @@ jobs:
       - name: Migrate DB schema (local CI Postgres)
         run: pnpm exec prisma migrate deploy
 
+      # RBAC v2 lấy quyền từ DỮ LIỆU (RoleDef + RolePermission), không từ code. Không seed
+      # thì `parent-permission.spec.ts` không có RoleDef PARENT để đọc — mà đó đúng là bài
+      # test canh sự cố 10/08 (114 phụ huynh / 0 UserOrgRole ⇒ không gửi được tin nào).
+      - name: Seed RoleDef + RolePermission (dữ liệu quyền v2)
+        run: pnpm exec tsx prisma/seed-roles.ts
+
       - name: Run chat DB tests
         # = `pnpm test:chat-db` chạy tay được y hệt (vitest run tests/chat).
         run: pnpm test:chat-db

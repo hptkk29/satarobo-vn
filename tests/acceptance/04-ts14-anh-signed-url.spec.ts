@@ -55,13 +55,19 @@ test("TS-14 · gửi ảnh, signed URL hết hạn sau 6 phút ngoài app nhưng
   console.log("[TS-14.3] Thumbnail 3 ảnh đã hiện trong luồng");
 
   // ── Bước 3b: mang URL ra NGOÀI ứng dụng ───────────────────────────────────
-  // Chờ tới lúc `<img>` dùng URL đã ký (bản gửi đi ban đầu là object URL cục bộ).
+  // ⚠️ Phía NGƯỜI GỬI, `<img src>` giữ nguyên `blob:` cục bộ cho tới khi tải lại trang —
+  // CÓ CHỦ ĐÍCH (chat-thread.tsx: "người gửi không phải chờ một vòng ký URL để thấy lại
+  // ảnh mình vừa gửi"). Muốn lấy URL đã ký thì phải dựng lại trang từ RSC.
+  await ph.reload();
+  // Đừng bám vào `alt`: sau khi tải lại, thư viện ảnh phải xin URL ký xong mới vẽ thẻ
+  // `<img>`, và tên file server trả về đã qua bước làm sạch nên không chắc trùng tên gốc.
+  // Dò theo ĐẶC ĐIỂM CỦA URL ĐÃ KÝ — thứ duy nhất ta thật sự cần ở bước này.
   let signed = "";
   for (let i = 0; i < 60; i++) {
-    const srcs = await ph.locator('img[alt^="nghiem-thu-"]').evaluateAll((els) =>
-      els.map((e) => (e as HTMLImageElement).src),
-    );
-    signed = srcs.find((s) => s.startsWith("http")) ?? "";
+    const srcs = await ph
+      .locator("img")
+      .evaluateAll((els) => els.map((e) => (e as HTMLImageElement).src));
+    signed = srcs.find((s) => s.includes("r2.cloudflarestorage.com") && s.includes("X-Amz-")) ?? "";
     if (signed) break;
     await ph.waitForTimeout(2_000);
   }
@@ -83,9 +89,23 @@ test("TS-14 · gửi ảnh, signed URL hết hạn sau 6 phút ngoài app nhưng
 
   // ── Bước 3d: trong ứng dụng ảnh VẪN hiện (tự xin URL mới) ─────────────────
   await ph.reload();
-  const imgAfter = ph.locator('img[alt^="nghiem-thu-"]').first();
-  await expect(imgAfter).toBeVisible({ timeout: 60_000 });
-  const ok = await imgAfter.evaluate((e) => (e as HTMLImageElement).naturalWidth > 0);
+  // Ảnh phải VẼ ĐƯỢC (naturalWidth > 0) bằng một URL ký MỚI — chứng minh app tự xin lại
+  // chứ không sống nhờ URL cũ đã chết.
+  let drawn = false;
+  for (let i = 0; i < 45; i++) {
+    drawn = await ph
+      .locator("img")
+      .evaluateAll((els) =>
+        els.some(
+          (e) =>
+            (e as HTMLImageElement).src.includes("r2.cloudflarestorage.com") &&
+            (e as HTMLImageElement).naturalWidth > 0,
+        ),
+      );
+    if (drawn) break;
+    await ph.waitForTimeout(2_000);
+  }
+  const ok = drawn;
   expect(ok, "ảnh trong app phải vẽ được sau khi URL cũ đã chết").toBe(true);
   console.log("[TS-14.3] Trong app ảnh vẫn hiện sau khi URL cũ hết hạn");
 

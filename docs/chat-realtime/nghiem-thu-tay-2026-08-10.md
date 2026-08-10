@@ -139,6 +139,48 @@ này còn xanh, lần sau mới đỏ. Một lần chạy may mắn là đủ đ
 - `components/chat/use-chat-channel.test.ts` — thêm test khoá bất biến này.
   **Đã kiểm ngược bằng đột biến**: đổi tên sự kiện trong code ⇒ test ĐỎ; khôi phục ⇒ 32/32 xanh.
 
+## 3-ter. LỖI NẶNG NHẤT: phụ huynh không gửi được tin nào (đã vá)
+
+**Triệu chứng:** phụ huynh gửi tin — chữ hay ảnh — đều `PERMISSION_DENIED`, trên test
+VÀ prod. Không có thông báo lỗi: client rơi vào nhánh *thử lại*, tin nằm im ở bong bóng
+"Gửi lại". Trong khi `permissions.md` ghi rõ **PH ✅ Gửi CHAT**.
+
+**Nguyên nhân gốc — đo trên DB:** `114 tài khoản PARENT / 0 dòng UserOrgRole`. RBAC v2
+lấy quyền DUY NHẤT từ `UserOrgRole` ⇒ `actor.permissions` rỗng ⇒ không có gì để khớp
+scope. `reconcileUserOrgRoles` chỉ được gọi từ 3 màn quản trị (nhân sự, giáo viên,
+users) — **luồng cấp tài khoản phụ huynh không gọi**.
+
+**Vì sao ẩn kỹ:** đường ĐỌC chat kiểm theo tư cách thành viên hội thoại, không qua
+`can()` ⇒ phụ huynh vào đọc bình thường; chỉ khâu gửi mới lộ.
+
+**Vì sao mọi test cũ đều xanh:** `chat-permissions.test.ts` dựng actor v2 bằng cách đưa
+thẳng hàng permission của `ROLE_SEED` vào `buildActor` — nó kiểm *"nếu PH có vai PARENT
+thì được gửi"*, đúng và vô dụng, vì ngoài đời không phụ huynh nào có vai đó. **Không test
+nào đi từ `User` thật trong DB ra tới `can()`.**
+
+**Một chỗ tôi suy luận sai, ghi lại để không ai đi lại đường đó:** ban đầu tôi kết luận
+"kể cả có `UserOrgRole` thì scope `OWN` cũng không khớp vì target chat không có
+`createdById`". SAI — `sendTargetOf` (`lib/chat/messages.ts:396-403`) cố ý gán
+`createdById = actor.userId` **khi người gửi là thành viên hội thoại**, tức ngữ nghĩa
+"participant" đã được mã hoá đúng qua scope `OWN`. Thêm một scope `PARTICIPANT` nữa chỉ
+là bộ máy thừa chồng lên thứ đang chạy được.
+
+**Bản vá (chủ dự án yêu cầu dứt điểm, không để tồn đọng):** khái niệm **vai quan hệ** —
+`RELATIONSHIP_ROLE_CODES` trong `lib/auth/actor.ts`. Vai không gắn đơn vị nào thì nạp
+thẳng từ `RoleDef` theo `User.role`/`User.roles`, không cần `UserOrgRole`:
+- không phải backfill 114 tài khoản cũ, **và không đời nào quên với tài khoản mới**;
+- **cố ý không** đóng góp `isHoLevel`/`visibleCenterIds`/`visibleOrgUnitIds`, `centerScope`
+  để `null` — gắn PH vào ROOT (cách vá "dễ") sẽ biến họ thành HO-level thấy mọi cơ sở;
+- `RoleDef` vẫn là nơi duy nhất định nghĩa PH được làm gì.
+
+**Test khoá lại đúng mắt xích đã đứt:** `tests/chat/parent-permission.spec.ts` đi từ
+`User` thật (role=PARENT, **không** tạo `UserOrgRole`) → `resolveActorUncached` → `can()`,
+kèm đối chứng: PH không gửi được nơi mình không phải thành viên, không HO-level, không
+thấy cơ sở nào, và **nhân viên thiếu `UserOrgRole` vẫn trắng tay** (bản vá không phát
+quyền đại trà). Đã kiểm ngược bằng đột biến. CI job `Chat DB invariants` nay seed
+`RoleDef` trước khi chạy — quyền v2 nằm ở DỮ LIỆU, không seed thì bài test vô nghĩa mà
+vẫn xanh, đúng kiểu lỗ hổng vừa rồi sống sót.
+
 ## 4. Những thứ KHÔNG nghiệm thu được trên `test` — còn nợ trước khi mở pilot
 
 | Mục | Vì sao | Ai làm |

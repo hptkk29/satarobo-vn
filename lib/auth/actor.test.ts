@@ -107,3 +107,77 @@ describe("[A0-03] buildActor — lọc hiệu lực (T7)", () => {
     expect(a.grantsAllow.has("evil:hack")).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vai QUAN HỆ (PARENT) — sinh ra từ sự cố đo được 10/08/2026 trên test VÀ prod:
+// phụ huynh không gửi được tin nào (chữ lẫn ảnh), `sendChatMessageAction` trả
+// PERMISSION_DENIED trong khi permissions.md ghi "PH ✅ Gửi CHAT". Nguyên nhân: 114
+// tài khoản PARENT / 0 dòng UserOrgRole ⇒ `actor.permissions` rỗng ⇒ không có gì để
+// khớp scope. Bộ test này khoá cả hai chiều: PHẢI có quyền, và KHÔNG được nới thêm.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("vai quan hệ (PARENT) — có quyền mà KHÔNG cần UserOrgRole", () => {
+  const parentRole = {
+    code: "PARENT",
+    isActive: true,
+    permissions: [
+      { action: "chat:read", scopeType: "OWN" as const },
+      { action: "chat:send", scopeType: "OWN" as const },
+    ],
+  };
+  const parentActor = (over: Partial<Parameters<typeof buildActor>[0]> = {}) =>
+    buildActor({
+      userId: "ph1",
+      rows: [],
+      orgNodes: ORG,
+      now: NOW,
+      relationshipRoles: [parentRole],
+      ...over,
+    });
+
+  it("KHÔNG có dòng UserOrgRole nào mà vẫn có chat:read + chat:send", () => {
+    const a = parentActor();
+    expect(a.permissions.map((p) => p.action).sort()).toEqual(["chat:read", "chat:send"]);
+  });
+
+  it("KHÔNG biến phụ huynh thành HO-level và KHÔNG cho thấy cơ sở nào", () => {
+    const a = parentActor();
+    expect(a.isHoLevel, "gắn vai vào ROOT là biến PH thành cross-center").toBe(false);
+    expect(a.isSuperAdmin).toBe(false);
+    expect(a.visibleCenterIds).toEqual([]);
+    expect(a.visibleOrgUnitIds).toEqual([]);
+    expect(a.orgRoles).toEqual([]);
+  });
+
+  it("centerScope = null ⇒ permission scope CENTER của vai này KHÔNG BAO GIỜ khớp", () => {
+    const a = buildActor({
+      userId: "ph1",
+      rows: [],
+      orgNodes: ORG,
+      now: NOW,
+      relationshipRoles: [
+        {
+          ...parentRole,
+          permissions: [{ action: "leads:view-all", scopeType: "CENTER" as const }],
+        },
+      ],
+    });
+    expect(a.permissions[0]?.centerScope).toBeNull();
+  });
+
+  it("RoleDef bị tắt ⇒ không cấp quyền (tắt vai là tắt thật)", () => {
+    const a = parentActor({ relationshipRoles: [{ ...parentRole, isActive: false }] });
+    expect(a.permissions).toEqual([]);
+  });
+
+  it("cộng dồn được với vai theo đơn vị — nhân viên kiêm phụ huynh không mất quyền nào", () => {
+    const a = buildActor({
+      userId: "u9",
+      rows: [row("cs1", "CENTER_MANAGER")],
+      orgNodes: ORG,
+      now: NOW,
+      relationshipRoles: [parentRole],
+    });
+    expect(a.visibleCenterIds).toEqual(["c1"]);
+    expect(a.permissions.some((p) => p.action === "chat:send")).toBe(true);
+  });
+});
