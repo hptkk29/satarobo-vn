@@ -152,6 +152,32 @@ này còn xanh, lần sau mới đỏ. Một lần chạy may mắn là đủ đ
 sau khi đồng ý PH vào thẳng nhóm lớp của con **không phải thao tác join**; bảng đo pilot
 đếm đúng. Chỉ còn thiếu khúc "kích hoạt bằng link + OTP thật" và cái đồng hồ.
 
+## 4-bis. Đã lên PROD 10/08 — trạng thái sau merge
+
+`main` = `5b44198b`. "Migrate Production DB (Supabase)" **success** (9 migration chat,
+toàn bộ additive: CREATE TABLE + FK + ENABLE RLS trên đúng bảng chat mới, không đụng
+bảng dữ liệu cũ nào).
+
+**Bằng chứng cron prod đã sống lại** — gọi vào chính URL mà Vercel Cron dùng:
+
+```
+https://satarobo-vn.vercel.app/api/cron/dispatch-events  →  HTTP 401   (trước: 308)
+```
+
+401 = handler ĐÃ chạy tới nơi rồi mới từ chối vì thiếu token (Vercel Cron gửi kèm
+`Authorization: Bearer`). Trước bản vá `ec427b6a`, request ăn 308 sang domain thật và
+header `Authorization` rụng theo ⇒ **20 cron chưa từng chạy một lần nào**.
+
+**Bốn việc còn lại trên prod** (mục G của `00-dieu-chinh-cho-repo.md`) — mỗi việc đều
+đổi hành vi thật nên phải có người bấm:
+
+| # | Việc | Cách chạy | Rủi ro phải biết trước |
+|---|---|---|---|
+| 1 | Seed RolePermission | Actions → *Seed Production RolePermission* | **Reset TOÀN BỘ RolePermission theo định nghĩa trong code.** Role nào từng chỉnh tay qua UI mà không đưa vào `seed-roles.ts` sẽ mất chỉnh đó. RBAC v2 đang ON trên prod ⇒ đổi quyền NGAY |
+| 2 | Backfill nhóm lớp | Actions → *Backfill nhóm lớp chat (prod)* | Chạy `dry-run` trước và ĐỌC danh sách: tạo nhóm = mở kênh riêng tư giữa GV và phụ huynh |
+| 3 | `R2_CHAT_BUCKET_NAME` scope Production | Vercel env | Thiếu → luồng ảnh 503 (fail-closed) |
+| 4 | CORS cho bucket ảnh chat | R2 dashboard / `apply-r2-cors.ts chat` | Thiếu → ảnh chết câm, xem §3 |
+
 ## 5. Hai cổng khác nhau — đừng gộp
 
 - **Cổng "được merge lên prod"**: mọi mục ✅ ở §1 + 3 việc checklist mục G + việc CORS
