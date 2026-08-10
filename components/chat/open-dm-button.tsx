@@ -62,8 +62,18 @@ export function OpenDmButton({
         // Giữ `pending` = true qua lúc điều hướng: bấm thêm lần nữa trong khi router
         // đang chuyển trang chỉ tạo thêm một lời gọi thừa (server vẫn trả cùng 1 hội
         // thoại nhờ unique dmKey, nhưng không việc gì phải gọi).
+        //
+        // ⚠️ KHÔNG gọi `router.refresh()` sau `push()` — ĐO ĐƯỢC 10/08/2026 khi nghiệm
+        // thu F5 trên test.satarobo.vn: bấm nút ở `/admin/enrollments`, Server Action trả
+        // `{ok:true, conversationId}`, RSC của trang đích được fetch và trả **200**, mà
+        // KHÔNG có sự kiện điều hướng nào — router lấy payload rồi bỏ đó. `refresh()` gọi
+        // ngay sau `push()` làm mất chuyến đi đang bay: nó re-fetch route HIỆN TẠI và
+        // giành mất lượt commit. Người dùng thấy nút như CHẾT trong khi hội thoại đã tạo
+        // xong trong DB — không toast, không lỗi, không dấu vết trong log server.
+        //
+        // Trang đích tự dựng mới ở server mỗi lượt vào nên không cần refresh: `push` đã
+        // kéo về payload RSC mới nhất.
         router.push(hrefTemplate.replace(":id", res.data.conversationId));
-        router.refresh();
       } catch {
         toast.error("Không mở được hội thoại riêng — vui lòng thử lại.");
         setPending(false);
