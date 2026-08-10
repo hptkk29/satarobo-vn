@@ -9,8 +9,10 @@ import type { Role } from "@prisma/client";
 export const TEST_PASSWORD = "Test@12345";
 
 /**
- * Mã OrgUnit chuẩn của hệ thống (Doc 15 OI-1): ROOT → HO/CS1/CS2 độc lập ngang hàng.
- * Dùng cho seedOrg(["HO","CS1","CS2"]) → cùng ROOT = 4 OrgUnit.
+ * Mã OrgUnit chuẩn của hệ thống (P1 · US-05, chốt 11/08/2026 theo BA 08/08 §1.1):
+ *     HO (gốc) → DANANG (REGION) → CS1, CS2
+ * `seedOrg(["HO","CS1","CS2"])` → 4 OrgUnit (HO + DANANG + 2 cơ sở). Node ROOT "SATAROBO"
+ * cũ không còn trong cây mặc định — giữ hằng ROOT ở đây chỉ để script/spec cũ tra được tên.
  */
 export const ORG_CODES = {
   ROOT: "SATAROBO",

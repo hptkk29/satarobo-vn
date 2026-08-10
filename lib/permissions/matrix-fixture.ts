@@ -10,7 +10,7 @@
 //
 // unitType/relationshipType (BA §2.2) hôm nay engine CHƯA đọc — giữ trong TREE làm nguồn
 // sự thật cho resolver P5 (US-14/US-15: grant derivedFrom + kiểm FranchiseContract lúc chạy).
-import type { Actor, Target } from "@/lib/auth/actor";
+import type { Actor, RoleCenterScope, Target } from "@/lib/auth/actor";
 import type { GrantRow } from "@/lib/permissions/grant-types";
 
 /** Key quyền cố định của ma trận (key thật trong registry v1 — trùng key can.test.ts dùng). */
@@ -68,21 +68,26 @@ function centersUnder(prefix: string): string[] {
 }
 
 /**
- * Path-resolve tại fixture-time — dịch (nơi gán role × dataScope) → roleCenterScope:
+ * Path-resolve tại fixture-time — dịch NƠI GÁN ROLE → roleCenterScope 2 mức:
  * - HO → "ALL" (cross-center theo chức năng — cùng công thức hoRoot của buildActor).
- * - REGION + UNIT_AND_BELOW → các centerId có TREE[x].path startsWith path vùng (subtree).
- * - REGION + UNIT_ONLY → [] — REGION không phải cơ sở, "chỉ đơn vị mình" không chứa
- *   center nào ⇒ scope không bao giờ thoả (case biên pin ở matrix.test.ts).
- * - CENTER → [centerId của chính nó].
+ * - REGION → unitOnly [] (vùng KHÔNG phải cơ sở, "chỉ đơn vị mình" không chứa center nào
+ *   ⇒ scope không bao giờ thoả — case biên pin ở matrix.test.ts);
+ *            unitAndBelow = các centerId có TREE[x].path startsWith path vùng.
+ * - CENTER → cả hai mức = [centerId của chính nó] (cơ sở không có cơ sở con).
+ *
+ * P1 · US-05 — KHÔNG còn nhận `scope` làm tham số. Trước P1, fixture phải tự chọn mức vì
+ * `Actor.roleCenterScope` chỉ chở được MỘT danh sách; nay Actor chở cả hai và
+ * `lib/permissions/can.ts` mới là chỗ chọn — đúng như buildActor() làm thật.
+ * Chân trị của 24 ô TS-04 KHÔNG đổi: chỉ đường đi tới nó đổi.
  */
-function resolveRoleCenterScope(
-  at: MatrixNodeKey,
-  scope: GrantRow["dataScope"],
-): "ALL" | string[] {
+function resolveRoleCenterScope(at: MatrixNodeKey): RoleCenterScope {
   const node = TREE[at];
   if (node.unitType === "HO") return "ALL";
-  if (node.unitType === "REGION") return scope === "UNIT_ONLY" ? [] : centersUnder(node.path);
-  return node.centerId ? [node.centerId] : [];
+  if (node.unitType === "REGION") {
+    return { unitOnly: [], unitAndBelow: centersUnder(node.path) };
+  }
+  const own = node.centerId ? [node.centerId] : [];
+  return { unitOnly: own, unitAndBelow: own };
 }
 
 /**
@@ -132,7 +137,7 @@ export function matrixActor(opts: {
     roleIds: [MATRIX_ROLE_ID],
     groupIds: [],
     permissionGrants: grants,
-    roleCenterScope: { [MATRIX_ROLE_ID]: resolveRoleCenterScope(opts.at, opts.scope) },
+    roleCenterScope: { [MATRIX_ROLE_ID]: resolveRoleCenterScope(opts.at) },
   };
 }
 

@@ -1,11 +1,21 @@
 // lib/org/org-tree.ts — Thuật toán cây OrgUnit THUẦN (ticket A0-01 §3 helper).
-// Quan trọng (Doc 15 OI-1): ROOT → HO, CS1, CS2 là các node ĐỘC LẬP NGANG HÀNG.
-// => getSubtreeCenterIds(HO) = [] (HO không phải cha của CS1/CS2). Quyền cross-center
-//    của role HO KHÔNG đến từ subtree của HO mà do ActorResolver xử lý riêng (ticket A0-03).
+//
+// ⚠️ HÌNH CÂY ĐÃ ĐỔI Ở P1 (chủ dự án chốt 11/08/2026 theo BA 08/08 §1.1):
+//   HO (gốc) → REGION → CENTER.
+// Trước đó Doc 15 OI-1 quy định ROOT → HO, CS1, CS2 NGANG HÀNG, và `getSubtreeCenterIds(HO)`
+// trả [] là hành vi CỐ Ý. Sau khi dời cây, HO là tổ tiên của mọi CENTER nên hàm đó trả đủ
+// danh sách cơ sở. Đây KHÔNG phải nới quyền: `isHoLevel` trong buildActor vốn đã cấp
+// cross-center cho mọi role đặt tại HO/ROOT bằng một nhánh riêng — nay hai đường cho cùng
+// một kết quả, tức bớt đi một chỗ để lệch.
+//
+// Việc DỜI node trên DB đang chạy làm bằng `scripts/nen-p1-reshape-org-tree.ts` (dry-run
+// mặc định), không nhét vào migration — luật cứng #4.
 
+import { isOrgUnitLive } from "./status";
 import type { OrgUnitNode, OrgUnitType } from "./types";
 
-const isLive = (n: OrgUnitNode): boolean => n.deletedAt == null && n.isActive !== false;
+/** Một định nghĩa "còn sống" duy nhất cho cả repo — xem lib/org/status.ts. */
+const isLive = isOrgUnitLive;
 
 function indexBy(nodes: OrgUnitNode[]): Map<string, OrgUnitNode> {
   return new Map(nodes.map((n) => [n.id, n]));
@@ -80,6 +90,43 @@ export function getSubtreeOrgUnitIds(
   return ids;
 }
 
+/**
+ * P1 · US-05 — phạm vi CƠ SỞ của một vị trí trong cây, TÁCH LÀM HAI MỨC.
+ *
+ * Đây là thứ P0 ký nợ: `documentation/permissions.md` ghi "pre-P1 hai mức UNIT_ONLY /
+ * UNIT_AND_BELOW trùng nhau… phân biệt thật ở P1 bằng OrgUnit.path". Trước P1,
+ * `Actor.roleCenterScope[roleId]` là MỘT danh sách nên can() không thể phân biệt; nay nó
+ * mang cả hai mức và can() chọn theo `grant.dataScope`.
+ *
+ * - `unitOnly`   = cơ sở của CHÍNH node đó. REGION/HO không phải cơ sở ⇒ [] (khớp
+ *                  `resolveRoleCenterScope` của matrix-fixture, ô biên đã ghim ở TS-04).
+ * - `unitAndBelow` = mọi cơ sở trong nhánh, GỒM chính nó.
+ *
+ * Ưu tiên `path` khi cả cây đã có path (rẻ + đúng công thức BA §2.5 `LIKE path || '%'`);
+ * rơi về duyệt parentId khi còn dòng chưa backfill. Test [US-05-U-18] khẳng định hai
+ * đường cho CÙNG kết quả — nếu lệch là path hỏng, và path hỏng nghĩa là quyền sai.
+ */
+export function centerScopeForOrgUnit(
+  nodes: OrgUnitNode[],
+  orgUnitId: string,
+  opts: { includeDeleted?: boolean } = {},
+): { unitOnly: string[]; unitAndBelow: string[] } {
+  const self = indexBy(nodes).get(orgUnitId);
+  const unitOnly = self && self.type === "CENTER" && self.centerId ? [self.centerId] : [];
+
+  const selfPath = self?.path;
+  const canUsePath = !!selfPath && nodes.every((n) => !!n.path || (!opts.includeDeleted && !isLive(n)));
+
+  const unitAndBelow = canUsePath
+    ? nodes
+        .filter((n) => (opts.includeDeleted || isLive(n)) && n.type === "CENTER" && n.centerId)
+        .filter((n) => n.path!.startsWith(selfPath!))
+        .map((n) => n.centerId as string)
+    : getSubtreeCenterIds(nodes, orgUnitId, opts);
+
+  return { unitOnly, unitAndBelow };
+}
+
 /** Đường đi từ node lên ROOT, GỒM chính nó: [self, parent, ..., root]. */
 export function getAncestors(nodes: OrgUnitNode[], id: string): OrgUnitNode[] {
   const byId = indexBy(nodes);
@@ -125,13 +172,22 @@ export type SelectableScope = {
   roleOrgUnitIds?: string[];
 };
 
+// ROOT là gốc kỹ thuật, không phải "đơn vị" chọn được.
+//
+// ⚠️ P1 CỐ Ý KHÔNG thêm REGION/DEPARTMENT vào đây. 6 màn đang gọi getSelectableOrgUnits()
+// KHÔNG truyền `types` (holidays ×2, nhan-su ×2, users ×2) và ghi kết quả vào cột
+// `centerId`. Node REGION có centerId = null, mà `centerId = NULL` ở nhiều bảng mang nghĩa
+// "ÁP DỤNG TOÀN HỆ THỐNG" (lib/db-scope.ts:62-70) — nên cho REGION lọt vào picker là biến
+// "nghỉ lễ của Vùng Đà Nẵng" thành "nghỉ lễ toàn hệ thống" mà không ai báo lỗi.
+// Vùng chỉ hiện ở màn cây tổ chức mới (/admin/to-chuc), nơi truyền `types` tường minh.
+// Mở rộng picker cho REGION là việc của P2 (khi mỗi bảng đã có orgUnitId thật sự dùng được).
 const DEFAULT_SELECTABLE_TYPES: OrgUnitType[] = [
   "HO",
   "CENTER",
   "CAMPUS",
   "PARTNER",
   "FRANCHISE",
-]; // ROOT là gốc kỹ thuật, không phải "đơn vị" chọn được.
+];
 
 /**
  * Đơn vị tổ chức actor được phép chọn/lọc — THUẦN (test không cần DB).

@@ -15,7 +15,9 @@ test.beforeAll(async () => {
   await seedOrg(["HO", "CS1", "CS2"]);
   await seedRoles();
   const cs1Org = await db.orgUnit.findFirst({ where: { code: "CS1" }, select: { id: true } });
-  const rootOrg = await db.orgUnit.findFirst({ where: { code: "SATAROBO" }, select: { id: true } });
+  // P1 · US-05 — cây mặc định không còn node ROOT; HO là gốc, và role đặt tại HO vẫn
+  // là HO-level (isHoRoot coi HO ≡ ROOT) nên quyền của SUPER_ADMIN không đổi.
+  const rootOrg = await db.orgUnit.findFirst({ where: { code: "HO" }, select: { id: true } });
   const teacherRole = await db.roleDef.findUnique({ where: { code: "TEACHER" }, select: { id: true } });
   const saRole = await db.roleDef.findUnique({ where: { code: "SUPER_ADMIN" }, select: { id: true } });
   const parentRole = await db.roleDef.findUnique({ where: { code: "PARENT" }, select: { id: true } });

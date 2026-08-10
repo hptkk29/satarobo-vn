@@ -90,7 +90,7 @@ describe("US-02 · grant là nguồn sự thật khi hit — scope fail KHÔNG f
   it("ALLOW UNIT_ONLY nhưng target lệch cơ sở → false, dù đường cũ (grantsAllow) cho phép", () => {
     const actor = makeActor({
       roleIds: [R1],
-      roleCenterScope: { [R1]: ["c1"] },
+      roleCenterScope: { [R1]: { unitOnly: ["c1"], unitAndBelow: ["c1"] } },
       grantsAllow: new Set(["students:view-all"]), // đường cũ sẽ nói TRUE
       permissionGrants: [grant({ dataScope: "UNIT_ONLY" })],
     });
@@ -122,7 +122,8 @@ describe("US-02 · bảng chân trị 4 dataScope × {null, khớp, lệch} (AC3
       actor: () =>
         makeActor({
           roleIds: [R1],
-          roleCenterScope: { [R1]: ["c1", "c2"] },
+          // P1 · US-05 — shape 2 mức: role đặt tại CS1, nhánh của nó gồm c1+c2.
+          roleCenterScope: { [R1]: { unitOnly: ["c1"], unitAndBelow: ["c1", "c2"] } },
           visibleCenterIds: ["c1", "c2", "c3"],
           permissionGrants: [grant({ dataScope: "UNIT_AND_BELOW" })],
         }),
@@ -135,7 +136,7 @@ describe("US-02 · bảng chân trị 4 dataScope × {null, khớp, lệch} (AC3
       actor: () =>
         makeActor({
           roleIds: [R1],
-          roleCenterScope: { [R1]: ["c1"] },
+          roleCenterScope: { [R1]: { unitOnly: ["c1"], unitAndBelow: ["c1"] } },
           permissionGrants: [grant({ dataScope: "UNIT_ONLY" })],
         }),
       nullExpect: false,
@@ -199,7 +200,7 @@ describe("US-02 · chống rò NGANG qua role kiêm nhiệm (review 09/08)", () 
     // Kịch bản review: kiêm nhiệm R1@CS1 + TEACHER@CS2 — grant đứng tên R1 chỉ phủ CS1.
     const actor = makeActor({
       roleIds: [R1],
-      roleCenterScope: { [R1]: ["c1"] },
+      roleCenterScope: { [R1]: { unitOnly: ["c1"], unitAndBelow: ["c1"] } },
       visibleCenterIds: ["c1", "c2"],
       permissionGrants: [grant({ dataScope: "UNIT_AND_BELOW" })],
     });

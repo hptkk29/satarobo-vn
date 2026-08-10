@@ -3,13 +3,22 @@
 // Lỗi nghiệp vụ → OrgRuleError (code EN + message VI). Doc 15 §2.1, OI-1.
 import { Prisma, type OrgUnit } from "@prisma/client";
 import { db } from "@/lib/db";
-import { OrgRuleError, type OrgUnitNode, type OrgUnitType } from "./types";
+import {
+  OrgRuleError,
+  type OrgRelationshipType,
+  type OrgUnitNode,
+  type OrgUnitStatus,
+  type OrgUnitType,
+} from "./types";
 import {
   validateCode,
   validateCenterId,
+  validateParentType,
   validateRootRule,
   wouldCreateCycle,
 } from "./orgunit-rules";
+import { childPath, recomputeSubtree } from "./path";
+import { isActiveFromStatus } from "./status";
 import {
   getAncestors as getAncestorsPure,
   getSubtreeCenterIds as getSubtreeCenterIdsPure,
@@ -26,12 +35,24 @@ export type CreateOrgUnitInput = {
   parentId?: string | null;
   address?: string | null;
   centerId?: string | null;
+  /** P1 · US-05 — trục sở hữu. Mặc định OWNED (đơn vị nội bộ). */
+  relationshipType?: OrgRelationshipType;
+  legalEntityId?: string | null;
+  effectiveFrom?: Date | null;
+  effectiveTo?: Date | null;
 };
 
 export type UpdateOrgUnitInput = Partial<{
   name: string;
+  /** Đổi code kéo theo tính lại path của CẢ NHÁNH — xem recomputeSubtree. */
+  code: string;
   parentId: string | null;
   address: string | null;
+  relationshipType: OrgRelationshipType;
+  status: OrgUnitStatus;
+  legalEntityId: string | null;
+  effectiveFrom: Date | null;
+  effectiveTo: Date | null;
 }>;
 
 /** Prisma row → node tối giản cho thuật toán cây thuần. */
@@ -42,6 +63,13 @@ function toNode(o: OrgUnit): OrgUnitNode {
     type: o.type as OrgUnitType,
     parentId: o.parentId,
     centerId: o.centerId,
+    path: o.path,
+    depth: o.depth,
+    relationshipType: o.relationshipType as OrgRelationshipType,
+    status: o.status as OrgUnitStatus,
+    effectiveFrom: o.effectiveFrom,
+    effectiveTo: o.effectiveTo,
+    legalEntityId: o.legalEntityId,
     isActive: o.isActive,
     deletedAt: o.deletedAt,
   };
@@ -62,7 +90,10 @@ function requireName(name: string): string {
   return n;
 }
 
-async function assertParentUsable(parentId: string): Promise<void> {
+/**
+ * Kiểm đơn vị cha dùng được + trả về nó (cần `path`/`type` để tính path con và kiểm V9).
+ */
+async function assertParentUsable(parentId: string): Promise<OrgUnit> {
   const parent = await db.orgUnit.findUnique({ where: { id: parentId } });
   if (!parent || parent.deletedAt) {
     throw new OrgRuleError(
@@ -71,6 +102,7 @@ async function assertParentUsable(parentId: string): Promise<void> {
       "parentId",
     );
   }
+  return parent;
 }
 
 /** Tạo OrgUnit (V1–V4, V7). code/centerId reuse của bản đã soft-delete: KHÔNG (code unique toàn cục). */
@@ -88,16 +120,37 @@ export async function createOrgUnit(input: CreateOrgUnitInput): Promise<OrgUnit>
   });
   validateRootRule({ type: input.type, parentId, existingRootId: existingRoot?.id ?? null }); // V3 + V4(parent required)
 
-  if (parentId) await assertParentUsable(parentId); // V4
+  const parent = parentId ? await assertParentUsable(parentId) : null; // V4
+  validateParentType(input.type, (parent?.type as OrgUnitType) ?? null); // V9 (US-05 AC3)
 
   const dup = await db.orgUnit.findUnique({ where: { code }, select: { id: true } });
   if (dup) {
     throw new OrgRuleError("ORG_CODE_CONFLICT", `Mã đơn vị "${code}" đã tồn tại.`, "code");
   }
 
+  // P1 · US-05 — node MỚI không có con, nên path tính thẳng từ path cha; không cần đệ quy.
+  // Cha chưa có path (dòng cũ chưa backfill) → path con cũng null, và script đối soát
+  // US-07 sẽ nhặt ra. KHÔNG đoán path từ code cha: đoán sai là sai quyền.
+  const path = parent ? (parent.path ? childPath(parent.path, code) : null) : childPath(null, code);
+  const depth = path ? path.split("/").filter(Boolean).length - 1 : null;
+
   try {
     const created = await db.orgUnit.create({
-      data: { type: input.type, code, name, address: input.address ?? null, parentId, centerId },
+      data: {
+        type: input.type,
+        code,
+        name,
+        address: input.address ?? null,
+        parentId,
+        centerId,
+        path,
+        depth,
+        relationshipType: input.relationshipType ?? "OWNED",
+        status: "ACTIVE",
+        legalEntityId: input.legalEntityId ?? null,
+        effectiveFrom: input.effectiveFrom ?? null,
+        effectiveTo: input.effectiveTo ?? null,
+      },
     });
     return created;
   } catch (e) {
@@ -128,7 +181,13 @@ export async function listOrgUnits(
   });
 }
 
-/** Cập nhật (đổi parent → V5/V6 chống cycle, V4 parent hợp lệ). */
+/**
+ * Cập nhật (đổi parent → V5/V6 chống cycle, V4 parent hợp lệ, V9 loại cha hợp lệ).
+ *
+ * P1 · US-05 AC2 — nếu `parentId` HOẶC `code` đổi thì `path`/`depth` của node NÀY và
+ * TOÀN BỘ hậu duệ được tính lại, và cả cụm ghi trong MỘT `$transaction`. Trước P1 hàm
+ * này không có transaction; đổi cha giữa chừng mà hỏng là để lại cây nửa vời.
+ */
 export async function updateOrgUnit(id: string, input: UpdateOrgUnitInput): Promise<OrgUnit> {
   const self = await db.orgUnit.findUnique({ where: { id } });
   if (!self || self.deletedAt) {
@@ -138,10 +197,35 @@ export async function updateOrgUnit(id: string, input: UpdateOrgUnitInput): Prom
   const data: Prisma.OrgUnitUpdateInput = {};
   if (input.name !== undefined) data.name = requireName(input.name);
   if (input.address !== undefined) data.address = input.address;
+  if (input.relationshipType !== undefined) data.relationshipType = input.relationshipType;
+  if (input.effectiveFrom !== undefined) data.effectiveFrom = input.effectiveFrom;
+  if (input.effectiveTo !== undefined) data.effectiveTo = input.effectiveTo;
+  if (input.legalEntityId !== undefined) {
+    data.legalEntity = input.legalEntityId
+      ? { connect: { id: input.legalEntityId } }
+      : { disconnect: true };
+  }
+  // `status` và `isActive` đi CẶP — xem lib/org/status.ts (chống trạng thái mâu thuẫn).
+  if (input.status !== undefined) {
+    data.status = input.status;
+    data.isActive = isActiveFromStatus(input.status);
+  }
 
-  if (input.parentId !== undefined && input.parentId !== self.parentId) {
-    const newParentId = input.parentId;
-    if (newParentId) await assertParentUsable(newParentId); // V4
+  let newCode: string | undefined;
+  if (input.code !== undefined && input.code !== self.code) {
+    newCode = validateCode(input.code);
+    const dup = await db.orgUnit.findUnique({ where: { code: newCode }, select: { id: true } });
+    if (dup && dup.id !== id) {
+      throw new OrgRuleError("ORG_CODE_CONFLICT", `Mã đơn vị "${newCode}" đã tồn tại.`, "code");
+    }
+    data.code = newCode;
+  }
+
+  const parentChanged = input.parentId !== undefined && input.parentId !== self.parentId;
+  if (parentChanged) {
+    const newParentId = input.parentId as string | null;
+    const newParent = newParentId ? await assertParentUsable(newParentId) : null; // V4
+    validateParentType(self.type as OrgUnitType, (newParent?.type as OrgUnitType) ?? null); // V9
     const nodes = await loadNodes(true);
     if (wouldCreateCycle(nodes, id, newParentId)) {
       throw new OrgRuleError(
@@ -150,13 +234,29 @@ export async function updateOrgUnit(id: string, input: UpdateOrgUnitInput): Prom
         "parentId",
       );
     }
-    data.parent = newParentId
-      ? { connect: { id: newParentId } }
-      : { disconnect: true };
+    data.parent = newParentId ? { connect: { id: newParentId } } : { disconnect: true };
   }
 
-  const updated = await db.orgUnit.update({ where: { id }, data });
-  return updated;
+  // Không đụng cấu trúc → update phẳng, khỏi mở transaction.
+  if (!parentChanged && newCode === undefined) {
+    return db.orgUnit.update({ where: { id }, data });
+  }
+
+  // Đụng cấu trúc → ghi node + tính lại CẢ NHÁNH trong cùng một transaction (AC2).
+  return db.$transaction(async (tx) => {
+    const updated = await tx.orgUnit.update({ where: { id }, data });
+
+    const rows = await tx.orgUnit.findMany({ where: { deletedAt: null } });
+    const rowsPure = rows.map(toNode);
+    for (const r of recomputeSubtree(rowsPure, id)) {
+      await tx.orgUnit.update({
+        where: { id: r.id },
+        data: { path: r.path, depth: r.depth },
+      });
+    }
+
+    return tx.orgUnit.findUniqueOrThrow({ where: { id: updated.id } });
+  });
 }
 
 /** Soft-delete (V8: chặn nếu còn con đang sống — vd xoá ROOT khi còn HO/CS). */
@@ -177,9 +277,28 @@ export async function softDeleteOrgUnit(id: string): Promise<OrgUnit> {
   }
   const deleted = await db.orgUnit.update({
     where: { id },
-    data: { deletedAt: new Date(), isActive: false },
+    // `status` đi cặp với `isActive` (lib/org/status.ts): xoá mềm là CLOSED, không phải
+    // SUSPENDED — SUSPENDED nghĩa "tạm dừng, sẽ mở lại", CLOSED là "đã đóng".
+    data: { deletedAt: new Date(), isActive: false, status: "CLOSED" },
   });
   return deleted;
+}
+
+/**
+ * Ánh xạ 2 chiều Center ↔ OrgUnit ĐANG dùng `centerId`; sau khi V7 được nới cho HO
+ * (xem orgunit-rules.ts) thì Center 'hoi-so' hết mồ côi. Hàm này chỉ để test/script
+ * khẳng định điều đó — không phải API mới cho app.
+ */
+export async function findOrphanCenters(): Promise<{ id: string; name: string }[]> {
+  const [centers, mapped] = await Promise.all([
+    db.center.findMany({ select: { id: true, name: true } }),
+    db.orgUnit.findMany({
+      where: { deletedAt: null, centerId: { not: null } },
+      select: { centerId: true },
+    }),
+  ]);
+  const covered = new Set(mapped.map((m) => m.centerId));
+  return centers.filter((c) => !covered.has(c.id));
 }
 
 // ─── Tree helpers (DB-backed wrap thuật toán thuần) ───

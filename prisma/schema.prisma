@@ -281,34 +281,100 @@ model Center {
 }
 
 // ─── A0-01 — OrgUnit tree (Doc 15 §2.1, OI-1) ───
-// ROOT(SataRobo) → HO, CS1, CS2 ĐỘC LẬP NGANG HÀNG. HO KHÔNG phải cha CS1/CS2.
-// Additive thuần — KHÔNG đụng Center/User.centerId hiện hữu (Phase A: centerId trỏ Center cũ).
+// [Nền Hệ thống P1 · US-05] Hình cây ĐÃ ĐỔI (chủ dự án chốt 11/08/2026, theo BA 08/08 §1.1):
+//   HO (gốc) → REGION (khối tỉnh/TP) → CENTER (cơ sở)
+// Trước đó Doc 15 OI-1 để ROOT → HO, CS1, CS2 NGANG HÀNG; bản BA thắng theo README bàn giao §1.
+// Node ROOT cũ (SATAROBO) vẫn hợp lệ về schema — việc dời cây trên DB đang chạy làm bằng
+// script dry-run `scripts/nen-p1-reshape-org-tree.ts`, KHÔNG nhét vào migration (luật cứng #4).
 enum OrgUnitType {
   ROOT
   HO
+  REGION // P1 — khối quản lý tỉnh/TP (BA §1.1); cha của CENTER
+  DEPARTMENT // P1 — phòng ban trong HO/cơ sở (BA §2.2)
   CENTER
   CAMPUS
   PARTNER
   FRANCHISE
 }
 
+// P1 — TRỤC SỞ HỮU, độc lập với unitType (BA §2.2: thứ AMIS không có).
+// KHÔNG suy từ OrgUnitType.FRANCHISE (giá trị chết, giữ lại chỉ vì additive).
+enum OrgRelationshipType {
+  OWNED
+  FRANCHISEE
+  AFFILIATE
+}
+
+// P1 — vòng đời đơn vị (BA §2.2). GHI CHÚ QUAN TRỌNG: tới hết P1 đây là cột GƯƠNG của
+// `isActive`, KHÔNG phải nguồn sự thật thứ ba. Mọi nơi hỏi "đơn vị còn sống không" đi qua
+// đúng một hàm `isOrgUnitLive()` / `isOrgUnitActiveAt()` trong lib/org/status.ts.
+enum OrgUnitStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
 model OrgUnit {
-  id        String      @id @default(cuid())
-  type      OrgUnitType
-  code      String      @unique // "SATAROBO","HO","CS1","CS2"
-  name      String
-  address   String? // chỉ thông tin, KHÔNG suy ra quan hệ quản lý
-  parentId  String?
-  parent    OrgUnit?    @relation("OrgUnitTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  children  OrgUnit[]   @relation("OrgUnitTree")
-  centerId  String?     @unique // Phase A: trỏ Center cũ (chỉ type=CENTER)
-  isActive  Boolean     @default(true)
-  deletedAt DateTime?   @db.Timestamptz(6)
-  createdAt DateTime    @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime    @updatedAt @db.Timestamptz(6)
+  id      String      @id @default(cuid())
+  type    OrgUnitType
+  code    String      @unique // "SATAROBO","HO","DANANG","CS1","CS2"
+  name    String
+  address String? // chỉ thông tin, KHÔNG suy ra quan hệ quản lý
+
+  parentId String?
+  parent   OrgUnit?  @relation("OrgUnitTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children OrgUnit[] @relation("OrgUnitTree")
+
+  // P1 · US-05 — materialized path. Dạng "/ho/danang/cs1/" (CÓ "/" ở cuối để `LIKE path || '%'`
+  // cắt đúng biên node, không dính "/cs1" với "/cs10"). Segment = code viết thường, "_" → "-".
+  // Nullable ở P1 vì migration additive; write path LUÔN set, invariant test chặn NULL mới.
+  path  String?
+  depth Int?
+
+  relationshipType OrgRelationshipType @default(OWNED)
+  status           OrgUnitStatus       @default(ACTIVE)
+  effectiveFrom    DateTime?           @db.Timestamptz(6)
+  effectiveTo      DateTime?           @db.Timestamptz(6)
+
+  // Pháp nhân sở hữu (US-06). Nullable: đơn vị nội bộ chưa gắn pháp nhân vẫn hợp lệ ở P1.
+  legalEntityId String?
+  legalEntity   LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+
+  // Khuôn mẫu sinh ra đơn vị — BA §6 "chừa cột trước, engine sau" (UnitTemplate là P5).
+  // Cố ý KHÔNG có FK: bảng đích chưa tồn tại.
+  templateId String?
+
+  centerId  String?   @unique // Phase A: trỏ Center cũ. P1 nới cho cả HO (Center 'hoi-so').
+  isActive  Boolean   @default(true)
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
   @@index([type])
   @@index([parentId])
+  @@index([deletedAt])
+  @@index([path])
+  @@index([legalEntityId])
+  @@index([status])
+}
+
+// [Nền Hệ thống P1 · US-06] Pháp nhân — TÁCH khỏi đơn vị vận hành (BA §2.3).
+// Vì sao tách: học phí thu ở cơ sở nhượng quyền thuộc pháp nhân CỦA HỌ, không phải doanh
+// thu của SataRobo. Gắn doanh thu vào orgUnitId thôi là ngày ký hợp đồng đầu tiên phải sửa bảng.
+model LegalEntity {
+  id        String    @id @default(cuid())
+  taxCode   String    @unique // MST — khoá nghiệp vụ thật
+  legalName String
+  address   String?
+  // Đúng MỘT pháp nhân gốc SataRobo. Ép bằng partial unique index (chỉ 1 dòng isPrimary=true).
+  isPrimary Boolean   @default(false)
+  isActive  Boolean   @default(true)
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+
+  orgUnits OrgUnit[]
+
   @@index([deletedAt])
 }
 
