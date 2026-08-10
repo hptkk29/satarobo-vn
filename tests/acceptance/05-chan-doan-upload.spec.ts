@@ -29,9 +29,11 @@ test("chẩn đoán · đường upload ảnh của trình duyệt", async ({ br
   const page = await ctx.newPage();
 
   page.on("console", (m) => {
-    if (m.type() === "error" || m.type() === "warning") {
-      console.log(`[console:${m.type()}] ${m.text().slice(0, 300)}`);
-    }
+    if (m.type() !== "error" && m.type() !== "warning") return;
+    const t = m.text();
+    // LÝ DO của lỗi CORS nằm ở CUỐI câu ("…has been blocked by CORS policy: <lý do>"),
+    // mà signed URL dài cả nghìn ký tự nên cắt đầu là mất đúng thứ cần đọc.
+    console.log(`[console:${m.type()}] …${t.slice(-260)}`);
   });
   page.on("requestfailed", (r) => {
     console.log(`[requestfailed] ${r.method()} ${r.url().slice(0, 120)} — ${r.failure()?.errorText}`);
