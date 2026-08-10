@@ -95,7 +95,11 @@ test("admin: hộp thư tin nhắn render + có thread; compliance render", asyn
   await login(page, { email: ctx.sa });
 
   await page.goto("/admin/tin-nhan");
-  await expect(page.getByRole("heading", { name: "Tin nhắn" })).toBeVisible();
+  // Đợt 3 bỏ tiêu đề trang "Tin nhắn" của màn admin (bản vá "màn chat của sale trông như
+  // trang vỡ" dồn nội dung lên, chỉ còn <title> ở metadata). Neo vào vùng CÓ NHÃN
+  // aria-label="Danh sách hội thoại" (chat-workspace.tsx:120) — thứ này là hợp đồng a11y
+  // của cột trái, không phải chi tiết trình bày, nên không vỡ mỗi lần đổi bố cục.
+  await expect(page.getByRole("complementary", { name: "Danh sách hội thoại" })).toBeVisible();
   // Hệ MỚI: cột trái là danh sách hội thoại mình là thành viên — nhóm lớp hiện TÊN LỚP
   // (không còn "HV Một" per-enrollment như hệ cũ). Mở thread → thấy tin PH đã seed.
   // (Link href="/tin-nhan?c=..." — localhost rewrite /X → /admin/X qua proxy.ts.)
@@ -122,6 +126,17 @@ test("portal: PH xem hộp thư + gửi tin mới", async ({ page, context }) =>
   ]);
 
   await page.goto("/portal/tin-nhan");
+
+  // US-16 (chat Đợt 3) — CỔNG CHÍNH SÁCH đứng TRƯỚC hộp thư: phụ huynh chưa bấm đồng ý
+  // thì `children` không được đưa vào cây React (layout.tsx), nên KHÔNG có hộp thư nào để
+  // click. Đây là hành vi ĐÚNG, không phải lỗi — smoke phải đi qua cổng như người thật.
+  // Bấm điều kiện: chỉ khi cổng hiện (chạy lại spec trên DB đã có ChatPolicyAcceptance
+  // thì cổng không hiện nữa) — giữ spec chạy lại được, không phụ thuộc trạng thái DB.
+  const nutDongY = page.getByRole("button", { name: "Tôi đã đọc và đồng ý" });
+  if (await nutDongY.isVisible().catch(() => false)) {
+    await nutDongY.click();
+  }
+
   await expect(page.getByRole("heading", { name: "Tin nhắn" })).toBeVisible();
   // Hệ MỚI (US-08): mỗi dòng là MỘT hội thoại — nhóm lớp hiện TÊN LỚP, không còn link
   // "HV Một" per-enrollment. Mở nhóm lớp của con → thấy tin đã seed.
