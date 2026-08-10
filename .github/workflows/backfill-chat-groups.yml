@@ -1,0 +1,98 @@
+name: Backfill nhóm lớp chat (prod)
+
+# =============================================================================
+# Tạo nhóm chat cho các lớp ĐÃ ACTIVE từ trước ngày phát hành module chat, trên
+# Supabase PROD (scripts/backfill-nhom-lop-chat.ts).
+#
+# VÌ SAO PHẢI CÓ WORKFLOW NÀY: `syncConversationMembership` chỉ chạy theo SỰ KIỆN
+# nghiệp vụ (duyệt lớp, đổi ghi danh, đổi QLCS…). Lớp vốn đã ACTIVE từ trước khi
+# module chat tồn tại KHÔNG BAO GIỜ phát sự kiện nào ⇒ không có nhóm ⇒ GV và phụ
+# huynh mở chat ra chỉ thấy "Chưa có hội thoại nào" — nhìn y hệt "tính năng chưa
+# chạy". Đo trên test 09/08: 24 lớp ACTIVE / 0 nhóm trước khi backfill.
+# Không cổng test nào bắt được vì đây là trạng thái DỮ LIỆU, không phải code.
+# Đây là việc số 2 trong checklist đưa chat lên prod
+# (docs/chat-realtime/00-dieu-chinh-cho-repo.md mục G).
+#
+# MẶC ĐỊNH DRY-RUN — in kế hoạch, không ghi gì. Ghi thật phải chọn mode=apply VÀ
+# gõ đúng chuỗi xác nhận. Script idempotent: chạy lại → 0 lớp cần tạo.
+#
+# ⚠️ Tạo nhóm = MỞ MỘT KÊNH RIÊNG TƯ giữa giáo viên và phụ huynh. Phải chạy
+# dry-run và soi danh sách lớp trước khi bấm apply.
+#
+# SAU KHI APPLY: kiểm bằng /admin/hoi-thoai/doi-soat — phải ra 0 drift.
+#
+# SECRETS: PROD_DATABASE_URL / PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run = chỉ in kế hoạch · apply = ghi thật"
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      confirm:
+        description: 'Khi mode=apply: gõ đúng "GHI THAT VAO PROD"'
+        required: false
+        default: ""
+      limit:
+        description: "Chỉ xử lý N lớp đầu (bỏ trống = tất cả). Nên chạy thử vài lớp trước."
+        required: false
+        default: ""
+
+concurrency:
+  group: backfill-chat-groups
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: backfill-nhom-lop-chat (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::mode=apply nhưng chuỗi xác nhận sai — dừng, không ghi gì."
+            missing=1
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Chạy backfill
+        run: |
+          set -euo pipefail
+          ARGS=""
+          if [ "${{ inputs.mode }}" = "apply" ]; then ARGS="$ARGS --apply"; fi
+          if [ -n "${{ inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ inputs.limit }}"; fi
+          echo "→ scripts/backfill-nhom-lop-chat.ts$ARGS"
+          pnpm exec tsx scripts/backfill-nhom-lop-chat.ts $ARGS | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          # session pooler (:5432) — script chạy nhiều query lặp, transaction pooler
+          # (:6543) sẽ lỗi prepared-statement 42P05.
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Nhắc bước kiểm
+        if: ${{ inputs.mode == 'apply' }}
+        run: |
+          echo '::warning::Đã tạo nhóm trên PROD. Kiểm ngay /admin/hoi-thoai/doi-soat — phải ra 0 drift.'

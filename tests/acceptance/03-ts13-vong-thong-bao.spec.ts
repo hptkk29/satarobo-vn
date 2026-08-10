@@ -107,6 +107,10 @@ test("TS-13 · thông báo ghim, đếm đã đọc, quota 10/ngày, ghim trụ 
   // ── Bước 4: thông báo thứ 11 trong ngày bị chặn ───────────────────────────
   await gv.goto(paths.teacherChat(seed.conversations.lopA));
   let blockedMessage: string | null = null;
+  // Quota tính theo NGÀY VN cho cả lớp, không theo lần chạy — lớp có thể đã tiêu vài
+  // suất từ lần nghiệm thu trước trong ngày, nên chỗ bị chặn xê dịch. Phải nhớ bản
+  // CUỐI CÙNG gửi được để bước 5 biết cái nào đang ghim.
+  let lastSentAnnouncement = annBody;
   for (let i = 2; i <= 11; i++) {
     await gv.getByRole("button", { name: "Gửi thông báo" }).first().click();
     const d = gv.getByRole("dialog");
@@ -121,6 +125,7 @@ test("TS-13 · thông báo ghim, đếm đã đọc, quota 10/ngày, ghim trụ 
       await d.getByRole("button", { name: "Huỷ" }).click();
       break;
     }
+    lastSentAnnouncement = `${tag} thông báo số ${i} trong ngày`;
     await d.getByRole("button", { name: "Đóng" }).click();
     await gv.waitForTimeout(500);
   }
@@ -142,7 +147,8 @@ test("TS-13 · thông báo ghim, đếm đã đọc, quota 10/ngày, ghim trụ 
   // Ghim = thông báo MỚI NHẤT (sau bước 4 là "thông báo số 10"), nằm ngoài vùng cuộn
   // của luồng nên 30 tin chat mới không đẩy nó đi đâu được.
   await ph1.reload();
-  const pinnedBody = `${tag} thông báo số 10 trong ngày`;
+  const pinnedBody = lastSentAnnouncement;
+  console.log(`[TS-13.5] Bản đang ghim phải là: "${pinnedBody}"`);
   await expect(ph1.getByText(pinnedBody, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   const pinnedBox = ph1.getByText(pinnedBody, { exact: true }).first();
   const lastChat = ph1.getByText(`${tag} tin chat 30`, { exact: true }).first();

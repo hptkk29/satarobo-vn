@@ -39,17 +39,38 @@ một `BrowserContext`/hồ sơ trình duyệt riêng.
 
 ## 2. TS-11 · hai cận trên KHÁC NHAU, đừng gộp
 
-*(điền sau khi lần chạy 10/08 chốt số)*
-
 - **Cận trên bảo mật** = lúc server thôi trả nội dung. `leftAt` được set trong CHÍNH
-  transaction đổi trạng thái ghi danh ⇒ tức thì.
-- **Cận trên trải nghiệm** = lúc client đang mở tự thoát. Tín hiệu đi
-  `DomainEvent → outbox → cron dispatch-events → broadcast`, nên nó bị chặn trên bởi
-  **nhịp cron**, không phải bởi realtime:
-  - PROD: `* * * * *` (mỗi phút — `vercel.json`)
-  - TEST: 5 phút/lần (`cron-pump-test.yml`, vì Vercel Cron không chạy cho custom env)
+  transaction đổi trạng thái ghi danh ⇒ **tức thì**. Đã kiểm: ngay sau khi admin bấm,
+  phụ huynh mở lại đúng URL đó bằng một tab khác của chính mình → không còn ô nhập,
+  màn hình báo lỗi tử tế (không trắng). ✅
+- **Cận trên trải nghiệm** = lúc client ĐANG MỞ tự thoát ra. Tín hiệu đi
+  `DomainEvent → outbox → cron dispatch-events → broadcast` ⇒ bị chặn trên bởi **nhịp
+  cron**, không phải bởi realtime.
 
-  ⇒ Con số đo trên test **không** dùng để kết luận trải nghiệm prod.
+**Số đo thật trên `test` (10/08):**
+
+| Sự kiện `chat.participant_removed` tạo lúc | được xử lý lúc |
+|---|---|
+| 02:25:33 | 02:57:02 |
+| 02:37:24 | 02:57:02 *(cùng một mẻ)* |
+| 03:04:44 | vẫn `NULL`, `attempts=0` sau 11 phút |
+| 09/08 09:58 | 10:14 |
+
+⇒ Nhịp thật của outbox trên `test` là **~20–30 phút**, KHÔNG phải 5 phút như
+`cron-pump-test.yml` ghi — lịch cron của GitHub Actions trôi là chuyện thường. Trên
+**PROD** job này là `* * * * *` (Vercel Cron, `vercel.json`) nên cận trên ≈ **1 nhịp
+cron**.
+
+**Điều phải nói thẳng:** AC gốc viết *"trong vài giây app tự thoát"*. Kiến trúc hiện tại
+**không đạt được "vài giây"** kể cả trên prod, vì tín hiệu đi qua outbox theo đúng thiết
+kế (side-effect không-atomic ⇒ DomainEvent). Cận trên thực tế trên prod là ~1 phút.
+Cái *bảo vệ* thật sự vẫn nguyên: server chặn đọc ngay, và kênh realtime bị từ chối ở lần
+JOIN kế tiếp (chu kỳ gia hạn vé ≤240s — đã đo 4,8s sau một chu kỳ, xem `00-dieu-chinh`
+mục E-ter #3).
+
+Bài test đã được sửa cho khớp bản chất: hỏi thẳng `DomainEvent.processedAt`; outbox chưa
+chạy thì ghi *"không kết luận được"*, chỉ đánh trượt khi **outbox đã phát mà client vẫn
+không thoát**.
 
 ## 3. TS-14 — LỖI CHẶN: bucket ảnh chat thiếu luật CORS
 
